@@ -1,9 +1,9 @@
 # DSL-Engine Sync Plan — Toward Phase 1
 
 **Date:** 2026-07-17
-**Revised:** 2026-07-17 (PCA shipped `2dd5a68`; optional backlog reprioritized)
-**Status:** Phase 1a vertical **product-complete**; BR stack + PCA shipped; optional residual only
-**Current pick:** **None required** — optional backlog § Optional residual priority (prefer stop / dogfood)
+**Revised:** 2026-07-17 (BR.4.4 instance links landed uncommitted; suite 1290)
+**Status:** Phase 1a vertical **product-complete**; BR stack + PCA shipped; **BR.4.4 uncommitted**
+**Current pick:** **Commit BR.4.4** — see [`domainmodeling-next-phase.md`](domainmodeling-next-phase.md)
 **Source:** [`docs/experiments/domain-modeling-dsl-tour-feedback.md`](../../experiments/domain-modeling-dsl-tour-feedback.md) — §3 and §4  
 **Review:** A–D′; N; BR; PCA shipped; **optional backlog reprioritized** (2026-07-17)  
 **Trigger:** IR/DSL divergence (events vs stage-observation); mutation surface width; single-vertical runtime gap  
@@ -25,7 +25,7 @@
 
 **Slice N principle:** N1 changes **surface syntax only**. IR stays (`Relationship` on `Domain`, `AddRelationshipChange`). Parser/printer map nav lines ↔ IR. **Owning/source side is authoritative** — never invent a second edge from reverse-nav lines.
 
-**Status (2026-07-17):** Phase 1a vertical closed. BR stack + **PCA** (`2dd5a68`) shipped. Suite green; tree clean. **No required product gate open.** Optional residual: see § Optional residual priority below.
+**Status (2026-07-17):** Phase 1a vertical closed. BR stack + **PCA** (`2dd5a68`) shipped. **BR.4.4 instance links** implemented (uncommitted; suite **1290**). See `domainmodeling-next-phase.md`.
 
 ---
 
@@ -318,7 +318,7 @@ Carry these as first-class B tasks (already in B.1–B.4); restated from review 
 
 ```text
 CallAction → StageTransitionEffect → DomainInstanceStore.NotifyTransition
-  → stage-scoped StageSubscription effects (Each, source=subscriber, type-level)
+  → stage-scoped StageSubscription effects (Each, source=subscriber, instance-linked)
 ```
 
 **Verified 2026-07-17 (B′ impl review):**
@@ -386,7 +386,7 @@ Order implemented: **OnExit → set stage → OnEntry → NotifyTransition** (wh
 - [x] **BR.4.1** Analyzer treats `ManyToOne` as singular for Any/All quantifier warning (`isSingularFromSource` in `SubscriptionContractAnalyzer`) — **verified already present** (A′′ era). Runtime still **Each-only** (`DomainInstanceStore` skips non-Each). Optional: dedicated ManyToOne+Any unit test; warning text still says “one-to-one” for ManyToOne cases → **BR.4.1′**
 - [x] **BR.4.2** MCP subscription visibility — `ApplyDsl_WithN1NavAndSubscription_Succeeds` asserts `GetEntityDetail` stage subscriptions (`Tracks` / `Active` / `Each`) — **`17b22df`**
 - [x] **BR.4.3** Replay/link message + duplicate XML + DRY SemanticMatch — accepted as already satisfied (no third call site)
-- [ ] **BR.4.4** Instance-level relationship links — **P1 optional** (only with named multi-instance fan-out pain)
+- [x] **BR.4.4** Instance-level relationship links — **in progress / largely landed**: `DomainInstanceStore.Link/Unlink/IsLinked`; NotifyTransition requires link; CallAction Link/Unlink effects; 2×2 golden test. See `domainmodeling-next-phase.md`
 - [ ] **BR.4.1′** Warning “singular” + ManyToOne+Any test — **P3 polish** (only when touching that analyzer)
 
 **Post-commit review (`17b22df`):** BR.4.2 smoke is correct and valuable. BR.4.1 is verification of existing analyzer, not new runtime Any/All support.
@@ -415,8 +415,8 @@ Phase 1a + N1 + runtime vertical + PCA are **done**. Do **not** start optional w
 
 | Priority | Item | When to pull | Why this rank |
 |----------|------|--------------|---------------|
-| **P0** | **Stop / dogfood / ship** | Always default | Principles: shipped capability over completeness; we are first customer — use MCP+DSL path before inventing more IR |
-| **P1** | **BR.4.4** Instance-level relationship links | Named multi-instance fan-out pain (wrong Tracker fires for wrong Order) | Highest product impact among residuals; type-level correlation is the only remaining runtime honesty gap that bites real multi-instance models |
+| **P0** | **Stop / dogfood / ship** | After IG.4 commit | Principles: shipped capability over completeness |
+| **P1** | **BR.4.4** Instance-level relationship links | **Active** (user chose Option A) | `DomainInstanceStore` links + NotifyTransition filter; commit remaining |
 | **P2** | **Runtime `Any`/`All` quantifiers** | Named need for multi-match subscription semantics | Store is Each-only today; analyzer already warns on singular+Any; implementing runtime without a consumer is framework completeness |
 | **P2** | **Slice E** Phase 1b DSL (`value` authoring surface, `create in`, …) | Named authoring consumer who cannot express a real domain in 1a | Pull-only grammar expansion; parser without runtime consumer fails §5 shipped-capability |
 | **P3** | **BR.4.1′** Warning text “singular” + ManyToOne+Any unit test | Touching `SubscriptionContractAnalyzer` anyway, or agent confusion in logs | Pure honesty polish; zero customer path change |
@@ -429,14 +429,14 @@ Phase 1a + N1 + runtime vertical + PCA are **done**. Do **not** start optional w
 - Parallel / schedule / for / match DSL (Phase 2+ per plan §4)
 - Capture mode, codegen, library import (out of this plan)
 
-**Default next action:** none on this plan. Integrate dogfood feedback; open P1 only with a concrete multi-instance wrong-fan-out story.
+**Default next action:** commit BR.4.4 instance-link work; then dogfood or P2 items only with named need.
 
 
 ### Slice B exit criteria (updated)
 
 - [x] CallAction + StageTransitionEffect fires matching subscription (literal effect)
 - [x] Wrong-stage subscriber does not fire
-- [x] store.Add wires Store; Source=subscriber; type-level documented
+- [x] store.Add wires Store; Source=subscriber; instance links required for fan-out
 - [x] Test domains analyze without DMSS003
 - [x] Event property flow: Option B characterized + remarks honest (`a41153c`)
 - [x] DomainModeling tests green
@@ -855,7 +855,7 @@ Only with a **named consumer** for value types / `create in` / quantifiers / etc
 | **N2 (legacy input)** | `relationship Orders from Customer to Order many` | Still accepted during transition |
 | **IR** | `Relationship` on `Domain` | Unchanged |
 
-Runtime correlation remains **type-level** until BR.4.4.
+Runtime correlation is **instance-level** via `DomainInstanceStore.Link` (BR.4.4 landed; commit pending).
 
 ### Appendix — Agent pick order (optional residual — reprioritized)
 

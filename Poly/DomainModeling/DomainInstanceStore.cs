@@ -2,34 +2,35 @@ namespace Poly.DomainModeling;
 
 /// <summary>
 /// Minimal in-memory store for <see cref="DomainEntityInstance"/> objects.
-/// Provides relationship-based lookup for stage-subscription fan-out.
+/// Provides relationship-based lookup for stage-subscription fan-out and
+/// <b>instance-level</b> relationship links.
 ///
-/// <para><b>Subscription pipeline (Slice B):</b></para>
+/// <para><b>Subscription pipeline:</b></para>
 /// <list type="number">
 ///   <item><c>TransitionStage</c> is called on a <see cref="DomainEntityInstance"/>.</item>
-///   <item><c>NotifyTransition</c> iterates all registered instances to find subscribers.</item>
+///   <item><c>NotifyTransition</c> iterates registered instances to find subscribers.</item>
 ///   <item>A subscriber matches if:
 ///     <list type="bullet">
 ///       <item>It is in a stage that declares a <see cref="StageSubscription"/>.</item>
-///       <item>The subscription's <c>RelationshipName</c> matches a relationship connecting the subscriber to the transitioned instance.</item>
+///       <item>The subscription's <c>RelationshipName</c> matches a domain relationship
+///         where Source = subscriber entity type and Target = transitioned entity type.</item>
+///       <item>An <b>instance link</b> exists for that relationship from subscriber → transitioned
+///         (see <see cref="Link"/>).</item>
 ///       <item>The subscription's <c>StageNames</c> includes the target stage.</item>
+///       <item>Quantifier is <see cref="StageSubscriptionQuantifier.Each"/> (Any/All deferred).</item>
 ///     </list>
 ///   </item>
-///   <item>Subscription effects execute on the subscriber with <c>this</c>=subscriber, <c>event</c>=transitioned instance.</item>
-///   <item>If a subscriber transitions as a side effect, the notification recurses (depth-limited).</item>
+///   <item>Subscription effects execute on the subscriber with <c>this</c>=subscriber,
+///     <c>event</c>=transitioned instance.</item>
+///   <item>If a subscriber transitions as a side effect, notification recurses (depth-limited).</item>
 /// </list>
 ///
 /// This is intentionally thin — not a full ORM or query engine.
-/// Slice B vertical: supports single-relationship hops only (no dotted paths; Each quantifier only).
-///
-/// <para><b>Correlation is type-level, not instance-level.</b>
-/// When two instances of the same entity type exist (e.g. two Orders and two Trackers),
-/// <em>every</em> Tracker instance may react to <em>every</em> Order's stage transition
-/// that matches the relationship name and target stage. There is no per-instance link table.
-/// Instance-level links are a post-B feature.</para>
+/// Single-relationship hops only (no dotted paths).
 /// </summary>
 public sealed class DomainInstanceStore {
     private readonly List<DomainEntityInstance> _instances = [];
+    private readonly List<(string RelationshipName, DomainEntityInstance Source, DomainEntityInstance Target)> _links = [];
 
     /// <summary>Registers an instance. Called after creation.</summary>
     public void Add(DomainEntityInstance instance) {
@@ -38,16 +39,64 @@ public sealed class DomainInstanceStore {
         _instances.Add(instance);
     }
 
-    /// <summary>Removes an instance (e.g. after delete effect).</summary>
+    /// <summary>Removes an instance (e.g. after delete effect). Also drops its links.</summary>
     public void Remove(DomainEntityInstance instance) {
         instance.Store = null;
         _instances.Remove(instance);
+        _links.RemoveAll(l =>
+            ReferenceEquals(l.Source, instance) || ReferenceEquals(l.Target, instance));
+    }
+
+    /// <summary>
+    /// Records an instance-level edge for <paramref name="relationshipName"/>
+    /// from <paramref name="source"/> to <paramref name="target"/>.
+    /// Both instances must already be registered in this store.
+    /// </summary>
+    public void Link(string relationshipName, DomainEntityInstance source, DomainEntityInstance target) {
+        ArgumentException.ThrowIfNullOrEmpty(relationshipName);
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(target);
+        if (!ReferenceEquals(source.Store, this) || !ReferenceEquals(target.Store, this))
+            throw new InvalidOperationException(
+                "Both instances must be registered in this store before linking.");
+        if (IsLinked(relationshipName, source, target))
+            return;
+        _links.Add((relationshipName, source, target));
+    }
+
+    /// <summary>
+    /// Removes an instance-level edge if present.
+    /// </summary>
+    public void Unlink(string relationshipName, DomainEntityInstance source, DomainEntityInstance target) {
+        ArgumentException.ThrowIfNullOrEmpty(relationshipName);
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(target);
+        _links.RemoveAll(l =>
+            string.Equals(l.RelationshipName, relationshipName, StringComparison.Ordinal)
+            && ReferenceEquals(l.Source, source)
+            && ReferenceEquals(l.Target, target));
+    }
+
+    /// <summary>
+    /// Returns whether an instance-level edge exists for the relationship.
+    /// </summary>
+    public bool IsLinked(string relationshipName, DomainEntityInstance source, DomainEntityInstance target) {
+        ArgumentException.ThrowIfNullOrEmpty(relationshipName);
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(target);
+        foreach (var l in _links) {
+            if (string.Equals(l.RelationshipName, relationshipName, StringComparison.Ordinal)
+                && ReferenceEquals(l.Source, source)
+                && ReferenceEquals(l.Target, target))
+                return true;
+        }
+        return false;
     }
 
     /// <summary>
     /// Called after an instance transitions to a new stage.
-    /// Finds all subscriber instances whose active subscription matches
-    /// the transition, and executes their subscription effects.
+    /// Finds subscriber instances whose active subscription matches the transition
+    /// <b>and</b> that are instance-linked to the transitioned entity, then runs effects.
     /// </summary>
     /// <param name="transitionedInstance">The instance that changed stage.</param>
     /// <param name="targetStageName">The stage entered.</param>
@@ -89,6 +138,10 @@ public sealed class DomainInstanceStore {
                     string.Equals(r.Name, subscription.RelationshipName, StringComparison.Ordinal) &&
                     string.Equals(r.Source.TypeName, subscriber.Entity.Name, StringComparison.Ordinal));
                 if (matchingRel is null) continue;
+
+                // Instance-level link required (BR.4.4)
+                if (!IsLinked(matchingRel.Name, subscriber, transitionedInstance))
+                    continue;
 
                 // Does the target stage match?
                 if (!subscription.StageNames.Any(sn =>

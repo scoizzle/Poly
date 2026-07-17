@@ -444,6 +444,7 @@ public class DomainEntityInstanceTests {
             new Dictionary<string, object?> { ["Status"] = "UNTOUCHED" }, domain: domain);
         store.Add(orderInstance);
         store.Add(trackerInstance);
+        store.Link("Tracks", trackerInstance, orderInstance);
 
         orderInstance.CallAction("Activate");
 
@@ -504,6 +505,7 @@ public class DomainEntityInstanceTests {
             new Dictionary<string, object?> { ["Status"] = "UNTOUCHED" }, domain: domain);
         store.Add(orderInstance);
         store.Add(trackerInstance);
+        store.Link("Tracks", trackerInstance, orderInstance);
 
         // Activate will trigger subscription effects that throw on the bad RHS
         var threw = false;
@@ -535,6 +537,7 @@ public class DomainEntityInstanceTests {
         var order2 = DomainEntityInstance.Create(order,
             new Dictionary<string, object?> { ["Code"] = "DEF-456" }, domain: domain);
         store.Add(order2);
+        store.Link("Tracks", freshTracker, order2);
 
         threw = false;
         try {
@@ -728,6 +731,7 @@ public class DomainEntityInstanceTests {
         var aInstance = DomainEntityInstance.Create(a, domain: domain);
         store.Add(bInstance);
         store.Add(aInstance);
+        store.Link("rel", aInstance, bInstance);
 
         await Assert.That(aInstance.CurrentStage).IsEqualTo("Pending");
 
@@ -841,6 +845,7 @@ public class DomainEntityInstanceTests {
         var bInstance = DomainEntityInstance.Create(b, domain: domain);
         store.Add(aInstance);
         store.Add(bInstance);
+        store.Link("rel", bInstance, aInstance);
 
         // Trigger transition — OnEntry throws, but notify should still fire in finally
         var threw = false;
@@ -918,6 +923,10 @@ public class DomainEntityInstanceTests {
             instances.Add(inst);
         }
 
+        // Instance links: Ei (source/subscriber) → Ei-1 (target) for rel i
+        for (int i = 1; i <= 11; i++)
+            store.Link($"rel{i}", instances[i], instances[i - 1]);
+
         // Trigger the cascade
         instances[0].CallAction("Go");
 
@@ -991,9 +1000,174 @@ public class DomainEntityInstanceTests {
         var childInstance = parentInstance.CreatedChildren[0];
         await Assert.That(childInstance.Store).IsNotNull();
 
+        // Instance link required for subscription fan-out
+        store.Link("parentChild", gpInstance, childInstance);
+
         // Child transitions to Active — Grandparent's subscription should fire
         childInstance.CallAction("Activate");
         await Assert.That(childInstance.CurrentStage).IsEqualTo("Active");
         await Assert.That(gpInstance.GetProperty<string>("Status")).IsEqualTo("ChildActivated");
+    }
+
+    [Test]
+    public async Task InstanceLinks_TwoByTwo_OnlyLinkedSubscriberFires() {
+        // BR.4.4 / IG golden: 2 Trackers × 2 Orders — only the linked Tracker reacts.
+        var statusProp = new Property("Status", new DomainTypeReference("Text"), []);
+        var tracker = new Entity("Tracker", [statusProp], [], [], [
+            new Stage("Pending", null, [], [], [], []) {
+                Subscriptions = [
+                    new StageSubscription("Tracks", ["Active"], StageSubscriptionQuantifier.Each, [
+                        new AssignEffect(
+                            DomainExpression.Property("Status"),
+                            DomainExpression.Literal("Triggered"))
+                    ])
+                ]
+            }
+        ]);
+
+        var order = new Entity("Order", [], [
+            new Poly.DomainModeling.Action("Activate", InvocationResult.Void, [], [
+                new StageTransitionEffect(new StageReference("Active"))
+            ], [])
+        ], [], [
+            new Stage("Draft", null, [], [], [], []),
+            new Stage("Active", null, [], [], [], [])
+        ]);
+
+        var rel = new Relationship("Tracks",
+            new DomainTypeReference("Tracker"), new DomainTypeReference("Order"),
+            RelationshipCardinality.OneToOne, []);
+
+        var domain = new Domain("Test", [tracker, order], [rel]);
+        var store = new DomainInstanceStore();
+
+        var order1 = DomainEntityInstance.Create(order, domain: domain);
+        var order2 = DomainEntityInstance.Create(order, domain: domain);
+        var tracker1 = DomainEntityInstance.Create(tracker,
+            new Dictionary<string, object?> { ["Status"] = "Idle1" }, domain: domain);
+        var tracker2 = DomainEntityInstance.Create(tracker,
+            new Dictionary<string, object?> { ["Status"] = "Idle2" }, domain: domain);
+
+        store.Add(order1);
+        store.Add(order2);
+        store.Add(tracker1);
+        store.Add(tracker2);
+
+        // Only tracker1 watches order1
+        store.Link("Tracks", tracker1, order1);
+
+        order1.CallAction("Activate");
+
+        await Assert.That(tracker1.GetProperty<string>("Status")).IsEqualTo("Triggered");
+        await Assert.That(tracker2.GetProperty<string>("Status")).IsEqualTo("Idle2");
+
+        // order2 has no links — neither tracker should fire
+        order2.CallAction("Activate");
+        await Assert.That(tracker1.GetProperty<string>("Status")).IsEqualTo("Triggered");
+        await Assert.That(tracker2.GetProperty<string>("Status")).IsEqualTo("Idle2");
+    }
+
+    [Test]
+    public async Task Store_Unlink_StopsSubscriptionFanOut() {
+        var statusProp = new Property("Status", new DomainTypeReference("Text"), []);
+        var tracker = new Entity("Tracker", [statusProp], [], [], [
+            new Stage("Pending", null, [], [], [], []) {
+                Subscriptions = [
+                    new StageSubscription("Tracks", ["Active"], StageSubscriptionQuantifier.Each, [
+                        new AssignEffect(
+                            DomainExpression.Property("Status"),
+                            DomainExpression.Literal("Triggered"))
+                    ])
+                ]
+            }
+        ]);
+
+        var order = new Entity("Order", [], [
+            new Poly.DomainModeling.Action("Activate", InvocationResult.Void, [], [
+                new StageTransitionEffect(new StageReference("Active"))
+            ], []),
+            new Poly.DomainModeling.Action("Reset", InvocationResult.Void, [], [
+                new StageTransitionEffect(new StageReference("Draft"))
+            ], [])
+        ], [], [
+            new Stage("Draft", null, [], [], [], []),
+            new Stage("Active", null, [], [], [], [])
+        ]);
+
+        var rel = new Relationship("Tracks",
+            new DomainTypeReference("Tracker"), new DomainTypeReference("Order"),
+            RelationshipCardinality.OneToOne, []);
+
+        var domain = new Domain("Test", [tracker, order], [rel]);
+        var store = new DomainInstanceStore();
+        var orderInstance = DomainEntityInstance.Create(order, domain: domain);
+        var trackerInstance = DomainEntityInstance.Create(tracker,
+            new Dictionary<string, object?> { ["Status"] = "Idle" }, domain: domain);
+        store.Add(orderInstance);
+        store.Add(trackerInstance);
+        store.Link("Tracks", trackerInstance, orderInstance);
+
+        orderInstance.CallAction("Activate");
+        await Assert.That(trackerInstance.GetProperty<string>("Status")).IsEqualTo("Triggered");
+
+        // Reset and unlink — second activation must not fire
+        orderInstance.CallAction("Reset");
+        trackerInstance.SetProperty("Status", "Idle");
+        store.Unlink("Tracks", trackerInstance, orderInstance);
+
+        orderInstance.CallAction("Activate");
+        await Assert.That(trackerInstance.GetProperty<string>("Status")).IsEqualTo("Idle");
+    }
+
+    [Test]
+    public async Task CallAction_LinkRelationshipEffect_LinksViaPropertyBag() {
+        // LinkRelationshipEffect target is a PropertyAccess whose value is a DomainEntityInstance.
+        var tracker = new Entity("Tracker", [
+            new Property("OrderRef", new DomainTypeReference("Text"), [])
+        ], [
+            new Poly.DomainModeling.Action("Attach", InvocationResult.Void, [], [
+                new LinkRelationshipEffect("Tracks", DomainExpression.Property("OrderRef"))
+            ], [])
+        ], [], [
+            new Stage("Pending", null, [], [], [], []) {
+                Subscriptions = [
+                    new StageSubscription("Tracks", ["Active"], StageSubscriptionQuantifier.Each, [
+                        new AssignEffect(
+                            DomainExpression.Property("OrderRef"),
+                            DomainExpression.Literal("linked-ok"))
+                    ])
+                ]
+            }
+        ]);
+
+        // OrderRef holds a DomainEntityInstance at runtime (property type Text is only schema)
+        var order = new Entity("Order", [], [
+            new Poly.DomainModeling.Action("Activate", InvocationResult.Void, [], [
+                new StageTransitionEffect(new StageReference("Active"))
+            ], [])
+        ], [], [
+            new Stage("Draft", null, [], [], [], []),
+            new Stage("Active", null, [], [], [], [])
+        ]);
+
+        var rel = new Relationship("Tracks",
+            new DomainTypeReference("Tracker"), new DomainTypeReference("Order"),
+            RelationshipCardinality.OneToOne, []);
+
+        var domain = new Domain("Test", [tracker, order], [rel]);
+        var store = new DomainInstanceStore();
+        var orderInstance = DomainEntityInstance.Create(order, domain: domain);
+        var trackerInstance = DomainEntityInstance.Create(tracker, domain: domain);
+        store.Add(orderInstance);
+        store.Add(trackerInstance);
+
+        // Seed property bag with instance reference, then Link via CallAction effect
+        trackerInstance.SetProperty("OrderRef", orderInstance);
+        var attach = trackerInstance.CallAction("Attach");
+        await Assert.That(attach.Succeeded).IsTrue();
+        await Assert.That(store.IsLinked("Tracks", trackerInstance, orderInstance)).IsTrue();
+
+        orderInstance.CallAction("Activate");
+        await Assert.That(trackerInstance.GetProperty<string>("OrderRef")).IsEqualTo("linked-ok");
     }
 }

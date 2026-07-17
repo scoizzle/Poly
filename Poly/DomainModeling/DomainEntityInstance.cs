@@ -299,7 +299,48 @@ public sealed record DomainEntityInstance {
             case DeleteEntityInstance:
                 IsDeleted = true;
                 break;
+            case LinkRelationshipEffect link:
+                ExecuteLink(link.RelationshipName, link.Target);
+                break;
+            case UnlinkRelationshipEffect unlink:
+                ExecuteUnlink(unlink.RelationshipName, unlink.Target);
+                break;
         }
+    }
+
+    /// <summary>
+    /// Resolves <paramref name="targetExpr"/> to a <see cref="DomainEntityInstance"/> and
+    /// records an instance link (source = this, target = resolved) in the store.
+    /// Target must be a <see cref="PropertyAccess"/> whose current value is a
+    /// <see cref="DomainEntityInstance"/> (set via property bag or prior effects).
+    /// Prefer <see cref="DomainInstanceStore.Link"/> for direct API linking.
+    /// </summary>
+    private void ExecuteLink(string relationshipName, DomainExpression targetExpr) {
+        if (Store is null)
+            throw new InvalidOperationException(
+                "Cannot link relationship without a DomainInstanceStore. Call store.Add(instance) first.");
+        var target = ResolveLinkedInstance(targetExpr, "Link");
+        Store.Link(relationshipName, this, target);
+    }
+
+    private void ExecuteUnlink(string relationshipName, DomainExpression targetExpr) {
+        if (Store is null)
+            throw new InvalidOperationException(
+                "Cannot unlink relationship without a DomainInstanceStore. Call store.Add(instance) first.");
+        var target = ResolveLinkedInstance(targetExpr, "Unlink");
+        Store.Unlink(relationshipName, this, target);
+    }
+
+    private DomainEntityInstance ResolveLinkedInstance(DomainExpression targetExpr, string effectName) {
+        if (targetExpr is PropertyAccess pa
+            && _values.TryGetValue(pa.Name, out var value)
+            && value is DomainEntityInstance instance)
+            return instance;
+
+        throw new InvalidOperationException(
+            $"{effectName} target must be a PropertyAccess whose value is a DomainEntityInstance. " +
+            "Use DomainInstanceStore.Link/Unlink for direct API linking, or store the target instance " +
+            "in a property bag entry first.");
     }
 
     /// <summary>

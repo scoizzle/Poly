@@ -331,6 +331,7 @@ public class SubscriptionAnalysisTests {
         var trackerInstance = DomainEntityInstance.Create(tracker, domain: domain);
         store.Add(orderInstance);
         store.Add(trackerInstance);
+        store.Link("Tracks", trackerInstance, orderInstance);
 
         // Order starts in Draft, then Activate → StageTransition → Active
         orderInstance.CallAction("Activate");
@@ -379,6 +380,8 @@ public class SubscriptionAnalysisTests {
             new Dictionary<string, object?> { ["Status"] = "Untouched" }, domain: domain);
         store.Add(orderInstance);
         store.Add(trackerInstance);
+        // Link present so the only reason subscription must not fire is wrong stage
+        store.Link("Tracks", trackerInstance, orderInstance);
 
         // Tracker is in Idle — subscription is on Pending, should NOT fire
         orderInstance.CallAction("Activate");

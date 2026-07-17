@@ -1,11 +1,11 @@
 # DSL-Engine Sync Plan — Toward Phase 1
 
 **Date:** 2026-07-17
-**Revised:** 2026-07-17 (BR.4.1–.2 verified/done — suite 1276 green; **commit pending**)
-**Status:** Phase 1a vertical **product-complete**; BR.2′–BR.3′′ + BR.4.1–.2 in working tree; **commit pending**
-**Current pick:** **Commit** (then BR.4.3–.4 / E pull-only)
+**Revised:** 2026-07-17 (post-commit review: `5a7b89b` BR.2′–BR.3′′, `17b22df` BR.4.1–.2 — suite 1276)
+**Status:** Phase 1a vertical **product-complete**; BR.2′–BR.3′′ shipped (`5a7b89b`); BR.4.1–.2 shipped (`17b22df`); tree clean
+**Current pick:** **BR.4.4** (instance links) / **E** pull-only — or stop (optional residual only)
 **Source:** [`docs/experiments/domain-modeling-dsl-tour-feedback.md`](../../experiments/domain-modeling-dsl-tour-feedback.md) — §3 and §4  
-**Review:** A–D′; N; bundle; BR.3′′; **pre-commit re-review** (2026-07-17)  
+**Review:** A–D′; N; BR.2′–BR.3′′; **post-commit review `5a7b89b`+`17b22df`** (2026-07-17)  
 **Trigger:** IR/DSL divergence (events vs stage-observation); mutation surface width; single-vertical runtime gap  
 **Related:**
 
@@ -25,7 +25,7 @@
 
 **Slice N principle:** N1 changes **surface syntax only**. IR stays (`Relationship` on `Domain`, `AddRelationshipChange`). Parser/printer map nav lines ↔ IR. **Owning/source side is authoritative** — never invent a second edge from reverse-nav lines.
 
-**Status (2026-07-17):** Phase 1a vertical closed (`e3e91ea`). **N+N′** (`9f0707d`) + **bundle** (`a41153c`) shipped. **BR.2′–BR.3′′** in working tree, suite **1276** green. **BR.3′′.2 verified fixed** (throw on Active OnEntry). **Commit is the only open product gate.** Then BR.4 / E pull-only.
+**Status (2026-07-17):** Phase 1a vertical closed (`e3e91ea`). **N+N′** (`9f0707d`) + N′′/D′′/BR.1–2 (`a41153c`) + **BR.2′–BR.3′′** (`5a7b89b`) + **BR.4.1–.2** (`17b22df`) shipped. Suite **1276** green; tree clean. Residual: **BR.4.4** instance links; **E** pull-only.
 
 ---
 
@@ -111,11 +111,11 @@ Slice N′′      N honesty tests                           [done — a41153c]
 D′′.1–.2       MCP honesty nits                          [done — a41153c]
 BR.1 / BR.1′   event.* Option B + remarks                [done — a41153c]
 BR.2           try/finally flag clear                    [done — a41153c]
-BR.2′          event-key cleanup on throw                [impl done — uncommitted]
-BR.3           OnEntry/OnExit, stage actions, auto-Add     [impl done — uncommitted]
+BR.2′          event-key cleanup on throw                [done — 5a7b89b]
+BR.3           OnEntry/OnExit, stage actions, auto-Add     [done — 5a7b89b]
 →              Commit BR.2′–BR.3′′                         [CURRENT]
 BR.3′          BR.3 review nits                            [done]
-BR.3′′          BR.3′ honesty nits                          [impl done — commit]
+BR.3′′          BR.3′ honesty nits                          [done — 5a7b89b]
 BR.4 / E       residual / Phase 1b                         [pull-only / optional]
 ```
 
@@ -345,7 +345,7 @@ CallAction → StageTransitionEffect → DomainInstanceStore.NotifyTransition
 - [x] **BR.1.3** Test asserts fire (`!= "UNTOUCHED"`) **and** gap (`!= "ABC-123"`)
 - [ ] **BR.1.4** (Future, named consumer) Real `event` subject / lowering — do not invent opcodes now
 
-#### BR.2 / BR.2′ — Exception safety — **IMPL DONE** (uncommitted)
+#### BR.2 / BR.2′ — Exception safety — **DONE** (`5a7b89b`)
 
 - [x] **BR.2.1** `try/finally` clears flag + event instance on throw (`a41153c`)
 - [x] **BR.2′.1** `eventKeys` outside `try`; remove in `finally`
@@ -356,7 +356,7 @@ CallAction → StageTransitionEffect → DomainInstanceStore.NotifyTransition
 
 **Review (2026-07-17, re-check):** Production + strengthened test look good.
 
-#### BR.3 — Lifecycle completeness — **IMPL DONE** (uncommitted)
+#### BR.3 — Lifecycle completeness — **DONE** (`5a7b89b`)
 
 Order implemented: **OnExit → set stage → OnEntry → NotifyTransition** (when `notifyStore` and not inside subscription).
 
@@ -365,33 +365,31 @@ Order implemented: **OnExit → set stage → OnEntry → NotifyTransition** (wh
 - [x] **BR.3.3** `Store?.Add(child)` after create — `CreateEntityInstance_AutoAddsToStore` (asserts `child.Store != null`)
 - [x] **BR.3.4** One-hop cascade (sub transitions subscriber) — `Subscription_OneHop_Cascade` (depth-limit enforcement tested in `Subscription_Cascade_ExceedsDepthLimit`)
 
-##### BR.3′ — follow-ups from BR.3 review — **IMPL LANDED** (uncommitted)
+##### BR.3′ — follow-ups from BR.3 review — **DONE** (`5a7b89b`)
 
 - [x] **BR.3′.1** Hierarchy walk — code + BR.3′′.1 test
 - [x] **BR.3′.2** OnEntry try/finally notify — code + BR.3′′.2 test (fixed: throws on Active OnEntry)
 - [x] **BR.3′.3** Depth limit — E11 subscribed (BR.3′′.3)
 - [x] **BR.3′.4** Child store fan-out — good
 - [x] **BR.3′.5** Re-entrancy documented (BR.3′′.4)
-- [ ] **BR.3′.6** **Commit** (with BR.3′′.7)
+- [x] **BR.3′.6** **Committed** as `5a7b89b`
 
-##### BR.3′′ — honesty nits — **IMPL DONE** (uncommitted)
+##### BR.3′′ — honesty nits — **DONE** (`5a7b89b`)
 
-- [x] **BR.3′′.1** `StageAction_InheritedFromParentStage` — parent-chain inheritance — **verified**
-- [x] **BR.3′′.2** `OnEntryEffect_Throws_StageStillSet_NotifyStillFires` — **re-reviewed fixed**: throw is on **Active OnEntry**; asserts `threw`, stage Active, B notified — exercises notify-in-finally
-- [x] **BR.3′′.3** E11 real subscription — maxDepth proof — **verified**
-- [x] **BR.3′′.4** Re-entrancy remarks on `TransitionStage` — **verified**
-- [x] **BR.3′′.5** Policy vs action hierarchy asymmetry remarks — **verified**
-- [x] **BR.3′′.6** `Subscription_OneHop_Cascade` rename — **verified**
-- [ ] **BR.3′′.7** **Commit** BR.2′ + BR.3 + BR.3′ + BR.3′′ (prod + tests + plan) — **NOT done** (working tree dirty; plan previously overstated “commit done”)
+- [x] **BR.3′′.1**–**.6** as previously verified
+- [x] **BR.3′′.7** **Committed** as `5a7b89b`
 
-**Pre-commit re-review (2026-07-17):** No remaining production defects found in this bundle. Suite **1276** green. Residual after commit: **BR.4** / **E** only (pull-only / optional).
+**Post-commit review (`5a7b89b`, 2026-07-17):** Lifecycle, hierarchy, depth limit, OnEntry-throw/notify, event-key finally — sound. Suite **1276** green.
 
-#### BR.4 — Earlier B-prep leftovers (still optional)
+#### BR.4 — Earlier B-prep leftovers
 
-- [x] **BR.4.1** Quantifier check — **already done** (`isSingularFromSource` covers `ManyToOne` since BR.3 work)
-- [x] **BR.4.2** MCP smoke for subscription visibility — `ApplyDsl_WithN1NavAndSubscription_Succeeds` now asserts `GetEntityDetail` returns `StageData.Subscriptions` with correct relationship name, stage names, and quantifier
-- [x] **BR.4.3** Replay message — **already done** (says "create, transition, or link effects"); duplicate XML — **already resolved by BR.1′ work**; DRY `SemanticMatch` — **per plan: only extract at third call site (only 2 exist)**
-- [ ] **BR.4.4** Instance-level relationship links (second consumer)
+- [x] **BR.4.1** Analyzer treats `ManyToOne` as singular for Any/All quantifier warning (`isSingularFromSource` in `SubscriptionContractAnalyzer`) — **verified already present** (A′′ era). Runtime still **Each-only** (`DomainInstanceStore` skips non-Each). Optional: dedicated ManyToOne+Any unit test; warning text still says “one-to-one” for ManyToOne cases → **BR.4.1′**
+- [x] **BR.4.2** MCP subscription visibility — `ApplyDsl_WithN1NavAndSubscription_Succeeds` asserts `GetEntityDetail` stage subscriptions (`Tracks` / `Active` / `Each`) — **`17b22df`**
+- [x] **BR.4.3** Replay/link message + duplicate XML + DRY SemanticMatch — accepted as already satisfied (no third call site)
+- [ ] **BR.4.4** Instance-level relationship links (second consumer) — **still open** (type-level correlation remains)
+- [ ] **BR.4.1′** (optional honesty) Warning message: say “singular” not only “one-to-one”; add `Analyze_AnyQuantifierOnManyToOne_ReportsWarning`
+
+**Post-commit review (`17b22df`):** BR.4.2 smoke is correct and valuable. BR.4.1 is verification of existing analyzer, not new runtime Any/All support.
 
 #### BR.5 — Doc / style nits
 
@@ -408,7 +406,7 @@ Order implemented: **OnExit → set stage → OnEntry → NotifyTransition** (wh
 - [x] Test domains analyze without DMSS003
 - [x] Event property flow: Option B characterized + remarks honest (`a41153c`)
 - [x] DomainModeling tests green
-- [x] BR.2 / BR.2′ + BR.3 + BR.3′ + BR.3′′ (working tree; **commit CURRENT**)
+- [x] BR.2 / BR.2′ + BR.3 + BR.3′ + BR.3′′ (**committed `5a7b89b`**)
 
 **B vertical product path is closed.** Residual BR work is optional polish / depth.
 
@@ -644,10 +642,9 @@ Pattern after `name :` in entity body:
 #### BR residual (runtime depth)
 
 - [x] **BR.1** + **BR.1′** Option B (`a41153c`)
-- [x] **BR.2** + **BR.2′** (`finally` + Snapshot; uncommitted)
-- [x] **BR.3** + **BR.3′** lifecycle/hierarchy/cascade/auto-Add (uncommitted)
-- [x] **BR.3′′** honesty nits complete in tree; **commit open** (BR.3′′.7)
-- [- [x] **BR.4** .1 quantifier check (done); .2 MCP visibility smoke (done); .3 Replay/DRY/XML (all already done); .4 instance links (deferred)
+- [x] **BR.2** + **BR.2′** (`5a7b89b`)
+- [x] **BR.3** + **BR.3′** + **BR.3′′** (`5a7b89b`)
+- [x] **BR.4.1–.2** (`17b22df`); BR.4.3 accepted; **BR.4.4** open; optional **BR.4.1′**
 - [x] **BR.5** style nits closed earlier
 
 #### Slice E: Phase 1b grammar (**pull-only**)
@@ -720,8 +717,9 @@ Only with a **named consumer** for value types / `create in` / quantifiers / etc
 ```text
 0 → … → B+B′ → C…C′′′ → D+D′  ✅ Phase 1a vertical closed
                          ↘ N+N′ ✅ `9f0707d` → N′′/D′′/BR.1/BR.1′/BR.2 ✅ `a41153c`
-                         ↘ BR.2′–BR.3′′ ✅ ready (commit CURRENT)
-                         ↘ BR.4 / E pull-only
+                         ↘ BR.2′–BR.3′′ ✅ `5a7b89b`
+                         ↘ BR.4.1–.2 ✅ `17b22df`
+                         ↘ BR.4.4 / E pull-only
 ```
 
 ---
@@ -743,7 +741,7 @@ Only with a **named consumer** for value types / `create in` / quantifiers / etc
 - [x] Single execution ownership; `DomainInstanceStore` not a second product API.
 - [x] B′.1 / B′.3 / B′.4 / B′.5 done.
 - [x] B′.2 / BR.1 / BR.1′ Option B characterized + documented (`a41153c`)
-- [x] BR.2 try/finally (`a41153c`) + **BR.2′** + **BR.3** + **BR.3′** + **BR.3′′** (**commit CURRENT**)
+- [x] BR.2 try/finally (`a41153c`) + **BR.2′** + **BR.3** + **BR.3′** + **BR.3′′** (`5a7b89b`) + BR.4.1–.2 (`17b22df`)
 - [ ] BR.4 optional residuals
 
 ### Slice C … C′′′ — **DONE**
@@ -763,8 +761,8 @@ Only with a **named consumer** for value types / `create in` / quantifiers / etc
 
 ### Cross-cutting
 
-- [x] Suite green (**1276**); BR.3′′.2 fixed and verified.
-- [x] D+D′ (`e3e91ea`); N+N′ (`9f0707d`); N′′/D′′/BR.1–2 (`a41153c`); BR.2′–BR.3′′ uncommitted.
+- [x] Suite green (**1276**); tree clean after `5a7b89b` + `17b22df`.
+- [x] D+D′ (`e3e91ea`); N+N′ (`9f0707d`); N′′/D′′/BR.1–2 (`a41153c`); BR.2′–BR.3′′ (`5a7b89b`); BR.4.1–.2 (`17b22df`).
 - [x] `AGENTS.md` principles unchanged unless a principle itself changes (rare).
 
 ---
@@ -798,7 +796,11 @@ Only with a **named consumer** for value types / `create in` / quantifiers / etc
 | 2026-07-17 | **BR.3′ impl review**: production mostly sound. Gaps: **no hierarchy unit test**; depth test **E11 has no subscription** (weak); OnEntry re-entrancy **not** store-depth-limited (claim overstated). Residual **BR.3′′**. **Commit CURRENT**. |
 | 2026-07-17 | **BR.3′′ landed** (uncommitted): hierarchy test; E11 sub; docs; OneHop rename; OnEntry-throw test. Suite **1276**. |
 | 2026-07-17 | **BR.3′′ impl review**: **BR.3′′.2 false positive** — throw was on **Draft** OnEntry, not **Active**. |
-| 2026-07-17 | **BR.3′′.2 fixed** then **pre-commit re-review**: throw on Active OnEntry; `threw` asserted; notify-in-finally proven. Bundle **ready to commit** (BR.3′′.7 open). No further product follow-ups beyond BR.4/E pull-only. |
+| 2026-07-17 | **BR.3′′.2 fixed** then committed with BR.2′–BR.3′′ as `5a7b89b`. |
+
+| 2026-07-17 | **BR.2′–BR.3′′ committed** (`5a7b89b`). Suite **1276**. |
+| 2026-07-17 | **BR.4.1–.2 committed** (`17b22df`): MCP sub visibility smoke; quantifier singular check verified pre-existing. |
+| 2026-07-17 | **Post-commit review** of `5a7b89b`+`17b22df`: lifecycle bundle sound; BR.4.2 smoke good; BR.4.1 is analyzer-already-done (runtime still Each-only). Residual **BR.4.4** instance links; optional BR.4.1′ warning text/test. |
 
 ### Appendix — Relationship authoring
 
@@ -810,17 +812,19 @@ Only with a **named consumer** for value types / `create in` / quantifiers / etc
 
 Runtime correlation remains **type-level** until BR.4.4.
 
-### Appendix — Agent pick order (after pre-commit re-review)
+### Appendix — Agent pick order (after `5a7b89b` + `17b22df` review)
 
 | Order | Task | Severity | Blocks |
 |-------|------|----------|--------|
-| 1 | **Commit** BR.2′–BR.3′′ + BR.4.1–.2 | Required | Uncommitted work |
-| 2 | **BR.4.3–.4 / E** | Optional / pull-only | Named consumer |
+| 1 | **BR.4.4** Instance-level relationship links | Optional | Second consumer / product need |
+| 2 | **BR.4.1′** Optional: ManyToOne+Any dedicated test; warning says “singular” not only “one-to-one” | Nice | Honesty |
+| 3 | **E** Phase 1b | Pull-only | Named consumer |
+| 4 | Runtime `Any`/`All` quantifiers | Pull-only | Named consumer (store still Each-only) |
 
 **Implementer watch-outs:**
 
-- Do not mark BR.3′′.7 done until `git` shows a commit hash.
-- Prefer commit now; BR.4 only with a named consumer.
+- Do not claim runtime Any/All support from BR.4.1 analyzer-only singular warning.
+- Prefer product need before BR.4.4 instance links.
 
 
 Principles: minimal diffs; TUnit names `Method_Condition_ExpectedResult`; no new abstractions; do not reintroduce Event/Publish. **Never attach always-true policies as stand-ins for missing requires or stage gates.**

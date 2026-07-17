@@ -48,7 +48,7 @@ TFM: `net10.0`, nullable on, zero external dependencies in core `Poly/`.
 | **Syntax** | `Node` records, `NodeId`, analysis framework (`Analyzer`, `AnalysisContext`, metadata store, **node replacement**) | Execution semantics, domain shapes, MCP session |
 | **Interpretation** | Semantic passes, `Interpreter`, `DirectVmAbiEmitter`, VM runtime | Domain concepts; one-off ABI/emitter forks for a single consumer |
 | **Introspection** | Platform-agnostic type/member model so Interpretation can **simulate any reasonable type system on any reasonable platform**; CLR is the first provider | Depending on Interpretation; baking one host into the core contract |
-| **DomainModeling** | Immutable `Domain`, evolution, `DomainExpression`, lower-to-AST | Domain VM opcodes; tree rewrites outside analysis + node replacement |
+| **DomainModeling** | Immutable `Domain`, evolution, `DomainExpression`, lower-to-AST; **stage transitions are the authorable observable** (no event/publish/subscribe surface — see `docs/decisions/2026-07-17-stage-transition-as-observable.md`) | Domain VM opcodes; tree rewrites outside analysis + node replacement |
 | **Validation** | `Rule` / `RuleSet` evaluation surface | Owning the AST or VM |
 | **MCP (`Poly.Mcp`)** | Session store, tools, tool honesty | Domain mutation semantics; claiming capabilities the core does not have |
 | **Synthesis** | Macros (VM validates) | Reverse deps from Interpretation |

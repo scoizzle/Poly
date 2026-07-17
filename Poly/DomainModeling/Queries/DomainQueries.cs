@@ -6,11 +6,11 @@ namespace Poly.DomainModeling.Queries;
 
 /// <summary>
 /// High-level overview of a domain model: name and type/relationship counts.
+/// Stage transitions are the authorable observable — there is no Event surface.
 /// </summary>
 public sealed record DomainOverview(
     string Name,
     int EntityCount,
-    int EventCount,
     int RelationshipCount,
     int PrimitiveTypeCount,
     int ValueTypeCount
@@ -40,11 +40,25 @@ public sealed record PropertyDetail(
 /// <summary>
 /// Lightweight stage info for query results.
 /// </summary>
+/// <summary>
+/// Lightweight subscription info for query results.
+/// </summary>
+public sealed record SubscriptionDetail(
+    string RelationshipName,
+    IReadOnlyList<string> StageNames,
+    string Quantifier,
+    int EffectCount
+);
+
+/// <summary>
+/// Lightweight stage info for query results.
+/// </summary>
 public sealed record StageDetail(
     string Name,
     string? ParentStageName,
     IReadOnlyList<string> ActionNames,
-    IReadOnlyList<string> PolicyNames
+    IReadOnlyList<string> PolicyNames,
+    IReadOnlyList<SubscriptionDetail> Subscriptions
 );
 
 /// <summary>
@@ -104,12 +118,9 @@ public static class DomainQueries {
         var entities = domain.Types.OfType<Entity>().ToList();
         var primitives = domain.Types.OfType<PrimitiveType>().ToList();
         var valueTypes = domain.Types.OfType<ValueType>().ToList();
-        var eventTypes = domain.Types.OfType<Event>().ToList();
-
         return new DomainOverview(
             Name: domain.Name,
             EntityCount: entities.Count,
-            EventCount: eventTypes.Count,
             RelationshipCount: domain.Relationships.Count,
             PrimitiveTypeCount: primitives.Count,
             ValueTypeCount: valueTypes.Count
@@ -142,7 +153,12 @@ public static class DomainQueries {
                     s.Name,
                     s.Parent?.StageName,
                     s.Actions.Select(a => a.Name).ToList(),
-                    s.Policies.Select(p => p.Name).ToList()))
+                    s.Policies.Select(p => p.Name).ToList(),
+                    s.Subscriptions.Select(sub => new SubscriptionDetail(
+                        sub.RelationshipName,
+                        sub.StageNames,
+                        sub.Quantifier.ToString(),
+                        sub.Effects.Count)).ToList()))
                 .ToList(),
             Actions: entity.Actions
                 .Select(a => new ActionDetail(
@@ -216,5 +232,16 @@ public static class DomainQueries {
                 .Select(d => $"[{d.Severity}] {d.Message}")
                 .ToList()
         );
+    }
+
+    /// <summary>
+    /// Flattens all <see cref="StageSubscription"/> instances across every stage of the given entity.
+    /// Useful for analyzers that need to inspect subscriptions without iterating stages manually.
+    /// </summary>
+    public static IReadOnlyList<StageSubscription> GetStageSubscriptions(Entity entity) {
+        ArgumentNullException.ThrowIfNull(entity);
+        return entity.Stages
+            .SelectMany(s => s.Subscriptions)
+            .ToList();
     }
 }

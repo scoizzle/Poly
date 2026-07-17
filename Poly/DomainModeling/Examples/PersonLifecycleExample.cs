@@ -5,10 +5,12 @@ namespace Poly.DomainModeling.Examples;
 
 /// <summary>
 /// Concrete construction of the Person lifecycle from the original Ugh sketch,
-/// using the current V3 Core immutable model.
-/// 
+/// using the current V3 Core immutable model and stage-observation semantics.
+///
+/// Stage transitions ARE the observable — no separate Event/PublishEvent surface.
+/// Subscribers use relationship-path subscriptions (when cert Stage) to react.
+///
 /// Policies are expressed directly with DomainExpression (no PolicyExpression layer).
-/// This is the target shape the V3 builders should make ergonomic.
 /// </summary>
 public static class PersonLifecycleExample {
     public static Domain Create() {
@@ -30,25 +32,6 @@ public static class PersonLifecycleExample {
             []
         );
 
-        // --- Events ---
-        var bornEvent = new Event(
-            "Born",
-            [
-                new Property("TimeOfBirth", new DomainTypeReference("Timestamp"), []),
-            ],
-            []
-        );
-
-        var diedEvent = new Event(
-            "Died",
-            [
-                new Property("TimeOfDeath", new DomainTypeReference("Timestamp"), []),
-                new Property("Cause", new DomainTypeReference("Text"), []),
-                new Property("LifeSpan", new DomainTypeReference("Duration"), []),
-            ],
-            []
-        );
-
         // --- Person Entity ---
         var person = new Entity(
             "Person",
@@ -56,10 +39,6 @@ public static class PersonLifecycleExample {
                 new Property("SurName", new DomainTypeReference("Text"), []),
                 new Property("GivenName", new DomainTypeReference("Text"), []),
                 new Property("TimeOfBirth", new DomainTypeReference("Timestamp"), []),
-            ],
-            [
-                new DomainTypeReference("Born"),
-                new DomainTypeReference("Died"),
             ],
             [], // Actions defined per stage below
             [], // Entity-level policies
@@ -84,15 +63,9 @@ public static class PersonLifecycleExample {
                     ],
                     OnEntryEffects:
                     [
-                        new PublishEventEffect(
-                            new DomainTypeReference("Born"),
-                            [
-                                new PropertyBinding(
-                                    "TimeOfBirth",
-                                    DomainExpression.Owned("BirthCertificate", DomainExpression.Property("Time"))
-                                ),
-                            ]
-                        ),
+                        // Stage entry IS the observable — no PublishEventEffect needed.
+                        // The fact of entering Alive communicates the birth.
+                        // Subscribers navigate via relationship path and read properties directly.
                     ],
                     OnExitEffects: []
                 ),
@@ -110,29 +83,7 @@ public static class PersonLifecycleExample {
                             )
                         ),
                     ],
-                    OnEntryEffects:
-                    [
-                        new PublishEventEffect(
-                            new DomainTypeReference("Died"),
-                            [
-                                new PropertyBinding(
-                                    "TimeOfDeath",
-                                    DomainExpression.Owned("DeathCertificate", DomainExpression.Property("Time"))
-                                ),
-                                new PropertyBinding(
-                                    "Cause",
-                                    DomainExpression.Owned("DeathCertificate", DomainExpression.Property("Cause"))
-                                ),
-                                new PropertyBinding(
-                                    "LifeSpan",
-                                    DomainExpression.Subtract(
-                                        DomainExpression.Owned("DeathCertificate", DomainExpression.Property("Time")),
-                                        DomainExpression.Property("TimeOfBirth")
-                                    )
-                                ),
-                            ]
-                        ),
-                    ],
+                    OnEntryEffects: [],
                     OnExitEffects: []
                 ),
             ]
@@ -178,8 +129,6 @@ public static class PersonLifecycleExample {
                 new PrimitiveType("Duration", TypeCategory.Temporal, []),
                 birthCertificateType,
                 deathCertificateType,
-                bornEvent,
-                diedEvent,
                 person,
             ],
             []

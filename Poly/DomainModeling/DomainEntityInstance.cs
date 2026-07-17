@@ -29,7 +29,27 @@ public sealed record DomainEntityInstance {
     private readonly Dictionary<string, object?> _values;
     private readonly TypeDefinitionNodeAnalyzer _typeDefAnalyzer;
     private readonly List<DomainEntityInstance> _createdChildren = [];
-    private readonly List<PublishEventEffect> _publishedEvents = [];
+    private Dictionary<string, object?>? _eventValues;
+    private bool _isExecutingSubscription;
+    internal DomainInstanceStore? Store { get; set; }
+
+    /// <summary>
+    /// Makes the transitioning entity's properties available as "event" in
+    /// subscription effect evaluation. Called by <see cref="DomainInstanceStore"/>
+    /// during fan-out.
+    /// </summary>
+    internal void SetEventInstance(DomainEntityInstance? eventInstance) {
+        if (eventInstance is null) {
+            _eventValues = null;
+            return;
+        }
+        // Build a real Dictionary from the snapshot (Snapshot() returns IReadOnlyDictionary)
+        var snapshot = eventInstance.Snapshot();
+        var dict = new Dictionary<string, object?>(StringComparer.Ordinal);
+        foreach (var kv in snapshot)
+            dict[kv.Key] = kv.Value;
+        _eventValues = dict;
+    }
 
     private DomainEntityInstance(
         Entity entity,
@@ -59,8 +79,6 @@ public sealed record DomainEntityInstance {
     /// <summary>Child instances created by <see cref="CreateEntityInstance"/> effects.</summary>
     public IReadOnlyList<DomainEntityInstance> CreatedChildren => _createdChildren;
 
-    /// <summary>Events published by <see cref="PublishEventEffect"/> during action execution.</summary>
-    public IReadOnlyList<PublishEventEffect> PublishedEvents => _publishedEvents;
 
     /// <summary>
     /// Creates a new instance of <paramref name="entity"/> with the given
@@ -169,6 +187,21 @@ public sealed record DomainEntityInstance {
     /// Attempts to call <paramref name="actionName"/> on this instance.
     /// Evaluates all guard policies, then executes each effect in sequence.
     ///
+    /// <para><b>Action pipeline order:</b></para>
+    /// <list type="number">
+    ///   <item>Resolve action by name — fail if not found.</item>
+    ///   <item>Evaluate action-level guard policies (<see cref="Policy"/>).</item>
+    ///   <item>Evaluate current-stage guard policies.</item>
+    ///   <item>Evaluate entity-level guard policies.</item>
+    ///   <item>Execute each effect in declaration order:
+    ///     <list type="bullet">
+    ///       <item><b>VM-compiled</b> (<see cref="AssignEffect"/>, <see cref="CompositeEffect"/>, <see cref="ConditionalEffect"/>) → lowered to Syntax AST → compiled via <see cref="Interpreter.Compile"/> → executed via VM.</item>
+    ///       <item><b>Direct-execution</b> (<see cref="StageTransitionEffect"/>, <see cref="CreateEntityInstance"/>, <see cref="InvokeActionEffect"/>, <see cref="DeleteEntityInstance"/>) → mutates instance state directly.</item>
+    ///     </list>
+    ///   </item>
+    ///   <item>On <see cref="StageTransitionEffect"/>: set stage → if <c>notifyStore</c>, fire stage-scoped <see cref="StageSubscription"/> effects (see <see cref="DomainInstanceStore.NotifyTransition"/>).</item>
+    /// </list>
+    ///
     /// <para><b>VM-executable effects</b> (<see cref="AssignEffect"/>,
     /// <see cref="CompositeEffect"/>, <see cref="ConditionalEffect"/>) are
     /// lowered to Syntax AST, compiled, and executed via the VM.</para>
@@ -233,7 +266,10 @@ public sealed record DomainEntityInstance {
 
         switch (effect) {
             case StageTransitionEffect transition:
-                TransitionStage(transition.TargetStage.StageName);
+                // Action path: always notify. Subscription path suppresses
+                // notifications via the _isExecutingSubscription flag checked
+                // in TransitionStage.
+                TransitionStage(transition.TargetStage.StageName, notifyStore: true);
                 break;
             case CreateEntityInstance create:
                 CreateChildInstance(create);
@@ -244,15 +280,78 @@ public sealed record DomainEntityInstance {
             case DeleteEntityInstance:
                 IsDeleted = true;
                 break;
-            case PublishEventEffect publish:
-                _publishedEvents.Add(publish);
-                break;
         }
     }
 
-    private void TransitionStage(string targetStageName) {
-        if (Entity.Stages.Any(s => string.Equals(s.Name, targetStageName, StringComparison.Ordinal)))
-            CurrentStage = targetStageName;
+    /// <summary>
+    /// Transitions to a target stage. Store notification fires when:
+    /// <list type="bullet">
+    ///   <item><paramref name="notifyStore"/> is <c>true</c>,</item>
+    ///   <item><c>Store</c> is set,</item>
+    ///   <item>we are <b>not</b> inside a <see cref="ExecuteSubscriptionEffects"/> call
+    ///     (subscription-triggered transitions cascade through <see cref="DomainInstanceStore.NotifyTransition"/>
+    ///     recursion, not through a second store call).</item>
+    /// </list>
+    /// </summary>
+    internal void TransitionStage(string targetStageName, bool notifyStore = true) {
+        if (!Entity.Stages.Any(s => string.Equals(s.Name, targetStageName, StringComparison.Ordinal)))
+            return;
+
+        var previousStage = CurrentStage;
+        CurrentStage = targetStageName;
+
+        // Notify subscribers (skip during subscription execution — cascading already handled by store)
+        if (notifyStore && Store is not null && previousStage != targetStageName && !_isExecutingSubscription) {
+            Store.NotifyTransition(this, targetStageName);
+        }
+    }
+
+    /// <summary>
+    /// Executes subscription effects in this instance's context (subscriber).
+    /// The <paramref name="eventInstance"/> is the entity that transitioned,
+    /// made available for "event" references in expression bodies.
+    /// Called by <see cref="DomainInstanceStore.NotifyTransition"/>.
+    ///
+    /// Subscription-triggered transitions suppress store notification via
+    /// <c>_isExecutingSubscription</c> — cascading is handled by the store's
+    /// depth-limited recursion instead.
+    /// </summary>
+    /// <summary>
+    /// Keys used to store event instance property values in <c>_values</c>
+    /// during subscription effect execution. Consumers can reference
+    /// <c>event.PropertyName</c> through these keys.
+    /// </summary>
+    private const string EventPrefix = "event.";
+
+    internal void ExecuteSubscriptionEffects(IReadOnlyList<Effect> effects, DomainEntityInstance eventInstance) {
+        SetEventInstance(eventInstance);
+        _isExecutingSubscription = true;
+
+        // Merge event values into _values so expressions can reference
+        // "event.PropertyName" via the standard lowering path.
+        // These keys are removed after execution.
+        var eventKeys = new List<string>();
+        if (_eventValues is not null) {
+            foreach (var kv in _eventValues) {
+                var key = $"{EventPrefix}{kv.Key}";
+                _values[key] = kv.Value;
+                eventKeys.Add(key);
+            }
+        }
+
+        var subjectParam = new Parameter("entity", new TypeReference(Entity.Name));
+        var effectPass = new EffectLoweringPass(Entity, subjectParam);
+
+        foreach (var effect in effects) {
+            ExecuteEffect(effect, effectPass);
+        }
+
+        // Clean up merged event values
+        foreach (var key in eventKeys)
+            _values.Remove(key);
+
+        _isExecutingSubscription = false;
+        SetEventInstance(null);
     }
 
     /// <summary>

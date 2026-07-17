@@ -40,7 +40,6 @@ internal sealed record DomainOverviewData(
     [property: JsonPropertyName("entityNames")] IReadOnlyList<string> EntityNames,
     [property: JsonPropertyName("primitiveCount")] int PrimitiveCount,
     [property: JsonPropertyName("relationshipCount")] int RelationshipCount,
-    [property: JsonPropertyName("eventCount")] int EventCount,
     [property: JsonPropertyName("valueTypeCount")] int ValueTypeCount
 );
 
@@ -62,10 +61,18 @@ internal sealed record PropertyData(
     [property: JsonPropertyName("constraintCount")] int ConstraintCount
 );
 
+internal sealed record SubscriptionData(
+    [property: JsonPropertyName("relationshipName")] string RelationshipName,
+    [property: JsonPropertyName("stageNames")] IReadOnlyList<string> StageNames,
+    [property: JsonPropertyName("quantifier")] string Quantifier,
+    [property: JsonPropertyName("effectCount")] int EffectCount
+);
+
 internal sealed record StageData(
     [property: JsonPropertyName("name")] string Name,
     [property: JsonPropertyName("parent")] string? ParentStageName,
-    [property: JsonPropertyName("actions")] IReadOnlyList<string> Actions
+    [property: JsonPropertyName("actions")] IReadOnlyList<string> Actions,
+    [property: JsonPropertyName("subscriptions")] IReadOnlyList<SubscriptionData> Subscriptions
 );
 
 internal sealed record ActionData(
@@ -149,7 +156,7 @@ internal sealed class QueryTool {
         var data = new DomainOverviewData(
             overview.Name, overview.EntityCount, entityNames,
             overview.PrimitiveTypeCount, overview.RelationshipCount,
-            overview.EventCount, overview.ValueTypeCount
+            overview.ValueTypeCount
         );
 
         return new DomainToolResponse(
@@ -186,7 +193,10 @@ internal sealed class QueryTool {
         var data = new EntityDetailData(
             detail.Name,
             detail.Properties.Select(p => new PropertyData(p.Name, p.TypeName, p.ConstraintCount)).ToList(),
-            detail.Stages.Select(s => new StageData(s.Name, s.ParentStageName, s.ActionNames)).ToList(),
+            detail.Stages.Select(s => new StageData(
+                s.Name, s.ParentStageName, s.ActionNames,
+                s.Subscriptions.Select(sub => new SubscriptionData(
+                    sub.RelationshipName, sub.StageNames, sub.Quantifier, sub.EffectCount)).ToList())).ToList(),
             detail.Actions.Select(a => new ActionData(a.Name, a.ParameterNames, a.EffectCount)).ToList(),
             detail.Policies.Select(p => p.Name).ToList(),
             detail.ParentEntityName

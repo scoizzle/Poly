@@ -1,7 +1,7 @@
 namespace Poly.DomainModeling;
 
 /// <summary>
-/// A named piece of data belonging to a <see cref="DomainType"/> (Entity, Event, ValueType, etc.).
+/// A named piece of data belonging to a <see cref="DomainType"/> (Entity, ValueType, etc.).
 /// </summary>
 public sealed record Property(
     string Name,

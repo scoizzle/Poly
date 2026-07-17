@@ -32,7 +32,7 @@ public class DomainEvolutionApplicatorTests {
 
     [Test]
     public async Task Apply_RemoveEntityChange_RemovesFromNewRoot() {
-        var entity = new Entity("Customer", [], [], [], [], []);
+        var entity = new Entity("Customer", [], [], [], []);
         var start = new Domain("TestDomain", [entity], []);
 
         var change = new RemoveEntityChange("Customer");
@@ -48,7 +48,7 @@ public class DomainEvolutionApplicatorTests {
     public async Task Apply_AddPropertyToExistingEntity_Works() {
         // Seed common primitive so property reference resolves
         var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
-        var entity = new Entity("Order", [], [], [], [], []);
+        var entity = new Entity("Order", [], [], [], []);
         var start = new Domain("Test", [entity, textPrimitive], []);
 
         var newProp = new Property("Status", new DomainTypeReference("Text"), []);
@@ -98,8 +98,8 @@ public class DomainEvolutionApplicatorTests {
     public async Task UnchangedEntities_RetainOriginalNodeId() {
         // Create a domain with two entities + required primitive
         var intPrimitive = new PrimitiveType("Int", Poly.Introspection.TypeCategory.Integer, []);
-        var untouched = new Entity("Customer", [], [], [], [], []);
-        var touched = new Entity("Order", [], [], [], [], []);
+        var untouched = new Entity("Customer", [], [], [], []);
+        var touched = new Entity("Order", [], [], [], []);
         var start = new Domain("Test", [untouched, touched, intPrimitive], []);
 
         var originalUntouchedId = untouched.Id;
@@ -121,7 +121,7 @@ public class DomainEvolutionApplicatorTests {
 
     [Test]
     public async Task Apply_AddStageChange_AddsStageToEntity() {
-        var entity = new Entity("Person", [], [], [], [], []);
+        var entity = new Entity("Person", [], [], [], []);
         var start = new Domain("Test", [entity], []);
 
         var change = new AddStageChange("Person", "Alive");
@@ -137,7 +137,7 @@ public class DomainEvolutionApplicatorTests {
     [Test]
     public async Task Apply_RemoveStageChange_RemovesStage() {
         var stage = new Stage("Alive", null, [], [], [], []);
-        var entity = new Entity("Person", [], [], [], [], [stage]);
+        var entity = new Entity("Person", [], [], [], [stage]);
         var start = new Domain("Test", [entity], []);
 
         var change = new RemoveStageChange("Person", "Alive");
@@ -150,7 +150,7 @@ public class DomainEvolutionApplicatorTests {
 
     [Test]
     public async Task Apply_AddActionChange_AddsActionToEntity() {
-        var entity = new Entity("Person", [], [], [], [], []);
+        var entity = new Entity("Person", [], [], [], []);
         var start = new Domain("Test", [entity], []);
 
         var change = new AddActionChange("Person", "Die");
@@ -165,7 +165,7 @@ public class DomainEvolutionApplicatorTests {
     [Test]
     public async Task Apply_RemoveActionChange_RemovesAction() {
         var action = new Poly.DomainModeling.Action("Die", InvocationResult.Void, [], [], []);
-        var entity = new Entity("Person", [], [], [action], [], []);
+        var entity = new Entity("Person", [], [action], [], []);
         var start = new Domain("Test", [entity], []);
 
         var change = new RemoveActionChange("Person", "Die");
@@ -206,18 +206,18 @@ public class DomainEvolutionApplicatorTests {
             .AddPrimitiveType("Text", Poly.Introspection.TypeCategory.Text)
             .AddPrimitiveType("Timestamp", Poly.Introspection.TypeCategory.DateTime)
             .AddPrimitiveType("Boolean", Poly.Introspection.TypeCategory.Boolean)
-            // Add owned documents (ValueTypes) and events — key for PersonLifecycle style
+            // Add owned documents (ValueTypes) — key for PersonLifecycle style
             .AddValueType("BirthCertificate", new Property("Time", new DomainTypeReference("Timestamp"), []))
             .AddValueType("DeathCertificate",
                 new Property("Time", new DomainTypeReference("Timestamp"), []),
                 new Property("Cause", new DomainTypeReference("Text"), []))
-            .AddEventToEntity("Person", "Born", new Property("TimeOfBirth", new DomainTypeReference("Timestamp"), []))
-
             .AddPropertyToEntity("Person", new Property("GivenName", new DomainTypeReference("Text"), []))
-            // Enhance existing Alive stage (attach guard policy + onEntry effect). Do not re-AddStage.
+            // Enhance existing Alive stage with an OnEntry effect. Do not re-AddStage.
             .AddStageGuard("Person", "Alive", "HasBirthCert",
                 DomainExpression.Exists(DomainExpression.Owned("BirthCertificate", DomainExpression.Property("Time"))))
-            .AddOnEntryEffect("Person", "Alive", new PublishEventEffect(new DomainTypeReference("Born"), []))
+            .AddOnEntryEffect("Person", "Alive",
+                new CompositeEffect([]))
+
             // Demonstrate action defined directly on a stage (new MVP capability)
             .AddActionToStage("Person", "Alive", "Cancel")
             // New action Register with its full definition
@@ -273,21 +273,20 @@ public class DomainEvolutionApplicatorTests {
         await Assert.That(result2.Root.Relationships.Count).IsEqualTo(1);
         await Assert.That(result2.Root.Relationships[0].Name).IsEqualTo("Friends");
 
-        // Verify ValueTypes and Events were added
+        // Verify ValueTypes were added
         var valueTypes = result2.Root.Types.OfType<Poly.DomainModeling.ValueType>().ToList();
         await Assert.That(valueTypes.Count).IsEqualTo(2);
         await Assert.That(valueTypes.Any(v => v.Name == "BirthCertificate")).IsTrue();
         await Assert.That(valueTypes.Any(v => v.Name == "DeathCertificate")).IsTrue();
 
-        await Assert.That(finalPerson.Events.Count).IsEqualTo(1);
-        await Assert.That(finalPerson.Events[0].TypeName).IsEqualTo("Born");
+
     }
 
     [Test]
     public async Task Apply_AddEffectToActionChange_AttachesCreateEffect() {
         // Setup: Person entity with a Die action + the target ValueType (owned doc pattern)
         var dieAction = new Poly.DomainModeling.Action("Die", InvocationResult.Void, [], [], []);
-        var person = new Entity("Person", [], [], [dieAction], [], []);
+        var person = new Entity("Person", [], [dieAction], [], []);
         var deathCert = new Poly.DomainModeling.ValueType("DeathCertificate", [], []);
         var start = new Domain("Test", [person, deathCert], []);
 
@@ -308,7 +307,7 @@ public class DomainEvolutionApplicatorTests {
     public async Task Apply_AddEffectToActionChange_AttachesStageTransition() {
         var dieAction = new Poly.DomainModeling.Action("Die", InvocationResult.Void, [], [], []);
         var deadStage = new Stage("Dead", null, [], [], [], []);
-        var person = new Entity("Person", [], [], [dieAction], [], [deadStage]);
+        var person = new Entity("Person", [], [dieAction], [], [deadStage]);
         var start = new Domain("Test", [person], []);
 
         var transition = new StageTransitionEffect(new StageReference("Dead"));
@@ -374,7 +373,7 @@ public class DomainEvolutionApplicatorTests {
 
     [Test]
     public async Task AddPolicyToEntity_Works() {
-        var entity = new Entity("Person", [], [], [], [], []);
+        var entity = new Entity("Person", [], [], [], []);
         var start = new Domain("Test", [entity], []);
 
         var policy = new Policy("HasBirthCert", DomainExpression.Exists(
@@ -446,12 +445,9 @@ public class DomainEvolutionApplicatorTests {
             .Evolve()
             .AddPrimitiveType("Timestamp", Poly.Introspection.TypeCategory.DateTime)
             .AddEntity("Person")
-            .AddEventToEntity("Person", "Born", new Property("TimeOfBirth", new DomainTypeReference("Timestamp"), []))
             .AddStage("Person", "Dead")
             .AddAction("Person", "Die")
             .AddParameterToAction("Person", "Die", new Property("TimeOfBirth", new DomainTypeReference("Timestamp"), []))
-            .AddPublishEventEffect("Person", "Die", "Born",
-                ("TimeOfBirth", DomainExpression.Parameter("TimeOfBirth")))
             .AddStageTransitionEffect("Person", "Die", "Dead")
             .Apply();
 
@@ -460,8 +456,7 @@ public class DomainEvolutionApplicatorTests {
         var die = result.Root.Types.OfType<Entity>().Single(e => e.Name == "Person")
             .Actions.Single(a => a.Name == "Die");
 
-        await Assert.That(die.Effects.Count).IsEqualTo(2);
-        await Assert.That(die.Effects.Any(e => e is PublishEventEffect)).IsTrue();
+        await Assert.That(die.Effects.Count).IsEqualTo(1);
         await Assert.That(die.Effects.Any(e => e is StageTransitionEffect)).IsTrue();
     }
 
@@ -497,7 +492,7 @@ public class DomainEvolutionApplicatorTests {
         var dieAction = new Poly.DomainModeling.Action("Die", InvocationResult.Void, [], [createEffect], []);
         var aliveStage = new Stage("Alive", null, [], [], [], []);
         var deadStage = new Stage("Dead", null, [], [], [], []);
-        var person = new Entity("Person", [new Property("Name", new DomainTypeReference("Text"), [])], [], [dieAction], [], [aliveStage, deadStage]);
+        var person = new Entity("Person", [new Property("Name", new DomainTypeReference("Text"), [])], [dieAction], [], [aliveStage, deadStage]);
         var start = new Domain("Test", [person, text, someDoc], []);
 
         // Capture original Ids of nodes we will not touch
@@ -617,7 +612,7 @@ public class DomainEvolutionApplicatorTests {
     public async Task RemoveActionFromStage_Works() {
         var action = new Poly.DomainModeling.Action("Approve", InvocationResult.Void, [], [], []);
         var stage = new Stage("Pending", null, [action], [], [], []);
-        var entity = new Entity("Order", [], [], [], [], [stage]);
+        var entity = new Entity("Order", [], [], [], [stage]);
         var start = new Domain("Test", [entity], []);
 
         var result = new DomainEvolution(start).Apply([
@@ -705,20 +700,11 @@ public class DomainEvolutionApplicatorTests {
             .AddValueType("DeathCertificate",
                 new Property("Time", new DomainTypeReference("Timestamp"), []),
                 new Property("Cause", new DomainTypeReference("Text"), []))
-            // Events with their payloads (documented)
-            .AddEvent("Born", new Property("TimeOfBirth", new DomainTypeReference("Timestamp"), []))
-            .AddEvent("Died",
-                new Property("TimeOfDeath", new DomainTypeReference("Timestamp"), []),
-                new Property("Cause", new DomainTypeReference("Text"), []),
-                new Property("LifeSpan", new DomainTypeReference("Duration"), []))
             // The Person entity skeleton (built incrementally — honest step-by-step via evolution)
             .AddEntity("Person")
             .AddPropertyToEntity("Person", new Property("SurName", new DomainTypeReference("Text"), []))
             .AddPropertyToEntity("Person", new Property("GivenName", new DomainTypeReference("Text"), []))
             .AddPropertyToEntity("Person", new Property("TimeOfBirth", new DomainTypeReference("Timestamp"), []))
-            // Attach the events to the entity (documented pattern)
-            .AddEventReferenceToEntity("Person", "Born")
-            .AddEventReferenceToEntity("Person", "Died")
             .Apply();
 
         await Assert.That(step1.Succeeded).IsTrue();
@@ -741,26 +727,16 @@ public class DomainEvolutionApplicatorTests {
             .AddStageGuard("Person", "Dead", "HasDeathCertificate",
                 DomainExpression.Exists(
                     DomainExpression.Owned("DeathCertificate", DomainExpression.Property("Time"))))
-            // OnEntry for Alive: publish Born (binding from owned certificate) — documented
+            // OnEntry for Alive: stage transition IS the observable — no PublishEvent needed.
             .AddOnEntryEffect("Person", "Alive",
-                new PublishEventEffect(
-                    new DomainTypeReference("Born"),
-                    [new PropertyBinding("TimeOfBirth",
-                        DomainExpression.Owned("BirthCertificate", DomainExpression.Property("Time")))]))
-            // OnEntry for Dead: publish Died with LifeSpan calculation (Subtract) — the key documented expression
+                new AssignEffect(
+                    DomainExpression.Property("TimeOfBirth"),
+                    DomainExpression.Owned("BirthCertificate", DomainExpression.Property("Time"))))
+            // OnEntry for Dead: stage transition IS the observable — no PublishEvent needed.
             .AddOnEntryEffect("Person", "Dead",
-                new PublishEventEffect(
-                    new DomainTypeReference("Died"),
-                    [
-                        new PropertyBinding("TimeOfDeath",
-                            DomainExpression.Owned("DeathCertificate", DomainExpression.Property("Time"))),
-                        new PropertyBinding("Cause",
-                            DomainExpression.Owned("DeathCertificate", DomainExpression.Property("Cause"))),
-                        new PropertyBinding("LifeSpan",
-                            DomainExpression.Subtract(
-                                DomainExpression.Owned("DeathCertificate", DomainExpression.Property("Time")),
-                                DomainExpression.Property("TimeOfBirth")))
-                    ]))
+                new AssignEffect(
+                    DomainExpression.Property("TimeOfBirth"),
+                    DomainExpression.Owned("DeathCertificate", DomainExpression.Property("Time"))))
             .Apply();
 
         await Assert.That(step2.Succeeded).IsTrue();
@@ -808,16 +784,12 @@ public class DomainEvolutionApplicatorTests {
         await Assert.That(dead.Policies.Count).IsEqualTo(1);
         await Assert.That(dead.Policies[0].Name).IsEqualTo("HasDeathCertificate");
 
-        // OnEntry effects with the documented Publish + complex binding (including Subtract for LifeSpan)
+        // OnEntry effects — stage transitions are the observable; AssignEffect replaces old PublishEventEffect.
         await Assert.That(alive.OnEntryEffects.Count).IsEqualTo(1);
-        await Assert.That(alive.OnEntryEffects[0]).IsTypeOf<PublishEventEffect>();
+        await Assert.That(alive.OnEntryEffects[0]).IsTypeOf<AssignEffect>();
 
         await Assert.That(dead.OnEntryEffects.Count).IsEqualTo(1);
-        var diedPublish = (PublishEventEffect)dead.OnEntryEffects[0];
-        await Assert.That(diedPublish.EventType.TypeName).IsEqualTo("Died");
-        // The LifeSpan binding uses Subtract — this is the non-trivial DomainExpression the documented example relies on
-        var lifeSpanBinding = diedPublish.PropertyBindings.Single(b => b.PropertyName == "LifeSpan");
-        await Assert.That(lifeSpanBinding.Expression).IsTypeOf<Poly.DomainModeling.Subtract>();
+        await Assert.That(dead.OnEntryEffects[0]).IsTypeOf<AssignEffect>();
 
         // Die action exists on the Alive stage with the documented effects
         await Assert.That(alive.Actions.Count).IsEqualTo(1);
@@ -829,7 +801,6 @@ public class DomainEvolutionApplicatorTests {
 
         // ValueTypes and Events are present as documented
         await Assert.That(final.Types.OfType<Poly.DomainModeling.ValueType>().Count()).IsEqualTo(2);
-        await Assert.That(final.Types.OfType<Event>().Count()).IsEqualTo(2);
 
         // The trace tells the full story (high-fidelity change history as Information diagnostics)
         // step2 added stages + policies + OnEntry effects
@@ -896,15 +867,6 @@ public class DomainEvolutionApplicatorTests {
             .AddPropertyToEntity("Fine", new Property("Reason", new DomainTypeReference("Text"), []))
             .AddPropertyToEntity("Fine", new Property("IssuedDate", new DomainTypeReference("Instant"), []))
             .AddPropertyToEntity("Fine", new Property("IsPaid", new DomainTypeReference("Bool"), []))
-            // Events
-            .AddEvent("BookCheckedOut",
-                new Property("BookTitle", new DomainTypeReference("Text"), []),
-                new Property("MemberName", new DomainTypeReference("Text"), []))
-            .AddEventReferenceToEntity("Loan", "BookCheckedOut")
-            .AddEvent("BookReturned",
-                new Property("ReturnDate", new DomainTypeReference("Instant"), []),
-                new Property("Condition", new DomainTypeReference("Text"), []))
-            .AddEventReferenceToEntity("Loan", "BookReturned")
             .Apply();
 
         await Assert.That(step1.Succeeded).IsTrue();
@@ -946,23 +908,11 @@ public class DomainEvolutionApplicatorTests {
 
         var checkoutTransition = new StageTransitionEffect(new StageReference("Active"));
 
-        var checkoutPublish = new PublishEventEffect(
-            new DomainTypeReference("BookCheckedOut"),
-            [
-                new PropertyBinding("BookTitle", DomainExpression.Parameter("BookTitle")),
-                new PropertyBinding("MemberName", DomainExpression.Parameter("MemberName"))
-            ]);
+        // PublishEventEffect removed — stage transitions are the observable.
 
-        // ReturnBook: Transitions Loan to Returned, publishes BookReturned.
+        // ReturnBook: Transitions Loan to Returned.
         // GAP: Cannot increment Book.AvailableCopies (same cross-entity mutation gap as CheckoutBook).
         var returnTransition = new StageTransitionEffect(new StageReference("Returned"));
-
-        var returnPublish = new PublishEventEffect(
-            new DomainTypeReference("BookReturned"),
-            [
-                new PropertyBinding("ReturnDate", DomainExpression.Property("DueDate")),
-                new PropertyBinding("Condition", DomainExpression.Parameter("Condition"))
-            ]);
 
         var step3 = new DomainEvolution(step2.Root)
             .Evolve()
@@ -985,14 +935,12 @@ public class DomainEvolutionApplicatorTests {
             .AddParameterToAction("Loan", "CheckoutBook", new Property("DueDate", new DomainTypeReference("Date"), []))
             .AddEffectToAction("Loan", "CheckoutBook", checkoutCreate)
             .AddEffectToAction("Loan", "CheckoutBook", checkoutTransition)
-            .AddEffectToAction("Loan", "CheckoutBook", checkoutPublish)
-            // ReturnBook: transitions Loan to Returned, publishes BookReturned
+            // ReturnBook: transitions Loan to Returned
             .AddActionToStage("Loan", "Active", "ReturnBook")
             .AddActionToStage("Loan", "Overdue", "ReturnBook")
             .AddActionToStage("Loan", "Renewed", "ReturnBook")
             .AddParameterToAction("Loan", "ReturnBook", new Property("Condition", new DomainTypeReference("Text"), []))
             .AddEffectToAction("Loan", "ReturnBook", returnTransition)
-            .AddEffectToAction("Loan", "ReturnBook", returnPublish)
             // RenewLoan: increments RenewalCount +1, extends DueDate by 14 days, transitions to Renewed.
             .AddActionToStage("Loan", "Active", "RenewLoan")
             .AddEffectToAction("Loan", "RenewLoan",
@@ -1047,24 +995,18 @@ public class DomainEvolutionApplicatorTests {
 
         // CheckoutBook effects
         var checkout = active.Actions.Single(a => a.Name == "CheckoutBook");
-        await Assert.That(checkout.Effects.Count).IsEqualTo(3);
+        await Assert.That(checkout.Effects.Count).IsEqualTo(2);
         await Assert.That(checkout.Effects.Any(e => e is CreateEntityInstance)).IsTrue();
         await Assert.That(checkout.Effects.Any(e => e is StageTransitionEffect)).IsTrue();
-        await Assert.That(checkout.Effects.Any(e => e is PublishEventEffect)).IsTrue();
 
         var checkoutCreateEffect = (CreateEntityInstance)checkout.Effects.First(e => e is CreateEntityInstance);
         await Assert.That(checkoutCreateEffect.Initializers.Count).IsEqualTo(3);
         await Assert.That(checkoutCreateEffect.Initializers.Any(i => i.PropertyName == "RenewalCount")).IsTrue();
 
-        var checkoutPublishEffect = (PublishEventEffect)checkout.Effects.First(e => e is PublishEventEffect);
-        await Assert.That(checkoutPublishEffect.EventType.TypeName).IsEqualTo("BookCheckedOut");
-        await Assert.That(checkoutPublishEffect.PropertyBindings.Any(b => b.PropertyName == "BookTitle")).IsTrue();
-
         // ReturnBook effects
         var returnBook = active.Actions.Single(a => a.Name == "ReturnBook");
-        await Assert.That(returnBook.Effects.Count).IsEqualTo(2);
+        await Assert.That(returnBook.Effects.Count).IsEqualTo(1);
         await Assert.That(returnBook.Effects.Any(e => e is StageTransitionEffect)).IsTrue();
-        await Assert.That(returnBook.Effects.Any(e => e is PublishEventEffect)).IsTrue();
 
         // RenewLoan: 2 AssignEffects + StageTransition (dynamic calc gap closed — Phase 4a)
         var renew = active.Actions.Single(a => a.Name == "RenewLoan");
@@ -1093,9 +1035,7 @@ public class DomainEvolutionApplicatorTests {
         await Assert.That(reportLostAction.Effects[0]).IsTypeOf<StageTransitionEffect>();
 
         // Events attached to loan
-        await Assert.That(loan.Events.Count).IsEqualTo(2);
-        await Assert.That(loan.Events.Any(e => e.TypeName == "BookCheckedOut")).IsTrue();
-        await Assert.That(loan.Events.Any(e => e.TypeName == "BookReturned")).IsTrue();
+
 
         // Relationships
         await Assert.That(final.Relationships.Count).IsEqualTo(3);
@@ -1135,7 +1075,7 @@ public class DomainEvolutionApplicatorTests {
             new PrimitiveType("Int", Poly.Introspection.TypeCategory.Integer, []),
             new Entity("Counter", [
                 new Property("Value", new DomainTypeReference("Int"), [])
-            ], [], [], [], [])
+            ], [], [], [])
         ], []);
         var result = new DomainEvolution(start)
             .Evolve()
@@ -1221,10 +1161,10 @@ public class DomainEvolutionApplicatorTests {
             new PrimitiveType("Int", Poly.Introspection.TypeCategory.Integer, []),
             new Entity("Project", [
                 new Property("MaxDueDate", new DomainTypeReference("Int"), [])
-            ], [], [], [], []),
+            ], [], [], []),
             new Entity("Task", [
                 new Property("DueDate", new DomainTypeReference("Int"), [])
-            ], [], [], [], [])
+            ], [], [], [])
         ], [
             new Relationship("ProjectTasks", new DomainTypeReference("Project"), new DomainTypeReference("Task"),
                 RelationshipCardinality.OneToMany, [])
@@ -1247,111 +1187,8 @@ public class DomainEvolutionApplicatorTests {
     }
 
     [Test]
-    public async Task Apply_AddEventSubscription_AddsToEntity() {
-        var entity = new Entity("Order", [], [], [], [], []);
-        var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
-        var start = new Domain("Test", [entity, textPrimitive], []);
-        var sub = new EventSubscription(
-            new DomainTypeReference("OrderPlaced"), "HandleOrderPlaced", "event");
-        var result = new DomainEvolution(start).Apply([new AddEventSubscriptionChange("Order", sub)]);
-        await Assert.That(result.Succeeded).IsTrue();
-        var updated = result.Root.Types.OfType<Entity>().Single(e => e.Name == "Order");
-        await Assert.That(updated.EventSubscriptions.Count).IsEqualTo(1);
-        await Assert.That(updated.EventSubscriptions[0].EventType.TypeName).IsEqualTo("OrderPlaced");
-        await Assert.That(updated.EventSubscriptions[0].HandlerActionName).IsEqualTo("HandleOrderPlaced");
-        await Assert.That(updated.EventSubscriptions[0].EventParameterName).IsEqualTo("event");
-        await Assert.That(updated.EventSubscriptions[0].RoutingMode).IsEqualTo(EventSubscriptionRoutingMode.Broadcast);
-    }
-
-    [Test]
-    public async Task Apply_RemoveEventSubscription_RemovesFromEntity() {
-        var sub = new EventSubscription(
-            new DomainTypeReference("OrderPlaced"), "HandleOrderPlaced", "event");
-        var entity = new Entity("Order", [], [], [], [], []) { EventSubscriptions = [sub] };
-        var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
-        var start = new Domain("Test", [entity, textPrimitive], []);
-        var result = new DomainEvolution(start).Apply([new RemoveEventSubscriptionChange("Order", "OrderPlaced", "HandleOrderPlaced")]);
-        await Assert.That(result.Succeeded).IsTrue();
-        var updated = result.Root.Types.OfType<Entity>().Single(e => e.Name == "Order");
-        await Assert.That(updated.EventSubscriptions).IsEmpty();
-    }
-
-    [Test]
-    public async Task Apply_AddEventSubscriptionCorrelation_AddsBinding() {
-        var sub = new EventSubscription(
-            new DomainTypeReference("OrderPlaced"), "HandleOrderPlaced", "event");
-        var entity = new Entity("Order", [], [], [], [], []) { EventSubscriptions = [sub] };
-        var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
-        var start = new Domain("Test", [entity, textPrimitive], []);
-        var binding = new EventCorrelationBinding("OrderId", "OrderId");
-        var result = new DomainEvolution(start).Apply([new AddEventSubscriptionCorrelationChange("Order", "OrderPlaced", "HandleOrderPlaced", binding)]);
-        await Assert.That(result.Succeeded).IsTrue();
-        var updated = result.Root.Types.OfType<Entity>().Single(e => e.Name == "Order");
-        var updatedSub = updated.EventSubscriptions.Single();
-        await Assert.That(updatedSub.Correlations.Count).IsEqualTo(1);
-        await Assert.That(updatedSub.Correlations[0].EventPropertyName).IsEqualTo("OrderId");
-        await Assert.That(updatedSub.Correlations[0].ConsumerPropertyName).IsEqualTo("OrderId");
-    }
-
-    [Test]
-    public async Task Apply_RemoveEventSubscriptionCorrelation_RemovesBinding() {
-        var binding = new EventCorrelationBinding("OrderId", "OrderId");
-        var sub = new EventSubscription(
-            new DomainTypeReference("OrderPlaced"), "HandleOrderPlaced", "event",
-            EventSubscriptionRoutingMode.Correlated, [binding]);
-        var entity = new Entity("Order", [], [], [], [], []) { EventSubscriptions = [sub] };
-        var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
-        var start = new Domain("Test", [entity, textPrimitive], []);
-        var result = new DomainEvolution(start).Apply([new RemoveEventSubscriptionCorrelationChange("Order", "OrderPlaced", "HandleOrderPlaced", "OrderId")]);
-        await Assert.That(result.Succeeded).IsTrue();
-        var updated = result.Root.Types.OfType<Entity>().Single(e => e.Name == "Order");
-        await Assert.That(updated.EventSubscriptions.Single().Correlations).IsEmpty();
-    }
-
-    [Test]
-    public async Task Apply_SetEventSubscriptionRoutingMode_UpdatesMode() {
-        var sub = new EventSubscription(
-            new DomainTypeReference("OrderPlaced"), "HandleOrderPlaced", "event");
-        var entity = new Entity("Order", [], [], [], [], []) { EventSubscriptions = [sub] };
-        var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
-        var start = new Domain("Test", [entity, textPrimitive], []);
-        var result = new DomainEvolution(start).Apply([new SetEventSubscriptionRoutingModeChange("Order", "OrderPlaced", "HandleOrderPlaced", EventSubscriptionRoutingMode.Correlated)]);
-        await Assert.That(result.Succeeded).IsTrue();
-        var updated = result.Root.Types.OfType<Entity>().Single(e => e.Name == "Order");
-        await Assert.That(updated.EventSubscriptions.Single().RoutingMode).IsEqualTo(EventSubscriptionRoutingMode.Correlated);
-    }
-
-    [Test]
-    public async Task Apply_SetEventSubscriptionEventParameter_UpdatesParameter() {
-        var sub = new EventSubscription(
-            new DomainTypeReference("OrderPlaced"), "HandleOrderPlaced", "evt");
-        var entity = new Entity("Order", [], [], [], [], []) { EventSubscriptions = [sub] };
-        var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
-        var start = new Domain("Test", [entity, textPrimitive], []);
-        var result = new DomainEvolution(start).Apply([new SetEventSubscriptionEventParameterChange("Order", "OrderPlaced", "HandleOrderPlaced", "orderEvent")]);
-        await Assert.That(result.Succeeded).IsTrue();
-        var updated = result.Root.Types.OfType<Entity>().Single(e => e.Name == "Order");
-        await Assert.That(updated.EventSubscriptions.Single().EventParameterName).IsEqualTo("orderEvent");
-    }
-
-    [Test]
-    public async Task EventSubscription_BuilderMethod_AddsToEntity() {
-        var entity = new Entity("Order", [], [], [], [], []);
-        var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
-        var start = new Domain("Test", [entity, textPrimitive], []);
-        var result = new DomainEvolution(start)
-            .Evolve()
-            .AddEventSubscription("Order", new EventSubscription(
-                new DomainTypeReference("OrderPlaced"), "HandleOrderPlaced", "event"))
-            .Apply();
-        await Assert.That(result.Succeeded).IsTrue();
-        var updated = result.Root.Types.OfType<Entity>().Single(e => e.Name == "Order");
-        await Assert.That(updated.EventSubscriptions.Count).IsEqualTo(1);
-    }
-
-    [Test]
     public async Task Apply_AddStageToRelationship_AddsStage() {
-        var entity = new Entity("Person", [], [], [], [], []);
+        var entity = new Entity("Person", [], [], [], []);
         var rel = new Relationship("Friends",
             new DomainTypeReference("Person"), new DomainTypeReference("Person"),
             RelationshipCardinality.ManyToMany, []);
@@ -1365,7 +1202,7 @@ public class DomainEvolutionApplicatorTests {
 
     [Test]
     public async Task Apply_RemoveStageFromRelationship_RemovesStage() {
-        var entity = new Entity("Person", [], [], [], [], []);
+        var entity = new Entity("Person", [], [], [], []);
         var stage = new Stage("Active", null, [], [], [], []);
         var rel = new Relationship("Friends",
             new DomainTypeReference("Person"), new DomainTypeReference("Person"),
@@ -1379,7 +1216,7 @@ public class DomainEvolutionApplicatorTests {
 
     [Test]
     public async Task Apply_AddPolicyToRelationship_AddsPolicy() {
-        var entity = new Entity("Person", [], [], [], [], []);
+        var entity = new Entity("Person", [], [], [], []);
         var rel = new Relationship("Friends",
             new DomainTypeReference("Person"), new DomainTypeReference("Person"),
             RelationshipCardinality.ManyToMany, []);
@@ -1393,7 +1230,7 @@ public class DomainEvolutionApplicatorTests {
 
     [Test]
     public async Task Apply_RemovePolicyFromRelationship_RemovesPolicy() {
-        var entity = new Entity("Person", [], [], [], [], []);
+        var entity = new Entity("Person", [], [], [], []);
         var policy = new Policy("MaxFriends", DomainExpression.Literal(10));
         var rel = new Relationship("Friends",
             new DomainTypeReference("Person"), new DomainTypeReference("Person"),
@@ -1407,8 +1244,8 @@ public class DomainEvolutionApplicatorTests {
 
     [Test]
     public async Task Apply_SetEntityParent_SetsParentName() {
-        var parent = new Entity("Person", [], [], [], [], []);
-        var child = new Entity("Member", [], [], [], [], []);
+        var parent = new Entity("Person", [], [], [], []);
+        var child = new Entity("Member", [], [], [], []);
         var start = new Domain("Test", [parent, child], []);
         var result = new DomainEvolution(start).Apply([new SetEntityParentChange("Member", "Person")]);
         await Assert.That(result.Succeeded).IsTrue();
@@ -1421,8 +1258,8 @@ public class DomainEvolutionApplicatorTests {
 
     [Test]
     public async Task Apply_SetEntityParent_ClearsParentName() {
-        var parent = new Entity("Person", [], [], [], [], []);
-        var child = new Entity("Member", [], [], [], [], []) { ParentEntityName = "Person" };
+        var parent = new Entity("Person", [], [], [], []);
+        var child = new Entity("Member", [], [], [], []) { ParentEntityName = "Person" };
         var start = new Domain("Test", [parent, child], []);
         var result = new DomainEvolution(start).Apply([new SetEntityParentChange("Member", null)]);
         await Assert.That(result.Succeeded).IsTrue();
@@ -1432,7 +1269,7 @@ public class DomainEvolutionApplicatorTests {
 
     [Test]
     public async Task CompositeEffect_CanBeStoredInAction() {
-        var entity = new Entity("Workflow", [], [], [], [], []);
+        var entity = new Entity("Workflow", [], [], [], []);
         var start = new Domain("Test", [entity], []);
         var result = new DomainEvolution(start)
             .Evolve()
@@ -1456,7 +1293,7 @@ public class DomainEvolutionApplicatorTests {
 
     [Test]
     public async Task InvokeActionEffect_CanBeStoredInAction() {
-        var entity = new Entity("Orchestrator", [], [], [new Poly.DomainModeling.Action("Step1", InvocationResult.Void, [], [], [])], [], []);
+        var entity = new Entity("Orchestrator", [], [new Poly.DomainModeling.Action("Step1", InvocationResult.Void, [], [], [])], [], []);
         var start = new Domain("Test", [entity], []);
         var result = new DomainEvolution(start)
             .Evolve()
@@ -1475,7 +1312,7 @@ public class DomainEvolutionApplicatorTests {
 
     [Test]
     public async Task ConditionalEffect_CanBeStoredInAction() {
-        var entity = new Entity("Task", [], [], [], [], []);
+        var entity = new Entity("Task", [], [], [], []);
         var start = new Domain("Test", [entity], []);
         var result = new DomainEvolution(start)
             .Evolve()
@@ -1500,7 +1337,7 @@ public class DomainEvolutionApplicatorTests {
 
     [Test]
     public async Task ConditionalEffect_WithoutElse_CanBeStored() {
-        var entity = new Entity("Task", [], [], [], [], []);
+        var entity = new Entity("Task", [], [], [], []);
         var start = new Domain("Test", [entity], []);
         var result = new DomainEvolution(start)
             .Evolve()
@@ -1521,7 +1358,7 @@ public class DomainEvolutionApplicatorTests {
 
     [Test]
     public async Task LinkRelationshipEffect_CanBeStoredInAction() {
-        var entity = new Entity("Order", [], [], [], [], []);
+        var entity = new Entity("Order", [], [], [], []);
         var customerRel = new Relationship("Customer",
             new DomainTypeReference("Order"), new DomainTypeReference("Order"),
             RelationshipCardinality.OneToOne, []);
@@ -1542,7 +1379,7 @@ public class DomainEvolutionApplicatorTests {
 
     [Test]
     public async Task UnlinkRelationshipEffect_CanBeStoredInAction() {
-        var entity = new Entity("Order", [], [], [], [], []);
+        var entity = new Entity("Order", [], [], [], []);
         var customerRel = new Relationship("Customer",
             new DomainTypeReference("Order"), new DomainTypeReference("Order"),
             RelationshipCardinality.OneToOne, []);
@@ -1561,7 +1398,7 @@ public class DomainEvolutionApplicatorTests {
 
     [Test]
     public async Task TransitionRelationshipEffect_CanBeStoredInAction() {
-        var entity = new Entity("Project", [], [], [], [], []);
+        var entity = new Entity("Project", [], [], [], []);
         var tasksRel = new Relationship("Tasks",
             new DomainTypeReference("Project"), new DomainTypeReference("Project"),
             RelationshipCardinality.OneToMany, []) { Stages = [new Stage("Completed", null, [], [], [], [])] };
@@ -1583,7 +1420,7 @@ public class DomainEvolutionApplicatorTests {
 
     [Test]
     public async Task DeleteEntityInstance_CanBeStoredAsEffect() {
-        var entity = new Entity("Task", [], [], [], [], []);
+        var entity = new Entity("Task", [], [], [], []);
         var start = new Domain("Test", [entity], []);
         var result = new DomainEvolution(start)
             .Evolve()
@@ -1599,8 +1436,8 @@ public class DomainEvolutionApplicatorTests {
 
     [Test]
     public async Task EntityInheritance_BuilderMethod_SetsParent() {
-        var parent = new Entity("Person", [], [], [], [], []);
-        var child = new Entity("Member", [], [], [], [], []);
+        var parent = new Entity("Person", [], [], [], []);
+        var child = new Entity("Member", [], [], [], []);
         var start = new Domain("Test", [parent, child], []);
         var result = new DomainEvolution(start)
             .Evolve()
@@ -1613,7 +1450,7 @@ public class DomainEvolutionApplicatorTests {
 
     [Test]
     public async Task RelationshipStage_BuilderMethods_Work() {
-        var entity = new Entity("Person", [], [], [], [], []);
+        var entity = new Entity("Person", [], [], [], []);
         var rel = new Relationship("Friends",
             new DomainTypeReference("Person"), new DomainTypeReference("Person"),
             RelationshipCardinality.ManyToMany, []);
@@ -1652,7 +1489,7 @@ public class DomainEvolutionApplicatorTests {
     [Test]
     public async Task Apply_AddPropertyToRelationship_AddsProperty() {
         var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
-        var entity = new Entity("Person", [], [], [], [], []);
+        var entity = new Entity("Person", [], [], [], []);
         var rel = new Relationship("Friends",
             new DomainTypeReference("Person"), new DomainTypeReference("Person"),
             RelationshipCardinality.ManyToMany, []);
@@ -1668,7 +1505,7 @@ public class DomainEvolutionApplicatorTests {
     [Test]
     public async Task Apply_RemovePropertyFromRelationship_RemovesProperty() {
         var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
-        var entity = new Entity("Person", [], [], [], [], []);
+        var entity = new Entity("Person", [], [], [], []);
         var prop = new Property("Since", new DomainTypeReference("Text"), []);
         var rel = new Relationship("Friends",
             new DomainTypeReference("Person"), new DomainTypeReference("Person"),
@@ -1685,7 +1522,7 @@ public class DomainEvolutionApplicatorTests {
         var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
         var entity = new Entity("Customer", [
             new Property("Email", new DomainTypeReference("Text"), [])
-        ], [], [], [], []);
+        ], [], [], []);
         var start = new Domain("Test", [entity, textPrimitive], []);
         var constraint = new RequiredConstraint();
         var result = new DomainEvolution(start).Apply([new AddConstraintToPropertyChange("Customer", "Email", constraint)]);
@@ -1702,7 +1539,7 @@ public class DomainEvolutionApplicatorTests {
         var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
         var entity = new Entity("Customer", [
             new Property("Email", new DomainTypeReference("Text"), [constraint])
-        ], [], [], [], []);
+        ], [], [], []);
         var start = new Domain("Test", [entity, textPrimitive], []);
         var result = new DomainEvolution(start).Apply([new RemoveConstraintFromPropertyChange("Customer", "Email", constraint)]);
         await Assert.That(result.Succeeded).IsTrue();
@@ -1734,37 +1571,12 @@ public class DomainEvolutionApplicatorTests {
     }
 
     [Test]
-    public async Task Apply_AddPropertyToEvent_AddsProperty() {
-        var ev = new Event("OrderPlaced", [], []);
-        var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
-        var start = new Domain("Test", [ev, textPrimitive], []);
-        var prop = new Property("CustomerName", new DomainTypeReference("Text"), []);
-        var result = new DomainEvolution(start).Apply([new AddPropertyToEventChange("OrderPlaced", prop)]);
-        await Assert.That(result.Succeeded).IsTrue();
-        var updatedEvent = result.Root.Types.OfType<Event>().Single(e => e.Name == "OrderPlaced");
-        await Assert.That(updatedEvent.Properties.Count).IsEqualTo(1);
-        await Assert.That(updatedEvent.Properties[0].Name).IsEqualTo("CustomerName");
-    }
-
-    [Test]
-    public async Task Apply_RemovePropertyFromEvent_RemovesProperty() {
-        var prop = new Property("CustomerName", new DomainTypeReference("Text"), []);
-        var ev = new Event("OrderPlaced", [prop], []);
-        var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
-        var start = new Domain("Test", [ev, textPrimitive], []);
-        var result = new DomainEvolution(start).Apply([new RemovePropertyFromEventChange("OrderPlaced", "CustomerName")]);
-        await Assert.That(result.Succeeded).IsTrue();
-        var updatedEvent = result.Root.Types.OfType<Event>().Single(e => e.Name == "OrderPlaced");
-        await Assert.That(updatedEvent.Properties).IsEmpty();
-    }
-
-    [Test]
     public async Task Apply_ChangePropertyType_UpdatesType() {
         var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
         var intPrimitive = new PrimitiveType("Integer", Poly.Introspection.TypeCategory.Integer, []);
         var entity = new Entity("Product", [
             new Property("Count", new DomainTypeReference("Text"), [])
-        ], [], [], [], []);
+        ], [], [], []);
         var start = new Domain("Test", [entity, textPrimitive, intPrimitive], []);
         var result = new DomainEvolution(start).Apply([new ChangePropertyTypeChange("Product", "Count", new DomainTypeReference("Integer"))]);
         await Assert.That(result.Succeeded).IsTrue();
@@ -1775,7 +1587,7 @@ public class DomainEvolutionApplicatorTests {
 
     [Test]
     public async Task Apply_SetRelationshipShape_UpdatesCardinality() {
-        var entity = new Entity("Person", [], [], [], [], []);
+        var entity = new Entity("Person", [], [], [], []);
         var rel = new Relationship("Friends",
             new DomainTypeReference("Person"), new DomainTypeReference("Person"),
             RelationshipCardinality.ManyToMany, []);
@@ -1854,8 +1666,7 @@ public class DomainEvolutionApplicatorTests {
         var contract = new ImportedContract("CrmContract", ContractSourceKind.ExternalProvider, "crm://api", "v1", [endpoint]);
         var action = new Poly.DomainModeling.Action("SomeAction", InvocationResult.Void,
             [new Property("input", new DomainTypeReference("Text"), [])], [], []);
-        var entity = new Entity("MyEntity",
-            [new Property("Name", new DomainTypeReference("Text"), [])], [], [action], [], []);
+        var entity = new Entity("MyEntity", [new Property("Name", new DomainTypeReference("Text"), [])], [action], [], []);
         var start = new Domain("Test", [entity, textPrimitive], []) {
             ImportedContracts = [contract],
             ContractBindings = []
@@ -1883,8 +1694,7 @@ public class DomainEvolutionApplicatorTests {
         var contract = new ImportedContract("CrmContract", ContractSourceKind.ExternalProvider, "crm://api", "v1", [endpoint]);
         var action = new Poly.DomainModeling.Action("SomeAction", InvocationResult.Void,
             [new Property("input", new DomainTypeReference("Text"), [])], [], []);
-        var entity = new Entity("MyEntity",
-            [new Property("Name", new DomainTypeReference("Text"), [])], [], [action], [], []);
+        var entity = new Entity("MyEntity", [new Property("Name", new DomainTypeReference("Text"), [])], [action], [], []);
         var binding = new ContractBinding("MyBinding", "CrmContract", "GetTicket", "SomeAction", "input", []);
         var start = new Domain("Test", [entity, textPrimitive], []) {
             ImportedContracts = [contract],
@@ -1905,8 +1715,7 @@ public class DomainEvolutionApplicatorTests {
         var contract = new ImportedContract("CrmContract", ContractSourceKind.ExternalProvider, "crm://api", "v1", [endpoint]);
         var action = new Poly.DomainModeling.Action("SomeAction", InvocationResult.Void,
             [new Property("input", new DomainTypeReference("Text"), [])], [], []);
-        var entity = new Entity("MyEntity",
-            [new Property("Name", new DomainTypeReference("Text"), [])], [], [action], [], []);
+        var entity = new Entity("MyEntity", [new Property("Name", new DomainTypeReference("Text"), [])], [action], [], []);
         var fieldMap = new ContractFieldMap("remoteId", "localId");
         var binding = new ContractBinding("MyBinding", "CrmContract", "GetTicket", "SomeAction", "input", [fieldMap]);
         var start = new Domain("Test", [entity, textPrimitive], []) {
@@ -1985,8 +1794,7 @@ public class DomainEvolutionApplicatorTests {
         var contract = new ImportedContract("CrmContract", ContractSourceKind.ExternalProvider, "crm://api", "v1", [endpoint]);
         var action = new Poly.DomainModeling.Action("MyAction", InvocationResult.Void,
             [new Property("something", new DomainTypeReference("Text"), [])], [], []);
-        var entity = new Entity("MyEntity",
-            [new Property("Name", new DomainTypeReference("Text"), [])], [], [action], [], []);
+        var entity = new Entity("MyEntity", [new Property("Name", new DomainTypeReference("Text"), [])], [action], [], []);
         var binding = new ContractBinding("MyBinding", "CrmContract", "GetTicket", "MyAction", "missingParam", []);
         var start = new Domain("Test", [entity, textPrimitive], []) {
             ImportedContracts = [contract],
@@ -2005,8 +1813,7 @@ public class DomainEvolutionApplicatorTests {
         var contract = new ImportedContract("CrmContract", ContractSourceKind.ExternalProvider, "crm://api", "v1", [endpoint]);
         var action = new Poly.DomainModeling.Action("MyAction", InvocationResult.Void,
             [new Property("input", new DomainTypeReference("Text"), [])], [], []);
-        var entity = new Entity("MyEntity",
-            [new Property("Name", new DomainTypeReference("Text"), [])], [], [action], [], []);
+        var entity = new Entity("MyEntity", [new Property("Name", new DomainTypeReference("Text"), [])], [action], [], []);
         var binding = new ContractBinding("MyBinding", "CrmContract", "GetTicket", "MyAction", "input", []);
         var start = new Domain("Test", [entity, textPrimitive, ticketDataPrimitive], []) {
             ImportedContracts = [contract],
@@ -2045,8 +1852,7 @@ public class DomainEvolutionApplicatorTests {
         var contract = new ImportedContract("CrmContract", ContractSourceKind.ExternalProvider, "crm://api/ticket", "v1", [endpoint]);
         var action = new Poly.DomainModeling.Action("MyAction", InvocationResult.Void,
             [new Property("input", new DomainTypeReference("Text"), [])], [], []);
-        var entity = new Entity("MyEntity",
-            [new Property("Name", new DomainTypeReference("Text"), [])], [], [action], [], []);
+        var entity = new Entity("MyEntity", [new Property("Name", new DomainTypeReference("Text"), [])], [action], [], []);
         var binding = new ContractBinding("MyBinding", "CrmContract", "GetTicket", "MyAction", "input", [
             new ContractFieldMap("remoteId", "localId")
         ]);
@@ -2067,7 +1873,7 @@ public class DomainEvolutionApplicatorTests {
                 new Property("Quantity", new DomainTypeReference("Int"), []),
                 new Property("Min", new DomainTypeReference("Int"), []),
                 new Property("Max", new DomainTypeReference("Int"), [])
-            ], [], [], [], [])
+            ], [], [], [])
         ], []);
 
         // Each kind uses ConditionalEffect wrapping a comparison as the condition.
@@ -2185,7 +1991,7 @@ public class DomainEvolutionApplicatorTests {
     [Test]
     public async Task RemoveProperty_MissingName_FailsWithClearError() {
         var text = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
-        var entity = new Entity("Order", [new Property("Total", new DomainTypeReference("Int"), [])], [], [], [], []);
+        var entity = new Entity("Order", [new Property("Total", new DomainTypeReference("Int"), [])], [], [], []);
         var start = new Domain("Test", [entity, text], []);
 
         var change = new RemovePropertyFromEntityChange("Order", "NonExistent");
@@ -2198,8 +2004,7 @@ public class DomainEvolutionApplicatorTests {
 
     [Test]
     public async Task RemoveStage_MissingName_FailsWithClearError() {
-        var entity = new Entity("Order", [], [], [], [],
-            Stages: [new Stage("Draft", null, [], [], [], [])]);
+        var entity = new Entity("Order", [], [], [], Stages: [new Stage("Draft", null, [], [], [], [])]);
         var start = new Domain("Test", [entity], []);
 
         var change = new RemoveStageChange("Order", "NonExistent");
@@ -2212,7 +2017,7 @@ public class DomainEvolutionApplicatorTests {
 
     [Test]
     public async Task RemoveAction_MissingName_FailsWithClearError() {
-        var entity = new Entity("Order", [], [], [
+        var entity = new Entity("Order", [], [
             new Poly.DomainModeling.Action("Submit", InvocationResult.Void, [], [], [])
         ], [], []);
         var start = new Domain("Test", [entity], []);
@@ -2228,7 +2033,7 @@ public class DomainEvolutionApplicatorTests {
     [Test]
     public async Task RemovePolicy_MissingName_FailsWithClearError() {
         var policy = new Policy("Adult", DomainExpression.Literal(true));
-        var entity = new Entity("Person", [], [], [], Policies: [policy], Stages: []);
+        var entity = new Entity("Person", [], [], Policies: [policy], Stages: []);
         var start = new Domain("Test", [entity], []);
 
         var change = new RemovePolicyFromEntityChange("Person", "NonExistent");
@@ -2242,7 +2047,7 @@ public class DomainEvolutionApplicatorTests {
     [Test]
     public async Task Remove_ExistingProperty_Succeeds() {
         var text = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
-        var entity = new Entity("Order", [new Property("Status", new DomainTypeReference("Text"), [])], [], [], [], []);
+        var entity = new Entity("Order", [new Property("Status", new DomainTypeReference("Text"), [])], [], [], []);
         var start = new Domain("Test", [entity, text], []);
 
         var change = new RemovePropertyFromEntityChange("Order", "Status");
@@ -2254,8 +2059,7 @@ public class DomainEvolutionApplicatorTests {
 
     [Test]
     public async Task Remove_ExistingStage_Succeeds() {
-        var entity = new Entity("Order", [], [], [], [],
-            Stages: [new Stage("Draft", null, [], [], [], [])]);
+        var entity = new Entity("Order", [], [], [], Stages: [new Stage("Draft", null, [], [], [], [])]);
         var start = new Domain("Test", [entity], []);
 
         var change = new RemoveStageChange("Order", "Draft");

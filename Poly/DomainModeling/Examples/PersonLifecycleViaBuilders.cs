@@ -6,7 +6,10 @@ namespace Poly.DomainModeling.Examples;
 /// <summary>
 /// Demonstrates constructing the Person lifecycle using the V3 fluent builders
 /// (instead of manually assembling immutable records).
-/// 
+///
+/// Stage transitions are the observable — no Event/PublishEvent surface.
+/// Subscribers use relationship-path subscriptions (when cert Stage) to react.
+///
 /// This is the target experience for test authors and LLM-driven construction.
 /// </summary>
 public static class PersonLifecycleViaBuilders {
@@ -29,9 +32,7 @@ public static class PersonLifecycleViaBuilders {
                 .Property("GivenName", "Text")
                 .Property("TimeOfBirth", "Timestamp")
 
-                .Event("Born")
-                .Event("Died")
-
+                // Stage transitions ARE the observable — no Event declarations needed.
                 // Ownership (still works via OwnsOne for ergonomics)
                 .OwnsOne("BirthCertificate", ofType: "CertificateOfLifeBirth")
                 .OwnsOne("DeathCertificate", ofType: "CertificateOfDeath")
@@ -46,10 +47,8 @@ public static class PersonLifecycleViaBuilders {
                     .Requires(DomainExpression.NotExists(
                         DomainExpression.Owned("DeathCertificate", DomainExpression.Property("Time"))))
 
-                    .OnEntry(onEntry => onEntry
-                        .Publish("Born", publish => publish
-                            .Bind("TimeOfBirth",
-                                DomainExpression.Owned("BirthCertificate", DomainExpression.Property("Time")))))
+                    // Entry into Alive IS the observable — no PublishEventEffect needed.
+                    // Subscribers navigate via relationship path and read instance properties directly.
 
                     .Action("Die")
                         .Parameter("TimeOfDeath", "Timestamp")
@@ -66,15 +65,6 @@ public static class PersonLifecycleViaBuilders {
                 .Stage("Dead", stage => stage
                     .Requires(DomainExpression.Exists(
                         DomainExpression.Owned("DeathCertificate", DomainExpression.Property("Time"))))
-
-                    .OnEntry(onEntry => onEntry
-                        .Publish("Died", publish => publish
-                            .Bind("TimeOfDeath", DomainExpression.Owned("DeathCertificate", DomainExpression.Property("Time")))
-                            .Bind("Cause", DomainExpression.Owned("DeathCertificate", DomainExpression.Property("Cause")))
-                            .Bind("LifeSpan", DomainExpression.Subtract(
-                                DomainExpression.Owned("DeathCertificate", DomainExpression.Property("Time")),
-                                DomainExpression.Property("TimeOfBirth"))))
-                    )
                 )
             )
 

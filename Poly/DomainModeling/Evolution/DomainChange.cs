@@ -44,7 +44,7 @@ public sealed record AddEntityChange(
     IReadOnlyList<Property> InitialProperties
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
-        var newEntity = new Entity(Name, InitialProperties, [], [], [], []);
+        var newEntity = new Entity(Name, InitialProperties, [], [], []);
         context.Types.Add(newEntity);
         context.ModifiedNodes.Add(newEntity);
     }
@@ -493,57 +493,6 @@ public sealed record RemoveValueTypeChange(
     internal override string GetDescription() => $"RemoveValueType({Name})";
 }
 
-public sealed record AddEventChange(
-    string Name,
-    IReadOnlyList<Property> Properties
-) : DomainChange {
-    internal override void ApplyTo(DomainMutationContext context) {
-        var newEvent = new Event(Name, Properties, []);
-        context.Types.Add(newEvent);
-        context.ModifiedNodes.Add(newEvent);
-    }
-
-    internal override string GetDescription() => $"AddEvent({Name})";
-}
-
-public sealed record RemoveEventChange(
-    string Name
-) : DomainChange {
-    internal override void ApplyTo(DomainMutationContext context) {
-        context.Types.RemoveAll(t => t is Event ev && string.Equals(ev.Name, Name, StringComparison.Ordinal));
-    }
-
-    internal override string GetDescription() => $"RemoveEvent({Name})";
-}
-
-public sealed record AddEventReferenceToEntityChange(
-    string EntityName,
-    DomainTypeReference EventReference
-) : DomainChange {
-    internal override void ApplyTo(DomainMutationContext context) {
-        context.RequireUpdate(
-            context.UpdateEntity(EntityName, e => e with { Events = e.Events.Append(EventReference).ToList() }),
-            $"Entity '{EntityName}' not found — cannot add event reference '{EventReference.TypeName}'");
-    }
-
-    internal override string GetDescription() => $"AddEventReferenceToEntity({EntityName}.{EventReference.TypeName})";
-}
-
-public sealed record RemoveEventReferenceFromEntityChange(
-    string EntityName,
-    string EventName
-) : DomainChange {
-    internal override void ApplyTo(DomainMutationContext context) {
-        context.RequireUpdate(
-            context.UpdateEntity(EntityName, e => e with {
-                Events = e.Events.Where(er => !string.Equals(er.TypeName, EventName, StringComparison.Ordinal)).ToList()
-            }),
-            $"Entity '{EntityName}' not found — cannot remove event reference '{EventName}'");
-    }
-
-    internal override string GetDescription() => $"RemoveEventReferenceFromEntity({EntityName}.{EventName})";
-}
-
 /// <summary>
 /// Adds a PrimitiveType to the domain.
 /// </summary>
@@ -701,7 +650,7 @@ public sealed record RemoveConstraintFromPropertyChange(
 }
 
 /// <summary>
-/// Adds a Constraint to a DomainType (Entity, ValueType, Event, PrimitiveType).
+/// Adds a Constraint to a DomainType (Entity, ValueType, PrimitiveType).
 /// </summary>
 public sealed record AddConstraintToDomainTypeChange(
     string TypeName,
@@ -729,34 +678,6 @@ public sealed record RemoveConstraintFromDomainTypeChange(
     }
 
     internal override string GetDescription() => $"Remove constraint from type '{TypeName}'";
-}
-
-public sealed record AddPropertyToEventChange(
-    string EventName,
-    Property Property
-) : DomainChange {
-    internal override void ApplyTo(DomainMutationContext context) {
-        context.RequireUpdate(
-            context.UpdateType(EventName, t => t with { Properties = t.Properties.Append(Property).ToList() }),
-            $"Event '{EventName}' not found — cannot add property '{Property.Name}'");
-    }
-
-    internal override string GetDescription() => $"Add property '{Property.Name}' to Event '{EventName}'";
-}
-
-public sealed record RemovePropertyFromEventChange(
-    string EventName,
-    string PropertyName
-) : DomainChange {
-    internal override void ApplyTo(DomainMutationContext context) {
-        context.RequireUpdate(
-            context.UpdateType(EventName, t => t with {
-                Properties = t.Properties.Where(p => !string.Equals(p.Name, PropertyName, StringComparison.Ordinal)).ToList()
-            }),
-            $"Event '{EventName}' not found — cannot remove property '{PropertyName}'");
-    }
-
-    internal override string GetDescription() => $"Remove property '{PropertyName}' from Event '{EventName}'";
 }
 
 public sealed record ChangePropertyTypeChange(
@@ -810,138 +731,6 @@ public sealed record SetPrimitiveTypeCategoryChange(
     }
 
     internal override string GetDescription() => $"Set primitive type '{TypeName}' category to {NewCategory}";
-}
-
-public sealed record AddEventSubscriptionChange(
-    string EntityName,
-    EventSubscription Subscription
-) : DomainChange {
-    internal override void ApplyTo(DomainMutationContext context) {
-        context.RequireUpdate(
-            context.UpdateEntity(EntityName, e => e with {
-                EventSubscriptions = e.EventSubscriptions.Append(Subscription).ToList()
-            }),
-            $"Entity '{EntityName}' not found — cannot add event subscription");
-    }
-
-    internal override string GetDescription() =>
-        $"Add event subscription '{Subscription.HandlerActionName}<-{Subscription.EventType.TypeName}' to '{EntityName}'";
-}
-
-public sealed record RemoveEventSubscriptionChange(
-    string EntityName,
-    string EventTypeName,
-    string HandlerActionName
-) : DomainChange {
-    internal override void ApplyTo(DomainMutationContext context) {
-        context.RequireUpdate(
-            context.UpdateEntity(EntityName, e => e with {
-                EventSubscriptions = e.EventSubscriptions.Where(s =>
-                    !(string.Equals(s.EventType.TypeName, EventTypeName, StringComparison.Ordinal)
-                      && string.Equals(s.HandlerActionName, HandlerActionName, StringComparison.Ordinal))
-                ).ToList()
-            }),
-            $"Entity '{EntityName}' not found — cannot remove event subscription");
-    }
-
-    internal override string GetDescription() =>
-        $"Remove event subscription '{HandlerActionName}<-{EventTypeName}' from '{EntityName}'";
-}
-
-public sealed record AddEventSubscriptionCorrelationChange(
-    string EntityName,
-    string EventTypeName,
-    string HandlerActionName,
-    EventCorrelationBinding Binding
-) : DomainChange {
-    internal override void ApplyTo(DomainMutationContext context) {
-        context.RequireUpdate(
-            context.UpdateEntity(EntityName, e => e with {
-                EventSubscriptions = e.EventSubscriptions.Select(s =>
-                    string.Equals(s.EventType.TypeName, EventTypeName, StringComparison.Ordinal)
-                    && string.Equals(s.HandlerActionName, HandlerActionName, StringComparison.Ordinal)
-                        ? s with { Correlations = s.Correlations.Append(Binding).ToList() }
-                        : s
-                ).ToList()
-            }),
-            $"Entity '{EntityName}' not found — cannot add correlation binding");
-    }
-
-    internal override string GetDescription() =>
-        $"Add correlation binding '{Binding.EventPropertyName}->{Binding.ConsumerPropertyName}' to subscription '{HandlerActionName}<-{EventTypeName}' on '{EntityName}'";
-}
-
-public sealed record RemoveEventSubscriptionCorrelationChange(
-    string EntityName,
-    string EventTypeName,
-    string HandlerActionName,
-    string EventPropertyName
-) : DomainChange {
-    internal override void ApplyTo(DomainMutationContext context) {
-        context.RequireUpdate(
-            context.UpdateEntity(EntityName, e => e with {
-                EventSubscriptions = e.EventSubscriptions.Select(s =>
-                    string.Equals(s.EventType.TypeName, EventTypeName, StringComparison.Ordinal)
-                    && string.Equals(s.HandlerActionName, HandlerActionName, StringComparison.Ordinal)
-                        ? s with {
-                            Correlations = s.Correlations.Where(b =>
-                            !string.Equals(b.EventPropertyName, EventPropertyName, StringComparison.Ordinal)
-                        ).ToList()
-                        }
-                        : s
-                ).ToList()
-            }),
-            $"Entity '{EntityName}' not found — cannot remove correlation binding");
-    }
-
-    internal override string GetDescription() =>
-        $"Remove correlation binding for event property '{EventPropertyName}' from subscription '{HandlerActionName}<-{EventTypeName}' on '{EntityName}'";
-}
-
-public sealed record SetEventSubscriptionRoutingModeChange(
-    string EntityName,
-    string EventTypeName,
-    string HandlerActionName,
-    EventSubscriptionRoutingMode RoutingMode
-) : DomainChange {
-    internal override void ApplyTo(DomainMutationContext context) {
-        context.RequireUpdate(
-            context.UpdateEntity(EntityName, e => e with {
-                EventSubscriptions = e.EventSubscriptions.Select(s =>
-                    string.Equals(s.EventType.TypeName, EventTypeName, StringComparison.Ordinal)
-                    && string.Equals(s.HandlerActionName, HandlerActionName, StringComparison.Ordinal)
-                        ? s with { RoutingMode = RoutingMode }
-                        : s
-                ).ToList()
-            }),
-            $"Entity '{EntityName}' not found — cannot set routing mode");
-    }
-
-    internal override string GetDescription() =>
-        $"Set routing mode to {RoutingMode} for subscription '{HandlerActionName}<-{EventTypeName}' on '{EntityName}'";
-}
-
-public sealed record SetEventSubscriptionEventParameterChange(
-    string EntityName,
-    string EventTypeName,
-    string HandlerActionName,
-    string EventParameterName
-) : DomainChange {
-    internal override void ApplyTo(DomainMutationContext context) {
-        context.RequireUpdate(
-            context.UpdateEntity(EntityName, e => e with {
-                EventSubscriptions = e.EventSubscriptions.Select(s =>
-                    string.Equals(s.EventType.TypeName, EventTypeName, StringComparison.Ordinal)
-                    && string.Equals(s.HandlerActionName, HandlerActionName, StringComparison.Ordinal)
-                        ? s with { EventParameterName = EventParameterName }
-                        : s
-                ).ToList()
-            }),
-            $"Entity '{EntityName}' not found — cannot set event parameter name");
-    }
-
-    internal override string GetDescription() =>
-        $"Set event parameter name to '{EventParameterName}' for subscription '{HandlerActionName}<-{EventTypeName}' on '{EntityName}'";
 }
 
 public sealed record AddStageToRelationshipChange(
@@ -1159,4 +948,78 @@ public sealed record RemoveContractFieldMapChange(
 
     internal override string GetDescription() =>
         $"Remove field map '{RemoteFieldName}' from binding '{BindingName}'";
+}
+
+/// <summary>
+/// Adds a <see cref="StageSubscription"/> to a stage on an entity.
+/// </summary>
+public sealed record AddStageSubscriptionChange(
+    string EntityName,
+    string StageName,
+    StageSubscription Subscription
+) : DomainChange {
+    internal override void ApplyTo(DomainMutationContext context) {
+        context.RequireUpdate(
+            context.UpdateStage(EntityName, StageName, s => s with {
+                Subscriptions = s.Subscriptions.Append(Subscription).ToList()
+            }),
+            $"Stage '{StageName}' on Entity '{EntityName}' not found — cannot add stage subscription");
+    }
+
+    internal override string GetDescription() =>
+        $"Add stage subscription on '{RelationshipName(Subscription)}' to Stage '{StageName}' on Entity '{EntityName}'";
+
+    private static string RelationshipName(StageSubscription sub) =>
+        $"{sub.RelationshipName} -> {string.Join("/", sub.StageNames)} ({sub.Quantifier})";
+}
+
+/// <summary>
+/// Removes a <see cref="StageSubscription"/> from a stage on an entity.
+/// Matches by **semantic key** (RelationshipName, StageNames sequence, Quantifier)
+/// rather than record identity, because <see cref="StageSubscription"/> inherits
+/// <see cref="DomainObject"/> → <see cref="Node"/> so record equality includes <c>Node.Id</c>.
+/// If multiple subscriptions match the same semantic key, all are removed.
+/// </summary>
+public sealed record RemoveStageSubscriptionChange(
+    string EntityName,
+    string StageName,
+    StageSubscription SubscriptionToRemove
+) : DomainChange {
+    internal override void ApplyTo(DomainMutationContext context) {
+        var entity = context.FindEntity(EntityName);
+        if (entity is not null) {
+            var stage = entity.Stages.FirstOrDefault(s => string.Equals(s.Name, StageName, StringComparison.Ordinal));
+            if (stage is not null && !stage.Subscriptions.Any(sub => SemanticMatch(sub, SubscriptionToRemove))) {
+                context.RequireTarget(false,
+                    $"Stage subscription with key '{SubscriptionKey(SubscriptionToRemove)}' not found " +
+                    $"on Stage '{StageName}' of Entity '{EntityName}' — nothing to remove");
+                return;
+            }
+        }
+        context.RequireUpdate(
+            context.UpdateStage(EntityName, StageName, s => s with {
+                Subscriptions = s.Subscriptions.Where(sub => !SemanticMatch(sub, SubscriptionToRemove)).ToList()
+            }),
+            $"Stage '{StageName}' on Entity '{EntityName}' not found — cannot remove stage subscription");
+    }
+
+    internal override string GetDescription() =>
+        $"Remove stage subscription '{SubscriptionKey(SubscriptionToRemove)}' from Stage '{StageName}' on Entity '{EntityName}'";
+
+    private static string SubscriptionKey(StageSubscription sub) =>
+        $"{sub.RelationshipName} -> {string.Join("/", sub.StageNames)} ({sub.Quantifier})";
+
+    private static bool SemanticMatch(StageSubscription a, StageSubscription b) {
+        if (!string.Equals(a.RelationshipName, b.RelationshipName, StringComparison.Ordinal))
+            return false;
+        if (a.Quantifier != b.Quantifier)
+            return false;
+        if (a.StageNames.Count != b.StageNames.Count)
+            return false;
+        for (int i = 0; i < a.StageNames.Count; i++) {
+            if (!string.Equals(a.StageNames[i], b.StageNames[i], StringComparison.Ordinal))
+                return false;
+        }
+        return true;
+    }
 }

@@ -12,6 +12,7 @@ public sealed class StageBuilder {
     private readonly List<Policy> _policies = new();
     private readonly List<Effect> _onEntryEffects = new();
     private readonly List<Effect> _onExitEffects = new();
+    private readonly List<StageSubscription> _subscriptions = new();
 
     internal StageBuilder(string name) {
         _name = Guard.ThrowIfNullOrEmpty(name);
@@ -59,6 +60,22 @@ public sealed class StageBuilder {
         return this;
     }
 
+    /// <summary>
+    /// Stage subscriptions: fire effects when a related entity transitions into a matching stage.
+    /// </summary>
+    public StageBuilder Subscribe(
+        string relationshipName,
+        string targetStageName,
+        StageSubscriptionQuantifier quantifier = StageSubscriptionQuantifier.Each,
+        params Effect[] effects) {
+        _subscriptions.Add(new StageSubscription(
+            Guard.ThrowIfNullOrEmpty(relationshipName),
+            Guard.ThrowIfNullOrEmpty(targetStageName),
+            quantifier,
+            effects));
+        return this;
+    }
+
     public StageBuilder OnEntry(Effect effect) {
         _onEntryEffects.Add(effect);
         return this;
@@ -69,16 +86,8 @@ public sealed class StageBuilder {
         return this;
     }
 
-    public StageBuilder OnEntryPublish(string eventName, Action<PublishEventBuilder> configure) {
-        ArgumentNullException.ThrowIfNull(configure);
-        var publishBuilder = new PublishEventBuilder(Guard.ThrowIfNullOrEmpty(eventName));
-        configure(publishBuilder);
-        _onEntryEffects.Add(publishBuilder.Build());
-        return this;
-    }
-
     /// <summary>
-    /// Supports a style closer to the original sketch: .OnEntry(Publish("Event", p => p.Bind(...)))
+    /// Adds effects via an <see cref="OnEntryBuilder"/> helper.
     /// </summary>
     public StageBuilder OnEntry(Action<OnEntryBuilder> configure) {
         ArgumentNullException.ThrowIfNull(configure);
@@ -96,6 +105,8 @@ public sealed class StageBuilder {
             _policies,
             _onEntryEffects,
             _onExitEffects
-        );
+        ) {
+            Subscriptions = _subscriptions
+        };
     }
 }

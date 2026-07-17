@@ -86,4 +86,4 @@ See the root `AGENTS.md` for guidance on when to consult these documents.
 | `Lowering/` | `DomainExpressionLoweringPass`, `PolicyEvaluator` — VM-integrated policy evaluation |
 | `Builders/` | Alternative fluent construction API (used for rich entity setup) |
 | `Constraints/` | Constraint types (Range, Length, Pattern, etc.) |
-| `Effects/` | Effect types (Create, Publish, Transition, Assign, etc.) |
+| `Effects/` | Effect types (Create, Transition, Assign, Conditional, Composite, etc.) |

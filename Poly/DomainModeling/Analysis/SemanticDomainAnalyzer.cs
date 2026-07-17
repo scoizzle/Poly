@@ -33,7 +33,6 @@ internal sealed class SemanticDomainAnalyzer : INodeAnalyzer {
             case CreateEntityInstance createEntityInstance:
                 ValidateCreateEntity(context, createEntityInstance);
                 break;
-            case PublishEventEffect:
             case StageTransitionEffect:
                 // Effect validation (bindings, availability) is future work.
                 break;
@@ -109,30 +108,10 @@ internal sealed class SemanticDomainAnalyzer : INodeAnalyzer {
             return;
         }
 
-        ResolveEntityEvents(context, entity);
         ValidateEntityParentCycle(context, entity);
         ValidateStages(context, entity);
         PublishEffectivePolicies(context, entity);
         PublishEffectiveMemberMetadata(context, entity);
-    }
-
-    private static void ResolveEntityEvents(AnalysisContext context, Entity entity) {
-        foreach (var @event in entity.Events) {
-            ResolveTypeReference(context, @event, entity, $"Entity '{entity.Name}' event");
-
-            if (context.GetMetadata<ResolvedTypeReferenceMetadata>(@event) is not ResolvedTypeReferenceMetadata resolved) {
-                continue;
-            }
-
-            if (resolved.Type is Event) {
-                continue;
-            }
-
-            context.ReportError(
-                entity,
-                $"Entity '{entity.Name}' event '{@event.TypeName}' must resolve to an event.",
-                DomainModelDiagnosticCodes.SemanticTypeCompatibility);
-        }
     }
 
     private static void ValidateEntityParentCycle(AnalysisContext context, Entity entity) {
@@ -323,9 +302,6 @@ internal sealed class SemanticDomainAnalyzer : INodeAnalyzer {
         var effectivePolicies = MergeByName(
             lineage.SelectMany(static e => e.Policies),
             static p => p.Name);
-        var effectiveEvents = MergeByName(
-            lineage.SelectMany(e => e.Events),
-            static e => e.TypeName); // DomainTypeReference uses TypeName
         var effectiveStages = MergeByName(
             lineage.SelectMany(static e => e.Stages),
             static s => s.Name);
@@ -334,7 +310,6 @@ internal sealed class SemanticDomainAnalyzer : INodeAnalyzer {
             effectiveProperties,
             effectiveActions,
             effectivePolicies,
-            effectiveEvents,
             effectiveStages));
     }
 

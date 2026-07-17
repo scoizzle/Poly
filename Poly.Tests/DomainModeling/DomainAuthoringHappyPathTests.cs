@@ -128,8 +128,8 @@ public class DomainAuthoringHappyPathTests {
         var text = new Poly.DomainModeling.PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
         var domain = new Domain("Test",
         [
-            new Entity("Duplicate", [], [], [], [], []),
-            new Entity("Duplicate", [], [], [], [], []),
+            new Entity("Duplicate", [], [], [], []),
+            new Entity("Duplicate", [], [], [], []),
             text,
         ], []);
 

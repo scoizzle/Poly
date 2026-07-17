@@ -17,7 +17,6 @@ public sealed record EffectiveMemberMetadata(
     IReadOnlyList<Property> EffectiveProperties,
     IReadOnlyList<Action> EffectiveActions,
     IReadOnlyList<Policy> EffectivePolicies,
-    IReadOnlyList<DomainTypeReference> EffectiveEvents,
     IReadOnlyList<Stage> EffectiveStages
 ) : IAnalysisMetadata;
 

@@ -85,11 +85,7 @@ internal sealed class ActionParameterUsageAnalyzer : INodeAnalyzer {
                     CollectFromExpression(binding.Expression, referenced);
                 }
                 break;
-            case PublishEventEffect pee:
-                foreach (var binding in pee.PropertyBindings) {
-                    CollectFromExpression(binding.Expression, referenced);
-                }
-                break;
+
             case StageTransitionEffect:
             case DeleteEntityInstance:
             case LinkRelationshipEffect:

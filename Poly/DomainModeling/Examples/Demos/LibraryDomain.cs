@@ -99,23 +99,6 @@ public static class LibraryDomain {
                 .AddStage("Book", "Reserved", "Available")
                 .AddStage("Book", "Archived")
 
-                // Events
-                .AddEventToEntity("Loan", "BookCheckedOut",
-                    new Property("BookTitle", new DomainTypeReference("Text"), []),
-                    new Property("MemberName", new DomainTypeReference("Text"), []))
-                .AddEventToEntity("Loan", "BookReturned",
-                    new Property("ReturnDate", new DomainTypeReference("DateTime"), []),
-                    new Property("Condition", new DomainTypeReference("Text"), []))
-                .AddEventToEntity("Reservation", "ReservationReady",
-                    new Property("BookTitle", new DomainTypeReference("Text"), []),
-                    new Property("MemberName", new DomainTypeReference("Text"), []))
-                .AddEventToEntity("Fine", "FineIssued",
-                    new Property("Amount", new DomainTypeReference("Decimal"), []),
-                    new Property("Reason", new DomainTypeReference("Text"), []))
-                .AddEventToEntity("Book", "BookAdded",
-                    new Property("ISBN", new DomainTypeReference("ISBN"), []),
-                    new Property("Title", new DomainTypeReference("Text"), []))
-
                 // Relationships
                 .AddRelationship("MemberLoans", "Member", "Loan",
                     RelationshipCardinality.OneToMany, sourceOwnsTarget: true)

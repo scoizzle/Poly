@@ -5,7 +5,6 @@ namespace Poly.DomainModeling;
 public sealed class EntityBuilder : DomainMemberBuilder {
     private readonly string _name;
     private readonly List<Property> _properties = new();
-    private readonly List<DomainTypeReference> _events = new();
     private readonly List<Action> _actions = new();
     private readonly List<Policy> _policies = new();
     private readonly List<Stage> _stages = new();
@@ -55,11 +54,6 @@ public sealed class EntityBuilder : DomainMemberBuilder {
         return this;
     }
 
-    public EntityBuilder Event(string eventName) {
-        _events.Add(new DomainTypeReference(Guard.ThrowIfNullOrEmpty(eventName)));
-        return this;
-    }
-
     public StageBuilder Stage(string name) {
         return new StageBuilder(Guard.ThrowIfNullOrEmpty(name));
     }
@@ -105,7 +99,6 @@ public sealed class EntityBuilder : DomainMemberBuilder {
         return new Entity(
             _name,
             _properties,
-            _events,
             _actions,
             _policies,
             _stages

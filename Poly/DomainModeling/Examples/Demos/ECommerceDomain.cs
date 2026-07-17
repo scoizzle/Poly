@@ -74,20 +74,6 @@ public static class ECommerceDomain {
                 .AddStage("InventoryItem", "OutOfStock")
                 .AddStage("InventoryItem", "Discontinued")
 
-                // Events
-                .AddEventToEntity("Order", "OrderPlaced",
-                    new Property("OrderDate", new DomainTypeReference("DateTime"), []),
-                    new Property("Total", new DomainTypeReference("Decimal"), []))
-                .AddEventToEntity("Order", "OrderShipped",
-                    new Property("TrackingNumber", new DomainTypeReference("Text"), []))
-                .AddEventToEntity("Order", "OrderDelivered")
-                .AddEventToEntity("Payment", "PaymentReceived",
-                    new Property("Amount", new DomainTypeReference("Decimal"), []),
-                    new Property("Method", new DomainTypeReference("Text"), []))
-                .AddEventToEntity("Product", "StockLow",
-                    new Property("CurrentStock", new DomainTypeReference("Number"), []),
-                    new Property("SKU", new DomainTypeReference("SKU"), []))
-
                 // Relationships
                 .AddRelationship("UserOrders", "User", "Order",
                     RelationshipCardinality.OneToMany, sourceOwnsTarget: true)

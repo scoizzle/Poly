@@ -21,9 +21,7 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
             case Stage stage:
                 AnalyzeStage(context, stage);
                 break;
-            case Event @event:
-                AnalyzeEvent(context, @event);
-                break;
+
             case Action action:
                 AnalyzeAction(context, action);
                 break;
@@ -52,7 +50,6 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
         }
 
         ReportDuplicateNames(context, entity.Properties, "entity", entity.Name);
-        ReportDuplicateReferenceNames(context, entity.Events, "entity", entity.Name);
         ReportDuplicateNames(context, entity.Actions, "entity", entity.Name);
         ReportDuplicateNames(context, entity.Policies, "entity", entity.Name);
         ReportDuplicateNames(context, entity.Stages, "entity", entity.Name);
@@ -68,14 +65,6 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
 
         // OnEntry / OnExit effects are walked via Children.
         // Future structural rules can go here.
-    }
-
-    private static void AnalyzeEvent(AnalysisContext context, Event @event) {
-        if (!context.TryBeginAnalyzerVisit<StructuralDomainAnalyzer>(@event)) {
-            return;
-        }
-
-        ReportDuplicateNames(context, @event.Properties, "event", @event.Name);
     }
 
     private static void AnalyzeAction(AnalysisContext context, Action action) {

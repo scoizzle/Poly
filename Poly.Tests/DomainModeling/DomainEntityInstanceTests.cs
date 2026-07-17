@@ -32,7 +32,6 @@ public class DomainEntityInstanceTests {
 
         return new Entity("Person",
             Properties: [age, name, active],
-            Events: [],
             Actions: [activate],
             Policies: [isAdult],
             Stages: [draft, activeStage]);
@@ -147,7 +146,7 @@ public class DomainEntityInstanceTests {
     [Test]
     public async Task AssignEffect_UpdatesPropertyViaVm() {
         var age = new Property("Age", new DomainTypeReference("Number"), []);
-        var entity = new Entity("Person", [age], [], Actions: [
+        var entity = new Entity("Person", [age], Actions: [
             new Poly.DomainModeling.Action("SetAge", InvocationResult.Void, [],
                 Effects: [new AssignEffect(
                     DomainExpression.Property("Age"),
@@ -167,7 +166,7 @@ public class DomainEntityInstanceTests {
     public async Task CompositeEffect_ExecutesAllSubEffects() {
         var age = new Property("Age", new DomainTypeReference("Number"), []);
         var active = new Property("Active", new DomainTypeReference("Boolean"), []);
-        var entity = new Entity("Person", [age, active], [], Actions: [
+        var entity = new Entity("Person", [age, active], Actions: [
             new Poly.DomainModeling.Action("Setup", InvocationResult.Void, [],
                 Effects: [new CompositeEffect([
                     new AssignEffect(DomainExpression.Property("Age"), DomainExpression.Literal(30L)),
@@ -189,7 +188,7 @@ public class DomainEntityInstanceTests {
     public async Task ConditionalEffect_WhenConditionTrue_ExecutesThenBranch() {
         var status = new Property("Status", new DomainTypeReference("Text"), []);
         var total = new Property("Total", new DomainTypeReference("Number"), []);
-        var entity = new Entity("Order", [status, total], [], Actions: [
+        var entity = new Entity("Order", [status, total], Actions: [
             new Poly.DomainModeling.Action("Process", InvocationResult.Void, [],
                 Effects: [new ConditionalEffect(
                     Condition: DomainExpression.GreaterThanOrEqual(
@@ -220,7 +219,7 @@ public class DomainEntityInstanceTests {
     public async Task ConditionalEffect_WithoutElse_NoopsWhenFalse() {
         var status = new Property("Status", new DomainTypeReference("Text"), []);
         var total = new Property("Total", new DomainTypeReference("Number"), []);
-        var entity = new Entity("Order", [status, total], [], Actions: [
+        var entity = new Entity("Order", [status, total], Actions: [
             new Poly.DomainModeling.Action("FlagLarge", InvocationResult.Void, [],
                 Effects: [new ConditionalEffect(
                     Condition: DomainExpression.GreaterThanOrEqual(
@@ -244,7 +243,7 @@ public class DomainEntityInstanceTests {
     public async Task CreateEntityInstance_CreatesChildInstance() {
         var name = new Property("Name", new DomainTypeReference("Text"), []);
         var age = new Property("Age", new DomainTypeReference("Number"), []);
-        var entity = new Entity("Person", [name, age], [], Actions: [
+        var entity = new Entity("Person", [name, age], Actions: [
             new Poly.DomainModeling.Action("Spawn", InvocationResult.Void, [],
                 Effects: [new CreateEntityInstance(
                     new DomainTypeReference("Person"),
@@ -269,7 +268,7 @@ public class DomainEntityInstanceTests {
 
     [Test]
     public async Task CreateEntityInstance_MultipleChildren_AllCreated() {
-        var entity = new Entity("Item", [], [], Actions: [
+        var entity = new Entity("Item", [], Actions: [
             new Poly.DomainModeling.Action("Batch", InvocationResult.Void, [],
                 Effects: [
                     new CreateEntityInstance(new DomainTypeReference("Item")),
@@ -288,7 +287,7 @@ public class DomainEntityInstanceTests {
     [Test]
     public async Task CreateEntityInstance_SameType_WhenNoDomainReference() {
         var name = new Property("Name", new DomainTypeReference("Text"), []);
-        var entity = new Entity("Person", [name], [], Actions: [
+        var entity = new Entity("Person", [name], Actions: [
             new Poly.DomainModeling.Action("Clone", InvocationResult.Void, [],
                 Effects: [new CreateEntityInstance(new DomainTypeReference("Person"),
                     Initializers: [new PropertyBinding("Name", DomainExpression.Literal("Clone"))])],
@@ -306,13 +305,13 @@ public class DomainEntityInstanceTests {
     public async Task CreateEntityInstance_UsesDomainForCrossEntityLookup() {
         var personName = new Property("PersonName", new DomainTypeReference("Text"), []);
         var itemName = new Property("ItemName", new DomainTypeReference("Text"), []);
-        var person = new Entity("Person", [personName], [], Actions: [
+        var person = new Entity("Person", [personName], Actions: [
             new Poly.DomainModeling.Action("CreateItem", InvocationResult.Void, [],
                 Effects: [new CreateEntityInstance(new DomainTypeReference("Item"),
                     Initializers: [new PropertyBinding("ItemName", DomainExpression.Literal("Widget"))])],
                 Policies: [])
         ], [], []);
-        var item = new Entity("Item", [itemName], [], [], [], []);
+        var item = new Entity("Item", [itemName], [], [], []);
         var domain = new Domain("Test", [person, item], []);
 
         var instance = DomainEntityInstance.Create(person, domain: domain);
@@ -325,7 +324,7 @@ public class DomainEntityInstanceTests {
 
     [Test]
     public async Task DeleteEntityInstance_SetsIsDeleted() {
-        var entity = new Entity("Temp", [], [], Actions: [
+        var entity = new Entity("Temp", [], Actions: [
             new Poly.DomainModeling.Action("Dispose", InvocationResult.Void, [],
                 Effects: [new DeleteEntityInstance(new DomainTypeReference("Temp"))],
                 Policies: [])
@@ -338,30 +337,12 @@ public class DomainEntityInstanceTests {
         await Assert.That(instance.IsDeleted).IsTrue();
     }
 
-    [Test]
-    public async Task PublishEventEffect_RecordsEvent() {
-        var entity = new Entity("Source", [], [], Actions: [
-            new Poly.DomainModeling.Action("Notify", InvocationResult.Void, [],
-                Effects: [new PublishEventEffect(
-                    new DomainTypeReference("SomethingHappened"),
-                    PropertyBindings: [
-                        new PropertyBinding("Detail", DomainExpression.Literal("Hello"))
-                    ])],
-                Policies: [])
-        ], [], []);
 
-        var instance = DomainEntityInstance.Create(entity);
-        instance.CallAction("Notify");
-
-        await Assert.That(instance.PublishedEvents.Count).IsEqualTo(1);
-        await Assert.That(instance.PublishedEvents[0].EventType.TypeName).IsEqualTo("SomethingHappened");
-        await Assert.That(instance.PublishedEvents[0].PropertyBindings.Count).IsEqualTo(1);
-    }
 
     [Test]
     public async Task InvokeActionEffect_ChainsToAnotherAction() {
         var count = new Property("Count", new DomainTypeReference("Number"), []);
-        var entity = new Entity("Counter", [count], [], Actions: [
+        var entity = new Entity("Counter", [count], Actions: [
             new Poly.DomainModeling.Action("Increment", InvocationResult.Void, [],
                 Effects: [new AssignEffect(
                     DomainExpression.Property("Count"),
@@ -386,7 +367,7 @@ public class DomainEntityInstanceTests {
     public async Task ActionWithMultipleEffects_ExecutesAllTypes() {
         var status = new Property("Status", new DomainTypeReference("Text"), []);
         var count = new Property("Count", new DomainTypeReference("Number"), []);
-        var entity = new Entity("Worker", [status, count], [], Actions: [
+        var entity = new Entity("Worker", [status, count], Actions: [
             new Poly.DomainModeling.Action("DoAll", InvocationResult.Void, [],
                 Effects: [
                     new AssignEffect(DomainExpression.Property("Status"),
@@ -394,7 +375,6 @@ public class DomainEntityInstanceTests {
                     new StageTransitionEffect(new StageReference("Active")),
                     new CreateEntityInstance(new DomainTypeReference("Worker"),
                         Initializers: [new PropertyBinding("Count", DomainExpression.Literal(0L))]),
-                    new PublishEventEffect(new DomainTypeReference("WorkStarted"), []),
                 ],
                 Policies: [])
         ], [], [new Stage("Draft", null, [], [], [], []), new Stage("Active", null, [], [], [], [])]);
@@ -407,6 +387,5 @@ public class DomainEntityInstanceTests {
         await Assert.That(instance.CurrentStage).IsEqualTo("Active");
         await Assert.That(instance.GetProperty<string>("Status")).IsEqualTo("Started");
         await Assert.That(instance.CreatedChildren.Count).IsEqualTo(1);
-        await Assert.That(instance.PublishedEvents.Count).IsEqualTo(1);
     }
 }

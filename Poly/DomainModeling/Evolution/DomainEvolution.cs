@@ -158,28 +158,7 @@ public sealed class EvolutionBuilder {
     public EvolutionBuilder RemoveValueType(string name) =>
         Apply(new RemoveValueTypeChange(name));
 
-    public EvolutionBuilder AddEvent(string name) =>
-        Apply(new AddEventChange(name, []));
 
-    public EvolutionBuilder AddEvent(string name, params Property[] properties) =>
-        Apply(new AddEventChange(name, properties));
-
-    public EvolutionBuilder RemoveEvent(string name) =>
-        Apply(new RemoveEventChange(name));
-
-    /// <summary>
-    /// Common pattern: Define an event and immediately attach it to an entity.
-    /// </summary>
-    public EvolutionBuilder AddEventToEntity(string entityName, string eventName, params Property[] properties) {
-        var b = AddEvent(eventName, properties);
-        return b.AddEventReferenceToEntity(entityName, eventName);
-    }
-
-    public EvolutionBuilder AddEventReferenceToEntity(string entityName, string eventName) =>
-        Apply(new AddEventReferenceToEntityChange(entityName, new DomainTypeReference(eventName)));
-
-    public EvolutionBuilder RemoveEventReferenceFromEntity(string entityName, string eventName) =>
-        Apply(new RemoveEventReferenceFromEntityChange(entityName, eventName));
 
     public EvolutionBuilder AddPrimitiveType(string name, TypeCategory typeCategory) =>
         Apply(new AddPrimitiveTypeChange(name, typeCategory, []));
@@ -304,28 +283,6 @@ public sealed class EvolutionBuilder {
         AddEffectToAction(entityName, actionName, new CreateEntityInstance(new DomainTypeReference(typeName)));
 
     /// <summary>
-    /// Adds a PublishEventEffect with optional property bindings to an action.
-    /// </summary>
-    public EvolutionBuilder AddPublishEventEffect(
-        string entityName,
-        string actionName,
-        string eventName,
-        params (string propertyName, DomainExpression expression)[] bindings) {
-        var initializers = bindings
-            .Select(b => new PropertyBinding(b.propertyName, b.expression))
-            .ToList();
-
-        var effect = new PublishEventEffect(new DomainTypeReference(eventName), initializers);
-        return AddEffectToAction(entityName, actionName, effect);
-    }
-
-    /// <summary>
-    /// Adds a simple PublishEventEffect (no bindings) to an action.
-    /// </summary>
-    public EvolutionBuilder AddPublishEventEffect(string entityName, string actionName, string eventName) =>
-        AddEffectToAction(entityName, actionName, new PublishEventEffect(new DomainTypeReference(eventName), []));
-
-    /// <summary>
     /// Adds a StageTransitionEffect to an action.
     /// </summary>
     public EvolutionBuilder AddStageTransitionEffect(string entityName, string actionName, string targetStageName) =>
@@ -405,12 +362,6 @@ public sealed class EvolutionBuilder {
     public EvolutionBuilder RemoveConstraintFromDomainType(string typeName, Constraint constraint) =>
         Apply(new RemoveConstraintFromDomainTypeChange(typeName, constraint));
 
-    public EvolutionBuilder AddPropertyToEvent(string eventName, Property property) =>
-        Apply(new AddPropertyToEventChange(eventName, property));
-
-    public EvolutionBuilder RemovePropertyFromEvent(string eventName, string propertyName) =>
-        Apply(new RemovePropertyFromEventChange(eventName, propertyName));
-
     public EvolutionBuilder ChangePropertyType(string entityName, string propertyName, DomainTypeReference newType) =>
         Apply(new ChangePropertyTypeChange(entityName, propertyName, newType));
 
@@ -434,6 +385,37 @@ public sealed class EvolutionBuilder {
 
     public EvolutionBuilder RemoveOnExitEffectFromStage(string entityName, string stageName, Effect effect) =>
         Apply(new RemoveOnExitEffectFromStageChange(entityName, stageName, effect));
+
+    /// <summary>
+    /// Adds a stage subscription to a stage on an entity.
+    /// </summary>
+    public EvolutionBuilder AddStageSubscription(string entityName, string stageName, StageSubscription subscription) =>
+        Apply(new AddStageSubscriptionChange(entityName, stageName, subscription));
+
+    /// <summary>
+    /// Removes a stage subscription from a stage on an entity.
+    /// </summary>
+    public EvolutionBuilder RemoveStageSubscription(string entityName, string stageName, StageSubscription subscription) =>
+        Apply(new RemoveStageSubscriptionChange(entityName, stageName, subscription));
+
+    /// <summary>
+    /// Adds a subscription to a stage using a builder configuration delegate.
+    /// The builder does not accept bindings yet — the Configure overload will be added in Phase 1b.
+    /// </summary>
+    public EvolutionBuilder AddStageSubscription(string entityName, string stageName,
+        string relationshipName, string targetStageName, StageSubscriptionQuantifier quantifier,
+        IReadOnlyList<Effect> effects) =>
+        AddStageSubscription(entityName, stageName,
+            new StageSubscription(relationshipName, targetStageName, quantifier, effects));
+
+    /// <summary>
+    /// Convenience: adds a subscription with <see cref="StageSubscriptionQuantifier.Each"/> and a single target stage.
+    /// </summary>
+    public EvolutionBuilder AddStageSubscription(string entityName, string stageName,
+        string relationshipName, string targetStageName,
+        IReadOnlyList<Effect> effects) =>
+        AddStageSubscription(entityName, stageName,
+            new StageSubscription(relationshipName, targetStageName, effects));
 
     public EvolutionBuilder SetActionResult(string entityName, string actionName, InvocationResult result) =>
         Apply(new SetActionResultChange(entityName, actionName, result));
@@ -487,26 +469,6 @@ public sealed class EvolutionBuilder {
 
     public EvolutionBuilder RemovePolicyFromRelationship(string relationshipName, string policyName) =>
         Apply(new RemovePolicyFromRelationshipChange(relationshipName, policyName));
-
-    // --- Event subscription builder methods ---
-
-    public EvolutionBuilder AddEventSubscription(string entityName, EventSubscription subscription) =>
-        Apply(new AddEventSubscriptionChange(entityName, subscription));
-
-    public EvolutionBuilder RemoveEventSubscription(string entityName, string eventTypeName, string handlerActionName) =>
-        Apply(new RemoveEventSubscriptionChange(entityName, eventTypeName, handlerActionName));
-
-    public EvolutionBuilder AddEventSubscriptionCorrelation(string entityName, string eventTypeName, string handlerActionName, EventCorrelationBinding binding) =>
-        Apply(new AddEventSubscriptionCorrelationChange(entityName, eventTypeName, handlerActionName, binding));
-
-    public EvolutionBuilder RemoveEventSubscriptionCorrelation(string entityName, string eventTypeName, string handlerActionName, string eventPropertyName) =>
-        Apply(new RemoveEventSubscriptionCorrelationChange(entityName, eventTypeName, handlerActionName, eventPropertyName));
-
-    public EvolutionBuilder SetEventSubscriptionRoutingMode(string entityName, string eventTypeName, string handlerActionName, EventSubscriptionRoutingMode routingMode) =>
-        Apply(new SetEventSubscriptionRoutingModeChange(entityName, eventTypeName, handlerActionName, routingMode));
-
-    public EvolutionBuilder SetEventSubscriptionEventParameter(string entityName, string eventTypeName, string handlerActionName, string eventParameterName) =>
-        Apply(new SetEventSubscriptionEventParameterChange(entityName, eventTypeName, handlerActionName, eventParameterName));
 
     /// <summary>
     /// Executes the accumulated changes through the analysis gate.

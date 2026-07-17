@@ -197,14 +197,13 @@ public class EvolutionRollbackTests {
     [Test]
     public async Task Apply_StageWithOnEntryEffect_Succeeds() {
         var domain = DomainFactory.Create("Test", builder =>
-            builder.AddEntity("Order")
-                   .AddEventToEntity("Order", "OrderCreated"));
+            builder.AddEntity("Order"));
 
         var result = new DomainEvolution(domain).Evolve()
-            .AddStage("Order", "Draft", onEntryEffects:
-            [
-                new PublishEventEffect(new DomainTypeReference("OrderCreated"), []),
-            ])
+            .AddPropertyToEntity("Order", new Property("Status", new DomainTypeReference("Text"), []))
+            .AddStage("Order", "Draft")
+            .AddOnEntryEffect("Order", "Draft",
+                new AssignEffect(DomainExpression.Property("Status"), DomainExpression.Literal("Created")))
             .Apply();
 
         await Assert.That(result.Succeeded).IsTrue();

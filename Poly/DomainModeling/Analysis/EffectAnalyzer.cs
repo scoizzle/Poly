@@ -64,9 +64,7 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
             case CreateEntityInstance cei:
                 ValidateCreateEntityInstance(context, cei, lookup);
                 break;
-            case PublishEventEffect pee:
-                ValidatePublishEvent(context, pee, lookup);
-                break;
+
             case StageTransitionEffect ste:
                 ValidateStageTransition(context, ste, entity);
                 break;
@@ -114,30 +112,6 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
                         $"CreateEntityInstance initializer references unknown property '{initializer.PropertyName}' on entity '{entity.Name}'.",
                         DomainModelDiagnosticCodes.EffectBinding);
                 }
-            }
-        }
-    }
-
-    private static void ValidatePublishEvent(
-        AnalysisContext context, PublishEventEffect pee, DomainTypeLookupMetadata lookup) {
-        if (!TryResolveDomainType(context, pee.EventType, lookup, pee, out var resolvedType)) {
-            return;
-        }
-
-        if (resolvedType is not Event eventType) {
-            context.ReportError(
-                pee,
-                $"PublishEvent effect references type '{pee.EventType.TypeName}' which must resolve to an Event.",
-                DomainModelDiagnosticCodes.EffectBinding);
-            return;
-        }
-
-        foreach (var binding in pee.PropertyBindings) {
-            if (!eventType.Properties.Any(p => string.Equals(p.Name, binding.PropertyName, StringComparison.Ordinal))) {
-                context.ReportError(
-                    binding,
-                    $"PublishEvent binding references unknown property '{binding.PropertyName}' on event '{eventType.Name}'.",
-                    DomainModelDiagnosticCodes.EffectBinding);
             }
         }
     }

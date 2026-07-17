@@ -28,7 +28,6 @@ public sealed class DomainBuilder {
     private readonly Dictionary<string, RelBuilder> _relationshipBuilders = new(StringComparer.Ordinal);
 
     private readonly List<PrimitiveType> _primitives = new();
-    private readonly List<Event> _events = new();
 
     public string Name { get; private set; } = string.Empty;
 
@@ -69,12 +68,6 @@ public sealed class DomainBuilder {
         ArgumentNullException.ThrowIfNull(configure);
         var vb = ValueType(Guard.ThrowIfNullOrEmpty(name));
         configure(vb);
-        return this;
-    }
-
-    public DomainBuilder Event(string name) {
-        var ev = new Event(Guard.ThrowIfNullOrEmpty(name), [], []);
-        _events.Add(ev);
         return this;
     }
 
@@ -129,7 +122,6 @@ public sealed class DomainBuilder {
         var allTypes = new List<DomainType>();
         allTypes.AddRange(_primitives);
         allTypes.AddRange(valueTypes);
-        allTypes.AddRange(_events);
         allTypes.AddRange(entities);
 
         return new Domain(Name, allTypes, relationships);

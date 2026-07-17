@@ -8,7 +8,6 @@ public sealed record ActionCapabilityView(
     IReadOnlyList<Property> Parameters,
     IReadOnlyList<Effect> Effects,
     IReadOnlyList<Type> EffectTypes,
-    IReadOnlyList<Event> PublishedEvents,
     IReadOnlyList<Stage> TransitionTargets);
 
 public sealed record StageCapabilityView(
@@ -86,15 +85,6 @@ internal sealed class CapabilityAnalyzer : INodeAnalyzer {
 
         var lookup = context.GetMetadata<DomainTypeLookupMetadata>(default);
 
-        var publishedEvents = new List<Event>();
-        foreach (var effect in FlattenEffects(action.Effects)) {
-            if (effect is PublishEventEffect pee && lookup is not null
-                && lookup.Types.TryGetValue(pee.EventType.TypeName, out var eventType)
-                && eventType is Event evt) {
-                publishedEvents.Add(evt);
-            }
-        }
-
         var transitionTargetStages = new List<Stage>();
         foreach (var effect in FlattenEffects(action.Effects)) {
             if (effect is StageTransitionEffect ste) {
@@ -107,7 +97,6 @@ internal sealed class CapabilityAnalyzer : INodeAnalyzer {
             Parameters: action.Parameters,
             Effects: action.Effects,
             EffectTypes: action.Effects.Select(static e => e.GetType()).Distinct().ToArray(),
-            PublishedEvents: publishedEvents,
             TransitionTargets: transitionTargetStages);
 
         context.SetMetadata(action, new ActionCapabilityMetadata(view));

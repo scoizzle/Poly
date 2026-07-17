@@ -61,17 +61,6 @@ public sealed class ActionBuilder {
         return this;
     }
 
-    /// <summary>
-    /// Adds a publish event effect.
-    /// </summary>
-    public ActionBuilder Publish(string eventName, Action<PublishEventBuilder> configure) {
-        ArgumentNullException.ThrowIfNull(configure);
-        var publishBuilder = new PublishEventBuilder(Guard.ThrowIfNullOrEmpty(eventName));
-        configure(publishBuilder);
-        _effects.Add(publishBuilder.Build());
-        return this;
-    }
-
     public ActionBuilder Policy(string name, DomainExpression expression) {
         _policies.Add(new Policy(Guard.ThrowIfNullOrEmpty(name), expression));
         return this;

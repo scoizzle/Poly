@@ -56,7 +56,10 @@ public sealed record RemoveEntityChange(
     string Name
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
-        context.Types.RemoveAll(t => t is Entity e && string.Equals(e.Name, Name, StringComparison.Ordinal));
+        var removed = context.Types.RemoveAll(t => t is Entity e && string.Equals(e.Name, Name, StringComparison.Ordinal));
+        if (removed == 0)
+            context.RequireTarget(false,
+                $"Entity '{Name}' not found — nothing to remove");
     }
 
     internal override string GetDescription() => $"RemoveEntity({Name})";
@@ -386,7 +389,10 @@ public sealed record RemoveRelationshipChange(
     string Name
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
-        context.Relationships.RemoveAll(r => string.Equals(r.Name, Name, StringComparison.Ordinal));
+        var removed = context.Relationships.RemoveAll(r => string.Equals(r.Name, Name, StringComparison.Ordinal));
+        if (removed == 0)
+            context.RequireTarget(false,
+                $"Relationship '{Name}' not found — nothing to remove");
     }
 
     internal override string GetDescription() => $"RemoveRelationship({Name})";

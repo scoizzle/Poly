@@ -1110,4 +1110,43 @@ public class McpSmokeTests {
             scope: "stage", stageName: "Active");
         await Assert.That(response.Success).IsTrue();
     }
+
+    [Test]
+    public async Task RemoveActionFromStage_Removes() {
+        var (sessionId, _) = McpSessionStore.Create("Test");
+        EvolveTool.AddEntity(sessionId, "Process");
+        EvolveTool.AddStage(sessionId, "Process", "Active");
+        EvolveTool.AddActionToStage(sessionId, "Process", "Active", "DoIt");
+
+        var response = EvolveTool.RemoveActionFromStage(sessionId, "Process", "Active", "DoIt");
+        await Assert.That(response.Success).IsTrue();
+
+        var detail = QueryTool.GetEntityDetail(sessionId, "Process");
+        await Assert.That(detail.Success).IsTrue();
+        var d = (EntityDetailData)detail.Data!;
+        var activeStage = d.Stages.First(s => s.Name == "Active");
+        await Assert.That(activeStage.Actions.Contains("DoIt")).IsFalse();
+    }
+
+    [Test]
+    public async Task RemovePolicy_InvalidScope_Rejected() {
+        var (sessionId, _) = McpSessionStore.Create("Test");
+        EvolveTool.AddEntity(sessionId, "Item");
+
+        var response = EvolveTool.RemovePolicy(sessionId, "Item", "SomePolicy",
+            scope: "invalid");
+        await Assert.That(response.Success).IsFalse();
+        await Assert.That(response.Message.Contains("Invalid scope")).IsTrue();
+    }
+
+    [Test]
+    public async Task RemovePolicy_MissingStageName_Rejected() {
+        var (sessionId, _) = McpSessionStore.Create("Test");
+        EvolveTool.AddEntity(sessionId, "Item");
+
+        var response = EvolveTool.RemovePolicy(sessionId, "Item", "SomePolicy",
+            scope: "stage");
+        await Assert.That(response.Success).IsFalse();
+        await Assert.That(response.Message.Contains("stageName is required")).IsTrue();
+    }
 }

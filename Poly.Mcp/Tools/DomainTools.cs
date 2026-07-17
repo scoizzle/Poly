@@ -444,22 +444,21 @@ internal sealed class EvolveTool {
     // ── Remove tools: agent evolutionary authoring ────────────────
 
     /// <summary>
-    /// Removes a relationship by name. Fails with a clear diagnostic if the name is
-    /// unknown or dependent elements prevent removal.
+    /// Removes a relationship by name. Analysis gate catches dangling references; missing name produces a clear diagnostic.
     /// </summary>
-    [McpServerTool(Name = "remove_relationship"), Description("Removes a relationship by name. Fails if the name is unknown or dependent elements prevent removal.")]
+    [McpServerTool(Name = "remove_relationship"), Description("Removes a relationship by name. Analysis gate catches dangling references; missing name is reported clearly.")]
     public static DomainToolResponse RemoveRelationship(
         [Description("Session ID")] string sessionId,
         [Description("Name of the relationship to remove")] string relationshipName) {
         return Evolve(sessionId, builder => builder.RemoveRelationship(relationshipName),
-            successAffordances: ["get_entity_detail", "get_domain_overview", "add_relationship"]);
+            successAffordances: ["get_entity_detail", "get_domain_overview", "get_relationships", "add_relationship"]);
     }
 
     /// <summary>
     /// Removes an entity and all its properties, stages, and actions.
     /// Fails if another entity depends on this one (e.g. via a relationship target).
     /// </summary>
-    [McpServerTool(Name = "remove_entity"), Description("Removes an entity by name. Fails with a clear diagnostic if relationships or other dependents prevent removal.")]
+    [McpServerTool(Name = "remove_entity"), Description("Removes an entity by name. Analysis gate rejects removal if other entities depend on this one (e.g. via relationships).")]
     public static DomainToolResponse RemoveEntity(
         [Description("Session ID")] string sessionId,
         [Description("Name of the entity to remove")] string entityName) {
@@ -470,7 +469,7 @@ internal sealed class EvolveTool {
     /// <summary>
     /// Removes a property from an entity.
     /// </summary>
-    [McpServerTool(Name = "remove_property"), Description("Removes a property from an entity. Fails if the property is referenced by policies, constraints, or effects.")]
+    [McpServerTool(Name = "remove_property"), Description("Removes a property from an entity. Analysis gate catches dangling references.")]
     public static DomainToolResponse RemoveProperty(
         [Description("Session ID")] string sessionId,
         [Description("Name of the entity")] string entityName,
@@ -483,7 +482,7 @@ internal sealed class EvolveTool {
     /// Removes a lifecycle stage from an entity. Fails if the stage is referenced
     /// by subscriptions or other dependents.
     /// </summary>
-    [McpServerTool(Name = "remove_stage"), Description("Removes a stage from an entity. Fails if actions, subscriptions, or policies on that stage prevent removal.")]
+    [McpServerTool(Name = "remove_stage"), Description("Removes a stage from an entity. Stage children (actions, subscriptions, policies) are removed with the stage.")]
     public static DomainToolResponse RemoveStage(
         [Description("Session ID")] string sessionId,
         [Description("Name of the entity")] string entityName,
@@ -493,16 +492,29 @@ internal sealed class EvolveTool {
     }
 
     /// <summary>
-    /// Removes an action from an entity (entity-level only). For stage-scoped actions,
+    /// Removes an action from an entity (entity-level). To remove a stage-scoped action,
     /// use remove_action_from_stage.
     /// </summary>
-    [McpServerTool(Name = "remove_action"), Description("Removes an entity-level action by name. For stage-scoped actions, use remove_action_from_stage.")]
+    [McpServerTool(Name = "remove_action"), Description("Removes an entity-level action by name. Missing name is reported clearly. For stage-scoped actions, use remove_action_from_stage.")]
     public static DomainToolResponse RemoveAction(
         [Description("Session ID")] string sessionId,
         [Description("Name of the entity")] string entityName,
         [Description("Name of the action to remove")] string actionName) {
         return Evolve(sessionId, builder => builder.RemoveAction(entityName, actionName),
             successAffordances: ["get_entity_detail", "get_domain_overview", "add_action"]);
+    }
+
+    /// <summary>
+    /// Removes a stage-scoped action. Fails if the action or stage doesn't exist.
+    /// </summary>
+    [McpServerTool(Name = "remove_action_from_stage"), Description("Removes an action from a stage (stage-scoped action). Fails if the stage or action doesn't exist.")]
+    public static DomainToolResponse RemoveActionFromStage(
+        [Description("Session ID")] string sessionId,
+        [Description("Name of the entity")] string entityName,
+        [Description("Name of the stage")] string stageName,
+        [Description("Name of the action to remove")] string actionName) {
+        return Evolve(sessionId, builder => builder.RemoveActionFromStage(entityName, stageName, actionName),
+            successAffordances: ["get_entity_detail", "get_domain_overview", "add_action_to_stage"]);
     }
 
     /// <summary>
@@ -518,14 +530,32 @@ internal sealed class EvolveTool {
         [Description("Scope: 'entity' (default), 'stage', or 'action'")] string scope = "entity",
         [Description("Stage name (required when scope='stage')")] string? stageName = null,
         [Description("Action name (required when scope='action')")] string? actionName = null) {
+        // Validate scope before any mutation
+        if (scope != "entity" && scope != "stage" && scope != "action")
+            return new DomainToolResponse(
+                Success: false,
+                Message: $"Invalid scope '{scope}'. Valid values are 'entity', 'stage', or 'action'.",
+                SessionId: sessionId,
+                Affordances: ["get_entity_detail"]);
+
+        if (scope == "stage" && string.IsNullOrWhiteSpace(stageName))
+            return new DomainToolResponse(
+                Success: false,
+                Message: "stageName is required when scope is 'stage'.",
+                SessionId: sessionId,
+                Affordances: ["get_entity_detail"]);
+
+        if (scope == "action" && string.IsNullOrWhiteSpace(actionName))
+            return new DomainToolResponse(
+                Success: false,
+                Message: "actionName is required when scope is 'action'.",
+                SessionId: sessionId,
+                Affordances: ["get_entity_detail"]);
+
         return Evolve(sessionId, builder => {
             return scope switch {
-                "stage" => stageName is not null
-                    ? builder.RemovePolicyFromStage(entityName, stageName, policyName)
-                    : throw new ArgumentException("stageName is required when scope='stage'."),
-                "action" => actionName is not null
-                    ? builder.RemovePolicyFromAction(entityName, actionName, policyName)
-                    : throw new ArgumentException("actionName is required when scope='action'."),
+                "stage" => builder.RemovePolicyFromStage(entityName, stageName!, policyName),
+                "action" => builder.RemovePolicyFromAction(entityName, actionName!, policyName),
                 _ => builder.RemovePolicyFromEntity(entityName, policyName),
             };
         }, successAffordances: ["get_entity_detail", "get_domain_analysis", "add_policy"]);

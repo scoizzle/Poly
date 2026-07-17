@@ -1,11 +1,11 @@
 # DSL-Engine Sync Plan — Toward Phase 1
 
 **Date:** 2026-07-17
-**Revised:** 2026-07-17 (MR impl review → MR′ residuals; suite 1299)
-**Status:** Phase 1a vertical **product-complete**; BR stack + PCA + MR core shipped; **MR′ honesty nits open**
-**Current pick:** **Commit MR** (working tree) — then **MR′** honesty only if editing those tools, else stop/dogfood
+**Revised:** 2026-07-17 (MR′ impl review — suite 1302; MR′′ optional nits only)
+**Status:** Phase 1a vertical **product-complete**; BR + PCA + MR + MR′ **done** (MR′ uncommitted)
+**Current pick:** **Commit MR′** working tree — then **stop / dogfood**
 **Source:** [`docs/experiments/domain-modeling-dsl-tour-feedback.md`](../../experiments/domain-modeling-dsl-tour-feedback.md) — §3 and §4  
-**Review:** A–D′; N; BR; PCA; **MR reviewed** (MR′ opened)  
+**Review:** A–D′; N; BR; PCA; MR; **MR′ reviewed** (MR′′ optional)  
 **Trigger:** IR/DSL divergence (events vs stage-observation); mutation surface width; single-vertical runtime gap  
 **Related:**
 
@@ -117,8 +117,9 @@ BR.3           OnEntry/OnExit, stage actions, auto-Add     [done — 5a7b89b]
 BR.3′          BR.3 review nits                            [done]
 BR.3′′          BR.3′ honesty nits                          [done — 5a7b89b]
 BR.4 / E       residual / Phase 1b                         [pull-only / optional]
-Slice MR       MCP remove_* micro-tools                    [done core — uncommitted]
-MR′            MR honesty / fail-loud residuals            [OPEN — post-review]
+Slice MR       MCP remove_* micro-tools                    [done — `6748924`]
+MR′            MR honesty / fail-loud residuals            [done — uncommitted]
+MR′′           optional polish after MR′ review            [pull-only]
 ```
 
 | Slice | Depends on | Does not depend on |
@@ -676,39 +677,43 @@ Pattern after `name :` in entity body:
 - [x] **D′′.2** `apply_dsl` re-batch affordance
 - [x] **D′′.3** Session race (accepted)
 
-#### Slice MR — MCP `remove_*` micro-tools — **DONE core** (uncommitted; suite **1299**)
+#### Slice MR — MCP `remove_*` micro-tools — **DONE** (`6748924`)
 
-Dogfood: evolutionary authoring needs mirror removes. Full task list in appendix **Slice MR** below. **Post-impl review → MR′.**
+Dogfood: evolutionary authoring needs mirror removes. Full task list in appendix **Slice MR** below.
 
 - [x] **MR.1** `remove_relationship` — tool + smoke (success + unknown-name fail)
 - [x] **MR.2** `remove_entity` / `remove_property` / `remove_stage` / `remove_action` — all with smokes
 - [x] **MR.3** `remove_policy` (entity + stage scope with smokes); constraint remove deferred
-- [ ] **MR.4** affordance/polish (optional — demote; see MR′)
-- [ ] **MR′** honesty / fail-loud residuals (below)
+- [x] **MR.4** demoted into MR′ / MR′′ pull-only
+- [x] **MR′** honesty / fail-loud — **DONE uncommitted** (suite **1302**)
 
-#### MR′ — MR honesty residuals (post-impl review 2026-07-17)
+#### MR′ — MR honesty residuals — **DONE** (uncommitted; suite **1302**)
 
-Core adapters correct; suite green. Residual is **agent-facing honesty**, not missing capability.
+| ID | Severity | Finding | Status |
+|----|----------|---------|--------|
+| **MR′.1** | Must | `remove_action` named missing tool | **Fixed** — added `remove_action_from_stage` |
+| **MR′.2** | Medium | silent `RemoveAll` on entity/relationship | **Fixed** — `RequireTarget` when removed==0 |
+| **MR′.3** | Medium | `remove_policy` threw on missing names | **Fixed** — pre-evolve structured response |
+| **MR′.4** | Low–med | invalid scope → entity | **Fixed** — reject with message |
+| **MR′.5** | Low | description overclaims | **Fixed** — Description attrs tightened |
+| **MR′.6** | Low | smoke / affordance gaps | **Partial** — see MR′′ |
+| **MR′.7** | Optional | constraint / README / polish | **Pull-only** |
 
-| ID | Severity | Finding |
-|----|----------|---------|
-| **MR′.1** | **Must before claim** | `remove_action` description says “use `remove_action_from_stage`” but **that tool is not registered**. Lying tool text. Fix: implement thin wrapper over `RemoveActionFromStage` **or** rewrite description to say entity-level only / stage actions need DSL or future tool. |
-| **MR′.2** | Medium | `RemoveRelationshipChange` + `RemoveEntityChange` use silent `RemoveAll` (no `RequireTarget`). Missing name is a no-op at IR; MCP only fails via fingerprint with generic message *“target entity not found or change had no effect”* (wrong for relationships). Align with `RemoveProperty`/`RemoveStage`/`RemoveAction` fail-loud at IR. |
-| **MR′.3** | Medium | `remove_policy` **throws** `ArgumentException` when `scope=stage\|action` and name missing — not a structured `DomainToolResponse` failure. Agents/MCP hosts get exceptions, not diagnostics. |
-| **MR′.4** | Low–med | Invalid / cased `scope` (`"Stage"`, `"foo"`) falls through `_ =>` to **entity** remove — silent wrong scope. Prefer explicit reject (unknown scope → fail response). |
-| **MR′.5** | Low | Description overclaims: `remove_stage` claims fail if actions/subs/policies “prevent” — stage remove drops children with the stage. `remove_property` claims policy-ref fail — true only if analysis errors; OK if reworded to analysis-gated. |
-| **MR′.6** | Low | Smoke gaps: policy entity smoke does not assert detail empty; no **action**-scope policy smoke; unknown-name fails do not assert revision unchanged / message quality; `get_relationships` missing from remove_relationship affordances. |
-| **MR′.7** | Optional | MR.3.2 `remove_constraint`, MR.3.4 README, MR.4.1–.2 polish — only with dogfood or while already in those files. |
+- [x] **MR′.1**–**MR′.5** as landed
+- [x] **MR′.6** partial: `get_relationships` affordance; stage-action + invalid-scope + missing-stageName smokes
+- [x] **MR′.7** deferred intentionally
 
-- [ ] **MR′.1** Fix `remove_action` description **or** add `remove_action_from_stage` (prefer description fix unless dogfood needs stage remove)
-- [ ] **MR′.2** Fail-loud `RemoveRelationshipChange` / `RemoveEntityChange` when name missing (+ evolution unit tests if none)
-- [ ] **MR′.3** `remove_policy` missing stageName/actionName → `Success: false` response, no throw
-- [ ] **MR′.4** Reject unknown `scope` values (do not silently default to entity)
-- [ ] **MR′.5** Tighten tool descriptions to match actual gate (analysis / no-op fingerprint / IR target)
-- [ ] **MR′.6** Strengthen smokes (detail assert; action-scope; revision on fail); add `get_relationships` affordance on `remove_relationship`
-- [ ] **MR′.7** Deferred polish (constraint / README / expansion-plan link) — pull-only
+**MR′ impl review (2026-07-17):** Production sound. Prior must/medium findings closed. No blockers for commit. Residual only **MR′′** (optional, pull-only).
 
-**Review verdict:** Ship/commit MR as thin vertical **after** fixing **MR′.1** (or accepting description fix in same commit). MR′.2–.4 are next honesty loop if still in `DomainTools`/`DomainChange`. Do **not** block commit of working tree on MR′.2 IR if description/scope throws are fixed first — fingerprint still fails loud for missing names at MCP.
+#### MR′′ — optional polish (post–MR′ review; **pull-only**)
+
+Do **not** start for completeness. Only while already in these files or dogfood forces.
+
+- [ ] **MR′′.1** Evolution unit tests: `RemoveEntity` / `RemoveRelationship` missing name fail with `nothing to remove` (mirror `RemoveProperty_MissingName_FailsWithClearError` pattern in `DomainEvolutionApplicatorTests`)
+- [ ] **MR′′.2** Smoke strengthen: `RemovePolicy_EntityScope` assert policies empty on detail; optional action-scope policy remove smoke; optional assert unknown-relationship message contains `Relationship` + `not found` (now IR-sourced)
+- [ ] **MR′′.3** Align `///` summaries with Description attrs (`remove_stage` XML still mentions fail-if-referenced)
+- [ ] **MR′′.4** Tool description: `scope` values are **exact lowercase** (`entity`/`stage`/`action`) — agents using `Stage` already fail loud (MR′.4); document in Description if dogfood confuses
+- [ ] **MR′′.5** = former MR′.7 / MR.4: `remove_constraint`, README honesty paragraph, `mcp-tool-surface-expansion.md` removal row, add_* affordance cross-links
 
 #### BR residual (runtime depth)
 
@@ -885,6 +890,9 @@ Only with a **named consumer** for value types / `create in` / quantifiers / etc
 | 2026-07-17 | **Optional residual reprioritized:** P0 stop/dogfood; P1 BR.4.4 only with multi-instance pain; P2 Any/All runtime + E only with named consumer; P3 analyzer polish; P4 demote framework completeness. |
 | 2026-07-17 | **Slice MR opened** from agent evolutionary-authoring notes: MCP has `add_*` but no `remove_*`; IR already has `Remove*Change` / `DomainEvolution.Remove*`. Tasks MR.1 (remove_relationship thin vertical) → MR.2 structural → MR.3 policy/constraint → MR.4 polish. Pick order 0 = dogfood. |
 | 2026-07-17 | **MR impl review** (suite **1299**): core tools correct thin adapters; fingerprint extended for policy counts; smokes cover happy paths + remove-entity-with-rel + unknown relationship. **MR′** opened: (1) `remove_action` docs name missing `remove_action_from_stage`; (2) `RemoveRelationship`/`RemoveEntity` silent RemoveAll — MCP fingerprint generic msg; (3) `remove_policy` throws on missing stage/action name; (4) unknown scope falls through to entity; (5–7) description overclaims, smoke gaps, deferred polish. Prefer fix MR′.1 in commit; MR′.2–.4 next honesty loop. |
+| 2026-07-17 | **MR committed** (`6748924`). |
+| 2026-07-17 | **MR′ landed** (uncommitted): `remove_action_from_stage`; RequireTarget on RemoveEntity/Relationship; policy scope pre-validate no throw; descriptions; 3 smokes. Suite **1302**. |
+| 2026-07-17 | **MR′ impl review:** must/medium closed; production sound; **commit open**. Residual **MR′′** pull-only: evolution unit tests for missing entity/relationship; policy detail/action-scope smoke strengthen; XML summary align; scope lowercase doc; constraint/README polish. |
 
 ### Appendix — Relationship authoring
 
@@ -900,14 +908,13 @@ Runtime correlation is **instance-level** via `DomainInstanceStore.Link` (BR.4.4
 
 | Order | Task | When |
 |-------|------|------|
-| 0 | **Commit MR** working tree | Tools + smokes green (1299); BR.4.4 already on branch (`8f46f05`) |
-| 0′ | **MR′.1** (description / stage action honesty) | Same commit preferred — tool must not name a missing tool |
-| — | **Default: stop / dogfood** | After commit; suite **1299** green |
-| 1 | **MR′.2–.4** fail-loud IR + policy scope | Only while touching remove tools / DomainChange |
+| 0 | **Commit MR′** working tree | Suite **1302**; MR already `6748924` |
+| — | **Default: stop / dogfood** | After commit |
+| 1 | **MR′′** optional polish | Only while editing DomainChange / DomainTools / smokes, or dogfood |
 | 2 | **Runtime Any/All** | Product needs multi-match quantifiers (not just analyzer warnings) |
 | 3 | **Slice E** Phase 1b grammar | Named domain cannot be authored in 1a |
-| 4 | **BR.4.1′** / RelNav-name PCA deepen / MR′.5–.7 | Only while already editing those files |
-| never | E or MR′ “for completeness” | Violates shipped-capability and guardrails-with-consumers |
+| 4 | **BR.4.1′** / RelNav-name PCA deepen | Only while already editing those files |
+| never | E or MR′′ “for completeness” | Violates shipped-capability and guardrails-with-consumers |
 
 **Implementer watch-outs:**
 
@@ -918,7 +925,7 @@ Runtime correlation is **instance-level** via `DomainInstanceStore.Link` (BR.4.4
 
 Principles: minimal diffs; TUnit names `Method_Condition_ExpectedResult`; no new abstractions; do not reintroduce Event/Publish. **Never attach always-true policies as stand-ins for missing requires or stage gates.**
 
-### Slice MR: MCP `remove_*` micro-tools — **DONE core** (uncommitted; review → MR′)
+### Slice MR: MCP `remove_*` micro-tools — **DONE** (`6748924` + MR′ uncommitted)
 
 **Consumer:** Agent evolutionary authoring. When an agent inserts an intermediate entity (e.g. `Module` between `Course` and `Assignment`), it can `add_entity` + `add_relationship` for the new hops and **`remove_relationship`** for the old edge. Same for entity/property/stage/action/policy undo.
 

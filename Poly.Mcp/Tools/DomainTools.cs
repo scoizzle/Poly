@@ -441,6 +441,96 @@ internal sealed class EvolveTool {
             successAffordances: ["add_relationship", "get_entity_detail", "get_domain_overview"]);
     }
 
+    // ── Remove tools: agent evolutionary authoring ────────────────
+
+    /// <summary>
+    /// Removes a relationship by name. Fails with a clear diagnostic if the name is
+    /// unknown or dependent elements prevent removal.
+    /// </summary>
+    [McpServerTool(Name = "remove_relationship"), Description("Removes a relationship by name. Fails if the name is unknown or dependent elements prevent removal.")]
+    public static DomainToolResponse RemoveRelationship(
+        [Description("Session ID")] string sessionId,
+        [Description("Name of the relationship to remove")] string relationshipName) {
+        return Evolve(sessionId, builder => builder.RemoveRelationship(relationshipName),
+            successAffordances: ["get_entity_detail", "get_domain_overview", "add_relationship"]);
+    }
+
+    /// <summary>
+    /// Removes an entity and all its properties, stages, and actions.
+    /// Fails if another entity depends on this one (e.g. via a relationship target).
+    /// </summary>
+    [McpServerTool(Name = "remove_entity"), Description("Removes an entity by name. Fails with a clear diagnostic if relationships or other dependents prevent removal.")]
+    public static DomainToolResponse RemoveEntity(
+        [Description("Session ID")] string sessionId,
+        [Description("Name of the entity to remove")] string entityName) {
+        return Evolve(sessionId, builder => builder.RemoveEntity(entityName),
+            successAffordances: ["get_domain_overview", "get_domain_analysis", "add_entity"]);
+    }
+
+    /// <summary>
+    /// Removes a property from an entity.
+    /// </summary>
+    [McpServerTool(Name = "remove_property"), Description("Removes a property from an entity. Fails if the property is referenced by policies, constraints, or effects.")]
+    public static DomainToolResponse RemoveProperty(
+        [Description("Session ID")] string sessionId,
+        [Description("Name of the entity")] string entityName,
+        [Description("Name of the property to remove")] string propertyName) {
+        return Evolve(sessionId, builder => builder.RemovePropertyFromEntity(entityName, propertyName),
+            successAffordances: ["get_entity_detail", "get_domain_overview", "add_property"]);
+    }
+
+    /// <summary>
+    /// Removes a lifecycle stage from an entity. Fails if the stage is referenced
+    /// by subscriptions or other dependents.
+    /// </summary>
+    [McpServerTool(Name = "remove_stage"), Description("Removes a stage from an entity. Fails if actions, subscriptions, or policies on that stage prevent removal.")]
+    public static DomainToolResponse RemoveStage(
+        [Description("Session ID")] string sessionId,
+        [Description("Name of the entity")] string entityName,
+        [Description("Name of the stage to remove")] string stageName) {
+        return Evolve(sessionId, builder => builder.RemoveStage(entityName, stageName),
+            successAffordances: ["get_entity_detail", "get_domain_overview", "add_stage"]);
+    }
+
+    /// <summary>
+    /// Removes an action from an entity (entity-level only). For stage-scoped actions,
+    /// use remove_action_from_stage.
+    /// </summary>
+    [McpServerTool(Name = "remove_action"), Description("Removes an entity-level action by name. For stage-scoped actions, use remove_action_from_stage.")]
+    public static DomainToolResponse RemoveAction(
+        [Description("Session ID")] string sessionId,
+        [Description("Name of the entity")] string entityName,
+        [Description("Name of the action to remove")] string actionName) {
+        return Evolve(sessionId, builder => builder.RemoveAction(entityName, actionName),
+            successAffordances: ["get_entity_detail", "get_domain_overview", "add_action"]);
+    }
+
+    /// <summary>
+    /// Removes a policy from an entity, stage, or action. The scope parameter
+    /// must be 'entity', 'stage', or 'action'. For stage and action scope, also
+    /// provide stageName/actionName as appropriate.
+    /// </summary>
+    [McpServerTool(Name = "remove_policy"), Description("Removes a policy by name. Scope: 'entity' (default), 'stage', or 'action'. For stage scope provide stageName; for action scope provide actionName.")]
+    public static DomainToolResponse RemovePolicy(
+        [Description("Session ID")] string sessionId,
+        [Description("Name of the entity")] string entityName,
+        [Description("Name of the policy to remove")] string policyName,
+        [Description("Scope: 'entity' (default), 'stage', or 'action'")] string scope = "entity",
+        [Description("Stage name (required when scope='stage')")] string? stageName = null,
+        [Description("Action name (required when scope='action')")] string? actionName = null) {
+        return Evolve(sessionId, builder => {
+            return scope switch {
+                "stage" => stageName is not null
+                    ? builder.RemovePolicyFromStage(entityName, stageName, policyName)
+                    : throw new ArgumentException("stageName is required when scope='stage'."),
+                "action" => actionName is not null
+                    ? builder.RemovePolicyFromAction(entityName, actionName, policyName)
+                    : throw new ArgumentException("actionName is required when scope='action'."),
+                _ => builder.RemovePolicyFromEntity(entityName, policyName),
+            };
+        }, successAffordances: ["get_entity_detail", "get_domain_analysis", "add_policy"]);
+    }
+
     // ── Batch/plural tools ──────────────────────────────────────
 
     /// <summary>
@@ -575,10 +665,11 @@ internal sealed class EvolveTool {
                 var props = $"P{e.Properties.Count}";
                 var constraints = e.Properties.Sum(p => p.Constraints.Count);
                 var stages = string.Join(",", e.Stages.OrderBy(s => s.Name)
-                    .Select(s => $"{s.Name}({s.Actions.Count}a)"));
+                    .Select(s => $"{s.Name}({s.Actions.Count}a,{s.Policies.Count}p)"));
                 var actions = $"A{e.Actions.Count}";
                 var stageActions = e.Stages.Sum(s => s.Actions.Count);
-                return $"{e.Name}:{props}({constraints}c)|[{stages}]|{actions}(+{stageActions}sa)";
+                var entityPolicies = e.Policies.Count;
+                return $"{e.Name}:{props}({constraints}c)E{entityPolicies}|[{stages}]|{actions}(+{stageActions}sa)";
             });
         return entityDetails.Any()
             ? $"{typeCounts}|{string.Join(",", entityDetails)}"

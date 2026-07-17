@@ -972,4 +972,142 @@ public class McpSmokeTests {
         await Assert.That(result.Root!.Relationships.Count).IsEqualTo(1);
         await Assert.That(result.Root.Relationships[0].Name).IsEqualTo("Tracks");
     }
+
+    // ── Slice MR: MCP remove_* micro-tools ──────────────────────
+
+    [Test]
+    public async Task RemoveRelationship_RemovesAndUpdatesOverview() {
+        var (sessionId, _) = McpSessionStore.Create("Test");
+
+        // Build: two entities + relationship
+        EvolveTool.AddEntity(sessionId, "Customer");
+        EvolveTool.AddEntity(sessionId, "Order");
+        EvolveTool.AddRelationship(sessionId, "Places", "Customer", "Order", "OneToMany");
+
+        var before = QueryTool.GetDomainOverview(sessionId);
+        await Assert.That(before.Message).Contains("1 relationships");
+
+        // Remove
+        var response = EvolveTool.RemoveRelationship(sessionId, "Places");
+        await Assert.That(response.Success).IsTrue();
+
+        var after = QueryTool.GetDomainOverview(sessionId);
+        await Assert.That(after.Message).Contains("0 relationships");
+    }
+
+    [Test]
+    public async Task RemoveRelationship_UnknownName_Fails() {
+        var (sessionId, _) = McpSessionStore.Create("Test");
+
+        var response = EvolveTool.RemoveRelationship(sessionId, "NonExistent");
+        await Assert.That(response.Success).IsFalse();
+    }
+
+    [Test]
+    public async Task RemoveEntity_RemovesAndUpdatesOverview() {
+        var (sessionId, _) = McpSessionStore.Create("Test");
+        EvolveTool.AddEntity(sessionId, "Product");
+        EvolveTool.AddProperty(sessionId, "Product", "Name", "Text");
+
+        var response = EvolveTool.RemoveEntity(sessionId, "Product");
+        await Assert.That(response.Success).IsTrue();
+
+        var overview = QueryTool.GetDomainOverview(sessionId);
+        await Assert.That(overview.Message).Contains("0 entities");
+    }
+
+    [Test]
+    public async Task RemoveEntity_WithRelationship_Fails() {
+        var (sessionId, _) = McpSessionStore.Create("Test");
+        EvolveTool.AddEntity(sessionId, "Order");
+        EvolveTool.AddEntity(sessionId, "Customer");
+        EvolveTool.AddRelationship(sessionId, "Places", "Customer", "Order", "OneToMany");
+
+        var response = EvolveTool.RemoveEntity(sessionId, "Order");
+        await Assert.That(response.Success).IsFalse();
+    }
+
+    [Test]
+    public async Task RemoveProperty_RemovesAndUpdatesDetail() {
+        var (sessionId, _) = McpSessionStore.Create("Test");
+        EvolveTool.AddEntity(sessionId, "Item");
+        EvolveTool.AddProperty(sessionId, "Item", "Name", "Text");
+        EvolveTool.AddProperty(sessionId, "Item", "Price", "Number");
+
+        var response = EvolveTool.RemoveProperty(sessionId, "Item", "Price");
+        await Assert.That(response.Success).IsTrue();
+
+        var detail = QueryTool.GetEntityDetail(sessionId, "Item");
+        await Assert.That(detail.Success).IsTrue();
+        var d = (EntityDetailData)detail.Data!;
+        await Assert.That(d.Properties.Count).IsEqualTo(1);
+        await Assert.That(d.Properties[0].Name).IsEqualTo("Name");
+    }
+
+    [Test]
+    public async Task RemoveStage_RemovesAndUpdatesDetail() {
+        var (sessionId, _) = McpSessionStore.Create("Test");
+        EvolveTool.AddEntity(sessionId, "Process");
+        EvolveTool.AddStage(sessionId, "Process", "Draft");
+        EvolveTool.AddStage(sessionId, "Process", "Active");
+
+        var response = EvolveTool.RemoveStage(sessionId, "Process", "Draft");
+        await Assert.That(response.Success).IsTrue();
+
+        var detail = QueryTool.GetEntityDetail(sessionId, "Process");
+        await Assert.That(detail.Success).IsTrue();
+        var d = (EntityDetailData)detail.Data!;
+        await Assert.That(d.Stages.Count).IsEqualTo(1);
+        await Assert.That(d.Stages[0].Name).IsEqualTo("Active");
+    }
+
+    [Test]
+    public async Task RemoveAction_RemovesAndUpdatesDetail() {
+        var (sessionId, _) = McpSessionStore.Create("Test");
+        EvolveTool.AddEntity(sessionId, "Task");
+        EvolveTool.AddAction(sessionId, "Task", "DoIt");
+        EvolveTool.AddAction(sessionId, "Task", "Undo");
+
+        var response = EvolveTool.RemoveAction(sessionId, "Task", "Undo");
+        await Assert.That(response.Success).IsTrue();
+
+        var detail = QueryTool.GetEntityDetail(sessionId, "Task");
+        await Assert.That(detail.Success).IsTrue();
+        var d = (EntityDetailData)detail.Data!;
+        await Assert.That(d.Actions.Count).IsEqualTo(1);
+        await Assert.That(d.Actions[0].Name).IsEqualTo("DoIt");
+    }
+
+    [Test]
+    public async Task RemovePolicy_EntityScope_Removes() {
+        var (sessionId, _) = McpSessionStore.Create("Test");
+        EvolveTool.AddEntity(sessionId, "Item");
+        EvolveTool.AddProperty(sessionId, "Item", "Score", "Number");
+        PolicyTool.AddPolicy(sessionId, "Item", "HighScore",
+            expression: """{"property":"Score","op":">=","value":100}""");
+
+        var response = EvolveTool.RemovePolicy(sessionId, "Item", "HighScore");
+        await Assert.That(response.Success).IsTrue();
+    }
+
+    [Test]
+    public async Task RemovePolicy_StageScope_Removes() {
+        var (sessionId, _) = McpSessionStore.Create("Test");
+        EvolveTool.AddEntity(sessionId, "Order");
+        EvolveTool.AddStage(sessionId, "Order", "Active");
+        EvolveTool.AddProperty(sessionId, "Order", "Score", "Number");
+
+        // Add a policy via evolution directly (MCP add_policy only supports entity scope)
+        McpSessionStore.Evolve(sessionId, domain =>
+            new DomainEvolution(domain).Evolve()
+                .AddPolicyToStage("Order", "Active", "Guard",
+                    DomainExpression.GreaterThanOrEqual(
+                        DomainExpression.Property("Score"),
+                        DomainExpression.Literal(0)))
+                .Apply());
+
+        var response = EvolveTool.RemovePolicy(sessionId, "Order", "Guard",
+            scope: "stage", stageName: "Active");
+        await Assert.That(response.Success).IsTrue();
+    }
 }

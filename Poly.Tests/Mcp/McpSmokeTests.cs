@@ -1,5 +1,7 @@
 using Poly.DomainModeling;
+using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Evolution;
+using Poly.DomainModeling.Parsing;
 using Poly.DomainModeling.Queries;
 using Poly.Mcp.Sessions;
 using Poly.Mcp.Tools;
@@ -921,8 +923,8 @@ public class McpSmokeTests {
         await Assert.That(pending.Subscriptions[0].RelationshipName).IsEqualTo("Tracks");
 
         // Analysis should be clean
-        var snapshot = response.Data;
-        await Assert.That(snapshot).IsNotNull();
+        var analysis = DomainModelAnalyzer.Analyze(state.Domain);
+        await Assert.That(analysis.HasStructuralFailure).IsFalse();
     }
 
     [Test]
@@ -948,5 +950,14 @@ public class McpSmokeTests {
 
         // Should contain N1 nav line on the source entity (Tracker)
         await Assert.That(poly).Contains("Tracks: Order");
+
+        // Re-parse the exported N1 poly and verify one relationship
+        var parser = new PolyDslParser(poly);
+        var changes = parser.Parse();
+        var emptyDomain = new Domain("_", [], []);
+        var result = new DomainEvolution(emptyDomain).Apply(changes);
+        await Assert.That(result.Succeeded).IsTrue();
+        await Assert.That(result.Root!.Relationships.Count).IsEqualTo(1);
+        await Assert.That(result.Root.Relationships[0].Name).IsEqualTo("Tracks");
     }
 }

@@ -1,11 +1,11 @@
 # DSL-Engine Sync Plan — Toward Phase 1
 
 **Date:** 2026-07-17  
-**Revised:** 2026-07-17 (N′ impl review — suite 1263 green; N′′ polish optional; **commit still open**)  
-**Status:** Phase 1a vertical **product-complete**; Slice N + N′ **implementation done** (uncommitted); optional N′′ polish; **commit pending**  
-**Current pick:** **Commit N + N′** (block on N′′ only if you want honesty nits in the same commit)  
+**Revised:** 2026-07-17 (bundle review: N′′ + D′′.1–.2 + BR.1 Option B — suite 1266 green; **still uncommitted**)  
+**Status:** Phase 1a vertical **product-complete**; **N+N′ committed** (`9f0707d`); **N′′ / D′′ / BR.1 / BR.1′ / BR.2 uncommitted**  
+**Current pick:** **Commit** the working-tree bundle (BR.1′ + BR.2 also done)  
 **Source:** [`docs/experiments/domain-modeling-dsl-tour-feedback.md`](../../experiments/domain-modeling-dsl-tour-feedback.md) — §3 and §4  
-**Review:** A–D′; Slice N design; N core impl; **N′ implementation review** (2026-07-17)  
+**Review:** A–D′; N family; **N′′+D′′+BR.1 bundle review** (2026-07-17)  
 **Trigger:** IR/DSL divergence (events vs stage-observation); mutation surface width; single-vertical runtime gap  
 **Related:**
 
@@ -25,7 +25,7 @@
 
 **Slice N principle:** N1 changes **surface syntax only**. IR stays (`Relationship` on `Domain`, `AddRelationshipChange`). Parser/printer map nav lines ↔ IR. **Owning/source side is authoritative** — never invent a second edge from reverse-nav lines.
 
-**Status (2026-07-17):** Phase 1a vertical closed (`e3e91ea`). Slice **N + N′** implementation is suite-green (**1263** tests) in the working tree — **not yet committed**. Optional **N′′** polish does not block commit. E remains pull-only.
+**Status (2026-07-17):** Phase 1a vertical closed (`e3e91ea`). **N+N′ shipped** (`9f0707d`). Working tree has **N′′** tests, **D′′.1–.2**, **BR.1 Option B** characterization test, **BR.1′** remarks fix, and **BR.2** try/finally — suite **1266** green, **not committed**. Commit pending. E remains pull-only.
 
 ---
 
@@ -67,7 +67,7 @@ Runtime “entity X entered stage Y” is a **runtime observation**, not an auth
 
 ### Gap 3: Phase 1 DSL path — **closed for Phase 1a vertical**
 
-Parser + printer + grammar + MCP `apply_dsl` / `export_dsl` landed. Residual: **N′** polish; D′′ nits; E pull-only.
+Parser + printer + grammar + MCP `apply_dsl` / `export_dsl` landed. Residual: commit N′′/D′′/BR.1 bundle; **BR.1′** remarks honesty; E pull-only.
 
 ### Gap 4: Mutation surface wider than one entity block
 
@@ -106,12 +106,15 @@ Remaining runtime fidelity (entry/exit, stage gates, instance links) is **BR res
 Slice 0–B′     IR + thin runtime                         [done]
 Slice C…C′′′   Phase 1a DSL parse/print                  [done]
 Slice D + D′   MCP apply/export_dsl + polish             [done]
-Slice N        N1 nav-property authoring (core)          [done — uncommitted]
-Slice N′       N residuals (collisions, MCP smokes)      [done — uncommitted]
-Slice N′′      N polish from N′ review (optional)        [optional]
-→              Commit N+N′(+N′′)                          [CURRENT]
+Slice N + N′   N1 nav surface + residuals                [done — 9f0707d]
+Slice N′′      N honesty tests                           [impl done — uncommitted]
+D′′.1–.2       MCP honesty nits                          [impl done — uncommitted]
+BR.1 Option B  event.* characterization test             [impl done — uncommitted]
+→              Commit working-tree bundle                [CURRENT]
+BR.1′          Fix false event.* product remarks         [done — uncommitted]
+BR.2            try/finally subscription flag              [done — uncommitted]
 Slice E        Phase 1b grammar                          [pull-only]
-BR residual    event data-flow, stage gates, entry/exit  [optional]
+BR.2–.4        runtime depth                             [optional]
 ```
 
 | Slice | Depends on | Does not depend on |
@@ -119,8 +122,9 @@ BR residual    event data-flow, stage gates, entry/exit  [optional]
 | 0–D′ | prior | — |
 | **N / N′** | **D** | **E** / **BR** |
 | **N′′** | **N′** | — |
+| **BR.1′** | BR.1 test | Runtime fix (Option B) |
 | E | named consumer | — |
-| BR | B vertical | D |
+| BR.2–.4 | B vertical | D |
 
 ---
 
@@ -334,18 +338,18 @@ CallAction → StageTransitionEffect → DomainInstanceStore.NotifyTransition
 
 #### BR.1 — Prove `event.*` property flow (recommended before DSL `when` bodies)
 
-**Gap:** `ExecuteSubscriptionEffects` injects `"event." + prop` keys into `_values`. There is **zero** test that an `AssignEffect` RHS uses `DomainExpression.Property("event.SomeProp")` (or better DE shape) and copies data from the transitioned instance.
+**Gap (originally):** `ExecuteSubscriptionEffects` injects `"event." + prop` keys into `_values`. No proof that assign RHS can read them.
 
-**Risk:** Dictionary-backed VM member access may not treat `"event.X"` like a real property; type defs omit those keys. Vertical today only proves **literal** assigns.
+**Landed (uncommitted):** Option **B** characterization — `SubscriptionEffect_EventPropertyAccess_Gap_Documented` proves RHS `Property("event.Code")` does **not** yield `"ABC-123"` through the VM. Subscription still fires.
 
-**Do:**
+**Honesty gap (BR.1′ — must fix):** Production XML comments on `EventPrefix` / `ExecuteSubscriptionEffects` still claim consumers *can* reference `event.PropertyName` via the “standard lowering path.” That is **false** per the new test. Remarks must state Option B (literals/`this` only) until real `event` lowering exists.
 
-1. Add test: Order has property `Code`; subscription on Tracker assigns `Status` from event code (whatever expression shape works).
-2. If string-prefix fails, implement thin support (e.g. parameter map / dual subject) **or** document Option B: subscription vertical = literals/`this` only until DSL parser defines `event`.
-3. Prefer not inventing domain opcodes.
+**Do (remaining):**
 
-- [ ] **BR.1.1** Failing-or-passing test for event→subscriber assign
-- [ ] **BR.1.2** Fix runtime or document Option B in `DomainEntityInstance` remarks
+- [x] **BR.1.1** Characterization test (Option B): `SubscriptionEffect_EventPropertyAccess_Gap_Documented` — suite green; **uncommitted**
+- [ ] **BR.1.2** Document Option B in **`DomainEntityInstance`** remarks (not only test comments). **Currently incomplete** — production docs still advertise the dead path
+- [ ] **BR.1.3** Strengthen test: assert subscription **did** fire (e.g. `Status != "UNTOUCHED"` or `== ""`) **and** `Status != "ABC-123"` — today `IsNotEqualTo("ABC-123")` alone passes if the subscription never runs
+- [ ] **BR.1.4** (Future, named consumer) Real `event` subject / lowering when DSL authors `event.X` — do not invent opcodes now
 
 #### BR.2 — Exception safety for `_isExecutingSubscription` (nit / bug)
 
@@ -353,7 +357,7 @@ CallAction → StageTransitionEffect → DomainInstanceStore.NotifyTransition
 
 **Do:** wrap subscription effect loop in `try/finally` clearing flag + event keys.
 
-- [ ] **BR.2.1** `try/finally` cleanup
+- [x] **BR.2.1** `try/finally` cleanup — `ExecuteSubscriptionEffects` now wraps effect loop in `try/finally` so `_isExecutingSubscription` and `_eventInstance` are always cleared on throw
 
 #### BR.3 — Lifecycle completeness (post-vertical)
 
@@ -381,10 +385,10 @@ CallAction → StageTransitionEffect → DomainInstanceStore.NotifyTransition
 - [x] Wrong-stage subscriber does not fire
 - [x] store.Add wires Store; Source=subscriber; type-level documented
 - [x] Test domains analyze without DMSS003
-- [ ] Event property flow tested **or** Option B documented (BR.1)
-- [x] DomainModeling tests green
+- [~] Event property flow: **tested as non-working** (Option B); **production remarks still wrong** → BR.1.2 / BR.1′
+- [x] DomainModeling tests green (with uncommitted BR.1 test)
 
-**Recommended next product slice:** **Slice C** (Phase 1a DSL). Pull BR.1 if C will emit `event` in `when` bodies immediately.
+**Recommended next product slice historically was C (done).** Residual: commit bundle + BR.1′ remarks fix.
 
 ---
 
@@ -441,7 +445,7 @@ relationship <Name> from <SourceEntity> to <TargetEntity> one|many
 
 ---
 
-### Slice N: N1 relationship-as-navigation-property authoring — **CORE LANDED** (uncommitted)
+### Slice N: N1 relationship-as-navigation-property authoring — **DONE** (`9f0707d`)
 
 **What:** Prefer N1 **source-side** nav lines inside entities over N2 top-level `relationship … from … to …` lines. IR unchanged (`Relationship` / `AddRelationshipChange`). Parser + printer (+ EntityDetail) map surface ↔ IR.
 
@@ -573,65 +577,66 @@ Pattern after `name :` in entity body:
 
 ---
 
-### Slice N′: N residuals — **DONE** (2026-07-17)
+### Slice N′: N residuals — **DONE** (committed in `9f0707d`)
 
-Must-fix and should-fix landed. **1263 tests green.** **Commit still open.**
+- [x] **N′.1**–**N′.12** as previously checked (collisions, EntityDetail, grammar, mixed/self-ref, MCP smokes, error msg, nits)
+- [x] Shipped with N core in commit `9f0707d`
 
-- [x] **N′.1** Property/nav name collision fail-loud at parse (`_entityPropertyNames`; error in `ResolvePendingNavs`)
-- [x] **N′.2** Duplicate relationship name at parse (`_relationshipNames` in `ParseRelationship` **and** `ResolvePendingNavs` — covers N2 in-entity, N2 top-level, and N1)
-- [x] **N′.3** EntityDetail navigations tests (`Query_EntityDetail_IncludesNavigations_SourceAndTarget`)
-- [x] **N′.4** Grammar §1: `.poly = domain-header entity-definitions [ legacy-relationships ]`
-- [x] **N′.5** Mixed-file fixture (`Parse_MixedN1AndN2_Succeeds`)
-- [x] **N′.6** Self-referential nav allowed (`Parse_SelfReferentialNav_Allowed`)
-- [x] **N′.7** Subscription + relationship round-trip (`N1NavWithSubscription_RoundTrips` — still **N2 input** → N1 print → re-parse; product N1 path is **N′.8**). See N′′.1 for unit-level N1-authored dual.
-- [x] **N′.8** apply_dsl smoke (`ApplyDsl_WithN1NavAndSubscription_Succeeds`)
-- [x] **N′.9** Export after micro-tool (`ExportDsl_AfterAddRelationship_PrintsN1`)
-- [x] **N′.10** Error msg fixed (unknown entity — no “define first”)
-- [x] **N′.11** Unused `changes` param removed from `ParseNavLine`
-- [x] **N′.12** Duplicate primitive-target test removed
-
-#### N′ implementation review (2026-07-17) — verified
+#### N′ implementation review (2026-07-17) — verified at land
 
 | Check | Result |
 |-------|--------|
-| Design rules 1–2–4–5 | Pass (source-only print, deferred N1 emit, N2 parse kept) |
-| N′.1 property/nav collision | Pass + test |
-| N′.2 dup names N1↔N1 and N1↔N2-in-entity | Pass + tests; top-level N2 also registers via same `ParseRelationship` |
-| N′.8 N1 apply_dsl + subscription | Pass (asserts entities/rel/subscription; analysis not deep-asserted → N′′.2) |
-| N′.9 export after add_relationship | Pass (N1 line present, no N2 `from`); uses reflection on anonymous `Data` → N′′.3 |
-| Suite | **1263** green |
-| Commit | **Still open** |
+| Design rules 1–2–4–5 | Pass |
+| Collisions N′.1–.2 | Pass + tests |
+| MCP N′.8 / N′.9 | Pass; honesty nits closed in N′′ |
+| Commit | **`9f0707d`** |
 
 ---
 
-### Slice N′′: optional polish (from N′ impl review) — **does not block commit**
+### Slice N′′: honesty test polish — **IMPL DONE** (uncommitted)
 
-Land in the same commit as N+N′ if cheap; otherwise a follow-up.
+Tests only vs `9f0707d` product code. Suite **1266** with full bundle.
 
-- [ ] **N′′.1** **True N1-authored C5 unit test:** rewrite or add sibling to `N1NavWithSubscription_RoundTrips` that authors `Tracks: Order` (or `Tracks: one Order`) on Tracker — **no** top-level `relationship` line — then print → re-parse → subscription + analysis green. (MCP path already N1 via N′.8.)
-- [ ] **N′′.2** **`ApplyDsl_WithN1NavAndSubscription_Succeeds`:** assert analysis clean (e.g. `DomainModelAnalyzer.Analyze` / snapshot errorCount) — today only checks `Data` non-null under a “analysis clean” comment.
-- [ ] **N′′.3** **`ExportDsl_AfterAddRelationship_PrintsN1`:** avoid reflection on anonymous `Data` — prefer typed DTO or `dynamic`/pattern consistent with other MCP tests; optionally re-parse exported poly and assert one relationship.
-- [ ] **N′′.4** Explicit test: N1 nav name collides with **top-level** N2 `relationship` of the same name (logic already covered by shared `_relationshipNames`; test would lock it).
-- [ ] **N′′.5** (Optional product policy) Parse-time error when relationship name equals an **entity** name — structural analyzer already reports domain-member name clashes after evolve; only add if agents hit it often.
-- [ ] **N′′.6** (Optional) Nav name vs stage/action/policy name on same entity — not required for Phase 1a; document “names are separate namespaces in IR” if leaving open.
+- [x] **N′′.1** `N1NavAuthored_RoundTrips_WithSubscription`
+- [x] **N′′.2** apply_dsl analysis assert
+- [x] **N′′.3** export re-parse assert (reflection for `Data.poly` accepted — same as other MCP export smokes)
+- [x] **N′′.4** `Parse_N1NavCollidesWithTopLevelN2_ThrowsError`
+- [x] **N′′.5–.6** Won't-do Phase 1a
+- [x] **N′′.7** Trailing newlines on N1 + McpSmoke tests
+- [ ] **N′′.8** **Commit** N′′ (and preferably the rest of the working-tree bundle) — **NOT done** (plan previously overstated)
 
-**Do not** open IR/analyzer work for N′′. Surface honesty only.
+#### N′′ re-review (2026-07-17, with D′′/BR.1 bundle) — verified green
+
+| Check | Result |
+|-------|--------|
+| N′′.1–.4 tests | Pass |
+| Production N path | Still `9f0707d` (no further product N changes) |
+| Commit claim | **False in prior plan revision** — working tree dirty |
+
+**Do not** open IR/analyzer work for N′′.
 
 ---
 
-### Post–N residuals (optional polish)
+### Post–N residuals
 
-#### D′′ — Tiny MCP nits (optional)
+#### D′′ — Tiny MCP nits — **partial, uncommitted**
 
-- [ ] **D′′.1** Extend README **Tool Honesty** table with a DSL row (tool description already has HONESTY NOTES; README table still policy-only)
-- [ ] **D′′.2** Success affordances on `apply_dsl` include `apply_dsl` / `export_dsl` for re-batch loops (export already links apply)
-- [ ] **D′′.3** Race: session deleted between early TryGet and Replace still fails late (acceptable)
+- [x] **D′′.1** README Tool Honesty: DSL tools called out — as a **paragraph after the table**, not a table row. Acceptable; optional polish = real table row later
+- [x] **D′′.2** `apply_dsl` success affordances include `apply_dsl` (for re-batch); `export_dsl` was already present
+- [ ] **D′′.3** Session race (acceptable — no change)
+- [ ] **D′′.4** **Commit** D′′ with N′′/BR.1 bundle
 
 #### BR residual (runtime depth)
 
-- [ ] **BR.1** `event` property flow in subscription effects tested
+- [- [x] **BR.1** Option B characterization test + **BR.1′** remarks fix + **BR.2** try/finally all landed (uncommitted)
 - [ ] **BR.3** OnEntry/OnExit; stage-gated CallAction; auto `store.Add` children
 - [ ] **BR.4** Instance-level relationship links
+
+#### BR.1′ — Honesty fix from bundle review (**should land with or immediately after commit**)
+
+- [x] **BR.1′.1** Rewrote `EventPrefix` / `ExecuteSubscriptionEffects` remarks — state Option B explicitly, document that VM member resolution does not see `event.*` dictionary keys, point to characterization test
+- [x] **BR.1′.2** Strengthened `SubscriptionEffect_EventPropertyAccess_Gap_Documented`: asserts both `IsNotEqualTo("UNTOUCHED")` (proves subscription fired) and `IsNotEqualTo("ABC-123")` (proves `event.*` didn't resolve)
+- [x] **BR.1′.3** Trailing newline restored on `DomainEntityInstanceTests.cs` (+ `DomainEntityInstance.cs`)
 
 #### Slice E: Phase 1b grammar (**pull-only**)
 
@@ -641,7 +646,7 @@ Only with a **named consumer** for value types / `create in` / quantifiers / etc
 - [ ] Parser + printer + tests
 - [ ] Runtime for any new effects on green path
 
-**Do not** start E just because N/N′ is done.
+**Do not** start E to “fill the queue” after N.
 
 ---
 
@@ -691,9 +696,9 @@ Only with a **named consumer** for value types / `create in` / quantifiers / etc
 | B residual (event test, entry/exit, …) | 0.5–2 days | Optional polish |
 | C … C′′′ Phase 1a parse/print | — | Done (~17 Parsing tests) |
 | **D + D′ MCP apply/export** | — | **Done** (commit `e3e91ea`) |
-| **N N1 nav surface (core)** | **1–2 days** | Done (uncommitted) |
-| **N′ residuals** | **0.5–1 day** | Done (uncommitted) |
-| **N′′ polish** | **&lt;0.5 day** | Optional honesty nits |
+| **N N1 nav surface (core)** | **1–2 days** | Done (`9f0707d`) |
+| **N′ residuals** | **0.5–1 day** | Done (`9f0707d`) |
+| **N′′ polish** | **&lt;0.5 day** | Impl done — commit pending |
 | D′′ tiny nits | &lt;0.5 day | Optional |
 | E Phase 1b | Pull-only | Named consumer only |
 | BR residual | weeks | Optional depth |
@@ -702,8 +707,9 @@ Only with a **named consumer** for value types / `create in` / quantifiers / etc
 
 ```text
 0 → … → B+B′ → C…C′′′ → D+D′  ✅ Phase 1a vertical closed
-                         ↘ N ✅ → N′ ✅ → [N′′ optional] → commit (CURRENT)
-                         ↘ D′′ / BR / E (pull-only)
+                         ↘ N+N′ ✅ `9f0707d`
+                         ↘ N′′+D′′+BR.1 test (uncommitted) → commit CURRENT
+                         ↘ BR.1′ remarks honesty → then BR.2–.4 / E pull-only
 ```
 
 ---
@@ -724,8 +730,8 @@ Only with a **named consumer** for value types / `create in` / quantifiers / etc
 - [x] **CallAction** → effects → stage → `when` (Each) → subscriber side effects (literal assign).
 - [x] Single execution ownership; `DomainInstanceStore` not a second product API.
 - [x] B′.1 / B′.3 / B′.4 / B′.5 done.
-- [ ] B′.2 / BR.1: event property flow tested or Option B documented.
-- [ ] BR.3: entry/exit, stage gates, auto-Add children (optional).
+- [- [x] B′.2 / BR.1: characterization test + BR.1′ remarks fix + BR.2 try/finally all in working tree
+- [ ] BR.3 / BR.4 optional residuals
 
 ### Slice C … C′′′ — **DONE**
 
@@ -737,25 +743,21 @@ Only with a **named consumer** for value types / `create in` / quantifiers / etc
 - [x] Strict `apply_dsl` + `export_dsl`; replace + revision+1; early session check; empty text fail.
 - [x] Honesty notes on tool description; dual-path README; require CallAction e2e smoke.
 - [x] Micro-tools retained.
-- [ ] **D′′** optional README honesty-table row / re-apply affordances.
+- [~] **D′′.1–.2** in working tree (uncommitted); D′′.3 accept
 
-### Slice N + N′ — **IMPLEMENTATION DONE** (uncommitted)
+### Slice N + N′ — **DONE** (committed `9f0707d`)
 
-- [x] N1 source-side nav parse/print; deferred relationship emit; N2 input retained
-- [x] Grammar doc + structural round-trip; full suite green (**1263** tests including `N1NavigationTests`)
-- [x] EntityDetail navigations (source+target views) + MCP `EntityDetailData` mirror
-- [x] N′ must-fix (collisions, EntityDetail tests, apply_dsl N1 smoke, export) — all done; **N′ re-reviewed**
-- [ ] **Commit N + N′** (**CURRENT** product gate)
-- [ ] N′′ optional polish (true N1 C5 unit test; analysis assert; export test hardening)
+- [x] N1 surface + N′ residuals committed as `9f0707d`
 
-### Slice N′′ — **OPTIONAL**
+### Slice N′′ — **IMPL DONE** (uncommitted)
 
-- [ ] See §3 Slice N′′ checklist — does not block commit
+- [x] N′′.1–.7 in working tree; suite **1266** with full bundle
+- [ ] **N′′.8 Commit** — **open**
 
 ### Cross-cutting
 
-- [x] Relevant tests green after D+D′; green with N+N′ in tree (**1263**).
-- [x] D+D′ committed (`e3e91ea`); **N+N′ not yet committed**.
+- [x] Suite green with full working-tree bundle (**1266**).
+- [x] D+D′ (`e3e91ea`); N+N′ (`9f0707d`); **N′′/D′′/BR.1 not committed**.
 - [x] `AGENTS.md` principles unchanged unless a principle itself changes (rare).
 
 ---
@@ -778,7 +780,11 @@ Only with a **named consumer** for value types / `create in` / quantifiers / etc
 | 2026-07-17 | **D + D′ shipped** (`e3e91ea`). Phase 1a vertical closed. |
 | 2026-07-17 | **Slice N added** then **design-reviewed**: surface-only N1; **source-side authoritative**; no same-name reverse print; deferred relationship emit; syntax `many`/`owned`/bare; N2 input kept, N1 print only; `one`/`many` already tokens. |
 | 2026-07-17 | **Slice N implementation reviewed**: core correct; **N′** opened for collisions/MCP smokes. |
-| 2026-07-17 | **N′ landed** then **N′ impl review**: collisions + MCP smokes verified; suite **1263** green. Residual **N′′** optional (true N1-authored C5 unit test, apply_dsl analysis assert, export test without reflection, top-level N2 dup test). **Commit is the open product gate.** |
+| 2026-07-17 | **N′ landed** then **N′ impl review**: collisions + MCP smokes verified; suite **1263** green. **N′′** opened for honesty nits. |
+| 2026-07-17 | **N+N′ committed** (`9f0707d`). |
+| 2026-07-17 | **N′′ landed** (tests, uncommitted): pure N1 C5; apply_dsl analysis; export re-parse; top-level N2 dup. |
+| 2026-07-17 | **D′′.1–.2 + BR.1 Option B test** also in working tree (uncommitted). |
+| 2026-07-17 | **Bundle review**: suite **1266** green. Plan had overstated “N′′ committed / family closed.” **Must:** commit bundle. **Should:** BR.1′ fix production `event.*` remarks (currently claim working path); strengthen BR.1 test fire assertion. BR.1.2 was **not** honestly complete. |
 
 ### Appendix — Relationship authoring
 
@@ -790,20 +796,17 @@ Only with a **named consumer** for value types / `create in` / quantifiers / etc
 
 Runtime correlation remains **type-level** until BR.4.4.
 
-### Appendix — Agent pick order (after N′ impl review)
+### Appendix — Agent pick order (after N′′/D′′/BR.1 bundle review)
 
 | Order | Task | Severity | Blocks |
 |-------|------|----------|--------|
-| 1 | **Commit N + N′** | Required | Uncommitted work (product gate) |
-| 2 | **N′′.1–.3** (optional same commit) | Should | Honesty nits only |
-| 3 | **N′′.4–.6** | Nice | — |
-| 4 | **D′′ / BR / E** | Optional / pull-only | — |
+| 1 | **Commit** working tree (N′′ + D′′.1–.2 + BR.1 test + BR.1′ remarks + BR.2 try/finally + plan) | Required | Uncommitted work |
+| 2 | **BR.3 / BR.4 / E** | Optional / pull-only | Named consumer |
 
-**Implementer watch-outs (still in force):**
+**Implementer watch-outs:**
 
 - Do **not** print reverse nav with the same relationship name.
-- Do **not** require target entity textually above source — defer `AddRelationshipChange`.
-- Do **not** remove N2 parse when adding N1 (compat window remains).
-- Prefer committing N+N′ even if N′′ is deferred — suite is green.
+- Do **not** claim `event.PropertyName` works in product docs while the characterization test proves it does not.
+- Do **not** mark slices “committed” in the plan without a git commit hash.
 
 Principles: minimal diffs; TUnit names `Method_Condition_ExpectedResult`; no new abstractions; do not reintroduce Event/Publish. **Never attach always-true policies as stand-ins for missing requires or stage gates.**

@@ -605,7 +605,7 @@ public class N1NavigationTests {
 
     [Test]
     public async Task N1NavWithSubscription_RoundTrips() {
-        // N1-authored relationship + stage subscription, structural round-trip
+        // N2 input → N1 print → round-trip with subscription
         var poly = """
             domain Test
 
@@ -631,7 +631,6 @@ public class N1NavigationTests {
             relationship Tracks from Tracker to Order one
             """;
 
-        // First parse
         var parser = new PolyDslParser(poly);
         var changes = parser.Parse();
         var emptyDomain = new Domain("_", [], []);
@@ -639,11 +638,9 @@ public class N1NavigationTests {
         await Assert.That(result.Succeeded).IsTrue();
         await Assert.That(result.Root!.Relationships.Count).IsEqualTo(1);
 
-        // First print
         var printer = new DomainDslPrinter();
         var printed = printer.Print(result.Root);
 
-        // Re-parse N1 output
         var parser2 = new PolyDslParser(printed);
         var changes2 = parser2.Parse();
         var emptyDomain2 = new Domain("_", [], []);
@@ -651,7 +648,6 @@ public class N1NavigationTests {
         await Assert.That(result2.Succeeded).IsTrue();
         await Assert.That(result2.Root!.Relationships.Count).IsEqualTo(1);
 
-        // Subscription still works by relationship name
         var tracker = result2.Root.Types.OfType<Entity>().Single(e => e.Name == "Tracker");
         var pending = tracker.Stages.Single(s => s.Name == "Pending");
         await Assert.That(pending.Subscriptions.Count).IsEqualTo(1);
@@ -660,5 +656,95 @@ public class N1NavigationTests {
         var analysis = DomainModelAnalyzer.Analyze(result2.Root);
         await Assert.That(analysis.Diagnostics.Any(d =>
             d.Code == DomainModelDiagnosticCodes.SubscriptionContractMismatch)).IsFalse();
+    }
+
+    [Test]
+    public async Task N1NavAuthored_RoundTrips_WithSubscription() {
+        // True N1-authored C5 variant: relationship as inline nav, no top-level N2
+        var poly = """
+            domain Test
+
+            Tracker: entity {
+              Status: Text
+              Pending: stage {
+                when Tracks Active {
+                  assign Status to "Triggered"
+                }
+              }
+              Tracks: Order
+            }
+
+            Order: entity {
+              Draft: stage {
+                Activate: action {
+                  transition to Active
+                }
+              }
+              Active: stage {}
+            }
+            """;
+
+        // First parse (pure N1 input)
+        var parser = new PolyDslParser(poly);
+        var changes = parser.Parse();
+        var emptyDomain = new Domain("_", [], []);
+        var result = new DomainEvolution(emptyDomain).Apply(changes);
+        await Assert.That(result.Succeeded).IsTrue();
+        await Assert.That(result.Root!.Relationships.Count).IsEqualTo(1);
+        var rel = result.Root.Relationships[0];
+        await Assert.That(rel.Name).IsEqualTo("Tracks");
+        await Assert.That(rel.Source.TypeName).IsEqualTo("Tracker");
+        await Assert.That(rel.Target.TypeName).IsEqualTo("Order");
+
+        // Print → re-parse (N1 round-trip)
+        var printer = new DomainDslPrinter();
+        var printed = printer.Print(result.Root);
+
+        var parser2 = new PolyDslParser(printed);
+        var changes2 = parser2.Parse();
+        var emptyDomain2 = new Domain("_", [], []);
+        var result2 = new DomainEvolution(emptyDomain2).Apply(changes2);
+        await Assert.That(result2.Succeeded).IsTrue();
+        await Assert.That(result2.Root!.Relationships.Count).IsEqualTo(1);
+        await Assert.That(result2.Root.Relationships[0].Name).IsEqualTo("Tracks");
+
+        // Subscription works by relationship name
+        var tracker = result2.Root.Types.OfType<Entity>().Single(e => e.Name == "Tracker");
+        var pending = tracker.Stages.Single(s => s.Name == "Pending");
+        await Assert.That(pending.Subscriptions.Count).IsEqualTo(1);
+        await Assert.That(pending.Subscriptions[0].RelationshipName).IsEqualTo("Tracks");
+
+        // Analysis should be clean
+        var analysis = DomainModelAnalyzer.Analyze(result2.Root);
+        await Assert.That(analysis.HasStructuralFailure).IsFalse();
+        await Assert.That(analysis.Diagnostics.Any(d =>
+            d.Code == DomainModelDiagnosticCodes.SubscriptionContractMismatch)).IsFalse();
+    }
+
+    [Test]
+    public async Task Parse_N1NavCollidesWithTopLevelN2_ThrowsError() {
+        // N1 nav name collides with a top-level N2 relationship of the same name
+        var poly = """
+            domain Test
+
+            Order: entity {
+              customer: many Customer
+            }
+
+            Customer: entity {}
+
+            relationship customer from Order to Customer many
+            """;
+
+        var parser = new PolyDslParser(poly);
+        var threw = false;
+        try {
+            parser.Parse();
+        }
+        catch (FormatException ex) {
+            await Assert.That(ex.Message.Contains("defined more than once")).IsTrue();
+            threw = true;
+        }
+        await Assert.That(threw).IsTrue();
     }
 }

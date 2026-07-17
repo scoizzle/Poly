@@ -1121,7 +1121,7 @@ for exploration and repair.")]
             Revision: state.Revision,
             Data: snapshot,
             Affordances: entityCount > 0
-                ? ["get_entity_detail", "get_domain_overview", "get_domain_analysis", "export_dsl"]
+                ? ["get_entity_detail", "get_domain_overview", "get_domain_analysis", "export_dsl", "apply_dsl"]
                 : ["get_domain_overview", "add_entity"]);
     }
 

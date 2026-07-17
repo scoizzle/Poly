@@ -308,18 +308,31 @@ public sealed record DomainEntityInstance {
 
     /// <summary>
     /// Executes subscription effects in this instance's context (subscriber).
-    /// The <paramref name="eventInstance"/> is the entity that transitioned,
-    /// made available for "event" references in expression bodies.
+    /// The <paramref name="eventInstance"/> is the entity that transitioned.
     /// Called by <see cref="DomainInstanceStore.NotifyTransition"/>.
     ///
     /// Subscription-triggered transitions suppress store notification via
     /// <c>_isExecutingSubscription</c> — cascading is handled by the store's
     /// depth-limited recursion instead.
     /// </summary>
+    ///
+    /// <remarks>
+    /// <b>Option B (current):</b> Event-instance property values are injected into
+    /// the subscriber's <c>_values</c> dictionary with an "event." prefix, but
+    /// this is <b>not</b> visible to the VM's member-resolution pipeline (which
+    /// resolves properties against CLR type definitions, not the dictionary).
+    /// Expressions like <c>event.Code</c> in subscription effects will <b>not</b>
+    /// resolve to the transitioning instance's value through the current lowering
+    /// path. The characterization test
+    /// <c>SubscriptionEffect_EventPropertyAccess_Gap_Documented</c> documents this.
+    /// Until proper "event" lowering is implemented (when a named consumer needs
+    /// it), subscription effects should use only literal values and "this" properties.
+    /// </remarks>
     /// <summary>
-    /// Keys used to store event instance property values in <c>_values</c>
-    /// during subscription effect execution. Consumers can reference
-    /// <c>event.PropertyName</c> through these keys.
+    /// Prefix used to store event instance property values in <c>_values</c>
+    /// during subscription effect execution. Note: the VM's member-resolution
+    /// pipeline does <b>not</b> currently resolve keys with this prefix — see
+    /// remarks on <see cref="ExecuteSubscriptionEffects"/>.
     /// </summary>
     private const string EventPrefix = "event.";
 
@@ -327,31 +340,34 @@ public sealed record DomainEntityInstance {
         SetEventInstance(eventInstance);
         _isExecutingSubscription = true;
 
-        // Merge event values into _values so expressions can reference
-        // "event.PropertyName" via the standard lowering path.
-        // These keys are removed after execution.
-        var eventKeys = new List<string>();
-        if (_eventValues is not null) {
-            foreach (var kv in _eventValues) {
-                var key = $"{EventPrefix}{kv.Key}";
-                _values[key] = kv.Value;
-                eventKeys.Add(key);
+        try {
+            // Merge event values into _values so expressions can reference
+            // "event.PropertyName" via the standard lowering path.
+            // These keys are removed after execution.
+            var eventKeys = new List<string>();
+            if (_eventValues is not null) {
+                foreach (var kv in _eventValues) {
+                    var key = $"{EventPrefix}{kv.Key}";
+                    _values[key] = kv.Value;
+                    eventKeys.Add(key);
+                }
             }
+
+            var subjectParam = new Parameter("entity", new TypeReference(Entity.Name));
+            var effectPass = new EffectLoweringPass(Entity, subjectParam);
+
+            foreach (var effect in effects) {
+                ExecuteEffect(effect, effectPass);
+            }
+
+            // Clean up merged event values
+            foreach (var key in eventKeys)
+                _values.Remove(key);
         }
-
-        var subjectParam = new Parameter("entity", new TypeReference(Entity.Name));
-        var effectPass = new EffectLoweringPass(Entity, subjectParam);
-
-        foreach (var effect in effects) {
-            ExecuteEffect(effect, effectPass);
+        finally {
+            _isExecutingSubscription = false;
+            SetEventInstance(null);
         }
-
-        // Clean up merged event values
-        foreach (var key in eventKeys)
-            _values.Remove(key);
-
-        _isExecutingSubscription = false;
-        SetEventInstance(null);
     }
 
     /// <summary>

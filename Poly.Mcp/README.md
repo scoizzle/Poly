@@ -82,3 +82,5 @@ Every MCP tool's **Name + Description + Success** must match actual behavior:
 | Evaluation fails | `Success: false` (or explicit error), not success without a bool |
 
 **Current policy tools:** `get_policy_expression` (inspect-only, no VM), `add_policy` (mutation, no eval), `evaluate_policy` (VM eval, returns bool). All three satisfy the invariant.
+
+**DSL tools:** `apply_dsl` (parses .poly text → evolves empty domain → analysis gate → replaces session domain; revision+1; explicit HONESTY NOTES document stage `when` not enforced, instance store not running, subscription side-effects not auto-fired), `export_dsl` (printer round-trip, no side effects). Both satisfy the invariant.

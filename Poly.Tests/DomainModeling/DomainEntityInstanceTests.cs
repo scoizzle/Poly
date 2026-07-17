@@ -1,4 +1,5 @@
 using Poly.DomainModeling;
+using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Bootstrap;
 using Poly.DomainModeling.Effects;
 
@@ -387,5 +388,74 @@ public class DomainEntityInstanceTests {
         await Assert.That(instance.CurrentStage).IsEqualTo("Active");
         await Assert.That(instance.GetProperty<string>("Status")).IsEqualTo("Started");
         await Assert.That(instance.CreatedChildren.Count).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task SubscriptionEffect_EventPropertyAccess_Gap_Documented() {
+        // BR.1 / Option B: event.* property access in subscription effects
+        // is NOT yet supported. The string-prefix convention (injecting
+        // "event.{prop}" keys into _values) is not visible to the VM's
+        // member resolution pipeline, which uses CLR type definitions.
+        //
+        // This test proves:
+        //   1. The subscription DOES fire (initial Status is not null).
+        //   2. The RHS "event.Code" DOES NOT resolve to the transitioning
+        //      instance's value — it evaluates to null/default.
+        //
+        // When the DSL parser defines an "event" keyword and proper lowering
+        // support is added, change this test to assert the expected value.
+        var trackerStatus = new Property("Status", new DomainTypeReference("Text"), []);
+        var tracker = new Entity("Tracker", [trackerStatus], [], [], [
+            new Stage("Pending", null, [], [], [], []) {
+                Subscriptions = [
+                    new StageSubscription("Tracks", ["Active"], StageSubscriptionQuantifier.Each, [
+                        new AssignEffect(
+                            DomainExpression.Property("Status"),
+                            DomainExpression.Property("event.Code"))
+                    ])
+                ]
+            }
+        ]);
+
+        var orderCode = new Property("Code", new DomainTypeReference("Text"), []);
+        var order = new Entity("Order", [orderCode], [
+            new Poly.DomainModeling.Action("Activate", InvocationResult.Void, [], [
+                new StageTransitionEffect(new StageReference("Active"))
+            ], [])
+        ], [], [
+            new Stage("Draft", null, [], [], [], []),
+            new Stage("Active", null, [], [], [], [])
+        ]);
+
+        var rel = new Relationship("Tracks",
+            new DomainTypeReference("Tracker"), new DomainTypeReference("Order"),
+            RelationshipCardinality.OneToOne, []);
+
+        var domain = new Domain("Test", [tracker, order], [rel]);
+
+        var analysis = DomainModelAnalyzer.Analyze(domain);
+        await Assert.That(analysis.Diagnostics.Any(d =>
+            d.Code == DomainModelDiagnosticCodes.SubscriptionContractMismatch)).IsFalse();
+
+        var store = new DomainInstanceStore();
+        var orderInstance = DomainEntityInstance.Create(order,
+            new Dictionary<string, object?> { ["Code"] = "ABC-123" }, domain: domain);
+        var trackerInstance = DomainEntityInstance.Create(tracker,
+            new Dictionary<string, object?> { ["Status"] = "UNTOUCHED" }, domain: domain);
+        store.Add(orderInstance);
+        store.Add(trackerInstance);
+
+        orderInstance.CallAction("Activate");
+
+        // Subscription fires (Status was "UNTOUCHED", now it's "" because
+        // AssignEffect wrote a default value), but "event.Code" does NOT
+        // resolve to "ABC-123" through the VM's member resolution.
+        // We prove both: subscription fired (Status changed from initial value)
+        // AND the event.* reference did NOT work (Status != "ABC-123").
+        var status = trackerInstance.GetProperty<string>("Status");
+        await Assert.That(status).IsNotEqualTo("UNTOUCHED");  // subscription fired
+        await Assert.That(status).IsNotEqualTo("ABC-123");     // but event.* didn't resolve
+        // When event.* lowering is implemented, change to:
+        //   await Assert.That(trackerInstance.GetProperty<string>("Status")).IsEqualTo("ABC-123");
     }
 }

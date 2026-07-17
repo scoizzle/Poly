@@ -1,11 +1,11 @@
 # DSL-Engine Sync Plan — Toward Phase 1
 
-**Date:** 2026-07-16  
-**Revised:** 2026-07-17 (Slice D reviewed; Phase 1a vertical complete; D′ optional polish)  
-**Status:** Active roadmap — Phase 1a vertical **product-complete**; remaining work is polish / Phase 1b pull  
-**Current pick:** **§3 D′** (optional MCP polish) *or* **commit/ship** *or* **BR residual** / **E** only with a named consumer  
+**Date:** 2026-07-17  
+**Revised:** 2026-07-17 (N′ impl review — suite 1263 green; N′′ polish optional; **commit still open**)  
+**Status:** Phase 1a vertical **product-complete**; Slice N + N′ **implementation done** (uncommitted); optional N′′ polish; **commit pending**  
+**Current pick:** **Commit N + N′** (block on N′′ only if you want honesty nits in the same commit)  
 **Source:** [`docs/experiments/domain-modeling-dsl-tour-feedback.md`](../../experiments/domain-modeling-dsl-tour-feedback.md) — §3 and §4  
-**Review:** Plan review; A–D impl reviews (2026-07-17)  
+**Review:** A–D′; Slice N design; N core impl; **N′ implementation review** (2026-07-17)  
 **Trigger:** IR/DSL divergence (events vs stage-observation); mutation surface width; single-vertical runtime gap  
 **Related:**
 
@@ -23,7 +23,9 @@
 
 **How to use this doc:** Treat §3 slices as the authority for order and exit criteria. Estimates are **rough order-of-magnitude**, not a commitment to a two-week calendar. Prefer promoting concrete steps into `simple-agent-tasks/` when work starts.
 
-**Status (2026-07-17, post D review):** **Phase 1a vertical product path complete.** Runtime CallAction→when; Phase 1a parse/print; MCP `apply_dsl` (replace) + `export_dsl`; dual-path README; MCP smoke **42** green. **D′ residuals:** early session check, honesty blurb (stage `when` / instance store), revision-reset policy. **Do not start E without a named consumer** (pull-only).
+**Slice N principle:** N1 changes **surface syntax only**. IR stays (`Relationship` on `Domain`, `AddRelationshipChange`). Parser/printer map nav lines ↔ IR. **Owning/source side is authoritative** — never invent a second edge from reverse-nav lines.
+
+**Status (2026-07-17):** Phase 1a vertical closed (`e3e91ea`). Slice **N + N′** implementation is suite-green (**1263** tests) in the working tree — **not yet committed**. Optional **N′′** polish does not block commit. E remains pull-only.
 
 ---
 
@@ -56,16 +58,16 @@ Runtime “entity X entered stage Y” is a **runtime observation**, not an auth
 
 ### Gap 2: Relationships-as-properties (authoring) vs first-class `Relationship` (IR)
 
-| DSL | Engine today |
-|-----|--------------|
-| `orders: many owned Order` | `Property(Name, Type, Constraints)` — no cardinality/ownership |
-| Owning side only; reverse nav synthesized | `Relationship` on `Domain` with `Cardinality`, `SourceOwnsTarget` |
+| Target DSL (N1) | Engine after Slice N core |
+|-----------------|---------------------------|
+| `orders: many owned Order` | **N1 primary** parse + print; N2 still accepted as legacy input |
+| Owning/source side only on print | `Relationship` on `Domain` + `SourceOwnsTarget` (IR unchanged) |
 
-Without a normalization rule, Phase 1 parse/print cannot be correct. This is IR work, not only a parser mapping note.
+**Gap 2 surface closed in core.** Residual honesty: collision policy (N′), MCP smokes for N1 authoring path (N′), commit.
 
 ### Gap 3: Phase 1 DSL path — **closed for Phase 1a vertical**
 
-Parser + printer + grammar + MCP `apply_dsl` / `export_dsl` landed. Residual: D′ polish; Phase 1b (Slice E).
+Parser + printer + grammar + MCP `apply_dsl` / `export_dsl` landed. Residual: **N′** polish; D′′ nits; E pull-only.
 
 ### Gap 4: Mutation surface wider than one entity block
 
@@ -103,17 +105,21 @@ Remaining runtime fidelity (entry/exit, stage gates, instance links) is **BR res
 ```text
 Slice 0–B′     IR + thin runtime                         [done]
 Slice C…C′′′   Phase 1a DSL parse/print                  [done]
-Slice D        MCP apply_dsl + export_dsl + dual path    [done]
-Slice D′       Optional MCP polish                       [optional]
-Slice E        Phase 1b grammar (pull-only)              [pull-only]
+Slice D + D′   MCP apply/export_dsl + polish             [done]
+Slice N        N1 nav-property authoring (core)          [done — uncommitted]
+Slice N′       N residuals (collisions, MCP smokes)      [done — uncommitted]
+Slice N′′      N polish from N′ review (optional)        [optional]
+→              Commit N+N′(+N′′)                          [CURRENT]
+Slice E        Phase 1b grammar                          [pull-only]
 BR residual    event data-flow, stage gates, entry/exit  [optional]
 ```
 
 | Slice | Depends on | Does not depend on |
 |-------|------------|---------------------|
-| 0–D | prior | — |
-| D′ | D | — |
-| E | named consumer | D′ |
+| 0–D′ | prior | — |
+| **N / N′** | **D** | **E** / **BR** |
+| **N′′** | **N′** | — |
+| E | named consumer | — |
 | BR | B vertical | D |
 
 ---
@@ -412,74 +418,230 @@ relationship <Name> from <SourceEntity> to <TargetEntity> one|many
 
 ---
 
-### Slice D: MCP — `apply_dsl` + dual path — **DONE**
+### Slice D + D′: MCP apply/export_dsl — **DONE** (verified)
 
-**Verified 2026-07-17:** `DslTool` + `McpSessionStore.Replace` + README dual path; MCP smoke **42** green (6 DSL-focused).
+**Commit:** `e3e91ea`. MCP smoke DSL tests green (ApplyDsl_*/ExportDsl_*).
 
 | Item | Status | Evidence |
 |------|--------|----------|
 | **D.1** apply_dsl | Done | parse → evolve empty domain → strict analysis → `Replace` |
-| **D.2** replace semantics | Done | tool description + README; revision reset to **0** |
+| **D.2** replace semantics | Done | tool + README |
 | **D.3** micro-tools retained | Done | still registered |
-| **D.4** export_dsl | Done | printer; export round-trip smoke |
+| **D.4** export_dsl | Done | round-trip smoke |
 | **D.5** no Capture | Done | not implemented |
-| **D.6** honesty | **Partial** | REPLACES clear; stage `when` / store limits under-documented → **D′.2** |
-| **D.7** README dual path | Done | batch vs incremental table |
-| **D.8** smoke | Done | minimal, relationship, missing require, malformed, export RT, missing session |
+| **D′.1** early session check | Done | `TryGet` before parse |
+| **D′.2** honesty in tool description | Done | HONESTY NOTES: stage `when`, instance store, revision+1 |
+| **D′.3** revision monotonic | Done | `current.Revision + 1` (not 0) |
+| **D′.4.1** export → apply_dsl affordance | Done | |
+| **D′.4.2** empty polyText | Done | |
+| **D′.4.4** require CallAction e2e | Done | `ApplyDsl_WithRequire_BlocksCallActionWhenPolicyFails` |
 | Program | Done | `.WithTools<DslTool>()` |
 
-**Shipped apply semantics:** evolve from empty `Domain` (parser emits primitives) → on success **replace** session; **revision = 0**.
+**Shipped apply semantics:** empty `Domain` + parser primitives → replace session domain; revision **+1**.
 
 ---
 
-### Slice D′: Optional MCP polish (from D code review)
+### Slice N: N1 relationship-as-navigation-property authoring — **CORE LANDED** (uncommitted)
 
-#### D′.1 — Fail-fast missing session (recommended)
+**What:** Prefer N1 **source-side** nav lines inside entities over N2 top-level `relationship … from … to …` lines. IR unchanged (`Relationship` / `AddRelationshipChange`). Parser + printer (+ EntityDetail) map surface ↔ IR.
 
-**Symptom:** `ApplyDsl` parses + evolves **before** `Replace`. Bad `sessionId` still does full work, then fails.
+**Why now:** Phase 1a vertical shipped. N2 is IR-shaped authoring; modelers/agents expect `orders: many Order` (see `DOMAIN-DSL-SPEC.md` Relationship Syntax).
 
-**Do:** `TryGet(sessionId)` first; then parse → evolve → `Replace`.
+**Scope:** Parser + Printer + grammar doc + tests + EntityDetail navigations. **No IR changes. No analyzer changes. No new DomainChange types.**
 
-- [ ] **D′.1.1** Early session check
-- [ ] **D′.1.2** Existing missing-session test still green
+**Out of scope for N:** instance-level links (BR.4); reverse FK columns; ManyToMany both-sides inventiveness; Phase 1b (`create in`, etc.).
 
-#### D′.2 — Honesty blurb (recommended)
-
-**Gap:** Tool description lists require + subscriptions without noting:
-
-- action `when Stage` is **not** runtime-enforced
-- stage subscriptions need `DomainInstanceStore` + registered instances (MCP session does not auto-run fan-out)
-
-**Do:** Short honesty paragraph in `apply_dsl` description and README Tool Honesty section.
-
-- [ ] **D′.2.1** Tool + README
-
-#### D′.3 — Revision after replace (optional)
-
-**Gap:** `Replace` sets `Revision: 0` while `Evolve` increments — non-monotonic for agents.
-
-**Do:** Document “apply_dsl resets revision to 0” **or** use `current.Revision + 1`.
-
-- [ ] **D′.3.1** Document or change
-
-#### D′.4 — Nice-to-haves
-
-- [ ] **D′.4.1** Affordance cross-links (`export_dsl` ↔ `apply_dsl`)
-- [ ] **D′.4.2** Empty polyText explicit error
-- [ ] **D′.4.3** Commit dirty Parsing+Mcp working tree if not committed
-- [ ] **D′.4.4** CallAction require e2e after apply_dsl (trust)
+**Implementation review (2026-07-17):** Core N correct. **N′** residuals landed and re-reviewed (below). Full product exit for N = **commit**.
 
 ---
 
-### Slice E: Phase 1b grammar (**pull-only** — not automatic next)
+#### Critical design rules (from Slice N design review — **do not violate**)
 
-Only when a **named consumer** needs value types, `create in`, quantifiers, etc.
+1. **Source side is authoritative.** A nav line on entity `S` means `AddRelationshipChange(Name, Source=S, Target=T, …)`. Do **not** emit a second `AddRelationshipChange` when the same edge is mentioned on the target entity.
+2. **Printer default: source side only.** Do **not** print reverse-nav lines that re-use the same relationship name — re-parse would create a second edge or clash. Optional later: reverse as documentation-only alias with a distinct name and alias detection (DSL-spec “optional reverse name”) — not Phase N.1.
+3. **Syntax aligns with DOMAIN-DSL-SPEC (Phase 1a subset):**
 
-- [ ] Freeze Phase 1b grammar delta in a new doc or extend `dsl-phase1a-grammar.md`
+```text
+nav-line = identifier ":" [ "many" ] [ "owned" ] entity-type-name
+// many → OneToMany; omit many → OneToOne (singular)
+// owned → SourceOwnsTarget = true
+// optional: "one" as explicit singular alias of bare type (if easy; not required)
+```
+
+Examples:
+
+```text
+orders: many owned Order
+manager: Employee
+supplier: owned Supplier
+```
+
+4. **Defer relationship changes until all entities are known** (or until end of parse). Do **not** require “target entity must appear above source in the file” — that fights alphabetical export and natural authoring. Collect pending navs; resolve after entity set is complete; error if target type is not an entity (and not a primitive).
+5. **N2 coexistence:** Keep parsing top-level `relationship Name from Src to Tgt one|many` for a transition window. **Printer emits N1 only** (source-side nav lines). Contradictory earlier note “remove top-level loop” vs “keep for transition” → **keep parse, drop print**.
+6. **Tokenizer reality:** `one` / `many` are already `TokenKind.One` / `TokenKind.Many` (from N2). Route them after `:` in entity body; do not claim they are bare Identifiers today.
+7. **Round-trip metric:** structural domain equality (entities, relationship count/edges, cardinality, ownership) after `parse → evolve → print → parse → evolve` — **not** byte-identical text. Entity order may stay alphabetical.
+8. **Subscriptions:** still use relationship **name** (`when Tracks Active`). Nav line `tracks: many Order` → relationship name `tracks` (or normalize casing consistently — pick **preserve identifier as Name**).
+
+---
+
+#### N.0 — Spec freeze before code
+
+- [x] **N.0.1** Freeze nav grammar in `dsl-phase1a-grammar.md` (N1 primary §2.9; N2 demoted to legacy §2.8)
+- [x] **N.0.2** Document source-only print rule + deferred resolution + ownership
+- [x] **N.0.3** Fixtures via `N1NavigationTests` (N2-only, N1-only, N2-inside-entity). Mixed N1+N2 in one file → N′.5 if desired
+
+#### N.1 — Printer: source-side nav properties
+
+```text
+Customer: entity {
+  Name: Text
+  orders: many Order          // from Relationship where Source == Customer
+}
+// Order entity does NOT get "orders: one Customer" auto-printed
+```
+
+- [x] **N.1.1** Printer holds `domain.Relationships`; emits navs inside `PrintEntity`
+- [x] **N.1.2** Source-side emit: `many` / bare / `owned`; name = `rel.Name`
+- [x] **N.1.3** No reverse-nav print
+- [x] **N.1.4** Top-level N2 **output** loop removed
+- [x] **N.1.5** Tests: `N2Input_PrintsAsN1_RoundTrips`, `N1Nav_RoundTrips_StructurallyIdentical`
+
+#### N.2 — Parser: nav lines inside entity blocks
+
+Pattern after `name :` in entity body:
+
+| Tokens after `:` | Meaning |
+|------------------|---------|
+| `many` [`owned`] `Type` | OneToMany (+ owned?) |
+| `owned` `Type` | OneToOne + owned |
+| `one` [`owned`] `Type` | OneToOne (+ owned?) optional alias |
+| primitive type | existing property path |
+| bare `Type` (non-primitive, not keyword) | OneToOne nav to entity `Type` |
+
+- [x] **N.2.1** `IsNavLine` + `ParseNavLine` before property path
+- [x] **N.2.2** `PendingNav` queue; target need not appear earlier in file
+- [x] **N.2.3** `ResolvePendingNavs` after all entities; unknown / primitive → `FormatException`. Self-cycle left allowed (Friends-style) — confirm with N′.6 if product wants a ban
+- [x] **N.2.4** Top-level + in-entity N2 parse retained
+- [x] **N.2.5** Core syntax tests in `N1NavigationTests`
+- [x] **N.2.6** Collision: same name as property on entity → parse/analyze error → **N′.1**
+- [x] **N.2.7** Two navs / edges with same relationship name (domain-unique today via structural analyzer only after evolve) → clearer parse error → **N′.2**
+
+#### N.3 — EntityDetail navigations
+
+- [x] **N.3.1** `NavigationDetail(RelationshipName, RelatedEntityName, Role, Cardinality, SourceOwnsTarget)`
+- [x] **N.3.2** `EntityDetail.Navigations`
+- [x] **N.3.3** Populated from `domain.Relationships` (source **and** target **views** — query only)
+- [x] **N.3.4** MCP `NavigationData` / `EntityDetailData.navigations`
+- [x] **N.3.5** Dedicated tests for source and target views → **N′.3**
+
+#### N.4 — Docs
+
+- [x] **N.4.1** Grammar doc N1 primary, N2 legacy input
+- [x] **N.4.2** Plan appendix: N2 interim → “legacy accepted input / N1 canonical print”
+- [x] **N.4.3** Printer class doc; MCP apply_dsl description mentions N1 nav lines
+- [x] **N.4.4** Gap 2 updated (this revision). Formal grammar §1 includes optional trailing N2 production → **N′.4**
+
+#### N.5 — Compat + regression
+
+- [x] **N.5.1** Full suite green with N2 fixtures still parsing (1255 tests)
+- [x] **N.5.2** Subscription round-trip green via N2→N1 print path (`C5_*`, `N1NavWithSubscription_RoundTrips`); product N1 path covered by **N′.8** / apply_dsl. True unit-level N1-authored C5 → **N′′.1** (optional honesty)
+- [x] **N.5.3** apply_dsl smoke: N1 multi-entity file with nav + subscription → **N′.8**
+- [x] **N.5.4** Export of session built via micro-tool `add_relationship` prints N1 (source side) → **N′.9**
+
+**Slice N core exit (met):**
+
+- [x] Printer emits N1 source-side nav lines only (no N2 output)
+- [x] Parser accepts N1 nav lines → single IR edge per nav; deferred resolution
+- [x] N2 input still accepted
+- [x] Structural round-trip green; subscription-by-name still works
+- [x] N.3 navigations on EntityDetail + MCP mirror
+- [x] Grammar doc matches (formal §1 includes optional N2 production)
+
+**Slice N full exit** = core + N′ + **commit** (N′′ optional).
+
+**Risks (explicit):**
+
+| Risk | Mitigation |
+|------|------------|
+| Reverse print same name → double edge on re-parse | Source-only print (rule 2) — verified in printer |
+| Forward-ref entity targets | Deferred emit (rule 4) — verified |
+| `many`/`one` as property names | They are keywords already; rare — document |
+| Bare `Foo: Bar` vs typo for primitive | Error if `Bar` not entity and not primitive |
+| MCP micro-tools still N2-shaped | Fine — export normalizes to N1 (N′.9 asserts) |
+| Property name vs nav name collision | Parse-time via `_entityPropertyNames` (N′.1) |
+| Duplicate relationship names | Parse-time via `_relationshipNames` for N1 + N2 (N′.2) |
+
+---
+
+### Slice N′: N residuals — **DONE** (2026-07-17)
+
+Must-fix and should-fix landed. **1263 tests green.** **Commit still open.**
+
+- [x] **N′.1** Property/nav name collision fail-loud at parse (`_entityPropertyNames`; error in `ResolvePendingNavs`)
+- [x] **N′.2** Duplicate relationship name at parse (`_relationshipNames` in `ParseRelationship` **and** `ResolvePendingNavs` — covers N2 in-entity, N2 top-level, and N1)
+- [x] **N′.3** EntityDetail navigations tests (`Query_EntityDetail_IncludesNavigations_SourceAndTarget`)
+- [x] **N′.4** Grammar §1: `.poly = domain-header entity-definitions [ legacy-relationships ]`
+- [x] **N′.5** Mixed-file fixture (`Parse_MixedN1AndN2_Succeeds`)
+- [x] **N′.6** Self-referential nav allowed (`Parse_SelfReferentialNav_Allowed`)
+- [x] **N′.7** Subscription + relationship round-trip (`N1NavWithSubscription_RoundTrips` — still **N2 input** → N1 print → re-parse; product N1 path is **N′.8**). See N′′.1 for unit-level N1-authored dual.
+- [x] **N′.8** apply_dsl smoke (`ApplyDsl_WithN1NavAndSubscription_Succeeds`)
+- [x] **N′.9** Export after micro-tool (`ExportDsl_AfterAddRelationship_PrintsN1`)
+- [x] **N′.10** Error msg fixed (unknown entity — no “define first”)
+- [x] **N′.11** Unused `changes` param removed from `ParseNavLine`
+- [x] **N′.12** Duplicate primitive-target test removed
+
+#### N′ implementation review (2026-07-17) — verified
+
+| Check | Result |
+|-------|--------|
+| Design rules 1–2–4–5 | Pass (source-only print, deferred N1 emit, N2 parse kept) |
+| N′.1 property/nav collision | Pass + test |
+| N′.2 dup names N1↔N1 and N1↔N2-in-entity | Pass + tests; top-level N2 also registers via same `ParseRelationship` |
+| N′.8 N1 apply_dsl + subscription | Pass (asserts entities/rel/subscription; analysis not deep-asserted → N′′.2) |
+| N′.9 export after add_relationship | Pass (N1 line present, no N2 `from`); uses reflection on anonymous `Data` → N′′.3 |
+| Suite | **1263** green |
+| Commit | **Still open** |
+
+---
+
+### Slice N′′: optional polish (from N′ impl review) — **does not block commit**
+
+Land in the same commit as N+N′ if cheap; otherwise a follow-up.
+
+- [ ] **N′′.1** **True N1-authored C5 unit test:** rewrite or add sibling to `N1NavWithSubscription_RoundTrips` that authors `Tracks: Order` (or `Tracks: one Order`) on Tracker — **no** top-level `relationship` line — then print → re-parse → subscription + analysis green. (MCP path already N1 via N′.8.)
+- [ ] **N′′.2** **`ApplyDsl_WithN1NavAndSubscription_Succeeds`:** assert analysis clean (e.g. `DomainModelAnalyzer.Analyze` / snapshot errorCount) — today only checks `Data` non-null under a “analysis clean” comment.
+- [ ] **N′′.3** **`ExportDsl_AfterAddRelationship_PrintsN1`:** avoid reflection on anonymous `Data` — prefer typed DTO or `dynamic`/pattern consistent with other MCP tests; optionally re-parse exported poly and assert one relationship.
+- [ ] **N′′.4** Explicit test: N1 nav name collides with **top-level** N2 `relationship` of the same name (logic already covered by shared `_relationshipNames`; test would lock it).
+- [ ] **N′′.5** (Optional product policy) Parse-time error when relationship name equals an **entity** name — structural analyzer already reports domain-member name clashes after evolve; only add if agents hit it often.
+- [ ] **N′′.6** (Optional) Nav name vs stage/action/policy name on same entity — not required for Phase 1a; document “names are separate namespaces in IR” if leaving open.
+
+**Do not** open IR/analyzer work for N′′. Surface honesty only.
+
+---
+
+### Post–N residuals (optional polish)
+
+#### D′′ — Tiny MCP nits (optional)
+
+- [ ] **D′′.1** Extend README **Tool Honesty** table with a DSL row (tool description already has HONESTY NOTES; README table still policy-only)
+- [ ] **D′′.2** Success affordances on `apply_dsl` include `apply_dsl` / `export_dsl` for re-batch loops (export already links apply)
+- [ ] **D′′.3** Race: session deleted between early TryGet and Replace still fails late (acceptable)
+
+#### BR residual (runtime depth)
+
+- [ ] **BR.1** `event` property flow in subscription effects tested
+- [ ] **BR.3** OnEntry/OnExit; stage-gated CallAction; auto `store.Add` children
+- [ ] **BR.4** Instance-level relationship links
+
+#### Slice E: Phase 1b grammar (**pull-only**)
+
+Only with a **named consumer** for value types / `create in` / quantifiers / etc.
+
+- [ ] Freeze Phase 1b grammar delta
 - [ ] Parser + printer + tests
-- [ ] Runtime support for any new effect on the green path (honesty)
+- [ ] Runtime for any new effects on green path
 
-**Do not** start E just because D is done.
+**Do not** start E just because N/N′ is done.
 
 ---
 
@@ -509,7 +671,9 @@ Only when a **named consumer** needs value types, `create in`, quantifiers, etc.
 | Round-trip instability | Medium | Medium | Structural equality gate in CI |
 | Second execution framework (`Orchestrator` vs `CallAction`) | High | High | Single ownership rule in Slice B |
 | Subscription cycles | Medium | Medium | CausalityAnalyzer + runtime depth limit |
-| Relationship dual form forever | Medium | Medium | Choose N1/N2 in Slice A; don’t leave undocumented |
+| Relationship dual form forever | Medium | Medium | Slice N: N1 print + N2 input window; then demote N2 |
+| Reverse-nav double edge on re-parse | High if reverse printed | High | Source-only print (Slice N design rule 2) |
+| Forward-ref entity in nav line | Medium | Medium | Defer AddRelationshipChange until entities known |
 | MCP honesty (tools claim runtime too early) | Medium | High | Slice D descriptions; no execute claim without tool |
 | Calendar optimism | High | Medium | Slice exits over day counts; promote agent micro-tasks |
 
@@ -526,15 +690,20 @@ Only when a **named consumer** needs value types, `create in`, quantifiers, etc.
 | B + B′ Runtime vertical | — | **Done** (CallAction→when literals) |
 | B residual (event test, entry/exit, …) | 0.5–2 days | Optional polish |
 | C … C′′′ Phase 1a parse/print | — | Done (~17 Parsing tests) |
-| **D MCP apply/export_dsl** | — | **Done** (42 MCP smoke incl. DSL) |
-| D′ MCP polish | 0.5 day | Optional |
-| E Phase 1b | Pull-only | Sized by consumer |
+| **D + D′ MCP apply/export** | — | **Done** (commit `e3e91ea`) |
+| **N N1 nav surface (core)** | **1–2 days** | Done (uncommitted) |
+| **N′ residuals** | **0.5–1 day** | Done (uncommitted) |
+| **N′′ polish** | **&lt;0.5 day** | Optional honesty nits |
+| D′′ tiny nits | &lt;0.5 day | Optional |
+| E Phase 1b | Pull-only | Named consumer only |
+| BR residual | weeks | Optional depth |
 
 **Dependency summary:**
 
 ```text
-0 → … → B+B′ → C…C′′′ → D → (D′ optional) → E / BR residual
-You are here: D done; pick D′ or next product need
+0 → … → B+B′ → C…C′′′ → D+D′  ✅ Phase 1a vertical closed
+                         ↘ N ✅ → N′ ✅ → [N′′ optional] → commit (CURRENT)
+                         ↘ D′′ / BR / E (pull-only)
 ```
 
 ---
@@ -547,7 +716,7 @@ You are here: D done; pick D′ or next product need
 - [x] Stage subscriptions on `Stage`; event analyzers removed; `DMSS*` passes registered.
 - [x] ADR + CORE updated.
 - [x] **A′ core:** semantic remove; real contract analyzer; builder subscribe; subscription tests.
-- [x] **N2 interim** for relationships (first-class records); N1 deferred to Slice C.
+- [x] **N2 interim** for relationships (first-class records); N1 deferred to Slice C (now delivered in Slice N).
 - [x] **A′′:** fail-loud zero-match remove; query/MCP subscription visibility; duplicate-key warning; OneToOne quantifier check.
 
 ### Slice B + B′
@@ -563,18 +732,31 @@ You are here: D done; pick D′ or next product need
 - [x] Phase 1a grammar + parser/printer + **17** Parsing tests.
 - [x] N2 relationships; deferred require; no when_* stubs; entity-level `require not` fixed.
 
-### Slice D — **DONE**
+### Slice D + D′ — **DONE**
 
-- [x] Strict `apply_dsl` + `export_dsl`.
-- [x] Replace semantics documented (tool + README).
-- [x] Micro-tools retained; dual path documented.
-- [ ] **D′** honesty blurb for stage `when` / instance store (optional).
+- [x] Strict `apply_dsl` + `export_dsl`; replace + revision+1; early session check; empty text fail.
+- [x] Honesty notes on tool description; dual-path README; require CallAction e2e smoke.
+- [x] Micro-tools retained.
+- [ ] **D′′** optional README honesty-table row / re-apply affordances.
+
+### Slice N + N′ — **IMPLEMENTATION DONE** (uncommitted)
+
+- [x] N1 source-side nav parse/print; deferred relationship emit; N2 input retained
+- [x] Grammar doc + structural round-trip; full suite green (**1263** tests including `N1NavigationTests`)
+- [x] EntityDetail navigations (source+target views) + MCP `EntityDetailData` mirror
+- [x] N′ must-fix (collisions, EntityDetail tests, apply_dsl N1 smoke, export) — all done; **N′ re-reviewed**
+- [ ] **Commit N + N′** (**CURRENT** product gate)
+- [ ] N′′ optional polish (true N1 C5 unit test; analysis assert; export test hardening)
+
+### Slice N′′ — **OPTIONAL**
+
+- [ ] See §3 Slice N′′ checklist — does not block commit
 
 ### Cross-cutting
 
-- [x] Relevant tests green after D (MCP + Parsing).
-- [ ] Commit working tree if still dirty.
-- [ ] `AGENTS.md` principles unchanged unless a principle itself changes (rare).
+- [x] Relevant tests green after D+D′; green with N+N′ in tree (**1263**).
+- [x] D+D′ committed (`e3e91ea`); **N+N′ not yet committed**.
+- [x] `AGENTS.md` principles unchanged unless a principle itself changes (rare).
 
 ---
 
@@ -593,23 +775,35 @@ You are here: D done; pick D′ or next product need
 | 2026-07-17 | C′ **implementation reviewed** → C′′ tasks. |
 | 2026-07-17 | C′′ review → C′′′.1 `require not` StageName bug. |
 | 2026-07-17 | **C′′′ verified.** Next was D. |
-| 2026-07-17 | **D reviewed:** `apply_dsl` (replace) + `export_dsl` + README dual path + smoke tests. **D′** optional: early session check, honesty text, revision policy. Phase 1 vertical product path complete. |
+| 2026-07-17 | **D + D′ shipped** (`e3e91ea`). Phase 1a vertical closed. |
+| 2026-07-17 | **Slice N added** then **design-reviewed**: surface-only N1; **source-side authoritative**; no same-name reverse print; deferred relationship emit; syntax `many`/`owned`/bare; N2 input kept, N1 print only; `one`/`many` already tokens. |
+| 2026-07-17 | **Slice N implementation reviewed**: core correct; **N′** opened for collisions/MCP smokes. |
+| 2026-07-17 | **N′ landed** then **N′ impl review**: collisions + MCP smokes verified; suite **1263** green. Residual **N′′** optional (true N1-authored C5 unit test, apply_dsl analysis assert, export test without reflection, top-level N2 dup test). **Commit is the open product gate.** |
 
-### Appendix — Relationship authoring (N2 interim)
+### Appendix — Relationship authoring
 
-```text
-relationship <Name> from <SourceEntity> to <TargetEntity> one|many
-```
+| Mode | Form | Role after Slice N |
+|------|------|---------------------|
+| **N1 (canonical print + preferred author)** | `orders: many owned Order` on **source** entity | Printer output; primary parse path |
+| **N2 (legacy input)** | `relationship Orders from Customer to Order many` | Still accepted during transition |
+| **IR** | `Relationship` on `Domain` | Unchanged |
 
-Property-line form deferred. Runtime correlation type-level until BR.4.4.
+Runtime correlation remains **type-level** until BR.4.4.
 
-### Appendix — Agent pick order (after D review)
+### Appendix — Agent pick order (after N′ impl review)
 
 | Order | Task | Severity | Blocks |
 |-------|------|----------|--------|
-| 1 | **D′.1** Session exists before parse/evolve | Suggestion | Waste on bad sessionId |
-| 2 | **D′.2** Honesty: stage `when` + subscription runtime needs | Honesty | Trust bar |
-| 3 | **D′.3** Document or fix revision reset on replace | Optional | Agent revision UX |
-| 4 | **BR.*** / **E** as product needs | Optional | Depth / Phase 1b |
+| 1 | **Commit N + N′** | Required | Uncommitted work (product gate) |
+| 2 | **N′′.1–.3** (optional same commit) | Should | Honesty nits only |
+| 3 | **N′′.4–.6** | Nice | — |
+| 4 | **D′′ / BR / E** | Optional / pull-only | — |
 
-Principles: minimal diffs; TUnit names `Method_Condition_ExpectedResult`; no new abstractions; do not reintroduce Event/Publish; run DomainModeling tests before calling done. **Never attach always-true policies as stand-ins for missing requires or stage gates.**
+**Implementer watch-outs (still in force):**
+
+- Do **not** print reverse nav with the same relationship name.
+- Do **not** require target entity textually above source — defer `AddRelationshipChange`.
+- Do **not** remove N2 parse when adding N1 (compat window remains).
+- Prefer committing N+N′ even if N′′ is deferred — suite is green.
+
+Principles: minimal diffs; TUnit names `Method_Condition_ExpectedResult`; no new abstractions; do not reintroduce Event/Publish. **Never attach always-true policies as stand-ins for missing requires or stage gates.**

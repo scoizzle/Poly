@@ -11,10 +11,13 @@ namespace Poly.DomainModeling.Parsing;
 ///
 /// Output is idempotent: printing the same domain twice produces identical text.
 /// No event/publish/subscribe output (these were removed from the product surface).
-/// Relationships use the explicit record form (N2 interim).
+/// Relationships are printed as inline navigation properties on the source entity
+/// (N1 form): "orders: many Order" instead of "relationship Orders from ... to ...".
+/// N2 top-level relationship lines are no longer emitted.
 /// </summary>
 public sealed class DomainDslPrinter {
     private readonly StringBuilder _sb = new();
+    private IReadOnlyList<Relationship> _relationships = [];
 
     /// <summary>
     /// Prints the domain to .poly text.
@@ -22,6 +25,7 @@ public sealed class DomainDslPrinter {
     public string Print(Domain domain) {
         ArgumentNullException.ThrowIfNull(domain);
         _sb.Clear();
+        _relationships = domain.Relationships;
 
         // Domain header
         _sb.AppendLine($"domain {domain.Name}");
@@ -36,31 +40,6 @@ public sealed class DomainDslPrinter {
             PrintEntity(entity);
             _sb.AppendLine();
         }
-
-        // Relationships (N2 explicit form)
-        var rels = domain.Relationships
-            .OrderBy(r => r.Name, StringComparer.Ordinal)
-            .ToList();
-        foreach (var rel in rels) {
-            _sb.Append("relationship ");
-            _sb.Append(rel.Name);
-            _sb.Append(" from ");
-            _sb.Append(rel.Source.TypeName);
-            _sb.Append(" to ");
-            _sb.Append(rel.Target.TypeName);
-            _sb.Append(' ');
-            _sb.Append(rel.Cardinality switch {
-                RelationshipCardinality.OneToOne => "one",
-                RelationshipCardinality.ManyToOne => "one",
-                RelationshipCardinality.OneToMany => "many",
-                RelationshipCardinality.ManyToMany => "many",
-                _ => "one"
-            });
-            _sb.AppendLine();
-        }
-
-        if (rels.Count > 0)
-            _sb.AppendLine();
 
         return _sb.ToString().TrimEnd() + "\n";
     }
@@ -79,6 +58,24 @@ public sealed class DomainDslPrinter {
                 _sb.Append(' ');
                 _sb.Append(PrintConstraint(c));
             }
+            _sb.AppendLine();
+        }
+
+        // Navigation properties (N1 source-side only)
+        foreach (var rel in _relationships
+            .Where(r => string.Equals(r.Source.TypeName, entity.Name, StringComparison.Ordinal))
+            .OrderBy(r => r.Name, StringComparer.Ordinal)) {
+            _sb.Append("  ");
+            _sb.Append(rel.Name);
+            _sb.Append(": ");
+            var isMany = rel.Cardinality is RelationshipCardinality.OneToMany or RelationshipCardinality.ManyToMany;
+            if (isMany) {
+                _sb.Append("many ");
+            }
+            if (rel.SourceOwnsTarget) {
+                _sb.Append("owned ");
+            }
+            _sb.Append(rel.Target.TypeName);
             _sb.AppendLine();
         }
 

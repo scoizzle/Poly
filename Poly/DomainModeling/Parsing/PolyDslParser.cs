@@ -27,11 +27,30 @@ public sealed class PolyDslParser {
     // Pending requires that must be resolved after the full entity body is parsed
     private readonly List<PendingRequire> _pendingRequires = new();
 
+    // Pending navigation properties (N1 form) resolved after all entities are known
+    private readonly List<PendingNav> _pendingNavs = new();
+
+    // Entity names collected during parsing, for nav target resolution
+    private readonly HashSet<string> _entityNames = new(StringComparer.Ordinal);
+
+    // Property names per entity, for collision detection with navs
+    private readonly Dictionary<string, HashSet<string>> _entityPropertyNames = new(StringComparer.Ordinal);
+
+    // Relationship names from already-emitted changes (e.g. N2 inside entity), for duplicate detection
+    private readonly HashSet<string> _relationshipNames = new(StringComparer.Ordinal);
+
     private readonly record struct PendingRequire(
         string ActionName,
         string? StageName,
         string PolicyName,
         bool Negated);
+
+    private readonly record struct PendingNav(
+        string SourceEntityName,
+        string PropertyName,
+        string TargetTypeName,
+        RelationshipCardinality Cardinality,
+        bool SourceOwnsTarget);
 
     public PolyDslParser(string text) {
         _tokenizer = new PolyDslTokenizer(text);
@@ -54,6 +73,9 @@ public sealed class PolyDslParser {
         while (_current.Kind == TokenKind.Identifier) {
             ParseEntity(changes);
         }
+
+        // ── Resolve N1 navigation properties ───────────────────
+        ResolvePendingNavs(changes);
 
         // ── Relationships (top-level N2 form) ──────────────────
         while (_current.Kind == TokenKind.Relationship) {
@@ -90,6 +112,7 @@ public sealed class PolyDslParser {
         Expect(TokenKind.Entity);
         Expect(TokenKind.LBrace);
 
+        _entityNames.Add(entityName);
         changes.Add(new AddEntityChange(entityName, []));
         EnsurePrimitivesOnce(changes);
 
@@ -98,9 +121,8 @@ public sealed class PolyDslParser {
                 ParseRelationship(changes);
             }
             else if (_current.Kind == TokenKind.Identifier && PeekIs(TokenKind.Colon)) {
-                // Could be property, stage, action, or policy
+                // Could be property, stage, action, policy, or nav line
                 var name = _current.Text;
-                var saved = _current;
                 Advance(); // consume identifier
                 Expect(TokenKind.Colon);
 
@@ -113,12 +135,15 @@ public sealed class PolyDslParser {
                 else if (_current.Kind == TokenKind.Policy) {
                     ParsePolicy(name, changes);
                 }
+                else if (IsNavLine()) {
+                    ParseNavLine(name);
+                }
                 else if (IsPrimitiveType(_current.Kind)) {
                     ParseProperty(name, _current.Kind, changes);
                 }
                 else {
                     CheckUnsupportedKeyword(name, _current.Text);
-                    throw Error($"Expected type, stage, action, or policy after '{name}:'");
+                    throw Error($"Expected type, stage, action, policy, or navigation property after '{name}:'");
                 }
             }
             else {
@@ -162,6 +187,14 @@ public sealed class PolyDslParser {
 
     private void ParseProperty(string name, TokenKind typeKind, List<DomainChange> changes) {
         Advance(); // consume type
+
+        // Track property name for collision detection with navs
+        if (!_entityPropertyNames.TryGetValue(_currentEntityName, out var props)) {
+            props = new HashSet<string>(StringComparer.Ordinal);
+            _entityPropertyNames[_currentEntityName] = props;
+        }
+        props.Add(name);
+
         var typeName = typeKind switch {
             TokenKind.Text => "Text",
             TokenKind.NumberType => "Number",
@@ -322,6 +355,12 @@ public sealed class PolyDslParser {
     private void ParseRelationship(List<DomainChange> changes) {
         Advance(); // consume 'relationship'
         var relName = ExpectIdentifier(TokenKind.Identifier, "relationship name");
+
+        // Track relationship name for duplicate detection with N1 navs
+        if (!_relationshipNames.Add(relName)) {
+            throw Error($"Relationship '{relName}' is defined more than once. Relationship names must be unique within a domain.");
+        }
+
         Expect(TokenKind.From);
         var source = ExpectIdentifier(TokenKind.Identifier, "source entity name");
         Expect(TokenKind.To);
@@ -344,6 +383,110 @@ public sealed class PolyDslParser {
             new DomainTypeReference(source), new DomainTypeReference(target),
             cardinality, [], false));
     }
+
+    /// <summary>
+    /// Returns true if the current token starts a navigation property line (N1 form).
+    /// Patterns: "many [owned] Type", "one [owned] Type", "owned Type", "Type" (bare entity name).
+    /// </summary>
+    private bool IsNavLine() {
+        // TokenKind.Many and TokenKind.One are unambiguous nav starts
+        if (_current.Kind == TokenKind.Many || _current.Kind == TokenKind.One)
+            return true;
+
+        // "owned" as the first token after : → nav (must be followed by TypeName)
+        if (_current.Kind == TokenKind.Identifier && _current.Text == "owned")
+            return true;
+
+        // Bare identifier that isn't a primitive type, keyword, or reserved construct
+        if (_current.Kind == TokenKind.Identifier && !IsPrimitiveType(_current.Kind)) {
+            var text = _current.Text;
+            // Exclude known keywords that aren't primitives but shouldn't be nav targets
+            return !_unsupportedKeywords.Contains(text)
+                && text != "entity" && text != "stage" && text != "action"
+                && text != "policy" && text != "relationship" && text != "when"
+                && text != "require" && text != "transition" && text != "assign"
+                && text != "prev" && text != "from" && text != "to"
+                && text != "null" && text != "true" && text != "false"
+                && text != "owned" // handled above
+                && text != "not" && text != "and" && text != "or";
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Parses an N1 navigation property line after "name :".
+    /// Consumes tokens and queues a <see cref="PendingNav"/> for deferred resolution.
+    /// </summary>
+    private void ParseNavLine(string name) {
+        var cardinality = RelationshipCardinality.OneToOne;
+        var owned = false;
+
+        // Check for cardinality keyword
+        if (_current.Kind == TokenKind.Many) {
+            cardinality = RelationshipCardinality.OneToMany;
+            Advance();
+        }
+        else if (_current.Kind == TokenKind.One) {
+            Advance(); // consume 'one'
+        }
+
+        // Check for optional 'owned'
+        if (_current.Kind == TokenKind.Identifier && _current.Text == "owned") {
+            owned = true;
+            Advance();
+        }
+
+        // Remaining identifier is the target type name
+        // Must be an identifier (not a primitive type keyword)
+        if (_current.Kind != TokenKind.Identifier) {
+            var hint = IsPrimitiveType(_current.Kind)
+                ? $" '{_current.Text}' is a primitive type, not an entity. Use a primitive property declaration instead."
+                : $" unexpected token '{_current.Text}'";
+            throw Error($"Navigation property '{name}' requires an entity type as target:{hint}");
+        }
+        var targetType = ExpectIdentifier(TokenKind.Identifier, "target entity name");
+
+        _pendingNavs.Add(new PendingNav(_currentEntityName, name, targetType, cardinality, owned));
+    }
+
+    /// <summary>
+    /// Resolves all pending navigation properties against known entity names.
+    /// Called after all entities have been parsed. Errors if a target type is
+    /// unknown or is a primitive type.
+    /// </summary>
+    private void ResolvePendingNavs(List<DomainChange> changes) {
+        foreach (var nav in _pendingNavs) {
+            if (IsPrimitiveTypeToken(nav.TargetTypeName)) {
+                throw Error($"Navigation property '{nav.PropertyName}': '{nav.TargetTypeName}' is a primitive type, not an entity. Use a primitive property declaration instead.");
+            }
+            if (!_entityNames.Contains(nav.TargetTypeName)) {
+                throw Error($"Navigation property '{nav.PropertyName}' references unknown entity '{nav.TargetTypeName}'. No entity with that name was found in the domain.");
+            }
+
+            // Check property name collision
+            if (_entityPropertyNames.TryGetValue(nav.SourceEntityName, out var props) && props.Contains(nav.PropertyName)) {
+                throw Error($"Navigation property '{nav.PropertyName}' on '{nav.SourceEntityName}' conflicts with an existing property of the same name.");
+            }
+
+            // Check duplicate relationship name (among navs or with N2 lines already emitted)
+            if (!_relationshipNames.Add(nav.PropertyName)) {
+                throw Error($"Relationship '{nav.PropertyName}' is defined more than once. Relationship names must be unique within a domain.");
+            }
+
+            changes.Add(new AddRelationshipChange(
+                nav.PropertyName,
+                new DomainTypeReference(nav.SourceEntityName),
+                new DomainTypeReference(nav.TargetTypeName),
+                nav.Cardinality, [], nav.SourceOwnsTarget));
+        }
+        _pendingNavs.Clear();
+    }
+
+    private static bool IsPrimitiveTypeToken(string typeName) => typeName switch {
+        "Text" or "Number" or "Boolean" or "DateTime" or "Date" => true,
+        _ => false,
+    };
 
     private void ParsePolicy(string name, List<DomainChange> changes) {
         Advance(); // consume 'policy'

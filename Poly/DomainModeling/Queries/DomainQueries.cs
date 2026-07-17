@@ -25,7 +25,21 @@ public sealed record EntityDetail(
     IReadOnlyList<StageDetail> Stages,
     IReadOnlyList<ActionDetail> Actions,
     IReadOnlyList<PolicyDetail> Policies,
-    string? ParentEntityName
+    string? ParentEntityName,
+    IReadOnlyList<NavigationDetail> Navigations
+);
+
+/// <summary>
+/// Lightweight navigation property info for query results.
+/// Shows source and target views — the relationship is a first-class
+/// Domain object, not duplicated on the entity.
+/// </summary>
+public sealed record NavigationDetail(
+    string RelationshipName,
+    string RelatedEntityName,
+    string Role,          // "Source" or "Target"
+    string Cardinality,   // e.g. "OneToOne", "OneToMany"
+    bool SourceOwnsTarget
 );
 
 /// <summary>
@@ -170,7 +184,19 @@ public static class DomainQueries {
             Policies: entity.Policies
                 .Select(p => new PolicyDetail(p.Name))
                 .ToList(),
-            ParentEntityName: entity.ParentEntityName
+            ParentEntityName: entity.ParentEntityName,
+            Navigations: domain.Relationships
+                .Where(r => string.Equals(r.Source.TypeName, entity.Name, StringComparison.Ordinal)
+                         || string.Equals(r.Target.TypeName, entity.Name, StringComparison.Ordinal))
+                .Select(r => new NavigationDetail(
+                    r.Name,
+                    string.Equals(r.Source.TypeName, entity.Name, StringComparison.Ordinal)
+                        ? r.Target.TypeName : r.Source.TypeName,
+                    string.Equals(r.Source.TypeName, entity.Name, StringComparison.Ordinal)
+                        ? "Source" : "Target",
+                    r.Cardinality.ToString(),
+                    r.SourceOwnsTarget))
+                .ToList()
         );
     }
 

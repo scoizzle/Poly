@@ -96,6 +96,37 @@ public class DomainAuthoringHappyPathTests {
     }
 
     [Test]
+    public async Task Query_EntityDetail_IncludesNavigations_SourceAndTarget() {
+        var domain = DomainFactory.Create("Test", builder =>
+            builder.AddEntity("Order")
+                   .AddEntity("Customer")
+                   .AddRelationship("PlacedBy", "Order", "Customer",
+                       RelationshipCardinality.ManyToOne, false));
+
+        // Source view
+        var orderDetail = DomainQueries.GetEntity(domain, "Order");
+        await Assert.That(orderDetail).IsNotNull();
+        await Assert.That(orderDetail!.Navigations.Count).IsEqualTo(1);
+        var orderNav = orderDetail.Navigations[0];
+        await Assert.That(orderNav.RelationshipName).IsEqualTo("PlacedBy");
+        await Assert.That(orderNav.RelatedEntityName).IsEqualTo("Customer");
+        await Assert.That(orderNav.Role).IsEqualTo("Source");
+        await Assert.That(orderNav.Cardinality).IsEqualTo(RelationshipCardinality.ManyToOne.ToString());
+        await Assert.That(orderNav.SourceOwnsTarget).IsFalse();
+
+        // Target view
+        var customerDetail = DomainQueries.GetEntity(domain, "Customer");
+        await Assert.That(customerDetail).IsNotNull();
+        await Assert.That(customerDetail!.Navigations.Count).IsEqualTo(1);
+        var customerNav = customerDetail.Navigations[0];
+        await Assert.That(customerNav.RelationshipName).IsEqualTo("PlacedBy");
+        await Assert.That(customerNav.RelatedEntityName).IsEqualTo("Order");
+        await Assert.That(customerNav.Role).IsEqualTo("Target");
+        await Assert.That(customerNav.Cardinality).IsEqualTo(RelationshipCardinality.ManyToOne.ToString());
+        await Assert.That(customerNav.SourceOwnsTarget).IsFalse();
+    }
+
+    [Test]
     public async Task Query_Overview_ReflectsEntityAndRelationshipCounts() {
         var domain = DomainFactory.Create("Demo", builder =>
             builder.AddEntity("Order")

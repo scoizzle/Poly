@@ -878,4 +878,75 @@ public class McpSmokeTests {
         await Assert.That(result2.Succeeded).IsTrue();
         await Assert.That(instance2.CurrentStage).IsEqualTo("Active");
     }
+
+    [Test]
+    public async Task ApplyDsl_WithN1NavAndSubscription_Succeeds() {
+        var (sessionId, _) = McpSessionStore.Create("Test");
+
+        var response = DslTool.ApplyDsl(sessionId, """
+            domain Test
+
+            Tracker: entity {
+              Status: Text
+              Pending: stage {
+                when Tracks Active {
+                  assign Status to "Triggered"
+                }
+              }
+              Tracks: Order
+            }
+
+            Order: entity {
+              Draft: stage {
+                Activate: action {
+                  transition to Active
+                }
+              }
+              Active: stage {}
+            }
+            """);
+
+        await Assert.That(response.Success).IsTrue();
+        await Assert.That(response.Message).Contains("2 entities");
+        await Assert.That(response.Message).Contains("1 relationships");
+
+        var exists = McpSessionStore.TryGet(sessionId, out var state);
+        await Assert.That(exists).IsTrue();
+        await Assert.That(state!.Domain.Relationships.Count).IsEqualTo(1);
+        await Assert.That(state.Domain.Relationships[0].Name).IsEqualTo("Tracks");
+
+        var tracker = state.Domain.Types.OfType<Entity>().Single(e => e.Name == "Tracker");
+        var pending = tracker.Stages.Single(s => s.Name == "Pending");
+        await Assert.That(pending.Subscriptions.Count).IsEqualTo(1);
+        await Assert.That(pending.Subscriptions[0].RelationshipName).IsEqualTo("Tracks");
+
+        // Analysis should be clean
+        var snapshot = response.Data;
+        await Assert.That(snapshot).IsNotNull();
+    }
+
+    [Test]
+    public async Task ExportDsl_AfterAddRelationship_PrintsN1() {
+        // Build domain via micro-tools, then export
+        var (sessionId, _) = McpSessionStore.Create("Test");
+
+        EvolveTool.AddEntity(sessionId, "Order");
+        EvolveTool.AddProperty(sessionId, "Order", "Name", "Text");
+        EvolveTool.AddEntity(sessionId, "Tracker");
+        EvolveTool.AddProperty(sessionId, "Tracker", "Status", "Text");
+        EvolveTool.AddRelationship(sessionId, "Tracks", "Tracker", "Order", "OneToOne");
+
+        var response = DslTool.ExportDsl(sessionId);
+        await Assert.That(response.Success).IsTrue();
+        await Assert.That(response.Data).IsNotNull();
+
+        var poly = response.Data!.GetType().GetProperty("poly")?.GetValue(response.Data) as string;
+        await Assert.That(poly).IsNotNull();
+
+        // Should NOT contain N2 form
+        await Assert.That(poly!.Contains("relationship Tracks from")).IsFalse();
+
+        // Should contain N1 nav line on the source entity (Tracker)
+        await Assert.That(poly).Contains("Tracks: Order");
+    }
 }

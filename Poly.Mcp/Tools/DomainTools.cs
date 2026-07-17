@@ -53,7 +53,8 @@ internal sealed record EntityDetailData(
     [property: JsonPropertyName("stages")] IReadOnlyList<StageData> Stages,
     [property: JsonPropertyName("actions")] IReadOnlyList<ActionData> Actions,
     [property: JsonPropertyName("policies")] IReadOnlyList<string> Policies,
-    [property: JsonPropertyName("parentEntity")] string? ParentEntityName = null
+    [property: JsonPropertyName("parentEntity")] string? ParentEntityName = null,
+    [property: JsonPropertyName("navigations")] IReadOnlyList<NavigationData>? Navigations = null
 );
 
 internal sealed record PropertyData(
@@ -85,6 +86,14 @@ internal sealed record ActionData(
 /// <summary>
 /// Structured analysis payload for <c>get_domain_analysis</c>.
 /// </summary>
+internal sealed record NavigationData(
+    [property: JsonPropertyName("relationshipName")] string RelationshipName,
+    [property: JsonPropertyName("relatedEntity")] string RelatedEntityName,
+    [property: JsonPropertyName("role")] string Role,
+    [property: JsonPropertyName("cardinality")] string Cardinality,
+    [property: JsonPropertyName("sourceOwnsTarget")] bool SourceOwnsTarget
+);
+
 internal sealed record AnalysisData(
     [property: JsonPropertyName("errorCount")] int ErrorCount,
     [property: JsonPropertyName("warningCount")] int WarningCount,
@@ -200,7 +209,9 @@ internal sealed class QueryTool {
                     sub.RelationshipName, sub.StageNames, sub.Quantifier, sub.EffectCount)).ToList())).ToList(),
             detail.Actions.Select(a => new ActionData(a.Name, a.ParameterNames, a.EffectCount)).ToList(),
             detail.Policies.Select(p => p.Name).ToList(),
-            detail.ParentEntityName
+            detail.ParentEntityName,
+            detail.Navigations.Select(n => new NavigationData(
+                n.RelationshipName, n.RelatedEntityName, n.Role, n.Cardinality, n.SourceOwnsTarget)).ToList()
         );
 
         return new DomainToolResponse(
@@ -1006,7 +1017,8 @@ add_property, etc.) remain for discovery and incremental edits.
 Phase 1a supports: entities, properties with constraints (required, unique, range,
 length, pattern), lifecycle stages with optional parent, actions with require gates,
 stage subscriptions (when RelName Stage { effects }), policies, relationships
-(relationship Name from Src to Tgt one|many), and effects (transition to, assign).
+(N1 navigation properties: 'orders: many Order'; N2 legacy: 'relationship Name from Src to Tgt one|many'),
+and effects (transition to, assign).
 
 Unsupported constructs (actor, value, create, schedule, etc.) produce clear errors.
 

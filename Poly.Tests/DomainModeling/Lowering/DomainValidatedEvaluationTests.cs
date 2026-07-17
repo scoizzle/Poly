@@ -41,22 +41,21 @@ public class DomainValidatedEvaluationTests {
     [Test]
     public async Task DomainEntity_MissingProperty_ThrowsClearError() {
         var domain = DomainTypeMapper.CreateDomainWithEntity<Person>("Demo");
-        var entity = domain.Types.OfType<Entity>().Single();
 
-        // Add a policy with lower-level evolution API so we can reference a missing property
+        // Add a policy referencing a non-existent property — now caught at analysis time
         var withPolicy = new DomainEvolution(domain).Apply(
             [new AddPolicyToEntityChange("Person",
                 new Policy("HasAge",
                     DomainExpression.GreaterThanOrEqual(
-                        // "MissingProp" doesn't exist on Person entity
                         DomainExpression.Property("MissingProp"),
                         DomainExpression.Literal(18))))]);
 
-        entity = withPolicy.Root.Types.OfType<Entity>().Single();
-        var policy = entity.Policies.Single();
-
-        await Assert.That(() => policy.CompileVMPredicate<Person>(entity))
-            .Throws<ArgumentException>();
+        // The policy references "MissingProp" which doesn't exist on Person.
+        // The PolicyConstraintAnalyzer now catches this at analysis time,
+        // causing the evolution to roll back.
+        await Assert.That(withPolicy.Succeeded).IsFalse();
+        await Assert.That(withPolicy.FailureSummary).IsNotNull();
+        await Assert.That(withPolicy.FailureSummary!.Contains("MissingProp")).IsTrue();
     }
 
     [Test]

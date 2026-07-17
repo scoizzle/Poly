@@ -1,4 +1,5 @@
 using Poly.DomainModeling;
+using Poly.DomainModeling.Bootstrap;
 using Poly.DomainModeling.Constraints;
 using Poly.DomainModeling.Effects;
 using Poly.DomainModeling.Evolution;
@@ -373,13 +374,16 @@ public class DomainEvolutionApplicatorTests {
 
     [Test]
     public async Task AddPolicyToEntity_Works() {
-        var entity = new Entity("Person", [], [], [], []);
-        var start = new Domain("Test", [entity], []);
+        var start = DomainFactory.Create("Test", builder =>
+            builder.AddEntity("Person")
+                   .AddPropertyToEntity("Person", new Property("BirthCertificate",
+                       new DomainTypeReference("Boolean"), [])));
 
         var policy = new Policy("HasBirthCert", DomainExpression.Exists(
-            DomainExpression.Owned("BirthCertificate", DomainExpression.Property("Time"))));
+            DomainExpression.Property("BirthCertificate")));
 
         var result = new DomainEvolution(start).Apply([new AddPolicyToEntityChange("Person", policy)]);
+        await Assert.That(result.Succeeded).IsTrue();
 
         var updated = result.Root.Types.OfType<Entity>().Single(e => e.Name == "Person");
         await Assert.That(updated.Policies.Count).IsEqualTo(1);

@@ -1,11 +1,11 @@
 # DSL-Engine Sync Plan — Toward Phase 1
 
 **Date:** 2026-07-17
-**Revised:** 2026-07-17 (post-commit review: `5a7b89b` BR.2′–BR.3′′, `17b22df` BR.4.1–.2 — suite 1276)
-**Status:** Phase 1a vertical **product-complete**; BR.2′–BR.3′′ shipped (`5a7b89b`); BR.4.1–.2 shipped (`17b22df`); tree clean
-**Current pick:** **BR.4.4** (instance links) / **E** pull-only — or stop (optional residual only)
+**Revised:** 2026-07-17 (PCA re-review — suite 1287 green; PCA.7–.8 landed; commit PCA only open gate)
+**Status:** Phase 1a vertical **product-complete**; BR stack shipped; **PCA ready to commit**
+**Current pick:** **Commit PCA** (PCA.7–.8 landed) (then BR.4.4 / E pull-only)
 **Source:** [`docs/experiments/domain-modeling-dsl-tour-feedback.md`](../../experiments/domain-modeling-dsl-tour-feedback.md) — §3 and §4  
-**Review:** A–D′; N; BR.2′–BR.3′′; **post-commit review `5a7b89b`+`17b22df`** (2026-07-17)  
+**Review:** A–D′; N; BR; PCA; **PCA re-review** (2026-07-17)  
 **Trigger:** IR/DSL divergence (events vs stage-observation); mutation surface width; single-vertical runtime gap  
 **Related:**
 
@@ -25,7 +25,7 @@
 
 **Slice N principle:** N1 changes **surface syntax only**. IR stays (`Relationship` on `Domain`, `AddRelationshipChange`). Parser/printer map nav lines ↔ IR. **Owning/source side is authoritative** — never invent a second edge from reverse-nav lines.
 
-**Status (2026-07-17):** Phase 1a vertical closed (`e3e91ea`). **N+N′** (`9f0707d`) + N′′/D′′/BR.1–2 (`a41153c`) + **BR.2′–BR.3′′** (`5a7b89b`) + **BR.4.1–.2** (`17b22df`) shipped. Suite **1276** green; tree clean. Residual: **BR.4.4** instance links; **E** pull-only.
+**Status (2026-07-17):** Phase 1a vertical closed. BR stack through BR.4.1–.2 shipped. **PCA ready to commit** (suite **1286**). PCA.6 OwnedAccess entity-prop check **wont-do** (value-type labels — PersonLifecycle). Residual after commit: BR.4.4 / E pull-only.
 
 ---
 
@@ -305,7 +305,7 @@ Carry these as first-class B tasks (already in B.1–B.4); restated from review 
 #### B-prep.4 — Small polish nits (optional)
 
 - [x] **B-prep.4.1** Replay hint text — **already done** (`SubscriptionReplaySafetyAnalyzer` says "create, transition, or link effects" — mentions all three)
-- [ ] **B-prep.4.2** `DomainQueries.cs`: remove duplicate/orphan `/// <summary>` above `SubscriptionDetail` (doc nit only)
+- [x] **B-prep.4.2** `DomainQueries.cs`: remove duplicate/orphan `/// <summary>` above `SubscriptionDetail` (doc nit only)
 - [ ] **B-prep.4.3** DRY: `SemanticMatch` / `SemanticKeyMatch` duplicated in `DomainChange` and `SubscriptionContractAnalyzer` — extract shared static helper only if a third call site appears
 - [ ] **B-prep.4.4** Causality full path + transition-aware graph → **post-B** (analyzer already documents heuristic)
 - [ ] **B-prep.4.5** `StageBuilder.Subscribe` multi-stage list overload → Phase 1b / Slice E
@@ -395,6 +395,34 @@ Order implemented: **OnExit → set stage → OnEntry → NotifyTransition** (wh
 
 - [x] **BR.5.1** Already resolved by BR.1′ `<remarks>` insertion — method and `EventPrefix` each have one `<summary>` (no duplication)
 - [x] **BR.5.2** Trailing newline restored on `DomainEntityInstanceTests.cs` (confirmed via xxd)
+
+#### PCA — Policy property-reference validation — **READY TO COMMIT** (uncommitted)
+
+**What landed:** `ValidatePolicyPropertyReferences` on entity / stage / entity-action / stage-action policies; unknown `PropertyAccess` → `DMSEM005` → evolution rollback. Skips: `OwnedAccess` (value-type path), `RelationshipNavigation` (related-entity fields), `ParameterAccess`. Tests: `PolicyConstraintAnalysisTests` (10) + updated eval/evolution tests. `DomainQueries` duplicate-summary cleanup.
+
+**Re-review (2026-07-17):**
+
+| Item | Verdict |
+|------|---------|
+| Entity/stage/action unknown `PropertyAccess` | Good + tests |
+| Known property / ParameterAccess / RelNav target field | Good + tests |
+| **OwnedAccess** full skip → **PCA.8 partial validation** | OwnedName validated against domain ValueTypes (via `lookup.Types`). Skipped if name matches entity property (backward compat). Children still skipped. |
+| Parent-entity prop map | **PCA.7 done** — `BuildPropertyMap` walks parent chain via `AddParentProperties`; child overrides parent by same name |
+| Suite | **1286** green |
+
+**Do:**
+
+- [x] **PCA.1** RelNav / ParameterAccess / OwnedAccess-inner skip
+- [x] **PCA.2** Stage policies
+- [x] **PCA.3** Action policies (entity + stage)
+- [x] **PCA.4** Focused tests (10)
+- [ ] **PCA.5** **Commit PCA** — only open required gate
+- [x] **PCA.6** OwnedAccess name-as-entity-property — **wont-do** (value-type labels)
+- [ ] **PCA.7** (optional) Parent-entity properties in `BuildPropertyMap`
+- [ ] **PCA.8** (optional later) Validate OwnedName against domain **ValueTypes** (and relationship names against `Domain.Relationships`)
+
+**No production blocker for commit.**
+
 
 ---
 
@@ -646,6 +674,7 @@ Pattern after `name :` in entity body:
 - [x] **BR.3** + **BR.3′** + **BR.3′′** (`5a7b89b`)
 - [x] **BR.4.1–.2** (`17b22df`); BR.4.3 accepted; **BR.4.4** open; optional **BR.4.1′**
 - [x] **BR.5** style nits closed earlier
+- [x] **PCA** policy property-ref validation (uncommitted; done — commit pending)
 
 #### Slice E: Phase 1b grammar (**pull-only**)
 
@@ -802,6 +831,13 @@ Only with a **named consumer** for value types / `create in` / quantifiers / etc
 | 2026-07-17 | **BR.4.1–.2 committed** (`17b22df`): MCP sub visibility smoke; quantifier singular check verified pre-existing. |
 | 2026-07-17 | **Post-commit review** of `5a7b89b`+`17b22df`: lifecycle bundle sound; BR.4.2 smoke good; BR.4.1 is analyzer-already-done (runtime still Each-only). Residual **BR.4.4** instance links; optional BR.4.1′ warning text/test. |
 
+| 2026-07-17 | **PCA review (uncommitted):** policy property-ref validation in `PolicyConstraintAnalyzer`. Good for entity `PropertyAccess`; **false positive risk on RelationshipNavigation target props**; stage/action policies not validated; need focused tests. Current pick: PCA.1–.5 then commit. |
+| 2026-07-17 | **PCA completed** (uncommitted): RelationshipNavigation/OwnedAccess/ParameterAccess skip; stage+action policy validation; 10 focused tests. Suite **1286** green. **Commit open.** |
+
+| 2026-07-17 | **PCA impl review:** PCA.1–.4 solid (RelNav skip, stage/action policies, 10 tests, suite **1286**). Residual **PCA.6** OwnedAccess name validation — won't do (OwnedName is value-type label, not entity property). **PCA.5** commit. |
+
+| 2026-07-17 | **PCA re-review:** PCA.1–.4 solid; PCA.6 wont-do confirmed (OwnedName = value-type label per PersonLifecycle). **PCA.7** parent-entity prop map; **PCA.8** ValueType name validation. Suite **1287**. **Only open required: PCA.5 commit.** |
+
 ### Appendix — Relationship authoring
 
 | Mode | Form | Role after Slice N |
@@ -812,19 +848,17 @@ Only with a **named consumer** for value types / `create in` / quantifiers / etc
 
 Runtime correlation remains **type-level** until BR.4.4.
 
-### Appendix — Agent pick order (after `5a7b89b` + `17b22df` review)
+### Appendix — Agent pick order (after PCA re-review)
 
 | Order | Task | Severity | Blocks |
 |-------|------|----------|--------|
-| 1 | **BR.4.4** Instance-level relationship links | Optional | Second consumer / product need |
-| 2 | **BR.4.1′** Optional: ManyToOne+Any dedicated test; warning says “singular” not only “one-to-one” | Nice | Honesty |
-| 3 | **E** Phase 1b | Pull-only | Named consumer |
-| 4 | Runtime `Any`/`All` quantifiers | Pull-only | Named consumer (store still Each-only) |
+| 1 | **PCA.5 Commit PCA** (PCA.6 wont-do, PCA.7–.8 done) | Required | Uncommitted work |
+| 2 | **BR.4.4 / E** | Optional / pull-only | Named consumer |
 
 **Implementer watch-outs:**
 
-- Do not claim runtime Any/All support from BR.4.1 analyzer-only singular warning.
-- Prefer product need before BR.4.4 instance links.
+- Do not validate `OwnedAccess.OwnedName` as an entity property — value-type labels are intentional.
+- Mark PCA shipped only after a commit hash exists.
 
 
 Principles: minimal diffs; TUnit names `Method_Condition_ExpectedResult`; no new abstractions; do not reintroduce Event/Publish. **Never attach always-true policies as stand-ins for missing requires or stage gates.**

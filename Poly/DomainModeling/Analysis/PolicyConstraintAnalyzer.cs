@@ -29,10 +29,34 @@ internal sealed class PolicyConstraintAnalyzer : INodeAnalyzer {
 
         var requiredByPolicy = new List<Property>();
         var referencedByPolicy = new List<Property>();
-        var entityPropMap = BuildPropertyMap(entity);
+        var lookup = context.GetMetadata<DomainTypeLookupMetadata>(default);
+        var entityPropMap = BuildPropertyMap(entity, lookup);
 
+        // ── Entity-level policies ─────────────────────────────
         foreach (var policy in entity.Policies) {
+            ValidatePolicyPropertyReferences(context, lookup, policy.Expression, entity, entityPropMap);
             CollectRequiredFromExpression(policy.Expression, entity, entityPropMap, requiredByPolicy, referencedByPolicy);
+        }
+
+        // ── Stage-level policies ──────────────────────────────
+        foreach (var stage in entity.Stages) {
+            foreach (var policy in stage.Policies) {
+                ValidatePolicyPropertyReferences(context, lookup, policy.Expression, entity, entityPropMap);
+            }
+        }
+
+        // ── Action-level policies (entity-level and stage-level actions) ──
+        foreach (var action in entity.Actions) {
+            foreach (var policy in action.Policies) {
+                ValidatePolicyPropertyReferences(context, lookup, policy.Expression, entity, entityPropMap);
+            }
+        }
+        foreach (var stage in entity.Stages) {
+            foreach (var action in stage.Actions) {
+                foreach (var policy in action.Policies) {
+                    ValidatePolicyPropertyReferences(context, lookup, policy.Expression, entity, entityPropMap);
+                }
+            }
         }
 
         foreach (var property in entity.Properties) {
@@ -138,14 +162,106 @@ internal sealed class PolicyConstraintAnalyzer : INodeAnalyzer {
         }
     }
 
-    private static Dictionary<string, Property> BuildPropertyMap(Entity entity) {
+    private static void ValidatePolicyPropertyReferences(
+        AnalysisContext context,
+        DomainTypeLookupMetadata? lookup,
+        DomainExpression expr,
+        Entity entity,
+        Dictionary<string, Property> entityPropMap) {
+
+        // Walk the expression tree and report errors for any PropertyAccess
+        // that references a property not found on the entity, and for any
+        // OwnedAccess whose name doesn't match a known ValueType.
+        // Other expression types are skipped:
+        //   - RelationshipNavigation: references properties on a related entity
+        //   - ParameterAccess: external parameters, not entity properties
+        switch (expr) {
+            case PropertyAccess pa:
+                if (!entityPropMap.ContainsKey(pa.Name)) {
+                    context.ReportError(
+                        expr,
+                        $"Policy references property '{pa.Name}' which does not exist on entity '{entity.Name}'.",
+                        DomainModelDiagnosticCodes.SemanticReferenceResolution);
+                }
+                return;
+            case OwnedAccess oa:
+                // Validate OwnedName against known ValueTypes (if lookup is available).
+                // Do NOT recurse into children — inner expressions reference
+                // properties on the owned type, not this entity.
+                ValidateOwnedAccessName(context, lookup, oa, entity);
+                return;
+            case RelationshipNavigation:
+                // Do NOT recurse — TargetProperty references properties on
+                // the related entity, not on this entity.
+                return;
+            case ParameterAccess:
+                // Parameter references are not entity properties — skip.
+                return;
+        }
+
+        // Recurse into children for composite expressions (And, Or, Not, Comparison, etc.)
+        foreach (var child in expr.Children.OfType<DomainExpression>()) {
+            ValidatePolicyPropertyReferences(context, lookup, child, entity, entityPropMap);
+        }
+    }
+
+    private static void ValidateOwnedAccessName(
+        AnalysisContext context,
+        DomainTypeLookupMetadata? lookup,
+        OwnedAccess owned,
+        Entity entity) {
+
+        if (lookup is null) return;
+
+        // OwnedAccess references a ValueType by name. If no such type exists,
+        // the policy is referencing a value type that hasn't been defined.
+        if (!lookup.Types.TryGetValue(owned.OwnedName, out var resolved) || resolved is not ValueType) {
+            // Only report an error if the name isn't already known as an entity property
+            // (backward compatibility — entity properties may shadow value-type names).
+            if (!entity.Properties.Any(p => string.Equals(p.Name, owned.OwnedName, StringComparison.Ordinal))) {
+                context.ReportError(
+                    owned,
+                    $"Policy references value type '{owned.OwnedName}' which does not exist in the domain. " +
+                    $"Define a value type with that name, or check for typos.",
+                    DomainModelDiagnosticCodes.SemanticReferenceResolution);
+            }
+        }
+    }
+
+    private static Dictionary<string, Property> BuildPropertyMap(Entity entity, DomainTypeLookupMetadata? lookup = null) {
         var map = new Dictionary<string, Property>(StringComparer.Ordinal);
+
+        // Add parent-entity properties first so child can override (PCA.7)
+        if (lookup is not null && entity.ParentEntityName is not null) {
+            AddParentProperties(entity, lookup, map, new HashSet<string>(StringComparer.Ordinal));
+        }
 
         foreach (var prop in entity.Properties) {
             map[prop.Name] = prop;
         }
 
         return map;
+    }
+
+    private static void AddParentProperties(
+        Entity entity,
+        DomainTypeLookupMetadata lookup,
+        Dictionary<string, Property> map,
+        HashSet<string> visited) {
+
+        if (entity.ParentEntityName is null) return;
+        if (!visited.Add(entity.Name)) return; // cycle guard
+
+        if (lookup.Types.TryGetValue(entity.ParentEntityName, out var parentType) && parentType is Entity parent) {
+            // Walk grandparent first so immediate parent overrides grandparent
+            AddParentProperties(parent, lookup, map, visited);
+
+            foreach (var prop in parent.Properties) {
+                if (!map.ContainsKey(prop.Name)) {
+                    map[prop.Name] = prop;
+                }
+            }
+        }
     }
 }
 

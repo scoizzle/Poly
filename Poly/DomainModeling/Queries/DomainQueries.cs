@@ -52,9 +52,6 @@ public sealed record PropertyDetail(
 );
 
 /// <summary>
-/// Lightweight stage info for query results.
-/// </summary>
-/// <summary>
 /// Lightweight subscription info for query results.
 /// </summary>
 public sealed record SubscriptionDetail(

@@ -1,11 +1,11 @@
 # Phase 3 — MCP Oracle Surface
 
 **Date:** 2026-07-18  
-**Revised:** 2026-07-18 (**RT shipped** — Runtime MCP thin vertical complete)  
-**Status:** Phase 3 thin **shipped** (V0/S0/A/G); dogfood complete; **Phase 4 RT** **shipped**  
-**Current pick:** **No active slice** — see [`agent-summaries/dogfood/DOGFOOD-REPORT-20260718.md`](agent-summaries/dogfood/DOGFOOD-REPORT-20260718.md) for RT residual follow-ups  
+**Revised:** 2026-07-18 (**Dogfood-2** post-RT → RT validated; next = honesty + stage-action semantics)  
+**Status:** Phase 3 thin **shipped**; **RT shipped & dogfood-2 validated**; residuals open (§6c RT′ / §6e SA)  
+**Current pick:** **SA** stage-action semantics (§6e) **or** ship **RT′.1–.3** honesty/safety first (cheap) — see agent pick  
 **Predecessor:** Phase 2 spawn-and-wire ([`domainmodeling-next-phase.md`](domainmodeling-next-phase.md)); MCP gap inventory ([`mcp-tool-surface-expansion.md`](mcp-tool-surface-expansion.md) §0)  
-**Dogfood:** [`agent-summaries/dogfood/DOGFOOD-REPORT-20260718.md`](agent-summaries/dogfood/DOGFOOD-REPORT-20260718.md)  
+**Dogfood:** [Report 1](agent-summaries/dogfood/DOGFOOD-REPORT-20260718.md) (R→RT) · [Report 2](agent-summaries/dogfood/DOGFOOD-REPORT-2-20260718.md) (post-RT)  
 **Goal:** Close the **neurosymbolic feedback loop** for agents: propose → **see** pipeline → **simulate** → correct → commit → **exercise** instances.  
 **Principle:** Thin MCP adapters; no new domain IR; deterministic oracles only; honest tool descriptions.
 
@@ -40,12 +40,15 @@ Agent proposes expression / element name
 | **S0** | Simulate ad-hoc policy | `simulate_policy` | ✅ Done |
 | **A0–A2** | Actionable suggestions | `get_domain_suggestions` (A-lite) | ✅ Done |
 | **G** | Product-true DSL guide | `get_dsl_guide` + embedded guide | ✅ Done (`6b0fd63`) |
-| **Dogfood** | Rank next pain | [DOGFOOD-REPORT-20260718](agent-summaries/dogfood/DOGFOOD-REPORT-20260718.md) | ✅ Done — **R #1** |
-| **RT** | Runtime MCP thin vertical | instance store + create/call/inspect | **CURRENT** — Phase 2 library already has machinery |
-| **V1 / S1** | Deep visibility / debug | `analyze_expression`, `compare_engines`, `debug_expression` | Pull — C3 found oracles green |
-| **Pull** | Effect micro-tools, `remove_constraint`, Capture | — | After RT; effect-micro discounted (C1 DSL green; C2 was partly C# builder) |
+| **Dogfood** | Rank next pain | [Report 1](agent-summaries/dogfood/DOGFOOD-REPORT-20260718.md) | ✅ Done — **R #1** → RT |
+| **RT** | Runtime MCP thin vertical | instance store + create/call/inspect | ✅ **Shipped** + dogfood-2 validated E2E |
+| **Dogfood-2** | Post-RT re-rank | [Report 2](agent-summaries/dogfood/DOGFOOD-REPORT-2-20260718.md) | ✅ Done — R closed; new **SA** + **RT′** |
+| **RT′** | Honesty / safety residuals | analysis→suggestions, IsDeleted, policy/tool text | **Cheap next** |
+| **SA** | Stage-action semantics | Fix empty stage action copy / effect targeting | **Next epic** (not full effect-micro) |
+| **V1 / S1** | Deep visibility / debug | `analyze_expression`, `compare_engines`, `debug_expression` | Pull |
+| **Pull** | Full effect-micro catalog, `remove_constraint`, Capture | — | Only if SA fixed and DSL still insufficient |
 
-**One open product slice at a time.** Current: **RT**.
+**One open product slice at a time.** Prefer **RT′ cheap bundle**, then **SA**.
 
 ---
 
@@ -348,25 +351,30 @@ Also: `InternalsVisibleTo` **Poly.Mcp** so MCP can read internal `DomainModelDia
 
 ---
 
-## 6c. Slice RT — Runtime MCP thin vertical (**SHIPPED** — dogfood #1 → RT complete)
+## 6c. Slice RT — Runtime MCP thin vertical (**SHIPPED** + dogfood-2 validated)
 
-**Source:** [DOGFOOD-REPORT-20260718](agent-summaries/dogfood/DOGFOOD-REPORT-20260718.md) (missions C1–C4, C9).  
-**Human review:** Accept executive pick with caveats — merge C9-F1/F2/F3 into **one epic**; discount C2 builder naming as **library** ergonomics (not MCP tool gap); treat C4-F4 as **suggestion discoverability** (tool exists: `get_domain_suggestions`).
+**Sources:** [DOGFOOD-REPORT-20260718](agent-summaries/dogfood/DOGFOOD-REPORT-20260718.md) (R→RT) · [DOGFOOD-REPORT-2-20260718](agent-summaries/dogfood/DOGFOOD-REPORT-2-20260718.md) (post-RT).  
+**Human review (report 1):** Merge C9 into one epic; ship RT.  
+**Human review (report 2):** RT E2E **accepted**; do **not** jump to full effect-micro catalog; fix **stage-action semantics (SA)** + **cheap RT′** residuals. Reconcile C1-F1 (Status assign) before claiming zero batch pain forever.
 
-### Dogfood summary (what we learned)
+### Dogfood-1 → RT (closed)
+
+| Worked | Pain → action |
+|--------|----------------|
+| C1 batch DSL, C3 oracles | **R** no runtime in MCP → **RT shipped** |
+
+### Dogfood-2 (post-RT) — what we learned
 
 | Worked (keep) | Pain (act) |
 |---------------|------------|
-| C1 batch DSL round-trip idempotent | **R** — no CallAction / instances / live `when` in MCP (Score 18) |
-| C3 oracle + policy simulate/evaluate parity | W — `AddActionWithEffect` C# builder confusion (Score 14) — **library**, not MCP |
-| Named `require Policy`, lab reject closed | A/W — DMAS001 easy to miss if agent only calls `get_domain_analysis` (Score 13) |
-| `apply_dsl` honesty notes on runtime gaps | D — unclear `actor` parse message; nav-to-missing-entity is `FormatException` (low) |
+| **C1 DSL→RT** spawn-and-wire E2E (create-in, when fan-out, guards) | **SA** `AddActionToStage` empty copy → CallAction can **no-op** (Score 14) — **core evolution**, not “more MCP tools” |
+| Round-trip batch + micro Clinic; snapshots | **RT′.1** DMAS001 still invisible via `get_domain_analysis` (Score 15) — use `get_domain_suggestions` |
+| Subscription cascades verified | **RT′.6** CallAction does not refuse `IsDeleted` (Score 14) |
+| PositiveTotal / entity policies evaluate | **RT′.7** Entity-level policies gate **all** actions — correct but **non-obvious** (honesty) |
+| | **RT′.8** Subscription target-vs-source directionality — docs/describe (Score 10) |
+| | Stage-scoped effect targeting gap (feeds **SA**, Score 8) |
 
-**Do not build next:** effect-micro epic (C1 green via DSL); guide nits as epic; `remove_constraint` (unexercised); V1/S1 (C3 green).
-
-### Why RT now
-
-Phase 2 shipped spawn-and-wire in **library** (`DomainEntityInstance`, `DomainInstanceStore`, CallAction, create-in + when). Phase 3 shipped **model-only** MCP. Dogfood proved agents can **author and verify policies** but **cannot exercise lifecycle** without custom C#. That is the named consumer for Runtime MCP.
+**Do not build next as epics:** full effect-micro catalog; V1/S1; L\*/containers; structured acceptTool.
 
 ```text
 apply_dsl / micro-tools  →  model in session
@@ -375,75 +383,101 @@ apply_dsl / micro-tools  →  model in session
   → get_instance / list  →  observe stage + properties
 ```
 
-### Design rules (RT)
+### Design rules (RT) — still apply to residual MCP work
 
 1. **Thin adapters only** — wrap existing DomainModeling runtime; no new IR or domain opcodes.  
-2. **Session-scoped store** — instances live on `McpSessionState` (or adjacent); not global process soup.  
-3. **Honest descriptions** — never claim fan-out/runtime for model-only tools; RT tools say what they execute.  
-4. **One golden path** — Order/Customer-style (or dogfood domain): create → action with transition and/or `create in` → observe linked subscription if store wiring matches Phase 2.  
-5. **Merge C9 findings** — one vertical, not three separate products.
+2. **Session-scoped store** — instances on session state.  
+3. **Honest descriptions** — model vs runtime tools.  
+4. **One golden path** — MCP-only spawn-and-wire smoke stays green.  
+5. Separate **library semantics bugs (SA)** from **MCP surface** gaps.
 
-### RT.0 — Session + store
+### RT.0–RT.4 — implementation checklist
 
-- [x] **RT.0.1** Extend session state with `DomainInstanceStore` (or equivalent) + instance id map.  
-- [x] **RT.0.2** Create session still model-only until first `create_instance` (or document empty store).  
-- [x] **RT.0.3** Fail-loud: unknown session, unknown entity type, bad property JSON.
+- [x] **RT.0** Session store + fail-loud create  
+- [x] **RT.1** `create_instance` / `get_instance` / `list_instances`  
+- [x] **RT.2** `call_action` + transition + spawn-and-wire smoke  
+- [x] **RT.3.1 / RT.3.3** README + affordances  
+- [ ] **RT.3.2** `apply_dsl` Description points at RT tools for exercise  
+- [x] **RT.4** Suite green with RT smokes; MCP-only E2E path  
+- [x] Expansion §0 Runtime marked shipped (refresh with dogfood-2)  
 
-### RT.1 — Create + inspect
-
-- [x] **RT.1.1** `create_instance(sessionId, entityName, propertiesJson)` → instance id + stage/props snapshot.  
-- [x] **RT.1.2** `get_instance(sessionId, instanceId)` — stage, properties, entity type.  
-- [x] **RT.1.3** `list_instances(sessionId, entityName?)` — ids + summary.  
-- [x] **RT.1.4** Register instance in store so relationship/subscription paths can work (match Phase 2 library behavior).  
-- [x] **RT.1.5** Smokes: create with props; unknown entity fails; list non-empty.
-
-### RT.2 — CallAction
-
-- [x] **RT.2.1** `call_action(sessionId, instanceId, actionName)` → success, effects summary, new stage if transitioned.  
-- [x] **RT.2.2** Reuse library CallAction / effect execution path (assign, transition, create, create in).  
-- [x] **RT.2.3** Policy/require failures → `Success: false` with clear message.  
-- [x] **RT.2.4** Smoke: stage transition visible via `get_instance`.  
-- [x] **RT.2.5** Smoke: spawn-and-wire — action with `create in` + subscriber `when` (same class as Phase 2 dogfood, **MCP-only**).
-
-### RT.3 — Docs + honesty
-
-- [x] **RT.3.1** README tool table + dual-path note: model tools vs runtime tools.  
-- [ ] **RT.3.2** `apply_dsl` honesty can point to RT tools for exercise (still honest if RT not loaded — only after RT ships).  
-- [x] **RT.3.3** Affordances after evolve/apply: `create_instance` when domain has entities.
-
-### RT.4 — Exit criteria
-
-- [x] Suite green with RT smokes (1354 total)  
-- [x] One end-to-end MCP script: guide/apply (or micro) → create → call_action → observe  
-- [ ] Expansion §0 Runtime bucket marked done / product-complete ([pending commit](#checklist))  
-- [x] No event tools; no effect-micro epic in same PR  
-
-### RT residuals (cheap; parallel or after RT v0)
+### RT′ — residuals (after dogfood-1 + dogfood-2 review)
 
 | ID | Source | Task | Priority |
 |----|--------|------|----------|
-| **RT′.1** | C4-F4 / review | Suggestion **discoverability**: `get_domain_analysis` message or affordance → `get_domain_suggestions`; README dual-path bullet | Low — after or beside RT |
-| **RT′.2** | C4-F1b | Parser: clear unsupported message for `actor` at entity-kind position (keyword is already rejected) | Low |
-| **RT′.3** | C4-F3b | Optional: softer diagnostic vs `FormatException` for unknown nav target (message already clear) | Pull |
-| **RT′.4** | C2-F5/F6 | Library: rename/docs `AddActionWithEffect` vs `AddEffectToAction` — **not** MCP effect-micro epic | Pull / library hygiene |
-| **RT′.5** | Report scope | Optional C5 dual-path dogfood after RT ships | Pull |
+| **RT′.1** | D1 C4-F4 · D2 C4-F2 Score 15 | Suggestion **discoverability**: `get_domain_analysis` message and/or affordances → `get_domain_suggestions`; optional Hint count | **Cheap — do soon** |
+| **RT′.6** | D2 Score 14 | `CallAction` **fail-loud** when `IsDeleted` (and MCP `call_action` surfaces it) | **Cheap — do soon** |
+| **RT′.7** | D2 Score 12 | Honesty: `add_policy` / README — entity policies are **universal action guards** | **Cheap** |
+| **RT′.8** | D2 Score 10 | Docs/guide/`describe_domain_element`: subscription fires on relationship **target** stage entry | Cheap / docs |
+| **RT′.2** | D1 | Parser: clear `actor` unsupported message at entity-kind position | Low |
+| **RT′.3** | D1 | Optional softer diagnostic for unknown nav target | Pull |
+| **RT′.4** | D1 C2 | Library: `AddActionWithEffect` vs `AddEffectToAction` naming docs/rename | Pull (after SA) |
+| **RT′.5** | D1 | Optional dual-path dogfood (C5) | Pull |
+| **RT′.9** | D2 C1-F1 | Reconcile “assign Status on Customer” evolution failure vs “C1 zero pain” claim | Hygiene |
+| **RT′.10** | D2 Score 6 | Richer CallAction errors when action missing / empty stage shadow | After SA |
 
-### RT pull-only (not RT v0)
+### RT pull-only
 
 | Item | When |
 |------|------|
-| Subscription “would fire” preview without mutate | After live fan-out works |
+| Subscription “would fire” preview | After SA + live path stable |
 | `simulate_effect` | Named need |
-| Multi-session instance sharing | Never unless host demands |
-| Effect micro-tools | Only if dogfood still refuses DSL for effects after RT |
-| Full VmDebugger step tools | V1/S1 pain |
+| Full MCP effect-micro catalog | Only if **SA** fixed and agents still cannot use DSL |
+| Full VmDebugger / V1 | Pain after RT′/SA |
+
+---
+
+## 6e. Slice SA — Stage-action semantics (**NEXT EPIC** after or with RT′ cheap)
+
+**Source:** [DOGFOOD-REPORT-2](agent-summaries/dogfood/DOGFOOD-REPORT-2-20260718.md) findings on `AddActionToStage` + effect adders.  
+**Human review:** This is **not** “ship effect micro-tools.” It is a **DomainModeling evolution / CallAction resolution** footgun: silent success with no effects.
+
+### Problem (verified in code)
+
+`AddActionToStageChange` appends `new Action(Name, …, effects: [], …)` on the stage.  
+`AddEffectToAction` / `AddStageTransitionEffect` target **entity-level** actions by name.  
+`CallAction` resolves **stage-scoped** action first when present → **empty effects run** → no-op “success.”
+
+```text
+AddAction(entity, "Activate")
+AddActionToStage(entity, "Draft", "Activate")   → empty stage copy
+AddStageTransitionEffect(entity, "Activate", …) → entity-level only
+CallAction("Activate") on Draft                  → stage copy wins → no transition
+```
+
+### Design options (pick one coherent model)
+
+| Option | Approach | Prefer |
+|--------|----------|--------|
+| **A** | Stage lists **references** to entity actions (placement only) | Clean long-term |
+| **B** | Effect-by-name updates **all** actions with that name (entity + stages) | Smaller change |
+| **C** | Fail-loud: shadowing empty stage action / forbid stage copy without effects | Safety net if A/B deferred |
+| **D** | Docs only | **Insufficient** alone |
+
+### SA checklist
+
+- [ ] **SA.0** Spec: document chosen option (A preferred; B acceptable) in DomainModeling README or ADR stub  
+- [ ] **SA.1** Implement evolution + CallAction resolution consistently  
+- [ ] **SA.2** Golden: micro evolution — entity action + stage placement + transition effect → `CallAction` from stage **transitions**  
+- [ ] **SA.3** Golden: MCP path if tools expose stage actions (`add_action_to_stage` + effects) — no silent no-op  
+- [ ] **SA.4** Fail-loud or migrate: existing “empty stage copy” pattern cannot succeed without effects (or analysis warning)  
+- [ ] **SA.5** Honesty: MCP/tool descriptions for `add_action_to_stage` match behavior  
+- [ ] **SA.6** Suite green; no full effect-micro catalog required for exit  
+
+### SA pull (explicitly out of slice)
+
+| Item | When |
+|------|------|
+| Full `add_effect_to_action` MCP surface for every effect kind | After SA; only if DSL insufficient |
+| `AddEffectToActionOnStage` as permanent dual API without fixing identity | Avoid — prefer A/B |
+| Redesign entity-level policy semantics | Honesty only (**RT′.7**) |
 
 ---
 
 ## 6d. Post–Phase 3 horizon — Lowered artifacts + host-consumable backends
 
 **Status:** **Well after Phase 3** — not current pick, not interleaved with RT unless a named emergency.  
-**Prerequisite track:** Phase 3 thin ✅ → **RT (§6c)** → dogfood → only then open L\* / host backends with pain.
+**Prerequisite track:** Phase 3 thin ✅ → RT ✅ → RT′/SA → only then open L\* / host backends with pain.
 
 **Product thesis:** The lowered Syntax AST is **an implementation** of domain intent. Optional **C#** (review + integrate) and later **MSIL/assembly** (shippable .NET) are **backends**, not a second IR. Reviewing artifacts from real domains feeds back into better AST generation; packaging makes Poly consumable outside the process.
 
@@ -460,7 +494,7 @@ Domain (intent)
 | Loop half | When | Role |
 |-----------|------|------|
 | **Agent corrects domain** | Phase 3 thin (shipped) | lower/describe/simulate → fix domain |
-| **Exercise domain** | **RT (current)** | instances + CallAction in MCP |
+| **Exercise domain** | **RT (shipped)** | instances + CallAction in MCP |
 | **Review + improve generation** | **Post–Phase 3** | artifact inspect, golden lower tests |
 | **Host-consumable ship** | **Post–Phase 3** (after or with review) | C# first; MSIL/assembly second |
 
@@ -520,7 +554,7 @@ Domain + Poly runtime (+ optional generated host code)
 4. Prefer **one** semantic core proven against VM; packaging multiplies deliverables, not semantics.  
 5. No domain-specific VM opcodes to ease codegen or containerization.  
 
-**Current pick remains RT (§6c).** This section is roadmap memory only until gates pass.
+**Current pick is RT′ / SA (§6c–§6e), not this section.** L\* remains post–Phase 3 roadmap memory only.
 
 ---
 
@@ -531,7 +565,7 @@ Domain + Poly runtime (+ optional generated host code)
 | V1 `analyze_expression`, `compare_engines` | Agent needs type diagnostics / dual oracle — **C3 green; low urgency** |
 | **L*** / host C# / MSIL | §6d — **well after Phase 3**; after RT + named need only |
 | S1 `debug_expression` | Step-through pain after S0 |
-| Effect micro-tools | DSL works (C1); C2 naming is library — not default next |
+| Full effect-micro catalog | After **SA**; only if DSL still insufficient — do **not** use micro-tools to paper over empty stage copies |
 | `remove_constraint` | Constraint churn via micro-tools (unexercised in dogfood) |
 | `add_policy_to_stage` / action | Same |
 | Capture / dry-run apply | Reverse-engineering scenario |
@@ -565,6 +599,8 @@ Optional single chain smoke: lower → describe same JSON both succeed.
 | A0–A2 | Medium | Analysis metadata + one analyzer + MCP |
 | G0–G2 | Small | Product-true guide text + `get_dsl_guide` + smoke |
 | RT.0–RT.2 | Medium | Session store + create/call/inspect + spawn-and-wire smoke |
+| RT′ | Small | Discoverability, IsDeleted, policy/stage honesty |
+| SA | Medium | Stage-action identity + effect targeting + goldens |
 
 ---
 
@@ -576,10 +612,11 @@ Optional single chain smoke: lower → describe same JSON both succeed.
 4. **S0** — `simulate_policy`  
 5. **A\*** — suggestions  
 6. **G0–G2** — product-true DSL guide  
-7. **Dogfood** — rank pain ([report](agent-summaries/dogfood/DOGFOOD-REPORT-20260718.md))  
-8. **RT.0 + RT.1** — session store + create/list/get instance  
-9. **RT.2** — `call_action` + transition + spawn-and-wire smoke  
-10. **RT.3** — README / affordances  
+7. **Dogfood-1** — R ranked #1 → RT  
+8. **RT.0–RT.2** — session store + create/call/inspect + spawn-and-wire  
+9. **Dogfood-2** — post-RT re-rank ([report 2](agent-summaries/dogfood/DOGFOOD-REPORT-2-20260718.md))  
+10. **RT′** — honesty/safety bundle (discoverability, IsDeleted, policy/stage text)  
+11. **SA** — stage-action semantics + goldens (§6e)  
 
 ---
 
@@ -587,41 +624,41 @@ Optional single chain smoke: lower → describe same JSON both succeed.
 
 ### Phase 3 thin (closed)
 
-- [x] V0 three tools green with tests  
-- [x] S0 `simulate_policy` green with tests  
-- [x] A-lite suggestions green with tests  
-- [x] **G** product-true DSL guide shipped (`6b0fd63`)  
-- [x] Agent loop tools documented (README tool table)  
-- [x] Dogfood run complete; Runtime MCP ranked #1  
+- [x] V0 / S0 / A-lite / G shipped  
+- [x] Dogfood-1 complete; Runtime MCP ranked #1  
 - [x] No event tools; no Capture  
 
-### Phase 4 RT (shipped)
+### Phase 4 RT (closed — dogfood-2 validated)
 
-- [x] RT.0–RT.2 tools green with smokes (1354 total)  
-- [x] MCP-only spawn-and-wire path (create → call_action → observe)  
+- [x] RT.0–RT.2 tools + MCP-only spawn-and-wire  
 - [x] Suite green including RT tests  
-- [ ] README lists runtime tools honestly (pending README update — RT.3.1)  
+- [x] Dogfood-2 confirms create/call/when path works  
+
+### Post-RT residuals (open)
+
+- [ ] **RT′.1** suggestion discoverability  
+- [ ] **RT′.6** CallAction refuses deleted instances  
+- [ ] **RT′.7–.8** policy + subscription direction honesty  
+- [ ] **SA** stage-action empty-copy / effect targeting fixed + goldens  
 
 ---
 
 ## 12. Agent pick (right now)
 
 ```text
-DONE:    Phase 3 thin (V0/S0/A/G); dogfood 2026-07-18; Phase 4 RT (Runtime MCP)
-CURRENT: No active slice — RT shipped, all gaps closed
-           Suite: 1354 green
-THEN:    RT.3 docs (README tool table); optional RT′ residuals
-LATER:   RT′ nits; V1 / effect-micro — pull with pain
-POST–P3: **L*** / C# consumable / MSIL (§6d) — well after Phase 3 + RT; not interleaved
+DONE:    Phase 3 thin; RT shipped; dogfood-1 (R→RT); dogfood-2 (RT E2E green)
+CURRENT: RT′ cheap bundle (§6c) — RT′.1 discoverability, RT′.6 IsDeleted, RT′.7–.8 honesty
+THEN:    SA stage-action semantics (§6e) — fix empty stage copies; goldens; no full effect-micro
+LATER:   RT′.2–.5/.9–.10; full effect-micro / V1 — pull only
+POST–P3: L* / C# / MSIL / containers (§6d)
 ```
 
 **Implementer watch-outs**
 
-- `RuntimeTool` wraps existing `DomainEntityInstance` / `DomainInstanceStore` / CallAction — no reimplemented runtime.  
-- Instance IDs are GUID strings from `NewInstanceId()`.  
-- `McpSessionState.InstanceStore` is null until first `create_instance`.  
-- `McpSessionState.InstanceMap` is a `ConcurrentDictionary` for thread-safe lookups.  
-- C9 findings merged into one RT epic — not three partial surfaces.  
-- `apply_dsl` honesty notes should point to RT tools for exercise (update after commit).  
-- **`require` = policy names**; comments = **`//` only**; **`invoke` unsupported**.  
-- Guide is an **embedded resource** — keep `Poly.Mcp.Docs.poly-dsl-agent-guide.md` name stable if renaming.
+- RT is **done** — do not reopen runtime surface for completeness.  
+- **SA:** `AddActionToStage` empty copy is a **silent no-op** under CallAction — fix evolution/resolution (**§6e**), not a pile of MCP effect tools.  
+- **RT′.1:** `get_domain_suggestions` works; analysis path must point agents there.  
+- **RT′.6:** refuse CallAction when `IsDeleted`.  
+- Entity-level policies **do** gate all actions — document (**RT′.7**), don’t “fix” by removing the feature.  
+- Subscriptions fire on relationship **target** stage entry (**RT′.8**).  
+- Full effect-micro catalog remains **pull** after SA.

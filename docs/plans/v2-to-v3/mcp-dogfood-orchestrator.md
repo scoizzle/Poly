@@ -1,8 +1,8 @@
 # MCP Dogfood Orchestrator — Supervisory Agent Plan
 
 **Date:** 2026-07-18  
-**Status:** **Run complete** — [DOGFOOD-REPORT-20260718](agent-summaries/dogfood/DOGFOOD-REPORT-20260718.md)  
-**Outcome:** Top pain **Runtime MCP** (Score 18 **R**) → product pick **§6c** in [`mcp-phase3-oracle-surface.md`](mcp-phase3-oracle-surface.md)  
+**Status:** **Two runs complete** — [report 1](agent-summaries/dogfood/DOGFOOD-REPORT-20260718.md) · [report 2](agent-summaries/dogfood/DOGFOOD-REPORT-2-20260718.md)  
+**Outcomes:** (1) **R** → RT shipped; (2) post-RT → **RT′** + **SA** stage-action semantics ([`mcp-phase3-oracle-surface.md`](mcp-phase3-oracle-surface.md) §6c–§6e)  
 **Audience:** One **supervisor** agent that spawns/coordinates **child** agents; human reviews ranked pain  
 **Goal:** Use the **shipped MCP surface only** to discover the **next biggest product painpoints** — not to implement fixes during the dogfood run  
 **Related:**  

@@ -11,8 +11,8 @@ Architectural rationale → **`docs/decisions/`**. Module maps → **`Poly/*/REA
 
 | Plan | Role |
 |------|------|
-| [**MCP Phase 3 + RT**](v2-to-v3/mcp-phase3-oracle-surface.md) | Phase 3 thin **done**; **§6c Runtime MCP** is current pick (dogfood #1) |
-| [**MCP dogfood orchestrator**](v2-to-v3/mcp-dogfood-orchestrator.md) | Dogfood program — **run complete** ([report](v2-to-v3/agent-summaries/dogfood/DOGFOOD-REPORT-20260718.md)) |
+| [**MCP Phase 3 + RT + SA**](v2-to-v3/mcp-phase3-oracle-surface.md) | Phase 3 + RT **done**; **RT′** + **§6e SA** current (dogfood-2) |
+| [**MCP dogfood orchestrator**](v2-to-v3/mcp-dogfood-orchestrator.md) | Dogfood — [report 1](v2-to-v3/agent-summaries/dogfood/DOGFOOD-REPORT-20260718.md) · [report 2](v2-to-v3/agent-summaries/dogfood/DOGFOOD-REPORT-2-20260718.md) |
 | [**Simple-agent queue (`vs-*`)**](v2-to-v3/simple-agent-tasks/vs-README.md) | **Primary pick order** for smaller agents — post-M2 tasks (pm2-*) |
 | [**MCP tool-surface expansion**](v2-to-v3/mcp-tool-surface-expansion.md) | Backlog §0 — RT next; pull-only after |
 | [**Vertical-slice finish plan**](v2-to-v3/vertical-slice-finish-plan.md) | Product path status; M2 **Done**; post-M2 calendar |

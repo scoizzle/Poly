@@ -1,14 +1,14 @@
 # MCP Tool Surface — Semantic Gap Analysis & Expansion Plan
 
 **Date:** 2026-07-12  
-**Revised:** 2026-07-18 (**RT shipped** — all gaps closed)  
-**Status:** All planned phases **shipped** (V0/S0/A/G/dogfood/RT); expansion items **pull-only**  
+**Revised:** 2026-07-18 (**Dogfood-2** post-RT → **RT′** + **SA** stage-action next)  
+**Status:** Phase 3 + RT **shipped** (dogfood-2 validated); **RT′ / SA** open — not “all gaps closed”  
 
 **Shipped tools (approx.):** ~34+ in `Poly.Mcp/Tools/` (session, query, evolve, policy, constraint, DSL, oracle, suggestions, guide, runtime)  
 **Principle:** Thin adapters over `DomainEvolution` / DomainModeling / Interpretation — no new domain semantics; no V2 resurrection; **no event authoring tools** (stage-transition-as-observable).  
 **Related:**  
-- [`mcp-phase3-oracle-surface.md`](mcp-phase3-oracle-surface.md) — Phase 3 + Phase 4 RT **shipped**  
-- [`mcp-dogfood-orchestrator.md`](mcp-dogfood-orchestrator.md) · [DOGFOOD-REPORT-20260718](agent-summaries/dogfood/DOGFOOD-REPORT-20260718.md)  
+- [`mcp-phase3-oracle-surface.md`](mcp-phase3-oracle-surface.md) — §6c RT done · **§6e SA** · **RT′**  
+- Dogfood: [report 1](agent-summaries/dogfood/DOGFOOD-REPORT-20260718.md) · [report 2](agent-summaries/dogfood/DOGFOOD-REPORT-2-20260718.md)  
 - [`domainmodeling-next-phase.md`](domainmodeling-next-phase.md) — Phase 2 domain runtime (library)  
 - ADR stage-transition-as-observable  
 
@@ -29,42 +29,36 @@
 | Policy | `get_policy_expression`, `add_policy` (entity), `evaluate_policy` (multi-property JSON subject) |
 | **DSL** | `apply_dsl` (full **replace**), `export_dsl`, `get_dsl_guide` (embedded product guide, `6b0fd63`) |
 | **Oracle** | `lower_expression`, `describe_expression`, `describe_domain_element`, `simulate_policy` |
-| **Runtime** | `create_instance`, `get_instance`, `list_instances`, `call_action` — **MCP-only spawn-and-wire** (Phase 4 RT) |
+| **Runtime** | `create_instance`, `get_instance`, `list_instances`, `call_action` — **dogfood-2 E2E validated** |
 
-**Honest substitute:** Action/effect/entry/exit configuration for agents is largely via **`apply_dsl`**, not micro-tools (C1 dogfood: batch path solid). Incremental effect micro-tools remain optional.
+**Honest substitute:** Effects largely via **`apply_dsl`**. **SA:** stage micro-path can silently no-op (empty `AddActionToStage` copies) — fix semantics before more effect tools.
 
-### Still missing (planned + still open)
+### Still missing / next
 
 | Priority | Bucket | Tools / work | Trigger |
 |----------|--------|--------------|---------|
-| **P0** 🔥 | **Runtime MCP (RT)** | Session `DomainInstanceStore`; `create_instance`, `call_action`, `get_instance`, `list_instances`; spawn-and-wire smoke | ✅ **Shipped** — dogfood #1 closed. Suite **1354** green. |
-| **P1** | Suggestion discoverability | Analysis affordance / message → `get_domain_suggestions` (DMAS001 works; easy to miss) | Dogfood C4-F4; phase3 **RT′.1** — cheap, after or beside RT |
-| **P2** | Parser honesty | Clear `actor` unsupported message at entity-kind position | Dogfood C4-F1b; **RT′.2** |
-| **P2** | Visibility deep (**V1**) | `analyze_expression`, `compare_engines`, effect lower in MCP | Pull — after RT; not Phase 3 |
-| **Post–P3** | **Host-consumable backends (L\*)** | C# → assembly/MSIL → **container/registry images** (likely ops-primary); golden lower corpus | **Well after Phase 3** — phase3 **§6d**; C#/runnable host before image bake |
-| **P2** | Debug (**S1**) | `debug_expression` | Pull |
-| **P3** | Effect micro-tools | MCP effect add/remove wrappers | **Discounted:** C1 DSL green; C2-F5/F6 is **C# EvolutionBuilder** naming, not MCP |
-| **P3** | Library builder hygiene | Rename/docs `AddActionWithEffect` vs `AddEffectToAction` | C2 supplementary; not MCP epic |
-| **P3** | Constraint remove | `remove_constraint` | Unexercised in dogfood |
-| **P4** | Capture / dry-run / state diff | … | Named scenario only |
-| **P5** | Effect simulate (**S2**) | `simulate_effect` | After RT |
-| **Never / skip** | Event authoring | `add_event_*` | Retired |
+| **P0** | **RT′ honesty/safety** | Analysis→suggestions; CallAction `IsDeleted`; entity policy + subscription docs | Dogfood-2 — phase3 **RT′** |
+| **P0** | **SA stage-action semantics** | Fix empty stage action / effect targeting; goldens | Dogfood-2 Score 14 — phase3 **§6e** (DomainModeling core) |
+| **P1** | Runtime MCP (RT) | create/call/list instances | ✅ **Shipped** + dogfood-2 |
+| **P1** | Parser honesty | `actor` message; optional nav FormatException | RT′.2–.3 |
+| **P2** | Visibility / debug (**V1/S1**) | analyze/compare/debug expression | Pull |
+| **P2** | Full effect-micro MCP | Per-effect tools | **After SA** only if DSL insufficient |
+| **P3** | Library builder hygiene | `AddActionWithEffect` naming | After SA |
+| **P3** | Constraint remove | `remove_constraint` | Unexercised |
+| **Post–P3** | **L\*** C# → MSIL → **containers** | phase3 **§6d** | Well after Phase 3 + RT |
+| **Never** | Event authoring | — | Retired |
 
 ### Pick order (agents)
 
-**Dogfood:** [DOGFOOD-REPORT-20260718](agent-summaries/dogfood/DOGFOOD-REPORT-20260718.md) · orchestrator [`mcp-dogfood-orchestrator.md`](mcp-dogfood-orchestrator.md)  
-**Detailed RT checklist:** [`mcp-phase3-oracle-surface.md`](mcp-phase3-oracle-surface.md) **§6c**
+**Dogfood-2:** [DOGFOOD-REPORT-2-20260718](agent-summaries/dogfood/DOGFOOD-REPORT-2-20260718.md)  
+**Checklists:** [`mcp-phase3-oracle-surface.md`](mcp-phase3-oracle-surface.md) **§6c RT′** · **§6e SA**
 
 ```text
-1. V0  oracle visibility  ← done
-2. S0  simulate_policy  ← done
-3. A-lite  get_domain_suggestions  ← done
-4. G    get_dsl_guide  ← done
-5. DOGFOOD  ← done (Runtime MCP #1)
-6. ▶ RT  Runtime MCP thin vertical  ← **done** (phase3 §6c; 1354 green)
-7. RT′.1 suggestion discoverability  (cheap parallel/after)
-8. Effect-micro / builder rename / remove_constraint / V1  ← pull only
-9. Post–Phase 3: L* host C# → MSIL / golden lower corpus  ← **well after** RT (§6d)
+1–6.  V0 / S0 / A / G / dogfood-1 / RT     ← done (RT dogfood-2 validated)
+7. ▶  RT′ cheap bundle                      ← next
+8. ▶  SA stage-action semantics (§6e)       ← next epic (not full effect-micro)
+9.    Full effect-micro / V1 / remove_constraint  ← pull only
+10.   Post–P3 L* / containers               ← well after
 ```
 
 ---

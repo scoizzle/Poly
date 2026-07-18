@@ -395,11 +395,11 @@ After report exists:
 
 ## 13. Exit criteria for this program
 
-- [ ] W0 + Wave 1 complete (or documented environment abort)  
-- [ ] ≥1 finding per completed mission (or explicit “no pain” with coverage notes)  
-- [ ] C9 runtime absence either confirmed as **R** or waived with reason  
-- [ ] `DOGFOOD-REPORT` with single recommended next slice  
-- [ ] Expansion §0 pick order updated **or** explicit “no change — more dogfood”  
+- [x] W0 + Wave 1 complete (or documented environment abort)  
+- [x] ≥1 finding per completed mission (or explicit "no pain" with coverage notes)  
+- [x] C9 runtime absence either confirmed as **R** or waived with reason  
+- [x] `DOGFOOD-REPORT` with single recommended next slice  
+- [x] Expansion §0 pick order updated **or** explicit "no change — more dogfood"  
 
 **Program fails** if supervisor ships code fixes instead of a report, or if children invent lab DSL as “success.”
 

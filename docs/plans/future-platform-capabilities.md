@@ -1,11 +1,14 @@
 # Future Platform Capabilities
 
-**Date:** 2026-06-25
+**Date:** 2026-06-25  
+**Revised:** 2026-07-18 (link domain extension experiment)  
 **Status:** Ideas / deferred — none block the current IR pipeline or domain modeling work.
 
 ---
 
 These are capabilities the platform will need as it matures beyond the compiler pipeline and into a usable product. They're recorded here to avoid losing them, not because they're urgent.
+
+**Domain DSL/plugins:** Experimental research plan for extension packs (facets like `column("…")`, target exporters) lives in [`docs/experiments/domain-plugin-extension-platform.md`](../experiments/domain-plugin-extension-platform.md) — research later, not an execution queue.
 
 ## 1. Onboarding Path
 

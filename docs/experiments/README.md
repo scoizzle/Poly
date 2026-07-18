@@ -19,6 +19,12 @@ They do **not** represent current priorities, committed roadmap items, or active
 - Long-term platform or type system roadmaps that are not yet active
 - Other significant speculative design artifacts
 
+### Notable experiments
+
+| Doc | Role |
+|-----|------|
+| [**domain-plugin-extension-platform.md**](domain-plugin-extension-platform.md) | Future research: C# extension packs for DSL facets (e.g. `column("…")`), analysis, target export — **not** active work |
+
 ## Related directories
 
 - `docs/decisions/` — Decisions that *have* been formally made

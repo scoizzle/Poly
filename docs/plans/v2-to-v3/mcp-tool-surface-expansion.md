@@ -36,7 +36,7 @@
 |----------|--------|--------------|---------|
 | **P0** | Pipeline visibility (**V0**) | `lower_expression`, `describe_expression`, `describe_domain_element` | ✅ **Done** (`68e37c8`) |
 | **P1** | Simulate (**S0**) | `simulate_policy` | ✅ **Done** (`68e37c8`) |
-| **P1** | Suggestions (**A-lite**) | `get_domain_suggestions` + `AuthoringSuggestionAnalyzer` | ✅ **Done** (`02ceee1`); full `acceptTool` pull |
+| **P1** | Suggestions (**A-lite**) | `get_domain_suggestions` + `AuthoringSuggestionAnalyzer` | ✅ **Done** (`02ceee1`); ⚠️ Dogfood: DMAS001 hints generated but invisible through standard query path (`GetAnalysisSummary` filters info-level). See [C4-F4](agent-summaries/dogfood/DOGFOOD-REPORT-20260718.md). Full `acceptTool` pull still open. |
 | **P1** | **DSL agent guide (G)** | `get_dsl_guide` + embedded `poly-dsl-agent-guide.md` | ✅ Code-complete suite **1344**; **commit open** (G′′.1); optional G′′.2 extract-golden |
 | **P2** | Visibility deep (**V1–V2**) | `analyze_expression`, `compare_engines`, `compile_expression`, `diff_expressions` | Debug / dual oracle |
 | **P2** | Debug (**S1**) | `debug_expression` (VmDebugger step trace) | After V0/S0 |
@@ -45,24 +45,26 @@
 | **P3** | Constraint remove | `remove_constraint` | Symmetric with add; evolutionary repair |
 | **P4** | Capture / dry-run (**R1**) | `apply_dsl_capture`, optional `apply_dsl_dry_run` | Reverse-engineering / dirty import |
 | **P4** | State diff (**S3**) | `diff_state` | After evolve confidence |
-| **P5** | Runtime session (**new**) | instance create / `CallAction` / `Link` / store inspect | **Only if dogfood needs spawn-and-wire inside MCP** (model-only session today) |
+| **P0** 🔥 | **Runtime session (dogfood #1)** | instance create / `CallAction` / `Link` / store inspect / stage subscription fan-out | ✅ Dogfood confirmed: **highest pain Score 18 (R)** — see [DOGFOOD-REPORT](agent-summaries/dogfood/DOGFOOD-REPORT-20260718.md). Model-only session is the single biggest gap. |
 | **P5** | Effect simulate (**S2**) | `simulate_effect` | Needs instance runtime model |
 | **Never / skip** | Event authoring | `add_event_*`, publish-event effects | Product path **retired** — stage transition is the observable |
 
 ### Pick order (agents)
 
-**Detailed checklists:** [`mcp-phase3-oracle-surface.md`](mcp-phase3-oracle-surface.md).  
-**Dogfood next-pain program:** [`mcp-dogfood-orchestrator.md`](mcp-dogfood-orchestrator.md) (supervisor + child missions → ranked report **before** more tools).
+**Dogfood:** [`mcp-dogfood-orchestrator.md`](mcp-dogfood-orchestrator.md) — **run on 2026-07-18** ([DOGFOOD-REPORT-20260718.md](agent-summaries/dogfood/DOGFOOD-REPORT-20260718.md)).
+**Ranked pain (top 3):** (1) Runtime MCP gap — no CallAction/instance tools in MCP (Score 18);
+(2) `AddActionWithEffect` naming confusion (Score 14);
+(3) DMAS001 hints invisible through standard analysis query (Score 13).
 
 ```text
 1. V0  lower_expression + describe_expression + describe_domain_element  ← **done** (`68e37c8`)
 2. S0  simulate_policy  ← **done** (`68e37c8`)
 3. A-lite  get_domain_suggestions  ← **done** (`02ceee1`)
 4. G    get_dsl_guide + product guide  ← **done** (`6b0fd63`)
-5. DOGFOOD orchestrator  ← **next** (rank pain; do not invent tools)
-6. V1/S1  analyze_expression, compare_engines, debug_expression  (pull with dogfood pain)
-7. Effect/policy micro-tools or remove_constraint  (only if DSL insufficient)
-8. Runtime MCP (CallAction/store)  (only with named dogfood)
+5. DOGFOOD orchestrator  ← **done** (2026-07-18; ranked Runtime MCP #1)
+6. ▶ Runtime MCP thin vertical  ← **next** (CallAction + instance management — top pain Score 18, category R)
+7. Effect micro-tools or remove_constraint  (pain-driven; AddActionWithEffect naming Score 14)
+8. V1/S1  analyze_expression, compare_engines, debug_expression  (pull with dogfood pain)
 9. Capture / dry-run / simulate_effect  (named reverse-eng or runtime scenario)
 ```
 

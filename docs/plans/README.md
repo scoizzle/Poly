@@ -27,6 +27,7 @@ Architectural rationale → **`docs/decisions/`**. Module maps → **`Poly/*/REA
 
 | Plan | Role |
 |------|------|
+| [**Domain plugin / extension platform**](domain-plugin-extension-platform.md) | Pointer → experiment: future DSL+facet+lowering packs — **research only** |
 | [**`Poly.Ast` + `Poly.Analysis` module split**](poly-ast-analysis-module-split.md) | Split `Poly.Syntax` into IR + analysis framework — after product stability |
 | [array-specialization-plan.md](array-specialization-plan.md) | Optional emitter TypeIs elimination — verify against `DirectVmAbiEmitter` before claiming |
 | [analyzer-improvements.md](analyzer-improvements.md) | Optional analysis quality ideas — not a product gate |

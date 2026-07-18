@@ -1638,6 +1638,47 @@ public class McpSmokeTests {
     }
 
     [Test]
+    public async Task ApplyDsl_WithDelete_SoftDeletesInstance() {
+        // E1.3: Golden test for DSL `delete` keyword. Parse → apply → create
+        // instance → call action with delete → CallAction refused afterward.
+        var (sessionId, _) = McpSessionStore.Create("Test");
+
+        var dsl = DslTool.ApplyDsl(sessionId, """
+            domain Test
+            Item: entity {
+              Name: Text
+              Draft: stage {
+                Archive: action {
+                  delete
+                }
+              }
+            }
+            """);
+        await Assert.That(dsl.Success).IsTrue();
+
+        // Verify the delete effect was parsed correctly via export round-trip
+        var export = DslTool.ExportDsl(sessionId);
+        await Assert.That(export.Success).IsTrue();
+        var exportJson = System.Text.Json.JsonSerializer.Serialize(export.Data);
+        await Assert.That(exportJson).Contains("delete");
+
+        // Create instance and call the Archive action
+        var create = RuntimeTool.CreateInstance(sessionId, "Item",
+            """{"Name":"TestItem"}""");
+        await Assert.That(create.Success).IsTrue();
+        var instanceId = ExtractInstanceId(
+            System.Text.Json.JsonSerializer.Serialize(create.Data));
+
+        var archiveCall = RuntimeTool.CallAction(sessionId, instanceId!, "Archive");
+        await Assert.That(archiveCall.Success).IsTrue();
+
+        // Verify subsequent actions are refused
+        var callAgain = RuntimeTool.CallAction(sessionId, instanceId!, "Archive");
+        await Assert.That(callAgain.Success).IsFalse();
+        await Assert.That(callAgain.Message).Contains("deleted");
+    }
+
+    [Test]
     public async Task GetDomainAnalysis_WithHints_SuggestsSuggestions() {
         // RT′.1: GetDomainAnalysis should include hint count and affordance
         // pointing to get_domain_suggestions.

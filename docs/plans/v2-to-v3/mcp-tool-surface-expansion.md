@@ -44,7 +44,8 @@
 | **P1** | Runtime MCP (RT) | create/call/list instances | ✅ **Shipped** + dogfood-2 |
 | **P1** | Parser honesty | `actor` message; optional nav FormatException | Pull (RT′.2–.3) |
 | **P2** | Visibility / debug (**V1/S1**) | analyze/compare/debug expression | Pull |
-| **P1** | **Effect surface (E\*)** | DSL/runtime parity for delete/link/invoke; optional thin MCP | [`effect-surface-completeness.md`](effect-surface-completeness.md) — **next usefulness track** |
+| **P1** | **Effect surface (E\*)** | DSL/runtime parity for delete/link/invoke; optional thin MCP | [`effect-surface-completeness.md`](effect-surface-completeness.md) |
+| **P1** | **DSL query surface (Q\*)** | LINQ-inspired policy/guard subset: nav, exists, any/all/count | [`dsl-query-surface.md`](dsl-query-surface.md) — **customer policies** |
 | **P2** | Full effect-micro MCP | Per-effect tools | **Pull** — only after E\* dogfood; prefer DSL first |
 | **P3** | Library builder hygiene | `AddActionWithEffect` naming | Pull |
 | **P3** | Constraint remove | `remove_constraint` | Unexercised |
@@ -56,11 +57,11 @@
 **Dogfood-2:** [DOGFOOD-REPORT-2-20260718](agent-summaries/dogfood/DOGFOOD-REPORT-2-20260718.md) · phase3 **§6e SA′′**
 
 ```text
-1–8.  V0…RT + RT′/SA + SA′ honesty        ← done
-9. ▶  Effect surface (E′′): commit plan package → E0 guide → E1 delete-self
-10.   E2 link decision / E3a then E3b      ← by pain (see effect-surface plan)
-11.   E5 thin MCP effect tools             ← only with quotes
-12.   SA′.1 Option A / V1 / L* containers  ← pull
+1–8.  V0…RT + SA + effect plan            ← done
+9. ▶  Commit E1 delete-self + E1′ honesty (suite 1360) — E1′′.1
+10.   E2.1 link decision and/or Q0/Q1
+11.   E3a/E3b; Q3 by pain
+12.   E5 / L* containers                  ← pull
 ```
 
 ---

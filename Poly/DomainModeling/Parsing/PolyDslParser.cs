@@ -348,6 +348,12 @@ public sealed class PolyDslParser {
             return ParseCreateEffect();
         }
 
+        if (_current.Kind == TokenKind.Delete) {
+            // E1: Soft-delete the current entity instance.
+            Advance(); // consume 'delete'
+            return new DeleteEntityInstance(new DomainTypeReference(_currentEntityName));
+        }
+
         if (_current.Kind == TokenKind.When) {
             // Subscription effect — this is handled differently
             // (embedded in StageSubscription, not in a standalone action)
@@ -361,7 +367,7 @@ public sealed class PolyDslParser {
                 $"'{_current.Text}' is not supported in Phase 1a");
         }
 
-        throw Error($"Expected effect (transition, assign, create), got '{_current.Text}'");
+        throw Error($"Expected effect (transition, assign, create, delete), got '{_current.Text}'");
     }
 
     private Effect ParseCreateEffect() {

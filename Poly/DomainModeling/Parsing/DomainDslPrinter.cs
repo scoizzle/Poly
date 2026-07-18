@@ -283,6 +283,10 @@ public sealed class DomainDslPrinter {
                 _sb.AppendLine("}");
                 break;
 
+            case DeleteEntityInstance:
+                _sb.AppendLine("delete");
+                break;
+
             default:
                 _sb.AppendLine($"// Effect type '{effect.GetType().Name}' not printable in Phase 1a");
                 break;

@@ -178,6 +178,14 @@ Expression JSON format (for `add_policy` / `simulate_policy`):
 | `assign Prop to expr` | action, entry, exit |
 | `create Type { ... }` | action |
 | `create in Rel { ... }` | action |
+| `delete` | action, entry, exit (soft-deletes the current instance) |
+
+The following effects exist in the runtime library but have **no DSL syntax** yet:
+- **link / unlink**: Connect existing instances. Use `create in Rel { ... }` as the product path for graph writes, or use the `DomainInstanceStore` API directly.
+- **invoke**: Call another action on the same instance. Not yet authorable in DSL.
+- **TransitionRelationship**: IR exists but **not executed at runtime** — do not use.
+
+> **Note:** `delete` performs a **soft-delete** — it sets the `IsDeleted` flag on the current instance. Any subsequent `call_action` on a deleted instance is refused. This is not a typed mass-delete.
 
 ## 9. Do NOT Use (Unsupported in Phase 1a/1b)
 
@@ -186,7 +194,7 @@ Expression JSON format (for `add_policy` / `simulate_policy`):
 | `actor` | Use `entity` instead |
 | `value { }` | Value types not supported |
 | `schedule`, `parallel`, `for` | Control flow not supported |
-| `invoke` | Not supported in Phase 1a/1b |
+| `invoke` | Not supported in Phase 1a/1b (runtime library only) |
 | `relationship Name from A to B` | Use N1 nav properties instead |
 | `function` | Functions not supported |
 | Event/publish/subscribe | Event model retired |

@@ -1,14 +1,16 @@
 # Effect Surface Completeness
 
 **Date:** 2026-07-18  
-**Revised:** 2026-07-18 (**E′′** review — plan package + small MCP honesty nits; suite **1359**)  
-**Status:** Active backlog — plan **code-reviewed**; **E0 not started** (no guide IR-vs-DSL product edit yet)  
-**Current pick:** **Commit plan package** → **E0** guide honesty → **E1** delete-self  
+**Revised:** 2026-07-18 (**E1′′** re-review — honesty nits in tree; **commit still open**; suite **1360**)  
+**Status:** E1+E1′ **code-complete green uncommitted**; E2/Q\* after commit  
+**Current pick:** **E1′′.1 Commit** → **E2.1** and/or **Q0/Q1**  
+
+
 
 **Related:**  
+- [`dsl-query-surface.md`](dsl-query-surface.md) — **parallel** policies/guards query language (LINQ-inspired subset)  
 - [`mcp-phase3-oracle-surface.md`](mcp-phase3-oracle-surface.md) §6c RT · §6e SA  
 - [`mcp-tool-surface-expansion.md`](mcp-tool-surface-expansion.md) §0  
-- [`domainmodeling-next-phase.md`](domainmodeling-next-phase.md)  
 - Product DSL: [`Poly.Mcp/Docs/poly-dsl-agent-guide.md`](../../../Poly.Mcp/Docs/poly-dsl-agent-guide.md)  
 
 **Principle:** Usefulness = **executable × authorable × honest**. Prefer finishing the path for effects that already run over inventing many new effect kinds. No domain VM opcodes for host I/O (email/HTTP) — host adapters later.
@@ -44,7 +46,7 @@ Legend: **✅** product-ready · **🟡** partial · **❌** missing · **🚫**
 | **Composite** | ✅ VM | 🟡 flatten/comment | 🟡 construct | ❌ | Nested structure |
 | **Conditional** | ✅ VM | 🟡 weak print | 🟡 construct | ❌ | Branching; no first-class `if` in parser |
 | **InvokeAction** | 🟡 **self only** | ❌ `invoke` unsupported keyword | 🟡 construct | ❌ | `CallAction(ActionName)` on **this** instance; **ParameterBindings ignored** today — **not** multi-entity yet |
-| **DeleteEntityInstance** | ✅ soft-delete **self** | ❌ no DSL | 🟡 construct | ❌ | IR has `EntityType` field; executor ignores it and sets `IsDeleted` on current instance |
+| **DeleteEntityInstance** | ✅ soft-delete **self** | ✅ `delete` (E1) | 🟡 construct | ❌ | Executor ignores `EntityType`; parser stamps `_currentEntityName`. Soft-delete only |
 | **LinkRelationship** | 🟡 constrained | ❌ no DSL | 🟡 construct | ❌ | Target must be `PropertyAccess` whose bag value is already a `DomainEntityInstance`; else throws. Prefer `Store.Link` in tests |
 | **UnlinkRelationship** | 🟡 same as link | ❌ no DSL | 🟡 construct | ❌ | Same target resolution rules |
 | **TransitionRelationship** | ❌ **not executed** | ❌ | 🟡 construct | ❌ | IR exists; **no `case` in `ExecuteEffect`** — do not add DSL until runtime handles it |
@@ -68,7 +70,7 @@ A domain is **useful** for internal process modeling when agents can author and 
 | Spawn related work | create / create in | ✅ DSL + RT |
 | React to peers | when + store | ✅ DSL + RT |
 | Guard | policy / require | ✅ |
-| Soft-remove | delete | 🟡 runtime self only; no DSL |
+| Soft-remove | delete | ✅ DSL `delete` + RT refuse after delete |
 | Connect existing instances | link / unlink | 🟡 property-bag target only; or `Store.Link` |
 | Call another action on **self** | invoke | 🟡 IR/runtime self; DSL rejects; params unused |
 | Call action on **related** instance | invoke+nav | ❌ not implemented |
@@ -86,7 +88,8 @@ A domain is **useful** for internal process modeling when agents can author and 
 4. **Honesty** — guide + tool Description match parser; no lab keywords.  
 5. **SA constraints** — stage-action Option B snapshot limits still apply when placing actions with effects ([§6e](mcp-phase3-oracle-surface.md)).  
 6. **No effect soup** — prefer compose of assign/transition/create over one-off “business” effect types.  
-7. **Host I/O out of scope** — email/HTTP/payments are not Phase 1a effects.
+7. **Host I/O out of scope** — email/HTTP/payments are not Phase 1a effects.  
+8. **Query language is parallel** — customer policies need [`dsl-query-surface.md`](dsl-query-surface.md); effects alone do not make the DSL ship-ready.
 
 ---
 
@@ -94,12 +97,12 @@ A domain is **useful** for internal process modeling when agents can author and 
 
 ### E0 — Matrix freeze + guide honesty (**small**)
 
-- [ ] **E0.1** Keep this matrix updated when effects change (same PR as product change).  
-- [ ] **E0.2** Product guide § effects matches parser only (`transition`, `assign`, `create`, `create in`, entry/exit).  
-- [ ] **E0.3** Document in guide or DomainModeling README: which effects exist in IR but not DSL (delete, link, invoke).  
-- [ ] **E0.4** Dogfood domain shortlist that *should* hurt (ticket / loan / fulfillment).  
-- [ ] **E0.5** (**E′.5**) Clarify Ticket story: “assign agent” = **field assign** vs **graph link** — only the latter pulls E2.  
-- [ ] **E0.6** (**E′.6**) Optional: legend under matrix — “🟡 evolution = hand-built `AddEffectToAction` / helpers, not full fluent surface.”
+- [x] **E0.1** Matrix updated when effects change (maintained in this doc).  
+- [x] **E0.2** Product guide § effects matches parser — now includes `delete` (E1).  
+- [x] **E0.3** Guide documents IR-only effects (link, invoke) under §8 after supported table.  
+- [x] **E0.4** Dogfood domain shortlist — deferred to E2/E3 (link/invoke).  
+- [x] **E0.5** (**E′.5**) Ticket story clarified: assign = field assign vs graph link — E2 covers link.  
+- [ ] **E0.6** (**E′.6**) Optional: legend under matrix — deferred.
 
 **Exit:** Agents can see “supported vs library-only” without reading source.
 
@@ -111,13 +114,50 @@ A domain is **useful** for internal process modeling when agents can author and 
 
 **Runtime truth (E′):** `DeleteEntityInstance` currently only sets `IsDeleted` on **the executing instance**. The `EntityType` field is unused at execution. Product DSL should mean **delete self** (e.g. bare `delete`), not “delete arbitrary type.”
 
-- [ ] **E1.0** Spec: keyword + semantics = soft-delete **current** instance; clarify/ignore `EntityType` or remove dead IR later.  
-- [ ] **E1.1** DSL: parse/print `delete` → `DeleteEntityInstance` (self).  
-- [ ] **E1.2** Guide + printer round-trip.  
-- [ ] **E1.3** Golden: action with delete → CallAction → `IsDeleted` / MCP refuses further actions.  
-- [ ] **E1.4** Optional MCP: not required if DSL suffices; thin tool only if dogfood demands.
+- [x] **E1.0** Spec: `delete` keyword = soft-delete **current** instance. `Delete` token added to tokenizer. Entity self-reference via `_currentEntityName`.  
+- [x] **E1.1** DSL: `ParseEffect()` handles `TokenKind.Delete` → `DeleteEntityInstance(new DomainTypeReference(_currentEntityName))`. Printer outputs `delete`.  
+- [x] **E1.2** Guide updated: `delete` in Supported Effect Summary table. Printer round-trip via `export_dsl` assertion in golden.  
+- [x] **E1.3** Golden test `ApplyDsl_WithDelete_SoftDeletesInstance`: DSL → apply → create instance → call Archive → CallAction refused afterward. Validate `export_dsl` contains `delete`.  
+- [x] **E1.4** MCP not required — DSL suffices. Existing `RuntimeTool.CallAction` + `IsDeleted` check handles the runtime path.
 
-**Exit:** Soft-delete is first-class on product path; RT′.6 remains correct.
+**Exit:** Soft-delete is first-class on product path; RT′.6 remains correct. **Met in code** (suite **1360**); **commit still open**.
+
+### E1′ — honesty nits (addressed in working tree)
+
+| ID | Status |
+|----|--------|
+| **E1′.2** | ✅ Error string includes `delete` |
+| **E1′.3** | ✅ Guide: soft-delete self + link/unlink + TransitionRelationship dead IR |
+| **E1′.4** | ✅ Guide table: action, entry, exit for `delete` |
+
+### E1′′ — re-review after honesty fixes (2026-07-18)
+
+**Scope:** Full E1 + E1′ honesty. Suite **1360**. Tree **dirty** (E1 code unstaged; `dsl-query-surface.md` staged only).
+
+**Verdict:** **Shipable — commit now (E1′′.1).** Do not claim “shipped” until commit. Plan header “E1′ all closed” overstated **commit**.
+
+**Solid:** parse/print/token; error message; guide honesty; golden soft-delete E2E; RT IsDeleted refuse.
+
+**Residuals**
+
+| ID | Severity | Finding |
+|----|----------|---------|
+| **E1′′.1** | **Ops** | **Commit** all E1 code + effect-surface plan + query-surface plan together |
+| **E1′′.2** | Low | Optional: guide note that `delete` is a reserved keyword |
+| **E1′′.3** | Low | `EntityType` on IR still unused at execute — cleanup pull |
+| **E1′′.4** | Low | E0.4 dogfood shortlist still soft/deferred |
+| **E1′′.5** | Process | Rebuild embed after guide edit (`get_dsl_guide`) |
+| **E1′′.6** | Next | **E2.1** link decision |
+| **E1′′.7** | Parallel | **Q0/Q1** query surface |
+| **E1′′.8** | Pull | E3 invoke; TransitionRelationship runtime-or-hide |
+
+**Checklist**
+
+- [ ] **E1′′.1** Commit  
+- [ ] **E1′′.2–.5** Optional hygiene  
+- [ ] **E1′′.6–.8** Next slices / pull  
+
+**Recommended:** **Commit entire dirty tree.** Then E2.1 and/or Q0 — not more E1 polish.
 
 ---
 
@@ -235,12 +275,12 @@ What you cannot write in DSL without this plan is the backlog order.
 
 ## 8. Success criteria (thin vertical)
 
-- [ ] E0 honesty: guide/docs list supported vs library-only effects  
-- [ ] At least **E1** green (delete on product path) **or** explicit reject with substitute  
-- [ ] E2 **decision** recorded (implement or create-in-only)  
+- [x] E0 honesty: guide lists `delete` + partial library-only (link, invoke, unlink, TransitionRelationship) — soft-delete self noted  
+- [x] **E1** green (delete on product path) — suite **1360**  
+- [ ] **E2** decision recorded (implement or create-in-only)  
 - [ ] One multi-entity workflow green (E2 or E3) **or** deferred with reason  
-- [ ] Suite green; product guide in sync  
-- [ ] No host I/O effects; no event tools  
+- [x] Suite green (**1360**) when E1 tests included  
+- [x] No host I/O effects; no event tools  
 
 **“Useful enough” claim:** lifecycle kernel + soft-delete + (link **or** invoke) authorable and exercisable via MCP RT without custom C# for the dogfood Ticket (or named substitute domain).
 
@@ -249,24 +289,21 @@ What you cannot write in DSL without this plan is the backlog order.
 ## 9. Agent pick (right now)
 
 ```text
-DONE:    Phase 3 thin; RT; SA MVP; dogfood-1/2; E′ matrix honesty in plan
-CURRENT: Commit plan package (E′′.1) → E0.2–E0.3 guide IR-vs-DSL section
-THEN:    E1.0 + E1 delete-self product path
-THEN:    E2 link decision / E3a before E3b
-LATER:   E4 / E5; TransitionRelationship runtime-or-hide
-PULL:    Host I/O; full micro-catalog; L* containers
+DONE:    E1 + E1′ honesty in working tree (suite 1360)
+CURRENT: Commit E1′′.1 (product + plans + dsl-query-surface.md)
+THEN:    E2.1 link decision and/or Q0/Q1
+LATER:   E3a/E3b; E4/E5
+PULL:    Host I/O; micro-catalog; L*; TransitionRelationship runtime
 ```
 
 **Implementer watch-outs**
 
-- Do not add DSL for effects CallAction cannot run (esp. **TransitionRelationship**).  
-- **Invoke is not multi-entity yet** — fix runtime before marketing E3b.  
-- **Delete is self soft-delete** — do not design DSL as typed mass-delete.  
-- Link targets are **instance-valued properties**, not type names.  
-- Prefer `apply_dsl` for batch effect graphs; micro-tools are optional sugar.  
-- Keep SA snapshot honesty when placing stage actions.  
-- Update this matrix in the same PR as product changes.  
-- **Commit** staged plans + DomainTools honesty nits before starting E0 product guide edit (or one combined PR).
+- **Commit before “shipped”** — tree is still dirty.  
+- **`delete` = soft-delete self**; entry/exit allowed (guide).  
+- Do not DSL non-executed IR (TransitionRelationship).  
+- **Invoke is self-only** until E3b.  
+- Link targets = instance-valued properties.  
+- **get_dsl_guide** embed-only — rebuild after guide edits.
 
 ---
 
@@ -307,12 +344,14 @@ Plan direction is **right** (authorability of effects that already run). Initial
 
 **Checklist**
 
-- [x] **E′.1** Matrix accuracy corrections (this edit)  
+- [x] **E′.1** Matrix accuracy corrections  
 - [x] **E′.2–.4** Reflected in E1–E3 slice text  
 - [ ] **E′.5** Clarify Ticket dogfood “assign” vs graph link in E0.4  
 - [ ] **E′.6** Optional legend for evolution column  
-- [ ] **E′.7** Commit plan package when ready  
+- [x] **E′.7** Plan package committed (`08994cc`)  
 - [ ] **E′.8–.10** As product work lands  
+
+**dsl-query-surface.md** now tracked as parallel plan (Q0/Q1).  
 
 **Also in working tree (not effect surface code):** `add_action_to_stage` Description now mentions CallAction **fallthrough** (SA′′.2) — good; include with next SA/docs commit if still unstaged.
 
@@ -357,13 +396,57 @@ Plan direction is **right** (authorability of effects that already run). Initial
 
 **Checklist**
 
-- [ ] **E′′.1** Commit plan package (+ DomainTools honesty if intended same ship)  
-- [ ] **E′′.2** E0.2–E0.3 product guide IR-vs-DSL section  
+- [x] **E′′.1** Commit plan package + DomainTools honesty (`08994cc`)  
+- [ ] **E′′.2** / **E′′′.1** E0.2–E0.3 product guide IR-vs-DSL section  
 - [ ] **E′′.3** E0.4–E0.5 Ticket assign vs link  
 - [ ] **E′′.4** Optional matrix evolution legend  
-- [ ] **E′′.5** Confirm embed in pack/publish docs if needed  
-- [ ] **E′′.6** Optional smoke on empty-suggestions wording  
-- [ ] **E′′.7** Plan header consistency after commit  
+- [ ] **E′′.5** Optional embed note in Poly.Mcp README/csproj  
+- [x] **E′′.6** Empty-suggestions wording shipped (no new smoke required)  
+- [x] **E′′.7** Superseded by E′′′  
 - [ ] **E′′.8** E1+ implementation  
 
 **Recommended:** **E′′.1 commit now** → **E0.2–E0.3** guide honesty using §2 matrix → **E1.0+E1.1** delete-self.
+
+---
+
+## 12. E′′′ — Post-commit review (`08994cc`, clean tree)
+
+**Scope:** Committed effect-surface plan package + DomainTools honesty nits. Working tree **clean**. Suite **1359**.
+
+### Verdict
+
+**Accepted as shipped planning + honesty.** No further code blockers on that commit. **Product E0 is still incomplete:** `poly-dsl-agent-guide.md` still lists only transition/assign/create/create-in and Do-NOT `invoke` — it does **not** yet document library-only runtime effects (delete self, link bag targets, self-invoke, TransitionRelationship dead IR). That gap is the next slice.
+
+### Solid (committed)
+
+| Item | Notes |
+|------|--------|
+| Plan + E′/E′′ honesty | Matrix, E1–E3 runtime truths, pointers |
+| FALLTHROUGH Description | `add_action_to_stage` complete |
+| Embed-only `get_dsl_guide` | Fail-loud if resource missing; tests green |
+| Empty suggestions copy | Less overclaim |
+
+### Residuals / follow-ups
+
+| ID | Severity | Finding |
+|----|----------|---------|
+| **E′′′.1** | **Product (E0)** | **E0.2–E0.3 still open** — add guide section: product effects vs IR-only (delete, link, unlink, invoke self, TransitionRelationship not executed). Keep Do-NOT list aligned with parser. |
+| **E′′′.2** | Low | **E0.4–E0.5** Ticket dogfood: assign field vs graph link; optional loan/fulfillment. |
+| **E′′′.3** | Low | **E0.6** evolution-column legend under matrix. |
+| **E′′′.4** | Low | Guide §8 “Supported Effect Summary” should stay in lockstep with E0.2 after any E1+ land (process: E0.1). |
+| **E′′′.5** | Ops | Plan header/E′′ checklist still said “commit package” — superseded by `08994cc`; this section is current. |
+| **E′′′.6** | Low | Embed-only guide: document in Poly.Mcp README or csproj comment that pack requires EmbeddedResource (optional). |
+| **E′′′.7** | Pull | E1 delete-self product path after E0. |
+| **E′′′.8** | Pull | E2/E3 per plan; TransitionRelationship runtime-or-hide; invoke ParameterBindings. |
+
+**Checklist**
+
+- [x] **E′′.1** Plan package + honesty nits committed (`08994cc`)  
+- [x] **E′′′.1** / **E0.2–E0.3** Product guide IR-vs-DSL section — done in E1′  
+- [ ] **E′′′.2** / **E0.4–E0.5** Ticket assign vs link  
+- [ ] **E′′′.3** / **E0.6** Optional matrix legend  
+- [ ] **E′′′.4** Process: matrix+guide same PR as effect changes  
+- [ ] **E′′′.6** Optional pack/embed note  
+- [ ] **E′′′.7–.8** E1+ and pull items  
+
+**E1′ closed.** E2.1 link decision and/or Q0/Q1 query surface next.

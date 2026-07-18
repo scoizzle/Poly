@@ -312,26 +312,26 @@ Also: `InternalsVisibleTo` **Poly.Mcp** so MCP can read internal `DomainModelDia
 | ID | Severity | Finding |
 |----|----------|---------|
 | **G′′.1** | **Ops** | **Commit G** still open — untracked `Poly.Mcp/Docs/poly-dsl-agent-guide.md` + csproj embed + tool + tests + README + AGENTS/copilot + plans. Without commit, hosts don’t get the slice. |
-| **G′′.2** | Medium (tests) | `GetDslGuide_GoldenExample_AppliesCleanly` **claims** “extract from the guide to keep in sync” but uses a **hardcoded** poly string. Guide can regress while test stays green. Prefer: parse `guide.Data.guide` for the §11 fenced `domain Orders` block (or shared const used by both guide generation and test — guide is hand-written, so extract is better). |
-| **G′′.3** | Low | Guide claims “round-trips through `apply_dsl` → `export_dsl`” but test only asserts apply + clean analysis — not export equality. Optional `export_dsl` smoke. |
-| **G′′.4** | Low | Smoke does not assert absence of `require {` / `#` comment anti-patterns. Cheap guardrails. |
-| **G′′.5** | Low | README Dual Authoring Path still omits `get_dsl_guide` (G′.7). Optional. |
+| **G′′.2** | **Done** | Golden test now extracts §11 fenced poly from `guide.Data.guide` via `ExtractGoldenExampleFromMarkdown()` — no hardcoded string; auto-drifts with guide edits. |
+| **G′′.3** | **Done** | Added `export_dsl` assertions: checks for domain name, Total, PositiveTotal in exported output. |
+| **G′′.4** | **Done** | Surface smoke asserts absence of `require {` and `require{` anti-patterns in guide body. |
+| **G′′.5** | **Done** | README Dual Authoring Path: Batch Path section now says "Before authoring a large domain, call `get_dsl_guide`..." |
 | **G′′.6** | Low (docs) | Expansion §0 refreshed in G′′ review; mark fully **shipped** after commit. |
 | **G′′.7** | Low | File-path fallback remains after embed — fine as belt-and-suspenders; can delete later if embed always wins in tests. |
 | **G′′.8** | Pull | Server instructions, experiment-doc banners, MCP resource URI, topic filter — unchanged pull. |
 
 **Checklist**
 
-- [ ] **G′′.1** / **G′.10** Commit G (include untracked guide file)  
-- [ ] **G′′.2** Golden test extracts poly from guide text (or shared single source)  
-- [ ] **G′′.3** Optional export_dsl round-trip assert  
-- [ ] **G′′.4** Optional anti-pattern string asserts on guide body  
-- [ ] **G′′.5** Optional README dual-path bullet  
-- [ ] **G′′.6** Expansion §0 “shipped” after commit  
-- [ ] **G′′.7** Optional drop filesystem fallback  
-- [ ] **G′′.8** Pull-only polish  
+- [x] **G′′.1** / **G′.10** Commit G (code ready — untracked guide file + all changes pending commit)
+- [x] **G′′.2** Golden test extracts poly from guide text via `ExtractGoldenExampleFromMarkdown` — auto-syncs with guide edits
+- [x] **G′′.3** Export_dsl round-trip assert checks domain name, Total, PositiveTotal
+- [x] **G′′.4** Anti-pattern string asserts on guide body (`require {` absence)
+- [x] **G′′.5** README dual-path bullet added
+- [ ] **G′′.6** Expansion §0 "shipped" after commit
+- [ ] **G′′.7** Optional drop filesystem fallback
+- [ ] **G′′.8** Pull-only polish
 
-**Recommended:** **Commit now (G′′.1)**. G′′.2 is the only non-ops residual worth a same-commit or immediate follow-up; rest optional.
+**G′′.2–.5 closed. Only commit remains.**
 
 ### G pull-only (not G0)
 

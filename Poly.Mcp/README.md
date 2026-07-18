@@ -35,6 +35,9 @@ Poly.Mcp supports two complementary ways to build a domain model, each suited to
 
 ### Batch Path (`apply_dsl`)
 
+Before authoring a large domain, call **`get_dsl_guide`** to retrieve the product-true syntax guide.
+This avoids inventing unsupported lab constructs.
+
 Write the full domain in a single `.poly` DSL document and apply it in one shot. The session's domain is **replaced** entirely — not merged incrementally.
 
 ```

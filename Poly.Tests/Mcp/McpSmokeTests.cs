@@ -1228,46 +1228,28 @@ public class McpSmokeTests {
         await Assert.That(dataJson.ToLowerInvariant()).Contains("actor");
         // Should mention apply_dsl / MCP
         await Assert.That(dataJson).Contains("apply_dsl");
+
+        // G′′.4: Anti-pattern guards — guide must not teach lab constructs
+        await Assert.That(dataJson.Contains("require {")).IsFalse();
+        await Assert.That(dataJson.Contains("require{")).IsFalse();
     }
 
     [Test]
     public async Task GetDslGuide_GoldenExample_AppliesCleanly() {
-        // G2.2 / G′.5: The guide's golden example must parse and analyze clean.
-        // Extract it from the guide to keep in sync automatically.
+        // G2.2 / G′.5 / G′′.2: The guide's golden example must parse and analyze clean.
+        // Extract it from the guide text to keep in sync (extract between the ```poly fences).
         var guide = DslTool.GetDslGuide();
         await Assert.That(guide.Success).IsTrue();
 
-        // Get the guide content from the response
-        var guideData = System.Text.Json.JsonSerializer.Serialize(guide.Data);
-        // The guide contains a "domain Orders" golden example — use a known-good equivalent
-        var poly = """
-            domain Orders
+        // Extract the golden poly block from the raw guide body (not from serialized JSON)
+        var guideProp = guide.Data!.GetType().GetProperty("guide");
+        await Assert.That(guideProp).IsNotNull();
+        var guideBody = guideProp!.GetValue(guide.Data) as string;
+        await Assert.That(guideBody).IsNotNull();
 
-            Customer: entity {
-              Name: Text required
-              Email: Text unique
-              orders: many Order
-            }
-
-            Order: entity {
-              Total: Number range(0, )
-              Status: Text
-              PositiveTotal: policy { Total > 0 }
-
-              Draft: stage {
-                Submit: action
-                  require PositiveTotal
-                {
-                  transition to Active
-                }
-              }
-              Active: stage {
-                entry { assign Status to "active" }
-                exit  { assign Status to "archived" }
-              }
-              Done: stage { }
-            }
-            """;
+        var poly = ExtractGoldenExampleFromMarkdown(guideBody!);
+        await Assert.That(poly).IsNotNull();
+        await Assert.That(poly!.Length).IsGreaterThan(50);
 
         var (sessionId, _) = McpSessionStore.Create("GuideTest");
         var response = DslTool.ApplyDsl(sessionId, poly);
@@ -1279,5 +1261,39 @@ public class McpSmokeTests {
         var analysis = DomainModelAnalyzer.Analyze(state!.Domain);
         await Assert.That(analysis.HasStructuralFailure).IsFalse();
         await Assert.That(analysis.HasErrors).IsFalse();
+
+        // G′′.3: export_dsl round-trip assertion
+        var exportResponse = DslTool.ExportDsl(sessionId);
+        await Assert.That(exportResponse.Success).IsTrue();
+        var exportJson = System.Text.Json.JsonSerializer.Serialize(exportResponse.Data);
+        await Assert.That(exportJson.ToLowerInvariant()).Contains("domain orders");
+        await Assert.That(exportJson).Contains("Total");
+        await Assert.That(exportJson).Contains("PositiveTotal");
+    }
+
+    /// <summary>
+    /// Extracts the golden example from the raw guide markdown by finding the fenced code block
+    /// between ```poly and ``` that follows 'Example (Round-Trip Safe)'.
+    /// </summary>
+    private static string? ExtractGoldenExampleFromMarkdown(string markdown) {
+        var sectionMarker = "## 11. Example (Round-Trip Safe)";
+        var sectionIdx = markdown.IndexOf(sectionMarker, StringComparison.Ordinal);
+        if (sectionIdx < 0) sectionIdx = markdown.IndexOf("Round-Trip Safe", StringComparison.Ordinal);
+        if (sectionIdx < 0) return null;
+
+        var fenceOpen = "```poly";
+        var fenceIdx = markdown.IndexOf(fenceOpen, sectionIdx, StringComparison.Ordinal);
+        if (fenceIdx < 0) return null;
+
+        var contentStart = fenceIdx + fenceOpen.Length;
+        while (contentStart < markdown.Length && (markdown[contentStart] == '\n' || markdown[contentStart] == '\r'))
+            contentStart++;
+
+        var fenceClose = "```";
+        var closeIdx = markdown.IndexOf(fenceClose, contentStart, StringComparison.Ordinal);
+        if (closeIdx < 0) return null;
+
+        var raw = markdown.Substring(contentStart, closeIdx - contentStart);
+        return raw.Trim();
     }
 }

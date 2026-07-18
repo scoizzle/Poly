@@ -33,6 +33,7 @@
         <!-- Enables smoke / integration tests in Poly.Tests to reach internal RISC VM types during development and transition.
              No effect on public API surface or packaged consumers. -->
         <InternalsVisibleTo Include="Poly.Tests" />
+        <InternalsVisibleTo Include="Poly.Mcp" />
     </ItemGroup>
 
     <ItemGroup>

@@ -44,6 +44,8 @@ public static class DomainModelAnalysisBuilderExtensions {
             builder.AddAnalyzer(new SubscriptionContractAnalyzer());
             builder.AddAnalyzer(new SubscriptionCausalityAnalyzer());
             builder.AddAnalyzer(new SubscriptionReplaySafetyAnalyzer());
+            // Authoring suggestions (advisory hints)
+            builder.AddAnalyzer(new AuthoringSuggestionAnalyzer());
             return builder;
         }
 

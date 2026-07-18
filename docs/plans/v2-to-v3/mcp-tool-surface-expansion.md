@@ -19,7 +19,7 @@
 | Area | Tools / notes |
 |------|----------------|
 | Session | `create_domain_session`, `list_sessions` |
-| Query | `get_domain_overview`, `get_entity_detail`, `get_domain_analysis`, `get_domain_snapshot`, `get_relationships` |
+| Query | `get_domain_overview`, `get_entity_detail`, `get_domain_analysis`, `get_domain_snapshot`, `get_relationships` (**`get_domain_suggestions` green uncommitted — A-lite**) |
 | Structure add | `add_entity`, `add_property`, `add_stage`, `add_action`, `add_action_to_stage`, `add_relationship` |
 | Batch add | `add_properties`, `add_stages`, `add_actions_to_stages` |
 | **Remove / undo** (old plan “Phase 2”) | `remove_entity`, `remove_property`, `remove_stage`, `remove_action`, `remove_action_from_stage`, `remove_relationship`, `remove_policy` |
@@ -35,7 +35,7 @@
 |----------|--------|--------------|---------|
 | **P0** | Pipeline visibility (**V0**) | `lower_expression`, `describe_expression`, `describe_domain_element` | ✅ **Done** (`OracleTool` + `OracleToolTests`, suite **1339**) |
 | **P1** | Simulate (**S0**) | `simulate_policy` | ✅ **Done** (session-free VM eval, type inference) |
-| **P1** | Suggestions (**A0–A2**) | `SuggestionMetadata` / `ReportSuggestion`, affordance analyzer, `get_domain_suggestions` | Actionable analysis |
+| **P1** | Suggestions (**A-lite**) | `get_domain_suggestions` + `AuthoringSuggestionAnalyzer` (text `DMAS001` only; A′ honesty done) | ✅ Code-complete suite **1342**; **commit open** (A′′.1); full `acceptTool` pull |
 | **P2** | Visibility deep (**V1–V2**) | `analyze_expression`, `compare_engines`, `compile_expression`, `diff_expressions` | Debug / dual oracle |
 | **P2** | Debug (**S1**) | `debug_expression` (VmDebugger step trace) | After V0/S0 |
 | **P3** | Effect micro-tools | `add_parameter_to_action`, `add_effect_to_action`, transition/assign/create-in wrappers, remove effect, OnEntry/OnExit micro-tools | Only if dogfood refuses DSL for incremental effect edits |
@@ -52,9 +52,9 @@
 **Detailed checklists:** [`mcp-phase3-oracle-surface.md`](mcp-phase3-oracle-surface.md).
 
 ```text
-1. V0  lower_expression + describe_expression + describe_domain_element  ← **done**
-2. S0  simulate_policy (ad-hoc expression + subject)  ← **done**
-3. A0–A2  structured suggestions + get_domain_suggestions  ← **pull (only with consumer)**
+1. V0  lower_expression + describe_expression + describe_domain_element  ← **done** (`68e37c8`)
+2. S0  simulate_policy  ← **done** (`68e37c8`)
+3. A-lite  text-hint suggestions + get_domain_suggestions  ← **green uncommitted**; **commit now** (phase3 A′′.1)
 4. V1/S1  analyze_expression, compare_engines, debug_expression  (pull with pain)
 5. Effect/policy micro-tools or remove_constraint  (only if DSL insufficient)
 6. Runtime MCP (CallAction/store)  (only with named dogfood)

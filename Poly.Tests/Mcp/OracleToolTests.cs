@@ -215,4 +215,38 @@ public class OracleToolTests {
 
         await Assert.That(response.Success).IsFalse();
     }
+    // ── A2.2: get_domain_suggestions smoke test ────────────────
+
+    [Test]
+    public async Task GetDomainSuggestions_EmptyDomain_HasNoSuggestions() {
+        var (sessionId, _) = McpSessionStore.Create("SuggestionTest");
+
+        var response = QueryTool.GetDomainSuggestions(sessionId);
+        await Assert.That(response.Success).IsTrue();
+        await Assert.That(response.Message).Contains("No suggestions");
+        await Assert.That(response.Data).IsNotNull();
+        var dataJson = System.Text.Json.JsonSerializer.Serialize(response.Data);
+        await Assert.That(dataJson).Contains("\"count\":0");
+    }
+
+    [Test]
+    public async Task GetDomainSuggestions_EntityWithPropertiesNoStages_HasSuggestions() {
+        var (sessionId, _) = McpSessionStore.Create("SuggestionTest");
+
+        var r1 = EvolveTool.AddEntity(sessionId, "Task");
+        await Assert.That(r1.Success).IsTrue();
+        EvolveTool.AddProperty(sessionId, "Task", "Title", "Text");
+        EvolveTool.AddProperty(sessionId, "Task", "IsComplete", "Boolean");
+
+        var response = QueryTool.GetDomainSuggestions(sessionId);
+        await Assert.That(response.Success).IsTrue();
+        var dataJson = System.Text.Json.JsonSerializer.Serialize(response.Data);
+        await Assert.That(dataJson.ToLowerInvariant()).Contains("stage");
+    }
+
+    [Test]
+    public async Task GetDomainSuggestions_UnknownSession_Fails() {
+        var response = QueryTool.GetDomainSuggestions("nonexistent");
+        await Assert.That(response.Success).IsFalse();
+    }
 }

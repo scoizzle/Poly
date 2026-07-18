@@ -14,11 +14,11 @@ No changes were made to the domain modeling subsystems. All review items were de
 
 ## Reviewed Items
 
-### 3 unregistered V3 analyzers (~300 lines) — KEEP
+### 3 unregistered V3 analyzers (~300 lines) — DELETED (Replaced)
 
-**What they are:** `SemanticCoherenceAnalyzer.cs`, `IdempotencySafetyAnalyzer.cs`, `AuthoringSuggestionGenerator.cs` exist in `Poly/DomainModeling/Analysis/` but are never registered in `DomainModelAnalyzer.BuildPipeline()`.
+**What they were:** `SemanticCoherenceAnalyzer.cs`, `IdempotencySafetyAnalyzer.cs`, `AuthoringSuggestionGenerator.cs` existed in `Poly/DomainModeling/Analysis/` but were never registered in `DomainModelAnalyzer.BuildPipeline()`.
 
-**Why keep:** They are ahead of the pipeline — written while the migration was in progress. Part of the V3 analyzer pipeline being built. Not dead — the pipeline hasn't caught up yet.
+**What replaced them:** `AuthoringSuggestionAnalyzer.cs` — a single, registered analyzer producing three kinds of authoring hints (missing stages, missing actions, missing policies). Wired into the pipeline at `UseDomainModelAnalysisPipeline()` after subscription analyzers. Uses `DomainModelDiagnosticCodes.AuthoringSuggestion` ("DMAS001") for its hints, exposed via MCP `get_domain_suggestions`.
 
 ### V3 Builders (9 files, ~600 lines) — KEEP
 

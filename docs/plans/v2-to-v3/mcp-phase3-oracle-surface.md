@@ -1,9 +1,9 @@
 # Phase 3 — MCP Oracle Surface
 
 **Date:** 2026-07-18  
-**Revised:** 2026-07-18 (V0′ + S0 shipped — suite **1339**; all V0′ residuals + simulate_policy done)  
-**Status:** V0 + S0 **product-complete** (OracleTool + simulate_policy; suite 1339)  
-**Current pick:** **Stop / dogfood** — before A* / V1  
+**Revised:** 2026-07-18 (A′′ re-review after A′ fixes — suite **1342**; **commit still open**)  
+**Status:** Phase 3 thin **code-complete green** (V0+S0 committed in `68e37c8`; A-lite + A′ fixes **uncommitted**)  
+**Current pick:** **Commit A\*** (include untracked `AuthoringSuggestionAnalyzer.cs`) → then **stop/dogfood**  
 **Predecessor:** Phase 2 spawn-and-wire ([`domainmodeling-next-phase.md`](domainmodeling-next-phase.md)); MCP gap inventory ([`mcp-tool-surface-expansion.md`](mcp-tool-surface-expansion.md) §0)  
 **Goal:** Close the **neurosymbolic feedback loop** for agents: propose → **see** pipeline → **simulate** → correct → commit.  
 **Principle:** Thin MCP adapters; no new domain IR; deterministic oracles only; honest tool descriptions.
@@ -173,17 +173,74 @@ Agent proposes expression / element name
 
 ---
 
-## 6. Slice A0–A2 — Actionable suggestions (after V0/S0)
+## 6. Slice A0–A2 — Actionable suggestions (**A-lite code-complete, uncommitted**)
 
 Only start with a clear consumer (agent looping on `get_domain_analysis` text is painful enough).
 
-- [ ] **A0.1** `SuggestionMetadata` + `ReportSuggestion` on analysis context  
-- [ ] **A1.1** Port one hint generator to structured suggestion (e.g. idempotency or authoring)  
-- [ ] **A2.1** MCP `get_domain_suggestions(sessionId)`  
-- [ ] **A2.2** Smoke: domain with known hint shape → non-empty suggestions with `acceptTool`  
-- [ ] **A2.3** Honesty: suggestions advisory; apply still via evolve tools  
+- [x] **A0.1** `AuthoringSuggestionAnalyzer` with `ReportHint` — reuses `DiagnosticSeverity.Hint` (no structured `SuggestionMetadata` / `acceptTool` DTO)
+- [x] **A1.1** Three hint kinds: missing stages, missing actions on stages, missing policies for bool/range props
+- [x] **A2.1** MCP `get_domain_suggestions(sessionId)` — filters `Hint` + `code == DMAS001` from `LatestAnalysis`
+- [x] **A2.2** Smoke: entity with properties, no stages → message contains `stage`
+- [x] **A2.3** Honesty: advisory only; apply via evolve tools named in prose
 
-**Exit:** At least one suggestion kind agent can apply via existing `add_policy` / similar.
+**Exit:** At least one suggestion kind agent can act on via existing tools. **Met** (text-guided, not structured accept payload).
+
+### A′ — closed (impl loop 2026-07-18)
+
+| ID | Status | Resolution |
+|----|--------|------------|
+| **A′.1** | ✅ | Filter `Severity.Hint` **and** `Code == DomainModelDiagnosticCodes.AuthoringSuggestion` (`DMAS001`) |
+| **A′.2** | ✅ docs | A-lite / text-hint MVP (no `acceptTool`) |
+| **A′.3** | ✅ | Deleted unregistered `AuthoringSuggestionGenerator`, `SemanticCoherenceAnalyzer`, `IdempotencySafetyAnalyzer` |
+| **A′.4** | ✅ | README row for `get_domain_suggestions` |
+| **A′.5** | ⏳ **commit** | Analyzer still **untracked** on disk until commit |
+| **A′.6** | pull | Multi-match fail for describe without `entityName` |
+| **A′.7** | pull | Structured `SuggestionMetadata` / `acceptTool` |
+| **A′.8** | ✅ | Empty-domain asserts `Message` + `"count":0` |
+| **A′.9** | ✅ partial | Unknown-session fail-loud added; actions/policies smokes deferred |
+| **A′.10** | ✅ | `docs/technical/domain-modeling.md` updated |
+
+Also: `InternalsVisibleTo` **Poly.Mcp** so MCP can read internal `DomainModelDiagnosticCodes` (correct first-party seam).
+
+### A′′ — re-review after A′ fixes (2026-07-18)
+
+**Verdict:** A′ honesty loop **lands correctly**. Placement, filter, dead-code delete, README, technical doc, and tests are sound. Suite **1342** green. Do **not** claim “product-complete / stop-dogfood” until the **commit** includes untracked `AuthoringSuggestionAnalyzer.cs`. This remains **text-hint A-lite**, not full structured suggestions.
+
+**Solid (confirmed in working tree)**
+
+| Item | Notes |
+|------|--------|
+| Filter honesty | `Hint` + `DMAS001` only — Description matches behavior |
+| Analyzer | Domain-level visit via lookup; three rules name MCP tools |
+| MCP | Thin `QueryTool` adapter; fail-loud missing session / no analysis |
+| Cleanup | Three dead analyzer files removed |
+| Docs | README + technical domain-modeling honesty |
+| Tests | Empty / stages path / unknown session; suite **1342** |
+| IVT | `Poly.Mcp` → internal diagnostic codes (no public API sprawl) |
+
+**Follow-ups**
+
+| ID | Severity | Finding |
+|----|----------|---------|
+| **A′′.1** | **High (ops)** | **Commit A\*** still open. Working tree dirty; `AuthoringSuggestionAnalyzer.cs` is `??` untracked. Bundle: analyzer + pipeline + codes + IVT + MCP tool + tests + README + technical doc + dead-file deletes + plans. Until then status is **code-complete**, not shipped. |
+| **A′′.2** | Low (docs) | Expansion [`mcp-tool-surface-expansion.md`](mcp-tool-surface-expansion.md) §0: mark A-lite green after commit; add `get_domain_suggestions` to **Query shipped** table; refresh pick line (drop “commit with A′.1”). |
+| **A′′.3** | Low (docs) | Expansion body / inventory still claims `AuthoringSuggestionGenerator` / `IdempotencySafetyAnalyzer` as production text-hint sources (~§A design inventory). Hygiene when touching that plan — not product-blocking. Same for `dsl-sync-inventory.md` / archived anti-pattern notes that list the deleted trio. |
+| **A′′.4** | Low (tests) | Stage smoke does not assert `"DMAS001"` / `code` field; no smokes for actions-only or policies-only rules. Optional next loop. |
+| **A′′.5** | Low (copy) | Empty-domain success message: “domain looks well-structured” is slightly overclaiming for a blank domain. Soften later if agents misread. |
+| **A′′.6** | Pull | Non-authoring Hints (rule coverage, unused params, subscription replay) remain MCP-invisible (`get_domain_analysis` still Error/Warning/Info only). Surface only with consumer pain. |
+| **A′′.7** | Pull | A′.6 multi-match describe; A′.7 structured acceptTool; V1/S1/RT — unchanged pull list §7. |
+
+**Checklist**
+
+- [ ] **A′′.1** Commit A* (include untracked analyzer; do not leave dead-file deletes without the new analyzer)  
+- [ ] **A′′.2** Expansion §0 Query table + pick line after commit  
+- [ ] **A′′.3** Expansion/inventory doc hygiene (pull with next docs touch)  
+- [ ] **A′′.4** Optional stronger suggestion smokes  
+- [ ] **A′′.5** Optional empty-domain message soften  
+- [ ] **A′′.6** Optional surface other Hints via analysis tool (pull)  
+- [ ] **A′′.7** Pull-only product depth (structured suggestions, multi-match, V1/S1/RT)
+
+**Recommended:** **A′′.1 commit now** → stop/dogfood. A′′.2 in same commit or immediately after.
 
 ---
 
@@ -242,9 +299,12 @@ Optional single chain smoke: lower → describe same JSON both succeed.
 
 - [x] V0 three tools green with tests  
 - [x] S0 `simulate_policy` green with tests  
-- [x] Agent loop documented in MCP README: lower → describe → (simulate) → add_policy  
-- [x] Suite green (**1339**)  
+- [x] A-lite suggestions green with tests (A′ honesty loop)  
+- [x] Agent loop documented in MCP README: lower → describe → (simulate) → get_domain_suggestions → add_policy  
+- [x] Suite green (**1342**)  
 - [x] V0′ residuals closed (entityName disambig, policy smoke, simulate_policy)  
+- [x] A′ code residuals closed (DMAS001 filter, dead generators deleted, README, technical doc, tightened tests, fail-loud session)  
+- [ ] **A′′.1** A* **committed** (analyzer file must not stay untracked)  
 - [x] No event tools; no Capture; no runtime CallAction  
 
 ---
@@ -252,13 +312,14 @@ Optional single chain smoke: lower → describe same JSON both succeed.
 ## 12. Agent pick (right now)
 
 ```text
-CURRENT: Stop / dogfood — Phase 3 V0 + S0 complete
-THEN:    A* only with consumer; V1/S1 only with debug pain
+DONE:    V0 + S0 (`68e37c8`); A-lite + A′ fixes green uncommitted (suite 1342)
+CURRENT: Commit A* (A′′.1) — include AuthoringSuggestionAnalyzer.cs + deletes + IVT
+THEN:    Stop / dogfood
+LATER:   A′′.2–.3 doc hygiene; A′′.4–.7 / V1/S1/RT — pull only with consumer pain
 ```
 
 **Implementer watch-outs**
 
-- Prefer session-free pure tools for expression contracts; session required only for domain elements.  
-- Do not call LLM for "plain English" — templates only.  
-- Match existing `DomainToolResponse` affordance style.  
-- Stage/action/policy **name uniqueness is not global** — V0′.1 added optional `entityName` param.  
+- `get_domain_suggestions` is **DMAS001-only**; other Hints stay off MCP until a deliberate analysis surface change.  
+- Stage/action/policy **name uniqueness is not global** without `entityName`.  
+- Commit **must** add `AuthoringSuggestionAnalyzer.cs` (untracked) together with the three deleted dead analyzers.

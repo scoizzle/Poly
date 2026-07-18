@@ -5,6 +5,7 @@ using System.Text.Json.Serialization;
 using ModelContextProtocol.Server;
 
 using Poly.DomainModeling;
+using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Bootstrap;
 using Poly.DomainModeling.Constraints;
 using Poly.DomainModeling.Evolution;
@@ -260,6 +261,47 @@ internal sealed class QueryTool {
             Affordances: summary.ErrorCount > 0 && summary.HasStructuralFailure
                 ? ["get_domain_overview"]
                 : null
+        );
+    }
+
+    /// <summary>
+    /// Returns authoring suggestions (advisory hints) for the current domain.
+    /// Suggestions identify common gaps like missing stages, actions, or policies.
+    /// </summary>
+    [McpServerTool(Name = "get_domain_suggestions"), Description("Returns authoring suggestions (advisory hints) for the current domain. Suggestions identify common gaps like missing stages, actions, or policies — they are advisory and do not block evolution.")]
+    public static DomainToolResponse GetDomainSuggestions(
+        [Description("Session ID")] string sessionId) {
+        if (!McpSessionStore.TryGet(sessionId, out var state))
+            return Failure_NotFound(sessionId);
+
+        if (state.LatestAnalysis is null)
+            return new DomainToolResponse(
+                Success: false,
+                Message: "No analysis available.",
+                SessionId: sessionId,
+                Affordances: ["get_domain_overview", "get_domain_analysis"]);
+
+        var hints = state.LatestAnalysis.Diagnostics
+            .Where(d => d.Severity == DiagnosticSeverity.Hint &&
+                        string.Equals(d.Code, DomainModelDiagnosticCodes.AuthoringSuggestion, StringComparison.Ordinal))
+            .Select(d => new {
+                message = d.Message,
+                code = d.Code,
+                nodeId = d.Node.Id.ToString()
+            })
+            .ToList();
+
+        var message = hints.Count > 0
+            ? $"{hints.Count} suggestion(s) available."
+            : "No suggestions — domain looks well-structured.";
+
+        return new DomainToolResponse(
+            Success: true,
+            Message: message,
+            SessionId: sessionId,
+            Revision: state.Revision,
+            Data: new { suggestions = hints, count = hints.Count },
+            Affordances: ["get_entity_detail", "get_domain_analysis", "add_stage", "add_action_to_stage", "add_policy"]
         );
     }
 

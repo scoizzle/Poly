@@ -26,4 +26,7 @@ internal static class DomainModelDiagnosticCodes {
 
     // General system diagnostics
     public const string RuleCoverage = "DMSYS001";
+
+    // Authoring suggestions (advisory hints)
+    public const string AuthoringSuggestion = "DMAS001";
 }

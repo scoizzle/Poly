@@ -18,6 +18,7 @@ builder.Services
     .WithTools<QueryTool>()
     .WithTools<EvolveTool>()
     .WithTools<PolicyTool>()
-    .WithTools<DslTool>();
+    .WithTools<DslTool>()
+    .WithTools<OracleTool>();
 
 await builder.Build().RunAsync();

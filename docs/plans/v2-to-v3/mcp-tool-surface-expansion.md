@@ -33,8 +33,8 @@
 
 | Priority | Bucket | Tools / work | Trigger |
 |----------|--------|--------------|---------|
-| **P0** | Pipeline visibility (**V0**) | `lower_expression`, `describe_expression`, `describe_domain_element` | Agent confidence; zero domain risk |
-| **P1** | Simulate (**S0**) | `simulate_policy` (or further broaden `evaluate_policy` for ad-hoc expressions) | Try-before-commit for guards |
+| **P0** | Pipeline visibility (**V0**) | `lower_expression`, `describe_expression`, `describe_domain_element` | ✅ **Done** (`OracleTool` + `OracleToolTests`, suite **1339**) |
+| **P1** | Simulate (**S0**) | `simulate_policy` | ✅ **Done** (session-free VM eval, type inference) |
 | **P1** | Suggestions (**A0–A2**) | `SuggestionMetadata` / `ReportSuggestion`, affordance analyzer, `get_domain_suggestions` | Actionable analysis |
 | **P2** | Visibility deep (**V1–V2**) | `analyze_expression`, `compare_engines`, `compile_expression`, `diff_expressions` | Debug / dual oracle |
 | **P2** | Debug (**S1**) | `debug_expression` (VmDebugger step trace) | After V0/S0 |
@@ -52,9 +52,9 @@
 **Detailed checklists:** [`mcp-phase3-oracle-surface.md`](mcp-phase3-oracle-surface.md).
 
 ```text
-1. V0  lower_expression + describe_expression + describe_domain_element  ← CURRENT
-2. S0  simulate_policy (ad-hoc expression + subject)
-3. A0–A2  structured suggestions + get_domain_suggestions
+1. V0  lower_expression + describe_expression + describe_domain_element  ← **done**
+2. S0  simulate_policy (ad-hoc expression + subject)  ← **done**
+3. A0–A2  structured suggestions + get_domain_suggestions  ← **pull (only with consumer)**
 4. V1/S1  analyze_expression, compare_engines, debug_expression  (pull with pain)
 5. Effect/policy micro-tools or remove_constraint  (only if DSL insufficient)
 6. Runtime MCP (CallAction/store)  (only with named dogfood)

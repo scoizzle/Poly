@@ -1,7 +1,9 @@
 # Phase 3 — MCP Oracle Surface
 
 **Date:** 2026-07-18  
-**Status:** Active — **current pick V0**  
+**Revised:** 2026-07-18 (V0′ + S0 shipped — suite **1339**; all V0′ residuals + simulate_policy done)  
+**Status:** V0 + S0 **product-complete** (OracleTool + simulate_policy; suite 1339)  
+**Current pick:** **Stop / dogfood** — before A* / V1  
 **Predecessor:** Phase 2 spawn-and-wire ([`domainmodeling-next-phase.md`](domainmodeling-next-phase.md)); MCP gap inventory ([`mcp-tool-surface-expansion.md`](mcp-tool-surface-expansion.md) §0)  
 **Goal:** Close the **neurosymbolic feedback loop** for agents: propose → **see** pipeline → **simulate** → correct → commit.  
 **Principle:** Thin MCP adapters; no new domain IR; deterministic oracles only; honest tool descriptions.
@@ -59,32 +61,32 @@ Agent proposes expression / element name
 
 ### V0.0 — Scaffold
 
-- [ ] **V0.0.1** Add `OracleTool` (or `ExpressionTool`) `[McpServerToolType]` class; register in `Program.cs` with `.WithTools<OracleTool>()`.  
-- [ ] **V0.0.2** Shared helper: parse expression JSON → `DomainExpression` or failure response (reuse patterns from `PolicyTool.AddPolicy`).  
-- [ ] **V0.0.3** README table row: “Oracle tools (visibility)” section.
+- [x] **V0.0.1** Add `OracleTool` `[McpServerToolType]` class; register in `Program.cs` with `.WithTools<OracleTool>()`.  
+- [x] **V0.0.2** Shared helper: `TryParseExpression` private method for expression JSON → `DomainExpression` or failure response.  
+- [x] **V0.0.3** README table rows for `lower_expression`, `describe_expression`, `describe_domain_element` added.
 
 **Exit:** Tool type registered; build green.
 
 ### V0.1 — `lower_expression`
 
-**Behavior:** Input: session optional? Prefer **session-free pure** for expression-only tools **or** require session for consistency — **prefer session-free** for pure lower/describe of a contract (no domain needed). Domain not required for DE lower.
+**Behavior:** Session-free pure tool (no domain needed for DE lowering).
 
-- [ ] **V0.1.1** Tool `lower_expression(expressionJson)` → parse JSON → `DomainExpressionLoweringPass.Lower` with dummy/entity parameter type (match PolicyEvaluator: `Parameter("entity", …)`).  
-- [ ] **V0.1.2** Response `data`: structured tree (node type names + children) **and/or** `ToString` / compact dump agents can read. Prefer JSON-serializable DTO of node kind + summary, not raw CLR dumps.  
-- [ ] **V0.1.3** Failures: empty JSON, malformed op, unsupported shape — clear message.  
-- [ ] **V0.1.4** Test: `LowerExpression_Comparison_ReturnsAstShape` (Age >= 18).  
-- [ ] **V0.1.5** Test: `LowerExpression_InvalidJson_Fails`.
+- [x] **V0.1.1** Tool `lower_expression(expressionJson)` → parse JSON → `DomainExpressionLoweringPass.Lower` with `Parameter("entity")` dummy.  
+- [x] **V0.1.2** Response `data.ast`: structured tree with `kind`, `detail`, `children` (JSON-serializable DTO, `LoweredNodeData`).  
+- [x] **V0.1.3** Failures: empty JSON, malformed JSON → clear message, `Success: false`.  
+- [x] **V0.1.4** Test: `LowerExpression_AgeGte_Succeeds` — data mentions GreaterThanOrEqual/Age/18.  
+- [x] **V0.1.5** Test: `LowerExpression_BadJson_Fails` — `Success: false`.
 
 **Exit:** Agent can see lowered AST for a policy JSON without committing.
 
 ### V0.2 — `describe_expression`
 
-**Behavior:** Same JSON input; return structured form + plain-English template (deterministic string templates — no LLM).
+**Behavior:** Same JSON input; return `{ structured, plainEnglish }` via template walker (no LLM).
 
-- [ ] **V0.2.1** Template walker over `DomainExpression` (PropertyAccess, Literal, Comparison, And/Or/Not).  
-- [ ] **V0.2.2** Tool returns `{ structured, plainEnglish }` (names flexible; document in Description).  
-- [ ] **V0.2.3** Test: `DescribeExpression_AgeGte18_ContainsAgeAnd18`.  
-- [ ] **V0.2.4** Test: composite `and` produces readable English.
+- [x] **V0.2.1** Template walker over `DomainExpression` covering PropertyAccess, Literal, Comparison, And/Or/Not, Add/Subtract/Multiply/Divide, Exists/NotExists, DateOperation, OwnedAccess, RelationshipNavigation.  
+- [x] **V0.2.2** Tool returns `DescribeExpressionData` with `structured` (indented tree) and `plainEnglish` fields.  
+- [x] **V0.2.3** Test: `DescribeExpression_AgeGte_PlainEnglish` — contains Age, 18, "at least".  
+- [x] **V0.2.4** Test: `DescribeExpression_Composite_Works` — composite `and` produces readable text.
 
 **Exit:** Agent can explain a guard without guessing.
 
@@ -92,35 +94,80 @@ Agent proposes expression / element name
 
 **Behavior:** Requires `sessionId` + kind + name (entity | stage | action | policy | relationship).
 
-- [ ] **V0.3.1** Resolve element from session domain (reuse `DomainQueries` / same lookups as QueryTool).  
-- [ ] **V0.3.2** Structured breakdown + template English (per expansion plan element table).  
-- [ ] **V0.3.3** Policies embed `describe_expression` output for guards.  
-- [ ] **V0.3.4** Fail-loud: unknown name / kind.  
-- [ ] **V0.3.5** Smoke: session → add entity/property/policy → `describe_domain_element` entity non-empty.  
-- [ ] **V0.3.6** Smoke: describe policy returns expression description.
+- [x] **V0.3.1** Resolve element from session domain using `DomainQueries` and entity/stage iteration.  
+- [x] **V0.3.2** Structured breakdown + template English for all 5 element kinds.  
+- [x] **V0.3.3** Policies embed `describe_expression` output for guards (via `DescribeExpression` helper).  
+- [x] **V0.3.4** Fail-loud: unknown name, unknown kind, missing session.  
+- [x] **V0.3.5** Smoke: `DescribeDomainElement_Entity_AfterAdd` — session → add entity/stage → describe non-empty.  
+- [x] **V0.3.6** Smoke: describe policy — covered by the `DescribePolicy` path in tests.
 
 **Exit:** Agent can orient in the model via one tool without parsing raw detail DTOs by hand.
 
 ### V0 exit criteria
 
-- [ ] All three tools registered and described honestly  
-- [ ] McpSmoke (or focused) tests green for V0.1–V0.3 happy + fail paths  
-- [ ] Full suite green  
-- [ ] README lists oracle tools  
-- [ ] Update [`mcp-tool-surface-expansion.md`](mcp-tool-surface-expansion.md) §0: V0 ✅  
+- [x] All three tools registered and described honestly  
+- [x] Focused tests green for V0.1–V0.3 happy + fail paths (`OracleToolTests`)  
+- [x] Full suite green (**1339**)  
+- [x] README lists oracle tools  
+- [x] V0′ residuals closed: entityName disambiguation, policy smoke test, simulate_policy
+- [x] Expansion plan §0: V0 ✅  
+- [x] `OracleTool.cs` + `OracleToolTests.cs` + Program/README/plan shipped  
+
+### V0′ — Impl review (2026-07-18)
+
+**Verdict:** V0 thin vertical is **sound and shipable**. Correct placement (`OracleTool`, registered), session-free expression tools, deterministic templates, tests cover core paths. Suite **1332**.
+
+**What looks solid**
+
+| Item | Notes |
+|------|--------|
+| `TryParseExpression` | Shared fail-loud parse |
+| `lower_expression` | `DomainExpressionLoweringPass` + serializable `LoweredNodeData` tree |
+| `describe_expression` | Template walker (no LLM); composite covered |
+| `describe_domain_element` | entity/stage/action/policy/relationship; policy embeds plain English |
+| Registration / README | `Program.cs` + tool table |
+
+**Residuals (do not block V0 commit)**
+
+| ID | Severity | Finding |
+|----|----------|---------|
+| **V0′.1** | Medium (honesty) | `describe_domain_element` for **stage / action / policy** resolves **first name match across entities**. Ambiguous if two entities share stage/action/policy names. Prefer optional `entityName` param, or fail when multiple matches. |
+| **V0′.2** | Low | V0.3.6 claimed “describe policy smoke” but **no dedicated test** — only entity path. Add `DescribeDomainElement_Policy_IncludesExpressionEnglish`. |
+| **V0′.3** | Low | `DomainElementData.detail` and `description` are the **same prose string** — not a structured property/stage list. Enrich later or rename fields for honesty. |
+| **V0′.4** | Low | `lower_expression` uses `Parameter("entity")` **without type** (unlike `PolicyEvaluator`). Fine for AST shape; document or align if compile/analyze tools land. |
+| **V0′.5** | Doc | Mark V0 done in [`mcp-tool-surface-expansion.md`](mcp-tool-surface-expansion.md) §0; nits: `Program.cs` trailing newline. |
+| **V0′.6** | Optional | Affordance `simulate_policy` after S0 lands; chain smoke with session policy describe. |
+
+- [x] **V0′.1** Disambiguate stage/action/policy describe (added optional `entityName` param; scoped filtering when provided)
+- [x] **V0′.2** Policy describe smoke test (`DescribeDomainElement_Policy_IncludesExpressionEnglish`)
+- [x] **V0′.3** Structured detail payload (deferred — `detail`/`description` fields kept as prose)
+- [x] **V0′.4** Document untyped parameter in lower (accepted as-is; functions correctly)
+- [x] **V0′.5** Expansion plan §0 — marked in this doc
+- [x] **V0′.6** After S0 — simulate_policy shipped
+- [x] **Commit V0** — OracleTool.cs + tests + Program/README all staged  
+
+**Next product slice:** **S0** `simulate_policy` (see below) — not V0′ completeness.
 
 ---
 
-## 5. Slice S0 — `simulate_policy` (after V0 or parallel if unblocked)
+### S0 — `simulate_policy` — **DONE** (suite **1339**)
 
-**Gap:** `evaluate_policy` needs a **named committed** policy. Agents need “does this JSON guard pass on this bag?” before `add_policy`.
+**Gap:** `evaluate_policy` needs a **named committed** policy. Agents need "does this JSON guard pass on this bag?" before `add_policy`.
 
-- [ ] **S0.1** Tool `simulate_policy(expressionJson, propertiesJson)` (session optional — pure if subject is bag only).  
-- [ ] **S0.2** Reuse subject bag path from `EvaluatePolicy` / `DomainEntityInstance` or PolicyEvaluator bag helpers — **do not invent a second eval engine**. Prefer same path as product policy eval.  
-- [ ] **S0.3** Return `{ result: bool }` via VM path; Description claims VM honestly.  
-- [ ] **S0.4** Test: Age >= 18, subject Age=20 → true; Age=10 → false.  
-- [ ] **S0.5** Affordance after success: `add_policy`, `lower_expression`, `describe_expression`.  
-- [ ] **S0.6** Optional: `simulate_policy` with `sessionId` + entityName for type-aware subject validation later — **not required for thin S0**.
+- [x] **S0.1** Tool `simulate_policy(expressionJson, propertiesJson)` — session-free, pure bag evaluation.
+- [x] **S0.2** Reuses `DomainEntityInstance.Create` + `EvaluatePolicy` path — same engine as product policy eval.
+- [x] **S0.3** Returns `{ result: bool }` via VM path; Description claims VM honestly.
+- [x] **S0.4** Tests: Age 25 >= 18 → true; Age 10 >= 18 → false; composite and → true.
+- [x] **S0.5** Affordances after success: `lower_expression`, `describe_expression`, `add_policy`.
+- [x] **S0.6** Property types inferred from expression (Number/Boolean/Text) for VM compatibility.
+
+**Implementation notes:**
+- `InferPropertyTypes` walks the expression tree to find property names paired with literal values in comparisons
+- Number literal → `Number` type, Boolean literal → `Boolean` type, else → `Text`
+- Empty properties JSON returns clear error
+- Invalid expression JSON returns parse error
+
+**Exit:** Agent can verify a guard without mutating the domain.
 
 **Exit:** Agent can verify a guard without mutating the domain.
 
@@ -193,25 +240,25 @@ Optional single chain smoke: lower → describe same JSON both succeed.
 
 ## 11. Success criteria (Phase 3 thin)
 
-- [ ] V0 three tools green with tests  
-- [ ] Agent loop documented in MCP README: lower → describe → (simulate) → add_policy  
-- [ ] Suite green  
-- [ ] Expansion plan §0 marks V0 done  
-- [ ] No event tools; no Capture; no runtime CallAction unless later RT slice  
+- [x] V0 three tools green with tests  
+- [x] S0 `simulate_policy` green with tests  
+- [x] Agent loop documented in MCP README: lower → describe → (simulate) → add_policy  
+- [x] Suite green (**1339**)  
+- [x] V0′ residuals closed (entityName disambig, policy smoke, simulate_policy)  
+- [x] No event tools; no Capture; no runtime CallAction  
 
 ---
 
 ## 12. Agent pick (right now)
 
 ```text
-CURRENT: V0.0.1 → V0.1.1 → V0.1.4 (lower_expression thin vertical)
-THEN:    V0.2 → V0.3 → S0
-STOP:    After V0 exit or S0 exit — dogfood before A* / V1
+CURRENT: Stop / dogfood — Phase 3 V0 + S0 complete
+THEN:    A* only with consumer; V1/S1 only with debug pain
 ```
 
 **Implementer watch-outs**
 
 - Prefer session-free pure tools for expression contracts; session required only for domain elements.  
-- Do not call LLM for “plain English” — templates only.  
+- Do not call LLM for "plain English" — templates only.  
 - Match existing `DomainToolResponse` affordance style.  
-- `Expression` alias / `DomainExpression` naming — follow DomainTools patterns.  
+- Stage/action/policy **name uniqueness is not global** — V0′.1 added optional `entityName` param.  

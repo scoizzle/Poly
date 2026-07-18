@@ -22,6 +22,10 @@ Tools live in `Poly.Mcp/Tools/` and use only `Poly.DomainModeling` types (no `Po
 | `evaluate_policy` | `PolicyTool` | Evaluates a policy against a sample subject (VM, returns bool) |
 | `apply_dsl` | `DslTool` | Applies a `.poly` DSL document, **replacing** the current session domain entirely |
 | `export_dsl` | `DslTool` | Exports the current session domain as `.poly` DSL text |
+| `lower_expression` | `OracleTool` | Lowers a JSON policy expression through the Syntax AST pipeline for inspection |
+| `describe_expression` | `OracleTool` | Returns a structured breakdown and plain-English description of an expression |
+| `describe_domain_element` | `OracleTool` | Describes a domain element (entity/stage/action/policy/relationship) |
+| `simulate_policy` | `OracleTool` | Simulates a JSON expression against a subject bag (VM eval, returns bool, no session needed) |
 
 ## Dual Authoring Path
 

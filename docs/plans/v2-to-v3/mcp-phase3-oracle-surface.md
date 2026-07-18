@@ -3,7 +3,7 @@
 **Date:** 2026-07-18  
 **Revised:** 2026-07-18 (**SA′′** review — honesty nits green uncommitted; suite **1359**)  
 **Status:** Phase 3 + RT + RT′/SA MVP **committed** (`a74af5d`); **SA′ honesty** (hintCount, Descriptions, README, order golden) **uncommitted**  
-**Current pick:** **Commit SA′ honesty** → stop; **SA′.1** snapshot semantics remain pull  
+**Current pick:** Effect surface — [`effect-surface-completeness.md`](effect-surface-completeness.md) (E0→E1); SA′.1 snapshot remains pull  
 
 
 **Predecessor:** Phase 2 spawn-and-wire ([`domainmodeling-next-phase.md`](domainmodeling-next-phase.md)); MCP gap inventory ([`mcp-tool-surface-expansion.md`](mcp-tool-surface-expansion.md) §0)  
@@ -689,16 +689,13 @@ Optional single chain smoke: lower → describe same JSON both succeed.
 ## 12. Agent pick (right now)
 
 ```text
-DONE:    Phase 3 thin; RT; dogfood-1/2; RT′/SA MVP (`a74af5d`); SA′ honesty code green (1359)
-CURRENT: Commit SA′ honesty (hintCount, Descriptions, README, order golden) — SA′′.1
-THEN:    Stop / dogfood
-LATER:   SA′′.4 stale snapshot / Option A; effect-micro / V1 / L* — pull only
+DONE:    Phase 3 thin; RT; dogfood-1/2; RT′/SA; SA′ honesty
+CURRENT: Effect surface — effect-surface-completeness.md (E0 → E1 delete → E2/E3)
+LATER:   SA stale snapshot / Option A; full effect-micro / V1 / L* — pull only
 ```
 
 **Implementer watch-outs**
 
-- **Commit** the uncommitted honesty diff — do not leave `hintCount` only in working tree.  
-- **SA Option B is a snapshot** — documented on `add_action_to_stage`; fallthrough only when stage effects+policies empty.  
-- `hintCount` ≠ `infoCount` — agents should read both.  
-- Subscriptions: relationship **TARGET** stage entry (README).  
-- Do **not** open Option A / effect-micro without named pain.
+- **SA Option B is a snapshot** — documented on `add_action_to_stage`.  
+- **Next usefulness track is effects authoring** — see [`effect-surface-completeness.md`](effect-surface-completeness.md).  
+- Do **not** open Option A / full effect-micro / host I/O / containers without named pain.

@@ -44,7 +44,8 @@
 | **P1** | Runtime MCP (RT) | create/call/list instances | ✅ **Shipped** + dogfood-2 |
 | **P1** | Parser honesty | `actor` message; optional nav FormatException | Pull (RT′.2–.3) |
 | **P2** | Visibility / debug (**V1/S1**) | analyze/compare/debug expression | Pull |
-| **P2** | Full effect-micro MCP | Per-effect tools | **Pull** — DSL + SA fix cover the gap |
+| **P1** | **Effect surface (E\*)** | DSL/runtime parity for delete/link/invoke; optional thin MCP | [`effect-surface-completeness.md`](effect-surface-completeness.md) — **next usefulness track** |
+| **P2** | Full effect-micro MCP | Per-effect tools | **Pull** — only after E\* dogfood; prefer DSL first |
 | **P3** | Library builder hygiene | `AddActionWithEffect` naming | Pull |
 | **P3** | Constraint remove | `remove_constraint` | Unexercised |
 | **Post–P3** | **L\*** C# → MSIL → **containers** | phase3 **§6d** | Well after Phase 3 + RT |
@@ -55,10 +56,11 @@
 **Dogfood-2:** [DOGFOOD-REPORT-2-20260718](agent-summaries/dogfood/DOGFOOD-REPORT-2-20260718.md) · phase3 **§6e SA′′**
 
 ```text
-1–7.  V0…RT + RT′/SA MVP (`a74af5d`)     ← done
-8. ▶  Commit SA′ honesty (1359)            ← now
-9.    SA′.1 stale snapshot / Option A      ← pull
-10.   effect-micro / V1 / L* / containers  ← pull
+1–8.  V0…RT + RT′/SA + SA′ honesty        ← done (or commit last honesty)
+9. ▶  Effect surface E0→E1 (matrix + delete DSL)  ← next usefulness
+10.   E2 link decision / E3 invoke         ← by dogfood domain pain
+11.   E5 thin MCP effect tools             ← only with quotes
+12.   SA′.1 Option A / V1 / L* containers  ← pull
 ```
 
 ---

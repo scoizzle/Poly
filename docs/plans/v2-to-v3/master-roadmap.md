@@ -37,12 +37,11 @@ MCP / direct API as thin consumers
 
 | Priority | Work | Where | Status |
 |----------|------|--------|--------|
-| 1 | **Phase 2: Spawn-and-wire** | [`domainmodeling-next-phase.md`](domainmodeling-next-phase.md) | **Complete** (residual commit may still be open) |
-| 2 | P2.1–P2.5 + P2′ honesty | create/link, DSL, dogfood, entry/exit, multi-stage when | Done |
-| 3 | **Phase 3: MCP oracle surface** | [`mcp-phase3-oracle-surface.md`](mcp-phase3-oracle-surface.md) (tasks) · [`mcp-tool-surface-expansion.md`](mcp-tool-surface-expansion.md) §0 | **Next** — V0 `lower_expression` first |
-| 4 | Simulate / suggestions / debug | same plan S0 / A* / S1 | Open |
-| 5 | Runtime MCP (CallAction/store) | expansion **RT.*** | Pull-only with dogfood |
-| 6 | Event authoring tools | — | **Never** (stage transition path) |
+| 1 | **Phase 2: Spawn-and-wire** | [`domainmodeling-next-phase.md`](domainmodeling-next-phase.md) | **Complete** |
+| 2 | **Phase 3 thin: oracle + A-lite + DSL guide** | [`mcp-phase3-oracle-surface.md`](mcp-phase3-oracle-surface.md) · expansion §0 | **Complete** (V0/S0/A/G) |
+| 3 | **MCP dogfood orchestration** | [`mcp-dogfood-orchestrator.md`](mcp-dogfood-orchestrator.md) | **Next** — rank next pain before more tools |
+| 4 | V1/S1 / effect micro / Runtime MCP | expansion §0 | **Pull-only** after dogfood report |
+| 5 | Event authoring tools | — | **Never** (stage transition path) |
 
 ## Archived migration material
 

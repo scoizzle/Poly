@@ -1,8 +1,9 @@
 # MCP Tool Surface — Semantic Gap Analysis & Expansion Plan
 
 **Date:** 2026-07-12  
-**Revised:** 2026-07-18 (**G′′** review: guide product-true green; **commit open**)  
-**Status:** Active backlog — mutate/undo/DSL/oracle/A-lite **shipped**; **G code-complete uncommitted**  
+**Revised:** 2026-07-18 (Phase 3 thin shipped; **dogfood orchestrator** is next pick)  
+**Status:** Active backlog — mutate/undo/DSL/oracle/A-lite/G **shipped**; next = dogfood rank, then pull-only slices  
+
 **Shipped tools (approx.):** ~30+ in `Poly.Mcp/Tools/` (session, query, evolve, policy, constraint, DSL, oracle, suggestions)  
 **Principle:** Thin adapters over `DomainEvolution` / DomainModeling / Interpretation — no new domain semantics; no V2 resurrection; **no event authoring tools** (stage-transition-as-observable).  
 **Related:**  
@@ -50,17 +51,19 @@
 
 ### Pick order (agents)
 
-**Detailed checklists:** [`mcp-phase3-oracle-surface.md`](mcp-phase3-oracle-surface.md).
+**Detailed checklists:** [`mcp-phase3-oracle-surface.md`](mcp-phase3-oracle-surface.md).  
+**Dogfood next-pain program:** [`mcp-dogfood-orchestrator.md`](mcp-dogfood-orchestrator.md) (supervisor + child missions → ranked report **before** more tools).
 
 ```text
 1. V0  lower_expression + describe_expression + describe_domain_element  ← **done** (`68e37c8`)
 2. S0  simulate_policy  ← **done** (`68e37c8`)
 3. A-lite  get_domain_suggestions  ← **done** (`02ceee1`)
-4. G    get_dsl_guide + product guide  ← **green uncommitted**; **commit now** (phase3 G′′.1)
-5. V1/S1  analyze_expression, compare_engines, debug_expression  (pull with pain)
-6. Effect/policy micro-tools or remove_constraint  (only if DSL insufficient)
-7. Runtime MCP (CallAction/store)  (only with named dogfood)
-8. Capture / dry-run / simulate_effect  (named reverse-eng or runtime scenario)
+4. G    get_dsl_guide + product guide  ← **done** (`6b0fd63`)
+5. DOGFOOD orchestrator  ← **next** (rank pain; do not invent tools)
+6. V1/S1  analyze_expression, compare_engines, debug_expression  (pull with dogfood pain)
+7. Effect/policy micro-tools or remove_constraint  (only if DSL insufficient)
+8. Runtime MCP (CallAction/store)  (only with named dogfood)
+9. Capture / dry-run / simulate_effect  (named reverse-eng or runtime scenario)
 ```
 
 ---

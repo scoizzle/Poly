@@ -11,6 +11,7 @@ Architectural rationale → **`docs/decisions/`**. Module maps → **`Poly/*/REA
 
 | Plan | Role |
 |------|------|
+| [**MCP dogfood orchestrator**](v2-to-v3/mcp-dogfood-orchestrator.md) | **Supervisor + child missions** to dogfood shipped MCP and rank next painpoints |
 | [**Simple-agent queue (`vs-*`)**](v2-to-v3/simple-agent-tasks/vs-README.md) | **Primary pick order** for smaller agents — post-M2 tasks (pm2-*) |
 | [**MCP tool-surface expansion**](v2-to-v3/mcp-tool-surface-expansion.md) | Pipeline visibility, simulation, debug, actionable suggestions, DSL, Capture mode — **post-M2 roadmap** |
 | [**Vertical-slice finish plan**](v2-to-v3/vertical-slice-finish-plan.md) | Product path status; M2 **Done**; post-M2 calendar |

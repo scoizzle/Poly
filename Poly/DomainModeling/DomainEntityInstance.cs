@@ -211,6 +211,10 @@ public sealed record DomainEntityInstance {
     /// mutate the instance directly.</para>
     /// </summary>
     public ActionCallResult CallAction(string actionName) {
+        // RT′.6: Refuse actions on deleted instances.
+        if (IsDeleted)
+            return ActionCallResult.Deleted(Entity.Name, actionName);
+
         // Find action: first check current stage (and its parent chain) for effective actions,
         // then entity-level. Stage-scoped actions are only available while on that stage.
         Poly.DomainModeling.Action? action = null;
@@ -224,8 +228,18 @@ public sealed record DomainEntityInstance {
                 .FirstOrDefault(a => string.Equals(a.Name, actionName, StringComparison.Ordinal));
         }
 
-        action ??= Entity.Actions
+        // SA: If the stage-scoped action is an empty copy (no effects, no policies,
+        // no parameters), fall through to the entity-level action if one exists.
+        // This prevents the silent no-op that occurs when AddActionToStage creates an
+        // empty stage copy while effects were added to the entity-level action only.
+        // See Phase 3 §6e (Stage-Action Semantics) in mcp-phase3-oracle-surface.md.
+        var entityAction = Entity.Actions
             .FirstOrDefault(a => string.Equals(a.Name, actionName, StringComparison.Ordinal));
+        if (action is not null && action.Effects.Count == 0 && action.Policies.Count == 0
+            && entityAction is not null)
+            action = entityAction;
+
+        action ??= entityAction;
 
         if (action is null)
             return ActionCallResult.Missing(Entity.Name, actionName);
@@ -665,5 +679,11 @@ public sealed record ActionCallResult {
         ActionName = actionName,
         Succeeded = false,
         ErrorMessage = $"Action '{actionName}' not found on entity '{entityName}'."
+    };
+
+    internal static ActionCallResult Deleted(string entityName, string actionName) => new() {
+        ActionName = actionName,
+        Succeeded = false,
+        ErrorMessage = $"Instance of entity '{entityName}' has been deleted — no actions can be called."
     };
 }

@@ -1516,4 +1516,146 @@ public class McpSmokeTests {
             return topId.GetString();
         return null;
     }
+
+    // ═════════════════════════════════════════════════════════════
+    // SA — Stage-Action Semantics (Phase 3 §6e)
+    // ═════════════════════════════════════════════════════════════
+
+    [Test]
+    public async Task AddActionToStage_CopiesEntityActionEffects() {
+        // SA.2: AddActionToStage should copy effects/policies from entity-level
+        // action when one exists with the same name.
+        var (sessionId, _) = McpSessionStore.Create("Test");
+
+        // Build: entity action with transition effect, then add to stage
+        var r1 = EvolveTool.AddEntity(sessionId, "Task");
+        await Assert.That(r1.Success).IsTrue();
+        var r2 = EvolveTool.AddProperty(sessionId, "Task", "Name", "Text");
+        await Assert.That(r2.Success).IsTrue();
+        var r3 = EvolveTool.AddStage(sessionId, "Task", "Draft");
+        await Assert.That(r3.Success).IsTrue();
+        var r4 = EvolveTool.AddStage(sessionId, "Task", "Active");
+        await Assert.That(r4.Success).IsTrue();
+
+        // Add entity-level action with transition effect
+        var r5 = EvolveTool.AddAction(sessionId, "Task", "Start");
+        await Assert.That(r5.Success).IsTrue();
+
+        // Manually add stage transition effect via evolution
+        var state = McpSessionStore.TryGet(sessionId, out var s) ? s : null;
+        await Assert.That(state).IsNotNull();
+        var evolveResult = McpSessionStore.Evolve(sessionId, domain =>
+            new DomainEvolution(domain).Evolve()
+                .AddStageTransitionEffect("Task", "Start", "Active")
+                .Apply());
+        await Assert.That(evolveResult).IsNotNull();
+        await Assert.That(evolveResult!.Succeeded).IsTrue();
+
+        // Now add action to stage — should copy the transition effect
+        var r6 = EvolveTool.AddActionToStage(sessionId, "Task", "Draft", "Start");
+        await Assert.That(r6.Success).IsTrue();
+
+        // Verify via MCP: create instance and call action from Draft stage
+        var create = RuntimeTool.CreateInstance(sessionId, "Task");
+        await Assert.That(create.Success).IsTrue();
+        await Assert.That(create.Message).Contains("Draft");
+
+        var instanceId = ExtractInstanceId(
+            System.Text.Json.JsonSerializer.Serialize(create.Data));
+
+        var call = RuntimeTool.CallAction(sessionId, instanceId!, "Start");
+        await Assert.That(call.Success).IsTrue();
+        await Assert.That(call.Message).Contains("Active");
+
+        var get = RuntimeTool.GetInstance(sessionId, instanceId!);
+        await Assert.That(get.Success).IsTrue();
+        await Assert.That(get.Message).Contains("Active");
+    }
+
+    [Test]
+    public async Task AddActionToStage_WithoutEntityAction_CreatesNew() {
+        // SA.2: When no entity-level action exists, AddActionToStage creates
+        // a fresh action (no effects, no policies) — same behavior as before.
+        var (sessionId, _) = McpSessionStore.Create("Test");
+
+        EvolveTool.AddEntity(sessionId, "Task");
+        EvolveTool.AddStage(sessionId, "Task", "Draft");
+        EvolveTool.AddStage(sessionId, "Task", "Active");
+
+        // Add action only to stage — no entity-level action
+        var r1 = EvolveTool.AddActionToStage(sessionId, "Task", "Draft", "DoSomething");
+        await Assert.That(r1.Success).IsTrue();
+
+        // Create instance and call the action — should succeed (no effects)
+        var create = RuntimeTool.CreateInstance(sessionId, "Task");
+        await Assert.That(create.Success).IsTrue();
+        var instanceId = ExtractInstanceId(
+            System.Text.Json.JsonSerializer.Serialize(create.Data));
+
+        var call = RuntimeTool.CallAction(sessionId, instanceId!, "DoSomething");
+        // Should succeed with no effects (no transition — still in Draft)
+        await Assert.That(call.Success).IsTrue();
+        await Assert.That(call.Message).Contains("Draft");
+    }
+
+    // ═════════════════════════════════════════════════════════════
+    // RT′ — Honesty & Safety Residuals (Phase 3 §6c)
+    // ═════════════════════════════════════════════════════════════
+
+    [Test]
+    public async Task CallAction_OnDeletedInstance_Refused() {
+        // RT′.6: CallAction should refuse actions on deleted instances.
+        // Use the core API directly since DeleteEntityInstance is not expressible in DSL.
+        var (sessionId, _) = McpSessionStore.Create("Test");
+        EvolveTool.AddEntity(sessionId, "Item");
+        EvolveTool.AddProperty(sessionId, "Item", "Name", "Text");
+        EvolveTool.AddStage(sessionId, "Item", "Draft");
+
+        // Add a Delete action with DeleteEntityInstance effect via evolution
+        var evolveResult = McpSessionStore.Evolve(sessionId, domain =>
+            new DomainEvolution(domain).Evolve()
+                .AddAction("Item", "Delete")
+                .AddEffectToAction("Item", "Delete",
+                    new DeleteEntityInstance(new DomainTypeReference("Item")))
+                .Apply());
+        await Assert.That(evolveResult).IsNotNull();
+        await Assert.That(evolveResult!.Succeeded).IsTrue();
+
+        var create = RuntimeTool.CreateInstance(sessionId, "Item",
+            """{"Name":"TestItem"}""");
+        await Assert.That(create.Success).IsTrue();
+        var instanceId = ExtractInstanceId(
+            System.Text.Json.JsonSerializer.Serialize(create.Data));
+
+        // Call Delete action — executes DeleteEntityInstance effect, setting IsDeleted=true
+        var delCall = RuntimeTool.CallAction(sessionId, instanceId!, "Delete");
+        await Assert.That(delCall.Success).IsTrue();
+
+        // Now any subsequent CallAction should fail (RT′.6)
+        var call = RuntimeTool.CallAction(sessionId, instanceId!, "Delete");
+        await Assert.That(call.Success).IsFalse();
+        await Assert.That(call.Message).Contains("deleted");
+    }
+
+    [Test]
+    public async Task GetDomainAnalysis_WithHints_SuggestsSuggestions() {
+        // RT′.1: GetDomainAnalysis should include hint count and affordance
+        // pointing to get_domain_suggestions.
+        var (sessionId, _) = McpSessionStore.Create("Test");
+
+        // Create entity with properties but no stages — triggers DMAS001 hints
+        EvolveTool.AddEntity(sessionId, "Person");
+        EvolveTool.AddProperty(sessionId, "Person", "Name", "Text");
+        EvolveTool.AddProperty(sessionId, "Person", "Age", "Number");
+
+        var response = QueryTool.GetDomainAnalysis(sessionId);
+        await Assert.That(response.Success).IsTrue();
+
+        // Message should mention hints
+        await Assert.That(response.Message).Contains("hint");
+
+        // Affordances should include get_domain_suggestions
+        await Assert.That(response.Affordances).IsNotNull();
+        await Assert.That(response.Affordances!.Contains("get_domain_suggestions")).IsTrue();
+    }
 }

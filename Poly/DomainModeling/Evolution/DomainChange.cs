@@ -531,9 +531,24 @@ public sealed record AddActionToStageChange(
     string Name
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
+        // SA: Look for an entity-level action with the same name. If found,
+        // copy its effects, policies, parameters, and result type so the
+        // stage-scoped action is not an empty shell. This prevents the silent
+        // no-op that occurs when AddActionToStage creates an empty copy while
+        // effects were added to the entity-level action only.
+        // See Phase 3 §6e (Stage-Action Semantics).
+        var entity = context.FindEntity(EntityName);
+        var source = entity?.Actions.FirstOrDefault(a =>
+            string.Equals(a.Name, Name, StringComparison.Ordinal));
+
         context.RequireUpdate(
             context.UpdateStage(EntityName, StageName, s => s with {
-                Actions = s.Actions.Append(new Action(Name, InvocationResult.Void, [], [], [])).ToList()
+                Actions = s.Actions.Append(
+                    source is not null
+                        ? new Action(Name, source.Result, source.Parameters.ToArray(),
+                            source.Effects.ToArray(), source.Policies.ToArray())
+                        : new Action(Name, InvocationResult.Void, [], [], [])
+                ).ToList()
             }),
             $"Stage '{StageName}' on Entity '{EntityName}' not found — cannot add action '{Name}'");
     }

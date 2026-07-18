@@ -1,8 +1,9 @@
 # MCP Tool Surface — Semantic Gap Analysis & Expansion Plan
 
 **Date:** 2026-07-12  
-**Revised:** 2026-07-18 (**Dogfood-2** post-RT → **RT′** + **SA** stage-action next)  
-**Status:** Phase 3 + RT **shipped** (dogfood-2 validated); **RT′ / SA** open — not “all gaps closed”  
+**Revised:** 2026-07-18 (**RT′/SA** impl review — MVP green uncommitted; **SA′** residuals)  
+**Status:** Phase 3 + RT **shipped**; RT′.1/.6/.7 + SA Option B **code-complete**; honesty/snapshot residuals open  
+
 
 **Shipped tools (approx.):** ~34+ in `Poly.Mcp/Tools/` (session, query, evolve, policy, constraint, DSL, oracle, suggestions, guide, runtime)  
 **Principle:** Thin adapters over `DomainEvolution` / DomainModeling / Interpretation — no new domain semantics; no V2 resurrection; **no event authoring tools** (stage-transition-as-observable).  
@@ -37,8 +38,8 @@
 
 | Priority | Bucket | Tools / work | Trigger |
 |----------|--------|--------------|---------|
-| **P0** | **RT′ honesty/safety** | Analysis→suggestions; CallAction `IsDeleted`; entity policy + subscription docs | Dogfood-2 — phase3 **RT′** |
-| **P0** | **SA stage-action semantics** | Fix empty stage action / effect targeting; goldens | Dogfood-2 Score 14 — phase3 **§6e** (DomainModeling core) |
+| **P0** | **RT′ honesty/safety** | Analysis→suggestions; CallAction `IsDeleted`; entity policy text | ✅ MVP (uncommitted); **SA′.3/′.4** nits |
+| **P0** | **SA stage-action semantics** | Option B copy + CallAction fallthrough + goldens | ✅ MVP (uncommitted); **SA′.1** snapshot/stale-copy residual |
 | **P1** | Runtime MCP (RT) | create/call/list instances | ✅ **Shipped** + dogfood-2 |
 | **P1** | Parser honesty | `actor` message; optional nav FormatException | RT′.2–.3 |
 | **P2** | Visibility / debug (**V1/S1**) | analyze/compare/debug expression | Pull |
@@ -54,11 +55,12 @@
 **Checklists:** [`mcp-phase3-oracle-surface.md`](mcp-phase3-oracle-surface.md) **§6c RT′** · **§6e SA**
 
 ```text
-1–6.  V0 / S0 / A / G / dogfood-1 / RT     ← done (RT dogfood-2 validated)
-7. ▶  RT′ cheap bundle                      ← next
-8. ▶  SA stage-action semantics (§6e)       ← next epic (not full effect-micro)
-9.    Full effect-micro / V1 / remove_constraint  ← pull only
-10.   Post–P3 L* / containers               ← well after
+1–6.  V0 / S0 / A / G / dogfood-1 / RT     ← done
+7.    RT′.1/.6/.7 + SA Option B            ← green uncommitted; commit
+8. ▶  SA′ honesty nits (Description, hintCount, README target)  ← preferred with commit
+9.    SA′.1 stale snapshot / Option A      ← pull with pain
+10.   Full effect-micro / V1               ← pull only
+11.   Post–P3 L* / containers              ← well after
 ```
 
 ---

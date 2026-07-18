@@ -1,9 +1,10 @@
 # Phase 3 — MCP Oracle Surface
 
 **Date:** 2026-07-18  
-**Revised:** 2026-07-18 (**Dogfood-2** post-RT → RT validated; next = honesty + stage-action semantics)  
-**Status:** Phase 3 thin **shipped**; **RT shipped & dogfood-2 validated**; residuals open (§6c RT′ / §6e SA)  
-**Current pick:** **SA** stage-action semantics (§6e) **or** ship **RT′.1–.3** honesty/safety first (cheap) — see agent pick  
+**Revised:** 2026-07-18 (**RT′/SA impl review** — suite **1358**; residual **SA′** / honesty nits)  
+**Status:** Phase 3 thin + RT + RT′.1/.6/.7 + SA Option B **code-complete green** (uncommitted); not “all gaps closed”  
+**Current pick:** **Commit RT′+SA** → optional **SA′** residuals; stop/dogfood  
+
 **Predecessor:** Phase 2 spawn-and-wire ([`domainmodeling-next-phase.md`](domainmodeling-next-phase.md)); MCP gap inventory ([`mcp-tool-surface-expansion.md`](mcp-tool-surface-expansion.md) §0)  
 **Dogfood:** [Report 1](agent-summaries/dogfood/DOGFOOD-REPORT-20260718.md) (R→RT) · [Report 2](agent-summaries/dogfood/DOGFOOD-REPORT-2-20260718.md) (post-RT)  
 **Goal:** Close the **neurosymbolic feedback loop** for agents: propose → **see** pipeline → **simulate** → correct → commit → **exercise** instances.  
@@ -43,12 +44,12 @@ Agent proposes expression / element name
 | **Dogfood** | Rank next pain | [Report 1](agent-summaries/dogfood/DOGFOOD-REPORT-20260718.md) | ✅ Done — **R #1** → RT |
 | **RT** | Runtime MCP thin vertical | instance store + create/call/inspect | ✅ **Shipped** + dogfood-2 validated E2E |
 | **Dogfood-2** | Post-RT re-rank | [Report 2](agent-summaries/dogfood/DOGFOOD-REPORT-2-20260718.md) | ✅ Done — R closed; new **SA** + **RT′** |
-| **RT′** | Honesty / safety residuals | analysis→suggestions, IsDeleted, policy/tool text | **Cheap next** |
-| **SA** | Stage-action semantics | Fix empty stage action copy / effect targeting | **Next epic** (not full effect-micro) |
+| **RT′** | Honesty / safety residuals | analysis→suggestions, IsDeleted, policy text | ✅ Core done (uncommitted); **RT′.8 overclaimed** |
+| **SA** | Stage-action semantics (Option B + CallAction fallthrough) | Copy-on-stage-add + empty fallthrough + goldens | ✅ MVP done (uncommitted); **SA′** residuals |
 | **V1 / S1** | Deep visibility / debug | `analyze_expression`, `compare_engines`, `debug_expression` | Pull |
-| **Pull** | Full effect-micro catalog, `remove_constraint`, Capture | — | Only if SA fixed and DSL still insufficient |
+| **Pull** | Full effect-micro catalog, `remove_constraint`, Capture | — | After SA′ if still needed |
 
-**One open product slice at a time.** Prefer **RT′ cheap bundle**, then **SA**.
+**One open product slice at a time.** Prefer **commit**, then optional SA′.
 
 ---
 
@@ -405,16 +406,16 @@ apply_dsl / micro-tools  →  model in session
 
 | ID | Source | Task | Priority |
 |----|--------|------|----------|
-| **RT′.1** | D1 C4-F4 · D2 C4-F2 Score 15 | Suggestion **discoverability**: `get_domain_analysis` message and/or affordances → `get_domain_suggestions`; optional Hint count | **Cheap — do soon** |
-| **RT′.6** | D2 Score 14 | `CallAction` **fail-loud** when `IsDeleted` (and MCP `call_action` surfaces it) | **Cheap — do soon** |
-| **RT′.7** | D2 Score 12 | Honesty: `add_policy` / README — entity policies are **universal action guards** | **Cheap** |
-| **RT′.8** | D2 Score 10 | Docs/guide/`describe_domain_element`: subscription fires on relationship **target** stage entry | Cheap / docs |
-| **RT′.2** | D1 | Parser: clear `actor` unsupported message at entity-kind position | Low |
-| **RT′.3** | D1 | Optional softer diagnostic for unknown nav target | Pull |
-| **RT′.4** | D1 C2 | Library: `AddActionWithEffect` vs `AddEffectToAction` naming docs/rename | Pull (after SA) |
-| **RT′.5** | D1 | Optional dual-path dogfood (C5) | Pull |
-| **RT′.9** | D2 C1-F1 | Reconcile “assign Status on Customer” evolution failure vs “C1 zero pain” claim | Hygiene |
-| **RT′.10** | D2 Score 6 | Richer CallAction errors when action missing / empty stage shadow | After SA |
+| **RT′.1** | ✅ MVP | Message + affordance when Hint count &gt; 0; see **SA′.3** InfoCount honesty |
+| **RT′.6** | ✅ Done | Library `Deleted()` + MCP early check on `IsDeleted` |
+| **RT′.7** | ✅ Done | `add_policy` Description: entity policies gate **all** actions |
+| **RT′.8** | ⏳ | **Not in diff** — README still lacks explicit “subscription = target stage entry”; plan overclaimed |
+| **RT′.2** | Pull | Parser: clear `actor` unsupported message |
+| **RT′.3** | Pull | Softer diagnostic for unknown nav target |
+| **RT′.4** | Pull | `AddActionWithEffect` vs `AddEffectToAction` naming |
+| **RT′.5** | Pull | Dual-path dogfood (C5) |
+| **RT′.9** | Pull | Reconcile dogfood C1-F1 Status assign claim |
+| **RT′.10** | Pull | Richer CallAction errors (empty stage shadow largely mitigated by SA) |
 
 ### RT pull-only
 
@@ -456,21 +457,62 @@ CallAction("Activate") on Draft                  → stage copy wins → no tran
 
 ### SA checklist
 
-- [ ] **SA.0** Spec: document chosen option (A preferred; B acceptable) in DomainModeling README or ADR stub  
-- [ ] **SA.1** Implement evolution + CallAction resolution consistently  
-- [ ] **SA.2** Golden: micro evolution — entity action + stage placement + transition effect → `CallAction` from stage **transitions**  
-- [ ] **SA.3** Golden: MCP path if tools expose stage actions (`add_action_to_stage` + effects) — no silent no-op  
-- [ ] **SA.4** Fail-loud or migrate: existing “empty stage copy” pattern cannot succeed without effects (or analysis warning)  
-- [ ] **SA.5** Honesty: MCP/tool descriptions for `add_action_to_stage` match behavior  
-- [ ] **SA.6** Suite green; no full effect-micro catalog required for exit  
+- [x] **SA.0** **Option B** (snapshot copy) + CallAction empty-stage fallthrough — not Option A reference model  
+- [x] **SA.1** `AddActionToStageChange` copies entity action fields when same name exists  
+- [x] **SA.2** Golden: `AddActionToStage_CopiesEntityActionEffects` (entity effect → stage place → CallAction transitions)  
+- [x] **SA.3** Same test exercises MCP `add_action_to_stage` + `call_action`  
+- [x] **SA.4** Empty stage-only action still callable (no-op if no effects) — fallthrough only when entity twin exists  
+- [ ] **SA.5** `add_action_to_stage` Description still generic — does **not** mention copy-from-entity or order-of-ops (see **SA′.2**)  
+- [x] **SA.6** Suite **1358** green  
+
+### SA′ — RT′/SA impl review (2026-07-18)
+
+**Verdict:** **Shipable MVP.** Core dogfood-2 pains addressed: stage empty-copy no-op mitigated (copy + fallthrough); deleted instances fail-loud; analysis points at suggestions; entity policy honesty on `add_policy`. Suite **1358**. Do **not** claim “all gaps closed” — residual honesty + Option B snapshot limits remain.
+
+**Solid**
+
+| Item | Notes |
+|------|--------|
+| `AddActionToStage` copy | When entity action exists at stage-add time, stage action gets effects/policies/params/result |
+| CallAction fallthrough | Empty stage action (0 effects, 0 policies) + entity twin → use entity — fixes “stage first then effect on entity” order |
+| IsDeleted | Library + MCP both refuse CallAction |
+| RT′.1 affordance | `get_domain_suggestions` when Hint count &gt; 0 |
+| RT′.7 | `add_policy` Description is explicit |
+| Tests | SA transition golden; deleted CallAction; analysis hints affordance |
+
+**Residuals**
+
+| ID | Severity | Finding |
+|----|----------|---------|
+| **SA′.1** | **Medium** | Option B is a **snapshot**. Effects added to entity **after** `AddActionToStage` are **not** copied onto the stage action; CallAction uses the **non-empty** stage copy and **skips fallthrough** → **stale effects**. Fallthrough only when stage is fully empty. Prefer document order-of-ops, analysis warning, or migrate toward Option A (reference/placement). |
+| **SA′.2** | Medium (honesty) | `add_action_to_stage` Description unchanged — should state: copies matching entity-level action if present; later entity effect edits may not update stage copy; prefer add effects before stage placement or use DSL. |
+| **SA′.3** | Medium (honesty) | `GetDomainAnalysis` adds Hint count into **`infoCount`** field (`InfoCount + hintCount`). Hint ≠ Information severity — agents/tools reading `infoCount` get a lie. Prefer separate `hintCount` on `AnalysisData` (or leave InfoCount pure and only put hints in Message). |
+| **SA′.4** | Low | RT′.8 claimed “README notes subscription direction” — **not in this diff**. Add one sentence under Runtime README (fires when relationship **target** enters stage). |
+| **SA′.5** | Low | Fallthrough ignores stage actions that have policies/parameters but zero effects — rare; document or treat as non-empty intentionally. |
+| **SA′.6** | Low | No golden for order “stage place first → then entity effects” (relies on fallthrough only). Worth one test. |
+| **SA′.7** | Ops | Uncommitted; plan header overstated “all planned slices complete.” |
+| **SA′.8** | Pull | Option A (stage references entity action); effect-by-name updates all copies; analysis “empty stage action shadows entity” |
+
+**Checklist**
+
+- [ ] **SA′.1** Document snapshot limits and/or warn/analyze stale stage copies; consider Option A later  
+- [ ] **SA′.2** Update `add_action_to_stage` Description for copy + order-of-ops  
+- [ ] **SA′.3** Separate `hintCount` from `infoCount` on analysis payload  
+- [ ] **SA′.4** README subscription target-direction one-liner (finish RT′.8)  
+- [ ] **SA′.5** Document fallthrough predicate (empty effects+policies only)  
+- [ ] **SA′.6** Optional golden: stage place before entity effects → CallAction still transitions  
+- [ ] **SA′.7** Commit RT′+SA bundle  
+- [ ] **SA′.8** Option A / multi-copy effect update — pull only  
+
+**Recommended:** Commit MVP; fix **SA′.2–.4** honesty in same or immediate follow-up commit (small). SA′.1 is the real semantic residual — do not oversell Option B as full SA closure.
 
 ### SA pull (explicitly out of slice)
 
 | Item | When |
 |------|------|
-| Full `add_effect_to_action` MCP surface for every effect kind | After SA; only if DSL insufficient |
-| `AddEffectToActionOnStage` as permanent dual API without fixing identity | Avoid — prefer A/B |
-| Redesign entity-level policy semantics | Honesty only (**RT′.7**) |
+| Full `add_effect_to_action` MCP surface for every effect kind | After SA′; only if DSL insufficient |
+| Option A reference model | Second consumer / SA′.1 pain |
+| Redesign entity-level policy semantics | Honesty only (**RT′.7** done) |
 
 ---
 
@@ -634,31 +676,31 @@ Optional single chain smoke: lower → describe same JSON both succeed.
 - [x] Suite green including RT tests  
 - [x] Dogfood-2 confirms create/call/when path works  
 
-### Post-RT residuals (open)
+### Post-RT residuals
 
-- [ ] **RT′.1** suggestion discoverability  
-- [ ] **RT′.6** CallAction refuses deleted instances  
-- [ ] **RT′.7–.8** policy + subscription direction honesty  
-- [ ] **SA** stage-action empty-copy / effect targeting fixed + goldens  
+- [x] **RT′.1** suggestion discoverability (MVP; see SA′.3)  
+- [x] **RT′.6** CallAction refuses deleted instances  
+- [x] **RT′.7** policy honesty on `add_policy`  
+- [ ] **RT′.8** / **SA′.4** subscription direction in README  
+- [x] **SA** Option B + fallthrough + golden (1358)  
+- [ ] **SA′** honesty + snapshot limits (see §6e SA′)  
 
 ---
 
 ## 12. Agent pick (right now)
 
 ```text
-DONE:    Phase 3 thin; RT shipped; dogfood-1 (R→RT); dogfood-2 (RT E2E green)
-CURRENT: RT′ cheap bundle (§6c) — RT′.1 discoverability, RT′.6 IsDeleted, RT′.7–.8 honesty
-THEN:    SA stage-action semantics (§6e) — fix empty stage copies; goldens; no full effect-micro
-LATER:   RT′.2–.5/.9–.10; full effect-micro / V1 — pull only
+DONE:    Phase 3 thin; RT; dogfood-1/2; RT′.1/.6/.7 + SA Option B (suite 1358, uncommitted)
+CURRENT: Commit RT′+SA bundle (SA′.7)
+NICE:    SA′.2–.4 honesty (tool Description, hintCount field, README subscription target)
+LATER:   SA′.1 snapshot/stale-copy; SA′.6 order golden; RT′.2–.5; effect-micro / V1 — pull
 POST–P3: L* / C# / MSIL / containers (§6d)
 ```
 
 **Implementer watch-outs**
 
 - RT is **done** — do not reopen runtime surface for completeness.  
-- **SA:** `AddActionToStage` empty copy is a **silent no-op** under CallAction — fix evolution/resolution (**§6e**), not a pile of MCP effect tools.  
-- **RT′.1:** `get_domain_suggestions` works; analysis path must point agents there.  
-- **RT′.6:** refuse CallAction when `IsDeleted`.  
-- Entity-level policies **do** gate all actions — document (**RT′.7**), don’t “fix” by removing the feature.  
-- Subscriptions fire on relationship **target** stage entry (**RT′.8**).  
-- Full effect-micro catalog remains **pull** after SA.
+- **SA Option B is a snapshot** — effects added to entity **after** stage placement do not update the stage copy; fallthrough only helps when stage action is still empty.  
+- **Do not** fold Hint into `infoCount` long-term (SA′.3).  
+- Entity-level policies gate all actions — documented on `add_policy`.  
+- Full effect-micro catalog remains **pull**.

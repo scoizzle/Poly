@@ -242,14 +242,24 @@ internal sealed class QueryTool {
             );
 
         var summary = DomainQueries.GetAnalysisSummary(state.LatestAnalysis);
+
+        // RT′.1: Count hint diagnostics for suggestion discoverability.
+        var hintCount = state.LatestAnalysis.Diagnostics
+            .Count(d => d.Severity == DiagnosticSeverity.Hint);
+
         var data = new AnalysisData(
-            summary.ErrorCount, summary.WarningCount, summary.InfoCount,
+            summary.ErrorCount, summary.WarningCount, summary.InfoCount + hintCount,
             summary.HasStructuralFailure, summary.Messages
         );
 
         var message = summary.ErrorCount > 0
             ? $"{summary.ErrorCount} error(s), {summary.WarningCount} warning(s). See diagnostics for details."
-            : $"{summary.InfoCount} info(s), {summary.WarningCount} warning(s). No errors.";
+            : $"{summary.InfoCount} info(s), {summary.WarningCount} warning(s). {hintCount} hint(s). No errors.";
+
+        // Build affordances — include get_domain_suggestions when hints exist.
+        var affordances = new List<string> { "get_domain_overview" };
+        if (hintCount > 0)
+            affordances.Add("get_domain_suggestions");
 
         return new DomainToolResponse(
             Success: true,
@@ -258,9 +268,7 @@ internal sealed class QueryTool {
             Revision: state.Revision,
             Data: data,
             Diagnostics: summary.Messages.Count > 0 ? summary.Messages : null,
-            Affordances: summary.ErrorCount > 0 && summary.HasStructuralFailure
-                ? ["get_domain_overview"]
-                : null
+            Affordances: affordances
         );
     }
 
@@ -991,7 +999,7 @@ internal sealed class PolicyTool {
     /// Adds a policy with a guard expression to an entity. Accepts a single JSON
     /// expression string supporting comparisons, composites, and literals.
     /// </summary>
-    [McpServerTool(Name = "add_policy"), Description("Adds a policy with a guard expression to an entity. Provide 'expression' as a JSON string: {\"property\":\"Age\",\"op\":\">=\",\"value\":18} for comparisons, {\"and\":[...]}/{\"or\":[...]}/{\"not\":{...}} for composites, or {\"literal\":true} for always-true guards.")]
+    [McpServerTool(Name = "add_policy"), Description("Adds a policy with a guard expression to an entity. Provide 'expression' as a JSON string: {\"property\":\"Age\",\"op\":\">=\",\"value\":18} for comparisons, {\"and\":[...]}/{\"or\":[...]}/{\"not\":{...}} for composites, or {\"literal\":true} for always-true guards. IMPORTANT: Entity-level policies are UNIVERSAL guards - they gate ALL actions on the entity (including stage-scoped actions). Use 'require PolicyName' in DSL or AddPolicyToAction to scope to a specific action.")]
     public static DomainToolResponse AddPolicy(
         [Description("Session ID")] string sessionId,
         [Description("Name of the entity")] string entityName,

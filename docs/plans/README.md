@@ -11,9 +11,10 @@ Architectural rationale → **`docs/decisions/`**. Module maps → **`Poly/*/REA
 
 | Plan | Role |
 |------|------|
-| [**MCP dogfood orchestrator**](v2-to-v3/mcp-dogfood-orchestrator.md) | **Supervisor + child missions** to dogfood shipped MCP and rank next painpoints |
+| [**MCP Phase 3 + RT**](v2-to-v3/mcp-phase3-oracle-surface.md) | Phase 3 thin **done**; **§6c Runtime MCP** is current pick (dogfood #1) |
+| [**MCP dogfood orchestrator**](v2-to-v3/mcp-dogfood-orchestrator.md) | Dogfood program — **run complete** ([report](v2-to-v3/agent-summaries/dogfood/DOGFOOD-REPORT-20260718.md)) |
 | [**Simple-agent queue (`vs-*`)**](v2-to-v3/simple-agent-tasks/vs-README.md) | **Primary pick order** for smaller agents — post-M2 tasks (pm2-*) |
-| [**MCP tool-surface expansion**](v2-to-v3/mcp-tool-surface-expansion.md) | Pipeline visibility, simulation, debug, actionable suggestions, DSL, Capture mode — **post-M2 roadmap** |
+| [**MCP tool-surface expansion**](v2-to-v3/mcp-tool-surface-expansion.md) | Backlog §0 — RT next; pull-only after |
 | [**Vertical-slice finish plan**](v2-to-v3/vertical-slice-finish-plan.md) | Product path status; M2 **Done**; post-M2 calendar |
 | [**Post–V2-delete naming cleanup**](post-v2-delete-naming-cleanup.md) | Drop product `V3*` labels (MCP types, demos, `UseV3*`) — idle green tree |
 | [**Post–system-review correctness hardening**](2026-07-11-review-fix-plan.md) | Honesty/VM residuals (mostly Done; optional 0.1d, WP-E/F later) |

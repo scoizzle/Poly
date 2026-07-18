@@ -28,6 +28,10 @@ Tools live in `Poly.Mcp/Tools/` and use only `Poly.DomainModeling` types (no `Po
 | `simulate_policy` | `OracleTool` | Simulates a JSON expression against a subject bag (VM eval, returns bool, no session needed) |
 | `get_domain_suggestions` | `QueryTool` | Returns authoring suggestions (advisory hints) identifying common gaps like missing stages, actions, or policies |
 | `get_dsl_guide` | `DslTool` | Returns the product-true Phase 1a/1b DSL syntax guide — call before first `apply_dsl` |
+| `create_instance` | `RuntimeTool` | Creates a runtime instance of a domain entity, registered in the session store |
+| `get_instance` | `RuntimeTool` | Returns a snapshot of a runtime instance: stage, properties, status |
+| `list_instances` | `RuntimeTool` | Lists all runtime instances in the session, optionally filtered by entity |
+| `call_action` | `RuntimeTool` | Calls an action on a runtime instance: evaluates guards, executes effects, transitions stage |
 
 ## Dual Authoring Path
 
@@ -92,3 +96,32 @@ Every MCP tool's **Name + Description + Success** must match actual behavior:
 **Current policy tools:** `get_policy_expression` (inspect-only, no VM), `add_policy` (mutation, no eval), `evaluate_policy` (VM eval, returns bool). All three satisfy the invariant.
 
 **DSL tools:** `apply_dsl` (parses .poly text → evolves empty domain → analysis gate → replaces session domain; revision+1; explicit HONESTY NOTES document stage `when` not enforced, instance store not running, subscription side-effects not auto-fired), `export_dsl` (printer round-trip, no side effects). Both satisfy the invariant.
+
+## Runtime Tools — Exercise Domain Lifecycle
+
+The **RuntimeTool** family closes the final feedback loop: agents can create instances, inspect state, and execute actions — all within the MCP session.
+
+### Create → Call → Observe
+
+```text
+1. apply_dsl / micro-tools  →  model in session
+2. create_instance          →  instanceId + initial snapshot
+3. call_action              →  effects execute, stage transitions, subscriptions fire
+4. get_instance             →  observe new stage + modified properties
+5. list_instances           →  enumerate all instances (optionally by entity)
+```
+
+### Instance lifecycle
+
+- Instances are **session-scoped** — each session has its own `DomainInstanceStore`.
+- The **first defined stage** is the initial stage (if stages exist).
+- `call_action` resolves from the **current stage** first, then entity-level actions.
+- Guard policies (action-level, stage-level, entity-level) are evaluated before effects.
+- On **stage transition**: OnExit → set new stage → OnEntry → notify store subscribers.
+- Stage subscription fan-out happens automatically for linked subscriber instances.
+- Deleted instances (`DeleteEntityInstance` effect) are marked `isDeleted: true`.
+
+### Honesty
+
+- `create_instance` / `get_instance` / `list_instances` are **inspect** tools — they read state, no execution.
+- `call_action` uses the **same `DomainEntityInstance.CallAction` path** as the core library — VM for assign/conditionals, direct execution for transition/create/delete/link.

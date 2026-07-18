@@ -10,7 +10,8 @@ namespace Poly.Mcp.Sessions;
 
 /// <summary>
 /// V3 session state: holds the current V3 <see cref="Domain"/> root,
-/// the latest analysis result, and a monotonically increasing revision number.
+/// the latest analysis result, a monotonically increasing revision number,
+/// and a runtime instance store for exercising domain lifecycle.
 /// No V2 types, no revision snapshot history.
 /// Workspace/session management lives here in MCP — not in DomainModeling.
 /// </summary>
@@ -18,7 +19,21 @@ internal sealed record McpSessionState(
     Domain Domain,
     AnalysisResult? LatestAnalysis,
     long Revision
-);
+) {
+    /// <summary>
+    /// Runtime instance store for executing action/lifecycle behavior.
+    /// Created fresh per session; null until first <c>create_instance</c>.
+    /// Uses <see cref="DomainInstanceStore"/> for relationship-based
+    /// subscription fan-out and instance-level links.
+    /// </summary>
+    public DomainInstanceStore? InstanceStore { get; set; }
+
+    /// <summary>
+    /// Maps instance IDs (GUID strings) to <see cref="DomainEntityInstance"/>
+    /// objects for MCP tool access. Thread-safe via <see cref="ConcurrentDictionary{TKey,TValue}"/>.
+    /// </summary>
+    public ConcurrentDictionary<string, DomainEntityInstance> InstanceMap { get; init; } = new(StringComparer.Ordinal);
+}
 
 /// <summary>
 /// Thread-safe in-memory store for V3 domain sessions.
@@ -119,6 +134,24 @@ internal static class McpSessionStore {
             if (!Sessions.TryGetValue(sessionId, out var current))
                 return false;
             Sessions[sessionId] = new McpSessionState(domain, analysis, current.Revision + 1);
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// Provides locked access to a session's state for runtime instance operations.
+    /// The callback receives the current <see cref="McpSessionState"/> and can
+    /// modify <c>InstanceMap</c> and <c>InstanceStore</c> in place (they are mutable).
+    /// Returns <c>true</c> if the session was found, <c>false</c> otherwise.
+    /// </summary>
+    public static bool TryModifyInstances(string sessionId, Action<McpSessionState> action) {
+        if (string.IsNullOrWhiteSpace(sessionId))
+            throw new ArgumentException("Session ID is required.", nameof(sessionId));
+
+        lock (StoreLock) {
+            if (!Sessions.TryGetValue(sessionId, out var current))
+                return false;
+            action(current);
             return true;
         }
     }

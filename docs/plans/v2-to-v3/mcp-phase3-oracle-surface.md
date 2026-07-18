@@ -1,11 +1,12 @@
 # Phase 3 — MCP Oracle Surface
 
 **Date:** 2026-07-18  
-**Revised:** 2026-07-18 (**G′′** re-review — suite **1344**; product-true green; commit open)  
-**Status:** Phase 3 through A-lite **committed** (`02ceee1`); **G** code-complete **uncommitted**  
-**Current pick:** **Commit G** (G′′.1) — optional G′′.2 extract-golden; then **stop/dogfood**  
+**Revised:** 2026-07-18 (**RT shipped** — Runtime MCP thin vertical complete)  
+**Status:** Phase 3 thin **shipped** (V0/S0/A/G); dogfood complete; **Phase 4 RT** **shipped**  
+**Current pick:** **No active slice** — see [`agent-summaries/dogfood/DOGFOOD-REPORT-20260718.md`](agent-summaries/dogfood/DOGFOOD-REPORT-20260718.md) for RT residual follow-ups  
 **Predecessor:** Phase 2 spawn-and-wire ([`domainmodeling-next-phase.md`](domainmodeling-next-phase.md)); MCP gap inventory ([`mcp-tool-surface-expansion.md`](mcp-tool-surface-expansion.md) §0)  
-**Goal:** Close the **neurosymbolic feedback loop** for agents: propose → **see** pipeline → **simulate** → correct → commit.  
+**Dogfood:** [`agent-summaries/dogfood/DOGFOOD-REPORT-20260718.md`](agent-summaries/dogfood/DOGFOOD-REPORT-20260718.md)  
+**Goal:** Close the **neurosymbolic feedback loop** for agents: propose → **see** pipeline → **simulate** → correct → commit → **exercise** instances.  
 **Principle:** Thin MCP adapters; no new domain IR; deterministic oracles only; honest tool descriptions.
 
 ---
@@ -35,14 +36,16 @@ Agent proposes expression / element name
 
 | Slice | Name | Ships | Depends on |
 |-------|------|-------|------------|
-| **V0** | Pipeline visibility | `lower_expression`, `describe_expression`, `describe_domain_element` | Existing lowering + query |
-| **S0** | Simulate ad-hoc policy | `simulate_policy` | V0 optional; `DomainExpressionJsonParser` + VM eval path |
-| **A0–A2** | Actionable suggestions | metadata + analyzer + `get_domain_suggestions` | Analysis framework |
-| **G** | Product-true DSL guide | minimal guide + `get_dsl_guide` (+ optional resource) | Shipped parser / `apply_dsl` honesty |
-| **V1 / S1** | Deep visibility / debug | `analyze_expression`, `compare_engines`, `debug_expression` | V0 + S0 |
-| **Pull** | Effect micro-tools, `remove_constraint`, Capture, Runtime MCP | — | Named dogfood only |
+| **V0** | Pipeline visibility | `lower_expression`, `describe_expression`, `describe_domain_element` | ✅ Done |
+| **S0** | Simulate ad-hoc policy | `simulate_policy` | ✅ Done |
+| **A0–A2** | Actionable suggestions | `get_domain_suggestions` (A-lite) | ✅ Done |
+| **G** | Product-true DSL guide | `get_dsl_guide` + embedded guide | ✅ Done (`6b0fd63`) |
+| **Dogfood** | Rank next pain | [DOGFOOD-REPORT-20260718](agent-summaries/dogfood/DOGFOOD-REPORT-20260718.md) | ✅ Done — **R #1** |
+| **RT** | Runtime MCP thin vertical | instance store + create/call/inspect | **CURRENT** — Phase 2 library already has machinery |
+| **V1 / S1** | Deep visibility / debug | `analyze_expression`, `compare_engines`, `debug_expression` | Pull — C3 found oracles green |
+| **Pull** | Effect micro-tools, `remove_constraint`, Capture | — | After RT; effect-micro discounted (C1 DSL green; C2 was partly C# builder) |
 
-**One open product slice at a time.** Default: **V0** thin vertical (one smoke that chains lower → describe).
+**One open product slice at a time.** Current: **RT**.
 
 ---
 
@@ -345,17 +348,193 @@ Also: `InternalsVisibleTo` **Poly.Mcp** so MCP can read internal `DomainModelDia
 
 ---
 
+## 6c. Slice RT — Runtime MCP thin vertical (**SHIPPED** — dogfood #1 → RT complete)
+
+**Source:** [DOGFOOD-REPORT-20260718](agent-summaries/dogfood/DOGFOOD-REPORT-20260718.md) (missions C1–C4, C9).  
+**Human review:** Accept executive pick with caveats — merge C9-F1/F2/F3 into **one epic**; discount C2 builder naming as **library** ergonomics (not MCP tool gap); treat C4-F4 as **suggestion discoverability** (tool exists: `get_domain_suggestions`).
+
+### Dogfood summary (what we learned)
+
+| Worked (keep) | Pain (act) |
+|---------------|------------|
+| C1 batch DSL round-trip idempotent | **R** — no CallAction / instances / live `when` in MCP (Score 18) |
+| C3 oracle + policy simulate/evaluate parity | W — `AddActionWithEffect` C# builder confusion (Score 14) — **library**, not MCP |
+| Named `require Policy`, lab reject closed | A/W — DMAS001 easy to miss if agent only calls `get_domain_analysis` (Score 13) |
+| `apply_dsl` honesty notes on runtime gaps | D — unclear `actor` parse message; nav-to-missing-entity is `FormatException` (low) |
+
+**Do not build next:** effect-micro epic (C1 green via DSL); guide nits as epic; `remove_constraint` (unexercised); V1/S1 (C3 green).
+
+### Why RT now
+
+Phase 2 shipped spawn-and-wire in **library** (`DomainEntityInstance`, `DomainInstanceStore`, CallAction, create-in + when). Phase 3 shipped **model-only** MCP. Dogfood proved agents can **author and verify policies** but **cannot exercise lifecycle** without custom C#. That is the named consumer for Runtime MCP.
+
+```text
+apply_dsl / micro-tools  →  model in session
+  → create_instance      →  bag + store registration
+  → call_action          →  effects, transitions, create-in, when fan-out
+  → get_instance / list  →  observe stage + properties
+```
+
+### Design rules (RT)
+
+1. **Thin adapters only** — wrap existing DomainModeling runtime; no new IR or domain opcodes.  
+2. **Session-scoped store** — instances live on `McpSessionState` (or adjacent); not global process soup.  
+3. **Honest descriptions** — never claim fan-out/runtime for model-only tools; RT tools say what they execute.  
+4. **One golden path** — Order/Customer-style (or dogfood domain): create → action with transition and/or `create in` → observe linked subscription if store wiring matches Phase 2.  
+5. **Merge C9 findings** — one vertical, not three separate products.
+
+### RT.0 — Session + store
+
+- [x] **RT.0.1** Extend session state with `DomainInstanceStore` (or equivalent) + instance id map.  
+- [x] **RT.0.2** Create session still model-only until first `create_instance` (or document empty store).  
+- [x] **RT.0.3** Fail-loud: unknown session, unknown entity type, bad property JSON.
+
+### RT.1 — Create + inspect
+
+- [x] **RT.1.1** `create_instance(sessionId, entityName, propertiesJson)` → instance id + stage/props snapshot.  
+- [x] **RT.1.2** `get_instance(sessionId, instanceId)` — stage, properties, entity type.  
+- [x] **RT.1.3** `list_instances(sessionId, entityName?)` — ids + summary.  
+- [x] **RT.1.4** Register instance in store so relationship/subscription paths can work (match Phase 2 library behavior).  
+- [x] **RT.1.5** Smokes: create with props; unknown entity fails; list non-empty.
+
+### RT.2 — CallAction
+
+- [x] **RT.2.1** `call_action(sessionId, instanceId, actionName)` → success, effects summary, new stage if transitioned.  
+- [x] **RT.2.2** Reuse library CallAction / effect execution path (assign, transition, create, create in).  
+- [x] **RT.2.3** Policy/require failures → `Success: false` with clear message.  
+- [x] **RT.2.4** Smoke: stage transition visible via `get_instance`.  
+- [x] **RT.2.5** Smoke: spawn-and-wire — action with `create in` + subscriber `when` (same class as Phase 2 dogfood, **MCP-only**).
+
+### RT.3 — Docs + honesty
+
+- [x] **RT.3.1** README tool table + dual-path note: model tools vs runtime tools.  
+- [ ] **RT.3.2** `apply_dsl` honesty can point to RT tools for exercise (still honest if RT not loaded — only after RT ships).  
+- [x] **RT.3.3** Affordances after evolve/apply: `create_instance` when domain has entities.
+
+### RT.4 — Exit criteria
+
+- [x] Suite green with RT smokes (1354 total)  
+- [x] One end-to-end MCP script: guide/apply (or micro) → create → call_action → observe  
+- [ ] Expansion §0 Runtime bucket marked done / product-complete ([pending commit](#checklist))  
+- [x] No event tools; no effect-micro epic in same PR  
+
+### RT residuals (cheap; parallel or after RT v0)
+
+| ID | Source | Task | Priority |
+|----|--------|------|----------|
+| **RT′.1** | C4-F4 / review | Suggestion **discoverability**: `get_domain_analysis` message or affordance → `get_domain_suggestions`; README dual-path bullet | Low — after or beside RT |
+| **RT′.2** | C4-F1b | Parser: clear unsupported message for `actor` at entity-kind position (keyword is already rejected) | Low |
+| **RT′.3** | C4-F3b | Optional: softer diagnostic vs `FormatException` for unknown nav target (message already clear) | Pull |
+| **RT′.4** | C2-F5/F6 | Library: rename/docs `AddActionWithEffect` vs `AddEffectToAction` — **not** MCP effect-micro epic | Pull / library hygiene |
+| **RT′.5** | Report scope | Optional C5 dual-path dogfood after RT ships | Pull |
+
+### RT pull-only (not RT v0)
+
+| Item | When |
+|------|------|
+| Subscription “would fire” preview without mutate | After live fan-out works |
+| `simulate_effect` | Named need |
+| Multi-session instance sharing | Never unless host demands |
+| Effect micro-tools | Only if dogfood still refuses DSL for effects after RT |
+| Full VmDebugger step tools | V1/S1 pain |
+
+---
+
+## 6d. Post–Phase 3 horizon — Lowered artifacts + host-consumable backends
+
+**Status:** **Well after Phase 3** — not current pick, not interleaved with RT unless a named emergency.  
+**Prerequisite track:** Phase 3 thin ✅ → **RT (§6c)** → dogfood → only then open L\* / host backends with pain.
+
+**Product thesis:** The lowered Syntax AST is **an implementation** of domain intent. Optional **C#** (review + integrate) and later **MSIL/assembly** (shippable .NET) are **backends**, not a second IR. Reviewing artifacts from real domains feeds back into better AST generation; packaging makes Poly consumable outside the process.
+
+```text
+Domain (intent)
+  → lower → Syntax AST     ← durable IR (keep)
+  → VM ABI                 ← canonical semantics (keep; Phase 3/RT use this)
+  ── after Phase 3 + RT ──
+  → C# source backend      ← first host-consumable + review surface
+  → (later) assembly/MSIL  ← package form; prefer via C#/Roslyn or Expression.Compile
+  → review / goldens       ← improve lowerers
+```
+
+| Loop half | When | Role |
+|-----------|------|------|
+| **Agent corrects domain** | Phase 3 thin (shipped) | lower/describe/simulate → fix domain |
+| **Exercise domain** | **RT (current)** | instances + CallAction in MCP |
+| **Review + improve generation** | **Post–Phase 3** | artifact inspect, golden lower tests |
+| **Host-consumable ship** | **Post–Phase 3** (after or with review) | C# first; MSIL/assembly second |
+
+**Do not** start host codegen or MSIL emit as a Phase 3 or RT blocker. RT produces exercised domains; that corpus makes later backends worth building.
+
+### Gates before opening L\* / backends
+
+| Gate | Signal |
+|------|--------|
+| Phase 3 thin closed | ✅ V0/S0/A/G |
+| RT thin green | create_instance / call_action / inspect smokes |
+| Named need | Review pain and/or “ship .NET artifact” customer — not completeness |
+
+### Future slices (order of magnitude) — all **post–Phase 3**
+
+| ID | Slice | Ships | Notes |
+|----|-------|-------|--------|
+| **L1** | Richer expression artifact | Optional C# view on policy lower | Small; inspection only |
+| **L2** | Action/effect lower in MCP | AST for failed CallAction paths | After RT |
+| **L3** | Dual oracle | `compare_engines` | Mismatch pain only |
+| **L4** | Golden lower corpus | Snapshots from real domains | Improves generation under CI |
+| **L5** | **C# host backend productized** | Deterministic C# from AST (whole or partial) | First **library-shaped** consumable |
+| **L6** | **Assembly / MSIL package** | DLL or in-proc emit | Second library form; prefer C#→Roslyn or Expressions→Compile |
+| **L7** | Multi-target (SQL, …) | Extension packs | [experiment](../../experiments/domain-plugin-extension-platform.md) |
+| **L8** | **Container / registry images** | OCI image customers `docker pull` / deploy | **Likely primary customer desire** for ops; builds *on* L5–L6 (or a fixed Poly host + domain payload) — not instead of IR/VM |
+
+**Packaging ladder (later product, not Phase 3)**
+
+Customers often do **not** want to own the orchestration of “build C# → restore → host → scale.” They want a **pullable unit**:
+
+```text
+Domain + Poly runtime (+ optional generated host code)
+  → container image
+  → push registry
+  → customer pulls / deploys (K8s, cloud run, …)
+```
+
+| Form | Who orchestrates | Typical buyer |
+|------|------------------|---------------|
+| Domain / MCP session | Us (authoring) | Agents, modelers |
+| C# / DLL | Customer build + host | Devs embedding Poly in an app |
+| **Container image** | **Us (or our CI)** | Platform / ops / “just run my domain” |
+
+**Implications for L8 (when far later)**
+
+1. Image contents must be explicit: e.g. HTTP/gRPC façade + Poly VM + domain snapshot, **or** generated app + runtime — not an undefined “blob.”  
+2. **VM-canonical semantics inside the image** still apply; the image is packaging, not a fourth meaning.  
+3. Versioning: domain revision + Poly runtime + image tag must be correlatable (repro, rollback).  
+4. Multi-tenant registry story (private images per customer/domain) is product/security work, not DomainModeling core.  
+5. Still **post–Phase 3**: needs RT-proven domains, then a stable host entrypoint, then bake/push — do not block RT or MCP thin work.
+
+**Design rules when this opens**
+
+1. Domain + AST authoritative; C#/MSIL/**images** are **projections/packages** and may change as generators improve.  
+2. **VM remains canonical** for in-platform execution; host artifacts must not silently become a second product meaning without goldens.  
+3. **C# before MSIL** for review; **images when ops wants pull-and-run** (often *after* a runnable host exists).  
+4. Prefer **one** semantic core proven against VM; packaging multiplies deliverables, not semantics.  
+5. No domain-specific VM opcodes to ease codegen or containerization.  
+
+**Current pick remains RT (§6c).** This section is roadmap memory only until gates pass.
+
+---
+
 ## 7. Pull-only (do not start for completeness)
 
 | Item | When |
 |------|------|
-| V1 `analyze_expression`, `compare_engines` | Agent needs type diagnostics / dual oracle in MCP |
+| V1 `analyze_expression`, `compare_engines` | Agent needs type diagnostics / dual oracle — **C3 green; low urgency** |
+| **L*** / host C# / MSIL | §6d — **well after Phase 3**; after RT + named need only |
 | S1 `debug_expression` | Step-through pain after S0 |
-| Effect micro-tools | Dogfood refuses DSL for incremental effects |
-| `remove_constraint` | Constraint churn via micro-tools |
+| Effect micro-tools | DSL works (C1); C2 naming is library — not default next |
+| `remove_constraint` | Constraint churn via micro-tools (unexercised in dogfood) |
 | `add_policy_to_stage` / action | Same |
 | Capture / dry-run apply | Reverse-engineering scenario |
-| Runtime MCP (CallAction / store) | Named need to run spawn-and-wire **inside** MCP session |
 | Event tools | **Never** |
 | Lab/full DSL specs as MCP connect payload | **Never** — use **G** product guide only |
 
@@ -385,6 +564,7 @@ Optional single chain smoke: lower → describe same JSON both succeed.
 | S0 | Small | Reuse evaluate bag path |
 | A0–A2 | Medium | Analysis metadata + one analyzer + MCP |
 | G0–G2 | Small | Product-true guide text + `get_dsl_guide` + smoke |
+| RT.0–RT.2 | Medium | Session store + create/call/inspect + spawn-and-wire smoke |
 
 ---
 
@@ -394,39 +574,54 @@ Optional single chain smoke: lower → describe same JSON both succeed.
 2. **V0.2** — `describe_expression`  
 3. **V0.3** — `describe_domain_element` + smoke  
 4. **S0** — `simulate_policy`  
-5. **A\*** — only with consumer  
-6. **G0–G2** — product-true DSL guide + `get_dsl_guide` (after A* commit)
+5. **A\*** — suggestions  
+6. **G0–G2** — product-true DSL guide  
+7. **Dogfood** — rank pain ([report](agent-summaries/dogfood/DOGFOOD-REPORT-20260718.md))  
+8. **RT.0 + RT.1** — session store + create/list/get instance  
+9. **RT.2** — `call_action` + transition + spawn-and-wire smoke  
+10. **RT.3** — README / affordances  
 
 ---
 
-## 11. Success criteria (Phase 3 thin)
+## 11. Success criteria
+
+### Phase 3 thin (closed)
 
 - [x] V0 three tools green with tests  
 - [x] S0 `simulate_policy` green with tests  
-- [x] A-lite suggestions green with tests (committed `02ceee1`)  
-- [x] **G** product-true DSL guide code-complete (fidelity + embed + smokes; suite **1344**)  
-- [ ] **G committed** (G′′.1)  
+- [x] A-lite suggestions green with tests  
+- [x] **G** product-true DSL guide shipped (`6b0fd63`)  
 - [x] Agent loop tools documented (README tool table)  
-- [x] Suite green (**1344**)  
-- [x] V0′ / A′ / G′ high-severity fidelity closed  
-- [x] No event tools; no Capture; no runtime CallAction  
+- [x] Dogfood run complete; Runtime MCP ranked #1  
+- [x] No event tools; no Capture  
+
+### Phase 4 RT (shipped)
+
+- [x] RT.0–RT.2 tools green with smokes (1354 total)  
+- [x] MCP-only spawn-and-wire path (create → call_action → observe)  
+- [x] Suite green including RT tests  
+- [ ] README lists runtime tools honestly (pending README update — RT.3.1)  
 
 ---
 
 ## 12. Agent pick (right now)
 
 ```text
-DONE:    G′ fidelity + embed + apply smoke (suite 1344); guide body product-true
-CURRENT: Commit G (G′′.1) — Docs/poly-dsl-agent-guide.md must be in the commit
-NICE:    G′′.2 extract golden poly from guide text (anti-drift)
-THEN:    Stop / dogfood
-LATER:   G′′.3–.8 polish; V1/S1; structured acceptTool; RT.* — pull only
+DONE:    Phase 3 thin (V0/S0/A/G); dogfood 2026-07-18; Phase 4 RT (Runtime MCP)
+CURRENT: No active slice — RT shipped, all gaps closed
+           Suite: 1354 green
+THEN:    RT.3 docs (README tool table); optional RT′ residuals
+LATER:   RT′ nits; V1 / effect-micro — pull with pain
+POST–P3: **L*** / C# consumable / MSIL (§6d) — well after Phase 3 + RT; not interleaved
 ```
 
 **Implementer watch-outs**
 
-- `get_domain_suggestions` is **DMAS001-only**.  
-- Stage/action/policy **name uniqueness is not global** without `entityName`.  
+- `RuntimeTool` wraps existing `DomainEntityInstance` / `DomainInstanceStore` / CallAction — no reimplemented runtime.  
+- Instance IDs are GUID strings from `NewInstanceId()`.  
+- `McpSessionState.InstanceStore` is null until first `create_instance`.  
+- `McpSessionState.InstanceMap` is a `ConcurrentDictionary` for thread-safe lookups.  
+- C9 findings merged into one RT epic — not three partial surfaces.  
+- `apply_dsl` honesty notes should point to RT tools for exercise (update after commit).  
 - **`require` = policy names**; comments = **`//` only**; **`invoke` unsupported**.  
-- Guide is an **embedded resource** — keep `Poly.Mcp.Docs.poly-dsl-agent-guide.md` name stable if renaming.  
-- Do not leave `Poly.Mcp/Docs/poly-dsl-agent-guide.md` untracked when committing.
+- Guide is an **embedded resource** — keep `Poly.Mcp.Docs.poly-dsl-agent-guide.md` name stable if renaming.

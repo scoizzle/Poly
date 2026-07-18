@@ -1,14 +1,15 @@
 # MCP Tool Surface — Semantic Gap Analysis & Expansion Plan
 
 **Date:** 2026-07-12  
-**Revised:** 2026-07-18 (Phase 3 thin shipped; **dogfood orchestrator** is next pick)  
-**Status:** Active backlog — mutate/undo/DSL/oracle/A-lite/G **shipped**; next = dogfood rank, then pull-only slices  
+**Revised:** 2026-07-18 (**RT shipped** — all gaps closed)  
+**Status:** All planned phases **shipped** (V0/S0/A/G/dogfood/RT); expansion items **pull-only**  
 
-**Shipped tools (approx.):** ~30+ in `Poly.Mcp/Tools/` (session, query, evolve, policy, constraint, DSL, oracle, suggestions)  
+**Shipped tools (approx.):** ~34+ in `Poly.Mcp/Tools/` (session, query, evolve, policy, constraint, DSL, oracle, suggestions, guide, runtime)  
 **Principle:** Thin adapters over `DomainEvolution` / DomainModeling / Interpretation — no new domain semantics; no V2 resurrection; **no event authoring tools** (stage-transition-as-observable).  
 **Related:**  
-- [`mcp-phase3-oracle-surface.md`](mcp-phase3-oracle-surface.md) — Phase 3 (**G′′**: commit G)  
-- [`domainmodeling-next-phase.md`](domainmodeling-next-phase.md) — Phase 2 domain runtime  
+- [`mcp-phase3-oracle-surface.md`](mcp-phase3-oracle-surface.md) — Phase 3 + Phase 4 RT **shipped**  
+- [`mcp-dogfood-orchestrator.md`](mcp-dogfood-orchestrator.md) · [DOGFOOD-REPORT-20260718](agent-summaries/dogfood/DOGFOOD-REPORT-20260718.md)  
+- [`domainmodeling-next-phase.md`](domainmodeling-next-phase.md) — Phase 2 domain runtime (library)  
 - ADR stage-transition-as-observable  
 
 ---
@@ -26,46 +27,44 @@
 | **Remove / undo** (old plan “Phase 2”) | `remove_entity`, `remove_property`, `remove_stage`, `remove_action`, `remove_action_from_stage`, `remove_relationship`, `remove_policy` |
 | Constraints | `add_constraint`, `get_constraints` (**`remove_constraint` still missing**) |
 | Policy | `get_policy_expression`, `add_policy` (entity), `evaluate_policy` (multi-property JSON subject) |
-| **DSL** | `apply_dsl` (full **replace**), `export_dsl`; **`get_dsl_guide` product-true (embedded guide) green uncommitted** |
+| **DSL** | `apply_dsl` (full **replace**), `export_dsl`, `get_dsl_guide` (embedded product guide, `6b0fd63`) |
+| **Oracle** | `lower_expression`, `describe_expression`, `describe_domain_element`, `simulate_policy` |
+| **Runtime** | `create_instance`, `get_instance`, `list_instances`, `call_action` — **MCP-only spawn-and-wire** (Phase 4 RT) |
 
-**Honest substitute:** Action/effect/entry/exit configuration for agents is largely via **`apply_dsl`**, not micro-tools. Incremental micro-tools for effects remain a gap. Keep guide **parser-true** (phase3 G′/G′′).
+**Honest substitute:** Action/effect/entry/exit configuration for agents is largely via **`apply_dsl`**, not micro-tools (C1 dogfood: batch path solid). Incremental effect micro-tools remain optional.
 
 ### Still missing (planned + still open)
 
 | Priority | Bucket | Tools / work | Trigger |
 |----------|--------|--------------|---------|
-| **P0** | Pipeline visibility (**V0**) | `lower_expression`, `describe_expression`, `describe_domain_element` | ✅ **Done** (`68e37c8`) |
-| **P1** | Simulate (**S0**) | `simulate_policy` | ✅ **Done** (`68e37c8`) |
-| **P1** | Suggestions (**A-lite**) | `get_domain_suggestions` + `AuthoringSuggestionAnalyzer` | ✅ **Done** (`02ceee1`); ⚠️ Dogfood: DMAS001 hints generated but invisible through standard query path (`GetAnalysisSummary` filters info-level). See [C4-F4](agent-summaries/dogfood/DOGFOOD-REPORT-20260718.md). Full `acceptTool` pull still open. |
-| **P1** | **DSL agent guide (G)** | `get_dsl_guide` + embedded `poly-dsl-agent-guide.md` | ✅ Code-complete suite **1344**; **commit open** (G′′.1); optional G′′.2 extract-golden |
-| **P2** | Visibility deep (**V1–V2**) | `analyze_expression`, `compare_engines`, `compile_expression`, `diff_expressions` | Debug / dual oracle |
-| **P2** | Debug (**S1**) | `debug_expression` (VmDebugger step trace) | After V0/S0 |
-| **P3** | Effect micro-tools | `add_parameter_to_action`, `add_effect_to_action`, transition/assign/create-in wrappers, remove effect, OnEntry/OnExit micro-tools | Only if dogfood refuses DSL for incremental effect edits |
-| **P3** | Policy placement | `add_policy_to_stage`, `add_policy_to_action` | Scoped policy authoring without DSL |
-| **P3** | Constraint remove | `remove_constraint` | Symmetric with add; evolutionary repair |
-| **P4** | Capture / dry-run (**R1**) | `apply_dsl_capture`, optional `apply_dsl_dry_run` | Reverse-engineering / dirty import |
-| **P4** | State diff (**S3**) | `diff_state` | After evolve confidence |
-| **P0** 🔥 | **Runtime session (dogfood #1)** | instance create / `CallAction` / `Link` / store inspect / stage subscription fan-out | ✅ Dogfood confirmed: **highest pain Score 18 (R)** — see [DOGFOOD-REPORT](agent-summaries/dogfood/DOGFOOD-REPORT-20260718.md). Model-only session is the single biggest gap. |
-| **P5** | Effect simulate (**S2**) | `simulate_effect` | Needs instance runtime model |
-| **Never / skip** | Event authoring | `add_event_*`, publish-event effects | Product path **retired** — stage transition is the observable |
+| **P0** 🔥 | **Runtime MCP (RT)** | Session `DomainInstanceStore`; `create_instance`, `call_action`, `get_instance`, `list_instances`; spawn-and-wire smoke | ✅ **Shipped** — dogfood #1 closed. Suite **1354** green. |
+| **P1** | Suggestion discoverability | Analysis affordance / message → `get_domain_suggestions` (DMAS001 works; easy to miss) | Dogfood C4-F4; phase3 **RT′.1** — cheap, after or beside RT |
+| **P2** | Parser honesty | Clear `actor` unsupported message at entity-kind position | Dogfood C4-F1b; **RT′.2** |
+| **P2** | Visibility deep (**V1**) | `analyze_expression`, `compare_engines`, effect lower in MCP | Pull — after RT; not Phase 3 |
+| **Post–P3** | **Host-consumable backends (L\*)** | C# → assembly/MSIL → **container/registry images** (likely ops-primary); golden lower corpus | **Well after Phase 3** — phase3 **§6d**; C#/runnable host before image bake |
+| **P2** | Debug (**S1**) | `debug_expression` | Pull |
+| **P3** | Effect micro-tools | MCP effect add/remove wrappers | **Discounted:** C1 DSL green; C2-F5/F6 is **C# EvolutionBuilder** naming, not MCP |
+| **P3** | Library builder hygiene | Rename/docs `AddActionWithEffect` vs `AddEffectToAction` | C2 supplementary; not MCP epic |
+| **P3** | Constraint remove | `remove_constraint` | Unexercised in dogfood |
+| **P4** | Capture / dry-run / state diff | … | Named scenario only |
+| **P5** | Effect simulate (**S2**) | `simulate_effect` | After RT |
+| **Never / skip** | Event authoring | `add_event_*` | Retired |
 
 ### Pick order (agents)
 
-**Dogfood:** [`mcp-dogfood-orchestrator.md`](mcp-dogfood-orchestrator.md) — **run on 2026-07-18** ([DOGFOOD-REPORT-20260718.md](agent-summaries/dogfood/DOGFOOD-REPORT-20260718.md)).
-**Ranked pain (top 3):** (1) Runtime MCP gap — no CallAction/instance tools in MCP (Score 18);
-(2) `AddActionWithEffect` naming confusion (Score 14);
-(3) DMAS001 hints invisible through standard analysis query (Score 13).
+**Dogfood:** [DOGFOOD-REPORT-20260718](agent-summaries/dogfood/DOGFOOD-REPORT-20260718.md) · orchestrator [`mcp-dogfood-orchestrator.md`](mcp-dogfood-orchestrator.md)  
+**Detailed RT checklist:** [`mcp-phase3-oracle-surface.md`](mcp-phase3-oracle-surface.md) **§6c**
 
 ```text
-1. V0  lower_expression + describe_expression + describe_domain_element  ← **done** (`68e37c8`)
-2. S0  simulate_policy  ← **done** (`68e37c8`)
-3. A-lite  get_domain_suggestions  ← **done** (`02ceee1`)
-4. G    get_dsl_guide + product guide  ← **done** (`6b0fd63`)
-5. DOGFOOD orchestrator  ← **done** (2026-07-18; ranked Runtime MCP #1)
-6. ▶ Runtime MCP thin vertical  ← **next** (CallAction + instance management — top pain Score 18, category R)
-7. Effect micro-tools or remove_constraint  (pain-driven; AddActionWithEffect naming Score 14)
-8. V1/S1  analyze_expression, compare_engines, debug_expression  (pull with dogfood pain)
-9. Capture / dry-run / simulate_effect  (named reverse-eng or runtime scenario)
+1. V0  oracle visibility  ← done
+2. S0  simulate_policy  ← done
+3. A-lite  get_domain_suggestions  ← done
+4. G    get_dsl_guide  ← done
+5. DOGFOOD  ← done (Runtime MCP #1)
+6. ▶ RT  Runtime MCP thin vertical  ← **done** (phase3 §6c; 1354 green)
+7. RT′.1 suggestion discoverability  (cheap parallel/after)
+8. Effect-micro / builder rename / remove_constraint / V1  ← pull only
+9. Post–Phase 3: L* host C# → MSIL / golden lower corpus  ← **well after** RT (§6d)
 ```
 
 ---
@@ -95,7 +94,9 @@ This means the platform works identically regardless of which model drives the a
 - The platform acts as a **correctness oracle**: the model proposes, the VM disposes.
 - The MCP tool surface *is* the interface to that oracle. Every visibility tool (`lower_expression`, `describe_expression`, `simulate_policy`, `debug_expression`) closes a loop the agent would otherwise fill with hallucination.
 
-**This is the core value of the MCP expansion below.** Not "more tools." A complete feedback loop for any model, at any size.
+**Second loop (post–Phase 3):** the lowered Syntax AST is **an implementation** of domain intent; **C#** (then optional **MSIL/assembly**) are host-consumable projections. Review + goldens improve generation; packaging makes Poly shippable outside the process. See phase3 **§6d**. **Do not schedule this against Phase 3 or RT** — needs RT corpus first, then named need.
+
+**This is the core value of the MCP expansion below.** Not "more tools." A complete feedback loop for any model, at any size — plus, over time, a corpus that improves the platform’s own lowering.
 
 ---
 

@@ -39,11 +39,12 @@ MCP / direct API as thin consumers
 |----------|------|--------|--------|
 | 1 | **Phase 2: Spawn-and-wire** | [`domainmodeling-next-phase.md`](domainmodeling-next-phase.md) | **Complete** |
 | 2 | **Phase 3 thin: oracle + A-lite + DSL guide** | [`mcp-phase3-oracle-surface.md`](mcp-phase3-oracle-surface.md) · expansion §0 | **Complete** (V0/S0/A/G) |
-| 3 | **MCP dogfood orchestration** | [`mcp-dogfood-orchestrator.md`](mcp-dogfood-orchestrator.md) | **Complete** — [DOGFOOD-REPORT](agent-summaries/dogfood/DOGFOOD-REPORT-20260718.md) ranks Runtime MCP #1 |
-| 4 | ▶ **Runtime MCP thin vertical** | [`mcp-tool-surface-expansion.md`](mcp-tool-surface-expansion.md) §0 | **Next** — CallAction + instance management (dogfood Score 18, category R) |
-| 5 | Effect micro-tools + suggestion visibility | expansion §0 | **Pain-driven** (AddActionWithEffect Score 14; DMAS001 visibility Score 13) |
-| 6 | V1/S1 analyze/debug | expansion §0 | **Pull-only** after runtime MCP |
-| 7 | Event authoring tools | — | **Never** (stage transition path) |
+| 3 | **MCP dogfood orchestration** | [`mcp-dogfood-orchestrator.md`](mcp-dogfood-orchestrator.md) | **Complete** — [DOGFOOD-REPORT](agent-summaries/dogfood/DOGFOOD-REPORT-20260718.md) |
+| 4 | **Runtime MCP thin vertical (RT)** | [`mcp-phase3-oracle-surface.md`](mcp-phase3-oracle-surface.md) **§6c** · expansion §0 | **Complete** — Suite **1354** green; create_instance / call_action / store shipped |
+| 5 | RT′ cheap residuals | suggestion discoverability; `actor` parse message | Optional — pain-driven only |
+| 6 | Effect-micro / builder rename / V1 | expansion §0 | **Pull-only** (C1 DSL green; C2 is library naming) |
+| 7 | **Host-consumable backends** (C# → MSIL → **container images**) | phase3 **§6d** | **Post–Phase 3** — ops often want registry pull; not current |
+| 8 | Event authoring tools | — | **Never** (stage transition path) |
 
 ## Archived migration material
 

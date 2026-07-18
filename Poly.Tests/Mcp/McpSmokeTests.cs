@@ -1296,4 +1296,224 @@ public class McpSmokeTests {
         var raw = markdown.Substring(contentStart, closeIdx - contentStart);
         return raw.Trim();
     }
+
+    // ═════════════════════════════════════════════════════════════
+    // Phase 4 RT — Runtime MCP thin vertical
+    // ═════════════════════════════════════════════════════════════
+
+    [Test]
+    public async Task CreateInstance_SimpleEntity_ReturnsSnapshot() {
+        var (sessionId, _) = McpSessionStore.Create("Test");
+        EvolveTool.AddEntity(sessionId, "Widget");
+        EvolveTool.AddProperty(sessionId, "Widget", "Name", "Text");
+        EvolveTool.AddProperty(sessionId, "Widget", "Price", "Number");
+
+        var response = RuntimeTool.CreateInstance(sessionId, "Widget",
+            """{"Name":"Gadget","Price":2999}""");
+        await Assert.That(response.Success).IsTrue();
+        await Assert.That(response.Message).Contains("Widget");
+        await Assert.That(response.Message).Contains("created");
+
+        var dataJson = System.Text.Json.JsonSerializer.Serialize(response.Data);
+        await Assert.That(dataJson).Contains("Gadget");
+        await Assert.That(dataJson).Contains("2999");
+        await Assert.That(dataJson).Contains("instanceId");
+    }
+
+    [Test]
+    public async Task CreateInstance_UnknownEntity_Fails() {
+        var (sessionId, _) = McpSessionStore.Create("Test");
+
+        var response = RuntimeTool.CreateInstance(sessionId, "NonExistent");
+        await Assert.That(response.Success).IsFalse();
+        await Assert.That(response.Message).Contains("not found");
+    }
+
+    [Test]
+    public async Task GetInstance_AfterCreate_ReturnsFullSnapshot() {
+        var (sessionId, _) = McpSessionStore.Create("Test");
+        EvolveTool.AddEntity(sessionId, "Item");
+        EvolveTool.AddProperty(sessionId, "Item", "Label", "Text");
+
+        var create = RuntimeTool.CreateInstance(sessionId, "Item",
+            """{"Label":"Test Item"}""");
+        await Assert.That(create.Success).IsTrue();
+        var dataJson = System.Text.Json.JsonSerializer.Serialize(create.Data);
+        // Extract instanceId from the response
+        var instanceId = ExtractInstanceId(dataJson);
+        await Assert.That(instanceId).IsNotNull();
+
+        var response = RuntimeTool.GetInstance(sessionId, instanceId!);
+        await Assert.That(response.Success).IsTrue();
+        await Assert.That(response.Message).Contains(instanceId!);
+        await Assert.That(response.Message).Contains("Item");
+    }
+
+    [Test]
+    public async Task GetInstance_UnknownId_Fails() {
+        var (sessionId, _) = McpSessionStore.Create("Test");
+
+        var response = RuntimeTool.GetInstance(sessionId, "nonexistent-id");
+        await Assert.That(response.Success).IsFalse();
+        await Assert.That(response.Message).Contains("not found");
+    }
+
+    [Test]
+    public async Task ListInstances_AfterCreate_ReturnsCount() {
+        var (sessionId, _) = McpSessionStore.Create("Test");
+        EvolveTool.AddEntity(sessionId, "Item");
+        EvolveTool.AddProperty(sessionId, "Item", "Label", "Text");
+
+        var r1 = RuntimeTool.CreateInstance(sessionId, "Item", """{"Label":"A"}""");
+        await Assert.That(r1.Success).IsTrue();
+        var r2 = RuntimeTool.CreateInstance(sessionId, "Item", """{"Label":"B"}""");
+        await Assert.That(r2.Success).IsTrue();
+
+        var response = RuntimeTool.ListInstances(sessionId);
+        await Assert.That(response.Success).IsTrue();
+        await Assert.That(response.Message).Contains("2");
+
+        // Filter by entity
+        var filtered = RuntimeTool.ListInstances(sessionId, entityName: "Item");
+        await Assert.That(filtered.Success).IsTrue();
+        await Assert.That(filtered.Message).Contains("2");
+    }
+
+    [Test]
+    public async Task ListInstances_EmptySession_ReturnsZero() {
+        var (sessionId, _) = McpSessionStore.Create("Test");
+
+        var response = RuntimeTool.ListInstances(sessionId);
+        await Assert.That(response.Success).IsTrue();
+        await Assert.That(response.Message).Contains("0");
+    }
+
+    [Test]
+    public async Task CallAction_WithStageTransition_Succeeds() {
+        var (sessionId, _) = McpSessionStore.Create("Test");
+
+        // Use apply_dsl to create a domain with actions + transition effects
+        var dsl = DslTool.ApplyDsl(sessionId, """
+            domain Test
+            Task: entity {
+              Status: Text
+              Draft: stage {
+                Start: action {
+                  transition to Active
+                }
+              }
+              Active: stage {
+                entry { assign Status to "running" }
+              }
+              Done: stage {}
+            }
+            """);
+        await Assert.That(dsl.Success).IsTrue();
+
+        // Create an instance via runtime tool
+        var create = RuntimeTool.CreateInstance(sessionId, "Task",
+            """{"Status":"idle"}""");
+        await Assert.That(create.Success).IsTrue();
+        await Assert.That(create.Message).Contains("Draft"); // first stage
+
+        var instanceId = ExtractInstanceId(
+            System.Text.Json.JsonSerializer.Serialize(create.Data));
+
+        // Call the Start action
+        var call = RuntimeTool.CallAction(sessionId, instanceId!, "Start");
+        await Assert.That(call.Success).IsTrue();
+        await Assert.That(call.Message).Contains("Active");
+
+        // Verify transition via get_instance
+        var get = RuntimeTool.GetInstance(sessionId, instanceId!);
+        await Assert.That(get.Success).IsTrue();
+        await Assert.That(get.Message).Contains("Active");
+    }
+
+    [Test]
+    public async Task CallAction_WithRequireGuard_BlocksWhenPolicyFails() {
+        var (sessionId, _) = McpSessionStore.Create("Test");
+
+        var dsl = DslTool.ApplyDsl(sessionId, """
+            domain Test
+            Item: entity {
+              Score: Number
+              HighScore: policy { Score > 10 }
+              Draft: stage {
+                Submit: action
+                  require HighScore
+                {
+                  transition to Active
+                }
+              }
+              Active: stage {}
+            }
+            """);
+        await Assert.That(dsl.Success).IsTrue();
+
+        // Create instance with low score — policy should block
+        var create = RuntimeTool.CreateInstance(sessionId, "Item",
+            """{"Score":5}""");
+        await Assert.That(create.Success).IsTrue();
+        var instanceId = ExtractInstanceId(
+            System.Text.Json.JsonSerializer.Serialize(create.Data));
+
+        var call = RuntimeTool.CallAction(sessionId, instanceId!, "Submit");
+        await Assert.That(call.Success).IsFalse();
+        await Assert.That(call.Message).Contains("HighScore");
+        await Assert.That(call.Message).Contains("blocked");
+
+        // Create instance with high score — should pass
+        var create2 = RuntimeTool.CreateInstance(sessionId, "Item",
+            """{"Score":15}""");
+        await Assert.That(create2.Success).IsTrue();
+        var instanceId2 = ExtractInstanceId(
+            System.Text.Json.JsonSerializer.Serialize(create2.Data));
+
+        var call2 = RuntimeTool.CallAction(sessionId, instanceId2!, "Submit");
+        await Assert.That(call2.Success).IsTrue();
+        await Assert.That(call2.Message).Contains("Active");
+    }
+
+    [Test]
+    public async Task CallAction_ActionNotFound_Fails() {
+        var (sessionId, _) = McpSessionStore.Create("Test");
+        EvolveTool.AddEntity(sessionId, "Task");
+        EvolveTool.AddStage(sessionId, "Task", "Draft");
+
+        var create = RuntimeTool.CreateInstance(sessionId, "Task");
+        await Assert.That(create.Success).IsTrue();
+        var instanceId = ExtractInstanceId(
+            System.Text.Json.JsonSerializer.Serialize(create.Data));
+
+        var call = RuntimeTool.CallAction(sessionId, instanceId!, "NonExistent");
+        await Assert.That(call.Success).IsFalse();
+        await Assert.That(call.Message).Contains("not found");
+    }
+
+    [Test]
+    public async Task CreateInstance_WitStages_SetsInitialStage() {
+        var (sessionId, _) = McpSessionStore.Create("Test");
+        EvolveTool.AddEntity(sessionId, "Process");
+        EvolveTool.AddStage(sessionId, "Process", "Draft");
+        EvolveTool.AddStage(sessionId, "Process", "Active");
+
+        var create = RuntimeTool.CreateInstance(sessionId, "Process");
+        await Assert.That(create.Success).IsTrue();
+        await Assert.That(create.Message).Contains("Draft");
+    }
+
+    /// <summary>
+    /// Extracts the instanceId from a JSON response containing an "instance" object.
+    /// </summary>
+    private static string? ExtractInstanceId(string json) {
+        using var doc = System.Text.Json.JsonDocument.Parse(json);
+        if (doc.RootElement.TryGetProperty("instance", out var instance)
+            && instance.TryGetProperty("instanceId", out var id))
+            return id.GetString();
+        // Fallback: try top-level instanceId
+        if (doc.RootElement.TryGetProperty("instanceId", out var topId))
+            return topId.GetString();
+        return null;
+    }
 }

@@ -3,7 +3,7 @@
 **Date:** 2026-07-18  
 **Revised:** 2026-07-18 (final — P2′′′′′′ shipped; suite **1323**)  
 **Status:** Phase 2 product vertical **complete** (main `12f2926`; residual ready to commit)  
-**Current pick:** **Commit residual** then **stop / dogfood**  
+**Current pick:** Phase 2 **complete** — next product work is **Runtime MCP (§6c)** in [`mcp-phase3-oracle-surface.md`](mcp-phase3-oracle-surface.md) (dogfood 2026-07-18)  
 **Predecessor:** Phase 1a product-complete ([`dsl-sync-toward-phase1.md`](dsl-sync-toward-phase1.md)); BR.4.4 (`8f46f05`); MR/MR′; N2 dropped  
 **Related:** [`dsl-phase1a-grammar.md`](dsl-phase1a-grammar.md), [`mcp-tool-surface-expansion.md`](mcp-tool-surface-expansion.md) (§0 MCP remaining), [`docs/CORE.md`](../../CORE.md), AGENTS.md principles  
 
@@ -62,7 +62,7 @@ Phase 3 MCP               Oracle / visibility backlog          [see mcp-tool-sur
 
 **Phase 2 main shipped (`12f2926`).** Full residual (flat stages + runtime + MCP honesty) is **green — only open action is commit**.
 
-After Phase 2 residual lands and dogfood: **MCP remaining surface** is **not** more remove_* — it is the **oracle loop** (`lower_expression`, `describe_*`, `simulate_policy`, suggestions, optional runtime CallAction). Canonical gap list: [`mcp-tool-surface-expansion.md`](mcp-tool-surface-expansion.md) **§0**.
+Phase 3 thin (oracle + suggestions + guide) **shipped**; dogfood ranked **Runtime MCP** #1. Execution: [`mcp-phase3-oracle-surface.md`](mcp-phase3-oracle-surface.md) **§6c**. Backlog: [`mcp-tool-surface-expansion.md`](mcp-tool-surface-expansion.md) **§0**.
 
 ---
 

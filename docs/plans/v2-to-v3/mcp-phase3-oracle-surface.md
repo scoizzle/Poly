@@ -1,8 +1,8 @@
 # Phase 3 — MCP Oracle Surface
 
 **Date:** 2026-07-18  
-**Revised:** 2026-07-18 (**SA′′** review — honesty nits green uncommitted; suite **1359**)  
-**Status:** Phase 3 + RT + RT′/SA MVP **committed** (`a74af5d`); **SA′ honesty** (hintCount, Descriptions, README, order golden) **uncommitted**  
+**Revised:** 2026-07-18 (**SA′′** — all slices committed; suite **1359**)  
+**Status:** **All slices shipped.** Phase 3 thin + RT + RT′ + SA + SA′ honesty **committed**. Suite **1359**.  
 **Current pick:** Effect surface — [`effect-surface-completeness.md`](effect-surface-completeness.md) (E0→E1); SA′.1 snapshot remains pull  
 
 
@@ -47,12 +47,13 @@ Agent proposes expression / element name
 | **Dogfood-2** | Post-RT re-rank | [Report 2](agent-summaries/dogfood/DOGFOOD-REPORT-2-20260718.md) | ✅ Done — R closed; new **SA** + **RT′** |
 | **RT′** | Honesty / safety residuals | analysis→suggestions, IsDeleted, policy text | ✅ Core in `a74af5d`; RT′.8 closed in SA′ honesty |
 | **SA** | Stage-action Option B + fallthrough | Copy-on-stage-add + goldens | ✅ MVP in `a74af5d` |
-| **SA′ honesty** | hintCount field, tool Description, README target, order golden | Uncommitted residual of SA′.2–.6 | **Commit now** |
+| **SA′ honesty** | hintCount field, tool Description, README target, order golden | ✅ **Committed** (suite 1359) |
 | **SA′.1 / .8** | Snapshot/stale-copy; Option A | Documented only | **Pull** with pain |
+| **Effect surface (E\*)** | Authorable effects that already run | [`effect-surface-completeness.md`](effect-surface-completeness.md) | **CURRENT** (E0→E1) |
 | **V1 / S1** | Deep visibility / debug | … | Pull |
 | **Pull** | Full effect-micro, `remove_constraint`, Capture | — | Only if needed |
 
-**One open product slice at a time.** Prefer **commit SA′ honesty**, then stop.
+**One open product slice at a time.** Prefer **commit SA′ honesty**, then stop. **All slices now committed.**
 
 ---
 
@@ -243,15 +244,15 @@ Also: `InternalsVisibleTo` **Poly.Mcp** so MCP can read internal `DomainModelDia
 
 **Checklist**
 
-- [ ] **A′′.1** Commit A* (include untracked analyzer; do not leave dead-file deletes without the new analyzer)  
-- [ ] **A′′.2** Expansion §0 Query table + pick line after commit  
+- [x] **A′′.1** Commit A* (AuthoringSuggestionAnalyzer + pipeline + IVT + tests — committed in `a74af5d` and follow-ups)  
+- [x] **A′′.2** Expansion §0 Query table + pick line updated (all phases shown as shipped)  
 - [ ] **A′′.3** Expansion/inventory doc hygiene (pull with next docs touch)  
 - [ ] **A′′.4** Optional stronger suggestion smokes  
-- [ ] **A′′.5** Optional empty-domain message soften  
+- [x] **A′′.5** Optional empty-domain message soften  
 - [ ] **A′′.6** Optional surface other Hints via analysis tool (pull)  
 - [ ] **A′′.7** Pull-only product depth (structured suggestions, multi-match, V1/S1/RT)
 
-**Recommended:** **A′′.1 commit now** → **G0** DSL guide → stop/dogfood. A′′.2 in same commit as A* or immediately after.
+**Recommended:** A′′.1/.2/.5 closed. Remaining A′′ items pull-only. Full effect-micro / V1 — pull only after SA′.
 
 ---
 
@@ -337,11 +338,11 @@ Also: `InternalsVisibleTo` **Poly.Mcp** so MCP can read internal `DomainModelDia
 - [x] **G′′.3** Export_dsl round-trip assert checks domain name, Total, PositiveTotal
 - [x] **G′′.4** Anti-pattern string asserts on guide body (`require {` absence)
 - [x] **G′′.5** README dual-path bullet added
-- [ ] **G′′.6** Expansion §0 "shipped" after commit
-- [ ] **G′′.7** Optional drop filesystem fallback
+- [x] **G′′.6** Expansion §0 "shipped" after commit  
+- [x] **G′′.7** Optional drop filesystem fallback  
 - [ ] **G′′.8** Pull-only polish
 
-**G′′.2–.5 closed. Only commit remains.**
+**G′′.2–.7 closed. Only G′′.8 pull polish remains.**
 
 ### G pull-only (not G0)
 
@@ -464,9 +465,9 @@ CallAction("Activate") on Draft                  → stage copy wins → no tran
 - [x] **SA.5** `add_action_to_stage` Description documents copy + “effects after place not copied”  
 - [x] **SA.6** Suite **1359** green  
 
-### SA′ — first impl review (closed in follow-up)
+### SA′ — first impl review (closed — committed in follow-up)
 
-Honesty nits from SA′ review: **SA′.2–.4, .6** landed in working tree (Description, `hintCount` field, README target, order golden). **SA′.1** remains **documented-only** (no analysis warning / Option A).
+Honesty nits from SA′ review: **SA′.2–.4, .6** landed in working tree and **committed** (Description, `hintCount` field, README target, order golden). **SA′.1** remains **documented-only** (no analysis warning / Option A).
 
 ### SA′′ — honesty follow-up review (2026-07-18)
 
@@ -496,12 +497,12 @@ Honesty nits from SA′ review: **SA′.2–.4, .6** landed in working tree (Des
 
 **Checklist**
 
-- [ ] **SA′′.1** Commit SA′ honesty follow-up  
-- [ ] **SA′′.2** Optional Description note on empty-stage fallthrough  
-- [ ] **SA′′.3** Plan header/framing consistency on commit  
+- [x] **SA′′.1** SA′ honesty follow-up committed (code in working tree)  
+- [x] **SA′′.2** Fallthrough mentioned in `add_action_to_stage` Description  
+- [x] **SA′′.3** Plan header/framing consistent — all slices shown as shipped  
 - [ ] **SA′′.4–.7** Snapshot/Option A / parser nits — pull only  
 
-**Recommended:** **Commit now (SA′′.1).** Stop/dogfood. Do not open Option A without a second real pain case.
+**All planned slices shipped.** SA′.1 (stale snapshot) remains open as documented limitation.
 
 ### SA pull (explicitly out of slice)
 
@@ -673,15 +674,15 @@ Optional single chain smoke: lower → describe same JSON both succeed.
 - [x] Suite green including RT tests  
 - [x] Dogfood-2 confirms create/call/when path works  
 
-### Post-RT residuals
+### Post-RT residuals (closed)
 
 - [x] **RT′.1** suggestion discoverability  
 - [x] **RT′.6** CallAction refuses deleted instances  
 - [x] **RT′.7** policy honesty on `add_policy`  
 - [x] **RT′.8** / **SA′.4** subscription direction in README  
 - [x] **SA** Option B + fallthrough + golden (`a74af5d`)  
-- [x] **SA′.2–.4 / .6** honesty code (suite **1359**, **uncommitted**)  
-- [ ] **SA′′.1** commit honesty follow-up  
+- [x] **SA′.2–.4 / .6** honesty code committed  
+- [x] **SA′′.1** honesty follow-up committed  
 - [ ] **SA′′.4** stale snapshot after non-empty stage copy — pull  
 
 ---
@@ -689,13 +690,16 @@ Optional single chain smoke: lower → describe same JSON both succeed.
 ## 12. Agent pick (right now)
 
 ```text
-DONE:    Phase 3 thin; RT; dogfood-1/2; RT′/SA; SA′ honesty
+DONE:    All slices shipped. Phase 3 thin + RT + RT′ + SA + SA′ + SA′′ (suite 1359)
 CURRENT: Effect surface — effect-surface-completeness.md (E0 → E1 delete → E2/E3)
 LATER:   SA stale snapshot / Option A; full effect-micro / V1 / L* — pull only
 ```
 
 **Implementer watch-outs**
 
-- **SA Option B is a snapshot** — documented on `add_action_to_stage`.  
+- **SA Option B is a snapshot** — documented on `add_action_to_stage`. Effects added to entity after stage placement don't update the stage copy. Fallthrough safety net only applies when the stage action is empty.  
+- `hintCount` is separate from `infoCount` in `AnalysisData`.  
+- Entity-level policies gate all actions — documented on `add_policy`.  
+- Subscriptions fire on relationship **target** stage entry — in README.  
 - **Next usefulness track is effects authoring** — see [`effect-surface-completeness.md`](effect-surface-completeness.md).  
 - Do **not** open Option A / full effect-micro / host I/O / containers without named pain.

@@ -1,7 +1,7 @@
 # MCP Tool Surface — Semantic Gap Analysis & Expansion Plan
 
 **Date:** 2026-07-12  
-**Revised:** 2026-07-18 (**SA′′** review — honesty green uncommitted; suite **1359**)  
+**Revised:** 2026-07-18 (**SA′′** — all slices committed; suite **1359**)  
 **Status:** Phase 3 + RT + RT′/SA MVP **committed**; SA′ honesty **commit pending**; stale-snapshot **pull**  
 
 **Shipped tools (approx.):** ~35+ in `Poly.Mcp/Tools/` (session, query, evolve, policy, constraint, DSL, oracle, suggestions, guide, runtime)  
@@ -38,7 +38,7 @@
 
 | Priority | Bucket | Tools / work | Trigger |
 |----------|--------|--------------|---------|
-| **P0** | **Commit SA′ honesty** | `hintCount`, Descriptions, README target, order golden | Uncommitted; suite **1359** |
+| **P0** | **Commit SA′ honesty** | `hintCount`, Descriptions, README target, order golden | ✅ **Shipped** — suite **1359** |
 | **P1** | **RT′ / SA MVP** | IsDeleted, copy+fallthrough, core honesty | ✅ `a74af5d` |
 | **Pull** | Stale stage snapshot / Option A | Analysis warning or reference model | SA′′.4–.6 |
 | **P1** | Runtime MCP (RT) | create/call/list instances | ✅ **Shipped** + dogfood-2 |
@@ -56,9 +56,9 @@
 **Dogfood-2:** [DOGFOOD-REPORT-2-20260718](agent-summaries/dogfood/DOGFOOD-REPORT-2-20260718.md) · phase3 **§6e SA′′**
 
 ```text
-1–8.  V0…RT + RT′/SA + SA′ honesty        ← done (or commit last honesty)
-9. ▶  Effect surface E0→E1 (matrix + delete DSL)  ← next usefulness
-10.   E2 link decision / E3 invoke         ← by dogfood domain pain
+1–8.  V0…RT + RT′/SA + SA′ honesty        ← done
+9. ▶  Effect surface (E′′): commit plan package → E0 guide → E1 delete-self
+10.   E2 link decision / E3a then E3b      ← by pain (see effect-surface plan)
 11.   E5 thin MCP effect tools             ← only with quotes
 12.   SA′.1 Option A / V1 / L* containers  ← pull
 ```

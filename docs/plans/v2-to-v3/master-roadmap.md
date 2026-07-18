@@ -42,7 +42,7 @@ MCP / direct API as thin consumers
 | 3 | **MCP dogfood** | [report 1](agent-summaries/dogfood/DOGFOOD-REPORT-20260718.md) · [report 2](agent-summaries/dogfood/DOGFOOD-REPORT-2-20260718.md) | **Complete** (R→RT; post-RT re-rank) |
 | 4 | **Runtime MCP (RT)** | phase3 **§6c** | **Complete** — dogfood-2 E2E validated |
 | 5 | **RT′ + SA MVP** | phase3 **§6e** | **Committed** `a74af5d` |
-| 6 | **SA′ honesty** | phase3 **§6e** | **Complete** (or commit if still dirty) |
+| 6 | **SA′ honesty** | phase3 **§6e** | **Complete** — SA′′ all items closed |
 | 7 | ▶ **Effect surface completeness** | [`effect-surface-completeness.md`](effect-surface-completeness.md) | **Next** — authorable effects that already run (E0→E1→E2/E3) |
 | 8 | Full effect-micro / V1 / Option A | expansion §0 · phase3 | **Pull-only** |
 | 9 | **Host-consumable** (C# → MSIL → containers) | phase3 **§6d** | **Post–Phase 3** |

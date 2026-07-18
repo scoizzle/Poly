@@ -302,7 +302,7 @@ internal sealed class QueryTool {
 
         var message = hints.Count > 0
             ? $"{hints.Count} suggestion(s) available."
-            : "No suggestions — domain looks well-structured.";
+            : "No suggestions at this time. Domain has no obvious gaps requiring authoring suggestions.";
 
         return new DomainToolResponse(
             Success: true,
@@ -461,7 +461,11 @@ If an entity-level action with the same name already exists, its effects, polici
 parameters, and result type are COPIED onto the stage action. Effects added to the
 entity-level action AFTER this call are NOT automatically copied — prefer adding
 effects to the entity action before placing it on the stage, or use DSL batch
-authoring (apply_dsl) to define actions with effects directly on stages.")]
+authoring (apply_dsl) to define actions with effects directly on stages.
+
+FALLTHROUGH: If the stage action has no effects and no policies, and an entity-level
+action with the same name exists, CallAction will use the entity-level action instead.
+This safety net prevents silent no-ops from empty stage copies.")]
     public static DomainToolResponse AddActionToStage(
         [Description("Session ID")] string sessionId,
         [Description("Name of the entity")] string entityName,
@@ -1333,26 +1337,16 @@ for exploration and repair.")]
         var assembly = typeof(DslTool).Assembly;
         var resourceName = "Poly.Mcp.Docs.poly-dsl-agent-guide.md";
 
-        using var stream = assembly.GetManifestResourceStream(resourceName);
-        if (stream is null) {
-            // Fallback for development/test layouts
-            var guidePath = Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "Poly.Mcp", "Docs", "poly-dsl-agent-guide.md");
-            if (!File.Exists(guidePath))
-                guidePath = Path.Combine(AppContext.BaseDirectory, "poly-dsl-agent-guide.md");
-            if (!File.Exists(guidePath))
-                guidePath = Path.Combine(AppContext.BaseDirectory, "..", "Docs", "poly-dsl-agent-guide.md");
-
-            try {
-                var content = File.ReadAllText(guidePath);
-                return new DomainToolResponse(Success: true, Message: "DSL syntax guide retrieved.", Data: new { guide = content }, Affordances: ["apply_dsl", "lower_expression", "describe_expression"]);
-            }
-            catch (Exception ex) {
-                return new DomainToolResponse(Success: false, Message: $"Could not load DSL guide: {ex.Message}", Affordances: ["apply_dsl"]);
-            }
+        string guideText;
+        try {
+            using var stream = assembly.GetManifestResourceStream(resourceName)
+                ?? throw new InvalidOperationException($"Embedded resource '{resourceName}' not found. The Poly.Mcp assembly must include 'Docs/poly-dsl-agent-guide.md' as EmbeddedResource.");
+            using var reader = new StreamReader(stream);
+            guideText = reader.ReadToEnd();
         }
-
-        using var reader = new StreamReader(stream);
-        var guideText = reader.ReadToEnd();
+        catch (Exception ex) {
+            return new DomainToolResponse(Success: false, Message: $"Could not load DSL guide: {ex.Message}", Affordances: ["apply_dsl"]);
+        }
 
         return new DomainToolResponse(
             Success: true,

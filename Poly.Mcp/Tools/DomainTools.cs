@@ -72,7 +72,6 @@ internal sealed record SubscriptionData(
 
 internal sealed record StageData(
     [property: JsonPropertyName("name")] string Name,
-    [property: JsonPropertyName("parent")] string? ParentStageName,
     [property: JsonPropertyName("actions")] IReadOnlyList<string> Actions,
     [property: JsonPropertyName("subscriptions")] IReadOnlyList<SubscriptionData> Subscriptions
 );
@@ -204,7 +203,7 @@ internal sealed class QueryTool {
             detail.Name,
             detail.Properties.Select(p => new PropertyData(p.Name, p.TypeName, p.ConstraintCount)).ToList(),
             detail.Stages.Select(s => new StageData(
-                s.Name, s.ParentStageName, s.ActionNames,
+                s.Name, s.ActionNames,
                 s.Subscriptions.Select(sub => new SubscriptionData(
                     sub.RelationshipName, sub.StageNames, sub.Quantifier, sub.EffectCount)).ToList())).ToList(),
             detail.Actions.Select(a => new ActionData(a.Name, a.ParameterNames, a.EffectCount)).ToList(),
@@ -279,7 +278,7 @@ internal sealed class QueryTool {
             return new {
                 name = e.Name,
                 properties = detail.Properties.Select(p => new { p.Name, p.TypeName, p.ConstraintCount }),
-                stages = detail.Stages.Select(s => new { s.Name, parent = s.ParentStageName, actions = s.ActionNames }),
+                stages = detail.Stages.Select(s => new { s.Name, actions = s.ActionNames }),
                 actions = detail.Actions.Select(a => new { a.Name, a.ParameterNames, a.EffectCount }),
                 policies = detail.Policies.Select(p => p.Name)
             };
@@ -378,16 +377,13 @@ internal sealed class EvolveTool {
     /// <summary>
     /// Adds a lifecycle stage to an entity.
     /// </summary>
-    [McpServerTool(Name = "add_stage"), Description("Adds a lifecycle stage to an entity. Optionally specify a parent stage for stage hierarchies.")]
+    [McpServerTool(Name = "add_stage"), Description("Adds a lifecycle stage to an entity.")]
     public static DomainToolResponse AddStage(
         [Description("Session ID")] string sessionId,
         [Description("Name of the entity")] string entityName,
-        [Description("Name of the new stage (e.g. 'Draft', 'Active', 'Archived')")] string stageName,
-        [Description("Optional parent stage name for stage hierarchy")] string? parentStageName = null) {
+        [Description("Name of the new stage (e.g. 'Draft', 'Active', 'Archived')")] string stageName) {
         return Evolve(sessionId, builder => {
-            return parentStageName is not null
-                ? builder.AddStage(entityName, stageName, parentStageName)
-                : builder.AddStage(entityName, stageName);
+            return builder.AddStage(entityName, stageName);
         },
             successAffordances: ["add_action", "add_action_to_stage", "add_property", "get_entity_detail"]);
     }
@@ -604,11 +600,11 @@ internal sealed class EvolveTool {
     /// <summary>
     /// Adds multiple lifecycle stages to an entity in a single atomic batch.
     /// </summary>
-    [McpServerTool(Name = "add_stages"), Description("Adds multiple lifecycle stages to an entity in a single atomic batch. Provide a JSON array of {name, parentStageName?} objects.")]
+    [McpServerTool(Name = "add_stages"), Description("Adds multiple lifecycle stages to an entity in a single atomic batch. Provide a JSON array of {name} objects.")]
     public static DomainToolResponse AddStages(
         [Description("Session ID")] string sessionId,
         [Description("Name of the entity")] string entityName,
-        [Description("JSON array of stage objects: [{\"name\":\"Draft\"},{\"name\":\"Review\",\"parentStageName\":\"Draft\"},...]")] string stages) {
+        [Description("JSON array of stage objects: [{\"name\":\"Draft\"},{\"name\":\"Confirmed\"},...]")] string stages) {
         StageSpec[] specs;
         try {
             specs = JsonSerializer.Deserialize<StageSpec[]>(stages)
@@ -633,9 +629,7 @@ internal sealed class EvolveTool {
 
         return Evolve(sessionId, builder => {
             foreach (var s in specs)
-                builder = s.ParentStageName is not null
-                    ? builder.AddStage(entityName, s.Name, s.ParentStageName)
-                    : builder.AddStage(entityName, s.Name);
+                builder = builder.AddStage(entityName, s.Name);
             return builder;
         }, successAffordances: ["add_action", "add_action_to_stage", "get_entity_detail"]);
     }
@@ -784,8 +778,7 @@ internal sealed class EvolveTool {
         [property: System.Text.Json.Serialization.JsonPropertyName("name")] string Name,
         [property: System.Text.Json.Serialization.JsonPropertyName("typeName")] string TypeName);
     private sealed record StageSpec(
-        [property: System.Text.Json.Serialization.JsonPropertyName("name")] string Name,
-        [property: System.Text.Json.Serialization.JsonPropertyName("parentStageName")] string? ParentStageName = null);
+        [property: System.Text.Json.Serialization.JsonPropertyName("name")] string Name);
     private sealed record ActionToStageSpec(
         [property: System.Text.Json.Serialization.JsonPropertyName("stageName")] string StageName,
         [property: System.Text.Json.Serialization.JsonPropertyName("actionName")] string ActionName);
@@ -1129,19 +1122,19 @@ internal sealed class DslTool {
     /// Parses the text, evolves a fresh domain, and — if analysis succeeds — replaces the
     /// session domain with the result. On failure, returns diagnostics with line/column info.
     /// </summary>
-    [McpServerTool(Name = "apply_dsl"), Description(@"Applies Phase 1a .poly DSL text to the session, REPLACING the current domain.
+    [McpServerTool(Name = "apply_dsl"), Description(@"Applies Phase 1a/1b .poly DSL text to the session, REPLACING the current domain.
 
 Parses the text, evolves a fresh domain, and — if analysis succeeds — replaces the
 session domain with the result. Use this for batch authoring; micro-tools (add_entity,
 add_property, etc.) remain for discovery and incremental edits.
 
-Phase 1a supports: entities, properties with constraints (required, unique, range,
-length, pattern), lifecycle stages with optional parent, actions with require gates,
-stage subscriptions (when RelName Stage { effects }), policies, relationships
+Supported constructs: entities, properties with constraints (required, unique, range,
+length, pattern), lifecycle stages, actions with require gates,
+stage subscriptions (when RelName Stage1, Stage2 { effects }), policies, relationships
 (N1 navigation properties only: 'orders: many Order' on the source entity),
-and effects (transition to, assign).
+and effects (transition to, assign, create, create in, entry/exit).
 
-Unsupported constructs (actor, value, create, schedule, etc.) produce clear errors.
+Unsupported constructs (actor, value, schedule, etc.) produce clear errors.
 
 HONESTY NOTES — what this tool does NOT enforce:
  - Action `when Stage` is parsed and stored but NOT runtime-enforced

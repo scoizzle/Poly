@@ -132,12 +132,12 @@ public class DomainEvolutionApplicatorTests {
         var updated = result.Root.Types.OfType<Entity>().Single(e => e.Name == "Person");
         await Assert.That(updated.Stages.Count).IsEqualTo(1);
         await Assert.That(updated.Stages[0].Name).IsEqualTo("Alive");
-        await Assert.That(updated.Stages[0].Parent).IsNull();
+        // Stage hierarchy not supported — no Parent property.
     }
 
     [Test]
     public async Task Apply_RemoveStageChange_RemovesStage() {
-        var stage = new Stage("Alive", null, [], [], [], []);
+        var stage = new Stage("Alive", [], [], [], []);
         var entity = new Entity("Person", [], [], [], [stage]);
         var start = new Domain("Test", [entity], []);
 
@@ -307,7 +307,7 @@ public class DomainEvolutionApplicatorTests {
     [Test]
     public async Task Apply_AddEffectToActionChange_AttachesStageTransition() {
         var dieAction = new Poly.DomainModeling.Action("Die", InvocationResult.Void, [], [], []);
-        var deadStage = new Stage("Dead", null, [], [], [], []);
+        var deadStage = new Stage("Dead", [], [], [], []);
         var person = new Entity("Person", [], [dieAction], [], [deadStage]);
         var start = new Domain("Test", [person], []);
 
@@ -494,8 +494,8 @@ public class DomainEvolutionApplicatorTests {
         var someDoc = new Poly.DomainModeling.ValueType("SomeDoc", [], []);
         var createEffect = new CreateEntityInstance(new DomainTypeReference("SomeDoc"));
         var dieAction = new Poly.DomainModeling.Action("Die", InvocationResult.Void, [], [createEffect], []);
-        var aliveStage = new Stage("Alive", null, [], [], [], []);
-        var deadStage = new Stage("Dead", null, [], [], [], []);
+        var aliveStage = new Stage("Alive", [], [], [], []);
+        var deadStage = new Stage("Dead", [], [], [], []);
         var person = new Entity("Person", [new Property("Name", new DomainTypeReference("Text"), [])], [dieAction], [], [aliveStage, deadStage]);
         var start = new Domain("Test", [person, text, someDoc], []);
 
@@ -556,9 +556,9 @@ public class DomainEvolutionApplicatorTests {
         var originalPendingId = afterParent.Root.Types.OfType<Entity>().Single(e => e.Name == "Order")
             .Stages.Single(s => s.Name == "Pending").Id;
 
-        // Now add a child stage with parent via the evolution layer
+        // Stage hierarchy not supported — add flat stage instead
         var result = new DomainEvolution(afterParent.Root).Apply([
-            new AddStageChange("Order", "Approved", new StageReference("Pending"))
+            new AddStageChange("Order", "Approved")
         ]);
 
         await Assert.That(result.Succeeded).IsTrue();
@@ -567,10 +567,8 @@ public class DomainEvolutionApplicatorTests {
         await Assert.That(order.Stages.Count).IsEqualTo(2);
 
         var approved = order.Stages.Single(s => s.Name == "Approved");
-        await Assert.That(approved.Parent).IsNotNull();
-        await Assert.That(approved.Parent!.StageName).IsEqualTo("Pending");
 
-        // Child stage gets a fresh Id (as expected for new nodes)
+        // Fresh Id for the new stage
         await Assert.That(approved.Id).IsNotEqualTo(originalPendingId);
 
         // Parent stage Id is preserved (NodeId continuity on untouched sibling)
@@ -584,12 +582,10 @@ public class DomainEvolutionApplicatorTests {
 
         var result = new DomainEvolution(start).Apply([
             new AddEntityChange("Order", []),
-            new AddStageChange("Order", "Approved", new StageReference("NonExistentParent"))
+            new AddStageChange("Order", "Approved")
         ]);
 
-        await Assert.That(result.Succeeded).IsFalse();
-        await Assert.That(result.WasRolledBack).IsTrue();
-        await Assert.That(result.HasStructuralFailure).IsTrue();
+        await Assert.That(result.Succeeded).IsTrue();
     }
 
     [Test]
@@ -615,7 +611,7 @@ public class DomainEvolutionApplicatorTests {
     [Test]
     public async Task RemoveActionFromStage_Works() {
         var action = new Poly.DomainModeling.Action("Approve", InvocationResult.Void, [], [], []);
-        var stage = new Stage("Pending", null, [action], [], [], []);
+        var stage = new Stage("Pending", [action], [], [], []);
         var entity = new Entity("Order", [], [], [], [stage]);
         var start = new Domain("Test", [entity], []);
 
@@ -881,10 +877,10 @@ public class DomainEvolutionApplicatorTests {
             .Evolve()
             // Loan stages (with simple parent hierarchy for Overdue/Renewed/Lost under Active)
             .AddStage("Loan", "Active")
-            .AddStage("Loan", "Overdue", "Active")
+            .AddStage("Loan", "Overdue")
             .AddStage("Loan", "Returned")
-            .AddStage("Loan", "Renewed", "Active")
-            .AddStage("Loan", "Lost", "Active")
+            .AddStage("Loan", "Renewed")
+            .AddStage("Loan", "Lost")
             // Book stages
             .AddStage("Book", "Available")
             .AddStage("Book", "Borrowed")
@@ -977,20 +973,13 @@ public class DomainEvolutionApplicatorTests {
         var loan = final.Types.OfType<Entity>().Single(e => e.Name == "Loan");
         await Assert.That(loan.Properties.Any(p => p.Name == "RenewalCount")).IsTrue();
 
-        // Loan stages with parent hierarchy
+        // Loan stages (flat — no parent hierarchy)
         await Assert.That(loan.Stages.Count).IsEqualTo(5);
         var active = loan.Stages.Single(s => s.Name == "Active");
         var overdue = loan.Stages.Single(s => s.Name == "Overdue");
         var returned = loan.Stages.Single(s => s.Name == "Returned");
         var renewed = loan.Stages.Single(s => s.Name == "Renewed");
         var lost = loan.Stages.Single(s => s.Name == "Lost");
-
-        await Assert.That(overdue.Parent).IsNotNull();
-        await Assert.That(overdue.Parent!.StageName).IsEqualTo("Active");
-        await Assert.That(renewed.Parent).IsNotNull();
-        await Assert.That(renewed.Parent!.StageName).IsEqualTo("Active");
-        await Assert.That(lost.Parent).IsNotNull();
-        await Assert.That(lost.Parent!.StageName).IsEqualTo("Active");
 
         // Actions on stages
         await Assert.That(active.Actions.Count).IsEqualTo(4); // CheckoutBook, ReturnBook, RenewLoan, ReportLost
@@ -1197,7 +1186,7 @@ public class DomainEvolutionApplicatorTests {
             new DomainTypeReference("Person"), new DomainTypeReference("Person"),
             RelationshipCardinality.ManyToMany, []);
         var start = new Domain("Test", [entity], [rel]);
-        var result = new DomainEvolution(start).Apply([new AddStageToRelationshipChange("Friends", new Stage("Active", null, [], [], [], []))]);
+        var result = new DomainEvolution(start).Apply([new AddStageToRelationshipChange("Friends", new Stage("Active", [], [], [], []))]);
         await Assert.That(result.Succeeded).IsTrue();
         var updatedRel = result.Root.Relationships.Single(r => r.Name == "Friends");
         await Assert.That(updatedRel.Stages.Count).IsEqualTo(1);
@@ -1207,7 +1196,7 @@ public class DomainEvolutionApplicatorTests {
     [Test]
     public async Task Apply_RemoveStageFromRelationship_RemovesStage() {
         var entity = new Entity("Person", [], [], [], []);
-        var stage = new Stage("Active", null, [], [], [], []);
+        var stage = new Stage("Active", [], [], [], []);
         var rel = new Relationship("Friends",
             new DomainTypeReference("Person"), new DomainTypeReference("Person"),
             RelationshipCardinality.ManyToMany, []) { Stages = [stage] };
@@ -1405,7 +1394,7 @@ public class DomainEvolutionApplicatorTests {
         var entity = new Entity("Project", [], [], [], []);
         var tasksRel = new Relationship("Tasks",
             new DomainTypeReference("Project"), new DomainTypeReference("Project"),
-            RelationshipCardinality.OneToMany, []) { Stages = [new Stage("Completed", null, [], [], [], [])] };
+            RelationshipCardinality.OneToMany, []) { Stages = [new Stage("Completed", [], [], [], [])] };
         var start = new Domain("Test", [entity], [tasksRel]);
         var result = new DomainEvolution(start)
             .Evolve()
@@ -2008,7 +1997,7 @@ public class DomainEvolutionApplicatorTests {
 
     [Test]
     public async Task RemoveStage_MissingName_FailsWithClearError() {
-        var entity = new Entity("Order", [], [], [], Stages: [new Stage("Draft", null, [], [], [], [])]);
+        var entity = new Entity("Order", [], [], [], Stages: [new Stage("Draft", [], [], [], [])]);
         var start = new Domain("Test", [entity], []);
 
         var change = new RemoveStageChange("Order", "NonExistent");
@@ -2063,7 +2052,7 @@ public class DomainEvolutionApplicatorTests {
 
     [Test]
     public async Task Remove_ExistingStage_Succeeds() {
-        var entity = new Entity("Order", [], [], [], Stages: [new Stage("Draft", null, [], [], [], [])]);
+        var entity = new Entity("Order", [], [], [], Stages: [new Stage("Draft", [], [], [], [])]);
         var start = new Domain("Test", [entity], []);
 
         var change = new RemoveStageChange("Order", "Draft");

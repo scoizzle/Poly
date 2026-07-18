@@ -107,13 +107,12 @@ public sealed record RemovePropertyFromEntityChange(
 /// </summary>
 public sealed record AddStageChange(
     string EntityName,
-    string Name,
-    StageReference? Parent = null
+    string Name
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
         context.RequireUpdate(
             context.UpdateEntity(EntityName, e => e with {
-                Stages = e.Stages.Append(new Stage(Name, Parent, [], [], [], [])).ToList()
+                Stages = e.Stages.Append(new Stage(Name, [], [], [], [])).ToList()
             }),
             $"Entity '{EntityName}' not found — cannot add stage '{Name}'");
     }

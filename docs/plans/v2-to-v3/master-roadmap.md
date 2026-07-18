@@ -44,12 +44,6 @@ MCP / direct API as thin consumers
 | 5 | P2.4 E-entry | OnEntry/OnExit DSL print/parse | Done |
 | 6 | P2.5 Multi-stage when-list | Parser extension | Done |
 
----
-
-## Archived migration material
-
----
-
 ## Archived migration material
 
 Completed/superseded workstreams, WP/ws micro-tasks, and µop-era WS8 docs:

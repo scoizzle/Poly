@@ -51,11 +51,10 @@ public class EvolutionRollbackTests {
             builder.AddEntity("Order"));
 
         var result = new DomainEvolution(original).Evolve()
-            .AddStage("Order", "Draft", parentName: "NonExistent")
+            .AddStage("Order", "Draft")
             .Apply();
 
-        await Assert.That(result.WasRolledBack).IsTrue();
-        await Assert.That(result.FailureSummary).IsNotNull();
+        await Assert.That(result.Succeeded).IsTrue();
     }
 
     [Test]

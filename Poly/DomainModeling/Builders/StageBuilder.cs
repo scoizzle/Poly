@@ -7,7 +7,6 @@ namespace Poly.DomainModeling;
 /// </summary>
 public sealed class StageBuilder {
     private readonly string _name;
-    private StageReference? _parent;
     private readonly List<Action> _actions = new();
     private readonly List<Policy> _policies = new();
     private readonly List<Effect> _onEntryEffects = new();
@@ -16,11 +15,6 @@ public sealed class StageBuilder {
 
     internal StageBuilder(string name) {
         _name = Guard.ThrowIfNullOrEmpty(name);
-    }
-
-    public StageBuilder Parent(string stageName) {
-        _parent = new StageReference(Guard.ThrowIfNullOrEmpty(stageName));
-        return this;
     }
 
     public StageBuilder Policy(string name, DomainExpression expression) {
@@ -100,7 +94,6 @@ public sealed class StageBuilder {
     internal Stage Build() {
         return new Stage(
             _name,
-            _parent,
             _actions,
             _policies,
             _onEntryEffects,

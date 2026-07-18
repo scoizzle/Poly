@@ -159,6 +159,24 @@ public class PolyDslRoundTripTests {
     }
 
     [Test]
+    public async Task Parse_StagePrev_Rejected() {
+        // P2′′′′′.3: Using the removed 'prev' keyword should produce a clear error.
+        var poly = """
+            domain Test
+
+            Item: entity {
+              Active: stage prev Draft {
+              }
+            }
+            """;
+
+        var parser = new PolyDslParser(poly);
+        var ex = Assert.Throws<FormatException>(() => parser.Parse());
+        await Assert.That(ex.Message).Contains("prev");
+        await Assert.That(ex.Message).Contains("no longer supported");
+    }
+
+    [Test]
     public async Task Parse_MinimalEntity_ProducesChangeList() {
         var poly = """
             domain Minimal

@@ -1,0 +1,223 @@
+// ============================================================
+// Restaurant Operations — Poly DSL Domain Model
+// Phase 1a: entities, properties, stages, actions, policies,
+// relationships, constraints.
+// ============================================================
+
+domain RestaurantOps
+
+// ============================================================
+// Menu
+// ============================================================
+
+MenuCategory: entity {
+  name: Text required unique
+  displayOrder: Number range(0, )
+  menuItems: many MenuItem
+  categoryRecipes: many Recipe
+}
+
+MenuItem: entity {
+  name: Text required unique
+  description: Text
+  price: Number range(0, ) required
+  prepTimeMinutes: Number range(0, )
+  isAvailable: Boolean
+  menuItemLineItems: many OrderLineItem
+  menuItemRecipes: many Recipe
+  IsAvailable: policy { isAvailable is true }
+}
+
+// ============================================================
+// Dining
+// ============================================================
+
+Table: entity {
+  tableNumber: Number required unique
+  capacity: Number range(1, ) required
+  section: Text
+  isActive: Boolean
+  tableOrders: many Order
+  tableReservations: many Reservation
+  IsActiveTable: policy { isActive is true }
+}
+
+Reservation: entity {
+  guestName: Text required
+  guestPhone: Text
+  partySize: Number range(1, ) required
+  reservationTime: DateTime required
+  notes: Text
+
+  Pending: stage {
+    Confirm: action { transition to Confirmed }
+    Cancel: action { transition to Cancelled }
+  }
+  Confirmed: stage {
+    Seat: action { transition to Seated }
+    NoShow: action { transition to NoShow }
+    Cancel: action { transition to Cancelled }
+  }
+  Seated: stage {}
+  NoShow: stage {}
+  Cancelled: stage {}
+}
+
+// ============================================================
+// Service
+// ============================================================
+
+Order: entity {
+  orderNumber: Text required unique
+  openedAt: DateTime required
+  closedAt: DateTime
+  subtotal: Number range(0, ) required
+  tax: Number range(0, )
+  tip: Number range(0, )
+  total: Number range(0, ) required
+  orderLineItems: many OrderLineItem
+  orderPayments: many Payment
+
+  Open: stage {
+    AddItem: action { transition to InProgress }
+  }
+  InProgress: stage {
+    MarkReady: action { transition to Ready }
+  }
+  Ready: stage {
+    Serve: action { transition to Served }
+  }
+  Served: stage {
+    RequestBill: action { transition to Billed }
+  }
+  Billed: stage {
+    Settle: action { transition to Paid }
+  }
+  Paid: stage {
+    Close: action { transition to Closed }
+  }
+  Closed: stage {}
+}
+
+OrderLineItem: entity {
+  quantity: Number range(1, ) required
+  unitPrice: Number range(0, ) required
+  lineTotal: Number range(0, ) required
+  modifiers: Text
+  lineItemPayments: many Payment
+
+  Ordered: stage {
+    StartPrep: action { transition to Preparing }
+  }
+  Preparing: stage {
+    MarkDone: action { transition to Ready }
+  }
+  Ready: stage {
+    Serve: action { transition to Served }
+  }
+  Served: stage {}
+  Cancelled: stage {}
+}
+
+// ============================================================
+// Payments
+// ============================================================
+
+Payment: entity {
+  amount: Number range(0, ) required
+  method: Text required
+  processedAt: DateTime
+  paymentLineItems: many OrderLineItem
+  IsValidAmount: policy { amount > 0 }
+
+  Pending: stage {
+    Process: action { transition to Captured }
+    Fail: action { transition to Failed }
+  }
+  Captured: stage {}
+  Failed: stage {
+    Retry: action { transition to Pending }
+  }
+  Refunded: stage {}
+}
+
+// ============================================================
+// Staff
+// ============================================================
+
+Employee: entity {
+  name: Text required
+  role: Text required
+  phone: Text
+  isActive: Boolean
+  employeeOrders: many Order
+  IsActiveStaff: policy { isActive is true }
+}
+
+// ============================================================
+// Kitchen
+// ============================================================
+
+Recipe: entity {
+  name: Text required unique
+  instructions: Text
+  prepTimeMinutes: Number range(0, )
+  cookTimeMinutes: Number range(0, )
+  recipeIngredients: many Ingredient
+}
+
+Ingredient: entity {
+  name: Text required unique
+  unit: Text required
+  costPerUnit: Number range(0, ) required
+  ingredientInventoryItems: many InventoryItem
+}
+
+// ============================================================
+// Inventory & Supply
+// ============================================================
+
+InventoryItem: entity {
+  quantityOnHand: Number range(0, ) required
+  reorderPoint: Number range(0, ) required
+  unitCost: Number range(0, ) required
+  inventoryPurchaseOrders: many PurchaseOrder
+  InStock: stage {}
+  LowStock: stage {}
+  OutOfStock: stage {}
+  Ordered: stage {}
+}
+
+Supplier: entity {
+  name: Text required
+  contactName: Text
+  phone: Text
+  email: Text
+  isActive: Boolean
+  supplierPurchaseOrders: many PurchaseOrder
+}
+
+PurchaseOrder: entity {
+  poNumber: Text required unique
+  orderDate: DateTime required
+  expectedDate: DateTime
+  receivedDate: DateTime
+  totalCost: Number range(0, ) required
+
+  Draft: stage {
+    Submit: action { transition to Submitted }
+  }
+  Submitted: stage {
+    Approve: action { transition to Approved }
+  }
+  Approved: stage {
+    Ship: action { transition to Shipped }
+  }
+  Shipped: stage {
+    Receive: action { transition to Received }
+  }
+  Received: stage {
+    Close: action { transition to Closed }
+  }
+  Closed: stage {}
+}

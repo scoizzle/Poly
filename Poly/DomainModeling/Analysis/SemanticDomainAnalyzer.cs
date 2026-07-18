@@ -148,53 +148,7 @@ internal sealed class SemanticDomainAnalyzer : INodeAnalyzer {
         var stages = entity.Stages
             .GroupBy(static stage => stage.Name, StringComparer.Ordinal)
             .ToDictionary(static group => group.Key, static group => group.Last(), StringComparer.Ordinal);
-
-        foreach (var stage in entity.Stages) {
-            if (stage.Parent is null) {
-                continue;
-            }
-
-            if (!stages.ContainsKey(stage.Parent.StageName)) {
-                context.ReportStructuralFailure(
-                    stage,
-                    $"Stage '{stage.Name}' on entity '{entity.Name}' references unknown parent stage '{stage.Parent.StageName}'.",
-                    DomainModelDiagnosticCodes.SemanticReferenceResolution);
-            }
-        }
-
-        foreach (var stage in entity.Stages) {
-            if (HasStageCycle(stage, stages)) {
-                context.ReportStructuralFailure(
-                    stage,
-                    $"Stage '{stage.Name}' on entity '{entity.Name}' has a parent cycle.",
-                    DomainModelDiagnosticCodes.SemanticTypeCompatibility);
-            }
-        }
-
-        foreach (var stage in entity.Stages) {
-            if (stage.Parent is not null && stages.TryGetValue(stage.Parent.StageName, out var resolvedParent)) {
-                context.SetMetadata(stage, new ResolvedStageParentMetadata(resolvedParent));
-            }
-        }
-
-        PublishStageLineageMetadata(context, entity, stages);
-    }
-
-    private static bool HasStageCycle(Stage stage, IReadOnlyDictionary<string, Stage> stages) {
-        HashSet<string> visited = [stage.Name];
-        var current = stage;
-
-        while (current.Parent is not null) {
-            if (!stages.TryGetValue(current.Parent.StageName, out current!)) {
-                return false;
-            }
-
-            if (!visited.Add(current.Name)) {
-                return true;
-            }
-        }
-
-        return false;
+        // All stages are flat — no parent/child hierarchy in the current DSL surface.
     }
 
     private static void PublishEffectivePolicies(AnalysisContext context, Entity entity) {
@@ -247,44 +201,7 @@ internal sealed class SemanticDomainAnalyzer : INodeAnalyzer {
             return;
         }
 
-        if (stage.Parent is not null && stages.TryGetValue(stage.Parent.StageName, out var parent)) {
-            AppendStagePolicies(parent, stages, effectivePolicies, visited);
-        }
-
         effectivePolicies.AddRange(stage.Policies);
-    }
-
-    private static void PublishStageLineageMetadata(
-        AnalysisContext context,
-        Entity entity,
-        IReadOnlyDictionary<string, Stage> stages) {
-        foreach (var stage in entity.Stages) {
-            var ancestors = CollectStageAncestors(stage, stages);
-            if (ancestors.Count > 0) {
-                context.SetMetadata(stage, new StageLineageMetadata(ancestors.Count, ancestors));
-            }
-        }
-    }
-
-    private static List<Stage> CollectStageAncestors(
-        Stage stage,
-        IReadOnlyDictionary<string, Stage> stages) {
-        var ancestors = new List<Stage>();
-        var visited = new HashSet<string>(StringComparer.Ordinal);
-        var current = stage;
-
-        while (current.Parent is not null) {
-            if (!visited.Add(current.Parent.StageName)) break;
-            if (stages.TryGetValue(current.Parent.StageName, out var parent)) {
-                ancestors.Add(parent);
-                current = parent;
-            }
-            else {
-                break;
-            }
-        }
-
-        return ancestors;
     }
 
     private static void PublishEffectiveMemberMetadata(AnalysisContext context, Entity entity) {

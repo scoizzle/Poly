@@ -88,7 +88,7 @@ internal sealed class CapabilityAnalyzer : INodeAnalyzer {
         var transitionTargetStages = new List<Stage>();
         foreach (var effect in FlattenEffects(action.Effects)) {
             if (effect is StageTransitionEffect ste) {
-                transitionTargetStages.Add(new Stage(ste.TargetStage.StageName, null, [], [], [], []));
+                transitionTargetStages.Add(new Stage(ste.TargetStage.StageName, [], [], [], []));
             }
         }
 
@@ -117,15 +117,8 @@ internal sealed class CapabilityAnalyzer : INodeAnalyzer {
         var effectiveActionViews = new List<ActionCapabilityView>();
         effectiveActionViews.AddRange(localActionViews);
 
-        var current = context.GetMetadata<ResolvedStageParentMetadata>(stage);
-        while (current is not null) {
-            var parentViews = current.ParentStage.Actions
-                .Select(a => context.GetMetadata<ActionCapabilityMetadata>(a)?.View)
-                .OfType<ActionCapabilityView>();
-            effectiveActionViews.AddRange(parentViews);
-
-            current = context.GetMetadata<ResolvedStageParentMetadata>(current.ParentStage);
-        }
+        // Stage hierarchy not supported — no parent walk.
+        // All effective actions come only from the stage itself.
 
         var view = new StageCapabilityView(
             StageName: stage.Name,

@@ -14,7 +14,7 @@ public class SubscriptionAnalysisTests {
         new(name, [], [], [], stages);
 
     private static Stage MakeStage(string name, params StageSubscription[] subs) =>
-        new(name, null, [], [], [], []) { Subscriptions = subs };
+        new(name, [], [], [], []) { Subscriptions = subs };
 
     // ── A′.1 RemoveStageSubscription semantic key matching ─────
 
@@ -101,7 +101,7 @@ public class SubscriptionAnalysisTests {
         var rel = new Relationship("Notifies",
             new DomainTypeReference("Order"), new DomainTypeReference("Customer"),
             RelationshipCardinality.OneToOne, []);
-        var targetStage = new Stage("Active", null, [], [], [], []);
+        var targetStage = new Stage("Active", [], [], [], []);
         var target = MakeEntity("Customer", targetStage);
         var sub = new StageSubscription("Notifies", ["Active"], StageSubscriptionQuantifier.Each, []);
         var stage = MakeStage("Pending", sub);
@@ -119,8 +119,8 @@ public class SubscriptionAnalysisTests {
         var rel = new Relationship("Notifies",
             new DomainTypeReference("Order"), new DomainTypeReference("Customer"),
             RelationshipCardinality.OneToOne, []);
-        var targetStage1 = new Stage("Active", null, [], [], [], []);
-        var targetStage2 = new Stage("Inactive", null, [], [], [], []);
+        var targetStage1 = new Stage("Active", [], [], [], []);
+        var targetStage2 = new Stage("Inactive", [], [], [], []);
         var target = MakeEntity("Customer", targetStage1, targetStage2);
         // One valid, one invalid
         var sub = new StageSubscription("Notifies", ["Active", "NonExistent"], StageSubscriptionQuantifier.Each, []);
@@ -167,7 +167,7 @@ public class SubscriptionAnalysisTests {
         var rel = new Relationship("Notifies",
             new DomainTypeReference("Order"), new DomainTypeReference("Customer"),
             RelationshipCardinality.OneToOne, []);
-        var targetStage = new Stage("Active", null, [], [], [], []);
+        var targetStage = new Stage("Active", [], [], [], []);
         var target = MakeEntity("Customer", targetStage);
         var stage = MakeStage("Pending");
         var entity = MakeEntity("Order", stage);
@@ -223,7 +223,7 @@ public class SubscriptionAnalysisTests {
         var rel = new Relationship("Notifies",
             new DomainTypeReference("Order"), new DomainTypeReference("Customer"),
             RelationshipCardinality.OneToOne, []);
-        var targetStage = new Stage("Active", null, [], [], [], []);
+        var targetStage = new Stage("Active", [], [], [], []);
         var target = MakeEntity("Customer", targetStage);
         var sub = new StageSubscription("Notifies", ["Active"], StageSubscriptionQuantifier.Each, []);
         var stage = MakeStage("Pending", sub);
@@ -249,7 +249,7 @@ public class SubscriptionAnalysisTests {
         var rel = new Relationship("Notifies",
             new DomainTypeReference("Order"), new DomainTypeReference("Customer"),
             RelationshipCardinality.OneToOne, []);
-        var targetStage = new Stage("Active", null, [], [], [], []);
+        var targetStage = new Stage("Active", [], [], [], []);
         var target = MakeEntity("Customer", targetStage);
         var sub1 = new StageSubscription("Notifies", ["Active"], StageSubscriptionQuantifier.Each, []);
         var sub2 = new StageSubscription("Notifies", ["Active"], StageSubscriptionQuantifier.Each, []);
@@ -272,7 +272,7 @@ public class SubscriptionAnalysisTests {
         var rel = new Relationship("Paired",
             new DomainTypeReference("Order"), new DomainTypeReference("Customer"),
             RelationshipCardinality.OneToOne, []);
-        var targetStage = new Stage("Active", null, [], [], [], []);
+        var targetStage = new Stage("Active", [], [], [], []);
         var target = MakeEntity("Customer", targetStage);
         // "Any" quantifier on a singular relationship is meaningless
         var sub = new StageSubscription("Paired", ["Active"], StageSubscriptionQuantifier.Any, []);
@@ -295,7 +295,7 @@ public class SubscriptionAnalysisTests {
         // Order is just the target entity that transitions.
         var statusProp = new Property("Status", new DomainTypeReference("Text"), []);
         var tracker = new Entity("Tracker", [statusProp], [], [], [
-            new Stage("Pending", null, [], [], [], []) {
+            new Stage("Pending", [], [], [], []) {
                 Subscriptions = [
                     new StageSubscription("Tracks", ["Active"], StageSubscriptionQuantifier.Each, [
                         new AssignEffect(
@@ -310,8 +310,8 @@ public class SubscriptionAnalysisTests {
             new StageTransitionEffect(new StageReference("Active"))
         ], []);
         var order = new Entity("Order", [], [orderAction], [], [
-            new Stage("Draft", null, [], [], [], []),
-            new Stage("Active", null, [], [], [], [])
+            new Stage("Draft", [], [], [], []),
+            new Stage("Active", [], [], [], [])
         ]);
 
         var rel = new Relationship("Tracks",
@@ -347,8 +347,8 @@ public class SubscriptionAnalysisTests {
         var tracker = new Entity("Tracker", [
             new Property("Status", new DomainTypeReference("Text"), [])
         ], [], [], [
-            new Stage("Idle", null, [], [], [], []),  // Default — no subscription
-            new Stage("Pending", null, [], [], [], []) {
+            new Stage("Idle", [], [], [], []),  // Default — no subscription
+            new Stage("Pending", [], [], [], []) {
                 Subscriptions = [
                     new StageSubscription("Tracks", ["Active"], StageSubscriptionQuantifier.Each, [
                         new AssignEffect(
@@ -363,8 +363,8 @@ public class SubscriptionAnalysisTests {
             new StageTransitionEffect(new StageReference("Active"))
         ], []);
         var order = new Entity("Order", [], [orderAction], [], [
-            new Stage("Draft", null, [], [], [], []),
-            new Stage("Active", null, [], [], [], [])
+            new Stage("Draft", [], [], [], []),
+            new Stage("Active", [], [], [], [])
         ]);
 
         var rel = new Relationship("Tracks",

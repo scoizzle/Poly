@@ -81,22 +81,22 @@ public static class LibraryDomain {
 
                 // Loan stages
                 .AddStage("Loan", "Active")
-                .AddStage("Loan", "Overdue", "Active")
-                .AddStage("Loan", "Renewed", "Active")
+                .AddStage("Loan", "Overdue")
+                .AddStage("Loan", "Renewed")
                 .AddStage("Loan", "Returned")
-                .AddStage("Loan", "Lost", "Active")
+                .AddStage("Loan", "Lost")
 
                 // Reservation stages
                 .AddStage("Reservation", "Waiting")
-                .AddStage("Reservation", "Ready", "Waiting")
+                .AddStage("Reservation", "Ready")
                 .AddStage("Reservation", "Fulfilled")
                 .AddStage("Reservation", "Cancelled")
                 .AddStage("Reservation", "Expired")
 
                 // Book stages
                 .AddStage("Book", "Available")
-                .AddStage("Book", "OutOfStock", "Available")
-                .AddStage("Book", "Reserved", "Available")
+                .AddStage("Book", "OutOfStock")
+                .AddStage("Book", "Reserved")
                 .AddStage("Book", "Archived")
 
                 // Relationships

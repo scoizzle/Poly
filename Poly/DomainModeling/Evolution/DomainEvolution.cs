@@ -172,8 +172,7 @@ public sealed class EvolutionBuilder {
     public EvolutionBuilder AddStage(string entityName, string name) =>
         Apply(new AddStageChange(entityName, name));
 
-    public EvolutionBuilder AddStage(string entityName, string name, string parentName) =>
-        Apply(new AddStageChange(entityName, name, new StageReference(parentName)));
+    // Stage hierarchy (parent/child) is not supported in the current DSL surface.
 
     public EvolutionBuilder AddStage(
         string entityName,
@@ -453,9 +452,8 @@ public sealed class EvolutionBuilder {
 
     // --- Relationship stage/policy builder methods ---
 
-    public EvolutionBuilder AddStageToRelationship(string relationshipName, string stageName, string? parentStageName = null) {
-        var parent = parentStageName is not null ? new StageReference(parentStageName) : null;
-        return Apply(new AddStageToRelationshipChange(relationshipName, new Stage(stageName, parent, [], [], [], [])));
+    public EvolutionBuilder AddStageToRelationship(string relationshipName, string stageName) {
+        return Apply(new AddStageToRelationshipChange(relationshipName, new Stage(stageName, [], [], [], [])));
     }
 
     public EvolutionBuilder RemoveStageFromRelationship(string relationshipName, string stageName) =>

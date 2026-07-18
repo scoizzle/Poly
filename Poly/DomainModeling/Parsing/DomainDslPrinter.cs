@@ -101,14 +101,8 @@ public sealed class DomainDslPrinter {
     private void PrintStage(Stage stage, string indent) {
         _sb.Append(indent);
         _sb.Append(stage.Name);
-        _sb.Append(": stage");
-
-        if (stage.Parent is not null) {
-            _sb.Append(" prev ");
-            _sb.Append(stage.Parent.StageName);
-        }
-
-        _sb.AppendLine(" {");
+        _sb.Append(": stage {");
+        _sb.AppendLine();
 
         // P2.4: Print OnEntry/OnExit effects
         if (stage.OnEntryEffects.Count > 0) {

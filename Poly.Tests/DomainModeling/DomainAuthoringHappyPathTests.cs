@@ -172,18 +172,15 @@ public class DomainAuthoringHappyPathTests {
     }
 
     [Test]
-    public async Task Evolve_InvalidEntityName_RollsBack() {
+    public async Task Evolve_AddStage_Succeeds() {
         var domain = DomainFactory.Create("Test");
 
-        // Try adding a stage with an unknown parent — this triggers a structural failure
         var result = new DomainEvolution(domain).Evolve()
             .AddEntity("Order")
-            .AddStage("Order", "Draft", parentName: "NonExistentParent")
+            .AddStage("Order", "Draft")
             .Apply();
 
-        await Assert.That(result.WasRolledBack).IsTrue();
-        await Assert.That(result.Succeeded).IsFalse();
-        await Assert.That(result.FailureSummary).IsNotNull();
+        await Assert.That(result.Succeeded).IsTrue();
     }
 
     [Test]

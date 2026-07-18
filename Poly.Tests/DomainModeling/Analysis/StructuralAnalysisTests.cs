@@ -417,7 +417,7 @@ public class UnsatisfiedRequirementTests {
     public async Task EffectUnsatisfiedRequirement_StageTransitionSatisfied_DoesNotReport() {
         var text = new Poly.DomainModeling.PrimitiveType("Text", TypeCategory.Text, []);
         var title = new Property("Title", new DomainTypeReference("Text"), [new RequiredConstraint()]);
-        var stage = new Stage("Open", default(StageReference?), [], [], [], []);
+        var stage = new Stage("Open", [], [], [], []);
         var action = new Poly.DomainModeling.Action("OpenTicket", InvocationResult.Void, [
             new Property("incomingTitle", new DomainTypeReference("Text"), [])
         ], [
@@ -437,7 +437,7 @@ public class UnsatisfiedRequirementTests {
     public async Task EffectUnsatisfiedRequirement_StageTransitionMissingAssignment_ReportsWarning() {
         var text = new Poly.DomainModeling.PrimitiveType("Text", TypeCategory.Text, []);
         var title = new Property("Title", new DomainTypeReference("Text"), [new RequiredConstraint()]);
-        var stage = new Stage("Open", default(StageReference?), [], [], [], []);
+        var stage = new Stage("Open", [], [], [], []);
         var action = new Poly.DomainModeling.Action("OpenTicket", InvocationResult.Void, [], [
             new StageTransitionEffect(new StageReference("Open"))
         ], []);

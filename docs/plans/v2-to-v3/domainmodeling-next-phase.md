@@ -1,9 +1,9 @@
 # DomainModeling Phase 2 — Spawn-and-Wire
 
 **Date:** 2026-07-17  
-**Revised:** 2026-07-17 (P2′′ impl review — suite **1319**; **commit only**)  
-**Status:** Phase 2 vertical **product-complete uncommitted** (P2.1–P2.5 + P2′ + P2′′ verified)  
-**Current pick:** **Commit working tree** — must include untracked `CreateEntityInRelationshipEffect.cs`; then **stop / dogfood**  
+**Revised:** 2026-07-17 (pre-commit residual review — suite **1323**)  
+**Status:** Phase 2 product vertical **complete** (main `12f2926`; residual green uncommitted)  
+**Current pick:** **Commit residual** (breaking: flat stages + runtime symmetry + MCP honesty) — then **stop / dogfood**  
 **Predecessor:** Phase 1a product-complete ([`dsl-sync-toward-phase1.md`](dsl-sync-toward-phase1.md)); BR.4.4 (`8f46f05`); MR/MR′; N2 dropped  
 **Related:** [`dsl-phase1a-grammar.md`](dsl-phase1a-grammar.md), [`docs/CORE.md`](../../CORE.md), AGENTS.md principles  
 
@@ -52,31 +52,14 @@ Principles: domain fidelity, end-to-end ownership, smallest coherent slice, test
 ## 4. Slice map (execution order)
 
 ```text
-P2.0  Plan + residual table (this doc)                      [done]
-P2.1  CR — Create → Link runtime vertical                   [done — uncommitted]
-P2.2  E-create — Phase 1b thin: `create` / `create in` DSL  [done — uncommitted]
-P2.3  DF — Dogfood golden: apply_dsl → CallAction → when    [done — uncommitted]
-P2′   Honesty residuals                                     [done — uncommitted]
-P2.4  E-entry — entry/exit DSL print/parse                  [done — uncommitted]
-P2.5  E-when-list — multi-stage `when Rel A, B`             [done — uncommitted]
-P2′′  Post–full-impl review polish                          [done — uncommitted]
-P2′′′ Post–P2′′ review (hygiene only)                        [commit residual]
-P2.x  Defer — Any/All, value DSL, invoke params, TRE, MCP exec
+P2.0–P2.5 + P2′ + P2′′   Spawn-and-wire product vertical     [done — `12f2926`]
+P2′′′                     Runtime symmetry + flat-stages cut   [done code — uncommitted]
+P2′′′′                    MCP parent honesty + prev error      [done code — uncommitted]
+P2′′′′′                   Docs honesty + prev test             [done code — uncommitted]
+P2.x                      Defer — Any/All, value, invoke, TRE, MCP exec
 ```
 
-### Dependency
-
-| Slice | Depends on | Does not need |
-|-------|------------|---------------|
-| P2.1 CR | BR.4.4 (done) | DSL |
-| P2.2 E-create | P2.1 | value types, Any/All |
-| P2.3 DF | P2.1; P2.2 for full DSL path | Library catalog completeness |
-| **P2′** | P2.1–.3 | P2.4 |
-| P2.4 | P2.2 | CR |
-| P2.5 | P2.2 | CR |
-| **P2′′** | full P2 | — |
-
-**Phase 2 product vertical complete (uncommitted).** **Only open action: commit** (see P2′′′).
+**Phase 2 main shipped (`12f2926`).** Full residual (flat stages + runtime + MCP honesty) is **green — only open action is commit**.
 
 ---
 
@@ -88,7 +71,7 @@ P2.x  Defer — Any/All, value DSL, invoke params, TRE, MCP exec
 - [x] Point [`dsl-sync-toward-phase1.md`](dsl-sync-toward-phase1.md) pick order at Phase 2 / P2.1.
 - [x] [`master-roadmap.md`](master-roadmap.md) “What next” points at Phase 2 (dup heading residual → P2′′′.5).
 
-**Exit:** Agents pick **commit**, then dogfood.
+**Exit:** Agents pick **commit residual** (breaking: Stage.Parent), then dogfood.
 
 ---
 
@@ -207,42 +190,91 @@ Optional: when Places Active { assign … } on Customer stage
 
 ---
 
-### P2′′ — Post–full-impl review polish — **DONE** (uncommitted; suite **1319**)
+### P2′′ — Post–full-impl review polish — **DONE** (`12f2926`)
 
 | ID | Finding | Status |
 |----|---------|--------|
 | **P2′′.1** | Exclusive-owned bare create tests | **Done** |
-| **P2′′.2** | Create + RelationshipName: source + target type analysis | **Done** (`ValidateCreateWithRelationshipName`) |
-| **P2′′.3** | Runtime create-in source check | **Done** (no dedicated runtime unit test — analysis covers wrong source) |
+| **P2′′.2** | Create + RelationshipName: source + target type analysis | **Done** |
+| **P2′′.3** | Runtime create-in source check | **Done** in `12f2926` |
 | **P2′′.4** | Dead entry/exit StageTransition branches | **Done** |
-| **P2′′.5** | Effect file + phone-call experiment | **Partial** — see P2′′′ |
+| **P2′′.5** | Effect file in commit | **Done** (`12f2926`) |
 | **P2′′.6–.7** | Docs / optional completeness | Partial / pull |
-
-**P2′′ impl review (2026-07-17):** Production sound. Analysis depth for create forms is solid. Suite **1319**. **No must-fix before commit** except include the untracked effect source file.
 
 ---
 
-### P2′′′ — Commit hygiene + tiny residuals (post–P2′′ review)
+### P2′′′ — Runtime symmetry + flat stages — **DONE code, uncommitted**
 
-**Verdict:** Ship Phase 2. Only residual that blocks a *correct* commit is **file inclusion**. Everything else is optional polish.
+**Context:** Main Phase 2 in **`12f2926`**. Working tree adds:
+
+1. **Runtime create-with-`RelationshipName` source + target checks** (+ 3 fail-loud tests).  
+2. **Stage hierarchy removal (flat stages)** — larger IR cut:
+
+| Removed | Where |
+|---------|--------|
+| `Stage.Parent` | IR |
+| `prev` keyword | tokenizer / parser / printer |
+| Parent stage action walk | `CallAction` |
+| Parent policy / lineage metadata | Semantic + Capability analyzers |
+| `StageBuilder.Parent`, 3-arg `AddStage` | builders / evolution |
+| `AddStageChange.Parent` | evolution |
+
+Grammar: hierarchy deferred; nested syntax preferred if reintroduced.
+
+- [x] Runtime source/target on create-with-RelationshipName + 3 tests  
+- [x] Flat stages cut + tests + grammar note  
+- [x] master-roadmap dup heading  
+- [ ] **Commit** residual (P2′′′′.1 code done; include P2′′′′′.1–.2 if quick)
+
+---
+
+### P2′′′′ — MCP parent honesty + prev error — **DONE code, uncommitted**
+
+| ID | Status |
+|----|--------|
+| **P2′′′′.1** | **Done** — removed `parentStageName` from `add_stage` / `add_stages` / `StageSpec`; Descriptions cleaned |
+| **P2′′′′.2** | **Done** — `StageDetail.ParentStageName` + MCP `StageData.parent` removed |
+| **P2′′′′.3** | **Done** — parser clear error for `prev` after `stage` |
+| **P2′′′′.4–.5** | README deferred; trailing newlines on Stage/metadata fixed |
+| **P2′′′′.6** | Still open at commit time — breaking note required |
+| **P2′′′′.7** | Pull-only |
+
+---
+
+### P2′′′′′ — Docs honesty + prev test — **DONE code, uncommitted** (suite **1323**)
+
+| ID | Status |
+|----|--------|
+| **P2′′′′′.1** | **Done** — `apply_dsl` Description lists create / create in / entry/exit / multi-stage when; create removed from unsupported list |
+| **P2′′′′′.2** | **Done** — MCP README `add_stage` no longer claims parent |
+| **P2′′′′′.3** | **Done** — `Parse_StagePrev_Rejected` |
+| **P2′′′′′.5** | Open only as **commit-time** process (breaking message) |
+
+---
+
+### Pre-commit residual review (2026-07-17; suite **1323**)
+
+**Verdict:** **Ship residual now.** No production blockers. All prior honesty findings closed in code.
 
 | ID | Severity | Finding |
 |----|----------|---------|
-| **P2′′′.1** | **Must for commit** | `Poly/DomainModeling/Effects/CreateEntityInRelationshipEffect.cs` is still **untracked** (not staged). Commit **must** `git add` this file or the build fails for others. Plan earlier claimed “staged” — **false** as of review. |
-| **P2′′′.2** | Low | `phone-call-minimal.poly` untracked experiment (`DateTime.Now`, not Phase 2 grammar). Keep out of product commit or quarantine under experiments without claiming parse green. |
-| **P2′′′.3** | Low | Runtime `CreateEntityInstance` + `RelationshipName` still only checks rel **exists** (not source/target type) — create-in has runtime source check; dual path asymmetry. Analysis covers API abuse for both. Optional symmetry only. |
-| **P2′′′.4** | Low | No focused **runtime** test that create-in throws on wrong source (P2′′.3 code path). Analysis test exists. |
-| **P2′′′.5** | Low | DomainModeling `README.md` still has no spawn-and-wire / create-in pointer; `master-roadmap.md` has a **duplicate** `## Archived migration material` heading. |
-| **P2′′′.6** | Optional | Required-prop completeness for create-in; Composite nesting create; MCP execute_action — still non-goals unless dogfood forces. |
+| **P2′′′′′′.1** | Process | **Commit residual** with explicit **breaking** note: Stage.Parent / builder Parent / parent AddStage / MCP parent field / flat stages. |
+| **P2′′′′′′.2** | Nit | `ApplyDsl` XML summary + `polyText` param Description still say “Phase 1a” only while tool Description says 1a/1b — optional align. |
+| **P2′′′′′′.3** | Low | DomainModeling README still no spawn-and-wire pointer; experiment polys not product grammar (`phone-call-minimal`, untracked `restaurant-ops`). |
+| **P2′′′′′′.4** | Optional | create-in required-prop analysis; Composite nest create; MCP execute; hierarchy only with named consumer. |
 
-- [ ] **P2′′′.1** `git add` `CreateEntityInRelationshipEffect.cs` in the Phase 2 commit
-- [ ] **P2′′′.2** Leave phone-call-minimal out of ship claim (or add only as experiment)
-- [ ] **P2′′′.3** Optional: runtime source/target checks on create-with-RelationshipName
-- [ ] **P2′′′.4** Optional: runtime wrong-source create-in test
-- [ ] **P2′′′.5** README + master-roadmap duplicate heading (while editing docs)
-- [ ] **P2′′′.6** Pull-only product extras
+**Solid:**
 
-**Do not open new IR for Phase 2 residual.**
+- Flat stages end-to-end (IR, DSL, MCP tools/DTOs, analyzers, CallAction).
+- Create-with-rel runtime source/target + create-in wrong-source tests.
+- `apply_dsl` / README honesty match product surface.
+- Suite **1323** green.
+
+- [ ] **P2′′′′′′.1** Commit residual (breaking flat stages)
+- [ ] **Stop / dogfood**
+- [ ] **P2′′′′′′.2–.3** only if already editing those files
+
+**Do not open new IR.**
 
 ---
 
@@ -294,8 +326,14 @@ Parser today: one stage token. IR + runtime already OR-match list.
 - [x] **P2.4** entry/exit DSL round-trip  
 - [x] **P2.5** multi-stage when list round-trip  
 - [x] **P2′′** polish landed (exclusive-owned tests, create-with-rel analysis depth, create-in runtime source check, entry/exit parse cleanup)  
-- [x] Suite green (**1319**)  
-- [ ] **Commit** working tree (**must** include `CreateEntityInRelationshipEffect.cs` — P2′′′.1)
+- [x] Suite green (**1322**)
+- [x] Main vertical committed (`12f2926`)
+- [x] P2′′′ residual: runtime symmetry + **flat stages** (uncommitted)
+- [x] P2′′′′: MCP parent removal + prev error (uncommitted)
+- [x] **P2′′′′′** apply_dsl Description + MCP README + `Parse_StagePrev_Rejected` (uncommitted)
+- [x] Suite green (**1323**) — residual pre-commit review clean
+- [ ] **Commit** residual (breaking flat stages — P2′′′′′′.1)
+- [ ] **Stop / dogfood**
 
 ---
 
@@ -320,11 +358,13 @@ Parser today: one stage token. IR + runtime already OR-match list.
 
 ## 9. Suggested PR stack (final)
 
-1. **Commit** entire Phase 2 tree — **`git add` `CreateEntityInRelationshipEffect.cs`** (P2′′′.1)  
-2. Stop / dogfood Order–Customer path  
-3. **P2′′′.3–.5** only while already in those files  
+1. ~~Phase 2 main~~ **`12f2926`**  
+2. ~~P2′′′–P2′′′′′ residual code~~ **done in working tree** (flat stages, runtime symmetry, MCP honesty, prev test)  
+3. **Commit residual** — breaking flat stages (P2′′′′′′.1)  
+4. **Stop / dogfood**  
+5. P2′′′′′′.2–.3 nits only if already editing  
 
-**Phase 2 product vertical complete (uncommitted).**
+**Phase 2 product vertical complete** (main committed; residual green uncommitted).
 
 ---
 

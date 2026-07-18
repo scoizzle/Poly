@@ -54,14 +54,12 @@ Constraints are order-independent. Only positional argument form is supported (`
 ### 2.2 Stage definitions
 
 ```
-stage-definition = identifier ":" "stage" [ prev-guard ] "{" stage-member-list "}"
+stage-definition = identifier ":" "stage" "{" stage-member-list "}"
 
 stage-member-list = { stage-action | subscription-definition }
-
-prev-guard = "prev" identifier-list
 ```
 
-`prev` names one or more parent stages for hierarchy (analyzers compute effective actions from parent chain).
+> **Note:** Stage hierarchy (parent/child stages) is not supported in the current DSL surface. All stages are flat within an entity. The IR's `Stage.Parent` field and related analysis metadata have been removed. If stage hierarchy is needed in the future, it should be introduced via nested stage syntax rather than a `prev` keyword.
 
 ### 2.3 Actions
 
@@ -319,7 +317,7 @@ constr     = "required" | "unique" | range | length | pattern
 range      = "range" "(" [ num ] "," [ num ] ")"
 length     = "length" "(" num [ "," num ] ")"
 pattern    = "pattern" "(" str ")"
-stage      = id ":" "stage" [ "prev" idlist ] "{" stgMember* "}"
+stage      = id ":" "stage" "{" stgMember* "}"
 stgMember  = action | subscription
 action     = id ":" [ "action" ] [ gates ] "{" eff* "}"
 gates      = whenClause? requireClause?

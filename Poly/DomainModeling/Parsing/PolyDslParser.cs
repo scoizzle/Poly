@@ -217,15 +217,14 @@ public sealed class PolyDslParser {
 
     private void ParseStage(string name, List<DomainChange> changes) {
         Advance(); // consume 'stage'
-        StageReference? parent = null;
 
-        if (_current.Kind == TokenKind.Prev) {
-            Advance(); // consume 'prev'
-            var parentName = ExpectIdentifier(TokenKind.Identifier, "parent stage name");
-            parent = new StageReference(parentName);
+        // P2′′′′.3: Clear error if someone tries the removed 'prev' keyword
+        if (_current.Kind == TokenKind.Identifier &&
+            string.Equals(_current.Text, "prev", StringComparison.Ordinal)) {
+            throw Error("'prev' is no longer supported. Stage hierarchy has been removed; all stages are flat.");
         }
 
-        changes.Add(new AddStageChange(_currentEntityName, name, parent));
+        changes.Add(new AddStageChange(_currentEntityName, name));
         Expect(TokenKind.LBrace);
 
         // P2.4: Parse entry/exit effect blocks before actions and subscriptions
@@ -449,7 +448,7 @@ public sealed class PolyDslParser {
                 && text != "entity" && text != "stage" && text != "action"
                 && text != "policy" && text != "relationship" && text != "when"
                 && text != "require" && text != "transition" && text != "assign"
-                && text != "prev" && text != "from" && text != "to"
+                && text != "from" && text != "to"
                 && text != "null" && text != "true" && text != "false"
                 && text != "owned" // handled above
                 && text != "not" && text != "and" && text != "or";

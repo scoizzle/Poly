@@ -46,7 +46,6 @@ public static class PersonLifecycleExample {
                 // === Alive Stage ===
                 new Stage(
                     "Alive",
-                    Parent: null,
                     Actions: [], // Populated below
                     Policies:
                     [
@@ -73,7 +72,6 @@ public static class PersonLifecycleExample {
                 // === Dead Stage ===
                 new Stage(
                     "Dead",
-                    Parent: null,
                     Actions: [],
                     Policies:
                     [

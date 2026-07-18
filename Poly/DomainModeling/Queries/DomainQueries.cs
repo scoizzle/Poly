@@ -66,7 +66,6 @@ public sealed record SubscriptionDetail(
 /// </summary>
 public sealed record StageDetail(
     string Name,
-    string? ParentStageName,
     IReadOnlyList<string> ActionNames,
     IReadOnlyList<string> PolicyNames,
     IReadOnlyList<SubscriptionDetail> Subscriptions
@@ -162,7 +161,6 @@ public static class DomainQueries {
             Stages: entity.Stages
                 .Select(s => new StageDetail(
                     s.Name,
-                    s.Parent?.StageName,
                     s.Actions.Select(a => a.Name).ToList(),
                     s.Policies.Select(p => p.Name).ToList(),
                     s.Subscriptions.Select(sub => new SubscriptionDetail(

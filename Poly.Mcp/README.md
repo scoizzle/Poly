@@ -13,7 +13,7 @@ Tools live in `Poly.Mcp/Tools/` and use only `Poly.DomainModeling` types (no `Po
 | `get_domain_analysis` | `QueryTool` | Returns analysis diagnostics (errors, warnings, info) |
 | `add_entity` | `EvolveTool` | Adds a new entity type |
 | `add_property` | `EvolveTool` | Adds a property to an existing entity |
-| `add_stage` | `EvolveTool` | Adds a lifecycle stage (optionally with parent) |
+| `add_stage` | `EvolveTool` | Adds a lifecycle stage to an entity |
 | `add_action` | `EvolveTool` | Adds an action/operation to an entity |
 | `add_action_to_stage` | `EvolveTool` | Creates a new action on a stage |
 | `add_relationship` | `EvolveTool` | Adds a relationship between entities |

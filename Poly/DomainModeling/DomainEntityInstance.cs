@@ -219,14 +219,9 @@ public sealed record DomainEntityInstance {
             var currentStageRef = Entity.Stages
                 .FirstOrDefault(s => string.Equals(s.Name, CurrentStage, StringComparison.Ordinal));
 
-            var walkStage = currentStageRef;
-            while (walkStage is not null && action is null) {
-                action = walkStage.Actions
-                    .FirstOrDefault(a => string.Equals(a.Name, actionName, StringComparison.Ordinal));
-                walkStage = walkStage.Parent is not null
-                    ? Entity.Stages.FirstOrDefault(s => string.Equals(s.Name, walkStage.Parent.StageName, StringComparison.Ordinal))
-                    : null;
-            }
+            // All stages are flat — no parent/child hierarchy.
+            action = currentStageRef?.Actions
+                .FirstOrDefault(a => string.Equals(a.Name, actionName, StringComparison.Ordinal));
         }
 
         action ??= Entity.Actions
@@ -527,15 +522,30 @@ public sealed record DomainEntityInstance {
         // BR.3.3: Auto-register child in the parent's store, if present.
         Store?.Add(child);
 
-        // P2.1 / P2′.3: Auto-link child to creator if the effect specifies a relationship name.
+        // P2.1 / P2′.3 / P2′′′.3: Auto-link child to creator if the effect specifies a relationship name.
         // Link direction: creator (this) = source, child = target.
-        // If Domain is available, validate the relationship exists (fail-loud on typo).
+        // If Domain is available, validate the relationship exists, source entity, and target type.
         // If Domain is null, link is best-effort (standalone instance).
         if (createEffect.RelationshipName is not null && Store is not null) {
-            if (Domain is not null && !Domain.Relationships.Any(r =>
-                string.Equals(r.Name, createEffect.RelationshipName, StringComparison.Ordinal))) {
-                throw new InvalidOperationException(
-                    $"Relationship '{createEffect.RelationshipName}' not found in domain '{Domain.Name}'.");
+            if (Domain is not null) {
+                var relationship = Domain.Relationships.FirstOrDefault(r =>
+                    string.Equals(r.Name, createEffect.RelationshipName, StringComparison.Ordinal));
+                if (relationship is null) {
+                    throw new InvalidOperationException(
+                        $"Relationship '{createEffect.RelationshipName}' not found in domain '{Domain.Name}'.");
+                }
+                // Verify source entity matches (defense-in-depth after analysis)
+                if (!string.Equals(relationship.Source.TypeName, Entity.Name, StringComparison.Ordinal)) {
+                    throw new InvalidOperationException(
+                        $"Entity '{Entity.Name}' is not the source of relationship '{createEffect.RelationshipName}'. " +
+                        $"Source is '{relationship.Source.TypeName}'. Create with RelationshipName must run on the source entity.");
+                }
+                // Verify created type matches relationship target
+                if (!string.Equals(targetEntity.Name, relationship.Target.TypeName, StringComparison.Ordinal)) {
+                    throw new InvalidOperationException(
+                        $"CreateEntityInstance creates type '{targetEntity.Name}' but relationship " +
+                        $"'{createEffect.RelationshipName}' targets '{relationship.Target.TypeName}'.");
+                }
             }
             Store.Link(createEffect.RelationshipName, this, child);
         }

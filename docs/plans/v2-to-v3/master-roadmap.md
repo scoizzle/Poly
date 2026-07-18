@@ -41,9 +41,9 @@ MCP / direct API as thin consumers
 | 2 | **Phase 3 thin: oracle + A-lite + DSL guide** | [`mcp-phase3-oracle-surface.md`](mcp-phase3-oracle-surface.md) · expansion §0 | **Complete** (V0/S0/A/G) |
 | 3 | **MCP dogfood** | [report 1](agent-summaries/dogfood/DOGFOOD-REPORT-20260718.md) · [report 2](agent-summaries/dogfood/DOGFOOD-REPORT-2-20260718.md) | **Complete** (R→RT; post-RT re-rank) |
 | 4 | **Runtime MCP (RT)** | phase3 **§6c** | **Complete** — dogfood-2 E2E validated |
-| 5 | **RT′ + SA MVP** | phase3 **RT′** / **§6e** | **Code-complete** (uncommitted) — commit; SA′ nits |
-| 6 | **SA′ residuals** | phase3 **§6e SA′** | Snapshot/stale-copy, tool Description, hintCount field, README subscription target |
-| 7 | Full effect-micro / V1 | expansion §0 | **Pull-only** |
+| 5 | **RT′ + SA MVP** | phase3 **§6e** | **Committed** `a74af5d` |
+| 6 | **SA′ honesty** | phase3 **§6e SA′′** | **Commit pending** (suite 1359); stale-snapshot **pull** |
+| 7 | Full effect-micro / V1 / Option A | expansion §0 | **Pull-only** |
 | 8 | **Host-consumable** (C# → MSIL → containers) | phase3 **§6d** | **Post–Phase 3** |
 | 9 | Event authoring tools | — | **Never** |
 

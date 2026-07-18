@@ -1,14 +1,14 @@
 # MCP Tool Surface — Semantic Gap Analysis & Expansion Plan
 
 **Date:** 2026-07-12  
-**Revised:** 2026-07-18 (**RT′/SA** impl review — MVP green uncommitted; **SA′** residuals)  
-**Status:** Phase 3 + RT **shipped**; RT′.1/.6/.7 + SA Option B **code-complete**; honesty/snapshot residuals open  
+**Revised:** 2026-07-18 (**SA′′** review — honesty green uncommitted; suite **1359**)  
+**Status:** Phase 3 + RT + RT′/SA MVP **committed**; SA′ honesty **commit pending**; stale-snapshot **pull**  
 
-
-**Shipped tools (approx.):** ~34+ in `Poly.Mcp/Tools/` (session, query, evolve, policy, constraint, DSL, oracle, suggestions, guide, runtime)  
+**Shipped tools (approx.):** ~35+ in `Poly.Mcp/Tools/` (session, query, evolve, policy, constraint, DSL, oracle, suggestions, guide, runtime)  
 **Principle:** Thin adapters over `DomainEvolution` / DomainModeling / Interpretation — no new domain semantics; no V2 resurrection; **no event authoring tools** (stage-transition-as-observable).  
 **Related:**  
-- [`mcp-phase3-oracle-surface.md`](mcp-phase3-oracle-surface.md) — §6c RT done · **§6e SA** · **RT′**  
+- [`mcp-phase3-oracle-surface.md`](mcp-phase3-oracle-surface.md) — §6e **SA′′**  
+
 - Dogfood: [report 1](agent-summaries/dogfood/DOGFOOD-REPORT-20260718.md) · [report 2](agent-summaries/dogfood/DOGFOOD-REPORT-2-20260718.md)  
 - [`domainmodeling-next-phase.md`](domainmodeling-next-phase.md) — Phase 2 domain runtime (library)  
 - ADR stage-transition-as-observable  
@@ -32,35 +32,33 @@
 | **Oracle** | `lower_expression`, `describe_expression`, `describe_domain_element`, `simulate_policy` |
 | **Runtime** | `create_instance`, `get_instance`, `list_instances`, `call_action` — **dogfood-2 E2E validated** |
 
-**Honest substitute:** Effects largely via **`apply_dsl`**. **SA:** stage micro-path can silently no-op (empty `AddActionToStage` copies) — fix semantics before more effect tools.
+**Honest substitute:** Effects largely via **`apply_dsl`**. SA Option B + fallthrough mitigates empty stage no-op; **stale snapshot** if entity effects change after non-empty stage copy (documented).
 
 ### Still missing / next
 
 | Priority | Bucket | Tools / work | Trigger |
 |----------|--------|--------------|---------|
-| **P0** | **RT′ honesty/safety** | Analysis→suggestions; CallAction `IsDeleted`; entity policy text | ✅ MVP (uncommitted); **SA′.3/′.4** nits |
-| **P0** | **SA stage-action semantics** | Option B copy + CallAction fallthrough + goldens | ✅ MVP (uncommitted); **SA′.1** snapshot/stale-copy residual |
+| **P0** | **Commit SA′ honesty** | `hintCount`, Descriptions, README target, order golden | Uncommitted; suite **1359** |
+| **P1** | **RT′ / SA MVP** | IsDeleted, copy+fallthrough, core honesty | ✅ `a74af5d` |
+| **Pull** | Stale stage snapshot / Option A | Analysis warning or reference model | SA′′.4–.6 |
 | **P1** | Runtime MCP (RT) | create/call/list instances | ✅ **Shipped** + dogfood-2 |
-| **P1** | Parser honesty | `actor` message; optional nav FormatException | RT′.2–.3 |
+| **P1** | Parser honesty | `actor` message; optional nav FormatException | Pull (RT′.2–.3) |
 | **P2** | Visibility / debug (**V1/S1**) | analyze/compare/debug expression | Pull |
-| **P2** | Full effect-micro MCP | Per-effect tools | **After SA** only if DSL insufficient |
-| **P3** | Library builder hygiene | `AddActionWithEffect` naming | After SA |
+| **P2** | Full effect-micro MCP | Per-effect tools | **Pull** — DSL + SA fix cover the gap |
+| **P3** | Library builder hygiene | `AddActionWithEffect` naming | Pull |
 | **P3** | Constraint remove | `remove_constraint` | Unexercised |
 | **Post–P3** | **L\*** C# → MSIL → **containers** | phase3 **§6d** | Well after Phase 3 + RT |
 | **Never** | Event authoring | — | Retired |
 
 ### Pick order (agents)
 
-**Dogfood-2:** [DOGFOOD-REPORT-2-20260718](agent-summaries/dogfood/DOGFOOD-REPORT-2-20260718.md)  
-**Checklists:** [`mcp-phase3-oracle-surface.md`](mcp-phase3-oracle-surface.md) **§6c RT′** · **§6e SA**
+**Dogfood-2:** [DOGFOOD-REPORT-2-20260718](agent-summaries/dogfood/DOGFOOD-REPORT-2-20260718.md) · phase3 **§6e SA′′**
 
 ```text
-1–6.  V0 / S0 / A / G / dogfood-1 / RT     ← done
-7.    RT′.1/.6/.7 + SA Option B            ← green uncommitted; commit
-8. ▶  SA′ honesty nits (Description, hintCount, README target)  ← preferred with commit
-9.    SA′.1 stale snapshot / Option A      ← pull with pain
-10.   Full effect-micro / V1               ← pull only
-11.   Post–P3 L* / containers              ← well after
+1–7.  V0…RT + RT′/SA MVP (`a74af5d`)     ← done
+8. ▶  Commit SA′ honesty (1359)            ← now
+9.    SA′.1 stale snapshot / Option A      ← pull
+10.   effect-micro / V1 / L* / containers  ← pull
 ```
 
 ---

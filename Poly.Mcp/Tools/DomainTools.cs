@@ -98,6 +98,7 @@ internal sealed record AnalysisData(
     [property: JsonPropertyName("errorCount")] int ErrorCount,
     [property: JsonPropertyName("warningCount")] int WarningCount,
     [property: JsonPropertyName("infoCount")] int InfoCount,
+    [property: JsonPropertyName("hintCount")] int HintCount,
     [property: JsonPropertyName("hasStructuralFailure")] bool HasStructuralFailure,
     [property: JsonPropertyName("messages")] IReadOnlyList<string> Messages
 );
@@ -243,12 +244,12 @@ internal sealed class QueryTool {
 
         var summary = DomainQueries.GetAnalysisSummary(state.LatestAnalysis);
 
-        // RT′.1: Count hint diagnostics for suggestion discoverability.
+        // SA′.3: Count hint diagnostics separately from infoCount (Hint ≠ Information severity).
         var hintCount = state.LatestAnalysis.Diagnostics
             .Count(d => d.Severity == DiagnosticSeverity.Hint);
 
         var data = new AnalysisData(
-            summary.ErrorCount, summary.WarningCount, summary.InfoCount + hintCount,
+            summary.ErrorCount, summary.WarningCount, summary.InfoCount, hintCount,
             summary.HasStructuralFailure, summary.Messages
         );
 
@@ -454,7 +455,13 @@ internal sealed class EvolveTool {
     /// Creates a new action on a stage. The action is placed directly on the stage
     /// and available only within that stage's lifecycle.
     /// </summary>
-    [McpServerTool(Name = "add_action_to_stage"), Description("Creates a new action on a stage. The action is placed directly on the stage and available only within that stage's lifecycle.")]
+    [McpServerTool(Name = "add_action_to_stage"), Description(@"Creates a new action on a stage. The action is available only within that stage's lifecycle.
+
+If an entity-level action with the same name already exists, its effects, policies,
+parameters, and result type are COPIED onto the stage action. Effects added to the
+entity-level action AFTER this call are NOT automatically copied — prefer adding
+effects to the entity action before placing it on the stage, or use DSL batch
+authoring (apply_dsl) to define actions with effects directly on stages.")]
     public static DomainToolResponse AddActionToStage(
         [Description("Session ID")] string sessionId,
         [Description("Name of the entity")] string entityName,

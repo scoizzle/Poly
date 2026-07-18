@@ -119,7 +119,10 @@ The **RuntimeTool** family closes the final feedback loop: agents can create ins
 - Guard policies (action-level, stage-level, entity-level) are evaluated before effects.
 - On **stage transition**: OnExit → set new stage → OnEntry → notify store subscribers.
 - Stage subscription fan-out happens automatically for linked subscriber instances.
+  - Subscriptions fire when the relationship **TARGET** entity enters a matching stage (not the source).
+  - Example: `when orders Active { ... }` on Customer fires when a linked Order enters its Active stage.
 - Deleted instances (`DeleteEntityInstance` effect) are marked `isDeleted: true`.
+- Calling actions on deleted instances is refused (returns error).
 
 ### Honesty
 

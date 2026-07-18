@@ -1654,8 +1654,56 @@ public class McpSmokeTests {
         // Message should mention hints
         await Assert.That(response.Message).Contains("hint");
 
+        // SA′.3: hintCount should be separate from infoCount
+        var dataJson = System.Text.Json.JsonSerializer.Serialize(response.Data);
+        await Assert.That(dataJson).Contains("hintCount");
+
         // Affordances should include get_domain_suggestions
         await Assert.That(response.Affordances).IsNotNull();
         await Assert.That(response.Affordances!.Contains("get_domain_suggestions")).IsTrue();
+    }
+
+    [Test]
+    public async Task AddActionToStage_Order_StageBeforeEntityEffects_StillTransitions() {
+        // SA′.6: If stage is placed first, then entity-level effects added later,
+        // CallAction should still use the fallthrough path (empty stage + entity twin).
+        var (sessionId, _) = McpSessionStore.Create("Test");
+
+        EvolveTool.AddEntity(sessionId, "Task");
+        EvolveTool.AddProperty(sessionId, "Task", "Name", "Text");
+        EvolveTool.AddStage(sessionId, "Task", "Draft");
+        EvolveTool.AddStage(sessionId, "Task", "Active");
+
+        // Step 1: Add action to stage FIRST (before entity-level action exists)
+        var r1 = EvolveTool.AddActionToStage(sessionId, "Task", "Draft", "Go");
+        await Assert.That(r1.Success).IsTrue();
+
+        // Step 2: Now add entity-level action with transition effect
+        var r2 = EvolveTool.AddAction(sessionId, "Task", "Go");
+        await Assert.That(r2.Success).IsTrue();
+
+        // Step 3: Add stage transition effect to entity-level action
+        var evolveResult = McpSessionStore.Evolve(sessionId, domain =>
+            new DomainEvolution(domain).Evolve()
+                .AddStageTransitionEffect("Task", "Go", "Active")
+                .Apply());
+        await Assert.That(evolveResult).IsNotNull();
+        await Assert.That(evolveResult!.Succeeded).IsTrue();
+
+        // Verify via MCP: create instance and call action — should transition
+        var create = RuntimeTool.CreateInstance(sessionId, "Task");
+        await Assert.That(create.Success).IsTrue();
+        await Assert.That(create.Message).Contains("Draft");
+
+        var instanceId = ExtractInstanceId(
+            System.Text.Json.JsonSerializer.Serialize(create.Data));
+
+        var call = RuntimeTool.CallAction(sessionId, instanceId!, "Go");
+        await Assert.That(call.Success).IsTrue();
+        await Assert.That(call.Message).Contains("Active");
+
+        var get = RuntimeTool.GetInstance(sessionId, instanceId!);
+        await Assert.That(get.Success).IsTrue();
+        await Assert.That(get.Message).Contains("Active");
     }
 }

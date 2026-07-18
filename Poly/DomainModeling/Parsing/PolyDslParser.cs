@@ -228,13 +228,40 @@ public sealed class PolyDslParser {
         changes.Add(new AddStageChange(_currentEntityName, name, parent));
         Expect(TokenKind.LBrace);
 
+        // P2.4: Parse entry/exit effect blocks before actions and subscriptions
+        bool parsedEntry = false;
+        bool parsedExit = false;
+
         while (_current.Kind != TokenKind.RBrace) {
-            if (_current.Kind == TokenKind.When && PeekIs(TokenKind.Identifier)) {
+            if (_current.Kind == TokenKind.Entry && !parsedEntry) {
+                parsedEntry = true;
+                Advance(); // consume 'entry'
+                Expect(TokenKind.LBrace);
+                while (_current.Kind != TokenKind.RBrace) {
+                    var effect = ParseEffect();
+                    changes.Add(new AddOnEntryEffectToStageChange(_currentEntityName, name, effect));
+                }
+                Expect(TokenKind.RBrace);
+            }
+            else if (_current.Kind == TokenKind.Exit && !parsedExit) {
+                parsedExit = true;
+                Advance(); // consume 'exit'
+                Expect(TokenKind.LBrace);
+                while (_current.Kind != TokenKind.RBrace) {
+                    var effect = ParseEffect();
+                    changes.Add(new AddOnExitEffectToStageChange(_currentEntityName, name, effect));
+                }
+                Expect(TokenKind.RBrace);
+            }
+            else if (_current.Kind == TokenKind.When && PeekIs(TokenKind.Identifier)) {
                 // Subscription: when RelName TargetStage { ... }
                 ParseSubscription(name, changes);
             }
             else {
-                // Stage-local action
+                // Stage-local action (or entry/exit if they appear in wrong order)
+                if ((_current.Kind == TokenKind.Entry || _current.Kind == TokenKind.Exit) && _current.Kind != TokenKind.Identifier) {
+                    throw Error($"'{_current.Text}' must appear at the beginning of the stage block, before actions and subscriptions.");
+                }
                 var actionName = ExpectIdentifier(TokenKind.Identifier, "action name");
                 Expect(TokenKind.Colon);
                 ParseActionBody(actionName, changes, name);
@@ -318,6 +345,10 @@ public sealed class PolyDslParser {
             return new AssignEffect(DomainExpression.Property(propName), expr);
         }
 
+        if (_current.Kind == TokenKind.Create) {
+            return ParseCreateEffect();
+        }
+
         if (_current.Kind == TokenKind.When) {
             // Subscription effect — this is handled differently
             // (embedded in StageSubscription, not in a standalone action)
@@ -331,13 +362,55 @@ public sealed class PolyDslParser {
                 $"'{_current.Text}' is not supported in Phase 1a");
         }
 
-        throw Error($"Expected effect (transition, assign), got '{_current.Text}'");
+        throw Error($"Expected effect (transition, assign, create), got '{_current.Text}'");
+    }
+
+    private Effect ParseCreateEffect() {
+        Advance(); // consume 'create'
+
+        string? relationshipName = null;
+
+        if (_current.Kind == TokenKind.In) {
+            // create in relName { ... }
+            Advance(); // consume 'in'
+            relationshipName = ExpectIdentifier(TokenKind.Identifier, "relationship name");
+            Expect(TokenKind.LBrace);
+            var initializers = ParsePropertyInitializers();
+            return new CreateEntityInRelationshipEffect(relationshipName, initializers);
+        }
+
+        // create EntityName { ... }
+        var entityTypeName = ExpectIdentifier(TokenKind.Identifier, "entity type name");
+        Expect(TokenKind.LBrace);
+        var initList = ParsePropertyInitializers();
+        return new CreateEntityInstance(
+            new DomainTypeReference(entityTypeName),
+            initList,
+            null);
+    }
+
+    private List<PropertyBinding> ParsePropertyInitializers() {
+        var initializers = new List<PropertyBinding>();
+        while (_current.Kind != TokenKind.RBrace) {
+            var propName = ExpectIdentifier(TokenKind.Identifier, "property name");
+            Expect(TokenKind.Colon);
+            var expr = ParseExpression();
+            initializers.Add(new PropertyBinding(propName, expr));
+        }
+        Expect(TokenKind.RBrace);
+        return initializers;
     }
 
     private void ParseSubscription(string stageName, List<DomainChange> changes) {
         Advance(); // consume 'when'
         var relName = ExpectIdentifier(TokenKind.Identifier, "relationship name");
-        var targetStage = ExpectIdentifier(TokenKind.Identifier, "target stage name");
+        // P2.5: Accept comma-separated stage names: "when Rel Active, Done"
+        var targetStages = new List<string>();
+        targetStages.Add(ExpectIdentifier(TokenKind.Identifier, "target stage name"));
+        while (_current.Kind == TokenKind.Comma) {
+            Advance(); // consume ','
+            targetStages.Add(ExpectIdentifier(TokenKind.Identifier, "target stage name"));
+        }
         Expect(TokenKind.LBrace);
 
         var effects = new List<Effect>();
@@ -346,7 +419,7 @@ public sealed class PolyDslParser {
         }
         Expect(TokenKind.RBrace);
 
-        var subscription = new StageSubscription(relName, targetStage, StageSubscriptionQuantifier.Each, effects);
+        var subscription = new StageSubscription(relName, targetStages, StageSubscriptionQuantifier.Each, effects);
         changes.Add(new AddStageSubscriptionChange(_currentEntityName, stageName, subscription));
     }
 
@@ -700,7 +773,7 @@ public sealed class PolyDslParser {
     };
 
     private static readonly HashSet<string> _unsupportedKeywords = new(StringComparer.OrdinalIgnoreCase) {
-        "actor", "value", "create", "schedule", "parallel", "invoke", "for", "function"
+        "actor", "value", "schedule", "parallel", "invoke", "for", "function"
     };
 
     /// <summary>

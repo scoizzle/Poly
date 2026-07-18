@@ -55,6 +55,10 @@ public enum TokenKind {
     From,
     One,
     Many,
+    Create,
+    In,
+    Entry,
+    Exit,
 }
 
 public readonly record struct Token(TokenKind Kind, string Text, int Line, int Col);
@@ -246,6 +250,10 @@ public sealed class PolyDslTokenizer {
         "from" => TokenKind.From,
         "one" => TokenKind.One,
         "many" => TokenKind.Many,
+        "create" => TokenKind.Create,
+        "in" => TokenKind.In,
+        "entry" => TokenKind.Entry,
+        "exit" => TokenKind.Exit,
         _ => TokenKind.Identifier,
     };
 

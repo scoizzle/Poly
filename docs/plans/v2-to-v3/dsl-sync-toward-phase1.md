@@ -25,7 +25,7 @@
 
 **Slice N principle:** N1 changes **surface syntax only**. IR stays (`Relationship` on `Domain`, `AddRelationshipChange`). Parser/printer map nav lines ↔ IR. **Owning/source side is authoritative** — never invent a second edge from reverse-nav lines.
 
-**Status (2026-07-17):** Phase 1a vertical closed. BR stack + PCA + BR.4.4 + MR/MR′ shipped. **N2 top-level relationship syntax removed** (N1 nav only).
+**Status (2026-07-17):** Phase 1a vertical closed. BR stack + PCA + BR.4.4 + MR/MR′ shipped. N2 dropped. **P2.1 shipped** (create+link). See [`domainmodeling-next-phase.md`](domainmodeling-next-phase.md).
 
 ---
 

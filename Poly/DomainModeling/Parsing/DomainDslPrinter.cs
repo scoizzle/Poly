@@ -110,8 +110,30 @@ public sealed class DomainDslPrinter {
 
         _sb.AppendLine(" {");
 
-        // OnEntry/OnExit effects not printed — Phase 1a has no entry/exit syntax.
-        // They are preserved in the IR but omitted from .poly output.
+        // P2.4: Print OnEntry/OnExit effects
+        if (stage.OnEntryEffects.Count > 0) {
+            _sb.Append(indent);
+            _sb.AppendLine("  entry {");
+            foreach (var effect in stage.OnEntryEffects) {
+                _sb.Append(indent);
+                _sb.Append("    ");
+                PrintEffect(effect, indent + "  ");
+            }
+            _sb.Append(indent);
+            _sb.AppendLine("  }");
+        }
+
+        if (stage.OnExitEffects.Count > 0) {
+            _sb.Append(indent);
+            _sb.AppendLine("  exit {");
+            foreach (var effect in stage.OnExitEffects) {
+                _sb.Append(indent);
+                _sb.Append("    ");
+                PrintEffect(effect, indent + "  ");
+            }
+            _sb.Append(indent);
+            _sb.AppendLine("  }");
+        }
 
         // Subscriptions
         foreach (var sub in stage.Subscriptions) {
@@ -223,6 +245,48 @@ public sealed class DomainDslPrinter {
                     _sb.Append("  ");
                     PrintEffect(sub, indent + "  ");
                 }
+                break;
+
+            case CreateEntityInstance create:
+                // P2′.5: If RelationshipName is set, print as "create in RelName { ... }" instead
+                if (create.RelationshipName is not null) {
+                    _sb.Append("create in ");
+                    _sb.Append(create.RelationshipName);
+                    _sb.Append(" {");
+                }
+                else {
+                    _sb.Append("create ");
+                    _sb.Append(create.Type.TypeName);
+                    _sb.Append(" {");
+                }
+                var first = true;
+                foreach (var init in create.Initializers) {
+                    if (!first) _sb.Append(',');
+                    _sb.Append(' ');
+                    _sb.Append(init.PropertyName);
+                    _sb.Append(": ");
+                    _sb.Append(PrintExpression(init.Expression));
+                    first = false;
+                }
+                if (!first) _sb.Append(' ');
+                _sb.AppendLine("}");
+                break;
+
+            case CreateEntityInRelationshipEffect createIn:
+                _sb.Append("create in ");
+                _sb.Append(createIn.RelationshipName);
+                _sb.Append(" {");
+                var firstInit = true;
+                foreach (var init in createIn.Initializers) {
+                    if (!firstInit) _sb.Append(',');
+                    _sb.Append(' ');
+                    _sb.Append(init.PropertyName);
+                    _sb.Append(": ");
+                    _sb.Append(PrintExpression(init.Expression));
+                    firstInit = false;
+                }
+                if (!firstInit) _sb.Append(' ');
+                _sb.AppendLine("}");
                 break;
 
             default:

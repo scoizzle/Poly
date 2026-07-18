@@ -2,6 +2,8 @@ using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Bootstrap;
 using Poly.DomainModeling.Effects;
+using Poly.DomainModeling.Evolution;
+using Poly.DomainModeling.Parsing;
 
 namespace Poly.Tests.DomainModeling;
 
@@ -693,6 +695,234 @@ public class DomainEntityInstanceTests {
         await Assert.That(childInstance.Store).IsNotNull();
     }
 
+    // ── P2.1: Create → Link runtime ─────────────────────────────
+
+    [Test]
+    public async Task CreateEntityInstance_WithRelationship_LinksInStore() {
+        // Create effect with RelationshipName set → child is linked in store.
+        var childProp = new Property("ChildName", new DomainTypeReference("Text"), []);
+        var child = new Entity("Child", [childProp], [], [], []);
+        var parent = new Entity("Parent", [
+            new Property("ParentName", new DomainTypeReference("Text"), [])
+        ], [
+            new Poly.DomainModeling.Action("Spawn", InvocationResult.Void, [], [
+                new CreateEntityInstance(new DomainTypeReference("Child"),
+                    [new PropertyBinding("ChildName", DomainExpression.Literal("Linked"))],
+                    RelationshipName: "hasChild")
+            ], [])
+        ], [], [
+            new Stage("Draft", null, [], [], [], []),
+            new Stage("Active", null, [], [], [], [])
+        ]);
+
+        var rel = new Relationship("hasChild",
+            new DomainTypeReference("Parent"), new DomainTypeReference("Child"),
+            RelationshipCardinality.OneToOne, []);
+        var domain = new Domain("Test", [parent, child], [rel]);
+        var store = new DomainInstanceStore();
+        var parentInstance = DomainEntityInstance.Create(parent,
+            new Dictionary<string, object?> { ["ParentName"] = "Parent" },
+            domain: domain);
+        store.Add(parentInstance);
+
+        parentInstance.CallAction("Spawn");
+
+        var childInstance = parentInstance.CreatedChildren[0];
+        await Assert.That(store.IsLinked("hasChild", parentInstance, childInstance)).IsTrue();
+    }
+
+    [Test]
+    public async Task CreateEntityInstance_WithoutRelationship_NotLinked() {
+        // Create effect without RelationshipName → child is NOT linked.
+        var child = new Entity("Child", [], [], [], []);
+        var parent = new Entity("Parent", [], [
+            new Poly.DomainModeling.Action("Spawn", InvocationResult.Void, [], [
+                new CreateEntityInstance(new DomainTypeReference("Child"))
+            ], [])
+        ], [], [
+            new Stage("Draft", null, [], [], [], []),
+            new Stage("Active", null, [], [], [], [])
+        ]);
+
+        var domain = new Domain("Test", [parent, child], []);
+        var store = new DomainInstanceStore();
+        var parentInstance = DomainEntityInstance.Create(parent, domain: domain);
+        store.Add(parentInstance);
+
+        parentInstance.CallAction("Spawn");
+
+        var childInstance = parentInstance.CreatedChildren[0];
+        await Assert.That(store.IsLinked("child", parentInstance, childInstance)).IsFalse();
+    }
+
+    // ── P2.3: Dogfood golden path (via DSL) ────────────────────
+
+    [Test]
+    public async Task Dogfood_CreateInDSL_SubscriptionFires() {
+        // Full golden path via .poly parse → evolve → execute.
+        // Customer has create-in action, Order has stage transition,
+        // Customer subscribes to linked Order's stage change.
+        var poly = """
+            domain Test
+
+            Customer: entity {
+              Status: Text
+              Pending: stage {
+                PlaceOrder: action {
+                  create in orders { Status: "New" }
+                }
+                when orders Active {
+                  assign Status to "Fulfilled"
+                }
+              }
+              orders: many Order
+            }
+
+            Order: entity {
+              Status: Text
+              Draft: stage {
+                Activate: action {
+                  transition to Active
+                }
+              }
+              Active: stage {}
+            }
+            """;
+
+        // Parse and evolve
+        var parser = new PolyDslParser(poly);
+        var changes = parser.Parse();
+        var domain = new Domain("_", [], []);
+        var evolveResult = new DomainEvolution(domain).Apply(changes);
+        await Assert.That(evolveResult.Succeeded).IsTrue();
+
+        // Verify the domain has the relationship and create-in effect
+        var customerEntity = evolveResult.Root.Types.OfType<Entity>().Single(e => e.Name == "Customer");
+        var orderEntity = evolveResult.Root.Types.OfType<Entity>().Single(e => e.Name == "Order");
+        await Assert.That(evolveResult.Root.Relationships.Count).IsEqualTo(1);
+        await Assert.That(evolveResult.Root.Relationships[0].Name).IsEqualTo("orders");
+
+        var placeOrder = customerEntity.Stages
+            .SelectMany(s => s.Actions)
+            .First(a => a.Name == "PlaceOrder");
+        await Assert.That(placeOrder.Effects.Count).IsEqualTo(1);
+        await Assert.That(placeOrder.Effects[0]).IsTypeOf<CreateEntityInRelationshipEffect>();
+
+        // Execute the golden path
+        var store = new DomainInstanceStore();
+        var custInstance = DomainEntityInstance.Create(customerEntity,
+            new Dictionary<string, object?> { ["Status"] = "Idle" },
+            domain: evolveResult.Root);
+
+        // Register instances
+        store.Add(custInstance);
+
+        // PlaceOrder → create Order + auto-link
+        custInstance.CallAction("PlaceOrder");
+        await Assert.That(custInstance.CreatedChildren.Count).IsEqualTo(1);
+        var orderInstance = custInstance.CreatedChildren[0];
+        await Assert.That(orderInstance.Entity.Name).IsEqualTo("Order");
+        await Assert.That(store.IsLinked("orders", custInstance, orderInstance)).IsTrue();
+        await Assert.That(orderInstance.GetProperty<string>("Status")).IsEqualTo("New");
+
+        // Order transitions to Active → Customer's subscription fires
+        orderInstance.CallAction("Activate");
+        await Assert.That(orderInstance.CurrentStage).IsEqualTo("Active");
+        await Assert.That(custInstance.GetProperty<string>("Status")).IsEqualTo("Fulfilled");
+
+        // export_dsl should be honest
+        var printer = new DomainDslPrinter();
+        var printed = printer.Print(evolveResult.Root);
+        await Assert.That(printed.Contains("create in orders")).IsTrue();
+        await Assert.That(printed.Contains("create Order")).IsFalse(); // uses create in, not plain create
+
+        // Re-parse printed output
+        var parser2 = new PolyDslParser(printed);
+        var changes2 = parser2.Parse();
+        var domain2 = new Domain("_", [], []);
+        var evolveResult2 = new DomainEvolution(domain2).Apply(changes2);
+        await Assert.That(evolveResult2.Succeeded).IsTrue();
+    }
+
+    [Test]
+    public async Task CallAction_CreateLinkedChild_SubscriptionFires() {
+        // Golden P2.1 path: create a linked child, then transition it.
+        // Customer ──places──► Order. Customer subscribes to Order's transition.
+        var orderStatus = new Property("OrderStatus", new DomainTypeReference("Text"), []);
+        var order = new Entity("Order", [orderStatus], [
+            new Poly.DomainModeling.Action("Activate", InvocationResult.Void, [], [
+                new StageTransitionEffect(new StageReference("Active"))
+            ], [])
+        ], [], [
+            new Stage("Draft", null, [], [], [], []),
+            new Stage("Active", null, [], [], [], [])
+        ]);
+
+        var custStatus = new Property("CustStatus", new DomainTypeReference("Text"), []);
+        var customer = new Entity("Customer", [custStatus], [
+            new Poly.DomainModeling.Action("PlaceOrder", InvocationResult.Void, [], [
+                // Create + auto-link via "places" relationship
+                new CreateEntityInstance(new DomainTypeReference("Order"),
+                    [new PropertyBinding("OrderStatus", DomainExpression.Literal("New"))],
+                    RelationshipName: "places")
+            ], [])
+        ], [], [
+            new Stage("Pending", null, [], [], [], []) {
+                Subscriptions = [
+                    new StageSubscription("places", ["Active"], StageSubscriptionQuantifier.Each, [
+                        new AssignEffect(
+                            DomainExpression.Property("CustStatus"),
+                            DomainExpression.Literal("Fulfilled"))
+                    ])
+                ]
+            },
+            new Stage("Done", null, [], [], [], [])
+        ]);
+
+        var rel = new Relationship("places",
+            new DomainTypeReference("Customer"), new DomainTypeReference("Order"),
+            RelationshipCardinality.OneToMany, []);
+
+        var domain = new Domain("Test", [customer, order], [rel]);
+
+        var store = new DomainInstanceStore();
+        var custInstance = DomainEntityInstance.Create(customer,
+            new Dictionary<string, object?> { ["CustStatus"] = "PendingWait" },
+            domain: domain);
+        store.Add(custInstance);
+
+        // PlaceOrder creates child Order, auto-links it via "places"
+        custInstance.CallAction("PlaceOrder");
+        await Assert.That(custInstance.CreatedChildren.Count).IsEqualTo(1);
+        var orderInstance = custInstance.CreatedChildren[0];
+        await Assert.That(store.IsLinked("places", custInstance, orderInstance)).IsTrue();
+
+        // Order starts in Draft, then transitions to Active.
+        // Because it's linked via "places", Customer's subscription should fire.
+        orderInstance.CallAction("Activate");
+        await Assert.That(orderInstance.CurrentStage).IsEqualTo("Active");
+        await Assert.That(custInstance.GetProperty<string>("CustStatus")).IsEqualTo("Fulfilled");
+    }
+
+    [Test]
+    public async Task CreateEntityInstance_RelationshipNameWithoutStore_NoOp() {
+        // Create with RelationshipName but no store → no crash, no link.
+        var child = new Entity("Child", [], [], [], []);
+        var parent = new Entity("Parent", [], [
+            new Poly.DomainModeling.Action("Spawn", InvocationResult.Void, [], [
+                new CreateEntityInstance(new DomainTypeReference("Child"), [],
+                    RelationshipName: "someRel")
+            ], [])
+        ], [], []);
+
+        var domain = new Domain("Test", [parent, child], []);
+        var parentInstance = DomainEntityInstance.Create(parent, domain: domain);
+
+        // No store → should not crash
+        parentInstance.CallAction("Spawn");
+        await Assert.That(parentInstance.CreatedChildren.Count).IsEqualTo(1);
+    }
+
     [Test]
     public async Task Subscription_OneHop_Cascade() {
         // BR.3.4: Subscription body transitions subscriber. A ──rel──► B.
@@ -1169,5 +1399,69 @@ public class DomainEntityInstanceTests {
 
         orderInstance.CallAction("Activate");
         await Assert.That(trackerInstance.GetProperty<string>("OrderRef")).IsEqualTo("linked-ok");
+    }
+
+    // ── P2′: Honesty residuals ──────────────────────────────────
+
+    [Test]
+    public async Task CreateEntityInstance_UnknownRelationship_FailsLoud() {
+        // P2′.3: Create with a relationship name that doesn't exist in the domain should throw.
+        var child = new Entity("Child", [], [], [], []);
+        var parent = new Entity("Parent", [], [
+            new Poly.DomainModeling.Action("Spawn", InvocationResult.Void, [], [
+                new CreateEntityInstance(new DomainTypeReference("Child"), [],
+                    RelationshipName: "nonexistentRel")
+            ], [])
+        ], [], []);
+
+        var domain = new Domain("Test", [parent, child], []);
+        var store = new DomainInstanceStore();
+        var parentInstance = DomainEntityInstance.Create(parent, domain: domain);
+        store.Add(parentInstance);
+
+        var threw = false;
+        try {
+            parentInstance.CallAction("Spawn");
+        }
+        catch (InvalidOperationException ex) {
+            await Assert.That(ex.Message.Contains("nonexistentRel")).IsTrue();
+            threw = true;
+        }
+        await Assert.That(threw).IsTrue();
+    }
+
+    [Test]
+    public async Task CreateEntityInRelationship_WithoutStore_NoCrash() {
+        // P2′.3: CreateIn without store → should not crash, child still created.
+        // Use direct API to avoid analysis gate issues (the create-in needs domain context)
+        var orderEntity = new Entity("Order", [new Property("Title", new DomainTypeReference("Text"), [])], [], [], []);
+        var customerEntity = new Entity("Customer", [new Property("Name", new DomainTypeReference("Text"), [])], [
+            new Poly.DomainModeling.Action("Go", InvocationResult.Void, [], [
+                new CreateEntityInRelationshipEffect("orders", [])
+            ], [])
+        ], [], [
+            new Stage("Draft", null, [], [], [], [])
+        ]);
+
+        var domain = new Domain("Test", [customerEntity, orderEntity], [
+            new Relationship("orders",
+                new DomainTypeReference("Customer"), new DomainTypeReference("Order"),
+                RelationshipCardinality.OneToMany, [])
+        ]);
+
+        var custInstance = DomainEntityInstance.Create(customerEntity, domain: domain);
+
+        // No store — the create-in resolves rel→target→creates child with RelationshipName,
+        // then CreateChildInstance tries Store?.Add(child) (null → skip),
+        // then tries to link (Store is null → skip). No crash expected.
+        var threw = false;
+        try {
+            custInstance.CallAction("Go");
+        }
+        catch {
+            threw = true;
+        }
+        await Assert.That(threw).IsFalse();
+        await Assert.That(custInstance.CreatedChildren.Count).IsEqualTo(1);
     }
 }

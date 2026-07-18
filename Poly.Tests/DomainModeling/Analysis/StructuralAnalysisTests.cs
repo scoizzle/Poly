@@ -230,6 +230,186 @@ public class EffectBindingTests {
         await Assert.That(analysis.Diagnostics.Any(d =>
             d.Code == DomainModelDiagnosticCodes.EffectBinding)).IsTrue();
     }
+
+    [Test]
+    public async Task EffectBinding_CreateInUnknownRelationship_ReportsError() {
+        // P2′.1: CreateIn effect with unknown relationship name.
+        var action = new Poly.DomainModeling.Action("DoIt", InvocationResult.Void, [], [
+            new CreateEntityInRelationshipEffect("NonExistentRel", [])
+        ], []);
+        var entity = new Entity("Maker", [], [action], [], []);
+        var domain = new Domain("Test", [entity], []);
+
+        var analysis = DomainModelAnalyzer.Analyze(domain);
+
+        await Assert.That(analysis.Diagnostics.Any(d =>
+            d.Code == DomainModelDiagnosticCodes.EffectBinding)).IsTrue();
+    }
+
+    [Test]
+    public async Task EffectBinding_CreateInWrongSourceEntity_ReportsError() {
+        // P2′.4: CreateIn effect where the action's entity is not the relationship source.
+        var order = new Entity("Order", [], [], [], []);
+        var action = new Poly.DomainModeling.Action("DoIt", InvocationResult.Void, [], [
+            new CreateEntityInRelationshipEffect("rel", [])
+        ], []);
+        // "Maker" is NOT the source of "rel" (Customer is)
+        var maker = new Entity("Maker", [], [action], [], []);
+        var rel = new Relationship("rel",
+            new DomainTypeReference("Customer"), new DomainTypeReference("Order"),
+            RelationshipCardinality.OneToMany, []);
+        var domain = new Domain("Test", [maker, order], [rel]);
+
+        var analysis = DomainModelAnalyzer.Analyze(domain);
+
+        await Assert.That(analysis.Diagnostics.Any(d =>
+            d.Code == DomainModelDiagnosticCodes.EffectBinding)).IsTrue();
+    }
+
+    [Test]
+    public async Task EffectBinding_CreateInHappyPath_NoError() {
+        // P2′.4: CreateIn on the correct source entity → no effect binding errors.
+        var order = new Entity("Order", [], [], [], []);
+        var action = new Poly.DomainModeling.Action("DoIt", InvocationResult.Void, [], [
+            new CreateEntityInRelationshipEffect("rel", [])
+        ], []);
+        var customer = new Entity("Customer", [], [action], [], []);
+        var rel = new Relationship("rel",
+            new DomainTypeReference("Customer"), new DomainTypeReference("Order"),
+            RelationshipCardinality.OneToMany, []);
+        var domain = new Domain("Test", [customer, order], [rel]);
+
+        var analysis = DomainModelAnalyzer.Analyze(domain);
+
+        // Should have NO effect binding errors
+        await Assert.That(analysis.Diagnostics.Any(d =>
+            d.Code == DomainModelDiagnosticCodes.EffectBinding)).IsFalse();
+    }
+
+    [Test]
+    public async Task EffectBinding_CreateInUnknownInitializer_ReportsError() {
+        // P2′.1: CreateIn initializer references unknown property on target entity.
+        var order = new Entity("Order", [
+            new Property("Name", new DomainTypeReference("Text"), [])
+        ], [], [], []);
+        var action = new Poly.DomainModeling.Action("DoIt", InvocationResult.Void, [], [
+            new CreateEntityInRelationshipEffect("rel",
+                [new PropertyBinding("NonExistentProp", new Literal("val"))])
+        ], []);
+        var customer = new Entity("Customer", [], [action], [], []);
+        var rel = new Relationship("rel",
+            new DomainTypeReference("Customer"), new DomainTypeReference("Order"),
+            RelationshipCardinality.OneToMany, []);
+        var domain = new Domain("Test", [customer, order], [rel]);
+
+        var analysis = DomainModelAnalyzer.Analyze(domain);
+
+        await Assert.That(analysis.Diagnostics.Any(d =>
+            d.Code == DomainModelDiagnosticCodes.EffectBinding)).IsTrue();
+    }
+
+    [Test]
+    public async Task EffectBinding_BareCreateExclusivelyOwned_ReportsError() {
+        // P2′′.1: Bare create of exclusively-owned entity (only owned target, never source) → error
+        var target = new Entity("Child", [], [], [], []);
+        var action = new Poly.DomainModeling.Action("DoIt", InvocationResult.Void, [], [
+            new CreateEntityInstance(new DomainTypeReference("Child"))
+        ], []);
+        var source = new Entity("Parent", [], [action], [], []);
+        var rel = new Relationship("owns",
+            new DomainTypeReference("Parent"), new DomainTypeReference("Child"),
+            RelationshipCardinality.OneToOne, []) { SourceOwnsTarget = true };
+        var domain = new Domain("Test", [source, target], [rel]);
+
+        var analysis = DomainModelAnalyzer.Analyze(domain);
+
+        await Assert.That(analysis.Diagnostics.Any(d =>
+            d.Code == DomainModelDiagnosticCodes.EffectBinding)).IsTrue();
+    }
+
+    [Test]
+    public async Task EffectBinding_BareCreateNotExclusivelyOwned_NoError() {
+        // P2′′.1: Bare create of entity that is also a source (not exclusively owned) → allowed
+        var target = new Entity("Child", [], [], [], []);
+        var action = new Poly.DomainModeling.Action("DoIt", InvocationResult.Void, [], [
+            new CreateEntityInstance(new DomainTypeReference("Child"))
+        ], []);
+        var source = new Entity("Parent", [], [action], [], []);
+        var rel = new Relationship("owns",
+            new DomainTypeReference("Parent"), new DomainTypeReference("Child"),
+            RelationshipCardinality.OneToOne, []) { SourceOwnsTarget = true };
+        // Child is also a source of another relationship → not exclusively owned
+        var otherRel = new Relationship("other",
+            new DomainTypeReference("Child"), new DomainTypeReference("Something"),
+            RelationshipCardinality.OneToMany, []);
+        var something = new Entity("Something", [], [], [], []);
+        var domain = new Domain("Test", [source, target, something], [rel, otherRel]);
+
+        var analysis = DomainModelAnalyzer.Analyze(domain);
+
+        await Assert.That(analysis.Diagnostics.Any(d =>
+            d.Code == DomainModelDiagnosticCodes.EffectBinding)).IsFalse();
+    }
+
+    [Test]
+    public async Task EffectBinding_CreateWithRelationshipNameWrongSource_ReportsError() {
+        // P2′′.2: CreateEntityInstance with RelationshipName where action entity is not the relationship source
+        var order = new Entity("Order", [], [], [], []);
+        var customer = new Entity("Customer", [], [], [], []);
+        var action = new Poly.DomainModeling.Action("DoIt", InvocationResult.Void, [], [
+            new CreateEntityInstance(new DomainTypeReference("Order"), [], "rel")
+        ], []);
+        // "Maker" is NOT the source of "rel" (Customer is)
+        var maker = new Entity("Maker", [], [action], [], []);
+        var rel = new Relationship("rel",
+            new DomainTypeReference("Customer"), new DomainTypeReference("Order"),
+            RelationshipCardinality.OneToMany, []);
+        var domain = new Domain("Test", [maker, customer, order], [rel]);
+
+        var analysis = DomainModelAnalyzer.Analyze(domain);
+
+        await Assert.That(analysis.Diagnostics.Any(d =>
+            d.Code == DomainModelDiagnosticCodes.EffectBinding)).IsTrue();
+    }
+
+    [Test]
+    public async Task EffectBinding_CreateWithRelationshipNameTargetTypeMismatch_ReportsError() {
+        // P2′′.2: CreateEntityInstance with RelationshipName where created type ≠ relationship target
+        var invoice = new Entity("Invoice", [], [], [], []);
+        var order = new Entity("Order", [], [], [], []);
+        var action = new Poly.DomainModeling.Action("DoIt", InvocationResult.Void, [], [
+            new CreateEntityInstance(new DomainTypeReference("Invoice"), [], "rel")
+        ], []);
+        var customer = new Entity("Customer", [], [action], [], []);
+        var rel = new Relationship("rel",
+            new DomainTypeReference("Customer"), new DomainTypeReference("Order"),
+            RelationshipCardinality.OneToMany, []);
+        var domain = new Domain("Test", [customer, order, invoice], [rel]);
+
+        var analysis = DomainModelAnalyzer.Analyze(domain);
+
+        await Assert.That(analysis.Diagnostics.Any(d =>
+            d.Code == DomainModelDiagnosticCodes.EffectBinding)).IsTrue();
+    }
+
+    [Test]
+    public async Task EffectBinding_CreateWithRelationshipNameHappyPath_NoError() {
+        // P2′′.2: CreateEntityInstance with correct RelationshipName on source entity, matching target type → OK
+        var order = new Entity("Order", [], [], [], []);
+        var action = new Poly.DomainModeling.Action("DoIt", InvocationResult.Void, [], [
+            new CreateEntityInstance(new DomainTypeReference("Order"), [], "rel")
+        ], []);
+        var customer = new Entity("Customer", [], [action], [], []);
+        var rel = new Relationship("rel",
+            new DomainTypeReference("Customer"), new DomainTypeReference("Order"),
+            RelationshipCardinality.OneToMany, []);
+        var domain = new Domain("Test", [customer, order], [rel]);
+
+        var analysis = DomainModelAnalyzer.Analyze(domain);
+
+        await Assert.That(analysis.Diagnostics.Any(d =>
+            d.Code == DomainModelDiagnosticCodes.EffectBinding)).IsFalse();
+    }
 }
 
 public class UnsatisfiedRequirementTests {

@@ -1,10 +1,10 @@
 # DomainModeling product roadmap (milestones)
 
 **Status:** Active (milestones index)  
-**Last Updated:** 2026-07-12  
-**Purpose:** High-level milestone status only.  
-**Day-to-day work:** [`simple-agent-tasks/vs-README.md`](simple-agent-tasks/vs-README.md)  
-**Slice status:** [`vertical-slice-finish-plan.md`](vertical-slice-finish-plan.md)
+**Last Updated:** 2026-07-17
+**Purpose:** High-level milestone status only.
+**Day-to-day work:** [`domainmodeling-next-phase.md`](domainmodeling-next-phase.md)
+**Phase 1a archive:** [`dsl-sync-toward-phase1.md`](dsl-sync-toward-phase1.md)
 
 ---
 
@@ -35,14 +35,18 @@ MCP / direct API as thin consumers
 
 ## What next
 
-| Priority | Work | Where |
-|----------|------|--------|
-| 1 | Post-M2 MCP evaluate multi-property sample | `vs-pm2-evaluate-policy-sample-bag.md` |
-| 2 | add_policy → evaluate_policy affordance | `vs-pm2-add-policy-evaluate-affordance.md` |
-| 3 | Optional remove-zero-match | `vs-s0-fail-loud-remove-zero-match.md` |
-| 4 | Naming cleanup (drop V3*) | [`../post-v2-delete-naming-cleanup.md`](../post-v2-delete-naming-cleanup.md) |
-| 5 | First effect / relationships | Pull-only (Slice 4/5) |
-| 6 | T2 dogfood | Trust ADR |
+| Priority | Work | Where | Status |
+|----------|------|--------|--------|
+| 1 | **Phase 2: Spawn-and-wire** | [`domainmodeling-next-phase.md`](domainmodeling-next-phase.md) | **Complete** |
+| 2 | P2.1 Create→Link runtime | `DomainEntityInstance.CreateChildInstance` + `CreateEntityInstance.RelationshipName` | Done |
+| 3 | P2.2 E-create DSL (`create`/`create in`) | `PolyDslParser` + `DomainDslPrinter` + grammar | Done |
+| 4 | P2.3 Dogfood golden path | `Dogfood_CreateInDSL_SubscriptionFires` + `ApplyDsl_WithCreateInAndSubscription_Succeeds` | Done |
+| 5 | P2.4 E-entry | OnEntry/OnExit DSL print/parse | Done |
+| 6 | P2.5 Multi-stage when-list | Parser extension | Done |
+
+---
+
+## Archived migration material
 
 ---
 

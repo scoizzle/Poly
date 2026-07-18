@@ -3,6 +3,7 @@ using System.Linq;
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Constraints;
+using Poly.DomainModeling.Effects;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Parsing;
 using Poly.Introspection;
@@ -50,6 +51,111 @@ public class PolyDslRoundTripTests {
 
         var analysis = DomainModelAnalyzer.Analyze(applyResult2.Root);
         await Assert.That(analysis.HasStructuralFailure).IsFalse();
+    }
+
+    [Test]
+    public async Task Parse_EntryExitEffects_RoundTrips() {
+        // P2.4: entry/exit effects on stages should parse and print round-trip
+        var poly = """
+            domain Test
+
+            Item: entity {
+              Status: Text
+
+              Active: stage {
+                entry {
+                  assign Status to "Entered"
+                }
+                exit {
+                  assign Status to "Exited"
+                }
+                DoStuff: action {
+                  transition to Done
+                }
+              }
+              Done: stage {}
+            }
+            """;
+
+        var parser = new PolyDslParser(poly);
+        var changes = parser.Parse();
+        var emptyDomain = new Domain("_", [], []);
+        var result = new DomainEvolution(emptyDomain).Apply(changes);
+        await Assert.That(result.Succeeded).IsTrue();
+
+        var item = result.Root.Types.OfType<Entity>().Single();
+        var active = item.Stages.Single(s => s.Name == "Active");
+        await Assert.That(active.OnEntryEffects.Count).IsEqualTo(1);
+        await Assert.That(active.OnExitEffects.Count).IsEqualTo(1);
+
+        // Print → re-parse → structural identity
+        var printer = new DomainDslPrinter();
+        var printed = printer.Print(result.Root);
+
+        var parser2 = new PolyDslParser(printed);
+        var changes2 = parser2.Parse();
+        var emptyDomain2 = new Domain("_", [], []);
+        var result2 = new DomainEvolution(emptyDomain2).Apply(changes2);
+        await Assert.That(result2.Succeeded).IsTrue();
+
+        var item2 = result2.Root.Types.OfType<Entity>().Single();
+        var active2 = item2.Stages.Single(s => s.Name == "Active");
+        await Assert.That(active2.OnEntryEffects.Count).IsEqualTo(1);
+        await Assert.That(active2.OnExitEffects.Count).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task Parse_MultiStageWhen_RoundTrips() {
+        // P2.5: when Rel Stage1, Stage2 should parse and print round-trip
+        var poly = """
+            domain Test
+
+            Tracker: entity {
+              Status: Text
+              Tracks: Order
+
+              Pending: stage {
+                when Tracks Active, Done {
+                  assign Status to "Triggered"
+                }
+              }
+            }
+
+            Order: entity {
+              Draft: stage { }
+              Active: stage { }
+              Done: stage {}
+            }
+            """;
+
+        var parser = new PolyDslParser(poly);
+        var changes = parser.Parse();
+        var emptyDomain = new Domain("_", [], []);
+        var result = new DomainEvolution(emptyDomain).Apply(changes);
+        await Assert.That(result.Succeeded).IsTrue();
+
+        var tracker = result.Root.Types.OfType<Entity>().Single(e => e.Name == "Tracker");
+        var pending = tracker.Stages.Single(s => s.Name == "Pending");
+        await Assert.That(pending.Subscriptions.Count).IsEqualTo(1);
+        await Assert.That(pending.Subscriptions[0].StageNames.Count).IsEqualTo(2);
+        await Assert.That(pending.Subscriptions[0].StageNames).Contains("Active");
+        await Assert.That(pending.Subscriptions[0].StageNames).Contains("Done");
+
+        // Print → re-parse → structural identity
+        var printer = new DomainDslPrinter();
+        var printed = printer.Print(result.Root);
+        await Assert.That(printed.Contains("Tracks: Order")).IsTrue();
+
+        var parser2 = new PolyDslParser(printed);
+        var changes2 = parser2.Parse();
+        var emptyDomain2 = new Domain("_", [], []);
+        var result2 = new DomainEvolution(emptyDomain2).Apply(changes2);
+        await Assert.That(result2.Succeeded).IsTrue();
+
+        var tracker2 = result2.Root.Types.OfType<Entity>().Single(e => e.Name == "Tracker");
+        var pending2 = tracker2.Stages.Single(s => s.Name == "Pending");
+        await Assert.That(pending2.Subscriptions.Count).IsEqualTo(1);
+        await Assert.That(pending2.Subscriptions[0].StageNames.Count).IsEqualTo(2);
     }
 
     [Test]
@@ -425,26 +531,93 @@ public class PolyDslRoundTripTests {
     }
 
     [Test]
-    public async Task Unsupported_CreateEffect_ThrowsPhase1Error() {
+    public async Task Parse_CreateEntityEffect_RoundTrips() {
         var poly = """
             domain Test
+
             Item: entity {
+              Name: Text
               Draft: stage {
                 Go: action {
-                  create Item in Draft
+                  create Item { Name: "NewItem" }
                 }
               }
+              Active: stage {}
             }
             """;
 
         var parser = new PolyDslParser(poly);
-        var threw = false;
-        try { parser.Parse(); }
-        catch (FormatException ex) {
-            await Assert.That(ex.Message.Contains("not supported in Phase 1a")).IsTrue();
-            threw = true;
-        }
-        await Assert.That(threw).IsTrue();
+        var changes = parser.Parse();
+        var emptyDomain = new Domain("_", [], []);
+        var result = new DomainEvolution(emptyDomain).Apply(changes);
+        await Assert.That(result.Succeeded).IsTrue();
+
+        var printer = new DomainDslPrinter();
+        var printed = printer.Print(result.Root);
+
+        // Re-parse and verify structural identity
+        var parser2 = new PolyDslParser(printed);
+        var changes2 = parser2.Parse();
+        var emptyDomain2 = new Domain("_", [], []);
+        var result2 = new DomainEvolution(emptyDomain2).Apply(changes2);
+        await Assert.That(result2.Succeeded).IsTrue();
+
+        var item1 = result.Root.Types.OfType<Entity>().Single(e => e.Name == "Item");
+        var item2 = result2.Root.Types.OfType<Entity>().Single(e => e.Name == "Item");
+        await Assert.That(item2.Stages.Count).IsEqualTo(item1.Stages.Count);
+        await Assert.That(item2.Actions.Count).IsEqualTo(item1.Actions.Count);
+    }
+
+    [Test]
+    public async Task Parse_CreateInEffect_RoundTrips() {
+        var poly = """
+            domain Test
+
+            Customer: entity {
+              Name: Text
+              Pending: stage {
+                Go: action {
+                  create in orders { }
+                }
+              }
+              orders: many Order
+            }
+
+            Order: entity {
+              Title: Text
+            }
+            """;
+
+        var parser = new PolyDslParser(poly);
+        var changes = parser.Parse();
+        var emptyDomain = new Domain("_", [], []);
+        var result = new DomainEvolution(emptyDomain).Apply(changes);
+        await Assert.That(result.Succeeded).IsTrue();
+
+        // Verify the create-in effect parsed as CreateEntityInRelationshipEffect
+        var customer = result.Root.Types.OfType<Entity>().Single(e => e.Name == "Customer");
+        var go = customer.Stages.SelectMany(s => s.Actions).FirstOrDefault(a => a.Name == "Go");
+        await Assert.That(go).IsNotNull();
+        await Assert.That(go!.Effects.Count).IsEqualTo(1);
+        await Assert.That(go.Effects[0]).IsTypeOf<CreateEntityInRelationshipEffect>();
+        var createIn = (CreateEntityInRelationshipEffect)go.Effects[0];
+        await Assert.That(createIn.RelationshipName).IsEqualTo("orders");
+
+        var printer = new DomainDslPrinter();
+        var printed = printer.Print(result.Root);
+
+        // Re-parse and verify structural identity
+        var parser2 = new PolyDslParser(printed);
+        var changes2 = parser2.Parse();
+        var emptyDomain2 = new Domain("_", [], []);
+        var result2 = new DomainEvolution(emptyDomain2).Apply(changes2);
+        await Assert.That(result2.Succeeded).IsTrue();
+
+        var customer2 = result2.Root.Types.OfType<Entity>().Single(e => e.Name == "Customer");
+        var go2 = customer2.Stages.SelectMany(s => s.Actions).FirstOrDefault(a => a.Name == "Go");
+        await Assert.That(go2).IsNotNull();
+        await Assert.That(go2!.Effects.Count).IsEqualTo(1);
+        await Assert.That(go2.Effects[0]).IsTypeOf<CreateEntityInRelationshipEffect>();
     }
 
     [Test]

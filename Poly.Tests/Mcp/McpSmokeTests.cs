@@ -1,5 +1,6 @@
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
+using Poly.DomainModeling.Effects;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Parsing;
 using Poly.DomainModeling.Queries;
@@ -1147,5 +1148,70 @@ public class McpSmokeTests {
             scope: "stage");
         await Assert.That(response.Success).IsFalse();
         await Assert.That(response.Message.Contains("stageName is required")).IsTrue();
+    }
+
+    // ── P2.3: Dogfood golden path via MCP apply_dsl ─────────────
+
+    [Test]
+    public async Task ApplyDsl_WithCreateInAndSubscription_Succeeds() {
+        var (sessionId, _) = McpSessionStore.Create("Test");
+
+        var response = DslTool.ApplyDsl(sessionId, """
+            domain Test
+
+            Customer: entity {
+              Status: Text
+              Pending: stage {
+                PlaceOrder: action {
+                  create in orders { Status: "New" }
+                }
+                when orders Active {
+                  assign Status to "Fulfilled"
+                }
+              }
+              orders: many Order
+            }
+
+            Order: entity {
+              Status: Text
+              Draft: stage {
+                Activate: action {
+                  transition to Active
+                }
+              }
+              Active: stage {}
+            }
+            """);
+
+        await Assert.That(response.Success).IsTrue();
+        await Assert.That(response.Message).Contains("2 entities");
+        await Assert.That(response.Message).Contains("1 relationships");
+
+        var exists = McpSessionStore.TryGet(sessionId, out var state);
+        await Assert.That(exists).IsTrue();
+        await Assert.That(state!.Domain.Relationships.Count).IsEqualTo(1);
+        await Assert.That(state.Domain.Relationships[0].Name).IsEqualTo("orders");
+
+        // Verify create-in effect parsed correctly
+        var customer = state.Domain.Types.OfType<Entity>().Single(e => e.Name == "Customer");
+        var placeOrder = customer.Stages.SelectMany(s => s.Actions).First(a => a.Name == "PlaceOrder");
+        await Assert.That(placeOrder.Effects.Count).IsEqualTo(1);
+        await Assert.That(placeOrder.Effects[0]).IsTypeOf<CreateEntityInRelationshipEffect>();
+
+        // Verify subscription
+        var pending = customer.Stages.Single(s => s.Name == "Pending");
+        await Assert.That(pending.Subscriptions.Count).IsEqualTo(1);
+        await Assert.That(pending.Subscriptions[0].RelationshipName).IsEqualTo("orders");
+
+        // Analysis should be clean
+        var analysis = DomainModelAnalyzer.Analyze(state.Domain);
+        await Assert.That(analysis.HasStructuralFailure).IsFalse();
+
+        // Export DSL should still be honest
+        var export = DslTool.ExportDsl(sessionId);
+        await Assert.That(export.Success).IsTrue();
+        var exportedPoly = export.Data!.GetType().GetProperty("poly")?.GetValue(export.Data) as string;
+        await Assert.That(exportedPoly).IsNotNull();
+        await Assert.That(exportedPoly!.Contains("create in orders")).IsTrue();
     }
 }

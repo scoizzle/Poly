@@ -62,7 +62,10 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
         DomainTypeLookupMetadata lookup) {
         switch (effect) {
             case CreateEntityInstance cei:
-                ValidateCreateEntityInstance(context, cei, lookup);
+                ValidateCreateEntityInstance(context, cei, entity, lookup, domain);
+                break;
+            case CreateEntityInRelationshipEffect createIn:
+                ValidateCreateEntityInRelationship(context, createIn, entity, domain, lookup);
                 break;
 
             case StageTransitionEffect ste:
@@ -99,19 +102,135 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
     }
 
     private static void ValidateCreateEntityInstance(
-        AnalysisContext context, CreateEntityInstance cei, DomainTypeLookupMetadata lookup) {
+        AnalysisContext context, CreateEntityInstance cei, Entity actionEntity, DomainTypeLookupMetadata lookup, Domain domain) {
         if (!TryResolveDomainType(context, cei.Type, lookup, cei, out var resolvedType)) {
             return;
         }
 
-        if (resolvedType is Entity entity) {
+        if (resolvedType is Entity targetEntity) {
             foreach (var initializer in cei.Initializers) {
-                if (!entity.Properties.Any(p => string.Equals(p.Name, initializer.PropertyName, StringComparison.Ordinal))) {
+                if (!targetEntity.Properties.Any(p => string.Equals(p.Name, initializer.PropertyName, StringComparison.Ordinal))) {
                     context.ReportError(
                         initializer,
-                        $"CreateEntityInstance initializer references unknown property '{initializer.PropertyName}' on entity '{entity.Name}'.",
+                        $"CreateEntityInstance initializer references unknown property '{initializer.PropertyName}' on entity '{targetEntity.Name}'.",
                         DomainModelDiagnosticCodes.EffectBinding);
                 }
+            }
+
+            // P2′.2: Reject bare create of exclusively-owned entity types
+            // An entity is exclusively-owned if it is only ever the target of SourceOwnsTarget relationships
+            // and no relationship has it as source.
+            if (cei.RelationshipName is null && IsExclusivelyOwned(targetEntity, domain)) {
+                context.ReportError(
+                    cei,
+                    $"Cannot directly create '{targetEntity.Name}': it is exclusively owned by other entities. " +
+                    $"Use 'create in' on a relationship that has '{targetEntity.Name}' as the target.",
+                    DomainModelDiagnosticCodes.EffectBinding);
+            }
+
+            // P2′.3 / P2′′.2: When RelationshipName is set, validate relationship exists,
+            // that the action entity is the relationship source, and that the created
+            // type matches the relationship target.
+            if (cei.RelationshipName is not null) {
+                ValidateCreateWithRelationshipName(context, cei, actionEntity, domain, lookup, targetEntity);
+            }
+        }
+    }
+
+    private static void ValidateCreateWithRelationshipName(
+        AnalysisContext context, CreateEntityInstance cei, Entity actionEntity, Domain domain, DomainTypeLookupMetadata lookup, Entity targetEntity) {
+        // Check the relationship exists
+        var relationship = domain.Relationships.FirstOrDefault(r =>
+            string.Equals(r.Name, cei.RelationshipName, StringComparison.Ordinal));
+        if (relationship is null) {
+            context.ReportError(
+                cei,
+                $"CreateEntityInstance references unknown relationship '{cei.RelationshipName}' in domain '{domain.Name}'.",
+                DomainModelDiagnosticCodes.EffectBinding);
+            return;
+        }
+
+        // Check the action's entity is the relationship source
+        if (!string.Equals(relationship.Source.TypeName, actionEntity.Name, StringComparison.Ordinal)) {
+            context.ReportError(
+                cei,
+                $"CreateEntityInstance uses relationship '{cei.RelationshipName}' whose source is " +
+                $"'{relationship.Source.TypeName}', but the effect is on entity '{actionEntity.Name}'. " +
+                $"Create with RelationshipName must be on the source entity of the relationship.",
+                DomainModelDiagnosticCodes.EffectBinding);
+            return;
+        }
+
+        // Check the created type matches the relationship target
+        if (!string.Equals(targetEntity.Name, relationship.Target.TypeName, StringComparison.Ordinal)) {
+            context.ReportError(
+                cei,
+                $"CreateEntityInstance creates type '{targetEntity.Name}' but relationship " +
+                $"'{cei.RelationshipName}' targets '{relationship.Target.TypeName}'. " +
+                $"The created type must match the relationship target.",
+                DomainModelDiagnosticCodes.EffectBinding);
+        }
+    }
+
+    private static bool IsExclusivelyOwned(Entity entity, Domain domain) {
+        var entityName = entity.Name;
+        bool isSource = false;
+        bool isOwnedTarget = false;
+
+        foreach (var rel in domain.Relationships) {
+            if (string.Equals(rel.Source.TypeName, entityName, StringComparison.Ordinal)) {
+                isSource = true;
+            }
+            if (string.Equals(rel.Target.TypeName, entityName, StringComparison.Ordinal) && rel.SourceOwnsTarget) {
+                isOwnedTarget = true;
+            }
+        }
+
+        // Exclusively owned: exists only as a target of owned relationships, never as a source
+        return isOwnedTarget && !isSource;
+    }
+
+    private static void ValidateCreateEntityInRelationship(
+        AnalysisContext context, CreateEntityInRelationshipEffect createIn, Entity entity, Domain domain, DomainTypeLookupMetadata lookup) {
+        // Validate relationship name exists
+        var relationship = domain.Relationships.FirstOrDefault(r =>
+            string.Equals(r.Name, createIn.RelationshipName, StringComparison.Ordinal));
+        if (relationship is null) {
+            context.ReportError(
+                createIn,
+                $"CreateIn effect references unknown relationship '{createIn.RelationshipName}' in domain '{domain.Name}'.",
+                DomainModelDiagnosticCodes.EffectBinding);
+            return;
+        }
+
+        // Validate source entity matches the entity owning the action
+        if (!string.Equals(relationship.Source.TypeName, entity.Name, StringComparison.Ordinal)) {
+            context.ReportError(
+                createIn,
+                $"CreateIn effect uses relationship '{createIn.RelationshipName}' whose source is " +
+                $"'{relationship.Source.TypeName}', but the effect is on entity '{entity.Name}'. " +
+                $"CreateIn must be on the source entity of the relationship.",
+                DomainModelDiagnosticCodes.EffectBinding);
+            return;
+        }
+
+        // Validate target entity exists
+        if (!lookup.Types.TryGetValue(relationship.Target.TypeName, out var targetType) || targetType is not Entity targetEntity) {
+            context.ReportError(
+                createIn,
+                $"CreateIn effect targets entity '{relationship.Target.TypeName}' via relationship " +
+                $"'{createIn.RelationshipName}', but that entity does not exist.",
+                DomainModelDiagnosticCodes.EffectBinding);
+            return;
+        }
+
+        // Validate initializer property names against target entity
+        foreach (var initializer in createIn.Initializers) {
+            if (!targetEntity.Properties.Any(p => string.Equals(p.Name, initializer.PropertyName, StringComparison.Ordinal))) {
+                context.ReportError(
+                    initializer,
+                    $"CreateIn initializer references unknown property '{initializer.PropertyName}' on entity '{targetEntity.Name}'.",
+                    DomainModelDiagnosticCodes.EffectBinding);
             }
         }
     }

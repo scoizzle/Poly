@@ -180,6 +180,29 @@ The relationship **name** is the property name (first identifier). Target entity
 - No reverse-nav lines printed by default (re-parse would create a duplicate edge).
 - The keyword form `relationship Name from Source to Target one|many` is **rejected** with a diagnostic pointing at this N1 form.
 
+### 2.9 Create effects (Phase 1b)
+
+```
+create-effect = "create" entity-name "{" [ prop-init { "," prop-init } ] "}"
+              | "create" "in" identifier "{" [ prop-init { "," prop-init } ] "}"
+
+prop-init = identifier ":" expression
+```
+
+Supports initialization of the created entity's properties using `expression` values from the current context. The `create in` variant creates an entity through a named relationship — the target entity type is resolved from the relationship definition, and the created instance is automatically linked to the creator via that relationship, enabling subscription fan-out.
+
+**Examples:**
+
+```text
+// Plain create — type and initializers explicit
+create Order { Title: "New Order", Total: 0 }
+
+// Create in relationship — target type resolved from "orders" relationship
+create in orders { Title: "Auto Order" }
+```
+
+The `create` keyword was unsupported in Phase 1a and is now available in Phase 1b. Other keywords (`schedule`, `parallel`, `for`, `value`, `actor`, `function`) remain unsupported.
+
 ---
 
 ## 3. Lexical rules
@@ -223,14 +246,13 @@ The parser produces `IReadOnlyList<DomainChange>` representing the entire domain
 
 ## 5. Unsupported constructs (NOT YET SUPPORTED diagnostics)
 
-Using any reserved keyword from the table below produces a `FormatException` with the message "`<keyword>` is not supported in Phase 1a". This includes both entity-level constructs (`actor`, `value`) and effect-level keywords (`create`, `schedule`).
+Using any reserved keyword from the table below produces a `FormatException` with the message "`<keyword>` is not supported in Phase 1a". This includes both entity-level constructs (`actor`, `value`) and effect-level keywords (`schedule`).
 
 | Construct | Diagnostic |
 |-----------|------------|
 | `actor` keyword | "Actor types are not supported in Phase 1a" |
 | Entity extension (`Name: Parent { }`) | "Entity extension is not supported in Phase 1a" |
 | Value types (`Name: value { }`) | "Value types are not supported in Phase 1a" |
-| `create` / `create in` effects | "Create effects are not supported in Phase 1a" |
 | `when any` / `when all` | "Collection quantifiers are not supported in Phase 1a" |
 | `schedule at` | "Schedule effects are not supported in Phase 1a" |
 | `for` iteration | "Iteration is not supported in Phase 1a" |

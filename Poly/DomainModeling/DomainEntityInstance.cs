@@ -293,6 +293,9 @@ public sealed record DomainEntityInstance {
             case CreateEntityInstance create:
                 CreateChildInstance(create);
                 break;
+            case CreateEntityInRelationshipEffect createIn:
+                ExecuteCreateInRelationship(createIn);
+                break;
             case InvokeActionEffect invoke:
                 CallAction(invoke.ActionName);
                 break;
@@ -523,6 +526,59 @@ public sealed record DomainEntityInstance {
 
         // BR.3.3: Auto-register child in the parent's store, if present.
         Store?.Add(child);
+
+        // P2.1 / P2′.3: Auto-link child to creator if the effect specifies a relationship name.
+        // Link direction: creator (this) = source, child = target.
+        // If Domain is available, validate the relationship exists (fail-loud on typo).
+        // If Domain is null, link is best-effort (standalone instance).
+        if (createEffect.RelationshipName is not null && Store is not null) {
+            if (Domain is not null && !Domain.Relationships.Any(r =>
+                string.Equals(r.Name, createEffect.RelationshipName, StringComparison.Ordinal))) {
+                throw new InvalidOperationException(
+                    $"Relationship '{createEffect.RelationshipName}' not found in domain '{Domain.Name}'.");
+            }
+            Store.Link(createEffect.RelationshipName, this, child);
+        }
+    }
+
+    /// <summary>
+    /// Executes a <see cref="CreateEntityInRelationshipEffect"/>: resolves the target
+    /// entity type from the relationship definition on the domain, creates the instance,
+    /// auto-registers it, and links it via the named relationship.
+    /// </summary>
+    private void ExecuteCreateInRelationship(CreateEntityInRelationshipEffect effect) {
+        if (Domain is null)
+            throw new InvalidOperationException(
+                "Cannot execute 'create in' effect without a domain to resolve relationship targets.");
+
+        // Find the relationship
+        var relationship = Domain.Relationships.FirstOrDefault(r =>
+            string.Equals(r.Name, effect.RelationshipName, StringComparison.Ordinal));
+        if (relationship is null)
+            throw new InvalidOperationException(
+                $"Relationship '{effect.RelationshipName}' not found in domain '{Domain.Name}'.");
+
+        // P2′′.3: Defense-in-depth — verify source entity matches at runtime
+        if (!string.Equals(relationship.Source.TypeName, Entity.Name, StringComparison.Ordinal)) {
+            throw new InvalidOperationException(
+                $"Entity '{Entity.Name}' is not the source of relationship '{effect.RelationshipName}'. " +
+                $"Source is '{relationship.Source.TypeName}'. 'Create in' must run on the source entity.");
+        }
+
+        // The target entity must be the relationship's Target type
+        var targetEntity = Domain.Types.OfType<Entity>()
+            .FirstOrDefault(e => string.Equals(e.Name, relationship.Target.TypeName, StringComparison.Ordinal));
+        if (targetEntity is null)
+            throw new InvalidOperationException(
+                $"Target entity '{relationship.Target.TypeName}' for relationship '{effect.RelationshipName}' not found.");
+
+        // Wrap into a CreateEntityInstance with the relationship name for auto-linking
+        var createEffect = new CreateEntityInstance(
+            new DomainTypeReference(targetEntity.Name),
+            effect.Initializers,
+            effect.RelationshipName);
+
+        CreateChildInstance(createEffect);
     }
 
     /// <summary>

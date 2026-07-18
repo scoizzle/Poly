@@ -87,3 +87,20 @@ See the root `AGENTS.md` for guidance on when to consult these documents.
 | `Builders/` | Alternative fluent construction API (used for rich entity setup) |
 | `Constraints/` | Constraint types (Range, Length, Pattern, etc.) |
 | `Effects/` | Effect types (Create, Transition, Assign, Conditional, Composite, etc.) |
+
+## Phase 2 — Spawn-and-Wire
+
+Phase 2 adds **instance graph creation** via the DSL:
+- `create ChildEntity { ... }` — bare create without auto-link
+- `create in RelationshipName { ... }` — create + auto-link via a relationship
+- `entry { effects }` / `exit { effects }` — lifecycle effects on stage transitions
+- `when RelName Stage1, Stage2 { effects }` — multi-stage subscription triggers
+- Flat stages (no parent hierarchy)
+
+**Key runtime path:**
+```
+CallAction → CreateEntityInRelationship → CreateChildInstance → Store.Link → NotifyTransition → subscription fires
+```
+
+See the dogfood test `Dogfood_CreateInDSL_SubscriptionFires` in `DomainEntityInstanceTests`
+and the plan at [`docs/plans/v2-to-v3/domainmodeling-next-phase.md`](../../docs/plans/v2-to-v3/domainmodeling-next-phase.md).

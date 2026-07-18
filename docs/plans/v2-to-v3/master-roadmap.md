@@ -37,12 +37,12 @@ MCP / direct API as thin consumers
 
 | Priority | Work | Where | Status |
 |----------|------|--------|--------|
-| 1 | **Phase 2: Spawn-and-wire** | [`domainmodeling-next-phase.md`](domainmodeling-next-phase.md) | **Complete** |
-| 2 | P2.1 Create→Link runtime | `DomainEntityInstance.CreateChildInstance` + `CreateEntityInstance.RelationshipName` | Done |
-| 3 | P2.2 E-create DSL (`create`/`create in`) | `PolyDslParser` + `DomainDslPrinter` + grammar | Done |
-| 4 | P2.3 Dogfood golden path | `Dogfood_CreateInDSL_SubscriptionFires` + `ApplyDsl_WithCreateInAndSubscription_Succeeds` | Done |
-| 5 | P2.4 E-entry | OnEntry/OnExit DSL print/parse | Done |
-| 6 | P2.5 Multi-stage when-list | Parser extension | Done |
+| 1 | **Phase 2: Spawn-and-wire** | [`domainmodeling-next-phase.md`](domainmodeling-next-phase.md) | **Complete** (residual commit may still be open) |
+| 2 | P2.1–P2.5 + P2′ honesty | create/link, DSL, dogfood, entry/exit, multi-stage when | Done |
+| 3 | **Phase 3: MCP oracle surface** | [`mcp-phase3-oracle-surface.md`](mcp-phase3-oracle-surface.md) (tasks) · [`mcp-tool-surface-expansion.md`](mcp-tool-surface-expansion.md) §0 | **Next** — V0 `lower_expression` first |
+| 4 | Simulate / suggestions / debug | same plan S0 / A* / S1 | Open |
+| 5 | Runtime MCP (CallAction/store) | expansion **RT.*** | Pull-only with dogfood |
+| 6 | Event authoring tools | — | **Never** (stage transition path) |
 
 ## Archived migration material
 

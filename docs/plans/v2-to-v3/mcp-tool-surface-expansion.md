@@ -1,10 +1,65 @@
 # MCP Tool Surface — Semantic Gap Analysis & Expansion Plan
 
 **Date:** 2026-07-12  
-**Status:** Proposal — post-M2 capability expansion  
-**Current tools:** 15 (V3-only)  
-**Estimated addition:** ~8–12 tools *or* DSL-first  
-**Principle:** Thin adapters over `DomainEvolution` — no new domain semantics; no V2 resurrection.
+**Revised:** 2026-07-18 (inventory refresh post Phase 2 spawn-and-wire + remove_* + DSL)  
+**Status:** Active backlog — **mutate/undo/DSL largely shipped**; remaining work is **oracle / visibility / simulate / suggestions / optional runtime**  
+**Shipped tools (approx.):** ~30 in `Poly.Mcp/Tools/DomainTools.cs` (session, query, evolve add/remove, policy, constraint, DSL)  
+**Principle:** Thin adapters over `DomainEvolution` / DomainModeling / Interpretation — no new domain semantics; no V2 resurrection; **no event authoring tools** (stage-transition-as-observable).  
+**Related:**  
+- [`mcp-phase3-oracle-surface.md`](mcp-phase3-oracle-surface.md) — **Phase 3 execution tasks (current pick V0)**  
+- [`domainmodeling-next-phase.md`](domainmodeling-next-phase.md) — Phase 2 domain runtime  
+- ADR stage-transition-as-observable  
+
+---
+
+## 0. Status as of 2026-07-18 — what shipped vs what’s still missing
+
+### Shipped (plan phases that are no longer gaps)
+
+| Area | Tools / notes |
+|------|----------------|
+| Session | `create_domain_session`, `list_sessions` |
+| Query | `get_domain_overview`, `get_entity_detail`, `get_domain_analysis`, `get_domain_snapshot`, `get_relationships` |
+| Structure add | `add_entity`, `add_property`, `add_stage`, `add_action`, `add_action_to_stage`, `add_relationship` |
+| Batch add | `add_properties`, `add_stages`, `add_actions_to_stages` |
+| **Remove / undo** (old plan “Phase 2”) | `remove_entity`, `remove_property`, `remove_stage`, `remove_action`, `remove_action_from_stage`, `remove_relationship`, `remove_policy` |
+| Constraints | `add_constraint`, `get_constraints` (**`remove_constraint` still missing**) |
+| Policy | `get_policy_expression`, `add_policy` (entity), `evaluate_policy` (multi-property JSON subject) |
+| **DSL** | `apply_dsl` (full **replace**), `export_dsl` |
+
+**Honest substitute:** Action/effect/entry/exit configuration for agents is largely via **`apply_dsl`**, not micro-tools. Incremental micro-tools for effects remain a gap.
+
+### Still missing (planned + still open)
+
+| Priority | Bucket | Tools / work | Trigger |
+|----------|--------|--------------|---------|
+| **P0** | Pipeline visibility (**V0**) | `lower_expression`, `describe_expression`, `describe_domain_element` | Agent confidence; zero domain risk |
+| **P1** | Simulate (**S0**) | `simulate_policy` (or further broaden `evaluate_policy` for ad-hoc expressions) | Try-before-commit for guards |
+| **P1** | Suggestions (**A0–A2**) | `SuggestionMetadata` / `ReportSuggestion`, affordance analyzer, `get_domain_suggestions` | Actionable analysis |
+| **P2** | Visibility deep (**V1–V2**) | `analyze_expression`, `compare_engines`, `compile_expression`, `diff_expressions` | Debug / dual oracle |
+| **P2** | Debug (**S1**) | `debug_expression` (VmDebugger step trace) | After V0/S0 |
+| **P3** | Effect micro-tools | `add_parameter_to_action`, `add_effect_to_action`, transition/assign/create-in wrappers, remove effect, OnEntry/OnExit micro-tools | Only if dogfood refuses DSL for incremental effect edits |
+| **P3** | Policy placement | `add_policy_to_stage`, `add_policy_to_action` | Scoped policy authoring without DSL |
+| **P3** | Constraint remove | `remove_constraint` | Symmetric with add; evolutionary repair |
+| **P4** | Capture / dry-run (**R1**) | `apply_dsl_capture`, optional `apply_dsl_dry_run` | Reverse-engineering / dirty import |
+| **P4** | State diff (**S3**) | `diff_state` | After evolve confidence |
+| **P5** | Runtime session (**new**) | instance create / `CallAction` / `Link` / store inspect | **Only if dogfood needs spawn-and-wire inside MCP** (model-only session today) |
+| **P5** | Effect simulate (**S2**) | `simulate_effect` | Needs instance runtime model |
+| **Never / skip** | Event authoring | `add_event_*`, publish-event effects | Product path **retired** — stage transition is the observable |
+
+### Pick order (agents)
+
+**Detailed checklists:** [`mcp-phase3-oracle-surface.md`](mcp-phase3-oracle-surface.md).
+
+```text
+1. V0  lower_expression + describe_expression + describe_domain_element  ← CURRENT
+2. S0  simulate_policy (ad-hoc expression + subject)
+3. A0–A2  structured suggestions + get_domain_suggestions
+4. V1/S1  analyze_expression, compare_engines, debug_expression  (pull with pain)
+5. Effect/policy micro-tools or remove_constraint  (only if DSL insufficient)
+6. Runtime MCP (CallAction/store)  (only with named dogfood)
+7. Capture / dry-run / simulate_effect  (named reverse-eng or runtime scenario)
+```
 
 ---
 
@@ -291,26 +346,29 @@ craft expression
 | `compile_expression` | Medium | Metadata is already in `VmProgram` |
 | `diff_expressions` | Medium | Structural diff on contracts |
 
-### When to build (unified execution plan)
+### When to build (unified execution plan) — **updated 2026-07-18**
 
-| Phase | Trigger | Tools | Notes |
-|-------|---------|-------|-------|
-| **V0** | Agent needs pipeline visibility | `lower_expression`, `describe_expression`, `describe_domain_element` | **Highest priority** — pure functions, zero risk |
-| **S0** | Agent needs to test expressions | `simulate_policy` | High value, low cost — follows `evaluate_policy` pattern |
-| **V1** | Agent needs analysis feedback | `analyze_expression`, `compare_engines` | Reuses existing infrastructure |
-| **S1** | Agent needs to debug evaluation | `debug_expression` | After V0/V1 — reuses VmDebugger |
-| **A0** | Suggestions infrastructure | `SuggestionMetadata`, `ReportSuggestion` | Small diff, core enabler for actionable analysis |
-| **A1** | Actionable suggestion pass | `AffordanceSuggestionAnalyzer` | Port existing text-hint generators to structured output |
-| **A2** | Suggestions in MCP | `get_domain_suggestions` | Returns inspectable, actionable suggestions |
-| **V2** | Agent needs metadata | `compile_expression`, `diff_expressions` | Lower urgency |
-| Phase 1 | Agent can't configure actions | `add_parameter_to_action`, `add_effect_to_action`, `add_stage_transition_effect`, `add_publish_event_effect` | Unblocks agents — make actions do something |
-| Phase 2 | Agent needs undo | `remove_entity`, `remove_property`, `remove_action`, `remove_stage`, `remove_policy` | After Phase 1 |
-| Phase 3 | Policy depth | `add_policy_to_stage`, JSON subject eval, `add_constraint_to_property` | After Phase 2 |
-| **S2** | Runtime subject model exists | `simulate_effect` | Blocked on Slice 4 |
-| **S3** | Agent needs before/after confidence | `diff_state` | Light wrapper, any time |
-| **R1** | Reverse-engineering legacy systems | `apply_dsl_capture` | **Deferred** — depends on `apply_dsl`; needs `EvolutionStrictness` |
-| **DSL** | DSL design is stable | `apply_dsl` + `apply_dsl_dry_run` | Optional — parallel to other phases |
-| Phase 4 | Events (pull) | `add_event_type`, `add_event_to_entity` | Only when demo needs it |
+| Phase | Trigger | Tools | Status |
+|-------|---------|-------|--------|
+| **DSL** | Batch authoring | `apply_dsl`, `export_dsl` | ✅ **Shipped** (replace semantics; dry-run still missing) |
+| **Mutate undo** | Agent recovery | remove_* family | ✅ **Shipped** (see §0) |
+| **Constraints add** | Property validation | `add_constraint`, `get_constraints` | ✅ **Shipped** |
+| **Policy eval multi-prop** | Subject bags | `evaluate_policy` properties JSON | ✅ **Shipped** |
+| **V0** | Agent needs pipeline visibility | `lower_expression`, `describe_expression`, `describe_domain_element` | ⬜ **Next pick** — pure, zero risk |
+| **S0** | Try-before-commit policies | `simulate_policy` (ad-hoc expr + subject) | ⬜ High value |
+| **A0–A2** | Actionable analysis | SuggestionMetadata + `get_domain_suggestions` | ⬜ |
+| **V1** | Analysis feedback | `analyze_expression`, `compare_engines` | ⬜ After V0 |
+| **S1** | Debug evaluation | `debug_expression` | ⬜ After V0/S0 — VmDebugger |
+| **V2** | Metadata / contract diff | `compile_expression`, `diff_expressions` | ⬜ Lower urgency |
+| **Effect micro-tools** | Incremental action config without DSL | parameter/effect/transition/assign/create-in/entry-exit wrappers | ⬜ Pull if dogfood refuses DSL |
+| **Policy placement** | Stage/action policies via tools | `add_policy_to_stage`, `add_policy_to_action` | ⬜ |
+| **Constraint remove** | Symmetric repair | `remove_constraint` | ⬜ |
+| **S3** | Before/after confidence | `diff_state` | ⬜ Any time light wrapper |
+| **R1** | Reverse-engineering | `apply_dsl_capture` | ⬜ Deferred — `EvolutionStrictness` |
+| **Dry-run** | Preview apply | `apply_dsl_dry_run` | ⬜ Optional |
+| **Runtime MCP** | In-session CallAction / Link / store | new tools (not model-only session) | ⬜ Named dogfood only |
+| **S2** | Effect dry-run | `simulate_effect` | ⬜ Needs instance runtime |
+| **Events** | — | event type / publish tools | ❌ **Do not build** — stage transition is the observable |
 
 ---
 
@@ -332,124 +390,129 @@ craft expression
 | Create session | ✅ | |
 | Add entity | ✅ | |
 | Add property | ✅ | |
-| Add stage | ✅ | |
+| Add stage | ✅ | Flat stages only (no parent hierarchy) |
 | Add action (entity-level) | ✅ | |
-| Add action to stage (stage-local) | ✅ | Creates blank action — **semantic gap** |
+| Add action to stage (stage-local) | ✅ | Blank action shell — effects via DSL or missing micro-tools |
 | Add relationship | ✅ | |
-| Remove entity | ⬜ | `RemoveEntityChange` exists |
-| Remove property | ⬜ | `RemovePropertyFromEntityChange` exists |
-| Remove stage | ⬜ | `RemoveStageChange` exists |
-| Remove action (entity) | ⬜ | `RemoveActionChange` exists |
-| Remove action (stage) | ⬜ | `RemoveActionFromStageChange` exists |
-| Remove relationship | ⬜ | `RemoveRelationshipChange` exists |
-| Set entity parent | ⬜ | `SetEntityParentChange` exists |
+| Remove entity / property / stage / action / action_from_stage / relationship | ✅ | MR / MR′ shipped |
+| Set entity parent | ⬜ | `SetEntityParentChange` exists; pull-only |
 
 ### Action parameter & effect tools
 
-This is the **biggest gap**: actions are currently inert shells.
-
 | Capability | MCP | Notes |
 |-----------|-----|-------|
-| Add parameter to action | ⬜ | `AddParameterToActionChange` exists |
-| Remove parameter from action | ⬜ | `RemoveParameterFromActionChange` exists |
-| Add effect to action | ⬜ | `AddEffectToActionChange` exists |
-| Add stage-transition effect | ⬜ | `AddStageTransitionEffect` exists |
-| Add assign effect | ⬜ | `AssignEffect` + `AddEffectToActionChange` exists |
-| Add publish-event effect | ⬜ | `PublishEventEffect` + `AddEffectToActionChange` exists |
-| Add create-entity effect | ⬜ | `CreateEntityInstance` + `AddEffectToActionChange` exists |
-| Remove effect from action | ⬜ | `RemoveEffectFromActionChange` exists |
-| Set action result type | ⬜ | `SetActionResultChange` exists |
+| Add parameter to action | ⬜ | IR exists; **DSL does not** fully replace params |
+| Remove parameter from action | ⬜ | IR exists |
+| Add effect to action (generic) | ⬜ | Prefer DSL for batch; micro-tool for incremental |
+| Stage-transition / assign / create / create-in effects | ⬜ micro-tool | ✅ via **DSL** `transition` / `assign` / `create` / `create in` |
+| Remove effect from action | ⬜ | IR exists |
+| Set action result type | ⬜ | IR exists |
+| Publish-event effect | ❌ **Skip** | Event authoring path retired |
 
 ### Stage effect tools
 
 | Capability | MCP | Notes |
 |-----------|-----|-------|
-| Add OnEntry effect to stage | ⬜ | Exists |
-| Add OnExit effect to stage | ⬜ | Exists |
-| Remove OnEntry/OnExit effect | ⬜ | Exists |
+| OnEntry / OnExit effects | ⬜ micro-tool | ✅ via **DSL** `entry` / `exit` |
+| Stage subscription add/remove micro-tools | ⬜ | ✅ author via **DSL** `when`; detail via `get_entity_detail` |
 
 ### Event tools
 
 | Capability | MCP | Notes |
 |-----------|-----|-------|
-| Add event type | ⬜ | `AddEventChange` exists |
-| Remove event type | ⬜ | `RemoveEventChange` exists |
-| Add event ref to entity | ⬜ | `AddEventReferenceToEntityChange` exists |
-| Remove event ref from entity | ⬜ | Exists |
-| Add event subscription | ⬜ | Exists |
-| Remove event subscription | ⬜ | Exists |
+| All event type / publish / event-subscription tools | ❌ **Skip** | Stage transition is the authorable observable (ADR 2026-07-17) |
 
 ### Policy tools
 
 | Capability | MCP | Notes |
 |-----------|-----|-------|
 | Get policy expression | ✅ | |
-| Add policy (simple expr) | ✅ | Supports property comparisons + composites |
-| Evaluate policy (Age) | ✅ | Single subject property |
-| Add policy to stage | ⬜ | `AddPolicyToStageChange` exists |
-| Add policy to action | ⬜ | `AddPolicyToActionChange` exists |
-| Remove policy | ⬜ | `RemovePolicyFromEntityChange` exists |
+| Add policy (entity) | ✅ | Comparisons + composites |
+| Evaluate policy | ✅ | Multi-property subject supported |
+| Add policy to stage / action | ⬜ | IR exists; remove_policy supports scopes |
+| Remove policy | ✅ | Entity / stage / action scope |
 
 ### Constraint tools
 
 | Capability | MCP | Notes |
 |-----------|-----|-------|
-| Add constraint to property | ⬜ | `AddConstraintToPropertyChange` exists |
-| Remove constraint from property | ⬜ | Exists |
-| Add constraint to type | ⬜ | Exists |
+| Add constraint to property | ✅ | `add_constraint` |
+| Get constraints | ✅ | |
+| Remove constraint from property | ⬜ | Still open (evolutionary repair) |
+| Add constraint to type | ⬜ | Pull-only |
 
 ### Query tools
 
 | Capability | MCP | Notes |
 |-----------|-----|-------|
 | Get domain overview | ✅ | |
-| Get entity detail | ✅ | |
-| Get domain analysis | ✅ | |
-| List primitives | ❌ | V2 deleted; no V3 query for this |
-| List entities | ❌ | V2 deleted; `get_domain_overview` has counts but not full list |
-| List relationships | ❌ | Same |
+| Get entity detail | ✅ | Stages, actions, policies, subscriptions, navigations |
+| Get domain analysis | ✅ | Text diagnostics / hints — not structured suggestions |
+| Get domain snapshot | ✅ | |
+| Get relationships | ✅ | |
+| List primitives (dedicated) | — | Covered enough by overview / bootstrap |
+
+### Pipeline visibility / simulate / suggestions (still open)
+
+| Capability | MCP | Notes |
+|-----------|-----|-------|
+| `lower_expression` | ⬜ | **V0** |
+| `describe_expression` | ⬜ | **V0** |
+| `describe_domain_element` | ⬜ | **V0** — richer than `get_entity_detail` (NL + template) |
+| `analyze_expression` | ⬜ | **V1** |
+| `compare_engines` | ⬜ | **V1** dual oracle |
+| `compile_expression` | ⬜ | **V2** |
+| `diff_expressions` | ⬜ | **V2** |
+| `simulate_policy` | ⬜ | **S0** ad-hoc expr (vs committed policy only) |
+| `debug_expression` | ⬜ | **S1** |
+| `simulate_effect` | ⬜ | **S2** needs instance model |
+| `diff_state` | ⬜ | **S3** |
+| `get_domain_suggestions` | ⬜ | **A2** structured acceptables |
+| `apply_dsl_capture` / dry-run | ⬜ | **R1** / optional |
+| Runtime: CallAction / Link / store | ⬜ | **Not in original plan** — session is model-only |
 
 ---
 
-## 2. Recommended MCP additions (by priority)
+## 2. Recommended MCP additions (by priority) — **post–2026-07-18**
 
-### Phase 1 — Make actions usable (unblocks agents)
+### Done (do not re-plan)
 
-These fill the worst gap: actions exist but can't be configured.
+- Remove family, constraints add/list, multi-property `evaluate_policy`, `apply_dsl` / `export_dsl`, extra query tools — **shipped**.
 
-| # | Tool | EvolutionBuilder method | Why |
-|---|------|------------------------|-----|
-| **P1.1** | `add_parameter_to_action` | `AddParameterToAction(entity, action, param)` | Actions need parameters |
-| **P1.2** | `add_effect_to_action` | `AddEffectToAction(entity, action, effect)` | Actions need behavior |
-| **P1.3** | `add_stage_transition_effect` | `AddStageTransitionEffect(entity, action, targetStage)` | Most common effect — moves entity between stages |
-| **P1.4** | `add_publish_event_effect` | `AddPublishEventEffect(entity, action, eventName)` | Second most common effect |
+### Next: Oracle surface (original V0/S0/A*)
 
-**Pattern:** Each is a thin wrapper — call `Evolve()`, apply the change, return `V3Response`. Follow the existing `V3EvolveTool` pattern. Effect contracts are flat args (target stage name, event name, property bindings as JSON string for composites).
+| # | Tool / work | Why | Depends |
+|---|-------------|-----|---------|
+| **V0.1** | `lower_expression` | Deterministic AST visibility | Lowering pass |
+| **V0.2** | `describe_expression` | Plain-English + structured guard | Template walk |
+| **V0.3** | `describe_domain_element` | Orient agent in model | Detail queries + templates |
+| **S0.1** | `simulate_policy` | Ad-hoc expr + subject without committing | PolicyEvaluator |
+| **A0–A2** | Suggestion metadata + `get_domain_suggestions` | Acceptable analysis artifacts | Analysis framework |
 
-### Phase 2 — Add remove/undo (agent recovery)
+### Then: depth / repair (pull with pain)
 
-| # | Tool | EvolutionBuilder method | Why |
-|---|------|------------------------|-----|
-| **P2.1** | `remove_entity` | `RemoveEntityChange` | Agent can delete mistakes |
-| **P2.2** | `remove_property` | `RemovePropertyFromEntityChange` | Same |
-| **P2.3** | `remove_action` | `RemoveActionChange` + `RemoveActionFromStageChange` | Same |
-| **P2.4** | `remove_stage` | `RemoveStageChange` | Same |
-| **P2.5** | `remove_policy` | `RemovePolicyFromEntityChange` | Same |
+| # | Tool / work | Why |
+|---|-------------|-----|
+| **V1.*** | `analyze_expression`, `compare_engines` | Type/diag + dual oracle |
+| **S1** | `debug_expression` | Step trace |
+| **E.*** | Effect/parameter micro-tools | Only if DSL insufficient for incremental agents |
+| **P.*** | `add_policy_to_stage` / `add_policy_to_action` | Scoped policy without full DSL rewrite |
+| **C.*** | `remove_constraint` | Symmetric constraint repair |
+| **R1** | Capture / dry-run apply | Reverse-engineering |
 
-### Phase 3 — Policy placement + evaluation depth (agent confidence)
+### Runtime MCP (new bucket — not original Phase 1–4)
 
-| # | Tool | Why |
-|---|------|-----|
-| **P3.1** | `add_policy_to_stage` | Policies on stages not just entities |
-| **P3.2** | `evaluate_policy` JSON subject body | Accept full `StrictBag`-style JSON instead of only Age |
-| **P3.3** | `add_constraint_to_property` | Validation constraints via MCP |
+| # | Tool / work | Why | Trigger |
+|---|-------------|-----|---------|
+| **RT.1** | Session instance store + create instance | Hold running entities | Dogfood CallAction via MCP |
+| **RT.2** | `call_action` / link / inspect store | Close spawn-and-wire **in** MCP | Named agent runtime consumer |
+| **RT.3** | `simulate_effect` | Dry-run effects | After RT.1 |
 
-### Phase 4 — Events (niche, pull-only)
+### Do not build
 
-| # | Tool | Why |
-|---|------|-----|
-| **P4.1** | `add_event_type` | Demos need events |
-| **P4.2** | `add_event_to_entity` | Wire events to entities |
+| Tool family | Why |
+|-------------|-----|
+| Event types / publish / event subscriptions | Product authoring path removed (stage transition is the observable) |
 
 ---
 
@@ -468,27 +531,29 @@ These fill the worst gap: actions exist but can't be configured.
 
 ```
 Poly.Mcp/Tools/
-  V3DomainTools.cs     ← existing (15 tools) — add Phase 1 here as V3EvolveTool methods
-  V3EffectTools.cs     ← new file — Phase 1.2–1.4 effect-specific tools
+  DomainTools.cs     ← current surface (session, query, evolve, policy, constraint, DSL)
+  # Prefer adding visibility/simulate tools here or a sibling ExpressionTools.cs when file grows
 ```
 
-Or keep all in `V3DomainTools.cs` until the file grows past ~1000 lines. Prefer a single file for now (< 1000 lines after additions).
+Placement: thin adapters only; lowering/eval/debug live in DomainModeling + Interpretation.
 
 ---
 
 ## 5. Execution plan
 
-See the **[unified execution table](#when-to-build-unified-execution-plan)** above. The earlier table is canonical — this section is retained as a placeholder for schedule notes.
+Canonical order: **[§0 pick order](#0-status-as-of-2026-07-18--what-shipped-vs-whats-still-missing)** and the **[unified execution table](#when-to-build-unified-execution-plan--updated-2026-07-18)**.
 
-### Both-and strategy
+### Both-and strategy (updated)
 
-1. **Build V0–V1 visibility tools first** — pure functions, zero risk, give agents confidence
-2. **Build S0–S1 simulation tools** — agents can verify before committing (high value, low cost)
-3. **Build Phase 1–4 MCP tools** — discoverable per-op surface for agents
-4. **Build DSL + `apply_dsl` in parallel** — batch optimization for complex mutations
-5. All tools consume the same `DomainChange[]`, `PolicyExpressionContract`, and analysis infrastructure — no divergence
+1. ✅ **DSL + micro mutate/undo** — dual path shipped  
+2. **V0 visibility next** — pure functions, zero risk, agent confidence  
+3. **S0 simulate_policy** — verify before commit  
+4. **A0–A2 suggestions** — analysis becomes actionable  
+5. **Effect micro-tools only if** agents cannot use DSL for incremental effect edits  
+6. **Runtime MCP only if** spawn-and-wire must run inside the session (today: model-only)  
+7. **Never** resurrect event authoring tools  
 
-**Total with all paths:** ~14 individual MCP tools + 2 DSL tools + 4 simulation/debug tools + 6 pipeline visibility tools + `evaluate_policy`.
+**Remaining estimated surface (if all open buckets ship):** ~6 visibility + ~3 simulate/debug + ~1 suggestions + optional effect/policy placement + optional runtime session tools.
 
 ---
 

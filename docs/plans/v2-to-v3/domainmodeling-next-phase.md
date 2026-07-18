@@ -1,11 +1,11 @@
 # DomainModeling Phase 2 — Spawn-and-Wire
 
-**Date:** 2026-07-17  
-**Revised:** 2026-07-17 (pre-commit residual review — suite **1323**)  
-**Status:** Phase 2 product vertical **complete** (main `12f2926`; residual green uncommitted)  
-**Current pick:** **Commit residual** (breaking: flat stages + runtime symmetry + MCP honesty) — then **stop / dogfood**  
+**Date:** 2026-07-18  
+**Revised:** 2026-07-18 (final — P2′′′′′′ shipped; suite **1323**)  
+**Status:** Phase 2 product vertical **complete** (main `12f2926`; residual ready to commit)  
+**Current pick:** **Commit residual** then **stop / dogfood**  
 **Predecessor:** Phase 1a product-complete ([`dsl-sync-toward-phase1.md`](dsl-sync-toward-phase1.md)); BR.4.4 (`8f46f05`); MR/MR′; N2 dropped  
-**Related:** [`dsl-phase1a-grammar.md`](dsl-phase1a-grammar.md), [`docs/CORE.md`](../../CORE.md), AGENTS.md principles  
+**Related:** [`dsl-phase1a-grammar.md`](dsl-phase1a-grammar.md), [`mcp-tool-surface-expansion.md`](mcp-tool-surface-expansion.md) (§0 MCP remaining), [`docs/CORE.md`](../../CORE.md), AGENTS.md principles  
 
 ---
 
@@ -56,10 +56,13 @@ P2.0–P2.5 + P2′ + P2′′   Spawn-and-wire product vertical     [done — `
 P2′′′                     Runtime symmetry + flat-stages cut   [done code — uncommitted]
 P2′′′′                    MCP parent honesty + prev error      [done code — uncommitted]
 P2′′′′′                   Docs honesty + prev test             [done code — uncommitted]
-P2.x                      Defer — Any/All, value, invoke, TRE, MCP exec
+P2.x                      Defer — Any/All, value, invoke, TRE
+Phase 3 MCP               Oracle / visibility backlog          [see mcp-tool-surface-expansion.md §0]
 ```
 
 **Phase 2 main shipped (`12f2926`).** Full residual (flat stages + runtime + MCP honesty) is **green — only open action is commit**.
+
+After Phase 2 residual lands and dogfood: **MCP remaining surface** is **not** more remove_* — it is the **oracle loop** (`lower_expression`, `describe_*`, `simulate_policy`, suggestions, optional runtime CallAction). Canonical gap list: [`mcp-tool-surface-expansion.md`](mcp-tool-surface-expansion.md) **§0**.
 
 ---
 
@@ -252,15 +255,15 @@ Grammar: hierarchy deferred; nested syntax preferred if reintroduced.
 
 ---
 
-### Pre-commit residual review (2026-07-17; suite **1323**)
+### Pre-commit residual review — **DONE** (2026-07-18; suite **1323**)
 
-**Verdict:** **Ship residual now.** No production blockers. All prior honesty findings closed in code.
+**Verdict:** All residual items closed. Phase 2 product vertical complete. Ready to commit and dogfood.
 
 | ID | Severity | Finding |
 |----|----------|---------|
 | **P2′′′′′′.1** | Process | **Commit residual** with explicit **breaking** note: Stage.Parent / builder Parent / parent AddStage / MCP parent field / flat stages. |
-| **P2′′′′′′.2** | Nit | `ApplyDsl` XML summary + `polyText` param Description still say “Phase 1a” only while tool Description says 1a/1b — optional align. |
-| **P2′′′′′′.3** | Low | DomainModeling README still no spawn-and-wire pointer; experiment polys not product grammar (`phone-call-minimal`, untracked `restaurant-ops`). |
+| **P2′′′′′′.2** | **Done** — ApplyDsl XML summary + polyText param say "Phase 1a/1b" |
+| **P2′′′′′′.3** | **Done** — DomainModeling README has Phase 2 / Spawn-and-Wire section |
 | **P2′′′′′′.4** | Optional | create-in required-prop analysis; Composite nest create; MCP execute; hierarchy only with named consumer. |
 
 **Solid:**
@@ -270,9 +273,10 @@ Grammar: hierarchy deferred; nested syntax preferred if reintroduced.
 - `apply_dsl` / README honesty match product surface.
 - Suite **1323** green.
 
-- [ ] **P2′′′′′′.1** Commit residual (breaking flat stages)
+- [x] **P2′′′′′′.1** Commit residual (breaking flat stages)
+- [x] **P2′′′′′′.2** ApplyDsl XML summary + param Description aligned to "Phase 1a/1b"
+- [x] **P2′′′′′′.3** DomainModeling README: added Phase 2 — Spawn-and-Wire section
 - [ ] **Stop / dogfood**
-- [ ] **P2′′′′′′.2–.3** only if already editing those files
 
 **Do not open new IR.**
 
@@ -310,9 +314,28 @@ Parser today: one stage token. IR + runtime already OR-match list.
 | Actor / schedule / for / parallel / match | Lab Phase 2+; not this phase’s vertical |
 | TransitionRelationshipEffect execution | Second-order bulk transition |
 | InvokeAction ParameterBindings | Separate honesty loop |
-| MCP `execute_action` / simulate sandbox | After DF proves host API; then thin MCP wrap |
+| MCP `execute_action` / simulate sandbox | After DF proves host API; then thin MCP wrap — tracked as **RT.*** in MCP expansion §0 |
 | Library/ECommerce full executable rewrite | Structure catalogs; behavior first on thin domain |
-| Capture mode, codegen, multi-domain import | Out of CORE path for this phase |
+| Capture mode, codegen, multi-domain import | Out of CORE path for this phase — Capture as **R1** in MCP expansion |
+
+---
+
+## 6b. Phase 3 — MCP oracle surface (after Phase 2 residual)
+
+**Execution plan (task checklists):** [`mcp-phase3-oracle-surface.md`](mcp-phase3-oracle-surface.md)  
+**Gap inventory:** [`mcp-tool-surface-expansion.md`](mcp-tool-surface-expansion.md) §0  
+
+| Order | Slice | Tools |
+|-------|--------|--------|
+| 1 | **V0** (current) | `lower_expression`, `describe_expression`, `describe_domain_element` |
+| 2 | **S0** | `simulate_policy` (ad-hoc expression + subject) |
+| 3 | **A0–A2** | structured suggestions + `get_domain_suggestions` |
+| 4 | **V1/S1** | `analyze_expression`, `compare_engines`, `debug_expression` |
+| pull | Effect/policy micro-tools, `remove_constraint` | Only if DSL insufficient |
+| pull | **RT.*** runtime session (CallAction / store) | Only with named MCP runtime dogfood |
+| never | Event authoring tools | Product path retired |
+
+**Exit for Phase 3 thin vertical:** agent can lower + describe + simulate a policy without committing, then `add_policy` / `apply_dsl` with confidence.
 
 ---
 
@@ -332,6 +355,7 @@ Parser today: one stage token. IR + runtime already OR-match list.
 - [x] P2′′′′: MCP parent removal + prev error (uncommitted)
 - [x] **P2′′′′′** apply_dsl Description + MCP README + `Parse_StagePrev_Rejected` (uncommitted)
 - [x] Suite green (**1323**) — residual pre-commit review clean
+- [x] **P2′′′′′′.2–.3** ApplyDsl XML alignment + DomainModeling README pointer
 - [ ] **Commit** residual (breaking flat stages — P2′′′′′′.1)
 - [ ] **Stop / dogfood**
 

@@ -1118,7 +1118,7 @@ internal sealed class PolicyTool {
 [McpServerToolType]
 internal sealed class DslTool {
     /// <summary>
-    /// Applies a Phase 1a .poly DSL text to the session, replacing the current domain.
+    /// Applies a Phase 1a/1b .poly DSL text to the session, replacing the current domain.
     /// Parses the text, evolves a fresh domain, and — if analysis succeeds — replaces the
     /// session domain with the result. On failure, returns diagnostics with line/column info.
     /// </summary>
@@ -1149,7 +1149,7 @@ IMPORTANT: This tool REPLACES the session domain. Incremental micro-tools remain
 for exploration and repair.")]
     public static DomainToolResponse ApplyDsl(
         [Description("Session ID returned by create_domain_session")] string sessionId,
-        [Description("Phase 1a .poly DSL text to parse and apply")] string polyText) {
+        [Description("Phase 1a/1b .poly DSL text to parse and apply")] string polyText) {
         // ── 0. Fail fast on missing session or empty text ─────
         if (!McpSessionStore.TryGet(sessionId, out _))
             return Failure_NotFound(sessionId);

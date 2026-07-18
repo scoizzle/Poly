@@ -1,9 +1,9 @@
 # Effect Surface Completeness
 
 **Date:** 2026-07-18  
-**Revised:** 2026-07-18 (**E1′′** re-review — honesty nits in tree; **commit still open**; suite **1360**)  
-**Status:** E1+E1′ **code-complete green uncommitted**; E2/Q\* after commit  
-**Current pick:** **E1′′.1 Commit** → **E2.1** and/or **Q0/Q1**  
+**Revised:** 2026-07-18 (**E1′′** — **committed** `121cd92`; suite **1360**)  
+**Status:** E1+E1′+E1′′ **shipped**; E2/Q\* next  
+**Current pick:** **E2.1** link decision and/or **Q0/Q1**  
 
 
 
@@ -153,11 +153,11 @@ A domain is **useful** for internal process modeling when agents can author and 
 
 **Checklist**
 
-- [ ] **E1′′.1** Commit  
+- [x] **E1′′.1** Commit — `121cd92`  
 - [ ] **E1′′.2–.5** Optional hygiene  
 - [ ] **E1′′.6–.8** Next slices / pull  
 
-**Recommended:** **Commit entire dirty tree.** Then E2.1 and/or Q0 — not more E1 polish.
+**Recommended:** **Commited `121cd92`. All code + plans staged + committed.** Next: E2.1 link decision and/or Q0.
 
 ---
 
@@ -289,16 +289,14 @@ What you cannot write in DSL without this plan is the backlog order.
 ## 9. Agent pick (right now)
 
 ```text
-DONE:    E1 + E1′ honesty in working tree (suite 1360)
-CURRENT: Commit E1′′.1 (product + plans + dsl-query-surface.md)
-THEN:    E2.1 link decision and/or Q0/Q1
+DONE:    E1 + E1′ + E1′′ committed (suite 1360, commit 121cd92)
+CURRENT: E2.1 link decision and/or Q0/Q1 query surface
 LATER:   E3a/E3b; E4/E5
 PULL:    Host I/O; micro-catalog; L*; TransitionRelationship runtime
 ```
 
 **Implementer watch-outs**
 
-- **Commit before “shipped”** — tree is still dirty.  
 - **`delete` = soft-delete self**; entry/exit allowed (guide).  
 - Do not DSL non-executed IR (TransitionRelationship).  
 - **Invoke is self-only** until E3b.  

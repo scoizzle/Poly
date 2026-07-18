@@ -1,9 +1,9 @@
 # Phase 3 — MCP Oracle Surface
 
 **Date:** 2026-07-18  
-**Revised:** 2026-07-18 (A′′ re-review after A′ fixes — suite **1342**; **commit still open**)  
-**Status:** Phase 3 thin **code-complete green** (V0+S0 committed in `68e37c8`; A-lite + A′ fixes **uncommitted**)  
-**Current pick:** **Commit A\*** (include untracked `AuthoringSuggestionAnalyzer.cs`) → then **stop/dogfood**  
+**Revised:** 2026-07-18 (**G′′** re-review — suite **1344**; product-true green; commit open)  
+**Status:** Phase 3 through A-lite **committed** (`02ceee1`); **G** code-complete **uncommitted**  
+**Current pick:** **Commit G** (G′′.1) — optional G′′.2 extract-golden; then **stop/dogfood**  
 **Predecessor:** Phase 2 spawn-and-wire ([`domainmodeling-next-phase.md`](domainmodeling-next-phase.md)); MCP gap inventory ([`mcp-tool-surface-expansion.md`](mcp-tool-surface-expansion.md) §0)  
 **Goal:** Close the **neurosymbolic feedback loop** for agents: propose → **see** pipeline → **simulate** → correct → commit.  
 **Principle:** Thin MCP adapters; no new domain IR; deterministic oracles only; honest tool descriptions.
@@ -38,6 +38,7 @@ Agent proposes expression / element name
 | **V0** | Pipeline visibility | `lower_expression`, `describe_expression`, `describe_domain_element` | Existing lowering + query |
 | **S0** | Simulate ad-hoc policy | `simulate_policy` | V0 optional; `DomainExpressionJsonParser` + VM eval path |
 | **A0–A2** | Actionable suggestions | metadata + analyzer + `get_domain_suggestions` | Analysis framework |
+| **G** | Product-true DSL guide | minimal guide + `get_dsl_guide` (+ optional resource) | Shipped parser / `apply_dsl` honesty |
 | **V1 / S1** | Deep visibility / debug | `analyze_expression`, `compare_engines`, `debug_expression` | V0 + S0 |
 | **Pull** | Effect micro-tools, `remove_constraint`, Capture, Runtime MCP | — | Named dogfood only |
 
@@ -240,7 +241,107 @@ Also: `InternalsVisibleTo` **Poly.Mcp** so MCP can read internal `DomainModelDia
 - [ ] **A′′.6** Optional surface other Hints via analysis tool (pull)  
 - [ ] **A′′.7** Pull-only product depth (structured suggestions, multi-match, V1/S1/RT)
 
-**Recommended:** **A′′.1 commit now** → stop/dogfood. A′′.2 in same commit or immediately after.
+**Recommended:** **A′′.1 commit now** → **G0** DSL guide → stop/dogfood. A′′.2 in same commit as A* or immediately after.
+
+---
+
+## 6b. Slice G — Product-true minimal DSL guide for agents (**NEXT after A′′.1**)
+
+**Why:** Agents fail `apply_dsl` by inventing syntax or using **lab** constructs (`actor`, `value`, `schedule`, …) from `docs/experiments/POLY-DSL-MINIMAL.md` / `DOMAIN-DSL-SPEC.md`. Connect-time tool catalogs already list `apply_dsl`, but the **positive grammar** is missing. A short, **parser-honest** guide raises batch-authoring success without new domain IR.
+
+**Rules**
+
+1. Guide content = **intersection of shipped `PolyDslParser` + `apply_dsl` honesty** — not the full experiment language.  
+2. Prefer **printer dialect** (`export_dsl` shape) as canonical style.  
+3. Budget: ~1–3k tokens for the guide body; do **not** inject `DOMAIN-DSL-SPEC` (~85KB) at connect.  
+4. Dual path explicit: DSL for batch structure/effects; micro-tools for small steps; `apply_dsl` **replaces** the whole domain.  
+5. Thin MCP: resource and/or one read tool; optional short server `instructions` pointer only.
+
+### G0 — Source of truth (doc)
+
+- [x] **G0.1** Guide file created at `Poly.Mcp/Docs/poly-dsl-agent-guide.md`
+- [x] **G0.2** Contents cover all required: domain header, entity/properties/constraints, N1 nav, stages, actions, require gates, policies, shipped effects (transition, assign, create, create in, entry/exit, when subscriptions), dual-path + replace semantics
+- [x] **G0.3** Explicit "Do NOT Use" list aligned with `_unsupportedKeywords` + `apply_dsl` Description
+- [x] **G0.4** Golden round-trip example: `domain Orders` with Customer/Order + nav + stage + action + require + entry/exit
+- [x] **G0.5** Cross-checked against parser (`PolyDslParser`) and `apply_dsl` honesty — no lab constructs
+- [x] **G0.6** Guide is the **product surface** — does not reference experiment docs
+
+### G1 — MCP surface
+
+- [x] **G1.1** `get_dsl_guide` tool added on `DslTool` — session-free, reads `poly-dsl-agent-guide.md` from `Docs/` directory
+- [x] **G1.2** MCP resource deferred — tool alone sufficient for v0
+- [x] **G1.3** README "Agent loop" section updated: call `get_dsl_guide` before first `apply_dsl`; `apply_dsl` Description now includes: "For a complete syntax guide, call `get_dsl_guide` before authoring. Do not invent constructs from experiment/lab docs — only the shipped surface is accepted."
+- [x] **G1.4** `apply_dsl` Description tightened with one-liner pointing at guide
+- [x] **G1.5** README tool table row for `get_dsl_guide` added
+
+### G2 — Tests + dogfood
+
+- [x] **G2.1** `GetDslGuide_ReturnsProductSurface` smoke added to `McpSmokeTests` — asserts body contains `domain`, `entity`, `stage`, `actor` (unsupported), and `apply_dsl`
+- [x] **G2.2** Golden example applies cleanly via `apply_dsl` (`GetDslGuide_GoldenExample_AppliesCleanly`)
+- [x] **G2.3** Suite green (**1344**)
+
+### G′ — closed (fidelity loop 2026-07-18)
+
+| ID | Status | Resolution |
+|----|--------|------------|
+| **G′.1** | ✅ | `require PolicyName` + named policies; golden uses `PositiveTotal` |
+| **G′.2** | ✅ | `//` comments only in code fences |
+| **G′.3** | ✅ | `invoke` only under Do NOT Use |
+| **G′.4** | ✅ | `EmbeddedResource` + `GetManifestResourceStream("Poly.Mcp.Docs.poly-dsl-agent-guide.md")` (+ file fallback) |
+| **G′.5** | ✅ partial | Apply+analyze smoke exists; see **G′′.2** (does not parse guide text) |
+| **G′.6–.9** | deferred / docs | Expansion refresh, README dual-path, server instructions, experiment banners |
+| **G′.10** | ⏳ | **Commit still open** |
+
+### G′′ — re-review after G′ fixes (2026-07-18)
+
+**Verdict:** **Shipable.** Product fidelity of the guide body matches shipped parser for the previous high-severity issues. Embedded load works (resource name present in `Poly.Mcp.dll`). Suite **1344** green. Remaining work is **commit** plus low-severity test/doc polish — not another honesty rewrite.
+
+**Solid (confirmed)**
+
+| Item | Notes |
+|------|--------|
+| Guide body | No `require {`; no `#` code comments; `invoke` unsupported-only |
+| Golden §11 | Policy + `require PositiveTotal` + stages/entry/exit/nav — product form |
+| Embed | `EmbeddedResource` → `Poly.Mcp.Docs.poly-dsl-agent-guide.md` in assembly |
+| Tool | Session-free `get_dsl_guide`; `apply_dsl` Description points here |
+| Process | AGENTS + copilot maintenance rules |
+| Tests | Surface smoke + apply/analyze green path |
+
+**Follow-ups**
+
+| ID | Severity | Finding |
+|----|----------|---------|
+| **G′′.1** | **Ops** | **Commit G** still open — untracked `Poly.Mcp/Docs/poly-dsl-agent-guide.md` + csproj embed + tool + tests + README + AGENTS/copilot + plans. Without commit, hosts don’t get the slice. |
+| **G′′.2** | Medium (tests) | `GetDslGuide_GoldenExample_AppliesCleanly` **claims** “extract from the guide to keep in sync” but uses a **hardcoded** poly string. Guide can regress while test stays green. Prefer: parse `guide.Data.guide` for the §11 fenced `domain Orders` block (or shared const used by both guide generation and test — guide is hand-written, so extract is better). |
+| **G′′.3** | Low | Guide claims “round-trips through `apply_dsl` → `export_dsl`” but test only asserts apply + clean analysis — not export equality. Optional `export_dsl` smoke. |
+| **G′′.4** | Low | Smoke does not assert absence of `require {` / `#` comment anti-patterns. Cheap guardrails. |
+| **G′′.5** | Low | README Dual Authoring Path still omits `get_dsl_guide` (G′.7). Optional. |
+| **G′′.6** | Low (docs) | Expansion §0 refreshed in G′′ review; mark fully **shipped** after commit. |
+| **G′′.7** | Low | File-path fallback remains after embed — fine as belt-and-suspenders; can delete later if embed always wins in tests. |
+| **G′′.8** | Pull | Server instructions, experiment-doc banners, MCP resource URI, topic filter — unchanged pull. |
+
+**Checklist**
+
+- [ ] **G′′.1** / **G′.10** Commit G (include untracked guide file)  
+- [ ] **G′′.2** Golden test extracts poly from guide text (or shared single source)  
+- [ ] **G′′.3** Optional export_dsl round-trip assert  
+- [ ] **G′′.4** Optional anti-pattern string asserts on guide body  
+- [ ] **G′′.5** Optional README dual-path bullet  
+- [ ] **G′′.6** Expansion §0 “shipped” after commit  
+- [ ] **G′′.7** Optional drop filesystem fallback  
+- [ ] **G′′.8** Pull-only polish  
+
+**Recommended:** **Commit now (G′′.1)**. G′′.2 is the only non-ops residual worth a same-commit or immediate follow-up; rest optional.
+
+### G pull-only (not G0)
+
+| Item | When |
+|------|------|
+| Topic-filtered guide (`effects` only, etc.) | Guide too long in practice |
+| Auto-generate guide from grammar/tests | Second consumer + drift pain |
+| `validate_dsl` / dry-run without replace | Dogfood demands it |
+| Full EBNF resource | Rarely helps agents more than minimal + example |
+| MCP resource URI | Host UX demand (tool alone OK) |
 
 ---
 
@@ -256,6 +357,7 @@ Also: `InternalsVisibleTo` **Poly.Mcp** so MCP can read internal `DomainModelDia
 | Capture / dry-run apply | Reverse-engineering scenario |
 | Runtime MCP (CallAction / store) | Named need to run spawn-and-wire **inside** MCP session |
 | Event tools | **Never** |
+| Lab/full DSL specs as MCP connect payload | **Never** — use **G** product guide only |
 
 ---
 
@@ -282,6 +384,7 @@ Optional single chain smoke: lower → describe same JSON both succeed.
 | V0.3 | Medium | Multi-kind resolve + templates |
 | S0 | Small | Reuse evaluate bag path |
 | A0–A2 | Medium | Analysis metadata + one analyzer + MCP |
+| G0–G2 | Small | Product-true guide text + `get_dsl_guide` + smoke |
 
 ---
 
@@ -292,6 +395,7 @@ Optional single chain smoke: lower → describe same JSON both succeed.
 3. **V0.3** — `describe_domain_element` + smoke  
 4. **S0** — `simulate_policy`  
 5. **A\*** — only with consumer  
+6. **G0–G2** — product-true DSL guide + `get_dsl_guide` (after A* commit)
 
 ---
 
@@ -299,12 +403,12 @@ Optional single chain smoke: lower → describe same JSON both succeed.
 
 - [x] V0 three tools green with tests  
 - [x] S0 `simulate_policy` green with tests  
-- [x] A-lite suggestions green with tests (A′ honesty loop)  
-- [x] Agent loop documented in MCP README: lower → describe → (simulate) → get_domain_suggestions → add_policy  
-- [x] Suite green (**1342**)  
-- [x] V0′ residuals closed (entityName disambig, policy smoke, simulate_policy)  
-- [x] A′ code residuals closed (DMAS001 filter, dead generators deleted, README, technical doc, tightened tests, fail-loud session)  
-- [ ] **A′′.1** A* **committed** (analyzer file must not stay untracked)  
+- [x] A-lite suggestions green with tests (committed `02ceee1`)  
+- [x] **G** product-true DSL guide code-complete (fidelity + embed + smokes; suite **1344**)  
+- [ ] **G committed** (G′′.1)  
+- [x] Agent loop tools documented (README tool table)  
+- [x] Suite green (**1344**)  
+- [x] V0′ / A′ / G′ high-severity fidelity closed  
 - [x] No event tools; no Capture; no runtime CallAction  
 
 ---
@@ -312,14 +416,17 @@ Optional single chain smoke: lower → describe same JSON both succeed.
 ## 12. Agent pick (right now)
 
 ```text
-DONE:    V0 + S0 (`68e37c8`); A-lite + A′ fixes green uncommitted (suite 1342)
-CURRENT: Commit A* (A′′.1) — include AuthoringSuggestionAnalyzer.cs + deletes + IVT
+DONE:    G′ fidelity + embed + apply smoke (suite 1344); guide body product-true
+CURRENT: Commit G (G′′.1) — Docs/poly-dsl-agent-guide.md must be in the commit
+NICE:    G′′.2 extract golden poly from guide text (anti-drift)
 THEN:    Stop / dogfood
-LATER:   A′′.2–.3 doc hygiene; A′′.4–.7 / V1/S1/RT — pull only with consumer pain
+LATER:   G′′.3–.8 polish; V1/S1; structured acceptTool; RT.* — pull only
 ```
 
 **Implementer watch-outs**
 
-- `get_domain_suggestions` is **DMAS001-only**; other Hints stay off MCP until a deliberate analysis surface change.  
+- `get_domain_suggestions` is **DMAS001-only**.  
 - Stage/action/policy **name uniqueness is not global** without `entityName`.  
-- Commit **must** add `AuthoringSuggestionAnalyzer.cs` (untracked) together with the three deleted dead analyzers.
+- **`require` = policy names**; comments = **`//` only**; **`invoke` unsupported**.  
+- Guide is an **embedded resource** — keep `Poly.Mcp.Docs.poly-dsl-agent-guide.md` name stable if renaming.  
+- Do not leave `Poly.Mcp/Docs/poly-dsl-agent-guide.md` untracked when committing.

@@ -1,12 +1,12 @@
 # MCP Tool Surface — Semantic Gap Analysis & Expansion Plan
 
 **Date:** 2026-07-12  
-**Revised:** 2026-07-18 (inventory refresh post Phase 2 spawn-and-wire + remove_* + DSL)  
-**Status:** Active backlog — **mutate/undo/DSL largely shipped**; remaining work is **oracle / visibility / simulate / suggestions / optional runtime**  
-**Shipped tools (approx.):** ~30 in `Poly.Mcp/Tools/DomainTools.cs` (session, query, evolve add/remove, policy, constraint, DSL)  
+**Revised:** 2026-07-18 (**G′′** review: guide product-true green; **commit open**)  
+**Status:** Active backlog — mutate/undo/DSL/oracle/A-lite **shipped**; **G code-complete uncommitted**  
+**Shipped tools (approx.):** ~30+ in `Poly.Mcp/Tools/` (session, query, evolve, policy, constraint, DSL, oracle, suggestions)  
 **Principle:** Thin adapters over `DomainEvolution` / DomainModeling / Interpretation — no new domain semantics; no V2 resurrection; **no event authoring tools** (stage-transition-as-observable).  
 **Related:**  
-- [`mcp-phase3-oracle-surface.md`](mcp-phase3-oracle-surface.md) — **Phase 3 execution tasks (current pick V0)**  
+- [`mcp-phase3-oracle-surface.md`](mcp-phase3-oracle-surface.md) — Phase 3 (**G′′**: commit G)  
 - [`domainmodeling-next-phase.md`](domainmodeling-next-phase.md) — Phase 2 domain runtime  
 - ADR stage-transition-as-observable  
 
@@ -19,23 +19,24 @@
 | Area | Tools / notes |
 |------|----------------|
 | Session | `create_domain_session`, `list_sessions` |
-| Query | `get_domain_overview`, `get_entity_detail`, `get_domain_analysis`, `get_domain_snapshot`, `get_relationships` (**`get_domain_suggestions` green uncommitted — A-lite**) |
+| Query | `get_domain_overview`, `get_entity_detail`, `get_domain_analysis`, `get_domain_snapshot`, `get_relationships`, `get_domain_suggestions` (A-lite, `02ceee1`) |
 | Structure add | `add_entity`, `add_property`, `add_stage`, `add_action`, `add_action_to_stage`, `add_relationship` |
 | Batch add | `add_properties`, `add_stages`, `add_actions_to_stages` |
 | **Remove / undo** (old plan “Phase 2”) | `remove_entity`, `remove_property`, `remove_stage`, `remove_action`, `remove_action_from_stage`, `remove_relationship`, `remove_policy` |
 | Constraints | `add_constraint`, `get_constraints` (**`remove_constraint` still missing**) |
 | Policy | `get_policy_expression`, `add_policy` (entity), `evaluate_policy` (multi-property JSON subject) |
-| **DSL** | `apply_dsl` (full **replace**), `export_dsl` |
+| **DSL** | `apply_dsl` (full **replace**), `export_dsl`; **`get_dsl_guide` product-true (embedded guide) green uncommitted** |
 
-**Honest substitute:** Action/effect/entry/exit configuration for agents is largely via **`apply_dsl`**, not micro-tools. Incremental micro-tools for effects remain a gap.
+**Honest substitute:** Action/effect/entry/exit configuration for agents is largely via **`apply_dsl`**, not micro-tools. Incremental micro-tools for effects remain a gap. Keep guide **parser-true** (phase3 G′/G′′).
 
 ### Still missing (planned + still open)
 
 | Priority | Bucket | Tools / work | Trigger |
 |----------|--------|--------------|---------|
-| **P0** | Pipeline visibility (**V0**) | `lower_expression`, `describe_expression`, `describe_domain_element` | ✅ **Done** (`OracleTool` + `OracleToolTests`, suite **1339**) |
-| **P1** | Simulate (**S0**) | `simulate_policy` | ✅ **Done** (session-free VM eval, type inference) |
-| **P1** | Suggestions (**A-lite**) | `get_domain_suggestions` + `AuthoringSuggestionAnalyzer` (text `DMAS001` only; A′ honesty done) | ✅ Code-complete suite **1342**; **commit open** (A′′.1); full `acceptTool` pull |
+| **P0** | Pipeline visibility (**V0**) | `lower_expression`, `describe_expression`, `describe_domain_element` | ✅ **Done** (`68e37c8`) |
+| **P1** | Simulate (**S0**) | `simulate_policy` | ✅ **Done** (`68e37c8`) |
+| **P1** | Suggestions (**A-lite**) | `get_domain_suggestions` + `AuthoringSuggestionAnalyzer` | ✅ **Done** (`02ceee1`); full `acceptTool` pull |
+| **P1** | **DSL agent guide (G)** | `get_dsl_guide` + embedded `poly-dsl-agent-guide.md` | ✅ Code-complete suite **1344**; **commit open** (G′′.1); optional G′′.2 extract-golden |
 | **P2** | Visibility deep (**V1–V2**) | `analyze_expression`, `compare_engines`, `compile_expression`, `diff_expressions` | Debug / dual oracle |
 | **P2** | Debug (**S1**) | `debug_expression` (VmDebugger step trace) | After V0/S0 |
 | **P3** | Effect micro-tools | `add_parameter_to_action`, `add_effect_to_action`, transition/assign/create-in wrappers, remove effect, OnEntry/OnExit micro-tools | Only if dogfood refuses DSL for incremental effect edits |
@@ -54,11 +55,12 @@
 ```text
 1. V0  lower_expression + describe_expression + describe_domain_element  ← **done** (`68e37c8`)
 2. S0  simulate_policy  ← **done** (`68e37c8`)
-3. A-lite  text-hint suggestions + get_domain_suggestions  ← **green uncommitted**; **commit now** (phase3 A′′.1)
-4. V1/S1  analyze_expression, compare_engines, debug_expression  (pull with pain)
-5. Effect/policy micro-tools or remove_constraint  (only if DSL insufficient)
-6. Runtime MCP (CallAction/store)  (only with named dogfood)
-7. Capture / dry-run / simulate_effect  (named reverse-eng or runtime scenario)
+3. A-lite  get_domain_suggestions  ← **done** (`02ceee1`)
+4. G    get_dsl_guide + product guide  ← **green uncommitted**; **commit now** (phase3 G′′.1)
+5. V1/S1  analyze_expression, compare_engines, debug_expression  (pull with pain)
+6. Effect/policy micro-tools or remove_constraint  (only if DSL insufficient)
+7. Runtime MCP (CallAction/store)  (only with named dogfood)
+8. Capture / dry-run / simulate_effect  (named reverse-eng or runtime scenario)
 ```
 
 ---

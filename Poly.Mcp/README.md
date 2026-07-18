@@ -27,6 +27,7 @@ Tools live in `Poly.Mcp/Tools/` and use only `Poly.DomainModeling` types (no `Po
 | `describe_domain_element` | `OracleTool` | Describes a domain element (entity/stage/action/policy/relationship) |
 | `simulate_policy` | `OracleTool` | Simulates a JSON expression against a subject bag (VM eval, returns bool, no session needed) |
 | `get_domain_suggestions` | `QueryTool` | Returns authoring suggestions (advisory hints) identifying common gaps like missing stages, actions, or policies |
+| `get_dsl_guide` | `DslTool` | Returns the product-true Phase 1a/1b DSL syntax guide — call before first `apply_dsl` |
 
 ## Dual Authoring Path
 

@@ -1176,6 +1176,9 @@ stage subscriptions (when RelName Stage1, Stage2 { effects }), policies, relatio
 (N1 navigation properties only: 'orders: many Order' on the source entity),
 and effects (transition to, assign, create, create in, entry/exit).
 
+For a complete syntax guide, call `get_dsl_guide` before authoring.
+Do not invent constructs from experiment/lab docs — only the shipped surface is accepted.
+
 Unsupported constructs (actor, value, schedule, etc.) produce clear errors.
 
 HONESTY NOTES — what this tool does NOT enforce:
@@ -1300,6 +1303,46 @@ for exploration and repair.")]
             Revision: state.Revision,
             Data: new { poly = polyText },
             Affordances: ["get_domain_overview", "get_entity_detail", "apply_dsl"]);
+    }
+
+    /// <summary>
+    /// Returns the product-true Phase 1a/1b DSL syntax guide for agents.
+    /// Call this before the first large `apply_dsl` to avoid inventing lab constructs.
+    /// No session required.
+    /// </summary>
+    [McpServerTool(Name = "get_dsl_guide"), Description("Returns the product-true Phase 1a/1b DSL syntax guide. Call this before the first large 'apply_dsl' to avoid inventing unsupported lab constructs. No session required.")]
+    public static DomainToolResponse GetDslGuide() {
+        // Load from embedded resource (packaged with MCP assembly)
+        var assembly = typeof(DslTool).Assembly;
+        var resourceName = "Poly.Mcp.Docs.poly-dsl-agent-guide.md";
+
+        using var stream = assembly.GetManifestResourceStream(resourceName);
+        if (stream is null) {
+            // Fallback for development/test layouts
+            var guidePath = Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "Poly.Mcp", "Docs", "poly-dsl-agent-guide.md");
+            if (!File.Exists(guidePath))
+                guidePath = Path.Combine(AppContext.BaseDirectory, "poly-dsl-agent-guide.md");
+            if (!File.Exists(guidePath))
+                guidePath = Path.Combine(AppContext.BaseDirectory, "..", "Docs", "poly-dsl-agent-guide.md");
+
+            try {
+                var content = File.ReadAllText(guidePath);
+                return new DomainToolResponse(Success: true, Message: "DSL syntax guide retrieved.", Data: new { guide = content }, Affordances: ["apply_dsl", "lower_expression", "describe_expression"]);
+            }
+            catch (Exception ex) {
+                return new DomainToolResponse(Success: false, Message: $"Could not load DSL guide: {ex.Message}", Affordances: ["apply_dsl"]);
+            }
+        }
+
+        using var reader = new StreamReader(stream);
+        var guideText = reader.ReadToEnd();
+
+        return new DomainToolResponse(
+            Success: true,
+            Message: "DSL syntax guide retrieved.",
+            Data: new { guide = guideText },
+            Affordances: ["apply_dsl", "lower_expression", "describe_expression"]
+        );
     }
 
     // ── Private helpers ─────────────────────────────────────────

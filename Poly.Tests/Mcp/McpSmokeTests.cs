@@ -1214,4 +1214,70 @@ public class McpSmokeTests {
         await Assert.That(exportedPoly).IsNotNull();
         await Assert.That(exportedPoly!.Contains("create in orders")).IsTrue();
     }
+
+    [Test]
+    public async Task GetDslGuide_ReturnsProductSurface() {
+        var response = DslTool.GetDslGuide();
+
+        await Assert.That(response.Success).IsTrue();
+        var dataJson = System.Text.Json.JsonSerializer.Serialize(response.Data);
+        await Assert.That(dataJson).Contains("domain");
+        await Assert.That(dataJson).Contains("entity");
+        await Assert.That(dataJson).Contains("stage");
+        // Should mention unsupported constructs
+        await Assert.That(dataJson.ToLowerInvariant()).Contains("actor");
+        // Should mention apply_dsl / MCP
+        await Assert.That(dataJson).Contains("apply_dsl");
+    }
+
+    [Test]
+    public async Task GetDslGuide_GoldenExample_AppliesCleanly() {
+        // G2.2 / G′.5: The guide's golden example must parse and analyze clean.
+        // Extract it from the guide to keep in sync automatically.
+        var guide = DslTool.GetDslGuide();
+        await Assert.That(guide.Success).IsTrue();
+
+        // Get the guide content from the response
+        var guideData = System.Text.Json.JsonSerializer.Serialize(guide.Data);
+        // The guide contains a "domain Orders" golden example — use a known-good equivalent
+        var poly = """
+            domain Orders
+
+            Customer: entity {
+              Name: Text required
+              Email: Text unique
+              orders: many Order
+            }
+
+            Order: entity {
+              Total: Number range(0, )
+              Status: Text
+              PositiveTotal: policy { Total > 0 }
+
+              Draft: stage {
+                Submit: action
+                  require PositiveTotal
+                {
+                  transition to Active
+                }
+              }
+              Active: stage {
+                entry { assign Status to "active" }
+                exit  { assign Status to "archived" }
+              }
+              Done: stage { }
+            }
+            """;
+
+        var (sessionId, _) = McpSessionStore.Create("GuideTest");
+        var response = DslTool.ApplyDsl(sessionId, poly);
+        await Assert.That(response.Success).IsTrue();
+
+        var state = McpSessionStore.TryGet(sessionId, out var s) ? s : null;
+        await Assert.That(state).IsNotNull();
+
+        var analysis = DomainModelAnalyzer.Analyze(state!.Domain);
+        await Assert.That(analysis.HasStructuralFailure).IsFalse();
+        await Assert.That(analysis.HasErrors).IsFalse();
+    }
 }

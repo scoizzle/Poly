@@ -21,4 +21,9 @@
     <ProjectReference Include="../Poly/Poly.csproj" />
   </ItemGroup>
 
+  <!-- Embed the product-true DSL guide as a manifest resource -->
+  <ItemGroup>
+    <EmbeddedResource Include="Docs/poly-dsl-agent-guide.md" />
+  </ItemGroup>
+
 </Project>

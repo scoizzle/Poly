@@ -98,6 +98,15 @@ Non-negotiable. Each principle has a **one-line rule** and a short **how** for a
 - Name types and directories for **what they are**, not which pattern they use (`UopCompiler`, not `UopLoweringVisitor`; `Backends/`, not `Visitors/`).
 - A concrete type **is** its concept: `CSharpCodeGenerator`, `Inliner`, `RingAnalyzer`.
 
+### DSL Guide
+
+The Phase 1a/1b DSL syntax guide at `Poly.Mcp/Docs/poly-dsl-agent-guide.md` is the **product-true reference** for the shipped `apply_dsl` surface.
+
+**Keep it in sync.** Any change to the parser, printer, or tokenizer that alters what DSL constructs are valid or emitted must update the guide in the same change. The smoke test `GetDslGuide_ReturnsProductSurface` will catch some drift, but guide content must be updated proactively — especially when adding/removing keywords, effect types, constraint syntax, or relationship forms.
+
+Do not let experimental or lab grammar docs (`docs/experiments/`) become the de-facto agent reference.
+The product guide is the single source of truth for MCP `apply_dsl`.
+
 ---
 
 ## Placement

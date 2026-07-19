@@ -299,10 +299,54 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
 
     private static void ValidateInvokeAction(
         AnalysisContext context, InvokeActionEffect iae, Entity entity, Domain domain) {
-        // Resolve which entity the action must live on
+        // Fail-closed policy: reject ambiguous/unanalyzed shapes now; relax only when
+        // analyzers can prove the edge case is safe (see guide + effect-surface plan).
+        var hasRel = iae.TargetRelationship is not null;
+        var hasFilter = iae.Filter is not null;
+        var quantifier = iae.Quantifier;
+        var hasCollectionQuantifier = quantifier is StageSubscriptionQuantifier.Any
+            or StageSubscriptionQuantifier.All;
+
+        // ── Local shape gates (no domain resolution required) ──
+        if (quantifier is not null && !hasCollectionQuantifier) {
+            context.ReportError(
+                iae,
+                quantifier is StageSubscriptionQuantifier.Each
+                    ? "InvokeAction does not support quantifier 'Each'. Use 'any' or 'all' for collection invoke, " +
+                      "or omit the quantifier for singular/self invoke."
+                    : $"InvokeAction has unsupported quantifier '{quantifier}'.",
+                DomainModelDiagnosticCodes.EffectInvokeShape);
+        }
+
+        if (hasCollectionQuantifier && !hasRel) {
+            context.ReportError(
+                iae,
+                $"InvokeAction quantifier '{quantifier}' requires a relationship target " +
+                $"(e.g. 'invoke {quantifier!.Value.ToString().ToLowerInvariant()} RelName.{iae.ActionName}'). " +
+                "Self-invoke cannot use any/all.",
+                DomainModelDiagnosticCodes.EffectInvokeShape);
+        }
+
+        if (hasFilter && !hasRel) {
+            context.ReportError(
+                iae,
+                "InvokeAction 'where' filter requires a relationship target on a collection relationship " +
+                "(e.g. 'invoke any RelName.Action where …'). Self-invoke cannot use where.",
+                DomainModelDiagnosticCodes.EffectInvokeShape);
+        }
+
+        if (hasFilter && !hasCollectionQuantifier) {
+            context.ReportError(
+                iae,
+                "InvokeAction 'where' filter requires a collection quantifier ('any' or 'all'). " +
+                "Singular cross-entity invoke cannot filter.",
+                DomainModelDiagnosticCodes.EffectInvokeShape);
+        }
+
+        // ── Resolve target entity (self or relationship target; source-side only) ──
         Entity targetEntity;
-        if (iae.TargetRelationship is not null) {
-            // E3b: cross-entity invoke — action is on the other side of a relationship
+
+        if (hasRel) {
             var relationship = domain.Relationships.FirstOrDefault(r =>
                 string.Equals(r.Name, iae.TargetRelationship, StringComparison.Ordinal));
             if (relationship is null) {
@@ -313,33 +357,80 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
                 return;
             }
 
-            // Determine which side of the relationship we are on
-            string otherSideTypeName;
-            if (string.Equals(relationship.Source.TypeName, entity.Name, StringComparison.Ordinal))
-                otherSideTypeName = relationship.Target.TypeName;
-            else if (string.Equals(relationship.Target.TypeName, entity.Name, StringComparison.Ordinal))
-                otherSideTypeName = relationship.Source.TypeName;
-            else {
+            // Strict: only the relationship source may cross-invoke via RelName.
+            // Reverse-side navigate is rejected until analysis can own that edge case.
+            if (!string.Equals(relationship.Source.TypeName, entity.Name, StringComparison.Ordinal)) {
                 context.ReportError(
                     iae,
-                    $"Entity '{entity.Name}' does not participate in relationship '{iae.TargetRelationship}' " +
-                    $"(source={relationship.Source.TypeName}, target={relationship.Target.TypeName}).",
-                    DomainModelDiagnosticCodes.EffectBinding);
+                    $"InvokeAction relationship '{iae.TargetRelationship}' may only be used from source entity " +
+                    $"'{relationship.Source.TypeName}' (caller is '{entity.Name}'). " +
+                    "Reverse-side cross-entity invoke is not supported yet.",
+                    DomainModelDiagnosticCodes.EffectInvokeShape);
                 return;
             }
 
-            targetEntity = domain.Types.OfType<Entity>()
-                .FirstOrDefault(e => string.Equals(e.Name, otherSideTypeName))!;
-            if (targetEntity is null) {
+            // Strict: only OneToOne (singular) and OneToMany (any/all) from source.
+            // ManyToOne / ManyToMany rejected until analyzable.
+            if (relationship.Cardinality is not (RelationshipCardinality.OneToOne or RelationshipCardinality.OneToMany)) {
                 context.ReportError(
                     iae,
-                    $"Target entity type '{otherSideTypeName}' for relationship '{iae.TargetRelationship}' not found.",
+                    $"InvokeAction on relationship '{iae.TargetRelationship}' with cardinality " +
+                    $"{relationship.Cardinality} is not supported yet. " +
+                    "Use OneToOne (bare Rel.Action) or OneToMany (any/all) from the source entity.",
+                    DomainModelDiagnosticCodes.EffectInvokeShape);
+                return;
+            }
+
+            // Strict: self-relationships (same type both ends) rejected until proven safe.
+            if (string.Equals(relationship.Source.TypeName, relationship.Target.TypeName, StringComparison.Ordinal)) {
+                context.ReportError(
+                    iae,
+                    $"InvokeAction on self-relationship '{iae.TargetRelationship}' " +
+                    $"(source and target both '{relationship.Source.TypeName}') is not supported yet.",
+                    DomainModelDiagnosticCodes.EffectInvokeShape);
+                return;
+            }
+
+            var isCollectionFromSource = relationship.Cardinality is RelationshipCardinality.OneToMany;
+
+            var targetTypeName = relationship.Target.TypeName;
+            var resolvedTarget = domain.Types.OfType<Entity>()
+                .FirstOrDefault(e => string.Equals(e.Name, targetTypeName, StringComparison.Ordinal));
+            if (resolvedTarget is null) {
+                context.ReportError(
+                    iae,
+                    $"Target entity type '{targetTypeName}' for relationship '{iae.TargetRelationship}' not found.",
                     DomainModelDiagnosticCodes.EffectBinding);
                 return;
             }
+            targetEntity = resolvedTarget;
+
+            if (hasCollectionQuantifier && !isCollectionFromSource) {
+                context.ReportError(
+                    iae,
+                    $"InvokeAction quantifier '{quantifier}' requires OneToMany from source " +
+                    $"'{entity.Name}', but '{iae.TargetRelationship}' is {relationship.Cardinality}. " +
+                    "Omit any/all for singular cross-entity invoke.",
+                    DomainModelDiagnosticCodes.EffectInvokeShape);
+            }
+
+            if (!hasCollectionQuantifier && isCollectionFromSource) {
+                context.ReportError(
+                    iae,
+                    $"InvokeAction on OneToMany relationship '{iae.TargetRelationship}' from '{entity.Name}' " +
+                    "requires a quantifier ('any' or 'all'). Bare 'invoke Rel.Action' is only valid for OneToOne.",
+                    DomainModelDiagnosticCodes.EffectInvokeShape);
+            }
+
+            if (hasFilter && !isCollectionFromSource) {
+                context.ReportError(
+                    iae,
+                    $"InvokeAction 'where' filter requires OneToMany from '{entity.Name}', " +
+                    $"but '{iae.TargetRelationship}' is {relationship.Cardinality}.",
+                    DomainModelDiagnosticCodes.EffectInvokeShape);
+            }
         }
         else {
-            // E3a: self invoke
             targetEntity = entity;
         }
 
@@ -354,6 +445,7 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
             return;
         }
 
+        // Unknown bindings
         foreach (var binding in iae.ParameterBindings) {
             if (!targetAction.Parameters.Any(p => string.Equals(p.Name, binding.PropertyName, StringComparison.Ordinal))) {
                 context.ReportError(
@@ -363,25 +455,111 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
             }
         }
 
-        // Validate filter expression properties exist on target entity
-        if (iae.Filter is not null && targetEntity is not null) {
-            ValidateFilterProperties(context, iae.Filter, targetEntity);
-        }
-    }
-
-    private static void ValidateFilterProperties(
-        AnalysisContext context, DomainExpression expr, Entity targetEntity) {
-        if (expr is PropertyAccess pa) {
-            if (!targetEntity.Properties.Any(p =>
-                string.Equals(p.Name, pa.Name, StringComparison.Ordinal))) {
+        // Strict: every declared parameter must be bound (no implicit defaults yet).
+        foreach (var param in targetAction.Parameters) {
+            if (!iae.ParameterBindings.Any(b =>
+                string.Equals(b.PropertyName, param.Name, StringComparison.Ordinal))) {
                 context.ReportError(
-                    expr,
-                    $"InvokeAction filter references property '{pa.Name}' which does not exist on target entity '{targetEntity.Name}'.",
+                    iae,
+                    $"InvokeAction '{iae.ActionName}' is missing required parameter binding '{param.Name}'.",
                     DomainModelDiagnosticCodes.EffectBinding);
             }
         }
-        foreach (var child in expr.Children.OfType<DomainExpression>()) {
-            ValidateFilterProperties(context, child, targetEntity);
+
+        // Duplicate bindings
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var binding in iae.ParameterBindings) {
+            if (!seen.Add(binding.PropertyName)) {
+                context.ReportError(
+                    binding,
+                    $"InvokeAction effect has duplicate parameter binding '{binding.PropertyName}'.",
+                    DomainModelDiagnosticCodes.EffectBinding);
+            }
+        }
+
+        // Filter: target-local predicate only (restricted expression surface).
+        if (iae.Filter is not null) {
+            ValidateInvokeFilterExpression(context, iae.Filter, targetEntity);
+        }
+    }
+
+    /// <summary>
+    /// Fail-closed filter surface: local target properties, literals, comparisons,
+    /// boolean compose, and arithmetic only. Reject path-prefix / params / owned / exists / dates
+    /// until those cases are analyzable end-to-end.
+    /// </summary>
+    private static void ValidateInvokeFilterExpression(
+        AnalysisContext context, DomainExpression expr, Entity targetEntity) {
+        switch (expr) {
+            case PropertyAccess pa:
+                if (!targetEntity.Properties.Any(p =>
+                    string.Equals(p.Name, pa.Name, StringComparison.Ordinal))) {
+                    context.ReportError(
+                        expr,
+                        $"InvokeAction filter references property '{pa.Name}' which does not exist on target entity '{targetEntity.Name}'.",
+                        DomainModelDiagnosticCodes.EffectBinding);
+                }
+                return;
+
+            case Literal:
+                return;
+
+            case Comparison:
+            case And:
+            case Or:
+            case Not:
+            case Add:
+            case Subtract:
+            case Multiply:
+            case Divide:
+                foreach (var child in expr.Children.OfType<DomainExpression>())
+                    ValidateInvokeFilterExpression(context, child, targetEntity);
+                return;
+
+            case ParameterAccess pa:
+                context.ReportError(
+                    expr,
+                    $"InvokeAction filter cannot reference action parameter '{pa.Name}'. " +
+                    "Filters are target-scoped only (no caller args).",
+                    DomainModelDiagnosticCodes.EffectInvokeShape);
+                return;
+
+            case RelationshipNavigation rn:
+                context.ReportError(
+                    expr,
+                    $"InvokeAction filter cannot navigate relationship '{rn.RelationshipName}'. " +
+                    "Only local target properties are allowed until related-filter analysis ships.",
+                    DomainModelDiagnosticCodes.EffectInvokeShape);
+                return;
+
+            case OwnedAccess oa:
+                context.ReportError(
+                    expr,
+                    $"InvokeAction filter cannot use owned access '{oa.OwnedName}' yet.",
+                    DomainModelDiagnosticCodes.EffectInvokeShape);
+                return;
+
+            case Exists:
+            case NotExists:
+                context.ReportError(
+                    expr,
+                    "InvokeAction filter cannot use exists/not-exists yet.",
+                    DomainModelDiagnosticCodes.EffectInvokeShape);
+                return;
+
+            case DateOperation:
+                context.ReportError(
+                    expr,
+                    "InvokeAction filter cannot use date operations yet.",
+                    DomainModelDiagnosticCodes.EffectInvokeShape);
+                return;
+
+            default:
+                context.ReportError(
+                    expr,
+                    $"InvokeAction filter expression '{expr.GetType().Name}' is not supported yet.",
+                    DomainModelDiagnosticCodes.EffectInvokeShape);
+                return;
         }
     }
 

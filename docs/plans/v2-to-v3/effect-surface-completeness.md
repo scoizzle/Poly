@@ -2,7 +2,7 @@
 
 **Date:** 2026-07-18  
 **Revised:** 2026-07-19 (**E6** post-change code review — uncommitted DSL gap closure; suite **1398**)  
-**Status:** E1 **shipped**; E2.1 create-in only; E3a/E3b cross-entity invoke with quantifiers+filter **DSL+RT shipped**; E4 conditional **DSL+RT shipped**; action params **DSL+RT shipped**; Q1′ authoring **complete**; arithmetic/`equals`/`enum`/inheritance/`owned` **DSL shipped** (suite **1416**)  
+**Status:** E1 **shipped**; E2.1 create-in only; E3a/E3b cross-entity invoke with quantifiers+filter + **DMEFF007** shape gates **DSL+RT shipped**; E4 conditional **DSL+RT shipped**; action params **DSL+RT shipped**; Q1′ authoring **complete**; arithmetic/`equals`/`enum`/inheritance/`owned` **DSL shipped** (suite **1425**)  
 **Current pick:** E6 follow-ups (RT goldens + hygiene) **or** query **Q3′** decision — [`dsl-query-surface.md`](dsl-query-surface.md) §15
 
 
@@ -306,6 +306,8 @@ What you cannot write in DSL without this plan is the backlog order.
 | 2026-07-19 | **E6.1-fix** | Action-param bag injection alone is insufficient: unresolved `Member` RHS passthroughs the whole `_values` dictionary into the assign target. Effect compile now uses an action-scoped `TypeDefinitionNodeAnalyzer` that includes declared parameters as dictionary-backed members. | `EmitMember` unresolved fallback returns the instance bag; Label became Dictionary`2.ToString(). Suite **1409**. |
 | 2026-07-19 | **E3b** | Cross-entity invoke: `invoke RelName.ActionName(args)` resolves linked target via store relationship and invokes the action on it. Parser/analyzer/runtime unified — E3a and E3b share `InvokeActionEffect` with optional `TargetRelationship`. Suite **1412**. | Library roadblock #1 (Book.AvailableCopies via cross-entity invoke) is now authorable. Requires `create in` or explicit store link to establish the relationship first. |
 | 2026-07-19 | **E3b quant+filter** | `any`/`all` quantifiers and `where` filter for cross-entity invoke. `invoke any rel.Action` tries each target, returns first success. `invoke all rel.Action` invokes on every target, fails on first miss. `invoke all rel.Action() where expr` filters targets per-instance. Suite **1416**. | Makes `many` relationship invoke unambiguous. Filter closes the common "select subset" use case with existing expression parsing. |
+| 2026-07-19 | **E3b shape** | Harden invoke contracts via **DMEFF007** (`EffectInvokeShape`): `any`/`all` require collection-valued `Rel` from caller; `where` only with `any`/`all` on collection; bare `Rel.Action` only singular; no self quantifier/filter; `Each` invalid on invoke. Filter is target-scoped only (not param/subscription collect). Runtime mirrors analyzer fail-loud. | Review found silent drop of quantifier/filter on self/singular; agents need static rejection before RT. |
+| 2026-07-19 | **E3b fail-closed** | Further strictness while analysis is coarse: **source-side only**; **OneToOne/OneToMany only** (reject M2M + self-rel); **empty any/all fails** (no vacuous success); parse-time local rejects; filter surface whitelist; **all action params must be bound**. Relax only when analyzers can prove edge cases. | Safer to tighten now and open later than to ship silent/ambiguous multi-entity invoke. |
 
 ---
 
@@ -324,7 +326,7 @@ LATER:   Host I/O; micro-catalog; L*; TRE; link DSL; E6.11–E6.12
 
 - **`delete` = soft-delete self**; entry/exit allowed (guide).  
 - Do not DSL non-executed IR (TransitionRelationship).  
-- **Invoke is self-only** until E3b — DSL already authors E3a only.  
+- **Invoke shape (DMEFF007, fail-closed):** self; source OneToOne bare; source OneToMany `any`/`all` (+ optional target-local `where`); empty match fails; no reverse/M2M/self-rel yet.  
 - Link targets = instance-valued properties; create-in is the easy graph write.  
 - **Query surface:** cross-entity **reads** legal; **writes** banned via assign — [`dsl-query-surface.md`](dsl-query-surface.md) §3.1 · §4.0.  
 - **get_dsl_guide** embed-only — rebuild after guide edits.  

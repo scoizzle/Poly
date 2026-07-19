@@ -365,12 +365,35 @@ public sealed record DomainEntityInstance {
                 break;
             case InvokeActionEffect invoke:
                 // Evaluate ParameterBindings and pass as args to chained action.
+                // Shape contracts mirror EffectAnalyzer (DMEFF007) — fail closed, never drop silently.
                 var chainedArgs = EvaluateParameterBindings(invoke.ParameterBindings);
+                var hasCollectionQuantifier = invoke.Quantifier is StageSubscriptionQuantifier.Any
+                    or StageSubscriptionQuantifier.All;
+                if (invoke.Quantifier is not null && !hasCollectionQuantifier) {
+                    throw new InvalidOperationException(
+                        "invoke does not support quantifier 'Each' (or unknown). Use any/all or omit.");
+                }
+                if (hasCollectionQuantifier && invoke.TargetRelationship is null) {
+                    throw new InvalidOperationException(
+                        $"invoke '{invoke.Quantifier}' requires a relationship target " +
+                        $"(e.g. invoke {invoke.Quantifier.ToString()!.ToLowerInvariant()} Rel.{invoke.ActionName}).");
+                }
+                if (invoke.Filter is not null &&
+                    (invoke.TargetRelationship is null || !hasCollectionQuantifier)) {
+                    throw new InvalidOperationException(
+                        "invoke 'where' requires any/all on a OneToMany relationship from the source.");
+                }
+
                 ActionInvocationResult nestedResult;
-                if (invoke.TargetRelationship is not null
-                    && invoke.Quantifier is StageSubscriptionQuantifier.Any or StageSubscriptionQuantifier.All) {
-                    // E3b collection: get linked targets, apply filter, invoke per quantifier rules
+                if (invoke.TargetRelationship is not null && hasCollectionQuantifier) {
+                    // E3b collection: source→targets only; empty set fails (no vacuous success).
                     var targets = GetRelatedTargets(invoke.TargetRelationship, invoke.Filter);
+                    if (targets.Count == 0) {
+                        throw new InvalidOperationException(
+                            $"invoke {invoke.Quantifier.ToString()!.ToLowerInvariant()} " +
+                            $"'{invoke.TargetRelationship}.{invoke.ActionName}' matched zero targets" +
+                            (invoke.Filter is not null ? " after where filter" : "") + ".");
+                    }
                     if (invoke.Quantifier == StageSubscriptionQuantifier.Any) {
                         nestedResult = ActionInvocationResult.Missing(Entity.Name, invoke.ActionName);
                         foreach (var t in targets) {
@@ -751,11 +774,28 @@ public sealed record DomainEntityInstance {
         BuildTypeDefAnalyzer(Entity.Name, Entity.Properties, action.Parameters);
 
     /// <summary>
-    /// Resolves the target instance for a cross-entity invoke (E3b).
-    /// The relationship name is looked up in the domain; the store returns
-    /// the linked instance(s) on the other side. Requires exactly one target.
+    /// Resolves the singular target for a cross-entity invoke (E3b).
+    /// Fail-closed: caller must be relationship source; exactly one outbound link.
     /// </summary>
     private DomainEntityInstance ResolveRelationshipTarget(string relationshipName) {
+        var related = GetOutboundRelatedInstances(relationshipName);
+        if (related.Count == 0)
+            throw new InvalidOperationException(
+                $"No linked instances found for relationship '{relationshipName}' on entity '{Entity.Name}'.");
+
+        if (related.Count > 1)
+            throw new InvalidOperationException(
+                $"Relationship '{relationshipName}' has {related.Count} linked instances; " +
+                "singular cross-entity invoke requires exactly one target.");
+
+        return related[0];
+    }
+
+    /// <summary>
+    /// Outbound links only (this instance as relationship source → targets).
+    /// Reverse-side navigate is rejected (matches DMEFF007).
+    /// </summary>
+    private IReadOnlyList<DomainEntityInstance> GetOutboundRelatedInstances(string relationshipName) {
         if (Domain is null)
             throw new InvalidOperationException(
                 $"Cannot resolve relationship '{relationshipName}' without a domain.");
@@ -766,22 +806,25 @@ public sealed record DomainEntityInstance {
             throw new InvalidOperationException(
                 $"Relationship '{relationshipName}' not found in domain '{Domain.Name}'.");
 
+        if (!string.Equals(relationship.Source.TypeName, Entity.Name, StringComparison.Ordinal))
+            throw new InvalidOperationException(
+                $"Cross-entity invoke on '{relationshipName}' is only allowed from source " +
+                $"'{relationship.Source.TypeName}' (caller is '{Entity.Name}').");
+
+        if (relationship.Cardinality is not (RelationshipCardinality.OneToOne or RelationshipCardinality.OneToMany))
+            throw new InvalidOperationException(
+                $"Cross-entity invoke on '{relationshipName}' ({relationship.Cardinality}) is not supported yet. " +
+                "Use OneToOne or OneToMany from the source.");
+
         if (Store is null)
             throw new InvalidOperationException(
                 "Cannot resolve relationship target without a DomainInstanceStore. " +
                 "Call store.Add(instance) first.");
 
-        var related = Store.GetRelatedInstances(relationshipName, this);
-        if (related.Count == 0)
-            throw new InvalidOperationException(
-                $"No linked instances found for relationship '{relationshipName}' on entity '{Entity.Name}'.");
-
-        if (related.Count > 1)
-            throw new InvalidOperationException(
-                $"Relationship '{relationshipName}' has {related.Count} linked instances; " +
-                "cross-entity invoke requires exactly one target for now.");
-
-        return related[0];
+        // Source → target only (do not walk reverse links).
+        return Store.GetRelatedInstances(relationshipName, this)
+            .Where(t => string.Equals(t.Entity.Name, relationship.Target.TypeName, StringComparison.Ordinal))
+            .ToList();
     }
 
     /// <summary>
@@ -790,10 +833,7 @@ public sealed record DomainEntityInstance {
     /// </summary>
     private IReadOnlyList<DomainEntityInstance> GetRelatedTargets(
         string relationshipName, DomainExpression? filter) {
-        if (Store is null)
-            throw new InvalidOperationException(
-                "Cannot resolve relationship targets without a DomainInstanceStore.");
-        var all = Store.GetRelatedInstances(relationshipName, this);
+        var all = GetOutboundRelatedInstances(relationshipName);
         if (filter is null || all.Count == 0) return all;
 
         var result = new List<DomainEntityInstance>();

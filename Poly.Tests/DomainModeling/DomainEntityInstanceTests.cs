@@ -592,6 +592,36 @@ public class DomainEntityInstanceTests {
     }
 
     [Test]
+    public async Task InvokeActionEffect_CrossEntity_All_EmptyTargets_Throws() {
+        // Fail-closed: vacuous all is not success.
+        var status = new Property("Status", new DomainTypeReference("Text"), []);
+        var target = new Entity("Target", [status], Actions: [
+            new Poly.DomainModeling.Action("Process", InvocationResult.Void, [], [
+                new AssignEffect(DomainExpression.Property("Status"),
+                    DomainExpression.Literal("done"))
+            ], [])
+        ], [], []);
+
+        var source = new Entity("Source", [], Actions: [
+            new Poly.DomainModeling.Action("RunAll", InvocationResult.Void, [], [
+                new InvokeActionEffect("Process", [],
+                    TargetRelationship: "Items",
+                    Quantifier: StageSubscriptionQuantifier.All)
+            ], [])
+        ], [], []);
+
+        var rel = new Relationship("Items",
+            new DomainTypeReference("Source"), new DomainTypeReference("Target"),
+            RelationshipCardinality.OneToMany, []);
+        var domain = new Domain("Test", [source, target], [rel]);
+        var store = new DomainInstanceStore();
+        var src = DomainEntityInstance.Create(source, domain: domain);
+        store.Add(src);
+
+        await Assert.That(() => src.InvokeAction("RunAll")).Throws<InvalidOperationException>();
+    }
+
+    [Test]
     public async Task ActionWithMultipleEffects_ExecutesAllTypes() {
         var status = new Property("Status", new DomainTypeReference("Text"), []);
         var count = new Property("Count", new DomainTypeReference("Number"), []);

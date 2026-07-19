@@ -499,13 +499,26 @@ public sealed class PolyDslParser {
                 Expect(TokenKind.RParen);
             }
 
-            // Optional filter: where expr
+            // Optional filter: where expr — local shape only (domain cardinality is analyzer).
             DomainExpression? filter = null;
             if (_current.Kind == TokenKind.Identifier &&
                 string.Equals(_current.Text, "where", StringComparison.OrdinalIgnoreCase)) {
                 Advance(); // consume 'where'
                 filter = ParseExpression();
             }
+
+            // Fail-closed local syntax (DMEFF007 mirror): do not accept shapes we will always reject later.
+            if (quantifier is not null && targetRelationship is null)
+                throw Error(
+                    $"'invoke {quantifier.Value.ToString().ToLowerInvariant()}' requires RelName.ActionName " +
+                    "(collection cross-entity only; self-invoke cannot use any/all)");
+            if (filter is not null && quantifier is null)
+                throw Error(
+                    "'invoke ... where' requires 'any' or 'all' on a collection relationship " +
+                    "(e.g. invoke any Rel.Action where …)");
+            if (filter is not null && targetRelationship is null)
+                throw Error(
+                    "'invoke ... where' requires a relationship target (not self-invoke)");
 
             return new InvokeActionEffect(actionName, bindings, targetRelationship, quantifier, filter);
         }

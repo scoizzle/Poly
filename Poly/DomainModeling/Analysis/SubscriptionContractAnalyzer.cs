@@ -218,10 +218,9 @@ internal sealed class SubscriptionContractAnalyzer : INodeAnalyzer {
                     CollectFromExpression(init.Expression, subscriberRefs, eventRefs);
                 break;
             case InvokeActionEffect iae:
+                // Bindings are subscriber-scoped; filter is target-scoped (EffectAnalyzer).
                 foreach (var binding in iae.ParameterBindings)
                     CollectFromExpression(binding.Expression, subscriberRefs, eventRefs);
-                if (iae.Filter is not null)
-                    CollectFromExpression(iae.Filter, subscriberRefs, eventRefs);
                 break;
             case ConditionalEffect ce:
                 CollectFromExpression(ce.Condition, subscriberRefs, eventRefs);

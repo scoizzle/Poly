@@ -151,23 +151,35 @@ Submit: action {
 
 `invoke` chains another action on the same instance by default.
 
-For cross-entity invoke (E3b), use relationship-dotted syntax:
-`invoke RelName.ActionName` — resolves the other end of a named relationship
-and calls the action on that instance.
+For cross-entity invoke (E3b), use relationship-dotted syntax from the **source** side only:
+`invoke RelName.ActionName` — outbound links on `RelName` (caller must be the relationship source).
 
-When the relationship is `many`, use a **quantifier**:
-- `invoke any RelName.Action` — try each linked target, return first success
-- `invoke all RelName.Action` — invoke on every linked target, fail on first miss
+**Fail-closed policy:** reject ambiguous shapes now; relax only when analysis can prove the edge case.
+Parser + analyzer (`DMEFF007`) + runtime all enforce the same contract.
 
-Add a **filter predicate** with `where` to select which linked targets to invoke on:
+**Shape rules:**
+| Form | Allowed when |
+|------|----------------|
+| `invoke Action` | Self only |
+| `invoke Rel.Action` | Source of **OneToOne** `Rel` — exactly one outbound link |
+| `invoke any Rel.Action` / `invoke all Rel.Action` | Source of **OneToMany** `Rel`; **zero matches fail** (no vacuous `all`) |
+| `… where expr` | Only with `any`/`all` on OneToMany; `expr` is **target-local** only |
+
+**Rejected (`DMEFF007` / parse / runtime):**
+- `any`/`all` without `Rel.`; `where` without `any`/`all`; `where` on self/singular
+- bare `Rel.Action` on OneToMany; `any`/`all` on OneToOne
+- reverse-side invoke (caller is relationship target, not source)
+- ManyToOne / ManyToMany; self-relationship (same type both ends)
+- filter with params, path-prefix, owned, exists, dates (local props/literals/comparisons/bool/arithmetic only)
+- missing/duplicate action parameter bindings
 
 ```poly
 invoke Validate                              # self-only
-invoke Validate(status: "ready")             # self-only with args
-invoke services.Process                      # cross-entity, singular
-invoke any services.Process                  # cross-entity, first success
-invoke all items.Process                     # cross-entity, every target
-invoke all items.Tag() where Size > 10       # cross-entity, filtered
+invoke Validate(status: "ready")             # self-only with args (all params required)
+invoke service.Process                       # OneToOne source → target
+invoke any services.Process                  # OneToMany first success
+invoke all items.Process                     # OneToMany every target (fails if none)
+invoke all items.Tag() where Size > 10       # filtered (target-local Size)
 ```
 
 Nested invoke depth is limited (max 16); recursive cycles fail loud.
@@ -314,7 +326,7 @@ and lowering pipeline but are **not yet authorable in product DSL**:
 | `create Type { ... }` | action |
 | `create in Rel { ... }` | action |
 | `delete` | action, entry, exit (soft-deletes the current instance) |
-| Invoke self/rel | `invoke ActionName` / `invoke RelName.ActionName` | action (self, cross-entity, `any`/`all` quantifiers, `where` filter; depth-limited) |
+| `invoke Action` / `invoke [any\|all] Rel.Action [where …]` | action (self; OneToOne / OneToMany source-only; fail-closed DMEFF007; depth-limited) |
 | `if (expr) { … } else if … else { … }` | action, entry, exit |
 
 The following effects exist in the runtime library but have **no DSL syntax** yet:

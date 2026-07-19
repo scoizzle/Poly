@@ -7,19 +7,18 @@ namespace Poly.DomainModeling.Effects;
 /// <param name="ActionName">The action to invoke.</param>
 /// <param name="ParameterBindings">Optional argument bindings.</param>
 /// <param name="TargetRelationship">
-/// When <c>null</c>, invoke is self-only (E3a, current behavior).
-/// When non-null, the target instance is resolved at runtime from the store
-/// via the named relationship.
+/// When <c>null</c>, invoke is self-only (E3a).
+/// When non-null, outbound navigate from the relationship <b>source</b> only
+/// (fail-closed; reverse-side / ManyToMany / self-rel rejected until analyzable).
 /// </param>
 /// <param name="Quantifier">
-/// <c>null</c> or <c>Each</c> → singular (exactly one target).
-/// <c>Any</c> → try each linked target, return first success.
-/// <c>All</c> → invoke on every linked target, fail on first miss.
-/// Only meaningful with <see cref="TargetRelationship"/> on a <c>many</c> relationship.
+/// <c>null</c> → singular OneToOne outbound invoke.
+/// <c>Any</c> / <c>All</c> → OneToMany outbound; empty match set fails (no vacuous success).
+/// <c>Each</c> is invalid on invoke.
 /// </param>
 /// <param name="Filter">
-/// Optional predicate expression evaluated against each potential target
-/// instance before invoking. Only targets passing the filter are invoked.
+/// Optional target-local predicate. Allowed only with <c>Any</c>/<c>All</c> on OneToMany.
+/// Restricted expression surface (local props/literals/comparisons/bool/arithmetic only).
 /// </param>
 public sealed record InvokeActionEffect(
     string ActionName,

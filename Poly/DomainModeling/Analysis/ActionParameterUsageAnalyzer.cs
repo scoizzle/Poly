@@ -89,11 +89,11 @@ internal sealed class ActionParameterUsageAnalyzer : INodeAnalyzer {
                 }
                 break;
             case InvokeActionEffect iae:
+                // Parameter bindings are evaluated in the caller/action scope.
+                // Filter is target-scoped — do not treat its names as caller params.
                 foreach (var binding in iae.ParameterBindings) {
                     CollectFromExpression(binding.Expression, referenced, paramNames);
                 }
-                if (iae.Filter is not null)
-                    CollectFromExpression(iae.Filter, referenced, paramNames);
                 break;
 
             case StageTransitionEffect:

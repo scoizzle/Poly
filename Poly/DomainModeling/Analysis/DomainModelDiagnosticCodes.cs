@@ -42,4 +42,8 @@ internal static class DomainModelDiagnosticCodes {
 
     /// Composite/Conditional effect contains direct-execution children that are silently dropped.
     public const string NestedDirectEffectDropped = "DMEFF006";
+
+    /// Invoke quantifier/filter/relationship shape is invalid
+    /// (e.g. any/all without a collection relationship, where on singular/self).
+    public const string EffectInvokeShape = "DMEFF007";
 }

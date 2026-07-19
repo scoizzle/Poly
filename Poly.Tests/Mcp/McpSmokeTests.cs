@@ -2617,9 +2617,9 @@ E: entity {{
               }
             }
             Orchestrator: entity {
-              services: many Service
+              service: Service
               Run: action {
-                invoke services.Process
+                invoke service.Process
               }
             }
             """);
@@ -2643,7 +2643,7 @@ E: entity {{
             if (state.InstanceMap.TryGetValue(orchId!, out var orch)
                 && state.InstanceMap.TryGetValue(svcId!, out var svc)
                 && state.InstanceStore is not null) {
-                state.InstanceStore.Link("services", orch, svc);
+                state.InstanceStore.Link("service", orch, svc);
             }
         });
 

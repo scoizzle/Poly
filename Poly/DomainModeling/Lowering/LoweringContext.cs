@@ -29,5 +29,6 @@ public sealed record LoweringContext(
     IReadOnlyDictionary<string, Node>? Parameters = null,
     bool UseThisReference = false,
     HashSet<string>? ActionParameterNames = null,
-    bool LowerStageTransitions = false
+    bool LowerStageTransitions = false,
+    Domain? Domain = null
 );

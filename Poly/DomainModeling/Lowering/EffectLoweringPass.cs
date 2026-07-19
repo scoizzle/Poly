@@ -17,6 +17,7 @@ namespace Poly.DomainModeling.Lowering;
 /// </summary>
 public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     private readonly Entity _entity;
+    private readonly Domain? _domain;
     private readonly DomainExpressionLoweringPass _expressionPass;
     private readonly bool _useThisReference;
     private readonly bool _lowerStageTransitions;
@@ -26,6 +27,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
 
     public EffectLoweringPass(Entity entity, LoweringContext context) {
         _entity = entity;
+        _domain = context.Domain;
         _useThisReference = context.UseThisReference;
         _lowerStageTransitions = context.LowerStageTransitions;
         _expressionPass = new DomainExpressionLoweringPass(context);
@@ -162,6 +164,67 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     }
 
     /// <summary>
+    /// Lowers CreateEntityInstance for C# mode. Emits <c>new TypeName(arg1, arg2, ...)</c>,
+    /// matching initializer bindings to constructor parameters by property name.
+    /// When <see cref="_domain"/> is null or the target entity is not found, returns null.
+    /// </summary>
+    protected override Node? CreateEntityInstance(CreateEntityInstance cei) {
+        if (!_lowerStageTransitions || _domain is null) return null;
+
+        var targetEntity = _domain.Types.OfType<Entity>().FirstOrDefault(e =>
+            string.Equals(e.Name, cei.Type.TypeName, StringComparison.Ordinal));
+        if (targetEntity is null) return null;
+
+        var args = BuildConstructorArgs(cei.Initializers, targetEntity);
+        return new New(new NamedTypeReference(targetEntity.Name), [.. args]);
+    }
+
+    /// <summary>
+    /// Lowers CreateEntityInRelationshipEffect for C# mode. Emits the same `new`
+    /// as CreateEntityInstance but the caller will need to wire the relationship.
+    /// </summary>
+    protected override Node? CreateEntityInRelationship(CreateEntityInRelationshipEffect cr) {
+        if (!_lowerStageTransitions || _domain is null) return null;
+
+        // Find relationship to determine target type
+        var rel = _domain.Relationships.FirstOrDefault(r =>
+            string.Equals(r.Name, cr.RelationshipName, StringComparison.Ordinal));
+        if (rel is null) return null;
+
+        var targetEntity = _domain.Types.OfType<Entity>().FirstOrDefault(e =>
+            string.Equals(e.Name, rel.Target.TypeName, StringComparison.Ordinal));
+        if (targetEntity is null) return null;
+
+        var args = BuildConstructorArgs(cr.Initializers, targetEntity);
+        return new New(new NamedTypeReference(targetEntity.Name), [.. args]);
+    }
+
+    /// <summary>
+    /// Lowers DeleteEntityInstance for C# mode. Emits <c>this.IsDeleted = true;</c>.
+    /// </summary>
+    protected override Node? DeleteEntity(DeleteEntityInstance _) {
+        if (!_lowerStageTransitions) return null;
+        return new Assignment(new Member(Subject, "IsDeleted"), new Constant(true));
+    }
+
+    /// <summary>Builds constructor arguments matching initializers to entity property order.</summary>
+    private List<Node> BuildConstructorArgs(
+        IReadOnlyList<PropertyBinding> initializers, Entity targetEntity) {
+        var initMap = new Dictionary<string, DomainExpression>(StringComparer.Ordinal);
+        foreach (var init in initializers)
+            initMap[init.PropertyName] = init.Expression;
+
+        var args = new List<Node>();
+        foreach (var prop in targetEntity.Properties) {
+            if (initMap.TryGetValue(prop.Name, out var expr))
+                args.Add(_expressionPass.Lower(expr, Subject));
+            else
+                args.Add(new Constant(null)); // null default for unset properties
+        }
+        return args;
+    }
+
+    /// <summary>
     /// Returns a human-readable description of why <paramref name="effect"/>
     /// cannot be lowered, including effect-specific detail like action names.
     /// </summary>
@@ -170,12 +233,12 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         InvokeActionEffect i when i.TargetRelationship is not null && i.Quantifier is null => $"invoke {i.TargetRelationship}.{i.ActionName}",
         InvokeActionEffect i => $"Cannot lower: invoke {i.ActionName} (InvokeActionEffect)",
         StageTransitionEffect s => $"transition to {s.TargetStage.StageName} (StageTransitionEffect)",
-        CreateEntityInstance cei => $"Cannot lower: create {cei.Type.TypeName} (CreateEntityInstance)",
-        DeleteEntityInstance => $"Cannot lower: delete (DeleteEntityInstance)",
+        CreateEntityInstance cei => $"create {cei.Type.TypeName}",
+        CreateEntityInRelationshipEffect cr => $"create in {cr.RelationshipName}",
+        DeleteEntityInstance => $"delete",
         LinkRelationshipEffect l => $"Cannot lower: link {l.RelationshipName} (LinkRelationshipEffect)",
         UnlinkRelationshipEffect u => $"Cannot lower: unlink {u.RelationshipName} (UnlinkRelationshipEffect)",
         TransitionRelationshipEffect tre => $"Cannot lower: transition {tre.RelationshipName} to {tre.TargetStage.StageName} (TransitionRelationshipEffect)",
-        CreateEntityInRelationshipEffect cr => $"Cannot lower: create in {cr.RelationshipName} (CreateEntityInRelationshipEffect)",
         _ => $"Cannot lower: {effect.GetType().Name}"
     };
 }

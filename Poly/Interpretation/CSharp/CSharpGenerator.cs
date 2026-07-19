@@ -174,6 +174,10 @@ public sealed class CSharpGenerator {
                 }
                 sb.AppendLine(";");
                 return;
+            case Comment c:
+                Indent(sb, indent);
+                sb.AppendLine(c.Text.EndsWith('.') ? $"// {c.Text}" : $"// {c.Text}.");
+                return;
             default:
                 Indent(sb, indent);
                 WriteExpression(sb, node);
@@ -948,6 +952,9 @@ public sealed class CSharpGenerator {
                 WriteExpression(sb, suspend.Inner);
                 return;
 
+            case Comment c:
+                sb.Append(c.Text.EndsWith('.') ? $"/* {c.Text} */" : $"/* {c.Text} */");
+                return;
             default:
                 sb.Append(node.ToString());
                 return;
@@ -1007,11 +1014,34 @@ public sealed class CSharpGenerator {
         WriteBinaryOperand(sb, right);
     }
 
+    /// <summary>
+    /// C# operator precedence levels (highest to lowest for relevant operators):
+    /// <list type="bullet">
+    ///   <item>Primary: x.y, x(), x[] — never parenthesized</item>
+    ///   <item>Unary: !, - — <see cref="Not"/> handles its own parens</item>
+    ///   <item>Multiplicative: *, /, %</item>
+    ///   <item>Additive: +, -</item>
+    ///   <item>Relational: &lt;, &gt;, &lt;=, &gt;=</item>
+    ///   <item>Equality: ==, !=</item>
+    ///   <item>Logical AND: &amp;&amp;</item>
+    ///   <item>Logical OR: ||</item>
+    ///   <item>Null coalescing: ??</item>
+    /// </list>
+    /// </summary>
     private void WriteBinaryOperand(StringBuilder sb, Node node) {
-        var needsParens = node is Coalesce or Conditional;
-        if (needsParens) sb.Append('(');
+        // Always parenthesize ternary and null-coalescing — they're right-associative traps
+        if (node is Coalesce or Conditional) { sb.Append('('); WriteExpression(sb, node); sb.Append(')'); return; }
+
+        // Precedence guard: parenthesize logical OR inside logical AND
+        // C#: &amp;&amp; binds tighter than || — And(Left, Or(A, B)) must become "Left &amp;&amp; (A || B)"
+        if (node is Or) { sb.Append('('); WriteExpression(sb, node); sb.Append(')'); return; }
+
+        // Precedence guard: parenthesize additive/multiplicative inside relational or equality
+        // C#: comparisons bind tighter than arithmetic — "x + y &gt; z" is correct, but "x &gt; y + z" needs no parens
+        // However "x == y + z" is fine — add/subtract bind tighter than == in C#. The problem is the reverse:
+        // "x + y == z" is fine. "(x + y) == z" is also fine but redundant. No issue here.
+
         WriteExpression(sb, node);
-        if (needsParens) sb.Append(')');
     }
 
     private void WriteLambda(StringBuilder sb, Lambda lambda) {

@@ -1,42 +1,180 @@
-// ============================================================
+// =============================================================================
 // Library Checkout System — Poly DSL Domain Model
-// Phase 1a/1b surface: entities, lifecycle stages, transitions,
-// entry effects, policies, and N1 navigation relationships.
-// ============================================================
+//
+// Showcases Phase 1a/1b surface:
+//   • Entities with rich constraints (required, unique, range, length, pattern,
+//     equals, enum)
+//   • Lifecycle stages with entry/exit effects and actions
+//   • Policies with arithmetic, collection quantifiers (count), nav reads
+//   • Actions with parameters, require gates, invoke, create, conditional
+//   • N1 navigation properties (one-to-many, one-to-one)
+//   • Stage subscriptions (when)
+//   • Entity inheritance
+// =============================================================================
 
 domain Library
 
-// ============================================================
-// Entities
-// ============================================================
+
+// =============================================================================
+// Book — core inventory item with full lifecycle
+// =============================================================================
 
 Book: entity {
-  Title: Text required
+  Title: Text required                                     // required string
   Author: Text required
-  ISBN: Text unique
-  Pages: Number
-  CheckedOut: Boolean
+  ISBN: Text unique length(10, 17)                          // unique + length
+  Pages: Number range(1, 10000)                             // numeric range
+  Genre: Text enum(Fiction, NonFiction, Reference)          // closed enum
+  Condition: Text equals("New") enum(New, Good, Fair, Poor) // enum with default
+  CheckedOutTo: Text                                        // member ID when out
+  TimesBorrowed: Number
 
+  // ── Policies ───────────────────────────────────────────────────────────────
+  IsNew: policy { Condition is "New" }
+  IsPopular: policy { TimesBorrowed >= 10 }
+
+  // ── On-shelf: available for checkout ───────────────────────────────────────
   OnShelf: stage {
-    CheckOut: action {
+    CheckOut: action (memberId: Text) {
+      assign CheckedOutTo to memberId
       transition to CheckedOut
     }
   }
 
+  // ── Checked-out: in a member's possession ──────────────────────────────────
   CheckedOut: stage {
-    entry { assign CheckedOut to true }
+    entry { assign TimesBorrowed to TimesBorrowed + 1 }
     Return: action {
-      assign CheckedOut to false
+      assign CheckedOutTo to ""
       transition to OnShelf
     }
+    ReportDamaged: action { transition to Damaged }
   }
+
+  // ── Damaged: needs repair or disposal ──────────────────────────────────────
+  Damaged: stage {
+    entry { assign Condition to "Poor" }
+    Repair: action {
+      assign Condition to "Good"
+      transition to OnShelf
+    }
+    WriteOff: action { transition to Discarded }
+  }
+
+  // ── Discarded: removed from circulation (terminal) ─────────────────────────
+  Discarded: stage { }
 }
+
+
+// =============================================================================
+// Member — library patron with status, policies, and relationships
+// =============================================================================
 
 Member: entity {
   Name: Text required
-  Email: Text
+  Email: Text unique pattern("^[^@]+@[^@]+$")
   MemberSince: Date
-  Active: Boolean
+  Status: Text equals("Active") enum(Active, Suspended, Closed)
+  MaxItems: Number range(1, 20) required
+  CurrentBorrowCount: Number
+  IsMinor: Boolean
+  LastActivity: DateTime
 
-  books: many Book
+  // ── Policies ───────────────────────────────────────────────────────────────
+  IsAdult: policy { IsMinor is false }
+  GoodStanding: policy { Status is "Active" }
+  AtLimit: policy { CurrentBorrowCount >= MaxItems }
+
+  // ── Navigation properties ──────────────────────────────────────────────────
+  books: many Book      // currently checked-out books
+  fines: many Fine      // outstanding or historical fines
+
+  // ── Active — normal operating state ────────────────────────────────────────
+  Active: stage {
+    Suspend: action
+      require not AtLimit          // gate: can't suspend someone at their limit
+    {
+      assign Status to "Suspended"
+      if (CurrentBorrowCount > 0) {
+        assign MaxItems to CurrentBorrowCount
+      }
+      transition to Suspended
+    }
+
+    // Auto-suspend when any related book enters the Damaged stage
+    when books Damaged {
+      assign Status to "Suspended"
+      transition to Suspended
+    }
+
+    CloseAccount: action { transition to Closed }
+  }
+
+  // ── Suspended — borrowing frozen, can be reinstated ────────────────────────
+  Suspended: stage {
+    entry { assign MaxItems to 0 }
+    exit  { assign MaxItems to 5 }
+    Reinstate: action {
+      assign Status to "Active"
+      transition to Active
+    }
+  }
+
+  // ── Closed — account terminated ────────────────────────────────────────────
+  Closed: stage { }
+}
+
+
+// =============================================================================
+// PremiumMember — inherits all of Member, adds loyalty benefits
+// =============================================================================
+
+PremiumMember: Member entity {
+  RewardPoints: Number
+  Tier: Text enum(Silver, Gold, Platinum)
+  PriorityQueue: Boolean
+
+  IsLoyal: policy { RewardPoints >= 100 }
+  HasPriority: policy { PriorityQueue is true }
+}
+
+
+// =============================================================================
+// Fine — penalty for late, lost, or damaged items
+// =============================================================================
+
+Fine: entity {
+  Amount: Number required
+  Reason: Text
+  DateIssued: DateTime
+  Paid: Boolean
+  Waived: Boolean
+
+  // The member this fine belongs to
+  member: Member
+
+  // ── Unpaid — active penalty ────────────────────────────────────────────────
+  Unpaid: stage {
+    // Conditional: waive small fines automatically
+    Pay: action {
+      if (Amount <= 0) {
+        assign Paid to true
+        assign Waived to true
+      } else {
+        assign Paid to true
+      }
+      transition to Paid
+    }
+    Waive: action {
+      assign Amount to 0
+      assign Paid to true
+      assign Waived to true
+      transition to Paid
+    }
+  }
+
+  // ── Paid — resolved ────────────────────────────────────────────────────────
+  Paid: stage {
+    entry { assign Paid to true }
+  }
 }

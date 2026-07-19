@@ -42,7 +42,6 @@ public sealed class DomainToCSharpExporter {
         var typeDefs = new List<Syntactic.TypeDefinitionNode>();
         var props = new List<Syntactic.PropertyDefinitionNode>();
         var methods = new List<Syntactic.MethodDefinitionNode>();
-        var fields = new List<Syntactic.FieldDefinitionNode>();
         var ctorParams = new List<Syntactic.Parameter>();
         var ctorAssignments = new List<Poly.Syntax.Node>();
 
@@ -141,10 +140,12 @@ public sealed class DomainToCSharpExporter {
                 Semantics: Syntactic.TypeDefinitionSemantics.MutableReference
             ));
 
-            fields.Add(new Syntactic.FieldDefinitionNode(
+            props.Add(new Syntactic.PropertyDefinitionNode(
                 "CurrentStage",
                 new Syntactic.NamedTypeReference(enumTypeName),
-                AccessModifier: AccessModifier.Public
+                Getter: new Syntactic.PropertyGetterDefinitionNode(),
+                Setter: new Syntactic.PropertySetterDefinitionNode(
+                    AccessModifier: AccessModifier.Private)
             ));
         }
 
@@ -175,7 +176,6 @@ public sealed class DomainToCSharpExporter {
             Constructors: ctors,
             Properties: props.Count > 0 ? props : null,
             Methods: methods.Count > 0 ? methods : null,
-            Fields: fields.Count > 0 ? fields : null,
             Semantics: Syntactic.TypeDefinitionSemantics.MutableReference
         ));
 

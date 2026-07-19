@@ -18,14 +18,20 @@ namespace Poly.DomainModeling.Lowering;
 public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     private readonly Entity _entity;
     private readonly DomainExpressionLoweringPass _expressionPass;
+    private readonly bool _useThisReference;
+    private readonly bool _lowerStageTransitions;
 
     public EffectLoweringPass(Entity entity, Node subject)
         : this(entity, new LoweringContext(subject)) { }
 
     public EffectLoweringPass(Entity entity, LoweringContext context) {
         _entity = entity;
+        _useThisReference = context.UseThisReference;
+        _lowerStageTransitions = context.LowerStageTransitions;
         _expressionPass = new DomainExpressionLoweringPass(context);
-        Subject = context.Subject;
+        Subject = context.UseThisReference && context.Subject is Parameter { Name: "entity" }
+            ? new ThisReference()
+            : context.Subject;
     }
 
     /// <summary>The Syntax AST node representing the current entity instance.</summary>
@@ -47,6 +53,59 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     }
 
     /// <summary>
+    /// Lowers a stage transition. When <see cref="_lowerStageTransitions"/> is true,
+    /// emits the target stage's entry effects followed by a CurrentStage assignment.
+    /// Otherwise returns null so the runtime calls <see cref="DomainEntityInstance.TransitionStage"/>.
+    /// </summary>
+    protected override Node? StageTransition(StageTransitionEffect t) {
+        if (!_lowerStageTransitions) return null;
+
+        var nodes = new List<Node>();
+
+        // Include entry effects from the target stage
+        var targetStage = _entity.Stages.FirstOrDefault(s =>
+            string.Equals(s.Name, t.TargetStage.StageName, StringComparison.Ordinal));
+        if (targetStage is not null) {
+            foreach (var entryEffect in targetStage.OnEntryEffects) {
+                var lowered = Route(entryEffect);
+                if (lowered is not null)
+                    nodes.Add(lowered);
+            }
+        }
+
+        var stageEnumType = new NamedTypeReference($"{_entity.Name}Stage");
+        nodes.Add(new Assignment(
+            new Member(Subject, "CurrentStage"),
+            new Member(stageEnumType, t.TargetStage.StageName)
+        ));
+
+        return nodes.Count == 1 ? nodes[0] : new Block(nodes);
+    }
+
+    /// <summary>
+    /// Lowers invoke effects for C# codegen mode. Self-invoke (no TargetRelationship)
+    /// becomes <c>this.ActionName(args)</c>. Cross-entity invoke becomes
+    /// <c>this.TargetRelationship.ActionName(args)</c>. Quantified/collection invoke
+    /// still returns null (no C# lowering yet).
+    /// </summary>
+    protected override Node? InvokeAction(InvokeActionEffect i) {
+        if (!_lowerStageTransitions) return null;
+        // Quantified/collection invoke not yet lowerable
+        if (i.Quantifier is not null) return null;
+
+        var args = new List<Node>();
+        foreach (var binding in i.ParameterBindings) {
+            args.Add(_expressionPass.Lower(binding.Expression, Subject));
+        }
+
+        var target = i.TargetRelationship is not null
+            ? (Node)new Member(Subject, i.TargetRelationship)
+            : Subject;
+
+        return new Invoke(new Member(target, i.ActionName), [.. args]);
+    }
+
+    /// <summary>
     /// Lowers a CompositeEffect. Only VM-compilable sub-effects are included;
     /// direct-execution sub-effects (which return null) are recorded as
     /// <see cref="Comment"/> nodes so the lowered AST preserves information
@@ -59,7 +118,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         foreach (var sub in c.Effects) {
             var lowered = Route(sub);
             if (lowered is not null)
-                nodes.Add(lowered);
+                CollectNode(nodes, lowered);
             else
                 nodes.Add(new Comment(DescribeEffect(sub)));
         }
@@ -69,17 +128,37 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     protected override Node? Conditional(ConditionalEffect c) {
         var condition = _expressionPass.Lower(c.Condition, Subject);
         var thenNodes = new List<Node>();
-        foreach (var sub in c.ThenEffects)
-            thenNodes.Add(Route(sub) ?? new Comment(DescribeEffect(sub)));
+        foreach (var sub in c.ThenEffects) {
+            var lowered = Route(sub);
+            if (lowered is not null)
+                CollectNode(thenNodes, lowered);
+            else
+                thenNodes.Add(new Comment(DescribeEffect(sub)));
+        }
 
         if (c.ElseEffects is not { Count: > 0 })
             return new IfStatement(condition, new Block(thenNodes));
 
         var elseNodes = new List<Node>();
-        foreach (var sub in c.ElseEffects)
-            elseNodes.Add(Route(sub) ?? new Comment(DescribeEffect(sub)));
+        foreach (var sub in c.ElseEffects) {
+            var lowered = Route(sub);
+            if (lowered is not null)
+                CollectNode(elseNodes, lowered);
+            else
+                elseNodes.Add(new Comment(DescribeEffect(sub)));
+        }
 
         return new IfStatement(condition, new Block(thenNodes), new Block(elseNodes));
+    }
+
+    /// <summary>Adds a lowered node to a list. Flattens Block children.
+    /// If null, no node is added (the calling code handled the comment).</summary>
+    private static void CollectNode(List<Node> nodes, Node? lowered) {
+        if (lowered is null) return;
+        if (lowered is Block b)
+            nodes.AddRange(b.Nodes);
+        else
+            nodes.Add(lowered);
     }
 
     /// <summary>
@@ -87,8 +166,10 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     /// cannot be lowered, including effect-specific detail like action names.
     /// </summary>
     private static string DescribeEffect(Effect effect) => effect switch {
+        InvokeActionEffect i when i.TargetRelationship is null => $"invoke {i.ActionName}",
+        InvokeActionEffect i when i.TargetRelationship is not null && i.Quantifier is null => $"invoke {i.TargetRelationship}.{i.ActionName}",
         InvokeActionEffect i => $"Cannot lower: invoke {i.ActionName} (InvokeActionEffect)",
-        StageTransitionEffect s => $"Cannot lower: transition to {s.TargetStage.StageName} (StageTransitionEffect)",
+        StageTransitionEffect s => $"transition to {s.TargetStage.StageName} (StageTransitionEffect)",
         CreateEntityInstance cei => $"Cannot lower: create {cei.Type.TypeName} (CreateEntityInstance)",
         DeleteEntityInstance => $"Cannot lower: delete (DeleteEntityInstance)",
         LinkRelationshipEffect l => $"Cannot lower: link {l.RelationshipName} (LinkRelationshipEffect)",

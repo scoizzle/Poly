@@ -7,9 +7,11 @@ using ModelContextProtocol.Server;
 
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
+using Poly.DomainModeling.Constraints;
 using Poly.DomainModeling.Effects;
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Queries;
+using Poly.Interpretation;
 using Poly.Interpretation.CSharp;
 using Poly.Mcp.Sessions;
 
@@ -147,18 +149,188 @@ internal sealed class OracleTool {
         _ => value.ToString() ?? "null"
     };
 
+    /// <summary>
+    /// Runs the Interpreter's 13-pass Syntax AST analysis on a lowered node
+    /// and returns the <see cref="Poly.Syntax.Analysis.AnalysisResult"/>.
+    /// Returns null if analysis is not available (no regression).
+    /// <summary>
+    /// Runs the Interpreter's 13-pass Syntax AST analysis on a lowered node.
+    /// If analysis reports errors, a non-null <paramref name="error"/> is set.
+    /// On success, <paramref name="analysis"/> is set and <paramref name="error"/> is null.
+    /// </summary>
+    private static bool TryAnalyze(Poly.Syntax.Node lowered,
+        out Poly.Syntax.Analysis.AnalysisResult? analysis,
+        out DomainToolResponse? error) {
+        analysis = null;
+        error = null;
+        try {
+            analysis = Interpreter.Analyze(lowered);
+        }
+        catch (Exception ex) {
+            error = new DomainToolResponse(Success: false, Message: $"AST analysis failed: {ex.Message}",
+                Data: new { error = ex.Message }, Affordances: ["analyze_expression"]);
+            return false;
+        }
+
+        if (analysis.HasErrors) {
+            var errorDiags = analysis.Diagnostics
+                .Where(d => d.Severity == Poly.Syntax.Analysis.DiagnosticSeverity.Error)
+                .ToList();
+            error = new DomainToolResponse(Success: false,
+                Message: $"C# generation blocked: analysis found {errorDiags.Count} error(s).",
+                Data: new {
+                    diagnostics = errorDiags.Select(d => new {
+                        severity = d.Severity.ToString(),
+                        code = d.Code,
+                        message = d.Message,
+                        nodeKind = d.Node?.GetType().Name
+                    }),
+                    hasErrors = true,
+                    hasStructuralFailure = analysis.HasStructuralFailure
+                },
+                Affordances: ["analyze_expression"]);
+            return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Generates C# from a lowered node, running Interpreter analysis first.
+    /// Returns the C# text on success, or an error with diagnostics if analysis failed.
+    /// </summary>
+    private static DomainToolResponse CSharpWithAnalysis(Poly.Syntax.Node lowered, string successMessage,
+        Func<string, object>? buildData = null, string[]? affordances = null) {
+        if (!TryAnalyze(lowered, out var analysis, out var error))
+            return error!;
+        var generator = new CSharpGenerator(analysis!);
+        var csharp = generator.Generate(lowered);
+        var data = buildData?.Invoke(csharp) ?? new { csharp };
+        return new DomainToolResponse(Success: true, Message: successMessage, Data: data, Affordances: affordances ?? ["analyze_expression", "describe_expression", "lower_expression"]);
+    }
+
+    // ── V0.3b: analyze_expression ──────────────────────────
+
+    [McpServerTool(Name = "analyze_expression"), Description("Parses a JSON policy expression, lowers it through the Syntax AST pipeline, and runs the Interpreter's 13-pass analysis pipeline. Returns diagnostics, side-effect classification, constant-folding results, and other analysis metadata. No session required.")]
+    public static DomainToolResponse AnalyzeExpression(
+        [Description("JSON expression string (same format as add_policy).")] string expressionJson) {
+        var failure = TryParseExpression(expressionJson, out var expr);
+        if (failure is not null) return failure;
+        try {
+            var lowered = LowerExpressionToNode(expr);
+            var analysis = Interpreter.Analyze(lowered);
+
+            var diagnostics = analysis.Diagnostics.Select(d => new {
+                severity = d.Severity.ToString(),
+                code = d.Code,
+                message = d.Message,
+                nodeKind = d.Node?.GetType().Name
+            }).ToList();
+
+            return new DomainToolResponse(Success: true, Message: $"Expression analyzed: {diagnostics.Count} diagnostics.", Data: new {
+                diagnostics,
+                hasErrors = analysis.HasErrors,
+                hasStructuralFailure = analysis.HasStructuralFailure,
+                wasTerminatedEarly = analysis.AnalysisWasTerminatedEarly,
+                ast = LowerToNodeData(expr),
+                telemetry = new {
+                    passCount = analysis.Telemetry.Passes.Count,
+                    passes = analysis.Telemetry.Passes.Select(p => new { name = p.PassName, elapsed = p.Elapsed.TotalMilliseconds }),
+                    totalWallClock = analysis.Telemetry.TotalElapsed.TotalMilliseconds,
+                    incremental = analysis.Telemetry.Incremental
+                }
+            }, Affordances: ["lower_expression", "describe_expression", "lower_expression_to_csharp"]);
+        }
+        catch (Exception ex) {
+            return new DomainToolResponse(Success: false, Message: $"Analysis failed: {ex.Message}", Data: new { error = ex.Message }, Affordances: []);
+        }
+    }
+
+    // ── V0.3c: analyze_effect ──────────────────────────────
+
+    [McpServerTool(Name = "analyze_effect"), Description("Lowers an action's effects through the Syntax AST pipeline and runs the Interpreter's analysis pipeline. Returns diagnostics, side-effect classification, and analysis metadata for the action's effects. Specify entityName and actionName. Optionally set stageName for stage-scoped actions.")]
+    public static DomainToolResponse AnalyzeEffect(
+        [Description("Session ID")] string sessionId,
+        [Description("Entity name")] string entityName,
+        [Description("Action name")] string actionName,
+        [Description("Optional stage name for stage-scoped actions")] string? stageName = null) {
+        if (!McpSessionStore.TryGet(sessionId, out var state))
+            return new DomainToolResponse(Success: false, Message: $"Session '{sessionId}' not found.", Affordances: ["create_domain_session", "list_sessions"]);
+
+        var entity = state.Domain.Types.OfType<Entity>().FirstOrDefault(e =>
+            string.Equals(e.Name, entityName, StringComparison.Ordinal));
+        if (entity is null)
+            return new DomainToolResponse(Success: false, Message: $"Entity '{entityName}' not found.", SessionId: sessionId, Affordances: ["get_domain_overview", "add_entity"]);
+
+        Poly.DomainModeling.Action? action = null;
+        if (stageName is not null) {
+            var stage = entity.Stages.FirstOrDefault(s =>
+                string.Equals(s.Name, stageName, StringComparison.Ordinal));
+            if (stage is null)
+                return new DomainToolResponse(Success: false, Message: $"Stage '{stageName}' not found on Entity '{entityName}'.", SessionId: sessionId, Affordances: ["get_entity_detail"]);
+            action = stage.Actions.FirstOrDefault(a =>
+                string.Equals(a.Name, actionName, StringComparison.Ordinal));
+        }
+        else {
+            action = entity.Actions.FirstOrDefault(a =>
+                string.Equals(a.Name, actionName, StringComparison.Ordinal));
+        }
+
+        if (action is null)
+            return new DomainToolResponse(Success: false, Message: $"Action '{actionName}' not found{(stageName is not null ? $" on stage '{stageName}'" : "")} on Entity '{entityName}'.", SessionId: sessionId, Affordances: ["get_entity_detail"]);
+
+        try {
+            var paramNames = new HashSet<string>(action.Parameters.Select(p => p.Name), StringComparer.Ordinal);
+            var context = new LoweringContext(
+                new Syntactic.Parameter("entity", new Syntactic.TypeReference(entity.Name)),
+                UseThisReference: true,
+                ActionParameterNames: paramNames,
+                LowerStageTransitions: true
+            );
+            var effectPass = new EffectLoweringPass(entity, context);
+            var composite = new CompositeEffect(action.Effects);
+            var lowered = effectPass.TryLowerVmNode(composite);
+
+            if (lowered is null)
+                return new DomainToolResponse(Success: false, Message: $"Action '{actionName}' has no VM-compilable effects.", SessionId: sessionId, Affordances: []);
+
+            var analysis = Interpreter.Analyze(lowered);
+            var diagnostics = analysis.Diagnostics.Select(d => new {
+                severity = d.Severity.ToString(),
+                code = d.Code,
+                message = d.Message,
+                nodeKind = d.Node?.GetType().Name
+            }).ToList();
+
+            return new DomainToolResponse(Success: true, Message: $"Effect analyzed: {diagnostics.Count} diagnostics.", SessionId: sessionId, Data: new {
+                diagnostics,
+                hasErrors = analysis.HasErrors,
+                hasStructuralFailure = analysis.HasStructuralFailure,
+                effectCount = action.Effects.Count,
+                telemetry = new {
+                    passCount = analysis.Telemetry.Passes.Count,
+                    passes = analysis.Telemetry.Passes.Select(p => new { name = p.PassName, elapsedMs = p.Elapsed.TotalMilliseconds }),
+                    totalWallClockMs = analysis.Telemetry.TotalElapsed.TotalMilliseconds
+                }
+            }, Affordances: ["lower_effect_to_csharp", "get_entity_detail"]);
+        }
+        catch (Exception ex) {
+            return new DomainToolResponse(Success: false, Message: $"Effect analysis failed: {ex.Message}", SessionId: sessionId, Data: new { error = ex.Message }, Affordances: []);
+        }
+    }
+
     // ── V0.4: lower_expression_to_csharp ─────────────────────────
 
-    [McpServerTool(Name = "lower_expression_to_csharp"), Description("Parses a JSON policy expression, lowers it through the Syntax AST pipeline, and generates C# source code. Useful for inspecting how a policy expression maps to executable C#. No session required.")]
+    [McpServerTool(Name = "lower_expression_to_csharp"), Description("Parses a JSON policy expression, lowers it through the Syntax AST pipeline, and generates C# source code. Returns analysis errors if the expression cannot compile. No session required.")]
     public static DomainToolResponse LowerExpressionToCSharp(
         [Description("JSON expression string (same format as add_policy). Example: {\"and\":[{\"property\":\"Age\",\"op\":\">=\",\"value\":18},{\"property\":\"Active\",\"op\":\"==\",\"value\":true}]}")] string expressionJson) {
         var failure = TryParseExpression(expressionJson, out var expr);
         if (failure is not null) return failure;
         try {
             var lowered = LowerExpressionToNode(expr);
-            var generator = new CSharpGenerator();
-            var csharp = generator.Generate(lowered);
-            return new DomainToolResponse(Success: true, Message: "Expression lowered to C# successfully.", Data: new { csharp, ast = LowerToNodeData(expr) }, Affordances: ["lower_expression", "describe_expression"]);
+            return CSharpWithAnalysis(lowered, "Expression lowered to C# successfully.",
+                buildData: csharp => new { csharp, ast = LowerToNodeData(expr) },
+                affordances: ["lower_expression", "describe_expression", "analyze_expression"]);
         }
         catch (Exception ex) {
             return new DomainToolResponse(Success: false, Message: $"C# lowering failed: {ex.Message}", Data: new { error = ex.Message }, Affordances: []);
@@ -200,8 +372,14 @@ internal sealed class OracleTool {
             return new DomainToolResponse(Success: false, Message: $"Action '{actionName}' not found{(stageName is not null ? $" on stage '{stageName}'" : "")} on Entity '{entityName}'.", SessionId: sessionId, Affordances: ["get_entity_detail"]);
 
         try {
-            var subject = new Syntactic.Parameter("entity", new Syntactic.TypeReference(entity.Name));
-            var effectPass = new EffectLoweringPass(entity, subject);
+            var paramNames = new HashSet<string>(action.Parameters.Select(p => p.Name), StringComparer.Ordinal);
+            var context = new LoweringContext(
+                new Syntactic.Parameter("entity", new Syntactic.TypeReference(entity.Name)),
+                UseThisReference: true,
+                ActionParameterNames: paramNames,
+                LowerStageTransitions: true
+            );
+            var effectPass = new EffectLoweringPass(entity, context);
             // Lower the action as a composite of all its effects
             var composite = new CompositeEffect(action.Effects);
             var lowered = effectPass.TryLowerVmNode(composite);
@@ -209,9 +387,10 @@ internal sealed class OracleTool {
             if (lowered is null)
                 return new DomainToolResponse(Success: false, Message: $"Action '{actionName}' has no VM-compilable effects. All its effects are direct-execution only (transition, create, invoke, delete, link).", SessionId: sessionId, Affordances: ["lower_expression_to_csharp"]);
 
-            var generator = new CSharpGenerator();
-            var csharp = generator.Generate(lowered);
-            return new DomainToolResponse(Success: true, Message: $"Action '{actionName}' lowered to C# successfully.", SessionId: sessionId, Data: new { csharp, effectCount = action.Effects.Count }, Affordances: ["get_entity_detail", "lower_expression_to_csharp"]);
+            var result = CSharpWithAnalysis(lowered, $"Action '{actionName}' lowered to C# successfully.",
+                buildData: csharp => new { csharp, effectCount = action.Effects.Count },
+                affordances: ["get_entity_detail", "lower_expression_to_csharp", "analyze_effect"]);
+            return result with { SessionId = sessionId };
         }
         catch (Exception ex) {
             return new DomainToolResponse(Success: false, Message: $"C# lowering failed: {ex.Message}", SessionId: sessionId, Data: new { error = ex.Message }, Affordances: []);
@@ -236,25 +415,45 @@ internal sealed class OracleTool {
 
         try {
             var typeDefs = new List<Syntactic.TypeDefinitionNode>();
-            var entities = state.Domain.Types.OfType<Entity>();
+            var domainRelationships = state.Domain.Relationships.ToList();
+            var entities = state.Domain.Types.OfType<Entity>().ToList();
 
             foreach (var entity in entities) {
                 var props = new List<Syntactic.PropertyDefinitionNode>();
                 var methods = new List<Syntactic.MethodDefinitionNode>();
                 var fields = new List<Syntactic.FieldDefinitionNode>();
+                var ctorParams = new List<Syntactic.Parameter>();
+                var ctorAssignments = new List<Poly.Syntax.Node>();
 
-                // Properties from entity property declarations
+
+                // ── Entity properties ──────────────────────────────
                 foreach (var prop in entity.Properties) {
+                    var propRef = MapDomainTypeRef(prop.Type);
+                    // Mark required properties with a sentinel constant so CSharpGenerator emits 'required' keyword
+                    List<Poly.Syntax.Node>? constraints = null;
+                    if (prop.Constraints.Any(c => c is RequiredConstraint))
+                        constraints = [new Syntactic.Constant("required")];
+
                     props.Add(new Syntactic.PropertyDefinitionNode(
                         prop.Name,
-                        MapDomainTypeRef(prop.Type),
+                        propRef,
                         Getter: new Syntactic.PropertyGetterDefinitionNode(),
-                        Setter: new Syntactic.PropertySetterDefinitionNode()
+                        Setter: new Syntactic.PropertySetterDefinitionNode(
+                            AccessModifier: Poly.Introspection.AccessModifier.Protected),
+                        Constraints: constraints
                     ));
+
+                    // Constructor parameter for every property (required for construction with protected setters)
+                    var paramName = ToCamelCase(prop.Name);
+                    var param = new Syntactic.Parameter(paramName, propRef);
+                    ctorParams.Add(param);
+                    ctorAssignments.Add(new Syntactic.Assignment(
+                        new Syntactic.Member(new Syntactic.ThisReference(), prop.Name),
+                        new Syntactic.Parameter(paramName)));
                 }
 
-                // Navigation properties from relationships where this entity is source
-                foreach (var rel in state.Domain.Relationships) {
+                // ── Navigation properties ──────────────────────────
+                foreach (var rel in domainRelationships) {
                     if (!string.Equals(rel.Source.TypeName, entity.Name, StringComparison.Ordinal))
                         continue;
 
@@ -265,37 +464,98 @@ internal sealed class OracleTool {
                         ? (Poly.Syntax.Node)new Syntactic.CollectionTypeReference(targetType)
                         : targetType;
 
+                    var paramName = ToCamelCase(rel.Name);
+                    var param = new Syntactic.Parameter(paramName, propType);
+                    ctorParams.Add(param);
+                    ctorAssignments.Add(new Syntactic.Assignment(
+                        new Syntactic.Member(new Syntactic.ThisReference(), rel.Name),
+                        new Syntactic.Parameter(paramName)));
+
                     props.Add(new Syntactic.PropertyDefinitionNode(
                         rel.Name,
                         propType,
                         Getter: new Syntactic.PropertyGetterDefinitionNode(),
-                        Setter: new Syntactic.PropertySetterDefinitionNode()
+                        Setter: new Syntactic.PropertySetterDefinitionNode(
+                            AccessModifier: Poly.Introspection.AccessModifier.Protected)
                     ));
                 }
 
-                // Actions as methods with lowered effect bodies
+                // Actions as methods with lowered effect bodies (entity + stage-level)
                 foreach (var action in entity.Actions) {
-                    var body = LowerActionToMethodBody(entity, action);
+                    AddActionMethod(entity, action, methods);
+                }
+                foreach (var stage in entity.Stages) {
+                    foreach (var action in stage.Actions) {
+                        AddActionMethod(entity, action, methods);
+                    }
+                }
+
+                // Policies as parameterless methods returning bool (uses this., not entity parameter)
+                foreach (var policy in entity.Policies) {
+                    var body = LowerExpressionToMethodBody(policy.Expression, entity);
                     methods.Add(new Syntactic.MethodDefinitionNode(
-                        action.Name,
-                        new Syntactic.TypeReference("void"),
-                        Parameters: action.Parameters.Select(p => new Syntactic.Parameter(p.Name, MapDomainTypeRef(p.Type))).ToList(),
+                        policy.Name,
+                        new Syntactic.PrimitiveTypeReference(Poly.Introspection.PrimitiveType.Boolean),
                         Body: body,
                         AccessModifier: Poly.Introspection.AccessModifier.Public
                     ));
                 }
 
-                // Stages as an enum field storing current stage name
+                // Stages: add a stage enum type + typed CurrentStage field
                 if (entity.Stages.Count > 0) {
+                    var stageEnumFields = new List<Syntactic.FieldDefinitionNode>();
+                    for (int si = 0; si < entity.Stages.Count; si++) {
+                        stageEnumFields.Add(new Syntactic.FieldDefinitionNode(
+                            entity.Stages[si].Name,
+                            new Syntactic.PrimitiveTypeReference(Poly.Introspection.PrimitiveType.Int32),
+                            DefaultValue: new Syntactic.Constant((long)si),
+                            AccessModifier: Poly.Introspection.AccessModifier.Public
+                        ));
+                    }
+                    var enumTypeName = $"{entity.Name}Stage";
+
+                    // Add the enum type definition before the entity type
+                    typeDefs.Add(new Syntactic.TypeDefinitionNode(
+                        enumTypeName,
+                        Fields: stageEnumFields,
+                        Semantics: Syntactic.TypeDefinitionSemantics.MutableReference
+                    ));
+
                     fields.Add(new Syntactic.FieldDefinitionNode(
                         "CurrentStage",
-                        new Syntactic.PrimitiveTypeReference(Poly.Introspection.PrimitiveType.String),
+                        new Syntactic.NamedTypeReference(enumTypeName),
                         AccessModifier: Poly.Introspection.AccessModifier.Public
                     ));
                 }
 
+                // ── Constructor ────────────────────────────────────
+                List<Syntactic.ConstructorDefinitionNode>? ctors = null;
+                if (ctorParams.Count > 0 || entity.Stages.Count > 0) {
+                    var bodyNodes = new List<Poly.Syntax.Node>();
+
+                    // Constructor parameter assignments: this.X = x
+                    foreach (var assign in ctorAssignments)
+                        bodyNodes.Add(assign);
+
+                    // Set CurrentStage to the first stage by default
+                    if (entity.Stages.Count > 0) {
+                        bodyNodes.Add(new Syntactic.Assignment(
+                            new Syntactic.Member(new Syntactic.ThisReference(), "CurrentStage"),
+                            new Syntactic.Member(
+                                new Syntactic.NamedTypeReference($"{entity.Name}Stage"),
+                                entity.Stages[0].Name)));
+                    }
+
+                    ctors = [new Syntactic.ConstructorDefinitionNode(
+                        Parameters: ctorParams,
+                        Body: new Syntactic.Block(bodyNodes),
+                        AccessModifier: Poly.Introspection.AccessModifier.Public
+                    )];
+                }
+
                 typeDefs.Add(new Syntactic.TypeDefinitionNode(
                     entity.Name,
+                    Constructors: ctors,
                     Properties: props.Count > 0 ? props : null,
                     Methods: methods.Count > 0 ? methods : null,
                     Fields: fields.Count > 0 ? fields : null,
@@ -313,16 +573,66 @@ internal sealed class OracleTool {
     }
 
     /// <summary>
-    /// Lower an action's effects to a Syntax AST Block suitable as a method body.
-    /// Wraps all effects in a CompositeEffect so the full action compiles to a Block.
+    /// Lowers an action's effects for C# method body generation.
+    /// Uses <see cref="LoweringContext"/> with UseThisReference so properties
+    /// render as <c>this.Name</c> and action parameters as bare names.
+    /// Stage transitions lower to <c>this.CurrentStage = XxxStage.Yyy</c>
+    /// assignments (no longer Comment placeholders).
     /// </summary>
-    private static Poly.Syntax.Node? LowerActionToMethodBody(Entity entity, Poly.DomainModeling.Action action) {
+    private static Poly.Syntax.Node? LowerActionToMethodBody(Entity entity, Poly.DomainModeling.Action action,
+        HashSet<string>? paramNames = null) {
         if (action.Effects.Count == 0) return null;
-        var subject = new Syntactic.Parameter("entity", new Syntactic.TypeReference(entity.Name));
-        var effectPass = new EffectLoweringPass(entity, subject);
+        var context = new LoweringContext(
+            new Syntactic.Parameter("entity", new Syntactic.TypeReference(entity.Name)),
+            UseThisReference: true,
+            ActionParameterNames: paramNames,
+            LowerStageTransitions: true
+        );
+        var effectPass = new EffectLoweringPass(entity, context);
         var composite = new CompositeEffect(action.Effects);
         return effectPass.TryLowerVmNode(composite);
     }
+
+    /// <summary>
+    /// Lowers a policy expression for C# method body generation.
+    /// Uses UseThisReference so properties render as <c>this.Name</c>.
+    /// </summary>
+    private static Poly.Syntax.Node? LowerExpressionToMethodBody(DomainExpression expr, Entity entity) {
+        var context = new LoweringContext(
+            new Syntactic.Parameter("entity", new Syntactic.TypeReference(entity.Name)),
+            UseThisReference: true
+        );
+        var pass = new DomainExpressionLoweringPass(context);
+        var lowered = pass.Lower(expr, new Syntactic.Parameter("entity"));
+        return lowered is not null ? new Syntactic.Block([new Syntactic.Return(lowered)]) : null;
+    }
+
+    /// <summary>
+    /// Adds a method definition for an action to the methods list, handling
+    /// both VM-compilable and direct-execution effects.
+    /// </summary>
+    private static void AddActionMethod(Entity entity, Poly.DomainModeling.Action action,
+        List<Syntactic.MethodDefinitionNode> methods) {
+        var paramNames = new HashSet<string>(action.Parameters.Select(p => p.Name), StringComparer.Ordinal);
+        var body = LowerActionToMethodBody(entity, action, paramNames);
+        methods.Add(new Syntactic.MethodDefinitionNode(
+            action.Name,
+            new Syntactic.TypeReference("void"),
+            Parameters: action.Parameters.Select(p => new Syntactic.Parameter(p.Name, MapDomainTypeRef(p.Type))).ToList(),
+            Body: body,
+            AccessModifier: Poly.Introspection.AccessModifier.Public
+        ));
+    }
+
+    /// <summary>
+
+    /// <summary>
+    /// Converts a PascalCase identifier to camelCase for use as constructor parameter names.
+    /// </summary>
+    private static string ToCamelCase(string name) =>
+        string.IsNullOrEmpty(name) || char.IsLower(name[0])
+            ? name
+            : char.ToLowerInvariant(name[0]) + name.Substring(1);
 
     /// <summary>
     /// Maps a <see cref="DomainTypeReference"/> to a Syntax AST type node,
@@ -375,7 +685,7 @@ internal sealed class OracleTool {
         if (failure is not null) return failure;
         try {
             var lowered = LowerToNodeData(expr);
-            return new DomainToolResponse(Success: true, Message: "Expression lowered successfully.", Data: new { ast = lowered }, Affordances: ["describe_expression", "add_policy"]);
+            return new DomainToolResponse(Success: true, Message: "Expression lowered successfully.", Data: new { ast = lowered }, Affordances: ["describe_expression", "add_policy", "analyze_expression"]);
         }
         catch (Exception ex) {
             return new DomainToolResponse(Success: false, Message: $"Lowering failed: {ex.Message}", Data: new { error = ex.Message }, Affordances: []);
@@ -391,7 +701,7 @@ internal sealed class OracleTool {
         if (failure is not null) return failure;
         try {
             var description = DescribeExpression(expr);
-            return new DomainToolResponse(Success: true, Message: "Expression described successfully.", Data: description, Affordances: ["lower_expression", "add_policy"]);
+            return new DomainToolResponse(Success: true, Message: "Expression described successfully.", Data: description, Affordances: ["lower_expression", "add_policy", "analyze_expression"]);
         }
         catch (Exception ex) {
             return new DomainToolResponse(Success: false, Message: $"Description failed: {ex.Message}", Data: new { error = ex.Message }, Affordances: []);

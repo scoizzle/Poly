@@ -506,7 +506,7 @@ public class CSharpGeneratorTests {
         var result = new CSharpGenerator().Generate(node);
 
         await Assert.That(result).IsEqualTo(
-            "public class Widget : IDisposable, IEnumerable<String>" + Environment.NewLine +
+            "public class Widget : IDisposable, IEnumerable<string>" + Environment.NewLine +
             "{" + Environment.NewLine +
             "}");
     }
@@ -523,7 +523,7 @@ public class CSharpGeneratorTests {
         var result = new CSharpGenerator().Generate(node);
 
         await Assert.That(result).IsEqualTo(
-            "public record WidgetCreated(String Name);");
+            "public record WidgetCreated(string Name);");
     }
 
     [Test]
@@ -543,7 +543,7 @@ public class CSharpGeneratorTests {
         await Assert.That(result).IsEqualTo(
             "public class Widget" + Environment.NewLine +
             "{" + Environment.NewLine +
-            "    public String Name { get; protected set; }" + Environment.NewLine +
+            "    public string Name { get; protected set; }" + Environment.NewLine +
             "}");
     }
 
@@ -572,9 +572,9 @@ public class CSharpGeneratorTests {
 
         var result = new CSharpGenerator().Generate(node);
 
-        await Assert.That(result).Contains("public record Widget(String name)");
-        await Assert.That(result).Contains("private readonly String _name = name;");
-        await Assert.That(result).Contains("public String DisplayName { get; } = name;");
+        await Assert.That(result).Contains("public record Widget(string name)");
+        await Assert.That(result).Contains("private readonly string _name = name;");
+        await Assert.That(result).Contains("public string DisplayName { get; } = name;");
     }
 
     [Test]

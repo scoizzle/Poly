@@ -517,6 +517,15 @@ public sealed class CSharpGenerator {
             WriteParameterDeclarations(sb, method.Parameters);
         }
         sb.Append(')');
+
+        // Expression-bodied: Block with single Return node → => expr;
+        if (method.Body is Block { Nodes: [Return r] }) {
+            sb.Append(" => ");
+            WriteExpression(sb, r.Value ?? new Constant(0L));
+            sb.AppendLine(";");
+            return;
+        }
+
         if (method.Body != null) {
             sb.AppendLine();
             WriteStatement(sb, method.Body, indent);
@@ -547,6 +556,11 @@ public sealed class CSharpGenerator {
     private void WritePropertyDefinition(StringBuilder sb, PropertyDefinitionNode prop, int indent) {
         Indent(sb, indent);
         WriteAccessModifier(sb, prop.AccessModifier);
+
+        // Emit C# 'required' keyword when Constraints is present (set by OracleTool for RequiredConstraint)
+        if (prop.Constraints is { Count: > 0 })
+            sb.Append("required ");
+
         WriteExpression(sb, prop.MemberType);
         sb.Append(' ');
         sb.Append(prop.Name);
@@ -697,7 +711,7 @@ public sealed class CSharpGenerator {
                 sb.Append(typeRef.TypeName);
                 return;
             case PrimitiveTypeReference prim:
-                sb.Append(prim.PrimitiveId.GetDisplayName());
+                sb.Append(prim.PrimitiveId.GetCSharpKeyword());
                 if (prim.IsNullable) sb.Append('?');
                 return;
             case NamedTypeReference named:

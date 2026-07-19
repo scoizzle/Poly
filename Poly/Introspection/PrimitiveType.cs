@@ -115,6 +115,35 @@ public static class PrimitiveTypeExtensions {
     };
 
     /// <summary>
+    /// Gets the C# keyword equivalent for a primitive type.
+    /// Used by <c>CSharpGenerator</c> to emit idiomatic C# types.
+    /// </summary>
+    public static string GetCSharpKeyword(this PrimitiveType id) => id switch {
+        PrimitiveType.Boolean => "bool",
+        PrimitiveType.Int8 => "sbyte",
+        PrimitiveType.Int16 => "short",
+        PrimitiveType.Int32 => "int",
+        PrimitiveType.Int64 => "long",
+        PrimitiveType.UInt8 => "byte",
+        PrimitiveType.UInt16 => "ushort",
+        PrimitiveType.UInt32 => "uint",
+        PrimitiveType.UInt64 => "ulong",
+        PrimitiveType.Float32 => "float",
+        PrimitiveType.Float64 => "double",
+        PrimitiveType.Decimal => "decimal",
+        PrimitiveType.String => "string",
+        PrimitiveType.Char => "char",
+        PrimitiveType.DateTime => "DateTime",
+        PrimitiveType.DateOnly => "DateOnly",
+        PrimitiveType.TimeOnly => "TimeOnly",
+        PrimitiveType.TimeSpan => "TimeSpan",
+        PrimitiveType.Guid => "Guid",
+        PrimitiveType.ByteArray => "byte[]",
+        PrimitiveType.Structure => "object",
+        _ => id.ToString()
+    };
+
+    /// <summary>
     /// Returns true when this primitive type can be stored directly on an
     /// evaluation-stack slot (e.g. a 64-bit register) without heap indirection.
     /// For example, numeric primitives and booleans are stack values; strings

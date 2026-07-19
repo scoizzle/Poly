@@ -16,6 +16,8 @@ namespace Poly.DomainModeling.Lowering;
 /// </remarks>
 public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Node> {
     private readonly IReadOnlyDictionary<string, Node> _parameters;
+    private readonly HashSet<string>? _actionParameterNames;
+    private readonly bool _useThisReference;
     private Node _currentSubject = null!;
 
     /// <param name="parameters">
@@ -23,15 +25,21 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Node
     /// When a ParameterAccess is encountered, its name is looked up here.
     /// If absent, a fresh Parameter node is created.
     /// </param>
-    public DomainExpressionLoweringPass(IReadOnlyDictionary<string, Node>? parameters = null) {
-        _parameters = parameters ?? new Dictionary<string, Node>();
-    }
+    public DomainExpressionLoweringPass(IReadOnlyDictionary<string, Node>? parameters = null)
+        : this(new LoweringContext(new Parameter("entity"), parameters)) { }
 
     /// <summary>
     /// Creates a pass using context from a <see cref="LoweringContext"/>.
+    /// When <see cref="LoweringContext.UseThisReference"/> is true, the lowered
+    /// tree uses <see cref="ThisReference"/> instead of <see cref="Parameter"/>
+    /// for the instance root, and names in <see cref="LoweringContext.ActionParameterNames"/>
+    /// render as bare parameters instead of <c>this.name</c>.
     /// </summary>
-    public DomainExpressionLoweringPass(LoweringContext context)
-        : this(context.Parameters) { }
+    public DomainExpressionLoweringPass(LoweringContext context) {
+        _parameters = context.Parameters ?? new Dictionary<string, Node>();
+        _actionParameterNames = context.ActionParameterNames;
+        _useThisReference = context.UseThisReference;
+    }
 
     /// <summary>
     /// Lowers <paramref name="expression"/> to a Syntax AST <see cref="Node"/>,
@@ -41,15 +49,21 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Node
     public Node Lower(DomainExpression expression, Node subject) {
         ArgumentNullException.ThrowIfNull(expression);
         ArgumentNullException.ThrowIfNull(subject);
-        _currentSubject = subject;
+        _currentSubject = _useThisReference && subject is Parameter { Name: "entity" }
+            ? new ThisReference()
+            : subject;
         return Route(expression);
     }
 
     protected override Node Default() => throw new NotSupportedException(
         $"DomainExpression node type is not supported");
 
-    protected override Node PropertyAccess(Poly.DomainModeling.PropertyAccess p)
-        => new Member(_currentSubject, p.Name);
+    protected override Node PropertyAccess(Poly.DomainModeling.PropertyAccess p) {
+        // When UseThisReference is set, action parameters render as bare names
+        if (_useThisReference && _actionParameterNames?.Contains(p.Name) == true)
+            return new Parameter(p.Name);
+        return new Member(_currentSubject, p.Name);
+    }
 
     protected override Node ParameterAccess(Poly.DomainModeling.ParameterAccess p)
         => _parameters.TryGetValue(p.Name, out var param) ? param : new Parameter(p.Name);

@@ -32,4 +32,12 @@ internal static class DomainModelDiagnosticCodes {
 
     /// Path-prefix on 'many' cardinality relationship (use Q3′ quantifiers instead).
     public const string RelationshipNavigationCardinality = "DMREL001";
+
+    // Unsupported / silently-dropped effect diagnostics
+
+    /// TransitionRelationshipEffect is parsed and stored but NOT executed at runtime.
+    public const string EffectNotExecutable = "DMEFF005";
+
+    /// Composite/Conditional effect contains direct-execution children that are silently dropped.
+    public const string NestedDirectEffectDropped = "DMEFF006";
 }

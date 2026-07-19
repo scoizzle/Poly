@@ -65,26 +65,6 @@ internal sealed class EffectOrderingAnalyzer : INodeAnalyzer {
             or UnlinkRelationshipEffect
             or TransitionRelationshipEffect;
 
-    private static IEnumerable<Effect> FlattenEffects(IEnumerable<Effect> effects) {
-        foreach (var effect in effects) {
-            yield return effect;
-            switch (effect) {
-                case ConditionalEffect ce:
-                    foreach (var nested in FlattenEffects(ce.ThenEffects)) {
-                        yield return nested;
-                    }
-                    if (ce.ElseEffects is not null) {
-                        foreach (var nested in FlattenEffects(ce.ElseEffects)) {
-                            yield return nested;
-                        }
-                    }
-                    break;
-                case CompositeEffect ce:
-                    foreach (var nested in FlattenEffects(ce.Effects)) {
-                        yield return nested;
-                    }
-                    break;
-            }
-        }
-    }
+    private static IEnumerable<Effect> FlattenEffects(IEnumerable<Effect> effects) =>
+        EffectHelpers.FlattenEffects(effects);
 }

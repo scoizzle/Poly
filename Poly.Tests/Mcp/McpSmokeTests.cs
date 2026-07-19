@@ -832,7 +832,7 @@ public class McpSmokeTests {
     }
 
     [Test]
-    public async Task ApplyDsl_WithRequire_BlocksCallActionWhenPolicyFails() {
+    public async Task ApplyDsl_WithRequire_BlocksInvokeActionWhenPolicyFails() {
         var (sessionId, _) = McpSessionStore.Create("Test");
 
         // Step 1: verify entity-with-policy DSL applies
@@ -1389,7 +1389,7 @@ public class McpSmokeTests {
     }
 
     [Test]
-    public async Task CallAction_WithStageTransition_Succeeds() {
+    public async Task InvokeAction_WithStageTransition_Succeeds() {
         var (sessionId, _) = McpSessionStore.Create("Test");
 
         // Use apply_dsl to create a domain with actions + transition effects
@@ -1431,7 +1431,7 @@ public class McpSmokeTests {
     }
 
     [Test]
-    public async Task CallAction_WithRequireGuard_BlocksWhenPolicyFails() {
+    public async Task InvokeAction_WithRequireGuard_BlocksWhenPolicyFails() {
         var (sessionId, _) = McpSessionStore.Create("Test");
 
         var dsl = DslTool.ApplyDsl(sessionId, """
@@ -1476,7 +1476,7 @@ public class McpSmokeTests {
     }
 
     [Test]
-    public async Task CallAction_ActionNotFound_Fails() {
+    public async Task InvokeAction_ActionNotFound_Fails() {
         var (sessionId, _) = McpSessionStore.Create("Test");
         EvolveTool.AddEntity(sessionId, "Task");
         EvolveTool.AddStage(sessionId, "Task", "Draft");
@@ -1603,8 +1603,8 @@ public class McpSmokeTests {
     // ═════════════════════════════════════════════════════════════
 
     [Test]
-    public async Task CallAction_OnDeletedInstance_Refused() {
-        // RT′.6: CallAction should refuse actions on deleted instances.
+    public async Task InvokeAction_OnDeletedInstance_Refused() {
+        // RT′.6: InvokeAction should refuse actions on deleted instances.
         // Use the core API directly since DeleteEntityInstance is not expressible in DSL.
         var (sessionId, _) = McpSessionStore.Create("Test");
         EvolveTool.AddEntity(sessionId, "Item");
@@ -1631,7 +1631,7 @@ public class McpSmokeTests {
         var delCall = RuntimeTool.InvokeAction(sessionId, instanceId!, "Delete");
         await Assert.That(delCall.Success).IsTrue();
 
-        // Now any subsequent CallAction should fail (RT′.6)
+        // Now any subsequent InvokeAction should fail (RT′.6)
         var call = RuntimeTool.InvokeAction(sessionId, instanceId!, "Delete");
         await Assert.That(call.Success).IsFalse();
         await Assert.That(call.Message).Contains("deleted");
@@ -1640,7 +1640,7 @@ public class McpSmokeTests {
     [Test]
     public async Task ApplyDsl_WithDelete_SoftDeletesInstance() {
         // E1.3: Golden test for DSL `delete` keyword. Parse → apply → create
-        // instance → call action with delete → CallAction refused afterward.
+        // instance → call action with delete → InvokeAction refused afterward.
         var (sessionId, _) = McpSessionStore.Create("Test");
 
         var dsl = DslTool.ApplyDsl(sessionId, """
@@ -1707,7 +1707,7 @@ public class McpSmokeTests {
     [Test]
     public async Task AddActionToStage_Order_StageBeforeEntityEffects_StillTransitions() {
         // SA′.6: If stage is placed first, then entity-level effects added later,
-        // CallAction should still use the fallthrough path (empty stage + entity twin).
+        // InvokeAction should still use the fallthrough path (empty stage + entity twin).
         var (sessionId, _) = McpSessionStore.Create("Test");
 
         EvolveTool.AddEntity(sessionId, "Task");

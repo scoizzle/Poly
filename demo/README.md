@@ -14,7 +14,7 @@ One file (`Program.cs`) that proves the full platform end-to-end in ~65 lines:
 | 2 | Attach `IsAdult` and `IsActive` guard policies | `DomainExpression` → `AddPolicyToEntity` |
 | 3 | Create an instance (Alice, 25, active) | `DomainEntityInstance.Create()` |
 | 4 | Evaluate both policies via the VM | `instance.EvaluatePolicy()` → `Interpreter.Compile` |
-| 5 | Call `Activate` action → stage transition Draft→Active | `instance.CallAction()` + `StageTransitionEffect` |
+| 5 | Call `Activate` action → stage transition Draft→Active | `instance.InvokeAction()` + `StageTransitionEffect` |
 
 ## Output
 
@@ -29,7 +29,7 @@ Instance: Alice, Age 25
   IsAdult (Age >= 18)?  True
   IsActive (Active==true)? True
 
-  CallAction("Activate"): True
+  InvokeAction("Activate"): True
   New stage:      Active
   Current stage:  Active
 

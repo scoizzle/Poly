@@ -38,7 +38,7 @@ public sealed class EffectLoweringPass {
             AssignEffect a => LowerAssign(a),
             CompositeEffect c => LowerComposite(c),
             ConditionalEffect c => LowerConditional(c),
-            _ => null // direct-execution effects — handled by CallAction
+            _ => null // direct-execution effects — handled by DomainEntityInstance.InvokeAction
         };
     }
 

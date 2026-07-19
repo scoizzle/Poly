@@ -6,6 +6,7 @@ using System.Text.Json.Serialization;
 using ModelContextProtocol.Server;
 
 using Poly.DomainModeling;
+using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Queries;
 using Poly.Mcp.Sessions;
@@ -224,7 +225,7 @@ internal sealed class OracleTool {
     }
 
     private static DomainToolResponse DescribeEntity(string sessionId, McpSessionState state, string name) {
-        var detail = DomainQueries.GetEntity(state.Domain, name);
+        var detail = DomainQueries.GetEntity(state.Domain, name, state.LatestAnalysis);
         if (detail is null) return new DomainToolResponse(Success: false, Message: $"Entity '{name}' not found.", SessionId: sessionId, Affordances: ["get_domain_overview", "add_entity"]);
 
         var sb = new StringBuilder();
@@ -243,10 +244,17 @@ internal sealed class OracleTool {
         foreach (var entity in entities) {
             var stage = entity.Stages.FirstOrDefault(s => string.Equals(s.Name, name, StringComparison.Ordinal));
             if (stage is null) continue;
+
+            var stageCap = state.LatestAnalysis?.GetMetadata<StageCapabilityMetadata>(stage);
+            var effectiveActionCount = stageCap?.View.EffectiveActions.Count ?? stage.Actions.Count;
+            var effectivePolicyCount = stageCap?.View.EffectivePolicies.Count ?? stage.Policies.Count;
+
             var sb = new StringBuilder();
-            sb.Append($"Stage '{name}' on entity '{entity.Name}' with {stage.Actions.Count} actions, {stage.Policies.Count} policies, {stage.Subscriptions.Count} subscriptions.");
+            sb.Append($"Stage '{name}' on entity '{entity.Name}' with {effectiveActionCount} effective actions, {effectivePolicyCount} effective policies, {stage.Subscriptions.Count} subscriptions.");
             if (stage.OnEntryEffects.Count > 0) sb.Append($" Has {stage.OnEntryEffects.Count} entry effect(s).");
             if (stage.OnExitEffects.Count > 0) sb.Append($" Has {stage.OnExitEffects.Count} exit effect(s).");
+            if (effectiveActionCount > stage.Actions.Count)
+                sb.Append($" Includes {effectiveActionCount - stage.Actions.Count} inherited action(s).");
             return new DomainToolResponse(Success: true, Message: sb.ToString(), SessionId: sessionId, Data: new DomainElementData("stage", name, entity.Name, sb.ToString(), sb.ToString()), Affordances: ["get_entity_detail"]);
         }
         return new DomainToolResponse(Success: false, Message: $"Stage '{name}' not found on any entity.", SessionId: sessionId, Affordances: ["get_domain_overview"]);
@@ -261,10 +269,16 @@ internal sealed class OracleTool {
             var action = entity.Actions.FirstOrDefault(a => string.Equals(a.Name, name, StringComparison.Ordinal))
                 ?? entity.Stages.SelectMany(s => s.Actions).FirstOrDefault(a => string.Equals(a.Name, name, StringComparison.Ordinal));
             if (action is null) continue;
+
+            var actionCap = state.LatestAnalysis?.GetMetadata<ActionCapabilityMetadata>(action);
+            var transitionTargets = actionCap?.View.TransitionTargets.Select(t => t.Name).ToList() ?? [];
+
             var sb = new StringBuilder();
             sb.Append($"Action '{name}' on entity '{entity.Name}'");
             if (action.Parameters.Count > 0) sb.Append($" with parameters: {string.Join(", ", action.Parameters.Select(p => $"{p.Name}: {p.Type.TypeName}"))}");
             sb.Append($", {action.Effects.Count} effect(s), {action.Policies.Count} guard(s).");
+            if (transitionTargets.Count > 0)
+                sb.Append($" Transitions to: {string.Join(", ", transitionTargets)}.");
             return new DomainToolResponse(Success: true, Message: sb.ToString(), SessionId: sessionId, Data: new DomainElementData("action", name, entity.Name, sb.ToString(), sb.ToString()), Affordances: ["get_entity_detail"]);
         }
         return new DomainToolResponse(Success: false, Message: $"Action '{name}' not found on any entity.", SessionId: sessionId, Affordances: ["get_domain_overview"]);

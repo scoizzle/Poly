@@ -78,7 +78,7 @@ Rough grammar: `or` → `and` → `not` → comparison → primary (property | l
 
 ## 3. Design rules
 
-1. **Policies stay pure** — no mutation, no CallAction, no I/O in expressions.  
+1. **Policies stay pure** — no mutation, no InvokeAction, no I/O in expressions.  
 2. **Lower or don’t ship** — every new DE node needs `DomainExpressionLoweringPass` + tests (VM or dual-oracle).  
 3. **DSL and JSON parity over time** — MCP `add_policy` JSON should not forever be weaker than DSL (or document the split).  
 4. **Collections = relationship `many` (and later owned lists)** — not arbitrary .NET IEnumerable.  
@@ -437,6 +437,7 @@ NeedsHuman: policy {
 - Cross-domain queries / second root  
 - Full `IQueryable` / EF translation as product claim  
 - Loading strategies / N+1 productization in the language  
+- **Collection quantifiers** (`any`/`all`/`none`/`count`): path-prefix + `where` + `exists` is the shipped observation surface; quantifiers add IR complexity without named dogfood pain  
 
 ---
 
@@ -728,7 +729,7 @@ Customer ship confidence: **kernel effects + Q1′ + (Q3′ or honest “no coll
 
 ```text
 DONE:    Q1′ through Q1'''''' authoring + analysis hygiene (`25a79ec`, suite 1385)
-CURRENT: Q3′ by dogfood pain OR honest non-goal “no collection quantifiers”
+CURRENT: Q3′ → **explicit non-goal** (collection quantifiers not shipped in v1; path-prefix + `where` + `exists` sufficient)
 THEN:    §15 low hygiene (nested path-prefix doc, dead code, owned story, test placement)
 PULL:    RT eval related policies; E3b; link DSL; L*
 ```
@@ -841,7 +842,7 @@ PULL:    RT eval related policies; E3b; link DSL; L*
 
 | ID | Sev | Finding | Recommended fix |
 |----|-----|---------|-----------------|
-| **Q1′′′.1** | **High** | Q1.4 task required evaluate/simulate/CallAction + true/false; ship tests are **parser-only** (no RT, no PolicyEvaluator, no soft-miss). | DomainModeling (or MCP) goldens: linked instance → policy true/false; missing to-one → false (soft-miss); `Rel exists` with/without link |
+| **Q1′′′.1** | **High** | Q1.4 task required evaluate/simulate/InvokeAction + true/false; ship tests are **parser-only** (no RT, no PolicyEvaluator, no soft-miss). | DomainModeling (or MCP) goldens: linked instance → policy true/false; missing to-one → false (soft-miss); `Rel exists` with/without link |
 | **Q1′′′.2** | **High** | Guide claims `Rel Prop` on **many** is a **parse error** — parser has **no** cardinality check; any two identifiers become path-prefix. | Analysis fail-loud (preferred) or parser with domain context; **or** reword guide to “invalid / fail at analysis” until enforced; add negative test |
 | **Q1′′′.3** | **Med** | No tests for **assign** related LHS reject or scalar related **RHS** (task Q1.4 listed both). | `assign Label to customer Tier` parse OK; `assign customer Status to "X"` fail-loud golden |
 | **Q1′′′.4** | **Med** | `OwnedAccess` printer still **`owned.Inner` with dots**; guide still says “owned.prop” in one place and “Pull” in gaps table. | Print path-prefix; align guide with nav (same surface) |
@@ -1028,7 +1029,7 @@ PULL:    RT eval related policies; E3b; link DSL; L*
 | **Q1'''''''.4** | Low | Owned still “Pull” in gaps table vs path-prefix Reality | Align docs |
 | **Q1'''''''.5** | Low | Tests still mostly in McpSmokeTests | Move DomainModeling-focused tests |
 | **Q1'''''''.6** | Low | Plan/roadmap status drift risk (row still “Next” while shipped) — **fixed this review** | Process |
-| **Q1'''''''.7** | Product | **Q3′** any/all/count **or** explicit non-goal | Dogfood pain or write non-goal in §7 |
+| **Q1'''''''.7** | Product | Q3′ any/all/count → **explicit non-goal** (see §7 / §15) | Non-goal written 2026-07-18 |
 | **Q1'''''''.8** | Pull | RT eval related policies | When product needs evaluate |
 
 ### Follow-up checklist (write-back)
@@ -1036,7 +1037,7 @@ PULL:    RT eval related policies; E3b; link DSL; L*
 - [ ] **Q1'''''''.1** Guide note: nested path-prefix in `where` body allowed (keyword nested `where` banned)  
 - [ ] **Q1'''''''.2** Optional tighten Exists-only exception for relationship names  
 - [ ] **Q1'''''''.3–.5** Hygiene (dead code, owned story, test placement)  
-- [ ] **Q1'''''''.7** Q3′ implement **or** document non-goal  
+- [x] **Q1'''''''.7** Q3′ → **explicit non-goal** (collection quantifiers not shipped in v1)
 - [ ] **Q1'''''''.8** RT eval pull  
 
-**Recommended next:** Prefer **Q3′ decision** (implement thin any/all **or** explicit non-goal in success criteria). Hygiene items are optional.
+**Recommended next:** §15 low hygiene (optional); RT eval related policies when product needs it.

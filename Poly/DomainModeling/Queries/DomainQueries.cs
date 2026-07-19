@@ -1,3 +1,4 @@
+using Poly.DomainModeling.Analysis;
 using Poly.Syntax.Analysis;
 
 namespace Poly.DomainModeling.Queries;
@@ -139,8 +140,11 @@ public static class DomainQueries {
 
     /// <summary>
     /// Returns a detailed projection of an entity by name, or null if not found.
+    /// When <paramref name="metadata"/> is provided, enriches the result with
+    /// analysis metadata: inheritance-aware members from <see cref="EffectiveMemberMetadata"/>
+    /// and stage capabilities from <see cref="StageCapabilityMetadata"/>.
     /// </summary>
-    public static EntityDetail? GetEntity(Domain domain, string entityName) {
+    public static EntityDetail? GetEntity(Domain domain, string entityName, INodeMetadataProvider? metadata = null) {
         ArgumentNullException.ThrowIfNull(domain);
         ArgumentException.ThrowIfNullOrWhiteSpace(entityName);
 
@@ -150,35 +154,52 @@ public static class DomainQueries {
         if (entity is null)
             return null;
 
-        return new EntityDetail(
-            Name: entity.Name,
-            Properties: entity.Properties
-                .Select(p => new PropertyDetail(
-                    p.Name,
-                    p.Type.TypeName,
-                    p.Constraints.Count))
-                .ToList(),
-            Stages: entity.Stages
-                .Select(s => new StageDetail(
+        // Read inheritance-aware members from analysis metadata when available
+        var effectiveMemberMeta = metadata?.GetMetadata<EffectiveMemberMetadata>(entity);
+
+        var properties = (effectiveMemberMeta?.EffectiveProperties ?? entity.Properties)
+            .Select(p => new PropertyDetail(p.Name, p.Type.TypeName, p.Constraints.Count))
+            .ToList();
+
+        var actions = (effectiveMemberMeta?.EffectiveActions ?? entity.Actions)
+            .Select(a => new ActionDetail(
+                a.Name,
+                a.Parameters.Select(p => p.Name).ToList(),
+                a.Policies.Select(p => p.Name).ToList(),
+                a.Effects.Count))
+            .ToList();
+
+        var policies = (effectiveMemberMeta?.EffectivePolicies ?? entity.Policies)
+            .Select(p => new PolicyDetail(p.Name))
+            .ToList();
+
+        // Stages: use effective stages from metadata, but enrich with StageCapabilityMetadata
+        // for effective action/policy lists when available
+        var stages = (effectiveMemberMeta?.EffectiveStages ?? entity.Stages)
+            .Select(s => {
+                var stageCap = metadata?.GetMetadata<StageCapabilityMetadata>(s);
+                var effectivePolicyNames = stageCap is not null
+                    ? stageCap.View.EffectivePolicies.Select(p => p.Name).ToList()
+                    : s.Policies.Select(p => p.Name).ToList();
+                return new StageDetail(
                     s.Name,
                     s.Actions.Select(a => a.Name).ToList(),
-                    s.Policies.Select(p => p.Name).ToList(),
+                    effectivePolicyNames,
                     s.Subscriptions.Select(sub => new SubscriptionDetail(
                         sub.RelationshipName,
                         sub.StageNames,
                         sub.Quantifier.ToString(),
-                        sub.Effects.Count)).ToList()))
-                .ToList(),
-            Actions: entity.Actions
-                .Select(a => new ActionDetail(
-                    a.Name,
-                    a.Parameters.Select(p => p.Name).ToList(),
-                    a.Policies.Select(p => p.Name).ToList(),
-                    a.Effects.Count))
-                .ToList(),
-            Policies: entity.Policies
-                .Select(p => new PolicyDetail(p.Name))
-                .ToList(),
+                        sub.Effects.Count)).ToList()
+                );
+            })
+            .ToList();
+
+        return new EntityDetail(
+            Name: entity.Name,
+            Properties: properties,
+            Stages: stages,
+            Actions: actions,
+            Policies: policies,
             ParentEntityName: entity.ParentEntityName,
             Navigations: domain.Relationships
                 .Where(r => string.Equals(r.Source.TypeName, entity.Name, StringComparison.Ordinal)

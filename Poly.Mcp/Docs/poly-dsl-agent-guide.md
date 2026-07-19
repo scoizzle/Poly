@@ -258,7 +258,7 @@ The following effects exist in the runtime library but have **no DSL syntax** ye
 - **invoke**: Call another action on the same instance. Not yet authorable in DSL.
 - **TransitionRelationship**: IR exists but **not executed at runtime** — do not use.
 
-> **Note:** `delete` performs a **soft-delete** — it sets the `IsDeleted` flag on the current instance. Any subsequent `call_action` on a deleted instance is refused. This is not a typed mass-delete.
+> **Note:** `delete` performs a **soft-delete** — it sets the `IsDeleted` flag on the current instance. Any subsequent `invoke_action` on a deleted instance is refused. This is not a typed mass-delete.
 
 ## 9. Do NOT Use (Unsupported in Phase 1a/1b)
 

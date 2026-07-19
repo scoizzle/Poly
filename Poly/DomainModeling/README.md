@@ -99,7 +99,7 @@ Phase 2 adds **instance graph creation** via the DSL:
 
 **Key runtime path:**
 ```
-CallAction → CreateEntityInRelationship → CreateChildInstance → Store.Link → NotifyTransition → subscription fires
+InvokeAction → CreateEntityInRelationship → CreateChildInstance → Store.Link → NotifyTransition → subscription fires
 ```
 
 See the dogfood test `Dogfood_CreateInDSL_SubscriptionFires` in `DomainEntityInstanceTests`

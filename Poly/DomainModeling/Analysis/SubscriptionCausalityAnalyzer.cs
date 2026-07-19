@@ -4,21 +4,20 @@ using Poly.Syntax.Analysis;
 namespace Poly.DomainModeling.Analysis;
 
 /// <summary>
-/// Coarse heuristic for detecting mutual subscription cycles.
+/// Detects mutual subscription cycles using analysis metadata.
 /// Builds edges from each subscriber entity to the target entity of its subscription's
-/// relationship. Any directed cycle in this graph is reported as a potential causality risk.
+/// relationship, then filters to only include edges where the target entity has at least
+/// one action that emits a <see cref="StageTransitionEffect"/> to a stage the subscription
+/// watches. This eliminates false positives for subscriptions targeting entities whose
+/// stages are never entered via any action.
 ///
-/// This is a **simplified model**: it assumes any subscription on Entity A targeting
-/// Entity B means A reacts to B's stage changes. A true cycle would require tracking
-/// action→stage-transition→subscription edges precisely, which requires analysis metadata
-/// about which actions emit which <see cref="StageTransitionEffect"/>.
-///
-/// TODO (post-B): Rewire to use action-level transition metadata for precise cycle detection.
+/// Uses <see cref="DomainTypeLookupMetadata"/> for entity resolution and
+/// <see cref="ActionCapabilityMetadata"/> for action→transition mapping.
 /// </summary>
 internal sealed class SubscriptionCausalityAnalyzer : INodeAnalyzer {
     public const string Id = "DomainSubscriptionCausalityAnalyzer";
     public string PassName => Id;
-    public string[] Dependencies => [];
+    public string[] Dependencies => [CapabilityAnalyzer.Id];
 
     public void Analyze(AnalysisContext context, Node node) {
         if (!context.ShouldAnalyze(node)) return;
@@ -34,46 +33,49 @@ internal sealed class SubscriptionCausalityAnalyzer : INodeAnalyzer {
     private static void ValidateDomain(AnalysisContext context, Domain domain) {
         if (!context.TryBeginAnalyzerVisit<SubscriptionCausalityAnalyzer>(domain)) return;
 
-        var entityMap = domain.Types
-            .OfType<Entity>()
-            .GroupBy(static e => e.Name, StringComparer.Ordinal)
-            .ToDictionary(static g => g.Key, static g => g.First(), StringComparer.Ordinal);
+        var lookup = context.GetMetadata<DomainTypeLookupMetadata>(default);
+        if (lookup is null) return;
 
-        // Build a graph: for each subscription on each stage, track which entity
-        // subscribes to which other entity's stage transitions via which action.
+        // Build a precise edge graph using capability metadata.
+        // An edge E₁ → E₂ exists only when E₂ has at least one action that
+        // transitions to a stage that E₁'s subscription watches.
         var edges = new List<(string FromEntity, string ToEntity, string StageName)>();
 
-        foreach (var entity in entityMap.Values) {
+        foreach (var entity in lookup.Entities) {
             foreach (var stage in entity.Stages) {
                 foreach (var sub in stage.Subscriptions) {
-                    // Subscription targets: all entities referenced by the relationship name.
-                    // For now, scan relationships for a match on this entity.
+                    // Resolve target entities from the subscription's relationship
                     var targetEntities = domain.Relationships
                         .Where(r => string.Equals(r.Source.TypeName, entity.Name, StringComparison.Ordinal)
                                  && string.Equals(r.Name, sub.RelationshipName, StringComparison.Ordinal))
                         .Select(r => r.Target.TypeName)
                         .Distinct(StringComparer.Ordinal);
 
-                    foreach (var targetEntity in targetEntities) {
-                        if (entityMap.ContainsKey(targetEntity)) {
-                            edges.Add((entity.Name, targetEntity, sub.StageNames.FirstOrDefault() ?? "?"));
-                        }
+                    foreach (var targetName in targetEntities) {
+                        if (!lookup.Types.TryGetValue(targetName, out var targetType) || targetType is not Entity targetEntity)
+                            continue;
+
+                        // Precise check: does targetEntity have any action that
+                        // transitions to a stage this subscription watches?
+                        if (!TargetHasTransitionToWatchedStages(context, targetEntity, sub.StageNames))
+                            continue;
+
+                        edges.Add((entity.Name, targetEntity.Name, sub.StageNames.FirstOrDefault() ?? "?"));
                     }
                 }
             }
         }
 
         // Detect cycles using DFS
-        var allEntities = entityMap.Keys.ToList();
+        var allEntities = lookup.Entities.Select(e => e.Name).ToList();
         var visited = new HashSet<string>(StringComparer.Ordinal);
         var inStack = new HashSet<string>(StringComparer.Ordinal);
 
-        foreach (var entity in allEntities) {
-            if (!visited.Contains(entity)) {
-                var cycleParticipants = DetectCycle(entity, edges, visited, inStack);
+        foreach (var entityName in allEntities) {
+            if (!visited.Contains(entityName)) {
+                var cycleParticipants = DetectCycle(entityName, edges, visited, inStack);
                 if (cycleParticipants.Count > 0) {
-                    // Report on the entity that closes the cycle
-                    if (entityMap.TryGetValue(cycleParticipants[0], out var cycleEntity)) {
+                    if (lookup.Types.TryGetValue(cycleParticipants[0], out var cycleType) && cycleType is Entity cycleEntity) {
                         context.ReportWarning(
                             cycleEntity,
                             $"Subscription causality cycle detected involving entities: {string.Join(" → ", cycleParticipants)}.",
@@ -83,6 +85,36 @@ internal sealed class SubscriptionCausalityAnalyzer : INodeAnalyzer {
                 }
             }
         }
+    }
+
+    /// <summary>
+    /// Returns true if <paramref name="targetEntity"/> has at least one action (entity-level
+    /// or stage-scoped) whose <see cref="ActionCapabilityMetadata"/> reports a transition to
+    /// any of the given <paramref name="watchedStages"/>.
+    /// </summary>
+    private static bool TargetHasTransitionToWatchedStages(
+        AnalysisContext context,
+        Entity targetEntity,
+        IReadOnlyList<string> watchedStages) {
+        var watched = new HashSet<string>(watchedStages, StringComparer.Ordinal);
+
+        foreach (var action in targetEntity.Actions) {
+            var cap = context.GetMetadata<ActionCapabilityMetadata>(action);
+            if (cap is null) continue;
+            if (cap.View.TransitionTargets.Any(t => watched.Contains(t.Name)))
+                return true;
+        }
+
+        foreach (var stage in targetEntity.Stages) {
+            foreach (var action in stage.Actions) {
+                var cap = context.GetMetadata<ActionCapabilityMetadata>(action);
+                if (cap is null) continue;
+                if (cap.View.TransitionTargets.Any(t => watched.Contains(t.Name)))
+                    return true;
+            }
+        }
+
+        return false;
     }
 
     private static List<string> DetectCycle(

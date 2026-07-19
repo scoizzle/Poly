@@ -192,7 +192,8 @@ public class SubscriptionAnalysisTests {
 
     [Test]
     public async Task CausalityAnalyzer_MutualSubscription_ReportsCycle() {
-        // Entity A subscribes to Entity B's stage, Entity B subscribes to Entity A's stage
+        // Entity A subscribes to Entity B's stage, Entity B subscribes to Entity A's stage.
+        // Both entities have actions that transition to the watched stage, creating a real cycle.
         var relAB = new Relationship("Paired",
             new DomainTypeReference("EntityA"), new DomainTypeReference("EntityB"),
             RelationshipCardinality.OneToOne, []);
@@ -200,13 +201,23 @@ public class SubscriptionAnalysisTests {
             new DomainTypeReference("EntityB"), new DomainTypeReference("EntityA"),
             RelationshipCardinality.OneToOne, []);
 
-        var stageA = MakeStage("Active",
-            new StageSubscription("Paired", ["Active"], StageSubscriptionQuantifier.Each, []));
-        var entityA = MakeEntity("EntityA", stageA);
+        var activateA = new Poly.DomainModeling.Action("Activate", InvocationResult.Void,
+            [], [new StageTransitionEffect(new StageReference("Active"))], []);
+        var stageA = new Stage("Active", [activateA], [], [], []) {
+            Subscriptions = [
+                new StageSubscription("Paired", ["Active"], StageSubscriptionQuantifier.Each, [])
+            ]
+        };
+        var entityA = new Entity("EntityA", [], [activateA], [], [stageA]);
 
-        var stageB = MakeStage("Active",
-            new StageSubscription("PairedReverse", ["Active"], StageSubscriptionQuantifier.Each, []));
-        var entityB = MakeEntity("EntityB", stageB);
+        var activateB = new Poly.DomainModeling.Action("Activate", InvocationResult.Void,
+            [], [new StageTransitionEffect(new StageReference("Active"))], []);
+        var stageB = new Stage("Active", [activateB], [], [], []) {
+            Subscriptions = [
+                new StageSubscription("PairedReverse", ["Active"], StageSubscriptionQuantifier.Each, [])
+            ]
+        };
+        var entityB = new Entity("EntityB", [], [activateB], [], [stageB]);
 
         var domain = new Domain("Test", [entityA, entityB], [relAB, relBA]);
 
@@ -289,7 +300,7 @@ public class SubscriptionAnalysisTests {
     // ── Slice B′: End-to-end subscription runtime loop ────────
 
     [Test]
-    public async Task CallAction_StageTransitionEffect_FiresSubscriptionOnRelatedInstance() {
+    public async Task InvokeAction_StageTransitionEffect_FiresSubscriptionOnRelatedInstance() {
         // Domain: Tracker ──Tracks──► Order. Subscriber (Tracker) is relationship SOURCE.
         // Tracker has a Pending stage with subscription: when Tracks Active { assign Status to "Triggered" }.
         // Order is just the target entity that transitions.
@@ -340,7 +351,7 @@ public class SubscriptionAnalysisTests {
     }
 
     [Test]
-    public async Task CallAction_StageChange_SubscriptionDoesNotFireWhenSubscriberInWrongStage() {
+    public async Task InvokeAction_StageChange_SubscriptionDoesNotFireWhenSubscriberInWrongStage() {
         // Tracker starts in Idle (first stage = default). Subscription on Pending.
         // When Order transitions to Active, tracker subscription should NOT fire
         // because tracker is in Idle, not Pending.

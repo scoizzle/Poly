@@ -26,7 +26,7 @@ Product doubt remains: **have we modeled enough effects to be useful?**
 
 Honest answer from inventory:
 
-- **IR + CallAction** can do more than agents can write.  
+- **IR + InvokeAction** can do more than agents can write.  
 - **DSL product path** only authors a subset.  
 - **MCP** has almost **no** effect-add micro-tools (effects via `apply_dsl` or C# evolution).
 
@@ -38,19 +38,19 @@ This plan tracks a **parity matrix** and a thin vertical to make the **lifecycle
 
 Legend: **✅** product-ready · **🟡** partial · **❌** missing · **🚫** non-goal (this plan)
 
-| Effect (IR) | Runtime (`CallAction`) | DSL parse/print | Evolution builder | MCP micro-tool | Notes |
+| Effect (IR) | Runtime (`InvokeAction`) | DSL parse/print | Evolution builder | MCP micro-tool | Notes |
 |-------------|------------------------|-----------------|-------------------|----------------|-------|
 | **StageTransition** | ✅ direct | ✅ `transition to S` | ✅ `AddStageTransitionEffect` | ❌ | Core lifecycle |
 | **Assign** | ✅ VM | ✅ `assign P to expr` | ✅ `AddEffectToAction` | ❌ | Core data change |
 | **CreateEntity** | ✅ direct | ✅ `create T { }` | ✅ helpers | ❌ | Optional `RelationshipName` auto-link |
 | **CreateInRelationship** | ✅ direct | ✅ `create in Rel { }` | 🟡 via `AddEffectToAction` | ❌ | Spawn-and-wire |
-| **Composite** | ✅ VM | 🟡 flatten/comment | 🟡 construct | ❌ | Nested structure |
-| **Conditional** | ✅ VM | 🟡 weak print | 🟡 construct | ❌ | Branching; no first-class `if` in parser |
-| **InvokeAction** | 🟡 **self only** | ❌ `invoke` unsupported keyword | 🟡 construct | ❌ | `CallAction(ActionName)` on **this** instance; **ParameterBindings ignored** today — **not** multi-entity yet |
+| **Composite** | ✅ VM (direct children silently dropped — DMEFF006 warning) | 🟡 flatten/comment | 🟡 construct | ❌ | Nested structure; only Assign/sub-Composite/sub-Conditional execute via VM; direct effects (transition, create, etc.) silently dropped |
+| **Conditional** | ✅ VM (direct children silently dropped — DMEFF006 warning) | 🟡 weak print | 🟡 construct | ❌ | Branching; only VM-lowerable children execute; direct effects silently dropped in both then/else |
+| **InvokeAction** | 🟡 **self only** | ❌ `invoke` unsupported keyword | 🟡 construct | ❌ | `InvokeAction(ActionName)` on **this** instance; **ParameterBindings evaluated** (self only) — **not** multi-entity yet |
 | **DeleteEntityInstance** | ✅ soft-delete **self** | ✅ `delete` (E1) | 🟡 construct | ❌ | Executor ignores `EntityType`; parser stamps `_currentEntityName`. Soft-delete only |
 | **LinkRelationship** | 🟡 constrained | ❌ no DSL | 🟡 construct | ❌ | Target must be `PropertyAccess` whose bag value is already a `DomainEntityInstance`; else throws. Prefer `Store.Link` in tests |
 | **UnlinkRelationship** | 🟡 same as link | ❌ no DSL | 🟡 construct | ❌ | Same target resolution rules |
-| **TransitionRelationship** | ❌ **not executed** | ❌ | 🟡 construct | ❌ | IR exists; **no `case` in `ExecuteEffect`** — do not add DSL until runtime handles it |
+| **TransitionRelationship** | ❌ **not executed** (DMEFF005 warning) | ❌ | 🟡 construct | ❌ | IR exists; **no `case` in `ExecuteEffect`** — analyzer warns on use; do not add DSL until runtime handles it |
 | OnEntry / OnExit effects | ✅ on transition | ✅ `entry`/`exit` blocks | ✅ stage effect changes | ❌ | Same effect subset as actions (product path) |
 | Stage **when** subscriptions | ✅ store notify | ✅ `when Rel Stages { }` | 🟡 | ❌ | Not an Effect type; related surface |
 | Host I/O (email, HTTP, queue) | 🚫 | 🚫 | 🚫 | 🚫 | Post–P3 / host adapters |
@@ -83,7 +83,7 @@ A domain is **useful** for internal process modeling when agents can author and 
 
 ## 4. Design rules
 
-1. **Runtime first** — do not add DSL for effects that CallAction cannot execute.  
+1. **Runtime first** — do not add DSL for effects that InvokeAction cannot execute.  
 2. **DSL before MCP micro-tools** — batch path is proven; micro-tools only where incremental edit pain is real (dogfood).  
 3. **One golden domain per slice** — e.g. support ticket: open → assign (link) → escalate (invoke) → close (delete).  
 4. **Honesty** — guide + tool Description match parser; no lab keywords.  
@@ -118,7 +118,7 @@ A domain is **useful** for internal process modeling when agents can author and 
 - [x] **E1.0** Spec: `delete` keyword = soft-delete **current** instance. `Delete` token added to tokenizer. Entity self-reference via `_currentEntityName`.  
 - [x] **E1.1** DSL: `ParseEffect()` handles `TokenKind.Delete` → `DeleteEntityInstance(new DomainTypeReference(_currentEntityName))`. Printer outputs `delete`.  
 - [x] **E1.2** Guide updated: `delete` in Supported Effect Summary table. Printer round-trip via `export_dsl` assertion in golden.  
-- [x] **E1.3** Golden test `ApplyDsl_WithDelete_SoftDeletesInstance`: DSL → apply → create instance → call Archive → CallAction refused afterward. Validate `export_dsl` contains `delete`.  
+- [x] **E1.3** Golden test `ApplyDsl_WithDelete_SoftDeletesInstance`: DSL → apply → create instance → call Archive → InvokeAction refused afterward. Validate `export_dsl` contains `delete`.  
 - [x] **E1.4** MCP not required — DSL suffices. Existing `RuntimeTool.InvokeAction` + `IsDeleted` check handles the runtime path.
 
 **Exit:** Soft-delete is first-class on product path; RT′.6 remains correct. **Met** (`121cd92`, suite **1360**).
@@ -188,7 +188,7 @@ Honesty nits (error string, guide soft-delete/unlink/TRE, entry/exit) landed wit
 
 **Goal:** Nested / multi-entity workflows without a second agent `invoke_action`.
 
-**Runtime truth (E′):** Today `InvokeActionEffect` only does `CallAction(ActionName)` on **this** instance. **`ParameterBindings` are ignored.** Multi-entity invoke is **new runtime work**, not “just un-reject DSL.”
+**Runtime truth (E′):** Today `InvokeActionEffect` only does `InvokeAction(ActionName, args)` on **this** instance. **ParameterBindings are evaluated** (args map fully wired). Multi-entity invoke is **new runtime work**, not “just un-reject DSL.”
 
 - [ ] **E3.0** Split product goals:
   - **E3a** Self-invoke / re-entrancy (may already be enough for some workflows) — DSL + goldens only.  
@@ -365,7 +365,7 @@ Plan direction is **right** (authorability of effects that already run). Initial
 
 **dsl-query-surface.md** parallel plan (Q0→Q1′; §3.1/§4.0 frozen).  
 
-**Also in working tree (not effect surface code):** `add_action_to_stage` Description now mentions CallAction **fallthrough** (SA′′.2) — good; include with next SA/docs commit if still unstaged.
+**Also in working tree (not effect surface code):** `add_action_to_stage` Description now mentions InvokeAction **fallthrough** (SA′′.2) — good; include with next SA/docs commit if still unstaged.
 
 **Recommended:** Start **E0** (guide IR-vs-DSL section) using the corrected matrix; then **E1.0+E1.1** delete-self. Defer E2 implementation until decision E2.1(a) vs (c); treat E3b as explicit runtime project.
 

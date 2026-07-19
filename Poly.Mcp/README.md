@@ -3,35 +3,82 @@
 ## Tool Surface
 
 Tools live in `Poly.Mcp/Tools/` and use only `Poly.DomainModeling` types (no `Poly.Data.Modeling`).
+**40 tools** registered via `Program.cs` (`SessionTool`, `QueryTool`, `EvolveTool`, `PolicyTool`, `DslTool`, `OracleTool`, `RuntimeTool`).
+
+### Session
 
 | Tool | Class | Purpose |
 |------|-------|---------|
 | `create_domain_session` | `SessionTool` | Creates a bootstrapped domain session with built-in primitive types |
 | `list_sessions` | `SessionTool` | Lists active domain sessions |
+
+### Query / inspect
+
+| Tool | Class | Purpose |
+|------|-------|---------|
 | `get_domain_overview` | `QueryTool` | Returns domain overview with entity/primitive/relationship counts |
-| `get_entity_detail` | `QueryTool` | Returns entity properties, stages, actions, policies |
-| `get_domain_analysis` | `QueryTool` | Returns analysis diagnostics (errors, warnings, info) |
+| `get_entity_detail` | `QueryTool` | Returns entity properties, stages, actions, policies, navigations, subscriptions |
+| `get_domain_analysis` | `QueryTool` | Returns analysis diagnostics (errors, warnings, info, hintCount) |
+| `get_domain_suggestions` | `QueryTool` | Authoring suggestions (advisory DMAS001 hints) |
+| `get_domain_snapshot` | `QueryTool` | Full model dump: entities, relationships, analysis |
+| `get_relationships` | `QueryTool` | Lists relationships; optional entity filter |
+| `get_constraints` | `EvolveTool` | Lists constraints on an entity's properties |
+
+### Evolve (analysis-gated mutation)
+
+| Tool | Class | Purpose |
+|------|-------|---------|
 | `add_entity` | `EvolveTool` | Adds a new entity type |
 | `add_property` | `EvolveTool` | Adds a property to an existing entity |
 | `add_stage` | `EvolveTool` | Adds a lifecycle stage to an entity |
-| `add_action` | `EvolveTool` | Adds an action/operation to an entity |
-| `add_action_to_stage` | `EvolveTool` | Creates a new action on a stage |
+| `add_action` | `EvolveTool` | Adds an entity-level action |
+| `add_action_to_stage` | `EvolveTool` | Places/copies an action onto a stage (documents fallthrough) |
 | `add_relationship` | `EvolveTool` | Adds a relationship between entities |
-| `get_policy_expression` | `PolicyTool` | Returns the guard expression text of a policy |
-| `add_policy` | `PolicyTool` | Adds a policy with a guard expression to an entity |
-| `evaluate_policy` | `PolicyTool` | Evaluates a policy against a sample subject (VM, returns bool) |
-| `apply_dsl` | `DslTool` | Applies a `.poly` DSL document, **replacing** the current session domain entirely |
+| `add_constraint` | `EvolveTool` | Adds Range/Required/Length/Pattern/Unique to a property |
+| `add_properties` | `EvolveTool` | Atomic batch of properties |
+| `add_stages` | `EvolveTool` | Atomic batch of stages |
+| `add_actions_to_stages` | `EvolveTool` | Atomic batch of stage action placements |
+| `remove_entity` | `EvolveTool` | Removes an entity (analysis gate on dependents) |
+| `remove_property` | `EvolveTool` | Removes a property |
+| `remove_stage` | `EvolveTool` | Removes a stage and its children |
+| `remove_action` | `EvolveTool` | Removes an entity-level action |
+| `remove_action_from_stage` | `EvolveTool` | Removes a stage-scoped action |
+| `remove_policy` | `EvolveTool` | Removes a policy (entity/stage/action scope) |
+| `remove_relationship` | `EvolveTool` | Removes a relationship by name |
+
+### Policy
+
+| Tool | Class | Purpose |
+|------|-------|---------|
+| `get_policy_expression` | `PolicyTool` | Inspect-only guard expression text |
+| `add_policy` | `PolicyTool` | Adds entity-level policy from JSON expression |
+| `evaluate_policy` | `PolicyTool` | VM-evaluates a named policy against a **local** subject bag |
+
+### DSL
+
+| Tool | Class | Purpose |
+|------|-------|---------|
+| `apply_dsl` | `DslTool` | Applies a `.poly` DSL document, **replacing** the session domain |
 | `export_dsl` | `DslTool` | Exports the current session domain as `.poly` DSL text |
-| `lower_expression` | `OracleTool` | Lowers a JSON policy expression through the Syntax AST pipeline for inspection |
-| `describe_expression` | `OracleTool` | Returns a structured breakdown and plain-English description of an expression |
-| `describe_domain_element` | `OracleTool` | Describes a domain element (entity/stage/action/policy/relationship) |
-| `simulate_policy` | `OracleTool` | Simulates a JSON expression against a subject bag (VM eval, returns bool, no session needed) |
-| `get_domain_suggestions` | `QueryTool` | Returns authoring suggestions (advisory hints) identifying common gaps like missing stages, actions, or policies |
-| `get_dsl_guide` | `DslTool` | Returns the product-true Phase 1a/1b DSL syntax guide — call before first `apply_dsl` |
-| `create_instance` | `RuntimeTool` | Creates a runtime instance of a domain entity, registered in the session store |
-| `get_instance` | `RuntimeTool` | Returns a snapshot of a runtime instance: stage, properties, status |
-| `list_instances` | `RuntimeTool` | Lists all runtime instances in the session, optionally filtered by entity |
-| `invoke_action` | `RuntimeTool` | Invokes an action on a runtime instance: evaluates guards, executes effects, transitions stage |
+| `get_dsl_guide` | `DslTool` | Product-true Phase 1a/1b syntax guide (embedded resource) |
+
+### Oracle
+
+| Tool | Class | Purpose |
+|------|-------|---------|
+| `lower_expression` | `OracleTool` | Lowers a JSON policy expression to Syntax AST (no session) |
+| `describe_expression` | `OracleTool` | Structured + plain-English expression breakdown (no session) |
+| `describe_domain_element` | `OracleTool` | Describes entity/stage/action/policy/relationship |
+| `simulate_policy` | `OracleTool` | VM-evaluates a JSON expression against a subject bag (no session) |
+
+### Runtime
+
+| Tool | Class | Purpose |
+|------|-------|---------|
+| `create_instance` | `RuntimeTool` | Creates a runtime instance and registers it in the session store |
+| `get_instance` | `RuntimeTool` | Snapshot: stage, properties, deletion status, child count |
+| `list_instances` | `RuntimeTool` | Lists runtime instances (skips deleted); optional entity filter |
+| `invoke_action` | `RuntimeTool` | Invokes an action: guards → effects → stage transition → subscription fan-out |
 
 ## Dual Authoring Path
 
@@ -95,7 +142,7 @@ Every MCP tool's **Name + Description + Success** must match actual behavior:
 
 **Current policy tools:** `get_policy_expression` (inspect-only, no VM), `add_policy` (mutation, no eval), `evaluate_policy` (VM eval, returns bool). All three satisfy the invariant.
 
-**DSL tools:** `apply_dsl` (parses .poly text → evolves empty domain → analysis gate → replaces session domain; revision+1; explicit HONESTY NOTES document stage `when` not enforced, instance store not running, subscription side-effects not auto-fired), `export_dsl` (printer round-trip, no side effects). Both satisfy the invariant.
+**DSL tools:** `apply_dsl` (parses .poly text → evolves empty domain → analysis gate → replaces session domain; revision+1; clears runtime instances; explicit HONESTY NOTES: action `when Stage` is not a separate runtime gate, subscriptions need RuntimeTool instances to fan out), `export_dsl` (printer round-trip, no side effects), `get_dsl_guide` (embedded product guide).
 
 ## Runtime Tools — Exercise Domain Lifecycle
 
@@ -126,5 +173,8 @@ The **RuntimeTool** family closes the final feedback loop: agents can create ins
 
 ### Honesty
 
-- `create_instance` / `get_instance` / `list_instances` are **inspect** tools — they read state, no execution.
+- `create_instance` **writes** session instance state (creates + registers an instance).
+- `get_instance` / `list_instances` are **inspect** tools — they read state, no execution.
 - `invoke_action` uses the **same `DomainEntityInstance.InvokeAction` path** as the core library — VM for assign/conditionals, direct execution for transition/create/delete/link.
+- Successful `apply_dsl` / evolve replaces the domain root and **clears** prior runtime instances (they held the previous entity graph).
+- Related-policy expressions (`Rel.Prop`, `Rel exists`, `Rel where`) are **authorable** but not RT-evaluated by `evaluate_policy` / `simulate_policy` (local property bag only).

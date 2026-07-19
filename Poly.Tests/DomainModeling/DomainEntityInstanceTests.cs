@@ -77,7 +77,7 @@ public class DomainEntityInstanceTests {
     }
 
     [Test]
-    public async Task CallAction_WithPassingGuards_Succeeds() {
+    public async Task InvokeAction_WithPassingGuards_Succeeds() {
         var entity = CreatePersonEntity();
         var instance = DomainEntityInstance.Create(entity,
             new Dictionary<string, object?> { ["Active"] = true, ["Age"] = 25L });
@@ -90,7 +90,7 @@ public class DomainEntityInstanceTests {
     }
 
     [Test]
-    public async Task CallAction_WithFailingGuard_Fails() {
+    public async Task InvokeAction_WithFailingGuard_Fails() {
         var entity = CreatePersonEntity();
         var instance = DomainEntityInstance.Create(entity,
             new Dictionary<string, object?> { ["Active"] = false, ["Age"] = 25L });
@@ -103,7 +103,7 @@ public class DomainEntityInstanceTests {
     }
 
     [Test]
-    public async Task CallAction_UnknownAction_ReturnsNotFound() {
+    public async Task InvokeAction_UnknownAction_ReturnsNotFound() {
         var entity = CreatePersonEntity();
         var instance = DomainEntityInstance.Create(entity);
 
@@ -846,7 +846,7 @@ public class DomainEntityInstanceTests {
     }
 
     [Test]
-    public async Task CallAction_CreateLinkedChild_SubscriptionFires() {
+    public async Task InvokeAction_CreateLinkedChild_SubscriptionFires() {
         // Golden P2.1 path: create a linked child, then transition it.
         // Customer ──places──► Order. Customer subscribes to Order's transition.
         var orderStatus = new Property("OrderStatus", new DomainTypeReference("Text"), []);
@@ -1350,7 +1350,7 @@ public class DomainEntityInstanceTests {
     }
 
     [Test]
-    public async Task CallAction_LinkRelationshipEffect_LinksViaPropertyBag() {
+    public async Task InvokeAction_LinkRelationshipEffect_LinksViaPropertyBag() {
         // LinkRelationshipEffect target is a PropertyAccess whose value is a DomainEntityInstance.
         var tracker = new Entity("Tracker", [
             new Property("OrderRef", new DomainTypeReference("Text"), [])
@@ -1391,7 +1391,7 @@ public class DomainEntityInstanceTests {
         store.Add(orderInstance);
         store.Add(trackerInstance);
 
-        // Seed property bag with instance reference, then Link via CallAction effect
+        // Seed property bag with instance reference, then Link via InvokeAction effect
         trackerInstance.SetProperty("OrderRef", orderInstance);
         var attach = trackerInstance.InvokeAction("Attach");
         await Assert.That(attach.Succeeded).IsTrue();

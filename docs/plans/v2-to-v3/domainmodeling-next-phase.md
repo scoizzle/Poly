@@ -31,11 +31,11 @@ Principles: domain fidelity, end-to-end ownership, smallest coherent slice, test
 | Shipped | Honest residual (not Phase 2 blockers) |
 |---------|----------------------------------------|
 | N1 nav only (N2 dropped) | Action `when Stage` parse without runtime enforce |
-| CallAction + OnExit/OnEntry + store notify | Composite/Conditional drop nested *direct* effects |
+| InvokeAction + OnExit/OnEntry + store notify | Composite/Conditional drop nested *direct* effects (DMEFF006) |
 | CreateEntityInstance + optional `RelationshipName` auto-link; `CreateEntityInRelationshipEffect` | Exclusive-owned free create reject analyzed (P2′.2) |
 | Link/Unlink effects (target = bag instance) | Delete is flag-only; TRE silent no-op |
 | when Each + instance links | Any/All skipped at runtime |
-| MCP add_* + remove_* + apply/export_dsl | No MCP CallAction / scenario tool yet |
+| MCP add_* + remove_* + apply/export_dsl | No MCP runtime tools yet (shipped later — create_instance, invoke_action) |
 
 ---
 
@@ -96,7 +96,7 @@ Phase 3 + Runtime MCP + SA MVP **shipped**. Effect IR is richer than product DSL
 **Tests (TUnit, `Method_Condition_ExpectedResult`):**
 
 - [x] `CreateEntityInstance_WithRelationship_LinksInStore`
-- [x] `CallAction_CreateLinkedChild_SubscriptionFires` (golden 2-entity)
+- [x] `InvokeAction_CreateLinkedChild_SubscriptionFires` (golden 2-entity)
 - [x] `CreateEntityInstance_WithoutRelationship_NotLinked` (backward compat)
 - [x] `CreateEntityInstance_RelationshipNameWithoutStore_NoOp` (crash safety)
 - [x] Existing create-without-rel tests still green (no forced link)
@@ -127,7 +127,7 @@ prop-init = identifier ":" expression
 
 **Tests:**
 
-- [x] Parse → evolve → CallAction golden (`Dogfood_CreateInDSL_SubscriptionFires` in `DomainEntityInstanceTests`)
+- [x] Parse → evolve → InvokeAction golden (`Dogfood_CreateInDSL_SubscriptionFires` in `DomainEntityInstanceTests`)
 - [x] Round-trip print/parse structural for create effects (`Parse_CreateEntityEffect_RoundTrips`, `Parse_CreateInEffect_RoundTrips` in `PolyDslRoundTripTests`)
 - [x] MCP `ApplyDsl` smoke with create-in + when (`ApplyDsl_WithCreateInAndSubscription_Succeeds` in `McpSmokeTests`)
 - [x] Unsupported keywords still reject `schedule` / `value` / etc. (unchanged — `create` removed from unsupported list)
@@ -151,7 +151,7 @@ Optional: when Places Active { assign … } on Customer stage
 **Prove:**
 
 1. apply_dsl (or evolution if P2.2 not yet) → domain analyzes clean  
-2. store.Add customer → CallAction PlaceOrder  
+2. store.Add customer → InvokeAction PlaceOrder  
 3. child Order in store, `IsLinked("Places", customer, order)`  
 4. if subscription authored, it fires on the linked path  
 5. export_dsl still honest  

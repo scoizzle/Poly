@@ -192,7 +192,7 @@ internal sealed class QueryTool {
         if (!McpSessionStore.TryGet(sessionId, out var state))
             return Failure_NotFound(sessionId);
 
-        var detail = DomainQueries.GetEntity(state.Domain, entityName);
+        var detail = DomainQueries.GetEntity(state.Domain, entityName, state.LatestAnalysis);
         if (detail is null)
             return new DomainToolResponse(
                 Success: false,
@@ -325,7 +325,7 @@ internal sealed class QueryTool {
             return Failure_NotFound(sessionId);
 
         var entities = state.Domain.Types.OfType<Entity>().Select(e => {
-            var detail = DomainQueries.GetEntity(state.Domain, e.Name)!;
+            var detail = DomainQueries.GetEntity(state.Domain, e.Name, state.LatestAnalysis)!;
             return new {
                 name = e.Name,
                 properties = detail.Properties.Select(p => new { p.Name, p.TypeName, p.ConstraintCount }),
@@ -464,7 +464,7 @@ effects to the entity action before placing it on the stage, or use DSL batch
 authoring (apply_dsl) to define actions with effects directly on stages.
 
 FALLTHROUGH: If the stage action has no effects and no policies, and an entity-level
-action with the same name exists, CallAction will use the entity-level action instead.
+action with the same name exists, InvokeAction will use the entity-level action instead.
 This safety net prevents silent no-ops from empty stage copies.")]
     public static DomainToolResponse AddActionToStage(
         [Description("Session ID")] string sessionId,
@@ -957,9 +957,9 @@ This safety net prevents silent no-ops from empty stage copies.")]
 }
 
 /// <summary>
-/// Tools for inspecting policy metadata (guard expressions) on domain entities.
-/// Full VM-based policy evaluation with record-building from JSON args is deferred
-/// to WP5 — see `docs/plans/v2-to-v3/workstreams/ws8-analysis-unification-and-lowering.md`.
+/// Tools for inspecting and evaluating policy guards on domain entities.
+/// <c>get_policy_expression</c> is inspect-only; <c>evaluate_policy</c> runs the
+/// VM path against a local subject bag (not cross-entity related reads).
 /// </summary>
 [McpServerToolType]
 internal sealed class PolicyTool {
@@ -1146,17 +1146,6 @@ internal sealed class PolicyTool {
 
     // ── Private helpers ─────────────────────────────────────────
 
-    private static object? JsonElementToPrimitive(System.Text.Json.JsonElement je) => je.ValueKind switch {
-        System.Text.Json.JsonValueKind.Number when je.TryGetInt32(out var i) => i,
-        System.Text.Json.JsonValueKind.Number when je.TryGetInt64(out var l) => l,
-        System.Text.Json.JsonValueKind.Number => je.GetDecimal(),
-        System.Text.Json.JsonValueKind.True => true,
-        System.Text.Json.JsonValueKind.False => false,
-        System.Text.Json.JsonValueKind.String => je.GetString(),
-        System.Text.Json.JsonValueKind.Null => null,
-        _ => je.GetRawText()
-    };
-
     /// <summary>
     /// Converts a JSON element to a CLR value for subject bag properties.
     /// </summary>
@@ -1201,15 +1190,18 @@ Do not invent constructs from experiment/lab docs — only the shipped surface i
 Unsupported constructs (actor, value, schedule, etc.) produce clear errors.
 
 HONESTY NOTES — what this tool does NOT enforce:
- - Action `when Stage` is parsed and stored but NOT runtime-enforced
-   (requires the action executor, e.g. CallAction, to check stage membership).
+ - Action `when Stage` is parsed and stored but NOT runtime-enforced as a separate
+   gate (stage membership comes from placing actions on stages; InvokeAction resolves
+   stage-scoped actions from the current stage first, then entity-level fallthrough).
    Use `create_instance` + `invoke_action` (RuntimeTool) to exercise lifecycle.
- - Stage subscriptions are parsed and stored but do NOT auto-fan-out.
+ - Stage subscriptions are parsed and stored but do NOT auto-fan-out from apply_dsl alone.
    Subscription side-effects need a DomainInstanceStore with registered instances.
    Use `create_instance` + `invoke_action` (RuntimeTool) to trigger subscription fan-out
    on stage transition.
- - The revision counter is reset to the session's current revision number + 1,
-   not to zero (apply_dsl replaces the entire domain but keeps the session alive).
+ - apply_dsl replaces the session domain and CLEARS any runtime instances created earlier
+   in the session (same as successful evolve — new domain root, fresh instance map).
+ - The revision counter becomes the session's current revision + 1, not zero
+   (apply_dsl replaces the domain but keeps the session alive).
 
 IMPORTANT: This tool REPLACES the session domain. Incremental micro-tools remain
 for exploration and repair.")]

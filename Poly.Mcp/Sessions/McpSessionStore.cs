@@ -100,6 +100,7 @@ internal static class McpSessionStore {
                 return outcome;
             }
 
+            // Fresh state: new domain root clears InstanceMap/InstanceStore (entity refs stale).
             var next = new McpSessionState(outcome.Root, outcome.Analysis, current.Revision + 1);
             Sessions[sessionId] = next;
             return outcome;
@@ -124,6 +125,8 @@ internal static class McpSessionStore {
     /// Atomically replaces a session's domain and analysis. The revision counter
     /// is set to the current revision + 1 (not reset to zero), so agents see
     /// monotonically increasing revisions across both evolve and replace cycles.
+    /// Runtime instances are cleared (new empty <see cref="McpSessionState.InstanceMap"/>)
+    /// because they hold entity/identity references from the previous domain root.
     /// Used by <c>apply_dsl</c> to replace the session with a freshly-parsed domain.
     /// </summary>
     public static bool Replace(string sessionId, Domain domain, AnalysisResult? analysis) {
@@ -133,6 +136,7 @@ internal static class McpSessionStore {
         lock (StoreLock) {
             if (!Sessions.TryGetValue(sessionId, out var current))
                 return false;
+            // Fresh state: domain + analysis only. InstanceMap/InstanceStore reset.
             Sessions[sessionId] = new McpSessionState(domain, analysis, current.Revision + 1);
             return true;
         }

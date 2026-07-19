@@ -262,6 +262,7 @@ public static class DirectVmAbiEmitter {
             TryCatchFinally tcf => EmitTryCatchFinally(tcf, ctx),
             UsingStatement us => EmitUsingStatement(us, ctx),
             SuspendNode sn => EmitSuspendNode(sn, ctx),
+            Comment _ => SpillToRing(Constant(0L), ctx),
 
             // Variables and blocks
             Assignment a => EmitAssignment(a, ctx),
@@ -574,6 +575,7 @@ public static class DirectVmAbiEmitter {
             TypeIs t => SpillRingRead(CompileNode(t, ctx), ctx),
             SwitchStatement sw => SpillRingRead(CompileNode(sw, ctx), ctx),
             StridedSetBits ssb => SpillRingRead(CompileNode(ssb, ctx), ctx),
+            Comment _ => Constant(0L),
             _ => throw new NotSupportedException(
                 $"CompileValue: unhandled {node.GetType().Name}")
         };

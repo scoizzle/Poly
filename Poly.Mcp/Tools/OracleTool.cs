@@ -7,8 +7,10 @@ using ModelContextProtocol.Server;
 
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
+using Poly.DomainModeling.Effects;
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Queries;
+using Poly.Interpretation.CSharp;
 using Poly.Mcp.Sessions;
 
 using Syntactic = Poly.Syntax.Nodes;
@@ -144,6 +146,85 @@ internal sealed class OracleTool {
         bool b => b ? "true" : "false",
         _ => value.ToString() ?? "null"
     };
+
+    // ── V0.4: lower_expression_to_csharp ─────────────────────────
+
+    [McpServerTool(Name = "lower_expression_to_csharp"), Description("Parses a JSON policy expression, lowers it through the Syntax AST pipeline, and generates C# source code. Useful for inspecting how a policy expression maps to executable C#. No session required.")]
+    public static DomainToolResponse LowerExpressionToCSharp(
+        [Description("JSON expression string (same format as add_policy). Example: {\"and\":[{\"property\":\"Age\",\"op\":\">=\",\"value\":18},{\"property\":\"Active\",\"op\":\"==\",\"value\":true}]}")] string expressionJson) {
+        var failure = TryParseExpression(expressionJson, out var expr);
+        if (failure is not null) return failure;
+        try {
+            var lowered = LowerExpressionToNode(expr);
+            var generator = new CSharpGenerator();
+            var csharp = generator.Generate(lowered);
+            return new DomainToolResponse(Success: true, Message: "Expression lowered to C# successfully.", Data: new { csharp, ast = LowerToNodeData(expr) }, Affordances: ["lower_expression", "describe_expression"]);
+        }
+        catch (Exception ex) {
+            return new DomainToolResponse(Success: false, Message: $"C# lowering failed: {ex.Message}", Data: new { error = ex.Message }, Affordances: []);
+        }
+    }
+
+    // ── V0.5: lower_effect_to_csharp ─────────────────────────────
+
+    [McpServerTool(Name = "lower_effect_to_csharp"), Description("Generates C# source code for an action's lowered effects from the session domain. Specify entityName and actionName. Optionally set stageName for stage-scoped actions.")]
+    public static DomainToolResponse LowerEffectToCSharp(
+        [Description("Session ID")] string sessionId,
+        [Description("Entity name")] string entityName,
+        [Description("Action name")] string actionName,
+        [Description("Optional stage name for stage-scoped actions")] string? stageName = null) {
+        if (!McpSessionStore.TryGet(sessionId, out var state))
+            return new DomainToolResponse(Success: false, Message: $"Session '{sessionId}' not found.", Affordances: ["create_domain_session", "list_sessions"]);
+
+        var entity = state.Domain.Types.OfType<Entity>().FirstOrDefault(e =>
+            string.Equals(e.Name, entityName, StringComparison.Ordinal));
+        if (entity is null)
+            return new DomainToolResponse(Success: false, Message: $"Entity '{entityName}' not found.", SessionId: sessionId, Affordances: ["get_domain_overview", "add_entity"]);
+
+        // Find the action
+        Poly.DomainModeling.Action? action = null;
+        if (stageName is not null) {
+            var stage = entity.Stages.FirstOrDefault(s =>
+                string.Equals(s.Name, stageName, StringComparison.Ordinal));
+            if (stage is null)
+                return new DomainToolResponse(Success: false, Message: $"Stage '{stageName}' not found on Entity '{entityName}'.", SessionId: sessionId, Affordances: ["get_entity_detail"]);
+            action = stage.Actions.FirstOrDefault(a =>
+                string.Equals(a.Name, actionName, StringComparison.Ordinal));
+        }
+        else {
+            action = entity.Actions.FirstOrDefault(a =>
+                string.Equals(a.Name, actionName, StringComparison.Ordinal));
+        }
+
+        if (action is null)
+            return new DomainToolResponse(Success: false, Message: $"Action '{actionName}' not found{(stageName is not null ? $" on stage '{stageName}'" : "")} on Entity '{entityName}'.", SessionId: sessionId, Affordances: ["get_entity_detail"]);
+
+        try {
+            var subject = new Syntactic.Parameter("entity", new Syntactic.TypeReference(entity.Name));
+            var effectPass = new EffectLoweringPass(entity, subject);
+            // Lower the action as a composite of all its effects
+            var composite = new CompositeEffect(action.Effects);
+            var lowered = effectPass.TryLowerVmNode(composite);
+
+            if (lowered is null)
+                return new DomainToolResponse(Success: false, Message: $"Action '{actionName}' has no VM-compilable effects. All its effects are direct-execution only (transition, create, invoke, delete, link).", SessionId: sessionId, Affordances: ["lower_expression_to_csharp"]);
+
+            var generator = new CSharpGenerator();
+            var csharp = generator.Generate(lowered);
+            return new DomainToolResponse(Success: true, Message: $"Action '{actionName}' lowered to C# successfully.", SessionId: sessionId, Data: new { csharp, effectCount = action.Effects.Count }, Affordances: ["get_entity_detail", "lower_expression_to_csharp"]);
+        }
+        catch (Exception ex) {
+            return new DomainToolResponse(Success: false, Message: $"C# lowering failed: {ex.Message}", SessionId: sessionId, Data: new { error = ex.Message }, Affordances: []);
+        }
+    }
+
+    /// <summary>
+    /// Parses and lowers a DomainExpression to a Syntax AST Node.
+    /// </summary>
+    private static Poly.Syntax.Node LowerExpressionToNode(DomainExpression expr) {
+        var pass = new DomainExpressionLoweringPass();
+        return pass.Lower(expr, new Syntactic.Parameter("entity"));
+    }
 
     // ── DTO types ───────────────────────────────────────────────
 

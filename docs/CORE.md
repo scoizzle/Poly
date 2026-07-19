@@ -56,7 +56,7 @@ TFM: `net10.0`, nullable on, zero external dependencies in core `Poly/`.
 **Enforced dependency direction (core):**
 
 - `Interpretation` → `Syntax`, `Introspection`
-- `DomainModeling` → `Syntax` for pure lowering (`DomainExpressionLoweringPass`)
+- `DomainModeling` → `Syntax` for pure lowering (`DomainExpressionLoweringPass`). Execution model: [`docs/interpretation/domain-execution-model.md`](interpretation/domain-execution-model.md).
 - `PolicyEvaluator` (under DomainModeling) **bridges** to Interpretation/VM for evaluate/compile — that is intentional consumption of the platform, not a license to fork the ABI
 - `Introspection` ↛ `Interpretation`
 - V2 `Poly/Data/Modeling` is **deleted** — only **DomainModeling** remains (legacy “V3” label = current stack; rename plan: [`plans/post-v2-delete-naming-cleanup.md`](plans/post-v2-delete-naming-cleanup.md))

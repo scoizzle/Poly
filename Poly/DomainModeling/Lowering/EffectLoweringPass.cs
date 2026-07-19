@@ -46,14 +46,24 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         return new Assignment(target, value);
     }
 
+    /// <summary>
+    /// Lowers a CompositeEffect. Only VM-compilable sub-effects are included;
+    /// direct-execution sub-effects (which return null) are recorded as
+    /// <see cref="Comment"/> nodes so the lowered AST preserves information
+    /// about what was not lowered. The Syntax AST's Block requires at least
+    /// one expression (type inference constraint), so Comments serve as
+    /// both documentation and a structural placeholder.
+    /// </summary>
     protected override Node? Composite(CompositeEffect c) {
         var nodes = new List<Node>();
         foreach (var sub in c.Effects) {
             var lowered = Route(sub);
             if (lowered is not null)
                 nodes.Add(lowered);
+            else
+                nodes.Add(new Comment($"Cannot lower: {sub.GetType().Name}"));
         }
-        return new Block(nodes.Count > 0 ? nodes : [new Constant(0L)]);
+        return new Block(nodes);
     }
 
     protected override Node? Conditional(ConditionalEffect c) {
@@ -61,19 +71,18 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         var thenNodes = new List<Node>();
         foreach (var sub in c.ThenEffects) {
             var lowered = Route(sub);
-            if (lowered is not null) thenNodes.Add(lowered);
+            thenNodes.Add(lowered ?? new Comment($"Cannot lower: {sub.GetType().Name}"));
         }
-        var thenBlock = new Block(thenNodes.Count > 0 ? thenNodes : [new Constant(0L)]);
 
         if (c.ElseEffects is not { Count: > 0 })
-            return new IfStatement(condition, thenBlock);
+            return new IfStatement(condition, new Block(thenNodes));
 
         var elseNodes = new List<Node>();
         foreach (var sub in c.ElseEffects) {
             var lowered = Route(sub);
-            if (lowered is not null) elseNodes.Add(lowered);
+            elseNodes.Add(lowered ?? new Comment($"Cannot lower: {sub.GetType().Name}"));
         }
-        return new IfStatement(condition, thenBlock,
-            new Block(elseNodes.Count > 0 ? elseNodes : [new Constant(0L)]));
+
+        return new IfStatement(condition, new Block(thenNodes), new Block(elseNodes));
     }
 }

@@ -1203,10 +1203,10 @@ Unsupported constructs (actor, value, schedule, etc.) produce clear errors.
 HONESTY NOTES — what this tool does NOT enforce:
  - Action `when Stage` is parsed and stored but NOT runtime-enforced
    (requires the action executor, e.g. CallAction, to check stage membership).
-   Use `create_instance` + `call_action` (RuntimeTool) to exercise lifecycle.
+   Use `create_instance` + `invoke_action` (RuntimeTool) to exercise lifecycle.
  - Stage subscriptions are parsed and stored but do NOT auto-fan-out.
    Subscription side-effects need a DomainInstanceStore with registered instances.
-   Use `create_instance` + `call_action` (RuntimeTool) to trigger subscription fan-out
+   Use `create_instance` + `invoke_action` (RuntimeTool) to trigger subscription fan-out
    on stage transition.
  - The revision counter is reset to the session's current revision number + 1,
    not to zero (apply_dsl replaces the entire domain but keeps the session alive).

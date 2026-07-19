@@ -334,7 +334,7 @@ public class SubscriptionAnalysisTests {
         store.Link("Tracks", trackerInstance, orderInstance);
 
         // Order starts in Draft, then Activate → StageTransition → Active
-        orderInstance.CallAction("Activate");
+        orderInstance.InvokeAction("Activate");
 
         await Assert.That(trackerInstance.GetProperty<string>("Status")).IsEqualTo("Triggered");
     }
@@ -384,7 +384,7 @@ public class SubscriptionAnalysisTests {
         store.Link("Tracks", trackerInstance, orderInstance);
 
         // Tracker is in Idle — subscription is on Pending, should NOT fire
-        orderInstance.CallAction("Activate");
+        orderInstance.InvokeAction("Activate");
 
         await Assert.That(trackerInstance.GetProperty<string>("Status")).IsEqualTo("Untouched");
     }

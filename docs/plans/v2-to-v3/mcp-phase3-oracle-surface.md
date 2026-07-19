@@ -384,7 +384,7 @@ Also: `InternalsVisibleTo` **Poly.Mcp** so MCP can read internal `DomainModelDia
 ```text
 apply_dsl / micro-tools  →  model in session
   → create_instance      →  bag + store registration
-  → call_action          →  effects, transitions, create-in, when fan-out
+  → invoke_action        →  effects, transitions, create-in, when fan-out
   → get_instance / list  →  observe stage + properties
 ```
 
@@ -400,9 +400,9 @@ apply_dsl / micro-tools  →  model in session
 
 - [x] **RT.0** Session store + fail-loud create  
 - [x] **RT.1** `create_instance` / `get_instance` / `list_instances`  
-- [x] **RT.2** `call_action` + transition + spawn-and-wire smoke  
+- [x] **RT.2** `invoke_action` + transition + spawn-and-wire smoke  
 - [x] **RT.3.1 / RT.3.3** README + affordances  
-- [x] **RT.3.2** `apply_dsl` honesty points at `create_instance` + `call_action` for exercise/fan-out  
+- [x] **RT.3.2** `apply_dsl` honesty points at `create_instance` + `invoke_action` for exercise/fan-out  
 
 - [x] **RT.4** Suite green with RT smokes; MCP-only E2E path  
 - [x] Expansion §0 Runtime marked shipped (refresh with dogfood-2)  
@@ -460,7 +460,7 @@ CallAction("Activate") on Draft                  → stage copy wins → no tran
 - [x] **SA.0** **Option B** (snapshot copy) + CallAction empty-stage fallthrough — not Option A reference model  
 - [x] **SA.1** `AddActionToStageChange` copies entity action fields when same name exists  
 - [x] **SA.2** Golden: `AddActionToStage_CopiesEntityActionEffects` (entity effect → stage place → CallAction transitions)  
-- [x] **SA.3** Same test exercises MCP `add_action_to_stage` + `call_action`  
+- [x] **SA.3** Same test exercises MCP `add_action_to_stage` + `invoke_action`  
 - [x] **SA.4** Empty stage-only action still callable (no-op if no effects) — fallthrough only when entity twin exists  
 - [x] **SA.5** `add_action_to_stage` Description documents copy + “effects after place not copied”  
 - [x] **SA.6** Suite **1359** green  
@@ -545,7 +545,7 @@ Domain (intent)
 | Gate | Signal |
 |------|--------|
 | Phase 3 thin closed | ✅ V0/S0/A/G |
-| RT thin green | create_instance / call_action / inspect smokes |
+| RT thin green | create_instance / invoke_action / inspect smokes |
 | Named need | Review pain and/or “ship .NET artifact” customer — not completeness |
 
 ### Future slices (order of magnitude) — all **post–Phase 3**

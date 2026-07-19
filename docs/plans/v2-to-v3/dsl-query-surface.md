@@ -3,7 +3,7 @@
 **Date:** 2026-07-18  
 **Revised:** 2026-07-18 — **surface direction frozen** (§3.1 + §4.0): subject-first path-prefix, postfix `exists`, `where` without forced parens, anti-dot; **cross-entity reads legal / writes banned**  
 **Status:** Active — **parallel to** [`effect-surface-completeness.md`](effect-surface-completeness.md); **before** customer ship confidence  
-**Current pick:** **§14** after Q1''''' ship `514e21c` (suite **1382**) — **fix `Rel exists` analysis** (nav ≠ property); then Q3′ pull — see **§14**
+**Current pick:** **Q3′ by pain OR non-goal** — Q1′ authoring path **complete** through Q1'''''' (`25a79ec`, suite **1385**); residual hygiene §15; RT eval **pull**
 **Micro-tasks:** [`simple-agent-tasks/qe-README.md`](simple-agent-tasks/qe-README.md)  
 **Related:** DomainExpression IR · `PolyDslParser` expression grammar · JSON policy parser · effect-surface plan · product guide · formal spec **§4.5**
 
@@ -454,7 +454,7 @@ Legend: **✅** shipped · **🟡** partial · **❌** missing · **🚫** non-g
 | `Literal` | ✅ numbers, strings, `true`, `false`, `null` | — | ✅ `{"literal":V}` | ✅ `Constant` | ✅ | |
 | `RelationshipNavigation` | ✅ path-prefix / `where` | — | ❌ | ✅ | 🟡 **authoring green**; **DMREL001** on many; **VM/store eval pull** (§13) | Subject-first |
 | `OwnedAccess` | 🟡 path-prefix print | path-prefix | ❌ | ✅ | 🟡 | Printer anti-dot (`3c99221`) |
-| `Exists` | ✅ `Rel exists` | — | ❌ | ✅ | 🟡 | `Exists(PropertyAccess)` |
+| `Exists` | ✅ `Rel exists` (nav or property) | — | ❌ | ✅ | 🟡 authoring; **RT eval pull** | N1 rel names accepted (`25a79ec`) |
 | `NotExists` | 🟡 surface `not Rel exists` → **`Not(Exists)`** | optional `NotExists` IR | ❌ | ✅ | 🟡 | Guide honest (`3c99221`) |
 | `ParameterAccess` | ❌ | **Q1b**: `@param` or `param Name` | ❌ | ❌ (needs type info) | ❌ (needs args) | Action params |
 | `Add` / `Subtract` / `Multiply` / `Divide` | ❌ | **Q2**: `A + B` etc. | ❌ | ✅ exists | ✅ | Arithmetic |
@@ -714,7 +714,7 @@ Customer ship confidence: **kernel effects + Q1′ + (Q3′ or honest “no coll
 - [x] Nested `where` ban + parse error (`514e21c`)  
 - [x] Unknown-rel + reverse-direction analysis (`514e21c`)  
 - [x] Path-prefix body validated against **target** entity (`514e21c`)  
-- [ ] **`Rel exists` on real nav** analysis green — **§14 Q1''''''.1 HIGH**  
+- [x] **`Rel exists` on real nav** analysis green (`25a79ec`)  
 - [ ] Q3′ any/all **or** explicit non-goal “no collection quantifiers in v1”  
 - [ ] Optional: true RT/eval true-false + soft-miss  
 - [x] JSON policy parity plan (documented DSL-only split)  
@@ -724,20 +724,19 @@ Customer ship confidence: **kernel effects + Q1′ + (Q3′ or honest “no coll
 
 ## 8. Agent pick
 
-**Micro-tasks:** [`simple-agent-tasks/qe-README.md`](simple-agent-tasks/qe-README.md) · **§14**.
+**Micro-tasks:** [`simple-agent-tasks/qe-README.md`](simple-agent-tasks/qe-README.md) · **§15**.
 
 ```text
-DONE:    Q1''''' guide authoring-only; nested-where ban; unknown-rel; body validation (`514e21c`, suite 1382)
-CURRENT: §14 Q1''''''.1 — fix Exists(PropertyAccess(nav)) analysis (treat nav names as relationships)
-THEN:    apply_dsl golden for assignee exists; Q3′ by pain OR non-goal
+DONE:    Q1′ through Q1'''''' authoring + analysis hygiene (`25a79ec`, suite 1385)
+CURRENT: Q3′ by dogfood pain OR honest non-goal “no collection quantifiers”
+THEN:    §15 low hygiene (nested path-prefix doc, dead code, owned story, test placement)
 PULL:    RT eval related policies; E3b; link DSL; L*
 ```
 
 **Implementer watch-outs**
 
 - Related reads are **authorable**; **not RT-evaluated** (guide).  
-- **DMREL001** on many path-prefix.  
-- **`Rel exists` must not require an entity property** of the same name (nav-only relationships).  
+- **DMREL001** on many path-prefix; **`Rel exists`** accepts N1 relationship names.  
 - Cross-entity reads OK; writes banned.
 
 ---
@@ -766,7 +765,9 @@ PULL:    RT eval related policies; E3b; link DSL; L*
 | 2026-07-18 | **Q1′′′′ ship** | `76568a3` — DMREL001; authoring-only tests; suite 1381 |
 | 2026-07-18 | **Q1''''' review** | §13 — open list before ship |
 | 2026-07-18 | **Q1''''' ship** | `514e21c` suite 1382 — guide, nested where, unknown-rel, body validation |
-| 2026-07-18 | **Q1'''''' review** | §14 — **Rel exists analysis bug** (Exists(PropertyAccess) vs N1 relationship-only) |
+| 2026-07-18 | **Q1'''''' review** | §14 — Rel exists analysis bug identified |
+| 2026-07-18 | **Q1'''''' ship** | `25a79ec` suite 1385 — Exists accepts N1 rel names; goldens |
+| 2026-07-18 | **Q1''''''' review** | §15 — authoring complete; Q3′ next; low hygiene residual |
 
 ---
 
@@ -992,10 +993,50 @@ PULL:    RT eval related policies; E3b; link DSL; L*
 ### Follow-up checklist (write-back)
 
 - [x] **Q1''''''.1** Fix `Rel exists` analysis for **nav relationships** + apply_dsl golden — `assignee: Agent` + `policy { assignee exists }` applies cleanly  
-- [x] **Q1''''''.2** Nested path-prefix in where body — documented allowed (nested `where` keyword is banned; bare path-prefix remains legal)  
+- [x] **Q1''''''.2** Nested path-prefix in where body — **plan/commit claim “documented allowed”**; **product guide still silent** → §15  
 - [x] **Q1''''''.3** Guide wording tightened — removed confusing subscription fan-out reference  
 - [x] **Q1''''''.4** Happy-path body validation test — `customer Tier is "VIP"` on valid target entity succeeds  
-- [ ] **Q1''''''.5** Low hygiene carry  
+- [ ] **Q1''''''.5** Low hygiene carry → §15  
 - [ ] **Q1''''''.6** RT eval pull  
 
-**§14 exit:** `Rel exists` on nav relationships is no longer a bug. Guide honest. Nested-where banned. Q3′ next or pull.
+**§14 exit:** `Rel exists` on nav relationships fixed. See **§15** for residual hygiene + Q3′ pick.
+
+---
+
+## 15. Plan review — Q1'''''' ship (`25a79ec`, suite **1385**)
+
+**Scope:** `IsRelationshipOnEntity` in PropertyAccess validation; apply_dsl goldens for `assignee exists` / `not certificate exists`; happy-path `customer Tier is "VIP"`; guide tighten.  
+**Verdict:** **Accepted.** Blocking §14 high item closed. Q1′ **authoring vertical is product-complete** under stated claims (not RT eval). Remaining work is **Q3′ decision** or low hygiene — not more “fix the surface.”
+
+### Solid
+
+| Item | Notes |
+|------|--------|
+| Rel exists on N1 | `PropertyAccess` missing from entity props but matching source-side relationship → no false error |
+| apply_dsl goldens | `HasAssignee: policy { assignee exists }`; `not certificate exists` |
+| Happy-path body | `customer Tier is "VIP"` succeeds when Tier on Customer |
+| Guide | Local-only evaluate/simulate; related expression eval future |
+| Suite | **1385** green |
+
+### Findings → follow-up tasks
+
+| ID | Sev | Finding | Fix |
+|----|-----|---------|-----|
+| **Q1'''''''.1** | Low | Nested path-prefix-in-where “documented allowed” only in plan/commit — **not in product guide** | One guide bullet: nested `where` banned; nested path-prefix in body allowed (or ban later) |
+| **Q1'''''''.2** | Low | Bare `PropertyAccess` that is **only** a relationship name (not under `Exists`) also suppressed — `policy { assignee }` may pass analysis | Optional: only suppress when parent is `Exists`/`NotExists`/`Not(Exists)` (requires parent context in walk) |
+| **Q1'''''''.3** | Low | Dead unused poly still in first path-prefix parser test | Delete |
+| **Q1'''''''.4** | Low | Owned still “Pull” in gaps table vs path-prefix Reality | Align docs |
+| **Q1'''''''.5** | Low | Tests still mostly in McpSmokeTests | Move DomainModeling-focused tests |
+| **Q1'''''''.6** | Low | Plan/roadmap status drift risk (row still “Next” while shipped) — **fixed this review** | Process |
+| **Q1'''''''.7** | Product | **Q3′** any/all/count **or** explicit non-goal | Dogfood pain or write non-goal in §7 |
+| **Q1'''''''.8** | Pull | RT eval related policies | When product needs evaluate |
+
+### Follow-up checklist (write-back)
+
+- [ ] **Q1'''''''.1** Guide note: nested path-prefix in `where` body allowed (keyword nested `where` banned)  
+- [ ] **Q1'''''''.2** Optional tighten Exists-only exception for relationship names  
+- [ ] **Q1'''''''.3–.5** Hygiene (dead code, owned story, test placement)  
+- [ ] **Q1'''''''.7** Q3′ implement **or** document non-goal  
+- [ ] **Q1'''''''.8** RT eval pull  
+
+**Recommended next:** Prefer **Q3′ decision** (implement thin any/all **or** explicit non-goal in success criteria). Hygiene items are optional.

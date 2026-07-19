@@ -867,7 +867,7 @@ public class McpSmokeTests {
         // Instance with Score=5 (fails: Score > 10) → blocked
         var instance = DomainEntityInstance.Create(entity,
             new Dictionary<string, object?> { ["Score"] = 5L });
-        var result = instance.CallAction("Submit");
+        var result = instance.InvokeAction("Submit");
         await Assert.That(result.Succeeded).IsFalse();
         await Assert.That(result.FailedGuards.Count).IsGreaterThan(0);
         await Assert.That(result.FailedGuards).Contains("HighScore");
@@ -876,7 +876,7 @@ public class McpSmokeTests {
         // Instance with Score=15 (passes: Score > 10) → succeeds
         var instance2 = DomainEntityInstance.Create(entity,
             new Dictionary<string, object?> { ["Score"] = 15L });
-        var result2 = instance2.CallAction("Submit");
+        var result2 = instance2.InvokeAction("Submit");
         await Assert.That(result2.Succeeded).IsTrue();
         await Assert.That(instance2.CurrentStage).IsEqualTo("Active");
     }
@@ -1420,7 +1420,7 @@ public class McpSmokeTests {
             System.Text.Json.JsonSerializer.Serialize(create.Data));
 
         // Call the Start action
-        var call = RuntimeTool.CallAction(sessionId, instanceId!, "Start");
+        var call = RuntimeTool.InvokeAction(sessionId, instanceId!, "Start");
         await Assert.That(call.Success).IsTrue();
         await Assert.That(call.Message).Contains("Active");
 
@@ -1458,7 +1458,7 @@ public class McpSmokeTests {
         var instanceId = ExtractInstanceId(
             System.Text.Json.JsonSerializer.Serialize(create.Data));
 
-        var call = RuntimeTool.CallAction(sessionId, instanceId!, "Submit");
+        var call = RuntimeTool.InvokeAction(sessionId, instanceId!, "Submit");
         await Assert.That(call.Success).IsFalse();
         await Assert.That(call.Message).Contains("HighScore");
         await Assert.That(call.Message).Contains("blocked");
@@ -1470,7 +1470,7 @@ public class McpSmokeTests {
         var instanceId2 = ExtractInstanceId(
             System.Text.Json.JsonSerializer.Serialize(create2.Data));
 
-        var call2 = RuntimeTool.CallAction(sessionId, instanceId2!, "Submit");
+        var call2 = RuntimeTool.InvokeAction(sessionId, instanceId2!, "Submit");
         await Assert.That(call2.Success).IsTrue();
         await Assert.That(call2.Message).Contains("Active");
     }
@@ -1486,7 +1486,7 @@ public class McpSmokeTests {
         var instanceId = ExtractInstanceId(
             System.Text.Json.JsonSerializer.Serialize(create.Data));
 
-        var call = RuntimeTool.CallAction(sessionId, instanceId!, "NonExistent");
+        var call = RuntimeTool.InvokeAction(sessionId, instanceId!, "NonExistent");
         await Assert.That(call.Success).IsFalse();
         await Assert.That(call.Message).Contains("not found");
     }
@@ -1563,7 +1563,7 @@ public class McpSmokeTests {
         var instanceId = ExtractInstanceId(
             System.Text.Json.JsonSerializer.Serialize(create.Data));
 
-        var call = RuntimeTool.CallAction(sessionId, instanceId!, "Start");
+        var call = RuntimeTool.InvokeAction(sessionId, instanceId!, "Start");
         await Assert.That(call.Success).IsTrue();
         await Assert.That(call.Message).Contains("Active");
 
@@ -1592,7 +1592,7 @@ public class McpSmokeTests {
         var instanceId = ExtractInstanceId(
             System.Text.Json.JsonSerializer.Serialize(create.Data));
 
-        var call = RuntimeTool.CallAction(sessionId, instanceId!, "DoSomething");
+        var call = RuntimeTool.InvokeAction(sessionId, instanceId!, "DoSomething");
         // Should succeed with no effects (no transition — still in Draft)
         await Assert.That(call.Success).IsTrue();
         await Assert.That(call.Message).Contains("Draft");
@@ -1628,11 +1628,11 @@ public class McpSmokeTests {
             System.Text.Json.JsonSerializer.Serialize(create.Data));
 
         // Call Delete action — executes DeleteEntityInstance effect, setting IsDeleted=true
-        var delCall = RuntimeTool.CallAction(sessionId, instanceId!, "Delete");
+        var delCall = RuntimeTool.InvokeAction(sessionId, instanceId!, "Delete");
         await Assert.That(delCall.Success).IsTrue();
 
         // Now any subsequent CallAction should fail (RT′.6)
-        var call = RuntimeTool.CallAction(sessionId, instanceId!, "Delete");
+        var call = RuntimeTool.InvokeAction(sessionId, instanceId!, "Delete");
         await Assert.That(call.Success).IsFalse();
         await Assert.That(call.Message).Contains("deleted");
     }
@@ -1669,11 +1669,11 @@ public class McpSmokeTests {
         var instanceId = ExtractInstanceId(
             System.Text.Json.JsonSerializer.Serialize(create.Data));
 
-        var archiveCall = RuntimeTool.CallAction(sessionId, instanceId!, "Archive");
+        var archiveCall = RuntimeTool.InvokeAction(sessionId, instanceId!, "Archive");
         await Assert.That(archiveCall.Success).IsTrue();
 
         // Verify subsequent actions are refused
-        var callAgain = RuntimeTool.CallAction(sessionId, instanceId!, "Archive");
+        var callAgain = RuntimeTool.InvokeAction(sessionId, instanceId!, "Archive");
         await Assert.That(callAgain.Success).IsFalse();
         await Assert.That(callAgain.Message).Contains("deleted");
     }
@@ -1739,7 +1739,7 @@ public class McpSmokeTests {
         var instanceId = ExtractInstanceId(
             System.Text.Json.JsonSerializer.Serialize(create.Data));
 
-        var call = RuntimeTool.CallAction(sessionId, instanceId!, "Go");
+        var call = RuntimeTool.InvokeAction(sessionId, instanceId!, "Go");
         await Assert.That(call.Success).IsTrue();
         await Assert.That(call.Message).Contains("Active");
 

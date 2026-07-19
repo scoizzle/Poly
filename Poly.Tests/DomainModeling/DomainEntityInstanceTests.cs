@@ -82,7 +82,7 @@ public class DomainEntityInstanceTests {
         var instance = DomainEntityInstance.Create(entity,
             new Dictionary<string, object?> { ["Active"] = true, ["Age"] = 25L });
 
-        var result = instance.CallAction("Activate");
+        var result = instance.InvokeAction("Activate");
 
         await Assert.That(result.Succeeded).IsTrue();
         await Assert.That(result.NewStage).IsEqualTo("Active");
@@ -95,7 +95,7 @@ public class DomainEntityInstanceTests {
         var instance = DomainEntityInstance.Create(entity,
             new Dictionary<string, object?> { ["Active"] = false, ["Age"] = 25L });
 
-        var result = instance.CallAction("Activate");
+        var result = instance.InvokeAction("Activate");
 
         await Assert.That(result.Succeeded).IsFalse();
         await Assert.That(result.FailedGuards).Contains("IsActive");
@@ -107,7 +107,7 @@ public class DomainEntityInstanceTests {
         var entity = CreatePersonEntity();
         var instance = DomainEntityInstance.Create(entity);
 
-        var result = instance.CallAction("NonExistent");
+        var result = instance.InvokeAction("NonExistent");
 
         await Assert.That(result.Succeeded).IsFalse();
         await Assert.That(result.ErrorMessage).Contains("not found");
@@ -161,7 +161,7 @@ public class DomainEntityInstanceTests {
         var instance = DomainEntityInstance.Create(entity,
             new Dictionary<string, object?> { ["Age"] = 0L });
 
-        var result = instance.CallAction("SetAge");
+        var result = instance.InvokeAction("SetAge");
         await Assert.That(result.Succeeded).IsTrue();
         await Assert.That(instance.GetProperty<object>("Age")).IsEqualTo(42L);
     }
@@ -180,7 +180,7 @@ public class DomainEntityInstanceTests {
         ], [], []);
 
         var instance = DomainEntityInstance.Create(entity);
-        var result = instance.CallAction("Setup");
+        var result = instance.InvokeAction("Setup");
 
         await Assert.That(result.Succeeded).IsTrue();
         await Assert.That(instance.GetProperty<object>("Age")).IsEqualTo(30L);
@@ -210,12 +210,12 @@ public class DomainEntityInstanceTests {
 
         var big = DomainEntityInstance.Create(entity,
             new Dictionary<string, object?> { ["Total"] = 200L });
-        big.CallAction("Process");
+        big.InvokeAction("Process");
         await Assert.That(big.GetProperty<string>("Status")).IsEqualTo("Approved");
 
         var small = DomainEntityInstance.Create(entity,
             new Dictionary<string, object?> { ["Total"] = 50L });
-        small.CallAction("Process");
+        small.InvokeAction("Process");
         await Assert.That(small.GetProperty<string>("Status")).IsEqualTo("Review");
     }
 
@@ -239,7 +239,7 @@ public class DomainEntityInstanceTests {
 
         var instance = DomainEntityInstance.Create(entity,
             new Dictionary<string, object?> { ["Total"] = 50L, ["Status"] = "OK" });
-        instance.CallAction("FlagLarge");
+        instance.InvokeAction("FlagLarge");
         await Assert.That(instance.GetProperty<string>("Status")).IsEqualTo("OK");
     }
 
@@ -259,7 +259,7 @@ public class DomainEntityInstanceTests {
         ], [], []);
 
         var instance = DomainEntityInstance.Create(entity);
-        var result = instance.CallAction("Spawn");
+        var result = instance.InvokeAction("Spawn");
 
         await Assert.That(result.Succeeded).IsTrue();
         await Assert.That(instance.CreatedChildren.Count).IsEqualTo(1);
@@ -283,7 +283,7 @@ public class DomainEntityInstanceTests {
         ], [], []);
 
         var instance = DomainEntityInstance.Create(entity);
-        instance.CallAction("Batch");
+        instance.InvokeAction("Batch");
 
         await Assert.That(instance.CreatedChildren.Count).IsEqualTo(3);
     }
@@ -299,7 +299,7 @@ public class DomainEntityInstanceTests {
         ], [], []);
 
         var instance = DomainEntityInstance.Create(entity); // no domain reference
-        instance.CallAction("Clone");
+        instance.InvokeAction("Clone");
 
         await Assert.That(instance.CreatedChildren.Count).IsEqualTo(1);
         await Assert.That(instance.CreatedChildren[0].GetProperty<string>("Name")).IsEqualTo("Clone");
@@ -319,7 +319,7 @@ public class DomainEntityInstanceTests {
         var domain = new Domain("Test", [person, item], []);
 
         var instance = DomainEntityInstance.Create(person, domain: domain);
-        instance.CallAction("CreateItem");
+        instance.InvokeAction("CreateItem");
 
         await Assert.That(instance.CreatedChildren.Count).IsEqualTo(1);
         await Assert.That(instance.CreatedChildren[0].Entity.Name).IsEqualTo("Item");
@@ -337,7 +337,7 @@ public class DomainEntityInstanceTests {
         var instance = DomainEntityInstance.Create(entity);
         await Assert.That(instance.IsDeleted).IsFalse();
 
-        instance.CallAction("Dispose");
+        instance.InvokeAction("Dispose");
         await Assert.That(instance.IsDeleted).IsTrue();
     }
 
@@ -362,7 +362,7 @@ public class DomainEntityInstanceTests {
 
         var instance = DomainEntityInstance.Create(entity,
             new Dictionary<string, object?> { ["Count"] = 0L });
-        instance.CallAction("DoubleIncrement");
+        instance.InvokeAction("DoubleIncrement");
 
         await Assert.That(instance.GetProperty<object>("Count")).IsEqualTo(2L);
     }
@@ -385,7 +385,7 @@ public class DomainEntityInstanceTests {
 
         var instance = DomainEntityInstance.Create(entity,
             new Dictionary<string, object?> { ["Status"] = "", ["Count"] = 0L });
-        var result = instance.CallAction("DoAll");
+        var result = instance.InvokeAction("DoAll");
 
         await Assert.That(result.Succeeded).IsTrue();
         await Assert.That(instance.CurrentStage).IsEqualTo("Active");
@@ -449,7 +449,7 @@ public class DomainEntityInstanceTests {
         store.Add(trackerInstance);
         store.Link("Tracks", trackerInstance, orderInstance);
 
-        orderInstance.CallAction("Activate");
+        orderInstance.InvokeAction("Activate");
 
         // Subscription fires (Status was "UNTOUCHED", now it's "" because
         // AssignEffect wrote a default value), but "event.Code" does NOT
@@ -513,7 +513,7 @@ public class DomainEntityInstanceTests {
         // Activate will trigger subscription effects that throw on the bad RHS
         var threw = false;
         try {
-            orderInstance.CallAction("Activate");
+            orderInstance.InvokeAction("Activate");
         }
         catch {
             // Expected — subscription effect throws during VM compilation/execution
@@ -544,7 +544,7 @@ public class DomainEntityInstanceTests {
 
         threw = false;
         try {
-            order2.CallAction("Activate");
+            order2.InvokeAction("Activate");
         }
         catch {
             threw = true;
@@ -586,7 +586,7 @@ public class DomainEntityInstanceTests {
             new Dictionary<string, object?> { ["Status"] = "Initial", ["EntryTarget"] = "" },
             domain: domain);
 
-        instance.CallAction("Go");
+        instance.InvokeAction("Go");
 
         await Assert.That(instance.CurrentStage).IsEqualTo("Active");
         await Assert.That(instance.GetProperty<string>("Status")).IsEqualTo("EnteredActive");
@@ -618,7 +618,7 @@ public class DomainEntityInstanceTests {
             domain: domain);
 
         // No initial stage transition — starts in Draft (first stage)
-        instance.CallAction("Go");
+        instance.InvokeAction("Go");
 
         await Assert.That(instance.CurrentStage).IsEqualTo("Active");
         await Assert.That(instance.GetProperty<string>("ExitNote")).IsEqualTo("LeftDraft");
@@ -649,16 +649,16 @@ public class DomainEntityInstanceTests {
             domain: domain);
 
         // Starts in Draft, can call StageOnly
-        var result1 = instance.CallAction("StageOnly");
+        var result1 = instance.InvokeAction("StageOnly");
         await Assert.That(result1.Succeeded).IsTrue();
         await Assert.That(instance.GetProperty<object>("Count")).IsEqualTo(1L);
 
         // Transition to StageA, which has no actions
-        instance.CallAction("Go");
+        instance.InvokeAction("Go");
         await Assert.That(instance.CurrentStage).IsEqualTo("StageA");
 
         // StageOnly no longer available
-        var result2 = instance.CallAction("StageOnly");
+        var result2 = instance.InvokeAction("StageOnly");
         await Assert.That(result2.Succeeded).IsFalse();
         await Assert.That(result2.ErrorMessage).IsNotNull();
     }
@@ -686,7 +686,7 @@ public class DomainEntityInstanceTests {
             domain: domain);
         store.Add(parentInstance);
 
-        parentInstance.CallAction("Spawn");
+        parentInstance.InvokeAction("Spawn");
 
         await Assert.That(parentInstance.CreatedChildren.Count).IsEqualTo(1);
         var childInstance = parentInstance.CreatedChildren[0];
@@ -726,7 +726,7 @@ public class DomainEntityInstanceTests {
             domain: domain);
         store.Add(parentInstance);
 
-        parentInstance.CallAction("Spawn");
+        parentInstance.InvokeAction("Spawn");
 
         var childInstance = parentInstance.CreatedChildren[0];
         await Assert.That(store.IsLinked("hasChild", parentInstance, childInstance)).IsTrue();
@@ -750,7 +750,7 @@ public class DomainEntityInstanceTests {
         var parentInstance = DomainEntityInstance.Create(parent, domain: domain);
         store.Add(parentInstance);
 
-        parentInstance.CallAction("Spawn");
+        parentInstance.InvokeAction("Spawn");
 
         var childInstance = parentInstance.CreatedChildren[0];
         await Assert.That(store.IsLinked("child", parentInstance, childInstance)).IsFalse();
@@ -819,7 +819,7 @@ public class DomainEntityInstanceTests {
         store.Add(custInstance);
 
         // PlaceOrder → create Order + auto-link
-        custInstance.CallAction("PlaceOrder");
+        custInstance.InvokeAction("PlaceOrder");
         await Assert.That(custInstance.CreatedChildren.Count).IsEqualTo(1);
         var orderInstance = custInstance.CreatedChildren[0];
         await Assert.That(orderInstance.Entity.Name).IsEqualTo("Order");
@@ -827,7 +827,7 @@ public class DomainEntityInstanceTests {
         await Assert.That(orderInstance.GetProperty<string>("Status")).IsEqualTo("New");
 
         // Order transitions to Active → Customer's subscription fires
-        orderInstance.CallAction("Activate");
+        orderInstance.InvokeAction("Activate");
         await Assert.That(orderInstance.CurrentStage).IsEqualTo("Active");
         await Assert.That(custInstance.GetProperty<string>("Status")).IsEqualTo("Fulfilled");
 
@@ -893,14 +893,14 @@ public class DomainEntityInstanceTests {
         store.Add(custInstance);
 
         // PlaceOrder creates child Order, auto-links it via "places"
-        custInstance.CallAction("PlaceOrder");
+        custInstance.InvokeAction("PlaceOrder");
         await Assert.That(custInstance.CreatedChildren.Count).IsEqualTo(1);
         var orderInstance = custInstance.CreatedChildren[0];
         await Assert.That(store.IsLinked("places", custInstance, orderInstance)).IsTrue();
 
         // Order starts in Draft, then transitions to Active.
         // Because it's linked via "places", Customer's subscription should fire.
-        orderInstance.CallAction("Activate");
+        orderInstance.InvokeAction("Activate");
         await Assert.That(orderInstance.CurrentStage).IsEqualTo("Active");
         await Assert.That(custInstance.GetProperty<string>("CustStatus")).IsEqualTo("Fulfilled");
     }
@@ -920,7 +920,7 @@ public class DomainEntityInstanceTests {
         var parentInstance = DomainEntityInstance.Create(parent, domain: domain);
 
         // No store → should not crash
-        parentInstance.CallAction("Spawn");
+        parentInstance.InvokeAction("Spawn");
         await Assert.That(parentInstance.CreatedChildren.Count).IsEqualTo(1);
     }
 
@@ -966,7 +966,7 @@ public class DomainEntityInstanceTests {
 
         await Assert.That(aInstance.CurrentStage).IsEqualTo("Pending");
 
-        bInstance.CallAction("Activate");
+        bInstance.InvokeAction("Activate");
 
         await Assert.That(bInstance.CurrentStage).IsEqualTo("Active");
         // A's subscription fired and transitioned A to Done
@@ -1004,29 +1004,29 @@ public class DomainEntityInstanceTests {
             domain: domain);
 
         // Starts in Root — can call ParentOp directly
-        var r1 = instance.CallAction("ParentOp");
+        var r1 = instance.InvokeAction("ParentOp");
         await Assert.That(r1.Succeeded).IsTrue();
         await Assert.That(instance.GetProperty<object>("Count")).IsEqualTo(1L);
 
         // ChildOp is on the Child stage — not accessible from Root
-        var r2 = instance.CallAction("ChildOp");
+        var r2 = instance.InvokeAction("ChildOp");
         await Assert.That(r2.Succeeded).IsFalse();
 
         // Transition to Child stage
-        instance.CallAction("GoToChild");
+        instance.InvokeAction("GoToChild");
         await Assert.That(instance.CurrentStage).IsEqualTo("Child");
 
         // From Child stage, ParentOp is NOT inherited (flat stages)
-        var r3 = instance.CallAction("ParentOp");
+        var r3 = instance.InvokeAction("ParentOp");
         await Assert.That(r3.Succeeded).IsFalse();
 
         // Can only call ChildOp directly on the Child stage
-        var r4 = instance.CallAction("ChildOp");
+        var r4 = instance.InvokeAction("ChildOp");
         await Assert.That(r4.Succeeded).IsTrue();
         await Assert.That(instance.GetProperty<object>("Count")).IsEqualTo(11L);
 
         // Entity-level action GoToChild still works from any stage
-        instance.CallAction("GoToChild"); // same stage, no-op effectively
+        instance.InvokeAction("GoToChild"); // same stage, no-op effectively
     }
 
     [Test]
@@ -1080,7 +1080,7 @@ public class DomainEntityInstanceTests {
         // Trigger transition — OnEntry throws, but notify should still fire in finally
         var threw = false;
         try {
-            aInstance.CallAction("Go");
+            aInstance.InvokeAction("Go");
         }
         catch {
             // Expected — OnEntry effect throws
@@ -1158,7 +1158,7 @@ public class DomainEntityInstanceTests {
             store.Link($"rel{i}", instances[i], instances[i - 1]);
 
         // Trigger the cascade
-        instances[0].CallAction("Go");
+        instances[0].InvokeAction("Go");
 
         // E0 triggered manually — in Active
         await Assert.That(instances[0].CurrentStage).IsEqualTo("Active");
@@ -1225,7 +1225,7 @@ public class DomainEntityInstanceTests {
         store.Add(parentInstance);
 
         // Parent spawns Child — child should be auto-added to store
-        parentInstance.CallAction("Spawn");
+        parentInstance.InvokeAction("Spawn");
         await Assert.That(parentInstance.CreatedChildren.Count).IsEqualTo(1);
         var childInstance = parentInstance.CreatedChildren[0];
         await Assert.That(childInstance.Store).IsNotNull();
@@ -1234,7 +1234,7 @@ public class DomainEntityInstanceTests {
         store.Link("parentChild", gpInstance, childInstance);
 
         // Child transitions to Active — Grandparent's subscription should fire
-        childInstance.CallAction("Activate");
+        childInstance.InvokeAction("Activate");
         await Assert.That(childInstance.CurrentStage).IsEqualTo("Active");
         await Assert.That(gpInstance.GetProperty<string>("Status")).IsEqualTo("ChildActivated");
     }
@@ -1286,13 +1286,13 @@ public class DomainEntityInstanceTests {
         // Only tracker1 watches order1
         store.Link("Tracks", tracker1, order1);
 
-        order1.CallAction("Activate");
+        order1.InvokeAction("Activate");
 
         await Assert.That(tracker1.GetProperty<string>("Status")).IsEqualTo("Triggered");
         await Assert.That(tracker2.GetProperty<string>("Status")).IsEqualTo("Idle2");
 
         // order2 has no links — neither tracker should fire
-        order2.CallAction("Activate");
+        order2.InvokeAction("Activate");
         await Assert.That(tracker1.GetProperty<string>("Status")).IsEqualTo("Triggered");
         await Assert.That(tracker2.GetProperty<string>("Status")).IsEqualTo("Idle2");
     }
@@ -1337,15 +1337,15 @@ public class DomainEntityInstanceTests {
         store.Add(trackerInstance);
         store.Link("Tracks", trackerInstance, orderInstance);
 
-        orderInstance.CallAction("Activate");
+        orderInstance.InvokeAction("Activate");
         await Assert.That(trackerInstance.GetProperty<string>("Status")).IsEqualTo("Triggered");
 
         // Reset and unlink — second activation must not fire
-        orderInstance.CallAction("Reset");
+        orderInstance.InvokeAction("Reset");
         trackerInstance.SetProperty("Status", "Idle");
         store.Unlink("Tracks", trackerInstance, orderInstance);
 
-        orderInstance.CallAction("Activate");
+        orderInstance.InvokeAction("Activate");
         await Assert.That(trackerInstance.GetProperty<string>("Status")).IsEqualTo("Idle");
     }
 
@@ -1393,11 +1393,11 @@ public class DomainEntityInstanceTests {
 
         // Seed property bag with instance reference, then Link via CallAction effect
         trackerInstance.SetProperty("OrderRef", orderInstance);
-        var attach = trackerInstance.CallAction("Attach");
+        var attach = trackerInstance.InvokeAction("Attach");
         await Assert.That(attach.Succeeded).IsTrue();
         await Assert.That(store.IsLinked("Tracks", trackerInstance, orderInstance)).IsTrue();
 
-        orderInstance.CallAction("Activate");
+        orderInstance.InvokeAction("Activate");
         await Assert.That(trackerInstance.GetProperty<string>("OrderRef")).IsEqualTo("linked-ok");
     }
 
@@ -1421,7 +1421,7 @@ public class DomainEntityInstanceTests {
 
         var threw = false;
         try {
-            parentInstance.CallAction("Spawn");
+            parentInstance.InvokeAction("Spawn");
         }
         catch (InvalidOperationException ex) {
             await Assert.That(ex.Message.Contains("nonexistentRel")).IsTrue();
@@ -1456,7 +1456,7 @@ public class DomainEntityInstanceTests {
         // then tries to link (Store is null → skip). No crash expected.
         var threw = false;
         try {
-            custInstance.CallAction("Go");
+            custInstance.InvokeAction("Go");
         }
         catch {
             threw = true;
@@ -1487,7 +1487,7 @@ public class DomainEntityInstanceTests {
 
         var threw = false;
         try {
-            makerInstance.CallAction("Spawn");
+            makerInstance.InvokeAction("Spawn");
         }
         catch (InvalidOperationException ex) {
             await Assert.That(ex.Message.Contains("not the source")).IsTrue();
@@ -1516,7 +1516,7 @@ public class DomainEntityInstanceTests {
 
         var threw = false;
         try {
-            custInstance.CallAction("Spawn");
+            custInstance.InvokeAction("Spawn");
         }
         catch (InvalidOperationException ex) {
             await Assert.That(ex.Message.Contains("targets")).IsTrue();
@@ -1544,7 +1544,7 @@ public class DomainEntityInstanceTests {
 
         var threw = false;
         try {
-            makerInstance.CallAction("Spawn");
+            makerInstance.InvokeAction("Spawn");
         }
         catch (InvalidOperationException ex) {
             await Assert.That(ex.Message.Contains("not the source")).IsTrue();

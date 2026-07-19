@@ -31,7 +31,7 @@ Tools live in `Poly.Mcp/Tools/` and use only `Poly.DomainModeling` types (no `Po
 | `create_instance` | `RuntimeTool` | Creates a runtime instance of a domain entity, registered in the session store |
 | `get_instance` | `RuntimeTool` | Returns a snapshot of a runtime instance: stage, properties, status |
 | `list_instances` | `RuntimeTool` | Lists all runtime instances in the session, optionally filtered by entity |
-| `call_action` | `RuntimeTool` | Calls an action on a runtime instance: evaluates guards, executes effects, transitions stage |
+| `invoke_action` | `RuntimeTool` | Invokes an action on a runtime instance: evaluates guards, executes effects, transitions stage |
 
 ## Dual Authoring Path
 
@@ -106,7 +106,7 @@ The **RuntimeTool** family closes the final feedback loop: agents can create ins
 ```text
 1. apply_dsl / micro-tools  →  model in session
 2. create_instance          →  instanceId + initial snapshot
-3. call_action              →  effects execute, stage transitions, subscriptions fire
+3. invoke_action              →  effects execute, stage transitions, subscriptions fire
 4. get_instance             →  observe new stage + modified properties
 5. list_instances           →  enumerate all instances (optionally by entity)
 ```
@@ -115,7 +115,7 @@ The **RuntimeTool** family closes the final feedback loop: agents can create ins
 
 - Instances are **session-scoped** — each session has its own `DomainInstanceStore`.
 - The **first defined stage** is the initial stage (if stages exist).
-- `call_action` resolves from the **current stage** first, then entity-level actions.
+- `invoke_action` resolves from the **current stage** first, then entity-level actions.
 - Guard policies (action-level, stage-level, entity-level) are evaluated before effects.
 - On **stage transition**: OnExit → set new stage → OnEntry → notify store subscribers.
 - Stage subscription fan-out happens automatically for linked subscriber instances.
@@ -127,4 +127,4 @@ The **RuntimeTool** family closes the final feedback loop: agents can create ins
 ### Honesty
 
 - `create_instance` / `get_instance` / `list_instances` are **inspect** tools — they read state, no execution.
-- `call_action` uses the **same `DomainEntityInstance.CallAction` path** as the core library — VM for assign/conditionals, direct execution for transition/create/delete/link.
+- `invoke_action` uses the **same `DomainEntityInstance.InvokeAction` path** as the core library — VM for assign/conditionals, direct execution for transition/create/delete/link.

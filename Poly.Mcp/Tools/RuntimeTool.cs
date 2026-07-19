@@ -78,7 +78,7 @@ internal sealed class RuntimeTool {
         [property: JsonPropertyName("propertyCount")] int PropertyCount
     );
 
-    internal sealed record CallActionResultData(
+    internal sealed record InvokeActionResultData(
         [property: JsonPropertyName("actionName")] string ActionName,
         [property: JsonPropertyName("succeeded")] bool Succeeded,
         [property: JsonPropertyName("newStage")] string? NewStage,
@@ -99,7 +99,7 @@ internal sealed class RuntimeTool {
 The instance starts in the first defined stage (if stages exist) and is immediately
 available for action execution, policy evaluation, and stage subscriptions.
 
-Use 'call_action' to invoke actions on the instance, 'get_instance' to inspect its
+Use 'invoke_action' to invoke actions on the instance, 'get_instance' to inspect its
 current state, and 'list_instances' to enumerate all instances in the session.
 
 Thin wrapper around DomainEntityInstance.Create — no new runtime machinery.")]
@@ -173,7 +173,7 @@ Thin wrapper around DomainEntityInstance.Create — no new runtime machinery.")]
             Message: $"Instance '{instanceId}' of entity '{entityName}' created. Stage: '{instance.CurrentStage ?? "(none)"}'.",
             SessionId: sessionId,
             Data: new { instance = snapshot },
-            Affordances: ["get_instance", "call_action", "list_instances"]);
+            Affordances: ["get_instance", "invoke_action", "list_instances"]);
     }
 
     // ── RT.1: get_instance ─────────────────────────────────────
@@ -202,7 +202,7 @@ Thin wrapper around DomainEntityInstance.Create — no new runtime machinery.")]
             Message: $"Instance '{instanceId}' of '{instance.Entity.Name}', stage: '{instance.CurrentStage ?? "(none)"}'.",
             SessionId: sessionId,
             Data: new { instance = snapshot },
-            Affordances: ["call_action", "list_instances", "create_instance"]);
+            Affordances: ["invoke_action", "list_instances", "create_instance"]);
     }
 
     // ── RT.1: list_instances ───────────────────────────────────
@@ -234,11 +234,11 @@ Thin wrapper around DomainEntityInstance.Create — no new runtime machinery.")]
             SessionId: sessionId,
             Data: new { instances = summaries, count = summaries.Count },
             Affordances: summaries.Count > 0
-                ? ["get_instance", "call_action", "create_instance"]
+                ? ["get_instance", "invoke_action", "create_instance"]
                 : ["create_instance"]);
     }
 
-    // ── RT.2: call_action ──────────────────────────────────────
+    // ── RT.2: invoke_action ─────────────────────────────────────
 
     /// <summary>
     /// Calls an action on a runtime instance. The action is resolved from the
@@ -254,7 +254,7 @@ Thin wrapper around DomainEntityInstance.Create — no new runtime machinery.")]
     /// linked subscriber instances see the transition and their subscription
     /// effects are executed.
     /// </summary>
-    [McpServerTool(Name = "call_action"), Description(@"Calls an action on a runtime instance.
+    [McpServerTool(Name = "invoke_action"), Description(@"Invokes an action on a runtime instance.
 
 The action pipeline:
 1. Resolve action from current stage or entity level
@@ -265,10 +265,13 @@ On stage transition, linked subscriber instances automatically fire their
 stage subscription effects (fan-out via DomainInstanceStore.NotifyTransition).
 
 Returns the result including new stage and any guard failures.")]
-    public static DomainToolResponse CallAction(
+    public static DomainToolResponse InvokeAction(
         [Description("Session ID")] string sessionId,
         [Description("Instance ID returned by create_instance")] string instanceId,
-        [Description("Name of the action to invoke")] string actionName) {
+        [Description("Name of the action to invoke")] string actionName,
+        [Description("Optional JSON object of action parameter values, " +
+            "e.g. {\"amount\":100,\"reason\":\"urgent\"}")]
+        string? argsJson = null) {
         if (!McpSessionStore.TryGet(sessionId, out var state))
             return Failure_NotFound(sessionId);
 
@@ -286,9 +289,30 @@ Returns the result including new stage and any guard failures.")]
                 SessionId: sessionId,
                 Affordances: ["create_instance"]);
 
-        ActionCallResult result;
+        // Parse action args JSON
+        Dictionary<string, object?>? args = null;
+        if (!string.IsNullOrWhiteSpace(argsJson)) {
+            try {
+                var parsed = System.Text.Json.JsonSerializer
+                    .Deserialize<Dictionary<string, System.Text.Json.JsonElement>>(argsJson);
+                if (parsed is not null) {
+                    args = new Dictionary<string, object?>(StringComparer.Ordinal);
+                    foreach (var (key, je) in parsed)
+                        args[key] = JsonElementToValue(je);
+                }
+            }
+            catch (Exception ex) {
+                return new DomainToolResponse(
+                    Success: false,
+                    Message: $"Invalid args JSON: {ex.Message}",
+                    SessionId: sessionId,
+                    Affordances: ["get_instance"]);
+            }
+        }
+
+        ActionInvocationResult result;
         try {
-            result = instance.CallAction(actionName);
+            result = instance.InvokeAction(actionName, args);
         }
         catch (Exception ex) {
             return new DomainToolResponse(
@@ -299,7 +323,7 @@ Returns the result including new stage and any guard failures.")]
                 Affordances: ["get_instance", "list_instances"]);
         }
 
-        var resultData = new CallActionResultData(
+        var resultData = new InvokeActionResultData(
             ActionName: result.ActionName,
             Succeeded: result.Succeeded,
             NewStage: result.NewStage,
@@ -313,7 +337,7 @@ Returns the result including new stage and any guard failures.")]
                 ? $"Action '{actionName}' succeeded. New stage: '{result.NewStage ?? "(unchanged)"}'."
                 : (result.ErrorMessage ?? $"Action '{actionName}' blocked by guards: {string.Join(", ", result.FailedGuards)}"),
             SessionId: sessionId,
-            Data: new { callActionResult = resultData },
+            Data: new { invokeActionResult = resultData },
             Affordances: ["get_instance", "list_instances", "create_instance"]);
     }
 }

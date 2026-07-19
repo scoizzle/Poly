@@ -30,7 +30,7 @@
 | Policy | `get_policy_expression`, `add_policy` (entity), `evaluate_policy` (multi-property JSON subject) |
 | **DSL** | `apply_dsl` (full **replace**), `export_dsl`, `get_dsl_guide` (embedded product guide, `6b0fd63`) |
 | **Oracle** | `lower_expression`, `describe_expression`, `describe_domain_element`, `simulate_policy` |
-| **Runtime** | `create_instance`, `get_instance`, `list_instances`, `call_action` — **dogfood-2 E2E validated** |
+| **Runtime** | `create_instance`, `get_instance`, `list_instances`, `invoke_action` — **dogfood-2 E2E validated** |
 
 **Honest substitute:** Effects largely via **`apply_dsl`**. SA Option B + fallthrough mitigates empty stage no-op; **stale snapshot** if entity effects change after non-empty stage copy (documented).
 

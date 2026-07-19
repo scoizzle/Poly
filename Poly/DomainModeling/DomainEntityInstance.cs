@@ -210,10 +210,40 @@ public sealed record DomainEntityInstance {
     /// <see cref="CreateEntityInstance"/>, <see cref="InvokeActionEffect"/>)
     /// mutate the instance directly.</para>
     /// </summary>
-    public ActionCallResult CallAction(string actionName) {
+    /// <param name="actionName">Name of the action to invoke.</param>
+    /// <param name="args">Optional parameter values injected into the property
+    /// bag during execution. Each key-value pair is available as a property
+    /// in policy guards and assign RHS expressions. Values are cleaned up
+    /// after the action completes.</param>
+    public ActionInvocationResult InvokeAction(string actionName,
+        IReadOnlyDictionary<string, object?>? args = null) {
         // RT′.6: Refuse actions on deleted instances.
         if (IsDeleted)
-            return ActionCallResult.Deleted(Entity.Name, actionName);
+            return ActionInvocationResult.Deleted(Entity.Name, actionName);
+
+        // Inject action args into the property bag for the duration of execution.
+        var argKeys = new List<string>();
+        if (args is { Count: > 0 }) {
+            foreach (var kv in args) {
+                _values[kv.Key] = kv.Value;
+                argKeys.Add(kv.Key);
+            }
+        }
+
+        try {
+            return InvokeActionInternal(actionName);
+        }
+        finally {
+            // Clean up injected args so subsequent calls don't see stale values.
+            foreach (var key in argKeys)
+                _values.Remove(key);
+        }
+    }
+
+    /// <summary>
+    /// Core action execution after args have been injected into <see cref="_values"/>.
+    /// </summary>
+    private ActionInvocationResult InvokeActionInternal(string actionName) {
 
         // Find action: first check current stage (and its parent chain) for effective actions,
         // then entity-level. Stage-scoped actions are only available while on that stage.
@@ -242,7 +272,7 @@ public sealed record DomainEntityInstance {
         action ??= entityAction;
 
         if (action is null)
-            return ActionCallResult.Missing(Entity.Name, actionName);
+            return ActionInvocationResult.Missing(Entity.Name, actionName);
 
         // ── Evaluate all guard policies ─────────────────────────
         var failures = new List<string>();
@@ -250,7 +280,7 @@ public sealed record DomainEntityInstance {
             if (!EvaluatePolicy(guard)) failures.Add(guard.Name);
 
         if (failures.Count > 0)
-            return ActionCallResult.Blocked(actionName, failures);
+            return ActionInvocationResult.Blocked(actionName, failures);
 
         var stage = Entity.Stages.FirstOrDefault(
             s => string.Equals(s.Name, CurrentStage, StringComparison.Ordinal));
@@ -259,13 +289,13 @@ public sealed record DomainEntityInstance {
                 if (!EvaluatePolicy(guard)) failures.Add(guard.Name);
 
         if (failures.Count > 0)
-            return ActionCallResult.Blocked(actionName, failures);
+            return ActionInvocationResult.Blocked(actionName, failures);
 
         foreach (var guard in Entity.Policies)
             if (!EvaluatePolicy(guard)) failures.Add(guard.Name);
 
         if (failures.Count > 0)
-            return ActionCallResult.Blocked(actionName, failures);
+            return ActionInvocationResult.Blocked(actionName, failures);
 
         // ── Execute effects ─────────────────────────────────────
         var subjectParam = new Parameter("entity", new TypeReference(Entity.Name));
@@ -275,7 +305,32 @@ public sealed record DomainEntityInstance {
             ExecuteEffect(effect, effectPass);
         }
 
-        return ActionCallResult.Ok(actionName, CurrentStage);
+        return ActionInvocationResult.Ok(actionName, CurrentStage);
+    }
+
+    /// <summary>
+    /// Evaluates a list of <see cref="PropertyBinding"/> expressions against the
+    /// current instance's property bag and returns the results as a dictionary.
+    /// Each binding's expression is lowered, compiled, and executed via the VM.
+    /// Returns null when <paramref name="bindings"/> is empty.
+    /// </summary>
+    private IReadOnlyDictionary<string, object?>? EvaluateParameterBindings(
+        IReadOnlyList<PropertyBinding> bindings) {
+        if (bindings is null || bindings.Count == 0) return null;
+
+        var result = new Dictionary<string, object?>(StringComparer.Ordinal);
+        var subjectParam = new Parameter("entity", new TypeReference(Entity.Name));
+
+        foreach (var binding in bindings) {
+            var loweringPass = new DomainExpressionLoweringPass();
+            var lowered = loweringPass.Lower(binding.Expression, subjectParam);
+            var compiled = Interpreter.Compile(lowered, _typeDefAnalyzer);
+            using var exec = Interpreter.Execute(compiled,
+                s => s.SetArgs(new object?[] { _values }));
+            result[binding.PropertyName] = exec.Result.GetValue<object>();
+        }
+
+        return result.Count > 0 ? result : null;
     }
 
     /// <summary>
@@ -306,7 +361,9 @@ public sealed record DomainEntityInstance {
                 ExecuteCreateInRelationship(createIn);
                 break;
             case InvokeActionEffect invoke:
-                CallAction(invoke.ActionName);
+                // Evaluate ParameterBindings and pass as args to chained action.
+                var chainedArgs = EvaluateParameterBindings(invoke.ParameterBindings);
+                InvokeAction(invoke.ActionName, chainedArgs);
                 break;
             case DeleteEntityInstance:
                 IsDeleted = true;
@@ -375,12 +432,12 @@ public sealed record DomainEntityInstance {
     /// </summary>
     /// <remarks>
     /// <b>Stage policy vs action hierarchy:</b> Stage-scoped policies are evaluated only on the
-    /// <b>current</b> stage (not the parent chain), while <see cref="CallAction"/> walks the
+    /// <b>current</b> stage (not the parent chain), while <see cref="InvokeAction"/> walks the
     /// parent chain for actions. This asymmetry exists because effective-policy computation
     /// is performed by analyzers (walking the hierarchy), while runtime scenario gating is
     /// still a per-stage concern.
     ///
-    /// <b>OnEntry re-entrancy:</b> If an OnEntry effect calls <see cref="CallAction"/> which
+    /// <b>OnEntry re-entrancy:</b> If an OnEntry effect calls <see cref="InvokeAction"/> which
     /// triggers another transition on the <b>same instance</b>, the resulting <c>TransitionStage</c>
     /// call is <b>not</b> bounded by the store&#x2019;s <c>maxDepth</c> (which limits subscription
     /// fan-out across <b>different</b> instances). Re-entrant same-instance transitions risk
@@ -645,8 +702,8 @@ public sealed record DomainEntityInstance {
 /// <summary>
 /// Result of calling an action on a <see cref="DomainEntityInstance"/>.
 /// </summary>
-public sealed record ActionCallResult {
-    private ActionCallResult() { }
+public sealed record ActionInvocationResult {
+    private ActionInvocationResult() { }
 
     /// <summary>The action name that was called.</summary>
     public string ActionName { get; private init; } = "";
@@ -663,25 +720,25 @@ public sealed record ActionCallResult {
     /// <summary>Error message for not-found action.</summary>
     public string? ErrorMessage { get; private init; }
 
-    internal static ActionCallResult Ok(string actionName, string? newStage) => new() {
+    internal static ActionInvocationResult Ok(string actionName, string? newStage) => new() {
         ActionName = actionName,
         Succeeded = true,
         NewStage = newStage
     };
 
-    internal static ActionCallResult Blocked(string actionName, List<string> failures) => new() {
+    internal static ActionInvocationResult Blocked(string actionName, List<string> failures) => new() {
         ActionName = actionName,
         Succeeded = false,
         FailedGuards = failures.AsReadOnly()
     };
 
-    internal static ActionCallResult Missing(string entityName, string actionName) => new() {
+    internal static ActionInvocationResult Missing(string entityName, string actionName) => new() {
         ActionName = actionName,
         Succeeded = false,
         ErrorMessage = $"Action '{actionName}' not found on entity '{entityName}'."
     };
 
-    internal static ActionCallResult Deleted(string entityName, string actionName) => new() {
+    internal static ActionInvocationResult Deleted(string entityName, string actionName) => new() {
         ActionName = actionName,
         Succeeded = false,
         ErrorMessage = $"Instance of entity '{entityName}' has been deleted — no actions can be called."

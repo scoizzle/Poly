@@ -99,17 +99,18 @@ Customer **policies** still cannot **read** related data in product DSL — IR +
 **Slice Q1′ exit (parse/print):** met (`959c6e7`).  
 **Q1′′′ partial (`3c99221`):** assign + owned print + apply/export.  
 **Q1′′′′ (`76568a3`):** **DMREL001**; authoring-only tests.  
-**Q1''''' (`514e21c`):** guide authoring-only; nested-where ban; unknown-rel; body→target validation.  
-**Current:** parent plan **§14 Q1''''''** — **Rel exists** analysis fix.
+**Q1''''' (`514e21c`):** guide; nested-where; unknown-rel; body→target.  
+**Q1'''''' (`25a79ec`):** **Rel exists on N1 nav** fixed + goldens.  
+**Current:** parent plan **§15** — **Q3′ decision** or low hygiene.
 
-### Slice Q1'''''' — Post-Q1''''' (§14)
+### Slice Q1''''''' — Post-authoring-complete (§15)
 
 | # | ID | Work | Sev | Status |
 |---|-----|------|-----|--------|
-| **1** | Q1''''''.1 | **`Rel exists` on N1 nav** — analysis accepts relationship names; apply_dsl golden | High | `[ ]` |
-| **2** | Q1''''''.2 | Nested path-prefix in where body — ban or document | Med | `[ ]` |
-| **3** | Q1''''''.3–.5 | Guide wording; happy-path body test; low hygiene | Low | `[ ]` |
-| **4** | Q1''''''.6 | Optional RT eval | Pull | `[ ]` |
+| **1** | Q1'''''''.7 | **Q3′** any/all/count **or** explicit non-goal | Product | `[ ]` |
+| **2** | Q1'''''''.1 | Guide: nested path-prefix in where body allowed | Low | `[ ]` |
+| **3** | Q1'''''''.2–.5 | Exists-only exception tighten; dead code; owned; tests | Low | `[ ]` |
+| **4** | Q1'''''''.8 | Optional RT eval | Pull | `[ ]` |
 
 ### Optional hygiene (parallel anytime; do not block)
 

@@ -2,8 +2,8 @@
 
 **Date:** 2026-07-18  
 **Revised:** 2026-07-18 (**E1′′′** post-commit review — `121cd92` clean tree; suite **1360**)  
-**Status:** E1 **shipped**; E2.1 create-in only; Q1′ through Q1''''' hygiene (`514e21c`, suite **1382**)  
-**Current pick:** query **§14** — **Rel exists** analysis fix — [`dsl-query-surface.md`](dsl-query-surface.md) §14
+**Status:** E1 **shipped**; E2.1 create-in only; Q1′ authoring **complete** through Q1'''''' (`25a79ec`, suite **1385**)  
+**Current pick:** query **§15** — Q3′ decision or hygiene — [`dsl-query-surface.md`](dsl-query-surface.md) §15
 
 
 
@@ -119,7 +119,7 @@ A domain is **useful** for internal process modeling when agents can author and 
 - [x] **E1.1** DSL: `ParseEffect()` handles `TokenKind.Delete` → `DeleteEntityInstance(new DomainTypeReference(_currentEntityName))`. Printer outputs `delete`.  
 - [x] **E1.2** Guide updated: `delete` in Supported Effect Summary table. Printer round-trip via `export_dsl` assertion in golden.  
 - [x] **E1.3** Golden test `ApplyDsl_WithDelete_SoftDeletesInstance`: DSL → apply → create instance → call Archive → CallAction refused afterward. Validate `export_dsl` contains `delete`.  
-- [x] **E1.4** MCP not required — DSL suffices. Existing `RuntimeTool.CallAction` + `IsDeleted` check handles the runtime path.
+- [x] **E1.4** MCP not required — DSL suffices. Existing `RuntimeTool.InvokeAction` + `IsDeleted` check handles the runtime path.
 
 **Exit:** Soft-delete is first-class on product path; RT′.6 remains correct. **Met** (`121cd92`, suite **1360**).
 
@@ -186,7 +186,7 @@ Honesty nits (error string, guide soft-delete/unlink/TRE, entry/exit) landed wit
 
 ### E3 — Invoke product path (**medium**)
 
-**Goal:** Nested / multi-entity workflows without a second agent `call_action`.
+**Goal:** Nested / multi-entity workflows without a second agent `invoke_action`.
 
 **Runtime truth (E′):** Today `InvokeActionEffect` only does `CallAction(ActionName)` on **this** instance. **`ParameterBindings` are ignored.** Multi-entity invoke is **new runtime work**, not “just un-reject DSL.”
 
@@ -301,9 +301,9 @@ What you cannot write in DSL without this plan is the backlog order.
 **Micro-tasks:** [`simple-agent-tasks/qe-README.md`](simple-agent-tasks/qe-README.md) — pick first `[ ]` there.
 
 ```text
-DONE:    E1; E2.1; Q1′ authoring; DMREL001; Q1''''' analysis hygiene
-CURRENT: query §14 — Rel exists on real nav (analysis)
-THEN:    Q3′ by pain OR non-goal; E3a if workflow pain
+DONE:    E1; E2.1; Q1′ authoring complete (incl. Rel exists on nav)
+CURRENT: query §15 — Q3′ by pain OR non-goal
+THEN:    E3a if workflow pain
 LATER:   E3b; optional RT eval related
 PULL:    Host I/O; micro-catalog; L*; TRE; link DSL
 ```

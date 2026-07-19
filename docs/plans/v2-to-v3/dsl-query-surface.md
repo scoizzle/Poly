@@ -508,7 +508,82 @@ Mapped against two dogfood domains: **Ticket** (support) and **Order/Customer** 
 | 11 | "Set customer's status to Active" | ❌ **Banned** — cross-entity write. Use `create in Rel { ... }` or assign local field only | 🚫 | Customer |
 | 12 | "Assign to the first available agent" | `assign assignee to ???` — needs link/invoke path (E2/E3) | **pull** | Ticket |
 | 13 | "Total with tax" | `Total + Tax > 1000` — arithmetic | **Q2** | Order |
-| 14 | "Overdue by more than 30 days" | `DueDateDiffDays() > 30` — date operation | **Q2** | Ticket |  
+| 14 | "Overdue by more than 30 days" | date operation | **Q2** | Ticket |
+
+---
+
+## 4.5 Formal Product Spec (Q1′ — Subject-First Related Reads)
+
+This section is the **implementable spec** for Q1′. It extends the shipped expression grammar (§4.0) with subject-first path-prefix, postfix `Rel exists`, and to-one `rel where …`. No changes to the shipped grammar for local-only expressions.
+
+### 4.5.0 Open Decisions (frozen in this spec)
+
+| Topic | Decision | Rationale |
+|-------|----------|-----------|
+| `where` body extent | **`and_expr` of comparisons**; `or` in body requires `(…)` | Avoids ambiguity; keeps "no forced parens for common and-chain" while making `or` opt-in |
+| `orders exists` (many) | **Allowed** as non-empty check (≥1 link) | Coherent semantics; does not gate on Q3′. `many` + property without quantifier still fail-loud |
+| Missing to-one on path-prefix | **`not exists` == false** (soft miss) — the nav is absent, so the compare/boolean is false | Avoids parse failures for runtime-valid queries; matches `Exists` semantics |
+| Sticky vs repeat nav | **Repeat** for path-prefix; `where` rebinds | `customer A and customer B` is explicit; `where` body rebinds once |
+
+### 4.5.1 Grammar (BNF extension to shipped expression grammar)
+
+```text
+(* Extends the existing expression grammar with related-entity forms.
+   Precedence: or < and < not < comparison < primary
+   "related_simple" and "where_scoped" replace some primary alternatives. *)
+
+related_simple ::=
+    RelName 'exists'                                         (* → Exists *)
+  | RelName BoolPropertyName                                 (* → RelationshipNavigation + PropertyAccess (bool) *)
+  | RelName PropertyName CompareOp value                     (* → RelationshipNavigation + Comparison *)
+  | RelName PropertyName 'is' ['not'] value                  (* → RelationshipNavigation + Equal/NotEqual *)
+
+where_scoped ::=
+    RelName 'where' and_expr                                 (* to-one: → RelationshipNavigation + rebind body *)
+
+(* many + property without quantifier is banned — parse error *)
+```
+
+### 4.5.2 Mapping to DomainExpression
+
+| Product form | DE construction | Valid context |
+|-------------|-----------------|---------------|
+| `assignee exists` | `Exists(RelationshipNavigation("assignee", PropertyAccess("")))` | Policy, require, constraint |
+| `not certificate exists` | `Not(Exists(RelationshipNavigation("certificate", …)))` | Policy, require, constraint |
+| `assignee Active` | `RelationshipNavigation("assignee", PropertyAccess("Active"))` | Policy, require, constraint; **scalar** on assign RHS |
+| `customer Tier is "VIP"` | `RelationshipNavigation("customer", Comparison(PropertyAccess("Tier"), Eq, Literal("VIP")))` | Same; **scalar** RHS allowed |
+| `customer where Status is "Active" and CreditLimit >= 1000` | `RelationshipNavigation("customer", And(Comparison(PropertyAccess("Status"), Eq, Literal("Active")), Comparison(PropertyAccess("CreditLimit"), Gte, Literal(1000L))))` | Policy/require only |
+
+### 4.5.3 Validation rules
+
+| Rule | Enforcement |
+|------|-------------|
+| `Rel.BoolProp` on `many` | Parse error — use `any Rel where …` (Q3′) |
+| `Rel.Prop op value` on `many` | Parse error — use `any Rel where …` (Q3′) |
+| `Rel exists` on `many` | **Allowed** — non-empty check |
+| Assign LHS with nav path | Parse error — cross-entity write banned |
+| Assign RHS with `Rel exists` | Parse error — boolean not a scalar value |
+| Missing relation name | Evolution-time domain analysis error |
+
+### 4.5.4 Implementation pointers for Q1.2–Q1.6
+
+| Task | Focus |
+|------|-------|
+| **Q1.2** | Parse path-prefix (`Rel Prop`, `Rel Prop op value`). Printer outputs same form. Lower via `RelationshipNavigation`. |
+| **Q1.3** | Parse `Rel exists` / `not Rel exists`. Printer outputs postfix `exists`. Lower via `Exists`/`NotExists`. |
+| **Q1.3b** | Parse `Rel where and_expr`. Rebind subject for body. Lower via `RelationshipNavigation` wrapping body. |
+| **Q1.4** | Goldens: policies evaluate, assign RHS scalar read works, related LHS rejected, many+property error. |
+| **Q1.5** | JSON policy parity: document that JSON lacks nav/exists — prefer split documentation. |
+| **Q1.6** | Guide examples using subject-first forms only. Add §3.1 cross-entity rule table. |
+
+### 4.5.5 Decision Log
+
+| Date | ID | Decision |
+|------|----|----------|
+| 2026-07-18 | Q1.1 | `where` body = `and_expr`; `or` inside body needs parens |
+| 2026-07-18 | Q1.1 | `orders exists` allowed for many (non-empty) |
+| 2026-07-18 | Q1.1 | Missing to-one on path-prefix = `not exists` = false (soft miss) |
+| 2026-07-18 | Q1.1 | Repeat nav name for multiple path-prefixes; `where` rebinds |  
 
 ---
 

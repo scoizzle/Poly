@@ -882,6 +882,13 @@ public sealed class PolyDslParser {
             case TokenKind.Identifier:
                 var name = _current.Text;
                 Advance();
+                // Q3′: Collection quantifier keywords (any/all/none/count).
+                // These must be followed by a relationship name, then 'where' + body.
+                // Check before Q1′ path-prefix since 'any', 'all', 'none', 'count'
+                // are not valid as relationship names in Q1′ (those are entity names).
+                if (IsQuantifierKeyword(name) && _current.Kind == TokenKind.Identifier) {
+                    return ParseQuantifiedExpression(name);
+                }
                 // Q1′: Check for subject-first related expression patterns.
                 // After a bare identifier, peek ahead to detect:
                 //   RelName exists        → Exists(PropertyAccess(name))
@@ -978,6 +985,41 @@ public sealed class PolyDslParser {
         // Bare Rel PropName (boolean property on related entity)
         return DomainExpression.RelationshipNav(relName, propExpr);
     }
+
+    /// <summary>
+    /// Parses a Q3′ quantified expression: any|all|none Rel where body or count Rel [where body].
+    /// The quantifier keyword + relationship name have already been consumed.
+    /// </summary>
+    private DomainExpression ParseQuantifiedExpression(string quantifier) {
+        var relName = ExpectIdentifier(TokenKind.Identifier, "relationship name");
+
+        // count Rel (no where — cardinality only)
+        if (quantifier == "count" && !string.Equals(_current.Text, "where", StringComparison.OrdinalIgnoreCase)) {
+            return DomainExpression.Count(relName, null);
+        }
+
+        // any|all|none|count Rel where body
+        if (!string.Equals(_current.Text, "where", StringComparison.OrdinalIgnoreCase))
+            throw Error($"Expected 'where' after '{quantifier} {relName}', got '{_current.Text}'");
+        Advance(); // consume 'where'
+
+        // Body uses ParseAnd (matching Q1' `where` behavior — `or` body requires parens).
+        var body = ParseAnd();
+
+        return quantifier switch {
+            "any" => DomainExpression.Any(relName, body),
+            "all" => DomainExpression.All(relName, body),
+            "none" => DomainExpression.None(relName, body),
+            "count" => DomainExpression.Count(relName, body),
+            _ => throw Error($"Unknown quantifier '{quantifier}'"),
+        };
+    }
+
+    private static bool IsQuantifierKeyword(string text) =>
+        string.Equals(text, "any", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(text, "all", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(text, "none", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(text, "count", StringComparison.OrdinalIgnoreCase);
 
     // ── Constraint parser ─────────────────────────────────────
 

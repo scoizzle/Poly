@@ -39,6 +39,33 @@ public abstract record DomainExpression : DomainObject {
     public static DomainExpression RelationshipNav(string relationshipName, DomainExpression targetProperty) =>
         new RelationshipNavigation(Guard.ThrowIfNullOrEmpty(relationshipName), targetProperty);
 
+    // --- Q3′ collection quantifiers ---
+
+    /// <summary>
+    /// ∃ related matching body (Any).
+    /// </summary>
+    public static DomainExpression Any(string relationshipName, DomainExpression body) =>
+        new AnyExpr(Guard.ThrowIfNullOrEmpty(relationshipName), body);
+
+    /// <summary>
+    /// ∀ related matching body (All).
+    /// </summary>
+    public static DomainExpression All(string relationshipName, DomainExpression body) =>
+        new AllExpr(Guard.ThrowIfNullOrEmpty(relationshipName), body);
+
+    /// <summary>
+    /// ¬any — no related entity matches body.
+    /// </summary>
+    public static DomainExpression None(string relationshipName, DomainExpression body) =>
+        new NoneExpr(Guard.ThrowIfNullOrEmpty(relationshipName), body);
+
+    /// <summary>
+    /// Count of related entities, optionally filtered by body.
+    /// Produces a numeric value usable in comparisons.
+    /// </summary>
+    public static DomainExpression Count(string relationshipName, DomainExpression? body) =>
+        new CountExpr(Guard.ThrowIfNullOrEmpty(relationshipName), body);
+
     public static DomainExpression And(DomainExpression left, DomainExpression right) =>
         new And(left, right);
 
@@ -162,6 +189,49 @@ public sealed record RelationshipNavigation(
     DomainExpression TargetProperty
 ) : DomainExpression {
     public sealed override IEnumerable<Node?> Children => [TargetProperty];
+}
+
+// ── Q3′ collection quantifiers ─────────────────────────────
+
+/// <summary>
+/// Q3′ collection quantifier: true if <b>any</b> related entity matches <see cref="Body"/>.
+/// </summary>
+public sealed record AnyExpr(
+    string RelationshipName,
+    DomainExpression Body
+) : DomainExpression {
+    public sealed override IEnumerable<Node?> Children => [Body];
+}
+
+/// <summary>
+/// Q3′ collection quantifier: true if <b>all</b> related entities match <see cref="Body"/>.
+/// </summary>
+public sealed record AllExpr(
+    string RelationshipName,
+    DomainExpression Body
+) : DomainExpression {
+    public sealed override IEnumerable<Node?> Children => [Body];
+}
+
+/// <summary>
+/// Q3′ collection quantifier: true if <b>no</b> related entity matches <see cref="Body"/>.
+/// </summary>
+public sealed record NoneExpr(
+    string RelationshipName,
+    DomainExpression Body
+) : DomainExpression {
+    public sealed override IEnumerable<Node?> Children => [Body];
+}
+
+/// <summary>
+/// Q3′ collection quantifier: count of related entities, optionally filtered by <see cref="Body"/>.
+/// Produces a numeric value usable in comparisons.
+/// </summary>
+public sealed record CountExpr(
+    string RelationshipName,
+    DomainExpression? Body
+) : DomainExpression {
+    public sealed override IEnumerable<Node?> Children => Body is not null ? [Body] : [];
 }
 
 public enum ComparisonKind { Equal, NotEqual, LessThan, LessThanOrEqual, GreaterThan, GreaterThanOrEqual }

@@ -157,13 +157,21 @@ public sealed record DomainEntityInstance {
     /// Evaluates <paramref name="policy"/> against this instance using the
     /// VM (direct AST lowering — canonical path). Returns <c>true</c> if the
     /// policy's guard expression is satisfied.
+    ///
+    /// <para>Q3′ quantifiers (any/all/none/count) are preprocessed before
+    /// lowering — evaluated against the current store's linked instances
+    /// and replaced with literal results. This keeps the VM lowering path
+    /// quantifier-free while enabling store-aware policy evaluation.</para>
     /// </summary>
     public bool EvaluatePolicy(Policy policy) {
         ArgumentNullException.ThrowIfNull(policy);
 
+        // Preprocess quantifiers: resolve against store, replace with literals.
+        var expr = PreprocessQuantifiers(policy.Expression);
+
         var entityParam = new Parameter("entity", new TypeReference(Entity.Name));
         var pass = new DomainExpressionLoweringPass();
-        var lowered = pass.Lower(policy.Expression, entityParam);
+        var lowered = pass.Lower(expr, entityParam);
 
         var compiled = Interpreter.Compile(lowered, _typeDefAnalyzer);
         using var exec = Interpreter.Execute(compiled,
@@ -848,6 +856,104 @@ public sealed record DomainEntityInstance {
                 result.Add(t);
         }
         return result;
+    }
+
+    // ── Q3′ quantifier preprocessing ──────────────────────────
+
+    /// <summary>
+    /// Walks an expression tree and evaluates Q3′ quantifier nodes
+    /// (AnyExpr/AllExpr/NoneExpr/CountExpr) against the current store,
+    /// replacing them with literal results. Non-quantifier nodes are
+    /// returned unchanged (or with preprocessed children for composites).
+    ///
+    /// <para>If <see cref="Store"/> is null, quantifiers throw (consistent
+    /// with fail-closed policy — instance must be store-attached).</para>
+    /// </summary>
+    private DomainExpression PreprocessQuantifiers(DomainExpression expr) {
+        switch (expr) {
+            case AnyExpr a:
+                return DomainExpression.Literal(EvaluateAnyExpr(a));
+            case AllExpr a:
+                return DomainExpression.Literal(EvaluateAllExpr(a));
+            case NoneExpr n:
+                return DomainExpression.Literal(EvaluateNoneExpr(n));
+            case CountExpr c:
+                return DomainExpression.Literal(EvaluateCountExpr(c));
+
+            // Composite expressions — recurse, then reconstruct via with
+            case And a: return a with { Left = PreprocessQuantifiers(a.Left), Right = PreprocessQuantifiers(a.Right) };
+            case Or o: return o with { Left = PreprocessQuantifiers(o.Left), Right = PreprocessQuantifiers(o.Right) };
+            case Not n: return n with { Operand = PreprocessQuantifiers(n.Operand) };
+            case Comparison c: return c with { Left = PreprocessQuantifiers(c.Left), Right = PreprocessQuantifiers(c.Right) };
+            case Add a: return a with { Left = PreprocessQuantifiers(a.Left), Right = PreprocessQuantifiers(a.Right) };
+            case Subtract s: return s with { Left = PreprocessQuantifiers(s.Left), Right = PreprocessQuantifiers(s.Right) };
+            case Multiply m: return m with { Left = PreprocessQuantifiers(m.Left), Right = PreprocessQuantifiers(m.Right) };
+            case Divide d: return d with { Left = PreprocessQuantifiers(d.Left), Right = PreprocessQuantifiers(d.Right) };
+            case DateOperation d: return d with { Date = PreprocessQuantifiers(d.Date), Offset = PreprocessQuantifiers(d.Offset) };
+            case RelationshipNavigation r: return r with { TargetProperty = PreprocessQuantifiers(r.TargetProperty) };
+            case OwnedAccess o: return o with { Inner = PreprocessQuantifiers(o.Inner) };
+            case Exists e: return e with { Target = PreprocessQuantifiers(e.Target) };
+            case NotExists ne: return ne with { Target = PreprocessQuantifiers(ne.Target) };
+
+            // Leaf nodes — no possible quantifiers inside
+            case PropertyAccess:
+            case ParameterAccess:
+            case Literal:
+                return expr;
+
+            default:
+                return expr;
+        }
+    }
+
+    private bool EvaluateAnyExpr(AnyExpr a) {
+        var targets = GetOutboundRelatedInstances(a.RelationshipName);
+        foreach (var t in targets) {
+            if (EvaluateBodyOnTarget(a.Body, t))
+                return true;
+        }
+        return false;
+    }
+
+    private bool EvaluateAllExpr(AllExpr a) {
+        var targets = GetOutboundRelatedInstances(a.RelationshipName);
+        if (targets.Count == 0) return false; // no vacuous all
+        foreach (var t in targets) {
+            if (!EvaluateBodyOnTarget(a.Body, t))
+                return false;
+        }
+        return true;
+    }
+
+    private bool EvaluateNoneExpr(NoneExpr n) {
+        return !EvaluateAnyExpr(new AnyExpr(n.RelationshipName, n.Body));
+    }
+
+    private long EvaluateCountExpr(CountExpr c) {
+        var targets = GetOutboundRelatedInstances(c.RelationshipName);
+        if (c.Body is null) return targets.Count;
+
+        long count = 0;
+        foreach (var t in targets) {
+            if (EvaluateBodyOnTarget(c.Body, t))
+                count++;
+        }
+        return count;
+    }
+
+    /// <summary>
+    /// Lowers, compiles, and executes a body expression against a target
+    /// instance's property bag and type definition. Returns the boolean
+    /// result. This is the same pattern used by <see cref="GetRelatedTargets"/>.
+    /// </summary>
+    private static bool EvaluateBodyOnTarget(DomainExpression body, DomainEntityInstance target) {
+        var pass = new DomainExpressionLoweringPass();
+        var lowered = pass.Lower(body,
+            new Parameter("entity", new TypeReference(target.Entity.Name)));
+        var compiled = Interpreter.Compile(lowered, target._typeDefAnalyzer);
+        using var exec = Interpreter.Execute(compiled,
+            s => s.SetArgs(new object?[] { target._values }));
+        return exec.Result.GetValue<bool>();
     }
 
     /// <summary>

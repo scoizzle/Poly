@@ -80,7 +80,22 @@ public sealed class DomainExpressionLoweringPass {
                     LowerCore(d.Offset, currentSubject)),
                 _ => throw new NotSupportedException($"DateOperation kind '{d.Kind}' is not supported."),
             },
-
+            // Q3′ quantifiers — authoring-only for now (need store-aware evaluation).
+            AnyExpr a => throw new NotSupportedException(
+                $"Q3′ quantifier 'any {a.RelationshipName} where …' requires store-aware evaluation " +
+                "which is not yet implemented on the VM compilation path."),
+            AllExpr a => throw new NotSupportedException(
+                $"Q3′ quantifier 'all {a.RelationshipName} where …' requires store-aware evaluation " +
+                "which is not yet implemented on the VM compilation path."),
+            NoneExpr n => throw new NotSupportedException(
+                $"Q3′ quantifier 'none {n.RelationshipName} where …' requires store-aware evaluation " +
+                "which is not yet implemented on the VM compilation path."),
+            CountExpr c when c.Body is not null => throw new NotSupportedException(
+                $"Q3′ quantifier 'count {c.RelationshipName} where …' requires store-aware evaluation " +
+                "which is not yet implemented on the VM compilation path."),
+            CountExpr c => throw new NotSupportedException(
+                $"Q3′ quantifier 'count {c.RelationshipName}' requires store-aware evaluation " +
+                "which is not yet implemented on the VM compilation path."),
             _ => throw new NotSupportedException(
                 $"DomainExpression node type '{expr.GetType().Name}' is not supported.")
         };

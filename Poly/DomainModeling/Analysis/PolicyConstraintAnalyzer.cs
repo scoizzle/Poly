@@ -175,6 +175,8 @@ internal sealed class PolicyConstraintAnalyzer : INodeAnalyzer {
         // Other expression types are skipped:
         //   - RelationshipNavigation: references properties on a related entity
         //   - ParameterAccess: external parameters, not entity properties
+        //   - AnyExpr/AllExpr/NoneExpr/CountExpr: Q3′ collection quantifiers,
+        //     validated against target entity separately
         switch (expr) {
             case PropertyAccess pa:
                 if (!entityPropMap.ContainsKey(pa.Name)) {
@@ -204,12 +206,118 @@ internal sealed class PolicyConstraintAnalyzer : INodeAnalyzer {
             case ParameterAccess:
                 // Parameter references are not entity properties — skip.
                 return;
+            case AnyExpr a:
+                ValidateQuantifierExpression(context, lookup, a.RelationshipName, a.Body, entity);
+                return;
+            case AllExpr a:
+                ValidateQuantifierExpression(context, lookup, a.RelationshipName, a.Body, entity);
+                return;
+            case NoneExpr n:
+                ValidateQuantifierExpression(context, lookup, n.RelationshipName, n.Body, entity);
+                return;
+            case CountExpr c when c.Body is not null:
+                ValidateQuantifierExpression(context, lookup, c.RelationshipName, c.Body, entity);
+                return;
+            case CountExpr:
+                // Bare count Rel (no body) — just validate relationship existence.
+                ValidateQuantifierRelationship(context, lookup, expr, entity);
+                return;
         }
 
         // Recurse into children for composite expressions (And, Or, Not, Comparison, etc.)
         foreach (var child in expr.Children.OfType<DomainExpression>()) {
             ValidatePolicyPropertyReferences(context, lookup, child, entity, entityPropMap);
         }
+    }
+
+    /// <summary>
+    /// Validates a Q3′ quantified expression body property references against the
+    /// target entity. Rejects unknown relationship, non-collection cardinality,
+    /// reverse-side, self-rel, and unknown body properties.
+    /// </summary>
+    private static void ValidateQuantifierExpression(
+        AnalysisContext context,
+        DomainTypeLookupMetadata? lookup,
+        string relationshipName,
+        DomainExpression body,
+        Entity entity) {
+        var (targetEntity, _) = ValidateQuantifierRelationship(context, lookup, body, entity, relationshipName);
+        if (targetEntity is null) return;
+
+        // Build property map for target entity and validate body references
+        var targetPropMap = BuildPropertyMap(targetEntity, lookup);
+        ValidateRelatedPropertyAccess(context, body, targetEntity, targetPropMap);
+    }
+
+    /// <summary>
+    /// Validates that a quantifier relationship exists, is OneToMany from the source,
+    /// source-side only, not self-rel. Returns the target entity or null on error.
+    /// </summary>
+    private static (Entity? TargetEntity, Relationship? Relationship) ValidateQuantifierRelationship(
+        AnalysisContext context,
+        DomainTypeLookupMetadata? lookup,
+        DomainExpression expr,
+        Entity entity,
+        string? relationshipName = null) {
+        if (lookup is null) return (null, null);
+        var domain = lookup.Domain;
+
+        // Resolve relationship
+        var resolvedRelName = relationshipName
+            ?? (expr is AnyExpr a ? a.RelationshipName
+                : expr is AllExpr a2 ? a2.RelationshipName
+                : expr is NoneExpr n ? n.RelationshipName
+                : expr is CountExpr c ? c.RelationshipName
+                : null);
+        if (resolvedRelName is null) return (null, null);
+
+        var relationship = domain.Relationships.FirstOrDefault(r =>
+            string.Equals(r.Name, resolvedRelName, StringComparison.Ordinal));
+
+        if (relationship is null) {
+            context.ReportError(expr,
+                $"Quantifier references relationship '{resolvedRelName}' which does not exist " +
+                $"on entity '{entity.Name}'.",
+                DomainModelDiagnosticCodes.SemanticReferenceResolution);
+            return (null, null);
+        }
+
+        // Source-side only
+        if (!string.Equals(relationship.Source.TypeName, entity.Name, StringComparison.Ordinal)) {
+            context.ReportError(expr,
+                $"Quantifier relationship '{resolvedRelName}' may only be used from source entity " +
+                $"'{relationship.Source.TypeName}' (caller is '{entity.Name}').",
+                DomainModelDiagnosticCodes.SemanticReferenceResolution);
+            return (null, null);
+        }
+
+        // Must be OneToMany for quantifiers (path-prefix uses OneToOne, covered by DMREL001)
+        if (relationship.Cardinality is not RelationshipCardinality.OneToMany) {
+            context.ReportError(expr,
+                $"Quantifier '{resolvedRelName}' requires a OneToMany relationship from '{entity.Name}', " +
+                $"but the cardinality is {relationship.Cardinality}. Use path-prefix for OneToOne reads.",
+                DomainModelDiagnosticCodes.SemanticReferenceResolution);
+            return (null, null);
+        }
+
+        // No self-relationship
+        if (string.Equals(relationship.Source.TypeName, relationship.Target.TypeName, StringComparison.Ordinal)) {
+            context.ReportError(expr,
+                $"Quantifier on self-relationship '{resolvedRelName}' is not supported yet.",
+                DomainModelDiagnosticCodes.SemanticReferenceResolution);
+            return (null, null);
+        }
+
+        // Resolve target entity
+        if (!lookup.Types.TryGetValue(relationship.Target.TypeName, out var targetType)
+            || targetType is not Entity targetEntity) {
+            context.ReportError(expr,
+                $"Target entity type '{relationship.Target.TypeName}' for quantifier '{resolvedRelName}' not found.",
+                DomainModelDiagnosticCodes.SemanticReferenceResolution);
+            return (null, null);
+        }
+
+        return (targetEntity, relationship);
     }
 
     /// <summary>
@@ -262,7 +370,7 @@ internal sealed class PolicyConstraintAnalyzer : INodeAnalyzer {
                 $"Path-prefix expression '{rn.RelationshipName}' references relationship with " +
                 $"cardinality {relationship.Cardinality} from entity '{entity.Name}'. " +
                 "Bare path-prefix on a 'many' relationship is invalid. Use a collection " +
-                "quantifier instead (e.g. 'any Rel where ...' — planned in Q3′).",
+                "quantifier instead (e.g. 'any Rel where ...' — Q3′).",
                 DomainModelDiagnosticCodes.RelationshipNavigationCardinality);
             return;
         }

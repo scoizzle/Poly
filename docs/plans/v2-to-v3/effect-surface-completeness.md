@@ -308,6 +308,7 @@ What you cannot write in DSL without this plan is the backlog order.
 | 2026-07-19 | **E3b quant+filter** | `any`/`all` quantifiers and `where` filter for cross-entity invoke. `invoke any rel.Action` tries each target, returns first success. `invoke all rel.Action` invokes on every target, fails on first miss. `invoke all rel.Action() where expr` filters targets per-instance. Suite **1416**. | Makes `many` relationship invoke unambiguous. Filter closes the common "select subset" use case with existing expression parsing. |
 | 2026-07-19 | **E3b shape** | Harden invoke contracts via **DMEFF007** (`EffectInvokeShape`): `any`/`all` require collection-valued `Rel` from caller; `where` only with `any`/`all` on collection; bare `Rel.Action` only singular; no self quantifier/filter; `Each` invalid on invoke. Filter is target-scoped only (not param/subscription collect). Runtime mirrors analyzer fail-loud. | Review found silent drop of quantifier/filter on self/singular; agents need static rejection before RT. |
 | 2026-07-19 | **E3b fail-closed** | Further strictness while analysis is coarse: **source-side only**; **OneToOne/OneToMany only** (reject M2M + self-rel); **empty any/all fails** (no vacuous success); parse-time local rejects; filter surface whitelist; **all action params must be bound**. Relax only when analyzers can prove edge cases. | Safer to tighten now and open later than to ship silent/ambiguous multi-entity invoke. |
+| 2026-07-19 | **Q3′** | Collection quantifiers for policies: `any`/`all`/`none`/`count` Rel where body. IR + parser + printer + analyzer + guide + **runtime eval** via store-aware preprocessing before VM lowering. 10 unit tests (any/all/none/count/filtered/combined/without-store). | Full send with runtime. Cross-entity reads for collection relationships are now fully executable. 1462 green. |
 
 ---
 
@@ -316,8 +317,10 @@ What you cannot write in DSL without this plan is the backlog order.
 **Micro-tasks:** [`simple-agent-tasks/qe-README.md`](simple-agent-tasks/qe-README.md) — pick first `[ ]` there.
 
 ```text
-DONE:    E1; E2.1; E3a/E3b cross-entity invoke with quantifiers+filter; E4 DSL+RT; params DSL+RT; E6.1–E6.10; Q1′ authoring; arithmetic/equals/enum/inheritance/owned DSL
-CURRENT: query Q3′ decision OR dogfood
+DONE:    E1; E2.1; E3a/E3b cross-entity invoke with quantifiers+filter; E4 DSL+RT; params DSL+RT; E6.1–E6.10; Q1′ authoring; arithmetic/equals/enum/inheritance/owned DSL; Q3′ collection quantifiers (DSL+RT)
+CURRENT: dogfood OR E5 micro-tools
+THEN:    dogfood-driven
+LATER:   Host I/O; micro-catalog; L*; TRE; link DSL; E6.11–E6.12
 THEN:    E5 micro-tools only with named dogfood pain
 LATER:   Host I/O; micro-catalog; L*; TRE; link DSL; E6.11–E6.12
 ```

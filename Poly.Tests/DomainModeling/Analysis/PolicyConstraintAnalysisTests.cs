@@ -231,4 +231,106 @@ public class PolicyConstraintAnalysisTests {
         await Assert.That(result.Succeeded).IsFalse();
         await Assert.That(result.FailureSummary!.Contains("NonExistentValueType")).IsTrue();
     }
+
+    // ── Q3′ quantifier analysis ───────────────────────────────
+
+    [Test]
+    public async Task Quantifier_Any_OnOneToMany_Succeeds() {
+        var start = DomainFactory.Create("Test", builder =>
+            builder.AddEntity("Target")
+                   .AddPropertyToEntity("Target", new Property("Flag",
+                       new DomainTypeReference("Boolean"), []))
+                   .AddEntity("Source"));
+
+        var domain = new DomainEvolution(start).Evolve()
+            .AddRelationship("items", "Source", "Target", RelationshipCardinality.OneToMany, false)
+            .Apply().Root;
+
+        var result = new DomainEvolution(domain).Apply([
+            new AddPolicyToEntityChange("Source",
+                new Policy("HasFlagged",
+                    DomainExpression.Any("items",
+                        DomainExpression.Equal(
+                            DomainExpression.Property("Flag"),
+                            DomainExpression.Literal(true)))))]);
+
+        await Assert.That(result.Succeeded).IsTrue();
+    }
+
+    [Test]
+    public async Task Quantifier_Any_UnknownBodyProperty_FailsEvolution() {
+        var start = DomainFactory.Create("Test", builder =>
+            builder.AddEntity("Target")
+                   .AddEntity("Source"));
+
+        var domain = new DomainEvolution(start).Evolve()
+            .AddRelationship("items", "Source", "Target", RelationshipCardinality.OneToMany, false)
+            .Apply().Root;
+
+        var result = new DomainEvolution(domain).Apply([
+            new AddPolicyToEntityChange("Source",
+                new Policy("BadRef",
+                    DomainExpression.Any("items",
+                        DomainExpression.Property("NonExistent"))))]);
+
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(result.FailureSummary!.Contains("NonExistent")).IsTrue();
+    }
+
+    [Test]
+    public async Task Quantifier_Any_OnOneToOne_FailsEvolution() {
+        var start = DomainFactory.Create("Test", builder =>
+            builder.AddEntity("Target")
+                   .AddPropertyToEntity("Target", new Property("Flag",
+                       new DomainTypeReference("Boolean"), []))
+                   .AddEntity("Source"));
+
+        var domain = new DomainEvolution(start).Evolve()
+            .AddRelationship("link", "Source", "Target", RelationshipCardinality.OneToOne, false)
+            .Apply().Root;
+
+        var result = new DomainEvolution(domain).Apply([
+            new AddPolicyToEntityChange("Source",
+                new Policy("BadQuant",
+                    DomainExpression.Any("link",
+                        DomainExpression.Property("Flag"))))]);
+
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(result.FailureSummary!.Contains("OneToOne")).IsTrue();
+    }
+
+    [Test]
+    public async Task Quantifier_Any_UnknownRelationship_FailsEvolution() {
+        var start = DomainFactory.Create("Test", builder =>
+            builder.AddEntity("Source"));
+
+        var result = new DomainEvolution(start).Apply([
+            new AddPolicyToEntityChange("Source",
+                new Policy("BadQuant",
+                    DomainExpression.Any("nonExistentRel",
+                        DomainExpression.Property("Flag"))))]);
+
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(result.FailureSummary!.Contains("nonExistentRel")).IsTrue();
+    }
+
+    [Test]
+    public async Task Quantifier_BareCount_NoBody_Succeeds() {
+        var start = DomainFactory.Create("Test", builder =>
+            builder.AddEntity("Target")
+                   .AddEntity("Source"));
+
+        var domain = new DomainEvolution(start).Evolve()
+            .AddRelationship("items", "Source", "Target", RelationshipCardinality.OneToMany, false)
+            .Apply().Root;
+
+        var result = new DomainEvolution(domain).Apply([
+            new AddPolicyToEntityChange("Source",
+                new Policy("CountCheck",
+                    DomainExpression.GreaterThan(
+                        DomainExpression.Count("items", null),
+                        DomainExpression.Literal(5L))))]);
+
+        await Assert.That(result.Succeeded).IsTrue();
+    }
 }

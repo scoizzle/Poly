@@ -1806,4 +1806,261 @@ public class DomainEntityInstanceTests {
         }
         await Assert.That(threw).IsTrue();
     }
+
+    // ═════════════════════════════════════════════════════════════
+    // Q3′ — Collection quantifier runtime evaluation
+    // ═════════════════════════════════════════════════════════════
+
+    [Test]
+    public async Task EvaluatePolicy_AnyQuantifier_ReturnsTrueWhenMatched() {
+        var target = new Entity("Target", [
+            new Property("Value", new DomainTypeReference("Number"), [])
+        ], [], [], []);
+        var source = new Entity("Source", [], [], [
+            new Policy("HasBig", DomainExpression.Any("items",
+                DomainExpression.GreaterThan(DomainExpression.Property("Value"), DomainExpression.Literal(10L))))
+        ], []);
+        var rel = new Relationship("items",
+            new DomainTypeReference("Source"), new DomainTypeReference("Target"),
+            RelationshipCardinality.OneToMany, []);
+        var domain = new Domain("Test", [source, target], [rel]);
+        var store = new DomainInstanceStore();
+        var src = DomainEntityInstance.Create(source, domain: domain);
+        var t1 = DomainEntityInstance.Create(target, new Dictionary<string, object?> { ["Value"] = 5L }, domain: domain);
+        var t2 = DomainEntityInstance.Create(target, new Dictionary<string, object?> { ["Value"] = 20L }, domain: domain);
+        store.Add(src); store.Add(t1); store.Add(t2);
+        store.Link("items", src, t1); store.Link("items", src, t2);
+        var policy = domain.Types.OfType<Entity>().First(e => e.Name == "Source").Policies.First(p => p.Name == "HasBig");
+        await Assert.That(src.EvaluatePolicy(policy)).IsTrue();
+    }
+
+    [Test]
+    public async Task EvaluatePolicy_AnyQuantifier_ReturnsFalseWhenUnmatched() {
+        var target = new Entity("Target", [
+            new Property("Value", new DomainTypeReference("Number"), [])
+        ], [], [], []);
+        var source = new Entity("Source", [], [], [
+            new Policy("HasBig", DomainExpression.Any("items",
+                DomainExpression.GreaterThan(DomainExpression.Property("Value"), DomainExpression.Literal(10L))))
+        ], []);
+        var rel = new Relationship("items",
+            new DomainTypeReference("Source"), new DomainTypeReference("Target"),
+            RelationshipCardinality.OneToMany, []);
+        var domain = new Domain("Test", [source, target], [rel]);
+        var store = new DomainInstanceStore();
+        var src = DomainEntityInstance.Create(source, domain: domain);
+        var t1 = DomainEntityInstance.Create(target, new Dictionary<string, object?> { ["Value"] = 1L }, domain: domain);
+        var t2 = DomainEntityInstance.Create(target, new Dictionary<string, object?> { ["Value"] = 5L }, domain: domain);
+        store.Add(src); store.Add(t1); store.Add(t2);
+        store.Link("items", src, t1); store.Link("items", src, t2);
+        var policy = domain.Types.OfType<Entity>().First(e => e.Name == "Source").Policies.First(p => p.Name == "HasBig");
+        await Assert.That(src.EvaluatePolicy(policy)).IsFalse();
+    }
+
+    [Test]
+    public async Task EvaluatePolicy_AllQuantifier_ReturnsTrueWhenAllMatch() {
+        var target = new Entity("Target", [
+            new Property("Active", new DomainTypeReference("Boolean"), [])
+        ], [], [], []);
+        var source = new Entity("Source", [], [], [
+            new Policy("AllActive", DomainExpression.All("items",
+                DomainExpression.Equal(DomainExpression.Property("Active"), DomainExpression.Literal(true))))
+        ], []);
+        var rel = new Relationship("items",
+            new DomainTypeReference("Source"), new DomainTypeReference("Target"),
+            RelationshipCardinality.OneToMany, []);
+        var domain = new Domain("Test", [source, target], [rel]);
+        var store = new DomainInstanceStore();
+        var src = DomainEntityInstance.Create(source, domain: domain);
+        var t1 = DomainEntityInstance.Create(target, new Dictionary<string, object?> { ["Active"] = true }, domain: domain);
+        var t2 = DomainEntityInstance.Create(target, new Dictionary<string, object?> { ["Active"] = true }, domain: domain);
+        store.Add(src); store.Add(t1); store.Add(t2);
+        store.Link("items", src, t1); store.Link("items", src, t2);
+        var policy = domain.Types.OfType<Entity>().First(e => e.Name == "Source").Policies.First(p => p.Name == "AllActive");
+        await Assert.That(src.EvaluatePolicy(policy)).IsTrue();
+    }
+
+    [Test]
+    public async Task EvaluatePolicy_AllQuantifier_ReturnsFalseWhenOneFails() {
+        var target = new Entity("Target", [
+            new Property("Active", new DomainTypeReference("Boolean"), [])
+        ], [], [], []);
+        var source = new Entity("Source", [], [], [
+            new Policy("AllActive", DomainExpression.All("items",
+                DomainExpression.Equal(DomainExpression.Property("Active"), DomainExpression.Literal(true))))
+        ], []);
+        var rel = new Relationship("items",
+            new DomainTypeReference("Source"), new DomainTypeReference("Target"),
+            RelationshipCardinality.OneToMany, []);
+        var domain = new Domain("Test", [source, target], [rel]);
+        var store = new DomainInstanceStore();
+        var src = DomainEntityInstance.Create(source, domain: domain);
+        var t1 = DomainEntityInstance.Create(target, new Dictionary<string, object?> { ["Active"] = true }, domain: domain);
+        var t2 = DomainEntityInstance.Create(target, new Dictionary<string, object?> { ["Active"] = false }, domain: domain);
+        store.Add(src); store.Add(t1); store.Add(t2);
+        store.Link("items", src, t1); store.Link("items", src, t2);
+        var policy = domain.Types.OfType<Entity>().First(e => e.Name == "Source").Policies.First(p => p.Name == "AllActive");
+        await Assert.That(src.EvaluatePolicy(policy)).IsFalse();
+    }
+
+    [Test]
+    public async Task EvaluatePolicy_AllQuantifier_EmptySet_ReturnsFalse() {
+        var target = new Entity("Target", [
+            new Property("Active", new DomainTypeReference("Boolean"), [])
+        ], [], [], []);
+        var source = new Entity("Source", [], [], [
+            new Policy("AllActive", DomainExpression.All("items",
+                DomainExpression.Equal(DomainExpression.Property("Active"), DomainExpression.Literal(true))))
+        ], []);
+        var rel = new Relationship("items",
+            new DomainTypeReference("Source"), new DomainTypeReference("Target"),
+            RelationshipCardinality.OneToMany, []);
+        var domain = new Domain("Test", [source, target], [rel]);
+        var store = new DomainInstanceStore();
+        var src = DomainEntityInstance.Create(source, domain: domain);
+        store.Add(src);
+        var policy = domain.Types.OfType<Entity>().First(e => e.Name == "Source").Policies.First(p => p.Name == "AllActive");
+        await Assert.That(src.EvaluatePolicy(policy)).IsFalse();
+    }
+
+    [Test]
+    public async Task EvaluatePolicy_NoneQuantifier_ReturnsTrueWhenNoneMatch() {
+        var target = new Entity("Target", [
+            new Property("Value", new DomainTypeReference("Number"), [])
+        ], [], [], []);
+        var source = new Entity("Source", [], [], [
+            new Policy("NoBig", DomainExpression.None("items",
+                DomainExpression.GreaterThan(DomainExpression.Property("Value"), DomainExpression.Literal(10L))))
+        ], []);
+        var rel = new Relationship("items",
+            new DomainTypeReference("Source"), new DomainTypeReference("Target"),
+            RelationshipCardinality.OneToMany, []);
+        var domain = new Domain("Test", [source, target], [rel]);
+        var store = new DomainInstanceStore();
+        var src = DomainEntityInstance.Create(source, domain: domain);
+        var t1 = DomainEntityInstance.Create(target, new Dictionary<string, object?> { ["Value"] = 1L }, domain: domain);
+        var t2 = DomainEntityInstance.Create(target, new Dictionary<string, object?> { ["Value"] = 5L }, domain: domain);
+        store.Add(src); store.Add(t1); store.Add(t2);
+        store.Link("items", src, t1); store.Link("items", src, t2);
+        var policy = domain.Types.OfType<Entity>().First(e => e.Name == "Source").Policies.First(p => p.Name == "NoBig");
+        await Assert.That(src.EvaluatePolicy(policy)).IsTrue();
+    }
+
+    [Test]
+    public async Task EvaluatePolicy_NoneQuantifier_ReturnsFalseWhenMatched() {
+        var target = new Entity("Target", [
+            new Property("Value", new DomainTypeReference("Number"), [])
+        ], [], [], []);
+        var source = new Entity("Source", [], [], [
+            new Policy("NoBig", DomainExpression.None("items",
+                DomainExpression.GreaterThan(DomainExpression.Property("Value"), DomainExpression.Literal(10L))))
+        ], []);
+        var rel = new Relationship("items",
+            new DomainTypeReference("Source"), new DomainTypeReference("Target"),
+            RelationshipCardinality.OneToMany, []);
+        var domain = new Domain("Test", [source, target], [rel]);
+        var store = new DomainInstanceStore();
+        var src = DomainEntityInstance.Create(source, domain: domain);
+        var t1 = DomainEntityInstance.Create(target, new Dictionary<string, object?> { ["Value"] = 1L }, domain: domain);
+        var t2 = DomainEntityInstance.Create(target, new Dictionary<string, object?> { ["Value"] = 20L }, domain: domain);
+        store.Add(src); store.Add(t1); store.Add(t2);
+        store.Link("items", src, t1); store.Link("items", src, t2);
+        var policy = domain.Types.OfType<Entity>().First(e => e.Name == "Source").Policies.First(p => p.Name == "NoBig");
+        await Assert.That(src.EvaluatePolicy(policy)).IsFalse();
+    }
+
+    [Test]
+    public async Task EvaluatePolicy_CountQuantifier_Bare_ReturnsCount() {
+        var target = new Entity("Target", [], [], [], []);
+        var source = new Entity("Source", [], [], [
+            new Policy("HasThree", DomainExpression.Equal(
+                DomainExpression.Count("items", null), DomainExpression.Literal(3L)))
+        ], []);
+        var rel = new Relationship("items",
+            new DomainTypeReference("Source"), new DomainTypeReference("Target"),
+            RelationshipCardinality.OneToMany, []);
+        var domain = new Domain("Test", [source, target], [rel]);
+        var store = new DomainInstanceStore();
+        var src = DomainEntityInstance.Create(source, domain: domain);
+        var t1 = DomainEntityInstance.Create(target, domain: domain);
+        var t2 = DomainEntityInstance.Create(target, domain: domain);
+        var t3 = DomainEntityInstance.Create(target, domain: domain);
+        store.Add(src); store.Add(t1); store.Add(t2); store.Add(t3);
+        store.Link("items", src, t1); store.Link("items", src, t2); store.Link("items", src, t3);
+        var policy = domain.Types.OfType<Entity>().First(e => e.Name == "Source").Policies.First(p => p.Name == "HasThree");
+        await Assert.That(src.EvaluatePolicy(policy)).IsTrue();
+    }
+
+    [Test]
+    public async Task EvaluatePolicy_CountQuantifier_WithBody_ReturnsFilteredCount() {
+        var target = new Entity("Target", [
+            new Property("Value", new DomainTypeReference("Number"), [])
+        ], [], [], []);
+        var source = new Entity("Source", [], [], [
+            new Policy("CountBig", DomainExpression.Equal(
+                DomainExpression.Count("items", DomainExpression.GreaterThan(DomainExpression.Property("Value"), DomainExpression.Literal(10L))),
+                DomainExpression.Literal(2L)))
+        ], []);
+        var rel = new Relationship("items",
+            new DomainTypeReference("Source"), new DomainTypeReference("Target"),
+            RelationshipCardinality.OneToMany, []);
+        var domain = new Domain("Test", [source, target], [rel]);
+        var store = new DomainInstanceStore();
+        var src = DomainEntityInstance.Create(source, domain: domain);
+        var t1 = DomainEntityInstance.Create(target, new Dictionary<string, object?> { ["Value"] = 5L }, domain: domain);
+        var t2 = DomainEntityInstance.Create(target, new Dictionary<string, object?> { ["Value"] = 20L }, domain: domain);
+        var t3 = DomainEntityInstance.Create(target, new Dictionary<string, object?> { ["Value"] = 30L }, domain: domain);
+        store.Add(src); store.Add(t1); store.Add(t2); store.Add(t3);
+        store.Link("items", src, t1); store.Link("items", src, t2); store.Link("items", src, t3);
+        var policy = domain.Types.OfType<Entity>().First(e => e.Name == "Source").Policies.First(p => p.Name == "CountBig");
+        await Assert.That(src.EvaluatePolicy(policy)).IsTrue();
+    }
+
+    [Test]
+    public async Task EvaluatePolicy_Quantifier_CombinedWithLocalProperty() {
+        var target = new Entity("Target", [
+            new Property("Value", new DomainTypeReference("Number"), [])
+        ], [], [], []);
+        var source = new Entity("Source", [
+            new Property("Threshold", new DomainTypeReference("Number"), [])
+        ], [], [
+            new Policy("HasBig", DomainExpression.And(
+                DomainExpression.GreaterThan(DomainExpression.Property("Threshold"), DomainExpression.Literal(0L)),
+                DomainExpression.Any("items", DomainExpression.GreaterThan(DomainExpression.Property("Value"), DomainExpression.Literal(10L)))))
+        ], []);
+        var rel = new Relationship("items",
+            new DomainTypeReference("Source"), new DomainTypeReference("Target"),
+            RelationshipCardinality.OneToMany, []);
+        var domain = new Domain("Test", [source, target], [rel]);
+        var store = new DomainInstanceStore();
+        var src = DomainEntityInstance.Create(source, new Dictionary<string, object?> { ["Threshold"] = 5L }, domain: domain);
+        var t1 = DomainEntityInstance.Create(target, new Dictionary<string, object?> { ["Value"] = 1L }, domain: domain);
+        var t2 = DomainEntityInstance.Create(target, new Dictionary<string, object?> { ["Value"] = 20L }, domain: domain);
+        store.Add(src); store.Add(t1); store.Add(t2);
+        store.Link("items", src, t1); store.Link("items", src, t2);
+        var policy = domain.Types.OfType<Entity>().First(e => e.Name == "Source").Policies.First(p => p.Name == "HasBig");
+        await Assert.That(src.EvaluatePolicy(policy)).IsTrue();
+
+        var src2 = DomainEntityInstance.Create(source, new Dictionary<string, object?> { ["Threshold"] = 0L }, domain: domain);
+        store.Add(src2);
+        await Assert.That(src2.EvaluatePolicy(policy)).IsFalse();
+    }
+
+    [Test]
+    public async Task EvaluatePolicy_Quantifier_WithoutStore_Throws() {
+        var target = new Entity("Target", [
+            new Property("Value", new DomainTypeReference("Number"), [])
+        ], [], [], []);
+        var source = new Entity("Source", [], [], [
+            new Policy("HasBig", DomainExpression.Any("items",
+                DomainExpression.GreaterThan(DomainExpression.Property("Value"), DomainExpression.Literal(10L))))
+        ], []);
+        var rel = new Relationship("items",
+            new DomainTypeReference("Source"), new DomainTypeReference("Target"),
+            RelationshipCardinality.OneToMany, []);
+        var domain = new Domain("Test", [source, target], [rel]);
+        var src = DomainEntityInstance.Create(source, domain: domain); // no store
+        var policy = domain.Types.OfType<Entity>().First(e => e.Name == "Source").Policies.First(p => p.Name == "HasBig");
+        await Assert.That(() => src.EvaluatePolicy(policy)).Throws<InvalidOperationException>();
+    }
 }

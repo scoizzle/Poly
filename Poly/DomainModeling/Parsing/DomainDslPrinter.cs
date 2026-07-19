@@ -391,6 +391,11 @@ public sealed class DomainDslPrinter {
             Divide d => $"({PrintExpression(d.Left)} / {PrintExpression(d.Right)})",
             Exists e => $"{PrintExpression(e.Target)} exists",
             NotExists n => $"not {PrintExpression(n.Target)} exists",
+            AnyExpr a => $"any {a.RelationshipName} where {PrintExpression(a.Body)}",
+            AllExpr a => $"all {a.RelationshipName} where {PrintExpression(a.Body)}",
+            NoneExpr n => $"none {n.RelationshipName} where {PrintExpression(n.Body)}",
+            CountExpr c when c.Body is not null => $"count {c.RelationshipName} where {PrintExpression(c.Body)}",
+            CountExpr c => $"count {c.RelationshipName}",
             _ => $"?{expr.GetType().Name}",
         };
     }

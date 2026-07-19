@@ -2767,4 +2767,159 @@ E: entity {{
         var g2s = System.Text.Json.JsonSerializer.Serialize(g2.Data);
         await Assert.That(g2s.Contains("tagged")).IsTrue();
     }
+
+    // ═════════════════════════════════════════════════════════════
+    // Q3′ — Collection quantifiers (any/all/none/count)
+    // ═════════════════════════════════════════════════════════════
+
+    [Test]
+    public async Task Parser_Quantifier_Any_ParsesCorrectly() {
+        var parsed = ParseExpression("any items where P1 is \"x\"");
+        await Assert.That(parsed).IsTypeOf<AnyExpr>();
+        var any = (AnyExpr)parsed;
+        await Assert.That(any.RelationshipName).IsEqualTo("items");
+        await Assert.That(any.Body).IsTypeOf<Comparison>();
+    }
+
+    [Test]
+    public async Task Parser_Quantifier_All_ParsesCorrectly() {
+        var parsed = ParseExpression("all items where P1 is \"x\"");
+        await Assert.That(parsed).IsTypeOf<AllExpr>();
+        var all = (AllExpr)parsed;
+        await Assert.That(all.RelationshipName).IsEqualTo("items");
+    }
+
+    [Test]
+    public async Task Parser_Quantifier_None_ParsesCorrectly() {
+        var parsed = ParseExpression("none items where P1 is \"x\"");
+        await Assert.That(parsed).IsTypeOf<NoneExpr>();
+        var none = (NoneExpr)parsed;
+        await Assert.That(none.RelationshipName).IsEqualTo("items");
+    }
+
+    [Test]
+    public async Task Parser_Quantifier_Count_WithWhere_ParsesCorrectly() {
+        var parsed = ParseExpression("count items where P1 is \"x\"");
+        await Assert.That(parsed).IsTypeOf<CountExpr>();
+        var cnt = (CountExpr)parsed;
+        await Assert.That(cnt.RelationshipName).IsEqualTo("items");
+        await Assert.That(cnt.Body).IsNotNull();
+    }
+
+    [Test]
+    public async Task Parser_Quantifier_Count_Bare_ParsesCorrectly() {
+        var parsed = ParseExpression("count items");
+        await Assert.That(parsed).IsTypeOf<CountExpr>();
+        var cnt = (CountExpr)parsed;
+        await Assert.That(cnt.RelationshipName).IsEqualTo("items");
+        await Assert.That(cnt.Body).IsNull();
+    }
+
+    [Test]
+    public async Task Parser_Quantifier_Any_And_Chain_Body() {
+        // Body uses ParseAnd: `or` requires parens inside where body
+        var parsed = ParseExpression("any items where P1 is \"x\" and P2 >= 10");
+        await Assert.That(parsed).IsTypeOf<AnyExpr>();
+        var any = (AnyExpr)parsed;
+        await Assert.That(any.Body).IsTypeOf<Poly.DomainModeling.And>();
+    }
+
+    [Test]
+    public async Task Parser_Quantifier_Any_In_Expression() {
+        // Quantifier inside a larger expression
+        var parsed = ParseExpression("P2 > 0 and any items where P1 is \"x\"");
+        await Assert.That(parsed).IsTypeOf<Poly.DomainModeling.And>();
+        var andExpr = (Poly.DomainModeling.And)parsed;
+        await Assert.That(andExpr.Right).IsTypeOf<AnyExpr>();
+    }
+
+    [Test]
+    public async Task Parser_Quantifier_Any_Negated() {
+        var parsed = ParseExpression("not any items where P1 is \"x\"");
+        await Assert.That(parsed).IsTypeOf<Poly.DomainModeling.Not>();
+        var notExpr = (Poly.DomainModeling.Not)parsed;
+        await Assert.That(notExpr.Operand).IsTypeOf<AnyExpr>();
+    }
+
+    [Test]
+    public async Task Printer_Quantifier_Any_RoundTrips() {
+        const string text = "any items where P1 is \"x\"";
+        var expr = ParseExpression(text);
+        var printed = PrintExpressionForTest(expr);
+        await Assert.That(printed).IsEqualTo(text);
+    }
+
+    [Test]
+    public async Task Printer_Quantifier_All_RoundTrips() {
+        const string text = "all items where P1 is \"x\"";
+        var expr = ParseExpression(text);
+        var printed = PrintExpressionForTest(expr);
+        await Assert.That(printed).IsEqualTo(text);
+    }
+
+    [Test]
+    public async Task Printer_Quantifier_None_RoundTrips() {
+        const string text = "none items where P1 is \"x\"";
+        var expr = ParseExpression(text);
+        var printed = PrintExpressionForTest(expr);
+        await Assert.That(printed).IsEqualTo(text);
+    }
+
+    [Test]
+    public async Task Printer_Quantifier_Count_WithWhere_RoundTrips() {
+        const string text = "count items where P1 is \"x\"";
+        var expr = ParseExpression(text);
+        var printed = PrintExpressionForTest(expr);
+        await Assert.That(printed).IsEqualTo(text);
+    }
+
+    [Test]
+    public async Task Printer_Quantifier_Count_Bare_RoundTrips() {
+        const string text = "count items";
+        var expr = ParseExpression(text);
+        var printed = PrintExpressionForTest(expr);
+        await Assert.That(printed).IsEqualTo(text);
+    }
+
+    [Test]
+    public async Task Parser_Quantifier_Any_WithOrInBody_UsesParens() {
+        // `or` in body requires parentheses (body is ParseAnd)
+        var parsed = ParseExpression("any items where (P1 is \"x\" or P1 is \"y\")");
+        await Assert.That(parsed).IsTypeOf<AnyExpr>();
+        var any = (AnyExpr)parsed;
+        await Assert.That(any.Body).IsTypeOf<Poly.DomainModeling.Or>();
+    }
+
+    [Test]
+    public async Task ApplyDsl_QuantifierAuthoring_ApplyAndExport() {
+        // Q3′ MCP golden: DSL apply + export with quantifier
+        var (sessionId, _) = McpSessionStore.Create("Test");
+        var dsl = DslTool.ApplyDsl(sessionId, """
+            domain Test
+            Order: entity {
+              Status: Text
+              Total: Number
+              Priority: Number
+            }
+            Customer: entity {
+              orders: many Order
+              HasPriorityOrder: policy { any orders where Priority > 5 }
+              AllHighValue: policy { all orders where Total > 100 }
+              HasNoRush: policy { none orders where Priority > 9 }
+              OpenOrderCount: policy { count orders where Status is "Open" > 0 }
+              TotalOrders: policy { count orders > 5 }
+            }
+            """);
+        await Assert.That(dsl.Success).IsTrue();
+
+        var export = DslTool.ExportDsl(sessionId);
+        await Assert.That(export.Success).IsTrue();
+        var exportJson = System.Text.Json.JsonSerializer.Serialize(export.Data);
+        await Assert.That(exportJson).Contains("any orders where");
+        await Assert.That(exportJson).Contains("all orders where");
+        await Assert.That(exportJson).Contains("none orders where");
+        await Assert.That(exportJson).Contains("count orders where");
+        // Bare count round-trips (verified in individual printer tests)
+        await Assert.That(exportJson).Contains("TotalOrders");
+    }
 }

@@ -279,8 +279,36 @@ not certificate exists
 customer where Status is "Active" and CreditLimit >= 1000
 ```
 
+#### Collection Quantifiers (Q3′)
+
+Policies can **observe** and **evaluate** collection relationships with `any`, `all`, `none`, and `count`.
+Quantifiers are evaluated at runtime against the instance store's linked targets.
+These require a **OneToMany** relationship from the source entity. The body is an `and`-chain
+(use parentheses for `or` inside the body).
+
+| Form | Meaning | Example |
+|------|---------|---------|
+| `any Rel where body` | ∃ related matching body | `any orders where Priority > 5` |
+| `all Rel where body` | ∀ related match body | `all items where Reserved is true` |
+| `none Rel where body` | ¬∃ related matching body | `none notes where NeedsFollowUp is true` |
+| `count Rel` / `count Rel where body` | Number of related (optionally filtered) | `count orders > 5` / `count orders where Status is "Open" > 0` |
+
+`count` produces a numeric value for use in comparisons. `any`/`all`/`none` produce booleans.
+
+```poly
+HasPriorityOrder: policy { any orders where Priority > 5 }
+AllHighValue: policy { all orders where Total > 100 }
+NoRush: policy { none notes where NeedsFollowUp is true }
+OpenOrderCount: policy { count orders where Status is "Open" > 0 }
+TotalOrderCount: policy { count orders > 5 }
+```
+
+**Analysis rules:** relationship must be OneToMany from the source; body properties validated
+against the target entity; reverse-side / self-rel / ManyToMany / OneToOne rejected (DMEFF007).
+
+
 **Rules:**
-- `Rel Prop` on `many` relationships is invalid (use `any Rel where …` — Q3′ planned). Cardinality validation is enforced at domain analysis time; the parser accepts the syntax but the analysis pipeline will reject it when relationship metadata is available.
+- `Rel Prop` on `many` relationships is invalid (use `any Rel where …` — Q3′ shipped). Cardinality validation is enforced at domain analysis time; the parser accepts the syntax but the analysis pipeline will reject it when relationship metadata is available.
 - `Rel exists` on `many` is allowed (non-empty check).
 - Cross-entity reads (path-prefix, exists, where) are legal in policies, require, and assign RHS.
 - Cross-entity writes (nav path as assign target) are banned.
@@ -296,7 +324,7 @@ customer where Status is "Active" and CreditLimit >= 1000
 - Owned navigation (`rel: owned Entity`)
 
 **Not yet shipped** (planned for future phases):
-- `any`/`all`/`none`/`count` over collections (Q3′)
+- `any`/`all`/`none`/`count` over collections (Q3′ — **shipped**)
 - Date operations
 - Owned/nested access in expressions
 
@@ -311,7 +339,7 @@ and lowering pipeline but are **not yet authorable in product DSL**:
 | Existence check | ✅ | ✅ **shipped** (postfix `Rel exists`) | `assignee exists` / `not assignee exists` |
 | Scoped filter (`where`) | ✅ | ✅ **shipped** (`rel where and-chain`) | `customer where Status is "Active"` |
 | Owned/nested access | ✅ | Pull (same path-prefix approach) | `profile Field is "x"` — not `profile.Field` |
-| Collection quantifiers (`any`/`all`/`none`/`count`) | ❌ no IR | Q3′ (planned) | New IR + lowering needed |
+| Collection quantifiers (`any`/`all`/`none`/`count`) | ✅ | ✅ **Q3′ shipped** | `any items where Status is "Open"`; store-aware runtime eval before VM lowering. |
 | Arithmetic (`+`, `-`, `*`, `/`) | ✅ | ✅ **shipped** | `Total + 5 > 10`, `Total * 0.9` |
 | Action parameters | ✅ | ✅ **shipped** | `actionName: action (param: Text) { ... }` |
 

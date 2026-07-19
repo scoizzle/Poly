@@ -3,7 +3,7 @@
 **Date:** 2026-07-18  
 **Revised:** 2026-07-19 — arithmetic **DSL shipped** (E6 gap closure, suite **1398**); Q1′ authoring still complete; Q3′ open  
 **Status:** Active — **parallel to** [`effect-surface-completeness.md`](effect-surface-completeness.md); **before** customer ship confidence  
-**Current pick:** **Q3′ by pain OR non-goal** — Q1′ authoring complete; **Q2 arithmetic shipped**; residual hygiene §15; RT eval related **pull**; see effect plan **E6** for RT goldens on invoke/conditional
+**Current pick:** **Q3′ shipped (DSL+RT)** — Q1′ authoring complete; **Q2 arithmetic shipped**; **Q3′ quantifiers shipped**; see effect plan **E6** for RT goldens on invoke/conditional
 **Micro-tasks:** [`simple-agent-tasks/qe-README.md`](simple-agent-tasks/qe-README.md)  
 **Related:** DomainExpression IR · `PolyDslParser` expression grammar · JSON policy parser · effect-surface plan · product guide · formal spec **§4.5**
 

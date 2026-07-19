@@ -92,6 +92,8 @@ internal sealed class ActionParameterUsageAnalyzer : INodeAnalyzer {
                 foreach (var binding in iae.ParameterBindings) {
                     CollectFromExpression(binding.Expression, referenced, paramNames);
                 }
+                if (iae.Filter is not null)
+                    CollectFromExpression(iae.Filter, referenced, paramNames);
                 break;
 
             case StageTransitionEffect:

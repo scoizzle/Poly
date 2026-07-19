@@ -2602,4 +2602,169 @@ E: entity {{
         var exportJson = System.Text.Json.JsonSerializer.Serialize(export.Data);
         await Assert.That(exportJson).Contains("else if");
     }
+
+    // ── E3b RT golden: cross-entity invoke ─────────────────────
+
+    [Test]
+    public async Task ApplyDsl_CrossEntityInvoke_RuntimePasses() {
+        var (sessionId, _) = McpSessionStore.Create("Test");
+        var dsl = DslTool.ApplyDsl(sessionId, """
+            domain Test
+            Service: entity {
+              Status: Text
+              Process: action {
+                assign Status to "processed"
+              }
+            }
+            Orchestrator: entity {
+              services: many Service
+              Run: action {
+                invoke services.Process
+              }
+            }
+            """);
+        await Assert.That(dsl.Success).IsTrue();
+
+        // Create the target instance first
+        var createSvc = RuntimeTool.CreateInstance(sessionId, "Service",
+            """{"Status":"idle"}""");
+        await Assert.That(createSvc.Success).IsTrue();
+        var svcId = ExtractInstanceId(
+            System.Text.Json.JsonSerializer.Serialize(createSvc.Data));
+
+        // Create the orchestrator
+        var createOrch = RuntimeTool.CreateInstance(sessionId, "Orchestrator");
+        await Assert.That(createOrch.Success).IsTrue();
+        var orchId = ExtractInstanceId(
+            System.Text.Json.JsonSerializer.Serialize(createOrch.Data));
+
+        // Link orchestrator → service via the InstanceStore
+        McpSessionStore.TryModifyInstances(sessionId, state => {
+            if (state.InstanceMap.TryGetValue(orchId!, out var orch)
+                && state.InstanceMap.TryGetValue(svcId!, out var svc)
+                && state.InstanceStore is not null) {
+                state.InstanceStore.Link("services", orch, svc);
+            }
+        });
+
+        // Now invoke Run on orchestrator
+        var call = RuntimeTool.InvokeAction(sessionId, orchId!, "Run");
+        await Assert.That(call.Success).IsTrue();
+
+        // Verify the service instance was modified via cross-entity invoke
+        var get = RuntimeTool.GetInstance(sessionId, svcId!);
+        var getJson = System.Text.Json.JsonSerializer.Serialize(get.Data);
+        await Assert.That(getJson).Contains("processed");
+    }
+
+    // ── E3b quantifier RT goldens ──────────────────────────────
+
+    [Test]
+    public async Task ApplyDsl_CrossEntityAll_InvokesEveryTarget() {
+        var (sessionId, _) = McpSessionStore.Create("Test");
+        var dsl = DslTool.ApplyDsl(sessionId, """
+            domain Test
+            Target: entity {
+              Status: Text
+              Process: action {
+                assign Status to "done"
+              }
+            }
+            Source: entity {
+              items: many Target
+              RunAll: action {
+                invoke all items.Process
+              }
+            }
+            """);
+        await Assert.That(dsl.Success).IsTrue();
+
+        var createT1 = RuntimeTool.CreateInstance(sessionId, "Target",
+            """{"Status":"a"}""");
+        var createT2 = RuntimeTool.CreateInstance(sessionId, "Target",
+            """{"Status":"b"}""");
+        var createS = RuntimeTool.CreateInstance(sessionId, "Source");
+        await Assert.That(createT1.Success).IsTrue();
+        await Assert.That(createT2.Success).IsTrue();
+        await Assert.That(createS.Success).IsTrue();
+        var sid = ExtractInstanceId(System.Text.Json.JsonSerializer.Serialize(createS.Data));
+        var t1id = ExtractInstanceId(System.Text.Json.JsonSerializer.Serialize(createT1.Data));
+        var t2id = ExtractInstanceId(System.Text.Json.JsonSerializer.Serialize(createT2.Data));
+
+        McpSessionStore.TryModifyInstances(sessionId, state => {
+            DomainEntityInstance? src = null;
+            foreach (var (id, inst) in state.InstanceMap)
+                if (id == sid) src = inst;
+            if (src is not null && state.InstanceStore is not null)
+                foreach (var (id, inst) in state.InstanceMap)
+                    if (id != sid) state.InstanceStore.Link("items", src, inst);
+        });
+
+        var call = RuntimeTool.InvokeAction(sessionId, sid!, "RunAll");
+        await Assert.That(call.Success).IsTrue();
+
+        var g1 = RuntimeTool.GetInstance(sessionId, t1id!);
+        var g1s = System.Text.Json.JsonSerializer.Serialize(g1.Data);
+        await Assert.That(g1s.Contains("done")).IsTrue();
+
+        var g2 = RuntimeTool.GetInstance(sessionId, t2id!);
+        var g2s = System.Text.Json.JsonSerializer.Serialize(g2.Data);
+        await Assert.That(g2s.Contains("done")).IsTrue();
+    }
+
+    [Test]
+    public async Task ApplyDsl_CrossEntityAny_WithFilter_OnlyMatchesTarget() {
+        var (sessionId, _) = McpSessionStore.Create("Test");
+        var dsl = DslTool.ApplyDsl(sessionId, """
+            domain Test
+            Target: entity {
+              Status: Text
+              Size: Number
+              Tag: action {
+                assign Status to "tagged"
+              }
+            }
+            Source: entity {
+              items: many Target
+              RunTag: action {
+                invoke any items.Tag where Size > 10
+              }
+            }
+            """);
+        await Assert.That(dsl.Success).IsTrue();
+
+        var createT1 = RuntimeTool.CreateInstance(sessionId, "Target",
+            """{"Status":"x","Size":5}""");
+        var createT2 = RuntimeTool.CreateInstance(sessionId, "Target",
+            """{"Status":"x","Size":20}""");
+        var createS = RuntimeTool.CreateInstance(sessionId, "Source");
+        await Assert.That(createT1.Success).IsTrue();
+        await Assert.That(createT2.Success).IsTrue();
+        await Assert.That(createS.Success).IsTrue();
+        var sid = ExtractInstanceId(System.Text.Json.JsonSerializer.Serialize(createS.Data));
+        var t1id = ExtractInstanceId(System.Text.Json.JsonSerializer.Serialize(createT1.Data));
+        var t2id = ExtractInstanceId(System.Text.Json.JsonSerializer.Serialize(createT2.Data));
+
+        McpSessionStore.TryModifyInstances(sessionId, state => {
+            DomainEntityInstance? src = null;
+            foreach (var (id, inst) in state.InstanceMap)
+                if (id == sid) src = inst;
+            if (src is not null && state.InstanceStore is not null)
+                foreach (var (id, inst) in state.InstanceMap)
+                    if (id != sid) state.InstanceStore.Link("items", src, inst);
+        });
+
+        var call = RuntimeTool.InvokeAction(sessionId, sid!, "RunTag");
+        await Assert.That(call.Success).IsTrue();
+
+        // t1 (Size=5) should NOT have been tagged — Status must not be "tagged"
+        var g1 = RuntimeTool.GetInstance(sessionId, t1id!);
+        var g1s = System.Text.Json.JsonSerializer.Serialize(g1.Data);
+        await Assert.That(g1s.Contains("tagged")).IsFalse();
+
+        // t2 (Size=20) SHOULD have been tagged
+        var g2 = RuntimeTool.GetInstance(sessionId, t2id!);
+        var g2s = System.Text.Json.JsonSerializer.Serialize(g2.Data);
+        await Assert.That(g2s.Contains("tagged")).IsTrue();
+    }
 }

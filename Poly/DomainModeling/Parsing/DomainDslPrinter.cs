@@ -1,5 +1,6 @@
 using System.Text;
 
+using Poly.DomainModeling;
 using Poly.DomainModeling.Constraints;
 using Poly.DomainModeling.Effects;
 
@@ -295,6 +296,14 @@ public sealed class DomainDslPrinter {
 
             case InvokeActionEffect invoke:
                 _sb.Append("invoke ");
+                if (invoke.Quantifier == StageSubscriptionQuantifier.Any)
+                    _sb.Append("any ");
+                else if (invoke.Quantifier == StageSubscriptionQuantifier.All)
+                    _sb.Append("all ");
+                if (invoke.TargetRelationship is not null) {
+                    _sb.Append(invoke.TargetRelationship);
+                    _sb.Append('.');
+                }
                 _sb.Append(invoke.ActionName);
                 if (invoke.ParameterBindings.Count > 0) {
                     _sb.Append('(');
@@ -307,6 +316,10 @@ public sealed class DomainDslPrinter {
                         _sb.Append(PrintExpression(binding.Expression));
                     }
                     _sb.Append(')');
+                }
+                if (invoke.Filter is not null) {
+                    _sb.Append(" where ");
+                    _sb.Append(PrintExpression(invoke.Filter));
                 }
                 _sb.AppendLine();
                 break;

@@ -2,7 +2,7 @@
 
 **Date:** 2026-07-18  
 **Revised:** 2026-07-19 (**E6** post-change code review — uncommitted DSL gap closure; suite **1398**)  
-**Status:** E1 **shipped**; E2.1 create-in only; E3a self-invoke **DSL+RT shipped**; E4 conditional **DSL+RT shipped**; action params **DSL+RT shipped**; Q1′ authoring **complete**; arithmetic/`equals`/`enum`/inheritance/`owned` **DSL shipped** (suite **1409**)  
+**Status:** E1 **shipped**; E2.1 create-in only; E3a/E3b cross-entity invoke with quantifiers+filter **DSL+RT shipped**; E4 conditional **DSL+RT shipped**; action params **DSL+RT shipped**; Q1′ authoring **complete**; arithmetic/`equals`/`enum`/inheritance/`owned` **DSL shipped** (suite **1416**)  
 **Current pick:** E6 follow-ups (RT goldens + hygiene) **or** query **Q3′** decision — [`dsl-query-surface.md`](dsl-query-surface.md) §15
 
 
@@ -193,17 +193,17 @@ Honesty nits (error string, guide soft-delete/unlink/TRE, entry/exit) landed wit
 **Runtime truth (E′):** Today `InvokeActionEffect` only does `InvokeAction(ActionName, args)` on **this** instance. **ParameterBindings are evaluated** (args map fully wired). Multi-entity invoke is **new runtime work**, not “just un-reject DSL.”
 
 - [x] **E3.0** Split product goals:
-  - **E3a** Self-invoke / re-entrancy — **DSL shipped** (`invoke Name`, optional bindings).  
-  - **E3b** Invoke on related instance (nav/link path) — **runtime + DSL** still open.  
-- [x] **E3.1** E3a: ParameterBindings used; IR kept. E3b still open.  
+  - **E3a** Self-invoke / re-entrancy — **DSL+RT shipped** (`invoke Name`, optional bindings).  
+  - **E3b** Invoke on related instance (nav/link path) — **DSL+RT shipped** (`invoke RelName.ActionName`).  
+- [x] **E3.1** E3a: ParameterBindings used; IR kept. E3b also shipped.  
 - [x] **E3.2** E3a DSL keyword + printer + guide.  
 - [ ] **E3.3** Guard recursion / re-entrancy (OnEntry → invoke → transition) — **open** (see E6.2).  
 - [x] **E3.4a** Golden: MCP apply/export smoke for `invoke` (authoring).  
 - [x] **E3.4b** Golden: E3a **runtime** self-invoke via `create_instance` → `invoke_action` (E6.1).  
-- [ ] **E3.4c** Golden: E3b parent→child if/when in scope.  
-- [x] **E3.5** Guide honesty: self-only invoke documented; multi-entity not claimed.
+- [x] **E3.4c** Golden: E3b cross-entity invoke via `invoke RelName.ActionName`.  
+- [x] **E3.5** Guide honesty: self-only invoke documented; cross-entity (E3b) documented.
 
-**Exit:** E3a authoring **met**. E3a RT exercise + E3b still open — do not claim multi-entity until E3b.
+**Exit:** E3a **shipped**. E3b **shipped**. Cross-entity invoke requires store link between instances (established via `create in` or explicit `store.Link`).
 
 ---
 
@@ -288,12 +288,12 @@ What you cannot write in DSL without this plan is the backlog order.
 - [x] **E2** decision recorded (create-in only — see § Decision Log)  
 - [x] **E3a** self-invoke authorable in DSL + guide honesty  
 - [x] **E4** conditional authorable in DSL + round-trip print  
-- [ ] One multi-entity workflow green (E2 or E3b) **or** deferred with reason — **deferred** (E2.1 create-in; E3b not started)  
+- [x] One multi-entity workflow green: E3b cross-entity invoke (`invoke RelName.ActionName`)  
 - [x] E3a/E4 **runtime** goldens under MCP RT (E6.1)  
-- [x] Suite green (**1398**) with DSL gap-closure goldens  
+- [x] Suite green (**1412**) with E3b cross-entity invoke goldens  
 - [x] No host I/O effects; no event tools  
 
-**“Useful enough” claim:** lifecycle kernel + soft-delete + self-invoke + conditional authorable via DSL. Exercisable end-to-end under MCP RT for invoke/conditional still needs E6.1 goldens. Multi-entity invoke remains E3b.
+**“Useful enough” claim:** lifecycle kernel + soft-delete + self-invoke + conditional + cross-entity invoke authorable via DSL. Exercisable end-to-end under MCP RT for invoke/conditional/params/cross-entity. Multi-entity invoke (E3b) shipped.
 
 ---
 
@@ -304,6 +304,8 @@ What you cannot write in DSL without this plan is the backlog order.
 | 2026-07-18 | **E2.1** | **(a) create-in only** — product graph writes stay explicit. Link/Unlink remain library/test-only. | Link runtime requires a `PropertyAccess` whose bag value is a `DomainEntityInstance` — high bar for DSL, narrow use case. `create in Rel { … }` with optional `RelationshipName` on `create` already handles spawn-and-wire. Cross-entity writes via assign are banned (§3.1 of query-surface). If link pain resurfaces dogfood, reopen with concrete domain scenario. E2.2–E2.4 **deferred**. |
 | 2026-07-19 | **E6** | Close IR↔DSL authoring gaps for arithmetic, E3a invoke, E4 conditional, action params, inheritance, equals/enum, owned. RT goldens deferred to **E6.1**. | IR + runtime already supported these; product path was the bottleneck. Approve authoring ship at suite **1398**; do not over-claim RT exercise or E3b. |
 | 2026-07-19 | **E6.1-fix** | Action-param bag injection alone is insufficient: unresolved `Member` RHS passthroughs the whole `_values` dictionary into the assign target. Effect compile now uses an action-scoped `TypeDefinitionNodeAnalyzer` that includes declared parameters as dictionary-backed members. | `EmitMember` unresolved fallback returns the instance bag; Label became Dictionary`2.ToString(). Suite **1409**. |
+| 2026-07-19 | **E3b** | Cross-entity invoke: `invoke RelName.ActionName(args)` resolves linked target via store relationship and invokes the action on it. Parser/analyzer/runtime unified — E3a and E3b share `InvokeActionEffect` with optional `TargetRelationship`. Suite **1412**. | Library roadblock #1 (Book.AvailableCopies via cross-entity invoke) is now authorable. Requires `create in` or explicit store link to establish the relationship first. |
+| 2026-07-19 | **E3b quant+filter** | `any`/`all` quantifiers and `where` filter for cross-entity invoke. `invoke any rel.Action` tries each target, returns first success. `invoke all rel.Action` invokes on every target, fails on first miss. `invoke all rel.Action() where expr` filters targets per-instance. Suite **1416**. | Makes `many` relationship invoke unambiguous. Filter closes the common "select subset" use case with existing expression parsing. |
 
 ---
 
@@ -312,11 +314,10 @@ What you cannot write in DSL without this plan is the backlog order.
 **Micro-tasks:** [`simple-agent-tasks/qe-README.md`](simple-agent-tasks/qe-README.md) — pick first `[ ]` there.
 
 ```text
-DONE:    E1; E2.1; E3a DSL+RT; E4 DSL+RT; params DSL+RT; E6.1–E6.10; Q1′ authoring; arithmetic/equals/enum/inheritance/owned DSL
+DONE:    E1; E2.1; E3a/E3b cross-entity invoke with quantifiers+filter; E4 DSL+RT; params DSL+RT; E6.1–E6.10; Q1′ authoring; arithmetic/equals/enum/inheritance/owned DSL
 CURRENT: query Q3′ decision OR dogfood
-THEN:    E3b only with named multi-entity pain
-LATER:   E5 micro-tools; optional RT eval related policies
-PULL:    Host I/O; micro-catalog; L*; TRE; link DSL; E6.11–E6.12
+THEN:    E5 micro-tools only with named dogfood pain
+LATER:   Host I/O; micro-catalog; L*; TRE; link DSL; E6.11–E6.12
 ```
 
 **Implementer watch-outs**
@@ -532,7 +533,7 @@ Plan direction is **right** (authorability of effects that already run). Initial
 | **E6.8** | Low | Duplicate “Parse effects” comment in `ParseActionBody`. | Cosmetic cleanup. |
 | **E6.9** | Ops | `TypeDefinitionProviderCollectionTests` mock hardening is orthogonal — split commit or note in message. | Prefer separate commit if splitting. |
 | **E6.10** | Process | Commit this tree; rebuild MCP so embedded guide matches. | `dotnet build Poly.Mcp` after guide edit. |
-| **E6.11** | Pull | **E3b** multi-entity invoke — runtime first, then DSL. | Only with named dogfood pain. |
+| **E6.11** | **Closed** | **E3b cross-entity invoke — shipped.** `invoke RelName.ActionName(args)` resolves linked target via store relationship. | Requires store link (`create in` or explicit). |
 | **E6.12** | Pull | TRE runtime-or-hide; link DSL (E2.1 stands). | Unchanged. |
 | **E6.13** | Parallel | Query plan: mark arithmetic **shipped** (was Q2); Q3′ still open — see [`dsl-query-surface.md`](dsl-query-surface.md). | Keep plans in lockstep. |
 
@@ -548,7 +549,8 @@ Plan direction is **right** (authorability of effects that already run). Initial
 - [x] **E6.8** Duplicate “Parse effects” comment removed  
 - [x] **E6.9** Orthogonal mock note accepted in-tree (no split required for ship)  
 - [x] **E6.10** Guide embed note in Poly.Mcp README; rebuild after guide edit  
-- [ ] **E6.11–E6.12** Pull (E3b, TRE, link)  
+- [x] **E6.11** **E3b** cross-entity invoke — shipped (DSL+RT).  
+- [ ] **E6.12** Pull (TRE runtime-or-hide; link DSL). Unchanged.
 - [x] **E6.13** Query-surface arithmetic row → shipped (dsl-query-surface.md §16 + matrix)  
 
 **Also fixed while closing E6.1:** action parameter grammar — canonical form is `Name: action (params)` (params after kind, keeps `Name: kind` consistency). Legacy `Name(params): action` still accepted.

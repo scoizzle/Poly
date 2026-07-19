@@ -418,6 +418,180 @@ public class DomainEntityInstanceTests {
     }
 
     [Test]
+    public async Task InvokeActionEffect_CrossEntity_InvokesOnRelatedInstance() {
+        // E3b: invoke RelName.ActionName(args) — resolve target via store relationship
+        var status = new Property("Status", new DomainTypeReference("Text"), []);
+        var count = new Property("Count", new DomainTypeReference("Number"), []);
+
+        // Target entity: Service has an action we invoke
+        var service = new Entity("Service", [status, count], Actions: [
+            new Poly.DomainModeling.Action("Process", InvocationResult.Void, [], [
+                new AssignEffect(DomainExpression.Property("Status"),
+                    DomainExpression.Literal("processed"))
+            ], [])
+        ], [], []);
+
+        // Source entity: Orchestrator has an action that invokes service.Process
+        var orchestrator = new Entity("Orchestrator", [count], Actions: [
+            new Poly.DomainModeling.Action("Run", InvocationResult.Void, [], [
+                new InvokeActionEffect("Process", [], TargetRelationship: "ServiceCall")
+            ], [])
+        ], [], []);
+
+        var rel = new Relationship("ServiceCall",
+            new DomainTypeReference("Orchestrator"), new DomainTypeReference("Service"),
+            RelationshipCardinality.OneToOne, []);
+
+        var domain = new Domain("Test", [orchestrator, service], [rel]);
+
+        var store = new DomainInstanceStore();
+        var svc = DomainEntityInstance.Create(service,
+            new Dictionary<string, object?> { ["Status"] = "idle", ["Count"] = 0L },
+            domain: domain);
+        var orch = DomainEntityInstance.Create(orchestrator,
+            new Dictionary<string, object?> { ["Count"] = 1L },
+            domain: domain);
+        store.Add(svc);
+        store.Add(orch);
+        store.Link("ServiceCall", orch, svc);
+
+        var result = orch.InvokeAction("Run");
+        await Assert.That(result.Succeeded).IsTrue();
+        // Service instance should have been modified by the cross-entity invoke
+        await Assert.That(svc.GetProperty<object>("Status")).IsEqualTo("processed");
+    }
+
+    [Test]
+    public async Task InvokeActionEffect_CrossEntity_WithArgs() {
+        // E3b with args passed through the relationship
+        var label = new Property("Label", new DomainTypeReference("Text"), []);
+
+        var target = new Entity("Target", [label], Actions: [
+            new Poly.DomainModeling.Action("SetText", InvocationResult.Void,
+                Parameters: [new Property("msg", new DomainTypeReference("Text"), [])],
+                Effects: [new AssignEffect(
+                    DomainExpression.Property("Label"),
+                    DomainExpression.Property("msg"))],
+                Policies: [])
+        ], [], []);
+
+        var source = new Entity("Source", [], Actions: [
+            new Poly.DomainModeling.Action("Go", InvocationResult.Void, [], [
+                new InvokeActionEffect("SetText", [
+                    new PropertyBinding("msg", DomainExpression.Literal("cross-entity!"))
+                ], TargetRelationship: "Link")
+            ], [])
+        ], [], []);
+
+        var rel = new Relationship("Link",
+            new DomainTypeReference("Source"), new DomainTypeReference("Target"),
+            RelationshipCardinality.OneToOne, []);
+        var domain = new Domain("Test", [source, target], [rel]);
+
+        var store = new DomainInstanceStore();
+        var tgt = DomainEntityInstance.Create(target,
+            new Dictionary<string, object?> { ["Label"] = "unset" }, domain: domain);
+        var src = DomainEntityInstance.Create(source, domain: domain);
+        store.Add(tgt);
+        store.Add(src);
+        store.Link("Link", src, tgt);
+
+        var result = src.InvokeAction("Go");
+        await Assert.That(result.Succeeded).IsTrue();
+        await Assert.That(tgt.GetProperty<object>("Label")).IsEqualTo("cross-entity!");
+    }
+
+    // ── E3b quantifier + filter tests ──────────────────────────
+
+    [Test]
+    public async Task InvokeActionEffect_CrossEntity_All_InvokesOnEveryTarget() {
+        var status = new Property("Status", new DomainTypeReference("Text"), []);
+        var target = new Entity("Target", [status], Actions: [
+            new Poly.DomainModeling.Action("Process", InvocationResult.Void, [], [
+                new AssignEffect(DomainExpression.Property("Status"),
+                    DomainExpression.Literal("done"))
+            ], [])
+        ], [], []);
+
+        var source = new Entity("Source", [], Actions: [
+            new Poly.DomainModeling.Action("RunAll", InvocationResult.Void, [], [
+                new InvokeActionEffect("Process", [],
+                    TargetRelationship: "Items",
+                    Quantifier: StageSubscriptionQuantifier.All)
+            ], [])
+        ], [], []);
+
+        var rel = new Relationship("Items",
+            new DomainTypeReference("Source"), new DomainTypeReference("Target"),
+            RelationshipCardinality.OneToMany, []);
+        var domain = new Domain("Test", [source, target], [rel]);
+
+        var store = new DomainInstanceStore();
+        var tgt1 = DomainEntityInstance.Create(target,
+            new Dictionary<string, object?> { ["Status"] = "a" }, domain: domain);
+        var tgt2 = DomainEntityInstance.Create(target,
+            new Dictionary<string, object?> { ["Status"] = "b" }, domain: domain);
+        var src = DomainEntityInstance.Create(source, domain: domain);
+        store.Add(tgt1); store.Add(tgt2); store.Add(src);
+        store.Link("Items", src, tgt1);
+        store.Link("Items", src, tgt2);
+
+        var result = src.InvokeAction("RunAll");
+        await Assert.That(result.Succeeded).IsTrue();
+        await Assert.That(tgt1.GetProperty<object>("Status")).IsEqualTo("done");
+        await Assert.That(tgt2.GetProperty<object>("Status")).IsEqualTo("done");
+    }
+
+    [Test]
+    public async Task InvokeActionEffect_CrossEntity_Any_WithFilter() {
+        var status = new Property("Status", new DomainTypeReference("Text"), []);
+        var count = new Property("Count", new DomainTypeReference("Number"), []);
+
+        var target = new Entity("Target", [status, count], Actions: [
+            new Poly.DomainModeling.Action("Process", InvocationResult.Void, [], [
+                new AssignEffect(DomainExpression.Property("Status"),
+                    DomainExpression.Literal("processed"))
+            ], [])
+        ], [], []);
+
+        var source = new Entity("Source", [], Actions: [
+            new Poly.DomainModeling.Action("RunAny", InvocationResult.Void, [], [
+                new InvokeActionEffect("Process", [],
+                    TargetRelationship: "Items",
+                    Quantifier: StageSubscriptionQuantifier.Any,
+                    Filter: DomainExpression.Equal(
+                        DomainExpression.Property("Count"),
+                        DomainExpression.Literal(42L)))
+            ], [])
+        ], [], []);
+
+        var rel = new Relationship("Items",
+            new DomainTypeReference("Source"), new DomainTypeReference("Target"),
+            RelationshipCardinality.OneToMany, []);
+        var domain = new Domain("Test", [source, target], [rel]);
+
+        var store = new DomainInstanceStore();
+        var tgt1 = DomainEntityInstance.Create(target,
+            new Dictionary<string, object?> { ["Status"] = "a", ["Count"] = 1L }, domain: domain);
+        var tgt2 = DomainEntityInstance.Create(target,
+            new Dictionary<string, object?> { ["Status"] = "b", ["Count"] = 42L }, domain: domain);
+        var tgt3 = DomainEntityInstance.Create(target,
+            new Dictionary<string, object?> { ["Status"] = "c", ["Count"] = 99L }, domain: domain);
+        var src = DomainEntityInstance.Create(source, domain: domain);
+        store.Add(tgt1); store.Add(tgt2); store.Add(tgt3); store.Add(src);
+        store.Link("Items", src, tgt1);
+        store.Link("Items", src, tgt2);
+        store.Link("Items", src, tgt3);
+
+        var result = src.InvokeAction("RunAny");
+        await Assert.That(result.Succeeded).IsTrue();
+        // Only tgt2 (Count=42) should have been processed; tgt1 and tgt3 unchanged
+        await Assert.That(tgt2.GetProperty<object>("Status")).IsEqualTo("processed");
+        await Assert.That(tgt1.GetProperty<object>("Status")).IsEqualTo("a");
+        await Assert.That(tgt3.GetProperty<object>("Status")).IsEqualTo("c");
+    }
+
+    [Test]
     public async Task ActionWithMultipleEffects_ExecutesAllTypes() {
         var status = new Property("Status", new DomainTypeReference("Text"), []);
         var count = new Property("Count", new DomainTypeReference("Number"), []);

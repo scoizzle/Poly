@@ -72,7 +72,7 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
                 ValidateStageTransition(context, ste, entity);
                 break;
             case InvokeActionEffect iae:
-                ValidateInvokeAction(context, iae, entity);
+                ValidateInvokeAction(context, iae, entity, domain);
                 break;
             case AssignEffect ae:
                 ValidateAssign(context, ae, entity);
@@ -298,12 +298,58 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
     }
 
     private static void ValidateInvokeAction(
-        AnalysisContext context, InvokeActionEffect iae, Entity entity) {
-        var targetAction = entity.Actions.FirstOrDefault(a => string.Equals(a.Name, iae.ActionName, StringComparison.Ordinal));
+        AnalysisContext context, InvokeActionEffect iae, Entity entity, Domain domain) {
+        // Resolve which entity the action must live on
+        Entity targetEntity;
+        if (iae.TargetRelationship is not null) {
+            // E3b: cross-entity invoke — action is on the other side of a relationship
+            var relationship = domain.Relationships.FirstOrDefault(r =>
+                string.Equals(r.Name, iae.TargetRelationship, StringComparison.Ordinal));
+            if (relationship is null) {
+                context.ReportError(
+                    iae,
+                    $"InvokeAction effect references relationship '{iae.TargetRelationship}' which does not exist on domain.",
+                    DomainModelDiagnosticCodes.EffectBinding);
+                return;
+            }
+
+            // Determine which side of the relationship we are on
+            string otherSideTypeName;
+            if (string.Equals(relationship.Source.TypeName, entity.Name, StringComparison.Ordinal))
+                otherSideTypeName = relationship.Target.TypeName;
+            else if (string.Equals(relationship.Target.TypeName, entity.Name, StringComparison.Ordinal))
+                otherSideTypeName = relationship.Source.TypeName;
+            else {
+                context.ReportError(
+                    iae,
+                    $"Entity '{entity.Name}' does not participate in relationship '{iae.TargetRelationship}' " +
+                    $"(source={relationship.Source.TypeName}, target={relationship.Target.TypeName}).",
+                    DomainModelDiagnosticCodes.EffectBinding);
+                return;
+            }
+
+            targetEntity = domain.Types.OfType<Entity>()
+                .FirstOrDefault(e => string.Equals(e.Name, otherSideTypeName))!;
+            if (targetEntity is null) {
+                context.ReportError(
+                    iae,
+                    $"Target entity type '{otherSideTypeName}' for relationship '{iae.TargetRelationship}' not found.",
+                    DomainModelDiagnosticCodes.EffectBinding);
+                return;
+            }
+        }
+        else {
+            // E3a: self invoke
+            targetEntity = entity;
+        }
+
+        var targetAction = targetEntity.Actions.FirstOrDefault(a =>
+            string.Equals(a.Name, iae.ActionName, StringComparison.Ordinal));
         if (targetAction is null) {
             context.ReportError(
                 iae,
-                $"InvokeAction effect references action '{iae.ActionName}' which does not exist on entity '{entity.Name}'.",
+                $"InvokeAction effect references action '{iae.ActionName}' which does not exist " +
+                $"on entity '{targetEntity.Name}'.",
                 DomainModelDiagnosticCodes.EffectBinding);
             return;
         }
@@ -315,6 +361,27 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
                     $"InvokeAction effect binding references unknown parameter '{binding.PropertyName}' on action '{targetAction.Name}'.",
                     DomainModelDiagnosticCodes.EffectBinding);
             }
+        }
+
+        // Validate filter expression properties exist on target entity
+        if (iae.Filter is not null && targetEntity is not null) {
+            ValidateFilterProperties(context, iae.Filter, targetEntity);
+        }
+    }
+
+    private static void ValidateFilterProperties(
+        AnalysisContext context, DomainExpression expr, Entity targetEntity) {
+        if (expr is PropertyAccess pa) {
+            if (!targetEntity.Properties.Any(p =>
+                string.Equals(p.Name, pa.Name, StringComparison.Ordinal))) {
+                context.ReportError(
+                    expr,
+                    $"InvokeAction filter references property '{pa.Name}' which does not exist on target entity '{targetEntity.Name}'.",
+                    DomainModelDiagnosticCodes.EffectBinding);
+            }
+        }
+        foreach (var child in expr.Children.OfType<DomainExpression>()) {
+            ValidateFilterProperties(context, child, targetEntity);
         }
     }
 

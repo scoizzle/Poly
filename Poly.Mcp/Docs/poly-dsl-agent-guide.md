@@ -119,6 +119,7 @@ Effects in an action body:
 | Create in relationship | `create in RelationshipName { prop: value }` |
 | Soft-delete self | `delete` |
 | Self-invoke | `invoke ActionName` / `invoke ActionName(param: expr, ...)` |
+| Cross-entity invoke | `invoke [any\|all] RelName.ActionName` / `invoke [any\|all] RelName.ActionName(param: expr, ...) [where expr]` |
 | Conditional | `if (expr) { effects } [else if (expr) { effects }]* [else { effects }]` |
 
 ```poly
@@ -146,7 +147,30 @@ Submit: action {
 
 `else if` is sugar for a nested `if` in the `else` branch (round-trips as `else if`).
 
-`invoke` is **self-only** (same instance). Nested invoke depth is limited (max 16); recursive cycles fail loud.
+### Invoke
+
+`invoke` chains another action on the same instance by default.
+
+For cross-entity invoke (E3b), use relationship-dotted syntax:
+`invoke RelName.ActionName` — resolves the other end of a named relationship
+and calls the action on that instance.
+
+When the relationship is `many`, use a **quantifier**:
+- `invoke any RelName.Action` — try each linked target, return first success
+- `invoke all RelName.Action` — invoke on every linked target, fail on first miss
+
+Add a **filter predicate** with `where` to select which linked targets to invoke on:
+
+```poly
+invoke Validate                              # self-only
+invoke Validate(status: "ready")             # self-only with args
+invoke services.Process                      # cross-entity, singular
+invoke any services.Process                  # cross-entity, first success
+invoke all items.Process                     # cross-entity, every target
+invoke all items.Tag() where Size > 10       # cross-entity, filtered
+```
+
+Nested invoke depth is limited (max 16); recursive cycles fail loud.
 
 ### Require Gates
 
@@ -253,7 +277,7 @@ customer where Status is "Active" and CreditLimit >= 1000
 **Shipped in the current product surface:**
 - Arithmetic (`+`, `-`, `*`, `/`) in expressions
 - Conditional effects (`if (expr) { effects } else { effects }`)
-- Invoke effect (`invoke ActionName` with optional arguments)
+- Invoke effect (`invoke ActionName` with optional arguments; cross-entity via `invoke RelName.ActionName`; quantifiers `any`/`all`; filter `where`)
 - Action parameters (`actionName: action (param: Type, ...)`)
 - Entity inheritance (`ChildName: ParentName entity { ... }`)
 - `equals` and `enum` constraints
@@ -290,7 +314,7 @@ and lowering pipeline but are **not yet authorable in product DSL**:
 | `create Type { ... }` | action |
 | `create in Rel { ... }` | action |
 | `delete` | action, entry, exit (soft-deletes the current instance) |
-| `invoke ActionName` | action (self-only, with optional args: `invoke Activate(status: "go")`; depth-limited) |
+| Invoke self/rel | `invoke ActionName` / `invoke RelName.ActionName` | action (self, cross-entity, `any`/`all` quantifiers, `where` filter; depth-limited) |
 | `if (expr) { … } else if … else { … }` | action, entry, exit |
 
 The following effects exist in the runtime library but have **no DSL syntax** yet:

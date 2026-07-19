@@ -366,7 +366,36 @@ public sealed record DomainEntityInstance {
             case InvokeActionEffect invoke:
                 // Evaluate ParameterBindings and pass as args to chained action.
                 var chainedArgs = EvaluateParameterBindings(invoke.ParameterBindings);
-                var nestedResult = InvokeAction(invoke.ActionName, chainedArgs);
+                ActionInvocationResult nestedResult;
+                if (invoke.TargetRelationship is not null
+                    && invoke.Quantifier is StageSubscriptionQuantifier.Any or StageSubscriptionQuantifier.All) {
+                    // E3b collection: get linked targets, apply filter, invoke per quantifier rules
+                    var targets = GetRelatedTargets(invoke.TargetRelationship, invoke.Filter);
+                    if (invoke.Quantifier == StageSubscriptionQuantifier.Any) {
+                        nestedResult = ActionInvocationResult.Missing(Entity.Name, invoke.ActionName);
+                        foreach (var t in targets) {
+                            var r = t.InvokeAction(invoke.ActionName, chainedArgs);
+                            if (r.Succeeded) { nestedResult = r; break; }
+                        }
+                    }
+                    else {
+                        nestedResult = ActionInvocationResult.Ok(invoke.ActionName, CurrentStage);
+                        foreach (var t in targets) {
+                            var r = t.InvokeAction(invoke.ActionName, chainedArgs);
+                            if (!r.Succeeded) {
+                                nestedResult = r;
+                                break;
+                            }
+                        }
+                    }
+                }
+                else if (invoke.TargetRelationship is not null) {
+                    var target = ResolveRelationshipTarget(invoke.TargetRelationship);
+                    nestedResult = target.InvokeAction(invoke.ActionName, chainedArgs);
+                }
+                else {
+                    nestedResult = InvokeAction(invoke.ActionName, chainedArgs);
+                }
                 if (!nestedResult.Succeeded) {
                     throw new InvalidOperationException(
                         nestedResult.ErrorMessage
@@ -720,6 +749,66 @@ public sealed record DomainEntityInstance {
     private TypeDefinitionNodeAnalyzer BuildActionScopedTypeDefAnalyzer(
         Poly.DomainModeling.Action action) =>
         BuildTypeDefAnalyzer(Entity.Name, Entity.Properties, action.Parameters);
+
+    /// <summary>
+    /// Resolves the target instance for a cross-entity invoke (E3b).
+    /// The relationship name is looked up in the domain; the store returns
+    /// the linked instance(s) on the other side. Requires exactly one target.
+    /// </summary>
+    private DomainEntityInstance ResolveRelationshipTarget(string relationshipName) {
+        if (Domain is null)
+            throw new InvalidOperationException(
+                $"Cannot resolve relationship '{relationshipName}' without a domain.");
+
+        var relationship = Domain.Relationships.FirstOrDefault(r =>
+            string.Equals(r.Name, relationshipName, StringComparison.Ordinal));
+        if (relationship is null)
+            throw new InvalidOperationException(
+                $"Relationship '{relationshipName}' not found in domain '{Domain.Name}'.");
+
+        if (Store is null)
+            throw new InvalidOperationException(
+                "Cannot resolve relationship target without a DomainInstanceStore. " +
+                "Call store.Add(instance) first.");
+
+        var related = Store.GetRelatedInstances(relationshipName, this);
+        if (related.Count == 0)
+            throw new InvalidOperationException(
+                $"No linked instances found for relationship '{relationshipName}' on entity '{Entity.Name}'.");
+
+        if (related.Count > 1)
+            throw new InvalidOperationException(
+                $"Relationship '{relationshipName}' has {related.Count} linked instances; " +
+                "cross-entity invoke requires exactly one target for now.");
+
+        return related[0];
+    }
+
+    /// <summary>
+    /// Returns linked target instances for a cross-entity invoke, optionally
+    /// filtered by a predicate expression evaluated against each target's bag.
+    /// </summary>
+    private IReadOnlyList<DomainEntityInstance> GetRelatedTargets(
+        string relationshipName, DomainExpression? filter) {
+        if (Store is null)
+            throw new InvalidOperationException(
+                "Cannot resolve relationship targets without a DomainInstanceStore.");
+        var all = Store.GetRelatedInstances(relationshipName, this);
+        if (filter is null || all.Count == 0) return all;
+
+        var result = new List<DomainEntityInstance>();
+        foreach (var t in all) {
+            var loweringPass = new DomainExpressionLoweringPass();
+            var lowered = loweringPass.Lower(filter,
+                new Parameter("entity", new TypeReference(t.Entity.Name)));
+            var compiled = Interpreter.Compile(lowered, t._typeDefAnalyzer);
+            using var exec = Interpreter.Execute(compiled,
+                s => s.SetArgs(new object?[] { t._values }));
+            if (exec.Result.GetValue<bool>())
+                result.Add(t);
+        }
+        return result;
+    }
 
     /// <summary>
     /// Maps a domain type reference (e.g. "Text", "Number") to an AST type

@@ -447,11 +447,44 @@ public sealed class PolyDslParser {
             throw Error("Unexpected 'when' inside action body (subscriptions are stage-level)");
         }
 
-        // E3a: invoke ActionName — chain another action on the same instance
+        // E3a/E3b: invoke [any|all] [RelName.]ActionName(args) [where expr]
+        //   any/all   → collection quantifier (E3b only, requires RelName)
+        //   RelName.  → cross-entity invoke (E3b, resolve via relationship)
+        //   bare      → self-only invoke (E3a)
+        //   where …  → optional filter predicate on target instances
         if (_current.Kind == TokenKind.Invoke) {
             Advance(); // consume 'invoke'
-            var targetName = ExpectIdentifier(TokenKind.Identifier, "action name");
-            // InvokeActionEffect: self-only invoke with optional parameter bindings
+
+            // Optional quantifier: any / all (identifier text match)
+            StageSubscriptionQuantifier? quantifier = null;
+            if (_current.Kind == TokenKind.Identifier &&
+                string.Equals(_current.Text, "any", StringComparison.OrdinalIgnoreCase)) {
+                quantifier = StageSubscriptionQuantifier.Any;
+                Advance();
+            }
+            else if (_current.Kind == TokenKind.Identifier &&
+                     string.Equals(_current.Text, "all", StringComparison.OrdinalIgnoreCase)) {
+                quantifier = StageSubscriptionQuantifier.All;
+                Advance();
+            }
+
+            var firstId = ExpectIdentifier(TokenKind.Identifier, "action or relationship name");
+
+            string? targetRelationship = null;
+            string actionName;
+
+            if (_current.Kind == TokenKind.Dot) {
+                // E3b: invoke RelName.ActionName(args)
+                targetRelationship = firstId;
+                Advance(); // consume '.'
+                actionName = ExpectIdentifier(TokenKind.Identifier, "action name");
+            }
+            else {
+                // E3a: invoke ActionName(args) — self-only
+                actionName = firstId;
+            }
+
+            // Optional parameter bindings: (name: expr, ...)
             var bindings = new List<PropertyBinding>();
             if (_current.Kind == TokenKind.LParen) {
                 Advance(); // consume '('
@@ -465,7 +498,16 @@ public sealed class PolyDslParser {
                 }
                 Expect(TokenKind.RParen);
             }
-            return new InvokeActionEffect(targetName, bindings);
+
+            // Optional filter: where expr
+            DomainExpression? filter = null;
+            if (_current.Kind == TokenKind.Identifier &&
+                string.Equals(_current.Text, "where", StringComparison.OrdinalIgnoreCase)) {
+                Advance(); // consume 'where'
+                filter = ParseExpression();
+            }
+
+            return new InvokeActionEffect(actionName, bindings, targetRelationship, quantifier, filter);
         }
 
         // E4 / E6.4: if (expr) { effects } [else if (expr) { ... }]* [else { effects }]

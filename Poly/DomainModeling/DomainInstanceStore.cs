@@ -96,6 +96,25 @@ public sealed class DomainInstanceStore {
     }
 
     /// <summary>
+    /// Returns the instances linked to <paramref name="instance"/> via <paramref name="relationshipName"/>.
+    /// If <paramref name="instance"/> is the relationship Source, returns linked Targets.
+    /// If <paramref name="instance"/> is the relationship Target, returns linked Sources.
+    /// </summary>
+    public IReadOnlyList<DomainEntityInstance> GetRelatedInstances(
+        string relationshipName, DomainEntityInstance instance) {
+        var results = new List<DomainEntityInstance>();
+        foreach (var l in _links) {
+            if (!string.Equals(l.RelationshipName, relationshipName, StringComparison.Ordinal))
+                continue;
+            if (ReferenceEquals(l.Source, instance))
+                results.Add(l.Target);
+            else if (ReferenceEquals(l.Target, instance))
+                results.Add(l.Source);
+        }
+        return results;
+    }
+
+    /// <summary>
     /// Called after an instance transitions to a new stage.
     /// Finds subscriber instances whose active subscription matches the transition
     /// <b>and</b> that are instance-linked to the transitioned entity, then runs effects.

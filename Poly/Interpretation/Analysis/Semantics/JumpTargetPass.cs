@@ -145,9 +145,7 @@ internal sealed class JumpTargetAnalyzer : INodeAnalyzer {
 
         switch (node) {
             case WhileLoop w:
-                loops.Push((w.Id, null));
-                // TODO: When WhileLoop gains a Label property (for labeled
-                // break/continue), push w.Label here instead of null.
+                loops.Push((w.Id, w.Label));
                 ResolveJumps(context, w.Condition, labels, loops);
                 ResolveJumps(context, w.Body, labels, loops);
                 loops.Pop();

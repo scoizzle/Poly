@@ -2,8 +2,8 @@
 
 **Date:** 2026-07-18  
 **Revised:** 2026-07-18 (**E1′′′** post-commit review — `121cd92` clean tree; suite **1360**)  
-**Status:** E1 delete-self **shipped** (`121cd92`); E2.1 **create-in only** recorded; Q0 + Q1.1 **done**  
-**Current pick:** query **Q1.2** path-prefix — [`simple-agent-tasks/qe-README.md`](simple-agent-tasks/qe-README.md) · [`dsl-query-surface.md`](dsl-query-surface.md) §4.5 / §10
+**Status:** E1 **shipped**; E2.1 create-in only; Q1′ parse/print **shipped** (`959c6e7`, suite **1373**)  
+**Current pick:** query **§11 Q1′′′ residuals** (RT/eval goldens) — [`dsl-query-surface.md`](dsl-query-surface.md) §11 · [`qe-README.md`](simple-agent-tasks/qe-README.md)
 
 
 
@@ -301,10 +301,10 @@ What you cannot write in DSL without this plan is the backlog order.
 **Micro-tasks:** [`simple-agent-tasks/qe-README.md`](simple-agent-tasks/qe-README.md) — pick first `[ ]` there.
 
 ```text
-DONE:    E1; E2.1 create-in-only; Q0; Q1.1 §4.5
-CURRENT: Q1.2 path-prefix (query suite)
-THEN:    Q1.3 exists → Q1.3b where → goldens/guide
-LATER:   E3a self-invoke; E3b multi-entity; E4/E5; Q3′ any/all where
+DONE:    E1; E2.1 create-in-only; Q0; Q1′ parse/print (`959c6e7`)
+CURRENT: query §11 residuals (RT/eval goldens + honesty)
+THEN:    Q3′ by pain OR non-goal; E3a if workflow pain
+LATER:   E3b multi-entity; E4/E5
 PULL:    Host I/O; micro-catalog; L*; TRE runtime; link DSL
 ```
 

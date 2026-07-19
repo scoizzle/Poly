@@ -202,7 +202,7 @@ Cross-entity **writes** via assign are **banned** — only local entity properti
 | Path-prefix (bool prop) | `assignee Active` | `RelationshipNavigation` + `PropertyAccess` |
 | Path-prefix (compare) | `customer Tier is "VIP"` | `RelationshipNavigation` + `Comparison` |
 | Presence | `assignee exists` | `Exists` |
-| Absence | `not certificate exists` | `NotExists` |
+| Absence | `not certificate exists` | `Not(Exists(...))` — wraps `Exists` in `Not` |
 | Multi-predicate | `customer where Status is "Active" and CreditLimit >= 1000` | `RelationshipNavigation` with `And` body |
 
 ```poly
@@ -214,7 +214,7 @@ customer where Status is "Active" and CreditLimit >= 1000
 ```
 
 **Rules:**
-- `Rel Prop` on `many` relationships is a parse error (use `any Rel where …` — Q3′ planned).
+- `Rel Prop` on `many` relationships is invalid (use `any Rel where …` — Q3′ planned). Cardinality validation is enforced at domain analysis time; the parser accepts the syntax but the analysis pipeline will reject it when relationship metadata is available.
 - `Rel exists` on `many` is allowed (non-empty check).
 - Cross-entity reads (path-prefix, exists, where) are legal in policies, require, and assign RHS.
 - Cross-entity writes (nav path as assign target) are banned.

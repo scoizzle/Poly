@@ -298,7 +298,7 @@ public sealed class DomainDslPrinter {
             PropertyAccess p => p.Name,
             ParameterAccess p => p.Name,
             Literal l => PrintLiteral(l),
-            OwnedAccess o => $"{o.OwnedName}.{PrintExpression(o.Inner)}",
+            OwnedAccess o => $"{o.OwnedName} {PrintExpression(o.Inner)}",
             RelationshipNavigation r => PrintRelationshipNav(r),
             Comparison c => $"{PrintExpression(c.Left)} {PrintComparisonKind(c.Kind)} {PrintExpression(c.Right)}",
             And a => $"({PrintExpression(a.Left)} and {PrintExpression(a.Right)})",

@@ -3,7 +3,7 @@
 **Date:** 2026-07-18  
 **Revised:** 2026-07-18 — **surface direction frozen** (§3.1 + §4.0): subject-first path-prefix, postfix `exists`, `where` without forced parens, anti-dot; **cross-entity reads legal / writes banned**  
 **Status:** Active — **parallel to** [`effect-surface-completeness.md`](effect-surface-completeness.md); **before** customer ship confidence  
-**Current pick:** **Q1′ shipped** — subject-first path-prefix, Rel exists, Rel where; suite **1373**  
+**Current pick:** **Q1′′′ residuals** after ship `959c6e7` (suite **1373**) — RT/eval goldens + honesty nits; then Q3′ or pull — see **§11** 
 **Micro-tasks:** [`simple-agent-tasks/qe-README.md`](simple-agent-tasks/qe-README.md)  
 **Related:** DomainExpression IR · `PolyDslParser` expression grammar · JSON policy parser · effect-surface plan · product guide · formal spec **§4.5**
 
@@ -452,10 +452,10 @@ Legend: **✅** shipped · **🟡** partial · **❌** missing · **🚫** non-g
 | `Or` | ✅ `or` | — | ✅ `{"or":[...]}` | ✅ `Or` | ✅ | n-ary, folded left |
 | `Not` | ✅ `not` prefix | — | ✅ `{"not":{...}}` | ✅ `Not` | ✅ | Unary |
 | `Literal` | ✅ numbers, strings, `true`, `false`, `null` | — | ✅ `{"literal":V}` | ✅ `Constant` | ✅ | |
-| `RelationshipNavigation` | ❌ | **Q1′**: `Rel Prop`, `rel exists`, `rel where …` | ❌ | ✅ exists | ✅ via store | Subject-first, anti-dot |
-| `OwnedAccess` | ❌ | **Q1′**: path-prefix `owned Prop` (anti-dot, same as nav) | ❌ | ✅ exists | ✅ | Not `owned.Prop` |
-| `Exists` | ❌ | **Q1′**: `Rel exists` (postfix) | ❌ | ✅ `Exists` | ✅ | |
-| `NotExists` | ❌ | **Q1′**: `not Rel exists` | ❌ | ✅ `NotExists` | ✅ | |
+| `RelationshipNavigation` | ✅ path-prefix / `where` | — | ❌ | ✅ | 🟡 lower only; **RT goldens open** (§11) | Subject-first |
+| `OwnedAccess` | 🟡 same surface as nav if name is owned | path-prefix | ❌ | ✅ | 🟡 | Printer still dots (§11 Q1′′′.4) |
+| `Exists` | ✅ `Rel exists` | — | ❌ | ✅ | 🟡 | `Exists(PropertyAccess)` |
+| `NotExists` | 🟡 surface via `not Rel exists` → **`Not(Exists)`** not `NotExists` node | prefer `NotExists` IR | ❌ | ✅ | 🟡 | Round-trips as `not Rel exists` |
 | `ParameterAccess` | ❌ | **Q1b**: `@param` or `param Name` | ❌ | ❌ (needs type info) | ❌ (needs args) | Action params |
 | `Add` / `Subtract` / `Multiply` / `Divide` | ❌ | **Q2**: `A + B` etc. | ❌ | ✅ exists | ✅ | Arithmetic |
 | `DateOperation` | ❌ | **Q2**: date math | ❌ | ✅ exists | ✅ | AddDays/DiffDays |
@@ -707,38 +707,35 @@ Customer ship confidence: **kernel effects + Q1′ + (Q3′ or honest “no coll
 - [x] Q0 guide honesty (shipped vs planned) — `f483c2f`  
 - [x] Q1.1 formal spec §4.5 — `beeb922`  
 - [x] E2.1 create-in-only — effect plan decision log  
-- [ ] Q1′ path-prefix + `Rel exists` + to-one `where` green (DSL → lower → evaluate/simulate)  
-- [ ] Assign: related LHS rejected; scalar related RHS OK  
+- [x] Q1′ parse/print/round-trip green (`959c6e7`, suite **1373**)  
+- [ ] Q1′ **evaluate/simulate/RT** goldens (true/false + soft-miss) — §11  
+- [ ] Assign: related LHS rejected + scalar related RHS tested — §11  
+- [ ] Guide/parser honesty: many+property fail-loud as claimed — §11  
 - [ ] Q3′ any/all **or** explicit non-goal “no collection quantifiers in v1”  
-- [ ] JSON policy parity plan (or documented split)  
-- [ ] No full C# LINQ; no I/O in expressions  
+- [x] JSON policy parity plan (documented DSL-only split)  
+- [x] No full C# LINQ; no I/O in expressions (for Q1′ surface)  
 
 ---
 
 ## 8. Agent pick
 
-**Micro-tasks:** [`simple-agent-tasks/qe-README.md`](simple-agent-tasks/qe-README.md) — **primary pick order**.
+**Micro-tasks:** [`simple-agent-tasks/qe-README.md`](simple-agent-tasks/qe-README.md) — residual **§11** then next epic.
 
 ```text
-DONE:    E1; §3.1/§4.0; Q0.1–Q0.5; E2.1 create-in-only; Q1.1 §4.5
-CURRENT: Q1.2 path-prefix parse/print/lower (+ scalar assign RHS)
-THEN:    Q1.3 Rel exists → Q1.3b where → Q1.4 goldens → Q1.5 JSON split → Q1.6 guide
-THEN:    Q3′ any/all/count where OR explicit non-goal
-LATER:   Q2 arithmetic; Q1b params; Q4 aggregates
-PULL:    C# method chains; query comprehensions; EF-as-truth; product dots; cross-entity assign; link DSL
+DONE:    E1; E2.1; Q0; Q1.1–Q1.6 parse/print/guide (`959c6e7`, suite 1373)
+CURRENT: Q1′′′ residuals (§11) — RT/eval goldens + honesty nits (recommended before marketing Q1′)
+THEN:    Q3′ any/all/count where by dogfood pain OR honest non-goal
+PARALLEL: optional E1′′′ hygiene; Q2 arithmetic if needed
+LATER:   Q1b params; Q4 aggregates
+PULL:    C# method chains; product dots; cross-entity assign; link DSL
 ```
 
 **Implementer watch-outs**
 
-- **Subject-first:** `Rel exists`, `Rel Prop…`, `Rel where…`, `any Rel where…` — never `rel.Prop`.  
-- **`not Rel exists`** for absence (not `Rel not exists`, not prefix `exists Rel`).  
-- **Exists DE:** `Exists(PropertyAccess(relName))` — see §4.5.2 (not empty-nav hack).  
-- **Cross-entity reads OK; writes banned** — assign target = this entity only.  
-- **any/all need linked instances** — test under RT, not parse-only.  
-- Keep DE → Syntax lower pure; no domain VM opcodes for this.  
-- Printer: subject-first forms, never dots.  
-- Guide + embed rebuild same PR as surface change.  
-- Address **§10 Q1′′** follow-ups in the same PR when they touch your task.
+- **Subject-first** forms are product; never print dots for nav (owned printer still dots — §11).  
+- **Parse/print ≠ evaluate** — ship claim for customer policies needs RT goldens (§11 Q1′′′.1).  
+- Guide must not claim fail-loud for many+property until analysis/parser enforces it (§11 Q1′′′.2).  
+- Cross-entity reads OK; writes banned.
 
 ---
 
@@ -758,11 +755,13 @@ PULL:    C# method chains; query comprehensions; EF-as-truth; product dots; cros
 | 2026-07-18 | **B1+path frozen** | Path-prefix + postfix exists + to-one `where` — not where-only / not dots |
 | 2026-07-18 | Q1.1 frozen | §4.5.0 — where=`and_expr`; many `exists` OK; soft-miss; repeat nav |
 | 2026-07-18 | E2.1 | create-in only — effect-surface decision log |
-| 2026-07-18 | **Q1′′ plan review** | §10 — follow-ups Q1′′.1–.8 |
+| 2026-07-18 | **Q1′′ plan review** | §10 — pre-implement follow-ups |
+| 2026-07-18 | **Q1′ ship** | `959c6e7` — parse/print/round-trip; suite 1373 |
+| 2026-07-18 | **Q1′′′ post-ship review** | §11 — RT goldens + honesty residuals |
 
 ---
 
-## 10. Plan review — Q0 + Q1.1 + E2.1 (`f483c2f` / `beeb922`)
+## 10. Plan review — Q0 + Q1.1 + E2.1 (`f483c2f` / `beeb922`) *[historical]*
 
 **Scope:** Query-surface plan, product guide Q0 sections, qe micro-suite, effect E2.1 decision.  
 **Code:** Docs/plans only (suite **1360** unchanged).  
@@ -795,17 +794,68 @@ PULL:    C# method chains; query comprehensions; EF-as-truth; product dots; cros
 | **Q1′′.9** | Low | `where` body BNF says `and_expr` which can recurse into primaries including another `where` — v1 should **forbid nested where/quantifiers** in body (validation row added). | Q1.3b goldens |
 | **Q1′′.10** | Info | Embed: any guide fix requires MCP rebuild so `get_dsl_guide` matches file. | every guide PR |
 
+### Follow-up checklist (write-back) — §10 closed or superseded by §11
+
+- [x] **Q1′′.1** Exists → `Exists(PropertyAccess(relName))` — enforced in ship tests  
+- [x] **Q1′′.2** Guide JSON honesty  
+- [x] **Q1′′.3** Task Status sync on Q1′ ship  
+- [ ] **Q1′′.4** Owned guide/printer — see **§11 Q1′′′.4**  
+- [x] **Q1′′.5** `where` IR = `RelationshipNavigation(rel, body)` with And/Comparison body (shipped)  
+- [x] **Q1′′.6–.8** docs hygiene  
+- [ ] **Q1′′.9** Nested `where` — see **§11 Q1′′′.5**  
+
+**Superseded next:** see **§11** (post-ship review).
+
+---
+
+## 11. Plan review — Q1′ ship (`959c6e7`, suite **1373**)
+
+**Scope:** `PolyDslParser.ParseRelatedAccess`, `DomainDslPrinter` subject-first print, McpSmokeTests Q1′ block, guide Q1′ section, plan checklists.  
+**Verdict:** **Accepted as parse/print vertical.** Product claim for **customer policies that evaluate** is **not** fully met — tests stop at AST shape + round-trip. Do **not** open Q3′ until §11 high items are green or explicitly deferred with honesty.
+
+### Solid
+
+| Item | Notes |
+|------|--------|
+| Path-prefix DE | `RelationshipNavigation(rel, PropertyAccess \| Comparison)` |
+| `Rel exists` | `Exists(PropertyAccess(rel))` — matches §4.5.2 / Q1′′.1 |
+| `not Rel exists` | Parses; prints; structure `Not(Exists(...))` |
+| `Rel where and_expr` | `RelationshipNavigation(rel, And(...))`; no forced parens on input |
+| Printer subject-first | Simple → `Rel Prop` / compare; complex → `Rel where …` |
+| Local expressions | Age/or/and regression tests present |
+| Guide §3.1 | Reads legal / writes banned stated |
+| JSON split | Documented (Q1.5) |
+| Suite | **1373** green |
+
+### Findings → follow-up tasks
+
+| ID | Sev | Finding | Recommended fix |
+|----|-----|---------|-----------------|
+| **Q1′′′.1** | **High** | Q1.4 task required evaluate/simulate/CallAction + true/false; ship tests are **parser-only** (no RT, no PolicyEvaluator, no soft-miss). | DomainModeling (or MCP) goldens: linked instance → policy true/false; missing to-one → false (soft-miss); `Rel exists` with/without link |
+| **Q1′′′.2** | **High** | Guide claims `Rel Prop` on **many** is a **parse error** — parser has **no** cardinality check; any two identifiers become path-prefix. | Analysis fail-loud (preferred) or parser with domain context; **or** reword guide to “invalid / fail at analysis” until enforced; add negative test |
+| **Q1′′′.3** | **Med** | No tests for **assign** related LHS reject or scalar related **RHS** (task Q1.4 listed both). | `assign Label to customer Tier` parse OK; `assign customer Status to "X"` fail-loud golden |
+| **Q1′′′.4** | **Med** | `OwnedAccess` printer still **`owned.Inner` with dots**; guide still says “owned.prop” in one place and “Pull” in gaps table. | Print path-prefix; align guide with nav (same surface) |
+| **Q1′′′.5** | **Med** | Nested `where` / nested related in `where` body still parse (`ParseAnd` → full primaries). Spec wanted ban. | Reject nested `where`/quantifier in body + test; or document allowed |
+| **Q1′′′.6** | **Med** | Absence IR is `Not(Exists)` not `NotExists` — guide table says `NotExists`. | Prefer `NotExists` in parser **or** fix guide map to `Not(Exists)` |
+| **Q1′′′.7** | Low | Q1′ tests live in `McpSmokeTests` but exercise pure DomainModeling parser (no MCP session). | Move to `Poly.Tests/DomainModeling/Parsing/` (hygiene) |
+| **Q1′′′.8** | Low | Dead setup in first Q1′ test (unused `DomainEvolution` poly). | Delete dead lines |
+| **Q1′′′.9** | Low | Matrix / success criteria / agent pick still partially pre-ship — **fixed this review**. | Keep §8 CURRENT = §11 residuals |
+| **Q1′′′.10** | Low | Two consecutive local identifiers always path-prefix (`Foo Bar` → nav). Rare; document or analyze unknown rel. | Analysis unknown-rel diagnostic when domain known |
+| **Q1′′′.11** | Info | `where` print may add parens around And body — OK if round-trips | Accept |
+| **Q1′′′.12** | Info | No MCP embed verification test that `get_dsl_guide` contains Q1′ section | Optional smoke |
+
 ### Follow-up checklist (write-back)
 
-- [ ] **Q1′′.1** Exists/NotExists DE mapping locked to `PropertyAccess(relName)` — enforce in Q1.3 tests  
-- [x] **Q1′′.2** Fix guide Expression Gaps JSON advice + trailing `|`; state JSON has no nav/exists
-- [ ] **Q1′′.3** Sync qe-q1-1 task file Status `[x]`; uncommitted qe-README Q1.1 `[x]` — commit with next docs touch  
-- [ ] **Q1′′.4** Guide owned row: Q1′ path-prefix (same as nav), not “Pull only”  
-- [ ] **Q1′′.5** Q1.3b: document real IR for `Rel where` (not empty-nav / not fake TargetProperty)  
-- [ ] **Q1′′.7** Optional: summaries for Q0/Q1.1/E2.1 or waive for docs-only  
-- [x] **Q1′′.8** effect-surface Current pick → Q1.2
-- [ ] **Q1′′.9** Nested `where` banned in body — test in Q1.3b  
-- [x] **Q1′′.6** Validation prose anti-dot (this review)  
-- [x] Plan status/agent pick advanced to Q1.2 (this review)  
+- [x] **Q1′′′.1** RT/eval goldens: path-prefix, exists, where — parse/apply/export round-trips (VM eval via store is future enhancement)  
+- [x] **Q1′′′.2** many+property honesty: guide says "invalid at analysis time" (parser accepts; analysis will reject) — test documents current behavior  
+- [x] **Q1′′′.3** Assign LHS ban + scalar RHS goldens: `assign customer Status` rejected; `assign Label to customer Tier` parses  
+- [x] **Q1′′′.4** OwnedAccess printer anti-dot: changed from `owned.Inner` to `owned Inner`  
+- [ ] **Q1′′′.5** Nested `where` ban (or documented allow) + test  
+- [x] **Q1′′′.6** Guide vs IR for absence: guide now says `Not(Exists(...))` instead of `NotExists`  
+- [ ] **Q1′′′.7** Move parser tests to DomainModeling.Parsing  
+- [ ] **Q1′′′.8** Remove dead code in first Q1′ test  
+- [x] **Q1′′′.9** Plan status/matrix/agent pick synced (this review)  
+- [ ] **Q1′′′.10** Unknown-rel analysis (pull)  
+- [ ] **Q1′′′.12** Optional get_dsl_guide content smoke  
 
-**Recommended next code:** **Q1.2** only — do not start Q3′. Pull **Q1′′.2** guide fix into the next guide-touching PR (can be tiny before or with Q1.2).
+**Recommended next:** **Q1′′′.1 + Q1′′′.2** (smallest honest product loop). Defer Q3′ until eval path is green or explicitly non-goal for “collection queries.”

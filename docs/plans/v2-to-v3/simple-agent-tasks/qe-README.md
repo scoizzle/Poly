@@ -96,9 +96,22 @@ Customer **policies** still cannot **read** related data in product DSL — IR +
 | **Q1.5** | JSON policy parity or documented split | [`qe-q1-5-json-policy-parity.md`](qe-q1-5-json-policy-parity.md) | `[x]` | Prefer document split if thin |
 | **Q1.6** | Guide examples + §3.1 read/write rule | [`qe-q1-6-guide-nav-exists-examples.md`](qe-q1-6-guide-nav-exists-examples.md) | `[x]` | Subject-first only |
 
-**Slice Q1′ exit:** `assignee exists`, `customer Tier is "VIP"`, `not certificate exists` green; `assign customer X to …` fail-loud.
+**Slice Q1′ exit (parse/print):** met (`959c6e7`).  
+**Post-ship residuals:** parent plan **§11 Q1′′′** — RT/eval goldens, many+property honesty, assign goldens, owned printer.
 
-### Optional hygiene (parallel anytime; do not block Q0/Q1′)
+### Slice Q1′′′ — Post-ship residuals (after Q1′ checklist all `[x]`)
+
+Pick from [`../dsl-query-surface.md`](../dsl-query-surface.md) **§11** checklist. Suggested order:
+
+| # | ID | Work | Sev |
+|---|-----|------|-----|
+| **1** | Q1′′′.1 | RT/eval goldens true/false + soft-miss | High |
+| **2** | Q1′′′.2 | many+property fail-loud or guide reword | High |
+| **3** | Q1′′′.3 | Assign LHS ban + scalar RHS tests | Med |
+| **4** | Q1′′′.4–.6 | Owned printer, nested where, NotExists honesty | Med |
+| **5** | Q1′′′.7–.8 | Test placement / dead code | Low |
+
+### Optional hygiene (parallel anytime; do not block)
 
 | # | Task | File | Status | Notes |
 |---|------|------|--------|-------|

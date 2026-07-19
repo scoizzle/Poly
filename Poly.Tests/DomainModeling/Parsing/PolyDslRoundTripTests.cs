@@ -845,4 +845,155 @@ public class PolyDslRoundTripTests {
         await Assert.That(rel).IsNotNull();
         await Assert.That(rel!.SourceOwnsTarget).IsTrue();
     }
+
+    [Test]
+    public async Task CombinedSurface_ParamsOwnedInheritanceIfInvoke_RoundTrips() {
+        // E6.3: single domain exercising params + owned + inheritance + if + invoke
+        var poly = """
+            domain Combined
+
+            Person: entity {
+              Name: Text
+            }
+
+            Worker: Person entity {
+              Role: Text
+              Score: Number
+              Badge: Text
+              passport: owned Passport
+
+              Draft: stage {
+                Promote: action (level: Text) {
+                  if (Score > 0) {
+                    invoke Stamp(mark: level)
+                  } else {
+                    assign Badge to "skip"
+                  }
+                  transition to Active
+                }
+              }
+              Active: stage {}
+
+              Stamp: action (mark: Text) {
+                assign Badge to mark
+              }
+            }
+
+            Passport: entity {
+              Number: Text
+            }
+            """;
+
+        var parser = new PolyDslParser(poly);
+        var changes = parser.Parse();
+        var emptyDomain = new Domain("_", [], []);
+        var result = new DomainEvolution(emptyDomain).Apply(changes);
+        await Assert.That(result.Succeeded).IsTrue();
+
+        var worker = result.Root!.Types.OfType<Entity>().Single(e => e.Name == "Worker");
+        await Assert.That(worker.ParentEntityName).IsEqualTo("Person");
+
+        var promote = worker.Stages.Single(s => s.Name == "Draft").Actions
+            .Single(a => a.Name == "Promote");
+        await Assert.That(promote.Parameters.Count).IsEqualTo(1);
+        await Assert.That(promote.Effects.Any(e => e is ConditionalEffect)).IsTrue();
+
+        var owned = result.Root.Relationships.Single(r => r.Name == "passport");
+        await Assert.That(owned.SourceOwnsTarget).IsTrue();
+
+        var printer = new DomainDslPrinter();
+        var printed = printer.Print(result.Root);
+
+        await Assert.That(printed.Contains("Worker: Person entity")).IsTrue();
+        await Assert.That(printed.Contains("owned Passport")).IsTrue();
+        await Assert.That(printed.Contains("Promote: action (level: Text)")).IsTrue();
+        await Assert.That(printed.Contains("if (")).IsTrue();
+        await Assert.That(printed.Contains("invoke Stamp")).IsTrue();
+
+        var parser2 = new PolyDslParser(printed);
+        var changes2 = parser2.Parse();
+        var empty2 = new Domain("_", [], []);
+        var result2 = new DomainEvolution(empty2).Apply(changes2);
+        await Assert.That(result2.Succeeded).IsTrue();
+
+        var worker2 = result2.Root!.Types.OfType<Entity>().Single(e => e.Name == "Worker");
+        await Assert.That(worker2.ParentEntityName).IsEqualTo("Person");
+        await Assert.That(worker2.Stages.Single(s => s.Name == "Draft").Actions
+            .Single(a => a.Name == "Promote").Parameters.Count).IsEqualTo(1);
+        await Assert.That(result2.Root.Relationships.Single(r => r.Name == "passport").SourceOwnsTarget).IsTrue();
+
+        var analysis = DomainModelAnalyzer.Analyze(result2.Root);
+        await Assert.That(analysis.HasStructuralFailure).IsFalse();
+    }
+
+    [Test]
+    public async Task ElseIf_ParsePrint_RoundTripsAsElseIf() {
+        var poly = """
+            domain Test
+
+            Item: entity {
+              Status: Text
+              Score: Number
+              Grade: action {
+                if (Score >= 90) {
+                  assign Status to "A"
+                } else if (Score >= 70) {
+                  assign Status to "B"
+                } else {
+                  assign Status to "C"
+                }
+              }
+            }
+            """;
+        var parser = new PolyDslParser(poly);
+        var changes = parser.Parse();
+        var emptyDomain = new Domain("_", [], []);
+        var result = new DomainEvolution(emptyDomain).Apply(changes);
+        await Assert.That(result.Succeeded).IsTrue();
+
+        var grade = result.Root!.Types.OfType<Entity>().Single().Actions.Single();
+        await Assert.That(grade.Effects[0]).IsTypeOf<ConditionalEffect>();
+        var outer = (ConditionalEffect)grade.Effects[0];
+        await Assert.That(outer.ElseEffects).IsNotNull();
+        await Assert.That(outer.ElseEffects![0]).IsTypeOf<ConditionalEffect>();
+
+        var printed = new DomainDslPrinter().Print(result.Root);
+        await Assert.That(printed.Contains("else if")).IsTrue();
+
+        var result2 = new DomainEvolution(new Domain("_", [], []))
+            .Apply(new PolyDslParser(printed).Parse());
+        await Assert.That(result2.Succeeded).IsTrue();
+        var printed2 = new DomainDslPrinter().Print(result2.Root!);
+        await Assert.That(printed2.Contains("else if")).IsTrue();
+    }
+
+    [Test]
+    public async Task EqualsConstraint_EscapedQuote_RoundTrips() {
+        var poly = """
+            domain Test
+
+            Item: entity {
+              Note: Text equals("say \"hi\"")
+            }
+            """;
+        var parser = new PolyDslParser(poly);
+        var changes = parser.Parse();
+        var emptyDomain = new Domain("_", [], []);
+        var result = new DomainEvolution(emptyDomain).Apply(changes);
+        await Assert.That(result.Succeeded).IsTrue();
+
+        var prop = result.Root!.Types.OfType<Entity>().Single().Properties.Single();
+        var eq = prop.Constraints.OfType<EqualityConstraint>().Single();
+        await Assert.That(eq.ExpectedValue).IsEqualTo("say \"hi\"");
+
+        var printed = new DomainDslPrinter().Print(result.Root);
+        await Assert.That(printed.Contains("\\\"")).IsTrue();
+
+        var result2 = new DomainEvolution(new Domain("_", [], []))
+            .Apply(new PolyDslParser(printed).Parse());
+        await Assert.That(result2.Succeeded).IsTrue();
+        var eq2 = result2.Root!.Types.OfType<Entity>().Single().Properties.Single()
+            .Constraints.OfType<EqualityConstraint>().Single();
+        await Assert.That(eq2.ExpectedValue).IsEqualTo("say \"hi\"");
+    }
 }

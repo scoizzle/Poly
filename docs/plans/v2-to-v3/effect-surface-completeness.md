@@ -2,7 +2,7 @@
 
 **Date:** 2026-07-18  
 **Revised:** 2026-07-19 (**E6** post-change code review — uncommitted DSL gap closure; suite **1398**)  
-**Status:** E1 **shipped**; E2.1 create-in only; E3a self-invoke **DSL shipped**; E4 conditional **DSL shipped**; Q1′ authoring **complete**; arithmetic/`equals`/`enum`/params/inheritance/`owned` **DSL shipped** (suite **1398**)  
+**Status:** E1 **shipped**; E2.1 create-in only; E3a self-invoke **DSL+RT shipped**; E4 conditional **DSL+RT shipped**; action params **DSL+RT shipped**; Q1′ authoring **complete**; arithmetic/`equals`/`enum`/inheritance/`owned` **DSL shipped** (suite **1409**)  
 **Current pick:** E6 follow-ups (RT goldens + hygiene) **or** query **Q3′** decision — [`dsl-query-surface.md`](dsl-query-surface.md) §15
 
 
@@ -199,7 +199,7 @@ Honesty nits (error string, guide soft-delete/unlink/TRE, entry/exit) landed wit
 - [x] **E3.2** E3a DSL keyword + printer + guide.  
 - [ ] **E3.3** Guard recursion / re-entrancy (OnEntry → invoke → transition) — **open** (see E6.2).  
 - [x] **E3.4a** Golden: MCP apply/export smoke for `invoke` (authoring).  
-- [ ] **E3.4b** Golden: E3a **runtime** self-invoke via `create_instance` → `invoke_action` (see E6.1).  
+- [x] **E3.4b** Golden: E3a **runtime** self-invoke via `create_instance` → `invoke_action` (E6.1).  
 - [ ] **E3.4c** Golden: E3b parent→child if/when in scope.  
 - [x] **E3.5** Guide honesty: self-only invoke documented; multi-entity not claimed.
 
@@ -212,7 +212,7 @@ Honesty nits (error string, guide soft-delete/unlink/TRE, entry/exit) landed wit
 - [x] **E4.1** DSL sugar: `if (expr) { effects } [else { effects }]`.  
 - [x] **E4.2** Printer round-trip (real `if`/`else`, not flattened comment).  
 - [x] **E4.3** Goldens: MCP apply/export smoke for conditional assign.  
-- [ ] **E4.4** Runtime golden: branch taken/not-taken under `invoke_action` (see E6.1).  
+- [x] **E4.4** Runtime golden: branch taken/not-taken under `invoke_action` (E6.1).  
 - [ ] **E4.5** Optional: `else if` sugar (parser currently requires nested `if` inside `else`).
 
 **Exit:** Branchy actions authorable without hand-built IR — **met** for authoring. RT exercise still open (E6.1).
@@ -289,7 +289,7 @@ What you cannot write in DSL without this plan is the backlog order.
 - [x] **E3a** self-invoke authorable in DSL + guide honesty  
 - [x] **E4** conditional authorable in DSL + round-trip print  
 - [ ] One multi-entity workflow green (E2 or E3b) **or** deferred with reason — **deferred** (E2.1 create-in; E3b not started)  
-- [ ] E3a/E4 **runtime** goldens under MCP RT (authoring-only today — E6.1)  
+- [x] E3a/E4 **runtime** goldens under MCP RT (E6.1)  
 - [x] Suite green (**1398**) with DSL gap-closure goldens  
 - [x] No host I/O effects; no event tools  
 
@@ -303,6 +303,7 @@ What you cannot write in DSL without this plan is the backlog order.
 |------|----|----------|-----------|
 | 2026-07-18 | **E2.1** | **(a) create-in only** — product graph writes stay explicit. Link/Unlink remain library/test-only. | Link runtime requires a `PropertyAccess` whose bag value is a `DomainEntityInstance` — high bar for DSL, narrow use case. `create in Rel { … }` with optional `RelationshipName` on `create` already handles spawn-and-wire. Cross-entity writes via assign are banned (§3.1 of query-surface). If link pain resurfaces dogfood, reopen with concrete domain scenario. E2.2–E2.4 **deferred**. |
 | 2026-07-19 | **E6** | Close IR↔DSL authoring gaps for arithmetic, E3a invoke, E4 conditional, action params, inheritance, equals/enum, owned. RT goldens deferred to **E6.1**. | IR + runtime already supported these; product path was the bottleneck. Approve authoring ship at suite **1398**; do not over-claim RT exercise or E3b. |
+| 2026-07-19 | **E6.1-fix** | Action-param bag injection alone is insufficient: unresolved `Member` RHS passthroughs the whole `_values` dictionary into the assign target. Effect compile now uses an action-scoped `TypeDefinitionNodeAnalyzer` that includes declared parameters as dictionary-backed members. | `EmitMember` unresolved fallback returns the instance bag; Label became Dictionary`2.ToString(). Suite **1409**. |
 
 ---
 
@@ -311,11 +312,11 @@ What you cannot write in DSL without this plan is the backlog order.
 **Micro-tasks:** [`simple-agent-tasks/qe-README.md`](simple-agent-tasks/qe-README.md) — pick first `[ ]` there.
 
 ```text
-DONE:    E1; E2.1; E3a DSL; E4 DSL; Q1′ authoring; arithmetic/equals/enum/params/inheritance/owned DSL
-CURRENT: E6 follow-ups (RT goldens E6.1, re-entrancy E6.2) OR query Q3′ decision
+DONE:    E1; E2.1; E3a DSL+RT; E4 DSL+RT; params DSL+RT; E6.1–E6.10; Q1′ authoring; arithmetic/equals/enum/inheritance/owned DSL
+CURRENT: query Q3′ decision OR dogfood
 THEN:    E3b only with named multi-entity pain
 LATER:   E5 micro-tools; optional RT eval related policies
-PULL:    Host I/O; micro-catalog; L*; TRE; link DSL
+PULL:    Host I/O; micro-catalog; L*; TRE; link DSL; E6.11–E6.12
 ```
 
 **Implementer watch-outs**
@@ -537,13 +538,21 @@ Plan direction is **right** (authorability of effects that already run). Initial
 
 ### Checklist
 
-- [ ] **E6.1** RT goldens: invoke self, conditional branch, action param binding under MCP Runtime  
-- [ ] **E6.2** Invoke re-entrancy / cycle policy + golden  
-- [ ] **E6.3** Optional combined structural round-trip  
-- [ ] **E6.4** `else if` doc or sugar  
-- [ ] **E6.5–E6.8** Hygiene (escapes, diagnostic code, event constant, comment)  
-- [ ] **E6.9–E6.10** Commit hygiene + embed rebuild  
+- [x] **E6.1** RT goldens: invoke self, conditional branch, action param binding, invoke-with-args under MCP Runtime  
+- [x] **E6.2** Invoke re-entrancy: `MaxInvokeDepth = 16`; fail-loud + MCP golden  
+- [x] **E6.3** Combined structural round-trip (params + owned + inheritance + if + invoke)  
+- [x] **E6.4** `else if` sugar (parser + printer collapse + guide)  
+- [x] **E6.5** String `\"` / `\\` escape in tokenizer + printer  
+- [x] **E6.6** `DMSS004` SubscriptionEffectBinding  
+- [x] **E6.7** `SubscriptionEventAccess` shared constant  
+- [x] **E6.8** Duplicate “Parse effects” comment removed  
+- [x] **E6.9** Orthogonal mock note accepted in-tree (no split required for ship)  
+- [x] **E6.10** Guide embed note in Poly.Mcp README; rebuild after guide edit  
 - [ ] **E6.11–E6.12** Pull (E3b, TRE, link)  
 - [x] **E6.13** Query-surface arithmetic row → shipped (dsl-query-surface.md §16 + matrix)  
 
-**Recommended next pick:** **E6.1** (smallest honesty gap — authoring ≠ exercised) **or** §15 low hygiene on the query plan. Do **not** open E3b without multi-entity dogfood quotes.
+**Also fixed while closing E6.1:** action parameter grammar — canonical form is `Name: action (params)` (params after kind, keeps `Name: kind` consistency). Legacy `Name(params): action` still accepted.
+
+**E6.1 runtime fix (param assign):** bag-injecting args was not enough — DSL bare identifiers lower as `PropertyAccess`/`Member`, and unresolved members passthrough the whole bag. `InvokeAction` now compiles effects with an action-scoped type def (entity properties ∪ action parameters). Unit tests: `AssignEffect_FromActionParameter_*`; MCP: `ApplyDsl_ActionParameter_RuntimeBindingVisible`, `ApplyDsl_InvokeNestedWithArgs_RuntimePassesBindings`. Suite **1409**.
+
+**Recommended next pick:** commit this tree · optional §15 query hygiene · **E3b only with dogfood**. Pull items unchanged.

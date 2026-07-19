@@ -134,16 +134,32 @@ public sealed class PolyDslParser {
             if (_current.Kind == TokenKind.Relationship) {
                 throw N2RelationshipNotSupported();
             }
-            else if (_current.Kind == TokenKind.Identifier && PeekIs(TokenKind.Colon)) {
-                // Could be property, stage, action, policy, or nav line
+            else if (_current.Kind == TokenKind.Identifier
+                     && (PeekIs(TokenKind.Colon) || PeekIs(TokenKind.LParen))) {
+                // Member form is Name: kind … (property/stage/action/policy/nav).
+                // Legacy Name(params): action is still accepted once; canonical is
+                // Name: action (params).
                 var name = _current.Text;
                 Advance(); // consume identifier
+
+                if (_current.Kind == TokenKind.LParen) {
+                    // Legacy: Name(params): action { … }
+                    var actionParams = ParseActionParameterList();
+                    Expect(TokenKind.Colon);
+                    if (_current.Kind is not (TokenKind.Action or TokenKind.LBrace or TokenKind.When or TokenKind.Require)) {
+                        throw Error($"Expected action after '{name}(...)', got '{_current.Text}'");
+                    }
+                    ParseActionBody(name, changes, stageName: null, actionParams);
+                    continue;
+                }
+
                 Expect(TokenKind.Colon);
 
                 if (_current.Kind == TokenKind.Stage) {
                     ParseStage(name, changes);
                 }
-                else if (_current.Kind == TokenKind.Action || _current.Kind == TokenKind.LBrace) {
+                else if (_current.Kind == TokenKind.Action || _current.Kind == TokenKind.LBrace
+                         || _current.Kind == TokenKind.When || _current.Kind == TokenKind.Require) {
                     ParseStandaloneAction(name, changes);
                 }
                 else if (_current.Kind == TokenKind.Policy) {
@@ -290,8 +306,12 @@ public sealed class PolyDslParser {
                     throw Error($"'{_current.Text}' must appear at the beginning of the stage block, before actions and subscriptions.");
                 }
                 var actionName = ExpectIdentifier(TokenKind.Identifier, "action name");
+                // Stage members also use Name: kind. Legacy Name(params): action accepted.
+                List<(string Name, string TypeName)>? stageActionParams = null;
+                if (_current.Kind == TokenKind.LParen)
+                    stageActionParams = ParseActionParameterList();
                 Expect(TokenKind.Colon);
-                ParseActionBody(actionName, changes, name);
+                ParseActionBody(actionName, changes, name, stageActionParams);
             }
         }
 
@@ -303,15 +323,44 @@ public sealed class PolyDslParser {
         if (_current.Kind == TokenKind.Action)
             Advance(); // consume optional 'action'
 
-        ParseActionBody(name, changes, stageName: null);
+        ParseActionBody(name, changes, stageName: null, preParsedParams: null);
     }
 
-    private void ParseActionBody(string actionName, List<DomainChange> changes, string? stageName) {
+    /// <summary>
+    /// Parses <c>(name: Type, ...)</c>. Canonical placement is after the kind:
+    /// <c>Name: action (params)</c>. Also used by legacy <c>Name(params): action</c>.
+    /// </summary>
+    private List<(string Name, string TypeName)> ParseActionParameterList() {
+        Expect(TokenKind.LParen);
+        var list = new List<(string, string)>();
+        while (_current.Kind != TokenKind.RParen) {
+            var paramName = ExpectIdentifier(TokenKind.Identifier, "parameter name");
+            Expect(TokenKind.Colon);
+            var paramType = ParseTypeName();
+            list.Add((paramName, paramType));
+            if (_current.Kind == TokenKind.Comma)
+                Advance();
+        }
+        Expect(TokenKind.RParen);
+        return list;
+    }
+
+    private void ParseActionBody(
+        string actionName,
+        List<DomainChange> changes,
+        string? stageName,
+        List<(string Name, string TypeName)>? preParsedParams) {
         // Optional 'action' keyword
         if (_current.Kind == TokenKind.Action)
             Advance();
 
-        // Stage gates and require policies (collected, not emitted — resolved after entity body)
+        // Canonical: Name: action (params) [require …] { … }
+        // Params immediately after the kind keep Name: kind uniform.
+        var paramList = preParsedParams;
+        if (paramList is null && _current.Kind == TokenKind.LParen)
+            paramList = ParseActionParameterList();
+
+        // Stage gates and require policies (collected — resolved after entity body)
         while (_current.Kind == TokenKind.When || _current.Kind == TokenKind.Require) {
             if (_current.Kind == TokenKind.When) {
                 Advance(); // consume 'when'
@@ -333,7 +382,7 @@ public sealed class PolyDslParser {
             }
         }
 
-        // Create the action BEFORE parsing parameters or effects
+        // Create the action BEFORE parameters or effects
         // (AddParameterToActionChange references the action by name, so it must exist first)
         if (stageName is not null) {
             changes.Add(new AddActionToStageChange(_currentEntityName, stageName, actionName));
@@ -342,25 +391,15 @@ public sealed class PolyDslParser {
             changes.Add(new AddActionChange(_currentEntityName, actionName));
         }
 
-        // Optional parameters: (paramName: TypeName, ...)
-        if (_current.Kind == TokenKind.LParen) {
-            Advance(); // consume '('
-            while (_current.Kind != TokenKind.RParen) {
-                var paramName = ExpectIdentifier(TokenKind.Identifier, "parameter name");
-                Expect(TokenKind.Colon);
-                var paramType = ParseTypeName();
+        if (paramList is not null) {
+            foreach (var (paramName, paramType) in paramList) {
                 changes.Add(new AddParameterToActionChange(
                     _currentEntityName, actionName,
                     new Property(paramName, new DomainTypeReference(paramType), [])));
-                if (_current.Kind == TokenKind.Comma)
-                    Advance(); // consume ','
             }
-            Expect(TokenKind.RParen);
         }
 
         Expect(TokenKind.LBrace);
-
-        // Parse effects
 
         // Parse effects
         var effects = new List<Effect>();
@@ -429,29 +468,9 @@ public sealed class PolyDslParser {
             return new InvokeActionEffect(targetName, bindings);
         }
 
-        // E4: if (expr) { effects } [else { effects }]
+        // E4 / E6.4: if (expr) { effects } [else if (expr) { ... }]* [else { effects }]
         if (_current.Kind == TokenKind.If) {
-            Advance(); // consume 'if'
-            Expect(TokenKind.LParen);
-            var condition = ParseExpression();
-            Expect(TokenKind.RParen);
-            Expect(TokenKind.LBrace);
-            var thenEffects = new List<Effect>();
-            while (_current.Kind != TokenKind.RBrace)
-                thenEffects.Add(ParseEffect());
-            Expect(TokenKind.RBrace);
-
-            List<Effect>? elseEffects = null;
-            if (_current.Kind == TokenKind.Else) {
-                Advance(); // consume 'else'
-                Expect(TokenKind.LBrace);
-                elseEffects = new List<Effect>();
-                while (_current.Kind != TokenKind.RBrace)
-                    elseEffects.Add(ParseEffect());
-                Expect(TokenKind.RBrace);
-            }
-
-            return new ConditionalEffect(condition, thenEffects, elseEffects);
+            return ParseConditionalEffect();
         }
 
         // Check for unsupported effect keywords
@@ -461,6 +480,40 @@ public sealed class PolyDslParser {
         }
 
         throw Error($"Expected effect (transition, assign, create, delete, invoke, if), got '{_current.Text}'");
+    }
+
+    /// <summary>
+    /// Parses <c>if (cond) { … } [else if (cond) { … }]* [else { … }]</c>.
+    /// Chains of <c>else if</c> lower to nested <see cref="ConditionalEffect"/> nodes.
+    /// </summary>
+    private Effect ParseConditionalEffect() {
+        Advance(); // consume 'if'
+        Expect(TokenKind.LParen);
+        var condition = ParseExpression();
+        Expect(TokenKind.RParen);
+        Expect(TokenKind.LBrace);
+        var thenEffects = new List<Effect>();
+        while (_current.Kind != TokenKind.RBrace)
+            thenEffects.Add(ParseEffect());
+        Expect(TokenKind.RBrace);
+
+        List<Effect>? elseEffects = null;
+        if (_current.Kind == TokenKind.Else) {
+            Advance(); // consume 'else'
+            if (_current.Kind == TokenKind.If) {
+                // else if → nest another ConditionalEffect as the sole else branch
+                elseEffects = [ParseConditionalEffect()];
+            }
+            else {
+                Expect(TokenKind.LBrace);
+                elseEffects = new List<Effect>();
+                while (_current.Kind != TokenKind.RBrace)
+                    elseEffects.Add(ParseEffect());
+                Expect(TokenKind.RBrace);
+            }
+        }
+
+        return new ConditionalEffect(condition, thenEffects, elseEffects);
     }
 
     private Effect ParseCreateEffect() {

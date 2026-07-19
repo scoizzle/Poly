@@ -31,6 +31,9 @@ public sealed record DomainEntityInstance {
     private readonly List<DomainEntityInstance> _createdChildren = [];
     private Dictionary<string, object?>? _eventValues;
     private bool _isExecutingSubscription;
+    private int _invokeDepth;
+    /// <summary>Max nested <see cref="InvokeAction"/> depth (self-invoke / re-entrancy).</summary>
+    public const int MaxInvokeDepth = 16;
     internal DomainInstanceStore? Store { get; set; }
 
     /// <summary>
@@ -123,22 +126,7 @@ public sealed record DomainEntityInstance {
             }
         }
 
-        // Build TypeDefinitionNode → AstTypeDefinition for typed compilation
-        var propDefs = new List<PropertyDefinitionNode>();
-        foreach (var ep in entity.Properties) {
-            var typeRef = MapDomainTypeToAstNode(ep.Type);
-            propDefs.Add(new PropertyDefinitionNode(ep.Name, typeRef,
-                Getter: new PropertyGetterDefinitionNode()));
-        }
-
-        var typeDefNode = new TypeDefinitionNode(
-            Name: entity.Name,
-            Properties: [.. propDefs],
-            Namespace: null);
-
-        var typeDefAnalyzer = new TypeDefinitionNodeAnalyzer();
-        var ctx = AnalysisContext.CreateDefault();
-        typeDefAnalyzer.Analyze(ctx, typeDefNode);
+        var typeDefAnalyzer = BuildTypeDefAnalyzer(entity.Name, entity.Properties);
 
         var currentStage = entity.Stages.FirstOrDefault()?.Name;
 
@@ -221,6 +209,10 @@ public sealed record DomainEntityInstance {
         if (IsDeleted)
             return ActionInvocationResult.Deleted(Entity.Name, actionName);
 
+        // E6.2: Depth-limited re-entrancy for nested invoke (self-call / OnEntry cycles).
+        if (_invokeDepth >= MaxInvokeDepth)
+            return ActionInvocationResult.InvokeDepthExceeded(actionName, MaxInvokeDepth);
+
         // Inject action args into the property bag for the duration of execution.
         var argKeys = new List<string>();
         if (args is { Count: > 0 }) {
@@ -230,10 +222,12 @@ public sealed record DomainEntityInstance {
             }
         }
 
+        _invokeDepth++;
         try {
             return InvokeActionInternal(actionName);
         }
         finally {
+            _invokeDepth--;
             // Clean up injected args so subsequent calls don't see stale values.
             foreach (var key in argKeys)
                 _values.Remove(key);
@@ -300,9 +294,15 @@ public sealed record DomainEntityInstance {
         // ── Execute effects ─────────────────────────────────────
         var subjectParam = new Parameter("entity", new TypeReference(Entity.Name));
         var effectPass = new EffectLoweringPass(Entity, subjectParam);
+        // Action parameters are injected into _values for the call duration, but are not
+        // entity schema properties. Compile with an action-scoped type def so PropertyAccess
+        // to parameter names resolves (otherwise Member passthrough assigns the whole bag).
+        var effectTypeProvider = action.Parameters.Count > 0
+            ? BuildActionScopedTypeDefAnalyzer(action)
+            : _typeDefAnalyzer;
 
         foreach (var effect in action.Effects) {
-            ExecuteEffect(effect, effectPass);
+            ExecuteEffect(effect, effectPass, effectTypeProvider);
         }
 
         return ActionInvocationResult.Ok(actionName, CurrentStage);
@@ -338,10 +338,13 @@ public sealed record DomainEntityInstance {
     /// lowering → compile → execute; direct-execution effects mutate
     /// the instance in place.
     /// </summary>
-    private void ExecuteEffect(Effect effect, EffectLoweringPass effectPass) {
+    private void ExecuteEffect(
+        Effect effect,
+        EffectLoweringPass effectPass,
+        TypeDefinitionNodeAnalyzer typeProvider) {
         var lowered = effectPass.TryLowerVmNode(effect);
         if (lowered is not null) {
-            var compiled = Interpreter.Compile(lowered, _typeDefAnalyzer);
+            var compiled = Interpreter.Compile(lowered, typeProvider);
             using var exec = Interpreter.Execute(compiled,
                 s => s.SetArgs(new object?[] { _values }));
             return;
@@ -363,7 +366,14 @@ public sealed record DomainEntityInstance {
             case InvokeActionEffect invoke:
                 // Evaluate ParameterBindings and pass as args to chained action.
                 var chainedArgs = EvaluateParameterBindings(invoke.ParameterBindings);
-                InvokeAction(invoke.ActionName, chainedArgs);
+                var nestedResult = InvokeAction(invoke.ActionName, chainedArgs);
+                if (!nestedResult.Succeeded) {
+                    throw new InvalidOperationException(
+                        nestedResult.ErrorMessage
+                        ?? (nestedResult.FailedGuards.Count > 0
+                            ? $"invoke '{invoke.ActionName}' blocked by guards: {string.Join(", ", nestedResult.FailedGuards)}"
+                            : $"invoke '{invoke.ActionName}' failed."));
+                }
                 break;
             case DeleteEntityInstance:
                 IsDeleted = true;
@@ -459,7 +469,7 @@ public sealed record DomainEntityInstance {
                 var exitPass = new EffectLoweringPass(Entity,
                     new Parameter("entity", new TypeReference(Entity.Name)));
                 foreach (var effect in prevStage.OnExitEffects)
-                    ExecuteEffect(effect, exitPass);
+                    ExecuteEffect(effect, exitPass, _typeDefAnalyzer);
             }
         }
 
@@ -476,7 +486,7 @@ public sealed record DomainEntityInstance {
                 var entryPass = new EffectLoweringPass(Entity,
                     new Parameter("entity", new TypeReference(Entity.Name)));
                 foreach (var effect in targetStage.OnEntryEffects)
-                    ExecuteEffect(effect, entryPass);
+                    ExecuteEffect(effect, entryPass, _typeDefAnalyzer);
             }
         }
         finally {
@@ -515,8 +525,6 @@ public sealed record DomainEntityInstance {
     /// pipeline does <b>not</b> currently resolve keys with this prefix — see
     /// remarks on <see cref="ExecuteSubscriptionEffects"/>.
     /// </summary>
-    private const string EventPrefix = "event.";
-
     internal void ExecuteSubscriptionEffects(IReadOnlyList<Effect> effects, DomainEntityInstance eventInstance) {
         SetEventInstance(eventInstance);
         _isExecutingSubscription = true;
@@ -526,7 +534,7 @@ public sealed record DomainEntityInstance {
         try {
             if (_eventValues is not null) {
                 foreach (var kv in _eventValues) {
-                    var key = $"{EventPrefix}{kv.Key}";
+                    var key = $"{SubscriptionEventAccess.Prefix}{kv.Key}";
                     _values[key] = kv.Value;
                     eventKeys.Add(key);
                 }
@@ -536,7 +544,7 @@ public sealed record DomainEntityInstance {
             var effectPass = new EffectLoweringPass(Entity, subjectParam);
 
             foreach (var effect in effects) {
-                ExecuteEffect(effect, effectPass);
+                ExecuteEffect(effect, effectPass, _typeDefAnalyzer);
             }
         }
         finally {
@@ -670,6 +678,50 @@ public sealed record DomainEntityInstance {
     // ── Private helpers ─────────────────────────────────────────
 
     /// <summary>
+    /// Builds a dictionary-backed type definition for <paramref name="entityName"/>
+    /// with the given schema properties (and optional extra action parameters).
+    /// </summary>
+    private static TypeDefinitionNodeAnalyzer BuildTypeDefAnalyzer(
+        string entityName,
+        IEnumerable<Property> properties,
+        IEnumerable<Property>? extraProperties = null) {
+        var propDefs = new List<PropertyDefinitionNode>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+
+        void AddProps(IEnumerable<Property> source) {
+            foreach (var ep in source) {
+                if (!seen.Add(ep.Name))
+                    continue;
+                var typeRef = MapDomainTypeToAstNode(ep.Type);
+                propDefs.Add(new PropertyDefinitionNode(ep.Name, typeRef,
+                    Getter: new PropertyGetterDefinitionNode()));
+            }
+        }
+
+        AddProps(properties);
+        if (extraProperties is not null)
+            AddProps(extraProperties);
+
+        var typeDefNode = new TypeDefinitionNode(
+            Name: entityName,
+            Properties: [.. propDefs],
+            Namespace: null);
+
+        var analyzer = new TypeDefinitionNodeAnalyzer();
+        var ctx = AnalysisContext.CreateDefault();
+        analyzer.Analyze(ctx, typeDefNode);
+        return analyzer;
+    }
+
+    /// <summary>
+    /// Type provider that includes entity properties plus the current action's
+    /// parameters so bag-injected args resolve as members during effect compile.
+    /// </summary>
+    private TypeDefinitionNodeAnalyzer BuildActionScopedTypeDefAnalyzer(
+        Poly.DomainModeling.Action action) =>
+        BuildTypeDefAnalyzer(Entity.Name, Entity.Properties, action.Parameters);
+
+    /// <summary>
     /// Maps a domain type reference (e.g. "Text", "Number") to an AST type
     /// reference node suitable for <see cref="PropertyDefinitionNode"/>.
     /// </summary>
@@ -742,5 +794,13 @@ public sealed record ActionInvocationResult {
         ActionName = actionName,
         Succeeded = false,
         ErrorMessage = $"Instance of entity '{entityName}' has been deleted — no actions can be called."
+    };
+
+    internal static ActionInvocationResult InvokeDepthExceeded(string actionName, int maxDepth) => new() {
+        ActionName = actionName,
+        Succeeded = false,
+        ErrorMessage =
+            $"Action invoke depth exceeded (max {maxDepth}) while calling '{actionName}'. " +
+            "Possible recursive invoke cycle (e.g. action → invoke self, or OnEntry → invoke → transition loops)."
     };
 }

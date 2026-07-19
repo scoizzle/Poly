@@ -98,7 +98,15 @@ Active: stage {
 ## 5. Actions
 
 ```
-action-name ":" "action" "{" effect* "}"
+action-name ":" "action" ["(" param-name ":" Type ("," ...)? ")"] ["require" ...] "{" effect* "}"
+```
+
+Parameters (optional) appear **after** `: action`, keeping the uniform `Name: kind` member form (matches `export_dsl`):
+
+```poly
+Tag: action (value: Text) {
+  assign Label to value
+}
 ```
 
 Effects in an action body:
@@ -109,6 +117,9 @@ Effects in an action body:
 | Property assignment | `assign PropertyName to expression` |
 | Create entity | `create EntityType { prop: value }` |
 | Create in relationship | `create in RelationshipName { prop: value }` |
+| Soft-delete self | `delete` |
+| Self-invoke | `invoke ActionName` / `invoke ActionName(param: expr, ...)` |
+| Conditional | `if (expr) { effects } [else if (expr) { effects }]* [else { effects }]` |
 
 ```poly
 PlaceOrder: action {
@@ -116,7 +127,26 @@ PlaceOrder: action {
   create in orders { Total: 100 }
   transition to Active
 }
+
+Grade: action {
+  if (Score >= 90) {
+    assign Status to "A"
+  } else if (Score >= 70) {
+    assign Status to "B"
+  } else {
+    assign Status to "C"
+  }
+}
+
+Submit: action {
+  invoke Validate
+  transition to Active
+}
 ```
+
+`else if` is sugar for a nested `if` in the `else` branch (round-trips as `else if`).
+
+`invoke` is **self-only** (same instance). Nested invoke depth is limited (max 16); recursive cycles fail loud.
 
 ### Require Gates
 
@@ -224,7 +254,7 @@ customer where Status is "Active" and CreditLimit >= 1000
 - Arithmetic (`+`, `-`, `*`, `/`) in expressions
 - Conditional effects (`if (expr) { effects } else { effects }`)
 - Invoke effect (`invoke ActionName` with optional arguments)
-- Action parameters (`actionName(param: Type, ...)`)
+- Action parameters (`actionName: action (param: Type, ...)`)
 - Entity inheritance (`ChildName: ParentName entity { ... }`)
 - `equals` and `enum` constraints
 - Owned navigation (`rel: owned Entity`)
@@ -247,7 +277,7 @@ and lowering pipeline but are **not yet authorable in product DSL**:
 | Owned/nested access | ✅ | Pull (same path-prefix approach) | `profile Field is "x"` — not `profile.Field` |
 | Collection quantifiers (`any`/`all`/`none`/`count`) | ❌ no IR | Q3′ (planned) | New IR + lowering needed |
 | Arithmetic (`+`, `-`, `*`, `/`) | ✅ | ✅ **shipped** | `Total + 5 > 10`, `Total * 0.9` |
-| Action parameters | ✅ | ✅ **shipped** | `actionName(param: Text) { ... }` |
+| Action parameters | ✅ | ✅ **shipped** | `actionName: action (param: Text) { ... }` |
 
 **JSON policies** (`add_policy` / `simulate_policy`) support comparison + and/or/not + literal only — **not** path-prefix, `Rel exists`, or `where`. Use DSL for related reads; JSON remains limited to local property comparisons and logical composition.
 
@@ -260,8 +290,8 @@ and lowering pipeline but are **not yet authorable in product DSL**:
 | `create Type { ... }` | action |
 | `create in Rel { ... }` | action |
 | `delete` | action, entry, exit (soft-deletes the current instance) |
-| `invoke ActionName` | action (self-only, with optional args: `invoke Activate(status: "go")`) |
-| `if (expr) { effects } else { effects }` | action, entry, exit |
+| `invoke ActionName` | action (self-only, with optional args: `invoke Activate(status: "go")`; depth-limited) |
+| `if (expr) { … } else if … else { … }` | action, entry, exit |
 
 The following effects exist in the runtime library but have **no DSL syntax** yet:
 - **link / unlink**: Connect existing instances. **Product path uses `create in Rel { ... }`** for graph writes instead (or `create` with `RelationshipName`). Link/Unlink remain available through the `DomainInstanceStore` library API for test code.
@@ -300,10 +330,12 @@ Employee: User entity {
 
 ### Action Parameters
 
-Actions can declare typed parameters. Parameters are available as expression references inside action effects and guard policies.
+Actions can declare typed parameters. Bare identifiers in effect expressions resolve to the parameter when the name matches a declared parameter (same surface as property access). Parameters are injected for the duration of the action call and do not persist on the instance.
+
+Canonical form puts parameters after `: action` so members stay `Name: kind` (matches `export_dsl`):
 
 ```poly
-SetName: action(newName: Text) {
+SetName: action (newName: Text) {
   assign Name to newName
 }
 ```

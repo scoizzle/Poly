@@ -2389,4 +2389,217 @@ E: entity {{
         var exportJson = System.Text.Json.JsonSerializer.Serialize(export.Data);
         await Assert.That(exportJson).Contains("Employee: User entity");
     }
+
+    // ── E6.1 RT goldens: authoring → create → invoke → assert ──
+
+    [Test]
+    public async Task ApplyDsl_InvokeEffect_RuntimeSelfInvoke_RunsNestedAction() {
+        var (sessionId, _) = McpSessionStore.Create("Test");
+        var dsl = DslTool.ApplyDsl(sessionId, """
+            domain Test
+            Order: entity {
+              Status: Text
+              Draft: stage {
+                Submit: action {
+                  invoke Validate
+                  transition to Active
+                }
+              }
+              Active: stage {}
+              Validate: action {
+                assign Status to "validated"
+              }
+            }
+            """);
+        await Assert.That(dsl.Success).IsTrue();
+
+        var create = RuntimeTool.CreateInstance(sessionId, "Order",
+            """{"Status":"new"}""");
+        await Assert.That(create.Success).IsTrue();
+        var instanceId = ExtractInstanceId(
+            System.Text.Json.JsonSerializer.Serialize(create.Data));
+
+        var call = RuntimeTool.InvokeAction(sessionId, instanceId!, "Submit");
+        await Assert.That(call.Success).IsTrue();
+
+        var get = RuntimeTool.GetInstance(sessionId, instanceId!);
+        await Assert.That(get.Success).IsTrue();
+        var getJson = System.Text.Json.JsonSerializer.Serialize(get.Data);
+        await Assert.That(getJson).Contains("Active");
+        await Assert.That(getJson).Contains("validated");
+    }
+
+    [Test]
+    public async Task ApplyDsl_ConditionalEffect_RuntimeBranchTaken() {
+        var (sessionId, _) = McpSessionStore.Create("Test");
+        var dsl = DslTool.ApplyDsl(sessionId, """
+            domain Test
+            Item: entity {
+              Status: Text
+              Count: Number
+              Draft: stage {
+                Process: action {
+                  if (Count > 0) {
+                    assign Status to "ok"
+                  } else {
+                    assign Status to "empty"
+                  }
+                  transition to Done
+                }
+              }
+              Done: stage {}
+            }
+            """);
+        await Assert.That(dsl.Success).IsTrue();
+
+        var createOk = RuntimeTool.CreateInstance(sessionId, "Item",
+            """{"Status":"pending","Count":3}""");
+        await Assert.That(createOk.Success).IsTrue();
+        var idOk = ExtractInstanceId(
+            System.Text.Json.JsonSerializer.Serialize(createOk.Data));
+        var callOk = RuntimeTool.InvokeAction(sessionId, idOk!, "Process");
+        await Assert.That(callOk.Success).IsTrue();
+        var getOk = RuntimeTool.GetInstance(sessionId, idOk!);
+        var okJson = System.Text.Json.JsonSerializer.Serialize(getOk.Data);
+        await Assert.That(okJson).Contains("\"ok\"");
+        await Assert.That(okJson).Contains("Done");
+
+        var createEmpty = RuntimeTool.CreateInstance(sessionId, "Item",
+            """{"Status":"pending","Count":0}""");
+        await Assert.That(createEmpty.Success).IsTrue();
+        var idEmpty = ExtractInstanceId(
+            System.Text.Json.JsonSerializer.Serialize(createEmpty.Data));
+        var callEmpty = RuntimeTool.InvokeAction(sessionId, idEmpty!, "Process");
+        await Assert.That(callEmpty.Success).IsTrue();
+        var getEmpty = RuntimeTool.GetInstance(sessionId, idEmpty!);
+        var emptyJson = System.Text.Json.JsonSerializer.Serialize(getEmpty.Data);
+        await Assert.That(emptyJson).Contains("empty");
+    }
+
+    [Test]
+    public async Task ApplyDsl_ActionParameter_RuntimeBindingVisible() {
+        var (sessionId, _) = McpSessionStore.Create("Test");
+        var dsl = DslTool.ApplyDsl(sessionId, """
+            domain Test
+            Item: entity {
+              Label: Text
+              Draft: stage {
+                Tag: action (value: Text) {
+                  assign Label to value
+                  transition to Done
+                }
+              }
+              Done: stage {}
+            }
+            """);
+        await Assert.That(dsl.Success).IsTrue();
+
+        var create = RuntimeTool.CreateInstance(sessionId, "Item",
+            """{"Label":"unset"}""");
+        await Assert.That(create.Success).IsTrue();
+        var instanceId = ExtractInstanceId(
+            System.Text.Json.JsonSerializer.Serialize(create.Data));
+
+        var call = RuntimeTool.InvokeAction(sessionId, instanceId!, "Tag",
+            """{"value":"tagged"}""");
+        await Assert.That(call.Success).IsTrue();
+
+        var get = RuntimeTool.GetInstance(sessionId, instanceId!);
+        var getJson = System.Text.Json.JsonSerializer.Serialize(get.Data);
+        await Assert.That(getJson).Contains("tagged");
+        await Assert.That(getJson).Contains("Done");
+    }
+
+    [Test]
+    public async Task ApplyDsl_InvokeNestedWithArgs_RuntimePassesBindings() {
+        var (sessionId, _) = McpSessionStore.Create("Test");
+        var dsl = DslTool.ApplyDsl(sessionId, """
+            domain Test
+            Item: entity {
+              Label: Text
+              Draft: stage {
+                Go: action {
+                  invoke Apply(value: "from-invoke")
+                  transition to Done
+                }
+              }
+              Done: stage {}
+              Apply: action (value: Text) {
+                assign Label to value
+              }
+            }
+            """);
+        await Assert.That(dsl.Success).IsTrue();
+
+        var create = RuntimeTool.CreateInstance(sessionId, "Item",
+            """{"Label":"before"}""");
+        await Assert.That(create.Success).IsTrue();
+        var instanceId = ExtractInstanceId(
+            System.Text.Json.JsonSerializer.Serialize(create.Data));
+
+        var call = RuntimeTool.InvokeAction(sessionId, instanceId!, "Go");
+        await Assert.That(call.Success).IsTrue();
+
+        var get = RuntimeTool.GetInstance(sessionId, instanceId!);
+        var getJson = System.Text.Json.JsonSerializer.Serialize(get.Data);
+        await Assert.That(getJson).Contains("from-invoke");
+    }
+
+    // ── E6.2 RT golden: invoke depth exceeded ──────────────────
+
+    [Test]
+    public async Task ApplyDsl_RecursiveInvoke_ExceedsDepth_FailsLoud() {
+        var (sessionId, _) = McpSessionStore.Create("Test");
+        var dsl = DslTool.ApplyDsl(sessionId, """
+            domain Test
+            Loop: entity {
+              Status: Text
+              Draft: stage {
+                Bounce: action {
+                  invoke Bounce
+                }
+              }
+            }
+            """);
+        await Assert.That(dsl.Success).IsTrue();
+
+        var create = RuntimeTool.CreateInstance(sessionId, "Loop",
+            """{"Status":"x"}""");
+        await Assert.That(create.Success).IsTrue();
+        var instanceId = ExtractInstanceId(
+            System.Text.Json.JsonSerializer.Serialize(create.Data));
+
+        var call = RuntimeTool.InvokeAction(sessionId, instanceId!, "Bounce");
+        await Assert.That(call.Success).IsFalse();
+        await Assert.That(call.Message).Contains("depth exceeded");
+    }
+
+    [Test]
+    public async Task ApplyDsl_ElseIf_ParsesAndRoundTrips() {
+        var (sessionId, _) = McpSessionStore.Create("Test");
+        var dsl = DslTool.ApplyDsl(sessionId, """
+            domain Test
+            Item: entity {
+              Status: Text
+              Score: Number
+              Draft: stage {
+                Grade: action {
+                  if (Score >= 90) {
+                    assign Status to "A"
+                  } else if (Score >= 70) {
+                    assign Status to "B"
+                  } else {
+                    assign Status to "C"
+                  }
+                }
+              }
+            }
+            """);
+        await Assert.That(dsl.Success).IsTrue();
+
+        var export = DslTool.ExportDsl(sessionId);
+        await Assert.That(export.Success).IsTrue();
+        var exportJson = System.Text.Json.JsonSerializer.Serialize(export.Data);
+        await Assert.That(exportJson).Contains("else if");
+    }
 }

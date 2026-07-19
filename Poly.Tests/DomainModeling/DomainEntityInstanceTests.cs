@@ -167,6 +167,56 @@ public class DomainEntityInstanceTests {
     }
 
     [Test]
+    public async Task AssignEffect_FromActionParameter_UpdatesProperty() {
+        var label = new Property("Label", new DomainTypeReference("Text"), []);
+        var valueParam = new Property("value", new DomainTypeReference("Text"), []);
+        var entity = new Entity("Item", [label], Actions: [
+            new Poly.DomainModeling.Action("Tag", InvocationResult.Void,
+                Parameters: [valueParam],
+                Effects: [new AssignEffect(
+                    DomainExpression.Property("Label"),
+                    DomainExpression.Property("value"))],
+                Policies: [])
+        ], [], []);
+
+        var instance = DomainEntityInstance.Create(entity,
+            new Dictionary<string, object?> { ["Label"] = "unset" });
+
+        var result = instance.InvokeAction("Tag",
+            new Dictionary<string, object?> { ["value"] = "tagged" });
+        await Assert.That(result.Succeeded).IsTrue();
+        await Assert.That(instance.GetProperty<object>("Label")).IsEqualTo("tagged");
+        // Arg must not leak into the property bag after the call.
+        await Assert.That(instance.Snapshot().ContainsKey("value")).IsFalse();
+    }
+
+    [Test]
+    public async Task AssignEffect_FromNestedInvokeArgs_UpdatesProperty() {
+        var label = new Property("Label", new DomainTypeReference("Text"), []);
+        var valueParam = new Property("value", new DomainTypeReference("Text"), []);
+        var entity = new Entity("Item", [label], Actions: [
+            new Poly.DomainModeling.Action("Go", InvocationResult.Void, [],
+                Effects: [new InvokeActionEffect("Apply", [
+                    new PropertyBinding("value", DomainExpression.Literal("from-invoke"))
+                ])],
+                Policies: []),
+            new Poly.DomainModeling.Action("Apply", InvocationResult.Void,
+                Parameters: [valueParam],
+                Effects: [new AssignEffect(
+                    DomainExpression.Property("Label"),
+                    DomainExpression.Property("value"))],
+                Policies: [])
+        ], [], []);
+
+        var instance = DomainEntityInstance.Create(entity,
+            new Dictionary<string, object?> { ["Label"] = "before" });
+
+        var result = instance.InvokeAction("Go");
+        await Assert.That(result.Succeeded).IsTrue();
+        await Assert.That(instance.GetProperty<object>("Label")).IsEqualTo("from-invoke");
+    }
+
+    [Test]
     public async Task CompositeEffect_ExecutesAllSubEffects() {
         var age = new Property("Age", new DomainTypeReference("Number"), []);
         var active = new Property("Active", new DomainTypeReference("Boolean"), []);

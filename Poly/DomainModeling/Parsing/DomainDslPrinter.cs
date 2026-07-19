@@ -149,9 +149,11 @@ public sealed class DomainDslPrinter {
     private void PrintAction(Action action, string indent, string? stageName) {
         _sb.Append(indent);
         _sb.Append(action.Name);
-        // Print parameters if any
+        // Keep Name: kind consistency with properties/stages/policies.
+        // Params decorate the action after the kind: Name: action (p: Type, ...)
+        _sb.Append(": action");
         if (action.Parameters.Count > 0) {
-            _sb.Append('(');
+            _sb.Append(" (");
             var firstParam = true;
             foreach (var param in action.Parameters) {
                 if (!firstParam) _sb.Append(", ");
@@ -162,7 +164,6 @@ public sealed class DomainDslPrinter {
             }
             _sb.Append(')');
         }
-        _sb.Append(": action");
 
         // Print require gates: positive + negated (skip internal when_* policies)
         var positiveRequires = action.Policies
@@ -247,27 +248,7 @@ public sealed class DomainDslPrinter {
                 break;
 
             case ConditionalEffect ce:
-                _sb.AppendLine("if (" + PrintExpression(ce.Condition) + ") {");
-                foreach (var sub in ce.ThenEffects) {
-                    _sb.Append(indent);
-                    _sb.Append("    ");
-                    PrintEffect(sub, indent + "  ");
-                }
-                _sb.Append(indent);
-                _sb.Append("}");
-                if (ce.ElseEffects is { Count: > 0 }) {
-                    _sb.AppendLine();
-                    _sb.Append(indent);
-                    _sb.AppendLine("else {");
-                    foreach (var sub in ce.ElseEffects) {
-                        _sb.Append(indent);
-                        _sb.Append("    ");
-                        PrintEffect(sub, indent + "  ");
-                    }
-                    _sb.Append(indent);
-                    _sb.Append("}");
-                }
-                _sb.AppendLine();
+                PrintConditionalEffect(ce, indent);
                 break;
 
             case CreateEntityInstance create:
@@ -340,6 +321,46 @@ public sealed class DomainDslPrinter {
         }
     }
 
+    /// <summary>
+    /// Prints <c>if / else if / else</c>. A single nested <see cref="ConditionalEffect"/>
+    /// in the else branch is emitted as <c>else if</c> (E6.4 sugar).
+    /// </summary>
+    private void PrintConditionalEffect(ConditionalEffect ce, string indent) {
+        _sb.AppendLine("if (" + PrintExpression(ce.Condition) + ") {");
+        foreach (var sub in ce.ThenEffects) {
+            _sb.Append(indent);
+            _sb.Append("    ");
+            PrintEffect(sub, indent + "  ");
+        }
+        _sb.Append(indent);
+        _sb.Append('}');
+
+        if (ce.ElseEffects is { Count: > 0 }) {
+            // Collapse else { if (...) } → else if (...)
+            if (ce.ElseEffects is [ConditionalEffect nestedOnly]) {
+                _sb.AppendLine();
+                _sb.Append(indent);
+                _sb.Append("else ");
+                // Continue on same indent — PrintConditionalEffect writes "if (...)"
+                PrintConditionalEffect(nestedOnly, indent);
+                return;
+            }
+
+            _sb.AppendLine();
+            _sb.Append(indent);
+            _sb.AppendLine("else {");
+            foreach (var sub in ce.ElseEffects) {
+                _sb.Append(indent);
+                _sb.Append("    ");
+                PrintEffect(sub, indent + "  ");
+            }
+            _sb.Append(indent);
+            _sb.Append('}');
+        }
+
+        _sb.AppendLine();
+    }
+
     private string PrintExpression(DomainExpression expr) {
         return expr switch {
             PropertyAccess p => p.Name,
@@ -385,11 +406,16 @@ public sealed class DomainDslPrinter {
     private static string PrintLiteral(Literal literal) {
         if (literal.Value is null) return "null";
         if (literal.Value is bool b) return b ? "true" : "false";
-        if (literal.Value is string s) return $"\"{s}\"";
+        if (literal.Value is string s) return $"\"{EscapeStringLiteral(s)}\"";
         if (literal.Value is long l) return l.ToString();
         if (literal.Value is double d) return d.ToString("0.#");
         return literal.Value.ToString() ?? "null";
     }
+
+    /// <summary>Escapes <c>\</c> and <c>"</c> for double-quoted DSL string literals.</summary>
+    internal static string EscapeStringLiteral(string value) =>
+        value.Replace("\\", "\\\\", StringComparison.Ordinal)
+             .Replace("\"", "\\\"", StringComparison.Ordinal);
 
     /// <summary>
     /// Prints a single expression tree (not wrapped in a full domain).
@@ -416,7 +442,7 @@ public sealed class DomainDslPrinter {
         LengthConstraint l => l.MinLength == l.MaxLength
             ? $"length({l.MinLength})"
             : $"length({l.MinLength}, {l.MaxLength})",
-        PatternConstraint p => $"pattern(\"{p.Pattern}\")",
+        PatternConstraint p => $"pattern(\"{EscapeStringLiteral(p.Pattern)}\")",
         EqualityConstraint e => $"equals({PrintLiteralValue(e.ExpectedValue)})",
         EnumConstraint en => $"enum({string.Join(", ", en.Members.Select(m => m.Name))})",
         _ => $"?{constraint.GetType().Name}",
@@ -426,7 +452,7 @@ public sealed class DomainDslPrinter {
         null => "null",
         true => "true",
         false => "false",
-        string s => $"\"{s}\"",
+        string s => $"\"{EscapeStringLiteral(s)}\"",
         _ => value.ToString() ?? "null",
     };
 }

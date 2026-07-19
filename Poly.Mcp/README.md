@@ -60,7 +60,7 @@ Tools live in `Poly.Mcp/Tools/` and use only `Poly.DomainModeling` types (no `Po
 |------|-------|---------|
 | `apply_dsl` | `DslTool` | Applies a `.poly` DSL document, **replacing** the session domain |
 | `export_dsl` | `DslTool` | Exports the current session domain as `.poly` DSL text |
-| `get_dsl_guide` | `DslTool` | Product-true Phase 1a/1b syntax guide (embedded resource) |
+| `get_dsl_guide` | `DslTool` | Product-true Phase 1a/1b syntax guide (**embedded resource only** — pack must include `Docs/poly-dsl-agent-guide.md` as EmbeddedResource; no filesystem fallback) |
 
 ### Oracle
 

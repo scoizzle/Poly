@@ -178,7 +178,7 @@ internal sealed class SubscriptionContractAnalyzer : INodeAnalyzer {
                         $"Subscription effect references property '{propName}' on subscriber entity " +
                         $"'{subscriberEntity.Name}', but that property does not exist. " +
                         $"Available: {string.Join(", ", subscriberProps)}.",
-                        DomainModelDiagnosticCodes.SubscriptionContractMismatch);
+                        DomainModelDiagnosticCodes.SubscriptionEffectBinding);
                 }
             }
 
@@ -190,7 +190,7 @@ internal sealed class SubscriptionContractAnalyzer : INodeAnalyzer {
                         $"Subscription effect references event property '{propName}' on target entity " +
                         $"'{targetEntity.Name}', but that property does not exist. " +
                         $"Available: {string.Join(", ", targetProps)}.",
-                        DomainModelDiagnosticCodes.SubscriptionContractMismatch);
+                        DomainModelDiagnosticCodes.SubscriptionEffectBinding);
                 }
             }
         }
@@ -243,10 +243,10 @@ internal sealed class SubscriptionContractAnalyzer : INodeAnalyzer {
         HashSet<string> eventRefs) {
         switch (expr) {
             case PropertyAccess pa:
-                // "event.PropertyName" convention: bare property starting with "event."
+                // "event.PropertyName" convention: bare property starting with Prefix
                 // references the event (transitioned) instance, not the subscriber.
-                if (pa.Name.StartsWith("event.", StringComparison.Ordinal)) {
-                    eventRefs.Add(pa.Name["event.".Length..]);
+                if (pa.Name.StartsWith(SubscriptionEventAccess.Prefix, StringComparison.Ordinal)) {
+                    eventRefs.Add(pa.Name[SubscriptionEventAccess.Prefix.Length..]);
                 }
                 else {
                     // Bare property access — references subscriber's property (this.*)
@@ -256,7 +256,7 @@ internal sealed class SubscriptionContractAnalyzer : INodeAnalyzer {
             case RelationshipNavigation rn:
                 // Lowered from "event PropertyName": RelationshipName = "event",
                 // TargetProperty = PropertyAccess("PropertyName").
-                if (string.Equals(rn.RelationshipName, "event", StringComparison.Ordinal)
+                if (string.Equals(rn.RelationshipName, SubscriptionEventAccess.RelationshipName, StringComparison.Ordinal)
                     && rn.TargetProperty is PropertyAccess eventPa) {
                     eventRefs.Add(eventPa.Name);
                 }

@@ -37,7 +37,10 @@ internal sealed class ActionParameterUsageAnalyzer : INodeAnalyzer {
     private static void ValidateAction(AnalysisContext context, Action action) {
         if (action.Parameters.Count == 0) return;
 
-        var usedParams = CollectParameterReferences(action.Effects);
+        var paramNames = new HashSet<string>(
+            action.Parameters.Select(p => p.Name),
+            StringComparer.Ordinal);
+        var usedParams = CollectParameterReferences(action.Effects, paramNames);
         var unused = action.Parameters
             .Where(p => !usedParams.Contains(p.Name))
             .ToArray();
@@ -50,39 +53,44 @@ internal sealed class ActionParameterUsageAnalyzer : INodeAnalyzer {
         }
     }
 
-    private static HashSet<string> CollectParameterReferences(IReadOnlyList<Effect> effects) {
+    private static HashSet<string> CollectParameterReferences(
+        IReadOnlyList<Effect> effects,
+        HashSet<string> paramNames) {
         var referenced = new HashSet<string>(StringComparer.Ordinal);
 
         foreach (var effect in effects) {
-            CollectFromEffect(effect, referenced);
+            CollectFromEffect(effect, referenced, paramNames);
         }
 
         return referenced;
     }
 
-    private static void CollectFromEffect(Effect effect, HashSet<string> referenced) {
+    private static void CollectFromEffect(
+        Effect effect,
+        HashSet<string> referenced,
+        HashSet<string> paramNames) {
         switch (effect) {
             case ConditionalEffect ce:
-                CollectFromExpression(ce.Condition, referenced);
-                foreach (var e in ce.ThenEffects) CollectFromEffect(e, referenced);
+                CollectFromExpression(ce.Condition, referenced, paramNames);
+                foreach (var e in ce.ThenEffects) CollectFromEffect(e, referenced, paramNames);
                 if (ce.ElseEffects is not null)
-                    foreach (var e in ce.ElseEffects) CollectFromEffect(e, referenced);
+                    foreach (var e in ce.ElseEffects) CollectFromEffect(e, referenced, paramNames);
                 break;
             case CompositeEffect ce:
-                foreach (var e in ce.Effects) CollectFromEffect(e, referenced);
+                foreach (var e in ce.Effects) CollectFromEffect(e, referenced, paramNames);
                 break;
             case AssignEffect ae:
-                CollectFromExpression(ae.Target, referenced);
-                CollectFromExpression(ae.Value, referenced);
+                CollectFromExpression(ae.Target, referenced, paramNames);
+                CollectFromExpression(ae.Value, referenced, paramNames);
                 break;
             case CreateEntityInstance cei:
                 foreach (var init in cei.Initializers) {
-                    CollectFromExpression(init.Expression, referenced);
+                    CollectFromExpression(init.Expression, referenced, paramNames);
                 }
                 break;
             case InvokeActionEffect iae:
                 foreach (var binding in iae.ParameterBindings) {
-                    CollectFromExpression(binding.Expression, referenced);
+                    CollectFromExpression(binding.Expression, referenced, paramNames);
                 }
                 break;
 
@@ -95,14 +103,23 @@ internal sealed class ActionParameterUsageAnalyzer : INodeAnalyzer {
         }
     }
 
-    private static void CollectFromExpression(DomainExpression expr, HashSet<string> referenced) {
-        if (expr is ParameterAccess pa) {
-            referenced.Add(pa.Name);
+    private static void CollectFromExpression(
+        DomainExpression expr,
+        HashSet<string> referenced,
+        HashSet<string> paramNames) {
+        // DSL bare identifiers lower as PropertyAccess; IR authors may use ParameterAccess.
+        // Both count when the name matches a declared action parameter.
+        switch (expr) {
+            case ParameterAccess pa when paramNames.Contains(pa.Name):
+                referenced.Add(pa.Name);
+                break;
+            case PropertyAccess prop when paramNames.Contains(prop.Name):
+                referenced.Add(prop.Name);
+                break;
         }
 
-        // Use ToArray for indexed if needed; kept simple foreach for IEnumerable Children (AggregateChildren handles the framework walk when used in analyzer context).
         foreach (var child in expr.Children.OfType<DomainExpression>()) {
-            CollectFromExpression(child, referenced);
+            CollectFromExpression(child, referenced, paramNames);
         }
     }
 }

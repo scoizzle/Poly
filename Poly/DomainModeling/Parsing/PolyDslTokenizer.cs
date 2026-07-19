@@ -204,6 +204,16 @@ public sealed class PolyDslTokenizer {
                 _pos++; _col++;
                 break;
             }
+            // E6.5: support \" and \\ escapes so printer round-trips embedded quotes.
+            if (ch == '\\' && _pos + 1 < _text.Length) {
+                var next = _text[_pos + 1];
+                if (next is '"' or '\\') {
+                    sb.Append(next);
+                    _pos += 2;
+                    _col += 2;
+                    continue;
+                }
+            }
             if (ch == '\n') { _line++; _col = 1; }
             else { _col++; }
             sb.Append(ch);

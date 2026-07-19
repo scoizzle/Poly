@@ -1,0 +1,42 @@
+// ============================================================
+// Library Checkout System — Poly DSL Domain Model
+// Phase 1a/1b surface: entities, lifecycle stages, transitions,
+// entry effects, policies, and N1 navigation relationships.
+// ============================================================
+
+domain Library
+
+// ============================================================
+// Entities
+// ============================================================
+
+Book: entity {
+  Title: Text required
+  Author: Text required
+  ISBN: Text unique
+  Pages: Number
+  CheckedOut: Boolean
+
+  OnShelf: stage {
+    CheckOut: action {
+      transition to CheckedOut
+    }
+  }
+
+  CheckedOut: stage {
+    entry { assign CheckedOut to true }
+    Return: action {
+      assign CheckedOut to false
+      transition to OnShelf
+    }
+  }
+}
+
+Member: entity {
+  Name: Text required
+  Email: Text
+  MemberSince: Date
+  Active: Boolean
+
+  books: many Book
+}

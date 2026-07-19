@@ -49,7 +49,8 @@ try {
         Console.WriteLine($"Done: {result.Files!.Count} file(s) written to {outputDir}");
     }
     else {
-        var combined = string.Join("\n\n", result.Files!.Select(f => f.Source));
+        // stdout mode: emit only the combined file (avoids duplication with per-entity files)
+        var combined = result.Files!.First(f => f.FileName == "_all.cs").Source;
         await Console.Out.WriteLineAsync(combined);
     }
 

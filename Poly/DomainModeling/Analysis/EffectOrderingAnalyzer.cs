@@ -25,17 +25,14 @@ internal sealed class EffectOrderingAnalyzer : INodeAnalyzer {
             return;
         }
 
-        foreach (var type in domain.Types) {
-            if (type is Entity entity) {
-                foreach (var action in entity.Actions) {
-                    ValidateActionEffects(context, action);
-                }
-                foreach (var stage in entity.Stages) {
-                    ValidateActionEffects(context, stage.OnEntryEffects);
-                    ValidateActionEffects(context, stage.OnExitEffects);
-                }
+        DomainAnalysis.ForEachEntity(domain, entity => {
+            foreach (var action in entity.Actions)
+                ValidateActionEffects(context, action);
+            foreach (var stage in entity.Stages) {
+                ValidateActionEffects(context, stage.OnEntryEffects);
+                ValidateActionEffects(context, stage.OnExitEffects);
             }
-        }
+        });
     }
 
     private static void ValidateActionEffects(AnalysisContext context, Action action) {

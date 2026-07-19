@@ -62,16 +62,14 @@ internal sealed class CapabilityAnalyzer : INodeAnalyzer {
             return;
         }
 
-        foreach (var type in domain.Types) {
-            if (type is Entity entity) {
-                foreach (var action in entity.Actions) {
-                    AnalyzeAction(context, action);
-                }
-                foreach (var stage in entity.Stages) {
-                    AnalyzeStage(context, stage);
-                }
+        DomainAnalysis.ForEachEntity(domain, entity => {
+            foreach (var action in entity.Actions) {
+                AnalyzeAction(context, action);
             }
-        }
+            foreach (var stage in entity.Stages) {
+                AnalyzeStage(context, stage);
+            }
+        });
 
         foreach (var relationship in domain.Relationships) {
             AnalyzeRelationship(context, relationship);

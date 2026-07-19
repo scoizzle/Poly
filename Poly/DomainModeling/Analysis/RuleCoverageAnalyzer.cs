@@ -25,16 +25,14 @@ internal sealed class RuleCoverageAnalyzer : INodeAnalyzer {
             return;
         }
 
-        foreach (var type in domain.Types) {
-            if (type is Entity entity) {
-                var requiredMeta = context.GetMetadata<RequiredPropertiesMetadata>(entity);
-                if (requiredMeta is null || requiredMeta.RequiredProperties.Count == 0) continue;
+        DomainAnalysis.ForEachEntity(domain, entity => {
+            var requiredMeta = context.GetMetadata<RequiredPropertiesMetadata>(entity);
+            if (requiredMeta is null || requiredMeta.RequiredProperties.Count == 0) return;
 
-                foreach (var action in entity.Actions) {
-                    ValidateAction(context, action, requiredMeta.RequiredProperties);
-                }
+            foreach (var action in entity.Actions) {
+                ValidateAction(context, action, requiredMeta.RequiredProperties);
             }
-        }
+        });
     }
 
     private static void ValidateAction(AnalysisContext context, Action action, IReadOnlyList<Property> requiredProperties) {

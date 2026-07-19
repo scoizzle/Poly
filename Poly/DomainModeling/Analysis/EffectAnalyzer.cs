@@ -30,17 +30,16 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
             return;
         }
 
-        foreach (var entity in lookup.Entities) {
+        DomainAnalysis.ForEachEntity(domain, entity => {
             foreach (var action in entity.Actions) {
                 ValidateEffects(context, action.Effects, entity, domain, lookup);
                 ValidateUnsatisfiedRequirements(context, action, entity, lookup);
             }
-
             foreach (var stage in entity.Stages) {
                 ValidateEffects(context, stage.OnEntryEffects, entity, domain, lookup);
                 ValidateEffects(context, stage.OnExitEffects, entity, domain, lookup);
             }
-        }
+        });
     }
 
     private static void ValidateEffects(

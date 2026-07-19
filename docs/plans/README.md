@@ -41,7 +41,8 @@ Architectural rationale → **`docs/decisions/`**. Module maps → **`Poly/*/REA
 
 ## Guardrails (not task lists)
 
-Anti-patterns (still valid): [001](anti-pattern-001-duplicate-tree-walks.md), [003](anti-pattern-003-extension-point-accretion.md), [004](anti-pattern-004-interface-new-hiding.md), [005](anti-pattern-005-second-system-effect.md), [007](anti-pattern-007-single-point-dependency.md).
+Anti-patterns (still valid): [001](anti-pattern-001-duplicate-tree-walks.md), [003](anti-pattern-003-extension-point-accretion.md), [004](anti-pattern-004-interface-new-hiding.md), [005](anti-pattern-005-second-system-effect.md), [007](anti-pattern-007-single-point-dependency.md).  
+DomainModeling abstraction gaps (review findings): [domain-modeling-abstraction-gaps.md](domain-modeling-abstraction-gaps.md).
 
 ---
 

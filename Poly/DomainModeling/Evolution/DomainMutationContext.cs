@@ -43,12 +43,34 @@ internal sealed class DomainMutationContext {
         ContractBindings = ContractBindings
     };
 
-    // --- Resolver helpers for ApplyTo methods ---
+    // --- Generic list helpers for ApplyTo methods ---
 
-    public bool UpdateEntity(string name, Func<Entity, Entity> transform) {
+    /// <summary>
+    /// Finds the first element in <paramref name="list"/> matching <paramref name="match"/>,
+    /// applies <paramref name="transform"/>, replaces it in-place, and records it in <see cref="ModifiedNodes"/>.
+    /// Returns true if a match was found and transformed.
+    /// </summary>
+    public bool ReplaceInList<T>(List<T> list, Func<T, bool> match, Func<T, T> transform) where T : Node {
+        for (int i = 0; i < list.Count; i++) {
+            if (match(list[i])) {
+                var result = transform(list[i]);
+                list[i] = result;
+                ModifiedNodes.Add(result);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Finds an entity by name, checks <paramref name="hasTarget"/>, applies <paramref name="rebuildEntity"/>,
+    /// and replaces the entity in-place. Returns true if the entity was found and the target existed.
+    /// </summary>
+    public bool ReplaceInEntity(string entityName, Func<Entity, bool> hasTarget, Func<Entity, Entity> rebuildEntity) {
         for (int i = 0; i < Types.Count; i++) {
-            if (Types[i] is Entity e && string.Equals(e.Name, name, StringComparison.Ordinal)) {
-                var result = transform(e);
+            if (Types[i] is Entity e && string.Equals(e.Name, entityName, StringComparison.Ordinal)) {
+                if (!hasTarget(e)) return false;
+                var result = rebuildEntity(e);
                 Types[i] = result;
                 ModifiedNodes.Add(result);
                 return true;
@@ -57,193 +79,105 @@ internal sealed class DomainMutationContext {
         return false;
     }
 
-    public bool UpdateType(string name, Func<DomainType, DomainType> transform) {
-        for (int i = 0; i < Types.Count; i++) {
-            if (string.Equals(Types[i].Name, name, StringComparison.Ordinal)) {
-                var result = transform(Types[i]);
-                Types[i] = result;
-                ModifiedNodes.Add(result);
-                return true;
-            }
-        }
-        return false;
-    }
+    // --- Convenience wrappers (thin, tested) ---
 
-    public bool UpdateRelationship(string name, Func<Relationship, Relationship> transform) {
-        var idx = Relationships.FindIndex(r => string.Equals(r.Name, name, StringComparison.Ordinal));
-        if (idx >= 0) {
-            var result = transform(Relationships[idx]);
-            Relationships[idx] = result;
-            ModifiedNodes.Add(result);
-            return true;
-        }
-        return false;
-    }
+    public bool UpdateEntity(string name, Func<Entity, Entity> transform) =>
+        ReplaceInList(Types, t => t is Entity e && string.Equals(e.Name, name, StringComparison.Ordinal), t => transform((Entity)t));
+
+    public bool UpdateType(string name, Func<DomainType, DomainType> transform) =>
+        ReplaceInList(Types, t => string.Equals(t.Name, name, StringComparison.Ordinal), t => transform(t));
+
+    public bool UpdateRelationship(string name, Func<Relationship, Relationship> transform) =>
+        ReplaceInList(Relationships, r => string.Equals(r.Name, name, StringComparison.Ordinal), r => transform(r));
+
+    public bool UpdateImportedContract(string name, Func<ImportedContract, ImportedContract> transform) =>
+        ReplaceInList(ImportedContracts, c => string.Equals(c.Name, name, StringComparison.Ordinal), c => transform(c));
+
+    public bool UpdateContractBinding(string name, Func<ContractBinding, ContractBinding> transform) =>
+        ReplaceInList(ContractBindings, b => string.Equals(b.Name, name, StringComparison.Ordinal), b => transform(b));
 
     public bool UpdateAction(string entityName, string actionName, Func<Action, Action> transform, bool searchStages = false) {
-        for (int i = 0; i < Types.Count; i++) {
-            if (Types[i] is Entity e && string.Equals(e.Name, entityName, StringComparison.Ordinal)) {
-                var foundAtEntityLevel = e.Actions.Any(a => string.Equals(a.Name, actionName, StringComparison.Ordinal));
+        // Try entity-level actions first
+        if (ReplaceInEntity(entityName,
+                e => e.Actions.Any(a => string.Equals(a.Name, actionName, StringComparison.Ordinal)),
+                e => e with {
+                    Actions = e.Actions.Select(a =>
+                    string.Equals(a.Name, actionName, StringComparison.Ordinal) ? transform(a) : a).ToList()
+                }))
+            return true;
 
-                if (foundAtEntityLevel) {
-                    var updatedActions = e.Actions.Select(a =>
-                        string.Equals(a.Name, actionName, StringComparison.Ordinal) ? transform(a) : a
-                    ).ToList();
-                    var updatedEntity = e with { Actions = updatedActions };
-                    Types[i] = updatedEntity;
-                    ModifiedNodes.Add(updatedEntity);
-                    return true;
-                }
+        if (!searchStages) return false;
 
-                if (searchStages) {
-                    var foundInStage = e.Stages.Any(s => s.Actions.Any(a => string.Equals(a.Name, actionName, StringComparison.Ordinal)));
-                    if (foundInStage) {
-                        var updatedStages = e.Stages.Select(s => {
-                            if (s.Actions.Any(a => string.Equals(a.Name, actionName, StringComparison.Ordinal))) {
-                                var stageActions = s.Actions.Select(a =>
-                                    string.Equals(a.Name, actionName, StringComparison.Ordinal) ? transform(a) : a
-                                ).ToList();
-                                return s with { Actions = stageActions };
-                            }
-                            return s;
-                        }).ToList();
-                        var updatedEntity = e with { Stages = updatedStages };
-                        Types[i] = updatedEntity;
-                        ModifiedNodes.Add(updatedEntity);
-                        return true;
+        // Fall back to stage-level actions
+        return ReplaceInEntity(entityName,
+            e => e.Stages.Any(s => s.Actions.Any(a => string.Equals(a.Name, actionName, StringComparison.Ordinal))),
+            e => e with {
+                Stages = e.Stages.Select(s => s.Actions.Any(a =>
+                string.Equals(a.Name, actionName, StringComparison.Ordinal))
+                    ? s with {
+                        Actions = s.Actions.Select(a =>
+                        string.Equals(a.Name, actionName, StringComparison.Ordinal) ? transform(a) : a).ToList()
                     }
-                }
-
-                // Entity found but action not found at entity or stage level
-                return false;
-            }
-        }
-        return false;
+                    : s).ToList()
+            });
     }
 
-    public bool UpdateStage(string entityName, string stageName, Func<Stage, Stage> transform) {
-        for (int i = 0; i < Types.Count; i++) {
-            if (Types[i] is Entity e && string.Equals(e.Name, entityName, StringComparison.Ordinal)) {
-                // Check that the named stage actually exists
-                if (!e.Stages.Any(s => string.Equals(s.Name, stageName, StringComparison.Ordinal)))
-                    return false;
+    public bool UpdateStage(string entityName, string stageName, Func<Stage, Stage> transform) =>
+        ReplaceInEntity(entityName,
+            e => e.Stages.Any(s => string.Equals(s.Name, stageName, StringComparison.Ordinal)),
+            e => e with {
+                Stages = e.Stages.Select(s =>
+                string.Equals(s.Name, stageName, StringComparison.Ordinal) ? transform(s) : s).ToList()
+            });
 
-                var updatedStages = e.Stages.Select(s =>
-                    string.Equals(s.Name, stageName, StringComparison.Ordinal) ? transform(s) : s
-                ).ToList();
-                var updatedEntity = e with { Stages = updatedStages };
-                Types[i] = updatedEntity;
-                ModifiedNodes.Add(updatedEntity);
-                return true;
-            }
-        }
-        return false;
-    }
-
-    public bool UpdateProperty(string entityName, string propertyName, Func<Property, Property> transform) {
-        for (int i = 0; i < Types.Count; i++) {
-            if (Types[i] is Entity e && string.Equals(e.Name, entityName, StringComparison.Ordinal)) {
-                // Check that the named property actually exists
-                if (!e.Properties.Any(p => string.Equals(p.Name, propertyName, StringComparison.Ordinal)))
-                    return false;
-
-                var updatedProps = e.Properties.Select(p =>
-                    string.Equals(p.Name, propertyName, StringComparison.Ordinal) ? transform(p) : p
-                ).ToList();
-                var updatedEntity = e with { Properties = updatedProps };
-                Types[i] = updatedEntity;
-                ModifiedNodes.Add(updatedEntity);
-                return true;
-            }
-        }
-        return false;
-    }
+    public bool UpdateProperty(string entityName, string propertyName, Func<Property, Property> transform) =>
+        ReplaceInEntity(entityName,
+            e => e.Properties.Any(p => string.Equals(p.Name, propertyName, StringComparison.Ordinal)),
+            e => e with {
+                Properties = e.Properties.Select(p =>
+                string.Equals(p.Name, propertyName, StringComparison.Ordinal) ? transform(p) : p).ToList()
+            });
 
     public bool UpdateRelationshipStage(string relationshipName, string stageName, Func<Stage, Stage> transform) {
         var idx = Relationships.FindIndex(r => string.Equals(r.Name, relationshipName, StringComparison.Ordinal));
-        if (idx >= 0) {
-            var r = Relationships[idx];
-            // Check that the named stage actually exists
-            if (!r.Stages.Any(s => string.Equals(s.Name, stageName, StringComparison.Ordinal)))
-                return false;
-
-            var updatedStages = r.Stages.Select(s =>
-                string.Equals(s.Name, stageName, StringComparison.Ordinal) ? transform(s) : s
-            ).ToList();
-            Relationships[idx] = r with { Stages = updatedStages };
-            ModifiedNodes.Add(Relationships[idx]);
-            return true;
-        }
-        return false;
+        if (idx < 0) return false;
+        var r = Relationships[idx];
+        if (!r.Stages.Any(s => string.Equals(s.Name, stageName, StringComparison.Ordinal)))
+            return false;
+        Relationships[idx] = r with {
+            Stages = r.Stages.Select(s =>
+            string.Equals(s.Name, stageName, StringComparison.Ordinal) ? transform(s) : s).ToList()
+        };
+        ModifiedNodes.Add(Relationships[idx]);
+        return true;
     }
 
     public bool AddPolicyToRelationship(string name, Policy policy) {
         var idx = Relationships.FindIndex(r => string.Equals(r.Name, name, StringComparison.Ordinal));
-        if (idx >= 0) {
-            var r = Relationships[idx];
-            Relationships[idx] = r with { Policies = r.Policies.Append(policy).ToList() };
-            ModifiedNodes.Add(Relationships[idx]);
-            return true;
-        }
-        return false;
+        if (idx < 0) return false;
+        var r = Relationships[idx];
+        Relationships[idx] = r with { Policies = r.Policies.Append(policy).ToList() };
+        ModifiedNodes.Add(Relationships[idx]);
+        return true;
     }
 
     public bool RemovePolicyFromRelationship(string name, string policyName) {
         var idx = Relationships.FindIndex(r => string.Equals(r.Name, name, StringComparison.Ordinal));
-        if (idx >= 0) {
-            var r = Relationships[idx];
-            Relationships[idx] = r with { Policies = r.Policies.Where(p => !string.Equals(p.Name, policyName, StringComparison.Ordinal)).ToList() };
-            ModifiedNodes.Add(Relationships[idx]);
-            return true;
-        }
-        return false;
+        if (idx < 0) return false;
+        var r = Relationships[idx];
+        Relationships[idx] = r with { Policies = r.Policies.Where(p => !string.Equals(p.Name, policyName, StringComparison.Ordinal)).ToList() };
+        ModifiedNodes.Add(Relationships[idx]);
+        return true;
     }
 
-    public Entity? FindEntity(string name) {
-        for (int i = 0; i < Types.Count; i++) {
-            if (Types[i] is Entity e && string.Equals(e.Name, name, StringComparison.Ordinal))
-                return e;
-        }
-        return null;
-    }
+    public Entity? FindEntity(string name) =>
+        (Entity?)Types.Find(t => t is Entity e && string.Equals(e.Name, name, StringComparison.Ordinal));
 
-    public Relationship? FindRelationship(string name) {
-        foreach (var r in Relationships) {
-            if (string.Equals(r.Name, name, StringComparison.Ordinal))
-                return r;
-        }
-        return null;
-    }
+    public Relationship? FindRelationship(string name) =>
+        Relationships.Find(r => string.Equals(r.Name, name, StringComparison.Ordinal));
 
-    public DomainType? FindType(string name) {
-        for (int i = 0; i < Types.Count; i++) {
-            if (string.Equals(Types[i].Name, name, StringComparison.Ordinal))
-                return Types[i];
-        }
-        return null;
-    }
-
-    public bool UpdateImportedContract(string name, Func<ImportedContract, ImportedContract> transform) {
-        var idx = ImportedContracts.FindIndex(c => string.Equals(c.Name, name, StringComparison.Ordinal));
-        if (idx >= 0) {
-            var result = transform(ImportedContracts[idx]);
-            ImportedContracts[idx] = result;
-            ModifiedNodes.Add(result);
-            return true;
-        }
-        return false;
-    }
-
-    public bool UpdateContractBinding(string name, Func<ContractBinding, ContractBinding> transform) {
-        var idx = ContractBindings.FindIndex(b => string.Equals(b.Name, name, StringComparison.Ordinal));
-        if (idx >= 0) {
-            var result = transform(ContractBindings[idx]);
-            ContractBindings[idx] = result;
-            ModifiedNodes.Add(result);
-            return true;
-        }
-        return false;
-    }
+    public DomainType? FindType(string name) =>
+        Types.Find(t => string.Equals(t.Name, name, StringComparison.Ordinal));
 
     public Action? FindActionOnAnyEntity(string actionName) {
         for (int i = 0; i < Types.Count; i++) {

@@ -34,6 +34,60 @@ public abstract record DomainChange {
     /// Returns a human-readable description of this change (used for traces).
     /// </summary>
     internal abstract string GetDescription();
+
+    // ── Static helpers for common ApplyTo patterns ────────────────
+
+    /// <summary>
+    /// Adds an item to the context Types collection and marks it as modified.
+    /// Shape A: direct add.
+    /// </summary>
+    internal static void AddToTypes(DomainMutationContext context, DomainType type) {
+        context.Types.Add(type);
+        context.ModifiedNodes.Add(type);
+    }
+
+    /// <summary>
+    /// Removes all matching items from a list. Fails via <see cref="DomainMutationContext.RequireTarget"/> if none removed.
+    /// Shape B: remove with guard.
+    /// </summary>
+    internal static void RemoveAllWithGuard<T>(
+        DomainMutationContext context, List<T> list, Func<T, bool> match, string notFoundMessage) {
+        var removed = list.RemoveAll(t => match(t));
+        if (removed == 0)
+            context.RequireTarget(false, notFoundMessage);
+    }
+
+    /// <summary>
+    /// Removes a named child from an entity's collection with an existence pre-check.
+    /// Checks if the child exists first; if not, reports target missing.
+    /// Otherwise delegates to the update lambda.
+    /// </summary>
+    internal static void RemoveFromEntity<T>(
+        DomainMutationContext context,
+        string entityName,
+        Func<Entity, IReadOnlyList<T>> getChildren,
+        Func<Entity, IReadOnlyList<T>, Entity> rebuild,
+        Func<T, bool> match,
+        string childTypeLabel,
+        string childName) {
+        var entity = context.FindEntity(entityName);
+        if (entity is not null && !getChildren(entity).Any(match)) {
+            context.RequireTarget(false, $"'{childName}' not found on {childTypeLabel} '{entityName}' — nothing to remove");
+            return;
+        }
+        context.RequireUpdate(
+            context.ReplaceInEntity(entityName, _ => true, e => rebuild(e, getChildren(e).Where(i => !match(i)).ToList())),
+            $"Entity '{entityName}' not found — cannot remove {childTypeLabel} child '{childName}'");
+    }
+
+    /// <summary>Adds an effect to an action with a RequireUpdate guard.</summary>
+    internal static void UpdateActionWithEffect(
+        DomainMutationContext context,
+        string entityName, string actionName,
+        Func<Action, Action> addEffect, string failMsg) {
+        context.RequireUpdate(
+            context.UpdateAction(entityName, actionName, addEffect, searchStages: true), failMsg);
+    }
 }
 
 /// <summary>
@@ -44,9 +98,7 @@ public sealed record AddEntityChange(
     IReadOnlyList<Property> InitialProperties
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
-        var newEntity = new Entity(Name, InitialProperties, [], [], []);
-        context.Types.Add(newEntity);
-        context.ModifiedNodes.Add(newEntity);
+        AddToTypes(context, new Entity(Name, InitialProperties, [], [], []));
     }
 
     internal override string GetDescription() => $"Add Entity '{Name}'";
@@ -56,10 +108,9 @@ public sealed record RemoveEntityChange(
     string Name
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
-        var removed = context.Types.RemoveAll(t => t is Entity e && string.Equals(e.Name, Name, StringComparison.Ordinal));
-        if (removed == 0)
-            context.RequireTarget(false,
-                $"Entity '{Name}' not found — nothing to remove");
+        RemoveAllWithGuard(context, context.Types,
+            t => t is Entity e && string.Equals(e.Name, Name, StringComparison.Ordinal),
+            $"Entity '{Name}' not found — nothing to remove");
     }
 
     internal override string GetDescription() => $"RemoveEntity({Name})";
@@ -86,17 +137,11 @@ public sealed record RemovePropertyFromEntityChange(
     string PropertyName
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
-        var entity = context.FindEntity(EntityName);
-        if (entity is not null && !entity.Properties.Any(p => string.Equals(p.Name, PropertyName, StringComparison.Ordinal))) {
-            context.RequireTarget(false,
-                $"Property '{PropertyName}' not found on Entity '{EntityName}' — nothing to remove");
-            return;
-        }
-        context.RequireUpdate(
-            context.UpdateEntity(EntityName, e => e with {
-                Properties = e.Properties.Where(p => !string.Equals(p.Name, PropertyName, StringComparison.Ordinal)).ToList()
-            }),
-            $"Entity '{EntityName}' not found — cannot remove property '{PropertyName}'");
+        RemoveFromEntity(context, EntityName,
+            e => e.Properties,
+            (e, props) => e with { Properties = props },
+            p => string.Equals(p.Name, PropertyName, StringComparison.Ordinal),
+            "Entity", PropertyName);
     }
 
     internal override string GetDescription() => $"RemoveProperty({EntityName}.{PropertyName})";
@@ -125,17 +170,11 @@ public sealed record RemoveStageChange(
     string Name
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
-        var entity = context.FindEntity(EntityName);
-        if (entity is not null && !entity.Stages.Any(s => string.Equals(s.Name, Name, StringComparison.Ordinal))) {
-            context.RequireTarget(false,
-                $"Stage '{Name}' not found on Entity '{EntityName}' — nothing to remove");
-            return;
-        }
-        context.RequireUpdate(
-            context.UpdateEntity(EntityName, e => e with {
-                Stages = e.Stages.Where(s => !string.Equals(s.Name, Name, StringComparison.Ordinal)).ToList()
-            }),
-            $"Entity '{EntityName}' not found — cannot remove stage '{Name}'");
+        RemoveFromEntity(context, EntityName,
+            e => e.Stages,
+            (e, stages) => e with { Stages = stages },
+            s => string.Equals(s.Name, Name, StringComparison.Ordinal),
+            "Entity", Name);
     }
 
     internal override string GetDescription() => $"RemoveStage({EntityName}.{Name})";
@@ -161,17 +200,11 @@ public sealed record RemoveActionChange(
     string Name
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
-        var entity = context.FindEntity(EntityName);
-        if (entity is not null && !entity.Actions.Any(a => string.Equals(a.Name, Name, StringComparison.Ordinal))) {
-            context.RequireTarget(false,
-                $"Action '{Name}' not found on Entity '{EntityName}' — nothing to remove");
-            return;
-        }
-        context.RequireUpdate(
-            context.UpdateEntity(EntityName, e => e with {
-                Actions = e.Actions.Where(a => !string.Equals(a.Name, Name, StringComparison.Ordinal)).ToList()
-            }),
-            $"Entity '{EntityName}' not found — cannot remove action '{Name}'");
+        RemoveFromEntity(context, EntityName,
+            e => e.Actions,
+            (e, actions) => e with { Actions = actions },
+            a => string.Equals(a.Name, Name, StringComparison.Ordinal),
+            "Entity", Name);
     }
 
     internal override string GetDescription() => $"RemoveAction({EntityName}.{Name})";
@@ -247,17 +280,11 @@ public sealed record RemovePolicyFromEntityChange(
     string PolicyName
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
-        var entity = context.FindEntity(EntityName);
-        if (entity is not null && !entity.Policies.Any(p => string.Equals(p.Name, PolicyName, StringComparison.Ordinal))) {
-            context.RequireTarget(false,
-                $"Policy '{PolicyName}' not found on Entity '{EntityName}' — nothing to remove");
-            return;
-        }
-        context.RequireUpdate(
-            context.UpdateEntity(EntityName, e => e with {
-                Policies = e.Policies.Where(p => !string.Equals(p.Name, PolicyName, StringComparison.Ordinal)).ToList()
-            }),
-            $"Entity '{EntityName}' not found — cannot remove policy '{PolicyName}'");
+        RemoveFromEntity(context, EntityName,
+            e => e.Policies,
+            (e, policies) => e with { Policies = policies },
+            p => string.Equals(p.Name, PolicyName, StringComparison.Ordinal),
+            "Entity", PolicyName);
     }
 
     internal override string GetDescription() => $"RemovePolicyFromEntity({EntityName}.{PolicyName})";
@@ -388,10 +415,9 @@ public sealed record RemoveRelationshipChange(
     string Name
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
-        var removed = context.Relationships.RemoveAll(r => string.Equals(r.Name, Name, StringComparison.Ordinal));
-        if (removed == 0)
-            context.RequireTarget(false,
-                $"Relationship '{Name}' not found — nothing to remove");
+        RemoveAllWithGuard(context, context.Relationships,
+            r => string.Equals(r.Name, Name, StringComparison.Ordinal),
+            $"Relationship '{Name}' not found — nothing to remove");
     }
 
     internal override string GetDescription() => $"RemoveRelationship({Name})";

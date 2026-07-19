@@ -14,8 +14,9 @@ namespace Poly.DomainModeling.Lowering;
 /// Arithmetic, boolean, and comparison nodes map 1:1 to their Syntax AST
 /// counterparts.
 /// </remarks>
-public sealed class DomainExpressionLoweringPass {
+public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Node> {
     private readonly IReadOnlyDictionary<string, Node> _parameters;
+    private Node _currentSubject = null!;
 
     /// <param name="parameters">
     /// Optional map of parameter names to their Syntax AST nodes.
@@ -27,6 +28,12 @@ public sealed class DomainExpressionLoweringPass {
     }
 
     /// <summary>
+    /// Creates a pass using context from a <see cref="LoweringContext"/>.
+    /// </summary>
+    public DomainExpressionLoweringPass(LoweringContext context)
+        : this(context.Parameters) { }
+
+    /// <summary>
     /// Lowers <paramref name="expression"/> to a Syntax AST <see cref="Node"/>,
     /// using <paramref name="subject"/> as the current-instance root for
     /// property and owned-navigation resolution.
@@ -34,70 +41,96 @@ public sealed class DomainExpressionLoweringPass {
     public Node Lower(DomainExpression expression, Node subject) {
         ArgumentNullException.ThrowIfNull(expression);
         ArgumentNullException.ThrowIfNull(subject);
-        return LowerCore(expression, subject);
+        _currentSubject = subject;
+        return Route(expression);
     }
 
-    private Node LowerCore(DomainExpression expr, Node currentSubject) {
-        return expr switch {
-            PropertyAccess p => new Member(currentSubject, p.Name),
-            ParameterAccess p => _parameters.TryGetValue(p.Name, out var param) ? param : new Parameter(p.Name),
-            Literal l => new Constant(l.Value),
+    protected override Node Default() => throw new NotSupportedException(
+        $"DomainExpression node type is not supported");
 
-            OwnedAccess oa => LowerCore(oa.Inner, new Member(currentSubject, oa.OwnedName)),
-            RelationshipNavigation rn => LowerCore(rn.TargetProperty, new Member(currentSubject, rn.RelationshipName)),
+    protected override Node PropertyAccess(Poly.DomainModeling.PropertyAccess p)
+        => new Member(_currentSubject, p.Name);
 
-            Exists e => new NotEqual(LowerCore(e.Target, currentSubject), new Constant(null)),
-            NotExists ne => new Equal(LowerCore(ne.Target, currentSubject), new Constant(null)),
+    protected override Node ParameterAccess(Poly.DomainModeling.ParameterAccess p)
+        => _parameters.TryGetValue(p.Name, out var param) ? param : new Parameter(p.Name);
 
-            Add a => new SN.Add(LowerCore(a.Left, currentSubject), LowerCore(a.Right, currentSubject)),
-            Subtract s => new SN.Subtract(LowerCore(s.Left, currentSubject), LowerCore(s.Right, currentSubject)),
-            Multiply m => new SN.Multiply(LowerCore(m.Left, currentSubject), LowerCore(m.Right, currentSubject)),
-            Divide d => new SN.Divide(LowerCore(d.Left, currentSubject), LowerCore(d.Right, currentSubject)),
+    protected override Node Literal(Poly.DomainModeling.Literal l)
+        => new Constant(l.Value);
 
-            And a => new SN.And(LowerCore(a.Left, currentSubject), LowerCore(a.Right, currentSubject)),
-            Or o => new SN.Or(LowerCore(o.Left, currentSubject), LowerCore(o.Right, currentSubject)),
-            Not n => new SN.Not(LowerCore(n.Operand, currentSubject)),
+    protected override Node OwnedAccess(Poly.DomainModeling.OwnedAccess oa)
+        => Route(oa.Inner, new Member(_currentSubject, oa.OwnedName));
 
-            Comparison c => c.Kind switch {
-                ComparisonKind.Equal => new Equal(LowerCore(c.Left, currentSubject), LowerCore(c.Right, currentSubject)),
-                ComparisonKind.NotEqual => new NotEqual(LowerCore(c.Left, currentSubject), LowerCore(c.Right, currentSubject)),
-                ComparisonKind.LessThan => new LessThan(LowerCore(c.Left, currentSubject), LowerCore(c.Right, currentSubject)),
-                ComparisonKind.LessThanOrEqual => new LessThanOrEqual(LowerCore(c.Left, currentSubject), LowerCore(c.Right, currentSubject)),
-                ComparisonKind.GreaterThan => new GreaterThan(LowerCore(c.Left, currentSubject), LowerCore(c.Right, currentSubject)),
-                ComparisonKind.GreaterThanOrEqual => new GreaterThanOrEqual(LowerCore(c.Left, currentSubject), LowerCore(c.Right, currentSubject)),
-                _ => throw new NotSupportedException($"Comparison kind '{c.Kind}' is not supported."),
-            },
+    protected override Node RelationshipNavigation(Poly.DomainModeling.RelationshipNavigation rn)
+        => Route(rn.TargetProperty, new Member(_currentSubject, rn.RelationshipName));
 
-            DateOperation d => d.Kind switch {
-                DateOperationKind.AddDays => new Invoke(
-                    new Member(LowerCore(d.Date, currentSubject), "AddDays"),
-                    LowerCore(d.Offset, currentSubject)),
-                DateOperationKind.AddMonths => new Invoke(
-                    new Member(LowerCore(d.Date, currentSubject), "AddMonths"),
-                    LowerCore(d.Offset, currentSubject)),
-                DateOperationKind.DiffDays => new Invoke(
-                    new Member(LowerCore(d.Date, currentSubject), "Subtract"),
-                    LowerCore(d.Offset, currentSubject)),
-                _ => throw new NotSupportedException($"DateOperation kind '{d.Kind}' is not supported."),
-            },
-            // Q3′ quantifiers — authoring-only for now (need store-aware evaluation).
-            AnyExpr a => throw new NotSupportedException(
-                $"Q3′ quantifier 'any {a.RelationshipName} where …' requires store-aware evaluation " +
-                "which is not yet implemented on the VM compilation path."),
-            AllExpr a => throw new NotSupportedException(
-                $"Q3′ quantifier 'all {a.RelationshipName} where …' requires store-aware evaluation " +
-                "which is not yet implemented on the VM compilation path."),
-            NoneExpr n => throw new NotSupportedException(
-                $"Q3′ quantifier 'none {n.RelationshipName} where …' requires store-aware evaluation " +
-                "which is not yet implemented on the VM compilation path."),
-            CountExpr c when c.Body is not null => throw new NotSupportedException(
-                $"Q3′ quantifier 'count {c.RelationshipName} where …' requires store-aware evaluation " +
-                "which is not yet implemented on the VM compilation path."),
-            CountExpr c => throw new NotSupportedException(
-                $"Q3′ quantifier 'count {c.RelationshipName}' requires store-aware evaluation " +
-                "which is not yet implemented on the VM compilation path."),
-            _ => throw new NotSupportedException(
-                $"DomainExpression node type '{expr.GetType().Name}' is not supported.")
+    // --- Recurse into a new subject — helper to avoid confusion with Route(expr) ---
+    private Node Route(DomainExpression expr, Node subject) {
+        var saved = _currentSubject;
+        _currentSubject = subject;
+        try { return Route(expr); }
+        finally { _currentSubject = saved; }
+    }
+
+    protected override Node Exists(Poly.DomainModeling.Exists e)
+        => new NotEqual(Lower(e.Target, _currentSubject), new Constant(null));
+
+    protected override Node NotExists(Poly.DomainModeling.NotExists ne)
+        => new Equal(Lower(ne.Target, _currentSubject), new Constant(null));
+
+    protected override Node Add(Poly.DomainModeling.Add a)
+        => new SN.Add(Lower(a.Left, _currentSubject), Lower(a.Right, _currentSubject));
+
+    protected override Node Subtract(Poly.DomainModeling.Subtract s)
+        => new SN.Subtract(Lower(s.Left, _currentSubject), Lower(s.Right, _currentSubject));
+
+    protected override Node Multiply(Poly.DomainModeling.Multiply m)
+        => new SN.Multiply(Lower(m.Left, _currentSubject), Lower(m.Right, _currentSubject));
+
+    protected override Node Divide(Poly.DomainModeling.Divide d)
+        => new SN.Divide(Lower(d.Left, _currentSubject), Lower(d.Right, _currentSubject));
+
+    protected override Node And(Poly.DomainModeling.And a)
+        => new SN.And(Lower(a.Left, _currentSubject), Lower(a.Right, _currentSubject));
+
+    protected override Node Or(Poly.DomainModeling.Or o)
+        => new SN.Or(Lower(o.Left, _currentSubject), Lower(o.Right, _currentSubject));
+
+    protected override Node Not(Poly.DomainModeling.Not n)
+        => new SN.Not(Lower(n.Operand, _currentSubject));
+
+    protected override Node Comparison(Poly.DomainModeling.Comparison c)
+        => c.Kind switch {
+            ComparisonKind.Equal => new Equal(Lower(c.Left, _currentSubject), Lower(c.Right, _currentSubject)),
+            ComparisonKind.NotEqual => new NotEqual(Lower(c.Left, _currentSubject), Lower(c.Right, _currentSubject)),
+            ComparisonKind.LessThan => new LessThan(Lower(c.Left, _currentSubject), Lower(c.Right, _currentSubject)),
+            ComparisonKind.LessThanOrEqual => new LessThanOrEqual(Lower(c.Left, _currentSubject), Lower(c.Right, _currentSubject)),
+            ComparisonKind.GreaterThan => new GreaterThan(Lower(c.Left, _currentSubject), Lower(c.Right, _currentSubject)),
+            ComparisonKind.GreaterThanOrEqual => new GreaterThanOrEqual(Lower(c.Left, _currentSubject), Lower(c.Right, _currentSubject)),
+            _ => throw new NotSupportedException($"Comparison kind '{c.Kind}' is not supported."),
         };
-    }
+
+    protected override Node DateOperation(Poly.DomainModeling.DateOperation d)
+        => d.Kind switch {
+            DateOperationKind.AddDays => new Invoke(
+                new Member(Lower(d.Date, _currentSubject), "AddDays"),
+                Lower(d.Offset, _currentSubject)),
+            DateOperationKind.AddMonths => new Invoke(
+                new Member(Lower(d.Date, _currentSubject), "AddMonths"),
+                Lower(d.Offset, _currentSubject)),
+            DateOperationKind.DiffDays => new Invoke(
+                new Member(Lower(d.Date, _currentSubject), "Subtract"),
+                Lower(d.Offset, _currentSubject)),
+            _ => throw new NotSupportedException($"DateOperation kind '{d.Kind}' is not supported."),
+        };
+
+    // Q3′ quantifiers — authoring-only for now (need store-aware evaluation).
+    protected override Node AnyExpr(Poly.DomainModeling.AnyExpr a) => throw Q3NotSupported("any", a.RelationshipName);
+    protected override Node AllExpr(Poly.DomainModeling.AllExpr a) => throw Q3NotSupported("all", a.RelationshipName);
+    protected override Node NoneExpr(Poly.DomainModeling.NoneExpr n) => throw Q3NotSupported("none", n.RelationshipName);
+    protected override Node CountExpr(Poly.DomainModeling.CountExpr c) => throw Q3NotSupported("count", c.RelationshipName);
+
+    private static Exception Q3NotSupported(string quantifier, string relName) =>
+        new NotSupportedException(
+            $"Q3′ quantifier '{quantifier} {relName} …' requires store-aware evaluation " +
+            "which is not yet implemented on the VM compilation path.");
 }

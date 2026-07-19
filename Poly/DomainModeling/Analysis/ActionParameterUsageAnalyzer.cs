@@ -25,13 +25,10 @@ internal sealed class ActionParameterUsageAnalyzer : INodeAnalyzer {
             return;
         }
 
-        foreach (var type in domain.Types) {
-            if (type is Entity entity) {
-                foreach (var action in entity.Actions) {
-                    ValidateAction(context, action);
-                }
-            }
-        }
+        DomainAnalysis.ForEachEntity(domain, entity => {
+            foreach (var action in entity.Actions)
+                ValidateAction(context, action);
+        });
     }
 
     private static void ValidateAction(AnalysisContext context, Action action) {

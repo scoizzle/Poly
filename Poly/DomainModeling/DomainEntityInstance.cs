@@ -358,92 +358,66 @@ public sealed record DomainEntityInstance {
             return;
         }
 
-        switch (effect) {
-            case StageTransitionEffect transition:
-                // Action path: always notify. Subscription path suppresses
-                // notifications via the _isExecutingSubscription flag checked
-                // in TransitionStage.
-                TransitionStage(transition.TargetStage.StageName, notifyStore: true);
-                break;
-            case CreateEntityInstance create:
-                CreateChildInstance(create);
-                break;
-            case CreateEntityInRelationshipEffect createIn:
-                ExecuteCreateInRelationship(createIn);
-                break;
-            case InvokeActionEffect invoke:
-                // Evaluate ParameterBindings and pass as args to chained action.
-                // Shape contracts mirror EffectAnalyzer (DMEFF007) — fail closed, never drop silently.
-                var chainedArgs = EvaluateParameterBindings(invoke.ParameterBindings);
-                var hasCollectionQuantifier = invoke.Quantifier is StageSubscriptionQuantifier.Any
-                    or StageSubscriptionQuantifier.All;
-                if (invoke.Quantifier is not null && !hasCollectionQuantifier) {
-                    throw new InvalidOperationException(
-                        "invoke does not support quantifier 'Each' (or unknown). Use any/all or omit.");
-                }
-                if (hasCollectionQuantifier && invoke.TargetRelationship is null) {
-                    throw new InvalidOperationException(
-                        $"invoke '{invoke.Quantifier}' requires a relationship target " +
-                        $"(e.g. invoke {invoke.Quantifier.ToString()!.ToLowerInvariant()} Rel.{invoke.ActionName}).");
-                }
-                if (invoke.Filter is not null &&
-                    (invoke.TargetRelationship is null || !hasCollectionQuantifier)) {
-                    throw new InvalidOperationException(
-                        "invoke 'where' requires any/all on a OneToMany relationship from the source.");
-                }
+        EffectExecutor.Run(this, effectPass, typeProvider, effect);
+    }
 
-                ActionInvocationResult nestedResult;
-                if (invoke.TargetRelationship is not null && hasCollectionQuantifier) {
-                    // E3b collection: source→targets only; empty set fails (no vacuous success).
-                    var targets = GetRelatedTargets(invoke.TargetRelationship, invoke.Filter);
-                    if (targets.Count == 0) {
-                        throw new InvalidOperationException(
-                            $"invoke {invoke.Quantifier.ToString()!.ToLowerInvariant()} " +
-                            $"'{invoke.TargetRelationship}.{invoke.ActionName}' matched zero targets" +
-                            (invoke.Filter is not null ? " after where filter" : "") + ".");
-                    }
-                    if (invoke.Quantifier == StageSubscriptionQuantifier.Any) {
-                        nestedResult = ActionInvocationResult.Missing(Entity.Name, invoke.ActionName);
-                        foreach (var t in targets) {
-                            var r = t.InvokeAction(invoke.ActionName, chainedArgs);
-                            if (r.Succeeded) { nestedResult = r; break; }
-                        }
-                    }
-                    else {
-                        nestedResult = ActionInvocationResult.Ok(invoke.ActionName, CurrentStage);
-                        foreach (var t in targets) {
-                            var r = t.InvokeAction(invoke.ActionName, chainedArgs);
-                            if (!r.Succeeded) {
-                                nestedResult = r;
-                                break;
-                            }
-                        }
-                    }
-                }
-                else if (invoke.TargetRelationship is not null) {
-                    var target = ResolveRelationshipTarget(invoke.TargetRelationship);
-                    nestedResult = target.InvokeAction(invoke.ActionName, chainedArgs);
-                }
-                else {
-                    nestedResult = InvokeAction(invoke.ActionName, chainedArgs);
-                }
-                if (!nestedResult.Succeeded) {
-                    throw new InvalidOperationException(
-                        nestedResult.ErrorMessage
-                        ?? (nestedResult.FailedGuards.Count > 0
-                            ? $"invoke '{invoke.ActionName}' blocked by guards: {string.Join(", ", nestedResult.FailedGuards)}"
-                            : $"invoke '{invoke.ActionName}' failed."));
-                }
-                break;
-            case DeleteEntityInstance:
-                IsDeleted = true;
-                break;
-            case LinkRelationshipEffect link:
-                ExecuteLink(link.RelationshipName, link.Target);
-                break;
-            case UnlinkRelationshipEffect unlink:
-                ExecuteUnlink(unlink.RelationshipName, unlink.Target);
-                break;
+    /// <summary>
+    /// Dispatches direct-execution effects using <see cref="EffectDispatch{TResult}"/>.
+    /// Named by the Effect subtype, not by the pattern (no Visit*).
+    /// </summary>
+    private sealed class EffectExecutor : EffectDispatch<object?> {
+        private readonly DomainEntityInstance _instance;
+        private readonly EffectLoweringPass _effectPass;
+        private readonly TypeDefinitionNodeAnalyzer _typeProvider;
+
+        private EffectExecutor(DomainEntityInstance instance,
+            EffectLoweringPass effectPass, TypeDefinitionNodeAnalyzer typeProvider) {
+            _instance = instance;
+            _effectPass = effectPass;
+            _typeProvider = typeProvider;
+        }
+
+        protected override object? Default() => null;
+
+        public static void Run(DomainEntityInstance instance,
+            EffectLoweringPass effectPass, TypeDefinitionNodeAnalyzer typeProvider,
+            Effect effect) {
+            new EffectExecutor(instance, effectPass, typeProvider).Route(effect);
+        }
+
+        protected override object? StageTransition(StageTransitionEffect transition) {
+            _instance.TransitionStage(transition.TargetStage.StageName, notifyStore: true);
+            return null;
+        }
+
+        protected override object? CreateEntityInstance(CreateEntityInstance create) {
+            _instance.CreateChildInstance(create);
+            return null;
+        }
+
+        protected override object? CreateEntityInRelationship(CreateEntityInRelationshipEffect createIn) {
+            _instance.ExecuteCreateInRelationship(createIn);
+            return null;
+        }
+
+        protected override object? InvokeAction(InvokeActionEffect invoke) {
+            _instance.ExecuteInvokeEffect(invoke);
+            return null;
+        }
+
+        protected override object? DeleteEntity(DeleteEntityInstance _) {
+            _instance.IsDeleted = true;
+            return null;
+        }
+
+        protected override object? LinkRelationship(LinkRelationshipEffect link) {
+            _instance.ExecuteLink(link.RelationshipName, link.Target);
+            return null;
+        }
+
+        protected override object? UnlinkRelationship(UnlinkRelationshipEffect unlink) {
+            _instance.ExecuteUnlink(unlink.RelationshipName, unlink.Target);
+            return null;
         }
     }
 
@@ -454,6 +428,68 @@ public sealed record DomainEntityInstance {
     /// <see cref="DomainEntityInstance"/> (set via property bag or prior effects).
     /// Prefer <see cref="DomainInstanceStore.Link"/> for direct API linking.
     /// </summary>
+    private void ExecuteInvokeEffect(InvokeActionEffect invoke) {
+        var chainedArgs = EvaluateParameterBindings(invoke.ParameterBindings);
+        var hasCollectionQuantifier = invoke.Quantifier is StageSubscriptionQuantifier.Any
+            or StageSubscriptionQuantifier.All;
+        if (invoke.Quantifier is not null && !hasCollectionQuantifier) {
+            throw new InvalidOperationException(
+                "invoke does not support quantifier 'Each' (or unknown). Use any/all or omit.");
+        }
+        if (hasCollectionQuantifier && invoke.TargetRelationship is null) {
+            throw new InvalidOperationException(
+                $"invoke '{invoke.Quantifier}' requires a relationship target " +
+                $"(e.g. invoke {invoke.Quantifier.ToString()!.ToLowerInvariant()} Rel.{invoke.ActionName}).");
+        }
+        if (invoke.Filter is not null &&
+            (invoke.TargetRelationship is null || !hasCollectionQuantifier)) {
+            throw new InvalidOperationException(
+                "invoke 'where' requires any/all on a OneToMany relationship from the source.");
+        }
+
+        ActionInvocationResult nestedResult;
+        if (invoke.TargetRelationship is not null && hasCollectionQuantifier) {
+            var targets = GetRelatedTargets(invoke.TargetRelationship, invoke.Filter);
+            if (targets.Count == 0) {
+                throw new InvalidOperationException(
+                    $"invoke {invoke.Quantifier.ToString()!.ToLowerInvariant()} " +
+                    $"'{invoke.TargetRelationship}.{invoke.ActionName}' matched zero targets" +
+                    (invoke.Filter is not null ? " after where filter" : "") + ".");
+            }
+            if (invoke.Quantifier == StageSubscriptionQuantifier.Any) {
+                nestedResult = ActionInvocationResult.Missing(Entity.Name, invoke.ActionName);
+                foreach (var t in targets) {
+                    var r = t.InvokeAction(invoke.ActionName, chainedArgs);
+                    if (r.Succeeded) { nestedResult = r; break; }
+                }
+            }
+            else {
+                nestedResult = ActionInvocationResult.Ok(invoke.ActionName, CurrentStage);
+                foreach (var t in targets) {
+                    var r = t.InvokeAction(invoke.ActionName, chainedArgs);
+                    if (!r.Succeeded) {
+                        nestedResult = r;
+                        break;
+                    }
+                }
+            }
+        }
+        else if (invoke.TargetRelationship is not null) {
+            var target = ResolveRelationshipTarget(invoke.TargetRelationship);
+            nestedResult = target.InvokeAction(invoke.ActionName, chainedArgs);
+        }
+        else {
+            nestedResult = InvokeAction(invoke.ActionName, chainedArgs);
+        }
+        if (!nestedResult.Succeeded) {
+            throw new InvalidOperationException(
+                nestedResult.ErrorMessage
+                ?? (nestedResult.FailedGuards.Count > 0
+                    ? $"invoke '{invoke.ActionName}' blocked by guards: {string.Join(", ", nestedResult.FailedGuards)}"
+                    : $"invoke '{invoke.ActionName}' failed."));
+        }
+    }
+
     private void ExecuteLink(string relationshipName, DomainExpression targetExpr) {
         if (Store is null)
             throw new InvalidOperationException(

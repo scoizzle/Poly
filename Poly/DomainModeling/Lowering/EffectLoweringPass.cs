@@ -12,17 +12,20 @@ namespace Poly.DomainModeling.Lowering;
 /// <para>Some effects (<see cref="StageTransitionEffect"/>,
 /// <see cref="CreateEntityInstance"/>, <see cref="InvokeActionEffect"/>)
 /// execute directly on <see cref="DomainEntityInstance"/> rather than
-/// through the VM — they produce <c>null</c> from <see cref="TryLowerVmNode"/>
+/// through the VM — they produce <c>null</c> from <see cref="Route"/>
 /// and are handled by the caller.</para>
 /// </summary>
-public sealed class EffectLoweringPass {
+public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     private readonly Entity _entity;
     private readonly DomainExpressionLoweringPass _expressionPass;
 
-    public EffectLoweringPass(Entity entity, Node subject) {
+    public EffectLoweringPass(Entity entity, Node subject)
+        : this(entity, new LoweringContext(subject)) { }
+
+    public EffectLoweringPass(Entity entity, LoweringContext context) {
         _entity = entity;
-        _expressionPass = new DomainExpressionLoweringPass();
-        Subject = subject;
+        _expressionPass = new DomainExpressionLoweringPass(context);
+        Subject = context.Subject;
     }
 
     /// <summary>The Syntax AST node representing the current entity instance.</summary>
@@ -33,46 +36,41 @@ public sealed class EffectLoweringPass {
     /// compilation, or returns <c>null</c> when the effect must be executed
     /// directly on a <see cref="DomainEntityInstance"/>.
     /// </summary>
-    public Node? TryLowerVmNode(Effect effect) {
-        return effect switch {
-            AssignEffect a => LowerAssign(a),
-            CompositeEffect c => LowerComposite(c),
-            ConditionalEffect c => LowerConditional(c),
-            _ => null // direct-execution effects — handled by DomainEntityInstance.InvokeAction
-        };
-    }
+    public Node? TryLowerVmNode(Effect effect) => Route(effect);
 
-    private Assignment LowerAssign(AssignEffect effect) {
-        var target = _expressionPass.Lower(effect.Target, Subject);
-        var value = _expressionPass.Lower(effect.Value, Subject);
+    protected override Node? Default() => null;
+
+    protected override Node? Assign(AssignEffect a) {
+        var target = _expressionPass.Lower(a.Target, Subject);
+        var value = _expressionPass.Lower(a.Value, Subject);
         return new Assignment(target, value);
     }
 
-    private Block LowerComposite(CompositeEffect effect) {
+    protected override Node? Composite(CompositeEffect c) {
         var nodes = new List<Node>();
-        foreach (var sub in effect.Effects) {
-            var lowered = TryLowerVmNode(sub);
+        foreach (var sub in c.Effects) {
+            var lowered = Route(sub);
             if (lowered is not null)
                 nodes.Add(lowered);
         }
         return new Block(nodes.Count > 0 ? nodes : [new Constant(0L)]);
     }
 
-    private Node LowerConditional(ConditionalEffect effect) {
-        var condition = _expressionPass.Lower(effect.Condition, Subject);
+    protected override Node? Conditional(ConditionalEffect c) {
+        var condition = _expressionPass.Lower(c.Condition, Subject);
         var thenNodes = new List<Node>();
-        foreach (var sub in effect.ThenEffects) {
-            var lowered = TryLowerVmNode(sub);
+        foreach (var sub in c.ThenEffects) {
+            var lowered = Route(sub);
             if (lowered is not null) thenNodes.Add(lowered);
         }
         var thenBlock = new Block(thenNodes.Count > 0 ? thenNodes : [new Constant(0L)]);
 
-        if (effect.ElseEffects is not { Count: > 0 })
+        if (c.ElseEffects is not { Count: > 0 })
             return new IfStatement(condition, thenBlock);
 
         var elseNodes = new List<Node>();
-        foreach (var sub in effect.ElseEffects) {
-            var lowered = TryLowerVmNode(sub);
+        foreach (var sub in c.ElseEffects) {
+            var lowered = Route(sub);
             if (lowered is not null) elseNodes.Add(lowered);
         }
         return new IfStatement(condition, thenBlock,

@@ -140,6 +140,18 @@ Layout sketch: `Poly/` (core library), `Poly.Tests/` (TUnit), `Poly.Benchmarks/`
 - Helpers under `Poly.Tests/TestHelpers/` are **test-only** — never promote into core `Poly/`.
 - Isolated single-file prototyping: [`docs/file-based-csharp-apps.md`](docs/file-based-csharp-apps.md).
 
+### Pre-ship review gate
+
+Before marking any slice or feature "Done", execute the **[uncommitted-change review gate](docs/plans/v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md)**:
+1. Review dirty files — `git diff --stat HEAD` then `git diff HEAD`.
+2. Categorize findings by severity (🔴 Structure / 🟠 Contract / 🟡 Edge case / ⚪ Hygiene).
+3. For every contract/structure finding, verify **three-layer defense**: parse-time rejects, analyze-time catches, runtime fails loud.
+4. **Fail-closed:** Empty sets, missing matches, and invalid configs fail loud — no vacuous success.
+5. Apply smallest fix that passes a failing test; re-review.
+6. Only ship when tree is clean, all 🔴🟠 resolved, build + suite green.
+
+This gate is **mandatory before `[x]`** on any task in the active suite. The full process with examples: [`docs/plans/v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md`](docs/plans/v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md).
+
 ---
 
 ## Coding ops

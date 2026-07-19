@@ -38,3 +38,17 @@ The smoke test `GetDslGuide_ReturnsProductSurface` will catch drift, but the
 maintainer must update the guide content proactively.
 
 This ensures consistent behavior across all AI tools the maintainer uses (Copilot, OpenCode, Grok, etc.).
+
+## Pre-Ship Review Gate
+
+Before marking any task or slice as complete, you **must** execute the
+**[uncommitted-change review gate](../../AGENTS.md#pre-ship-review-gate)** defined in AGENTS.md.
+
+The process:
+1. Run `git diff --stat HEAD` then `git diff HEAD` to audit dirty files.
+2. Categorize findings by severity: 🔴 Structure, 🟠 Contract, 🟡 Edge case, ⚪ Hygiene.
+3. For every 🔴/🟠 finding, verify **three-layer defense**: parse-time rejects, analyze-time catches, runtime fails loud.
+4. **Fail-closed:** Empty sets, missing matches, invalid configs — fail loud, no vacuous success.
+5. Apply the smallest fix, re-review, and only ship when the tree is clean and all 🔴🟠 are resolved.
+
+Full task definition: [`docs/plans/v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md`](../../docs/plans/v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md)

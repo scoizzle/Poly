@@ -50,6 +50,7 @@ Customer **policies** still cannot **read** related data in product DSL — IR +
 8. Principles: AGENTS.md — domain fidelity, thin slice, guide honesty same PR as surface change, rebuild `get_dsl_guide` embed after guide edits.
 9. **Shipped only after commit** — do not mark parent plans “shipped” while the tree is dirty.
 10. **Assign:** never accept related **LHS**; scalar related **RHS** is a cross-entity **read** (legal when path-prefix ships).
+11. **Pre-ship review gate:** Before marking any slice `[x]`, execute [`pr1-uncommitted-review-gate.md`](pr1-uncommitted-review-gate.md) — review dirty files, categorize findings (🔴🟠🟡⚪), harden with three-layer defense + fail-closed posture, re-review, and only ship when clean. The review gate is not a separate task to claim — it is the **last step before `[x]` on every slice**.
 
 ### Status marks
 
@@ -111,6 +112,7 @@ Customer **policies** still cannot **read** related data in product DSL — IR +
 | **2** | Q1'''''''.1 | Guide: nested path-prefix in where body allowed | Low | `[ ]` |
 | **3** | Q1'''''''.2–.5 | Exists-only exception tighten; dead code; owned; tests | Low | `[ ]` |
 | **4** | Q1'''''''.8 | Optional RT eval | Pull | `[ ]` |
+| **Gate** | — | Run [`pr1-uncommitted-review-gate.md`](pr1-uncommitted-review-gate.md) before marking this slice `[x]` | Process | `[ ]` |
 
 ### Optional hygiene (parallel anytime; do not block)
 

@@ -1,11 +1,12 @@
 # Simple Agent Tasks
 
 **Purpose:** Small, self-contained tasks for lower-context / cheaper agents.  
-**Last Updated:** 2026-07-12  
+**Last Updated:** 2026-07-19  
 
 ## Operating rule
 
-**Pick from [`vs-README.md`](vs-README.md) only.**
+**Active queue:** [`qe-README.md`](qe-README.md) (Query + Effect Suite — post-E1).  
+**Completed:** [`vs-README.md`](vs-README.md) (M2 vertical slice — no new picks).  
 
 | Mark | Meaning |
 |------|---------|
@@ -15,22 +16,10 @@
 
 ---
 
-## Current focus
-
-**M2 product-complete.** Primary queue: **post-M2** items in [`vs-README.md`](vs-README.md).
-
-| Status | Slice |
-|--------|--------|
-| ✅ | 0 Honesty, 1 Structure (Person), 2 Policy API, 3 Policy MCP, M2 checkpoint |
-| Next | pm2-1 multi-property evaluate sample, pm2-2 affordances, optional 0.1d, naming cleanup |
-
-Parent: [`../vertical-slice-finish-plan.md`](../vertical-slice-finish-plan.md)
-
----
-
 ## Templates
 
 - Task: [`TEMPLATE-micro-task.md`](TEMPLATE-micro-task.md)  
+- Process: [`pr1-uncommitted-review-gate.md`](pr1-uncommitted-review-gate.md) — pre-ship review loop (three-layer defense, fail-closed, re-review)  
 - Summary: [`../agent-summaries/TEMPLATE-task-summary.md`](../agent-summaries/TEMPLATE-task-summary.md)
 
 ---

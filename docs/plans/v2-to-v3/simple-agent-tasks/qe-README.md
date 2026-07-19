@@ -97,19 +97,18 @@ Customer **policies** still cannot **read** related data in product DSL — IR +
 | **Q1.6** | Guide examples + §3.1 read/write rule | [`qe-q1-6-guide-nav-exists-examples.md`](qe-q1-6-guide-nav-exists-examples.md) | `[x]` | Subject-first only |
 
 **Slice Q1′ exit (parse/print):** met (`959c6e7`).  
-**Post-ship residuals:** parent plan **§11 Q1′′′** — RT/eval goldens, many+property honesty, assign goldens, owned printer.
+**Q1′′′ partial (`3c99221`):** assign + owned print + apply/export — **not** full RT eval.  
+**Current residuals:** parent plan **§12 Q1′′′′**.
 
-### Slice Q1′′′ — Post-ship residuals (after Q1′ checklist all `[x]`)
+### Slice Q1′′′′ — Post-residual honesty (§12)
 
-Pick from [`../dsl-query-surface.md`](../dsl-query-surface.md) **§11** checklist. Suggested order:
-
-| # | ID | Work | Sev |
-|---|-----|------|-----|
-| **1** | Q1′′′.1 | RT/eval goldens true/false + soft-miss | High |
-| **2** | Q1′′′.2 | many+property fail-loud or guide reword | High |
-| **3** | Q1′′′.3 | Assign LHS ban + scalar RHS tests | Med |
-| **4** | Q1′′′.4–.6 | Owned printer, nested where, NotExists honesty | Med |
-| **5** | Q1′′′.7–.8 | Test placement / dead code | Low |
+| # | ID | Work | Sev | Status |
+|---|-----|------|-----|--------|
+| **1** | Q1′′′′.2 | many+property: **analysis reject** or guide without “will reject” | High | `[ ]` |
+| **2** | Q1′′′′.1 | True RT/eval true-false + soft-miss **or** authoring-only product claim | High | `[ ]` |
+| **3** | Q1′′′′.3 | Related `exists` golden on real nav | Med | `[ ]` |
+| **4** | Q1′′′.5 / ′′′′.5 | Nested `where` ban or document | Med | `[ ]` |
+| **5** | Q1′′′.7–.8 / ′′′′.6–.8 | Test move, dead code, guide `owned Prop` | Low | `[ ]` |
 
 ### Optional hygiene (parallel anytime; do not block)
 

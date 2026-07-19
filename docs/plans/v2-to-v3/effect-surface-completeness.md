@@ -2,8 +2,8 @@
 
 **Date:** 2026-07-18  
 **Revised:** 2026-07-18 (**E1′′′** post-commit review — `121cd92` clean tree; suite **1360**)  
-**Status:** E1 **shipped**; E2.1 create-in only; Q1′ parse/print **shipped** (`959c6e7`, suite **1373**)  
-**Current pick:** query **§11 Q1′′′ residuals** (RT/eval goldens) — [`dsl-query-surface.md`](dsl-query-surface.md) §11 · [`qe-README.md`](simple-agent-tasks/qe-README.md)
+**Status:** E1 **shipped**; E2.1 create-in only; Q1′ authoring **shipped**; Q1′′′ nits **partial** (`3c99221`, suite **1381**)  
+**Current pick:** query **§12** — true eval or authoring-only claim; many+property analysis honesty — [`dsl-query-surface.md`](dsl-query-surface.md) §12
 
 
 
@@ -301,11 +301,11 @@ What you cannot write in DSL without this plan is the backlog order.
 **Micro-tasks:** [`simple-agent-tasks/qe-README.md`](simple-agent-tasks/qe-README.md) — pick first `[ ]` there.
 
 ```text
-DONE:    E1; E2.1 create-in-only; Q0; Q1′ parse/print (`959c6e7`)
-CURRENT: query §11 residuals (RT/eval goldens + honesty)
+DONE:    E1; E2.1; Q1′ authoring; Q1′′′ partial (assign/export/owned print)
+CURRENT: query §12 — eval path honesty + many+property analysis
 THEN:    Q3′ by pain OR non-goal; E3a if workflow pain
 LATER:   E3b multi-entity; E4/E5
-PULL:    Host I/O; micro-catalog; L*; TRE runtime; link DSL
+PULL:    Host I/O; micro-catalog; L*; TRE; link DSL
 ```
 
 **Implementer watch-outs**

@@ -1936,13 +1936,11 @@ E: entity {{
     // ═════════════════════════════════════════════════════════════
 
     [Test]
-    public async Task Eval_PathPrefix_RelBoolProp_WithLinkedInstance_True() {
-        // Q1′′′.1: RT eval golden — path-prefix bool prop on linked to-one.
-        // Tests that the parser, printer, export round-trip, and policy creation work.
-        // NOTE: Full RT evaluation of RelationshipNavigation through the store requires
-        // VM-level graph traversal support (currently lowering exists but instance store
-        // resolution is not connected to the VM's property resolution). This test verifies
-        // the authoring path (parse → apply → export). RT evaluation is a future enhancement.
+    public async Task Parser_PathPrefix_RelBoolProp_Authoring_ExportsCorrectly() {
+        // Q1′′′′.1: Test that path-prefix (Rel BoolProp) parses, applies, and
+        // exports correctly. This verifies the authoring/parse/print path, not
+        // full RT evaluation (which requires VM-level store graph traversal
+        // as a future enhancement).
         var (sessionId, _) = McpSessionStore.Create("Test");
 
         var dsl = DslTool.ApplyDsl(sessionId, """
@@ -1975,10 +1973,8 @@ E: entity {{
     }
 
     [Test]
-    public async Task Eval_PathPrefix_RelPropCompare_WithLinkedInstance_TrueFalse() {
-        // Q1′′′.1: RT eval golden — path-prefix compare on linked to-one.
-        // Verifies parse → apply → export round-trip for Rel Prop is "value" patterns.
-        // RT graph evaluation through the store is not yet connected to the VM pipeline.
+    public async Task Parser_PathPrefix_RelPropCompare_Authoring_ExportsCorrectly() {
+        // Q1′′′′.1: Authoring-only — path-prefix compare parse/apply/export test.
         var (sessionId, _) = McpSessionStore.Create("Test");
 
         var dsl = DslTool.ApplyDsl(sessionId, """
@@ -2009,8 +2005,8 @@ E: entity {{
     }
 
     [Test]
-    public async Task Eval_RelExists_WithLink_True_WithoutLink_False() {
-        // Q1′′′.1: RT eval golden — `Rel exists` on a regular property.
+    public async Task Parser_RelExists_Authoring_ExportsCorrectly() {
+        // Q1′′′′.1: Authoring-only — `Rel exists` on a regular property.
         // Use a nullable property on the same entity to test the exists keyword.
         var (sessionId, _) = McpSessionStore.Create("Test");
 
@@ -2037,7 +2033,7 @@ E: entity {{
     }
 
     [Test]
-    public async Task Eval_Where_MultiPred_WithMatchingInstance_True() {
+    public async Task Parser_PathPrefix_RelWhere_Authoring_ExportsCorrectly() {
         // Q1′′′.1: RT golden — `Rel where` via apply_dsl with N1 nav.
         // Uses the parser's ParseRelatedAccess for `customer where ...`.
         // The N1 nav creates a relationship; the policy expression references
@@ -2126,17 +2122,30 @@ E: entity {{
     }
 
     [Test]
-    public async Task Parser_ManyPlusProperty_CurrentlyAccepted_DocumentGap() {
-        // Q1′′′.2: Parser accepts `orders Status` (many + property) today.
-        // Cardinality validation happens at analysis time, not parse time.
-        // This test documents the current behavior and the guide honesty claim.
+    public async Task Parser_ManyPlusProperty_ParsesButAnalysisRejects() {
+        // Q1′′′′.2: Parser accepts `orders Status` (many + property) syntactically,
+        // but the analysis pipeline rejects it via RelationshipNavigationCardinality check.
         var parsed = ParseExpression("orders Status is \"Open\"");
         await Assert.That(parsed).IsTypeOf<Poly.DomainModeling.RelationshipNavigation>();
         var nav = (Poly.DomainModeling.RelationshipNavigation)parsed;
         await Assert.That(nav.RelationshipName).IsEqualTo("orders");
-        // Note: This would be rejected by analysis when relationship metadata
-        // shows "orders" is a many-to-one relationship (not to-one).
-        // For now the parser accepts it — the guide says it's invalid at analysis time.
+
+        // Verify analysis rejection via apply_dsl on a domain with a many relationship
+        var (sessionId, _) = McpSessionStore.Create("Test");
+        var dsl = DslTool.ApplyDsl(sessionId, """
+            domain Test
+            Order: entity {
+              Status: Text
+            }
+            Customer: entity {
+              orders: many Order
+              ManyCheck: policy { orders Status is "Open" }
+            }
+            """);
+        // Should fail because orders is a many relationship
+        await Assert.That(dsl.Success).IsFalse();
+        await Assert.That(dsl.Message).Contains("orders");
+        await Assert.That(dsl.Message).Contains("many", StringComparison.OrdinalIgnoreCase);
     }
 
     [Test]

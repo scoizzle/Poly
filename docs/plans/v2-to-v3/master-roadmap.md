@@ -3,7 +3,7 @@
 **Status:** Active (milestones index)  
 **Last Updated:** 2026-07-18  
 **Purpose:** High-level milestone status only.  
-**Day-to-day work:** [`simple-agent-tasks/qe-README.md`](simple-agent-tasks/qe-README.md) · [`dsl-query-surface.md`](dsl-query-surface.md) **§11**  
+**Day-to-day work:** [`dsl-query-surface.md`](dsl-query-surface.md) **§12** · [`simple-agent-tasks/qe-README.md`](simple-agent-tasks/qe-README.md)  
 **Phase 1a archive:** [`dsl-sync-toward-phase1.md`](dsl-sync-toward-phase1.md)  
 **Phase 2 archive (complete):** [`domainmodeling-next-phase.md`](domainmodeling-next-phase.md)
 
@@ -20,7 +20,7 @@ MCP / direct API as thin consumers
 - **No** product µop / primitive IR path  
 - **No** V2 (`Poly.Data.Modeling` deleted)  
 - **M2** first-consumer vertical slice (structure + policy API + MCP policy) **Done**  
-- **Suite baseline:** **1373** (after Q1′ parse/print ship `959c6e7`)
+- **Suite baseline:** **1381** (after Q1′′′ partial residuals `3c99221`)
 
 ---
 
@@ -47,21 +47,24 @@ MCP / direct API as thin consumers
 | 6 | **SA′ honesty** | phase3 **§6e** | **Complete** — SA′′ all items closed |
 | 7 | **Effect surface: E0+E1** | [`effect-surface-completeness.md`](effect-surface-completeness.md) | **Complete** `121cd92` — delete keyword + guide honesty |
 | 8 | **E2.1 link decision** | effect-surface decision log | **Complete** — **(a) create-in only**; link DSL deferred |
-| 9 | **Q0 → Q1′ related reads** | [`dsl-query-surface.md`](dsl-query-surface.md) §3.1/§4.0/§4.5 · [`qe-README.md`](simple-agent-tasks/qe-README.md) | **Parse/print complete** `959c6e7` (path-prefix, `Rel exists`, `Rel where`; suite **1373**) |
-| 10 | **Q1′′′ residuals** | query plan **[§11](dsl-query-surface.md)** | **Complete** — RT/export goldens `1381`, owned anti-dot, assign LHS/RHS, guide honesty  |
-| 11 | **Q3′ any/all/count** | dsl-query-surface | **Pull** by dogfood pain — after §11 high items |
-| 12 | E3 invoke / E1′′′ hygiene | effect-surface | **Pull** |
-| 13 | Full effect-micro / V1 / Option A | expansion §0 | **Pull-only** |
-| 14 | **Host-consumable** (C# → MSIL → containers) | phase3 **§6d** | **Post–Phase 3** |
-| 15 | Event authoring tools | — | **Never** |
+| 9 | **Q0 → Q1′ authoring** | [`dsl-query-surface.md`](dsl-query-surface.md) §3.1/§4.5 · qe-README | **Complete** `959c6e7` — path-prefix, `Rel exists`, `Rel where` parse/print |
+| 10 | **Q1′′′ residual nits** | query **§11** | **Partial** `3c99221` — apply/export, assign LHS/RHS, owned anti-dot; **not** full RT eval |
+| 11 | **Q1′′′′ honesty + eval** | query **[§12](dsl-query-surface.md)** | **Complete** — authoring-only claim, analysis DMREL001 for many+property, test renames, owned anti-dot (`1381`)  |
+| 12 | **Q3′ any/all/count** | dsl-query-surface | **Pull** after §12 high items (or honest non-goal) |
+| 13 | E3 invoke / E1′′′ hygiene | effect-surface | **Pull** |
+| 14 | Full effect-micro / V1 / Option A | expansion §0 | **Pull-only** |
+| 15 | **Host-consumable** (C# → MSIL → containers) | phase3 **§6d** | **Post–Phase 3** |
+| 16 | Event authoring tools | — | **Never** |
 
 ### Agent pick (one line)
 
 ```text
-CURRENT: Q3′ by pain OR honest "no collection quantifiers"
-THEN:    Q1′′′.5/.7/.8 (nested where hygiene)
+CURRENT: Q1′′′′.5 nested where; then Q3′ by pain or honest non-goal
+THEN:    Q1′′′′.6/.8 hygiene
 PULL:    E3b multi-entity invoke; link DSL; L* containers; host I/O effects
 ```
+
+**Do not** market Q1′ as “related policies evaluate under RT” until §12 Q1′′′′.1 is green or the product claim is narrowed in the guide.
 
 ---
 
@@ -81,8 +84,8 @@ Do **not** claim WS8 Phase B, WP7 port, or µop pipeline work from archive.
 |-------|---------|
 | Correctness | Analysis-gated evolution, honest diagnostics, VM-primary policy when claimed |
 | Composition | Direct API + thin MCP |
-| Tests | Direct API first; MCP smoke second |
+| Tests | Direct API first; MCP smoke second; **names must match what they assert** |
 | Natural names | Prefer what-it-is over V3 migration labels (see naming cleanup) |
-| Query honesty | Cross-entity **reads** legal; cross-entity **writes** banned (assign = this entity only) |
+| Query honesty | Cross-entity **reads** legal; cross-entity **writes** banned; **no overclaim** of eval or analysis |
 
 Platform map: [`docs/CORE.md`](../../CORE.md).

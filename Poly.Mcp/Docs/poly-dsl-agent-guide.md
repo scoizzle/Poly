@@ -223,7 +223,7 @@ customer where Status is "Active" and CreditLimit >= 1000
 - `any`/`all`/`none`/`count` over collections (Q3′)
 - Arithmetic (`+`, `-`, `*`, `/`)
 - Date operations
-- Owned/nested access (partial: simple `owned.prop` via path-prefix)
+- Owned/nested access (partial: simple `owned Prop` via path-prefix)
 
 ### Expression Gaps — IR vs DSL
 

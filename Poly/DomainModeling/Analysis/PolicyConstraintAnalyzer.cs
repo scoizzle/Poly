@@ -190,9 +190,11 @@ internal sealed class PolicyConstraintAnalyzer : INodeAnalyzer {
                 // properties on the owned type, not this entity.
                 ValidateOwnedAccessName(context, lookup, oa, entity);
                 return;
-            case RelationshipNavigation:
-                // Do NOT recurse — TargetProperty references properties on
-                // the related entity, not on this entity.
+            case RelationshipNavigation rn:
+                // Validate that the relationship is not a 'many' cardinality
+                // from the source entity's perspective. Path-prefix on a 'many'
+                // relationship is invalid (use Q3′ quantifiers instead).
+                ValidateRelationshipCardinality(context, lookup, rn, entity);
                 return;
             case ParameterAccess:
                 // Parameter references are not entity properties — skip.
@@ -202,6 +204,45 @@ internal sealed class PolicyConstraintAnalyzer : INodeAnalyzer {
         // Recurse into children for composite expressions (And, Or, Not, Comparison, etc.)
         foreach (var child in expr.Children.OfType<DomainExpression>()) {
             ValidatePolicyPropertyReferences(context, lookup, child, entity, entityPropMap);
+        }
+    }
+
+    /// <summary>
+    /// Validates that a RelationshipNavigation in a policy expression does not
+    /// reference a 'many' cardinality relationship. Path-prefix on 'many' is
+    /// invalid — collection quantifiers (Q3′) must be used instead.
+    /// </summary>
+    private static void ValidateRelationshipCardinality(
+        AnalysisContext context,
+        DomainTypeLookupMetadata? lookup,
+        RelationshipNavigation rn,
+        Entity entity) {
+        if (lookup is null) return;
+
+        var domain = lookup.Domain;
+
+        // Find the relationship from the source entity's perspective
+        var relationship = domain.Relationships.FirstOrDefault(r =>
+            string.Equals(r.Name, rn.RelationshipName, StringComparison.Ordinal) &&
+            string.Equals(r.Source.TypeName, entity.Name, StringComparison.Ordinal));
+
+        if (relationship is null) {
+            // Relationship not found or not from this entity — could be a
+            // navigation from another entity or an unknown name.
+            // Let existing analyzers handle that case.
+            return;
+        }
+
+        // Check for 'many' cardinality from the source side
+        if (relationship.Cardinality is RelationshipCardinality.OneToMany
+            or RelationshipCardinality.ManyToMany) {
+            context.ReportError(
+                rn,
+                $"Path-prefix expression '{rn.RelationshipName}' references relationship with " +
+                $"cardinality {relationship.Cardinality} from entity '{entity.Name}'. " +
+                "Bare path-prefix on a 'many' relationship is invalid. Use a collection " +
+                "quantifier instead (e.g. 'any Rel where ...' — planned in Q3′).",
+                DomainModelDiagnosticCodes.RelationshipNavigationCardinality);
         }
     }
 

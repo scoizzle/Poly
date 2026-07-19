@@ -13,9 +13,9 @@ Architectural rationale → **`docs/decisions/`**. Module maps → **`Poly/*/REA
 |------|------|
 | [**MCP Phase 3 + RT + SA**](v2-to-v3/mcp-phase3-oracle-surface.md) | Phase 3 + RT + SA MVP **done**; residuals pull |
 | [**Effect surface completeness**](v2-to-v3/effect-surface-completeness.md) | Usefulness track — IR/DSL/MCP effect parity (delete, link, invoke, …) |
-| [**DSL query surface**](v2-to-v3/dsl-query-surface.md) | Subject-first related **reads**; Q1′ parse/print **shipped**; **§11 residuals** (RT/eval) next |
+| [**DSL query surface**](v2-to-v3/dsl-query-surface.md) | Q1′ authoring shipped; **§12** — true RT/eval still open; many+property analysis honesty |
 | [**MCP dogfood orchestrator**](v2-to-v3/mcp-dogfood-orchestrator.md) | Dogfood — [report 1](v2-to-v3/agent-summaries/dogfood/DOGFOOD-REPORT-20260718.md) · [report 2](v2-to-v3/agent-summaries/dogfood/DOGFOOD-REPORT-2-20260718.md) |
-| [**Simple-agent queue (`qe-*`)**](v2-to-v3/simple-agent-tasks/qe-README.md) | **Primary pick** — Q1′′′ residuals (§11) then Q3′ pull |
+| [**Simple-agent queue (`qe-*`)**](v2-to-v3/simple-agent-tasks/qe-README.md) | **Primary pick** — §12 Q1′′′′ then Q3′ pull |
 | [**Simple-agent queue (`vs-*`)**](v2-to-v3/simple-agent-tasks/vs-README.md) | Historical M2 vertical-slice tasks — **done**; do not reopen |
 | [**MCP tool-surface expansion**](v2-to-v3/mcp-tool-surface-expansion.md) | Backlog §0 — RT next; pull-only after |
 | [**Vertical-slice finish plan**](v2-to-v3/vertical-slice-finish-plan.md) | Product path status; M2 **Done**; post-M2 calendar |
@@ -72,7 +72,7 @@ Agents **must not** implement archive work without an explicit re-open validated
 
 ## Guidelines
 
-1. **What next?** → [`v2-to-v3/master-roadmap.md`](v2-to-v3/master-roadmap.md) agent pick · [`dsl-query-surface.md`](v2-to-v3/dsl-query-surface.md) **§11** · [`qe-README.md`](v2-to-v3/simple-agent-tasks/qe-README.md).  
+1. **What next?** → [`v2-to-v3/master-roadmap.md`](v2-to-v3/master-roadmap.md) agent pick · [`dsl-query-surface.md`](v2-to-v3/dsl-query-surface.md) **§12** · [`qe-README.md`](v2-to-v3/simple-agent-tasks/qe-README.md).  
 2. Consult `docs/decisions/` and `CORE.md` before significant work.  
 3. Do not invent a second product IR or reintroduce V2.  
 4. Prefer thin vertical slices over completing archived frameworks.

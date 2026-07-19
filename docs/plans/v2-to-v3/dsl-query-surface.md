@@ -3,9 +3,9 @@
 **Date:** 2026-07-18  
 **Revised:** 2026-07-18 — **surface direction frozen** (§3.1 + §4.0): subject-first path-prefix, postfix `exists`, `where` without forced parens, anti-dot; **cross-entity reads legal / writes banned**  
 **Status:** Active — **parallel to** [`effect-surface-completeness.md`](effect-surface-completeness.md); **before** customer ship confidence  
-**Current pick:** **Q0** honesty in guide + matrix (reflect frozen surface as *planned*, not shipped); then **Q1′** implement path-prefix + `Rel exists`  
+**Current pick:** **Q1′ shipped** — subject-first path-prefix, Rel exists, Rel where; suite **1373**  
 **Micro-tasks:** [`simple-agent-tasks/qe-README.md`](simple-agent-tasks/qe-README.md)  
-**Related:** DomainExpression IR · `PolyDslParser` expression grammar · JSON policy parser · effect-surface plan · product guide  
+**Related:** DomainExpression IR · `PolyDslParser` expression grammar · JSON policy parser · effect-surface plan · product guide · formal spec **§4.5**
 
 **Principle:** Policies and guards are only as useful as the **query language** inside them. Prefer a **small, lowerable, subject-first keyword subset** that maps to existing `DomainExpression` + Syntax AST over a full LINQ / SQL / C# clone. **Cross-entity reads legal; cross-entity writes banned** (§3.1). No host I/O in expressions.
 
@@ -398,7 +398,7 @@ NeedsHuman: policy {
 | Cross-entity | **Reads legal; writes banned** (§3.1) |
 | Q3′ quantifiers | `any`/`all`/`none`/`count` **Rel where …** (later) |
 
-**Still open (Q1.1 may freeze):** where body = `and_expr` vs full `or_expr`; many-side `orders exists` = non-empty?
+**Q1.1 open bits:** frozen in **§4.5.0** / §4.5.5 — do not re-litigate.
 
 ---
 
@@ -453,7 +453,7 @@ Legend: **✅** shipped · **🟡** partial · **❌** missing · **🚫** non-g
 | `Not` | ✅ `not` prefix | — | ✅ `{"not":{...}}` | ✅ `Not` | ✅ | Unary |
 | `Literal` | ✅ numbers, strings, `true`, `false`, `null` | — | ✅ `{"literal":V}` | ✅ `Constant` | ✅ | |
 | `RelationshipNavigation` | ❌ | **Q1′**: `Rel Prop`, `rel exists`, `rel where …` | ❌ | ✅ exists | ✅ via store | Subject-first, anti-dot |
-| `OwnedAccess` | ❌ | **Q1′**: `owned.Prop` via path-prefix | ❌ | ✅ exists | ✅ | |
+| `OwnedAccess` | ❌ | **Q1′**: path-prefix `owned Prop` (anti-dot, same as nav) | ❌ | ✅ exists | ✅ | Not `owned.Prop` |
 | `Exists` | ❌ | **Q1′**: `Rel exists` (postfix) | ❌ | ✅ `Exists` | ✅ | |
 | `NotExists` | ❌ | **Q1′**: `not Rel exists` | ❌ | ✅ `NotExists` | ✅ | |
 | `ParameterAccess` | ❌ | **Q1b**: `@param` or `param Name` | ❌ | ❌ (needs type info) | ❌ (needs args) | Action params |
@@ -548,22 +548,24 @@ where_scoped ::=
 
 | Product form | DE construction | Valid context |
 |-------------|-----------------|---------------|
-| `assignee exists` | `Exists(RelationshipNavigation("assignee", PropertyAccess("")))` | Policy, require, constraint |
-| `not certificate exists` | `Not(Exists(RelationshipNavigation("certificate", …)))` | Policy, require, constraint |
+| `assignee exists` | **`Exists(PropertyAccess("assignee"))`** — nav name as property/nav bag slot; lower → `Member(subject,"assignee") != null`. **Not** `RelationshipNavigation` with empty target. | Policy, require, constraint |
+| `not certificate exists` | **`NotExists(PropertyAccess("certificate"))`** preferred (or `Not(Exists(...))` if printer folds) | Policy, require, constraint |
 | `assignee Active` | `RelationshipNavigation("assignee", PropertyAccess("Active"))` | Policy, require, constraint; **scalar** on assign RHS |
 | `customer Tier is "VIP"` | `RelationshipNavigation("customer", Comparison(PropertyAccess("Tier"), Eq, Literal("VIP")))` | Same; **scalar** RHS allowed |
-| `customer where Status is "Active" and CreditLimit >= 1000` | `RelationshipNavigation("customer", And(Comparison(PropertyAccess("Status"), Eq, Literal("Active")), Comparison(PropertyAccess("CreditLimit"), Gte, Literal(1000L))))` | Policy/require only |
+| `customer where Status is "Active" and CreditLimit >= 1000` | Prefer lower as: eval body with subject = linked instance of `customer` (may be sugar over nav + and of compares). Document exact IR in Q1.3b if not pure `RelationshipNavigation` wrap. | Policy/require only |
+
+> **Q1′′.1 (review):** Empty-string `PropertyAccess("")` inside `RelationshipNavigation` is **invalid** — fixed above. Q1.2/Q1.3 implementers must follow this table.
 
 ### 4.5.3 Validation rules
 
 | Rule | Enforcement |
 |------|-------------|
-| `Rel.BoolProp` on `many` | Parse error — use `any Rel where …` (Q3′) |
-| `Rel.Prop op value` on `many` | Parse error — use `any Rel where …` (Q3′) |
+| Path-prefix bool/compare on `many` | Parse error — use `any Rel where …` (Q3′) |
 | `Rel exists` on `many` | **Allowed** — non-empty check |
 | Assign LHS with nav path | Parse error — cross-entity write banned |
-| Assign RHS with `Rel exists` | Parse error — boolean not a scalar value |
+| Assign RHS with `Rel exists` / `where` / quantifier | Parse error — boolean not a scalar value |
 | Missing relation name | Evolution-time domain analysis error |
+| `where` body may not nest `where` / quantifiers in v1 | Parse error or defer — keep body = comparisons + and |
 
 ### 4.5.4 Implementation pointers for Q1.2–Q1.6
 
@@ -606,13 +608,13 @@ where_scoped ::=
 **Goal:** Cross-entity **reads** for policies (and scalar assign RHS) **without** dots, without collection quantifier IR, **without** cross-entity writes.  
 **Direction:** §3.1 + §4.0 frozen (B1+path).
 
-- [ ] **Q1.1** Spec freeze: BNF/examples for path-prefix, `Rel exists` / `not Rel exists`, to-one `Rel where`, assign LHS/RHS rules; remaining open bits (where-body and/or; many `exists`).  
-- [ ] **Q1.2** Parse/print + lower **path-prefix** (`Rel Prop`, `Rel Prop op value`) for policy + scalar assign RHS.  
-- [ ] **Q1.3** Parse/print + lower **`Rel exists`** / **`not Rel exists`**.  
-- [ ] **Q1.3b** Parse/print + lower to-one **`Rel where` and-chain** (rebind).  
-- [ ] **Q1.4** Goldens: path-prefix policy, exists, optional where, scalar assign RHS; refuse related assign **LHS**.  
-- [ ] **Q1.5** JSON policy shapes for same (or document DSL-only split).  
-- [ ] **Q1.6** Guide examples (subject-first only; state cross-entity read/write rule).
+- [x] **Q1.1** Spec freeze — **§4.5** (`beeb922`); open bits closed in §4.5.0  
+- [x] **Q1.2** Parse/print + lower **path-prefix** (`Rel Prop`, `Rel Prop op value`) for policy + scalar assign RHS.  
+- [x] **Q1.3** Parse/print + lower **`Rel exists`** / **`not Rel exists`** per §4.5.2 mapping.  
+- [x] **Q1.3b** Parse/print + lower to-one **`Rel where` and-chain** (rebind).  
+- [x] **Q1.4** Goldens: path-prefix policy, exists, optional where, scalar assign RHS; refuse related assign **LHS**.  
+- [x] **Q1.5** JSON policy shapes for same (or document DSL-only split).  
+- [x] **Q1.6** Guide examples (subject-first only; state cross-entity read/write rule).
 
 **Exit:** `assignee exists`, `customer Tier is "VIP"`, `not certificate exists` authorable; `assign customer X to …` rejected.  
 **Not exit:** `any orders where …` — that is Q3′.
@@ -702,7 +704,9 @@ Customer ship confidence: **kernel effects + Q1′ + (Q3′ or honest “no coll
 
 - [x] §4.0 surface direction frozen (B1+path; subject-first; anti-dot)  
 - [x] §3.1 cross-entity reads legal / writes banned  
-- [ ] Q0 guide honesty (shipped vs planned)  
+- [x] Q0 guide honesty (shipped vs planned) — `f483c2f`  
+- [x] Q1.1 formal spec §4.5 — `beeb922`  
+- [x] E2.1 create-in-only — effect plan decision log  
 - [ ] Q1′ path-prefix + `Rel exists` + to-one `where` green (DSL → lower → evaluate/simulate)  
 - [ ] Assign: related LHS rejected; scalar related RHS OK  
 - [ ] Q3′ any/all **or** explicit non-goal “no collection quantifiers in v1”  
@@ -716,25 +720,25 @@ Customer ship confidence: **kernel effects + Q1′ + (Q3′ or honest “no coll
 **Micro-tasks:** [`simple-agent-tasks/qe-README.md`](simple-agent-tasks/qe-README.md) — **primary pick order**.
 
 ```text
-DONE:    E1 delete-self; §3.1 + §4.0 surface direction frozen (design)
-CURRENT: qe Q0.1 — guide honesty for shipped expressions only
-THEN:    Q0.2–Q0.5 (planned subject-first dialect named, not shipped)
-THEN:    Q1.1 spec residual → Q1.2 path-prefix → Q1.3 Rel exists → Q1.3b where → Q1.4–Q1.6
+DONE:    E1; §3.1/§4.0; Q0.1–Q0.5; E2.1 create-in-only; Q1.1 §4.5
+CURRENT: Q1.2 path-prefix parse/print/lower (+ scalar assign RHS)
+THEN:    Q1.3 Rel exists → Q1.3b where → Q1.4 goldens → Q1.5 JSON split → Q1.6 guide
 THEN:    Q3′ any/all/count where OR explicit non-goal
-PARALLEL: E2.1 link decision after Q0.1–Q0.2
 LATER:   Q2 arithmetic; Q1b params; Q4 aggregates
-PULL:    C# method chains; query comprehensions; EF-as-truth; product dots; cross-entity assign
+PULL:    C# method chains; query comprehensions; EF-as-truth; product dots; cross-entity assign; link DSL
 ```
 
 **Implementer watch-outs**
 
 - **Subject-first:** `Rel exists`, `Rel Prop…`, `Rel where…`, `any Rel where…` — never `rel.Prop`.  
 - **`not Rel exists`** for absence (not `Rel not exists`, not prefix `exists Rel`).  
+- **Exists DE:** `Exists(PropertyAccess(relName))` — see §4.5.2 (not empty-nav hack).  
 - **Cross-entity reads OK; writes banned** — assign target = this entity only.  
 - **any/all need linked instances** — test under RT, not parse-only.  
 - Keep DE → Syntax lower pure; no domain VM opcodes for this.  
 - Printer: subject-first forms, never dots.  
-- Guide + embed rebuild same PR as surface change.
+- Guide + embed rebuild same PR as surface change.  
+- Address **§10 Q1′′** follow-ups in the same PR when they touch your task.
 
 ---
 
@@ -752,5 +756,56 @@ PULL:    C# method chains; query comprehensions; EF-as-truth; product dots; cros
 | 2026-07-18 | **Postfix `exists`** | `Rel exists` (not prefix `exists Rel`) |
 | 2026-07-18 | **Absence = `not Rel exists`** | Reuse outer `not`; **no** `Rel not exists` product spelling |
 | 2026-07-18 | **B1+path frozen** | Path-prefix + postfix exists + to-one `where` — not where-only / not dots |
-| 2026-07-18 | Open: many-side `orders exists` | Non-empty many? Decide in Q1.1 |
-| 2026-07-18 | Open: where-body and vs or | Prefer and-chain + paren for `or` — finalize in Q1.1 |
+| 2026-07-18 | Q1.1 frozen | §4.5.0 — where=`and_expr`; many `exists` OK; soft-miss; repeat nav |
+| 2026-07-18 | E2.1 | create-in only — effect-surface decision log |
+| 2026-07-18 | **Q1′′ plan review** | §10 — follow-ups Q1′′.1–.8 |
+
+---
+
+## 10. Plan review — Q0 + Q1.1 + E2.1 (`f483c2f` / `beeb922`)
+
+**Scope:** Query-surface plan, product guide Q0 sections, qe micro-suite, effect E2.1 decision.  
+**Code:** Docs/plans only (suite **1360** unchanged).  
+**Verdict:** Direction and Q0 honesty are **good enough to implement Q1.2**. Formal §4.5 is the right ship artifact. Several **doc consistency / DE mapping** issues must be fixed before or during Q1.2–Q1.3 (listed below).
+
+### Solid
+
+| Item | Notes |
+|------|--------|
+| §3.1 read/write split | Clear; assign LHS ban + scalar RHS read is coherent |
+| §4.0 subject-first dialect | Path-prefix, postfix exists, unparenthesized `where` |
+| Q0 guide shipped-vs-planned | Grammar table matches local expressions |
+| Parity matrix | Useful; Q1′/Q3′ columns |
+| Must-have list | Product spellings; banned write called out |
+| Q1.1 §4.5 BNF + decisions | where=`and_expr`; many exists; soft-miss; repeat nav |
+| E2.1 create-in-only | Aligns with write ban; effect plan decision log |
+
+### Findings → follow-up tasks
+
+| ID | Sev | Finding | Owner task |
+|----|-----|---------|------------|
+| **Q1′′.1** | **High** | §4.5.2 originally mapped `Rel exists` → `Exists(RelationshipNavigation(rel, PropertyAccess("")))` — empty property is invalid IR. **Corrected** to `Exists(PropertyAccess(relName))` (lower: Member ≠ null). Absence: prefer `NotExists(PropertyAccess(relName))`. | Q1.3 (+ re-read §4.5.2) |
+| **Q1′′.2** | **High** | Guide **Expression Gaps** ends with: use JSON for IR capabilities not in DSL — **false for nav/exists** (JSON has no nav). Trailing `|` typo. Fix honesty: JSON is **weaker/equal** for comparison-only; related reads are DSL Q1′ only until Q1.5. | **Q0′ hygiene** (below) or early Q1.6 |
+| **Q1′′.3** | Med | Status drift after commit: agent pick / success criteria still said CURRENT Q0.1; Q1.1 checklist open; qe-q1-1 task file Status still Not Started. **Partially fixed this review** in plan header/§5/§8. | Process — keep qe-README + task Status in sync on every ship |
+| **Q1′′.4** | Med | Matrix row for `OwnedAccess` said `owned.Prop` (dot). **Fixed** to path-prefix. Guide Q0.2 still says owned = “Pull” while matrix says Q1′ — align: owned uses **same path-prefix as nav** in Q1′ when name resolves owned. | Q0′ hygiene + Q1.2 analysis |
+| **Q1′′.5** | Med | §4.5.2 `where` mapping as pure `RelationshipNavigation` wrap may not match lower (body is boolean tree, not a “target property”). Q1.3b must document real IR (rebind eval vs new node). | **Q1.3b** |
+| **Q1′′.6** | Low | Validation rules used `Rel.BoolProp` naming (dot in prose). Prefer “path-prefix on many”. Soft wording fix in §4.5.3. | done in this review if applied |
+| **Q1′′.7** | Low | No `agent-summaries/qe-*-summary.md` for Q0/Q1.1/E2.1 — suite rule asked for them. Optional catch-up or drop requirement for docs-only tasks. | Optional process |
+| **Q1′′.8** | Low | Effect plan header still “Q0 in progress”; E1′′′ residual text stale. Sync effect-surface agent pick to **Q1.2**. | docs hygiene |
+| **Q1′′.9** | Low | `where` body BNF says `and_expr` which can recurse into primaries including another `where` — v1 should **forbid nested where/quantifiers** in body (validation row added). | Q1.3b goldens |
+| **Q1′′.10** | Info | Embed: any guide fix requires MCP rebuild so `get_dsl_guide` matches file. | every guide PR |
+
+### Follow-up checklist (write-back)
+
+- [ ] **Q1′′.1** Exists/NotExists DE mapping locked to `PropertyAccess(relName)` — enforce in Q1.3 tests  
+- [x] **Q1′′.2** Fix guide Expression Gaps JSON advice + trailing `|`; state JSON has no nav/exists
+- [ ] **Q1′′.3** Sync qe-q1-1 task file Status `[x]`; uncommitted qe-README Q1.1 `[x]` — commit with next docs touch  
+- [ ] **Q1′′.4** Guide owned row: Q1′ path-prefix (same as nav), not “Pull only”  
+- [ ] **Q1′′.5** Q1.3b: document real IR for `Rel where` (not empty-nav / not fake TargetProperty)  
+- [ ] **Q1′′.7** Optional: summaries for Q0/Q1.1/E2.1 or waive for docs-only  
+- [x] **Q1′′.8** effect-surface Current pick → Q1.2
+- [ ] **Q1′′.9** Nested `where` banned in body — test in Q1.3b  
+- [x] **Q1′′.6** Validation prose anti-dot (this review)  
+- [x] Plan status/agent pick advanced to Q1.2 (this review)  
+
+**Recommended next code:** **Q1.2** only — do not start Q3′. Pull **Q1′′.2** guide fix into the next guide-touching PR (can be tiny before or with Q1.2).

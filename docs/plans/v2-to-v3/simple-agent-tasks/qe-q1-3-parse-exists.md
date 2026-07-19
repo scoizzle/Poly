@@ -27,11 +27,12 @@ not certificate exists
 ## Exact Steps
 
 1. Tokenize/parse `Rel exists` as related_simple / primary.
-2. Absence = outer `not` + `Rel exists` (existing Not node or NotExists — match Q1.1).
+2. **DE (Q1′′.1):** `Exists(PropertyAccess(relName))` — **not** `RelationshipNavigation` with empty property. Absence: prefer `NotExists(PropertyAccess(relName))` or parse `not Rel exists` as `Not(Exists(...))` with round-trip that still prints `not Rel exists`.
 3. Printer: `Rel exists` / `not Rel exists` only.
-4. Tests: happy + fail-loud for prefix `exists Rel` if still a parse path.
-5. Many-side `orders exists` per Q1.1 decision.
+4. Tests: happy + fail-loud for prefix `exists Rel` if still a parse path; assert DE shape for exists.
+5. Many-side `orders exists` allowed (non-empty) per §4.5.0.
 6. Boolean `exists` is **not** valid assign RHS.
+7. Soft-miss for missing to-one is for path-prefix compares; exists false when unlinked.
 
 ## Verification
 

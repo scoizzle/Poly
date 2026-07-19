@@ -1747,4 +1747,187 @@ public class McpSmokeTests {
         await Assert.That(get.Success).IsTrue();
         await Assert.That(get.Message).Contains("Active");
     }
+
+    // ═════════════════════════════════════════════════════════════
+    // Q1′ — Subject-First Related Reads (Phase 4)
+    // ═════════════════════════════════════════════════════════════
+
+    [Test]
+    public async Task Parser_PathPrefix_RelBoolProp_CreatesRelationshipNav() {
+        // Q1.2: `Rel BoolProp` should parse to RelationshipNavigation
+        var poly = "domain Test\nItem: entity {\n  Flag: Boolean\n}\n";
+        var domain = new DomainEvolution(new Domain("_", [], [])).Apply(
+            new PolyDslParser(poly).Parse()).Root;
+        // Build a policy expression via DSL that uses a hypothetical relationship
+        // We test parser directly via PolyDslParser on a policy expression
+        var parsed = ParseExpression("assignee Active");
+        await Assert.That(parsed).IsTypeOf<RelationshipNavigation>();
+        var nav = (RelationshipNavigation)parsed;
+        await Assert.That(nav.RelationshipName).IsEqualTo("assignee");
+        await Assert.That(nav.TargetProperty).IsTypeOf<PropertyAccess>();
+        await Assert.That(((PropertyAccess)nav.TargetProperty).Name).IsEqualTo("Active");
+    }
+
+    [Test]
+    public async Task Parser_PathPrefix_RelPropIsValue_CreatesRelationshipNavWithComparison() {
+        // Q1.2: `Rel Prop is "value"` → RelationshipNavigation with Comparison
+        var parsed = ParseExpression("customer Tier is \"VIP\"");
+        await Assert.That(parsed).IsTypeOf<RelationshipNavigation>();
+        var nav = (RelationshipNavigation)parsed;
+        await Assert.That(nav.RelationshipName).IsEqualTo("customer");
+        await Assert.That(nav.TargetProperty).IsTypeOf<Comparison>();
+        var comp = (Comparison)nav.TargetProperty;
+        await Assert.That(comp.Kind).IsEqualTo(ComparisonKind.Equal);
+        await Assert.That(comp.Left).IsTypeOf<PropertyAccess>();
+        await Assert.That(((PropertyAccess)comp.Left).Name).IsEqualTo("Tier");
+    }
+
+    [Test]
+    public async Task Parser_PathPrefix_RelPropCompareOp_CreatesNavWithComparison() {
+        // Q1.2: `Rel Prop >= value` → RelationshipNavigation with Comparison
+        var parsed = ParseExpression("customer CreditLimit >= 1000");
+        await Assert.That(parsed).IsTypeOf<RelationshipNavigation>();
+        var nav = (RelationshipNavigation)parsed;
+        await Assert.That(nav.RelationshipName).IsEqualTo("customer");
+        await Assert.That(nav.TargetProperty).IsTypeOf<Comparison>();
+        var comp = (Comparison)nav.TargetProperty;
+        await Assert.That(comp.Kind).IsEqualTo(ComparisonKind.GreaterThanOrEqual);
+    }
+
+    [Test]
+    public async Task Parser_Exists_RelExists_CreatesExists() {
+        // Q1.3: `Rel exists` → Exists(PropertyAccess)
+        var parsed = ParseExpression("assignee exists");
+        await Assert.That(parsed).IsTypeOf<Poly.DomainModeling.Exists>();
+        var exists = (Poly.DomainModeling.Exists)parsed;
+        await Assert.That(exists.Target).IsTypeOf<PropertyAccess>();
+        await Assert.That(((PropertyAccess)exists.Target).Name).IsEqualTo("assignee");
+    }
+
+    [Test]
+    public async Task Parser_Exists_NotRelExists_CreatesNotExists() {
+        // Q1.3: `not Rel exists` → Not(Exists(PropertyAccess))
+        var parsed = ParseExpression("not certificate exists");
+        await Assert.That(parsed).IsTypeOf<Poly.DomainModeling.Not>();
+        var notExpr = (Poly.DomainModeling.Not)parsed;
+        await Assert.That(notExpr.Operand).IsTypeOf<Poly.DomainModeling.Exists>();
+        var exists = (Exists)notExpr.Operand;
+        await Assert.That(exists.Target).IsTypeOf<PropertyAccess>();
+        await Assert.That(((PropertyAccess)exists.Target).Name).IsEqualTo("certificate");
+    }
+
+    [Test]
+    public async Task Parser_Where_RelWhereAndChain_CreatesRelationshipNav() {
+        // Q1.3b: `Rel where Prop1 is "val" and Prop2 >= val` → RelationshipNavigation with And body
+        var parsed = ParseExpression("customer where Status is \"Active\" and CreditLimit >= 1000");
+        await Assert.That(parsed).IsTypeOf<RelationshipNavigation>();
+        var nav = (RelationshipNavigation)parsed;
+        await Assert.That(nav.RelationshipName).IsEqualTo("customer");
+        await Assert.That(nav.TargetProperty).IsTypeOf<Poly.DomainModeling.And>();
+    }
+
+    [Test]
+    public async Task Printer_PathPrefix_RoundTrips() {
+        // Verify parse → print → parse round-trip for path-prefix
+        const string exprText = "assignee Active";
+        var printer = new DomainDslPrinter();
+
+        // Build expression and print
+        var expr = ParseExpression(exprText);
+        var printed = PrintExpressionForTest(expr);
+
+        // Re-parse and verify structure matches
+        var reParsed = ParseExpression(printed);
+        await Assert.That(reParsed).IsTypeOf<RelationshipNavigation>();
+        var nav = (RelationshipNavigation)reParsed;
+        await Assert.That(nav.RelationshipName).IsEqualTo("assignee");
+    }
+
+    [Test]
+    public async Task Printer_Exists_RoundTrips() {
+        const string exprText = "assignee exists";
+        var expr = ParseExpression(exprText);
+        var printed = PrintExpressionForTest(expr);
+        await Assert.That(printed).IsEqualTo("assignee exists");
+
+        var reParsed = ParseExpression(printed);
+        await Assert.That(reParsed).IsTypeOf<Poly.DomainModeling.Exists>();
+    }
+
+    [Test]
+    public async Task Printer_NotExists_RoundTrips() {
+        const string exprText = "not certificate exists";
+        var expr = ParseExpression(exprText);
+        var printed = PrintExpressionForTest(expr);
+        await Assert.That(printed).IsEqualTo("not certificate exists");
+
+        var reParsed = ParseExpression(printed);
+        await Assert.That(reParsed).IsTypeOf<Poly.DomainModeling.Not>();
+    }
+
+    [Test]
+    public async Task Printer_Where_RoundTrips() {
+        const string exprText = "customer where Status is \"Active\" and CreditLimit >= 1000";
+        var expr = ParseExpression(exprText);
+        var printed = PrintExpressionForTest(expr);
+        await Assert.That(printed).Contains("customer where");
+        await Assert.That(printed).Contains("Status is \"Active\"");
+        await Assert.That(printed).Contains("CreditLimit >= 1000");
+
+        var reParsed = ParseExpression(printed);
+        await Assert.That(reParsed).IsTypeOf<RelationshipNavigation>();
+    }
+
+    [Test]
+    public async Task Parser_LocalProperty_StillWorks() {
+        // Verify that existing local property expressions are unaffected
+        var parsed = ParseExpression("Age >= 18");
+        await Assert.That(parsed).IsTypeOf<Poly.DomainModeling.Comparison>();
+    }
+
+    [Test]
+    public async Task Parser_SimpleIdentifier_StillWorks() {
+        var parsed = ParseExpression("Name");
+        await Assert.That(parsed).IsTypeOf<Poly.DomainModeling.PropertyAccess>();
+    }
+
+    [Test]
+    public async Task Parser_ComplexLocalExpr_StillWorks() {
+        // Mixed and/or/not with parens
+        var parsed = ParseExpression("(Total > 0) or Rush is true");
+        await Assert.That(parsed).IsTypeOf<Poly.DomainModeling.Or>();
+    }
+
+    /// <summary>
+    /// Parses a policy expression string (the part inside `policy { ... }`).
+    /// Wraps in a minimal domain context so the parser can process it.
+    /// </summary>
+    private static DomainExpression ParseExpression(string text) {
+        // The expression parser is embedded in PolyDslParser.
+        // We need to parse a full .poly with a policy to extract the expression.
+        var poly = $@"
+domain Test
+E: entity {{
+  P1: Text
+  P2: Number
+  X: policy {{ {text} }}
+}}
+";
+        var parser = new PolyDslParser(poly);
+        var changes = parser.Parse();
+        // Find the AddPolicyToEntityChange and extract its expression
+        var policyChange = changes.OfType<AddPolicyToEntityChange>().FirstOrDefault();
+        if (policyChange is not null)
+            return policyChange.Policy.Expression;
+
+        // Fallback: not found
+        throw new InvalidOperationException($"Could not parse expression: {text}");
+    }
+
+    /// <summary>
+    /// Uses the DomainDslPrinter to print an expression.
+    /// </summary>
+    private static string PrintExpressionForTest(DomainExpression expr) {
+        return new DomainDslPrinter().PrintTestExpression(expr);
+    }
 }

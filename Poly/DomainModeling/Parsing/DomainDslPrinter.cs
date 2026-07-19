@@ -299,6 +299,7 @@ public sealed class DomainDslPrinter {
             ParameterAccess p => p.Name,
             Literal l => PrintLiteral(l),
             OwnedAccess o => $"{o.OwnedName}.{PrintExpression(o.Inner)}",
+            RelationshipNavigation r => PrintRelationshipNav(r),
             Comparison c => $"{PrintExpression(c.Left)} {PrintComparisonKind(c.Kind)} {PrintExpression(c.Right)}",
             And a => $"({PrintExpression(a.Left)} and {PrintExpression(a.Right)})",
             Or o => $"({PrintExpression(o.Left)} or {PrintExpression(o.Right)})",
@@ -307,10 +308,31 @@ public sealed class DomainDslPrinter {
             Subtract s => $"({PrintExpression(s.Left)} - {PrintExpression(s.Right)})",
             Multiply m => $"({PrintExpression(m.Left)} * {PrintExpression(m.Right)})",
             Divide d => $"({PrintExpression(d.Left)} / {PrintExpression(d.Right)})",
-            Exists e => $"exists({PrintExpression(e.Target)})",
-            NotExists n => $"not_exists({PrintExpression(n.Target)})",
+            Exists e => $"{PrintExpression(e.Target)} exists",
+            NotExists n => $"not {PrintExpression(n.Target)} exists",
             _ => $"?{expr.GetType().Name}",
         };
+    }
+
+    /// <summary>
+    /// Prints a RelationshipNavigation in subject-first form.
+    /// Simple body (PropertyAccess or Comparison) → "Rel Prop" / "Rel Prop op value"
+    /// Complex body (And/Or etc) → "Rel where body" 
+    /// </summary>
+    private string PrintRelationshipNav(RelationshipNavigation rn) {
+        var rel = rn.RelationshipName;
+        var body = rn.TargetProperty;
+
+        // Simple: Rel Prop
+        if (body is PropertyAccess pa)
+            return $"{rel} {pa.Name}";
+
+        // Simple: Rel Prop op value (Comparison with PropertyAccess on left)
+        if (body is Comparison comp && comp.Left is PropertyAccess)
+            return $"{rel} {PrintExpression(body)}";
+
+        // Complex: Rel where body
+        return $"{rel} where {PrintExpression(body)}";
     }
 
     private static string PrintLiteral(Literal literal) {
@@ -320,6 +342,14 @@ public sealed class DomainDslPrinter {
         if (literal.Value is long l) return l.ToString();
         if (literal.Value is double d) return d.ToString("0.#");
         return literal.Value.ToString() ?? "null";
+    }
+
+    /// <summary>
+    /// Prints a single expression tree (not wrapped in a full domain).
+    /// Public entry point for test use.
+    /// </summary>
+    public string PrintTestExpression(DomainExpression expr) {
+        return PrintExpression(expr);
     }
 
     private static string PrintComparisonKind(ComparisonKind kind) => kind switch {

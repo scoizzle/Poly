@@ -192,31 +192,55 @@ not Suspended
 Status is "active"
 ```
 
+#### Subject-First Related Reads (Q1′)
+
+Policies and assign RHS can **read** data from related entities using subject-first syntax.
+Cross-entity **writes** via assign are **banned** — only local entity properties can be written.
+
+| Form | Example | Maps to |
+|------|---------|---------|
+| Path-prefix (bool prop) | `assignee Active` | `RelationshipNavigation` + `PropertyAccess` |
+| Path-prefix (compare) | `customer Tier is "VIP"` | `RelationshipNavigation` + `Comparison` |
+| Presence | `assignee exists` | `Exists` |
+| Absence | `not certificate exists` | `NotExists` |
+| Multi-predicate | `customer where Status is "Active" and CreditLimit >= 1000` | `RelationshipNavigation` with `And` body |
+
+```poly
+assignee Active
+customer Tier is "VIP"
+assignee exists
+not certificate exists
+customer where Status is "Active" and CreditLimit >= 1000
+```
+
+**Rules:**
+- `Rel Prop` on `many` relationships is a parse error (use `any Rel where …` — Q3′ planned).
+- `Rel exists` on `many` is allowed (non-empty check).
+- Cross-entity reads (path-prefix, exists, where) are legal in policies, require, and assign RHS.
+- Cross-entity writes (nav path as assign target) are banned.
+
 **Not yet shipped** (planned for future phases):
-- Related entity reads (`customer Tier`, `assignee exists`): see Q1′
 - `any`/`all`/`none`/`count` over collections (Q3′)
 - Arithmetic (`+`, `-`, `*`, `/`)
 - Date operations
-- Owned/nested access
+- Owned/nested access (partial: simple `owned.prop` via path-prefix)
 
 ### Expression Gaps — IR vs DSL
 
 The following expression capabilities exist in the runtime expression IR (`DomainExpression`)
 and lowering pipeline but are **not yet authorable in product DSL**:
 
-| Capability | IR exists | DSL planned | Notes |
-|------------|-----------|-------------|-------|
-| Relationship navigation (`rel.Property`) | ✅ | Q1′ (subject-first path-prefix) | `customer Tier`, not `customer.Tier` |
-| Existence check (`exists`) | ✅ | Q1′ (postfix) | `assignee exists` |
-| Existence check (`not exists`) | ✅ | Q1′ (postfix) | `not assignee exists` |
-| Scoped filter (`where`) | ✅ | Q1′ | `customer where Status is "Active"` |
-| Collection quantifiers (`any`/`all`/`none`/`count`) | ❌ no IR | Q3′ | New IR + lowering needed |
-| Arithmetic (`+`, `-`, `*`, `/`) | ✅ | Pull | Date operations also in IR |
-| Owned/nested access (`owned.Property`) | ✅ | Pull | |
+| Capability | IR exists | DSL status | Notes |
+|------------|-----------|------------|-------|
+| Relationship navigation | ✅ | ✅ **shipped** (path-prefix) | `customer Tier`, not `customer.Tier` |
+| Existence check | ✅ | ✅ **shipped** (postfix `Rel exists`) | `assignee exists` / `not assignee exists` |
+| Scoped filter (`where`) | ✅ | ✅ **shipped** (`rel where and-chain`) | `customer where Status is "Active"` |
+| Owned/nested access | ✅ | Pull (same path-prefix approach) | `profile Field is "x"` — not `profile.Field` |
+| Collection quantifiers (`any`/`all`/`none`/`count`) | ❌ no IR | Q3′ (planned) | New IR + lowering needed |
+| Arithmetic (`+`, `-`, `*`, `/`) | ✅ | Pull (planned) | Date operations also in IR |
 | Action parameters | ✅ | Not yet planned | `ParameterAccess` in IR |
 
-Use the JSON expression format (`simulate_policy`, `add_policy`) for capabilities
-that exist in IR but not in DSL. |
+**JSON policies** (`add_policy` / `simulate_policy`) support comparison + and/or/not + literal only — **not** path-prefix, `Rel exists`, or `where`. Use DSL for related reads; JSON remains limited to local property comparisons and logical composition.
 
 ## 8. Supported Effect Summary
 

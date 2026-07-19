@@ -655,6 +655,15 @@ public sealed class PolyDslParser {
             case TokenKind.Identifier:
                 var name = _current.Text;
                 Advance();
+                // Q1′: Check for subject-first related expression patterns.
+                // After a bare identifier, peek ahead to detect:
+                //   RelName exists        → Exists(PropertyAccess(name))
+                //   RelName where body    → RelationshipNavigation(name, body)
+                //   RelName PropName ...  → RelationshipNavigation(name, propAccess + compare)
+                // Otherwise treat as a local property access.
+                if (_current.Kind == TokenKind.Identifier) {
+                    return ParseRelatedAccess(name);
+                }
                 return DomainExpression.Property(name);
 
             case TokenKind.Not:
@@ -663,6 +672,75 @@ public sealed class PolyDslParser {
             default:
                 throw Error($"Expected expression, got '{_current.Text}'");
         }
+    }
+
+    /// <summary>
+    /// Parses a subject-first related expression that starts with a relationship name
+    /// (already consumed as <paramref name="relName"/>) followed by one of:
+    ///   - 'exists' → Exists(PropertyAccess(relName))
+    ///   - 'where'  → RelationshipNavigation(relName, and_expr)
+    ///   - PropName → RelationshipNavigation(relName, PropertyAccess(propName))
+    ///                optionally followed by a comparison operator and value.
+    /// </summary>
+    private DomainExpression ParseRelatedAccess(string relName) {
+        var next = _current.Text;
+
+        // RelName exists (postfix)
+        if (string.Equals(next, "exists", StringComparison.OrdinalIgnoreCase)) {
+            Advance(); // consume 'exists'
+            return DomainExpression.Exists(DomainExpression.Property(relName));
+        }
+
+        // RelName where and_expr (to-one multi-predicate)
+        if (string.Equals(next, "where", StringComparison.OrdinalIgnoreCase)) {
+            Advance(); // consume 'where'
+            var body = ParseAnd();
+            return DomainExpression.RelationshipNav(relName, body);
+        }
+
+        // RelName PropName — consume the property name
+        Advance(); // consume the property name
+        var propName = next;
+        var propExpr = DomainExpression.Property(propName);
+
+        // Check for comparison operator — RelName PropName op value
+        if (IsComparisonOp(_current.Kind)) {
+            var op = _current.Kind;
+
+            // Special case: "is not" → NotEqual
+            if (op == TokenKind.Is && PeekIs(TokenKind.Not)) {
+                Advance(); // consume 'is'
+                Advance(); // consume 'not'
+                var rhs = ParsePrimary();
+                var compare = DomainExpression.NotEqual(propExpr, rhs);
+                return DomainExpression.RelationshipNav(relName, compare);
+            }
+
+            Advance(); // consume the operator
+
+            // Handle standalone "is" → Equal
+            if (op == TokenKind.Is) {
+                var rhs = ParsePrimary();
+                var compare = DomainExpression.Equal(propExpr, rhs);
+                return DomainExpression.RelationshipNav(relName, compare);
+            }
+
+            // Standard operators: == != > >= < <=
+            var right = ParsePrimary();
+            var comparison = op switch {
+                TokenKind.Eq => DomainExpression.Equal(propExpr, right),
+                TokenKind.Neq => DomainExpression.NotEqual(propExpr, right),
+                TokenKind.Gt => DomainExpression.GreaterThan(propExpr, right),
+                TokenKind.Gte => DomainExpression.GreaterThanOrEqual(propExpr, right),
+                TokenKind.Lt => DomainExpression.LessThan(propExpr, right),
+                TokenKind.Lte => DomainExpression.LessThanOrEqual(propExpr, right),
+                _ => throw Error($"Unknown comparison operator '{op}'"),
+            };
+            return DomainExpression.RelationshipNav(relName, comparison);
+        }
+
+        // Bare Rel PropName (boolean property on related entity)
+        return DomainExpression.RelationshipNav(relName, propExpr);
     }
 
     // ── Constraint parser ─────────────────────────────────────

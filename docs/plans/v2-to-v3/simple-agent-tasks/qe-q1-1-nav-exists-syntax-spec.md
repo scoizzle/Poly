@@ -4,7 +4,7 @@
 **Parent:** [`../dsl-query-surface.md`](../dsl-query-surface.md) §3.1 · §4.0 · §5 Q1.1  
 **Difficulty:** Small Model Friendly  
 **Estimated Context:** ~8k tokens  
-**Status:** `[ ]` Not Started  
+**Status:** `[x]` **Done** (`beeb922`) — formal spec in parent plan **§4.5**; open bits frozen in §4.5.0. Review follow-ups: parent **§10 Q1′′**.  
 **Prereq:** **Slice Q0 exit**
 
 ## Objective

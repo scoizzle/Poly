@@ -44,7 +44,7 @@ MCP / direct API as thin consumers
 | 5 | **RT′ + SA MVP** | phase3 **§6e** | **Committed** `a74af5d` |
 | 6 | **SA′ honesty** | phase3 **§6e** | **Complete** — SA′′ all items closed |
 | 7 | **Effect surface: E0+E1** | [`effect-surface-completeness.md`](effect-surface-completeness.md) | **Committed** `121cd92` — delete keyword + guide honesty + E1′ nits |
-| 8 | ▶ **Q0 → Q1′ (+ E2.1)** | [`simple-agent-tasks/qe-README.md`](simple-agent-tasks/qe-README.md) · [`dsl-query-surface.md`](dsl-query-surface.md) §3.1/§4.0 · effect-surface | **In progress** — Q0.1–Q0.5 + E2.1 decision (create-in only) done |
+| 8 | **Q0 → Q1′ (+ E2.1)** | [`simple-agent-tasks/qe-README.md`](simple-agent-tasks/qe-README.md) · [`dsl-query-surface.md`](dsl-query-surface.md) §3.1/§4.0 · effect-surface | **Complete** — suite **1373** |
 | 9 | E3 invoke / E1′′′ hygiene | effect-surface | **Pull** |
 | 10 | Full effect-micro / V1 / Option A | expansion §0 | **Pull-only** |
 | 11 | **Host-consumable** (C# → MSIL → containers) | phase3 **§6d** | **Post–Phase 3** |

@@ -88,13 +88,13 @@ Customer **policies** still cannot **read** related data in product DSL — IR +
 
 | # | Task | File | Status | Notes |
 |---|------|------|--------|-------|
-| **Q1.1** | Spec residual: BNF, where-body, many-exists | [`qe-q1-1-nav-exists-syntax-spec.md`](qe-q1-1-nav-exists-syntax-spec.md) | `[~]` | Direction frozen; fill open bits only |
-| **Q1.2** | Parse/print/lower **path-prefix** (+ scalar assign RHS) | [`qe-q1-2-parse-nav-owned.md`](qe-q1-2-parse-nav-owned.md) | `[ ]` | `Rel Prop`, `Rel Prop op value` |
-| **Q1.3** | Parse/print/lower **`Rel exists`** / **`not Rel exists`** | [`qe-q1-3-parse-exists.md`](qe-q1-3-parse-exists.md) | `[ ]` | Postfix only |
-| **Q1.3b** | Parse/print/lower to-one **`Rel where` and-chain** | [`qe-q1-3b-parse-where-rebind.md`](qe-q1-3b-parse-where-rebind.md) | `[ ]` | No forced parens |
-| **Q1.4** | Goldens: policies + assign RHS read + reject related LHS | [`qe-q1-4-nav-exists-goldens.md`](qe-q1-4-nav-exists-goldens.md) | `[ ]` | evaluate / simulate / require |
-| **Q1.5** | JSON policy parity or documented split | [`qe-q1-5-json-policy-parity.md`](qe-q1-5-json-policy-parity.md) | `[ ]` | Prefer document split if thin |
-| **Q1.6** | Guide examples + §3.1 read/write rule | [`qe-q1-6-guide-nav-exists-examples.md`](qe-q1-6-guide-nav-exists-examples.md) | `[ ]` | Subject-first only |
+| **Q1.1** | Spec residual: BNF, where-body, many-exists | [`qe-q1-1-nav-exists-syntax-spec.md`](qe-q1-1-nav-exists-syntax-spec.md) | `[x]` | Direction frozen; fill open bits only |
+| **Q1.2** | Parse/print/lower **path-prefix** (+ scalar assign RHS) | [`qe-q1-2-parse-nav-owned.md`](qe-q1-2-parse-nav-owned.md) | `[x]` | `Rel Prop`, `Rel Prop op value` |
+| **Q1.3** | Parse/print/lower **`Rel exists`** / **`not Rel exists`** | [`qe-q1-3-parse-exists.md`](qe-q1-3-parse-exists.md) | `[x]` | Postfix only |
+| **Q1.3b** | Parse/print/lower to-one **`Rel where` and-chain** | [`qe-q1-3b-parse-where-rebind.md`](qe-q1-3b-parse-where-rebind.md) | `[x]` | No forced parens |
+| **Q1.4** | Goldens: policies + assign RHS read + reject related LHS | [`qe-q1-4-nav-exists-goldens.md`](qe-q1-4-nav-exists-goldens.md) | `[x]` | evaluate / simulate / require |
+| **Q1.5** | JSON policy parity or documented split | [`qe-q1-5-json-policy-parity.md`](qe-q1-5-json-policy-parity.md) | `[x]` | Prefer document split if thin |
+| **Q1.6** | Guide examples + §3.1 read/write rule | [`qe-q1-6-guide-nav-exists-examples.md`](qe-q1-6-guide-nav-exists-examples.md) | `[x]` | Subject-first only |
 
 **Slice Q1′ exit:** `assignee exists`, `customer Tier is "VIP"`, `not certificate exists` green; `assign customer X to …` fail-loud.
 

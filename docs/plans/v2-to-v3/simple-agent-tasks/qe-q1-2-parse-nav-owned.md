@@ -22,10 +22,11 @@ Round-trip printer; lower via existing `RelationshipNavigation` / `OwnedAccess` 
 
 ## Required Reading
 
-- Q1.1 spec
+- Parent plan **§4.5** (formal spec) + **§10 Q1′′** (review follow-ups)
 - `PolyDslParser.cs` / `DomainDslPrinter.cs` / tokenizer
 - `DomainExpression.cs` + `DomainExpressionLoweringPass.cs`
 - AGENTS.md TUnit conventions
+- **Exists is Q1.3** — do not invent empty `RelationshipNavigation` targets
 
 ## Exact Steps
 

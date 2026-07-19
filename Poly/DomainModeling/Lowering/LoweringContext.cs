@@ -24,11 +24,18 @@ namespace Poly.DomainModeling.Lowering;
 /// execution. Used for C# code generation where transitions should be emitted
 /// as property writes. Defaults to false (runtime-compatible mode).
 /// </param>
+/// <param name="Domain">Optional domain reference for cross-entity type resolution.</param>
+/// <param name="StageEnumTypeName">
+/// Optional stage enum type name for stage transition lowering. Overrides the
+/// default <c>{EntityName}Stage</c> derivation — necessary for inherited entities
+/// where the stage enum is defined on the root ancestor.
+/// </param>
 public sealed record LoweringContext(
     Node Subject,
     IReadOnlyDictionary<string, Node>? Parameters = null,
     bool UseThisReference = false,
     HashSet<string>? ActionParameterNames = null,
     bool LowerStageTransitions = false,
-    Domain? Domain = null
+    Domain? Domain = null,
+    string? StageEnumTypeName = null
 );

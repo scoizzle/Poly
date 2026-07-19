@@ -21,6 +21,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     private readonly DomainExpressionLoweringPass _expressionPass;
     private readonly bool _useThisReference;
     private readonly bool _lowerStageTransitions;
+    private readonly string? _stageEnumTypeName;
 
     public EffectLoweringPass(Entity entity, Node subject)
         : this(entity, new LoweringContext(subject)) { }
@@ -30,6 +31,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         _domain = context.Domain;
         _useThisReference = context.UseThisReference;
         _lowerStageTransitions = context.LowerStageTransitions;
+        _stageEnumTypeName = context.StageEnumTypeName;
         _expressionPass = new DomainExpressionLoweringPass(context);
         Subject = context.UseThisReference && context.Subject is Parameter { Name: "entity" }
             ? new ThisReference()
@@ -75,7 +77,8 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
             }
         }
 
-        var stageEnumType = new NamedTypeReference($"{_entity.Name}Stage");
+        var stageEnumType = new NamedTypeReference(
+            _stageEnumTypeName ?? $"{_entity.Name}Stage");
         nodes.Add(new Assignment(
             new Member(Subject, "CurrentStage"),
             new Member(stageEnumType, t.TargetStage.StageName)

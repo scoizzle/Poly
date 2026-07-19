@@ -26,10 +26,11 @@ public sealed class DomainToCSharpExporter {
         ArgumentNullException.ThrowIfNull(domain);
         var domainRelationships = domain.Relationships.ToList();
         var entities = domain.Types.OfType<Entity>().ToList();
+        var entityLookup = entities.ToDictionary(e => e.Name, StringComparer.Ordinal);
         var result = new List<Syntactic.TypeDefinitionNode>();
 
         foreach (var entity in entities)
-            result.AddRange(BuildTypeDefsForEntity(entity, domainRelationships));
+            result.AddRange(BuildTypeDefsForEntity(entity, domainRelationships, entityLookup));
 
         return result;
     }
@@ -37,7 +38,9 @@ public sealed class DomainToCSharpExporter {
     // ── Per-entity builder ──────────────────────────────────────
 
     internal IReadOnlyList<Syntactic.TypeDefinitionNode> BuildTypeDefsForEntity(
-        Entity entity, IReadOnlyList<Relationship> domainRelationships) {
+        Entity entity,
+        IReadOnlyList<Relationship> domainRelationships,
+        IReadOnlyDictionary<string, Entity> entityLookup) {
 
         var typeDefs = new List<Syntactic.TypeDefinitionNode>();
         var props = new List<Syntactic.PropertyDefinitionNode>();
@@ -45,8 +48,51 @@ public sealed class DomainToCSharpExporter {
         var ctorParams = new List<Syntactic.Parameter>();
         var ctorAssignments = new List<Poly.Syntax.Node>();
 
-        // ── Entity properties (sorted for deterministic output) ──
-        foreach (var prop in entity.Properties.OrderBy(p => p.Name)) {
+        // ── Resolve inheritance: effective members + base type ─────
+        string? baseTypeName = null;
+        string stageEnumOwner;
+        var ownPropertyNames = new HashSet<string>(
+            entity.Properties.Select(p => p.Name), StringComparer.Ordinal);
+        var ownActionNames = new HashSet<string>(
+            entity.Actions.Select(a => a.Name), StringComparer.Ordinal);
+        var ownPolicyNames = new HashSet<string>(
+            entity.Policies.Select(p => p.Name), StringComparer.Ordinal);
+        var ownStageNames = new HashSet<string>(
+            entity.Stages.Select(s => s.Name), StringComparer.Ordinal);
+
+        var effectiveProperties = new List<Property>(entity.Properties);
+        var effectiveActions = new List<Poly.DomainModeling.Action>(entity.Actions);
+        var effectivePolicies = new List<Policy>(entity.Policies);
+        var effectiveStages = new List<Stage>(entity.Stages);
+
+        if (entity.ParentEntityName is not null
+            && entityLookup.TryGetValue(entity.ParentEntityName, out var parentEntity)) {
+            baseTypeName = parentEntity.Name;
+
+            foreach (var ancestor in WalkLineageRootToLeaf(parentEntity, entityLookup)) {
+                effectiveProperties = MergeByName(effectiveProperties, ancestor.Properties, p => p.Name);
+                effectiveActions = MergeByName(effectiveActions, ancestor.Actions, a => a.Name);
+                effectivePolicies = MergeByName(effectivePolicies, ancestor.Policies, p => p.Name);
+                effectiveStages = MergeByName(effectiveStages, ancestor.Stages, s => s.Name);
+            }
+        }
+
+        // Determine stage enum owner (root ancestor that defines stages)
+        stageEnumOwner = GetStageEnumOwner(entity, entityLookup);
+
+        // ── Common property: IsDeleted (always emitted) ────────────
+        props.Add(new Syntactic.PropertyDefinitionNode(
+            "IsDeleted",
+            new Syntactic.PrimitiveTypeReference(PrimType.Boolean),
+            Getter: new Syntactic.PropertyGetterDefinitionNode(),
+            Setter: new Syntactic.PropertySetterDefinitionNode(
+                AccessModifier: AccessModifier.Private)
+        ));
+
+        // ── Entity properties (own only for declaration, effective for ctor) ──
+        foreach (var prop in (baseTypeName is not null
+            ? entity.Properties.OrderBy(p => p.Name)
+            : effectiveProperties.OrderBy(p => p.Name))) {
             var propRef = MapDomainTypeRef(prop.Type);
             List<Poly.Syntax.Node>? constraints = null;
             if (prop.Constraints.Any(c => c is RequiredConstraint))
@@ -59,7 +105,11 @@ public sealed class DomainToCSharpExporter {
                     AccessModifier: AccessModifier.Protected),
                 Constraints: constraints
             ));
+        }
 
+        // ── Constructor params and assignments (ALL effective properties) ──
+        foreach (var prop in effectiveProperties.OrderBy(p => p.Name)) {
+            var propRef = MapDomainTypeRef(prop.Type);
             var paramName = ToCamelCase(prop.Name);
             ctorParams.Add(new Syntactic.Parameter(paramName, propRef));
             ctorAssignments.Add(new Syntactic.Assignment(
@@ -103,15 +153,18 @@ public sealed class DomainToCSharpExporter {
             ));
         }
 
-        // ── Actions as void methods (entity + stage-level) ─────
-        foreach (var action in entity.Actions)
-            AddActionMethod(entity, action, methods);
-        foreach (var stage in entity.Stages)
+        // ── Actions as void methods (own only for inheritance) ────
+        var stageEnumTypeName = $"{stageEnumOwner}Stage";
+        var actionsToEmit = baseTypeName is not null ? entity.Actions : effectiveActions;
+        foreach (var action in actionsToEmit)
+            AddActionMethod(entity, action, methods, stageEnumTypeName);
+        foreach (var stage in (baseTypeName is not null ? entity.Stages : effectiveStages))
             foreach (var action in stage.Actions)
-                AddActionMethod(entity, action, methods);
+                AddActionMethod(entity, action, methods, stageEnumTypeName);
 
-        // ── Policies as bool methods ───────────────────────────
-        foreach (var policy in entity.Policies) {
+        // ── Policies as bool methods (own only for inheritance) ───
+        var policiesToEmit = baseTypeName is not null ? entity.Policies : effectivePolicies;
+        foreach (var policy in policiesToEmit) {
             var body = LowerExpressionToMethodBody(policy.Expression, entity);
             methods.Add(new Syntactic.MethodDefinitionNode(
                 policy.Name,
@@ -121,24 +174,28 @@ public sealed class DomainToCSharpExporter {
             ));
         }
 
-        // ── Stage enum + CurrentStage field ────────────────────
-        if (entity.Stages.Count > 0) {
-            var stageEnumFields = new List<Syntactic.FieldDefinitionNode>();
-            for (int si = 0; si < entity.Stages.Count; si++) {
-                stageEnumFields.Add(new Syntactic.FieldDefinitionNode(
-                    entity.Stages[si].Name,
-                    new Syntactic.PrimitiveTypeReference(PrimType.Int32),
-                    DefaultValue: new Syntactic.Constant((long)si),
-                    AccessModifier: AccessModifier.Public
+        // ── Stage enum + CurrentStage property ────────────────────
+        if (effectiveStages.Count > 0) {
+            var enumOwner = GetStageEnumOwner(entity, entityLookup);
+            var enumTypeName = $"{enumOwner}Stage";
+
+            // Only emit the stage enum if this entity owns it
+            if (string.Equals(enumOwner, entity.Name, StringComparison.Ordinal)) {
+                var stageEnumFields = new List<Syntactic.FieldDefinitionNode>();
+                for (int si = 0; si < effectiveStages.Count; si++) {
+                    stageEnumFields.Add(new Syntactic.FieldDefinitionNode(
+                        effectiveStages[si].Name,
+                        new Syntactic.PrimitiveTypeReference(PrimType.Int32),
+                        DefaultValue: new Syntactic.Constant((long)si),
+                        AccessModifier: AccessModifier.Public
+                    ));
+                }
+                typeDefs.Add(new Syntactic.TypeDefinitionNode(
+                    enumTypeName,
+                    Fields: stageEnumFields,
+                    Semantics: Syntactic.TypeDefinitionSemantics.MutableReference
                 ));
             }
-            var enumTypeName = $"{entity.Name}Stage";
-
-            typeDefs.Add(new Syntactic.TypeDefinitionNode(
-                enumTypeName,
-                Fields: stageEnumFields,
-                Semantics: Syntactic.TypeDefinitionSemantics.MutableReference
-            ));
 
             props.Add(new Syntactic.PropertyDefinitionNode(
                 "CurrentStage",
@@ -149,24 +206,55 @@ public sealed class DomainToCSharpExporter {
             ));
         }
 
-        // ── Constructor ────────────────────────────────────────
+        // ── Constructor (with base() call for inheritance) ────────
         List<Syntactic.ConstructorDefinitionNode>? ctors = null;
-        if (ctorParams.Count > 0 || entity.Stages.Count > 0) {
-            var bodyNodes = new List<Poly.Syntax.Node>();
-            foreach (var assign in ctorAssignments)
-                bodyNodes.Add(assign);
+        if (ctorParams.Count > 0 || effectiveStages.Count > 0) {
+            List<Node>? baseCallArgs = null;
+            List<Poly.Syntax.Node> bodyNodes;
 
-            if (entity.Stages.Count > 0) {
-                bodyNodes.Add(new Syntactic.Assignment(
-                    new Syntactic.Member(new Syntactic.ThisReference(), "CurrentStage"),
-                    new Syntactic.Member(
-                        new Syntactic.NamedTypeReference($"{entity.Name}Stage"),
-                        entity.Stages[0].Name)));
+            if (baseTypeName is not null) {
+                baseCallArgs = new List<Node>();
+                var ownAssignments = new List<Poly.Syntax.Node>();
+
+                foreach (var assign in ctorAssignments) {
+                    if (assign is Syntactic.Assignment a
+                        && a.Destination is Syntactic.Member m
+                        && ownPropertyNames.Contains(m.MemberName)) {
+                        ownAssignments.Add(assign);
+                    }
+                    else if (assign is Syntactic.Assignment a2) {
+                        baseCallArgs.Add(a2.Value ?? new Syntactic.Constant(null));
+                    }
+                }
+
+                bodyNodes = new List<Poly.Syntax.Node>();
+                bodyNodes.AddRange(ownAssignments);
+
+                if (effectiveStages.Count > 0) {
+                    bodyNodes.Add(new Syntactic.Assignment(
+                        new Syntactic.Member(new Syntactic.ThisReference(), "CurrentStage"),
+                        new Syntactic.Member(
+                            new Syntactic.NamedTypeReference($"{stageEnumOwner}Stage"),
+                            effectiveStages[0].Name)));
+                }
+            }
+            else {
+                bodyNodes = new List<Poly.Syntax.Node>();
+                bodyNodes.AddRange(ctorAssignments);
+
+                if (effectiveStages.Count > 0) {
+                    bodyNodes.Add(new Syntactic.Assignment(
+                        new Syntactic.Member(new Syntactic.ThisReference(), "CurrentStage"),
+                        new Syntactic.Member(
+                            new Syntactic.NamedTypeReference($"{stageEnumOwner}Stage"),
+                            effectiveStages[0].Name)));
+                }
             }
 
             ctors = [new Syntactic.ConstructorDefinitionNode(
                 Parameters: ctorParams,
-                Body: new Syntactic.Block(bodyNodes),
+                Body: bodyNodes.Count > 0 ? new Syntactic.Block(bodyNodes) : null,
+                BaseCall: baseCallArgs?.Count > 0 ? baseCallArgs : null,
                 AccessModifier: AccessModifier.Public
             )];
         }
@@ -176,19 +264,75 @@ public sealed class DomainToCSharpExporter {
             Constructors: ctors,
             Properties: props.Count > 0 ? props : null,
             Methods: methods.Count > 0 ? methods : null,
+            BaseType: baseTypeName is not null
+                ? new Syntactic.NamedTypeReference(baseTypeName)
+                : null,
             Semantics: Syntactic.TypeDefinitionSemantics.MutableReference
         ));
 
         return typeDefs;
     }
 
+    /// <summary>
+    /// Determines which entity "owns" the stage enum. For inherited entities,
+    /// the root ancestor's stages are canonical; the child reuses that enum.
+    /// </summary>
+    private static string GetStageEnumOwner(
+        Entity entity, IReadOnlyDictionary<string, Entity> entityLookup) {
+        var current = entity;
+        while (current.ParentEntityName is not null
+               && entityLookup.TryGetValue(current.ParentEntityName, out var parent)) {
+            current = parent;
+        }
+        return current.Name;
+    }
+
+    /// <summary>
+    /// Walks the entity lineage from root (topmost ancestor) to leaf (<paramref name="entity"/>).
+    /// </summary>
+    private static IEnumerable<Entity> WalkLineageRootToLeaf(
+        Entity entity, IReadOnlyDictionary<string, Entity> lookup) {
+        var chain = new List<Entity>();
+        var visited = new HashSet<string>(StringComparer.Ordinal);
+        Entity? current = entity;
+
+        while (current is not null) {
+            if (!visited.Add(current.Name)) break;
+            chain.Add(current);
+            current = current.ParentEntityName is not null
+                      && lookup.TryGetValue(current.ParentEntityName, out var parent)
+                ? parent : null;
+        }
+
+        chain.Reverse();
+        return chain;
+    }
+
+    /// <summary>
+    /// Merges <paramref name="newItems"/> into <paramref name="existing"/> by name.
+    /// Existing (child) wins on conflict.
+    /// </summary>
+    private static List<T> MergeByName<T>(
+        List<T> existing, IReadOnlyList<T> newItems,
+        Func<T, string> nameSelector) {
+        var merged = new Dictionary<string, T>(StringComparer.Ordinal);
+        foreach (var item in existing)
+            merged[nameSelector(item)] = item;
+        foreach (var item in newItems) {
+            var name = nameSelector(item);
+            if (!merged.ContainsKey(name))
+                merged[name] = item;
+        }
+        return merged.Values.ToList();
+    }
+
     // ── Action method builder ───────────────────────────────────
 
     private static void AddActionMethod(Entity entity, Poly.DomainModeling.Action action,
-        List<Syntactic.MethodDefinitionNode> methods) {
+        List<Syntactic.MethodDefinitionNode> methods, string? stageEnumTypeName = null) {
         var paramNames = new HashSet<string>(
             action.Parameters.Select(p => p.Name), StringComparer.Ordinal);
-        var body = LowerActionToMethodBody(entity, action, paramNames);
+        var body = LowerActionToMethodBody(entity, action, paramNames, stageEnumTypeName);
         methods.Add(new Syntactic.MethodDefinitionNode(
             action.Name,
             new Syntactic.TypeReference("void"),
@@ -204,13 +348,14 @@ public sealed class DomainToCSharpExporter {
 
     internal static Poly.Syntax.Node? LowerActionToMethodBody(
         Entity entity, Poly.DomainModeling.Action action,
-        HashSet<string>? paramNames = null) {
+        HashSet<string>? paramNames = null, string? stageEnumTypeName = null) {
         if (action.Effects.Count == 0) return null;
         var context = new LoweringContext(
             new Syntactic.Parameter("entity", new Syntactic.TypeReference(entity.Name)),
             UseThisReference: true,
             ActionParameterNames: paramNames,
-            LowerStageTransitions: true
+            LowerStageTransitions: true,
+            StageEnumTypeName: stageEnumTypeName
         );
         var effectPass = new EffectLoweringPass(entity, context);
         var composite = new CompositeEffect(action.Effects);

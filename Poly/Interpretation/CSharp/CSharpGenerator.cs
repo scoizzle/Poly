@@ -544,6 +544,17 @@ public sealed class CSharpGenerator {
             WriteParameterDeclarations(sb, ctor.Parameters);
         }
         sb.Append(')');
+
+        // Emit : base(args) when applicable
+        if (ctor.BaseCall is { Count: > 0 }) {
+            sb.Append(" : base(");
+            for (int i = 0; i < ctor.BaseCall.Count; i++) {
+                if (i > 0) sb.Append(", ");
+                WriteExpression(sb, ctor.BaseCall[i]);
+            }
+            sb.Append(')');
+        }
+
         if (ctor.Body != null) {
             sb.AppendLine();
             WriteStatement(sb, ctor.Body, indent);

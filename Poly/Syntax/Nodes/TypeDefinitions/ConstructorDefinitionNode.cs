@@ -5,9 +5,11 @@ namespace Poly.Syntax.Nodes;
 /// </summary>
 /// <param name="Parameters">The constructor parameters.</param>
 /// <param name="Body">Optional constructor body as an AST node.</param>
+/// <param name="BaseCall">Optional base constructor arguments for inheritance chains.</param>
 public sealed record ConstructorDefinitionNode(
     IReadOnlyList<Parameter>? Parameters = null,
     Node? Body = null,
+    IReadOnlyList<Node>? BaseCall = null,
     AccessModifier AccessModifier = AccessModifier.Public
 ) : Node {
 
@@ -16,6 +18,8 @@ public sealed record ConstructorDefinitionNode(
             if (Parameters != null)
                 foreach (var parameter in Parameters) yield return parameter;
             yield return Body;
+            if (BaseCall != null)
+                foreach (var arg in BaseCall) yield return arg;
         }
     }
 

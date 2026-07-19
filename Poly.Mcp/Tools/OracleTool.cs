@@ -226,6 +226,125 @@ internal sealed class OracleTool {
         return pass.Lower(expr, new Syntactic.Parameter("entity"));
     }
 
+    // ── V0.6: export_domain_to_csharp ────────────────────────────
+
+    [McpServerTool(Name = "export_domain_to_csharp"), Description("Generates C# source code for an entire domain session as a set of record/class definitions. Each entity becomes a C# record with its properties, navigation properties (as collections for many, references for one), stages as enums or additional state, and actions as methods with their lowered effects as the method body. Useful for inspecting how a domain model maps to C#.")]
+    public static DomainToolResponse ExportDomainToCSharp(
+        [Description("Session ID")] string sessionId) {
+        if (!McpSessionStore.TryGet(sessionId, out var state))
+            return new DomainToolResponse(Success: false, Message: $"Session '{sessionId}' not found.", Affordances: ["create_domain_session", "list_sessions"]);
+
+        try {
+            var typeDefs = new List<Syntactic.TypeDefinitionNode>();
+            var entities = state.Domain.Types.OfType<Entity>();
+
+            foreach (var entity in entities) {
+                var props = new List<Syntactic.PropertyDefinitionNode>();
+                var methods = new List<Syntactic.MethodDefinitionNode>();
+                var fields = new List<Syntactic.FieldDefinitionNode>();
+
+                // Properties from entity property declarations
+                foreach (var prop in entity.Properties) {
+                    props.Add(new Syntactic.PropertyDefinitionNode(
+                        prop.Name,
+                        MapDomainTypeRef(prop.Type),
+                        Getter: new Syntactic.PropertyGetterDefinitionNode(),
+                        Setter: new Syntactic.PropertySetterDefinitionNode()
+                    ));
+                }
+
+                // Navigation properties from relationships where this entity is source
+                foreach (var rel in state.Domain.Relationships) {
+                    if (!string.Equals(rel.Source.TypeName, entity.Name, StringComparison.Ordinal))
+                        continue;
+
+                    var isMany = rel.Cardinality is RelationshipCardinality.OneToMany
+                                 or RelationshipCardinality.ManyToMany;
+                    var targetType = new Syntactic.NamedTypeReference(rel.Target.TypeName);
+                    var propType = isMany
+                        ? (Poly.Syntax.Node)new Syntactic.CollectionTypeReference(targetType)
+                        : targetType;
+
+                    props.Add(new Syntactic.PropertyDefinitionNode(
+                        rel.Name,
+                        propType,
+                        Getter: new Syntactic.PropertyGetterDefinitionNode(),
+                        Setter: new Syntactic.PropertySetterDefinitionNode()
+                    ));
+                }
+
+                // Actions as methods with lowered effect bodies
+                foreach (var action in entity.Actions) {
+                    var body = LowerActionToMethodBody(entity, action);
+                    methods.Add(new Syntactic.MethodDefinitionNode(
+                        action.Name,
+                        new Syntactic.TypeReference("void"),
+                        Parameters: action.Parameters.Select(p => new Syntactic.Parameter(p.Name, MapDomainTypeRef(p.Type))).ToList(),
+                        Body: body,
+                        AccessModifier: Poly.Introspection.AccessModifier.Public
+                    ));
+                }
+
+                // Stages as an enum field storing current stage name
+                if (entity.Stages.Count > 0) {
+                    fields.Add(new Syntactic.FieldDefinitionNode(
+                        "CurrentStage",
+                        new Syntactic.PrimitiveTypeReference(Poly.Introspection.PrimitiveType.String),
+                        AccessModifier: Poly.Introspection.AccessModifier.Public
+                    ));
+                }
+
+                typeDefs.Add(new Syntactic.TypeDefinitionNode(
+                    entity.Name,
+                    Properties: props.Count > 0 ? props : null,
+                    Methods: methods.Count > 0 ? methods : null,
+                    Fields: fields.Count > 0 ? fields : null,
+                    Semantics: Syntactic.TypeDefinitionSemantics.MutableReference
+                ));
+            }
+
+            var generator = new CSharpGenerator();
+            var csharp = generator.Generate(typeDefs);
+            return new DomainToolResponse(Success: true, Message: $"Domain exported to C#: {typeDefs.Count} types.", SessionId: sessionId, Data: new { csharp, typeCount = typeDefs.Count }, Affordances: ["get_domain_overview", "get_entity_detail", "apply_dsl"]);
+        }
+        catch (Exception ex) {
+            return new DomainToolResponse(Success: false, Message: $"Domain-to-C# export failed: {ex.Message}", SessionId: sessionId, Data: new { error = ex.Message }, Affordances: []);
+        }
+    }
+
+    /// <summary>
+    /// Lower an action's effects to a Syntax AST Block suitable as a method body.
+    /// Wraps all effects in a CompositeEffect so the full action compiles to a Block.
+    /// </summary>
+    private static Poly.Syntax.Node? LowerActionToMethodBody(Entity entity, Poly.DomainModeling.Action action) {
+        if (action.Effects.Count == 0) return null;
+        var subject = new Syntactic.Parameter("entity", new Syntactic.TypeReference(entity.Name));
+        var effectPass = new EffectLoweringPass(entity, subject);
+        var composite = new CompositeEffect(action.Effects);
+        return effectPass.TryLowerVmNode(composite);
+    }
+
+    /// <summary>
+    /// Maps a <see cref="DomainTypeReference"/> to a Syntax AST type node,
+    /// matching the mapping in <see cref="DomainEntityInstance"/>.
+    /// </summary>
+    private static Poly.Syntax.Node MapDomainTypeRef(DomainTypeReference domainType) {
+        var typeName = domainType.TypeName;
+        return typeName switch {
+            "Text" => new Syntactic.PrimitiveTypeReference(Poly.Introspection.PrimitiveType.String),
+            "Number" or "Int" => new Syntactic.PrimitiveTypeReference(Poly.Introspection.PrimitiveType.Int64),
+            "Boolean" or "Bool" => new Syntactic.PrimitiveTypeReference(Poly.Introspection.PrimitiveType.Boolean),
+            "DateTime" or "Timestamp" => new Syntactic.PrimitiveTypeReference(Poly.Introspection.PrimitiveType.DateTime),
+            "Date" or "DateOnly" => new Syntactic.PrimitiveTypeReference(Poly.Introspection.PrimitiveType.DateOnly),
+            "Time" or "TimeOnly" => new Syntactic.PrimitiveTypeReference(Poly.Introspection.PrimitiveType.TimeOnly),
+            "Duration" or "TimeSpan" => new Syntactic.PrimitiveTypeReference(Poly.Introspection.PrimitiveType.TimeSpan),
+            "Uuid" or "Guid" => new Syntactic.PrimitiveTypeReference(Poly.Introspection.PrimitiveType.Guid),
+            "Decimal" => new Syntactic.PrimitiveTypeReference(Poly.Introspection.PrimitiveType.Decimal),
+            "Float" or "Double" => new Syntactic.PrimitiveTypeReference(Poly.Introspection.PrimitiveType.Float64),
+            _ => new Syntactic.NamedTypeReference(typeName)
+        };
+    }
+
     // ── DTO types ───────────────────────────────────────────────
 
     internal sealed record LoweredNodeData(

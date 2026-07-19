@@ -61,7 +61,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
             if (lowered is not null)
                 nodes.Add(lowered);
             else
-                nodes.Add(new Comment($"Cannot lower: {sub.GetType().Name}"));
+                nodes.Add(new Comment(DescribeEffect(sub)));
         }
         return new Block(nodes);
     }
@@ -69,20 +69,32 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     protected override Node? Conditional(ConditionalEffect c) {
         var condition = _expressionPass.Lower(c.Condition, Subject);
         var thenNodes = new List<Node>();
-        foreach (var sub in c.ThenEffects) {
-            var lowered = Route(sub);
-            thenNodes.Add(lowered ?? new Comment($"Cannot lower: {sub.GetType().Name}"));
-        }
+        foreach (var sub in c.ThenEffects)
+            thenNodes.Add(Route(sub) ?? new Comment(DescribeEffect(sub)));
 
         if (c.ElseEffects is not { Count: > 0 })
             return new IfStatement(condition, new Block(thenNodes));
 
         var elseNodes = new List<Node>();
-        foreach (var sub in c.ElseEffects) {
-            var lowered = Route(sub);
-            elseNodes.Add(lowered ?? new Comment($"Cannot lower: {sub.GetType().Name}"));
-        }
+        foreach (var sub in c.ElseEffects)
+            elseNodes.Add(Route(sub) ?? new Comment(DescribeEffect(sub)));
 
         return new IfStatement(condition, new Block(thenNodes), new Block(elseNodes));
     }
+
+    /// <summary>
+    /// Returns a human-readable description of why <paramref name="effect"/>
+    /// cannot be lowered, including effect-specific detail like action names.
+    /// </summary>
+    private static string DescribeEffect(Effect effect) => effect switch {
+        InvokeActionEffect i => $"Cannot lower: invoke {i.ActionName} (InvokeActionEffect)",
+        StageTransitionEffect s => $"Cannot lower: transition to {s.TargetStage.StageName} (StageTransitionEffect)",
+        CreateEntityInstance cei => $"Cannot lower: create {cei.Type.TypeName} (CreateEntityInstance)",
+        DeleteEntityInstance => $"Cannot lower: delete (DeleteEntityInstance)",
+        LinkRelationshipEffect l => $"Cannot lower: link {l.RelationshipName} (LinkRelationshipEffect)",
+        UnlinkRelationshipEffect u => $"Cannot lower: unlink {u.RelationshipName} (UnlinkRelationshipEffect)",
+        TransitionRelationshipEffect tre => $"Cannot lower: transition {tre.RelationshipName} to {tre.TargetStage.StageName} (TransitionRelationshipEffect)",
+        CreateEntityInRelationshipEffect cr => $"Cannot lower: create in {cr.RelationshipName} (CreateEntityInRelationshipEffect)",
+        _ => $"Cannot lower: {effect.GetType().Name}"
+    };
 }

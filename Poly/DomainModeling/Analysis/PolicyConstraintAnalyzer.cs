@@ -209,8 +209,9 @@ internal sealed class PolicyConstraintAnalyzer : INodeAnalyzer {
 
     /// <summary>
     /// Validates that a RelationshipNavigation in a policy expression does not
-    /// reference a 'many' cardinality relationship. Path-prefix on 'many' is
-    /// invalid — collection quantifiers (Q3′) must be used instead.
+    /// reference a 'many' cardinality relationship, that the relationship name
+    /// is known to the entity, and that body property references are valid
+    /// against the target entity type.
     /// </summary>
     private static void ValidateRelationshipCardinality(
         AnalysisContext context,
@@ -226,10 +227,25 @@ internal sealed class PolicyConstraintAnalyzer : INodeAnalyzer {
             string.Equals(r.Name, rn.RelationshipName, StringComparison.Ordinal) &&
             string.Equals(r.Source.TypeName, entity.Name, StringComparison.Ordinal));
 
+        // Q1'''''.3: Report error for unknown relationship name
         if (relationship is null) {
-            // Relationship not found or not from this entity — could be a
-            // navigation from another entity or an unknown name.
-            // Let existing analyzers handle that case.
+            // Check if relationship exists but from the target side (wrong direction)
+            var reverseRel = domain.Relationships.FirstOrDefault(r =>
+                string.Equals(r.Name, rn.RelationshipName, StringComparison.Ordinal));
+            if (reverseRel is not null) {
+                context.ReportError(rn,
+                    $"Relationship '{rn.RelationshipName}' exists but the source is " +
+                    $"'{reverseRel.Source.TypeName}', not '{entity.Name}'. " +
+                    "Path-prefix expressions must be on the source entity of the relationship.",
+                    DomainModelDiagnosticCodes.SemanticReferenceResolution);
+            }
+            else {
+                context.ReportError(rn,
+                    $"Relationship name '{rn.RelationshipName}' is not defined on entity " +
+                    $"'{entity.Name}'. Declare a navigation property (e.g. '{rn.RelationshipName}: TargetEntity') " +
+                    "on this entity first.",
+                    DomainModelDiagnosticCodes.SemanticReferenceResolution);
+            }
             return;
         }
 
@@ -243,6 +259,63 @@ internal sealed class PolicyConstraintAnalyzer : INodeAnalyzer {
                 "Bare path-prefix on a 'many' relationship is invalid. Use a collection " +
                 "quantifier instead (e.g. 'any Rel where ...' — planned in Q3′).",
                 DomainModelDiagnosticCodes.RelationshipNavigationCardinality);
+            return;
+        }
+
+        // Q1'''''.4: Validate body property references against the target entity
+        ValidateRelatedBodyProperties(context, lookup, rn, relationship);
+    }
+
+    /// <summary>
+    /// Validates that the TargetProperty of a RelationshipNavigation references
+    /// valid properties on the target entity type.
+    /// </summary>
+    private static void ValidateRelatedBodyProperties(
+        AnalysisContext context,
+        DomainTypeLookupMetadata lookup,
+        RelationshipNavigation rn,
+        Relationship relationship) {
+        // Resolve target entity
+        if (!lookup.Types.TryGetValue(relationship.Target.TypeName, out var targetType)
+            || targetType is not Entity targetEntity)
+            return;
+
+        // Build property map for target entity
+        var targetPropMap = BuildPropertyMap(targetEntity, lookup);
+
+        // Walk the body expression tree and validate PropertyAccess against target entity
+        ValidateRelatedPropertyAccess(context, rn.TargetProperty, targetEntity, targetPropMap);
+    }
+
+    /// <summary>
+    /// Recursively validates PropertyAccess nodes in the body expression against
+    /// the target entity's property map. Skips nested RelationshipNavigation
+    /// (those would be validated separately).
+    /// </summary>
+    private static void ValidateRelatedPropertyAccess(
+        AnalysisContext context,
+        DomainExpression expr,
+        Entity targetEntity,
+        Dictionary<string, Property> targetPropMap) {
+        switch (expr) {
+            case PropertyAccess pa:
+                if (!targetPropMap.ContainsKey(pa.Name)) {
+                    context.ReportError(expr,
+                        $"Path-prefix body references property '{pa.Name}' which does not exist " +
+                        $"on target entity '{targetEntity.Name}'.",
+                        DomainModelDiagnosticCodes.SemanticReferenceResolution);
+                }
+                return;
+            case RelationshipNavigation:
+                // Nested navigation — skip (validated separately)
+                return;
+            case ParameterAccess:
+                return;
+        }
+
+        // Recurse into children
+        foreach (var child in expr.Children.OfType<DomainExpression>()) {
+            ValidateRelatedPropertyAccess(context, child, targetEntity, targetPropMap);
         }
     }
 

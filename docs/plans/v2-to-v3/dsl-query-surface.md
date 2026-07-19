@@ -3,7 +3,7 @@
 **Date:** 2026-07-18  
 **Revised:** 2026-07-18 — **surface direction frozen** (§3.1 + §4.0): subject-first path-prefix, postfix `exists`, `where` without forced parens, anti-dot; **cross-entity reads legal / writes banned**  
 **Status:** Active — **parallel to** [`effect-surface-completeness.md`](effect-surface-completeness.md); **before** customer ship confidence  
-**Current pick:** **Authoring-only claim established, DMREL001 analysis shipped** — nested where hygiene then Q3′ by pain — see **§12**
+**Current pick:** **§13** after Q1′′′′ ship `76568a3` (suite **1381**) — guide authoring-only claim; nested where; unknown-rel; optional RT eval — see **§13**
 **Micro-tasks:** [`simple-agent-tasks/qe-README.md`](simple-agent-tasks/qe-README.md)  
 **Related:** DomainExpression IR · `PolyDslParser` expression grammar · JSON policy parser · effect-surface plan · product guide · formal spec **§4.5**
 
@@ -452,7 +452,7 @@ Legend: **✅** shipped · **🟡** partial · **❌** missing · **🚫** non-g
 | `Or` | ✅ `or` | — | ✅ `{"or":[...]}` | ✅ `Or` | ✅ | n-ary, folded left |
 | `Not` | ✅ `not` prefix | — | ✅ `{"not":{...}}` | ✅ `Not` | ✅ | Unary |
 | `Literal` | ✅ numbers, strings, `true`, `false`, `null` | — | ✅ `{"literal":V}` | ✅ `Constant` | ✅ | |
-| `RelationshipNavigation` | ✅ path-prefix / `where` | — | ❌ | ✅ | 🟡 **authoring green**; **VM/store eval open** (§12) | Subject-first |
+| `RelationshipNavigation` | ✅ path-prefix / `where` | — | ❌ | ✅ | 🟡 **authoring green**; **DMREL001** on many; **VM/store eval pull** (§13) | Subject-first |
 | `OwnedAccess` | 🟡 path-prefix print | path-prefix | ❌ | ✅ | 🟡 | Printer anti-dot (`3c99221`) |
 | `Exists` | ✅ `Rel exists` | — | ❌ | ✅ | 🟡 | `Exists(PropertyAccess)` |
 | `NotExists` | 🟡 surface `not Rel exists` → **`Not(Exists)`** | optional `NotExists` IR | ❌ | ✅ | 🟡 | Guide honest (`3c99221`) |
@@ -709,10 +709,12 @@ Customer ship confidence: **kernel effects + Q1′ + (Q3′ or honest “no coll
 - [x] E2.1 create-in-only — effect plan decision log  
 - [x] Q1′ parse/print/round-trip green (`959c6e7`, suite **1373**)  
 - [x] Q1′ apply/export + assign goldens (`3c99221`, suite **1381**)  
-- [ ] Q1′ **true evaluate/RT** true/false + soft-miss — §12 **Q1′′′′.1**  
-- [ ] many+property **analysis rejects** (or guide without “will reject”) — §12 **Q1′′′′.2**  
+- [x] Product claim **narrowed to authoring** (tests renamed; see §13 for guide gap)  
+- [x] many+property **DMREL001** analysis rejects (`76568a3`)  
+- [ ] Guide explicitly states **authoring-only** (related policies not RT-evaluated yet) — §13  
 - [ ] Nested `where` ban or documented allow  
 - [ ] Q3′ any/all **or** explicit non-goal “no collection quantifiers in v1”  
+- [ ] Optional: true RT/eval true-false + soft-miss (still open product path)  
 - [x] JSON policy parity plan (documented DSL-only split)  
 - [x] No full C# LINQ; no I/O in expressions (for Q1′ surface)  
 
@@ -720,20 +722,19 @@ Customer ship confidence: **kernel effects + Q1′ + (Q3′ or honest “no coll
 
 ## 8. Agent pick
 
-**Micro-tasks:** [`simple-agent-tasks/qe-README.md`](simple-agent-tasks/qe-README.md) · **§12**.
+**Micro-tasks:** [`simple-agent-tasks/qe-README.md`](simple-agent-tasks/qe-README.md) · **§13**.
 
 ```text
-DONE:    Q1′ authoring; Q1′′′ partial (assign/export/owned) `3c99221` suite 1381
-CURRENT: §12 Q1′′′′.2 then .1 — many+property analysis honesty; true RT/eval or authoring-only claim
-THEN:    nested where; test hygiene
-THEN:    Q3′ by pain OR non-goal
+DONE:    Q1′ authoring; DMREL001 many+property; authoring-only test honesty (`76568a3`, suite 1381)
+CURRENT: §13 Q1''''' — guide authoring-only sentence; nested where; DMREL001 code assert; unknown-rel
+THEN:    Q3′ by pain OR non-goal; optional RT eval pipeline
 PULL:    C# method chains; product dots; cross-entity assign; link DSL; L*
 ```
 
 **Implementer watch-outs**
 
-- **Do not market evaluable related policies** until §12 Q1′′′′.1 green or claim narrowed.  
-- **Do not claim analysis rejects many+property** until analyzer does (§12 Q1′′′′.2).  
+- Related reads are **authorable**; **do not claim RT evaluation** until store/VM path is green.  
+- **DMREL001** rejects path-prefix on source-side `many` / `ManyToMany`.  
 - Cross-entity reads OK; writes banned.
 
 ---
@@ -759,6 +760,8 @@ PULL:    C# method chains; product dots; cross-entity assign; link DSL; L*
 | 2026-07-18 | **Q1′′′ post-ship review** | §11 — original residual list |
 | 2026-07-18 | **Q1′′′ residual ship** | `3c99221` suite 1381 — assign/export/owned; eval partial |
 | 2026-07-18 | **Q1′′′′ review** | §12 — reopen .1/.2 honesty; do not jump to Q3′ |
+| 2026-07-18 | **Q1′′′′ ship** | `76568a3` — DMREL001; authoring-only tests; suite 1381 |
+| 2026-07-18 | **Q1''''' review** | §13 — guide authoring-only; nested where; unknown-rel; body validation |
 
 ---
 
@@ -895,14 +898,60 @@ PULL:    C# method chains; product dots; cross-entity assign; link DSL; L*
 
 ### Follow-up checklist (write-back)
 
-- [x] **Q1′′′′.1** Narrowed product claim to authoring-only — tests renamed, comments honest about VM eval gap  
-- [x] **Q1′′′′.2** Analysis **shipped**: `PolicyConstraintAnalyzer` now checks `RelationshipNavigation` cardinality and reports `DMREL001` error for path-prefix on `many`  
-- [ ] **Q1′′′′.3** Related `exists` golden on real nav — requires N1 nav to also create properties (separate enhancement)  
-- [x] **Q1′′′′.4** Plan/roadmap agent pick honesty (this review)  
-- [ ] **Q1′′′′.5** Nested where (carry Q1′′′.5)  
-- [ ] **Q1′′′′.6** Dead code cleanup  
-- [x] **Q1′′′′.7** Guide owned.prop → path-prefix spelling  
-- [ ] **Q1′′′′.8** Test placement  
-- [ ] **Q1′′′′.9** Eval pipeline spike if blocked  
+- [x] **Q1′′′′.1** Tests renamed authoring-only (`76568a3`) — **guide still weak** → §13 Q1'''''.1  
+- [x] **Q1′′′′.2** **DMREL001** shipped + apply_dsl golden  
+- [ ] **Q1′′′′.3** Related `exists` on real nav — §13  
+- [x] **Q1′′′′.4** Plan pick (superseded by §13)  
+- [ ] **Q1′′′′.5** Nested where — §13  
+- [ ] **Q1′′′′.6** Dead code — §13  
+- [x] **Q1′′′′.7** Guide `owned Prop`  
+- [ ] **Q1′′′′.8** Test placement — §13  
+- [ ] **Q1′′′′.9** Eval pipeline spike — §13  
 
-**Next:** Q1′′′′.5 nested where; then Q3′ by pain or honest non-goal.
+**Superseded next:** see **§13**.
+
+---
+
+## 13. Plan review — Q1′′′′ ship (`76568a3`, suite **1381**)
+
+**Scope:** `PolicyConstraintAnalyzer.ValidateRelationshipCardinality` + `DMREL001`; McpSmokeTests renames + many-analysis golden; guide owned spelling; plan checklists.  
+**Verdict:** **Accepted for many+property analysis.** Authoring-only is honest in **tests** but still **under-documented in the product guide**. Do not open Q3′ until nested-where policy is deliberate; optional RT eval remains a separate product decision.
+
+### Solid
+
+| Item | Notes |
+|------|--------|
+| **DMREL001** | `OneToMany` / `ManyToMany` path-prefix → analysis error with Q3′ hint |
+| Apply golden | `orders Status is "Open"` on many → `apply_dsl` fails; message mentions orders/many |
+| Exists on many | Still `Exists(PropertyAccess)` — not RelationshipNavigation — so `orders exists` not blocked by DMREL001 (matches §4.5.0) |
+| Test renames | Dropped false `Eval_*_True` names; comments state authoring-only |
+| Owned guide | `owned Prop` anti-dot spelling |
+
+### Findings → follow-up tasks
+
+| ID | Sev | Finding | Fix |
+|----|-----|---------|-----|
+| **Q1'''''.1** | **Med** | Guide § Subject-First Related Reads does **not** say related policies are **authoring-only** / not RT-evaluated. Agents still read it as full product evaluate path. | One clear guide sentence + optional “Not yet: RT evaluate related” under rules |
+| **Q1'''''.2** | **Med** | Nested `where` / nested related forms in body still parse; no ban/test | Ban nested `where` + test **or** document allowed |
+| **Q1'''''.3** | **Med** | Unknown / non-source relationship name: `ValidateRelationshipCardinality` **returns without error** — no “unknown nav” diagnostic | Report error when rel not found on entity (or document deferral) |
+| **Q1'''''.4** | **Med** | Path-prefix **body** properties not validated against **target** entity (early return after cardinality check) — `customer Bogus is "x"` may not fail analysis | Validate TargetProperty against related entity type |
+| **Q1'''''.5** | Low | Many+property test asserts message substrings, not code **`DMREL001`** | Assert diagnostic code in evolution/analysis result if surface exposes it |
+| **Q1'''''.6** | Low | Dead unused poly in `Parser_PathPrefix_RelBoolProp_*` still present | Delete |
+| **Q1'''''.7** | Low | Gaps table still lists Owned as **Pull** while path-prefix ships for nav names; DSL never emits `OwnedAccess` (always `RelationshipNavigation`) | Align owned story: path-prefix via RelationshipNav **or** parse owned as OwnedAccess |
+| **Q1'''''.8** | Low | Tests still in McpSmokeTests | Move DomainModeling parser/analysis tests under DomainModeling |
+| **Q1'''''.9** | Pull | True RT/eval true-false + soft-miss | Separate product slice when store/VM path ready |
+| **Q1'''''.10** | Info | Roadmap line still said “until Q1′′′′.1 green” while .1 closed as authoring-only — fixed this review | — |
+
+### Follow-up checklist (write-back)
+
+- [x] **Q1'''''.1** Guide: explicit **authoring-only** (no RT evaluate claim for related policies yet)  
+- [x] **Q1'''''.2** Nested `where` ban + test  
+- [x] **Q1'''''.3** Unknown relationship name fail-loud + reverse-direction diagnostic in analysis  
+- [x] **Q1'''''.4** Validate path-prefix body props against **related** entity (TargetField now fails)  
+- [ ] **Q1'''''.5** Assert `DMREL001` code in golden (deferred — ApplyDsl response doesn't surface diagnostic codes directly)  
+- [ ] **Q1'''''.6** Dead code cleanup  
+- [ ] **Q1'''''.7** OwnedAccess vs RelationshipNavigation product story  
+- [ ] **Q1'''''.8** Test placement hygiene  
+- [ ] **Q1'''''.9** Optional RT eval slice (pull)  
+
+**Slice exit:** Authoring honesty, nested-where ban, unknown-rel + body validation shipped. Remaining Q1'''''.5–.8 are low-priority hygiene.

@@ -39,6 +39,9 @@ public sealed class PolyDslParser {
     // Relationship names from N1 nav lines, for duplicate detection
     private readonly HashSet<string> _relationshipNames = new(StringComparer.Ordinal);
 
+    // Q1′′′.5 / Q1'''''.2: Prevents recursive `Rel where ...` parsing inside a where body.
+    private bool _inWhereBody;
+
     private readonly record struct PendingRequire(
         string ActionName,
         string? StageName,
@@ -692,10 +695,19 @@ public sealed class PolyDslParser {
         }
 
         // RelName where and_expr (to-one multi-predicate)
+        // Q1'''''.2: Nested `where` is rejected to avoid ambiguous binding.
         if (string.Equals(next, "where", StringComparison.OrdinalIgnoreCase)) {
+            if (_inWhereBody)
+                throw Error("Nested 'where' is not allowed. Use parentheses for grouped conditions instead.");
             Advance(); // consume 'where'
-            var body = ParseAnd();
-            return DomainExpression.RelationshipNav(relName, body);
+            _inWhereBody = true;
+            try {
+                var body = ParseAnd();
+                return DomainExpression.RelationshipNav(relName, body);
+            }
+            finally {
+                _inWhereBody = false;
+            }
         }
 
         // RelName PropName — consume the property name

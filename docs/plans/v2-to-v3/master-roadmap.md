@@ -3,7 +3,7 @@
 **Status:** Active (milestones index)  
 **Last Updated:** 2026-07-18  
 **Purpose:** High-level milestone status only.  
-**Day-to-day work:** [`dsl-query-surface.md`](dsl-query-surface.md) **§12** · [`simple-agent-tasks/qe-README.md`](simple-agent-tasks/qe-README.md)  
+**Day-to-day work:** [`dsl-query-surface.md`](dsl-query-surface.md) **§13** · [`simple-agent-tasks/qe-README.md`](simple-agent-tasks/qe-README.md)  
 **Phase 1a archive:** [`dsl-sync-toward-phase1.md`](dsl-sync-toward-phase1.md)  
 **Phase 2 archive (complete):** [`domainmodeling-next-phase.md`](domainmodeling-next-phase.md)
 
@@ -20,7 +20,7 @@ MCP / direct API as thin consumers
 - **No** product µop / primitive IR path  
 - **No** V2 (`Poly.Data.Modeling` deleted)  
 - **M2** first-consumer vertical slice (structure + policy API + MCP policy) **Done**  
-- **Suite baseline:** **1381** (after Q1′′′ partial residuals `3c99221`)
+- **Suite baseline:** **1381** (after Q1′′′′ `76568a3` — DMREL001 + authoring-only test honesty)
 
 ---
 
@@ -45,26 +45,28 @@ MCP / direct API as thin consumers
 | 4 | **Runtime MCP (RT)** | phase3 **§6c** | **Complete** — dogfood-2 E2E validated |
 | 5 | **RT′ + SA MVP** | phase3 **§6e** | **Complete** `a74af5d` |
 | 6 | **SA′ honesty** | phase3 **§6e** | **Complete** — SA′′ all items closed |
-| 7 | **Effect surface: E0+E1** | [`effect-surface-completeness.md`](effect-surface-completeness.md) | **Complete** `121cd92` — delete keyword + guide honesty |
-| 8 | **E2.1 link decision** | effect-surface decision log | **Complete** — **(a) create-in only**; link DSL deferred |
-| 9 | **Q0 → Q1′ authoring** | [`dsl-query-surface.md`](dsl-query-surface.md) §3.1/§4.5 · qe-README | **Complete** `959c6e7` — path-prefix, `Rel exists`, `Rel where` parse/print |
-| 10 | **Q1′′′ residual nits** | query **§11** | **Partial** `3c99221` — apply/export, assign LHS/RHS, owned anti-dot; **not** full RT eval |
-| 11 | **Q1′′′′ honesty + eval** | query **[§12](dsl-query-surface.md)** | **Complete** — authoring-only claim, analysis DMREL001 for many+property, test renames, owned anti-dot (`1381`)  |
-| 12 | **Q3′ any/all/count** | dsl-query-surface | **Pull** after §12 high items (or honest non-goal) |
-| 13 | E3 invoke / E1′′′ hygiene | effect-surface | **Pull** |
-| 14 | Full effect-micro / V1 / Option A | expansion §0 | **Pull-only** |
-| 15 | **Host-consumable** (C# → MSIL → containers) | phase3 **§6d** | **Post–Phase 3** |
-| 16 | Event authoring tools | — | **Never** |
+| 7 | **Effect surface: E0+E1** | [`effect-surface-completeness.md`](effect-surface-completeness.md) | **Complete** `121cd92` |
+| 8 | **E2.1 link decision** | effect-surface decision log | **Complete** — **(a) create-in only** |
+| 9 | **Q0 → Q1′ authoring** | dsl-query-surface · qe-README | **Complete** `959c6e7` — path-prefix, `Rel exists`, `Rel where` |
+| 10 | **Q1′′′ residual nits** | query §11 | **Partial** `3c99221` — assign/export/owned print |
+| 11 | **Q1′′′′ analysis + test honesty** | query §12 | **Complete** `76568a3` — **DMREL001** many+property; tests authoring-only (not RT eval) |
+| 12 | **Q1''''' hygiene** | query **[§13](dsl-query-surface.md)** | **Complete** `1382` — guide authoring-only, nested-where ban, unknown-rel fail-loud, body validation  |
+| 13 | **Q3′ any/all/count** | dsl-query-surface | **Pull** after §13 (or honest non-goal) |
+| 14 | **Optional RT eval** for related policies | dsl-query-surface §13 Q1'''''.9 | **Pull** — store/VM path when product needs evaluate |
+| 15 | E3 invoke / E1′′′ hygiene | effect-surface | **Pull** |
+| 16 | Full effect-micro / V1 / Option A | expansion §0 | **Pull-only** |
+| 17 | **Host-consumable** (C# → MSIL → containers) | phase3 **§6d** | **Post–Phase 3** |
+| 18 | Event authoring tools | — | **Never** |
 
 ### Agent pick (one line)
 
 ```text
-CURRENT: Q1′′′′.5 nested where; then Q3′ by pain or honest non-goal
-THEN:    Q1′′′′.6/.8 hygiene
-PULL:    E3b multi-entity invoke; link DSL; L* containers; host I/O effects
+CURRENT: Q3′ by pain or honest non-goal
+THEN:    Q1'''''.5–.8 hygiene (low priority)
+PULL:    RT eval related policies; E3b; link DSL; L*; host I/O
 ```
 
-**Do not** market Q1′ as “related policies evaluate under RT” until §12 Q1′′′′.1 is green or the product claim is narrowed in the guide.
+**Honest product claim today:** Q1′ related forms are **authorable** (parse/print/apply/export) with **DMREL001** blocking path-prefix on source-side `many`. They are **not** yet claimed as **RT-evaluated** customer policies.
 
 ---
 
@@ -86,6 +88,6 @@ Do **not** claim WS8 Phase B, WP7 port, or µop pipeline work from archive.
 | Composition | Direct API + thin MCP |
 | Tests | Direct API first; MCP smoke second; **names must match what they assert** |
 | Natural names | Prefer what-it-is over V3 migration labels (see naming cleanup) |
-| Query honesty | Cross-entity **reads** legal; cross-entity **writes** banned; **no overclaim** of eval or analysis |
+| Query honesty | Cross-entity **reads** legal; **writes** banned; **no overclaim** of RT eval |
 
 Platform map: [`docs/CORE.md`](../../CORE.md).

@@ -69,9 +69,9 @@ public class PolicyConstraintAnalysisTests {
     }
 
     [Test]
-    public async Task EntityPolicy_RelationshipNavigation_TargetProperty_NotValidatedAgainstEntity() {
-        // RelationshipNavigation("rel", Property("TargetField")) — "TargetField" is on
-        // the related entity, not on the source entity. This should NOT cause a validation error.
+    public async Task EntityPolicy_RelationshipNavigation_TargetProperty_NowValidatedAgainstEntity() {
+        // Q1'''''.4: RelationshipNavigation("rel", Property("TargetField")) — "TargetField" is on
+        // the related entity, not on the source entity. This should now trigger a validation error.
         var start = DomainFactory.Create("Test", builder =>
             builder.AddEntity("Source")
                    .AddEntity("Target"));
@@ -81,6 +81,7 @@ public class PolicyConstraintAnalysisTests {
             .AddRelationship("rel", "Source", "Target", RelationshipCardinality.OneToOne, false)
             .Apply().Root;
 
+        // TargetField doesn't exist on Target entity (Target has no properties)
         var result = new DomainEvolution(domain).Apply([
             new AddPolicyToEntityChange("Source",
                 new Policy("CheckTarget",
@@ -88,8 +89,9 @@ public class PolicyConstraintAnalysisTests {
                         DomainExpression.RelationshipNav("rel",
                             DomainExpression.Property("TargetField")))))]);
 
-        // Should succeed because RelationshipNavigation TargetProperty is on related entity
-        await Assert.That(result.Succeeded).IsTrue();
+        // Should now fail because body property validation checks target entity
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(result.FailureSummary!.Contains("TargetField")).IsTrue();
     }
 
     [Test]

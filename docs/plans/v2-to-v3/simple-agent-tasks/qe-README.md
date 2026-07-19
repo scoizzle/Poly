@@ -97,18 +97,20 @@ Customer **policies** still cannot **read** related data in product DSL — IR +
 | **Q1.6** | Guide examples + §3.1 read/write rule | [`qe-q1-6-guide-nav-exists-examples.md`](qe-q1-6-guide-nav-exists-examples.md) | `[x]` | Subject-first only |
 
 **Slice Q1′ exit (parse/print):** met (`959c6e7`).  
-**Q1′′′ partial (`3c99221`):** assign + owned print + apply/export — **not** full RT eval.  
-**Current residuals:** parent plan **§12 Q1′′′′**.
+**Q1′′′ partial (`3c99221`):** assign + owned print + apply/export.  
+**Q1′′′′ (`76568a3`):** **DMREL001** many+property; tests renamed authoring-only.  
+**Current residuals:** parent plan **§13 Q1'''''**.
 
-### Slice Q1′′′′ — Post-residual honesty (§12)
+### Slice Q1''''' — Post-DMREL001 hygiene (§13)
 
 | # | ID | Work | Sev | Status |
 |---|-----|------|-----|--------|
-| **1** | Q1′′′′.2 | many+property: **analysis reject** or guide without “will reject” | High | `[ ]` |
-| **2** | Q1′′′′.1 | True RT/eval true-false + soft-miss **or** authoring-only product claim | High | `[ ]` |
-| **3** | Q1′′′′.3 | Related `exists` golden on real nav | Med | `[ ]` |
-| **4** | Q1′′′.5 / ′′′′.5 | Nested `where` ban or document | Med | `[ ]` |
-| **5** | Q1′′′.7–.8 / ′′′′.6–.8 | Test move, dead code, guide `owned Prop` | Low | `[ ]` |
+| **1** | Q1'''''.1 | Guide: **authoring-only** (no RT eval claim for related) | Med | `[ ]` |
+| **2** | Q1'''''.2 | Nested `where` ban or document + test | Med | `[ ]` |
+| **3** | Q1'''''.3 | Unknown relationship name fail-loud | Med | `[ ]` |
+| **4** | Q1'''''.4 | Validate path-prefix body against **related** entity | Med | `[ ]` |
+| **5** | Q1'''''.5–.8 | DMREL001 code assert; dead code; owned story; test placement | Low | `[ ]` |
+| **6** | Q1'''''.9 | Optional RT eval slice | Pull | `[ ]` |
 
 ### Optional hygiene (parallel anytime; do not block)
 

@@ -2123,7 +2123,7 @@ E: entity {{
 
     [Test]
     public async Task Parser_ManyPlusProperty_ParsesButAnalysisRejects() {
-        // Q1′′′′.2: Parser accepts `orders Status` (many + property) syntactically,
+        // Q1′′′′.2 / Q1'''''.5: Parser accepts `orders Status` (many + property) syntactically,
         // but the analysis pipeline rejects it via RelationshipNavigationCardinality check.
         var parsed = ParseExpression("orders Status is \"Open\"");
         await Assert.That(parsed).IsTypeOf<Poly.DomainModeling.RelationshipNavigation>();
@@ -2146,6 +2146,26 @@ E: entity {{
         await Assert.That(dsl.Success).IsFalse();
         await Assert.That(dsl.Message).Contains("orders");
         await Assert.That(dsl.Message).Contains("many", StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Test]
+    public async Task Parser_NestedWhere_Rejected() {
+        // Q1'''''.2: Nested `where` inside a where body is rejected with a clear error.
+        var (sessionId, _) = McpSessionStore.Create("Test");
+        var dsl = DslTool.ApplyDsl(sessionId, """
+            domain Test
+            Ticket: entity {
+              Label: Text
+              BadPolicy: policy { customer where other where Status is "Active" }
+              customer: Customer
+            }
+            Customer: entity {
+              Name: Text
+              Status: Text
+            }
+            """);
+        await Assert.That(dsl.Success).IsFalse();
+        await Assert.That(dsl.Message).Contains("Nested 'where'");
     }
 
     [Test]

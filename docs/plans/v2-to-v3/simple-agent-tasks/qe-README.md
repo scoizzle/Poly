@@ -98,19 +98,18 @@ Customer **policies** still cannot **read** related data in product DSL — IR +
 
 **Slice Q1′ exit (parse/print):** met (`959c6e7`).  
 **Q1′′′ partial (`3c99221`):** assign + owned print + apply/export.  
-**Q1′′′′ (`76568a3`):** **DMREL001** many+property; tests renamed authoring-only.  
-**Current residuals:** parent plan **§13 Q1'''''**.
+**Q1′′′′ (`76568a3`):** **DMREL001**; authoring-only tests.  
+**Q1''''' (`514e21c`):** guide authoring-only; nested-where ban; unknown-rel; body→target validation.  
+**Current:** parent plan **§14 Q1''''''** — **Rel exists** analysis fix.
 
-### Slice Q1''''' — Post-DMREL001 hygiene (§13)
+### Slice Q1'''''' — Post-Q1''''' (§14)
 
 | # | ID | Work | Sev | Status |
 |---|-----|------|-----|--------|
-| **1** | Q1'''''.1 | Guide: **authoring-only** (no RT eval claim for related) | Med | `[ ]` |
-| **2** | Q1'''''.2 | Nested `where` ban or document + test | Med | `[ ]` |
-| **3** | Q1'''''.3 | Unknown relationship name fail-loud | Med | `[ ]` |
-| **4** | Q1'''''.4 | Validate path-prefix body against **related** entity | Med | `[ ]` |
-| **5** | Q1'''''.5–.8 | DMREL001 code assert; dead code; owned story; test placement | Low | `[ ]` |
-| **6** | Q1'''''.9 | Optional RT eval slice | Pull | `[ ]` |
+| **1** | Q1''''''.1 | **`Rel exists` on N1 nav** — analysis accepts relationship names; apply_dsl golden | High | `[ ]` |
+| **2** | Q1''''''.2 | Nested path-prefix in where body — ban or document | Med | `[ ]` |
+| **3** | Q1''''''.3–.5 | Guide wording; happy-path body test; low hygiene | Low | `[ ]` |
+| **4** | Q1''''''.6 | Optional RT eval | Pull | `[ ]` |
 
 ### Optional hygiene (parallel anytime; do not block)
 

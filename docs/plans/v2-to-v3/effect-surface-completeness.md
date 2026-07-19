@@ -2,8 +2,8 @@
 
 **Date:** 2026-07-18  
 **Revised:** 2026-07-18 (**E1′′′** post-commit review — `121cd92` clean tree; suite **1360**)  
-**Status:** E1 **shipped**; E2.1 create-in only; Q1′ authoring + **DMREL001** (`76568a3`, suite **1381**)  
-**Current pick:** query **§13** hygiene — [`dsl-query-surface.md`](dsl-query-surface.md) §13
+**Status:** E1 **shipped**; E2.1 create-in only; Q1′ through Q1''''' hygiene (`514e21c`, suite **1382**)  
+**Current pick:** query **§14** — **Rel exists** analysis fix — [`dsl-query-surface.md`](dsl-query-surface.md) §14
 
 
 
@@ -301,10 +301,10 @@ What you cannot write in DSL without this plan is the backlog order.
 **Micro-tasks:** [`simple-agent-tasks/qe-README.md`](simple-agent-tasks/qe-README.md) — pick first `[ ]` there.
 
 ```text
-DONE:    E1; E2.1; Q1′ authoring; DMREL001 many+property
-CURRENT: query §13 — guide authoring-only; nested where; unknown-rel analysis
+DONE:    E1; E2.1; Q1′ authoring; DMREL001; Q1''''' analysis hygiene
+CURRENT: query §14 — Rel exists on real nav (analysis)
 THEN:    Q3′ by pain OR non-goal; E3a if workflow pain
-LATER:   E3b multi-entity; E4/E5; optional RT eval related
+LATER:   E3b; optional RT eval related
 PULL:    Host I/O; micro-catalog; L*; TRE; link DSL
 ```
 

@@ -178,10 +178,15 @@ internal sealed class PolicyConstraintAnalyzer : INodeAnalyzer {
         switch (expr) {
             case PropertyAccess pa:
                 if (!entityPropMap.ContainsKey(pa.Name)) {
-                    context.ReportError(
-                        expr,
-                        $"Policy references property '{pa.Name}' which does not exist on entity '{entity.Name}'.",
-                        DomainModelDiagnosticCodes.SemanticReferenceResolution);
+                    // Q1''''''.1: Before reporting error, check if the name matches a
+                    // relationship (N1 nav). `Rel exists` produces Exists(PropertyAccess(relName))
+                    // where relName is a relationship, not an entity property.
+                    if (lookup is not null && !IsRelationshipOnEntity(lookup, pa.Name, entity)) {
+                        context.ReportError(
+                            expr,
+                            $"Policy references property '{pa.Name}' which does not exist on entity '{entity.Name}'.",
+                            DomainModelDiagnosticCodes.SemanticReferenceResolution);
+                    }
                 }
                 return;
             case OwnedAccess oa:
@@ -317,6 +322,16 @@ internal sealed class PolicyConstraintAnalyzer : INodeAnalyzer {
         foreach (var child in expr.Children.OfType<DomainExpression>()) {
             ValidateRelatedPropertyAccess(context, child, targetEntity, targetPropMap);
         }
+    }
+
+    /// <summary>
+    /// Returns true if <paramref name="name"/> is a relationship (N1 nav) on <paramref name="entity"/>,
+    /// meaning the entity is the source of a relationship with that name.
+    /// </summary>
+    private static bool IsRelationshipOnEntity(DomainTypeLookupMetadata lookup, string name, Entity entity) {
+        return lookup.Domain.Relationships.Any(r =>
+            string.Equals(r.Name, name, StringComparison.Ordinal) &&
+            string.Equals(r.Source.TypeName, entity.Name, StringComparison.Ordinal));
     }
 
     private static void ValidateOwnedAccessName(

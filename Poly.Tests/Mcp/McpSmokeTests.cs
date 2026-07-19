@@ -2177,4 +2177,84 @@ E: entity {{
         var notExpr = (Poly.DomainModeling.Not)parsed;
         await Assert.That(notExpr.Operand).IsTypeOf<Poly.DomainModeling.Exists>();
     }
+
+    [Test]
+    public async Task ApplyDsl_RelExists_OnNavRelationship_Succeeds() {
+        // Q1''''''.1: `Rel exists` on a real N1 nav relationship must apply cleanly.
+        var (sessionId, _) = McpSessionStore.Create("Test");
+        var dsl = DslTool.ApplyDsl(sessionId, """
+            domain Test
+            Ticket: entity {
+              Label: Text
+              HasAssignee: policy { assignee exists }
+              assignee: Agent
+            }
+            Agent: entity {
+              Name: Text
+            }
+            """);
+        await Assert.That(dsl.Success).IsTrue();
+
+        // Verify export contains the exists expression
+        var export = DslTool.ExportDsl(sessionId);
+        await Assert.That(export.Success).IsTrue();
+        var exportJson = System.Text.Json.JsonSerializer.Serialize(export.Data);
+        await Assert.That(exportJson).Contains("assignee exists");
+        await Assert.That(exportJson).Contains("HasAssignee");
+
+        // Verify the parsed expression shape
+        var state = McpSessionStore.TryGet(sessionId, out var s) ? s : null;
+        await Assert.That(state).IsNotNull();
+        var ticketEntity = state!.Domain.Types.OfType<Entity>().First(e => e.Name == "Ticket");
+        var policy = ticketEntity.Policies.First(p => p.Name == "HasAssignee");
+        await Assert.That(policy.Expression).IsTypeOf<Poly.DomainModeling.Exists>();
+    }
+
+    [Test]
+    public async Task ApplyDsl_RelNotExists_OnNavRelationship_Succeeds() {
+        // Q1''''''.1: `not Rel exists` on a real N1 nav must apply cleanly.
+        var (sessionId, _) = McpSessionStore.Create("Test");
+        var dsl = DslTool.ApplyDsl(sessionId, """
+            domain Test
+            Ticket: entity {
+              Label: Text
+              NoCertificate: policy { not certificate exists }
+              certificate: Certificate
+            }
+            Certificate: entity {
+              Name: Text
+            }
+            """);
+        await Assert.That(dsl.Success).IsTrue();
+
+        var export = DslTool.ExportDsl(sessionId);
+        await Assert.That(export.Success).IsTrue();
+        var exportJson = System.Text.Json.JsonSerializer.Serialize(export.Data);
+        await Assert.That(exportJson).Contains("certificate exists");
+        await Assert.That(exportJson).Contains("NoCertificate");
+    }
+
+    [Test]
+    public async Task Analysis_BodyValidation_ValidPropOnTarget_Succeeds() {
+        // Q1''''''.4: Happy-path test — body property exists on target entity.
+        var (sessionId, _) = McpSessionStore.Create("Test");
+        var dsl = DslTool.ApplyDsl(sessionId, """
+            domain Test
+            Ticket: entity {
+              Label: Text
+              VipCheck: policy { customer Tier is "VIP" }
+              customer: Customer
+            }
+            Customer: entity {
+              Name: Text
+              Tier: Text
+            }
+            """);
+        await Assert.That(dsl.Success).IsTrue();
+
+        var export = DslTool.ExportDsl(sessionId);
+        await Assert.That(export.Success).IsTrue();
+        var exportJson = System.Text.Json.JsonSerializer.Serialize(export.Data);
+        await Assert.That(exportJson).Contains("customer Tier");
+    }
 }

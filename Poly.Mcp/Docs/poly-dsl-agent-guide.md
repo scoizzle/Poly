@@ -218,7 +218,7 @@ customer where Status is "Active" and CreditLimit >= 1000
 - `Rel exists` on `many` is allowed (non-empty check).
 - Cross-entity reads (path-prefix, exists, where) are legal in policies, require, and assign RHS.
 - Cross-entity writes (nav path as assign target) are banned.
-- **Related policies are authoring-complete** — they parse, apply, and export correctly. Full runtime evaluation (true/false via `evaluate_policy`/`simulate_policy` against linked instances) is a future enhancement. Today the `call_action` and `evaluate_policy` tools evaluate local entity properties and linked relationships through subscription fan-out, but VM-level graph traversal for related-expression policy evaluation is not yet connected.
+- **Related policies are authoring-complete** — they parse, apply, and export correctly. Full runtime evaluation (true/false via `evaluate_policy`/`simulate_policy` against linked instances) is a future enhancement. Today the `evaluate_policy` and `simulate_policy` tools evaluate local entity properties only — cross-entity expression evaluation through the VM graph traversal pipeline is not yet connected.
 
 **Not yet shipped** (planned for future phases):
 - `any`/`all`/`none`/`count` over collections (Q3′)

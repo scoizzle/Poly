@@ -1,14 +1,15 @@
 # Effect Surface Completeness
 
 **Date:** 2026-07-18  
-**Revised:** 2026-07-18 (**E1′′** — **committed** `121cd92`; suite **1360**)  
-**Status:** E1+E1′+E1′′ **shipped**; E2/Q\* next  
-**Current pick:** **E2.1** link decision and/or **Q0/Q1**  
+**Revised:** 2026-07-18 (**E1′′′** post-commit review — `121cd92` clean tree; suite **1360**)  
+**Status:** E1 delete-self **shipped** (`121cd92`); E2.1 decision **recorded**; Q0/Q1′ **in progress**  
+**Current pick:** **Q0** query honesty → **Q1′** subject-first related reads; **E2.1** link decision (parallel after Q0.1–Q0.2) — see [`simple-agent-tasks/qe-README.md`](simple-agent-tasks/qe-README.md) 
+
 
 
 
 **Related:**  
-- [`dsl-query-surface.md`](dsl-query-surface.md) — **parallel** policies/guards query language (LINQ-inspired subset)  
+- [`dsl-query-surface.md`](dsl-query-surface.md) — **parallel** related **reads** (subject-first; §3.1 reads OK / writes banned) · [`qe-README.md`](simple-agent-tasks/qe-README.md)
 - [`mcp-phase3-oracle-surface.md`](mcp-phase3-oracle-surface.md) §6c RT · §6e SA  
 - [`mcp-tool-surface-expansion.md`](mcp-tool-surface-expansion.md) §0  
 - Product DSL: [`Poly.Mcp/Docs/poly-dsl-agent-guide.md`](../../../Poly.Mcp/Docs/poly-dsl-agent-guide.md)  
@@ -89,7 +90,7 @@ A domain is **useful** for internal process modeling when agents can author and 
 5. **SA constraints** — stage-action Option B snapshot limits still apply when placing actions with effects ([§6e](mcp-phase3-oracle-surface.md)).  
 6. **No effect soup** — prefer compose of assign/transition/create over one-off “business” effect types.  
 7. **Host I/O out of scope** — email/HTTP/payments are not Phase 1a effects.  
-8. **Query language is parallel** — customer policies need [`dsl-query-surface.md`](dsl-query-surface.md); effects alone do not make the DSL ship-ready.
+8. **Query language is parallel** — customer policies need related **reads** ([`dsl-query-surface.md`](dsl-query-surface.md) §3.1/§4.0); effects alone do not make the DSL ship-ready. Assign never does cross-entity writes.
 
 ---
 
@@ -120,44 +121,51 @@ A domain is **useful** for internal process modeling when agents can author and 
 - [x] **E1.3** Golden test `ApplyDsl_WithDelete_SoftDeletesInstance`: DSL → apply → create instance → call Archive → CallAction refused afterward. Validate `export_dsl` contains `delete`.  
 - [x] **E1.4** MCP not required — DSL suffices. Existing `RuntimeTool.CallAction` + `IsDeleted` check handles the runtime path.
 
-**Exit:** Soft-delete is first-class on product path; RT′.6 remains correct. **Met in code** (suite **1360**); **commit still open**.
+**Exit:** Soft-delete is first-class on product path; RT′.6 remains correct. **Met** (`121cd92`, suite **1360**).
 
-### E1′ — honesty nits (addressed in working tree)
+### E1′ / E1′′ — closed at commit `121cd92`
 
-| ID | Status |
-|----|--------|
-| **E1′.2** | ✅ Error string includes `delete` |
-| **E1′.3** | ✅ Guide: soft-delete self + link/unlink + TransitionRelationship dead IR |
-| **E1′.4** | ✅ Guide table: action, entry, exit for `delete` |
+Honesty nits (error string, guide soft-delete/unlink/TRE, entry/exit) landed with E1. Commit complete.
 
-### E1′′ — re-review after honesty fixes (2026-07-18)
+### E1′′′ — post-commit review (2026-07-18)
 
-**Scope:** Full E1 + E1′ honesty. Suite **1360**. Tree **dirty** (E1 code unstaged; `dsl-query-surface.md` staged only).
+**Scope:** `121cd92` + `7d0f1af` plan pointer commit. Working tree **clean**. Suite **1360**.
 
-**Verdict:** **Shipable — commit now (E1′′.1).** Do not claim “shipped” until commit. Plan header “E1′ all closed” overstated **commit**.
+**Verdict:** **Accepted as shipped.** E1 thin vertical is product-complete for self soft-delete. No blocking code follow-ups. Next product work is **not more delete** — it is **Q0/Q1′** (subject-first related reads) and/or **E2.1** (link decision).
 
-**Solid:** parse/print/token; error message; guide honesty; golden soft-delete E2E; RT IsDeleted refuse.
+**Solid (shipped)**
+
+| Item | Notes |
+|------|--------|
+| Token / parse / print | `delete` → self `DeleteEntityInstance` → `delete` |
+| Error text | includes `delete` |
+| Guide | supported + soft-delete note + library-only (link/unlink/invoke/TRE) |
+| Golden | apply → export → create → Archive → refuse |
+| Query plan | `dsl-query-surface.md` committed alongside |
 
 **Residuals**
 
 | ID | Severity | Finding |
 |----|----------|---------|
-| **E1′′.1** | **Ops** | **Commit** all E1 code + effect-surface plan + query-surface plan together |
-| **E1′′.2** | Low | Optional: guide note that `delete` is a reserved keyword |
-| **E1′′.3** | Low | `EntityType` on IR still unused at execute — cleanup pull |
-| **E1′′.4** | Low | E0.4 dogfood shortlist still soft/deferred |
-| **E1′′.5** | Process | Rebuild embed after guide edit (`get_dsl_guide`) |
-| **E1′′.6** | Next | **E2.1** link decision |
-| **E1′′.7** | Parallel | **Q0/Q1** query surface |
-| **E1′′.8** | Pull | E3 invoke; TransitionRelationship runtime-or-hide |
+| **E1′′′.1** | Low | Optional guide note: `delete` is a reserved keyword (cannot name types `delete`). |
+| **E1′′′.2** | Low | `DeleteEntityInstance.EntityType` still unused at execute — accept stamp or cleanup later. |
+| **E1′′′.3** | Low | No dedicated fail-loud test for bad effect token error string (only happy path). Optional. |
+| **E1′′′.4** | Low | Matrix already shows delete ✅ DSL — keep E0.1 discipline on future effect PRs. |
+| **E1′′′.5** | **Next** | **E2.1** — record create-in-only vs bag/param link decision in § decision log. |
+| **E1′′′.6** | **Parallel** | **Q0** honesty; **Q1′** subject-first related **reads** (`Rel exists`, path-prefix, `where`) — [`dsl-query-surface.md`](dsl-query-surface.md) §3.1/§4.0. |
+| **E1′′′.7** | Pull | E3a/E3b invoke; TRE runtime-or-hide; ParameterBindings. |
+| **E1′′′.8** | Process | Prefer one agent pick: either E2.1 **or** Q0 first if parallel thrash is a risk — default **Q0** if customer ship = policies, **E2.1** if graph write is the pain. |
 
 **Checklist**
 
-- [x] **E1′′.1** Commit — `121cd92`  
-- [ ] **E1′′.2–.5** Optional hygiene  
-- [ ] **E1′′.6–.8** Next slices / pull  
+- [x] **E1′′.1** Commit `121cd92`  
+- [ ] **E1′′′.1–.3** Optional hygiene (reserved keyword note; EntityType cleanup; error-string smoke)  
+- [x] **E1′′′.4** Matrix delete row ✅ (maintain on future PRs)  
+- [x] **E1′′′.5** E2.1 decision — create-in only  
+- [x] **E1′′′.6** Q0/Q1′ (qe suite) — Q0.1–Q0.5 + E2.1 in progress  
+- [ ] **E1′′′.7–.8** Pull / pick discipline  
 
-**Recommended:** **Commited `121cd92`. All code + plans staged + committed.** Next: E2.1 link decision and/or Q0.
+**Recommended:** Stop E1. Start **qe** suite **Q0.1** (guide honesty) → Q1′ subject-first reads; **E2.1** parallel after Q0.1–Q0.2. Do not open multi-entity invoke DSL yet.
 
 ---
 
@@ -167,16 +175,10 @@ A domain is **useful** for internal process modeling when agents can author and 
 
 **Runtime truth (E′):** `Link`/`Unlink` require `Store` and a target that is a **property bag entry holding a `DomainEntityInstance`** (PropertyAccess only). That is a high bar for DSL; create-in remains the easier spawn path.
 
-- [ ] **E2.1** Spec: expression form for target instance in DSL. Decide:
-  - **(a)** document create-in / `RelationshipName` as the **only** product graph-write path (link = library/test), or  
-  - **(b)** bag-based link: require prior assign of instance-valued property (awkward but matches runtime), or  
-  - **(c)** parameter-bound link once action params are product-authorable and bound into bag/expressions.  
-- [ ] **E2.2** If (b)/(c): implement parse → evolve → CallAction → store end-to-end.  
-- [ ] **E2.3** Golden multi-instance: create A, B, link, observe subscription if applicable.  
-- [ ] **E2.4** Unlink symmetric if link ships.  
-- [ ] **E2.5** Record decision in this file §11 decision log.
+- [x] **E2.1** Decision: **(a) create-in only**. See § Decision Log.  
+- **Skip** **E2.2–E2.5**: Link/Unlink DSL deferred — create-in is the product graph-write path. Reopen only with named dogfood pain.  
 
-**Exit:** Documented decision + either working path or explicit non-goal with create-in as substitute.
+**Exit:** Documented decision + explicit non-goal with create-in as substitute.
 
 **Note:** Do not pretend compile-time entity type names are runtime instances.
 
@@ -277,7 +279,7 @@ What you cannot write in DSL without this plan is the backlog order.
 
 - [x] E0 honesty: guide lists `delete` + partial library-only (link, invoke, unlink, TransitionRelationship) — soft-delete self noted  
 - [x] **E1** green (delete on product path) — suite **1360**  
-- [ ] **E2** decision recorded (implement or create-in-only)  
+- [x] **E2** decision recorded (create-in only — see § Decision Log)  
 - [ ] One multi-entity workflow green (E2 or E3) **or** deferred with reason  
 - [x] Suite green (**1360**) when E1 tests included  
 - [x] No host I/O effects; no event tools  
@@ -286,13 +288,24 @@ What you cannot write in DSL without this plan is the backlog order.
 
 ---
 
+## 9. Decision Log
+
+| Date | ID | Decision | Rationale |
+|------|----|----------|-----------|
+| 2026-07-18 | **E2.1** | **(a) create-in only** — product graph writes stay explicit. Link/Unlink remain library/test-only. | Link runtime requires a `PropertyAccess` whose bag value is a `DomainEntityInstance` — high bar for DSL, narrow use case. `create in Rel { … }` with optional `RelationshipName` on `create` already handles spawn-and-wire. Cross-entity writes via assign are banned (§3.1 of query-surface). If link pain resurfaces dogfood, reopen with concrete domain scenario. E2.2–E2.4 **deferred**. |
+
+---
+
 ## 9. Agent pick (right now)
 
+**Micro-tasks:** [`simple-agent-tasks/qe-README.md`](simple-agent-tasks/qe-README.md) — pick first `[ ]` there.
+
 ```text
-DONE:    E1 + E1′ + E1′′ committed (suite 1360, commit 121cd92)
-CURRENT: E2.1 link decision and/or Q0/Q1 query surface
-LATER:   E3a/E3b; E4/E5
-PULL:    Host I/O; micro-catalog; L*; TransitionRelationship runtime
+DONE:    E1 delete-self shipped (`121cd92`, suite 1360)
+CURRENT: qe suite Q0.1 — guide honesty (then Q0.* → Q1′ subject-first reads)
+THEN:    Q1′ path-prefix + Rel exists; E2.1 link decision
+LATER:   E3a self-invoke; E3b multi-entity; E4/E5; Q3′ any/all where
+PULL:    Host I/O; micro-catalog; L*; TRE runtime
 ```
 
 **Implementer watch-outs**
@@ -300,7 +313,8 @@ PULL:    Host I/O; micro-catalog; L*; TransitionRelationship runtime
 - **`delete` = soft-delete self**; entry/exit allowed (guide).  
 - Do not DSL non-executed IR (TransitionRelationship).  
 - **Invoke is self-only** until E3b.  
-- Link targets = instance-valued properties.  
+- Link targets = instance-valued properties; create-in is the easy graph write.  
+- **Query surface:** cross-entity **reads** legal; **writes** banned via assign — [`dsl-query-surface.md`](dsl-query-surface.md) §3.1 · §4.0.  
 - **get_dsl_guide** embed-only — rebuild after guide edits.
 
 ---
@@ -349,7 +363,7 @@ Plan direction is **right** (authorability of effects that already run). Initial
 - [x] **E′.7** Plan package committed (`08994cc`)  
 - [ ] **E′.8–.10** As product work lands  
 
-**dsl-query-surface.md** now tracked as parallel plan (Q0/Q1).  
+**dsl-query-surface.md** parallel plan (Q0→Q1′; §3.1/§4.0 frozen).  
 
 **Also in working tree (not effect surface code):** `add_action_to_stage` Description now mentions CallAction **fallthrough** (SA′′.2) — good; include with next SA/docs commit if still unstaged.
 
@@ -447,4 +461,4 @@ Plan direction is **right** (authorability of effects that already run). Initial
 - [ ] **E′′′.6** Optional pack/embed note  
 - [ ] **E′′′.7–.8** E1+ and pull items  
 
-**E1′ closed.** E2.1 link decision and/or Q0/Q1 query surface next.
+**E1′ closed.** Q0/Q1′ (qe suite) and/or E2.1 next.

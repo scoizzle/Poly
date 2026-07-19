@@ -170,6 +170,54 @@ Expression JSON format (for `add_policy` / `simulate_policy`):
 | NOT | `{"not":{...}}` |
 | Literal | `{"literal":true}` |
 
+### Expression Grammar (Shipped in Phase 1a/1b)
+
+The DSL accepts boolean and scalar expressions through the following precedence levels
+(highest to lowest):
+
+| Level | Operators | Example |
+|-------|-----------|---------|
+| Primary | `Number`, `"string"`, `true`, `false`, `null`, `(expr)`, property name | `42`, `"hello"`, `true`, `Name` |
+| Comparison | `==`, `!=`, `>`, `>=`, `<`, `<=`, `is`, `is not` | `Age >= 18`, `Status is "active"` |
+| `not` | Prefix unary | `not Suspended` |
+| `and` | Binary, left-assoc | `Age >= 18 and Status is "active"` |
+| `or` | Binary, left-assoc | `Total > 0 or Rush is true` |
+
+Valid expressions:
+```poly
+Age >= 18
+isActive is true and role is "admin"
+not Suspended
+(Total > 0) or Rush is true
+Status is "active"
+```
+
+**Not yet shipped** (planned for future phases):
+- Related entity reads (`customer Tier`, `assignee exists`): see Q1′
+- `any`/`all`/`none`/`count` over collections (Q3′)
+- Arithmetic (`+`, `-`, `*`, `/`)
+- Date operations
+- Owned/nested access
+
+### Expression Gaps — IR vs DSL
+
+The following expression capabilities exist in the runtime expression IR (`DomainExpression`)
+and lowering pipeline but are **not yet authorable in product DSL**:
+
+| Capability | IR exists | DSL planned | Notes |
+|------------|-----------|-------------|-------|
+| Relationship navigation (`rel.Property`) | ✅ | Q1′ (subject-first path-prefix) | `customer Tier`, not `customer.Tier` |
+| Existence check (`exists`) | ✅ | Q1′ (postfix) | `assignee exists` |
+| Existence check (`not exists`) | ✅ | Q1′ (postfix) | `not assignee exists` |
+| Scoped filter (`where`) | ✅ | Q1′ | `customer where Status is "Active"` |
+| Collection quantifiers (`any`/`all`/`none`/`count`) | ❌ no IR | Q3′ | New IR + lowering needed |
+| Arithmetic (`+`, `-`, `*`, `/`) | ✅ | Pull | Date operations also in IR |
+| Owned/nested access (`owned.Property`) | ✅ | Pull | |
+| Action parameters | ✅ | Not yet planned | `ParameterAccess` in IR |
+
+Use the JSON expression format (`simulate_policy`, `add_policy`) for capabilities
+that exist in IR but not in DSL. |
+
 ## 8. Supported Effect Summary
 
 | Effect | Can appear in |
@@ -181,7 +229,7 @@ Expression JSON format (for `add_policy` / `simulate_policy`):
 | `delete` | action, entry, exit (soft-deletes the current instance) |
 
 The following effects exist in the runtime library but have **no DSL syntax** yet:
-- **link / unlink**: Connect existing instances. Use `create in Rel { ... }` as the product path for graph writes, or use the `DomainInstanceStore` API directly.
+- **link / unlink**: Connect existing instances. **Product path uses `create in Rel { ... }`** for graph writes instead (or `create` with `RelationshipName`). Link/Unlink remain available through the `DomainInstanceStore` library API for test code.
 - **invoke**: Call another action on the same instance. Not yet authorable in DSL.
 - **TransitionRelationship**: IR exists but **not executed at runtime** — do not use.
 

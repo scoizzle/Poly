@@ -45,7 +45,7 @@
 | **P1** | Parser honesty | `actor` message; optional nav FormatException | Pull (RT′.2–.3) |
 | **P2** | Visibility / debug (**V1/S1**) | analyze/compare/debug expression | Pull |
 | **P1** | **Effect surface (E\*)** | DSL/runtime parity for delete/link/invoke; optional thin MCP | [`effect-surface-completeness.md`](effect-surface-completeness.md) |
-| **P1** | **DSL query surface (Q\*)** | LINQ-inspired policy/guard subset: nav, exists, any/all/count | [`dsl-query-surface.md`](dsl-query-surface.md) — **customer policies** |
+| **P1** | **DSL query surface (Q\*)** | Subject-first related **reads**: path-prefix, `Rel exists`, `where`; later `any/all/count where`; **no** cross-entity assign writes | [`dsl-query-surface.md`](dsl-query-surface.md) · [`qe-README.md`](simple-agent-tasks/qe-README.md) |
 | **P2** | Full effect-micro MCP | Per-effect tools | **Pull** — only after E\* dogfood; prefer DSL first |
 | **P3** | Library builder hygiene | `AddActionWithEffect` naming | Pull |
 | **P3** | Constraint remove | `remove_constraint` | Unexercised |
@@ -57,11 +57,12 @@
 **Dogfood-2:** [DOGFOOD-REPORT-2-20260718](agent-summaries/dogfood/DOGFOOD-REPORT-2-20260718.md) · phase3 **§6e SA′′**
 
 ```text
-1–8.  V0…RT + SA + effect plan            ← done
-9. ▶  Commit E1 delete-self + E1′ honesty (suite 1360) — E1′′.1
-10.   E2.1 link decision and/or Q0/Q1
-11.   E3a/E3b; Q3 by pain
-12.   E5 / L* containers                  ← pull
+1–9.  V0…RT + SA + E1 delete-self (`121cd92`)  ← done
+10. ▶ qe micro-suite — Q0 → Q1′ (subject-first reads) + E2.1
+      simple-agent-tasks/qe-README.md
+      dsl-query-surface §3.1 reads OK / writes banned; §4.0 anti-dot
+11.   E3a/E3b; Q3′ any/all where by pain
+12.   E5 / L* containers                     ← pull
 ```
 
 ---

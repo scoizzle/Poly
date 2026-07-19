@@ -2257,4 +2257,136 @@ E: entity {{
         var exportJson = System.Text.Json.JsonSerializer.Serialize(export.Data);
         await Assert.That(exportJson).Contains("customer Tier");
     }
+
+    [Test]
+    public async Task ApplyDsl_WithArithmetic_ParsesAndRoundTrips() {
+        var (sessionId, _) = McpSessionStore.Create("Test");
+        var dsl = DslTool.ApplyDsl(sessionId, """
+            domain Test
+            Item: entity {
+              Total: Number
+              Discount: Number
+              Net: Number
+              HighValue: policy { Total - Discount > 100 }
+            }
+            """);
+        await Assert.That(dsl.Success).IsTrue();
+
+        var export = DslTool.ExportDsl(sessionId);
+        await Assert.That(export.Success).IsTrue();
+        var exportJson = System.Text.Json.JsonSerializer.Serialize(export.Data);
+        await Assert.That(exportJson).Contains("-");
+    }
+
+    [Test]
+    public async Task ApplyDsl_WithInvokeEffect_ParsesAndRoundTrips() {
+        var (sessionId, _) = McpSessionStore.Create("Test");
+        var dsl = DslTool.ApplyDsl(sessionId, """
+            domain Test
+            Order: entity {
+              Draft: stage {
+                Submit: action {
+                  invoke Validate
+                  transition to Active
+                }
+              }
+              Active: stage {}
+              Validate: action {
+                assign Status to "validated"
+              }
+              Status: Text
+            }
+            """);
+        await Assert.That(dsl.Success).IsTrue();
+
+        var export = DslTool.ExportDsl(sessionId);
+        await Assert.That(export.Success).IsTrue();
+        var exportJson = System.Text.Json.JsonSerializer.Serialize(export.Data);
+        await Assert.That(exportJson).Contains("invoke Validate");
+    }
+
+    [Test]
+    public async Task ApplyDsl_WithConditionalEffect_ParsesAndRoundTrips() {
+        var (sessionId, _) = McpSessionStore.Create("Test");
+        var dsl = DslTool.ApplyDsl(sessionId, """
+            domain Test
+            Item: entity {
+              Status: Text
+              Count: Number
+              Draft: stage {
+                Process: action {
+                  if (Count > 0) {
+                    assign Status to "ok"
+                  } else {
+                    assign Status to "empty"
+                  }
+                  transition to Done
+                }
+              }
+              Done: stage {}
+            }
+            """);
+        await Assert.That(dsl.Success).IsTrue();
+
+        var export = DslTool.ExportDsl(sessionId);
+        await Assert.That(export.Success).IsTrue();
+        var exportJson = System.Text.Json.JsonSerializer.Serialize(export.Data);
+        await Assert.That(exportJson).Contains("if (");
+        await Assert.That(exportJson).Contains("else {");
+    }
+
+    [Test]
+    public async Task ApplyDsl_WithEqualsConstraint_ParsesAndRoundTrips() {
+        var (sessionId, _) = McpSessionStore.Create("Test");
+        var dsl = DslTool.ApplyDsl(sessionId, """
+            domain Test
+            Item: entity {
+              Status: Text equals("Active")
+              Count: Number equals(0)
+            }
+            """);
+        await Assert.That(dsl.Success).IsTrue();
+
+        var export = DslTool.ExportDsl(sessionId);
+        await Assert.That(export.Success).IsTrue();
+        var exportJson = System.Text.Json.JsonSerializer.Serialize(export.Data);
+        await Assert.That(exportJson).Contains("equals");
+    }
+
+    [Test]
+    public async Task ApplyDsl_WithEnumConstraint_ParsesAndRoundTrips() {
+        var (sessionId, _) = McpSessionStore.Create("Test");
+        var dsl = DslTool.ApplyDsl(sessionId, """
+            domain Test
+            Item: entity {
+              Color: Text enum(Red, Green, Blue)
+            }
+            """);
+        await Assert.That(dsl.Success).IsTrue();
+
+        var export = DslTool.ExportDsl(sessionId);
+        await Assert.That(export.Success).IsTrue();
+        var exportJson = System.Text.Json.JsonSerializer.Serialize(export.Data);
+        await Assert.That(exportJson).Contains("enum(Red, Green, Blue)");
+    }
+
+    [Test]
+    public async Task ApplyDsl_WithEntityInheritance_ParsesAndRoundTrips() {
+        var (sessionId, _) = McpSessionStore.Create("Test");
+        var dsl = DslTool.ApplyDsl(sessionId, """
+            domain Test
+            User: entity {
+              Email: Text
+            }
+            Employee: User entity {
+              EmployeeId: Text
+            }
+            """);
+        await Assert.That(dsl.Success).IsTrue();
+
+        var export = DslTool.ExportDsl(sessionId);
+        await Assert.That(export.Success).IsTrue();
+        var exportJson = System.Text.Json.JsonSerializer.Serialize(export.Data);
+        await Assert.That(exportJson).Contains("Employee: User entity");
+    }
 }

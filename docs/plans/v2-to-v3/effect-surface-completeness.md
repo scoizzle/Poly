@@ -1,9 +1,9 @@
 # Effect Surface Completeness
 
 **Date:** 2026-07-18  
-**Revised:** 2026-07-18 (**E1′′′** post-commit review — `121cd92` clean tree; suite **1360**)  
-**Status:** E1 **shipped**; E2.1 create-in only; Q1′ authoring **complete** through Q1'''''' (`25a79ec`, suite **1385**)  
-**Current pick:** query **§15** — Q3′ decision or hygiene — [`dsl-query-surface.md`](dsl-query-surface.md) §15
+**Revised:** 2026-07-19 (**E6** post-change code review — uncommitted DSL gap closure; suite **1398**)  
+**Status:** E1 **shipped**; E2.1 create-in only; E3a self-invoke **DSL shipped**; E4 conditional **DSL shipped**; Q1′ authoring **complete**; arithmetic/`equals`/`enum`/params/inheritance/`owned` **DSL shipped** (suite **1398**)  
+**Current pick:** E6 follow-ups (RT goldens + hygiene) **or** query **Q3′** decision — [`dsl-query-surface.md`](dsl-query-surface.md) §15
 
 
 
@@ -44,9 +44,9 @@ Legend: **✅** product-ready · **🟡** partial · **❌** missing · **🚫**
 | **Assign** | ✅ VM | ✅ `assign P to expr` | ✅ `AddEffectToAction` | ❌ | Core data change |
 | **CreateEntity** | ✅ direct | ✅ `create T { }` | ✅ helpers | ❌ | Optional `RelationshipName` auto-link |
 | **CreateInRelationship** | ✅ direct | ✅ `create in Rel { }` | 🟡 via `AddEffectToAction` | ❌ | Spawn-and-wire |
-| **Composite** | ✅ VM (direct children silently dropped — DMEFF006 warning) | 🟡 flatten/comment | 🟡 construct | ❌ | Nested structure; only Assign/sub-Composite/sub-Conditional execute via VM; direct effects (transition, create, etc.) silently dropped |
-| **Conditional** | ✅ VM (direct children silently dropped — DMEFF006 warning) | 🟡 weak print | 🟡 construct | ❌ | Branching; only VM-lowerable children execute; direct effects silently dropped in both then/else |
-| **InvokeAction** | 🟡 **self only** | ❌ `invoke` unsupported keyword | 🟡 construct | ❌ | `InvokeAction(ActionName)` on **this** instance; **ParameterBindings evaluated** (self only) — **not** multi-entity yet |
+| **Composite** | ✅ VM (direct children silently dropped — DMEFF006 warning) | ✅ flatten (children inline) | 🟡 construct | ❌ | Nested structure; only Assign/sub-Composite/sub-Conditional execute via VM; direct effects silently dropped |
+| **Conditional** | ✅ VM (direct children silently dropped — DMEFF006 warning) | ✅ `if (expr) { effects } else { effects }` | 🟡 construct | ❌ | Branching; only VM-lowerable children execute; direct effects silently dropped in both then/else |
+| **InvokeAction** | 🟡 **self only** | ✅ `invoke ActionName` (+ optional args) | 🟡 construct | ❌ | `InvokeAction(ActionName)` on **this** instance; **ParameterBindings evaluated** (self only) — **not** multi-entity yet |
 | **DeleteEntityInstance** | ✅ soft-delete **self** | ✅ `delete` (E1) | 🟡 construct | ❌ | Executor ignores `EntityType`; parser stamps `_currentEntityName`. Soft-delete only |
 | **LinkRelationship** | 🟡 constrained | ❌ no DSL | 🟡 construct | ❌ | Target must be `PropertyAccess` whose bag value is already a `DomainEntityInstance`; else throws. Prefer `Store.Link` in tests |
 | **UnlinkRelationship** | 🟡 same as link | ❌ no DSL | 🟡 construct | ❌ | Same target resolution rules |
@@ -73,11 +73,13 @@ A domain is **useful** for internal process modeling when agents can author and 
 | Guard | policy / require | ✅ |
 | Soft-remove | delete | ✅ DSL `delete` + RT refuse after delete |
 | Connect existing instances | link / unlink | 🟡 property-bag target only; or `Store.Link` |
-| Call another action on **self** | invoke | 🟡 IR/runtime self; DSL rejects; params unused |
+| Call another action on **self** | invoke | 🟡 DSL + RT self; bindings evaluated; multi-entity still ❌ |
 | Call action on **related** instance | invoke+nav | ❌ not implemented |
+| Branchy effects | if/else | ✅ DSL + RT (VM-lowerable children; DMEFF006 on direct non-VM children) |
+| Action parameters | `(name: Type)` | ✅ DSL parse/print; RT binding path exists |
 
 **Kernel bar (dogfood-2):** met for Order/Customer-style.  
-**Workflow bar:** not met until delete (+ link and/or true multi-entity invoke) are authorable **and** runtime semantics match the marketing.
+**Workflow bar:** partially met (delete + self-invoke + conditional authorable). Still open: multi-entity invoke (E3b) and/or link pain with named dogfood.
 
 ---
 
@@ -190,26 +192,30 @@ Honesty nits (error string, guide soft-delete/unlink/TRE, entry/exit) landed wit
 
 **Runtime truth (E′):** Today `InvokeActionEffect` only does `InvokeAction(ActionName, args)` on **this** instance. **ParameterBindings are evaluated** (args map fully wired). Multi-entity invoke is **new runtime work**, not “just un-reject DSL.”
 
-- [ ] **E3.0** Split product goals:
-  - **E3a** Self-invoke / re-entrancy (may already be enough for some workflows) — DSL + goldens only.  
-  - **E3b** Invoke on related instance (nav/link path) — **runtime + DSL**.  
-- [ ] **E3.1** Spec for E3a vs E3b; wire ParameterBindings or drop dead IR.  
-- [ ] **E3.2** DSL keyword only after E3a/E3b semantics match.  
-- [ ] **E3.3** Guard recursion / re-entrancy (OnEntry → invoke → transition).  
-- [ ] **E3.4** Golden: E3a self-invoke; E3b parent→child if in scope.  
-- [ ] **E3.5** Guide honesty: self vs related.
+- [x] **E3.0** Split product goals:
+  - **E3a** Self-invoke / re-entrancy — **DSL shipped** (`invoke Name`, optional bindings).  
+  - **E3b** Invoke on related instance (nav/link path) — **runtime + DSL** still open.  
+- [x] **E3.1** E3a: ParameterBindings used; IR kept. E3b still open.  
+- [x] **E3.2** E3a DSL keyword + printer + guide.  
+- [ ] **E3.3** Guard recursion / re-entrancy (OnEntry → invoke → transition) — **open** (see E6.2).  
+- [x] **E3.4a** Golden: MCP apply/export smoke for `invoke` (authoring).  
+- [ ] **E3.4b** Golden: E3a **runtime** self-invoke via `create_instance` → `invoke_action` (see E6.1).  
+- [ ] **E3.4c** Golden: E3b parent→child if/when in scope.  
+- [x] **E3.5** Guide honesty: self-only invoke documented; multi-entity not claimed.
 
-**Exit:** Documented E3a and/or E3b green under MCP RT — do not claim multi-entity until E3b.
+**Exit:** E3a authoring **met**. E3a RT exercise + E3b still open — do not claim multi-entity until E3b.
 
 ---
 
-### E4 — Conditional / composite authoring (**medium**, after E1–E3 if needed)
+### E4 — Conditional / composite authoring (**medium**)
 
-- [ ] **E4.1** DSL sugar for conditional effects (if product needs branchy actions without C#).  
-- [ ] **E4.2** Printer round-trip (stop “flattened comment” only).  
-- [ ] **E4.3** Goldens: conditional assign/transition.
+- [x] **E4.1** DSL sugar: `if (expr) { effects } [else { effects }]`.  
+- [x] **E4.2** Printer round-trip (real `if`/`else`, not flattened comment).  
+- [x] **E4.3** Goldens: MCP apply/export smoke for conditional assign.  
+- [ ] **E4.4** Runtime golden: branch taken/not-taken under `invoke_action` (see E6.1).  
+- [ ] **E4.5** Optional: `else if` sugar (parser currently requires nested `if` inside `else`).
 
-**Exit:** Branchy actions authorable without hand-built IR.
+**Exit:** Branchy actions authorable without hand-built IR — **met** for authoring. RT exercise still open (E6.1).
 
 ---
 
@@ -277,14 +283,17 @@ What you cannot write in DSL without this plan is the backlog order.
 
 ## 8. Success criteria (thin vertical)
 
-- [x] E0 honesty: guide lists `delete` + partial library-only (link, invoke, unlink, TransitionRelationship) — soft-delete self noted  
-- [x] **E1** green (delete on product path) — suite **1360**  
+- [x] E0 honesty: guide lists `delete` + partial library-only (link, unlink, TransitionRelationship) — soft-delete self noted  
+- [x] **E1** green (delete on product path)  
 - [x] **E2** decision recorded (create-in only — see § Decision Log)  
-- [ ] One multi-entity workflow green (E2 or E3) **or** deferred with reason  
-- [x] Suite green (**1360**) when E1 tests included  
+- [x] **E3a** self-invoke authorable in DSL + guide honesty  
+- [x] **E4** conditional authorable in DSL + round-trip print  
+- [ ] One multi-entity workflow green (E2 or E3b) **or** deferred with reason — **deferred** (E2.1 create-in; E3b not started)  
+- [ ] E3a/E4 **runtime** goldens under MCP RT (authoring-only today — E6.1)  
+- [x] Suite green (**1398**) with DSL gap-closure goldens  
 - [x] No host I/O effects; no event tools  
 
-**“Useful enough” claim:** lifecycle kernel + soft-delete + (link **or** invoke) authorable and exercisable via MCP RT without custom C# for the dogfood Ticket (or named substitute domain).
+**“Useful enough” claim:** lifecycle kernel + soft-delete + self-invoke + conditional authorable via DSL. Exercisable end-to-end under MCP RT for invoke/conditional still needs E6.1 goldens. Multi-entity invoke remains E3b.
 
 ---
 
@@ -293,6 +302,7 @@ What you cannot write in DSL without this plan is the backlog order.
 | Date | ID | Decision | Rationale |
 |------|----|----------|-----------|
 | 2026-07-18 | **E2.1** | **(a) create-in only** — product graph writes stay explicit. Link/Unlink remain library/test-only. | Link runtime requires a `PropertyAccess` whose bag value is a `DomainEntityInstance` — high bar for DSL, narrow use case. `create in Rel { … }` with optional `RelationshipName` on `create` already handles spawn-and-wire. Cross-entity writes via assign are banned (§3.1 of query-surface). If link pain resurfaces dogfood, reopen with concrete domain scenario. E2.2–E2.4 **deferred**. |
+| 2026-07-19 | **E6** | Close IR↔DSL authoring gaps for arithmetic, E3a invoke, E4 conditional, action params, inheritance, equals/enum, owned. RT goldens deferred to **E6.1**. | IR + runtime already supported these; product path was the bottleneck. Approve authoring ship at suite **1398**; do not over-claim RT exercise or E3b. |
 
 ---
 
@@ -301,10 +311,10 @@ What you cannot write in DSL without this plan is the backlog order.
 **Micro-tasks:** [`simple-agent-tasks/qe-README.md`](simple-agent-tasks/qe-README.md) — pick first `[ ]` there.
 
 ```text
-DONE:    E1; E2.1; Q1′ authoring complete (incl. Rel exists on nav)
-CURRENT: query §15 — Q3′ by pain OR non-goal
-THEN:    E3a if workflow pain
-LATER:   E3b; optional RT eval related
+DONE:    E1; E2.1; E3a DSL; E4 DSL; Q1′ authoring; arithmetic/equals/enum/params/inheritance/owned DSL
+CURRENT: E6 follow-ups (RT goldens E6.1, re-entrancy E6.2) OR query Q3′ decision
+THEN:    E3b only with named multi-entity pain
+LATER:   E5 micro-tools; optional RT eval related policies
 PULL:    Host I/O; micro-catalog; L*; TRE; link DSL
 ```
 
@@ -312,10 +322,11 @@ PULL:    Host I/O; micro-catalog; L*; TRE; link DSL
 
 - **`delete` = soft-delete self**; entry/exit allowed (guide).  
 - Do not DSL non-executed IR (TransitionRelationship).  
-- **Invoke is self-only** until E3b.  
+- **Invoke is self-only** until E3b — DSL already authors E3a only.  
 - Link targets = instance-valued properties; create-in is the easy graph write.  
 - **Query surface:** cross-entity **reads** legal; **writes** banned via assign — [`dsl-query-surface.md`](dsl-query-surface.md) §3.1 · §4.0.  
-- **get_dsl_guide** embed-only — rebuild after guide edits.
+- **get_dsl_guide** embed-only — rebuild after guide edits.  
+- Authoring goldens ≠ RT goldens — E6.1 closes the gap for invoke/conditional/params.
 
 ---
 
@@ -457,8 +468,82 @@ Plan direction is **right** (authorability of effects that already run). Initial
 - [x] **E′′′.1** / **E0.2–E0.3** Product guide IR-vs-DSL section — done in E1′  
 - [ ] **E′′′.2** / **E0.4–E0.5** Ticket assign vs link  
 - [ ] **E′′′.3** / **E0.6** Optional matrix legend  
-- [ ] **E′′′.4** Process: matrix+guide same PR as effect changes  
+- [x] **E′′′.4** Process: matrix+guide same PR as effect changes — practiced in E6 gap closure  
 - [ ] **E′′′.6** Optional pack/embed note  
-- [ ] **E′′′.7–.8** E1+ and pull items  
+- [x] **E′′′.7** E1 shipped  
+- [x] **E′′′.8** E3a/E4 DSL shipped; TRE still pull; bindings live for E3a  
 
-**E1′ closed.** Q0/Q1′ (qe suite) and/or E2.1 next.
+**E1′ closed.** Superseded by E6 gap-closure review below.
+
+---
+
+## 13. E6 — DSL gap-closure code review (2026-07-19)
+
+**Scope:** Uncommitted working tree closing “IR exists but not in product DSL” gaps:
+
+| Area | Files |
+|------|--------|
+| Tokenizer | `PolyDslTokenizer.cs` — `+ - * /`, `if`/`else`, `invoke`, `equals`, `enum`, `owned` |
+| Parser | `PolyDslParser.cs` — arithmetic precedence, invoke/if effects, action params, inheritance header, equals/enum, owned nav, primitive-as-property-name |
+| Printer | `DomainDslPrinter.cs` — parent entity, params, if/else, invoke, equals/enum |
+| Runtime | `DomainInstanceStore.cs` — Any/All quantifier dispatch |
+| Analysis | `SubscriptionContractAnalyzer.cs` — this/event property binding validation |
+| Validation | `MutualExclusionRule.cs` — MaxAllowed > 1 combinatorics fix |
+| Tests | MCP goldens (6) + round-trip additions; suite **1398** |
+| Docs | `poly-dsl-agent-guide.md` + this matrix |
+
+**Build/test:** clean build; **1398 passed / 0 failed**.
+
+### Verdict
+
+**Approve for commit as authoring-complete product surface expansion.** Changes correctly re-use existing IR/evolution (`InvokeActionEffect`, `ConditionalEffect`, `AddParameterToActionChange`, `SetEntityParentChange`, arithmetic DE nodes). Guide and matrix honesty match parser. No architectural boundary violations.
+
+**Do not claim:** full RT exercise of invoke/conditional/params under MCP `invoke_action` (authoring goldens only); multi-entity invoke; true related-policy VM eval.
+
+### Solid (shipped in this tree)
+
+| Item | Notes |
+|------|--------|
+| E3a DSL | `invoke Name[(bindings)]` parse + print + guide |
+| E4 DSL | real `if`/`else` parse + print (no comment stub) |
+| Arithmetic | `ParseAdd`/`ParseMultiply`; printer already had DE cases |
+| Action parameters | `(name: Type)` before `{`; evolution order correct |
+| Entity inheritance | `Child: Parent entity { }` + `SetEntityParentChange` |
+| equals / enum | constraint keywords + printer |
+| owned token | `TokenKind.Owned` in nav lines |
+| Any/All notify | store quantifier dispatch matches analyzer contract |
+| Subscription bindings | this/event property existence warnings |
+| MutualExclusion | MaxAllowed > 1 fixed |
+| MCP goldens | arithmetic, invoke, conditional, equals, enum, inheritance |
+| Guide honesty | shipped vs not-yet lists updated |
+
+### Residuals / follow-ups
+
+| ID | Severity | Finding | Suggested action |
+|----|----------|---------|------------------|
+| **E6.1** | **Medium** | Authoring goldens only for invoke / conditional / action params. No MCP RT path: `apply_dsl` → `create_instance` → `invoke_action` → assert side effects (branch taken, nested action ran, param visible). | Add 2–3 RT goldens in `McpSmokeTests` (or Runtime tests). Closes E3.4b / E4.4. |
+| **E6.2** | **Medium** | E3.3 re-entrancy / recursion guard for `invoke` (OnEntry → invoke → transition loops) not implemented or golden’d. | Spec depth/cycle policy; fail-loud or depth limit; one negative golden. |
+| **E6.3** | Low | Direct `PolyDslRoundTripTests` missing combined golden (params + owned + inheritance + if + invoke in one domain). MCP path covers pieces. | Optional single structural round-trip. |
+| **E6.4** | Low | `else if` not sugar — must nest `if` inside `else`. Guide does not show `else if`. | Document nested form **or** add `else if` token path. |
+| **E6.5** | Low | `PrintLiteralValue` / string constraints: no escape for embedded quotes in `equals("…")` / pattern. Fine for current goldens. | Escape or reject unsafe literals if dogfood hits it. |
+| **E6.6** | Low | Subscription binding diagnostics reuse `SubscriptionContractMismatch`. | Optional dedicated diagnostic code for agents. |
+| **E6.7** | Low | `"event."` prefix convention duplicated (analyzer vs execution). | Shared constant if surface grows. |
+| **E6.8** | Low | Duplicate “Parse effects” comment in `ParseActionBody`. | Cosmetic cleanup. |
+| **E6.9** | Ops | `TypeDefinitionProviderCollectionTests` mock hardening is orthogonal — split commit or note in message. | Prefer separate commit if splitting. |
+| **E6.10** | Process | Commit this tree; rebuild MCP so embedded guide matches. | `dotnet build Poly.Mcp` after guide edit. |
+| **E6.11** | Pull | **E3b** multi-entity invoke — runtime first, then DSL. | Only with named dogfood pain. |
+| **E6.12** | Pull | TRE runtime-or-hide; link DSL (E2.1 stands). | Unchanged. |
+| **E6.13** | Parallel | Query plan: mark arithmetic **shipped** (was Q2); Q3′ still open — see [`dsl-query-surface.md`](dsl-query-surface.md). | Keep plans in lockstep. |
+
+### Checklist
+
+- [ ] **E6.1** RT goldens: invoke self, conditional branch, action param binding under MCP Runtime  
+- [ ] **E6.2** Invoke re-entrancy / cycle policy + golden  
+- [ ] **E6.3** Optional combined structural round-trip  
+- [ ] **E6.4** `else if` doc or sugar  
+- [ ] **E6.5–E6.8** Hygiene (escapes, diagnostic code, event constant, comment)  
+- [ ] **E6.9–E6.10** Commit hygiene + embed rebuild  
+- [ ] **E6.11–E6.12** Pull (E3b, TRE, link)  
+- [x] **E6.13** Query-surface arithmetic row → shipped (dsl-query-surface.md §16 + matrix)  
+
+**Recommended next pick:** **E6.1** (smallest honesty gap — authoring ≠ exercised) **or** §15 low hygiene on the query plan. Do **not** open E3b without multi-entity dogfood quotes.

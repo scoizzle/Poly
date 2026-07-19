@@ -23,6 +23,10 @@ public enum TokenKind {
     Lte,            // <=
     Eq,             // ==
     Neq,            // !=
+    Plus,           // +
+    Minus,          // -
+    Star,           // *
+    Slash,          // /
     Is,
     Not,
     And,
@@ -32,6 +36,8 @@ public enum TokenKind {
     Transition,
     When,
     Require,
+    If,
+    Else,
     Domain,
     Entity,
     Stage,
@@ -50,12 +56,16 @@ public enum TokenKind {
     Range,
     Length,
     Pattern,
+    Enum,
+    Equals,
     Relationship,
     From,
     One,
     Many,
+    Owned,
     Create,
     In,
+    Invoke,
     Entry,
     Exit,
     Delete,
@@ -129,6 +139,10 @@ public sealed class PolyDslTokenizer {
         // Single-character operators
         if (ch == '>') return Advance(TokenKind.Gt);
         if (ch == '<') return Advance(TokenKind.Lt);
+        if (ch == '+') return Advance(TokenKind.Plus);
+        if (ch == '-') return Advance(TokenKind.Minus);
+        if (ch == '*') return Advance(TokenKind.Star);
+        if (ch == '/') return Advance(TokenKind.Slash);
 
         // String literals
         if (ch == '"')
@@ -245,12 +259,18 @@ public sealed class PolyDslTokenizer {
         "range" => TokenKind.Range,
         "length" => TokenKind.Length,
         "pattern" => TokenKind.Pattern,
+        "enum" => TokenKind.Enum,
+        "equals" => TokenKind.Equals,
         "relationship" => TokenKind.Relationship,
         "from" => TokenKind.From,
         "one" => TokenKind.One,
         "many" => TokenKind.Many,
+        "owned" => TokenKind.Owned,
         "create" => TokenKind.Create,
         "in" => TokenKind.In,
+        "invoke" => TokenKind.Invoke,
+        "if" => TokenKind.If,
+        "else" => TokenKind.Else,
         "entry" => TokenKind.Entry,
         "exit" => TokenKind.Exit,
         "delete" => TokenKind.Delete,

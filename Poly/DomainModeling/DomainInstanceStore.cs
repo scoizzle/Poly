@@ -17,7 +17,9 @@ namespace Poly.DomainModeling;
 ///       <item>An <b>instance link</b> exists for that relationship from subscriber → transitioned
 ///         (see <see cref="Link"/>).</item>
 ///       <item>The subscription's <c>StageNames</c> includes the target stage.</item>
-///       <item>Quantifier is <see cref="StageSubscriptionQuantifier.Each"/> (Any/All deferred).</item>
+///       <item>Quantifier is <see cref="StageSubscriptionQuantifier.Each"/> (fires per transition),
+///         <see cref="StageSubscriptionQuantifier.Any"/> (fires if any linked target matches), or
+///         <see cref="StageSubscriptionQuantifier.All"/> (fires if all linked targets match).</item>
 ///     </list>
 ///   </item>
 ///   <item>Subscription effects execute on the subscriber with <c>this</c>=subscriber,
@@ -129,8 +131,6 @@ public sealed class DomainInstanceStore {
 
             // Check each subscription on this stage
             foreach (var subscription in subscriberStage.Subscriptions) {
-                if (subscription.Quantifier != StageSubscriptionQuantifier.Each) continue; // Any/All deferred
-
                 // Subscription must name a relationship where:
                 // - Name matches
                 // - Source entity = subscriber entity, Target entity = transitioned instance entity
@@ -148,9 +148,35 @@ public sealed class DomainInstanceStore {
                         string.Equals(sn, targetStageName, StringComparison.Ordinal)))
                     continue;
 
-                // Execute subscription effects in the subscriber's context,
-                // with the transitioned instance available as "event"
-                subscriber.ExecuteSubscriptionEffects(subscription.Effects, transitionedInstance);
+                // Dispatch based on quantifier
+                if (subscription.Quantifier == StageSubscriptionQuantifier.Each) {
+                    // Each: fire effects for every matching transition (default)
+                    subscriber.ExecuteSubscriptionEffects(subscription.Effects, transitionedInstance);
+                }
+                else if (subscription.Quantifier is StageSubscriptionQuantifier.Any or StageSubscriptionQuantifier.All) {
+                    // Any: fire once when at least one related entity is in matching stage.
+                    // All: fire once when every related entity is in matching stage.
+                    // Both check the current state of all linked targets for that relationship.
+                    var allLinkedTargets = _links
+                        .Where(l => string.Equals(l.RelationshipName, matchingRel.Name, StringComparison.Ordinal)
+                                 && ReferenceEquals(l.Source, subscriber))
+                        .Select(l => l.Target)
+                        .ToList();
+
+                    if (allLinkedTargets.Count == 0) continue;
+
+                    var matchedCount = allLinkedTargets.Count(t =>
+                        string.Equals(t.CurrentStage, targetStageName, StringComparison.Ordinal));
+
+                    bool shouldFire = subscription.Quantifier switch {
+                        StageSubscriptionQuantifier.Any => matchedCount >= 1,
+                        StageSubscriptionQuantifier.All => matchedCount == allLinkedTargets.Count,
+                        _ => false
+                    };
+
+                    if (!shouldFire) continue;
+                    subscriber.ExecuteSubscriptionEffects(subscription.Effects, transitionedInstance);
+                }
 
                 // Recurse if the subscriber also transitioned as a side effect
                 if (depth + 1 < maxDepth && subscriber.CurrentStage != subscriberStage.Name)

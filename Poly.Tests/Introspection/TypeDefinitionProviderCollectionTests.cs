@@ -139,10 +139,11 @@ public class TypeDefinitionProviderCollectionTests {
         public TypeCategory TypeCategory => TypeCategory.None;
 
         public IEnumerable<ITypeMember> GetMembers(string name) => Enumerable.Empty<ITypeMember>();
-        public bool IsAssignableTo(ITypeDefinition targetType) => throw new NotImplementedException();
+        public bool IsAssignableTo(ITypeDefinition targetType) => false;
 
         public bool TryGetMethod(string name, IEnumerable<Type> parameterTypes, out ITypeMethod? method) {
-            throw new NotImplementedException();
+            method = null;
+            return false;
         }
 
         public string? Tag { get; set; }

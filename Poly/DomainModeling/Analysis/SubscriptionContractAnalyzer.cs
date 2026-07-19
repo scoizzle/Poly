@@ -1,3 +1,4 @@
+using Poly.DomainModeling.Effects;
 using Poly.Syntax.Analysis;
 
 namespace Poly.DomainModeling.Analysis;
@@ -7,8 +8,7 @@ namespace Poly.DomainModeling.Analysis;
 /// - The subscription's relationship name resolves to an existing relationship on the owning entity.
 /// - Target stage names exist on the target entity type (resolved from the relationship).
 /// - Basic structural checks (non-empty names, defined quantifier).
-///
-/// TODO (post-A′): Validate <c>this</c>/<c>event</c> expression bindings in subscription effects.
+/// - Expression bindings in subscription effects reference valid <c>this.*</c> and <c>event.*</c> properties.
 /// </summary>
 internal sealed class SubscriptionContractAnalyzer : INodeAnalyzer {
     public const string Id = "DomainSubscriptionContractAnalyzer";
@@ -142,6 +142,132 @@ internal sealed class SubscriptionContractAnalyzer : INodeAnalyzer {
                 "on singular relationships. Use 'Each' or change relationship cardinality.",
                 DomainModelDiagnosticCodes.SubscriptionContractMismatch);
         }
+
+        // ── Validate that subscription effect expressions reference known properties ──
+        ValidateSubscriptionEffectBindings(context, subscription, entity, targetEntity);
+    }
+
+    /// <summary>
+    /// Validates that property accesses in subscription effect expressions resolve to
+    /// valid properties on the subscriber entity (<c>this.*</c>) or the event (target)
+    /// entity (<c>event.*</c>). This catches typos and stale property references that
+    /// would silently fail at runtime.
+    /// </summary>
+    private static void ValidateSubscriptionEffectBindings(
+        AnalysisContext context,
+        StageSubscription subscription,
+        Entity subscriberEntity,
+        Entity targetEntity) {
+        if (subscription.Effects.Count == 0) return;
+
+        var subscriberProps = new HashSet<string>(
+            subscriberEntity.Properties.Select(p => p.Name), StringComparer.Ordinal);
+        var targetProps = new HashSet<string>(
+            targetEntity.Properties.Select(p => p.Name), StringComparer.Ordinal);
+
+        foreach (var effect in subscription.Effects) {
+            var subscriberRefs = new HashSet<string>(StringComparer.Ordinal);
+            var eventRefs = new HashSet<string>(StringComparer.Ordinal);
+            CollectPropertyAccesses(effect, subscriberRefs, eventRefs);
+
+            // Validate this.* property accesses
+            foreach (var propName in subscriberRefs) {
+                if (!subscriberProps.Contains(propName)) {
+                    context.ReportWarning(
+                        subscription,
+                        $"Subscription effect references property '{propName}' on subscriber entity " +
+                        $"'{subscriberEntity.Name}', but that property does not exist. " +
+                        $"Available: {string.Join(", ", subscriberProps)}.",
+                        DomainModelDiagnosticCodes.SubscriptionContractMismatch);
+                }
+            }
+
+            // Validate event.* property accesses
+            foreach (var propName in eventRefs) {
+                if (!targetProps.Contains(propName)) {
+                    context.ReportWarning(
+                        subscription,
+                        $"Subscription effect references event property '{propName}' on target entity " +
+                        $"'{targetEntity.Name}', but that property does not exist. " +
+                        $"Available: {string.Join(", ", targetProps)}.",
+                        DomainModelDiagnosticCodes.SubscriptionContractMismatch);
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Walks all expressions in <paramref name="effect"/> and collects:
+    /// - <paramref name="subscriberRefs"/>: bare <see cref="PropertyAccess"/> names (this.* context)
+    /// - <paramref name="eventRefs"/>: <see cref="PropertyAccess"/> names prefixed with "event."
+    /// </summary>
+    private static void CollectPropertyAccesses(
+        Effect effect,
+        HashSet<string> subscriberRefs,
+        HashSet<string> eventRefs) {
+        switch (effect) {
+            case AssignEffect ae:
+                CollectFromExpression(ae.Target, subscriberRefs, eventRefs);
+                CollectFromExpression(ae.Value, subscriberRefs, eventRefs);
+                break;
+            case StageTransitionEffect:
+            case DeleteEntityInstance:
+                break;
+            case CreateEntityInstance cei:
+                foreach (var init in cei.Initializers)
+                    CollectFromExpression(init.Expression, subscriberRefs, eventRefs);
+                break;
+            case InvokeActionEffect iae:
+                foreach (var binding in iae.ParameterBindings)
+                    CollectFromExpression(binding.Expression, subscriberRefs, eventRefs);
+                break;
+            case ConditionalEffect ce:
+                CollectFromExpression(ce.Condition, subscriberRefs, eventRefs);
+                foreach (var e in ce.ThenEffects) CollectPropertyAccesses(e, subscriberRefs, eventRefs);
+                if (ce.ElseEffects is not null)
+                    foreach (var e in ce.ElseEffects) CollectPropertyAccesses(e, subscriberRefs, eventRefs);
+                break;
+            case CompositeEffect ce:
+                foreach (var e in ce.Effects) CollectPropertyAccesses(e, subscriberRefs, eventRefs);
+                break;
+            case LinkRelationshipEffect:
+            case UnlinkRelationshipEffect:
+            case TransitionRelationshipEffect:
+                break;
+        }
+    }
+
+    private static void CollectFromExpression(
+        DomainExpression expr,
+        HashSet<string> subscriberRefs,
+        HashSet<string> eventRefs) {
+        switch (expr) {
+            case PropertyAccess pa:
+                // "event.PropertyName" convention: bare property starting with "event."
+                // references the event (transitioned) instance, not the subscriber.
+                if (pa.Name.StartsWith("event.", StringComparison.Ordinal)) {
+                    eventRefs.Add(pa.Name["event.".Length..]);
+                }
+                else {
+                    // Bare property access — references subscriber's property (this.*)
+                    subscriberRefs.Add(pa.Name);
+                }
+                break;
+            case RelationshipNavigation rn:
+                // Lowered from "event PropertyName": RelationshipName = "event",
+                // TargetProperty = PropertyAccess("PropertyName").
+                if (string.Equals(rn.RelationshipName, "event", StringComparison.Ordinal)
+                    && rn.TargetProperty is PropertyAccess eventPa) {
+                    eventRefs.Add(eventPa.Name);
+                }
+                // Recurse into target property (may have further access patterns)
+                CollectFromExpression(rn.TargetProperty, subscriberRefs, eventRefs);
+                return; // children already handled
+        }
+
+        // Recurse into children
+        foreach (var child in expr.Children.OfType<DomainExpression>())
+            CollectFromExpression(child, subscriberRefs, eventRefs);
     }
 
     private static bool SemanticKeyMatch(StageSubscription a, StageSubscription b) {

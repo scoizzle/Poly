@@ -1,9 +1,9 @@
 # DSL Query / Expression Surface (LINQ-inspired subset)
 
 **Date:** 2026-07-18  
-**Revised:** 2026-07-18 — **surface direction frozen** (§3.1 + §4.0): subject-first path-prefix, postfix `exists`, `where` without forced parens, anti-dot; **cross-entity reads legal / writes banned**  
+**Revised:** 2026-07-19 — arithmetic **DSL shipped** (E6 gap closure, suite **1398**); Q1′ authoring still complete; Q3′ open  
 **Status:** Active — **parallel to** [`effect-surface-completeness.md`](effect-surface-completeness.md); **before** customer ship confidence  
-**Current pick:** **Q3′ by pain OR non-goal** — Q1′ authoring path **complete** through Q1'''''' (`25a79ec`, suite **1385**); residual hygiene §15; RT eval **pull**
+**Current pick:** **Q3′ by pain OR non-goal** — Q1′ authoring complete; **Q2 arithmetic shipped**; residual hygiene §15; RT eval related **pull**; see effect plan **E6** for RT goldens on invoke/conditional
 **Micro-tasks:** [`simple-agent-tasks/qe-README.md`](simple-agent-tasks/qe-README.md)  
 **Related:** DomainExpression IR · `PolyDslParser` expression grammar · JSON policy parser · effect-surface plan · product guide · formal spec **§4.5**
 
@@ -56,7 +56,7 @@ Rough grammar: `or` → `and` → `not` → comparison → primary (property | l
 | `OwnedAccess` | ❌ | planned: path-prefix / `owned where …` |
 | `Exists` / `NotExists` | ❌ | planned: `assignee exists` / `not certificate exists` |
 | `ParameterAccess` | ❌ | action args in guards/effects |
-| Arithmetic (`Add`…) | ❌ | totals, age math |
+| Arithmetic (`Add`…) | ✅ shipped | totals, age math (`Total - Discount > 100`) |
 | `DateOperation` | ❌ | deadlines |
 | Collection quantifiers | ❌ **no IR yet** | any/all/none over `many` navs |
 | Aggregates | ❌ **no IR yet** | count/sum/min/max over related |
@@ -411,9 +411,9 @@ NeedsHuman: policy {
 | `Rel exists` / `not Rel exists` | `Exists` / `NotExists` | **Q1′** |
 | `Rel where and-chain…` (to-one multi-pred) | rebind + nav IR | **Q1′** |
 | Scalar path-prefix on **assign RHS** | same nav IR; write stays local | **Q1′** |
-| `@Name` / `param Name` | `ParameterAccess` | **Q1b** |
-| `A + B`, `*`, `-`, `/` | arithmetic DE | **Q2** |
-| date ops (thin) | `DateOperation` | **Q2** |
+| `@Name` / `param Name` | `ParameterAccess` | **Q1b** (action params DSL shipped for declarations; param *access* in expressions still open) |
+| `A + B`, `*`, `-`, `/` | arithmetic DE | ✅ **shipped** (was Q2) |
+| date ops (thin) | `DateOperation` | **Q2** residual |
 
 ### Q-linq (collection quantifiers / aggregates) — **new IR + lower**
 
@@ -457,8 +457,8 @@ Legend: **✅** shipped · **🟡** partial · **❌** missing · **🚫** non-g
 | `OwnedAccess` | 🟡 path-prefix print | path-prefix | ❌ | ✅ | 🟡 | Printer anti-dot (`3c99221`) |
 | `Exists` | ✅ `Rel exists` (nav or property) | — | ❌ | ✅ | 🟡 authoring; **RT eval pull** | N1 rel names accepted (`25a79ec`) |
 | `NotExists` | 🟡 surface `not Rel exists` → **`Not(Exists)`** | optional `NotExists` IR | ❌ | ✅ | 🟡 | Guide honest (`3c99221`) |
-| `ParameterAccess` | ❌ | **Q1b**: `@param` or `param Name` | ❌ | ❌ (needs type info) | ❌ (needs args) | Action params |
-| `Add` / `Subtract` / `Multiply` / `Divide` | ❌ | **Q2**: `A + B` etc. | ❌ | ✅ exists | ✅ | Arithmetic |
+| `ParameterAccess` | ❌ | **Q1b**: `@param` or `param Name` | ❌ | ❌ (needs type info) | ❌ (needs args) | Action param *declarations* DSL shipped; expression access still open |
+| `Add` / `Subtract` / `Multiply` / `Divide` | ✅ `+ - * /` | — | ❌ | ✅ exists | ✅ | Shipped in E6 gap closure (suite **1398**) |
 | `DateOperation` | ❌ | **Q2**: date math | ❌ | ✅ exists | ✅ | AddDays/DiffDays |
 | Quantifiers (`any`/`all`/`none`/`count`) | ❌ | **Q3′**: `any Rel where …` | ❌ | ❌ new IR | ❌ new | Store enumeration |
 | Aggregates (`sum`/`avg`/`min`/`max`) | ❌ | **Q4** pull | ❌ | ❌ new IR | ❌ new | |
@@ -508,8 +508,8 @@ Mapped against two dogfood domains: **Ticket** (support) and **Order/Customer** 
 | 10 | "All line items are reserved" | `all lineItems where Reserved is true` | **Q3′** | Order |
 | 11 | "Set customer's status to Active" | ❌ **Banned** — cross-entity write. Use `create in Rel { ... }` or assign local field only | 🚫 | Customer |
 | 12 | "Assign to the first available agent" | `assign assignee to ???` — needs link/invoke path (E2/E3) | **pull** | Ticket |
-| 13 | "Total with tax" | `Total + Tax > 1000` — arithmetic | **Q2** | Order |
-| 14 | "Overdue by more than 30 days" | date operation | **Q2** | Ticket |
+| 13 | "Total with tax" | `Total + Tax > 1000` — arithmetic | ✅ shipped | Order |
+| 14 | "Overdue by more than 30 days" | date operation | **Q2** residual | Ticket |
 
 ---
 
@@ -728,17 +728,18 @@ Customer ship confidence: **kernel effects + Q1′ + (Q3′ or honest “no coll
 **Micro-tasks:** [`simple-agent-tasks/qe-README.md`](simple-agent-tasks/qe-README.md) · **§15**.
 
 ```text
-DONE:    Q1′ through Q1'''''' authoring + analysis hygiene (`25a79ec`, suite 1385)
-CURRENT: Q3′ → **explicit non-goal** (collection quantifiers not shipped in v1; path-prefix + `where` + `exists` sufficient)
-THEN:    §15 low hygiene (nested path-prefix doc, dead code, owned story, test placement)
-PULL:    RT eval related policies; E3b; link DSL; L*
+DONE:    Q1′ through Q1'''''' authoring; Q2 arithmetic DSL (E6, suite 1398)
+CURRENT: §15 low hygiene (optional) — Q3′ remains **explicit non-goal**
+THEN:    effect plan E6.1 RT goldens (invoke/conditional/params) if picking effects next
+PULL:    RT eval related policies; Q1b param access in expressions; DateOperation; E3b; link DSL; L*
 ```
 
 **Implementer watch-outs**
 
 - Related reads are **authorable**; **not RT-evaluated** (guide).  
 - **DMREL001** on many path-prefix; **`Rel exists`** accepts N1 relationship names.  
-- Cross-entity reads OK; writes banned.
+- Cross-entity reads OK; writes banned.  
+- Arithmetic (`+ - * /`) is product-shipped; date ops still open.
 
 ---
 
@@ -1039,5 +1040,23 @@ PULL:    RT eval related policies; E3b; link DSL; L*
 - [ ] **Q1'''''''.3–.5** Hygiene (dead code, owned story, test placement)  
 - [x] **Q1'''''''.7** Q3′ → **explicit non-goal** (collection quantifiers not shipped in v1)
 - [ ] **Q1'''''''.8** RT eval pull  
+- [x] **Q1'''''''.9** Arithmetic (**Q2**) DSL shipped — E6 gap closure 2026-07-19; matrix/rows updated  
+- [ ] **Q1'''''''.10** Q1b: parameter *access* in expressions (`@Name` / `param Name`) — declarations DSL shipped via effect plan; expression IR access still open  
+- [ ] **Q1'''''''.11** DateOperation thin surface (remaining Q2 residual)  
 
-**Recommended next:** §15 low hygiene (optional); RT eval related policies when product needs it.
+**Recommended next:** §15 low hygiene (optional); effect **E6.1** RT goldens if on effect track; RT eval related policies when product needs it. Do not reopen Q3′ without named dogfood pain.
+
+---
+
+## 16. Cross-plan note — E6 gap closure (2026-07-19)
+
+Effect-surface review **E6** closed arithmetic authoring (this plan’s former Q2 row) along with invoke/conditional/params/inheritance/equals/enum/owned on the effect track. See [`effect-surface-completeness.md`](effect-surface-completeness.md) §13 for code-review verdict and residual **E6.1–E6.13**.
+
+| Query residual | Status after E6 |
+|----------------|-----------------|
+| Arithmetic DE | ✅ DSL shipped |
+| Parameter **declaration** on actions | ✅ DSL shipped (effect plan) |
+| Parameter **access** in expressions | ❌ still Q1b |
+| Date ops | ❌ still Q2 residual |
+| Collection quantifiers | 🚫 Q3′ non-goal |
+| Related RT eval | Pull |

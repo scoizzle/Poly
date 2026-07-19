@@ -110,11 +110,24 @@ public sealed class PolyDslParser {
             throw new FormatException(
                 $"'{_current.Text}' is not supported in Phase 1a (use 'entity' instead)");
         }
+
+        // Optional parent entity: Name: ParentName entity { ... }
+        string? parentEntityName = null;
+        if (_current.Kind == TokenKind.Identifier && PeekIs(TokenKind.Entity)) {
+            parentEntityName = ExpectIdentifier(TokenKind.Identifier, "parent entity name");
+        }
+
         Expect(TokenKind.Entity);
-        Expect(TokenKind.LBrace);
 
         _entityNames.Add(entityName);
         changes.Add(new AddEntityChange(entityName, []));
+
+        if (parentEntityName is not null) {
+            changes.Add(new SetEntityParentChange(entityName, parentEntityName));
+        }
+
+        Expect(TokenKind.LBrace);
+
         EnsurePrimitivesOnce(changes);
 
         while (_current.Kind != TokenKind.RBrace) {
@@ -145,6 +158,18 @@ public sealed class PolyDslParser {
                 else {
                     CheckUnsupportedKeyword(name, _current.Text);
                     throw Error($"Expected type, stage, action, policy, or navigation property after '{name}:'");
+                }
+            }
+            else if (IsPrimitiveType(_current.Kind) && PeekIs(TokenKind.Colon)) {
+                // Primitive keyword used as property name (e.g. "Number: Text")
+                var name = _current.Text;
+                Advance(); // consume type keyword (e.g. 'Number')
+                Expect(TokenKind.Colon);
+                if (IsPrimitiveType(_current.Kind)) {
+                    ParseProperty(name, _current.Kind, changes);
+                }
+                else {
+                    throw Error($"Expected type after '{name}:', got '{_current.Text}'");
                 }
             }
             else {
@@ -308,15 +333,34 @@ public sealed class PolyDslParser {
             }
         }
 
-        Expect(TokenKind.LBrace);
-
-        // Create the action
+        // Create the action BEFORE parsing parameters or effects
+        // (AddParameterToActionChange references the action by name, so it must exist first)
         if (stageName is not null) {
             changes.Add(new AddActionToStageChange(_currentEntityName, stageName, actionName));
         }
         else {
             changes.Add(new AddActionChange(_currentEntityName, actionName));
         }
+
+        // Optional parameters: (paramName: TypeName, ...)
+        if (_current.Kind == TokenKind.LParen) {
+            Advance(); // consume '('
+            while (_current.Kind != TokenKind.RParen) {
+                var paramName = ExpectIdentifier(TokenKind.Identifier, "parameter name");
+                Expect(TokenKind.Colon);
+                var paramType = ParseTypeName();
+                changes.Add(new AddParameterToActionChange(
+                    _currentEntityName, actionName,
+                    new Property(paramName, new DomainTypeReference(paramType), [])));
+                if (_current.Kind == TokenKind.Comma)
+                    Advance(); // consume ','
+            }
+            Expect(TokenKind.RParen);
+        }
+
+        Expect(TokenKind.LBrace);
+
+        // Parse effects
 
         // Parse effects
         var effects = new List<Effect>();
@@ -364,13 +408,59 @@ public sealed class PolyDslParser {
             throw Error("Unexpected 'when' inside action body (subscriptions are stage-level)");
         }
 
+        // E3a: invoke ActionName — chain another action on the same instance
+        if (_current.Kind == TokenKind.Invoke) {
+            Advance(); // consume 'invoke'
+            var targetName = ExpectIdentifier(TokenKind.Identifier, "action name");
+            // InvokeActionEffect: self-only invoke with optional parameter bindings
+            var bindings = new List<PropertyBinding>();
+            if (_current.Kind == TokenKind.LParen) {
+                Advance(); // consume '('
+                while (_current.Kind != TokenKind.RParen) {
+                    var paramName = ExpectIdentifier(TokenKind.Identifier, "parameter name");
+                    Expect(TokenKind.Colon);
+                    var paramExpr = ParseExpression();
+                    bindings.Add(new PropertyBinding(paramName, paramExpr));
+                    if (_current.Kind == TokenKind.Comma)
+                        Advance(); // consume ','
+                }
+                Expect(TokenKind.RParen);
+            }
+            return new InvokeActionEffect(targetName, bindings);
+        }
+
+        // E4: if (expr) { effects } [else { effects }]
+        if (_current.Kind == TokenKind.If) {
+            Advance(); // consume 'if'
+            Expect(TokenKind.LParen);
+            var condition = ParseExpression();
+            Expect(TokenKind.RParen);
+            Expect(TokenKind.LBrace);
+            var thenEffects = new List<Effect>();
+            while (_current.Kind != TokenKind.RBrace)
+                thenEffects.Add(ParseEffect());
+            Expect(TokenKind.RBrace);
+
+            List<Effect>? elseEffects = null;
+            if (_current.Kind == TokenKind.Else) {
+                Advance(); // consume 'else'
+                Expect(TokenKind.LBrace);
+                elseEffects = new List<Effect>();
+                while (_current.Kind != TokenKind.RBrace)
+                    elseEffects.Add(ParseEffect());
+                Expect(TokenKind.RBrace);
+            }
+
+            return new ConditionalEffect(condition, thenEffects, elseEffects);
+        }
+
         // Check for unsupported effect keywords
         if (_current.Kind == TokenKind.Identifier && _unsupportedKeywords.Contains(_current.Text)) {
             throw new FormatException(
                 $"'{_current.Text}' is not supported in Phase 1a");
         }
 
-        throw Error($"Expected effect (transition, assign, create, delete), got '{_current.Text}'");
+        throw Error($"Expected effect (transition, assign, create, delete, invoke, if), got '{_current.Text}'");
     }
 
     private Effect ParseCreateEffect() {
@@ -446,7 +536,7 @@ public sealed class PolyDslParser {
             return true;
 
         // "owned" as the first token after : → nav (must be followed by TypeName)
-        if (_current.Kind == TokenKind.Identifier && _current.Text == "owned")
+        if (_current.Kind == TokenKind.Owned)
             return true;
 
         // Bare identifier that isn't a primitive type, keyword, or reserved construct
@@ -484,7 +574,7 @@ public sealed class PolyDslParser {
         }
 
         // Check for optional 'owned'
-        if (_current.Kind == TokenKind.Identifier && _current.Text == "owned") {
+        if (_current.Kind == TokenKind.Owned) {
             owned = true;
             Advance();
         }
@@ -578,14 +668,14 @@ public sealed class PolyDslParser {
     private DomainExpression ParseNot() {
         if (_current.Kind == TokenKind.Not) {
             Advance();
-            var operand = ParsePrimary();
+            var operand = ParseAdd();
             return DomainExpression.Not(operand);
         }
         return ParseComparison();
     }
 
     private DomainExpression ParseComparison() {
-        var left = ParsePrimary();
+        var left = ParseAdd();
 
         if (IsComparisonOp(_current.Kind)) {
             var op = _current.Kind;
@@ -594,7 +684,7 @@ public sealed class PolyDslParser {
             if (op == TokenKind.Is && PeekIs(TokenKind.Not)) {
                 Advance(); // consume 'is'
                 Advance(); // consume 'not'
-                var rhs = ParsePrimary();
+                var rhs = ParseAdd();
                 return DomainExpression.NotEqual(left, rhs);
             }
 
@@ -602,12 +692,12 @@ public sealed class PolyDslParser {
 
             // Handle standalone "is" without following "not" → Equal
             if (op == TokenKind.Is) {
-                var rhs = ParsePrimary();
+                var rhs = ParseAdd();
                 return DomainExpression.Equal(left, rhs);
             }
 
             // Standard operators: == != > >= < <=
-            var right = ParsePrimary();
+            var right = ParseAdd();
 
             return op switch {
                 TokenKind.Eq => DomainExpression.Equal(left, right),
@@ -620,6 +710,32 @@ public sealed class PolyDslParser {
             };
         }
 
+        return left;
+    }
+
+    private DomainExpression ParseAdd() {
+        var left = ParseMultiply();
+        while (_current.Kind == TokenKind.Plus || _current.Kind == TokenKind.Minus) {
+            var op = _current.Kind;
+            Advance();
+            var right = ParseMultiply();
+            left = op == TokenKind.Plus
+                ? DomainExpression.Add(left, right)
+                : DomainExpression.Subtract(left, right);
+        }
+        return left;
+    }
+
+    private DomainExpression ParseMultiply() {
+        var left = ParsePrimary();
+        while (_current.Kind == TokenKind.Star || _current.Kind == TokenKind.Slash) {
+            var op = _current.Kind;
+            Advance();
+            var right = ParsePrimary();
+            left = op == TokenKind.Star
+                ? DomainExpression.Multiply(left, right)
+                : DomainExpression.Divide(left, right);
+        }
         return left;
     }
 
@@ -767,6 +883,28 @@ public sealed class PolyDslParser {
                 Advance();
                 return new UniqueConstraint();
 
+            case TokenKind.Equals:
+                Advance();
+                Expect(TokenKind.LParen);
+                var eqValue = ParseExpression();
+                Expect(TokenKind.RParen);
+                if (eqValue is Literal l)
+                    return new EqualityConstraint(l.Value!);
+                throw Error("equals() constraint requires a literal value (number, string, true, false).");
+
+            case TokenKind.Enum:
+                Advance();
+                Expect(TokenKind.LParen);
+                var members = new List<EnumConstraint.Member>();
+                while (_current.Kind != TokenKind.RParen) {
+                    var memberName = ExpectIdentifier(TokenKind.Identifier, "enum value name");
+                    members.Add(new EnumConstraint.Member(memberName));
+                    if (_current.Kind == TokenKind.Comma)
+                        Advance(); // consume ','
+                }
+                Expect(TokenKind.RParen);
+                return new EnumConstraint(members);
+
             case TokenKind.Range:
                 Advance();
                 Expect(TokenKind.LParen);
@@ -815,6 +953,25 @@ public sealed class PolyDslParser {
 
     // ── Helpers ───────────────────────────────────────────────
 
+    private string ParseTypeName() {
+        if (IsPrimitiveType(_current.Kind)) {
+            var typeName = _current.Kind switch {
+                TokenKind.Text => "Text",
+                TokenKind.NumberType => "Number",
+                TokenKind.BooleanType => "Boolean",
+                TokenKind.DateTimeType => "DateTime",
+                TokenKind.DateType => "Date",
+                _ => throw Error($"Unknown type '{_current.Kind}'"),
+            };
+            Advance();
+            return typeName;
+        }
+        if (_current.Kind == TokenKind.Identifier) {
+            return ExpectIdentifier(TokenKind.Identifier, "type name");
+        }
+        throw Error($"Expected a type name, got '{_current.Text}'");
+    }
+
     private void Advance() {
         _current = _tokenizer.Next();
     }
@@ -857,7 +1014,8 @@ public sealed class PolyDslParser {
 
     private static bool IsConstraint(TokenKind kind) => kind switch {
         TokenKind.Required or TokenKind.Unique or TokenKind.Range
-            or TokenKind.Length or TokenKind.Pattern => true,
+            or TokenKind.Length or TokenKind.Pattern
+            or TokenKind.Equals or TokenKind.Enum => true,
         _ => false,
     };
 
@@ -868,7 +1026,7 @@ public sealed class PolyDslParser {
     };
 
     private static readonly HashSet<string> _unsupportedKeywords = new(StringComparer.OrdinalIgnoreCase) {
-        "actor", "value", "schedule", "parallel", "invoke", "for", "function"
+        "actor", "value", "schedule", "parallel", "for", "function"
     };
 
     /// <summary>

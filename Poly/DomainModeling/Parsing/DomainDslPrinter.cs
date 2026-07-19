@@ -45,7 +45,10 @@ public sealed class DomainDslPrinter {
     }
 
     private void PrintEntity(Entity entity) {
-        _sb.AppendLine($"{entity.Name}: entity {{");
+        var header = entity.ParentEntityName is not null
+            ? $"{entity.Name}: {entity.ParentEntityName} entity {{"
+            : $"{entity.Name}: entity {{";
+        _sb.AppendLine(header);
 
         // Properties
         foreach (var prop in entity.Properties) {
@@ -146,6 +149,19 @@ public sealed class DomainDslPrinter {
     private void PrintAction(Action action, string indent, string? stageName) {
         _sb.Append(indent);
         _sb.Append(action.Name);
+        // Print parameters if any
+        if (action.Parameters.Count > 0) {
+            _sb.Append('(');
+            var firstParam = true;
+            foreach (var param in action.Parameters) {
+                if (!firstParam) _sb.Append(", ");
+                firstParam = false;
+                _sb.Append(param.Name);
+                _sb.Append(": ");
+                _sb.Append(param.Type.TypeName);
+            }
+            _sb.Append(')');
+        }
         _sb.Append(": action");
 
         // Print require gates: positive + negated (skip internal when_* policies)
@@ -231,14 +247,27 @@ public sealed class DomainDslPrinter {
                 break;
 
             case ConditionalEffect ce:
-                // Not printable in Phase 1a (no if/else in grammar).
-                // Flatten as comment for round-trip honesty.
-                _sb.AppendLine("// if (flattened — see also else branch)");
+                _sb.AppendLine("if (" + PrintExpression(ce.Condition) + ") {");
                 foreach (var sub in ce.ThenEffects) {
                     _sb.Append(indent);
-                    _sb.Append("  ");
+                    _sb.Append("    ");
                     PrintEffect(sub, indent + "  ");
                 }
+                _sb.Append(indent);
+                _sb.Append("}");
+                if (ce.ElseEffects is { Count: > 0 }) {
+                    _sb.AppendLine();
+                    _sb.Append(indent);
+                    _sb.AppendLine("else {");
+                    foreach (var sub in ce.ElseEffects) {
+                        _sb.Append(indent);
+                        _sb.Append("    ");
+                        PrintEffect(sub, indent + "  ");
+                    }
+                    _sb.Append(indent);
+                    _sb.Append("}");
+                }
+                _sb.AppendLine();
                 break;
 
             case CreateEntityInstance create:
@@ -281,6 +310,24 @@ public sealed class DomainDslPrinter {
                 }
                 if (!firstInit) _sb.Append(' ');
                 _sb.AppendLine("}");
+                break;
+
+            case InvokeActionEffect invoke:
+                _sb.Append("invoke ");
+                _sb.Append(invoke.ActionName);
+                if (invoke.ParameterBindings.Count > 0) {
+                    _sb.Append('(');
+                    var firstBinding = true;
+                    foreach (var binding in invoke.ParameterBindings) {
+                        if (!firstBinding) _sb.Append(", ");
+                        firstBinding = false;
+                        _sb.Append(binding.PropertyName);
+                        _sb.Append(": ");
+                        _sb.Append(PrintExpression(binding.Expression));
+                    }
+                    _sb.Append(')');
+                }
+                _sb.AppendLine();
                 break;
 
             case DeleteEntityInstance:
@@ -370,6 +417,16 @@ public sealed class DomainDslPrinter {
             ? $"length({l.MinLength})"
             : $"length({l.MinLength}, {l.MaxLength})",
         PatternConstraint p => $"pattern(\"{p.Pattern}\")",
+        EqualityConstraint e => $"equals({PrintLiteralValue(e.ExpectedValue)})",
+        EnumConstraint en => $"enum({string.Join(", ", en.Members.Select(m => m.Name))})",
         _ => $"?{constraint.GetType().Name}",
+    };
+
+    private static string PrintLiteralValue(object? value) => value switch {
+        null => "null",
+        true => "true",
+        false => "false",
+        string s => $"\"{s}\"",
+        _ => value.ToString() ?? "null",
     };
 }

@@ -16,30 +16,41 @@ public sealed class MutualExclusionRule : Rule {
             return True;
         }
 
-        // For now, implement simple mutual exclusion (only one can have value)
-        // More complex counting logic would require arithmetic operators
-        if (MaxAllowed == 1) {
-            // At most one property can be non-null
-            var nonNullChecks = properties
-                .Select(name => new Member(context.Value, name))
-                .Select(member => new NotEqual(member, Null))
-                .ToList();
+        // General mutual exclusion: at most MaxAllowed can be non-null.
+        // Generate combinations of (MaxAllowed + 1) properties — each combination
+        // being all non-null simultaneously would violate the constraint.
+        var nonNullChecks = properties
+            .Select(name => new Member(context.Value, name))
+            .Select(member => new NotEqual(member, Null))
+            .ToList();
 
-            // Create pairwise exclusions: for each pair, at least one must be null
-            var exclusions = new List<Node>();
-            for (int i = 0; i < nonNullChecks.Count; i++) {
-                for (int j = i + 1; j < nonNullChecks.Count; j++) {
-                    // !(prop_i != null AND prop_j != null)
-                    exclusions.Add(new Not(new And(nonNullChecks[i], nonNullChecks[j])));
-                }
-            }
+        if (MaxAllowed >= nonNullChecks.Count)
+            return True;
 
-            var exclusionResult = exclusions.Aggregate((current, next) => new And(current, next));
-            return exclusionResult;
+        // Generate all combinations of size (MaxAllowed + 1)
+        var exclusions = new List<Node>();
+        var indices = new int[MaxAllowed + 1];
+        for (int i = 0; i < indices.Length; i++)
+            indices[i] = i;
+
+        while (true) {
+            // NOT (all checks in this combination are non-null simultaneously)
+            var conjunction = (Node)nonNullChecks[indices[0]];
+            for (int i = 1; i < indices.Length; i++)
+                conjunction = new And(conjunction, nonNullChecks[indices[i]]);
+            exclusions.Add(new Not(conjunction));
+
+            // Advance to next combination
+            int p = indices.Length - 1;
+            while (p >= 0 && indices[p] == nonNullChecks.Count - (indices.Length - p))
+                p--;
+            if (p < 0) break;
+            indices[p]++;
+            for (int i = p + 1; i < indices.Length; i++)
+                indices[i] = indices[i - 1] + 1;
         }
 
-        // For maxAllowed > 1, would need count aggregation
-        throw new NotImplementedException("MutualExclusionRule with MaxAllowed > 1 not yet implemented");
+        return exclusions.Aggregate((current, next) => new And(current, next));
     }
 
     public override string ToString() {

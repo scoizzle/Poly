@@ -220,11 +220,19 @@ customer where Status is "Active" and CreditLimit >= 1000
 - Cross-entity writes (nav path as assign target) are banned.
 - **Related policies are authoring-complete** — they parse, apply, and export correctly. Full runtime evaluation (true/false via `evaluate_policy`/`simulate_policy` against linked instances) is a future enhancement. Today the `evaluate_policy` and `simulate_policy` tools evaluate local entity properties only — cross-entity expression evaluation through the VM graph traversal pipeline is not yet connected.
 
+**Shipped in the current product surface:**
+- Arithmetic (`+`, `-`, `*`, `/`) in expressions
+- Conditional effects (`if (expr) { effects } else { effects }`)
+- Invoke effect (`invoke ActionName` with optional arguments)
+- Action parameters (`actionName(param: Type, ...)`)
+- Entity inheritance (`ChildName: ParentName entity { ... }`)
+- `equals` and `enum` constraints
+- Owned navigation (`rel: owned Entity`)
+
 **Not yet shipped** (planned for future phases):
 - `any`/`all`/`none`/`count` over collections (Q3′)
-- Arithmetic (`+`, `-`, `*`, `/`)
 - Date operations
-- Owned/nested access (partial: simple `owned Prop` via path-prefix)
+- Owned/nested access in expressions
 
 ### Expression Gaps — IR vs DSL
 
@@ -238,8 +246,8 @@ and lowering pipeline but are **not yet authorable in product DSL**:
 | Scoped filter (`where`) | ✅ | ✅ **shipped** (`rel where and-chain`) | `customer where Status is "Active"` |
 | Owned/nested access | ✅ | Pull (same path-prefix approach) | `profile Field is "x"` — not `profile.Field` |
 | Collection quantifiers (`any`/`all`/`none`/`count`) | ❌ no IR | Q3′ (planned) | New IR + lowering needed |
-| Arithmetic (`+`, `-`, `*`, `/`) | ✅ | Pull (planned) | Date operations also in IR |
-| Action parameters | ✅ | Not yet planned | `ParameterAccess` in IR |
+| Arithmetic (`+`, `-`, `*`, `/`) | ✅ | ✅ **shipped** | `Total + 5 > 10`, `Total * 0.9` |
+| Action parameters | ✅ | ✅ **shipped** | `actionName(param: Text) { ... }` |
 
 **JSON policies** (`add_policy` / `simulate_policy`) support comparison + and/or/not + literal only — **not** path-prefix, `Rel exists`, or `where`. Use DSL for related reads; JSON remains limited to local property comparisons and logical composition.
 
@@ -252,10 +260,11 @@ and lowering pipeline but are **not yet authorable in product DSL**:
 | `create Type { ... }` | action |
 | `create in Rel { ... }` | action |
 | `delete` | action, entry, exit (soft-deletes the current instance) |
+| `invoke ActionName` | action (self-only, with optional args: `invoke Activate(status: "go")`) |
+| `if (expr) { effects } else { effects }` | action, entry, exit |
 
 The following effects exist in the runtime library but have **no DSL syntax** yet:
 - **link / unlink**: Connect existing instances. **Product path uses `create in Rel { ... }`** for graph writes instead (or `create` with `RelationshipName`). Link/Unlink remain available through the `DomainInstanceStore` library API for test code.
-- **invoke**: Call another action on the same instance. Not yet authorable in DSL.
 - **TransitionRelationship**: IR exists but **not executed at runtime** — do not use.
 
 > **Note:** `delete` performs a **soft-delete** — it sets the `IsDeleted` flag on the current instance. Any subsequent `invoke_action` on a deleted instance is refused. This is not a typed mass-delete.
@@ -267,12 +276,51 @@ The following effects exist in the runtime library but have **no DSL syntax** ye
 | `actor` | Use `entity` instead |
 | `value { }` | Value types not supported |
 | `schedule`, `parallel`, `for` | Control flow not supported |
-| `invoke` | Not supported in Phase 1a/1b (runtime library only) |
+
 | `relationship Name from A to B` | Use N1 nav properties instead |
 | `function` | Functions not supported |
 | Event/publish/subscribe | Event model retired |
 
-## 10. Dual Authoring Path
+## 10. Additional Features
+
+### Entity Inheritance
+
+An entity can extend another entity, inheriting its properties and actions. The analyzer computes effective members (inherited + own) and validates constraint fixed-point.
+
+```poly
+User: entity {
+  Email: Text required
+}
+
+Employee: User entity {
+  EmployeeId: Text unique
+  Role: Text
+}
+```
+
+### Action Parameters
+
+Actions can declare typed parameters. Parameters are available as expression references inside action effects and guard policies.
+
+```poly
+SetName: action(newName: Text) {
+  assign Name to newName
+}
+```
+
+### Constraint Reference
+
+| Constraint | Syntax | Example |
+|-----------|--------|---------|
+| Required | `required` | `Name: Text required` |
+| Unique | `unique` | `Email: Text unique` |
+| Range | `range(min, max)` | `Age: Number range(0, 150)` |
+| Length | `length(min, max)` | `Code: Text length(2, 10)` |
+| Pattern | `pattern(regex)` | `Zip: Text pattern("^\\d{5}$")` |
+| Equals | `equals(value)` | `Status: Text equals("Active")` |
+| Enum | `enum(v1, v2, ...)` | `Color: Text enum(Red, Green, Blue)` |
+
+## 11. Dual Authoring Path
 
 **Batch** (`apply_dsl`): Write the full domain in `.poly` and apply in one shot.
 **Replaces** the entire session domain — not merged incrementally.

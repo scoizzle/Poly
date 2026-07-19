@@ -686,4 +686,163 @@ public class PolyDslRoundTripTests {
         await Assert.That(policy.Name).IsEqualTo("not_IsBlocked");
         await Assert.That(policy.Expression).IsTypeOf<Poly.DomainModeling.Not>();
     }
+
+    [Test]
+    public async Task EqualsConstraint_ParseAndRoundTrip() {
+        var poly = """
+            domain Test
+
+            Item: entity {
+              Status: Text equals("Active")
+            }
+            """;
+        var parser = new PolyDslParser(poly);
+        var changes = parser.Parse();
+        var emptyDomain = new Domain("_", [], []);
+        var result = new DomainEvolution(emptyDomain).Apply(changes);
+        await Assert.That(result.Succeeded).IsTrue();
+        var item = result.Root!.Types.OfType<Entity>().Single();
+        await Assert.That(item.Properties.Any(p =>
+            p.Name == "Status" && p.Constraints.Any(c => c is EqualityConstraint))).IsTrue();
+    }
+
+    [Test]
+    public async Task EnumConstraint_ParseAndRoundTrip() {
+        var poly = """
+            domain Test
+
+            Item: entity {
+              Color: Text enum(Red, Green, Blue)
+            }
+            """;
+        var parser = new PolyDslParser(poly);
+        var changes = parser.Parse();
+        var emptyDomain = new Domain("_", [], []);
+        var result = new DomainEvolution(emptyDomain).Apply(changes);
+        await Assert.That(result.Succeeded).IsTrue();
+        var item = result.Root!.Types.OfType<Entity>().Single();
+        await Assert.That(item.Properties.Any(p =>
+            p.Constraints.Any(c => c is EnumConstraint))).IsTrue();
+    }
+
+    [Test]
+    public async Task Arithmetic_Expression_ParseAndRoundTrip() {
+        var poly = """
+            domain Test
+
+            Item: entity {
+              Total: Number
+              Computed: policy { Total + 5 > 10 }
+            }
+            """;
+        var parser = new PolyDslParser(poly);
+        var changes = parser.Parse();
+        var emptyDomain = new Domain("_", [], []);
+        var result = new DomainEvolution(emptyDomain).Apply(changes);
+        await Assert.That(result.Succeeded).IsTrue();
+        // Verify printer includes arithmetic
+        var printer = new DomainDslPrinter();
+        var printed = printer.Print(result.Root!);
+        await Assert.That(printed.Contains("+")).IsTrue();
+    }
+
+    [Test]
+    public async Task InvokeEffect_ParseAndRoundTrip() {
+        var poly = """
+            domain Test
+
+            Order: entity {
+              Status: Text
+              Draft: stage {
+                Submit: action {
+                  invoke Validate
+                  transition to Active
+                }
+              }
+              Active: stage {}
+              Validate: action { assign Status to "validated" }
+            }
+            """;
+        var parser = new PolyDslParser(poly);
+        var changes = parser.Parse();
+        var emptyDomain = new Domain("_", [], []);
+        var result = new DomainEvolution(emptyDomain).Apply(changes);
+        await Assert.That(result.Succeeded).IsTrue();
+        var printer = new DomainDslPrinter();
+        var printed = printer.Print(result.Root!);
+        await Assert.That(printed.Contains("invoke Validate")).IsTrue();
+    }
+
+    [Test]
+    public async Task ConditionalEffect_ParseAndRoundTrip() {
+        var poly = """
+            domain Test
+
+            Item: entity {
+              Status: Text
+              Count: Number
+              Draft: stage {
+                Process: action {
+                  if (Count > 0) {
+                    assign Status to "ok"
+                  } else {
+                    assign Status to "empty"
+                  }
+                  transition to Done
+                }
+              }
+              Done: stage {}
+            }
+            """;
+        var parser = new PolyDslParser(poly);
+        var changes = parser.Parse();
+        var emptyDomain = new Domain("_", [], []);
+        var result = new DomainEvolution(emptyDomain).Apply(changes);
+        await Assert.That(result.Succeeded).IsTrue();
+        var printer = new DomainDslPrinter();
+        var printed = printer.Print(result.Root!);
+        await Assert.That(printed.Contains("if (")).IsTrue();
+        await Assert.That(printed.Contains("else {")).IsTrue();
+    }
+
+    [Test]
+    public async Task InvokeKeyword_NoLongerRejected() {
+        // Verify that 'invoke' is accepted (removed from unsupported keywords)
+        var poly = """
+            domain Test
+
+            Item: entity {
+              DoIt: action {
+                invoke Validate
+              }
+              Validate: action { }
+            }
+            """;
+        var parser = new PolyDslParser(poly);
+        var changes = parser.Parse();
+        await Assert.That(changes.Count > 0).IsTrue();
+    }
+
+    [Test]
+    public async Task OwnedKeyword_IsTokenized() {
+        var poly = """
+            domain Test
+
+            Customer: entity {
+              passport: owned Passport
+            }
+            Passport: entity {
+              Number: Text
+            }
+            """;
+        var parser = new PolyDslParser(poly);
+        var changes = parser.Parse();
+        var emptyDomain = new Domain("_", [], []);
+        var result = new DomainEvolution(emptyDomain).Apply(changes);
+        await Assert.That(result.Succeeded).IsTrue();
+        // Verify the relationship exists and has SourceOwnsTarget=true
+        var rel = result.Root.Relationships.FirstOrDefault(r => r.Name == "passport");
+        await Assert.That(rel).IsNotNull();
+        await Assert.That(rel!.SourceOwnsTarget).IsTrue();
+    }
 }

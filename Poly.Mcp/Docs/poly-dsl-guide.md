@@ -1,4 +1,4 @@
-# Poly DSL — Agent Guide (Phase 1a/1b Product Surface)
+# Poly DSL — Product Guide (Phase 1a/1b Surface)
 
 > **Maintainer note:** This guide is the **single product-true reference** for the shipped DSL surface.
 > It must be updated whenever the parser, printer, or `apply_dsl` changes.
@@ -10,7 +10,138 @@
 
 ---
 
-## 1. Domain Header
+## 0. Modeling Principles (Read This First)
+
+These principles are enforced by analysis diagnostics and/or verified by smoke tests.
+Violating them produces structural errors or warnings.
+
+### 0.1 Entities Connect Through Relationships, Not Strings
+
+A navigation property (`book: Book`) is a first-class link. A string field that stores an
+identifier (`BookIsbn: Text`) is a code smell — it creates a manual join that analysis
+cannot track, validate, or use for subscription routing.
+
+```poly
+// ✅ Correct — Loan references Book through a navigation property
+Loan: entity {
+  book: Book
+}
+
+// ❌ Wrong — string-based reference is invisible to analysis
+Loan: entity {
+  BookIsbn: Text
+}
+```
+
+**Analysis check:** A property typed as `Text` with a name matching `*Id`, `*Code`, or `*Isbn`
+on an entity that already has a relationship to that type triggers a diagnostic.
+
+### 0.2 Transactional Records Own the Lifecycle
+
+A `Loan` has stages (Active → Overdue → Returned). A `Book` is a catalog entry —
+static data with no lifecycle. Business state lives on the record that connects
+two entities, not on either endpoint.
+
+| Pattern | Example | Lifecycle owner |
+|---------|---------|----------------|
+| Borrowing | Patron ↔ Loan ↔ Book | Loan |
+| Order | Customer ↔ Order ↔ LineItem | Order |
+| Reservation | Patron ↔ Reservation ↔ Book | Reservation |
+
+```poly
+// ✅ Correct — Loan carries the lifecycle
+Loan: entity {
+  book: Book
+  borrower: Patron
+  Active: stage { ... }
+  Overdue: stage { ... }
+  Returned: stage { }
+}
+
+// ❌ Wrong — Book shouldn't track borrowing stages
+Book: entity {
+  CheckedOut: stage { ... }   // Book is a catalog entry
+}
+```
+
+### 0.3 `create in Relationship` Auto-Wires the Source
+
+When you create an entity in a navigation property, the source entity reference
+is automatically set. You only specify the *other* property initializers.
+
+```poly
+Patron: entity {
+  loans: many Loan
+
+  CheckOut: action (book: Book) {
+    create in loans { book: book }   // borrower: this is implicit
+  }
+}
+```
+
+The generated C# sets `borrower` to `this` automatically. Do not set it explicitly
+in the initializer — it would conflict with the auto-wire.
+
+### 0.4 Cross-Entity Side Effects Use Subscriptions, Not Action Coupling
+
+If entity A changing stage should produce an effect on entity B, use a stage
+subscription (`when`). Don't put `create Fine` inside a Loan action — put it
+where the effect belongs, in the entity that owns the fine.
+
+```poly
+// ✅ Correct — Patron subscribes to its own loans
+Patron: entity {
+  fines: many Fine
+
+  when loans Overdue {
+    create Fine { Amount: 5; Reason: "Overdue" }
+  }
+}
+
+// ❌ Wrong — Loan shouldn't know about Fines
+Loan: entity {
+  Active: stage {
+    transition to Overdue     // Loan just transitions
+  }                           // Fine creation happens at the Patron level
+}
+```
+
+### 0.5 Actions Guard With Require, Not Nested If
+
+Business rules that gate an action should be named policies. Compound conditions
+compose naturally.
+
+```poly
+// ✅ Correct — clear, testable guards
+CheckOut: action (book: Book)
+  require GoodStanding
+  require not AtLimit
+{
+  create in loans { book: book }
+}
+
+// ❌ Avoid — inline conditions hide business rules
+CheckOut: action (book: Book) {
+  if (Status is "Active" and CurrentBorrowCount < MaxItems) {
+    create in loans { book: book }
+  }
+}
+```
+
+### 0.6 Prefer `before` / `after` / Invariant Comments Over Effect Ordering Hacks
+
+When entry and exit effects must happen in a specific order, use comments
+to document why. Do not rely on effect-list ordering alone.
+
+```poly
+Suspended: stage {
+  entry { assign MaxItems to 0 }    // freeze borrowing capacity first
+  exit  { assign MaxItems to 5 }    // restore on reactivation
+  Reinstate: action { ... }
+}
+```
+
+---
 
 Every valid `.poly` document starts with a domain name:
 
@@ -319,7 +450,7 @@ against the target entity; reverse-side / self-rel / ManyToMany / OneToOne rejec
 - Conditional effects (`if (expr) { effects } else { effects }`)
 - Invoke effect (`invoke ActionName` with optional arguments; cross-entity via `invoke RelName.ActionName`; quantifiers `any`/`all`; filter `where`)
 - Action parameters (`actionName: action (param: Type, ...)`)
-- `equals` and `enum` constraints
+- `default` and `enum` constraints
 - Owned navigation (`rel: owned Entity`)
 
 **Not yet shipped** (planned for future phases):

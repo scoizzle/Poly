@@ -117,8 +117,9 @@ public class SemanticAnalysisTests {
 
         var analysis = DomainModelAnalyzer.Analyze(domain);
 
+        // Inheritance was removed — parent-child constraint mismatch no longer applies.
         await Assert.That(analysis.Diagnostics.Any(d =>
-            d.Code == DomainModelDiagnosticCodes.SemanticConstraintMismatch)).IsTrue();
+            d.Code == DomainModelDiagnosticCodes.SemanticConstraintMismatch)).IsFalse();
     }
 
     [Test]
@@ -134,16 +135,7 @@ public class SemanticAnalysisTests {
 
 
 
-    [Test]
-    public async Task SemanticReferenceResolution_UndefinedParentEntity_ReportsError() {
-        var entity = new Entity("Ticket", [], [], [], []) { ParentEntityName = "NonExistent" };
-        var domain = new Domain("Test", [entity], []);
-
-        var analysis = DomainModelAnalyzer.Analyze(domain);
-
-        await Assert.That(analysis.Diagnostics.Any(d =>
-            d.Code == DomainModelDiagnosticCodes.SemanticReferenceResolution)).IsTrue();
-    }
+    // Entity inheritance was removed — no parent-entity tests needed.
 }
 
 public class EffectBindingTests {

@@ -22,7 +22,7 @@ Pay particular attention to:
 
 ## DSL Guide Maintenance
 
-**`Poly.Mcp/Docs/poly-dsl-agent-guide.md` must be updated whenever the DSL surface changes.**
+**`Poly.Mcp/Docs/poly-dsl-guide.md` must be updated whenever the DSL surface changes.**
 
 This includes:
 - Adding or removing a parser keyword or syntax construct
@@ -33,7 +33,7 @@ This includes:
 - Adding, removing, or renaming an MCP tool that authors DSL
 
 Before merging any change that affects what `apply_dsl` accepts or what `export_dsl` emits,
-verify the guide at `Poly.Mcp/Docs/poly-dsl-agent-guide.md` is still accurate.
+verify the guide at `Poly.Mcp/Docs/poly-dsl-guide.md` is still accurate.
 The smoke test `GetDslGuide_ReturnsProductSurface` will catch drift, but the
 maintainer must update the guide content proactively.
 

@@ -1325,12 +1325,12 @@ for exploration and repair.")]
     public static DomainToolResponse GetDslGuide() {
         // Load from embedded resource (packaged with MCP assembly)
         var assembly = typeof(DslTool).Assembly;
-        var resourceName = "Poly.Mcp.Docs.poly-dsl-agent-guide.md";
-
+        // Try the product guide first (unqualified name), fall back to legacy agent-guide
         string guideText;
         try {
-            using var stream = assembly.GetManifestResourceStream(resourceName)
-                ?? throw new InvalidOperationException($"Embedded resource '{resourceName}' not found. The Poly.Mcp assembly must include 'Docs/poly-dsl-agent-guide.md' as EmbeddedResource.");
+            var stream = assembly.GetManifestResourceStream("Poly.Mcp.Docs.poly-dsl-guide.md")
+                       ?? assembly.GetManifestResourceStream("Poly.Mcp.Docs.poly-dsl-agent-guide.md")
+                       ?? throw new InvalidOperationException("Embedded resource 'poly-dsl-guide.md' not found.");
             using var reader = new StreamReader(stream);
             guideText = reader.ReadToEnd();
         }

@@ -100,7 +100,7 @@ Non-negotiable. Each principle has a **one-line rule** and a short **how** for a
 
 ### DSL Guide
 
-The Phase 1a/1b DSL syntax guide at `Poly.Mcp/Docs/poly-dsl-agent-guide.md` is the **product-true reference** for the shipped `apply_dsl` surface.
+The **Modeling Principles** in [`Poly.Mcp/Docs/poly-dsl-guide.md`](Poly.Mcp/Docs/poly-dsl-guide.md) must be read before authoring or modifying any domain model. The same document is the product-true syntax reference for the shipped `apply_dsl` surface.
 
 **Keep it in sync.** Any change to the parser, printer, or tokenizer that alters what DSL constructs are valid or emitted must update the guide in the same change. The smoke test `GetDslGuide_ReturnsProductSurface` will catch some drift, but guide content must be updated proactively — especially when adding/removing keywords, effect types, constraint syntax, or relationship forms.
 

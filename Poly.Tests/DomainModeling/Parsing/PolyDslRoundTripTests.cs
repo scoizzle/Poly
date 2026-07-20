@@ -888,7 +888,9 @@ public class PolyDslRoundTripTests {
         await Assert.That(result.Succeeded).IsTrue();
 
         var worker = result.Root!.Types.OfType<Entity>().Single(e => e.Name == "Worker");
-        await Assert.That(worker.ParentEntityName).IsEqualTo("Person");
+        await Assert.That(worker.Properties.Any(p => p.Name == "Name")).IsTrue();
+        await Assert.That(worker.Properties.Any(p => p.Name == "Role")).IsTrue();
+        await Assert.That(worker.Properties.Any(p => p.Name == "Badge")).IsTrue();
 
         var promote = worker.Stages.Single(s => s.Name == "Draft").Actions
             .Single(a => a.Name == "Promote");
@@ -901,7 +903,7 @@ public class PolyDslRoundTripTests {
         var printer = new DomainDslPrinter();
         var printed = printer.Print(result.Root);
 
-        await Assert.That(printed.Contains("Worker: Person entity")).IsTrue();
+        await Assert.That(printed.Contains("Worker: entity")).IsTrue();
         await Assert.That(printed.Contains("owned Passport")).IsTrue();
         await Assert.That(printed.Contains("Promote: action (level: Text)")).IsTrue();
         await Assert.That(printed.Contains("if (")).IsTrue();

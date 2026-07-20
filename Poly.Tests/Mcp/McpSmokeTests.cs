@@ -2370,25 +2370,7 @@ E: entity {{
         await Assert.That(exportJson).Contains("enum(Red, Green, Blue)");
     }
 
-    [Test]
-    public async Task ApplyDsl_WithEntityInheritance_ParsesAndRoundTrips() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
-        var dsl = DslTool.ApplyDsl(sessionId, """
-            domain Test
-            User: entity {
-              Email: Text
-            }
-            Employee: User entity {
-              EmployeeId: Text
-            }
-            """);
-        await Assert.That(dsl.Success).IsTrue();
-
-        var export = DslTool.ExportDsl(sessionId);
-        await Assert.That(export.Success).IsTrue();
-        var exportJson = System.Text.Json.JsonSerializer.Serialize(export.Data);
-        await Assert.That(exportJson).Contains("Employee: User entity");
-    }
+    // Entity inheritance was removed — no inheritance test.
 
     // ── E6.1 RT goldens: authoring → create → invoke → assert ──
 

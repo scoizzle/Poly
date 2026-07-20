@@ -59,13 +59,15 @@ Patron: entity {
   }
 
   // ── Active — can borrow ────────────────────────────────────────────────────
+  // Prefer declarative require gates over nested conditionals (Principle 0.5).
   Active: stage {
     CheckOut: action (book: Book)
       require GoodStanding
       require not AtLimit
       require not HasFines
     {
-      create in loans { BookIsbn: book.ISBN }
+      // create in loans sets borrower: this implicitly (Principle 0.3).
+      create in loans { book: book }
       assign CurrentBorrowCount to CurrentBorrowCount + 1
     }
 
@@ -77,7 +79,7 @@ Patron: entity {
       transition to Suspended
     }
 
-    // Auto-fine when any related loan goes overdue
+    // Subscription handles cross-entity side effects (Principle 0.4).
     when loans Overdue {
       create Fine { Amount: 5 Reason: "Overdue item" }
       assign OutstandingFines to OutstandingFines + 5
@@ -109,17 +111,18 @@ Patron: entity {
 // =============================================================================
 
 Loan: entity {
-  BookIsbn: Text required
   Status: Text
   CheckedOutAt: DateTime
   DueDate: DateTime
   ReturnedAt: DateTime
   TimesRenewed: Number
 
-  // Reference to the actual catalog entry
+  // Connected through relationships, not strings (Principle 0.1).
   book: Book
-  // The patron who borrowed this item (set implicitly by create in loans)
+  // Set implicitly by create in loans (Principle 0.3).
   borrower: Patron
+
+  // Transactional record owns the lifecycle (Principle 0.2).
 
   // ── Active — currently borrowed and not yet overdue ────────────────────────
   Active: stage {

@@ -24,6 +24,7 @@
   <!-- Embed the product-true DSL guide as a manifest resource -->
   <ItemGroup>
     <EmbeddedResource Include="Docs/poly-dsl-agent-guide.md" />
+    <EmbeddedResource Include="Docs/poly-dsl-guide.md" />
   </ItemGroup>
 
 </Project>

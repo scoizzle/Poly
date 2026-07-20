@@ -1050,8 +1050,7 @@ public class DomainEvolutionApplicatorTests {
         // 3. Conditional effects: ReportLost should conditionally create a Fine entity and
         //    decrement Book.TotalCopies. Requires ConditionalEffect + InvokeAction.
         //
-        // 4. Entity inheritance: V3 has no ParentEntity/ParentEntityName. Member should
-        //    inherit from Person. Requires Entity inheritance support.
+        // 4. Entity inheritance was removed. 
         //
         // 5. InvokeAction: FulfillReservation → CheckoutBook binding not supported.
         //    Requires InvokeAction effect with parameter binding.
@@ -1236,808 +1235,790 @@ public class DomainEvolutionApplicatorTests {
     }
 
     [Test]
-    public async Task Apply_SetEntityParent_SetsParentName() {
-        var result = await RunEvolution("Test", new Entity("Person", [], [], [], []), operations: []);
-
-        [Test]
-        public static async Task CompositeEffect_CanBeStoredInAction() {
-            var entity = new Entity("Workflow", [], [], [], []);
-            var start = new Domain("Test", [entity], []);
-            var result = new DomainEvolution(start)
-                .Evolve()
-                .AddStage("Workflow", "Active")
-                .AddStage("Workflow", "Completed")
-                .AddAction("Workflow", "Execute")
-                .AddEffectToAction("Workflow", "Execute",
-                    new CompositeEffect([
-                        new StageTransitionEffect(new StageReference("Active")),
+    public async Task CompositeEffect_CanBeStoredInAction() {
+        var entity = new Entity("Workflow", [], [], [], []);
+        var start = new Domain("Test", [entity], []);
+        var result = new DomainEvolution(start)
+            .Evolve()
+            .AddStage("Workflow", "Active")
+            .AddStage("Workflow", "Completed")
+            .AddAction("Workflow", "Execute")
+            .AddEffectToAction("Workflow", "Execute",
+                new CompositeEffect([
+                    new StageTransitionEffect(new StageReference("Active")),
                     new StageTransitionEffect(new StageReference("Completed"))
-                    ]))
-                .Apply();
-            await Assert.That(result.Succeeded).IsTrue();
-            var wf = result.Root.Types.OfType<Entity>().Single(e => e.Name == "Workflow");
-            var action = wf.Actions.Single(a => a.Name == "Execute");
-            await Assert.That(action.Effects.Count).IsEqualTo(1);
-            await Assert.That(action.Effects[0]).IsTypeOf<CompositeEffect>();
-            var composite = (CompositeEffect)action.Effects[0];
-            await Assert.That(composite.Effects.Count).IsEqualTo(2);
-        }
+                ]))
+            .Apply();
+        await Assert.That(result.Succeeded).IsTrue();
+        var wf = result.Root.Types.OfType<Entity>().Single(e => e.Name == "Workflow");
+        var action = wf.Actions.Single(a => a.Name == "Execute");
+        await Assert.That(action.Effects.Count).IsEqualTo(1);
+        await Assert.That(action.Effects[0]).IsTypeOf<CompositeEffect>();
+        var composite = (CompositeEffect)action.Effects[0];
+        await Assert.That(composite.Effects.Count).IsEqualTo(2);
+    }
 
-        [Test]
-        public static async Task InvokeActionEffect_CanBeStoredInAction() {
-            var entity = new Entity("Orchestrator", [], [new Poly.DomainModeling.Action("Step1", InvocationResult.Void, [], [], [])], [], []);
-            var start = new Domain("Test", [entity], []);
-            var result = new DomainEvolution(start)
-                .Evolve()
-                .AddAction("Orchestrator", "RunAll")
-                .AddEffectToAction("Orchestrator", "RunAll",
-                    new InvokeActionEffect("Step1", []))
-                .Apply();
-            await Assert.That(result.Succeeded).IsTrue();
-            var orch = result.Root.Types.OfType<Entity>().Single(e => e.Name == "Orchestrator");
-            var action = orch.Actions.Single(a => a.Name == "RunAll");
-            await Assert.That(action.Effects.Count).IsEqualTo(1);
-            await Assert.That(action.Effects[0]).IsTypeOf<InvokeActionEffect>();
-            var invoke = (InvokeActionEffect)action.Effects[0];
-            await Assert.That(invoke.ActionName).IsEqualTo("Step1");
-        }
+    [Test]
+    public async Task InvokeActionEffect_CanBeStoredInAction() {
+        var entity = new Entity("Orchestrator", [], [new Poly.DomainModeling.Action("Step1", InvocationResult.Void, [], [], [])], [], []);
+        var start = new Domain("Test", [entity], []);
+        var result = new DomainEvolution(start)
+            .Evolve()
+            .AddAction("Orchestrator", "RunAll")
+            .AddEffectToAction("Orchestrator", "RunAll",
+                new InvokeActionEffect("Step1", []))
+            .Apply();
+        await Assert.That(result.Succeeded).IsTrue();
+        var orch = result.Root.Types.OfType<Entity>().Single(e => e.Name == "Orchestrator");
+        var action = orch.Actions.Single(a => a.Name == "RunAll");
+        await Assert.That(action.Effects.Count).IsEqualTo(1);
+        await Assert.That(action.Effects[0]).IsTypeOf<InvokeActionEffect>();
+        var invoke = (InvokeActionEffect)action.Effects[0];
+        await Assert.That(invoke.ActionName).IsEqualTo("Step1");
+    }
 
-        [Test]
-        public static async Task ConditionalEffect_CanBeStoredInAction() {
-            var entity = new Entity("Task", [], [], [], []);
-            var start = new Domain("Test", [entity], []);
-            var result = new DomainEvolution(start)
-                .Evolve()
-                .AddStage("Task", "Approved")
-                .AddStage("Task", "Rejected")
-                .AddAction("Task", "Evaluate")
-                .AddEffectToAction("Task", "Evaluate",
-                    new ConditionalEffect(
-                        DomainExpression.Literal(true),
-                        [new StageTransitionEffect(new StageReference("Approved"))],
-                        [new StageTransitionEffect(new StageReference("Rejected"))]))
-                .Apply();
-            await Assert.That(result.Succeeded).IsTrue();
-            var task = result.Root.Types.OfType<Entity>().Single(e => e.Name == "Task");
-            var action = task.Actions.Single(a => a.Name == "Evaluate");
-            await Assert.That(action.Effects.Count).IsEqualTo(1);
-            await Assert.That(action.Effects[0]).IsTypeOf<ConditionalEffect>();
-            var cond = (ConditionalEffect)action.Effects[0];
-            await Assert.That(cond.ThenEffects.Count).IsEqualTo(1);
-            await Assert.That(cond.ElseEffects?.Count).IsEqualTo(1);
-        }
+    [Test]
+    public async Task ConditionalEffect_CanBeStoredInAction() {
+        var entity = new Entity("Task", [], [], [], []);
+        var start = new Domain("Test", [entity], []);
+        var result = new DomainEvolution(start)
+            .Evolve()
+            .AddStage("Task", "Approved")
+            .AddStage("Task", "Rejected")
+            .AddAction("Task", "Evaluate")
+            .AddEffectToAction("Task", "Evaluate",
+                new ConditionalEffect(
+                    DomainExpression.Literal(true),
+                    [new StageTransitionEffect(new StageReference("Approved"))],
+                    [new StageTransitionEffect(new StageReference("Rejected"))]))
+            .Apply();
+        await Assert.That(result.Succeeded).IsTrue();
+        var task = result.Root.Types.OfType<Entity>().Single(e => e.Name == "Task");
+        var action = task.Actions.Single(a => a.Name == "Evaluate");
+        await Assert.That(action.Effects.Count).IsEqualTo(1);
+        await Assert.That(action.Effects[0]).IsTypeOf<ConditionalEffect>();
+        var cond = (ConditionalEffect)action.Effects[0];
+        await Assert.That(cond.ThenEffects.Count).IsEqualTo(1);
+        await Assert.That(cond.ElseEffects?.Count).IsEqualTo(1);
+    }
 
-        [Test]
-        public static async Task ConditionalEffect_WithoutElse_CanBeStored() {
-            var entity = new Entity("Task", [], [], [], []);
-            var start = new Domain("Test", [entity], []);
-            var result = new DomainEvolution(start)
-                .Evolve()
-                .AddStage("Task", "Completed")
-                .AddAction("Task", "TryComplete")
-                .AddEffectToAction("Task", "TryComplete",
-                    new ConditionalEffect(
-                        DomainExpression.Property("IsReady"),
-                        [new StageTransitionEffect(new StageReference("Completed"))],
-                        null))
-                .Apply();
-            await Assert.That(result.Succeeded).IsTrue();
-            var task = result.Root.Types.OfType<Entity>().Single(e => e.Name == "Task");
-            var action = task.Actions.Single(a => a.Name == "TryComplete");
-            var cond = (ConditionalEffect)action.Effects.Single();
-            await Assert.That(cond.ElseEffects).IsNull();
-        }
+    [Test]
+    public async Task ConditionalEffect_WithoutElse_CanBeStored() {
+        var entity = new Entity("Task", [], [], [], []);
+        var start = new Domain("Test", [entity], []);
+        var result = new DomainEvolution(start)
+            .Evolve()
+            .AddStage("Task", "Completed")
+            .AddAction("Task", "TryComplete")
+            .AddEffectToAction("Task", "TryComplete",
+                new ConditionalEffect(
+                    DomainExpression.Property("IsReady"),
+                    [new StageTransitionEffect(new StageReference("Completed"))],
+                    null))
+            .Apply();
+        await Assert.That(result.Succeeded).IsTrue();
+        var task = result.Root.Types.OfType<Entity>().Single(e => e.Name == "Task");
+        var action = task.Actions.Single(a => a.Name == "TryComplete");
+        var cond = (ConditionalEffect)action.Effects.Single();
+        await Assert.That(cond.ElseEffects).IsNull();
+    }
 
-        [Test]
-        public static async Task LinkRelationshipEffect_CanBeStoredInAction() {
-            var entity = new Entity("Order", [], [], [], []);
-            var customerRel = new Relationship("Customer",
-                new DomainTypeReference("Order"), new DomainTypeReference("Order"),
-                RelationshipCardinality.OneToOne, []);
-            var start = new Domain("Test", [entity], [customerRel]);
-            var result = new DomainEvolution(start)
-                .Evolve()
-                .AddAction("Order", "AssignCustomer")
-                .AddEffectToAction("Order", "AssignCustomer",
-                    new LinkRelationshipEffect("Customer", DomainExpression.Parameter("CustomerId")))
-                .Apply();
-            await Assert.That(result.Succeeded).IsTrue();
-            var order = result.Root.Types.OfType<Entity>().Single(e => e.Name == "Order");
-            var action = order.Actions.Single(a => a.Name == "AssignCustomer");
-            await Assert.That(action.Effects[0]).IsTypeOf<LinkRelationshipEffect>();
-            var link = (LinkRelationshipEffect)action.Effects[0];
-            await Assert.That(link.RelationshipName).IsEqualTo("Customer");
-        }
+    [Test]
+    public async Task LinkRelationshipEffect_CanBeStoredInAction() {
+        var entity = new Entity("Order", [], [], [], []);
+        var customerRel = new Relationship("Customer",
+            new DomainTypeReference("Order"), new DomainTypeReference("Order"),
+            RelationshipCardinality.OneToOne, []);
+        var start = new Domain("Test", [entity], [customerRel]);
+        var result = new DomainEvolution(start)
+            .Evolve()
+            .AddAction("Order", "AssignCustomer")
+            .AddEffectToAction("Order", "AssignCustomer",
+                new LinkRelationshipEffect("Customer", DomainExpression.Parameter("CustomerId")))
+            .Apply();
+        await Assert.That(result.Succeeded).IsTrue();
+        var order = result.Root.Types.OfType<Entity>().Single(e => e.Name == "Order");
+        var action = order.Actions.Single(a => a.Name == "AssignCustomer");
+        await Assert.That(action.Effects[0]).IsTypeOf<LinkRelationshipEffect>();
+        var link = (LinkRelationshipEffect)action.Effects[0];
+        await Assert.That(link.RelationshipName).IsEqualTo("Customer");
+    }
 
-        [Test]
-        public static async Task UnlinkRelationshipEffect_CanBeStoredInAction() {
-            var entity = new Entity("Order", [], [], [], []);
-            var customerRel = new Relationship("Customer",
-                new DomainTypeReference("Order"), new DomainTypeReference("Order"),
-                RelationshipCardinality.OneToOne, []);
-            var start = new Domain("Test", [entity], [customerRel]);
-            var result = new DomainEvolution(start)
-                .Evolve()
-                .AddAction("Order", "RemoveCustomer")
-                .AddEffectToAction("Order", "RemoveCustomer",
-                    new UnlinkRelationshipEffect("Customer", DomainExpression.Parameter("CustomerId")))
-                .Apply();
-            await Assert.That(result.Succeeded).IsTrue();
-            var order = result.Root.Types.OfType<Entity>().Single(e => e.Name == "Order");
-            var action = order.Actions.Single(a => a.Name == "RemoveCustomer");
-            await Assert.That(action.Effects[0]).IsTypeOf<UnlinkRelationshipEffect>();
-        }
+    [Test]
+    public async Task UnlinkRelationshipEffect_CanBeStoredInAction() {
+        var entity = new Entity("Order", [], [], [], []);
+        var customerRel = new Relationship("Customer",
+            new DomainTypeReference("Order"), new DomainTypeReference("Order"),
+            RelationshipCardinality.OneToOne, []);
+        var start = new Domain("Test", [entity], [customerRel]);
+        var result = new DomainEvolution(start)
+            .Evolve()
+            .AddAction("Order", "RemoveCustomer")
+            .AddEffectToAction("Order", "RemoveCustomer",
+                new UnlinkRelationshipEffect("Customer", DomainExpression.Parameter("CustomerId")))
+            .Apply();
+        await Assert.That(result.Succeeded).IsTrue();
+        var order = result.Root.Types.OfType<Entity>().Single(e => e.Name == "Order");
+        var action = order.Actions.Single(a => a.Name == "RemoveCustomer");
+        await Assert.That(action.Effects[0]).IsTypeOf<UnlinkRelationshipEffect>();
+    }
 
-        [Test]
-        public static async Task TransitionRelationshipEffect_CanBeStoredInAction() {
-            var entity = new Entity("Project", [], [], [], []);
-            var tasksRel = new Relationship("Tasks",
-                new DomainTypeReference("Project"), new DomainTypeReference("Project"),
-                RelationshipCardinality.OneToMany, []) { Stages = [new Stage("Completed", [], [], [], [])] };
-            var start = new Domain("Test", [entity], [tasksRel]);
-            var result = new DomainEvolution(start)
-                .Evolve()
-                .AddAction("Project", "AdvanceTask")
-                .AddEffectToAction("Project", "AdvanceTask",
-                    new TransitionRelationshipEffect("Tasks", new StageReference("Completed")))
-                .Apply();
-            await Assert.That(result.Succeeded).IsTrue();
-            var project = result.Root.Types.OfType<Entity>().Single(e => e.Name == "Project");
-            var action = project.Actions.Single(a => a.Name == "AdvanceTask");
-            await Assert.That(action.Effects[0]).IsTypeOf<TransitionRelationshipEffect>();
-            var tr = (TransitionRelationshipEffect)action.Effects[0];
-            await Assert.That(tr.RelationshipName).IsEqualTo("Tasks");
-            await Assert.That(tr.TargetStage.StageName).IsEqualTo("Completed");
-        }
+    [Test]
+    public async Task TransitionRelationshipEffect_CanBeStoredInAction() {
+        var entity = new Entity("Project", [], [], [], []);
+        var tasksRel = new Relationship("Tasks",
+            new DomainTypeReference("Project"), new DomainTypeReference("Project"),
+            RelationshipCardinality.OneToMany, []) { Stages = [new Stage("Completed", [], [], [], [])] };
+        var start = new Domain("Test", [entity], [tasksRel]);
+        var result = new DomainEvolution(start)
+            .Evolve()
+            .AddAction("Project", "AdvanceTask")
+            .AddEffectToAction("Project", "AdvanceTask",
+                new TransitionRelationshipEffect("Tasks", new StageReference("Completed")))
+            .Apply();
+        await Assert.That(result.Succeeded).IsTrue();
+        var project = result.Root.Types.OfType<Entity>().Single(e => e.Name == "Project");
+        var action = project.Actions.Single(a => a.Name == "AdvanceTask");
+        await Assert.That(action.Effects[0]).IsTypeOf<TransitionRelationshipEffect>();
+        var tr = (TransitionRelationshipEffect)action.Effects[0];
+        await Assert.That(tr.RelationshipName).IsEqualTo("Tasks");
+        await Assert.That(tr.TargetStage.StageName).IsEqualTo("Completed");
+    }
 
-        [Test]
-        public static async Task DeleteEntityInstance_CanBeStoredAsEffect() {
-            var entity = new Entity("Task", [], [], [], []);
-            var start = new Domain("Test", [entity], []);
-            var result = new DomainEvolution(start)
-                .Evolve()
-                .AddAction("Task", "Remove")
-                .AddEffectToAction("Task", "Remove", new DeleteEntityInstance(new DomainTypeReference("Task")))
-                .Apply();
-            await Assert.That(result.Succeeded).IsTrue();
-            var task = result.Root.Types.OfType<Entity>().Single(e => e.Name == "Task");
-            var action = task.Actions.Single(a => a.Name == "Remove");
-            await Assert.That(action.Effects.Count).IsEqualTo(1);
-            await Assert.That(action.Effects[0]).IsTypeOf<DeleteEntityInstance>();
-        }
+    [Test]
+    public async Task DeleteEntityInstance_CanBeStoredAsEffect() {
+        var entity = new Entity("Task", [], [], [], []);
+        var start = new Domain("Test", [entity], []);
+        var result = new DomainEvolution(start)
+            .Evolve()
+            .AddAction("Task", "Remove")
+            .AddEffectToAction("Task", "Remove", new DeleteEntityInstance(new DomainTypeReference("Task")))
+            .Apply();
+        await Assert.That(result.Succeeded).IsTrue();
+        var task = result.Root.Types.OfType<Entity>().Single(e => e.Name == "Task");
+        var action = task.Actions.Single(a => a.Name == "Remove");
+        await Assert.That(action.Effects.Count).IsEqualTo(1);
+        await Assert.That(action.Effects[0]).IsTypeOf<DeleteEntityInstance>();
+    }
 
-        [Test]
-        public static async Task EntityInheritance_BuilderMethod_SetsParent() {
-            var parent = new Entity("Person", [], [], [], []);
-            var child = new Entity("Member", [], [], [], []);
-            var start = new Domain("Test", [parent, child], []);
-            var result = new DomainEvolution(start)
-                .Evolve()
-                .SetEntityParent("Member", "Person")
-                .Apply();
-            await Assert.That(result.Succeeded).IsTrue();
-            var updatedChild = result.Root.Types.OfType<Entity>().Single(e => e.Name == "Member");
-            await Assert.That(updatedChild.ParentEntityName).IsEqualTo("Person");
-        }
+    [Test]
+    public async Task RelationshipStage_BuilderMethods_Work() {
+        var entity = new Entity("Person", [], [], [], []);
+        var rel = new Relationship("Friends",
+            new DomainTypeReference("Person"), new DomainTypeReference("Person"),
+            RelationshipCardinality.ManyToMany, []);
+        var start = new Domain("Test", [entity], [rel]);
+        var result = new DomainEvolution(start)
+            .Evolve()
+            .AddStageToRelationship("Friends", "Active")
+            .AddPolicyToRelationship("Friends", "Limit", DomainExpression.Literal(5))
+            .Apply();
+        await Assert.That(result.Succeeded).IsTrue();
+        var updatedRel = result.Root.Relationships.Single(r => r.Name == "Friends");
+        await Assert.That(updatedRel.Stages.Count).IsEqualTo(1);
+        await Assert.That(updatedRel.Policies.Count).IsEqualTo(1);
+    }
 
-        [Test]
-        public static async Task RelationshipStage_BuilderMethods_Work() {
-            var entity = new Entity("Person", [], [], [], []);
-            var rel = new Relationship("Friends",
-                new DomainTypeReference("Person"), new DomainTypeReference("Person"),
-                RelationshipCardinality.ManyToMany, []);
-            var start = new Domain("Test", [entity], [rel]);
-            var result = new DomainEvolution(start)
-                .Evolve()
-                .AddStageToRelationship("Friends", "Active")
-                .AddPolicyToRelationship("Friends", "Limit", DomainExpression.Literal(5))
-                .Apply();
-            await Assert.That(result.Succeeded).IsTrue();
-            var updatedRel = result.Root.Relationships.Single(r => r.Name == "Friends");
-            await Assert.That(updatedRel.Stages.Count).IsEqualTo(1);
-            await Assert.That(updatedRel.Policies.Count).IsEqualTo(1);
-        }
+    [Test]
+    public async Task Apply_SetDomainNameChange_UpdatesDomainName() {
+        var start = new Domain("OriginalName", [], []);
+        var result = new DomainEvolution(start).Apply([new SetDomainNameChange("Renamed")]);
+        await Assert.That(result.Succeeded).IsTrue();
+        await Assert.That(result.Root.Name).IsEqualTo("Renamed");
+        await Assert.That(start.Name).IsEqualTo("OriginalName");
+    }
 
-        [Test]
-        public static async Task Apply_SetDomainNameChange_UpdatesDomainName() {
-            var start = new Domain("OriginalName", [], []);
-            var result = new DomainEvolution(start).Apply([new SetDomainNameChange("Renamed")]);
-            await Assert.That(result.Succeeded).IsTrue();
-            await Assert.That(result.Root.Name).IsEqualTo("Renamed");
-            await Assert.That(start.Name).IsEqualTo("OriginalName");
-        }
+    [Test]
+    public async Task Apply_Builder_SetDomainName_Works() {
+        var start = new Domain("OriginalName", [], []);
+        var result = new DomainEvolution(start)
+            .Evolve()
+            .SetDomainName("Renamed")
+            .Apply();
+        await Assert.That(result.Succeeded).IsTrue();
+        await Assert.That(result.Root.Name).IsEqualTo("Renamed");
+    }
 
-        [Test]
-        public static async Task Apply_Builder_SetDomainName_Works() {
-            var start = new Domain("OriginalName", [], []);
-            var result = new DomainEvolution(start)
-                .Evolve()
-                .SetDomainName("Renamed")
-                .Apply();
-            await Assert.That(result.Succeeded).IsTrue();
-            await Assert.That(result.Root.Name).IsEqualTo("Renamed");
-        }
+    [Test]
+    public async Task Apply_AddPropertyToRelationship_AddsProperty() {
+        var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
+        var entity = new Entity("Person", [], [], [], []);
+        var rel = new Relationship("Friends",
+            new DomainTypeReference("Person"), new DomainTypeReference("Person"),
+            RelationshipCardinality.ManyToMany, []);
+        var start = new Domain("Test", [entity, textPrimitive], [rel]);
+        var prop = new Property("Since", new DomainTypeReference("Text"), []);
+        var result = new DomainEvolution(start).Apply([new AddPropertyToRelationshipChange("Friends", prop)]);
+        await Assert.That(result.Succeeded).IsTrue();
+        var updatedRel = result.Root.Relationships.Single(r => r.Name == "Friends");
+        await Assert.That(updatedRel.Properties.Count).IsEqualTo(1);
+        await Assert.That(updatedRel.Properties[0].Name).IsEqualTo("Since");
+    }
 
-        [Test]
-        public static async Task Apply_AddPropertyToRelationship_AddsProperty() {
-            var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
-            var entity = new Entity("Person", [], [], [], []);
-            var rel = new Relationship("Friends",
-                new DomainTypeReference("Person"), new DomainTypeReference("Person"),
-                RelationshipCardinality.ManyToMany, []);
-            var start = new Domain("Test", [entity, textPrimitive], [rel]);
-            var prop = new Property("Since", new DomainTypeReference("Text"), []);
-            var result = new DomainEvolution(start).Apply([new AddPropertyToRelationshipChange("Friends", prop)]);
-            await Assert.That(result.Succeeded).IsTrue();
-            var updatedRel = result.Root.Relationships.Single(r => r.Name == "Friends");
-            await Assert.That(updatedRel.Properties.Count).IsEqualTo(1);
-            await Assert.That(updatedRel.Properties[0].Name).IsEqualTo("Since");
-        }
+    [Test]
+    public async Task Apply_RemovePropertyFromRelationship_RemovesProperty() {
+        var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
+        var entity = new Entity("Person", [], [], [], []);
+        var prop = new Property("Since", new DomainTypeReference("Text"), []);
+        var rel = new Relationship("Friends",
+            new DomainTypeReference("Person"), new DomainTypeReference("Person"),
+            RelationshipCardinality.ManyToMany, [prop]);
+        var start = new Domain("Test", [entity, textPrimitive], [rel]);
+        var result = new DomainEvolution(start).Apply([new RemovePropertyFromRelationshipChange("Friends", "Since")]);
+        await Assert.That(result.Succeeded).IsTrue();
+        var updatedRel = result.Root.Relationships.Single(r => r.Name == "Friends");
+        await Assert.That(updatedRel.Properties).IsEmpty();
+    }
 
-        [Test]
-        public static async Task Apply_RemovePropertyFromRelationship_RemovesProperty() {
-            var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
-            var entity = new Entity("Person", [], [], [], []);
-            var prop = new Property("Since", new DomainTypeReference("Text"), []);
-            var rel = new Relationship("Friends",
-                new DomainTypeReference("Person"), new DomainTypeReference("Person"),
-                RelationshipCardinality.ManyToMany, [prop]);
-            var start = new Domain("Test", [entity, textPrimitive], [rel]);
-            var result = new DomainEvolution(start).Apply([new RemovePropertyFromRelationshipChange("Friends", "Since")]);
-            await Assert.That(result.Succeeded).IsTrue();
-            var updatedRel = result.Root.Relationships.Single(r => r.Name == "Friends");
-            await Assert.That(updatedRel.Properties).IsEmpty();
-        }
+    [Test]
+    public async Task Apply_AddConstraintToProperty_AddsConstraint() {
+        var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
+        var entity = new Entity("Customer", [
+            new Property("Email", new DomainTypeReference("Text"), [])
+        ], [], [], []);
+        var start = new Domain("Test", [entity, textPrimitive], []);
+        var constraint = new RequiredConstraint();
+        var result = new DomainEvolution(start).Apply([new AddConstraintToPropertyChange("Customer", "Email", constraint)]);
+        await Assert.That(result.Succeeded).IsTrue();
+        var updatedEntity = result.Root.Types.OfType<Entity>().Single(e => e.Name == "Customer");
+        var emailProp = updatedEntity.Properties.Single(p => p.Name == "Email");
+        await Assert.That(emailProp.Constraints.Count).IsEqualTo(1);
+        await Assert.That(emailProp.Constraints[0]).IsTypeOf<RequiredConstraint>();
+    }
 
-        [Test]
-        public static async Task Apply_AddConstraintToProperty_AddsConstraint() {
-            var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
-            var entity = new Entity("Customer", [
-                new Property("Email", new DomainTypeReference("Text"), [])
-            ], [], [], []);
-            var start = new Domain("Test", [entity, textPrimitive], []);
-            var constraint = new RequiredConstraint();
-            var result = new DomainEvolution(start).Apply([new AddConstraintToPropertyChange("Customer", "Email", constraint)]);
-            await Assert.That(result.Succeeded).IsTrue();
-            var updatedEntity = result.Root.Types.OfType<Entity>().Single(e => e.Name == "Customer");
-            var emailProp = updatedEntity.Properties.Single(p => p.Name == "Email");
-            await Assert.That(emailProp.Constraints.Count).IsEqualTo(1);
-            await Assert.That(emailProp.Constraints[0]).IsTypeOf<RequiredConstraint>();
-        }
+    [Test]
+    public async Task Apply_RemoveConstraintFromProperty_RemovesConstraint() {
+        var constraint = new RequiredConstraint();
+        var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
+        var entity = new Entity("Customer", [
+            new Property("Email", new DomainTypeReference("Text"), [constraint])
+        ], [], [], []);
+        var start = new Domain("Test", [entity, textPrimitive], []);
+        var result = new DomainEvolution(start).Apply([new RemoveConstraintFromPropertyChange("Customer", "Email", constraint)]);
+        await Assert.That(result.Succeeded).IsTrue();
+        var updatedEntity = result.Root.Types.OfType<Entity>().Single(e => e.Name == "Customer");
+        var emailProp = updatedEntity.Properties.Single(p => p.Name == "Email");
+        await Assert.That(emailProp.Constraints).IsEmpty();
+    }
 
-        [Test]
-        public static async Task Apply_RemoveConstraintFromProperty_RemovesConstraint() {
-            var constraint = new RequiredConstraint();
-            var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
-            var entity = new Entity("Customer", [
-                new Property("Email", new DomainTypeReference("Text"), [constraint])
-            ], [], [], []);
-            var start = new Domain("Test", [entity, textPrimitive], []);
-            var result = new DomainEvolution(start).Apply([new RemoveConstraintFromPropertyChange("Customer", "Email", constraint)]);
-            await Assert.That(result.Succeeded).IsTrue();
-            var updatedEntity = result.Root.Types.OfType<Entity>().Single(e => e.Name == "Customer");
-            var emailProp = updatedEntity.Properties.Single(p => p.Name == "Email");
-            await Assert.That(emailProp.Constraints).IsEmpty();
-        }
+    [Test]
+    public async Task Apply_AddConstraintToDomainType_AddsConstraint() {
+        var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
+        var start = new Domain("Test", [textPrimitive], []);
+        var constraint = new RequiredConstraint();
+        var result = new DomainEvolution(start).Apply([new AddConstraintToDomainTypeChange("Text", constraint)]);
+        await Assert.That(result.Succeeded).IsTrue();
+        var updated = result.Root.Types.Single(t => t.Name == "Text");
+        await Assert.That(updated.Constraints.Count).IsEqualTo(1);
+    }
 
-        [Test]
-        public static async Task Apply_AddConstraintToDomainType_AddsConstraint() {
-            var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
-            var start = new Domain("Test", [textPrimitive], []);
-            var constraint = new RequiredConstraint();
-            var result = new DomainEvolution(start).Apply([new AddConstraintToDomainTypeChange("Text", constraint)]);
-            await Assert.That(result.Succeeded).IsTrue();
-            var updated = result.Root.Types.Single(t => t.Name == "Text");
-            await Assert.That(updated.Constraints.Count).IsEqualTo(1);
-        }
+    [Test]
+    public async Task Apply_RemoveConstraintFromDomainType_RemovesConstraint() {
+        var constraint = new RequiredConstraint();
+        var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, [constraint]);
+        var start = new Domain("Test", [textPrimitive], []);
+        var result = new DomainEvolution(start).Apply([new RemoveConstraintFromDomainTypeChange("Text", constraint)]);
+        await Assert.That(result.Succeeded).IsTrue();
+        var updated = result.Root.Types.Single(t => t.Name == "Text");
+        await Assert.That(updated.Constraints).IsEmpty();
+    }
 
-        [Test]
-        public static async Task Apply_RemoveConstraintFromDomainType_RemovesConstraint() {
-            var constraint = new RequiredConstraint();
-            var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, [constraint]);
-            var start = new Domain("Test", [textPrimitive], []);
-            var result = new DomainEvolution(start).Apply([new RemoveConstraintFromDomainTypeChange("Text", constraint)]);
-            await Assert.That(result.Succeeded).IsTrue();
-            var updated = result.Root.Types.Single(t => t.Name == "Text");
-            await Assert.That(updated.Constraints).IsEmpty();
-        }
+    [Test]
+    public async Task Apply_ChangePropertyType_UpdatesType() {
+        var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
+        var intPrimitive = new PrimitiveType("Integer", Poly.Introspection.TypeCategory.Integer, []);
+        var entity = new Entity("Product", [
+            new Property("Count", new DomainTypeReference("Text"), [])
+        ], [], [], []);
+        var start = new Domain("Test", [entity, textPrimitive, intPrimitive], []);
+        var result = new DomainEvolution(start).Apply([new ChangePropertyTypeChange("Product", "Count", new DomainTypeReference("Integer"))]);
+        await Assert.That(result.Succeeded).IsTrue();
+        var updatedEntity = result.Root.Types.OfType<Entity>().Single(e => e.Name == "Product");
+        var countProp = updatedEntity.Properties.Single(p => p.Name == "Count");
+        await Assert.That(countProp.Type.TypeName).IsEqualTo("Integer");
+    }
 
-        [Test]
-        public static async Task Apply_ChangePropertyType_UpdatesType() {
-            var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
-            var intPrimitive = new PrimitiveType("Integer", Poly.Introspection.TypeCategory.Integer, []);
-            var entity = new Entity("Product", [
-                new Property("Count", new DomainTypeReference("Text"), [])
-            ], [], [], []);
-            var start = new Domain("Test", [entity, textPrimitive, intPrimitive], []);
-            var result = new DomainEvolution(start).Apply([new ChangePropertyTypeChange("Product", "Count", new DomainTypeReference("Integer"))]);
-            await Assert.That(result.Succeeded).IsTrue();
-            var updatedEntity = result.Root.Types.OfType<Entity>().Single(e => e.Name == "Product");
-            var countProp = updatedEntity.Properties.Single(p => p.Name == "Count");
-            await Assert.That(countProp.Type.TypeName).IsEqualTo("Integer");
-        }
-
-        [Test]
-        public static async Task Apply_SetRelationshipShape_UpdatesCardinality() {
-            var entity = new Entity("Person", [], [], [], []);
-            var rel = new Relationship("Friends",
-                new DomainTypeReference("Person"), new DomainTypeReference("Person"),
-                RelationshipCardinality.ManyToMany, []);
-            var start = new Domain("Test", [entity], [rel]);
-            var result = new DomainEvolution(start).Apply([new SetRelationshipShapeChange("Friends",
+    [Test]
+    public async Task Apply_SetRelationshipShape_UpdatesCardinality() {
+        var entity = new Entity("Person", [], [], [], []);
+        var rel = new Relationship("Friends",
+            new DomainTypeReference("Person"), new DomainTypeReference("Person"),
+            RelationshipCardinality.ManyToMany, []);
+        var start = new Domain("Test", [entity], [rel]);
+        var result = new DomainEvolution(start).Apply([new SetRelationshipShapeChange("Friends",
             NewCardinality: RelationshipCardinality.OneToOne)]);
-            await Assert.That(result.Succeeded).IsTrue();
-            var updatedRel = result.Root.Relationships.Single(r => r.Name == "Friends");
-            await Assert.That(updatedRel.Cardinality).IsEqualTo(RelationshipCardinality.OneToOne);
-        }
+        await Assert.That(result.Succeeded).IsTrue();
+        var updatedRel = result.Root.Relationships.Single(r => r.Name == "Friends");
+        await Assert.That(updatedRel.Cardinality).IsEqualTo(RelationshipCardinality.OneToOne);
+    }
 
-        [Test]
-        public static async Task Apply_SetPrimitiveTypeCategory_UpdatesCategory() {
-            var textPrimitive = new PrimitiveType("MyText", Poly.Introspection.TypeCategory.Text, []);
-            var start = new Domain("Test", [textPrimitive], []);
-            var result = new DomainEvolution(start).Apply([new SetPrimitiveTypeCategoryChange("MyText", Poly.Introspection.TypeCategory.Numeric)]);
-            await Assert.That(result.Succeeded).IsTrue();
-            var updated = result.Root.Types.OfType<PrimitiveType>().Single(t => t.Name == "MyText");
-            await Assert.That(updated.TypeCategory).IsEqualTo(Poly.Introspection.TypeCategory.Numeric);
-        }
+    [Test]
+    public async Task Apply_SetPrimitiveTypeCategory_UpdatesCategory() {
+        var textPrimitive = new PrimitiveType("MyText", Poly.Introspection.TypeCategory.Text, []);
+        var start = new Domain("Test", [textPrimitive], []);
+        var result = new DomainEvolution(start).Apply([new SetPrimitiveTypeCategoryChange("MyText", Poly.Introspection.TypeCategory.Numeric)]);
+        await Assert.That(result.Succeeded).IsTrue();
+        var updated = result.Root.Types.OfType<PrimitiveType>().Single(t => t.Name == "MyText");
+        await Assert.That(updated.TypeCategory).IsEqualTo(Poly.Introspection.TypeCategory.Numeric);
+    }
 
-        // --- Contract integration tests ---
+    // --- Contract integration tests ---
 
-        [Test]
-        public static async Task Apply_AddImportedContractChange_AddsContractToDomain() {
-            var start = new Domain("TestDomain", [], []);
-            var change = new AddImportedContractChange("CrmContract", ContractSourceKind.ExternalProvider, "crm://api/ticket", "v1");
-            var result = new DomainEvolution(start).Apply([change]);
-            await Assert.That(result.Succeeded).IsTrue();
-            await Assert.That(result.Root.ImportedContracts.Count).IsEqualTo(1);
-            await Assert.That(result.Root.ImportedContracts[0].Name).IsEqualTo("CrmContract");
-            await Assert.That(result.Root.ImportedContracts[0].SourceIdentifier).IsEqualTo("crm://api/ticket");
-        }
+    [Test]
+    public async Task Apply_AddImportedContractChange_AddsContractToDomain() {
+        var start = new Domain("TestDomain", [], []);
+        var change = new AddImportedContractChange("CrmContract", ContractSourceKind.ExternalProvider, "crm://api/ticket", "v1");
+        var result = new DomainEvolution(start).Apply([change]);
+        await Assert.That(result.Succeeded).IsTrue();
+        await Assert.That(result.Root.ImportedContracts.Count).IsEqualTo(1);
+        await Assert.That(result.Root.ImportedContracts[0].Name).IsEqualTo("CrmContract");
+        await Assert.That(result.Root.ImportedContracts[0].SourceIdentifier).IsEqualTo("crm://api/ticket");
+    }
 
-        [Test]
-        public static async Task Apply_RemoveImportedContractChange_RemovesContractAndBindings() {
-            var contract = new ImportedContract("CrmContract", ContractSourceKind.ExternalProvider, "crm://api/ticket", "v1", []);
-            var binding = new ContractBinding("MyBinding", "CrmContract", "GetTicket", "SomeAction", "param", []);
-            var start = new Domain("Test", [], []) {
-                ImportedContracts = [contract],
-                ContractBindings = [binding]
-            };
-            var result = new DomainEvolution(start).Apply([new RemoveImportedContractChange("CrmContract")]);
-            await Assert.That(result.Succeeded).IsTrue();
-            await Assert.That(result.Root.ImportedContracts).IsEmpty();
-            await Assert.That(result.Root.ContractBindings).IsEmpty();
-        }
+    [Test]
+    public async Task Apply_RemoveImportedContractChange_RemovesContractAndBindings() {
+        var contract = new ImportedContract("CrmContract", ContractSourceKind.ExternalProvider, "crm://api/ticket", "v1", []);
+        var binding = new ContractBinding("MyBinding", "CrmContract", "GetTicket", "SomeAction", "param", []);
+        var start = new Domain("Test", [], []) {
+            ImportedContracts = [contract],
+            ContractBindings = [binding]
+        };
+        var result = new DomainEvolution(start).Apply([new RemoveImportedContractChange("CrmContract")]);
+        await Assert.That(result.Succeeded).IsTrue();
+        await Assert.That(result.Root.ImportedContracts).IsEmpty();
+        await Assert.That(result.Root.ContractBindings).IsEmpty();
+    }
 
-        [Test]
-        public static async Task Apply_AddContractEndpointChange_AddsEndpoint() {
-            var contract = new ImportedContract("CrmContract", ContractSourceKind.ExternalProvider, "crm://api/ticket", "v1", []);
-            var start = new Domain("Test", [], []) { ImportedContracts = [contract] };
-            var endpoint = new ContractEndpoint("GetTicket", ContractEndpointKind.Operation, ContractEndpointDirection.Inbound, new DomainTypeReference("TicketData"));
-            var result = new DomainEvolution(start).Apply([new AddContractEndpointChange("CrmContract", endpoint)]);
-            await Assert.That(result.Succeeded).IsTrue();
-            var updated = result.Root.ImportedContracts.Single(c => c.Name == "CrmContract");
-            await Assert.That(updated.Endpoints.Count).IsEqualTo(1);
-            await Assert.That(updated.Endpoints[0].Name).IsEqualTo("GetTicket");
-        }
+    [Test]
+    public async Task Apply_AddContractEndpointChange_AddsEndpoint() {
+        var contract = new ImportedContract("CrmContract", ContractSourceKind.ExternalProvider, "crm://api/ticket", "v1", []);
+        var start = new Domain("Test", [], []) { ImportedContracts = [contract] };
+        var endpoint = new ContractEndpoint("GetTicket", ContractEndpointKind.Operation, ContractEndpointDirection.Inbound, new DomainTypeReference("TicketData"));
+        var result = new DomainEvolution(start).Apply([new AddContractEndpointChange("CrmContract", endpoint)]);
+        await Assert.That(result.Succeeded).IsTrue();
+        var updated = result.Root.ImportedContracts.Single(c => c.Name == "CrmContract");
+        await Assert.That(updated.Endpoints.Count).IsEqualTo(1);
+        await Assert.That(updated.Endpoints[0].Name).IsEqualTo("GetTicket");
+    }
 
-        [Test]
-        public static async Task Apply_RemoveContractEndpointChange_RemovesEndpoint() {
-            var endpoint = new ContractEndpoint("GetTicket", ContractEndpointKind.Operation, ContractEndpointDirection.Inbound, new DomainTypeReference("TicketData"));
-            var contract = new ImportedContract("CrmContract", ContractSourceKind.ExternalProvider, "crm://api/ticket", "v1", [endpoint]);
-            var start = new Domain("Test", [], []) { ImportedContracts = [contract] };
-            var result = new DomainEvolution(start).Apply([new RemoveContractEndpointChange("CrmContract", "GetTicket")]);
-            await Assert.That(result.Succeeded).IsTrue();
-            var updated = result.Root.ImportedContracts.Single(c => c.Name == "CrmContract");
-            await Assert.That(updated.Endpoints).IsEmpty();
-        }
+    [Test]
+    public async Task Apply_RemoveContractEndpointChange_RemovesEndpoint() {
+        var endpoint = new ContractEndpoint("GetTicket", ContractEndpointKind.Operation, ContractEndpointDirection.Inbound, new DomainTypeReference("TicketData"));
+        var contract = new ImportedContract("CrmContract", ContractSourceKind.ExternalProvider, "crm://api/ticket", "v1", [endpoint]);
+        var start = new Domain("Test", [], []) { ImportedContracts = [contract] };
+        var result = new DomainEvolution(start).Apply([new RemoveContractEndpointChange("CrmContract", "GetTicket")]);
+        await Assert.That(result.Succeeded).IsTrue();
+        var updated = result.Root.ImportedContracts.Single(c => c.Name == "CrmContract");
+        await Assert.That(updated.Endpoints).IsEmpty();
+    }
 
-        [Test]
-        public static async Task Apply_AddContractBindingChange_AddsBinding() {
-            var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
-            var endpoint = new ContractEndpoint("GetTicket", ContractEndpointKind.Operation, ContractEndpointDirection.Inbound, new DomainTypeReference("Text"));
-            var contract = new ImportedContract("CrmContract", ContractSourceKind.ExternalProvider, "crm://api", "v1", [endpoint]);
-            var action = new Poly.DomainModeling.Action("SomeAction", InvocationResult.Void,
-                [new Property("input", new DomainTypeReference("Text"), [])], [], []);
-            var entity = new Entity("MyEntity", [new Property("Name", new DomainTypeReference("Text"), [])], [action], [], []);
-            var start = new Domain("Test", [entity, textPrimitive], []) {
-                ImportedContracts = [contract],
-                ContractBindings = []
-            };
-            var change = new AddContractBindingChange("MyBinding", "CrmContract", "GetTicket", "SomeAction", "input");
-            var result = new DomainEvolution(start).Apply([change]);
-            await Assert.That(result.Succeeded).IsTrue();
-            await Assert.That(result.Root.ContractBindings.Count).IsEqualTo(1);
-            await Assert.That(result.Root.ContractBindings[0].ContractName).IsEqualTo("CrmContract");
-        }
+    [Test]
+    public async Task Apply_AddContractBindingChange_AddsBinding() {
+        var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
+        var endpoint = new ContractEndpoint("GetTicket", ContractEndpointKind.Operation, ContractEndpointDirection.Inbound, new DomainTypeReference("Text"));
+        var contract = new ImportedContract("CrmContract", ContractSourceKind.ExternalProvider, "crm://api", "v1", [endpoint]);
+        var action = new Poly.DomainModeling.Action("SomeAction", InvocationResult.Void,
+            [new Property("input", new DomainTypeReference("Text"), [])], [], []);
+        var entity = new Entity("MyEntity", [new Property("Name", new DomainTypeReference("Text"), [])], [action], [], []);
+        var start = new Domain("Test", [entity, textPrimitive], []) {
+            ImportedContracts = [contract],
+            ContractBindings = []
+        };
+        var change = new AddContractBindingChange("MyBinding", "CrmContract", "GetTicket", "SomeAction", "input");
+        var result = new DomainEvolution(start).Apply([change]);
+        await Assert.That(result.Succeeded).IsTrue();
+        await Assert.That(result.Root.ContractBindings.Count).IsEqualTo(1);
+        await Assert.That(result.Root.ContractBindings[0].ContractName).IsEqualTo("CrmContract");
+    }
 
-        [Test]
-        public static async Task Apply_RemoveContractBindingChange_RemovesBinding() {
-            var binding = new ContractBinding("MyBinding", "CrmContract", "GetTicket", "SomeAction", "input", []);
-            var start = new Domain("Test", [], []) { ContractBindings = [binding] };
-            var result = new DomainEvolution(start).Apply([new RemoveContractBindingChange("MyBinding")]);
-            await Assert.That(result.Succeeded).IsTrue();
-            await Assert.That(result.Root.ContractBindings).IsEmpty();
-        }
+    [Test]
+    public async Task Apply_RemoveContractBindingChange_RemovesBinding() {
+        var binding = new ContractBinding("MyBinding", "CrmContract", "GetTicket", "SomeAction", "input", []);
+        var start = new Domain("Test", [], []) { ContractBindings = [binding] };
+        var result = new DomainEvolution(start).Apply([new RemoveContractBindingChange("MyBinding")]);
+        await Assert.That(result.Succeeded).IsTrue();
+        await Assert.That(result.Root.ContractBindings).IsEmpty();
+    }
 
-        [Test]
-        public static async Task Apply_AddContractFieldMapChange_AddsFieldMap() {
-            var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
-            var endpoint = new ContractEndpoint("GetTicket", ContractEndpointKind.Operation, ContractEndpointDirection.Inbound, new DomainTypeReference("Text"));
-            var contract = new ImportedContract("CrmContract", ContractSourceKind.ExternalProvider, "crm://api", "v1", [endpoint]);
-            var action = new Poly.DomainModeling.Action("SomeAction", InvocationResult.Void,
-                [new Property("input", new DomainTypeReference("Text"), [])], [], []);
-            var entity = new Entity("MyEntity", [new Property("Name", new DomainTypeReference("Text"), [])], [action], [], []);
-            var binding = new ContractBinding("MyBinding", "CrmContract", "GetTicket", "SomeAction", "input", []);
-            var start = new Domain("Test", [entity, textPrimitive], []) {
-                ImportedContracts = [contract],
-                ContractBindings = [binding]
-            };
-            var fieldMap = new ContractFieldMap("remoteId", "localId");
-            var result = new DomainEvolution(start).Apply([new AddContractFieldMapChange("MyBinding", fieldMap)]);
-            await Assert.That(result.Succeeded).IsTrue();
-            var updated = result.Root.ContractBindings.Single(b => b.Name == "MyBinding");
-            await Assert.That(updated.FieldMaps.Count).IsEqualTo(1);
-            await Assert.That(updated.FieldMaps[0].RemoteFieldName).IsEqualTo("remoteId");
-        }
+    [Test]
+    public async Task Apply_AddContractFieldMapChange_AddsFieldMap() {
+        var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
+        var endpoint = new ContractEndpoint("GetTicket", ContractEndpointKind.Operation, ContractEndpointDirection.Inbound, new DomainTypeReference("Text"));
+        var contract = new ImportedContract("CrmContract", ContractSourceKind.ExternalProvider, "crm://api", "v1", [endpoint]);
+        var action = new Poly.DomainModeling.Action("SomeAction", InvocationResult.Void,
+            [new Property("input", new DomainTypeReference("Text"), [])], [], []);
+        var entity = new Entity("MyEntity", [new Property("Name", new DomainTypeReference("Text"), [])], [action], [], []);
+        var binding = new ContractBinding("MyBinding", "CrmContract", "GetTicket", "SomeAction", "input", []);
+        var start = new Domain("Test", [entity, textPrimitive], []) {
+            ImportedContracts = [contract],
+            ContractBindings = [binding]
+        };
+        var fieldMap = new ContractFieldMap("remoteId", "localId");
+        var result = new DomainEvolution(start).Apply([new AddContractFieldMapChange("MyBinding", fieldMap)]);
+        await Assert.That(result.Succeeded).IsTrue();
+        var updated = result.Root.ContractBindings.Single(b => b.Name == "MyBinding");
+        await Assert.That(updated.FieldMaps.Count).IsEqualTo(1);
+        await Assert.That(updated.FieldMaps[0].RemoteFieldName).IsEqualTo("remoteId");
+    }
 
-        [Test]
-        public static async Task Apply_RemoveContractFieldMapChange_RemovesFieldMap() {
-            var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
-            var endpoint = new ContractEndpoint("GetTicket", ContractEndpointKind.Operation, ContractEndpointDirection.Inbound, new DomainTypeReference("Text"));
-            var contract = new ImportedContract("CrmContract", ContractSourceKind.ExternalProvider, "crm://api", "v1", [endpoint]);
-            var action = new Poly.DomainModeling.Action("SomeAction", InvocationResult.Void,
-                [new Property("input", new DomainTypeReference("Text"), [])], [], []);
-            var entity = new Entity("MyEntity", [new Property("Name", new DomainTypeReference("Text"), [])], [action], [], []);
-            var fieldMap = new ContractFieldMap("remoteId", "localId");
-            var binding = new ContractBinding("MyBinding", "CrmContract", "GetTicket", "SomeAction", "input", [fieldMap]);
-            var start = new Domain("Test", [entity, textPrimitive], []) {
-                ImportedContracts = [contract],
-                ContractBindings = [binding]
-            };
-            var result = new DomainEvolution(start).Apply([new RemoveContractFieldMapChange("MyBinding", "remoteId")]);
-            await Assert.That(result.Succeeded).IsTrue();
-            var updated = result.Root.ContractBindings.Single(b => b.Name == "MyBinding");
-            await Assert.That(updated.FieldMaps).IsEmpty();
-        }
+    [Test]
+    public async Task Apply_RemoveContractFieldMapChange_RemovesFieldMap() {
+        var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
+        var endpoint = new ContractEndpoint("GetTicket", ContractEndpointKind.Operation, ContractEndpointDirection.Inbound, new DomainTypeReference("Text"));
+        var contract = new ImportedContract("CrmContract", ContractSourceKind.ExternalProvider, "crm://api", "v1", [endpoint]);
+        var action = new Poly.DomainModeling.Action("SomeAction", InvocationResult.Void,
+            [new Property("input", new DomainTypeReference("Text"), [])], [], []);
+        var entity = new Entity("MyEntity", [new Property("Name", new DomainTypeReference("Text"), [])], [action], [], []);
+        var fieldMap = new ContractFieldMap("remoteId", "localId");
+        var binding = new ContractBinding("MyBinding", "CrmContract", "GetTicket", "SomeAction", "input", [fieldMap]);
+        var start = new Domain("Test", [entity, textPrimitive], []) {
+            ImportedContracts = [contract],
+            ContractBindings = [binding]
+        };
+        var result = new DomainEvolution(start).Apply([new RemoveContractFieldMapChange("MyBinding", "remoteId")]);
+        await Assert.That(result.Succeeded).IsTrue();
+        var updated = result.Root.ContractBindings.Single(b => b.Name == "MyBinding");
+        await Assert.That(updated.FieldMaps).IsEmpty();
+    }
 
-        [Test]
-        public static async Task Apply_ContractIntegrationAnalyzer_DetectsMissingSourceIdentifier() {
-            var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
-            var contract = new ImportedContract("BadContract", ContractSourceKind.ExternalProvider, "", "v1", []);
-            var start = new Domain("Test", [textPrimitive], []) { ImportedContracts = [contract] };
-            var result = new DomainEvolution(start).Apply([]);
-            await Assert.That(result.Succeeded).IsFalse();
-            await Assert.That(result.FailureSummary).Contains("source identifier");
-        }
+    [Test]
+    public async Task Apply_ContractIntegrationAnalyzer_DetectsMissingSourceIdentifier() {
+        var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
+        var contract = new ImportedContract("BadContract", ContractSourceKind.ExternalProvider, "", "v1", []);
+        var start = new Domain("Test", [textPrimitive], []) { ImportedContracts = [contract] };
+        var result = new DomainEvolution(start).Apply([]);
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(result.FailureSummary).Contains("source identifier");
+    }
 
-        [Test]
-        public static async Task Apply_ContractIntegrationAnalyzer_DetectsMissingVersion() {
-            var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
-            var contract = new ImportedContract("BadContract", ContractSourceKind.ExternalProvider, "crm://api", "", []);
-            var start = new Domain("Test", [textPrimitive], []) { ImportedContracts = [contract] };
-            var result = new DomainEvolution(start).Apply([]);
-            await Assert.That(result.Succeeded).IsFalse();
-            await Assert.That(result.FailureSummary).Contains("missing a version");
-        }
+    [Test]
+    public async Task Apply_ContractIntegrationAnalyzer_DetectsMissingVersion() {
+        var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
+        var contract = new ImportedContract("BadContract", ContractSourceKind.ExternalProvider, "crm://api", "", []);
+        var start = new Domain("Test", [textPrimitive], []) { ImportedContracts = [contract] };
+        var result = new DomainEvolution(start).Apply([]);
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(result.FailureSummary).Contains("missing a version");
+    }
 
-        [Test]
-        public static async Task Apply_ContractIntegrationAnalyzer_DetectsMissingContractForBinding() {
-            var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
-            var binding = new ContractBinding("MyBinding", "NonExistentContract", "GetTicket", "SomeAction", "input", []);
-            var start = new Domain("Test", [textPrimitive], []) { ContractBindings = [binding] };
-            var result = new DomainEvolution(start).Apply([]);
-            await Assert.That(result.Succeeded).IsFalse();
-            await Assert.That(result.FailureSummary).Contains("not registered");
-        }
+    [Test]
+    public async Task Apply_ContractIntegrationAnalyzer_DetectsMissingContractForBinding() {
+        var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
+        var binding = new ContractBinding("MyBinding", "NonExistentContract", "GetTicket", "SomeAction", "input", []);
+        var start = new Domain("Test", [textPrimitive], []) { ContractBindings = [binding] };
+        var result = new DomainEvolution(start).Apply([]);
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(result.FailureSummary).Contains("not registered");
+    }
 
-        [Test]
-        public static async Task Apply_ContractIntegrationAnalyzer_DetectsMissingEndpointOnBinding() {
-            var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
-            var contract = new ImportedContract("CrmContract", ContractSourceKind.ExternalProvider, "crm://api", "v1", []);
-            var binding = new ContractBinding("MyBinding", "CrmContract", "NonExistentEndpoint", "SomeAction", "input", []);
-            var start = new Domain("Test", [textPrimitive], []) {
-                ImportedContracts = [contract],
-                ContractBindings = [binding]
-            };
-            var result = new DomainEvolution(start).Apply([]);
-            await Assert.That(result.Succeeded).IsFalse();
-            await Assert.That(result.FailureSummary).Contains("does not belong");
-        }
+    [Test]
+    public async Task Apply_ContractIntegrationAnalyzer_DetectsMissingEndpointOnBinding() {
+        var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
+        var contract = new ImportedContract("CrmContract", ContractSourceKind.ExternalProvider, "crm://api", "v1", []);
+        var binding = new ContractBinding("MyBinding", "CrmContract", "NonExistentEndpoint", "SomeAction", "input", []);
+        var start = new Domain("Test", [textPrimitive], []) {
+            ImportedContracts = [contract],
+            ContractBindings = [binding]
+        };
+        var result = new DomainEvolution(start).Apply([]);
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(result.FailureSummary).Contains("does not belong");
+    }
 
-        [Test]
-        public static async Task Apply_ContractIntegrationAnalyzer_DetectsMissingAction() {
-            var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
-            var endpoint = new ContractEndpoint("GetTicket", ContractEndpointKind.Operation, ContractEndpointDirection.Inbound, new DomainTypeReference("Text"));
-            var contract = new ImportedContract("CrmContract", ContractSourceKind.ExternalProvider, "crm://api", "v1", [endpoint]);
-            var binding = new ContractBinding("MyBinding", "CrmContract", "GetTicket", "NonExistentAction", "input", []);
-            var start = new Domain("Test", [textPrimitive], []) {
-                ImportedContracts = [contract],
-                ContractBindings = [binding]
-            };
-            var result = new DomainEvolution(start).Apply([]);
-            await Assert.That(result.Succeeded).IsFalse();
-            await Assert.That(result.FailureSummary).Contains("not found");
-        }
+    [Test]
+    public async Task Apply_ContractIntegrationAnalyzer_DetectsMissingAction() {
+        var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
+        var endpoint = new ContractEndpoint("GetTicket", ContractEndpointKind.Operation, ContractEndpointDirection.Inbound, new DomainTypeReference("Text"));
+        var contract = new ImportedContract("CrmContract", ContractSourceKind.ExternalProvider, "crm://api", "v1", [endpoint]);
+        var binding = new ContractBinding("MyBinding", "CrmContract", "GetTicket", "NonExistentAction", "input", []);
+        var start = new Domain("Test", [textPrimitive], []) {
+            ImportedContracts = [contract],
+            ContractBindings = [binding]
+        };
+        var result = new DomainEvolution(start).Apply([]);
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(result.FailureSummary).Contains("not found");
+    }
 
-        [Test]
-        public static async Task Apply_ContractIntegrationAnalyzer_DetectsMissingParameter() {
-            var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
-            var endpoint = new ContractEndpoint("GetTicket", ContractEndpointKind.Operation, ContractEndpointDirection.Inbound, new DomainTypeReference("Text"));
-            var contract = new ImportedContract("CrmContract", ContractSourceKind.ExternalProvider, "crm://api", "v1", [endpoint]);
-            var action = new Poly.DomainModeling.Action("MyAction", InvocationResult.Void,
-                [new Property("something", new DomainTypeReference("Text"), [])], [], []);
-            var entity = new Entity("MyEntity", [new Property("Name", new DomainTypeReference("Text"), [])], [action], [], []);
-            var binding = new ContractBinding("MyBinding", "CrmContract", "GetTicket", "MyAction", "missingParam", []);
-            var start = new Domain("Test", [entity, textPrimitive], []) {
-                ImportedContracts = [contract],
-                ContractBindings = [binding]
-            };
-            var result = new DomainEvolution(start).Apply([]);
-            await Assert.That(result.Succeeded).IsFalse();
-            await Assert.That(result.FailureSummary).Contains("missingParam");
-        }
+    [Test]
+    public async Task Apply_ContractIntegrationAnalyzer_DetectsMissingParameter() {
+        var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
+        var endpoint = new ContractEndpoint("GetTicket", ContractEndpointKind.Operation, ContractEndpointDirection.Inbound, new DomainTypeReference("Text"));
+        var contract = new ImportedContract("CrmContract", ContractSourceKind.ExternalProvider, "crm://api", "v1", [endpoint]);
+        var action = new Poly.DomainModeling.Action("MyAction", InvocationResult.Void,
+            [new Property("something", new DomainTypeReference("Text"), [])], [], []);
+        var entity = new Entity("MyEntity", [new Property("Name", new DomainTypeReference("Text"), [])], [action], [], []);
+        var binding = new ContractBinding("MyBinding", "CrmContract", "GetTicket", "MyAction", "missingParam", []);
+        var start = new Domain("Test", [entity, textPrimitive], []) {
+            ImportedContracts = [contract],
+            ContractBindings = [binding]
+        };
+        var result = new DomainEvolution(start).Apply([]);
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(result.FailureSummary).Contains("missingParam");
+    }
 
-        [Test]
-        public static async Task Apply_ContractIntegrationAnalyzer_DetectsTypeMismatch() {
-            var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
-            var ticketDataPrimitive = new PrimitiveType("TicketData", Poly.Introspection.TypeCategory.Text, []);
-            var endpoint = new ContractEndpoint("GetTicket", ContractEndpointKind.Operation, ContractEndpointDirection.Inbound, new DomainTypeReference("TicketData"));
-            var contract = new ImportedContract("CrmContract", ContractSourceKind.ExternalProvider, "crm://api", "v1", [endpoint]);
-            var action = new Poly.DomainModeling.Action("MyAction", InvocationResult.Void,
-                [new Property("input", new DomainTypeReference("Text"), [])], [], []);
-            var entity = new Entity("MyEntity", [new Property("Name", new DomainTypeReference("Text"), [])], [action], [], []);
-            var binding = new ContractBinding("MyBinding", "CrmContract", "GetTicket", "MyAction", "input", []);
-            var start = new Domain("Test", [entity, textPrimitive, ticketDataPrimitive], []) {
-                ImportedContracts = [contract],
-                ContractBindings = [binding]
-            };
-            var result = new DomainEvolution(start).Apply([]);
-            await Assert.That(result.Succeeded).IsFalse();
-            await Assert.That(result.FailureSummary).Contains("incompatible");
-        }
+    [Test]
+    public async Task Apply_ContractIntegrationAnalyzer_DetectsTypeMismatch() {
+        var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
+        var ticketDataPrimitive = new PrimitiveType("TicketData", Poly.Introspection.TypeCategory.Text, []);
+        var endpoint = new ContractEndpoint("GetTicket", ContractEndpointKind.Operation, ContractEndpointDirection.Inbound, new DomainTypeReference("TicketData"));
+        var contract = new ImportedContract("CrmContract", ContractSourceKind.ExternalProvider, "crm://api", "v1", [endpoint]);
+        var action = new Poly.DomainModeling.Action("MyAction", InvocationResult.Void,
+            [new Property("input", new DomainTypeReference("Text"), [])], [], []);
+        var entity = new Entity("MyEntity", [new Property("Name", new DomainTypeReference("Text"), [])], [action], [], []);
+        var binding = new ContractBinding("MyBinding", "CrmContract", "GetTicket", "MyAction", "input", []);
+        var start = new Domain("Test", [entity, textPrimitive, ticketDataPrimitive], []) {
+            ImportedContracts = [contract],
+            ContractBindings = [binding]
+        };
+        var result = new DomainEvolution(start).Apply([]);
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(result.FailureSummary).Contains("incompatible");
+    }
 
-        [Test]
-        public static async Task ContractDomainObject_SupportsTreeWalk() {
-            var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
-            var endpoint = new ContractEndpoint("GetTicket", ContractEndpointKind.Operation, ContractEndpointDirection.Inbound, new DomainTypeReference("Text"));
-            var contract = new ImportedContract("CrmContract", ContractSourceKind.ExternalProvider, "crm://api", "v1", [endpoint]);
-            var binding = new ContractBinding("MyBinding", "CrmContract", "GetTicket", "SomeAction", "input", [
-                new ContractFieldMap("remoteId", "localId")
-            ]);
-            var domain = new Domain("Test", [textPrimitive], []) {
-                ImportedContracts = [contract],
-                ContractBindings = [binding]
-            };
+    [Test]
+    public async Task ContractDomainObject_SupportsTreeWalk() {
+        var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
+        var endpoint = new ContractEndpoint("GetTicket", ContractEndpointKind.Operation, ContractEndpointDirection.Inbound, new DomainTypeReference("Text"));
+        var contract = new ImportedContract("CrmContract", ContractSourceKind.ExternalProvider, "crm://api", "v1", [endpoint]);
+        var binding = new ContractBinding("MyBinding", "CrmContract", "GetTicket", "SomeAction", "input", [
+            new ContractFieldMap("remoteId", "localId")
+        ]);
+        var domain = new Domain("Test", [textPrimitive], []) {
+            ImportedContracts = [contract],
+            ContractBindings = [binding]
+        };
 
-            var children = domain.Children.ToArray();
-            await Assert.That(children).Contains(contract);
-            await Assert.That(children).Contains(binding);
+        var children = domain.Children.ToArray();
+        await Assert.That(children).Contains(contract);
+        await Assert.That(children).Contains(binding);
 
-            var contractChildren = contract.Children.ToArray();
-            await Assert.That(contractChildren).Contains(endpoint);
-        }
+        var contractChildren = contract.Children.ToArray();
+        await Assert.That(contractChildren).Contains(endpoint);
+    }
 
-        [Test]
-        public static async Task Apply_ValidContractIntegration_PassesAnalysis() {
-            var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
-            var endpoint = new ContractEndpoint("GetTicket", ContractEndpointKind.Operation, ContractEndpointDirection.Inbound, new DomainTypeReference("Text"));
-            var contract = new ImportedContract("CrmContract", ContractSourceKind.ExternalProvider, "crm://api/ticket", "v1", [endpoint]);
-            var action = new Poly.DomainModeling.Action("MyAction", InvocationResult.Void,
-                [new Property("input", new DomainTypeReference("Text"), [])], [], []);
-            var entity = new Entity("MyEntity", [new Property("Name", new DomainTypeReference("Text"), [])], [action], [], []);
-            var binding = new ContractBinding("MyBinding", "CrmContract", "GetTicket", "MyAction", "input", [
-                new ContractFieldMap("remoteId", "localId")
-            ]);
-            var start = new Domain("Test", [entity, textPrimitive], []) {
-                ImportedContracts = [contract],
-                ContractBindings = [binding]
-            };
+    [Test]
+    public async Task Apply_ValidContractIntegration_PassesAnalysis() {
+        var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
+        var endpoint = new ContractEndpoint("GetTicket", ContractEndpointKind.Operation, ContractEndpointDirection.Inbound, new DomainTypeReference("Text"));
+        var contract = new ImportedContract("CrmContract", ContractSourceKind.ExternalProvider, "crm://api/ticket", "v1", [endpoint]);
+        var action = new Poly.DomainModeling.Action("MyAction", InvocationResult.Void,
+            [new Property("input", new DomainTypeReference("Text"), [])], [], []);
+        var entity = new Entity("MyEntity", [new Property("Name", new DomainTypeReference("Text"), [])], [action], [], []);
+        var binding = new ContractBinding("MyBinding", "CrmContract", "GetTicket", "MyAction", "input", [
+            new ContractFieldMap("remoteId", "localId")
+        ]);
+        var start = new Domain("Test", [entity, textPrimitive], []) {
+            ImportedContracts = [contract],
+            ContractBindings = [binding]
+        };
 
-            var result = new DomainEvolution(start).Apply([]);
-            await Assert.That(result.Succeeded).IsTrue();
-        }
+        var result = new DomainEvolution(start).Apply([]);
+        await Assert.That(result.Succeeded).IsTrue();
+    }
 
-        [Test]
-        public static async Task DomainExpression_Comparison_AllKinds_CanBeConstructed() {
-            var start = new Domain("Test", [
-                new PrimitiveType("Int", Poly.Introspection.TypeCategory.Integer, []),
+    [Test]
+    public async Task DomainExpression_Comparison_AllKinds_CanBeConstructed() {
+        var start = new Domain("Test", [
+            new PrimitiveType("Int", Poly.Introspection.TypeCategory.Integer, []),
             new Entity("Stock", [
                 new Property("Quantity", new DomainTypeReference("Int"), []),
                 new Property("Min", new DomainTypeReference("Int"), []),
                 new Property("Max", new DomainTypeReference("Int"), [])
             ], [], [], [])
-            ], []);
-
-            // Each kind uses ConditionalEffect wrapping a comparison as the condition.
-            // Then/Else branches use AssignEffect to avoid requiring valid stage references.
-
-            // Equal
-            var eqResult = new DomainEvolution(start)
-                .Evolve()
-                .AddAction("Stock", "CheckEqual")
-                .AddEffectToAction("Stock", "CheckEqual",
-                    new ConditionalEffect(
-                        DomainExpression.Equal(DomainExpression.Property("Quantity"), DomainExpression.Property("Min")),
-                        [new AssignEffect(DomainExpression.Property("Quantity"), DomainExpression.Literal(0))],
-                        null))
-                .Apply();
-            await Assert.That(eqResult.Succeeded).IsTrue();
-
-            // NotEqual
-            var neqResult = new DomainEvolution(start)
-                .Evolve()
-                .AddAction("Stock", "CheckNotEqual")
-                .AddEffectToAction("Stock", "CheckNotEqual",
-                    new ConditionalEffect(
-                        DomainExpression.NotEqual(DomainExpression.Property("Quantity"), DomainExpression.Literal(0)),
-                        [new AssignEffect(DomainExpression.Property("Quantity"), DomainExpression.Literal(42))],
-                        null))
-                .Apply();
-            await Assert.That(neqResult.Succeeded).IsTrue();
-
-            // LessThan
-            var ltResult = new DomainEvolution(start)
-                .Evolve()
-                .AddAction("Stock", "CheckLow")
-                .AddEffectToAction("Stock", "CheckLow",
-                    new ConditionalEffect(
-                        DomainExpression.LessThan(DomainExpression.Property("Quantity"), DomainExpression.Property("Min")),
-                        [new AssignEffect(DomainExpression.Property("Quantity"), DomainExpression.Property("Min"))],
-                        [new AssignEffect(DomainExpression.Property("Quantity"), DomainExpression.Property("Max"))]))
-                .Apply();
-            await Assert.That(ltResult.Succeeded).IsTrue();
-
-            // LessThanOrEqual
-            var lteResult = new DomainEvolution(start)
-                .Evolve()
-                .AddAction("Stock", "CheckAtOrBelowMin")
-                .AddEffectToAction("Stock", "CheckAtOrBelowMin",
-                    new ConditionalEffect(
-                        DomainExpression.LessThanOrEqual(DomainExpression.Property("Quantity"), DomainExpression.Property("Min")),
-                        [new AssignEffect(DomainExpression.Property("Quantity"), DomainExpression.Property("Min"))],
-                        [new AssignEffect(DomainExpression.Property("Quantity"), DomainExpression.Property("Max"))]))
-                .Apply();
-            await Assert.That(lteResult.Succeeded).IsTrue();
-
-            // GreaterThan
-            var gtResult = new DomainEvolution(start)
-                .Evolve()
-                .AddAction("Stock", "CheckOverstock")
-                .AddEffectToAction("Stock", "CheckOverstock",
-                    new ConditionalEffect(
-                        DomainExpression.GreaterThan(DomainExpression.Property("Quantity"), DomainExpression.Property("Max")),
-                        [new AssignEffect(DomainExpression.Property("Quantity"), DomainExpression.Property("Max"))],
-                        [new AssignEffect(DomainExpression.Property("Quantity"), DomainExpression.Property("Min"))]))
-                .Apply();
-            await Assert.That(gtResult.Succeeded).IsTrue();
-
-            // GreaterThanOrEqual
-            var gteResult = new DomainEvolution(start)
-                .Evolve()
-                .AddAction("Stock", "CheckAtOrAboveMax")
-                .AddEffectToAction("Stock", "CheckAtOrAboveMax",
-                    new ConditionalEffect(
-                        DomainExpression.GreaterThanOrEqual(DomainExpression.Property("Quantity"), DomainExpression.Property("Max")),
-                        [new AssignEffect(DomainExpression.Property("Quantity"), DomainExpression.Property("Max"))],
-                        [new AssignEffect(DomainExpression.Property("Quantity"), DomainExpression.Property("Min"))]))
-                .Apply();
-            await Assert.That(gteResult.Succeeded).IsTrue();
-        }
-
-        [Test]
-        public static async Task DomainExpression_Comparison_ConstructsCorrectNode() {
-            // Verify the factory methods produce the right Comparison nodes in memory
-            var equal = DomainExpression.Equal(DomainExpression.Property("A"), DomainExpression.Property("B"));
-            await Assert.That(equal).IsTypeOf<Comparison>();
-            var comp = (Comparison)equal;
-            await Assert.That(comp.Kind).IsEqualTo(ComparisonKind.Equal);
-
-            var lt = DomainExpression.LessThan(DomainExpression.Property("X"), DomainExpression.Literal(10));
-            await Assert.That(lt).IsTypeOf<Comparison>();
-            var comp2 = (Comparison)lt;
-            await Assert.That(comp2.Kind).IsEqualTo(ComparisonKind.LessThan);
-        }
-
-        [Test]
-        public static async Task Evolution_ApplyChanges_ReturnsModifiedNodes() {
-            // Verify the allocation fix: ApplyChanges now returns modified nodes list
-            var start = new Domain("Test", [
-                new PrimitiveType("Int", Poly.Introspection.TypeCategory.Integer, []),
         ], []);
 
-            var evolution = new DomainEvolution(start);
-            var changes = new DomainChange[] {
+        // Each kind uses ConditionalEffect wrapping a comparison as the condition.
+        // Then/Else branches use AssignEffect to avoid requiring valid stage references.
+
+        // Equal
+        var eqResult = new DomainEvolution(start)
+            .Evolve()
+            .AddAction("Stock", "CheckEqual")
+            .AddEffectToAction("Stock", "CheckEqual",
+                new ConditionalEffect(
+                    DomainExpression.Equal(DomainExpression.Property("Quantity"), DomainExpression.Property("Min")),
+                    [new AssignEffect(DomainExpression.Property("Quantity"), DomainExpression.Literal(0))],
+                    null))
+            .Apply();
+        await Assert.That(eqResult.Succeeded).IsTrue();
+
+        // NotEqual
+        var neqResult = new DomainEvolution(start)
+            .Evolve()
+            .AddAction("Stock", "CheckNotEqual")
+            .AddEffectToAction("Stock", "CheckNotEqual",
+                new ConditionalEffect(
+                    DomainExpression.NotEqual(DomainExpression.Property("Quantity"), DomainExpression.Literal(0)),
+                    [new AssignEffect(DomainExpression.Property("Quantity"), DomainExpression.Literal(42))],
+                    null))
+            .Apply();
+        await Assert.That(neqResult.Succeeded).IsTrue();
+
+        // LessThan
+        var ltResult = new DomainEvolution(start)
+            .Evolve()
+            .AddAction("Stock", "CheckLow")
+            .AddEffectToAction("Stock", "CheckLow",
+                new ConditionalEffect(
+                    DomainExpression.LessThan(DomainExpression.Property("Quantity"), DomainExpression.Property("Min")),
+                    [new AssignEffect(DomainExpression.Property("Quantity"), DomainExpression.Property("Min"))],
+                    [new AssignEffect(DomainExpression.Property("Quantity"), DomainExpression.Property("Max"))]))
+            .Apply();
+        await Assert.That(ltResult.Succeeded).IsTrue();
+
+        // LessThanOrEqual
+        var lteResult = new DomainEvolution(start)
+            .Evolve()
+            .AddAction("Stock", "CheckAtOrBelowMin")
+            .AddEffectToAction("Stock", "CheckAtOrBelowMin",
+                new ConditionalEffect(
+                    DomainExpression.LessThanOrEqual(DomainExpression.Property("Quantity"), DomainExpression.Property("Min")),
+                    [new AssignEffect(DomainExpression.Property("Quantity"), DomainExpression.Property("Min"))],
+                    [new AssignEffect(DomainExpression.Property("Quantity"), DomainExpression.Property("Max"))]))
+            .Apply();
+        await Assert.That(lteResult.Succeeded).IsTrue();
+
+        // GreaterThan
+        var gtResult = new DomainEvolution(start)
+            .Evolve()
+            .AddAction("Stock", "CheckOverstock")
+            .AddEffectToAction("Stock", "CheckOverstock",
+                new ConditionalEffect(
+                    DomainExpression.GreaterThan(DomainExpression.Property("Quantity"), DomainExpression.Property("Max")),
+                    [new AssignEffect(DomainExpression.Property("Quantity"), DomainExpression.Property("Max"))],
+                    [new AssignEffect(DomainExpression.Property("Quantity"), DomainExpression.Property("Min"))]))
+            .Apply();
+        await Assert.That(gtResult.Succeeded).IsTrue();
+
+        // GreaterThanOrEqual
+        var gteResult = new DomainEvolution(start)
+            .Evolve()
+            .AddAction("Stock", "CheckAtOrAboveMax")
+            .AddEffectToAction("Stock", "CheckAtOrAboveMax",
+                new ConditionalEffect(
+                    DomainExpression.GreaterThanOrEqual(DomainExpression.Property("Quantity"), DomainExpression.Property("Max")),
+                    [new AssignEffect(DomainExpression.Property("Quantity"), DomainExpression.Property("Max"))],
+                    [new AssignEffect(DomainExpression.Property("Quantity"), DomainExpression.Property("Min"))]))
+            .Apply();
+        await Assert.That(gteResult.Succeeded).IsTrue();
+    }
+
+    [Test]
+    public async Task DomainExpression_Comparison_ConstructsCorrectNode() {
+        // Verify the factory methods produce the right Comparison nodes in memory
+        var equal = DomainExpression.Equal(DomainExpression.Property("A"), DomainExpression.Property("B"));
+        await Assert.That(equal).IsTypeOf<Comparison>();
+        var comp = (Comparison)equal;
+        await Assert.That(comp.Kind).IsEqualTo(ComparisonKind.Equal);
+
+        var lt = DomainExpression.LessThan(DomainExpression.Property("X"), DomainExpression.Literal(10));
+        await Assert.That(lt).IsTypeOf<Comparison>();
+        var comp2 = (Comparison)lt;
+        await Assert.That(comp2.Kind).IsEqualTo(ComparisonKind.LessThan);
+    }
+
+    [Test]
+    public async Task Evolution_ApplyChanges_ReturnsModifiedNodes() {
+        // Verify the allocation fix: ApplyChanges now returns modified nodes list
+        var start = new Domain("Test", [
+            new PrimitiveType("Int", Poly.Introspection.TypeCategory.Integer, []),
+        ], []);
+
+        var evolution = new DomainEvolution(start);
+        var changes = new DomainChange[] {
             new AddEntityChange("Order", []),
             new AddPropertyToEntityChange("Order", new Property("Total", new DomainTypeReference("Int"), []))
         };
 
-            var result = evolution.Apply(changes);
-            await Assert.That(result.Succeeded).IsTrue();
+        var result = evolution.Apply(changes);
+        await Assert.That(result.Succeeded).IsTrue();
 
-            var order = result.Root.Types.OfType<Entity>().Single(e => e.Name == "Order");
-            await Assert.That(order.Properties.Count).IsEqualTo(1);
-        }
-
-        // ── 0.1d: Remove-by-name zero-match fail-loud ────────────────
-
-        [Test]
-        public static async Task RemoveProperty_MissingName_FailsWithClearError() {
-            var text = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
-            var entity = new Entity("Order", [new Property("Total", new DomainTypeReference("Int"), [])], [], [], []);
-            var start = new Domain("Test", [entity, text], []);
-
-            var change = new RemovePropertyFromEntityChange("Order", "NonExistent");
-            var result = new DomainEvolution(start).Apply([change]);
-
-            await Assert.That(result.Succeeded).IsFalse();
-            await Assert.That(result.FailureSummary).Contains("not found on Entity 'Order'");
-            await Assert.That(result.FailureSummary).Contains("nothing to remove");
-        }
-
-        [Test]
-        public static async Task RemoveStage_MissingName_FailsWithClearError() {
-            var entity = new Entity("Order", [], [], [], Stages: [new Stage("Draft", [], [], [], [])]);
-            var start = new Domain("Test", [entity], []);
-
-            var change = new RemoveStageChange("Order", "NonExistent");
-            var result = new DomainEvolution(start).Apply([change]);
-
-            await Assert.That(result.Succeeded).IsFalse();
-            await Assert.That(result.FailureSummary).Contains("not found on Entity 'Order'");
-            await Assert.That(result.FailureSummary).Contains("nothing to remove");
-        }
-
-        [Test]
-        public static async Task RemoveAction_MissingName_FailsWithClearError() {
-            var entity = new Entity("Order", [], [
-                new Poly.DomainModeling.Action("Submit", InvocationResult.Void, [], [], [])
-            ], [], []);
-            var start = new Domain("Test", [entity], []);
-
-            var change = new RemoveActionChange("Order", "NonExistent");
-            var result = new DomainEvolution(start).Apply([change]);
-
-            await Assert.That(result.Succeeded).IsFalse();
-            await Assert.That(result.FailureSummary).Contains("not found on Entity 'Order'");
-            await Assert.That(result.FailureSummary).Contains("nothing to remove");
-        }
-
-        [Test]
-        public static async Task RemovePolicy_MissingName_FailsWithClearError() {
-            var policy = new Policy("Adult", DomainExpression.Literal(true));
-            var entity = new Entity("Person", [], [], Policies: [policy], Stages: []);
-            var start = new Domain("Test", [entity], []);
-
-            var change = new RemovePolicyFromEntityChange("Person", "NonExistent");
-            var result = new DomainEvolution(start).Apply([change]);
-
-            await Assert.That(result.Succeeded).IsFalse();
-            await Assert.That(result.FailureSummary).Contains("not found on Entity 'Person'");
-            await Assert.That(result.FailureSummary).Contains("nothing to remove");
-        }
-
-        [Test]
-        public static async Task Remove_ExistingProperty_Succeeds() {
-            var text = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
-            var entity = new Entity("Order", [new Property("Status", new DomainTypeReference("Text"), [])], [], [], []);
-            var start = new Domain("Test", [entity, text], []);
-
-            var change = new RemovePropertyFromEntityChange("Order", "Status");
-            var result = new DomainEvolution(start).Apply([change]);
-
-            await Assert.That(result.Succeeded).IsTrue();
-            await Assert.That(result.Root.Types.OfType<Entity>().Single().Properties).IsEmpty();
-        }
-
-        [Test]
-        public static async Task Remove_ExistingStage_Succeeds() {
-            var entity = new Entity("Order", [], [], [], Stages: [new Stage("Draft", [], [], [], [])]);
-            var start = new Domain("Test", [entity], []);
-
-            var change = new RemoveStageChange("Order", "Draft");
-            var result = new DomainEvolution(start).Apply([change]);
-
-            await Assert.That(result.Succeeded).IsTrue();
-            await Assert.That(result.Root.Types.OfType<Entity>().Single().Stages).IsEmpty();
-        }
+        var order = result.Root.Types.OfType<Entity>().Single(e => e.Name == "Order");
+        await Assert.That(order.Properties.Count).IsEqualTo(1);
     }
+
+    // ── 0.1d: Remove-by-name zero-match fail-loud ────────────────
+
+    [Test]
+    public async Task RemoveProperty_MissingName_FailsWithClearError() {
+        var text = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
+        var entity = new Entity("Order", [new Property("Total", new DomainTypeReference("Int"), [])], [], [], []);
+        var start = new Domain("Test", [entity, text], []);
+
+        var change = new RemovePropertyFromEntityChange("Order", "NonExistent");
+        var result = new DomainEvolution(start).Apply([change]);
+
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(result.FailureSummary).Contains("not found on Entity 'Order'");
+        await Assert.That(result.FailureSummary).Contains("nothing to remove");
+    }
+
+    [Test]
+    public async Task RemoveStage_MissingName_FailsWithClearError() {
+        var entity = new Entity("Order", [], [], [], Stages: [new Stage("Draft", [], [], [], [])]);
+        var start = new Domain("Test", [entity], []);
+
+        var change = new RemoveStageChange("Order", "NonExistent");
+        var result = new DomainEvolution(start).Apply([change]);
+
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(result.FailureSummary).Contains("not found on Entity 'Order'");
+        await Assert.That(result.FailureSummary).Contains("nothing to remove");
+    }
+
+    [Test]
+    public async Task RemoveAction_MissingName_FailsWithClearError() {
+        var entity = new Entity("Order", [], [
+            new Poly.DomainModeling.Action("Submit", InvocationResult.Void, [], [], [])
+        ], [], []);
+        var start = new Domain("Test", [entity], []);
+
+        var change = new RemoveActionChange("Order", "NonExistent");
+        var result = new DomainEvolution(start).Apply([change]);
+
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(result.FailureSummary).Contains("not found on Entity 'Order'");
+        await Assert.That(result.FailureSummary).Contains("nothing to remove");
+    }
+
+    [Test]
+    public async Task RemovePolicy_MissingName_FailsWithClearError() {
+        var policy = new Policy("Adult", DomainExpression.Literal(true));
+        var entity = new Entity("Person", [], [], Policies: [policy], Stages: []);
+        var start = new Domain("Test", [entity], []);
+
+        var change = new RemovePolicyFromEntityChange("Person", "NonExistent");
+        var result = new DomainEvolution(start).Apply([change]);
+
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(result.FailureSummary).Contains("not found on Entity 'Person'");
+        await Assert.That(result.FailureSummary).Contains("nothing to remove");
+    }
+
+    [Test]
+    public async Task Remove_ExistingProperty_Succeeds() {
+        var text = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
+        var entity = new Entity("Order", [new Property("Status", new DomainTypeReference("Text"), [])], [], [], []);
+        var start = new Domain("Test", [entity, text], []);
+
+        var change = new RemovePropertyFromEntityChange("Order", "Status");
+        var result = new DomainEvolution(start).Apply([change]);
+
+        await Assert.That(result.Succeeded).IsTrue();
+        await Assert.That(result.Root.Types.OfType<Entity>().Single().Properties).IsEmpty();
+    }
+
+    [Test]
+    public async Task Remove_ExistingStage_Succeeds() {
+        var entity = new Entity("Order", [], [], [], Stages: [new Stage("Draft", [], [], [], [])]);
+        var start = new Domain("Test", [entity], []);
+
+        var change = new RemoveStageChange("Order", "Draft");
+        var result = new DomainEvolution(start).Apply([change]);
+
+        await Assert.That(result.Succeeded).IsTrue();
+        await Assert.That(result.Root.Types.OfType<Entity>().Single().Stages).IsEmpty();
+    }
+}

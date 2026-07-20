@@ -2,17 +2,46 @@ using System.Text.Json;
 
 using Poly.DslCompiler;
 
-if (args.Length < 1 || args.Length > 2) {
-    Console.Error.WriteLine("Usage: poly-dsl-compiler <input.poly> [output-dir]");
-    Console.Error.WriteLine();
-    Console.Error.WriteLine("Compiles a .poly DSL domain model into C# type definitions.");
-    Console.Error.WriteLine("If output-dir is provided, one .cs file per type is created.");
-    Console.Error.WriteLine("Otherwise, the generated C# code is written to stdout.");
-    return 1;
+// ── Argument parsing ────────────────────────────────────────────
+// Usage: poly-dsl-compiler [options] <input.poly> [output-dir]
+// Options:
+//   --mode entities|db    What to generate (default: entities)
+
+var inputPath = (string?)null;
+var outputDir = (string?)null;
+var mode = CompileMode.Entities;
+
+for (int i = 0; i < args.Length; i++) {
+    if (args[i] == "--mode" && i + 1 < args.Length) {
+        i++;
+        mode = args[i].ToLowerInvariant() switch {
+            "entities" => CompileMode.Entities,
+            "db" => CompileMode.Db,
+            "all" => CompileMode.All,
+            var other => throw new FormatException(
+                $"Unknown mode '{other}'. Valid values: entities, db, all")
+        };
+    }
+    else if (inputPath is null) {
+        inputPath = args[i];
+    }
+    else if (outputDir is null) {
+        outputDir = args[i];
+    }
 }
 
-var inputPath = args[0];
-var outputDir = args.Length > 1 ? args[1] : null;
+if (inputPath is null) {
+    Console.Error.WriteLine("Usage: poly-dsl-compiler [--mode entities|db|all] <input.poly> [output-dir]");
+    Console.Error.WriteLine();
+    Console.Error.WriteLine("Compiles a .poly DSL domain model into C# source files.");
+    Console.Error.WriteLine("  --mode entities    Entity type definitions only (default)");
+    Console.Error.WriteLine("  --mode db         Entity types + EF Core DbContext");
+    Console.Error.WriteLine("  --mode all        Entity types + DbContext + Minimal API (not yet ready)");
+    Console.Error.WriteLine();
+    Console.Error.WriteLine("If output-dir is provided, files are written there.");
+    Console.Error.WriteLine("Otherwise, the combined file is written to stdout.");
+    return 1;
+}
 
 if (!File.Exists(inputPath)) {
     Console.Error.WriteLine($"Error: File not found: {inputPath}");
@@ -23,7 +52,7 @@ var polyText = await File.ReadAllTextAsync(inputPath);
 var compiler = new DslCompiler();
 
 try {
-    var result = compiler.Compile(polyText);
+    var result = compiler.Compile(polyText, mode);
 
     if (!result.Success) {
         Console.Error.WriteLine("Compilation failed:");

@@ -11,6 +11,18 @@ using Poly.Syntax.Analysis;
 namespace Poly.DslCompiler;
 
 /// <summary>
+/// Controls which artifacts the DslCompiler generates.
+/// </summary>
+public enum CompileMode {
+    /// <summary>Entity type definitions only (current behavior).</summary>
+    Entities,
+    /// <summary>Entity types + EF Core DbContext.</summary>
+    Db,
+    /// <summary>Entity types + DbContext + Minimal API. (Not yet implemented)</summary>
+    All,
+}
+
+/// <summary>
 /// Compiles .poly DSL text into C# type definitions.
 ///
 /// Reuses <see cref="DomainToCSharpExporter"/> from the lowering subsystem,
@@ -27,9 +39,15 @@ public sealed class DslCompiler {
     );
 
     /// <summary>
-    /// Compiles .poly DSL text into C# source files.
+    /// Compiles .poly DSL text into C# source files (entities only — default mode).
     /// </summary>
-    public CompileResult Compile(string polyText) {
+    public CompileResult Compile(string polyText) =>
+        Compile(polyText, CompileMode.Entities);
+
+    /// <summary>
+    /// Compiles .poly DSL text into C# source files with the given mode.
+    /// </summary>
+    public CompileResult Compile(string polyText, CompileMode mode) {
         if (string.IsNullOrWhiteSpace(polyText))
             return Fail("DSL text is empty.");
 
@@ -77,7 +95,7 @@ public sealed class DslCompiler {
 
         // ── 3. Generate C# ───────────────────────────────────────
         var domain = outcome.Root;
-        var files = GenerateFiles(domain, outcome.Analysis);
+        var files = GenerateAllFiles(domain, outcome.Analysis, mode);
 
         return new CompileResult(
             Success: true,
@@ -88,18 +106,21 @@ public sealed class DslCompiler {
 
     // ── C# generation ───────────────────────────────────────────
 
-    private static IReadOnlyList<(string FileName, string Source)> GenerateFiles(Domain domain, Poly.Syntax.Analysis.AnalysisResult analysis) {
+    private static IReadOnlyList<(string FileName, string Source)> GenerateAllFiles(
+        Domain domain, Poly.Syntax.Analysis.AnalysisResult analysis,
+        CompileMode mode = CompileMode.Entities) {
+
+        var files = new List<(string FileName, string Source)>();
+
+        // Entity types (always generated)
         var exporter = new DomainToCSharpExporter();
         var combinedDefs = exporter.Export(domain, analysis);
-        var entities = domain.Types.OfType<Entity>().ToList();
-        var perEntityFiles = new List<(string FileName, string Source)>();
-
-        // Combined single file with all types
         var combinedGenerator = new CSharpGenerator();
         var combinedSource = combinedGenerator.Generate(combinedDefs);
-        perEntityFiles.Add(("_all.cs", combinedSource));
+        files.Add(("_all.cs", combinedSource));
 
-        // Per-entity files: filter combined defs to just this entity + its stage enum
+        // Per-entity files
+        var entities = domain.Types.OfType<Entity>().ToList();
         foreach (var entity in entities) {
             var entityNames = new HashSet<string>(StringComparer.Ordinal) {
                 entity.Name,
@@ -110,10 +131,26 @@ public sealed class DslCompiler {
                 .ToList();
             var generator = new CSharpGenerator();
             var csharp = generator.Generate(entityDefs);
-            perEntityFiles.Add(($"{entity.Name}.cs", csharp));
+            files.Add(($"{entity.Name}.cs", csharp));
         }
 
-        return perEntityFiles;
+        // DbContext (mode: db or all)
+        if (mode == CompileMode.Db || mode == CompileMode.All) {
+            var dbContextName = $"{domain.Name}DbContext";
+            var dbGen = new DbContextGenerator(domain);
+            files.Add(("LibraryDbContext.cs", dbGen.Generate()));
+
+            // Minimal API + .http file (mode: all only)
+            if (mode == CompileMode.All) {
+                var apiGen = new MinimalApiGenerator(domain);
+                files.Add(("Program.cs", apiGen.Generate(dbContextName)));
+
+                var httpGen = new HttpFileGenerator(domain);
+                files.Add(("demo.http", httpGen.Generate()));
+            }
+        }
+
+        return files;
     }
 
     private static CompileResult Fail(string message) =>

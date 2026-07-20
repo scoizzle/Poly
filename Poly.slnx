@@ -5,7 +5,6 @@
     <Platform Name="x86" />
   </Configurations>
   <Folder Name="/demo/">
-    <Project Path="demo/Poly.Demo.csproj" />
     <Project Path="demo/Poly.RestApi/Poly.RestApi.csproj" />
   </Folder>
   <Folder Name="/src/">

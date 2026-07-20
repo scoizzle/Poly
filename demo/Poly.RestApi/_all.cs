@@ -169,9 +169,6 @@ public class Patron {
         if (this.CurrentStage != PatronStage.Active) {
             return DomainResult.Failure("'Suspend' requires stage 'Active' on entity 'Patron'.");
         }
-        if (this.AtLimit()) {
-            return DomainResult.Failure("'Suspend' blocked by policy 'AtLimit'.");
-        }
         this.Status = PatronStatus.Suspended;
         this.CurrentBorrowCount = 0L;
         this.MaxItems = 0L;

@@ -98,9 +98,7 @@ Patron: entity {
       create in loans { book: book }
     }
 
-    Suspend: action
-      require not AtLimit
-    {
+    Suspend: action {
       assign Status to "Suspended"
       assign CurrentBorrowCount to 0
       transition to Suspended

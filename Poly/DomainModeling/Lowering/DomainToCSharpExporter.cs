@@ -325,7 +325,7 @@ public sealed class DomainToCSharpExporter {
                 if (!emitted.Add(key)) continue;
 
                 var srcType = new Syntactic.NamedTypeReference(info.SourceEntity.Name);
-                var fieldName = $"_{info.StageName}Subscribers";
+                var fieldName = $"_{ToCamelCase(info.StageName)}Subscribers";
                 var paramName = "subscriber";
 
                 // private List<TA>? _DamagedSubscribers;
@@ -406,7 +406,11 @@ public sealed class DomainToCSharpExporter {
                         new Syntactic.Parameter("entity",
                             new Syntactic.TypeReference(entity.Name)),
                         UseThisReference: true,
-                        LowerStageTransitions: true
+                        LowerStageTransitions: true,
+                        Domain: domain,
+                        EnumPropertyNames: domain is not null
+                            ? BuildEnumPropertyNames(entity, domain)
+                            : null
                     );
                     var effectPass = new EffectLoweringPass(entity, context);
                     var composite = new CompositeEffect(subscriptionEffects);
@@ -456,11 +460,35 @@ public sealed class DomainToCSharpExporter {
             bodyNodes.AddRange(ctorAssignments);
 
             if (entity.Stages.Count > 0) {
+                var firstStage = entity.Stages[0];
                 bodyNodes.Add(new Syntactic.Assignment(
                     new Syntactic.Member(new Syntactic.ThisReference(), "CurrentStage"),
                     new Syntactic.Member(
                         new Syntactic.NamedTypeReference($"{entity.Name}Stage"),
-                        entity.Stages[0].Name)));
+                        firstStage.Name)));
+
+                // Apply the initial stage's entry effects in the constructor.
+                // This ensures properties set by entry effects (e.g. "entry { assign
+                // CheckedOutAt to now }" on Loan.Active) are initialized during
+                // construction, not just during explicit stage transitions.
+                if (firstStage.OnEntryEffects.Count > 0) {
+                    var entryCtx = new LoweringContext(
+                        new Syntactic.Parameter("entity",
+                            new Syntactic.TypeReference(entity.Name)),
+                        UseThisReference: true,
+                        LowerStageTransitions: false,
+                        Domain: domain,
+                        EnumPropertyNames: domain is not null
+                            ? BuildEnumPropertyNames(entity, domain)
+                            : null
+                    );
+                    var entryPass = new EffectLoweringPass(entity, entryCtx);
+                    foreach (var entryEffect in firstStage.OnEntryEffects) {
+                        var lowered = entryPass.Route(entryEffect);
+                        if (lowered is not null)
+                            bodyNodes.Add(lowered);
+                    }
+                }
             }
 
             // InitializeSubscriptions is called as the last step so that all

@@ -268,7 +268,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
             if (initMap.TryGetValue(prop.Name, out var expr))
                 args.Add(_expressionPass.Lower(expr, Subject));
             else
-                args.Add(new Constant(null));
+                args.Add(DefaultForDomainType(prop.Type, _domain));
         }
 
         // 2. Singular navs excluding back-reference (auto-wired by factory method)
@@ -282,7 +282,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
             if (initMap.TryGetValue(trel.Name, out var expr))
                 args.Add(_expressionPass.Lower(expr, Subject));
             else
-                args.Add(new Constant(null));
+                args.Add(DefaultForDomainType(trel.Target, _domain));
         }
 
         return new Invoke(new Member(Subject, methodName), [.. args]);
@@ -320,7 +320,22 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         return null;
     }
 
-    /// <summary>Builds constructor arguments matching initializers to entity property order.</summary>
+    /// <summary>
+    /// Builds constructor arguments matching the <c>Create</c> factory method
+    /// signature produced by <see cref="DomainToCSharpExporter"/>.
+    ///
+    /// The factory signature orders params as:
+    ///   1. Entity properties without <see cref="DefaultValueConstraint"/>
+    ///      (sorted by property name — same order as the exporter).
+    ///   2. Singular navigation properties (one-to-one where target entity
+    ///      is the source).
+    ///
+    /// Back-references to the current entity (<c>_entity</c>) are auto-wired
+    /// as <c>this</c>. Unspecified initializers use CLR-appropriate defaults
+    /// (false for bool, 0 for numbers, null for strings/references).
+    /// Properties with <see cref="DefaultValueConstraint"/> are NOT included
+    /// in constructor args — the factory body sets them from the default.
+    /// </summary>
     private List<Node> BuildConstructorArgs(
         IReadOnlyList<PropertyBinding> initializers, Entity targetEntity) {
         var initMap = new Dictionary<string, DomainExpression>(StringComparer.Ordinal);
@@ -328,13 +343,63 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
             initMap[init.PropertyName] = init.Expression;
 
         var args = new List<Node>();
-        foreach (var prop in targetEntity.Properties) {
+
+        // 1. Entity properties without DefaultValueConstraint (sorted by name)
+        foreach (var prop in targetEntity.Properties.OrderBy(p => p.Name)) {
+            if (prop.Constraints.Any(c => c is DefaultValueConstraint)) continue;
             if (initMap.TryGetValue(prop.Name, out var expr))
                 args.Add(_expressionPass.Lower(expr, Subject));
             else
-                args.Add(new Constant(null)); // null default for unset properties
+                args.Add(DefaultForDomainType(prop.Type, _domain));
         }
+
+        // 2. Singular navigation properties (one-to-one where target is source)
+        if (_domain is not null) {
+            var targetRelationships = _domain.Relationships
+                .Where(r => string.Equals(r.Source.TypeName, targetEntity.Name, StringComparison.Ordinal)
+                         && r.Cardinality is not (RelationshipCardinality.OneToMany or RelationshipCardinality.ManyToMany))
+                .ToList();
+            foreach (var trel in targetRelationships) {
+                // Auto-wire back-references to the creating entity
+                if (string.Equals(trel.Target.TypeName, _entity.Name, StringComparison.Ordinal)) {
+                    args.Add(Subject);
+                    continue;
+                }
+                if (initMap.TryGetValue(trel.Name, out var expr))
+                    args.Add(_expressionPass.Lower(expr, Subject));
+                else
+                    args.Add(DefaultForDomainType(trel.Target, _domain));
+            }
+        }
+
         return args;
+    }
+
+    /// <summary>
+    /// Returns a type-appropriate default value Syntax node for a domain type.
+    /// Used by <see cref="BuildConstructorArgs"/> and <see cref="CreateEntityInRelationship"/>
+    /// to emit valid defaults instead of bare <c>null</c> for value-type properties.
+    /// </summary>
+    private static Node DefaultForDomainType(DomainTypeReference typeRef, Domain? domain) {
+        if (domain is not null) {
+            var enumType = domain.Types.OfType<EnumType>()
+                .FirstOrDefault(e => string.Equals(e.Name, typeRef.TypeName, StringComparison.Ordinal));
+            if (enumType is not null)
+                return new Member(new NamedTypeReference(enumType.Name), enumType.MemberNames[0]);
+        }
+        return typeRef.TypeName switch {
+            "Text" or "String" => new Constant(null),
+            "Number" or "Int" or "Int64" => new Constant(0L),
+            "Int32" => new Constant(0),
+            "Boolean" or "Bool" => new Constant(false),
+            "DateTime" or "Timestamp" => new Member(
+                new NamedTypeReference("DateTime"), "MinValue"),
+            "Date" or "DateOnly" => new Member(
+                new NamedTypeReference("DateOnly"), "MinValue"),
+            "Guid" or "Uuid" => new Member(
+                new NamedTypeReference("Guid"), "Empty"),
+            _ => new Constant(null),
+        };
     }
 
     /// <summary>

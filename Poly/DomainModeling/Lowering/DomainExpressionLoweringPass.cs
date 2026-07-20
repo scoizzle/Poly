@@ -61,6 +61,14 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Node
         $"DomainExpression node type is not supported");
 
     protected override Node PropertyAccess(Poly.DomainModeling.PropertyAccess p) {
+        // Runtime default expressions: now/today/guid should resolve to CLR
+        // expressions (DateTime.UtcNow, DateOnly.FromDateTime, Guid.NewGuid)
+        // instead of entity property access.
+        if (_useThisReference) {
+            var runtime = EffectLoweringPass.LowerDefaultExpression(p);
+            if (runtime is not null) return runtime;
+        }
+
         // When UseThisReference is set, action parameters render as bare names
         if (_useThisReference && _actionParameterNames?.Contains(p.Name) == true)
             return new Parameter(p.Name);
@@ -125,6 +133,17 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Node
             var fixedRight = FixEnumLiteral(c.Right, c.Left, loweredLeft);
             if (fixedLeft is not null) loweredLeft = fixedLeft;
             if (fixedRight is not null) loweredRight = fixedRight;
+        }
+
+        // Simplify boolean comparisons: boolProp == true  → boolProp
+        //                            boolProp == false → !boolProp
+        if (c.Kind == ComparisonKind.Equal
+            && loweredRight is SN.Constant { Value: bool b }) {
+            return b ? loweredLeft : new SN.Not(loweredLeft);
+        }
+        if (c.Kind == ComparisonKind.NotEqual
+            && loweredRight is SN.Constant { Value: bool b2 }) {
+            return b2 ? new SN.Not(loweredLeft) : loweredLeft;
         }
 
         return c.Kind switch {

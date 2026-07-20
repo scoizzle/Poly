@@ -224,9 +224,14 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         if (targetEntity is null) return null;
 
         var args = BuildConstructorArgs(cei.Initializers, targetEntity);
-        return new Invoke(
+        var createCall = new Invoke(
             new Member(new NamedTypeReference(targetEntity.Name), "Create"),
             [.. args]);
+
+        // Wrap standalone creates in a local variable ('var fine = Fine.Create(...)') so
+        // the instance is not silently discarded. Callers should prefer 'create in Rel'
+        // (which auto-wires via AddCreateNavMethod) for relationship-aware creation.
+        return new Variable(DomainToCSharpExporter.ToCamelCase(targetEntity.Name), createCall);
     }
 
     /// <summary>

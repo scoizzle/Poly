@@ -103,6 +103,11 @@ public sealed class DomainToCSharpExporter {
             ));
         }
 
+        // ── Build DomainResult infrastructure types ─────────────
+        // Emitted once at the top so all action methods can reference them.
+        result.Add(BuildDomainResultTypeDef());
+        result.Add(BuildDomainResultGenericTypeDef());
+
         // ── Build entity type definitions ─────────────────────────
         foreach (var entity in entities) {
             var targetSubs = subscriptionsByTarget.GetValueOrDefault(entity.Name);
@@ -400,7 +405,7 @@ public sealed class DomainToCSharpExporter {
 
                 // Lower the subscription effects into the handler body
                 var subscriptionEffects = info.Subscription.Effects;
-                Poly.Syntax.Node? handlerBody = null;
+                Poly.Syntax.Node handlerBody;
                 if (subscriptionEffects.Count > 0) {
                     var context = new LoweringContext(
                         new Syntactic.Parameter("entity",
@@ -414,7 +419,11 @@ public sealed class DomainToCSharpExporter {
                     );
                     var effectPass = new EffectLoweringPass(entity, context);
                     var composite = new CompositeEffect(subscriptionEffects);
-                    handlerBody = effectPass.TryLowerVmNode(composite);
+                    handlerBody = effectPass.TryLowerVmNode(composite)
+                        ?? new Syntactic.Block([new Syntactic.Comment("no-op")]);
+                }
+                else {
+                    handlerBody = new Syntactic.Block([new Syntactic.Comment("no-op")]);
                 }
 
                 methods.Add(new Syntactic.MethodDefinitionNode(
@@ -532,7 +541,7 @@ public sealed class DomainToCSharpExporter {
                     "InitializeSubscriptions",
                     new Syntactic.TypeReference("void"),
                     Body: new Syntactic.Block(initBody),
-                    AccessModifier: AccessModifier.Public
+                    AccessModifier: AccessModifier.Private
                 ));
             }
         }
@@ -714,7 +723,7 @@ public sealed class DomainToCSharpExporter {
             targetType,
             Parameters: methodParams.Count > 0 ? methodParams : null,
             Body: new Syntactic.Block(bodyNodes),
-            AccessModifier: AccessModifier.Public
+            AccessModifier: AccessModifier.Private
         ));
     }
 
@@ -736,6 +745,35 @@ public sealed class DomainToCSharpExporter {
         return new Syntactic.Constant(null);
     }
 
+    /// <summary>
+    /// Returns a CLR-appropriate default value Syntax node for a domain type
+    /// reference (e.g., <c>false</c> for <c>Boolean</c>, <c>0</c> for <c>Number</c>,
+    /// <c>null</c> for <c>Text</c>). For enum types, returns the first member.
+    /// Used by <see cref="BuildActionBodyWithGuards"/> for guard-clause default returns.
+    /// </summary>
+    private static Poly.Syntax.Node DefaultValueForTypeRef(DomainTypeReference typeRef, Domain? domain) {
+        if (domain is not null) {
+            var enumType = domain.Types.OfType<EnumType>()
+                .FirstOrDefault(e => string.Equals(e.Name, typeRef.TypeName, StringComparison.Ordinal));
+            if (enumType is not null && enumType.MemberNames.Count > 0)
+                return new Syntactic.Member(
+                    new Syntactic.NamedTypeReference(enumType.Name), enumType.MemberNames[0]);
+        }
+        return typeRef.TypeName switch {
+            "Text" or "String" => new Syntactic.Constant(null),
+            "Number" or "Int" or "Int64" => new Syntactic.Constant(0L),
+            "Int32" => new Syntactic.Constant(0),
+            "Boolean" or "Bool" => new Syntactic.Constant(false),
+            "DateTime" or "Timestamp" => new Syntactic.Member(
+                new Syntactic.NamedTypeReference("DateTime"), "MinValue"),
+            "Date" or "DateOnly" => new Syntactic.Member(
+                new Syntactic.NamedTypeReference("DateOnly"), "MinValue"),
+            "Guid" or "Uuid" => new Syntactic.Member(
+                new Syntactic.NamedTypeReference("Guid"), "Empty"),
+            _ => new Syntactic.Constant(null),
+        };
+    }
+
     // ── Action method builder ───────────────────────────────────
 
     private static void AddActionMethod(Entity entity, Poly.DomainModeling.Action action,
@@ -748,11 +786,25 @@ public sealed class DomainToCSharpExporter {
             postTransitionNodes, sourceStageName, domain);
 
         // Build the full method body: require guards first, then effects
-        var body = BuildActionBodyWithGuards(action, entity, effectsBody);
+        var isVoid = action.Result is not { Members.Count: > 0 };
+        var body = BuildActionBodyWithGuards(action, entity, effectsBody, domain,
+            sourceStageName, stageEnumTypeName, isVoid);
+
+        // All actions return DomainResult (void) or DomainResult<T> (typed).
+        // This lets callers pattern-match on IsSuccess without exceptions.
+        Poly.Syntax.Node returnType;
+        if (isVoid) {
+            returnType = new Syntactic.NamedTypeReference("DomainResult");
+        }
+        else {
+            var innerType = MapDomainTypeRef(action.Result.Members[0].Type, domain);
+            returnType = new Syntactic.NamedTypeReference("DomainResult",
+                TypeArguments: [innerType]);
+        }
 
         methods.Add(new Syntactic.MethodDefinitionNode(
             action.Name,
-            new Syntactic.TypeReference("void"),
+            returnType,
             Parameters: action.Parameters
                 .Select(p => new Syntactic.Parameter(p.Name, MapDomainTypeRef(p.Type, domain)))
                 .ToList(),
@@ -768,20 +820,62 @@ public sealed class DomainToCSharpExporter {
     /// as a synthetic <c>not_PolicyName</c> policy on the action), we strip the prefix and
     /// invert the condition so the generated code calls the real entity-level method.
     ///
+    /// All guards return <c>DomainResult.Failure("message")</c> (void) or
+    /// <c>DomainResult&lt;T&gt;.Failure("message")</c> (typed) instead of throwing
+    /// or returning default — enabling clean pattern matching at call sites.
+    ///
     /// Generated patterns:
-    ///   <c>require AtLimit</c>     → <c>if (!this.AtLimit()) { return; }</c>
-    ///   <c>require not AtLimit</c> → <c>if (this.AtLimit()) { return; }</c>
+    ///   Stage-scoped:          <c>return DomainResult.Failure("'CheckOut' is not valid for stage 'Active'...");</c>
+    ///   <c>require AtLimit</c>     → <c>return DomainResult.Failure("Policy 'AtLimit' not satisfied.");</c>
+    ///   <c>require not AtLimit</c> → <c>return DomainResult.Failure("Policy 'AtLimit' not satisfied.");</c>
     ///
     /// Returns a <see cref="Syntactic.Block"/> with at least an empty body — never null —
     /// so the C# generator emits <c>{ }</c> rather than an invalid semicolon.
     /// </summary>
     private static Syntactic.Block BuildActionBodyWithGuards(
-        Poly.DomainModeling.Action action, Entity entity, Poly.Syntax.Node? effectsBody) {
+        Poly.DomainModeling.Action action, Entity entity, Poly.Syntax.Node? effectsBody,
+        Domain? domain = null, string? sourceStageName = null, string? stageEnumTypeName = null,
+        bool isVoid = true) {
+
+        // Build the DomainResult type reference for failure/success returns
+        Poly.Syntax.Node actionResultType;
+        Poly.Syntax.Node resultTypeRef;
+        if (isVoid) {
+            actionResultType = new Syntactic.NamedTypeReference("DomainResult");
+            resultTypeRef = new Syntactic.NamedTypeReference("DomainResult");
+        }
+        else {
+            resultTypeRef = MapDomainTypeRef(action.Result!.Members[0].Type, domain);
+            actionResultType = new Syntactic.NamedTypeReference("DomainResult",
+                TypeArguments: [resultTypeRef]);
+        }
+
+        // Helper: DomainResult[<T>].Failure("message")
+        Poly.Syntax.Node FailureReturn(string message) => new Syntactic.Return(
+            new Syntactic.Invoke(
+                new Syntactic.Member(actionResultType, "Failure"),
+                new Syntactic.Constant(message)));
 
         // Collect all nodes: require guards first, then effects
         var nodes = new List<Poly.Syntax.Node>();
 
+        // Emit stage guard for stage-scoped actions.
+        // Returns DomainResult[<T>].Failure("'CheckOut' requires stage 'Active' on entity 'Patron'.")
+        if (sourceStageName is not null && stageEnumTypeName is not null) {
+            nodes.Add(new Syntactic.IfStatement(
+                new Syntactic.NotEqual(
+                    new Syntactic.Member(new Syntactic.ThisReference(), "CurrentStage"),
+                    new Syntactic.Member(
+                        new Syntactic.NamedTypeReference(stageEnumTypeName),
+                        sourceStageName)),
+                new Syntactic.Block([
+                    FailureReturn(
+                        $"'{action.Name}' requires stage '{sourceStageName}' on entity '{entity.Name}'.")
+                ])));
+        }
+
         // Emit require guard clauses referencing entity-level policy methods
+        // Returns DomainResult[<T>].Failure("'CheckOut' blocked by policy 'AtLimit'.")
         foreach (var policy in action.Policies) {
             if (policy.Name.StartsWith("not_", StringComparison.Ordinal)) {
                 var realName = policy.Name.Substring(4);
@@ -789,14 +883,16 @@ public sealed class DomainToCSharpExporter {
                     new Syntactic.Member(new Syntactic.ThisReference(), realName));
                 nodes.Add(new Syntactic.IfStatement(
                     guardCall,
-                    new Syntactic.Block([new Syntactic.Return()])));
+                    new Syntactic.Block([FailureReturn(
+                        $"'{action.Name}' blocked by policy '{realName}'.")])));
             }
             else {
                 var guardCall = new Syntactic.Invoke(
                     new Syntactic.Member(new Syntactic.ThisReference(), policy.Name));
                 nodes.Add(new Syntactic.IfStatement(
                     new Syntactic.Not(guardCall),
-                    new Syntactic.Block([new Syntactic.Return()])));
+                    new Syntactic.Block([FailureReturn(
+                        $"'{action.Name}' blocked by policy '{policy.Name}'.")])));
             }
         }
 
@@ -806,6 +902,64 @@ public sealed class DomainToCSharpExporter {
         }
         else if (effectsBody is not null) {
             nodes.Add(effectsBody);
+        }
+
+        if (isVoid) {
+            // Void actions end with return DomainResult.Success();
+            nodes.Add(new Syntactic.Return(
+                new Syntactic.Invoke(
+                    new Syntactic.Member(
+                        new Syntactic.NamedTypeReference("DomainResult"), "Success"))));
+        }
+        else {
+            // Non-void actions: wrap the last effect node in DomainResult<T>.Success(value).
+            // If the last effect produces a value (Assignment, Invoke, New, etc.),
+            // wrap it: return DomainResult<T>.Success(expr).
+            // If the last effect is already a Return, leave it.
+            // If there are no effects (body was empty), emit a structural error.
+            if (nodes.Count > 0) {
+                var lastIdx = nodes.Count - 1;
+                var last = nodes[lastIdx];
+
+                if (last is Syntactic.Return) {
+                    // Already wrapped — leave as-is.
+                }
+                else if (last is Syntactic.Assignment or Syntactic.Invoke
+                         or Syntactic.Member or Syntactic.Constant
+                         or Syntactic.New or Syntactic.UnaryMinus
+                         or Syntactic.Not or Syntactic.Add or Syntactic.Subtract
+                         or Syntactic.Multiply or Syntactic.Divide) {
+                    nodes[lastIdx] = new Syntactic.Return(
+                        new Syntactic.Invoke(
+                            new Syntactic.Member(actionResultType, "Success"),
+                            [last]));
+                }
+                else if (last is Syntactic.Variable { Value: not null } v) {
+                    // var x = expr → return DomainResult<T>.Success(expr)
+                    nodes[lastIdx] = new Syntactic.Return(
+                        new Syntactic.Invoke(
+                            new Syntactic.Member(actionResultType, "Success"),
+                            [v.Value]));
+                }
+                else {
+                    // Non-returnable last node — structural error (still throw)
+                    nodes.Add(new Syntactic.ThrowStatement(
+                        new Syntactic.New(
+                            new Syntactic.NamedTypeReference("NotSupportedException"),
+                            new Syntactic.Constant(
+                                $"Action '{action.Name}' has return type but its last effect " +
+                                $"does not produce a value. Use an 'assign' statement as the " +
+                                $"final effect, or remove the -> return type declaration."))));
+                }
+            }
+            else {
+                // Empty action body with declared return type — structural error
+                nodes.Add(new Syntactic.ThrowStatement(
+                    new Syntactic.New(
+                        new Syntactic.NamedTypeReference("NotSupportedException"),
+                        new Syntactic.Constant(
+                            $"Action '{action.Name}' has return type but has no effects."))));
+            }
         }
 
         // Block requires ≥1 node; use Comment for empty method bodies
@@ -902,6 +1056,203 @@ public sealed class DomainToCSharpExporter {
             "Float" or "Double" => new Syntactic.PrimitiveTypeReference(PrimType.Float64),
             _ => new Syntactic.NamedTypeReference(typeName)
         };
+    }
+
+    // ── DomainResult infrastructure type builders ───────────────
+
+    /// <summary>
+    /// Builds the <c>DomainResult</c> record struct: a discrimated-union-like
+    /// result type for void actions. Methods return <c>DomainResult.Success()</c>
+    /// or <c>DomainResult.Failure(message)</c> instead of throwing or returning void.
+    /// Consumers switch on <see cref="IsSuccess"/> to handle success/failure.
+    /// </summary>
+    private static Syntactic.TypeDefinitionNode BuildDomainResultTypeDef() {
+        // public readonly record struct DomainResult
+        // {
+        //     public bool IsSuccess { get; }
+        //     public string? ErrorMessage { get; }
+        //
+        //     private DomainResult(bool isSuccess, string? errorMessage)
+        //     {
+        //         IsSuccess = isSuccess;
+        //         ErrorMessage = errorMessage;
+        //     }
+        //
+        //     public static DomainResult Success() => new(true, null);
+        //     public static DomainResult Failure(string message) => new(false, message);
+        // }
+
+        var props = new List<Syntactic.PropertyDefinitionNode>
+        {
+            new("IsSuccess",
+                new Syntactic.PrimitiveTypeReference(PrimType.Boolean),
+                Getter: new Syntactic.PropertyGetterDefinitionNode()),
+            new("ErrorMessage",
+                new Syntactic.OptionalTypeReference(
+                    new Syntactic.PrimitiveTypeReference(PrimType.String)),
+                Getter: new Syntactic.PropertyGetterDefinitionNode()),
+        };
+
+        var ctor = new Syntactic.ConstructorDefinitionNode(
+            Parameters: [
+                new Syntactic.Parameter("isSuccess",
+                    new Syntactic.PrimitiveTypeReference(PrimType.Boolean)),
+                new Syntactic.Parameter("errorMessage",
+                    new Syntactic.OptionalTypeReference(
+                        new Syntactic.PrimitiveTypeReference(PrimType.String))),
+            ],
+            Body: new Syntactic.Block([
+                new Syntactic.Assignment(
+                    new Syntactic.Member(new Syntactic.ThisReference(), "IsSuccess"),
+                    new Syntactic.Parameter("isSuccess")),
+                new Syntactic.Assignment(
+                    new Syntactic.Member(new Syntactic.ThisReference(), "ErrorMessage"),
+                    new Syntactic.Parameter("errorMessage")),
+            ]),
+            AccessModifier: AccessModifier.Private
+        );
+
+        var methods = new List<Syntactic.MethodDefinitionNode>
+        {
+            new("Success",
+                new Syntactic.NamedTypeReference("DomainResult"),
+                Body: new Syntactic.Block([
+                    new Syntactic.Return(
+                        new Syntactic.New(
+                            new Syntactic.NamedTypeReference("DomainResult"),
+                            new Syntactic.Constant(true),
+                            new Syntactic.Constant(null)))
+                ]),
+                IsStatic: true,
+                AccessModifier: AccessModifier.Public),
+            new("Failure",
+                new Syntactic.NamedTypeReference("DomainResult"),
+                Parameters: [
+                    new Syntactic.Parameter("message",
+                        new Syntactic.PrimitiveTypeReference(PrimType.String))
+                ],
+                Body: new Syntactic.Block([
+                    new Syntactic.Return(
+                        new Syntactic.New(
+                            new Syntactic.NamedTypeReference("DomainResult"),
+                            new Syntactic.Constant(false),
+                            new Syntactic.Parameter("message")))
+                ]),
+                IsStatic: true,
+                AccessModifier: AccessModifier.Public),
+        };
+
+        return new Syntactic.TypeDefinitionNode(
+            "DomainResult",
+            Properties: props,
+            Constructors: [ctor],
+            Methods: methods,
+            Semantics: Syntactic.TypeDefinitionSemantics.ImmutableValue
+        );
+    }
+
+    /// <summary>
+    /// Builds the <c>DomainResult&lt;T&gt;</c> generic record struct: a typed result
+    /// for non-void actions. Returns <c>DomainResult&lt;T&gt;.Success(value)</c> or
+    /// <c>DomainResult&lt;T&gt;.Failure(message)</c>.
+    /// </summary>
+    private static Syntactic.TypeDefinitionNode BuildDomainResultGenericTypeDef() {
+        // public readonly record struct DomainResult<T>
+        // {
+        //     public bool IsSuccess { get; }
+        //     public T Value { get; }
+        //     public string? ErrorMessage { get; }
+        //
+        //     private DomainResult(bool isSuccess, T value, string? errorMessage)
+        //     {
+        //         IsSuccess = isSuccess;
+        //         Value = value;
+        //         ErrorMessage = errorMessage;
+        //     }
+        //
+        //     public static DomainResult<T> Success(T value) => new(true, value, null);
+        //     public static DomainResult<T> Failure(string message) => new(false, default!, message);
+        // }
+
+        var tParam = new Syntactic.NamedTypeReference("T");
+        var actionResultT = new Syntactic.NamedTypeReference("DomainResult",
+            TypeArguments: [tParam]);
+
+        var props = new List<Syntactic.PropertyDefinitionNode>
+        {
+            new("IsSuccess",
+                new Syntactic.PrimitiveTypeReference(PrimType.Boolean),
+                Getter: new Syntactic.PropertyGetterDefinitionNode()),
+            new("Value", tParam,
+                Getter: new Syntactic.PropertyGetterDefinitionNode()),
+            new("ErrorMessage",
+                new Syntactic.OptionalTypeReference(
+                    new Syntactic.PrimitiveTypeReference(PrimType.String)),
+                Getter: new Syntactic.PropertyGetterDefinitionNode()),
+        };
+
+        var ctor = new Syntactic.ConstructorDefinitionNode(
+            Parameters: [
+                new Syntactic.Parameter("isSuccess",
+                    new Syntactic.PrimitiveTypeReference(PrimType.Boolean)),
+                new Syntactic.Parameter("value", tParam),
+                new Syntactic.Parameter("errorMessage",
+                    new Syntactic.OptionalTypeReference(
+                        new Syntactic.PrimitiveTypeReference(PrimType.String))),
+            ],
+            Body: new Syntactic.Block([
+                new Syntactic.Assignment(
+                    new Syntactic.Member(new Syntactic.ThisReference(), "IsSuccess"),
+                    new Syntactic.Parameter("isSuccess")),
+                new Syntactic.Assignment(
+                    new Syntactic.Member(new Syntactic.ThisReference(), "Value"),
+                    new Syntactic.Parameter("value")),
+                new Syntactic.Assignment(
+                    new Syntactic.Member(new Syntactic.ThisReference(), "ErrorMessage"),
+                    new Syntactic.Parameter("errorMessage")),
+            ]),
+            AccessModifier: AccessModifier.Private
+        );
+
+        var methods = new List<Syntactic.MethodDefinitionNode>
+        {
+            new("Success", actionResultT,
+                Parameters: [
+                    new Syntactic.Parameter("value", tParam)
+                ],
+                Body: new Syntactic.Block([
+                    new Syntactic.Return(
+                        new Syntactic.New(actionResultT,
+                            new Syntactic.Constant(true),
+                            new Syntactic.Parameter("value"),
+                            new Syntactic.Constant(null)))
+                ]),
+                IsStatic: true,
+                AccessModifier: AccessModifier.Public),
+            new("Failure", actionResultT,
+                Parameters: [
+                    new Syntactic.Parameter("message",
+                        new Syntactic.PrimitiveTypeReference(PrimType.String))
+                ],
+                Body: new Syntactic.Block([
+                    new Syntactic.Return(
+                        new Syntactic.New(actionResultT,
+                            new Syntactic.Constant(false),
+                            new Syntactic.NullForgiving(new Syntactic.Default()),
+                            new Syntactic.Parameter("message")))
+                ]),
+                IsStatic: true,
+                AccessModifier: AccessModifier.Public),
+        };
+
+        return new Syntactic.TypeDefinitionNode(
+            "DomainResult",
+            GenericParameters: [new Syntactic.Parameter("T")],
+            Properties: props,
+            Constructors: [ctor],
+            Methods: methods,
+            Semantics: Syntactic.TypeDefinitionSemantics.ImmutableValue
+        );
     }
 
     // ── String helpers ──────────────────────────────────────────

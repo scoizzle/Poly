@@ -179,6 +179,12 @@ public sealed class DomainDslPrinter {
             _sb.Append(')');
         }
 
+        // Print return type when non-void: -> RetType
+        if (action.Result is { Members.Count: > 0 }) {
+            _sb.Append(" -> ");
+            _sb.Append(action.Result.Members[0].Type.TypeName);
+        }
+
         // Print require gates: positive + negated (skip internal when_* policies)
         var positiveRequires = action.Policies
             .Where(p => !p.Name.StartsWith("when_", StringComparison.Ordinal)

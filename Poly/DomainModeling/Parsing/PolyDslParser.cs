@@ -374,11 +374,22 @@ public sealed class PolyDslParser {
         if (_current.Kind == TokenKind.Action)
             Advance();
 
-        // Canonical: Name: action (params) [require …] { … }
+        // Canonical: Name: action (params) -> RetType [require …] { … }
         // Params immediately after the kind keep Name: kind uniform.
         var paramList = preParsedParams;
         if (paramList is null && _current.Kind == TokenKind.LParen)
             paramList = ParseActionParameterList();
+
+        // Optional return type: -> TypeName
+        InvocationResult? actionResult = null;
+        if (_current.Kind == TokenKind.Arrow) {
+            Advance(); // consume ->
+            var returnTypeName = ParseTypeName();
+            actionResult = new InvocationResult([
+                new InvocationResult.Member("Result",
+                    new DomainTypeReference(returnTypeName), [])
+            ]);
+        }
 
         // Stage gates and require policies (collected — resolved after entity body)
         while (_current.Kind == TokenKind.When || _current.Kind == TokenKind.Require) {
@@ -417,6 +428,11 @@ public sealed class PolyDslParser {
                     _currentEntityName, actionName,
                     new Property(paramName, new DomainTypeReference(paramType), [])));
             }
+        }
+
+        if (actionResult is not null) {
+            changes.Add(new SetActionResultChange(
+                _currentEntityName, actionName, actionResult));
         }
 
         Expect(TokenKind.LBrace);

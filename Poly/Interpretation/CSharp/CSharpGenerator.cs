@@ -52,6 +52,8 @@ public sealed class CSharpGenerator {
         ArgumentNullException.ThrowIfNull(typeDefs);
         var sb = new StringBuilder();
         sb.AppendLine("#nullable enable");
+        sb.AppendLine("using System;");
+        sb.AppendLine("using System.Collections.Generic;");
         sb.AppendLine();
         if (testStatements is not null) {
             foreach (var stmt in testStatements) {

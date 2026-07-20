@@ -68,7 +68,7 @@ Patron: entity {
   Email: Text unique pattern("^[^@]+@[^@]+$")
   MemberSince: Date default(today)
   Status: PatronStatus default(Active)
-  MaxItems: Number range(1, 20) required
+  MaxItems: Number range(0, 20) required
   CurrentBorrowCount: Number
   OutstandingFines: Number
 
@@ -88,14 +88,14 @@ Patron: entity {
   // ── Active — can borrow ────────────────────────────────────────────────────
   // Prefer declarative require gates over nested conditionals (Principle 0.5).
   Active: stage {
-    CheckOut: action (book: Book)
+    CheckOut: action (book: Book) -> Loan
       require GoodStanding
       require not AtLimit
       require not HasFines
     {
       // create in loans sets borrower: this implicitly (Principle 0.3).
-      create in loans { book: book }
       assign CurrentBorrowCount to CurrentBorrowCount + 1
+      create in loans { book: book }
     }
 
     Suspend: action

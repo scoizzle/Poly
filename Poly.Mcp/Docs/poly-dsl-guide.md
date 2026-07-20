@@ -253,7 +253,7 @@ Active: stage {
 ## 6. Actions
 
 ```
-action-name ":" "action" ["(" param-name ":" Type ("," ...)? ")"] ["require" ...] "{" effect* "}"
+action-name ":" "action" ["(" param-name ":" Type ("," ...)? ")"] ["->" ret-type] ["require" ...] "{" effect* "}"
 ```
 
 Parameters (optional) appear **after** `: action`, keeping the uniform `Name: kind` member form (matches `export_dsl`):
@@ -261,6 +261,14 @@ Parameters (optional) appear **after** `: action`, keeping the uniform `Name: ki
 ```poly
 Tag: action (value: Text) {
   assign Label to value
+}
+```
+
+Return type (optional) appears after parameters using `-> TypeName`:
+
+```poly
+ComputeDiscount: action (total: Number) -> Number {
+  assign Result to total * 0.1
 }
 ```
 

@@ -1,5 +1,7 @@
+using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Constraints;
 using Poly.DomainModeling.Effects;
+using Poly.Syntax.Analysis;
 
 using AccessModifier = Poly.Introspection.AccessModifier;
 using PrimType = Poly.Introspection.PrimitiveType;
@@ -16,21 +18,82 @@ namespace Poly.DomainModeling.Lowering;
 /// <c>IReadOnlyList&lt;T&gt;</c> for collections), lifecycle stages (as enum +
 /// <c>CurrentStage</c> field), actions (as void methods), and policies (as
 /// bool methods). Constructor parameters are auto-generated for every property.
+///
+/// Stage subscriptions (<c>when RelName Stage</c>) generate cross-entity notification:
+/// the subscriber entity declares a <c>When{Target}{Stage}()</c> handler method, and
+/// the target entity emits a subscriber list + notify call after each stage transition.
 /// </summary>
 public sealed class DomainToCSharpExporter {
+    /// <summary>Collected subscription data for cross-entity notification.</summary>
+    internal sealed record SubscriptionInfo(
+        string StageName,
+        StageSubscription Subscription,
+        Entity SourceEntity,
+        Entity TargetEntity,
+        Relationship Relationship
+    );
+
     /// <summary>
     /// Builds Syntax AST type definitions for all entities and their stage enums
-    /// in the given domain.
+    /// in the given domain. The exporter uses <see cref="EffectiveMemberMetadata"/>
+    /// from the pre-computed analysis for inheritance-aware member resolution.
     /// </summary>
-    public IReadOnlyList<Syntactic.TypeDefinitionNode> Export(Domain domain) {
+    /// <param name="domain">The domain model to export.</param>
+    /// <param name="analysis">
+    /// The analysis result (required). Must include <see cref="EffectiveMemberMetadata"/>
+    /// for each entity (produced by <see cref="SemanticDomainAnalyzer"/>).
+    /// </param>
+    public IReadOnlyList<Syntactic.TypeDefinitionNode> Export(Domain domain,
+        AnalysisResult analysis) {
         ArgumentNullException.ThrowIfNull(domain);
+        ArgumentNullException.ThrowIfNull(analysis);
         var domainRelationships = domain.Relationships.ToList();
         var entities = domain.Types.OfType<Entity>().ToList();
         var entityLookup = entities.ToDictionary(e => e.Name, StringComparer.Ordinal);
         var result = new List<Syntactic.TypeDefinitionNode>();
 
-        foreach (var entity in entities)
-            result.AddRange(BuildTypeDefsForEntity(entity, domainRelationships, entityLookup));
+        // ── Collect all subscriptions ─────────────────────────────
+        var subscriptionsByTarget = new Dictionary<string, List<SubscriptionInfo>>(
+            StringComparer.Ordinal);
+        var subscriptionsBySubscriber = new Dictionary<string, List<SubscriptionInfo>>(
+            StringComparer.Ordinal);
+
+        foreach (var entity in entities) {
+            var subList = new List<SubscriptionInfo>();
+            foreach (var stage in entity.Stages) {
+                foreach (var sub in stage.Subscriptions) {
+                    // Resolve the target entity via the relationship
+                    var rel = domainRelationships.FirstOrDefault(r =>
+                        string.Equals(r.Name, sub.RelationshipName, StringComparison.Ordinal) &&
+                        string.Equals(r.Source.TypeName, entity.Name, StringComparison.Ordinal));
+                    if (rel is null) continue;
+
+                    if (!entityLookup.TryGetValue(rel.Target.TypeName, out var targetEntity))
+                        continue;
+
+                    foreach (var stageName in sub.StageNames) {
+                        var info = new SubscriptionInfo(stageName, sub, entity, targetEntity, rel);
+                        subList.Add(info);
+
+                        if (!subscriptionsByTarget.TryGetValue(targetEntity.Name, out var targetList))
+                            subscriptionsByTarget[targetEntity.Name] = targetList = new();
+                        targetList.Add(info);
+                    }
+                }
+            }
+            if (subList.Count > 0)
+                subscriptionsBySubscriber[entity.Name] = subList;
+        }
+
+        // ── Build type defs with subscription context ──────────────
+        foreach (var entity in entities) {
+            var targetSubs = subscriptionsByTarget.GetValueOrDefault(entity.Name);
+            var subscriberSubs = subscriptionsBySubscriber.GetValueOrDefault(entity.Name);
+
+            result.AddRange(BuildTypeDefsForEntity(
+                entity, domainRelationships, entityLookup, analysis,
+                targetSubs, subscriberSubs));
+        }
 
         return result;
     }
@@ -40,42 +103,39 @@ public sealed class DomainToCSharpExporter {
     internal IReadOnlyList<Syntactic.TypeDefinitionNode> BuildTypeDefsForEntity(
         Entity entity,
         IReadOnlyList<Relationship> domainRelationships,
-        IReadOnlyDictionary<string, Entity> entityLookup) {
+        IReadOnlyDictionary<string, Entity> entityLookup,
+        AnalysisResult analysis,
+        List<SubscriptionInfo>? targetSubs = null,
+        List<SubscriptionInfo>? subscriberSubs = null) {
 
         var typeDefs = new List<Syntactic.TypeDefinitionNode>();
         var props = new List<Syntactic.PropertyDefinitionNode>();
         var methods = new List<Syntactic.MethodDefinitionNode>();
+        var fields = new List<Syntactic.FieldDefinitionNode>();
         var ctorParams = new List<Syntactic.Parameter>();
         var ctorAssignments = new List<Poly.Syntax.Node>();
 
-        // ── Resolve inheritance: effective members + base type ─────
+        // ── Resolve inheritance from analysis metadata ─────────────
+        var effective = analysis.GetMetadata<EffectiveMemberMetadata>(entity)
+            ?? throw new InvalidOperationException(
+                $"Missing EffectiveMemberMetadata for entity '{entity.Name}'. " +
+                "Ensure SemanticDomainAnalyzer ran on the domain.");
+
+        var effectiveProperties = effective.EffectiveProperties;
+        var effectiveActions = effective.EffectiveActions;
+        var effectivePolicies = effective.EffectivePolicies;
+        var effectiveStages = effective.EffectiveStages;
+
         string? baseTypeName = null;
-        string stageEnumOwner;
-        var ownPropertyNames = new HashSet<string>(
-            entity.Properties.Select(p => p.Name), StringComparer.Ordinal);
-        var ownActionNames = new HashSet<string>(
-            entity.Actions.Select(a => a.Name), StringComparer.Ordinal);
-        var ownPolicyNames = new HashSet<string>(
-            entity.Policies.Select(p => p.Name), StringComparer.Ordinal);
-        var ownStageNames = new HashSet<string>(
-            entity.Stages.Select(s => s.Name), StringComparer.Ordinal);
-
-        var effectiveProperties = new List<Property>(entity.Properties);
-        var effectiveActions = new List<Poly.DomainModeling.Action>(entity.Actions);
-        var effectivePolicies = new List<Policy>(entity.Policies);
-        var effectiveStages = new List<Stage>(entity.Stages);
-
         if (entity.ParentEntityName is not null
             && entityLookup.TryGetValue(entity.ParentEntityName, out var parentEntity)) {
             baseTypeName = parentEntity.Name;
-
-            foreach (var ancestor in WalkLineageRootToLeaf(parentEntity, entityLookup)) {
-                effectiveProperties = MergeByName(effectiveProperties, ancestor.Properties, p => p.Name);
-                effectiveActions = MergeByName(effectiveActions, ancestor.Actions, a => a.Name);
-                effectivePolicies = MergeByName(effectivePolicies, ancestor.Policies, p => p.Name);
-                effectiveStages = MergeByName(effectiveStages, ancestor.Stages, s => s.Name);
-            }
         }
+
+        var ownPropertyNames = new HashSet<string>(
+            entity.Properties.Select(p => p.Name), StringComparer.Ordinal);
+
+        var stageEnumOwner = GetStageEnumOwner(entity, entityLookup);
 
         // Determine stage enum owner (root ancestor that defines stages)
         stageEnumOwner = GetStageEnumOwner(entity, entityLookup);
@@ -155,12 +215,30 @@ public sealed class DomainToCSharpExporter {
 
         // ── Actions as void methods (own only for inheritance) ────
         var stageEnumTypeName = $"{stageEnumOwner}Stage";
+
+        // Build post-transition notification nodes (subscription fan-out on target entity)
+        Dictionary<string, IReadOnlyList<Node>>? postTransitionNodes = null;
+        if (targetSubs is { Count: > 0 }) {
+            postTransitionNodes = new Dictionary<string, IReadOnlyList<Node>>(
+                StringComparer.Ordinal);
+            foreach (var group in targetSubs.GroupBy(s => s.StageName)) {
+                var nodes = new List<Node>();
+                foreach (var info in group) {
+                    // this.Notify{Stage}Subscribers();
+                    nodes.Add(new Syntactic.Invoke(
+                        new Syntactic.Member(new Syntactic.ThisReference(),
+                            $"Notify{info.StageName}Subscribers")));
+                }
+                postTransitionNodes[group.Key] = nodes;
+            }
+        }
+
         var actionsToEmit = baseTypeName is not null ? entity.Actions : effectiveActions;
         foreach (var action in actionsToEmit)
-            AddActionMethod(entity, action, methods, stageEnumTypeName);
+            AddActionMethod(entity, action, methods, stageEnumTypeName, postTransitionNodes);
         foreach (var stage in (baseTypeName is not null ? entity.Stages : effectiveStages))
             foreach (var action in stage.Actions)
-                AddActionMethod(entity, action, methods, stageEnumTypeName);
+                AddActionMethod(entity, action, methods, stageEnumTypeName, postTransitionNodes);
 
         // ── Policies as bool methods (own only for inheritance) ───
         var policiesToEmit = baseTypeName is not null ? entity.Policies : effectivePolicies;
@@ -172,6 +250,112 @@ public sealed class DomainToCSharpExporter {
                 Body: body,
                 AccessModifier: AccessModifier.Public
             ));
+        }
+
+        // ── Target entity: subscription registry ──────────────────
+        // Fields, register methods, and notify methods for each stage/subscriber pair.
+        if (targetSubs is { Count: > 0 }) {
+            var emitted = new HashSet<(string Stage, string SourceType)>();
+            foreach (var info in targetSubs) {
+                var key = (info.StageName, info.SourceEntity.Name);
+                if (!emitted.Add(key)) continue;
+
+                var srcType = new Syntactic.NamedTypeReference(info.SourceEntity.Name);
+                var fieldName = $"_{info.StageName}Subscribers";
+                var paramName = "subscriber";
+
+                // private List<TA>? _DamagedSubscribers;
+                fields.Add(new Syntactic.FieldDefinitionNode(
+                    fieldName,
+                    new Syntactic.OptionalTypeReference(
+                        new Syntactic.NamedTypeReference("List",
+                            TypeArguments: [srcType])),
+                    AccessModifier: AccessModifier.Private
+                ));
+
+                // internal void RegisterDamagedSubscriber(TA sub) {
+                //     if (_damagedSubscribers == null)
+                //         _damagedSubscribers = new List<TA>();
+                //     _damagedSubscribers.Add(sub);
+                // }
+                var fieldAcc = new Syntactic.Member(new Syntactic.ThisReference(), fieldName);
+                var registerBody = new Syntactic.Block([
+                    new Syntactic.IfStatement(
+                        new Syntactic.Equal(fieldAcc, new Syntactic.Constant(null)),
+                        new Syntactic.Block([
+                            new Syntactic.Assignment(fieldAcc,
+                                new Syntactic.New(
+                                    new Syntactic.NamedTypeReference("List",
+                                        TypeArguments: [srcType])))
+                        ])),
+                    new Syntactic.Invoke(
+                        new Syntactic.Member(fieldAcc, "Add"),
+                        [new Syntactic.Parameter(paramName)])
+                ]);
+                methods.Add(new Syntactic.MethodDefinitionNode(
+                    $"Register{info.SourceEntity.Name}{info.StageName}Subscriber",
+                    new Syntactic.TypeReference("void"),
+                    Parameters: [new Syntactic.Parameter(paramName, srcType)],
+                    Body: registerBody,
+                    AccessModifier: AccessModifier.Internal
+                ));
+
+                // internal void NotifyDamagedSubscribers() {
+                //     if (_damagedSubscribers != null)
+                //         foreach (var sub in _damagedSubscribers)
+                //             sub.WhenBookDamaged();
+                // }
+                var handlerName = $"When{info.TargetEntity.Name}{info.StageName}";
+                var subVar = "sub";
+                var foreachBody = new Syntactic.Block([
+                    new Syntactic.Invoke(
+                        new Syntactic.Member(
+                            new Syntactic.Variable(subVar), handlerName))
+                ]);
+                var notifyBody = new Syntactic.IfStatement(
+                    new Syntactic.NotEqual(
+                        new Syntactic.Member(new Syntactic.ThisReference(), fieldName),
+                        new Syntactic.Constant(null)),
+                    new Syntactic.ForEachLoop(
+                        new Syntactic.Variable(subVar),
+                        new Syntactic.Member(new Syntactic.ThisReference(), fieldName),
+                        foreachBody));
+                methods.Add(new Syntactic.MethodDefinitionNode(
+                    $"Notify{info.StageName}Subscribers",
+                    new Syntactic.TypeReference("void"),
+                    Body: new Syntactic.Block([notifyBody]),
+                    AccessModifier: AccessModifier.Internal
+                ));
+            }
+        }
+
+        // ── Subscriber entity: subscription handler methods ──────
+        if (subscriberSubs is { Count: > 0 }) {
+            foreach (var info in subscriberSubs) {
+                var handlerName = $"When{info.TargetEntity.Name}{info.StageName}";
+
+                // Lower the subscription effects into the handler body
+                var subscriptionEffects = info.Subscription.Effects;
+                Poly.Syntax.Node? handlerBody = null;
+                if (subscriptionEffects.Count > 0) {
+                    var context = new LoweringContext(
+                        new Syntactic.Parameter("entity",
+                            new Syntactic.TypeReference(entity.Name)),
+                        UseThisReference: true,
+                        LowerStageTransitions: true
+                    );
+                    var effectPass = new EffectLoweringPass(entity, context);
+                    var composite = new CompositeEffect(subscriptionEffects);
+                    handlerBody = effectPass.TryLowerVmNode(composite);
+                }
+
+                methods.Add(new Syntactic.MethodDefinitionNode(
+                    handlerName,
+                    new Syntactic.TypeReference("void"),
+                    Body: handlerBody,
+                    AccessModifier: AccessModifier.Internal
+                ));
+            }
         }
 
         // ── Stage enum + CurrentStage property ────────────────────
@@ -251,6 +435,9 @@ public sealed class DomainToCSharpExporter {
                 }
             }
 
+            // Append subscription registrations for subscriber entities after navigation assignments
+            AddSubscriberRegistrationNodes(subscriberSubs, bodyNodes);
+
             ctors = [new Syntactic.ConstructorDefinitionNode(
                 Parameters: ctorParams,
                 Body: bodyNodes.Count > 0 ? new Syntactic.Block(bodyNodes) : null,
@@ -264,6 +451,7 @@ public sealed class DomainToCSharpExporter {
             Constructors: ctors,
             Properties: props.Count > 0 ? props : null,
             Methods: methods.Count > 0 ? methods : null,
+            Fields: fields.Count > 0 ? fields : null,
             BaseType: baseTypeName is not null
                 ? new Syntactic.NamedTypeReference(baseTypeName)
                 : null,
@@ -274,10 +462,55 @@ public sealed class DomainToCSharpExporter {
     }
 
     /// <summary>
+    /// Appends subscription registration statements to the constructor body.
+    /// For each subscription on this entity's stage, emits code that registers
+    /// this instance as a subscriber on each related target entity.
+    /// </summary>
+    private static void AddSubscriberRegistrationNodes(
+        List<SubscriptionInfo>? subscriberSubs,
+        List<Poly.Syntax.Node> bodyNodes) {
+        if (subscriberSubs is { Count: > 0 }) {
+            foreach (var group in subscriberSubs.GroupBy(s => s.Relationship.Name)) {
+                var rel = group.First().Relationship;
+                var pascalNavName = ToPascalCase(rel.Name);
+                var isMany = rel.Cardinality is RelationshipCardinality.OneToMany
+                             or RelationshipCardinality.ManyToMany;
+
+                if (isMany) {
+                    foreach (var info in group) {
+                        var subVarName = "target";
+                        bodyNodes.Add(new Syntactic.ForEachLoop(
+                            new Syntactic.Variable(subVarName),
+                            new Syntactic.Member(new Syntactic.ThisReference(), pascalNavName),
+                            new Syntactic.Block([
+                                new Syntactic.Invoke(
+                                    new Syntactic.Member(
+                                        new Syntactic.Variable(subVarName),
+                                        $"Register{info.SourceEntity.Name}{info.StageName}Subscriber"),
+                                    [new Syntactic.ThisReference()])
+                            ])
+                        ));
+                    }
+                }
+                else {
+                    foreach (var info in group) {
+                        bodyNodes.Add(new Syntactic.Invoke(
+                            new Syntactic.Member(
+                                new Syntactic.Member(new Syntactic.ThisReference(), pascalNavName),
+                                $"Register{info.SourceEntity.Name}{info.StageName}Subscriber"),
+                            [new Syntactic.ThisReference()])
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    /// <summary>
     /// Determines which entity "owns" the stage enum. For inherited entities,
     /// the root ancestor's stages are canonical; the child reuses that enum.
     /// </summary>
-    private static string GetStageEnumOwner(
+    public static string GetStageEnumOwnerName(
         Entity entity, IReadOnlyDictionary<string, Entity> entityLookup) {
         var current = entity;
         while (current.ParentEntityName is not null
@@ -287,52 +520,23 @@ public sealed class DomainToCSharpExporter {
         return current.Name;
     }
 
-    /// <summary>
-    /// Walks the entity lineage from root (topmost ancestor) to leaf (<paramref name="entity"/>).
-    /// </summary>
-    private static IEnumerable<Entity> WalkLineageRootToLeaf(
-        Entity entity, IReadOnlyDictionary<string, Entity> lookup) {
-        var chain = new List<Entity>();
-        var visited = new HashSet<string>(StringComparer.Ordinal);
-        Entity? current = entity;
-
-        while (current is not null) {
-            if (!visited.Add(current.Name)) break;
-            chain.Add(current);
-            current = current.ParentEntityName is not null
-                      && lookup.TryGetValue(current.ParentEntityName, out var parent)
-                ? parent : null;
-        }
-
-        chain.Reverse();
-        return chain;
-    }
-
-    /// <summary>
-    /// Merges <paramref name="newItems"/> into <paramref name="existing"/> by name.
-    /// Existing (child) wins on conflict.
-    /// </summary>
-    private static List<T> MergeByName<T>(
-        List<T> existing, IReadOnlyList<T> newItems,
-        Func<T, string> nameSelector) {
-        var merged = new Dictionary<string, T>(StringComparer.Ordinal);
-        foreach (var item in existing)
-            merged[nameSelector(item)] = item;
-        foreach (var item in newItems) {
-            var name = nameSelector(item);
-            if (!merged.ContainsKey(name))
-                merged[name] = item;
-        }
-        return merged.Values.ToList();
-    }
+    private static string GetStageEnumOwner(
+        Entity entity, IReadOnlyDictionary<string, Entity> entityLookup)
+        => GetStageEnumOwnerName(entity, entityLookup);
 
     // ── Action method builder ───────────────────────────────────
 
     private static void AddActionMethod(Entity entity, Poly.DomainModeling.Action action,
-        List<Syntactic.MethodDefinitionNode> methods, string? stageEnumTypeName = null) {
+        List<Syntactic.MethodDefinitionNode> methods, string? stageEnumTypeName = null,
+        IReadOnlyDictionary<string, IReadOnlyList<Node>>? postTransitionNodes = null) {
         var paramNames = new HashSet<string>(
             action.Parameters.Select(p => p.Name), StringComparer.Ordinal);
-        var body = LowerActionToMethodBody(entity, action, paramNames, stageEnumTypeName);
+        var effectsBody = LowerActionToMethodBody(entity, action, paramNames, stageEnumTypeName,
+            postTransitionNodes);
+
+        // Build the full method body: require guards first, then effects
+        var body = BuildActionBodyWithGuards(action, entity, effectsBody);
+
         methods.Add(new Syntactic.MethodDefinitionNode(
             action.Name,
             new Syntactic.TypeReference("void"),
@@ -344,18 +548,69 @@ public sealed class DomainToCSharpExporter {
         ));
     }
 
+    /// <summary>
+    /// Builds a method body with require gate guard clauses prepended before the effects.
+    /// Always references entity-level policy methods (<c>bool PolicyName()</c>), not synthetic
+    /// action-scoped policy copies. For <c>require not PolicyName</c> (which the parser encodes
+    /// as a synthetic <c>not_PolicyName</c> policy on the action), we strip the prefix and
+    /// invert the condition so the generated code calls the real entity-level method.
+    ///
+    /// Generated patterns:
+    ///   <c>require AtLimit</c>     → <c>if (!this.AtLimit()) { return; }</c>
+    ///   <c>require not AtLimit</c> → <c>if (this.AtLimit()) { return; }</c>
+    /// </summary>
+    private static Syntactic.Block? BuildActionBodyWithGuards(
+        Poly.DomainModeling.Action action, Entity entity, Poly.Syntax.Node? effectsBody) {
+
+        // Collect all nodes: require guards first, then effects
+        var nodes = new List<Poly.Syntax.Node>();
+
+        // Emit require guard clauses referencing entity-level policy methods
+        foreach (var policy in action.Policies) {
+            if (policy.Name.StartsWith("not_", StringComparison.Ordinal)) {
+                // require not PolicyName → if (this.PolicyName()) { return; }
+                var realName = policy.Name.Substring(4);
+                var guardCall = new Syntactic.Invoke(
+                    new Syntactic.Member(new Syntactic.ThisReference(), realName));
+                nodes.Add(new Syntactic.IfStatement(
+                    guardCall, // block when policy IS true (no negation)
+                    new Syntactic.Block([new Syntactic.Return()])));
+            }
+            else {
+                // require PolicyName → if (!this.PolicyName()) { return; }
+                var guardCall = new Syntactic.Invoke(
+                    new Syntactic.Member(new Syntactic.ThisReference(), policy.Name));
+                nodes.Add(new Syntactic.IfStatement(
+                    new Syntactic.Not(guardCall),
+                    new Syntactic.Block([new Syntactic.Return()])));
+            }
+        }
+
+        // Append the effects body
+        if (effectsBody is Syntactic.Block block) {
+            nodes.AddRange(block.Nodes);
+        }
+        else if (effectsBody is not null) {
+            nodes.Add(effectsBody);
+        }
+
+        return nodes.Count > 0 ? new Syntactic.Block(nodes) : null;
+    }
+
     // ── Lowering helpers ────────────────────────────────────────
 
     internal static Poly.Syntax.Node? LowerActionToMethodBody(
         Entity entity, Poly.DomainModeling.Action action,
-        HashSet<string>? paramNames = null, string? stageEnumTypeName = null) {
+        HashSet<string>? paramNames = null, string? stageEnumTypeName = null,
+        IReadOnlyDictionary<string, IReadOnlyList<Node>>? postTransitionNodes = null) {
         if (action.Effects.Count == 0) return null;
         var context = new LoweringContext(
             new Syntactic.Parameter("entity", new Syntactic.TypeReference(entity.Name)),
             UseThisReference: true,
             ActionParameterNames: paramNames,
             LowerStageTransitions: true,
-            StageEnumTypeName: stageEnumTypeName
+            StageEnumTypeName: stageEnumTypeName,
+            PostTransitionNodes: postTransitionNodes
         );
         var effectPass = new EffectLoweringPass(entity, context);
         var composite = new CompositeEffect(action.Effects);

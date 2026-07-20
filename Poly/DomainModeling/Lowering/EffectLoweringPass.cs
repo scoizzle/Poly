@@ -22,6 +22,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     private readonly bool _useThisReference;
     private readonly bool _lowerStageTransitions;
     private readonly string? _stageEnumTypeName;
+    private readonly IReadOnlyDictionary<string, IReadOnlyList<Node>>? _postTransitionNodes;
 
     public EffectLoweringPass(Entity entity, Node subject)
         : this(entity, new LoweringContext(subject)) { }
@@ -32,6 +33,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         _useThisReference = context.UseThisReference;
         _lowerStageTransitions = context.LowerStageTransitions;
         _stageEnumTypeName = context.StageEnumTypeName;
+        _postTransitionNodes = context.PostTransitionNodes;
         _expressionPass = new DomainExpressionLoweringPass(context);
         Subject = context.UseThisReference && context.Subject is Parameter { Name: "entity" }
             ? new ThisReference()
@@ -83,6 +85,13 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
             new Member(Subject, "CurrentStage"),
             new Member(stageEnumType, t.TargetStage.StageName)
         ));
+
+        // Append post-transition notification nodes (subscription fan-out)
+        if (_postTransitionNodes is not null
+            && _postTransitionNodes.TryGetValue(t.TargetStage.StageName, out var postNodes)) {
+            foreach (var postNode in postNodes)
+                nodes.Add(postNode);
+        }
 
         return nodes.Count == 1 ? nodes[0] : new Block(nodes);
     }

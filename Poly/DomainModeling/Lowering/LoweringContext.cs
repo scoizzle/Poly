@@ -30,6 +30,11 @@ namespace Poly.DomainModeling.Lowering;
 /// default <c>{EntityName}Stage</c> derivation — necessary for inherited entities
 /// where the stage enum is defined on the root ancestor.
 /// </param>
+/// <param name="PostTransitionNodes">
+/// Optional map of stage name to Syntax AST nodes to emit <em>after</em> the
+/// <c>CurrentStage</c> assignment when lowering a transition to that stage.
+/// Used for cross-entity subscription notifications in C# codegen mode.
+/// </param>
 public sealed record LoweringContext(
     Node Subject,
     IReadOnlyDictionary<string, Node>? Parameters = null,
@@ -37,5 +42,6 @@ public sealed record LoweringContext(
     HashSet<string>? ActionParameterNames = null,
     bool LowerStageTransitions = false,
     Domain? Domain = null,
-    string? StageEnumTypeName = null
+    string? StageEnumTypeName = null,
+    IReadOnlyDictionary<string, IReadOnlyList<Node>>? PostTransitionNodes = null
 );

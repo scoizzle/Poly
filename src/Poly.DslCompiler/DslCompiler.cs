@@ -77,7 +77,7 @@ public sealed class DslCompiler {
 
         // ── 3. Generate C# ───────────────────────────────────────
         var domain = outcome.Root;
-        var files = GenerateFiles(domain);
+        var files = GenerateFiles(domain, outcome.Analysis);
 
         return new CompileResult(
             Success: true,
@@ -88,9 +88,9 @@ public sealed class DslCompiler {
 
     // ── C# generation ───────────────────────────────────────────
 
-    private static IReadOnlyList<(string FileName, string Source)> GenerateFiles(Domain domain) {
+    private static IReadOnlyList<(string FileName, string Source)> GenerateFiles(Domain domain, Poly.Syntax.Analysis.AnalysisResult analysis) {
         var exporter = new DomainToCSharpExporter();
-        var combinedDefs = exporter.Export(domain);
+        var combinedDefs = exporter.Export(domain, analysis);
         var entities = domain.Types.OfType<Entity>().ToList();
         var perEntityFiles = new List<(string FileName, string Source)>();
 
@@ -99,9 +99,21 @@ public sealed class DslCompiler {
         var combinedSource = combinedGenerator.Generate(combinedDefs);
         perEntityFiles.Add(("_all.cs", combinedSource));
 
-        // Per-entity files
+        // Per-entity files: filter combined defs to just this entity + its stage enum
         foreach (var entity in entities) {
-            var entityDefs = exporter.Export(new Domain(domain.Name, [entity], []));
+            var entityNames = new HashSet<string>(StringComparer.Ordinal) {
+                entity.Name,
+                $"{entity.Name}Stage"
+            };
+            // Also include parent stage enum names for inherited entities
+            var stageOwner = DomainToCSharpExporter.GetStageEnumOwnerName(
+                entity, entities.ToDictionary(e => e.Name, StringComparer.Ordinal));
+            if (!string.Equals(stageOwner, entity.Name, StringComparison.Ordinal))
+                entityNames.Add($"{stageOwner}Stage");
+
+            var entityDefs = combinedDefs
+                .Where(d => entityNames.Contains(d.Name))
+                .ToList();
             var generator = new CSharpGenerator();
             var csharp = generator.Generate(entityDefs);
             perEntityFiles.Add(($"{entity.Name}.cs", csharp));

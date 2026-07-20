@@ -412,10 +412,12 @@ internal sealed class OracleTool {
         [Description("Session ID")] string sessionId) {
         if (!McpSessionStore.TryGet(sessionId, out var state))
             return new DomainToolResponse(Success: false, Message: $"Session '{sessionId}' not found.", Affordances: ["create_domain_session", "list_sessions"]);
+        if (state.LatestAnalysis is null)
+            return new DomainToolResponse(Success: false, Message: $"Session '{sessionId}' has no analysis. Apply a domain first (apply_dsl or evolution).", SessionId: sessionId, Affordances: ["apply_dsl", "get_domain_overview"]);
 
         try {
             var exporter = new DomainToCSharpExporter();
-            var typeDefs = exporter.Export(state.Domain);
+            var typeDefs = exporter.Export(state.Domain, state.LatestAnalysis);
             var generator = new CSharpGenerator();
             var csharp = generator.Generate(typeDefs);
             return new DomainToolResponse(Success: true, Message: $"Domain exported to C#: {typeDefs.Count} types.", SessionId: sessionId, Data: new { csharp, typeCount = typeDefs.Count }, Affordances: ["get_domain_overview", "get_entity_detail", "apply_dsl"]);

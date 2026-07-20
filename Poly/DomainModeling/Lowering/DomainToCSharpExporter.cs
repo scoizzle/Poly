@@ -508,10 +508,26 @@ public sealed class DomainToCSharpExporter {
                     new Syntactic.Member(new Syntactic.ThisReference(), "InitializeSubscriptions")));
             }
 
-            // Private constructor — only the static Create factory can construct
-            // instances. EntityFramework and other infrastructure can still
-            // materialize via Create or private-ctor reflection.
+            // Private parameterless constructor for EF Core materialization.
+            var paramlessBody = new List<Poly.Syntax.Node>();
+            foreach (var f in fields) {
+                var isOptional = f.FieldType is Syntactic.OptionalTypeReference;
+                if (isOptional) continue;
+                paramlessBody.Add(new Syntactic.Assignment(
+                    new Syntactic.Member(new Syntactic.ThisReference(), f.Name),
+                    new Syntactic.New(f.FieldType)));
+            }
+            if (paramlessBody.Count == 0)
+                paramlessBody.Add(new Syntactic.Comment("EF materialization"));
             ctors = [new Syntactic.ConstructorDefinitionNode(
+                Parameters: null,
+                Body: new Syntactic.Block(paramlessBody),
+                AccessModifier: AccessModifier.Private
+            )];
+
+            // Full constructor — only the static Create factory can construct
+            // instances with data. EntityFramework uses the parameterless ctor.
+            ctors = [.. ctors, new Syntactic.ConstructorDefinitionNode(
                 Parameters: ctorParams,
                 Body: bodyNodes.Count > 0 ? new Syntactic.Block(bodyNodes) : null,
                 AccessModifier: AccessModifier.Private
@@ -651,8 +667,8 @@ public sealed class DomainToCSharpExporter {
         var methodParams = new List<Syntactic.Parameter>();
         var createArgs = new List<Poly.Syntax.Node>();
 
-        // Add regular properties without defaults
-        foreach (var prop in targetEntity.Properties) {
+        // Add regular properties without defaults (sorted to match Create factory)
+        foreach (var prop in targetEntity.Properties.OrderBy(p => p.Name)) {
             if (prop.Constraints.Any(c => c is DefaultValueConstraint)) continue;
             var paramName = ToCamelCase(prop.Name);
             var propRef = MapDomainTypeRef(prop.Type, domain);
@@ -679,13 +695,10 @@ public sealed class DomainToCSharpExporter {
             createArgs.Add(new Syntactic.ThisReference());
         }
 
-        // Fill remaining Target.Create() params with default/null for properties
-        // that have DefaultValueConstraint (they'll be set in the body)
-        foreach (var prop in targetEntity.Properties) {
-            var hasDefault = prop.Constraints.Any(c => c is DefaultValueConstraint);
-            if (!hasDefault) continue; // already handled above
-            createArgs.Add(DefaultValueForProp(prop, domain));
-        }
+        // NOTE: properties with DefaultValueConstraint are NOT included in
+        // the Target.Create() parameter list — they are set directly in the
+        // constructor body from their default expression. Do NOT append them
+        // to createArgs here; the Create factory already handles them.
 
         var bodyNodes = new List<Poly.Syntax.Node>();
         var localName = ToCamelCase(targetTypeName);
@@ -760,7 +773,7 @@ public sealed class DomainToCSharpExporter {
                     new Syntactic.NamedTypeReference(enumType.Name), enumType.MemberNames[0]);
         }
         return typeRef.TypeName switch {
-            "Text" or "String" => new Syntactic.Constant(null),
+            "Text" or "String" => new Syntactic.Constant(""),
             "Number" or "Int" or "Int64" => new Syntactic.Constant(0L),
             "Int32" => new Syntactic.Constant(0),
             "Boolean" or "Bool" => new Syntactic.Constant(false),

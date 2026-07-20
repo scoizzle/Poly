@@ -73,10 +73,25 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
                 && !string.IsNullOrEmpty(strVal)) {
                 value = new Member(new NamedTypeReference(enumType.Name), strVal);
             }
+
+            // Date/DateTime arithmetic: DueDate + 14 → DueDate.AddDays(14)
+            // The domain type names "DateTime", "Timestamp", "Date", "DateOnly"
+            // map to CLR types where + long is invalid — use AddDays instead.
+            if (entityProp is not null
+                && value is Poly.Syntax.Nodes.Add { LeftHandValue: Node lhs, RightHandValue: Node rhs }
+                && IsDateTimeDomainType(entityProp.Type.TypeName)) {
+                value = new Invoke(new Member(lhs, "AddDays"), [rhs]);
+            }
         }
 
         return new Assignment(target, value);
     }
+
+    /// <summary>Returns true when the domain type name maps to a date/time CLR type.</summary>
+    private static bool IsDateTimeDomainType(string typeName) => typeName switch {
+        "DateTime" or "Timestamp" or "Date" or "DateOnly" => true,
+        _ => false,
+    };
 
     /// <summary>
     /// Lowers a stage transition. When <see cref="_lowerStageTransitions"/> is true,
@@ -267,8 +282,8 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
 
         var args = new List<Node>();
 
-        // 1. Entity properties without DefaultValueConstraint (same order as AddCreateNavMethod)
-        foreach (var prop in targetEntity.Properties) {
+        // 1. Entity properties without DefaultValueConstraint (same order as AddCreateNavMethod — sorted by Name)
+        foreach (var prop in targetEntity.Properties.OrderBy(p => p.Name)) {
             if (prop.Constraints.Any(c => c is DefaultValueConstraint)) continue;
             if (initMap.TryGetValue(prop.Name, out var expr))
                 args.Add(_expressionPass.Lower(expr, Subject));
@@ -393,7 +408,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
                 return new Member(new NamedTypeReference(enumType.Name), enumType.MemberNames[0]);
         }
         return typeRef.TypeName switch {
-            "Text" or "String" => new Constant(null),
+            "Text" or "String" => new Constant(""),
             "Number" or "Int" or "Int64" => new Constant(0L),
             "Int32" => new Constant(0),
             "Boolean" or "Bool" => new Constant(false),

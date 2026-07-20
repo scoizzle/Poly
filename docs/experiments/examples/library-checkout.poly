@@ -1,173 +1,98 @@
 // =============================================================================
 // Library Checkout System — Poly DSL Domain Model
 //
+// Three concerns, cleanly separated:
+//   • Book — catalog entry (static definition, no lifecycle)
+//   • Patron — user profile with borrowing lifecycle (Active → Suspended → Closed)
+//   • Loan — transactional record carrying the check-out → overdue → returned
+//     lifecycle. The Loan connects a Book (by ISBN) to a Patron.
+//   • Fine — monetary penalty tied to a patron
+//
 // Showcases Phase 1a/1b surface:
-//   • Entities with rich constraints (required, unique, range, length, pattern,
-//     equals, enum)
-//   • Lifecycle stages with entry/exit effects and actions
-//   • Policies with arithmetic, collection quantifiers, nav reads
-//   • Actions with parameters, require gates, invoke, create, create in,
-//     conditional, delete
-//   • Cross-entity notifications via stage subscriptions (when)
-//   • Entity inheritance
-//   • N1 navigation properties (one-to-many, one-to-one)
+//   • Entities with rich constraints  |  • Actions with parameters, require
+//   • Policies with arithmetic, nav   |    gates, conditional, create in,
+//     reads, collection quantifiers   |    invoke, delete
+//   • Lifecycle stages with entry/exit | • Cross-entity subscriptions (when)
+//     effects and actions              | • Navigation properties (N1: one-to-many)
 // =============================================================================
 
 domain Library
 
-
 // =============================================================================
-// Book — core inventory item with full lifecycle
+// Book — catalog entry. A static definition with no lifecycle or actions.
+// Books are identified by ISBN and represent the "what" of a library.
 // =============================================================================
 
 Book: entity {
-  Title: Text required                                     // required string
+  Title: Text required
   Author: Text required
-  ISBN: Text unique length(10, 17)                          // unique + length
-  Pages: Number range(1, 10000)                             // numeric range
-  Genre: Text enum(Fiction, NonFiction, Reference)          // closed enum
-  Condition: Text default("New") enum(New, Good, Fair, Poor) // default value
-  CheckedOutTo: Text                                        // member ID when out
-  TimesBorrowed: Number
-
-  // ── Policies ───────────────────────────────────────────────────────────────
-  IsNew: policy { Condition is "New" }
-  IsPopular: policy { TimesBorrowed >= 10 }
-
-  // ── On-shelf: available for checkout ───────────────────────────────────────
-  OnShelf: stage {
-    CheckOut: action (memberId: Text) {
-      invoke ValidateEligibility
-      assign CheckedOutTo to memberId
-      transition to CheckedOut
-    }
-  }
-
-  // ── Checked-out: in a member's possession ──────────────────────────────────
-  CheckedOut: stage {
-    entry { assign TimesBorrowed to TimesBorrowed + 1 }
-    Return: action {
-      assign CheckedOutTo to ""
-      transition to OnShelf
-    }
-    ReportDamaged: action { transition to Damaged }
-  }
-
-  // ── Damaged: needs repair or disposal ──────────────────────────────────────
-  Damaged: stage {
-    entry { assign Condition to "Poor" }
-    Repair: action {
-      assign Condition to "Good"
-      transition to OnShelf
-    }
-    WriteOff: action { transition to Discarded }
-  }
-
-  // ── Discarded: removed from circulation (terminal) ─────────────────────────
-  Discarded: stage { }
-
-  // ── Entity-level actions ───────────────────────────────────────────────────
-  ValidateEligibility: action {
-    // Validation logic (no-op stub — policy gates would apply in practice)
-  }
+  ISBN: Text unique length(10, 17)
+  Pages: Number range(1, 10000)
+  Genre: Text enum(Fiction, NonFiction, Reference)
 }
 
 
 // =============================================================================
-// LoanRecord — tracks individual borrowing events (created by CheckOut)
+// Patron — library user with borrowing privileges and account lifecycle.
 // =============================================================================
 
-LoanRecord: entity {
-  BookTitle: Text required
-  MemberName: Text required
-  CheckedOutAt: DateTime
-  ReturnedAt: DateTime
-
-  Active: stage {
-    Complete: action {
-      transition to Completed
-    }
-  }
-
-  Completed: stage { }
-}
-
-
-// =============================================================================
-// Reservation — hold request for a currently checked-out book
-// =============================================================================
-
-Reservation: entity {
-  member: Member
-  book: Book
-  PlacedAt: DateTime
-  FulfilledAt: DateTime
-
-  Pending: stage {
-    Fulfill: action { transition to Fulfilled }
-    Cancel: action { transition to Cancelled }
-  }
-
-  Fulfilled: stage { }
-
-  Cancelled: stage { }
-}
-
-
-// =============================================================================
-// Member — library patron with status, policies, and relationships
-// =============================================================================
-
-Member: entity {
+Patron: entity {
   Name: Text required
   Email: Text unique pattern("^[^@]+@[^@]+$")
   MemberSince: Date
   Status: Text default("Active") enum(Active, Suspended, Closed)
   MaxItems: Number range(1, 20) required
   CurrentBorrowCount: Number
-  IsMinor: Boolean
-  LastActivity: DateTime
+  OutstandingFines: Number
+
+  // ── Navigation Properties ──────────────────────────────────────────────────
+  loans: many Loan
+  fines: many Fine
 
   // ── Policies ───────────────────────────────────────────────────────────────
-  IsAdult: policy { IsMinor is false }
   GoodStanding: policy { Status is "Active" }
   AtLimit: policy { CurrentBorrowCount >= MaxItems }
-  HasOverdueBooks: policy { any books where CheckedOutTo is not "" }
-  HasManyFines: policy { count fines > 3 }
-  ActiveReservations: policy { count reservations > 0 }
-  AverageRating: policy { count books > 0 }
+  HasFines: policy { OutstandingFines > 0 }
+  HasOverdueLoans: policy { any loans where Status is "Overdue" }
+  AccountInGoodStanding: policy {
+    Status is "Active" and OutstandingFines == 0
+  }
 
-  // ── Navigation properties ──────────────────────────────────────────────────
-  books: many Book              // currently checked-out books
-  fines: many Fine              // outstanding or historical fines
-  reservations: many Reservation
-
-  // ── Active — normal operating state ────────────────────────────────────────
+  // ── Active — can borrow ────────────────────────────────────────────────────
   Active: stage {
+    CheckOut: action (book: Book)
+      require GoodStanding
+      require not AtLimit
+      require not HasFines
+    {
+      create in loans { BookIsbn: book.ISBN }
+      assign CurrentBorrowCount to CurrentBorrowCount + 1
+    }
+
     Suspend: action
-      require not AtLimit          // gate: can't suspend someone at their limit
+      require not AtLimit
     {
       assign Status to "Suspended"
-      if (CurrentBorrowCount > 0) {
-        assign MaxItems to CurrentBorrowCount
-      }
+      assign CurrentBorrowCount to 0
       transition to Suspended
     }
 
-    // Auto-suspend when any related book enters the Damaged stage
-    when books Damaged {
-      assign Status to "Suspended"
-      transition to Suspended
+    // Auto-fine when any related loan goes overdue
+    when loans Overdue {
+      create Fine { Amount: 5 Reason: "Overdue item" }
+      assign OutstandingFines to OutstandingFines + 5
     }
 
     CloseAccount: action { transition to Closed }
   }
 
-  // ── Suspended — borrowing frozen, can be reinstated ────────────────────────
+  // ── Suspended — borrowing frozen ───────────────────────────────────────────
   Suspended: stage {
     entry { assign MaxItems to 0 }
     exit  { assign MaxItems to 5 }
-    Reinstate: action {
+    Reinstate: action
+      require not HasOverdueLoans
+    {
       assign Status to "Active"
       transition to Active
     }
@@ -179,21 +104,41 @@ Member: entity {
 
 
 // =============================================================================
-// PremiumMember — inherits all of Member, adds loyalty benefits
+// Loan — a single borrowing event. Represents one book checked out by one patron.
+// This is where the real lifecycle lives: Active → Overdue → Returned.
 // =============================================================================
 
-PremiumMember: Member entity {
-  RewardPoints: Number
-  Tier: Text enum(Silver, Gold, Platinum)
-  PriorityQueue: Boolean
+Loan: entity {
+  BookIsbn: Text required
+  Status: Text
+  CheckedOutAt: DateTime
+  DueDate: DateTime
+  ReturnedAt: DateTime
+  TimesRenewed: Number
 
-  IsLoyal: policy { RewardPoints >= 100 }
-  HasPriority: policy { PriorityQueue is true }
+  // Reference to the actual catalog entry
+  book: Book
+  // The patron who borrowed this item (set implicitly by create in loans)
+  borrower: Patron
+
+  // ── Active — currently borrowed and not yet overdue ────────────────────────
+  Active: stage {
+    Renew: action {
+      assign DueDate to DueDate + 14
+      assign TimesRenewed to TimesRenewed + 1
+    }
+  }
+
+  // ── Overdue — beyond due date; fines applied at patron level via subscription ──
+  Overdue: stage { }
+
+  // ── Returned — resolved ─────────────────────────────────────────────────────
+  Returned: stage { }
 }
 
 
 // =============================================================================
-// Fine — penalty for late, lost, or damaged items
+// Fine — monetary penalty for overdue, lost, or damaged items
 // =============================================================================
 
 Fine: entity {
@@ -201,33 +146,48 @@ Fine: entity {
   Reason: Text
   DateIssued: DateTime
   Paid: Boolean
-  Waived: Boolean
 
-  // The member this fine belongs to
-  patron: Member
+  // The patron who owes this fine
+  patron: Patron
 
-  // ── Unpaid — active penalty ────────────────────────────────────────────────
+  // ── Unpaid — penalty is active ─────────────────────────────────────────────
   Unpaid: stage {
-    // Conditional: waive small fines automatically
     Pay: action {
       if (Amount <= 0) {
         assign Paid to true
-        assign Waived to true
+        delete
       } else {
         assign Paid to true
       }
-      transition to Paid
+      transition to Resolved
     }
     Waive: action {
       assign Amount to 0
       assign Paid to true
-      assign Waived to true
-      delete                        // soft-delete: removes fine from consideration
+      transition to Resolved
     }
   }
 
-  // ── Paid — resolved ────────────────────────────────────────────────────────
-  Paid: stage {
+  // ── Resolved — paid or waived ──────────────────────────────────────────────
+  Resolved: stage {
     entry { assign Paid to true }
   }
 }
+
+
+// =============================================================================
+// PremiumPatron — independent loyalty profile, not a subtype of Patron
+// =============================================================================
+
+PremiumPatron: entity {
+  Name: Text required
+  Email: Text unique pattern("^[^@]+@[^@]+$")
+  RewardPoints: Number
+  Tier: Text enum(Silver, Gold, Platinum) default("Silver")
+  PriorityAccess: Boolean
+
+  IsLoyal: policy { RewardPoints >= 100 }
+  HasPriority: policy { PriorityAccess is true }
+  UnlimitedItems: policy { Tier is "Platinum" or PriorityAccess is true }
+}
+

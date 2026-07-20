@@ -468,37 +468,11 @@ internal sealed class PolicyConstraintAnalyzer : INodeAnalyzer {
     private static Dictionary<string, Property> BuildPropertyMap(Entity entity, DomainTypeLookupMetadata? lookup = null) {
         var map = new Dictionary<string, Property>(StringComparer.Ordinal);
 
-        // Add parent-entity properties first so child can override (PCA.7)
-        if (lookup is not null && entity.ParentEntityName is not null) {
-            AddParentProperties(entity, lookup, map, new HashSet<string>(StringComparer.Ordinal));
-        }
-
         foreach (var prop in entity.Properties) {
             map[prop.Name] = prop;
         }
 
         return map;
-    }
-
-    private static void AddParentProperties(
-        Entity entity,
-        DomainTypeLookupMetadata lookup,
-        Dictionary<string, Property> map,
-        HashSet<string> visited) {
-
-        if (entity.ParentEntityName is null) return;
-        if (!visited.Add(entity.Name)) return; // cycle guard
-
-        if (lookup.Types.TryGetValue(entity.ParentEntityName, out var parentType) && parentType is Entity parent) {
-            // Walk grandparent first so immediate parent overrides grandparent
-            AddParentProperties(parent, lookup, map, visited);
-
-            foreach (var prop in parent.Properties) {
-                if (!map.ContainsKey(prop.Name)) {
-                    map[prop.Name] = prop;
-                }
-            }
-        }
     }
 }
 

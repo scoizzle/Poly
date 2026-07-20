@@ -116,30 +116,7 @@ public sealed class DomainToCSharpExporter {
         var ctorParams = new List<Syntactic.Parameter>();
         var ctorAssignments = new List<Poly.Syntax.Node>();
 
-        // ── Resolve inheritance from analysis metadata ─────────────
-        var effective = analysis.GetMetadata<EffectiveMemberMetadata>(entity)
-            ?? throw new InvalidOperationException(
-                $"Missing EffectiveMemberMetadata for entity '{entity.Name}'. " +
-                "Ensure SemanticDomainAnalyzer ran on the domain.");
-
-        var effectiveProperties = effective.EffectiveProperties;
-        var effectiveActions = effective.EffectiveActions;
-        var effectivePolicies = effective.EffectivePolicies;
-        var effectiveStages = effective.EffectiveStages;
-
-        string? baseTypeName = null;
-        if (entity.ParentEntityName is not null
-            && entityLookup.TryGetValue(entity.ParentEntityName, out var parentEntity)) {
-            baseTypeName = parentEntity.Name;
-        }
-
-        var ownPropertyNames = new HashSet<string>(
-            entity.Properties.Select(p => p.Name), StringComparer.Ordinal);
-
-        var stageEnumOwner = GetStageEnumOwner(entity, entityLookup);
-
-        // Determine stage enum owner (root ancestor that defines stages)
-        stageEnumOwner = GetStageEnumOwner(entity, entityLookup);
+        var stageEnumTypeName = $"{entity.Name}Stage";
 
         // ── Common property: IsDeleted (always emitted) ────────────
         props.Add(new Syntactic.PropertyDefinitionNode(
@@ -150,10 +127,8 @@ public sealed class DomainToCSharpExporter {
                 AccessModifier: AccessModifier.Private)
         ));
 
-        // ── Entity properties (own only for declaration, effective for ctor) ──
-        foreach (var prop in (baseTypeName is not null
-            ? entity.Properties.OrderBy(p => p.Name)
-            : effectiveProperties.OrderBy(p => p.Name))) {
+        // ── Entity properties (sorted for deterministic output) ──
+        foreach (var prop in entity.Properties.OrderBy(p => p.Name)) {
             var propRef = MapDomainTypeRef(prop.Type);
             List<Poly.Syntax.Node>? constraints = null;
             if (prop.Constraints.Any(c => c is RequiredConstraint))
@@ -166,11 +141,7 @@ public sealed class DomainToCSharpExporter {
                     AccessModifier: AccessModifier.Protected),
                 Constraints: constraints
             ));
-        }
 
-        // ── Constructor params and assignments (ALL effective properties) ──
-        foreach (var prop in effectiveProperties.OrderBy(p => p.Name)) {
-            var propRef = MapDomainTypeRef(prop.Type);
             var paramName = ToCamelCase(prop.Name);
             ctorParams.Add(new Syntactic.Parameter(paramName, propRef));
             ctorAssignments.Add(new Syntactic.Assignment(
@@ -214,36 +185,30 @@ public sealed class DomainToCSharpExporter {
             ));
         }
 
-        // ── Actions as void methods (own only for inheritance) ────
-        var stageEnumTypeName = $"{stageEnumOwner}Stage";
-
-        // Build post-transition notification nodes (subscription fan-out on target entity)
+        // ── Build post-transition notification nodes ──────────────
         Dictionary<string, IReadOnlyList<Node>>? postTransitionNodes = null;
         if (targetSubs is { Count: > 0 }) {
             postTransitionNodes = new Dictionary<string, IReadOnlyList<Node>>(
                 StringComparer.Ordinal);
             foreach (var group in targetSubs.GroupBy(s => s.StageName)) {
                 var nodes = new List<Node>();
-                foreach (var info in group) {
-                    // this.Notify{Stage}Subscribers();
+                foreach (var info in group)
                     nodes.Add(new Syntactic.Invoke(
                         new Syntactic.Member(new Syntactic.ThisReference(),
                             $"Notify{info.StageName}Subscribers")));
-                }
                 postTransitionNodes[group.Key] = nodes;
             }
         }
 
-        var actionsToEmit = baseTypeName is not null ? entity.Actions : effectiveActions;
-        foreach (var action in actionsToEmit)
+        // ── Actions as void methods ───────────────────────────────
+        foreach (var action in entity.Actions)
             AddActionMethod(entity, action, methods, stageEnumTypeName, postTransitionNodes, domain: domain);
-        foreach (var stage in (baseTypeName is not null ? entity.Stages : effectiveStages))
+        foreach (var stage in entity.Stages)
             foreach (var action in stage.Actions)
                 AddActionMethod(entity, action, methods, stageEnumTypeName, postTransitionNodes, stage.Name, domain);
 
-        // ── Policies as bool methods (own only for inheritance) ───
-        var policiesToEmit = baseTypeName is not null ? entity.Policies : effectivePolicies;
-        foreach (var policy in policiesToEmit) {
+        // ── Policies as bool methods ──────────────────────────────
+        foreach (var policy in entity.Policies) {
             Poly.Syntax.Node? body;
             try {
                 body = LowerExpressionToMethodBody(policy.Expression, entity);
@@ -371,27 +336,22 @@ public sealed class DomainToCSharpExporter {
         }
 
         // ── Stage enum + CurrentStage property ────────────────────
-        if (effectiveStages.Count > 0) {
-            var enumOwner = GetStageEnumOwner(entity, entityLookup);
-            var enumTypeName = $"{enumOwner}Stage";
-
-            // Only emit the stage enum if this entity owns it
-            if (string.Equals(enumOwner, entity.Name, StringComparison.Ordinal)) {
-                var stageEnumFields = new List<Syntactic.FieldDefinitionNode>();
-                for (int si = 0; si < effectiveStages.Count; si++) {
-                    stageEnumFields.Add(new Syntactic.FieldDefinitionNode(
-                        effectiveStages[si].Name,
-                        new Syntactic.PrimitiveTypeReference(PrimType.Int32),
-                        DefaultValue: new Syntactic.Constant((long)si),
-                        AccessModifier: AccessModifier.Public
-                    ));
-                }
-                typeDefs.Add(new Syntactic.TypeDefinitionNode(
-                    enumTypeName,
-                    Fields: stageEnumFields,
-                    Semantics: Syntactic.TypeDefinitionSemantics.MutableReference
+        if (entity.Stages.Count > 0) {
+            var enumTypeName = $"{entity.Name}Stage";
+            var stageEnumFields = new List<Syntactic.FieldDefinitionNode>();
+            for (int si = 0; si < entity.Stages.Count; si++) {
+                stageEnumFields.Add(new Syntactic.FieldDefinitionNode(
+                    entity.Stages[si].Name,
+                    new Syntactic.PrimitiveTypeReference(PrimType.Int32),
+                    DefaultValue: new Syntactic.Constant((long)si),
+                    AccessModifier: AccessModifier.Public
                 ));
             }
+            typeDefs.Add(new Syntactic.TypeDefinitionNode(
+                enumTypeName,
+                Fields: stageEnumFields,
+                Semantics: Syntactic.TypeDefinitionSemantics.MutableReference
+            ));
 
             props.Add(new Syntactic.PropertyDefinitionNode(
                 "CurrentStage",
@@ -402,58 +362,26 @@ public sealed class DomainToCSharpExporter {
             ));
         }
 
-        // ── Constructor (with base() call for inheritance) ────────
+        // ── Constructor ────────────────────────────────────────
         List<Syntactic.ConstructorDefinitionNode>? ctors = null;
-        if (ctorParams.Count > 0 || effectiveStages.Count > 0) {
-            List<Node>? baseCallArgs = null;
-            List<Poly.Syntax.Node> bodyNodes;
+        if (ctorParams.Count > 0 || entity.Stages.Count > 0) {
+            var bodyNodes = new List<Poly.Syntax.Node>();
+            bodyNodes.AddRange(ctorAssignments);
 
-            if (baseTypeName is not null) {
-                baseCallArgs = new List<Node>();
-                var ownAssignments = new List<Poly.Syntax.Node>();
-
-                foreach (var assign in ctorAssignments) {
-                    if (assign is Syntactic.Assignment a
-                        && a.Destination is Syntactic.Member m
-                        && ownPropertyNames.Contains(m.MemberName)) {
-                        ownAssignments.Add(assign);
-                    }
-                    else if (assign is Syntactic.Assignment a2) {
-                        baseCallArgs.Add(a2.Value ?? new Syntactic.Constant(null));
-                    }
-                }
-
-                bodyNodes = new List<Poly.Syntax.Node>();
-                bodyNodes.AddRange(ownAssignments);
-
-                if (effectiveStages.Count > 0) {
-                    bodyNodes.Add(new Syntactic.Assignment(
-                        new Syntactic.Member(new Syntactic.ThisReference(), "CurrentStage"),
-                        new Syntactic.Member(
-                            new Syntactic.NamedTypeReference($"{stageEnumOwner}Stage"),
-                            effectiveStages[0].Name)));
-                }
-            }
-            else {
-                bodyNodes = new List<Poly.Syntax.Node>();
-                bodyNodes.AddRange(ctorAssignments);
-
-                if (effectiveStages.Count > 0) {
-                    bodyNodes.Add(new Syntactic.Assignment(
-                        new Syntactic.Member(new Syntactic.ThisReference(), "CurrentStage"),
-                        new Syntactic.Member(
-                            new Syntactic.NamedTypeReference($"{stageEnumOwner}Stage"),
-                            effectiveStages[0].Name)));
-                }
+            if (entity.Stages.Count > 0) {
+                bodyNodes.Add(new Syntactic.Assignment(
+                    new Syntactic.Member(new Syntactic.ThisReference(), "CurrentStage"),
+                    new Syntactic.Member(
+                        new Syntactic.NamedTypeReference($"{entity.Name}Stage"),
+                        entity.Stages[0].Name)));
             }
 
-            // Append subscription registrations for subscriber entities after navigation assignments
+            // Append subscription registrations
             AddSubscriberRegistrationNodes(subscriberSubs, bodyNodes);
 
             ctors = [new Syntactic.ConstructorDefinitionNode(
                 Parameters: ctorParams,
                 Body: bodyNodes.Count > 0 ? new Syntactic.Block(bodyNodes) : null,
-                BaseCall: baseCallArgs?.Count > 0 ? baseCallArgs : null,
                 AccessModifier: AccessModifier.Public
             )];
         }
@@ -464,9 +392,6 @@ public sealed class DomainToCSharpExporter {
             Properties: props.Count > 0 ? props : null,
             Methods: methods.Count > 0 ? methods : null,
             Fields: fields.Count > 0 ? fields : null,
-            BaseType: baseTypeName is not null
-                ? new Syntactic.NamedTypeReference(baseTypeName)
-                : null,
             Semantics: Syntactic.TypeDefinitionSemantics.MutableReference
         ));
 
@@ -517,24 +442,6 @@ public sealed class DomainToCSharpExporter {
             }
         }
     }
-
-    /// <summary>
-    /// Determines which entity "owns" the stage enum. For inherited entities,
-    /// the root ancestor's stages are canonical; the child reuses that enum.
-    /// </summary>
-    public static string GetStageEnumOwnerName(
-        Entity entity, IReadOnlyDictionary<string, Entity> entityLookup) {
-        var current = entity;
-        while (current.ParentEntityName is not null
-               && entityLookup.TryGetValue(current.ParentEntityName, out var parent)) {
-            current = parent;
-        }
-        return current.Name;
-    }
-
-    private static string GetStageEnumOwner(
-        Entity entity, IReadOnlyDictionary<string, Entity> entityLookup)
-        => GetStageEnumOwnerName(entity, entityLookup);
 
     // ── Action method builder ───────────────────────────────────
 

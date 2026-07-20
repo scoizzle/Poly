@@ -54,7 +54,6 @@ internal sealed record EntityDetailData(
     [property: JsonPropertyName("stages")] IReadOnlyList<StageData> Stages,
     [property: JsonPropertyName("actions")] IReadOnlyList<ActionData> Actions,
     [property: JsonPropertyName("policies")] IReadOnlyList<string> Policies,
-    [property: JsonPropertyName("parentEntity")] string? ParentEntityName = null,
     [property: JsonPropertyName("navigations")] IReadOnlyList<NavigationData>? Navigations = null
 );
 
@@ -210,7 +209,6 @@ internal sealed class QueryTool {
                     sub.RelationshipName, sub.StageNames, sub.Quantifier, sub.EffectCount)).ToList())).ToList(),
             detail.Actions.Select(a => new ActionData(a.Name, a.ParameterNames, a.EffectCount)).ToList(),
             detail.Policies.Select(p => p.Name).ToList(),
-            detail.ParentEntityName,
             detail.Navigations.Select(n => new NavigationData(
                 n.RelationshipName, n.RelatedEntityName, n.Role, n.Cardinality, n.SourceOwnsTarget)).ToList()
         );

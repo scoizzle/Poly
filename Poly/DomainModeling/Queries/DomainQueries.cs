@@ -26,7 +26,6 @@ public sealed record EntityDetail(
     IReadOnlyList<StageDetail> Stages,
     IReadOnlyList<ActionDetail> Actions,
     IReadOnlyList<PolicyDetail> Policies,
-    string? ParentEntityName,
     IReadOnlyList<NavigationDetail> Navigations
 );
 
@@ -200,7 +199,6 @@ public static class DomainQueries {
             Stages: stages,
             Actions: actions,
             Policies: policies,
-            ParentEntityName: entity.ParentEntityName,
             Navigations: domain.Relationships
                 .Where(r => string.Equals(r.Source.TypeName, entity.Name, StringComparison.Ordinal)
                          || string.Equals(r.Target.TypeName, entity.Name, StringComparison.Ordinal))

@@ -111,20 +111,18 @@ public sealed class PolyDslParser {
                 $"'{_current.Text}' is not supported in Phase 1a (use 'entity' instead)");
         }
 
-        // Optional parent entity: Name: ParentName entity { ... }
-        string? parentEntityName = null;
+        // Reject old inheritance syntax: Name: ParentName entity { ... }
         if (_current.Kind == TokenKind.Identifier && PeekIs(TokenKind.Entity)) {
-            parentEntityName = ExpectIdentifier(TokenKind.Identifier, "parent entity name");
+            var parentName = _current.Text;
+            throw new FormatException(
+                $"Entity inheritance ('{entityName}: {parentName} entity') is no longer supported. " +
+                $"Define '{parentName}' properties directly on '{entityName}'.");
         }
 
         Expect(TokenKind.Entity);
 
         _entityNames.Add(entityName);
         changes.Add(new AddEntityChange(entityName, []));
-
-        if (parentEntityName is not null) {
-            changes.Add(new SetEntityParentChange(entityName, parentEntityName));
-        }
 
         Expect(TokenKind.LBrace);
 

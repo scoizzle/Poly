@@ -18,7 +18,6 @@ public sealed record Entity(
     IReadOnlyList<Policy> Policies,
     IReadOnlyList<Stage> Stages
 ) : DomainType(Name, Properties, []) {
-    public string? ParentEntityName { get; init; }
     public sealed override IEnumerable<Node?> Children =>
         [.. Properties, .. Constraints, .. Actions, .. Policies, .. Stages];
 }

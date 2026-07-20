@@ -19,24 +19,23 @@ public static class LibraryDomain {
                 .AddPrimitiveType("Phone", Poly.Introspection.TypeCategory.Text)
                 .AddPrimitiveType("Decimal", Poly.Introspection.TypeCategory.HighPrecision)
 
-                // Person entity
-                .AddEntity("Person")
-                .AddPropertyToEntity("Person", new("FirstName", new("Text"), []))
-                .AddPropertyToEntity("Person", new("LastName", new("Text"), []))
-                .AddPropertyToEntity("Person", new("PhoneNumber", new("Phone"), []))
-                .AddPropertyToEntity("Person", new("Email", new("Email"), []))
-
-                // Member inherits from Person
+                // Member entity (standalone — no inheritance)
                 .AddEntity("Member")
-                .SetEntityParent("Member", "Person")
+                .AddPropertyToEntity("Member", new("FirstName", new("Text"), []))
+                .AddPropertyToEntity("Member", new("LastName", new("Text"), []))
+                .AddPropertyToEntity("Member", new("PhoneNumber", new("Phone"), []))
+                .AddPropertyToEntity("Member", new("Email", new("Email"), []))
                 .AddPropertyToEntity("Member", new("MemberId", new("Text"), []))
                 .AddPropertyToEntity("Member", new("JoinDate", new("DateTime"), []))
                 .AddPropertyToEntity("Member", new("IsActive", new("Boolean"), []))
                 .AddPropertyToEntity("Member", new("MaxBooksAllowed", new("Number"), []))
 
-                // Librarian inherits from Person
+                // Librarian entity (standalone — no inheritance)
                 .AddEntity("Librarian")
-                .SetEntityParent("Librarian", "Person")
+                .AddPropertyToEntity("Librarian", new("FirstName", new("Text"), []))
+                .AddPropertyToEntity("Librarian", new("LastName", new("Text"), []))
+                .AddPropertyToEntity("Librarian", new("PhoneNumber", new("Phone"), []))
+                .AddPropertyToEntity("Librarian", new("Email", new("Email"), []))
                 .AddPropertyToEntity("Librarian", new("EmployeeId", new("Text"), []))
                 .AddPropertyToEntity("Librarian", new("HireDate", new("DateTime"), []))
                 .AddPropertyToEntity("Librarian", new("Role", new("Text"), []))

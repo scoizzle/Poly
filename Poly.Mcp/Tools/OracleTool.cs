@@ -512,10 +512,10 @@ internal sealed class OracleTool {
 
         var sb = new StringBuilder();
         sb.Append($"Entity '{name}' with {detail.Properties.Count} properties, {detail.Stages.Count} stages, {detail.Actions.Count} actions, {detail.Policies.Count} policies.");
-        if (detail.ParentEntityName is not null) sb.Append($" Extends '{detail.ParentEntityName}'.");
+
         if (detail.Navigations.Count > 0) sb.Append($" Navigations: {string.Join(", ", detail.Navigations.Select(n => n.RelationshipName))}.");
 
-        return new DomainToolResponse(Success: true, Message: sb.ToString(), SessionId: sessionId, Data: new DomainElementData("entity", name, detail.ParentEntityName, sb.ToString(), sb.ToString()), Affordances: ["get_entity_detail", "get_domain_analysis"]);
+        return new DomainToolResponse(Success: true, Message: sb.ToString(), SessionId: sessionId, Data: new DomainElementData("entity", name, null, sb.ToString(), sb.ToString()), Affordances: ["get_entity_detail", "get_domain_analysis"]);
     }
 
     private static DomainToolResponse DescribeStage(string sessionId, McpSessionState state, string name, string? entityName = null) {

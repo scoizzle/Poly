@@ -108,40 +108,9 @@ internal sealed class SemanticDomainAnalyzer : INodeAnalyzer {
             return;
         }
 
-        ValidateEntityParentCycle(context, entity);
         ValidateStages(context, entity);
         PublishEffectivePolicies(context, entity);
         PublishEffectiveMemberMetadata(context, entity);
-    }
-
-    private static void ValidateEntityParentCycle(AnalysisContext context, Entity entity) {
-        if (entity.ParentEntityName is null) return;
-
-        var lookup = context.GetMetadata<DomainTypeLookupMetadata>(default);
-        if (lookup is null) return;
-
-        var visited = new HashSet<string>(StringComparer.Ordinal) { entity.Name };
-        var currentName = entity.ParentEntityName;
-
-        while (currentName is not null) {
-            if (!visited.Add(currentName)) {
-                context.ReportStructuralFailure(
-                    entity,
-                    $"Entity '{entity.Name}' participates in an inheritance cycle.",
-                    DomainModelDiagnosticCodes.StructuralCycle);
-                return;
-            }
-
-            if (!lookup.Types.TryGetValue(currentName, out var parentType) || parentType is not Entity parentEntity) {
-                context.ReportStructuralFailure(
-                    entity,
-                    $"Entity '{entity.Name}' references unknown parent entity '{currentName}'.",
-                    DomainModelDiagnosticCodes.SemanticReferenceResolution);
-                return;
-            }
-
-            currentName = parentEntity.ParentEntityName;
-        }
     }
 
     private static void ValidateStages(AnalysisContext context, Entity entity) {
@@ -205,73 +174,12 @@ internal sealed class SemanticDomainAnalyzer : INodeAnalyzer {
     }
 
     private static void PublishEffectiveMemberMetadata(AnalysisContext context, Entity entity) {
-        var lookup = context.GetMetadata<DomainTypeLookupMetadata>(default);
-        if (lookup is null) return;
-
-        var lineage = EnumerateEntityLineageRootToLeaf(entity, lookup).ToArray();
-
-        var effectiveProperties = MergeByName(
-            lineage.SelectMany(static e => e.Properties),
-            static p => p.Name);
-        var effectiveActions = MergeByName(
-            lineage.SelectMany(static e => e.Actions),
-            static a => a.Name);
-        var effectivePolicies = MergeByName(
-            lineage.SelectMany(static e => e.Policies),
-            static p => p.Name);
-        var effectiveStages = MergeByName(
-            lineage.SelectMany(static e => e.Stages),
-            static s => s.Name);
-
+        // Without entity inheritance, effective members are just the entity's own members.
         context.SetMetadata(entity, new EffectiveMemberMetadata(
-            effectiveProperties,
-            effectiveActions,
-            effectivePolicies,
-            effectiveStages));
-    }
-
-    private static IEnumerable<Entity> EnumerateEntityLineageRootToLeaf(
-        Entity entity,
-        DomainTypeLookupMetadata lookup) {
-        if (entity.ParentEntityName is null) {
-            yield return entity;
-            yield break;
-        }
-
-        var chain = new List<Entity>();
-        var visited = new HashSet<string>(StringComparer.Ordinal);
-        Entity? current = entity;
-
-        while (current is not null) {
-            if (!visited.Add(current.Name)) break;
-            chain.Add(current);
-            if (current.ParentEntityName is not null
-                && lookup.Types.TryGetValue(current.ParentEntityName, out var parentType)
-                && parentType is Entity parent) {
-                current = parent;
-            }
-            else {
-                current = null;
-            }
-        }
-
-        chain.Reverse();
-
-        foreach (var e in chain) {
-            yield return e;
-        }
-    }
-
-    private static List<T> MergeByName<T>(
-        IEnumerable<T> items,
-        Func<T, string> nameSelector) where T : class {
-        var merged = new Dictionary<string, T>(StringComparer.Ordinal);
-
-        foreach (var item in items) {
-            merged[nameSelector(item)] = item;
-        }
-
-        return merged.Values.ToList();
+            entity.Properties,
+            entity.Actions,
+            entity.Policies,
+            entity.Stages));
     }
 
     private static void ValidateRelationship(AnalysisContext context, Relationship relationship) {

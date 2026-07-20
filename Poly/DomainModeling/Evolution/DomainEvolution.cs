@@ -445,11 +445,6 @@ public sealed class EvolutionBuilder {
     public EvolutionBuilder RemovePolicyFromAction(string entityName, string actionName, string policyName) =>
         Apply(new RemovePolicyFromActionChange(entityName, actionName, policyName));
 
-    // --- Entity inheritance builder methods ---
-
-    public EvolutionBuilder SetEntityParent(string entityName, string? parentEntityName) =>
-        Apply(new SetEntityParentChange(entityName, parentEntityName));
-
     // --- Relationship stage/policy builder methods ---
 
     public EvolutionBuilder AddStageToRelationship(string relationshipName, string stageName) {

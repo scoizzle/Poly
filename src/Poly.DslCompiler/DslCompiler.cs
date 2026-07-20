@@ -105,12 +105,6 @@ public sealed class DslCompiler {
                 entity.Name,
                 $"{entity.Name}Stage"
             };
-            // Also include parent stage enum names for inherited entities
-            var stageOwner = DomainToCSharpExporter.GetStageEnumOwnerName(
-                entity, entities.ToDictionary(e => e.Name, StringComparer.Ordinal));
-            if (!string.Equals(stageOwner, entity.Name, StringComparison.Ordinal))
-                entityNames.Add($"{stageOwner}Stage");
-
             var entityDefs = combinedDefs
                 .Where(d => entityNames.Contains(d.Name))
                 .ToList();

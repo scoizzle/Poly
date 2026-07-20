@@ -847,22 +847,6 @@ public sealed record RemovePolicyFromRelationshipChange(
     internal override string GetDescription() => $"Remove policy '{PolicyName}' from relationship '{RelationshipName}'";
 }
 
-public sealed record SetEntityParentChange(
-    string EntityName,
-    string? ParentEntityName
-) : DomainChange {
-    internal override void ApplyTo(DomainMutationContext context) {
-        context.RequireUpdate(
-            context.UpdateEntity(EntityName, e => e with { ParentEntityName = ParentEntityName }),
-            $"Entity '{EntityName}' not found — cannot set parent");
-    }
-
-    internal override string GetDescription() =>
-        ParentEntityName is not null
-            ? $"Set parent of '{EntityName}' to '{ParentEntityName}'"
-            : $"Clear parent of '{EntityName}'";
-}
-
 // --- Contract integration changes ---
 
 public sealed record AddImportedContractChange(

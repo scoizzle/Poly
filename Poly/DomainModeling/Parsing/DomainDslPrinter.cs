@@ -46,10 +46,7 @@ public sealed class DomainDslPrinter {
     }
 
     private void PrintEntity(Entity entity) {
-        var header = entity.ParentEntityName is not null
-            ? $"{entity.Name}: {entity.ParentEntityName} entity {{"
-            : $"{entity.Name}: entity {{";
-        _sb.AppendLine(header);
+        _sb.AppendLine($"{entity.Name}: entity {{");
 
         // Properties
         foreach (var prop in entity.Properties) {

@@ -19,17 +19,7 @@ public class StructuralAnalysisTests {
             d.Code == DomainModelDiagnosticCodes.StructuralDuplicate)).IsTrue();
     }
 
-    [Test]
-    public async Task StructuralCycle_EntityParentCycle_ReportsError() {
-        var entityA = new Entity("A", [], [], [], []) { ParentEntityName = "B" };
-        var entityB = new Entity("B", [], [], [], []) { ParentEntityName = "A" };
-        var domain = new Domain("Test", [entityA, entityB], []);
-
-        var analysis = DomainModelAnalyzer.Analyze(domain);
-
-        await Assert.That(analysis.Diagnostics.Any(d =>
-            d.Code == DomainModelDiagnosticCodes.StructuralCycle)).IsTrue();
-    }
+    // Entity inheritance was removed — no StructuralCycle test needed.
 
     [Test]
     public async Task StructuralOwnership_ManyToManyWithOwnership_ReportsError() {
@@ -121,7 +111,7 @@ public class SemanticAnalysisTests {
             ])
         ]);
         var parent = new Entity("BaseTicket", [parentProp], [], [], []);
-        var child = new Entity("Ticket", [childProp], [], [], []) { ParentEntityName = "BaseTicket" };
+        var child = new Entity("Ticket", [childProp], [], [], []);
         var text = new Poly.DomainModeling.PrimitiveType("Text", TypeCategory.Text, []);
         var domain = new Domain("Test", [text, parent, child], []);
 

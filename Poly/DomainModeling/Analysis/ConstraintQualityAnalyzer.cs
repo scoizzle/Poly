@@ -32,15 +32,7 @@ internal sealed class ConstraintQualityAnalyzer : INodeAnalyzer {
         var lookup = context.GetMetadata<DomainTypeLookupMetadata>(default);
         if (lookup is null) return;
 
-        foreach (var entity in lookup.Entities) {
-            if (entity.ParentEntityName is null) continue;
-
-            if (!lookup.Types.TryGetValue(entity.ParentEntityName, out var parentType) || parentType is not Entity parentEntity) {
-                continue;
-            }
-
-            ValidateEntityFixedPoint(context, entity, parentEntity);
-        }
+        // Inheritance removed — no parent-entity fixed-point validation needed.
     }
 
     private static void ValidatePropertyConstraints(AnalysisContext context, Property property) {

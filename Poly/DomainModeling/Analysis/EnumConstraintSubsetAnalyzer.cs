@@ -54,15 +54,6 @@ internal sealed class EnumConstraintSubsetAnalyzer : INodeAnalyzer {
     }
 
     private static Entity? ResolveParentEntity(Property property, DomainTypeLookupMetadata lookup) {
-        foreach (var entity in lookup.Entities) {
-            if (entity.Properties.Contains(property) && entity.ParentEntityName is not null) {
-                if (lookup.Types.TryGetValue(entity.ParentEntityName, out var parentType) && parentType is Entity parentEntity) {
-                    return parentEntity;
-                }
-                return null;
-            }
-        }
-
         return null;
     }
 
@@ -77,11 +68,6 @@ internal sealed class EnumConstraintSubsetAnalyzer : INodeAnalyzer {
             }
         }
 
-        if (entity.ParentEntityName is not null
-            && lookup.Types.TryGetValue(entity.ParentEntityName, out var parentType)
-            && parentType is Entity parentEntity) {
-            return FindPropertyInHierarchy(parentEntity, propertyName, lookup, visited);
-        }
 
         return null;
     }

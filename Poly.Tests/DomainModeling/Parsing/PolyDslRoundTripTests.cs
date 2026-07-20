@@ -848,15 +848,12 @@ public class PolyDslRoundTripTests {
 
     [Test]
     public async Task CombinedSurface_ParamsOwnedInheritanceIfInvoke_RoundTrips() {
-        // E6.3: single domain exercising params + owned + inheritance + if + invoke
+        // E6.3: single domain exercising params + owned + inheritance (removed) + if + invoke
         var poly = """
             domain Combined
 
-            Person: entity {
+            Worker: entity {
               Name: Text
-            }
-
-            Worker: Person entity {
               Role: Text
               Score: Number
               Badge: Text
@@ -917,7 +914,8 @@ public class PolyDslRoundTripTests {
         await Assert.That(result2.Succeeded).IsTrue();
 
         var worker2 = result2.Root!.Types.OfType<Entity>().Single(e => e.Name == "Worker");
-        await Assert.That(worker2.ParentEntityName).IsEqualTo("Person");
+        await Assert.That(worker2.Properties.Any(p => p.Name == "Name")).IsTrue();
+        await Assert.That(worker2.Properties.Any(p => p.Name == "Role")).IsTrue();
         await Assert.That(worker2.Stages.Single(s => s.Name == "Draft").Actions
             .Single(a => a.Name == "Promote").Parameters.Count).IsEqualTo(1);
         await Assert.That(result2.Root.Relationships.Single(r => r.Name == "passport").SourceOwnsTarget).IsTrue();

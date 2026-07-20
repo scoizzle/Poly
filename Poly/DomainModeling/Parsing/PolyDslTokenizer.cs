@@ -83,16 +83,16 @@ public sealed class PolyDslTokenizer {
     private int _pos;
     private int _line = 1;
     private int _col = 1;
-    private Token? _lookahead;
+    private readonly List<Token> _lookaheadBuffer = new();
 
     public PolyDslTokenizer(string text) {
         _text = text ?? throw new ArgumentNullException(nameof(text));
     }
 
     public Token Next() {
-        if (_lookahead.HasValue) {
-            var result = _lookahead.Value;
-            _lookahead = null;
+        if (_lookaheadBuffer.Count > 0) {
+            var result = _lookaheadBuffer[0];
+            _lookaheadBuffer.RemoveAt(0);
             return result;
         }
         return ScanNext();
@@ -102,10 +102,16 @@ public sealed class PolyDslTokenizer {
     /// Returns the next token without consuming it.
     /// Multiple calls return the same token until <see cref="Next"/> is called.
     /// </summary>
-    public Token Peek() {
-        if (!_lookahead.HasValue)
-            _lookahead = ScanNext();
-        return _lookahead.Value;
+    public Token Peek() => Peek(1);
+
+    /// <summary>
+    /// Returns the nth future token (1-based) without consuming any.
+    /// Internally buffers tokens as needed.
+    /// </summary>
+    public Token Peek(int distance) {
+        while (_lookaheadBuffer.Count < distance)
+            _lookaheadBuffer.Add(ScanNext());
+        return _lookaheadBuffer[distance - 1];
     }
 
     private Token ScanNext() {

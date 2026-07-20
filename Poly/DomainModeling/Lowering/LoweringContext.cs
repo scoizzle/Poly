@@ -40,6 +40,11 @@ namespace Poly.DomainModeling.Lowering;
 /// When set, exit effects of the source stage are emitted before the
 /// target stage's entry effects.
 /// </param>
+/// <param name="EnumPropertyNames">
+/// Optional map from property name to enum type name. When present, literal
+/// comparisons against enum-typed properties emit qualified member access
+/// (e.g. <c>PatronStatus.Active</c>) instead of string literals.
+/// </param>
 public sealed record LoweringContext(
     Node Subject,
     IReadOnlyDictionary<string, Node>? Parameters = null,
@@ -49,5 +54,6 @@ public sealed record LoweringContext(
     Domain? Domain = null,
     string? StageEnumTypeName = null,
     IReadOnlyDictionary<string, IReadOnlyList<Node>>? PostTransitionNodes = null,
-    string? SourceStageName = null
+    string? SourceStageName = null,
+    IReadOnlyDictionary<string, string>? EnumPropertyNames = null
 );

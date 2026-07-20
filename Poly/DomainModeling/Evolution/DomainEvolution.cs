@@ -445,6 +445,11 @@ public sealed class EvolutionBuilder {
     public EvolutionBuilder RemovePolicyFromAction(string entityName, string actionName, string policyName) =>
         Apply(new RemovePolicyFromActionChange(entityName, actionName, policyName));
 
+    // --- Enum type builder methods ---
+
+    public EvolutionBuilder AddEnumType(string name, params string[] memberNames) =>
+        Apply(new AddEnumTypeChange(name, memberNames));
+
     // --- Relationship stage/policy builder methods ---
 
     public EvolutionBuilder AddStageToRelationship(string relationshipName, string stageName) {

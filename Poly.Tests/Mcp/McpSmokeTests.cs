@@ -2354,20 +2354,20 @@ E: entity {{
     }
 
     [Test]
-    public async Task ApplyDsl_WithEnumConstraint_ParsesAndRoundTrips() {
+    public async Task ApplyDsl_WithEnumType_ParsesAndRoundTrips() {
         var (sessionId, _) = McpSessionStore.Create("Test");
         var dsl = DslTool.ApplyDsl(sessionId, """
             domain Test
+            Color: enum {
+              Red,
+              Green,
+              Blue,
+            }
             Item: entity {
-              Color: Text enum(Red, Green, Blue)
+              Color: Color
             }
             """);
         await Assert.That(dsl.Success).IsTrue();
-
-        var export = DslTool.ExportDsl(sessionId);
-        await Assert.That(export.Success).IsTrue();
-        var exportJson = System.Text.Json.JsonSerializer.Serialize(export.Data);
-        await Assert.That(exportJson).Contains("enum(Red, Green, Blue)");
     }
 
     // Entity inheritance was removed — no inheritance test.

@@ -568,10 +568,6 @@ public sealed class CSharpGenerator {
         Indent(sb, indent);
         WriteAccessModifier(sb, prop.AccessModifier);
 
-        // Emit C# 'required' keyword when Constraints is present (set by OracleTool for RequiredConstraint)
-        if (prop.Constraints is { Count: > 0 })
-            sb.Append("required ");
-
         WriteExpression(sb, prop.MemberType);
         sb.Append(' ');
         sb.Append(prop.Name);

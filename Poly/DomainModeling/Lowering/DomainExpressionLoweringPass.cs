@@ -18,6 +18,7 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Node
     private readonly IReadOnlyDictionary<string, Node> _parameters;
     private readonly HashSet<string>? _actionParameterNames;
     private readonly bool _useThisReference;
+    private readonly IReadOnlyDictionary<string, string>? _enumPropertyNames;
     private Node _currentSubject = null!;
 
     /// <param name="parameters">
@@ -39,6 +40,7 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Node
         _parameters = context.Parameters ?? new Dictionary<string, Node>();
         _actionParameterNames = context.ActionParameterNames;
         _useThisReference = context.UseThisReference;
+        _enumPropertyNames = context.EnumPropertyNames;
     }
 
     /// <summary>
@@ -112,16 +114,47 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Node
     protected override Node Not(Poly.DomainModeling.Not n)
         => new SN.Not(Lower(n.Operand, _currentSubject));
 
-    protected override Node Comparison(Poly.DomainModeling.Comparison c)
-        => c.Kind switch {
-            ComparisonKind.Equal => new Equal(Lower(c.Left, _currentSubject), Lower(c.Right, _currentSubject)),
-            ComparisonKind.NotEqual => new NotEqual(Lower(c.Left, _currentSubject), Lower(c.Right, _currentSubject)),
-            ComparisonKind.LessThan => new LessThan(Lower(c.Left, _currentSubject), Lower(c.Right, _currentSubject)),
-            ComparisonKind.LessThanOrEqual => new LessThanOrEqual(Lower(c.Left, _currentSubject), Lower(c.Right, _currentSubject)),
-            ComparisonKind.GreaterThan => new GreaterThan(Lower(c.Left, _currentSubject), Lower(c.Right, _currentSubject)),
-            ComparisonKind.GreaterThanOrEqual => new GreaterThanOrEqual(Lower(c.Left, _currentSubject), Lower(c.Right, _currentSubject)),
+    protected override Node Comparison(Poly.DomainModeling.Comparison c) {
+        var loweredLeft = Lower(c.Left, _currentSubject);
+        var loweredRight = Lower(c.Right, _currentSubject);
+
+        // For enum-typed properties, replace string literal with qualified member
+        // access: Status == "Active" becomes Status == PatronStatus.Active
+        if (_enumPropertyNames is { Count: > 0 }) {
+            var fixedLeft = FixEnumLiteral(c.Left, c.Right, loweredRight);
+            var fixedRight = FixEnumLiteral(c.Right, c.Left, loweredLeft);
+            if (fixedLeft is not null) loweredLeft = fixedLeft;
+            if (fixedRight is not null) loweredRight = fixedRight;
+        }
+
+        return c.Kind switch {
+            ComparisonKind.Equal => new Equal(loweredLeft, loweredRight),
+            ComparisonKind.NotEqual => new NotEqual(loweredLeft, loweredRight),
+            ComparisonKind.LessThan => new LessThan(loweredLeft, loweredRight),
+            ComparisonKind.LessThanOrEqual => new LessThanOrEqual(loweredLeft, loweredRight),
+            ComparisonKind.GreaterThan => new GreaterThan(loweredLeft, loweredRight),
+            ComparisonKind.GreaterThanOrEqual => new GreaterThanOrEqual(loweredLeft, loweredRight),
             _ => throw new NotSupportedException($"Comparison kind '{c.Kind}' is not supported."),
         };
+    }
+
+    /// <summary>
+    /// If <paramref name="valueNode"/> is a string literal and <paramref name="otherSide"/>
+    /// is a property access for an enum-typed property, returns a Syntax node that
+    /// references the enum member qualified by the type name (e.g. <c>PatronStatus.Active</c>).
+    /// Returns null if no substitution is needed.
+    /// </summary>
+    private Node? FixEnumLiteral(DomainExpression valueExpr, DomainExpression otherSide, Node otherSideNode) {
+        if (valueExpr is Poly.DomainModeling.Literal { Value: string strVal }
+            && !string.IsNullOrEmpty(strVal)
+            && strVal is not "true" and not "false" and not "null"
+            && !char.IsDigit(strVal[0])
+            && otherSide is Poly.DomainModeling.PropertyAccess prop
+            && _enumPropertyNames!.TryGetValue(prop.Name, out var enumTypeName)) {
+            return new SN.Member(new SN.NamedTypeReference(enumTypeName), strVal);
+        }
+        return null;
+    }
 
     protected override Node DateOperation(Poly.DomainModeling.DateOperation d)
         => d.Kind switch {

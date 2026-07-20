@@ -170,6 +170,11 @@ internal sealed class DomainMutationContext {
         return true;
     }
 
+    public void AddType(DomainType type) {
+        Types.Add(type);
+        ModifiedNodes.Add(type);
+    }
+
     public Entity? FindEntity(string name) =>
         (Entity?)Types.Find(t => t is Entity e && string.Equals(e.Name, name, StringComparison.Ordinal));
 

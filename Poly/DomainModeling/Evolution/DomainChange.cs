@@ -828,6 +828,20 @@ public sealed record AddPolicyToRelationshipChange(
     internal override string GetDescription() => $"Add policy '{Policy.Name}' to relationship '{RelationshipName}'";
 }
 
+// ── Enum type changes ─────────────────────────────────
+
+public sealed record AddEnumTypeChange(
+    string Name,
+    IReadOnlyList<string> MemberNames
+) : DomainChange {
+    internal override void ApplyTo(DomainMutationContext context) {
+        context.Types.Add(new EnumType(Name, MemberNames, []));
+        context.ModifiedNodes.Add(context.Types[^1]);
+    }
+
+    internal override string GetDescription() => $"Add enum type '{Name}' with {MemberNames.Count} members";
+}
+
 public sealed record RemovePolicyFromRelationshipChange(
     string RelationshipName,
     string PolicyName

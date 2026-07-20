@@ -149,7 +149,26 @@ Every valid `.poly` document starts with a domain name:
 domain MyDomain
 ```
 
-## 2. Entities and Properties
+## 2. Enum Types
+
+Enum types are declared at the top level, before entities that reference them.
+Members are bare identifiers separated by optional commas (trailing comma allowed).
+
+```poly
+Color: enum {
+  Red,
+  Green,
+  Blue,
+}
+
+MemberStatus: enum {
+  Active
+  Suspended
+  Closed
+}
+```
+
+## 3. Entities and Properties
 
 ```
 entity-name ":" "entity" "{" property* stage* action* policy* "}"
@@ -162,17 +181,22 @@ entity-name ":" "entity" "{" property* stage* action* policy* "}"
 | Range | `range(min, max)` | `Age: Number range(0, 150)` |
 | Length | `length(min, max)` | `Code: Text length(2, 10)` |
 | Pattern | `pattern(regex)` | `Zip: Text pattern("^\\d{5}$")` |
+| Default | `default(value)` | `Status: MemberStatus default(Active)` |
+
+Properties can reference enum types by name as their type, and use `default(MemberName)`
+to set a default value:
 
 ```poly
-Customer: entity {
-  Name: Text required        //required text
-  Age: Number range(0, 150)   //number with range
-  Email: Text unique          //unique constraint
-  IsActive: Boolean           //optional boolean
+Color: enum { Red, Green, Blue }
+
+Item: entity {
+  Name: Text required
+  Color: Color default(Red)     // typed by enum, default by member name
+  Status: MemberStatus default(Active)
 }
 ```
 
-## 3. Navigation Properties (N1 Relationships Only)
+## 4. Navigation Properties (N1 Relationships Only)
 
 Relationships are declared as **inline navigation properties** on the source entity.
 The legacy `relationship { }` top-level form is **not supported**.
@@ -196,7 +220,7 @@ Customer: entity {
 Cardinality: `one` (default, can be omitted), `many`.
 Ownership: `owned` marks `SourceOwnsTarget = true`.
 
-## 4. Lifecycle Stages
+## 5. Lifecycle Stages
 
 ```
 stage-name ":" "stage" "{" stage-member-list "}"
@@ -226,7 +250,7 @@ Active: stage {
 }
 ```
 
-## 5. Actions
+## 6. Actions
 
 ```
 action-name ":" "action" ["(" param-name ":" Type ("," ...)? ")"] ["require" ...] "{" effect* "}"
@@ -330,7 +354,7 @@ Submit: action
 }
 ```
 
-## 6. Stage Subscriptions
+## 7. Stage Subscriptions
 
 ```
 "when" relationship-name stage-name ("," stage-name)* "{" effect* "}"
@@ -348,7 +372,7 @@ Pending: stage {
 
 The relationship name refers to a navigation property on the same entity.
 
-## 7. Policies
+## 8. Policies
 
 Policies are named boolean guard expressions attached to an entity.
 
@@ -475,7 +499,7 @@ and lowering pipeline but are **not yet authorable in product DSL**:
 
 **JSON policies** (`add_policy` / `simulate_policy`) support comparison + and/or/not + literal only — **not** path-prefix, `Rel exists`, or `where`. Use DSL for related reads; JSON remains limited to local property comparisons and logical composition.
 
-## 8. Supported Effect Summary
+## 9. Supported Effect Summary
 
 | Effect | Can appear in |
 |--------|---------------|
@@ -493,7 +517,7 @@ The following effects exist in the runtime library but have **no DSL syntax** ye
 
 > **Note:** `delete` performs a **soft-delete** — it sets the `IsDeleted` flag on the current instance. Any subsequent `invoke_action` on a deleted instance is refused. This is not a typed mass-delete.
 
-## 9. Do NOT Use (Unsupported in Phase 1a/1b)
+## 10. Do NOT Use (Unsupported in Phase 1a/1b)
 
 | Construct | Why |
 |-----------|-----|
@@ -505,7 +529,7 @@ The following effects exist in the runtime library but have **no DSL syntax** ye
 | `function` | Functions not supported |
 | Event/publish/subscribe | Event model retired |
 
-## 10. Additional Features
+## 11. Additional Features
 
 ### Action Parameters
 
@@ -531,7 +555,7 @@ SetName: action (newName: Text) {
 | Default | `default(value)` | `Status: Text default("Active")` |
 | Enum | `enum(v1, v2, ...)` | `Color: Text enum(Red, Green, Blue)` |
 
-## 11. Dual Authoring Path
+## 12. Dual Authoring Path
 
 **Batch** (`apply_dsl`): Write the full domain in `.poly` and apply in one shot.
 **Replaces** the entire session domain — not merged incrementally.
@@ -542,7 +566,7 @@ SetName: action (newName: Text) {
 **Golden workflow:** `get_dsl_guide` → write `.poly` → `apply_dsl` → `get_domain_analysis` →
 oracle tools → iterate.
 
-## 11. Example (Round-Trip Safe)
+## 13. Example (Round-Trip Safe)
 
 ```poly
 domain Orders

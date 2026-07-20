@@ -85,7 +85,25 @@ public sealed class DomainToCSharpExporter {
                 subscriptionsBySubscriber[entity.Name] = subList;
         }
 
-        // ── Build type defs with subscription context ──────────────
+        // ── Build enum type definitions ────────────────────────
+        foreach (var enumType in domain.Types.OfType<EnumType>()) {
+            var enumFields = new List<Syntactic.FieldDefinitionNode>();
+            for (int i = 0; i < enumType.MemberNames.Count; i++) {
+                enumFields.Add(new Syntactic.FieldDefinitionNode(
+                    enumType.MemberNames[i],
+                    new Syntactic.PrimitiveTypeReference(PrimType.Int32),
+                    DefaultValue: new Syntactic.Constant((int)i),
+                    AccessModifier: AccessModifier.Public
+                ));
+            }
+            result.Add(new Syntactic.TypeDefinitionNode(
+                enumType.Name,
+                Fields: enumFields,
+                Semantics: Syntactic.TypeDefinitionSemantics.MutableReference
+            ));
+        }
+
+        // ── Build entity type definitions ─────────────────────────
         foreach (var entity in entities) {
             var targetSubs = subscriptionsByTarget.GetValueOrDefault(entity.Name);
             var subscriberSubs = subscriptionsBySubscriber.GetValueOrDefault(entity.Name);
@@ -129,16 +147,17 @@ public sealed class DomainToCSharpExporter {
 
         // ── Entity properties (sorted for deterministic output) ──
         foreach (var prop in entity.Properties.OrderBy(p => p.Name)) {
-            var propRef = MapDomainTypeRef(prop.Type);
+            var propRef = MapDomainTypeRef(prop.Type, domain);
+            var isRequired = prop.Constraints.Any(c => c is RequiredConstraint);
             List<Poly.Syntax.Node>? constraints = null;
-            if (prop.Constraints.Any(c => c is RequiredConstraint))
+            if (isRequired)
                 constraints = [new Syntactic.Constant("required")];
 
             props.Add(new Syntactic.PropertyDefinitionNode(
                 prop.Name, propRef,
                 Getter: new Syntactic.PropertyGetterDefinitionNode(),
                 Setter: new Syntactic.PropertySetterDefinitionNode(
-                    AccessModifier: AccessModifier.Protected),
+                    AccessModifier: AccessModifier.Private),
                 Constraints: constraints
             ));
 
@@ -181,7 +200,7 @@ public sealed class DomainToCSharpExporter {
                 pascalName, propType,
                 Getter: new Syntactic.PropertyGetterDefinitionNode(),
                 Setter: new Syntactic.PropertySetterDefinitionNode(
-                    AccessModifier: AccessModifier.Protected)
+                    AccessModifier: AccessModifier.Private)
             ));
         }
 
@@ -211,7 +230,7 @@ public sealed class DomainToCSharpExporter {
         foreach (var policy in entity.Policies) {
             Poly.Syntax.Node? body;
             try {
-                body = LowerExpressionToMethodBody(policy.Expression, entity);
+                body = LowerExpressionToMethodBody(policy.Expression, entity, domain);
             }
             catch (NotSupportedException) {
                 // Q3′ quantifiers (any/all/none/count) and other store-dependent
@@ -343,7 +362,7 @@ public sealed class DomainToCSharpExporter {
                 stageEnumFields.Add(new Syntactic.FieldDefinitionNode(
                     entity.Stages[si].Name,
                     new Syntactic.PrimitiveTypeReference(PrimType.Int32),
-                    DefaultValue: new Syntactic.Constant((long)si),
+                    DefaultValue: new Syntactic.Constant((int)si),
                     AccessModifier: AccessModifier.Public
                 ));
             }
@@ -461,7 +480,7 @@ public sealed class DomainToCSharpExporter {
             action.Name,
             new Syntactic.TypeReference("void"),
             Parameters: action.Parameters
-                .Select(p => new Syntactic.Parameter(p.Name, MapDomainTypeRef(p.Type)))
+                .Select(p => new Syntactic.Parameter(p.Name, MapDomainTypeRef(p.Type, domain)))
                 .ToList(),
             Body: body,
             AccessModifier: AccessModifier.Public
@@ -530,6 +549,7 @@ public sealed class DomainToCSharpExporter {
         IReadOnlyDictionary<string, IReadOnlyList<Node>>? postTransitionNodes = null,
         string? sourceStageName = null, Domain? domain = null) {
         if (action.Effects.Count == 0) return null;
+        var enumProps = domain is not null ? BuildEnumPropertyNames(entity, domain) : null;
         var context = new LoweringContext(
             new Syntactic.Parameter("entity", new Syntactic.TypeReference(entity.Name)),
             UseThisReference: true,
@@ -538,7 +558,8 @@ public sealed class DomainToCSharpExporter {
             StageEnumTypeName: stageEnumTypeName,
             PostTransitionNodes: postTransitionNodes,
             SourceStageName: sourceStageName,
-            Domain: domain
+            Domain: domain,
+            EnumPropertyNames: enumProps
         );
         var effectPass = new EffectLoweringPass(entity, context);
         var composite = new CompositeEffect(action.Effects);
@@ -546,10 +567,12 @@ public sealed class DomainToCSharpExporter {
     }
 
     internal static Poly.Syntax.Node? LowerExpressionToMethodBody(
-        DomainExpression expr, Entity entity) {
+        DomainExpression expr, Entity entity, Domain? domain = null) {
+        var enumProps = domain is not null ? BuildEnumPropertyNames(entity, domain) : null;
         var context = new LoweringContext(
             new Syntactic.Parameter("entity", new Syntactic.TypeReference(entity.Name)),
-            UseThisReference: true
+            UseThisReference: true,
+            EnumPropertyNames: enumProps
         );
         var pass = new DomainExpressionLoweringPass(context);
         var lowered = pass.Lower(expr, new Syntactic.Parameter("entity"));
@@ -558,10 +581,40 @@ public sealed class DomainToCSharpExporter {
             : null;
     }
 
+    /// <summary>
+    /// Builds a map from property name → enum type name for all properties of
+    /// <paramref name="entity"/> whose type resolves to an <see cref="EnumType"/>.
+    /// Used by the expression lowering pass to emit qualified enum member access.
+    /// </summary>
+    internal static Dictionary<string, string>? BuildEnumPropertyNames(
+        Entity entity, Domain domain) {
+        Dictionary<string, string>? map = null;
+        var enumTypes = domain.Types.OfType<EnumType>()
+            .ToDictionary(e => e.Name, StringComparer.Ordinal);
+        if (enumTypes.Count == 0) return null;
+
+        foreach (var prop in entity.Properties) {
+            if (enumTypes.TryGetValue(prop.Type.TypeName, out _)) {
+                (map ??= new(StringComparer.Ordinal))[prop.Name] = prop.Type.TypeName;
+            }
+        }
+        return map;
+    }
+
     // ── Type mapping ────────────────────────────────────────────
 
-    internal static Poly.Syntax.Node MapDomainTypeRef(DomainTypeReference domainType) {
+    internal static Poly.Syntax.Node MapDomainTypeRef(DomainTypeReference domainType,
+        Domain? domain = null) {
         var typeName = domainType.TypeName;
+
+        // Check for enum types in the domain
+        if (domain is not null) {
+            var enumType = domain.Types.OfType<EnumType>()
+                .FirstOrDefault(e => string.Equals(e.Name, typeName, StringComparison.Ordinal));
+            if (enumType is not null)
+                return new Syntactic.NamedTypeReference(typeName);
+        }
+
         return typeName switch {
             "Text" => new Syntactic.PrimitiveTypeReference(PrimType.String),
             "Number" or "Int" => new Syntactic.PrimitiveTypeReference(PrimType.Int64),

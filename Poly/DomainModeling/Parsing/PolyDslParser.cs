@@ -33,6 +33,9 @@ public sealed class PolyDslParser {
     // Entity names collected during parsing, for nav target resolution
     private readonly HashSet<string> _entityNames = new(StringComparer.Ordinal);
 
+    // Enum type names, for distinguishing typed properties from nav lines
+    private readonly HashSet<string> _enumTypeNames = new(StringComparer.Ordinal);
+
     // Property names per entity, for collision detection with navs
     private readonly Dictionary<string, HashSet<string>> _entityPropertyNames = new(StringComparer.Ordinal);
 
@@ -72,9 +75,16 @@ public sealed class PolyDslParser {
         _domainName = ExpectIdentifier(TokenKind.Identifier, "domain name");
         changes.Add(new SetDomainNameChange(_domainName));
 
-        // ── Entity definitions ─────────────────────────────────
+        // ── Enum type definitions + entity definitions ─────────
+        // Parse entities and enum types in order; enum types must precede entities
+        // that reference them for property type resolution.
         while (_current.Kind == TokenKind.Identifier) {
-            ParseEntity(changes);
+            if (IsNextTokenEnum()) {
+                ParseEnumType(changes);
+            }
+            else {
+                ParseEntity(changes);
+            }
         }
 
         // ── Resolve N1 navigation properties ───────────────────
@@ -163,8 +173,20 @@ public sealed class PolyDslParser {
                 else if (_current.Kind == TokenKind.Policy) {
                     ParsePolicy(name, changes);
                 }
-                else if (IsNavLine()) {
+                else if (IsNavLine() && !_enumTypeNames.Contains(_current.Text)) {
                     ParseNavLine(name);
+                }
+                else if (_current.Kind == TokenKind.Identifier && _enumTypeNames.Contains(_current.Text)) {
+                    // Typed property referencing an enum type, with optional constraints
+                    var typeName = ExpectIdentifier(TokenKind.Identifier, "enum type name");
+                    var prop = new Property(name, new DomainTypeReference(typeName), []);
+                    changes.Add(new AddPropertyToEntityChange(_currentEntityName, prop));
+                    // Parse constraints (default, etc.)
+                    while (IsConstraint(_current.Kind)) {
+                        var constraint = ParseConstraint();
+                        if (constraint is not null)
+                            changes.Add(new AddConstraintToPropertyChange(_currentEntityName, name, constraint));
+                    }
                 }
                 else if (IsPrimitiveType(_current.Kind)) {
                     ParseProperty(name, _current.Kind, changes);
@@ -636,6 +658,41 @@ public sealed class PolyDslParser {
     /// Returns true if the current token starts a navigation property line (N1 form).
     /// Patterns: "many [owned] Type", "one [owned] Type", "owned Type", "Type" (bare entity name).
     /// </summary>
+    /// <summary>
+    /// Looks ahead to check if the current identifier is followed by <c>: enum</c>,
+    /// indicating a top-level enum type declaration.
+    /// </summary>
+    private bool IsNextTokenEnum() {
+        var peek1 = _tokenizer.Peek();
+        if (peek1.Kind != TokenKind.Colon) return false;
+        var peek2 = _tokenizer.Peek(2);
+        return peek2.Kind == TokenKind.Enum;
+    }
+
+    /// <summary>
+    /// Parses a top-level enum type declaration: <c>Name: enum { Member1, Member2 }</c>.
+    /// Enum types must be declared before entities that reference them.
+    /// </summary>
+    private void ParseEnumType(List<DomainChange> changes) {
+        var name = ExpectIdentifier(TokenKind.Identifier, "enum type name");
+        Expect(TokenKind.Colon);
+        Expect(TokenKind.Enum);
+        Expect(TokenKind.LBrace);
+
+        var members = new List<string>();
+        while (_current.Kind == TokenKind.Identifier) {
+            members.Add(_current.Text);
+            Advance();
+            if (_current.Kind == TokenKind.Comma)
+                Advance();
+        }
+
+        Expect(TokenKind.RBrace);
+
+        _enumTypeNames.Add(name);
+        changes.Add(new AddEnumTypeChange(name, members));
+    }
+
     private bool IsNavLine() {
         // TokenKind.Many and TokenKind.One are unambiguous nav starts
         if (_current.Kind == TokenKind.Many || _current.Kind == TokenKind.One)
@@ -1038,20 +1095,13 @@ public sealed class PolyDslParser {
                 Expect(TokenKind.RParen);
                 if (eqValue is Literal l)
                     return new EqualityConstraint(l.Value!);
-                throw Error("equals() constraint requires a literal value (number, string, true, false).");
+                if (eqValue is PropertyAccess pa)
+                    return new EqualityConstraint(pa.Name); // enum member name
+                throw Error("default() requires a literal value or enum member name.");
 
             case TokenKind.Enum:
-                Advance();
-                Expect(TokenKind.LParen);
-                var members = new List<EnumConstraint.Member>();
-                while (_current.Kind != TokenKind.RParen) {
-                    var memberName = ExpectIdentifier(TokenKind.Identifier, "enum value name");
-                    members.Add(new EnumConstraint.Member(memberName));
-                    if (_current.Kind == TokenKind.Comma)
-                        Advance(); // consume ','
-                }
-                Expect(TokenKind.RParen);
-                return new EnumConstraint(members);
+                throw Error("Inline enum(...) constraints are no longer supported. " +
+                    "Use a top-level enum type declaration: Name: enum { Member1, Member2 }");
 
             case TokenKind.Range:
                 Advance();

@@ -397,7 +397,7 @@ SetName: action (newName: Text) {
 | Range | `range(min, max)` | `Age: Number range(0, 150)` |
 | Length | `length(min, max)` | `Code: Text length(2, 10)` |
 | Pattern | `pattern(regex)` | `Zip: Text pattern("^\\d{5}$")` |
-| Default | `default(value)` | `Status: Text default("Active")` |
+| Default | `default(value)` | `Status: MemberStatus default(Active)` |
 | Enum | `enum(v1, v2, ...)` | `Color: Text enum(Red, Green, Blue)` |
 
 ## 11. Dual Authoring Path

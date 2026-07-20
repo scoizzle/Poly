@@ -707,12 +707,18 @@ public class PolyDslRoundTripTests {
     }
 
     [Test]
-    public async Task EnumConstraint_ParseAndRoundTrip() {
+    public async Task EnumType_ParseAndRoundTrip() {
         var poly = """
             domain Test
 
+            Color: enum {
+              Red,
+              Green,
+              Blue,
+            }
+
             Item: entity {
-              Color: Text enum(Red, Green, Blue)
+              Color: Color
             }
             """;
         var parser = new PolyDslParser(poly);
@@ -720,9 +726,15 @@ public class PolyDslRoundTripTests {
         var emptyDomain = new Domain("_", [], []);
         var result = new DomainEvolution(emptyDomain).Apply(changes);
         await Assert.That(result.Succeeded).IsTrue();
-        var item = result.Root!.Types.OfType<Entity>().Single();
-        await Assert.That(item.Properties.Any(p =>
-            p.Constraints.Any(c => c is EnumConstraint))).IsTrue();
+        var enumType = result.Root!.Types.OfType<EnumType>().Single();
+        await Assert.That(enumType.MemberNames.Count).IsEqualTo(3);
+        await Assert.That(enumType.MemberNames).Contains("Red");
+        await Assert.That(enumType.MemberNames).Contains("Green");
+        await Assert.That(enumType.MemberNames).Contains("Blue");
+
+        var printer = new DomainDslPrinter();
+        var printed = printer.Print(result.Root);
+        await Assert.That(printed.Contains("Color: enum {")).IsTrue();
     }
 
     [Test]

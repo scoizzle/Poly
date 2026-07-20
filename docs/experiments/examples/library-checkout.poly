@@ -14,9 +14,36 @@
 //     reads, collection quantifiers   |    invoke, delete
 //   • Lifecycle stages with entry/exit | • Cross-entity subscriptions (when)
 //     effects and actions              | • Navigation properties (N1: one-to-many)
+//   • First-class enum types           |
 // =============================================================================
 
 domain Library
+
+// ── Enum Types ─────────────────────────────────────────────────
+
+Genre: enum {
+  Fiction,
+  NonFiction,
+  Reference,
+}
+
+PatronStatus: enum {
+  Active,
+  Suspended,
+  Closed,
+}
+
+FineStatus: enum {
+  Unpaid,
+  Resolved,
+}
+
+PremiumTier: enum {
+  Silver,
+  Gold,
+  Platinum,
+}
+
 
 // =============================================================================
 // Book — catalog entry. A static definition with no lifecycle or actions.
@@ -28,7 +55,7 @@ Book: entity {
   Author: Text required
   ISBN: Text unique length(10, 17)
   Pages: Number range(1, 10000)
-  Genre: Text enum(Fiction, NonFiction, Reference)
+  Genre: Genre
 }
 
 
@@ -40,7 +67,7 @@ Patron: entity {
   Name: Text required
   Email: Text unique pattern("^[^@]+@[^@]+$")
   MemberSince: Date
-  Status: Text default("Active") enum(Active, Suspended, Closed)
+  Status: PatronStatus default(Active)
   MaxItems: Number range(1, 20) required
   CurrentBorrowCount: Number
   OutstandingFines: Number
@@ -186,7 +213,7 @@ PremiumPatron: entity {
   Name: Text required
   Email: Text unique pattern("^[^@]+@[^@]+$")
   RewardPoints: Number
-  Tier: Text enum(Silver, Gold, Platinum) default("Silver")
+  Tier: PremiumTier default(Silver)
   PriorityAccess: Boolean
 
   IsLoyal: policy { RewardPoints >= 100 }

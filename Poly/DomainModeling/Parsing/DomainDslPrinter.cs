@@ -37,12 +37,28 @@ public sealed class DomainDslPrinter {
             .OrderBy(e => e.Name, StringComparer.Ordinal)
             .ToList();
 
+        // Print enum types first
+        var enumTypes = domain.Types.OfType<EnumType>().ToList();
+        foreach (var enumType in enumTypes) {
+            PrintEnumType(enumType);
+            _sb.AppendLine();
+        }
+
         foreach (var entity in entities) {
             PrintEntity(entity);
             _sb.AppendLine();
         }
 
         return _sb.ToString().TrimEnd() + "\n";
+    }
+
+    private void PrintEnumType(EnumType enumType) {
+        _sb.AppendLine($"{enumType.Name}: enum {{");
+        foreach (var member in enumType.MemberNames) {
+            _sb.AppendLine($"  {member},");
+        }
+        _sb.AppendLine("}");
+        _sb.AppendLine();
     }
 
     private void PrintEntity(Entity entity) {
@@ -531,7 +547,7 @@ public sealed class DomainDslPrinter {
             : $"length({l.MinLength}, {l.MaxLength})",
         PatternConstraint p => $"pattern(\"{EscapeStringLiteral(p.Pattern)}\")",
         EqualityConstraint e => $"default({PrintLiteralValue(e.ExpectedValue)})",
-        EnumConstraint en => $"enum({string.Join(", ", en.Members.Select(m => m.Name))})",
+        EnumConstraint en => $"/* enum({string.Join(", ", en.Members.Select(m => m.Name))}) */", // legacy — no longer parsed
         _ => $"?{constraint.GetType().Name}",
     };
 

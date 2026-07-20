@@ -244,7 +244,18 @@ public sealed class DomainToCSharpExporter {
         // ── Policies as bool methods (own only for inheritance) ───
         var policiesToEmit = baseTypeName is not null ? entity.Policies : effectivePolicies;
         foreach (var policy in policiesToEmit) {
-            var body = LowerExpressionToMethodBody(policy.Expression, entity);
+            Poly.Syntax.Node? body;
+            try {
+                body = LowerExpressionToMethodBody(policy.Expression, entity);
+            }
+            catch (NotSupportedException) {
+                // Q3′ quantifiers (any/all/none/count) and other store-dependent
+                // expressions cannot be lowered to standalone C# methods yet.
+                body = new Syntactic.Block([
+                    new Syntactic.Comment(
+                        $"not yet lowerable: {policy.Name}")
+                ]);
+            }
             methods.Add(new Syntactic.MethodDefinitionNode(
                 policy.Name,
                 new Syntactic.PrimitiveTypeReference(PrimType.Boolean),
@@ -560,8 +571,11 @@ public sealed class DomainToCSharpExporter {
     /// Generated patterns:
     ///   <c>require AtLimit</c>     → <c>if (!this.AtLimit()) { return; }</c>
     ///   <c>require not AtLimit</c> → <c>if (this.AtLimit()) { return; }</c>
+    ///
+    /// Returns a <see cref="Syntactic.Block"/> with at least an empty body — never null —
+    /// so the C# generator emits <c>{ }</c> rather than an invalid semicolon.
     /// </summary>
-    private static Syntactic.Block? BuildActionBodyWithGuards(
+    private static Syntactic.Block BuildActionBodyWithGuards(
         Poly.DomainModeling.Action action, Entity entity, Poly.Syntax.Node? effectsBody) {
 
         // Collect all nodes: require guards first, then effects
@@ -570,16 +584,14 @@ public sealed class DomainToCSharpExporter {
         // Emit require guard clauses referencing entity-level policy methods
         foreach (var policy in action.Policies) {
             if (policy.Name.StartsWith("not_", StringComparison.Ordinal)) {
-                // require not PolicyName → if (this.PolicyName()) { return; }
                 var realName = policy.Name.Substring(4);
                 var guardCall = new Syntactic.Invoke(
                     new Syntactic.Member(new Syntactic.ThisReference(), realName));
                 nodes.Add(new Syntactic.IfStatement(
-                    guardCall, // block when policy IS true (no negation)
+                    guardCall,
                     new Syntactic.Block([new Syntactic.Return()])));
             }
             else {
-                // require PolicyName → if (!this.PolicyName()) { return; }
                 var guardCall = new Syntactic.Invoke(
                     new Syntactic.Member(new Syntactic.ThisReference(), policy.Name));
                 nodes.Add(new Syntactic.IfStatement(
@@ -596,7 +608,11 @@ public sealed class DomainToCSharpExporter {
             nodes.Add(effectsBody);
         }
 
-        return nodes.Count > 0 ? new Syntactic.Block(nodes) : null;
+        // Block requires ≥1 node; use Comment for empty method bodies
+        if (nodes.Count == 0)
+            nodes.Add(new Syntactic.Comment("no-op"));
+
+        return new Syntactic.Block(nodes);
     }
 
     // ── Lowering helpers ────────────────────────────────────────

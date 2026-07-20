@@ -2341,8 +2341,8 @@ E: entity {{
         var dsl = DslTool.ApplyDsl(sessionId, """
             domain Test
             Item: entity {
-              Status: Text equals("Active")
-              Count: Number equals(0)
+              Status: Text default("Active")
+              Count: Number default(0)
             }
             """);
         await Assert.That(dsl.Success).IsTrue();
@@ -2350,7 +2350,7 @@ E: entity {{
         var export = DslTool.ExportDsl(sessionId);
         await Assert.That(export.Success).IsTrue();
         var exportJson = System.Text.Json.JsonSerializer.Serialize(export.Data);
-        await Assert.That(exportJson).Contains("equals");
+        await Assert.That(exportJson).Contains("default(");
     }
 
     [Test]

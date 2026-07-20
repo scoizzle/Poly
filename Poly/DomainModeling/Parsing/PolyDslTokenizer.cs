@@ -270,7 +270,7 @@ public sealed class PolyDslTokenizer {
         "length" => TokenKind.Length,
         "pattern" => TokenKind.Pattern,
         "enum" => TokenKind.Enum,
-        "equals" => TokenKind.Equals,
+        "default" => TokenKind.Equals,
         "relationship" => TokenKind.Relationship,
         "from" => TokenKind.From,
         "one" => TokenKind.One,

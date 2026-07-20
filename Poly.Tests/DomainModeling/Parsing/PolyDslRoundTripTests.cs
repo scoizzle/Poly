@@ -693,7 +693,7 @@ public class PolyDslRoundTripTests {
             domain Test
 
             Item: entity {
-              Status: Text equals("Active")
+              Status: Text default("Active")
             }
             """;
         var parser = new PolyDslParser(poly);
@@ -973,7 +973,7 @@ public class PolyDslRoundTripTests {
             domain Test
 
             Item: entity {
-              Note: Text equals("say \"hi\"")
+              Note: Text default("say \"hi\"")
             }
             """;
         var parser = new PolyDslParser(poly);

@@ -533,7 +533,7 @@ public sealed class DomainDslPrinter {
             ? $"length({l.MinLength})"
             : $"length({l.MinLength}, {l.MaxLength})",
         PatternConstraint p => $"pattern(\"{EscapeStringLiteral(p.Pattern)}\")",
-        EqualityConstraint e => $"equals({PrintLiteralValue(e.ExpectedValue)})",
+        EqualityConstraint e => $"default({PrintLiteralValue(e.ExpectedValue)})",
         EnumConstraint en => $"enum({string.Join(", ", en.Members.Select(m => m.Name))})",
         _ => $"?{constraint.GetType().Name}",
     };

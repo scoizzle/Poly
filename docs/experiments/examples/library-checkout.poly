@@ -26,7 +26,7 @@ Book: entity {
   ISBN: Text unique length(10, 17)                          // unique + length
   Pages: Number range(1, 10000)                             // numeric range
   Genre: Text enum(Fiction, NonFiction, Reference)          // closed enum
-  Condition: Text equals("New") enum(New, Good, Fair, Poor) // enum with default
+  Condition: Text default("New") enum(New, Good, Fair, Poor) // default value
   CheckedOutTo: Text                                        // member ID when out
   TimesBorrowed: Number
 
@@ -122,7 +122,7 @@ Member: entity {
   Name: Text required
   Email: Text unique pattern("^[^@]+@[^@]+$")
   MemberSince: Date
-  Status: Text equals("Active") enum(Active, Suspended, Closed)
+  Status: Text default("Active") enum(Active, Suspended, Closed)
   MaxItems: Number range(1, 20) required
   CurrentBorrowCount: Number
   IsMinor: Boolean
@@ -132,6 +132,10 @@ Member: entity {
   IsAdult: policy { IsMinor is false }
   GoodStanding: policy { Status is "Active" }
   AtLimit: policy { CurrentBorrowCount >= MaxItems }
+  HasOverdueBooks: policy { any books where CheckedOutTo is not "" }
+  HasManyFines: policy { count fines > 3 }
+  ActiveReservations: policy { count reservations > 0 }
+  AverageRating: policy { count books > 0 }
 
   // ── Navigation properties ──────────────────────────────────────────────────
   books: many Book              // currently checked-out books

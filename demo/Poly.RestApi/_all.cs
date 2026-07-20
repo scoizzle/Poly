@@ -66,7 +66,27 @@ public class Book {
     public string ISBN { get; private set; }
     public long Pages { get; private set; }
     public string Title { get; private set; }
-    public static Book Create(string author, Genre genre, string isbn, long pages, string title) => new Book(author, genre, isbn, pages, title);
+    public static DomainResult<Book> Create(string author, Genre genre, string isbn, long pages, string title) {
+        if (string.IsNullOrEmpty(author)) {
+            return DomainResult<Book>.Failure("'Author' is required.");
+        }
+        if (isbn.Length < 10L) {
+            return DomainResult<Book>.Failure("'ISBN' must be at least 10 characters.");
+        }
+        if (isbn.Length > 17L) {
+            return DomainResult<Book>.Failure("'ISBN' must be at most 17 characters.");
+        }
+        if (pages < 1L) {
+            return DomainResult<Book>.Failure("'Pages' must be >= 1.");
+        }
+        if (pages > 10000L) {
+            return DomainResult<Book>.Failure("'Pages' must be <= 10000.");
+        }
+        if (string.IsNullOrEmpty(title)) {
+            return DomainResult<Book>.Failure("'Title' is required.");
+        }
+        return DomainResult<Book>.Success(new Book(author, genre, isbn, pages, title));
+    }
 }
 
 public enum PatronStage {
@@ -111,13 +131,21 @@ public class Patron {
     }
     public PatronStage CurrentStage { get; private set; }
     private Loan CreateLoans(DateTime checkedOutAt, DateTime dueDate, DateTime returnedAt, string status, long timesRenewed, Book book) {
-        var loan = Loan.Create(checkedOutAt, dueDate, returnedAt, status, timesRenewed, book, this);
+        var loanResult = Loan.Create(checkedOutAt, dueDate, returnedAt, status, timesRenewed, book, this);
+        if (!loanResult.IsSuccess) {
+            throw new InvalidOperationException(loanResult.ErrorMessage);
+        }
+        var loan = loanResult.Value;
         this._loans.Add(loan);
         loan.RegisterPatronOverdueSubscriber(this);
         return loan;
     }
     private Fine CreateFines(long amount, bool paid, string reason) {
-        var fine = Fine.Create(amount, paid, reason, this);
+        var fineResult = Fine.Create(amount, paid, reason, this);
+        if (!fineResult.IsSuccess) {
+            throw new InvalidOperationException(fineResult.ErrorMessage);
+        }
+        var fine = fineResult.Value;
         this._fines.Add(fine);
         return fine;
     }
@@ -177,10 +205,28 @@ public class Patron {
     }
     public bool AccountInGoodStanding() => this.Status == PatronStatus.Active && this.OutstandingFines == 0L;
     internal void WhenLoanOverdue() {
-        var fine = Fine.Create(5L, false, "Overdue item", this);
+        var fineResult = Fine.Create(5L, false, "Overdue item", this);
+        if (!fineResult.IsSuccess) {
+            throw new InvalidOperationException(fineResult.ErrorMessage);
+        }
+        var fine = fineResult.Value;
         this.OutstandingFines = this.OutstandingFines + 5L;
     }
-    public static Patron Create(long currentBorrowCount, string email, long maxItems, string name, long outstandingFines, IEnumerable<Loan> loans, IEnumerable<Fine> fines) => new Patron(currentBorrowCount, email, maxItems, name, outstandingFines, loans, fines);
+    public static DomainResult<Patron> Create(long currentBorrowCount, string email, long maxItems, string name, long outstandingFines, IEnumerable<Loan> loans, IEnumerable<Fine> fines) {
+        if (!System.Text.RegularExpressions.Regex.IsMatch(email, "^[^@]+@[^@]+$")) {
+            return DomainResult<Patron>.Failure("'Email' does not match the required pattern.");
+        }
+        if (maxItems < 0L) {
+            return DomainResult<Patron>.Failure("'MaxItems' must be >= 0.");
+        }
+        if (maxItems > 20L) {
+            return DomainResult<Patron>.Failure("'MaxItems' must be <= 20.");
+        }
+        if (string.IsNullOrEmpty(name)) {
+            return DomainResult<Patron>.Failure("'Name' is required.");
+        }
+        return DomainResult<Patron>.Success(new Patron(currentBorrowCount, email, maxItems, name, outstandingFines, loans, fines));
+    }
     private void InitializeSubscriptions() {
         foreach (var target in this.Loans) {
             target.RegisterPatronOverdueSubscriber(this);
@@ -240,7 +286,7 @@ public class Loan {
             }
         }
     }
-    public static Loan Create(DateTime checkedOutAt, DateTime dueDate, DateTime returnedAt, string status, long timesRenewed, Book book, Patron borrower) => new Loan(checkedOutAt, dueDate, returnedAt, status, timesRenewed, book, borrower);
+    public static DomainResult<Loan> Create(DateTime checkedOutAt, DateTime dueDate, DateTime returnedAt, string status, long timesRenewed, Book book, Patron borrower) => DomainResult<Loan>.Success(new Loan(checkedOutAt, dueDate, returnedAt, status, timesRenewed, book, borrower));
 }
 
 public enum FineStage {
@@ -292,7 +338,7 @@ public class Fine {
         this.CurrentStage = FineStage.Resolved;
         return DomainResult.Success();
     }
-    public static Fine Create(long amount, bool paid, string reason, Patron patron) => new Fine(amount, paid, reason, patron);
+    public static DomainResult<Fine> Create(long amount, bool paid, string reason, Patron patron) => DomainResult<Fine>.Success(new Fine(amount, paid, reason, patron));
 }
 
 public class PremiumPatron {
@@ -315,5 +361,13 @@ public class PremiumPatron {
     public bool IsLoyal() => this.RewardPoints >= 100L;
     public bool HasPriority() => this.PriorityAccess;
     public bool UnlimitedItems() => this.Tier == PremiumTier.Platinum || this.PriorityAccess;
-    public static PremiumPatron Create(string email, string name, bool priorityAccess, long rewardPoints) => new PremiumPatron(email, name, priorityAccess, rewardPoints);
+    public static DomainResult<PremiumPatron> Create(string email, string name, bool priorityAccess, long rewardPoints) {
+        if (!System.Text.RegularExpressions.Regex.IsMatch(email, "^[^@]+@[^@]+$")) {
+            return DomainResult<PremiumPatron>.Failure("'Email' does not match the required pattern.");
+        }
+        if (string.IsNullOrEmpty(name)) {
+            return DomainResult<PremiumPatron>.Failure("'Name' is required.");
+        }
+        return DomainResult<PremiumPatron>.Success(new PremiumPatron(email, name, priorityAccess, rewardPoints));
+    }
 }

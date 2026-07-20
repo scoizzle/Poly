@@ -243,10 +243,32 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
             new Member(new NamedTypeReference(targetEntity.Name), "Create"),
             [.. args]);
 
-        // Wrap standalone creates in a local variable ('var fine = Fine.Create(...)') so
-        // the instance is not silently discarded. Callers should prefer 'create in Rel'
-        // (which auto-wires via AddCreateNavMethod) for relationship-aware creation.
-        return new Variable(DomainToCSharpExporter.ToCamelCase(targetEntity.Name), createCall);
+        // The Create factory now returns DomainResult<T> with constraint validation.
+        // Unwrap: var fineResult = Fine.Create(...);
+        //         if (!fineResult.IsSuccess) throw ...;
+        //         var fine = fineResult.Value;
+        var targetName = DomainToCSharpExporter.ToCamelCase(targetEntity.Name);
+        var resultVar = $"{targetName}Result";
+        var nds = new List<Node>();
+
+        // var fineResult = Fine.Create(...);
+        nds.Add(new Variable(resultVar, createCall));
+
+        // if (!fineResult.IsSuccess) throw new InvalidOperationException(fineResult.ErrorMessage);
+        nds.Add(new IfStatement(
+            new Poly.Syntax.Nodes.Not(new Member(new Variable(resultVar), "IsSuccess")),
+            new Block(new Node[] {
+                new ThrowStatement(
+                    new New(
+                        new NamedTypeReference("InvalidOperationException"),
+                        new Member(new Variable(resultVar), "ErrorMessage")))
+            })));
+
+        // var fine = fineResult.Value;
+        nds.Add(new Variable(targetName,
+            new Member(new Variable(resultVar), "Value")));
+
+        return new Block(nds);
     }
 
     /// <summary>

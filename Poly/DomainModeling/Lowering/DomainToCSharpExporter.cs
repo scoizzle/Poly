@@ -533,16 +533,30 @@ public sealed class DomainToCSharpExporter {
                 AccessModifier: AccessModifier.Private
             )];
 
-            // public static EntityName Create(args...) => new EntityName(args...);
-            var createReturn = new Syntactic.Return(
-                new Syntactic.New(
-                    new Syntactic.NamedTypeReference(entity.Name),
-                    ctorParams.Select(p => new Syntactic.Parameter(p.Name)).ToArray()));
+            // public static DomainResult<EntityName> Create(args...)
+            var createResultType = new Syntactic.NamedTypeReference("DomainResult",
+                TypeArguments: [new Syntactic.NamedTypeReference(entity.Name)]);
+
+            // Build constraint validation checks before the constructor call.
+            // Only entity properties (not navigations) are validated — navs
+            // don't carry constraints in the current model.
+            var constraintChecks = BuildCreateConstraintChecks(entity, domain);
+
+            // return DomainResult<EntityName>.Success(new EntityName(args...));
+            var createSuccessNodes = new List<Poly.Syntax.Node>();
+            createSuccessNodes.AddRange(constraintChecks);
+            createSuccessNodes.Add(new Syntactic.Return(
+                new Syntactic.Invoke(
+                    new Syntactic.Member(createResultType, "Success"),
+                    [new Syntactic.New(
+                        new Syntactic.NamedTypeReference(entity.Name),
+                        ctorParams.Select(p => new Syntactic.Parameter(p.Name)).ToArray())])));
+
             methods.Add(new Syntactic.MethodDefinitionNode(
                 "Create",
-                new Syntactic.NamedTypeReference(entity.Name),
+                createResultType,
                 Parameters: ctorParams,
-                Body: new Syntactic.Block([createReturn]),
+                Body: new Syntactic.Block(createSuccessNodes),
                 IsStatic: true,
                 AccessModifier: AccessModifier.Public
             ));
@@ -701,13 +715,35 @@ public sealed class DomainToCSharpExporter {
         // to createArgs here; the Create factory already handles them.
 
         var bodyNodes = new List<Poly.Syntax.Node>();
+        var localResultName = $"{ToCamelCase(targetTypeName)}Result";
         var localName = ToCamelCase(targetTypeName);
 
-        // var loan = Loan.Create(book: book, borrower: this, ...);
-        bodyNodes.Add(new Syntactic.Variable(localName,
+        // var loanResult = Loan.Create(book: book, borrower: this, ...);
+        bodyNodes.Add(new Syntactic.Variable(localResultName,
             new Syntactic.Invoke(
                 new Syntactic.Member(targetType, "Create"),
                 [.. createArgs])));
+
+        // Unwrap: the Create factory now returns DomainResult<T>, and it may
+        // reject invalid inputs via constraint checks. Since CreateNav methods
+        // are only called from action bodies with controlled defaults, a
+        // failure here is a programmer error — assert fast.
+        bodyNodes.Add(new Syntactic.IfStatement(
+            new Syntactic.Not(
+                new Syntactic.Member(
+                    new Syntactic.Variable(localResultName), "IsSuccess")),
+            new Syntactic.Block([
+                new Syntactic.ThrowStatement(
+                    new Syntactic.New(
+                        new Syntactic.NamedTypeReference("InvalidOperationException"),
+                        new Syntactic.Member(
+                            new Syntactic.Variable(localResultName), "ErrorMessage")))
+            ])));
+
+        // var loan = loanResult.Value;
+        bodyNodes.Add(new Syntactic.Variable(localName,
+            new Syntactic.Member(
+                new Syntactic.Variable(localResultName), "Value")));
 
         // _loans.Add(loan);
         bodyNodes.Add(new Syntactic.Invoke(
@@ -757,6 +793,183 @@ public sealed class DomainToCSharpExporter {
         }
         return new Syntactic.Constant(null);
     }
+
+    /// <summary>
+    /// Builds constraint-validation guard clauses for the <c>Create</c> factory method.
+    /// Each constraint on a constructor-parameter property produces an early-return
+    /// guard: <c>if (violation) return DomainResult&lt;T&gt;.Failure("'Prop' ...");</c>
+    ///
+    /// Only entity properties (not navigation properties) are validated — navs do not
+    /// carry constraints in the current domain model.
+    /// </summary>
+    private static List<Poly.Syntax.Node> BuildCreateConstraintChecks(
+        Entity entity, Domain? domain) {
+
+        var checks = new List<Poly.Syntax.Node>();
+        var entityTypeRef = new Syntactic.NamedTypeReference(entity.Name);
+        var resultType = new Syntactic.NamedTypeReference("DomainResult",
+            TypeArguments: [entityTypeRef]);
+
+        foreach (var prop in entity.Properties.OrderBy(p => p.Name)) {
+            // Only properties without DefaultValueConstraint are constructor params
+            if (prop.Constraints.Any(c => c is DefaultValueConstraint)) continue;
+
+            var paramName = ToCamelCase(prop.Name);
+            var paramRef = new Syntactic.Parameter(paramName);
+            var isText = string.Equals(prop.Type.TypeName, "Text", StringComparison.Ordinal)
+                      || string.Equals(prop.Type.TypeName, "String", StringComparison.Ordinal);
+            var isNumber = string.Equals(prop.Type.TypeName, "Number", StringComparison.Ordinal)
+                        || string.Equals(prop.Type.TypeName, "Int", StringComparison.Ordinal);
+
+            Poly.Syntax.Node Failure(string msg) => new Syntactic.Return(
+                new Syntactic.Invoke(
+                    new Syntactic.Member(resultType, "Failure"),
+                    new Syntactic.Constant(msg)));
+
+            foreach (var constraint in prop.Constraints) {
+                switch (constraint) {
+                    case RequiredConstraint:
+                        // Required: skip for value types (Number, Boolean,
+                        // DateTime, etc.) — they can never be null at runtime.
+                        // Only Text/String and entity reference types benefit
+                        // from runtime required checks.
+                        if (isText) {
+                            checks.Add(new Syntactic.IfStatement(
+                                new Syntactic.Invoke(
+                                    new Syntactic.Member(
+                                        new Syntactic.NamedTypeReference("string"),
+                                        "IsNullOrEmpty"),
+                                    [paramRef]),
+                                new Syntactic.Block([Failure(
+                                    $"'{prop.Name}' is required.")])));
+                        }
+                        else if (IsNullableDomainType(prop.Type.TypeName)) {
+                            checks.Add(new Syntactic.IfStatement(
+                                new Syntactic.Equal(paramRef, new Syntactic.Constant(null)),
+                                new Syntactic.Block([Failure(
+                                    $"'{prop.Name}' is required.")])));
+                        }
+                        break;
+
+                    case RangeConstraint r:
+                        if (isNumber && r.Minimum is not null) {
+                            var minVal = ConvertToConstant(r.Minimum);
+                            if (minVal is not null) {
+                                checks.Add(new Syntactic.IfStatement(
+                                    new Syntactic.LessThan(paramRef, minVal),
+                                    new Syntactic.Block([Failure(
+                                        $"'{prop.Name}' must be >= {FormatConstraintValue(r.Minimum)}.")])));
+                            }
+                        }
+                        if (isNumber && r.Maximum is not null) {
+                            var maxVal = ConvertToConstant(r.Maximum);
+                            if (maxVal is not null) {
+                                checks.Add(new Syntactic.IfStatement(
+                                    new Syntactic.GreaterThan(paramRef, maxVal),
+                                    new Syntactic.Block([Failure(
+                                        $"'{prop.Name}' must be <= {FormatConstraintValue(r.Maximum)}.")])));
+                            }
+                        }
+                        break;
+
+                    case LengthConstraint l:
+                        if (isText) {
+                            var lenAccess = new Syntactic.Member(paramRef, "Length");
+                            if (l.MinLength > 0) {
+                                checks.Add(new Syntactic.IfStatement(
+                                    new Syntactic.LessThan(lenAccess,
+                                        new Syntactic.Constant((long)l.MinLength)),
+                                    new Syntactic.Block([Failure(
+                                        $"'{prop.Name}' must be at least {l.MinLength} characters.")])));
+                            }
+                            if (l.MaxLength < int.MaxValue) {
+                                checks.Add(new Syntactic.IfStatement(
+                                    new Syntactic.GreaterThan(lenAccess,
+                                        new Syntactic.Constant((long)l.MaxLength)),
+                                    new Syntactic.Block([Failure(
+                                        $"'{prop.Name}' must be at most {l.MaxLength} characters.")])));
+                            }
+                        }
+                        break;
+
+                    case PatternConstraint p:
+                        if (isText) {
+                            checks.Add(new Syntactic.IfStatement(
+                                new Syntactic.Not(
+                                    new Syntactic.Invoke(
+                                        new Syntactic.Member(
+                                            new Syntactic.NamedTypeReference(
+                                                "System.Text.RegularExpressions.Regex"),
+                                            "IsMatch"),
+                                        [paramRef,
+                                         new Syntactic.Constant(p.Pattern)])),
+                                new Syntactic.Block([Failure(
+                                    $"'{prop.Name}' does not match the required pattern.")])));
+                        }
+                        break;
+
+                    case EqualityConstraint eq:
+                        if (eq.ExpectedValue is not null) {
+                            checks.Add(new Syntactic.IfStatement(
+                                new Syntactic.NotEqual(paramRef,
+                                    new Syntactic.Constant(eq.ExpectedValue)),
+                                new Syntactic.Block([Failure(
+                                    $"'{prop.Name}' must equal {eq.ExpectedValue}.")])));
+                        }
+                        break;
+
+                        // DefaultValueConstraint, UniqueConstraint, EnumConstraint
+                        // are not validated at factory time:
+                        //   • Default → already handled (only non-default props are params)
+                        //   • Unique  → requires store awareness
+                        //   • Enum    → enforced by the type system at the compiler level
+                }
+            }
+        }
+
+        return checks;
+    }
+
+    /// <summary>Converts a constraint value object to a Syntax Constant.</summary>
+    private static Syntactic.Constant? ConvertToConstant(object? value) {
+        if (value is null) return null;
+        if (value is long l) return new Syntactic.Constant(l);
+        if (value is int i) return new Syntactic.Constant((long)i);
+        if (value is double d) return d == Math.Floor(d)
+            ? new Syntactic.Constant((long)d)
+            : new Syntactic.Constant(d);
+        if (value is decimal m) return new Syntactic.Constant((double)m);
+        if (value is string s) return new Syntactic.Constant(s);
+        if (value is bool b) return new Syntactic.Constant(b);
+        return new Syntactic.Constant(value?.ToString());
+    }
+
+    /// <summary>Formats a constraint boundary value for error messages.</summary>
+    private static string FormatConstraintValue(object? value) => value switch {
+        null => "?",
+        double d => d == Math.Floor(d) ? d.ToString("F0") : d.ToString("G"),
+        _ => value.ToString() ?? "?"
+    };
+
+    /// <summary>
+    /// Returns true if the domain type name maps to a nullable CLR type
+    /// (string or reference type), meaning null-check validation applies.
+    /// Value types (Number, Boolean, DateTime, etc.) always have a value
+    /// and cannot be null at runtime.
+    /// </summary>
+    private static bool IsNullableDomainType(string typeName) => typeName switch {
+        "Text" or "String" => true,  // handled separately via IsNullOrEmpty
+        "Number" or "Int" or "Int64" or "Int32" => false,
+        "Boolean" or "Bool" => false,
+        "DateTime" or "Timestamp" => false,
+        "Date" or "DateOnly" => false,
+        "Time" or "TimeOnly" => false,
+        "Duration" or "TimeSpan" => false,
+        "Decimal" => false,
+        "Float" or "Double" => false,
+        "Guid" or "Uuid" => false,
+        _ => true, // entity reference types (Book, Patron, etc.) are nullable
+    };
 
     /// <summary>
     /// Returns a CLR-appropriate default value Syntax node for a domain type

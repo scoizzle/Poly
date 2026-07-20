@@ -60,10 +60,11 @@ app.MapGet("/api/books/{isbn}", async (string isbn, LibraryDbContext db) =>
         : Results.NotFound());
 
 app.MapPost("/api/books", async (BookDto dto, LibraryDbContext db) => {
-    var book = Book.Create(dto.Author, dto.Genre, dto.ISBN, dto.Pages, dto.Title);
-    db.Books.Add(book);
+    var bookResult = Book.Create(dto.Author, dto.Genre, dto.ISBN, dto.Pages, dto.Title);
+    if (!bookResult.IsSuccess) return Results.Conflict(new { error = bookResult.ErrorMessage });
+    db.Books.Add(bookResult.Value);
     await db.SaveChangesAsync();
-    return Results.Created($"/api/books/{book.ISBN}", book);
+    return Results.Created($"/api/books/{bookResult.Value.ISBN}", bookResult.Value);
 });
 
 // ═══════════════════════════════════════════════════════════════════
@@ -79,7 +80,7 @@ app.MapGet("/api/patrons/{email}", async (string email, LibraryDbContext db) =>
         : Results.NotFound());
 
 app.MapPost("/api/patrons", async (PatronDto dto, LibraryDbContext db) => {
-    var patron = Patron.Create(
+    var patronResult = Patron.Create(
         dto.CurrentBorrowCount,
         dto.Email,
         dto.MaxItems,
@@ -87,9 +88,10 @@ app.MapPost("/api/patrons", async (PatronDto dto, LibraryDbContext db) => {
         dto.OutstandingFines ?? 0,
         Enumerable.Empty<Loan>(),
         Enumerable.Empty<Fine>());
-    db.Patrons.Add(patron);
+    if (!patronResult.IsSuccess) return Results.Conflict(new { error = patronResult.ErrorMessage });
+    db.Patrons.Add(patronResult.Value);
     await db.SaveChangesAsync();
-    return Results.Created($"/api/patrons/{patron.Email}", patron);
+    return Results.Created($"/api/patrons/{patronResult.Value.Email}", patronResult.Value);
 });
 
 // ── Action: CheckOut ─────────────────────────────────────────────
@@ -192,15 +194,15 @@ app.Run();
 static async Task SeedAsync(LibraryDbContext db) {
     if (await db.Books.AnyAsync()) return;
 
-    // Books
+    // Books (Create now returns DomainResult<T> — unwrap with .Value)
     var dune = Book.Create("Frank Herbert", Genre.Fiction, "978-0441172719", 412, "Dune");
     var neuromancer = Book.Create("William Gibson", Genre.Fiction, "978-0441569595", 271, "Neuromancer");
     var godel = Book.Create("Douglas Hofstadter", Genre.NonFiction, "978-0465026562", 777, "Gödel, Escher, Bach");
 
-    db.Books.AddRange(dune, neuromancer, godel);
+    db.Books.AddRange(dune.Value!, neuromancer.Value!, godel.Value!);
 
-    // Patrons
-    var alice = Patron.Create(
+    // Patrons (Create now returns DomainResult<T> — unwrap with .Value)
+    var aliceResult = Patron.Create(
         currentBorrowCount: 0,
         email: "alice@library.org",
         maxItems: 5,
@@ -209,7 +211,7 @@ static async Task SeedAsync(LibraryDbContext db) {
         loans: Enumerable.Empty<Loan>(),
         fines: Enumerable.Empty<Fine>());
 
-    var bob = Patron.Create(
+    var bobResult = Patron.Create(
         currentBorrowCount: 0,
         email: "bob@library.org",
         maxItems: 3,
@@ -218,7 +220,7 @@ static async Task SeedAsync(LibraryDbContext db) {
         loans: Enumerable.Empty<Loan>(),
         fines: Enumerable.Empty<Fine>());
 
-    db.Patrons.AddRange(alice, bob);
+    db.Patrons.AddRange(aliceResult.Value!, bobResult.Value!);
 
     await db.SaveChangesAsync();
 

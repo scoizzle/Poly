@@ -1,3 +1,4 @@
+using Poly.DomainModeling.Constraints;
 using Poly.DomainModeling.Effects;
 using Poly.Syntax.Analysis;
 
@@ -32,12 +33,12 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
 
         DomainAnalysis.ForEachEntity(domain, entity => {
             foreach (var action in entity.Actions) {
-                ValidateEffects(context, action.Effects, entity, domain, lookup);
+                ValidateEffects(context, action.Effects, action, entity, domain, lookup);
                 ValidateUnsatisfiedRequirements(context, action, entity, lookup);
             }
             foreach (var stage in entity.Stages) {
-                ValidateEffects(context, stage.OnEntryEffects, entity, domain, lookup);
-                ValidateEffects(context, stage.OnExitEffects, entity, domain, lookup);
+                ValidateEffects(context, stage.OnEntryEffects, null, entity, domain, lookup);
+                ValidateEffects(context, stage.OnExitEffects, null, entity, domain, lookup);
             }
         });
     }
@@ -45,17 +46,19 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
     private static void ValidateEffects(
         AnalysisContext context,
         IReadOnlyList<Effect> effects,
+        Action? action,
         Entity entity,
         Domain domain,
         DomainTypeLookupMetadata lookup) {
         foreach (var effect in effects) {
-            ValidateEffect(context, effect, entity, domain, lookup);
+            ValidateEffect(context, effect, action, entity, domain, lookup);
         }
     }
 
     private static void ValidateEffect(
         AnalysisContext context,
         Effect effect,
+        Action? action,
         Entity entity,
         Domain domain,
         DomainTypeLookupMetadata lookup) {
@@ -74,7 +77,7 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
                 ValidateInvokeAction(context, iae, entity, domain);
                 break;
             case AssignEffect ae:
-                ValidateAssign(context, ae, entity);
+                ValidateAssign(context, ae, action, entity);
                 break;
             case DeleteEntityInstance dei:
                 ValidateDeleteEntityInstance(context, dei, lookup);
@@ -98,9 +101,9 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
                     DomainModelDiagnosticCodes.EffectNotExecutable);
                 break;
             case ConditionalEffect ce:
-                ValidateEffects(context, ce.ThenEffects, entity, domain, lookup);
+                ValidateEffects(context, ce.ThenEffects, action, entity, domain, lookup);
                 if (ce.ElseEffects is not null) {
-                    ValidateEffects(context, ce.ElseEffects, entity, domain, lookup);
+                    ValidateEffects(context, ce.ElseEffects, action, entity, domain, lookup);
                 }
                 // DMEFF006: warn if the conditional contains direct-execution effects
                 // that would be silently dropped by EffectLoweringPass
@@ -109,7 +112,7 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
                     WarnNestedDirectEffects(context, "ConditionalEffect (else)", ce.ElseEffects);
                 break;
             case CompositeEffect ce:
-                ValidateEffects(context, ce.Effects, entity, domain, lookup);
+                ValidateEffects(context, ce.Effects, action, entity, domain, lookup);
                 // DMEFF006: warn if composite contains direct-execution effects
                 // that would be silently dropped by EffectLoweringPass
                 WarnNestedDirectEffects(context, "CompositeEffect", ce.Effects);
@@ -160,11 +163,20 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
 
         if (resolvedType is Entity targetEntity) {
             foreach (var initializer in cei.Initializers) {
-                if (!targetEntity.Properties.Any(p => string.Equals(p.Name, initializer.PropertyName, StringComparison.Ordinal))) {
+                var targetProp = targetEntity.Properties
+                    .FirstOrDefault(p => string.Equals(p.Name, initializer.PropertyName, StringComparison.Ordinal));
+
+                if (targetProp is null) {
                     context.ReportError(
                         initializer,
                         $"CreateEntityInstance initializer references unknown property '{initializer.PropertyName}' on entity '{targetEntity.Name}'.",
                         DomainModelDiagnosticCodes.EffectBinding);
+                    continue;
+                }
+
+                // Validate literal initializer values against property constraints
+                if (initializer.Expression is Literal lit && targetProp.Constraints.Count > 0) {
+                    ValidateLiteralAgainstConstraints(context, initializer, lit.Value, targetProp);
                 }
             }
 
@@ -277,11 +289,20 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
 
         // Validate initializer property names against target entity
         foreach (var initializer in createIn.Initializers) {
-            if (!targetEntity.Properties.Any(p => string.Equals(p.Name, initializer.PropertyName, StringComparison.Ordinal))) {
+            var targetProp = targetEntity.Properties
+                .FirstOrDefault(p => string.Equals(p.Name, initializer.PropertyName, StringComparison.Ordinal));
+
+            if (targetProp is null) {
                 context.ReportError(
                     initializer,
                     $"CreateIn initializer references unknown property '{initializer.PropertyName}' on entity '{targetEntity.Name}'.",
                     DomainModelDiagnosticCodes.EffectBinding);
+                continue;
+            }
+
+            // Validate literal initializer values against property constraints
+            if (initializer.Expression is Literal lit && targetProp.Constraints.Count > 0) {
+                ValidateLiteralAgainstConstraints(context, initializer, lit.Value, targetProp);
             }
         }
     }
@@ -563,15 +584,152 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
     }
 
     private static void ValidateAssign(
-        AnalysisContext context, AssignEffect ae, Entity entity) {
-        if (ae.Target is PropertyAccess propAccess) {
-            if (!entity.Properties.Any(p => string.Equals(p.Name, propAccess.Name, StringComparison.Ordinal))) {
-                context.ReportError(
-                    ae,
-                    $"Assign effect targets property '{propAccess.Name}' which does not exist on entity '{entity.Name}'.",
-                    DomainModelDiagnosticCodes.EffectBinding);
+        AnalysisContext context, AssignEffect ae, Action? action, Entity entity) {
+        if (ae.Target is not PropertyAccess propAccess) return;
+
+        var targetProp = entity.Properties
+            .FirstOrDefault(p => string.Equals(p.Name, propAccess.Name, StringComparison.Ordinal));
+
+        if (targetProp is null) {
+            context.ReportError(
+                ae,
+                $"Assign effect targets property '{propAccess.Name}' which does not exist on entity '{entity.Name}'.",
+                DomainModelDiagnosticCodes.EffectBinding);
+            return;
+        }
+
+        if (targetProp.Constraints.Count == 0) return;
+
+        // ── Validate literal assignments against property constraints ──────
+        if (ae.Value is Literal lit) {
+            ValidateLiteralAgainstConstraints(context, ae, lit.Value, targetProp);
+            return;
+        }
+
+        // ── Validate parameter-to-property constraint compatibility ─────────
+        if (ae.Value is ParameterAccess pa && action is not null) {
+            var sourceParam = action.Parameters
+                .FirstOrDefault(p => string.Equals(p.Name, pa.Name, StringComparison.Ordinal));
+            if (sourceParam is not null) {
+                ValidateParameterConstraintCompatibility(context, ae, sourceParam, targetProp);
+
+                // Also check DownstreamConstraintsMetadata if ConstraintPropagationAnalyzer has run
+                var downstreamMeta = context.GetMetadata<DownstreamConstraintsMetadata>(sourceParam);
+                if (downstreamMeta is not null) {
+                    ValidateDownstreamConstraints(context, ae, downstreamMeta.Constraints, targetProp, sourceParam);
+                }
             }
         }
+    }
+
+    private static void ValidateLiteralAgainstConstraints(
+        AnalysisContext context, Node errorNode, object? literalValue, Property targetProp) {
+        foreach (var constraint in targetProp.Constraints) {
+            if (!ConstraintValidation.IsSatisfiedBy(constraint, literalValue)) {
+                var display = FormatValueForMessage(literalValue);
+                context.ReportError(
+                    errorNode,
+                    $"Assigned value '{display}' violates constraint {ConstraintValidation.Describe(constraint)} " +
+                    $"on property '{targetProp.Name}'.",
+                    DomainModelDiagnosticCodes.EffectConstraintViolation);
+            }
+        }
+    }
+
+    private static void ValidateParameterConstraintCompatibility(
+        AnalysisContext context, Node errorNode, Property sourceParam, Property targetProp) {
+        // Check that the parameter's constraints don't allow values the property prohibits.
+        // For each property constraint, check if any value allowed by the parameter would violate it.
+        // We use a simple subsumption check: the parameter's range/length must be within the property's.
+        foreach (var propConstraint in targetProp.Constraints) {
+            // Find the matching constraint on the parameter (same type)
+            var paramConstraint = sourceParam.Constraints
+                .FirstOrDefault(c => c.GetType() == propConstraint.GetType());
+            if (paramConstraint is null) {
+                // Parameter has no constraint of this type — parameter could carry any value,
+                // including ones that violate the property constraint.
+                context.ReportWarning(
+                    errorNode,
+                    $"Parameter '{sourceParam.Name}' has no {ConstraintValidation.Describe(propConstraint)} constraint, " +
+                    $"but flows to property '{targetProp.Name}' which requires " +
+                    $"{ConstraintValidation.Describe(propConstraint)}. The parameter may carry values " +
+                    $"that violate the property constraint.",
+                    DomainModelDiagnosticCodes.EffectConstraintViolation);
+                continue;
+            }
+
+            // Check parameter constraint does not exceed property constraint bounds
+            if (!IsConstraintSubsumed(paramConstraint, propConstraint)) {
+                context.ReportWarning(
+                    errorNode,
+                    $"Parameter '{sourceParam.Name}' has {ConstraintValidation.Describe(paramConstraint)} " +
+                    $"which allows values outside property '{targetProp.Name}' constraint " +
+                    $"{ConstraintValidation.Describe(propConstraint)}.",
+                    DomainModelDiagnosticCodes.EffectConstraintViolation);
+            }
+        }
+    }
+
+    private static void ValidateDownstreamConstraints(
+        AnalysisContext context, Node errorNode,
+        IReadOnlyList<Constraint> downstreamConstraints, Property targetProp, Property sourceParam) {
+        foreach (var dc in downstreamConstraints) {
+            // Check if downstream constraint is compatible with target property constraints
+            var matchingPropConstraint = targetProp.Constraints
+                .FirstOrDefault(c => c.GetType() == dc.GetType());
+            if (matchingPropConstraint is null) continue;
+
+            if (!IsConstraintSubsumed(dc, matchingPropConstraint)) {
+                context.ReportWarning(
+                    errorNode,
+                    $"Effect-chain constraint {ConstraintValidation.Describe(dc)} from parameter " +
+                    $"'{sourceParam.Name}' exceeds property '{targetProp.Name}' constraint " +
+                    $"{ConstraintValidation.Describe(matchingPropConstraint)}.",
+                    DomainModelDiagnosticCodes.EffectConstraintViolation);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Returns true if <paramref name="inner"/> is at least as restrictive as <paramref name="outer"/>,
+    /// meaning any value satisfying <c>inner</c> also satisfies <c>outer</c>.
+    /// </summary>
+    private static bool IsConstraintSubsumed(Constraint inner, Constraint outer) {
+        if (inner is RangeConstraint ir && outer is RangeConstraint or) {
+            return IsRangeSubsumed(ir, or);
+        }
+        if (inner is LengthConstraint il && outer is LengthConstraint ol) {
+            return il.MinLength >= ol.MinLength && il.MaxLength <= ol.MaxLength;
+        }
+        if (inner is EnumConstraint ie && outer is EnumConstraint oe) {
+            // Parameter's enum member set must be a subset of property's enum member set
+            return ie.Members.All(im =>
+                oe.Members.Any(om => string.Equals(im.Name, om.Name, StringComparison.Ordinal)));
+        }
+        // For other constraint types, assume compatible (exact match on type was already checked)
+        return true;
+    }
+
+    private static bool IsRangeSubsumed(RangeConstraint inner, RangeConstraint outer) {
+        var innerMin = inner.Minimum is not null ? ToDouble(inner.Minimum) : double.NegativeInfinity;
+        var innerMax = inner.Maximum is not null ? ToDouble(inner.Maximum) : double.PositiveInfinity;
+        var outerMin = outer.Minimum is not null ? ToDouble(outer.Minimum) : double.NegativeInfinity;
+        var outerMax = outer.Maximum is not null ? ToDouble(outer.Maximum) : double.PositiveInfinity;
+
+        if (innerMin is null || innerMax is null || outerMin is null || outerMax is null) return false;
+
+        return innerMin.Value >= outerMin.Value && innerMax.Value <= outerMax.Value;
+    }
+
+    private static string FormatValueForMessage(object? value) => value switch {
+        null => "<null>",
+        string s => $"\"{s}\"",
+        _ => value.ToString() ?? "?"
+    };
+
+    private static double? ToDouble(object? value) {
+        try { return Convert.ToDouble(value); }
+        catch { return null; }
     }
 
     private static void ValidateDeleteEntityInstance(

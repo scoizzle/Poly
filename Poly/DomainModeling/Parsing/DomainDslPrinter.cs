@@ -546,9 +546,16 @@ public sealed class DomainDslPrinter {
             ? $"length({l.MinLength})"
             : $"length({l.MinLength}, {l.MaxLength})",
         PatternConstraint p => $"pattern(\"{EscapeStringLiteral(p.Pattern)}\")",
-        EqualityConstraint e => $"default({PrintLiteralValue(e.ExpectedValue)})",
+        DefaultValueConstraint dv => $"default({PrintDomainExpression(dv.Expression)})",
+        EqualityConstraint e => $"/* equals({PrintLiteralValue(e.ExpectedValue)}) */", // legacy
         EnumConstraint en => $"/* enum({string.Join(", ", en.Members.Select(m => m.Name))}) */", // legacy — no longer parsed
         _ => $"?{constraint.GetType().Name}",
+    };
+
+    private static string PrintDomainExpression(DomainExpression expr) => expr switch {
+        Poly.DomainModeling.Literal l => PrintLiteralValue(l.Value),
+        Poly.DomainModeling.PropertyAccess pa => pa.Name,
+        _ => expr.ToString() ?? "?",
     };
 
     private static string PrintLiteralValue(object? value) => value switch {

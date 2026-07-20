@@ -1,3 +1,4 @@
+using Poly.DomainModeling.Constraints;
 using Poly.DomainModeling.Effects;
 using Poly.Syntax.Nodes;
 
@@ -57,6 +58,23 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     protected override Node? Assign(AssignEffect a) {
         var target = _expressionPass.Lower(a.Target, Subject);
         var value = _expressionPass.Lower(a.Value, Subject);
+
+        // Convert string literals to qualified enum member access when the
+        // target property is enum-typed:  assign Status to "Suspended"
+        // on PatronStatus-typed property →  this.Status = PatronStatus.Suspended
+        if (_domain is not null && a.Target is Poly.DomainModeling.PropertyAccess propAccess) {
+            var enumTypes = _domain.Types.OfType<EnumType>()
+                .ToDictionary(e => e.Name, StringComparer.Ordinal);
+            var entityProp = _entity.Properties.FirstOrDefault(p =>
+                string.Equals(p.Name, propAccess.Name, StringComparison.Ordinal));
+            if (entityProp is not null
+                && enumTypes.TryGetValue(entityProp.Type.TypeName, out var enumType)
+                && a.Value is Poly.DomainModeling.Literal { Value: string strVal }
+                && !string.IsNullOrEmpty(strVal)) {
+                value = new Member(new NamedTypeReference(enumType.Name), strVal);
+            }
+        }
+
         return new Assignment(target, value);
     }
 
@@ -192,8 +210,10 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     }
 
     /// <summary>
-    /// Lowers CreateEntityInstance for C# mode. Emits <c>new TypeName(arg1, arg2, ...)</c>,
+    /// Lowers CreateEntityInstance for C# mode. Emits <c>TargetType.Create(arg1, arg2, ...)</c>,
     /// matching initializer bindings to constructor parameters by property name.
+    /// Uses the static <c>Create</c> factory method instead of <c>new</c> since
+    /// constructors are private (Principle: owner constructs owned).
     /// When <see cref="_domain"/> is null or the target entity is not found, returns null.
     /// </summary>
     protected override Node? CreateEntityInstance(CreateEntityInstance cei) {
@@ -204,27 +224,68 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         if (targetEntity is null) return null;
 
         var args = BuildConstructorArgs(cei.Initializers, targetEntity);
-        return new New(new NamedTypeReference(targetEntity.Name), [.. args]);
+        return new Invoke(
+            new Member(new NamedTypeReference(targetEntity.Name), "Create"),
+            [.. args]);
     }
 
     /// <summary>
-    /// Lowers CreateEntityInRelationshipEffect for C# mode. Emits the same `new`
-    /// as CreateEntityInstance but the caller will need to wire the relationship.
+    /// Lowers CreateEntityInRelationshipEffect for C# mode. Emits a call to the
+    /// source entity's <c>Create{Nav}()</c> factory method, which handles
+    /// construction, collection wiring, and subscription registration.
+    /// E.g. <c>create in loans { book: book }</c> → <c>this.CreateLoans(book)</c>.
+    ///
+    /// Builds the argument list to match the factory method signature produced
+    /// by <see cref="DomainToCSharpExporter.AddCreateNavMethod"/>: entity
+    /// properties (excluding defaults) followed by singular navs (excluding
+    /// the auto-wired back-reference). Unspecified initializers default to null.
     /// </summary>
     protected override Node? CreateEntityInRelationship(CreateEntityInRelationshipEffect cr) {
         if (!_lowerStageTransitions || _domain is null) return null;
 
-        // Find relationship to determine target type
-        var rel = _domain.Relationships.FirstOrDefault(r =>
+        var pascalName = DomainToCSharpExporter.ToPascalCase(cr.RelationshipName);
+        var methodName = $"Create{pascalName}";
+
+        // Resolve the relationship to find the target entity
+        var relationship = _domain.Relationships.FirstOrDefault(r =>
             string.Equals(r.Name, cr.RelationshipName, StringComparison.Ordinal));
-        if (rel is null) return null;
+        if (relationship is null) return null;
 
         var targetEntity = _domain.Types.OfType<Entity>().FirstOrDefault(e =>
-            string.Equals(e.Name, rel.Target.TypeName, StringComparison.Ordinal));
+            string.Equals(e.Name, relationship.Target.TypeName, StringComparison.Ordinal));
         if (targetEntity is null) return null;
 
-        var args = BuildConstructorArgs(cr.Initializers, targetEntity);
-        return new New(new NamedTypeReference(targetEntity.Name), [.. args]);
+        // Build initializer map keyed by property name (camelCase and PascalCase)
+        var initMap = new Dictionary<string, DomainExpression>(StringComparer.Ordinal);
+        foreach (var init in cr.Initializers)
+            initMap[init.PropertyName] = init.Expression;
+
+        var args = new List<Node>();
+
+        // 1. Entity properties without DefaultValueConstraint (same order as AddCreateNavMethod)
+        foreach (var prop in targetEntity.Properties) {
+            if (prop.Constraints.Any(c => c is DefaultValueConstraint)) continue;
+            if (initMap.TryGetValue(prop.Name, out var expr))
+                args.Add(_expressionPass.Lower(expr, Subject));
+            else
+                args.Add(new Constant(null));
+        }
+
+        // 2. Singular navs excluding back-reference (auto-wired by factory method)
+        var targetRelationships = _domain.Relationships
+            .Where(r => string.Equals(r.Source.TypeName, targetEntity.Name, StringComparison.Ordinal)
+                     && r.Cardinality is not (RelationshipCardinality.OneToMany or RelationshipCardinality.ManyToMany))
+            .ToList();
+        foreach (var trel in targetRelationships) {
+            if (string.Equals(trel.Target.TypeName, _entity.Name, StringComparison.Ordinal))
+                continue; // back-ref is auto-wired by factory method
+            if (initMap.TryGetValue(trel.Name, out var expr))
+                args.Add(_expressionPass.Lower(expr, Subject));
+            else
+                args.Add(new Constant(null));
+        }
+
+        return new Invoke(new Member(Subject, methodName), [.. args]);
     }
 
     /// <summary>
@@ -233,6 +294,30 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     protected override Node? DeleteEntity(DeleteEntityInstance _) {
         if (!_lowerStageTransitions) return null;
         return new Assignment(new Member(Subject, "IsDeleted"), new Constant(true));
+    }
+
+    // ── Runtime default expression helpers ───────────────────────
+
+    /// <summary>
+    /// Builds a Syntax AST node for a runtime default expression.
+    /// Returns <c>DateTime.UtcNow</c>, <c>Guid.NewGuid()</c>, etc.
+    /// based on the expression type in the <see cref="DefaultValueConstraint"/>.
+    /// Returns null for literal defaults (handled directly by the exporter).
+    /// </summary>
+    internal static Node? LowerDefaultExpression(DomainExpression expr, Node? typeHint = null) {
+        if (expr is Poly.DomainModeling.PropertyAccess pa) {
+            return pa.Name switch {
+                "now" or "utcnow" => new Member(
+                    new NamedTypeReference("DateTime"), "UtcNow"),
+                "today" => new Invoke(
+                    new Member(new NamedTypeReference("DateOnly"), "FromDateTime"),
+                    new Member(new NamedTypeReference("DateTime"), "UtcNow")),
+                "guid" => new Invoke(
+                    new Member(new NamedTypeReference("Guid"), "NewGuid")),
+                _ => null, // treat as enum member name
+            };
+        }
+        return null;
     }
 
     /// <summary>Builds constructor arguments matching initializers to entity property order.</summary>

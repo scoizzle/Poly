@@ -703,7 +703,7 @@ public class PolyDslRoundTripTests {
         await Assert.That(result.Succeeded).IsTrue();
         var item = result.Root!.Types.OfType<Entity>().Single();
         await Assert.That(item.Properties.Any(p =>
-            p.Name == "Status" && p.Constraints.Any(c => c is EqualityConstraint))).IsTrue();
+            p.Name == "Status" && p.Constraints.Any(c => c is DefaultValueConstraint))).IsTrue();
     }
 
     [Test]
@@ -995,8 +995,9 @@ public class PolyDslRoundTripTests {
         await Assert.That(result.Succeeded).IsTrue();
 
         var prop = result.Root!.Types.OfType<Entity>().Single().Properties.Single();
-        var eq = prop.Constraints.OfType<EqualityConstraint>().Single();
-        await Assert.That(eq.ExpectedValue).IsEqualTo("say \"hi\"");
+        var dv = prop.Constraints.OfType<DefaultValueConstraint>().Single();
+        var lit = dv.Expression as Poly.DomainModeling.Literal;
+        await Assert.That(lit?.Value).IsEqualTo("say \"hi\"");
 
         var printed = new DomainDslPrinter().Print(result.Root);
         await Assert.That(printed.Contains("\\\"")).IsTrue();
@@ -1004,8 +1005,9 @@ public class PolyDslRoundTripTests {
         var result2 = new DomainEvolution(new Domain("_", [], []))
             .Apply(new PolyDslParser(printed).Parse());
         await Assert.That(result2.Succeeded).IsTrue();
-        var eq2 = result2.Root!.Types.OfType<Entity>().Single().Properties.Single()
-            .Constraints.OfType<EqualityConstraint>().Single();
-        await Assert.That(eq2.ExpectedValue).IsEqualTo("say \"hi\"");
+        var dv2 = result2.Root!.Types.OfType<Entity>().Single().Properties.Single()
+            .Constraints.OfType<DefaultValueConstraint>().Single();
+        var lit2 = dv2.Expression as Poly.DomainModeling.Literal;
+        await Assert.That(lit2?.Value).IsEqualTo("say \"hi\"");
     }
 }

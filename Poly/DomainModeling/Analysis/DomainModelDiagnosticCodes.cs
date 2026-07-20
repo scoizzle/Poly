@@ -46,4 +46,7 @@ internal static class DomainModelDiagnosticCodes {
     /// Invoke quantifier/filter/relationship shape is invalid
     /// (e.g. any/all without a collection relationship, where on singular/self).
     public const string EffectInvokeShape = "DMEFF007";
+
+    /// Assigned value violates property constraints (range, length, pattern, enum, required).
+    public const string EffectConstraintViolation = "DMEFF008";
 }

@@ -66,7 +66,7 @@ Book: entity {
 Patron: entity {
   Name: Text required
   Email: Text unique pattern("^[^@]+@[^@]+$")
-  MemberSince: Date
+  MemberSince: Date default(today)
   Status: PatronStatus default(Active)
   MaxItems: Number range(1, 20) required
   CurrentBorrowCount: Number
@@ -153,6 +153,7 @@ Loan: entity {
 
   // ── Active — currently borrowed and not yet overdue ────────────────────────
   Active: stage {
+    entry { assign CheckedOutAt to now }
     Renew: action {
       assign DueDate to DueDate + 14
       assign TimesRenewed to TimesRenewed + 1
@@ -160,7 +161,9 @@ Loan: entity {
   }
 
   // ── Overdue — beyond due date; fines applied at patron level via subscription ──
-  Overdue: stage { }
+  Overdue: stage {
+    entry { assign CheckedOutAt to now }
+  }
 
   // ── Returned — resolved ─────────────────────────────────────────────────────
   Returned: stage { }
@@ -174,7 +177,7 @@ Loan: entity {
 Fine: entity {
   Amount: Number required
   Reason: Text
-  DateIssued: DateTime
+  DateIssued: DateTime default(now)
   Paid: Boolean
 
   // The patron who owes this fine

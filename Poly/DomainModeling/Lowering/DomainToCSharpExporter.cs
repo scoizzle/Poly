@@ -161,6 +161,44 @@ public sealed class DomainToCSharpExporter {
                 Constraints: constraints
             ));
 
+            // Check for default value expression (runtime default or constant)
+            var defaultValue = prop.Constraints.OfType<DefaultValueConstraint>().FirstOrDefault();
+            if (defaultValue is not null) {
+                // Try to lower as a runtime default (now, today, guid)
+                var runtimeExpr = EffectLoweringPass.LowerDefaultExpression(defaultValue.Expression);
+                if (runtimeExpr is not null) {
+                    ctorAssignments.Add(new Syntactic.Assignment(
+                        new Syntactic.Member(new Syntactic.ThisReference(), prop.Name),
+                        runtimeExpr));
+                    continue; // skip ctor param — runtime value set in body
+                }
+                // If it's a literal, emit directly in body as default
+                if (defaultValue.Expression is Poly.DomainModeling.Literal lit) {
+                    ctorAssignments.Add(new Syntactic.Assignment(
+                        new Syntactic.Member(new Syntactic.ThisReference(), prop.Name),
+                        new Syntactic.Constant(lit.Value)));
+                    continue; // skip ctor param — constant default in body
+                }
+                // If it's an enum member (PropertyAccess), also emit directly
+                if (defaultValue.Expression is Poly.DomainModeling.PropertyAccess pa && domain is not null) {
+                    // Try to resolve as enum member: EnumType.MemberName
+                    var enumProp = entity.Properties.FirstOrDefault(p =>
+                        string.Equals(p.Name, prop.Name, StringComparison.Ordinal));
+                    if (enumProp is not null) {
+                        var enumTypes = domain.Types.OfType<EnumType>()
+                            .ToDictionary(e => e.Name, StringComparer.Ordinal);
+                        if (enumTypes.TryGetValue(enumProp.Type.TypeName, out var enumType)) {
+                            ctorAssignments.Add(new Syntactic.Assignment(
+                                new Syntactic.Member(new Syntactic.ThisReference(), prop.Name),
+                                new Syntactic.Member(
+                                    new Syntactic.NamedTypeReference(enumType.Name), pa.Name)));
+                            continue; // skip ctor param
+                        }
+                    }
+                }
+            }
+
+            // No default expression — full constructor param + assignment
             var paramName = ToCamelCase(prop.Name);
             ctorParams.Add(new Syntactic.Parameter(paramName, propRef));
             ctorAssignments.Add(new Syntactic.Assignment(
@@ -177,31 +215,57 @@ public sealed class DomainToCSharpExporter {
                          or RelationshipCardinality.ManyToMany;
             var targetType = new Syntactic.NamedTypeReference(rel.Target.TypeName);
             var pascalName = ToPascalCase(rel.Name);
+            var paramName = ToCamelCase(pascalName);
 
-            Poly.Syntax.Node propType;
-            Poly.Syntax.Node ctorParamType;
             if (isMany) {
-                propType = new Syntactic.NamedTypeReference("IReadOnlyList",
+                // Collection nav: private field, IEnumerable<T> constructor param,
+                // getter-only property. EF passes loaded items in via the constructor.
+                var fieldName = $"_{paramName}";
+                var listType = new Syntactic.NamedTypeReference("List",
                     TypeArguments: [targetType]);
-                ctorParamType = new Syntactic.CollectionTypeReference(targetType);
+                var readOnlyType = new Syntactic.NamedTypeReference("IReadOnlyList",
+                    TypeArguments: [targetType]);
+                var enumerableType = new Syntactic.NamedTypeReference("IEnumerable",
+                    TypeArguments: [targetType]);
+
+                fields.Add(new Syntactic.FieldDefinitionNode(
+                    fieldName,
+                    listType,
+                    AccessModifier: AccessModifier.Private
+                ));
+
+                props.Add(new Syntactic.PropertyDefinitionNode(
+                    pascalName, readOnlyType,
+                    Getter: new Syntactic.PropertyGetterDefinitionNode(
+                        Body: new Syntactic.Member(new Syntactic.ThisReference(), fieldName)),
+                    IsReadOnly: true
+                ));
+
+                // Constructor param: IEnumerable<T> items → _field = new List<T>(items)
+                var param = new Syntactic.Parameter(paramName, enumerableType);
+                ctorParams.Add(param);
+                ctorAssignments.Add(new Syntactic.Assignment(
+                    new Syntactic.Member(new Syntactic.ThisReference(), fieldName),
+                    new Syntactic.New(listType, [new Syntactic.Parameter(paramName)])));
+
+                // Generate CreateNavName(args) factory method on the source entity
+                AddCreateNavMethod(entity, rel, domain!, subscriberSubs, fieldName, methods);
             }
             else {
-                propType = targetType;
-                ctorParamType = targetType;
+                // Singular nav: property with private setter (constructor param)
+                props.Add(new Syntactic.PropertyDefinitionNode(
+                    pascalName, targetType,
+                    Getter: new Syntactic.PropertyGetterDefinitionNode(),
+                    Setter: new Syntactic.PropertySetterDefinitionNode(
+                        AccessModifier: AccessModifier.Private)
+                ));
+
+                var param = new Syntactic.Parameter(paramName, targetType);
+                ctorParams.Add(param);
+                ctorAssignments.Add(new Syntactic.Assignment(
+                    new Syntactic.Member(new Syntactic.ThisReference(), pascalName),
+                    new Syntactic.Parameter(paramName)));
             }
-
-            var paramName = ToCamelCase(pascalName);
-            ctorParams.Add(new Syntactic.Parameter(paramName, ctorParamType));
-            ctorAssignments.Add(new Syntactic.Assignment(
-                new Syntactic.Member(new Syntactic.ThisReference(), pascalName),
-                new Syntactic.Parameter(paramName)));
-
-            props.Add(new Syntactic.PropertyDefinitionNode(
-                pascalName, propType,
-                Getter: new Syntactic.PropertyGetterDefinitionNode(),
-                Setter: new Syntactic.PropertySetterDefinitionNode(
-                    AccessModifier: AccessModifier.Private)
-            ));
         }
 
         // ── Build post-transition notification nodes ──────────────
@@ -235,9 +299,13 @@ public sealed class DomainToCSharpExporter {
             catch (NotSupportedException) {
                 // Q3′ quantifiers (any/all/none/count) and other store-dependent
                 // expressions cannot be lowered to standalone C# methods yet.
+                // Generate a runtime exception so calling code fails loud.
                 body = new Syntactic.Block([
-                    new Syntactic.Comment(
-                        $"not yet lowerable: {policy.Name}")
+                    new Syntactic.ThrowStatement(
+                        new Syntactic.New(
+                            new Syntactic.NamedTypeReference("NotSupportedException"),
+                            new Syntactic.Constant(
+                                $"Policy '{policy.Name}' requires store-aware evaluation and cannot be compiled to standalone C#.")))
                 ]);
             }
             methods.Add(new Syntactic.MethodDefinitionNode(
@@ -381,7 +449,7 @@ public sealed class DomainToCSharpExporter {
             ));
         }
 
-        // ── Constructor ────────────────────────────────────────
+        // ── Private constructor + public static Create factory ─────
         List<Syntactic.ConstructorDefinitionNode>? ctors = null;
         if (ctorParams.Count > 0 || entity.Stages.Count > 0) {
             var bodyNodes = new List<Poly.Syntax.Node>();
@@ -395,14 +463,50 @@ public sealed class DomainToCSharpExporter {
                         entity.Stages[0].Name)));
             }
 
-            // Append subscription registrations
-            AddSubscriberRegistrationNodes(subscriberSubs, bodyNodes);
+            // InitializeSubscriptions is called as the last step so that all
+            // state (including collections passed from data-store materialization)
+            // is set before subscription wiring runs.
+            if (subscriberSubs is { Count: > 0 }) {
+                bodyNodes.Add(new Syntactic.Invoke(
+                    new Syntactic.Member(new Syntactic.ThisReference(), "InitializeSubscriptions")));
+            }
 
+            // Private constructor — only the static Create factory can construct
+            // instances. EntityFramework and other infrastructure can still
+            // materialize via Create or private-ctor reflection.
             ctors = [new Syntactic.ConstructorDefinitionNode(
                 Parameters: ctorParams,
                 Body: bodyNodes.Count > 0 ? new Syntactic.Block(bodyNodes) : null,
-                AccessModifier: AccessModifier.Public
+                AccessModifier: AccessModifier.Private
             )];
+
+            // public static EntityName Create(args...) => new EntityName(args...);
+            var createReturn = new Syntactic.Return(
+                new Syntactic.New(
+                    new Syntactic.NamedTypeReference(entity.Name),
+                    ctorParams.Select(p => new Syntactic.Parameter(p.Name)).ToArray()));
+            methods.Add(new Syntactic.MethodDefinitionNode(
+                "Create",
+                new Syntactic.NamedTypeReference(entity.Name),
+                Parameters: ctorParams,
+                Body: new Syntactic.Block([createReturn]),
+                IsStatic: true,
+                AccessModifier: AccessModifier.Public
+            ));
+        }
+
+        // ── InitializeSubscriptions — for post-load subscription wiring ──
+        if (subscriberSubs is { Count: > 0 }) {
+            var initBody = new List<Poly.Syntax.Node>();
+            AddSubscriberRegistrationNodes(subscriberSubs, initBody);
+            if (initBody.Count > 0) {
+                methods.Add(new Syntactic.MethodDefinitionNode(
+                    "InitializeSubscriptions",
+                    new Syntactic.TypeReference("void"),
+                    Body: new Syntactic.Block(initBody),
+                    AccessModifier: AccessModifier.Public
+                ));
+            }
         }
 
         typeDefs.Add(new Syntactic.TypeDefinitionNode(
@@ -460,6 +564,148 @@ public sealed class DomainToCSharpExporter {
                 }
             }
         }
+    }
+
+    /// <summary>
+    /// Generates a <c>Create{NavName}(args)</c> method on the source entity
+    /// that constructs the target entity, adds it to the collection field,
+    /// and wires subscription registration.
+    ///
+    /// The method parameters correspond to the target entity's constructor
+    /// parameters (regular properties + singular nav properties), minus
+    /// the back-reference to the source entity which is auto-wired as <c>this</c>.
+    ///
+    /// For DSL <c>create in loans { book: book }</c>, this produces:
+    /// <code>
+    /// public Loan CreateLoans(Book book, string status, ...)
+    /// {
+    ///     var loan = Loan.Create(book: book, borrower: this, status: status, ...);
+    ///     _loans.Add(loan);
+    ///     loan.RegisterPatronOverdueSubscriber(this);
+    ///     return loan;
+    /// }
+    /// </code>
+    /// </summary>
+    private static void AddCreateNavMethod(
+        Entity entity,
+        Relationship rel,
+        Domain domain,
+        List<SubscriptionInfo>? subscriberSubs,
+        string fieldName,
+        List<Syntactic.MethodDefinitionNode> methods) {
+
+        var pascalName = ToPascalCase(rel.Name);
+        var targetTypeName = rel.Target.TypeName;
+        var targetType = new Syntactic.NamedTypeReference(targetTypeName);
+        var targetEntity = domain.Types.OfType<Entity>()
+            .FirstOrDefault(e => string.Equals(e.Name, targetTypeName, StringComparison.Ordinal));
+        if (targetEntity is null) return;
+
+        var methodName = $"Create{pascalName}";
+
+        // Collect all target entity constructor-level properties:
+        // regular entity properties (minus those with DefaultValueConstraint)
+        // plus singular nav properties (one-to-one relationships to other entities)
+        var targetRelationships = domain.Relationships
+            .Where(r => string.Equals(r.Source.TypeName, targetTypeName, StringComparison.Ordinal)
+                     && r.Cardinality is not (RelationshipCardinality.OneToMany or RelationshipCardinality.ManyToMany))
+            .ToList();
+
+        var methodParams = new List<Syntactic.Parameter>();
+        var createArgs = new List<Poly.Syntax.Node>();
+
+        // Add regular properties without defaults
+        foreach (var prop in targetEntity.Properties) {
+            if (prop.Constraints.Any(c => c is DefaultValueConstraint)) continue;
+            var paramName = ToCamelCase(prop.Name);
+            var propRef = MapDomainTypeRef(prop.Type, domain);
+            methodParams.Add(new Syntactic.Parameter(paramName, propRef));
+            createArgs.Add(new Syntactic.Parameter(paramName));
+        }
+
+        // Add singular navigation properties (e.g. book: Book, borrower: Patron)
+        foreach (var trel in targetRelationships) {
+            // Skip the back-reference to the source entity (auto-wired as 'this')
+            if (string.Equals(trel.Target.TypeName, entity.Name, StringComparison.Ordinal)) continue;
+
+            var paramName = ToCamelCase(trel.Name);
+            var trgType = new Syntactic.NamedTypeReference(trel.Target.TypeName);
+            methodParams.Add(new Syntactic.Parameter(paramName, trgType));
+            createArgs.Add(new Syntactic.Parameter(paramName));
+        }
+
+        // Back-ref check — find the relationship where target points back to source
+        var backRefRel = targetRelationships
+            .FirstOrDefault(r => string.Equals(r.Target.TypeName, entity.Name, StringComparison.Ordinal));
+        // Auto-wire back-reference (borrower: Patron → this)
+        if (backRefRel is not null) {
+            createArgs.Add(new Syntactic.ThisReference());
+        }
+
+        // Fill remaining Target.Create() params with default/null for properties
+        // that have DefaultValueConstraint (they'll be set in the body)
+        foreach (var prop in targetEntity.Properties) {
+            var hasDefault = prop.Constraints.Any(c => c is DefaultValueConstraint);
+            if (!hasDefault) continue; // already handled above
+            createArgs.Add(DefaultValueForProp(prop, domain));
+        }
+
+        var bodyNodes = new List<Poly.Syntax.Node>();
+        var localName = ToCamelCase(targetTypeName);
+
+        // var loan = Loan.Create(book: book, borrower: this, ...);
+        bodyNodes.Add(new Syntactic.Variable(localName,
+            new Syntactic.Invoke(
+                new Syntactic.Member(targetType, "Create"),
+                [.. createArgs])));
+
+        // _loans.Add(loan);
+        bodyNodes.Add(new Syntactic.Invoke(
+            new Syntactic.Member(
+                new Syntactic.Member(new Syntactic.ThisReference(), fieldName), "Add"),
+            [new Syntactic.Variable(localName)]));
+
+        // Subscription registration: loan.RegisterPatronOverdueSubscriber(this)
+        if (subscriberSubs is { Count: > 0 }) {
+            foreach (var info in subscriberSubs) {
+                if (string.Equals(info.Relationship.Name, rel.Name, StringComparison.Ordinal)) {
+                    bodyNodes.Add(new Syntactic.Invoke(
+                        new Syntactic.Member(
+                            new Syntactic.Variable(localName),
+                            $"Register{info.SourceEntity.Name}{info.StageName}Subscriber"),
+                        [new Syntactic.ThisReference()]));
+                }
+            }
+        }
+
+        // return loan;
+        bodyNodes.Add(new Syntactic.Return(new Syntactic.Variable(localName)));
+
+        methods.Add(new Syntactic.MethodDefinitionNode(
+            methodName,
+            targetType,
+            Parameters: methodParams.Count > 0 ? methodParams : null,
+            Body: new Syntactic.Block(bodyNodes),
+            AccessModifier: AccessModifier.Public
+        ));
+    }
+
+    /// <summary>Returns a default-value Syntax node for a property (null, 0, false, etc.).</summary>
+    private static Poly.Syntax.Node DefaultValueForProp(Property prop, Domain domain) {
+        var defaultValue = prop.Constraints.OfType<DefaultValueConstraint>().FirstOrDefault();
+        if (defaultValue is not null) {
+            var runtimeExpr = EffectLoweringPass.LowerDefaultExpression(defaultValue.Expression);
+            if (runtimeExpr is not null) return runtimeExpr;
+            if (defaultValue.Expression is Poly.DomainModeling.Literal lit)
+                return new Syntactic.Constant(lit.Value);
+            if (defaultValue.Expression is Poly.DomainModeling.PropertyAccess pa) {
+                var enumTypes = domain.Types.OfType<EnumType>()
+                    .ToDictionary(e => e.Name, StringComparer.Ordinal);
+                if (enumTypes.TryGetValue(prop.Type.TypeName, out var enumType))
+                    return new Syntactic.Member(new Syntactic.NamedTypeReference(enumType.Name), pa.Name);
+            }
+        }
+        return new Syntactic.Constant(null);
     }
 
     // ── Action method builder ───────────────────────────────────
@@ -632,10 +878,29 @@ public sealed class DomainToCSharpExporter {
 
     // ── String helpers ──────────────────────────────────────────
 
-    internal static string ToCamelCase(string name) =>
-        string.IsNullOrEmpty(name) || char.IsLower(name[0])
-            ? name
-            : char.ToLowerInvariant(name[0]) + name.Substring(1);
+    internal static string ToCamelCase(string name) {
+        if (string.IsNullOrEmpty(name) || char.IsLower(name[0]))
+            return name;
+
+        // Handle acronyms: find the leading run of consecutive uppercase letters.
+        // If the run spans the whole word, lowercase all (e.g. "ISBN" → "isbn").
+        // If prefix is > 1 followed by lower, lowercase the entire prefix
+        // (e.g. "XMLParser" → "xmlParser", "ABig" → "abig").
+        // If only first char is uppercase, just lowercase it
+        // (e.g. "Name" → "name").
+        int upperCount = 0;
+        for (int i = 0; i < name.Length && char.IsUpper(name[i]); i++)
+            upperCount++;
+
+        if (upperCount <= 1)
+            return char.ToLowerInvariant(name[0]) + name.Substring(1);
+
+        // Two+ leading uppercase chars — lowercase the entire prefix run
+        // so acronyms produce natural camelCase: "ISBN" → "isbn",
+        // "XMLParser" → "xmlParser".
+        return name.Substring(0, upperCount).ToLowerInvariant()
+             + name.Substring(upperCount);
+    }
 
     internal static string ToPascalCase(string name) =>
         string.IsNullOrEmpty(name) || char.IsUpper(name[0])

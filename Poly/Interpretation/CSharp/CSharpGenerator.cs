@@ -213,7 +213,7 @@ public sealed class CSharpGenerator {
         sb.AppendLine(")");
 
         if (_analysisResult == null || !_analysisResult.CanElide(ifStmt.ThenBranch)) {
-            WriteStatement(sb, ifStmt.ThenBranch, ifStmt.ThenBranch is Block ? indent : indent + 1);
+            WriteIfBody(sb, ifStmt.ThenBranch, indent);
         }
         else {
             Indent(sb, indent + 1);
@@ -222,11 +222,40 @@ public sealed class CSharpGenerator {
 
         if (ifStmt.ElseBranch != null) {
             if (_analysisResult == null || !_analysisResult.CanElide(ifStmt.ElseBranch)) {
-                Indent(sb, indent);
-                sb.AppendLine("else");
-                WriteStatement(sb, ifStmt.ElseBranch, ifStmt.ElseBranch is Block ? indent : indent + 1);
+                AppendElse(sb, ifStmt.ElseBranch, indent);
             }
-            // else omit dead else entirely (or could emit else { } but minimal skip)
+        }
+    }
+
+    /// <summary>Emits the body of an if/else-if branch, always wrapped in braces.</summary>
+    private void WriteIfBody(StringBuilder sb, Node body, int indent) {
+        if (body is Block block) {
+            WriteStatement(sb, block, indent);
+        }
+        else {
+            Indent(sb, indent);
+            sb.AppendLine("{");
+            WriteStatement(sb, body, indent + 1);
+            Indent(sb, indent);
+            sb.AppendLine("}");
+        }
+    }
+
+    /// <summary>Emits an else clause, handling else-if chains recursively.</summary>
+    private void AppendElse(StringBuilder sb, Node elseBranch, int indent) {
+        if (elseBranch is IfStatement elseIf) {
+            Indent(sb, indent);
+            sb.Append("else if (");
+            WriteExpression(sb, elseIf.Condition);
+            sb.AppendLine(")");
+            WriteIfBody(sb, elseIf.ThenBranch, indent);
+            if (elseIf.ElseBranch != null)
+                AppendElse(sb, elseIf.ElseBranch, indent);
+        }
+        else {
+            Indent(sb, indent);
+            sb.AppendLine("else");
+            WriteIfBody(sb, elseBranch, indent);
         }
     }
 

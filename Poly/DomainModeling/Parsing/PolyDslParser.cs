@@ -1091,13 +1091,9 @@ public sealed class PolyDslParser {
             case TokenKind.Equals:
                 Advance();
                 Expect(TokenKind.LParen);
-                var eqValue = ParseExpression();
+                var dvExpr = ParseExpression();
                 Expect(TokenKind.RParen);
-                if (eqValue is Literal l)
-                    return new EqualityConstraint(l.Value!);
-                if (eqValue is PropertyAccess pa)
-                    return new EqualityConstraint(pa.Name); // enum member name
-                throw Error("default() requires a literal value or enum member name.");
+                return new DefaultValueConstraint(dvExpr);
 
             case TokenKind.Enum:
                 throw Error("Inline enum(...) constraints are no longer supported. " +

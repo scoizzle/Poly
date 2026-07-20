@@ -35,12 +35,4 @@
         <InternalsVisibleTo Include="Poly.Tests" />
         <InternalsVisibleTo Include="Poly.Mcp" />
     </ItemGroup>
-
-    <ItemGroup>
-
-    </ItemGroup>
-
-    <ItemGroup>
-      <PackageReference Include="System.Numerics.Tensors" Version="10.0.0" />
-    </ItemGroup>
 </Project>

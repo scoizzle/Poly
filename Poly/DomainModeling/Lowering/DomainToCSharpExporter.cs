@@ -91,7 +91,7 @@ public sealed class DomainToCSharpExporter {
             var subscriberSubs = subscriptionsBySubscriber.GetValueOrDefault(entity.Name);
 
             result.AddRange(BuildTypeDefsForEntity(
-                entity, domainRelationships, entityLookup, analysis,
+                entity, domain, domainRelationships, entityLookup, analysis,
                 targetSubs, subscriberSubs));
         }
 
@@ -102,6 +102,7 @@ public sealed class DomainToCSharpExporter {
 
     internal IReadOnlyList<Syntactic.TypeDefinitionNode> BuildTypeDefsForEntity(
         Entity entity,
+        Domain domain,
         IReadOnlyList<Relationship> domainRelationships,
         IReadOnlyDictionary<string, Entity> entityLookup,
         AnalysisResult analysis,
@@ -235,10 +236,10 @@ public sealed class DomainToCSharpExporter {
 
         var actionsToEmit = baseTypeName is not null ? entity.Actions : effectiveActions;
         foreach (var action in actionsToEmit)
-            AddActionMethod(entity, action, methods, stageEnumTypeName, postTransitionNodes);
+            AddActionMethod(entity, action, methods, stageEnumTypeName, postTransitionNodes, domain: domain);
         foreach (var stage in (baseTypeName is not null ? entity.Stages : effectiveStages))
             foreach (var action in stage.Actions)
-                AddActionMethod(entity, action, methods, stageEnumTypeName, postTransitionNodes);
+                AddActionMethod(entity, action, methods, stageEnumTypeName, postTransitionNodes, stage.Name, domain);
 
         // ── Policies as bool methods (own only for inheritance) ───
         var policiesToEmit = baseTypeName is not null ? entity.Policies : effectivePolicies;
@@ -528,11 +529,12 @@ public sealed class DomainToCSharpExporter {
 
     private static void AddActionMethod(Entity entity, Poly.DomainModeling.Action action,
         List<Syntactic.MethodDefinitionNode> methods, string? stageEnumTypeName = null,
-        IReadOnlyDictionary<string, IReadOnlyList<Node>>? postTransitionNodes = null) {
+        IReadOnlyDictionary<string, IReadOnlyList<Node>>? postTransitionNodes = null,
+        string? sourceStageName = null, Domain? domain = null) {
         var paramNames = new HashSet<string>(
             action.Parameters.Select(p => p.Name), StringComparer.Ordinal);
         var effectsBody = LowerActionToMethodBody(entity, action, paramNames, stageEnumTypeName,
-            postTransitionNodes);
+            postTransitionNodes, sourceStageName, domain);
 
         // Build the full method body: require guards first, then effects
         var body = BuildActionBodyWithGuards(action, entity, effectsBody);
@@ -602,7 +604,8 @@ public sealed class DomainToCSharpExporter {
     internal static Poly.Syntax.Node? LowerActionToMethodBody(
         Entity entity, Poly.DomainModeling.Action action,
         HashSet<string>? paramNames = null, string? stageEnumTypeName = null,
-        IReadOnlyDictionary<string, IReadOnlyList<Node>>? postTransitionNodes = null) {
+        IReadOnlyDictionary<string, IReadOnlyList<Node>>? postTransitionNodes = null,
+        string? sourceStageName = null, Domain? domain = null) {
         if (action.Effects.Count == 0) return null;
         var context = new LoweringContext(
             new Syntactic.Parameter("entity", new Syntactic.TypeReference(entity.Name)),
@@ -610,7 +613,9 @@ public sealed class DomainToCSharpExporter {
             ActionParameterNames: paramNames,
             LowerStageTransitions: true,
             StageEnumTypeName: stageEnumTypeName,
-            PostTransitionNodes: postTransitionNodes
+            PostTransitionNodes: postTransitionNodes,
+            SourceStageName: sourceStageName,
+            Domain: domain
         );
         var effectPass = new EffectLoweringPass(entity, context);
         var composite = new CompositeEffect(action.Effects);

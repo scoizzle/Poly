@@ -5,11 +5,12 @@
 //   • Entities with rich constraints (required, unique, range, length, pattern,
 //     equals, enum)
 //   • Lifecycle stages with entry/exit effects and actions
-//   • Policies with arithmetic, collection quantifiers (count), nav reads
-//   • Actions with parameters, require gates, invoke, create, conditional
-//   • N1 navigation properties (one-to-many, one-to-one)
-//   • Stage subscriptions (when)
+//   • Policies with arithmetic, collection quantifiers, nav reads
+//   • Actions with parameters, require gates, invoke, create, create in,
+//     conditional, delete
+//   • Cross-entity notifications via stage subscriptions (when)
 //   • Entity inheritance
+//   • N1 navigation properties (one-to-many, one-to-one)
 // =============================================================================
 
 domain Library
@@ -36,6 +37,7 @@ Book: entity {
   // ── On-shelf: available for checkout ───────────────────────────────────────
   OnShelf: stage {
     CheckOut: action (memberId: Text) {
+      invoke ValidateEligibility
       assign CheckedOutTo to memberId
       transition to CheckedOut
     }
@@ -63,6 +65,52 @@ Book: entity {
 
   // ── Discarded: removed from circulation (terminal) ─────────────────────────
   Discarded: stage { }
+
+  // ── Entity-level actions ───────────────────────────────────────────────────
+  ValidateEligibility: action {
+    // Validation logic (no-op stub — policy gates would apply in practice)
+  }
+}
+
+
+// =============================================================================
+// LoanRecord — tracks individual borrowing events (created by CheckOut)
+// =============================================================================
+
+LoanRecord: entity {
+  BookTitle: Text required
+  MemberName: Text required
+  CheckedOutAt: DateTime
+  ReturnedAt: DateTime
+
+  Active: stage {
+    Complete: action {
+      transition to Completed
+    }
+  }
+
+  Completed: stage { }
+}
+
+
+// =============================================================================
+// Reservation — hold request for a currently checked-out book
+// =============================================================================
+
+Reservation: entity {
+  member: Member
+  book: Book
+  PlacedAt: DateTime
+  FulfilledAt: DateTime
+
+  Pending: stage {
+    Fulfill: action { transition to Fulfilled }
+    Cancel: action { transition to Cancelled }
+  }
+
+  Fulfilled: stage { }
+
+  Cancelled: stage { }
 }
 
 
@@ -86,8 +134,9 @@ Member: entity {
   AtLimit: policy { CurrentBorrowCount >= MaxItems }
 
   // ── Navigation properties ──────────────────────────────────────────────────
-  books: many Book      // currently checked-out books
-  fines: many Fine      // outstanding or historical fines
+  books: many Book              // currently checked-out books
+  fines: many Fine              // outstanding or historical fines
+  reservations: many Reservation
 
   // ── Active — normal operating state ────────────────────────────────────────
   Active: stage {
@@ -151,7 +200,7 @@ Fine: entity {
   Waived: Boolean
 
   // The member this fine belongs to
-  member: Member
+  patron: Member
 
   // ── Unpaid — active penalty ────────────────────────────────────────────────
   Unpaid: stage {
@@ -169,7 +218,7 @@ Fine: entity {
       assign Amount to 0
       assign Paid to true
       assign Waived to true
-      transition to Paid
+      delete                        // soft-delete: removes fine from consideration
     }
   }
 

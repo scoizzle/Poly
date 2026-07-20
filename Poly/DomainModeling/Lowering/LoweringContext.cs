@@ -35,6 +35,11 @@ namespace Poly.DomainModeling.Lowering;
 /// <c>CurrentStage</c> assignment when lowering a transition to that stage.
 /// Used for cross-entity subscription notifications in C# codegen mode.
 /// </param>
+/// <param name="SourceStageName">
+/// Optional name of the source stage from which a transition originates.
+/// When set, exit effects of the source stage are emitted before the
+/// target stage's entry effects.
+/// </param>
 public sealed record LoweringContext(
     Node Subject,
     IReadOnlyDictionary<string, Node>? Parameters = null,
@@ -43,5 +48,6 @@ public sealed record LoweringContext(
     bool LowerStageTransitions = false,
     Domain? Domain = null,
     string? StageEnumTypeName = null,
-    IReadOnlyDictionary<string, IReadOnlyList<Node>>? PostTransitionNodes = null
+    IReadOnlyDictionary<string, IReadOnlyList<Node>>? PostTransitionNodes = null,
+    string? SourceStageName = null
 );

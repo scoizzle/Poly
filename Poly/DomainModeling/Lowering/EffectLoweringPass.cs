@@ -23,6 +23,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     private readonly bool _lowerStageTransitions;
     private readonly string? _stageEnumTypeName;
     private readonly IReadOnlyDictionary<string, IReadOnlyList<Node>>? _postTransitionNodes;
+    private readonly string? _sourceStageName;
 
     public EffectLoweringPass(Entity entity, Node subject)
         : this(entity, new LoweringContext(subject)) { }
@@ -34,6 +35,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         _lowerStageTransitions = context.LowerStageTransitions;
         _stageEnumTypeName = context.StageEnumTypeName;
         _postTransitionNodes = context.PostTransitionNodes;
+        _sourceStageName = context.SourceStageName;
         _expressionPass = new DomainExpressionLoweringPass(context);
         Subject = context.UseThisReference && context.Subject is Parameter { Name: "entity" }
             ? new ThisReference()
@@ -60,13 +62,27 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
 
     /// <summary>
     /// Lowers a stage transition. When <see cref="_lowerStageTransitions"/> is true,
-    /// emits the target stage's entry effects followed by a CurrentStage assignment.
+    /// emits the source stage's exit effects (if known), then the target stage's entry
+    /// effects, then a CurrentStage assignment, then post-transition notification nodes.
     /// Otherwise returns null so the runtime calls <see cref="DomainEntityInstance.TransitionStage"/>.
     /// </summary>
     protected override Node? StageTransition(StageTransitionEffect t) {
         if (!_lowerStageTransitions) return null;
 
         var nodes = new List<Node>();
+
+        // Include exit effects from the source stage (if known)
+        if (_sourceStageName is not null) {
+            var sourceStage = _entity.Stages.FirstOrDefault(s =>
+                string.Equals(s.Name, _sourceStageName, StringComparison.Ordinal));
+            if (sourceStage is not null) {
+                foreach (var exitEffect in sourceStage.OnExitEffects) {
+                    var lowered = Route(exitEffect);
+                    if (lowered is not null)
+                        nodes.Add(lowered);
+                }
+            }
+        }
 
         // Include entry effects from the target stage
         var targetStage = _entity.Stages.FirstOrDefault(s =>

@@ -88,7 +88,7 @@ app.MapGet("/api/patrons/{email}/loans", async (string email, LibraryDbContext d
     return Results.Ok(parent.Loans);
 });
 
-app.MapGet("/api/patrons/{email}/loans/{id}", async (string email, string id, LibraryDbContext db) => {
+app.MapGet("/api/patrons/{email}/loans/{id}", async (string email, int id, LibraryDbContext db) => {
     var parent = await db.Patrons.FindAsync(email);
     if (parent is null) return Results.NotFound(new { error = "Patron not found" });
     await db.Entry(parent).Collection(e => e.Loans).LoadAsync();
@@ -105,7 +105,7 @@ app.MapGet("/api/patrons/{email}/fines", async (string email, LibraryDbContext d
     return Results.Ok(parent.Fines);
 });
 
-app.MapGet("/api/patrons/{email}/fines/{id}", async (string email, string id, LibraryDbContext db) => {
+app.MapGet("/api/patrons/{email}/fines/{id}", async (string email, int id, LibraryDbContext db) => {
     var parent = await db.Patrons.FindAsync(email);
     if (parent is null) return Results.NotFound(new { error = "Patron not found" });
     await db.Entry(parent).Collection(e => e.Fines).LoadAsync();
@@ -211,8 +211,10 @@ app.MapPost("/api/patrons/{email}/loans/{id}/renew", async (string email, int id
     var entity = await db.Loans.FindAsync(id);
     if (entity is null) return Results.NotFound(new { error = "Loan not found" });
 
-    // Load parent collections for action context
+    // Verify child belongs to parent
     await db.Entry(parentEntity).Collection(e => e.Loans).LoadAsync();
+    if (!parentEntity.Loans.Any(e => e == entity))
+        return Results.NotFound(new { error = "Loan not found for this Patron" });
 
     try {
         var result = entity.Renew();
@@ -236,8 +238,10 @@ app.MapPost("/api/patrons/{email}/loans/{id}/return", async (string email, int i
     var entity = await db.Loans.FindAsync(id);
     if (entity is null) return Results.NotFound(new { error = "Loan not found" });
 
-    // Load parent collections for action context
+    // Verify child belongs to parent
     await db.Entry(parentEntity).Collection(e => e.Loans).LoadAsync();
+    if (!parentEntity.Loans.Any(e => e == entity))
+        return Results.NotFound(new { error = "Loan not found for this Patron" });
 
     try {
         var result = entity.Return();
@@ -261,8 +265,10 @@ app.MapPost("/api/patrons/{email}/fines/{id}/pay", async (string email, int id, 
     var entity = await db.Fines.FindAsync(id);
     if (entity is null) return Results.NotFound(new { error = "Fine not found" });
 
-    // Load parent collections for action context
+    // Verify child belongs to parent
     await db.Entry(parentEntity).Collection(e => e.Fines).LoadAsync();
+    if (!parentEntity.Fines.Any(e => e == entity))
+        return Results.NotFound(new { error = "Fine not found for this Patron" });
 
     try {
         var result = entity.Pay();
@@ -286,8 +292,10 @@ app.MapPost("/api/patrons/{email}/fines/{id}/waive", async (string email, int id
     var entity = await db.Fines.FindAsync(id);
     if (entity is null) return Results.NotFound(new { error = "Fine not found" });
 
-    // Load parent collections for action context
+    // Verify child belongs to parent
     await db.Entry(parentEntity).Collection(e => e.Fines).LoadAsync();
+    if (!parentEntity.Fines.Any(e => e == entity))
+        return Results.NotFound(new { error = "Fine not found for this Patron" });
 
     try {
         var result = entity.Waive();
@@ -341,11 +349,11 @@ static async Task SeedAsync(LibraryDbContext db) {
     if (bookResult.IsSuccess)
         db.Add(bookResult.Value);
 
-    var patronResult = Patron.Create(1, "Sample", 1, "Sample", 1, Enumerable.Empty<Loan>(), Enumerable.Empty<Fine>());
+    var patronResult = Patron.Create(1, "user@test.com", 1, "Sample", 1, Enumerable.Empty<Loan>(), Enumerable.Empty<Fine>());
     if (patronResult.IsSuccess)
         db.Add(patronResult.Value);
 
-    var premiumPatronResult = PremiumPatron.Create("Sample", "Sample", false, 1);
+    var premiumPatronResult = PremiumPatron.Create("user@test.com", "Sample", false, 1);
     if (premiumPatronResult.IsSuccess)
         db.Add(premiumPatronResult.Value);
 

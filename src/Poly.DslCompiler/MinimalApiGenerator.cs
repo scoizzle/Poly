@@ -120,18 +120,46 @@ public sealed class MinimalApiGenerator {
                 sb.AppendLine();
 
                 // GET by key: /api/parents/{parentKey}/{childPlural}/{childKey}
-                sb.AppendLine($"app.MapGet(\"{detailRoute}\", async ({parentKeyType} {parentKey}, string {childKey}, {dbContextName} db) =>");
+                // Filter by both parent (via back-reference) and child's key.
+                var childKeyType = childUnique is not null ? "string" : "int";
+                var backRefRel = GetBackReferenceRelationship(entity, parentEntity);
+                var backRefName = backRefRel is not null ? Pascalize(backRefRel.Name) : null;
+                sb.AppendLine($"app.MapGet(\"{detailRoute}\", async ({parentKeyType} {parentKey}, {childKeyType} {childKey}, {dbContextName} db) =>");
                 sb.AppendLine("{");
-                sb.AppendLine($"    var parent = await db.{Pluralize(parentEntity.Name)}.FindAsync({parentKey});");
-                sb.AppendLine($"    if (parent is null) return Results.NotFound(new {{ error = \"{parentEntity.Name} not found\" }});");
-                sb.AppendLine($"    await db.Entry(parent).Collection(e => e.{Pascalize(rel.Name)}).LoadAsync();");
-                sb.AppendLine($"    var child = parent.{Pascalize(rel.Name)}.FirstOrDefault();");
+                if (childUnique is not null && backRefRel is not null && parentProp is not null) {
+                    // Natural-key child — query with Where + FirstOrDefaultAsync
+                    sb.AppendLine($"    var child = await db.{Pluralize(entity.Name)}");
+                    sb.AppendLine($"        .Where(e => e.{backRefName}.{parentProp.Name} == {parentKey})");
+                    sb.AppendLine($"        .FirstOrDefaultAsync(e => e.{childUnique.Name} == {childKey});");
+                }
+                else if (backRefRel is not null && parentProp is not null) {
+                    // Shadow-key child — can't use FirstOrDefault on shadow key in LINQ
+                    // Load parent collection and check membership via back-ref
+                    sb.AppendLine($"    var parent = await db.{Pluralize(parentEntity.Name)}.FindAsync({parentKey});");
+                    sb.AppendLine($"    if (parent is null) return Results.NotFound(new {{ error = \"{parentEntity.Name} not found\" }});");
+                    sb.AppendLine($"    await db.Entry(parent).Collection(e => e.{Pascalize(rel.Name)}).LoadAsync();");
+                    sb.AppendLine($"    var child = parent.{Pascalize(rel.Name)}.FirstOrDefault();");
+                }
+                else {
+                    sb.AppendLine($"    var child = await db.{Pluralize(entity.Name)}.FindAsync({childKey});");
+                }
                 sb.AppendLine($"    if (child is null) return Results.NotFound(new {{ error = \"{entity.Name} not found\" }});");
                 sb.AppendLine($"    return Results.Ok(child);");
                 sb.AppendLine("});");
                 sb.AppendLine();
             }
         }
+    }
+
+    /// <summary>
+    /// Finds the singular navigation from a child entity back to its parent
+    /// (e.g. Loan.borrower → Patron). Returns null if no back-reference exists.
+    /// </summary>
+    private Relationship? GetBackReferenceRelationship(Entity child, Entity parent) {
+        return _domain.Relationships.FirstOrDefault(r =>
+            string.Equals(r.Source.TypeName, child.Name, StringComparison.Ordinal) &&
+            string.Equals(r.Target.TypeName, parent.Name, StringComparison.Ordinal) &&
+            r.Cardinality is not (RelationshipCardinality.OneToMany or RelationshipCardinality.ManyToMany));
     }
 
     private void AppendEntityCrud(StringBuilder sb, Entity entity, string dbContextName) {
@@ -325,8 +353,10 @@ public sealed class MinimalApiGenerator {
             sb.AppendLine($"    var entity = {childLookup};");
             sb.AppendLine($"    if (entity is null) return Results.NotFound(new {{ error = \"{entity.Name} not found\" }});");
             sb.AppendLine();
-            sb.AppendLine($"    // Load parent collections for action context");
+            sb.AppendLine($"    // Verify child belongs to parent");
             sb.AppendLine($"    await db.Entry(parentEntity).Collection(e => e.{Pascalize(rel.Name)}).LoadAsync();");
+            sb.AppendLine($"    if (!parentEntity.{Pascalize(rel.Name)}.Any(e => e == entity))");
+            sb.AppendLine($"        return Results.NotFound(new {{ error = \"{entity.Name} not found for this {parentEntity.Name}\" }});");
         }
         else {
             // Root entity: direct action route
@@ -629,6 +659,17 @@ public sealed class MinimalApiGenerator {
     private string GetSampleValue(Entity entity, Property prop) {
         if (prop.Constraints.Any(c => c is DefaultValueConstraint))
             return "default";
+
+        // Common property name conventions for better seed data
+        var propNameLower = prop.Name.ToLowerInvariant();
+        if (propNameLower == "email" || propNameLower == "emailaddress") {
+            var length = prop.Constraints.OfType<LengthConstraint>().FirstOrDefault();
+            if (length is not null && length.MinLength > 0) {
+                var localPart = length.MinLength > 5 ? new string('x', length.MinLength - 4) : "user";
+                return $"\"{localPart}@test.com\"";
+            }
+            return "\"user@test.com\"";
+        }
 
         // Check for RangeConstraint to generate valid seed values
         var range = prop.Constraints.OfType<RangeConstraint>().FirstOrDefault();

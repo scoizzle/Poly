@@ -19,6 +19,12 @@ namespace Poly.DomainModeling.Parsing;
 public sealed class DomainDslPrinter {
     private readonly StringBuilder _sb = new();
     private IReadOnlyList<Relationship> _relationships = [];
+    private readonly AnnotationRegistry? _annotations;
+
+    /// <summary>Creates a printer with an optional annotation registry for facet printing.</summary>
+    public DomainDslPrinter(AnnotationRegistry? annotations = null) {
+        _annotations = annotations;
+    }
 
     /// <summary>
     /// Prints the domain to .poly text.
@@ -62,7 +68,15 @@ public sealed class DomainDslPrinter {
     }
 
     private void PrintEntity(Entity entity) {
-        _sb.AppendLine($"{entity.Name}: entity {{");
+        _sb.Append(entity.Name);
+        _sb.Append(": entity");
+
+        foreach (var facet in entity.Facets) {
+            _sb.Append(' ');
+            _sb.Append(PrintFacet(facet));
+        }
+
+        _sb.AppendLine(" {");
 
         // Properties
         foreach (var prop in entity.Properties) {
@@ -75,6 +89,12 @@ public sealed class DomainDslPrinter {
                 _sb.Append(' ');
                 _sb.Append(PrintConstraint(c));
             }
+
+            foreach (var facet in prop.Facets) {
+                _sb.Append(' ');
+                _sb.Append(PrintFacet(facet, prop.Name));
+            }
+
             _sb.AppendLine();
         }
 
@@ -248,6 +268,21 @@ public sealed class DomainDslPrinter {
         _sb.Append(": policy { ");
         _sb.Append(PrintExpression(policy.Expression));
         _sb.AppendLine(" }");
+    }
+
+    private string PrintFacet(Facet facet, string? propertyName = null) {
+        var text = _annotations?.TryPrint(facet);
+        if (text is not null)
+            return text;
+
+        var location = propertyName is null ? "" : $" on property '{propertyName}'";
+        if (facet is Annotation ann) {
+            throw new FormatException(
+                $"Cannot print annotation '{ann.Name}'{location} — no pack registered for this keyword.");
+        }
+
+        throw new FormatException(
+            $"Cannot print facet of type '{facet.GetType().Name}'{location} — no pack registered for it.");
     }
 
     private void PrintEffect(Effect effect, string indent) {

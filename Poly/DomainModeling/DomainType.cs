@@ -13,5 +13,8 @@ public abstract record DomainType(
     IReadOnlyList<Property> Properties,
     IReadOnlyList<Constraint> Constraints
 ) : DomainMember(Name) {
-    public override IEnumerable<Node?> Children => [.. Properties, .. Constraints];
+    /// <summary>Type-level facets (table, schema, …).</summary>
+    public IReadOnlyList<Facet> Facets { get; init; } = [];
+
+    public override IEnumerable<Node?> Children => [.. Properties, .. Constraints, .. Facets];
 }

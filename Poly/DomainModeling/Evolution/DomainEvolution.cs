@@ -361,6 +361,16 @@ public sealed class EvolutionBuilder {
     public EvolutionBuilder RemoveConstraintFromDomainType(string typeName, Constraint constraint) =>
         Apply(new RemoveConstraintFromDomainTypeChange(typeName, constraint));
 
+    // ── Facets ──────────────────────────────────────────────────────────────
+
+    /// <summary>Adds a facet to a property on an entity.</summary>
+    public EvolutionBuilder AddFacetToProperty(string entityName, string propertyName, Facet facet) =>
+        Apply(new AddFacetToPropertyChange(entityName, propertyName, facet));
+
+    /// <summary>Adds a facet to a DomainType (Entity, ValueType, PrimitiveType, EnumType).</summary>
+    public EvolutionBuilder AddFacetToDomainType(string typeName, Facet facet) =>
+        Apply(new AddFacetToDomainTypeChange(typeName, facet));
+
     public EvolutionBuilder ChangePropertyType(string entityName, string propertyName, DomainTypeReference newType) =>
         Apply(new ChangePropertyTypeChange(entityName, propertyName, newType));
 

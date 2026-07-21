@@ -8,5 +8,8 @@ public sealed record Property(
     DomainTypeReference Type,
     IReadOnlyList<Constraint> Constraints
 ) : DomainMember(Name) {
-    public sealed override IEnumerable<Node?> Children => [.. Constraints];
+    /// <summary>Property-level facets (column, json, pii, …).</summary>
+    public IReadOnlyList<Facet> Facets { get; init; } = [];
+
+    public sealed override IEnumerable<Node?> Children => [.. Constraints, .. Facets];
 }

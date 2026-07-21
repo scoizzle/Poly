@@ -45,6 +45,9 @@ public sealed class PolyDslParser {
     // Q1′′′.5 / Q1'''''.2: Prevents recursive `Rel where ...` parsing inside a where body.
     private bool _inWhereBody;
 
+    // Packs / annotation support
+    private readonly DomainAuthoringContext? _authoringContext;
+
     private readonly record struct PendingRequire(
         string ActionName,
         string? StageName,
@@ -61,6 +64,15 @@ public sealed class PolyDslParser {
     public PolyDslParser(string text) {
         _tokenizer = new PolyDslTokenizer(text);
         _current = _tokenizer.Next();
+    }
+
+    /// <summary>
+    /// Creates a parser with an optional <see cref="DomainAuthoringContext"/> for pack-aware parsing.
+    /// When a context is provided, its registered <see cref="IAnnotationSyntax"/> handlers
+    /// are consulted for property-tail and entity-header annotations.
+    /// </summary>
+    public PolyDslParser(string text, DomainAuthoringContext? context) : this(text) {
+        _authoringContext = context;
     }
 
     /// <summary>
@@ -134,6 +146,25 @@ public sealed class PolyDslParser {
         _entityNames.Add(entityName);
         changes.Add(new AddEntityChange(entityName, []));
 
+        // ── Entity header facets (pack-registered annotations) ──
+        while (_current.Kind == TokenKind.Identifier) {
+            var keyword = _current.Text;
+            if (_authoringContext?.Annotations.CanAccept(keyword) == true) {
+                Advance();
+                changes.Add(new AddFacetToDomainTypeChange(entityName, ParseAnnotation(keyword)));
+                continue;
+            }
+
+            // Fail closed: bare keyword(…) before '{' is an unregistered annotation, not a body.
+            if (PeekIs(TokenKind.LParen)) {
+                throw Error(
+                    $"Unknown or unregistered annotation '{keyword}'. " +
+                    "Enable a pack that registers this keyword, or remove the annotation.");
+            }
+
+            break;
+        }
+
         Expect(TokenKind.LBrace);
 
         EnsurePrimitivesOnce(changes);
@@ -181,16 +212,12 @@ public sealed class PolyDslParser {
                     ParseNavLine(name);
                 }
                 else if (_current.Kind == TokenKind.Identifier && _enumTypeNames.Contains(_current.Text)) {
-                    // Typed property referencing an enum type, with optional constraints
+                    // Typed property referencing an enum type, with optional constraints/facets
                     var typeName = ExpectIdentifier(TokenKind.Identifier, "enum type name");
-                    var prop = new Property(name, new DomainTypeReference(typeName), []);
-                    changes.Add(new AddPropertyToEntityChange(_currentEntityName, prop));
-                    // Parse constraints (default, etc.)
-                    while (IsConstraint(_current.Kind)) {
-                        var constraint = ParseConstraint();
-                        if (constraint is not null)
-                            changes.Add(new AddConstraintToPropertyChange(_currentEntityName, name, constraint));
-                    }
+                    TrackPropertyName(_currentEntityName, name);
+                    changes.Add(new AddPropertyToEntityChange(_currentEntityName,
+                        new Property(name, new DomainTypeReference(typeName), [])));
+                    ParsePropertyTail(name, changes);
                 }
                 else if (IsPrimitiveType(_current.Kind)) {
                     ParseProperty(name, _current.Kind, changes);
@@ -254,12 +281,7 @@ public sealed class PolyDslParser {
     private void ParseProperty(string name, TokenKind typeKind, List<DomainChange> changes) {
         Advance(); // consume type
 
-        // Track property name for collision detection with navs
-        if (!_entityPropertyNames.TryGetValue(_currentEntityName, out var props)) {
-            props = new HashSet<string>(StringComparer.Ordinal);
-            _entityPropertyNames[_currentEntityName] = props;
-        }
-        props.Add(name);
+        TrackPropertyName(_currentEntityName, name);
 
         var typeName = typeKind switch {
             TokenKind.Text => "Text",
@@ -273,14 +295,68 @@ public sealed class PolyDslParser {
         changes.Add(new AddPropertyToEntityChange(_currentEntityName,
             new Property(name, new DomainTypeReference(typeName), [])));
 
-        // Parse constraints
-        var property = new Property(name, new DomainTypeReference(typeName), []);
+        ParsePropertyTail(name, changes);
+    }
+
+    private void TrackPropertyName(string entityName, string propertyName) {
+        if (!_entityPropertyNames.TryGetValue(entityName, out var props)) {
+            props = new HashSet<string>(StringComparer.Ordinal);
+            _entityPropertyNames[entityName] = props;
+        }
+        props.Add(propertyName);
+    }
+
+    /// <summary>
+    /// Parses optional constraints then pack annotations on a property tail.
+    /// Registered annotations are consumed here. Unregistered annotation-shaped
+    /// <c>keyword(literal…)</c> forms fail closed. Legacy <c>Name(params): action</c>
+    /// (identifier args / trailing <c>:</c>) is left for the entity body loop.
+    /// </summary>
+    private void ParsePropertyTail(string propertyName, List<DomainChange> changes) {
         while (IsConstraint(_current.Kind)) {
             var constraint = ParseConstraint();
             if (constraint is not null) {
-                changes.Add(new AddConstraintToPropertyChange(_currentEntityName, name, constraint));
+                changes.Add(new AddConstraintToPropertyChange(_currentEntityName, propertyName, constraint));
             }
         }
+
+        while (_current.Kind == TokenKind.Identifier && PeekIs(TokenKind.LParen)) {
+            var keyword = _current.Text;
+            if (_authoringContext?.Annotations.CanAccept(keyword) == true) {
+                Advance();
+                changes.Add(new AddFacetToPropertyChange(
+                    _currentEntityName, propertyName, ParseAnnotation(keyword)));
+                continue;
+            }
+
+            // Fail closed only for annotation-shaped args (literals), not
+            // legacy action heads like Checkout(days: Number): action { … }.
+            if (LooksLikeAnnotationCall()) {
+                throw Error(
+                    $"Unknown or unregistered annotation '{keyword}'. " +
+                    "Enable a pack that registers this keyword, or remove the annotation.");
+            }
+
+            break;
+        }
+    }
+
+    /// <summary>
+    /// True when the current identifier is followed by <c>(</c> and an annotation
+    /// argument list (literals / empty), not a legacy action parameter list.
+    /// Current token must already be the keyword identifier.
+    /// </summary>
+    private bool LooksLikeAnnotationCall() {
+        if (_current.Kind != TokenKind.Identifier || _tokenizer.Peek(1).Kind != TokenKind.LParen)
+            return false;
+
+        var firstArg = _tokenizer.Peek(2).Kind;
+        return firstArg is TokenKind.StringLiteral
+            or TokenKind.Number
+            or TokenKind.True
+            or TokenKind.False
+            or TokenKind.Null
+            or TokenKind.RParen;
     }
 
     private void ParseStage(string name, List<DomainChange> changes) {
@@ -1120,6 +1196,64 @@ public sealed class PolyDslParser {
         || string.Equals(text, "all", StringComparison.OrdinalIgnoreCase)
         || string.Equals(text, "none", StringComparison.OrdinalIgnoreCase)
         || string.Equals(text, "count", StringComparison.OrdinalIgnoreCase);
+
+    // ── Annotation parser ────────────────────────────────────
+
+    /// <summary>
+    /// Parses a parenthesized annotation after the keyword has been consumed.
+    /// Syntax: <c>keyword("arg1", "arg2")</c> or <c>keyword(42)</c>.
+    /// Produces an <see cref="Annotation"/> with positional arguments keyed
+    /// as <c>"0"</c>, <c>"1"</c>, etc.
+    /// </summary>
+    private Facet ParseAnnotation(string keyword) {
+        Expect(TokenKind.LParen);
+
+        var args = new Dictionary<string, AnnotationValue>();
+        int positionalIndex = 0;
+
+        while (_current.Kind != TokenKind.RParen) {
+            if (_current.Kind == TokenKind.StringLiteral) {
+                args[positionalIndex.ToString()] = new AnnotationString(_current.Text);
+                Advance();
+            }
+            else if (_current.Kind == TokenKind.Number) {
+                args[positionalIndex.ToString()] = new AnnotationNumber(
+                    double.Parse(_current.Text, CultureInfo.InvariantCulture));
+                Advance();
+            }
+            else if (_current.Kind == TokenKind.True) {
+                args[positionalIndex.ToString()] = new AnnotationBool(true);
+                Advance();
+            }
+            else if (_current.Kind == TokenKind.False) {
+                args[positionalIndex.ToString()] = new AnnotationBool(false);
+                Advance();
+            }
+            else if (_current.Kind == TokenKind.Null) {
+                args[positionalIndex.ToString()] = new AnnotationNull();
+                Advance();
+            }
+            else {
+                throw Error($"Expected annotation argument (string, number, bool, null), got '{_current.Text}'");
+            }
+
+            positionalIndex++;
+
+            if (_current.Kind == TokenKind.Comma) {
+                Advance();
+                if (_current.Kind == TokenKind.RParen) {
+                    throw Error($"Trailing comma in annotation '{keyword}(...)' arguments");
+                }
+            }
+            else if (_current.Kind != TokenKind.RParen) {
+                throw Error(
+                    $"Expected ',' or ')' in annotation '{keyword}(...)', got '{_current.Text}'");
+            }
+        }
+
+        Expect(TokenKind.RParen);
+        return new Annotation(keyword, args);
+    }
 
     // ── Constraint parser ─────────────────────────────────────
 

@@ -1,8 +1,8 @@
 # Experiment: Domain + DSL + Lowering Extension Platform
 
 **Date:** 2026-07-18  
-**Status:** **Experimental / future research** — not active work, not committed roadmap  
-**Home:** `docs/experiments/` (speculative). Promote to `docs/plans/` only when a **named consumer** and execution slice are approved.  
+**Status:** **Superseded for execution framing** by [`docs/plans/dsl-plugin-pipeline-experiment.md`](../plans/dsl-plugin-pipeline-experiment.md) (2026-07-21 **rev 3**: P0 locked; multi-DBMS + DomainModeling seams + pack libraries). Keep this file as research memory (facets, threats, questions).  
+**Home:** `docs/experiments/` (speculative design memory).  
 **Pointer from plans:** [`docs/plans/domain-plugin-extension-platform.md`](../plans/domain-plugin-extension-platform.md)  
 
 ---

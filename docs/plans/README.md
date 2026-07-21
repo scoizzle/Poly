@@ -31,7 +31,7 @@ Architectural rationale → **`docs/decisions/`**. Module maps → **`Poly/*/REA
 
 | Plan | Role |
 |------|------|
-| [**Domain plugin / extension platform**](domain-plugin-extension-platform.md) | Pointer → experiment: future DSL+facet+lowering packs — **research only** |
+| [**Domain plugin / multi-DBMS packs**](domain-plugin-extension-platform.md) | Pointer → [`dsl-plugin-pipeline-experiment.md`](dsl-plugin-pipeline-experiment.md) **rev 3**: P0 locked; DomainModeling seams + pack libraries — **P1-ready; not current pick** |
 | [**`Poly.Ast` + `Poly.Analysis` module split**](poly-ast-analysis-module-split.md) | Split `Poly.Syntax` into IR + analysis framework — after product stability |
 | [array-specialization-plan.md](array-specialization-plan.md) | Optional emitter TypeIs elimination — verify against `DirectVmAbiEmitter` before claiming |
 | [analyzer-improvements.md](analyzer-improvements.md) | Optional analysis quality ideas — not a product gate |

@@ -26,5 +26,5 @@ public sealed record Entity(
     public IReadOnlyList<StageSubscription> Subscriptions { get; init; } = [];
 
     public sealed override IEnumerable<Node?> Children =>
-        [.. Properties, .. Constraints, .. Actions, .. Policies, .. Stages, .. Subscriptions];
+        [.. Properties, .. Constraints, .. Facets, .. Actions, .. Policies, .. Stages, .. Subscriptions];
 }

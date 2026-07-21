@@ -726,6 +726,41 @@ public sealed record RemoveConstraintFromDomainTypeChange(
     internal override string GetDescription() => $"Remove constraint from type '{TypeName}'";
 }
 
+/// <summary>
+/// Adds a Facet to an Entity's (or other DomainType's) Properties by name.
+/// </summary>
+public sealed record AddFacetToPropertyChange(
+    string EntityName,
+    string PropertyName,
+    Facet Facet
+) : DomainChange {
+    internal override void ApplyTo(DomainMutationContext context) {
+        context.RequireUpdate(
+            context.UpdateProperty(EntityName, PropertyName, p => p with {
+                Facets = p.Facets.Append(Facet).ToList()
+            }),
+            $"Property '{PropertyName}' on Entity '{EntityName}' not found — cannot add facet");
+    }
+
+    internal override string GetDescription() => $"Add facet {Facet.GetType().Name} to property '{PropertyName}' on Entity '{EntityName}'";
+}
+
+/// <summary>
+/// Adds a Facet to a DomainType (Entity, ValueType, PrimitiveType, EnumType).
+/// </summary>
+public sealed record AddFacetToDomainTypeChange(
+    string TypeName,
+    Facet Facet
+) : DomainChange {
+    internal override void ApplyTo(DomainMutationContext context) {
+        context.RequireUpdate(
+            context.UpdateType(TypeName, t => t with { Facets = t.Facets.Append(Facet).ToList() }),
+            $"Type '{TypeName}' not found — cannot add facet");
+    }
+
+    internal override string GetDescription() => $"Add facet {Facet.GetType().Name} to type '{TypeName}'";
+}
+
 public sealed record ChangePropertyTypeChange(
     string EntityName,
     string PropertyName,

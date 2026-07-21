@@ -33,13 +33,15 @@ public sealed class HttpFileGenerator {
         sb.AppendLine();
 
         foreach (var entity in _entities) {
-            AppendEntitySection(sb, entity);
+            var isRoot = !HasRequiredEntityRef(entity);
+            AppendEntitySection(sb, entity, isRoot);
         }
 
         return sb.ToString();
     }
 
-    private void AppendEntitySection(StringBuilder sb, Entity entity) {
+    /// <param name="isRoot">True if the entity can exist independently (has CRUD endpoints).</param>
+    private void AppendEntitySection(StringBuilder sb, Entity entity, bool isRoot) {
         var route = Pluralize(ToCamelCase(entity.Name));
         var uniqueProp = entity.Properties.FirstOrDefault(p =>
             p.Constraints.Any(c => c is UniqueConstraint));
@@ -49,35 +51,50 @@ public sealed class HttpFileGenerator {
         sb.AppendLine($"### ──────────── {Pluralize(entity.Name)} ────────────");
         sb.AppendLine();
 
-        // GET list
-        sb.AppendLine($"### List all {Pluralize(ToCamelCase(entity.Name))}");
-        sb.AppendLine($"GET {_baseUrl}/api/{route}");
-        sb.AppendLine();
-
-        // GET single
-        sb.AppendLine($"### Get {ToCamelCase(entity.Name)} by {(hasKey ? uniqueProp!.Name : "id")}");
-        sb.AppendLine($"GET {_baseUrl}/api/{route}/{keyExample}");
-        sb.AppendLine();
-
-        // POST create
-        sb.AppendLine($"### Create a new {ToCamelCase(entity.Name)}");
-        sb.AppendLine($"POST {_baseUrl}/api/{route}");
-        sb.AppendLine("Content-Type: application/json");
-        sb.AppendLine();
-        sb.AppendLine("{");
-        var scalarProps = entity.Properties
-            .Where(p => !p.Constraints.Any(c => c is DefaultValueConstraint))
-            .Where(p => !_entities.Any(e => string.Equals(e.Name, p.Type.TypeName, StringComparison.Ordinal)))
-            .OrderBy(p => p.Name)
-            .ToList();
-        for (int i = 0; i < scalarProps.Count; i++) {
-            var comma = i < scalarProps.Count - 1 ? "," : "";
-            sb.AppendLine($"    \"{scalarProps[i].Name}\": {GetExampleJsonValue(scalarProps[i])}{comma}");
+        if (isRoot) {
+            // CRUD for root entities
+            sb.AppendLine($"### List all {Pluralize(ToCamelCase(entity.Name))}");
+            sb.AppendLine($"GET {_baseUrl}/api/{route}");
+            sb.AppendLine();
+            sb.AppendLine($"### Get {ToCamelCase(entity.Name)} by {(hasKey ? uniqueProp!.Name : "id")}");
+            sb.AppendLine($"GET {_baseUrl}/api/{route}/{keyExample}");
+            sb.AppendLine();
+            sb.AppendLine($"### Create a new {ToCamelCase(entity.Name)}");
+            sb.AppendLine($"POST {_baseUrl}/api/{route}");
+            sb.AppendLine("Content-Type: application/json");
+            sb.AppendLine();
+            sb.AppendLine("{");
+            var scalarProps = entity.Properties
+                .Where(p => !p.Constraints.Any(c => c is DefaultValueConstraint))
+                .Where(p => !_entities.Any(e => string.Equals(e.Name, p.Type.TypeName, StringComparison.Ordinal)))
+                .OrderBy(p => p.Name)
+                .ToList();
+            for (int i = 0; i < scalarProps.Count; i++) {
+                var comma = i < scalarProps.Count - 1 ? "," : "";
+                sb.AppendLine($"    \"{scalarProps[i].Name}\": {GetExampleJsonValue(scalarProps[i])}{comma}");
+            }
+            sb.AppendLine("}");
+            sb.AppendLine();
         }
-        sb.AppendLine("}");
-        sb.AppendLine();
 
-        // Actions on the entity
+        // Child entity list/detail under parent
+        if (!isRoot) {
+            var parents = GetParentRelationships(entity).ToList();
+            foreach (var (parentEntity, rel) in parents) {
+                var parentUnique = parentEntity.Properties.FirstOrDefault(p =>
+                    p.Constraints.Any(c => c is UniqueConstraint));
+                var parentKeyEx = parentUnique is not null ? GetExampleValue(parentUnique) : "1";
+                var relRoute = $"{Pluralize(ToCamelCase(parentEntity.Name))}/{parentKeyEx}/{ToCamelCase(rel.Name).ToLowerInvariant()}";
+                sb.AppendLine($"### List {Pluralize(ToCamelCase(entity.Name))} for {ToCamelCase(parentEntity.Name)}");
+                sb.AppendLine($"GET {_baseUrl}/api/{relRoute}");
+                sb.AppendLine();
+                sb.AppendLine($"### Get {ToCamelCase(entity.Name)} by id for {ToCamelCase(parentEntity.Name)}");
+                sb.AppendLine($"GET {_baseUrl}/api/{relRoute}/{keyExample}");
+                sb.AppendLine();
+            }
+        }
+
+        // Actions on the entity (for both root and child)
         foreach (var action in entity.Actions) {
             AppendActionRequest(sb, entity, action, hasKey, keyExample);
         }
@@ -90,10 +107,40 @@ public sealed class HttpFileGenerator {
         }
     }
 
+    /// <summary>Returns parent relationships for a child entity.</summary>
+    private IEnumerable<(Entity Parent, Relationship Rel)> GetParentRelationships(Entity child) {
+        foreach (var rel in _domain.Relationships) {
+            if (!string.Equals(rel.Target.TypeName, child.Name, StringComparison.Ordinal))
+                continue;
+            if (rel.Cardinality is not (RelationshipCardinality.OneToMany or RelationshipCardinality.ManyToMany))
+                continue;
+            var parent = _entities.FirstOrDefault(e =>
+                string.Equals(e.Name, rel.Source.TypeName, StringComparison.Ordinal));
+            if (parent is null) continue;
+            yield return (parent, rel);
+        }
+    }
+
     private void AppendActionRequest(StringBuilder sb, Entity entity,
         DomainModeling.Action action, bool hasKey, string keyExample) {
-        var route = Pluralize(ToCamelCase(entity.Name));
         var actionName = ToCamelCase(action.Name);
+
+        var isChild = HasRequiredEntityRef(entity);
+        var parentRoute = "";
+        if (isChild) {
+            var parents = GetParentRelationships(entity).ToList();
+            if (parents.Count > 0) {
+                var (parentEntity, rel) = parents[0];
+                var parentUnique = parentEntity.Properties.FirstOrDefault(p =>
+                    p.Constraints.Any(c => c is UniqueConstraint));
+                var parentKeyExample = parentUnique is not null ? GetExampleValue(parentUnique) : "1";
+                parentRoute = $"{Pluralize(ToCamelCase(parentEntity.Name))}/{parentKeyExample}/{ToCamelCase(rel.Name).ToLowerInvariant()}";
+            }
+        }
+
+        var route = isChild && parentRoute.Length > 0
+            ? parentRoute
+            : $"{Pluralize(ToCamelCase(entity.Name))}";
 
         sb.AppendLine($"### Action: {action.Name}");
         sb.AppendLine($"POST {_baseUrl}/api/{route}/{keyExample}/{actionName}");
@@ -117,6 +164,18 @@ public sealed class HttpFileGenerator {
     }
 
     // ── Helpers ────────────────────────────────────────────────
+
+    /// <summary>Returns true if the entity has required entity-reference constructor params.</summary>
+    private bool HasRequiredEntityRef(Entity entity) {
+        if (entity.Properties.Any(p => !p.Constraints.Any(c => c is DefaultValueConstraint)
+            && _entities.Any(e => string.Equals(e.Name, p.Type.TypeName, StringComparison.Ordinal))))
+            return true;
+        if (_domain.Relationships.Any(r => string.Equals(r.Source.TypeName, entity.Name, StringComparison.Ordinal)
+            && r.Cardinality is not (RelationshipCardinality.OneToMany or RelationshipCardinality.ManyToMany)
+            && !string.Equals(r.Target.TypeName, entity.Name, StringComparison.Ordinal)))
+            return true;
+        return false;
+    }
 
     private static string Pluralize(string name) => name + "s";
 

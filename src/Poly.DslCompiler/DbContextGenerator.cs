@@ -47,7 +47,8 @@ public sealed class DbContextGenerator {
         sb.AppendLine($"    public {_contextName}(DbContextOptions<{_contextName}> options) : base(options) {{ }}");
         sb.AppendLine();
 
-        // DbSet properties
+        // DbSet properties for all entities. CRUD API filtering is a consumer concern.
+        // Child entities (Loan, Fine, etc.) are reached through parent navigation properties.
         foreach (var entity in _entities) {
             var setName = Pluralize(entity.Name);
             sb.AppendLine($"    public DbSet<{entity.Name}> {setName} => Set<{entity.Name}>();");
@@ -138,6 +139,18 @@ public sealed class DbContextGenerator {
     }
 
     // ── Helpers ────────────────────────────────────────────────
+
+    /// <summary>Returns true if the entity has required entity-reference constructor params.</summary>
+    private bool HasRequiredEntityRef(Entity entity) {
+        if (entity.Properties.Any(p => !p.Constraints.Any(c => c is DefaultValueConstraint)
+            && _entities.Any(e => string.Equals(e.Name, p.Type.TypeName, StringComparison.Ordinal))))
+            return true;
+        if (_domain.Relationships.Any(r => string.Equals(r.Source.TypeName, entity.Name, StringComparison.Ordinal)
+            && r.Cardinality is not (RelationshipCardinality.OneToMany or RelationshipCardinality.ManyToMany)
+            && !string.Equals(r.Target.TypeName, entity.Name, StringComparison.Ordinal)))
+            return true;
+        return false;
+    }
 
     private static string Pluralize(string name) {
         // Simple pluralization: add "s". Will be wrong for some words

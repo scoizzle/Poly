@@ -6,31 +6,23 @@ using Poly.Syntax.Analysis;
 namespace Poly.DomainModeling.Lowering;
 
 /// <summary>
-/// Analyzes a <see cref="Domain"/> and produces a <see cref="StorageModel"/>
-/// — aggregate boundaries, keys, columns, navigations, foreign keys,
-/// soft-delete, stage tracking, and subscription-list shape.
+/// Builds <see cref="StorageModel"/> — storage conventions applied to
+/// shared domain facts (EntityStructureMetadata, AggregateModel).
 ///
-/// Call <see cref="Analyze"/> to compute the storage model, or use
-/// <see cref="InfrastructureAnalyzer"/> which coordinates both
-/// storage and transport analysis.
-///
-/// When an <see cref="AnalysisResult"/> is available (from domain evolution),
-/// pass it to leverage pre-computed <see cref="DomainTypeLookupMetadata"/>
-/// and other metadata from the domain analysis pipeline.
+/// Produces columns, navigations, foreign keys, soft-delete storage shape,
+/// stage tracking storage shape, and subscription list backing fields.
 /// </summary>
 public sealed class StorageAnalyzer {
     private readonly Domain _domain;
     private readonly List<Entity> _entities;
     private readonly List<Relationship> _relationships;
     private readonly Dictionary<string, Entity> _entityLookup;
-    private readonly Dictionary<string, List<Relationship>> _incomingRels;
     private readonly AnalysisResult? _analysis;
 
     public StorageAnalyzer(Domain domain, AnalysisResult? analysis = null) {
         _domain = domain;
         _analysis = analysis;
 
-        // Use pre-computed metadata from analysis pipeline when available
         var lookup = analysis?.GetMetadata<DomainTypeLookupMetadata>(default);
         if (lookup is not null) {
             _entities = lookup.Entities.ToList();
@@ -44,46 +36,29 @@ public sealed class StorageAnalyzer {
         }
 
         _relationships = domain.Relationships.ToList();
-        _incomingRels = new Dictionary<string, List<Relationship>>(StringComparer.Ordinal);
-        foreach (var rel in _relationships) {
-            if (!_incomingRels.TryGetValue(rel.Target.TypeName, out var list))
-                _incomingRels[rel.Target.TypeName] = list = new();
-            list.Add(rel);
-        }
     }
 
-    public StorageModel Analyze(EffectTopology? topology = null) {
+    public StorageModel Analyze(AggregateModel? aggregate = null, EffectTopology? topology = null) {
+        var aggLookup = aggregate?.Entities.ToDictionary(e => e.Name, StringComparer.Ordinal);
         var storageEntities = new List<StorageEntity>();
 
         foreach (var entity in _entities) {
-            storageEntities.Add(AnalyzeEntity(entity));
-        }
-
-        // Pass 2: resolve aggregate parents (need all entities analyzed first)
-        var storageLookup = storageEntities.ToDictionary(e => e.Name, StringComparer.Ordinal);
-        foreach (var store in storageEntities) {
-            ResolveParent(store, storageLookup, topology);
-        }
-
-        // Pass 3: detect subscription lists (need parent resolution done)
-        foreach (var store in storageEntities) {
-            DetectSubscriptionLists(store, topology);
+            storageEntities.Add(BuildStorageEntity(entity, aggLookup, topology));
         }
 
         var rels = _relationships.Select(r => new StorageRelationship(r)).ToList();
         return new StorageModel(_domain.Name, storageEntities, rels);
     }
 
-    // ── Per-entity analysis ───────────────────────────────────
+    private StorageEntity BuildStorageEntity(Entity entity,
+        Dictionary<string, AggregateEntity>? aggLookup, EffectTopology? topology) {
 
-    private StorageEntity AnalyzeEntity(Entity entity) {
         var store = new StorageEntity(entity);
-
-        // Use pre-computed metadata from analysis pipeline when available
         var meta = _analysis?.GetMetadata<EntityStructureMetadata>(entity);
+        var agg = aggLookup?.GetValueOrDefault(entity.Name);
 
+        // ── Entity structure (from metadata or fallback) ──────
         if (meta is not null) {
-            // Key structure
             store.KeyProperty = meta.KeyPropertyName is not null
                 ? entity.Properties.FirstOrDefault(p =>
                     string.Equals(p.Name, meta.KeyPropertyName, StringComparison.Ordinal))
@@ -91,14 +66,8 @@ public sealed class StorageAnalyzer {
             store.KeyName = meta.KeyPropertyName is not null
                 ? ToCamelCase(meta.KeyPropertyName) : "id";
             store.KeyClrType = meta.KeyClrType;
-
-            // Root / aggregate
             store.IsRoot = meta.IsRoot;
-
-            // Soft delete
             store.HasSoftDelete = meta.HasSoftDelete;
-
-            // Stage tracking
             if (meta.HasStages) {
                 store.HasStages = true;
                 store.StagePropertyName = "CurrentStage";
@@ -106,15 +75,16 @@ public sealed class StorageAnalyzer {
             }
         }
         else {
-            // Fallback: derive from raw domain types (pre-analysis compat)
-            AnalyzeKey(entity, store);
+            var uniqueProp = entity.Properties.FirstOrDefault(p =>
+                p.Constraints.Any(c => c is UniqueConstraint));
+            store.KeyProperty = uniqueProp;
+            store.KeyName = uniqueProp is not null ? ToCamelCase(uniqueProp.Name) : "id";
+            store.KeyClrType = uniqueProp is not null ? "string" : "int";
             store.IsRoot = !HasRequiredEntityRef(entity);
-
             store.HasSoftDelete = entity.Properties.Any(p =>
                 string.Equals(p.Name, "IsDeleted", StringComparison.Ordinal) &&
                 string.Equals(p.Type.TypeName, "Boolean", StringComparison.Ordinal) &&
                 p.Constraints.Any(c => c is DefaultValueConstraint));
-
             var stageEnumType = _domain.Types.OfType<EnumType>()
                 .FirstOrDefault(e => e.Name == $"{entity.Name}Stage");
             if (stageEnumType is not null || entity.Stages.Count > 0) {
@@ -124,90 +94,18 @@ public sealed class StorageAnalyzer {
             }
         }
 
-        // Column vs navigation classification
+        // ── Aggregate parent (from pre-computed AggregateModel) ─
+        if (agg is not null) {
+            store.AggregateParentName = agg.AggregateParentName;
+        }
+
+        // ── Columns / navigations ─────────────────────────────
         ClassifyProperties(entity, store);
 
+        // ── Subscription lists ────────────────────────────────
+        DetectSubscriptionLists(store, topology);
+
         return store;
-    }
-
-    private void AnalyzeKey(Entity entity, StorageEntity store) {
-        var uniqueProp = entity.Properties.FirstOrDefault(p =>
-            p.Constraints.Any(c => c is UniqueConstraint));
-        store.KeyProperty = uniqueProp;
-        store.KeyName = uniqueProp is not null ? ToCamelCase(uniqueProp.Name) : "id";
-        store.KeyClrType = uniqueProp is not null ? "string" : "int";
-    }
-
-    private void ResolveParent(StorageEntity store, Dictionary<string, StorageEntity> storageLookup, EffectTopology? topo) {
-        if (store.IsRoot) return;
-
-        if (!_incomingRels.TryGetValue(store.Name, out var incoming)) return;
-
-        // Build create-in set for parent priority
-        var createInRelNames = topo?.CreateInRelations
-            .Where(c => string.Equals(c.CreatedEntity, store.Name, StringComparison.Ordinal))
-            .Select(c => c.RelationshipName)
-            .ToHashSet(StringComparer.Ordinal) ?? new HashSet<string>();
-
-        StorageEntity? chosenParent = null;
-        string? chosenRelName = null;
-        Relationship? chosenBackRef = null;
-
-        foreach (var rel in incoming) {
-            var isCollection = rel.Cardinality is RelationshipCardinality.OneToMany or RelationshipCardinality.ManyToMany;
-            if (!isCollection) continue;
-
-            var parentEntity = _entityLookup.GetValueOrDefault(rel.Source.TypeName);
-            if (parentEntity is null) continue;
-
-            var parentStore = storageLookup.GetValueOrDefault(parentEntity.Name);
-            if (parentStore is null || !parentStore.IsRoot) continue;
-
-            var backRef = _relationships.FirstOrDefault(r =>
-                string.Equals(r.Source.TypeName, store.Name, StringComparison.Ordinal) &&
-                string.Equals(r.Target.TypeName, parentEntity.Name, StringComparison.Ordinal) &&
-                r.Cardinality is not (RelationshipCardinality.OneToMany or RelationshipCardinality.ManyToMany));
-
-            if (createInRelNames.Contains(rel.Name)) {
-                chosenParent = parentStore;
-                chosenRelName = rel.Name;
-                chosenBackRef = backRef;
-                break;
-            }
-
-            chosenParent ??= parentStore;
-            chosenRelName ??= rel.Name;
-            chosenBackRef ??= backRef;
-        }
-
-        // Fallback: singular nav parent
-        if (chosenParent is null && incoming.Count > 0) {
-            var singular = incoming.FirstOrDefault(r =>
-                r.Cardinality is not (RelationshipCardinality.OneToMany or RelationshipCardinality.ManyToMany));
-            if (singular is not null && _entityLookup.ContainsKey(singular.Source.TypeName)) {
-                chosenParent = storageLookup.GetValueOrDefault(singular.Source.TypeName);
-                chosenRelName = singular.Name;
-                chosenBackRef = null;
-            }
-        }
-
-        if (chosenParent is not null) {
-            store.AggregateParentName = chosenParent.Name;
-            store.AggregateParent = chosenParent;
-            store.ParentRelationshipName = chosenRelName;
-            store.BackReferencePropertyName = chosenBackRef?.Name;
-        }
-
-        // Effect topology fallback for create-in
-        if (store.AggregateParentName is null && topo is not null) {
-            var createIn = topo.CreateInRelations.FirstOrDefault(c =>
-                string.Equals(c.CreatedEntity, store.Name, StringComparison.Ordinal));
-            if (createIn is not null) {
-                store.AggregateParentName = createIn.CreatorEntity;
-                store.AggregateParent = storageLookup.GetValueOrDefault(createIn.CreatorEntity);
-                store.ParentRelationshipName = createIn.RelationshipName;
-            }
-        }
     }
 
     private void ClassifyProperties(Entity entity, StorageEntity store) {
@@ -218,7 +116,7 @@ public sealed class StorageAnalyzer {
             var isEntityRef = _entityLookup.ContainsKey(prop.Type.TypeName);
             var isEnum = enumTypes.ContainsKey(prop.Type.TypeName);
 
-            if (isEntityRef) continue; // skip nav-type properties here
+            if (isEntityRef) continue;
 
             var col = new StorageColumn(prop, GetColumnType(prop, isEnum)) {
                 ClrTypeName = GetClrTypeName(prop.Type.TypeName),
@@ -231,13 +129,10 @@ public sealed class StorageAnalyzer {
             store.AddColumn(col);
         }
 
-        // Navigation analysis
         foreach (var rel in _relationships) {
             if (!string.Equals(rel.Source.TypeName, entity.Name, StringComparison.Ordinal)) continue;
-
             var isCollection = rel.Cardinality is RelationshipCardinality.OneToMany or RelationshipCardinality.ManyToMany;
             var nav = new StorageNavigation(rel, ToPascalCase(rel.Name), isCollection);
-
             if (isCollection) store.AddCollectionNavigation(nav);
             else store.AddReferenceNavigation(nav);
         }
@@ -246,52 +141,22 @@ public sealed class StorageAnalyzer {
     private void DetectSubscriptionLists(StorageEntity store, EffectTopology? topo) {
         if (topo is null) return;
 
-        // Group subscriptions by (subscriber entity, relationship name)
         var subsBySubscriber = topo.Subscriptions
             .Where(s => string.Equals(s.SubscriberEntity, store.Name, StringComparison.Ordinal))
             .GroupBy(s => s.RelationshipName, StringComparer.Ordinal);
 
         foreach (var group in subsBySubscriber) {
-            // Find the navigation that matches this subscription's relationship
             var nav = store.CollectionNavigations
                 .FirstOrDefault(n => string.Equals(n.PropertyName, ToPascalCase(group.Key), StringComparison.Ordinal));
             if (nav is null) continue;
 
-            // The subscriber list belongs on the *target* entity (the one with the nav),
-            // not the subscriber. The subscriber entity registers for notifications
-            // from entities in this navigation. The backing field lives on the
-            // target of the relationship (e.g. Loan stores _overdueSubscribers for Patron).
-            // Actually, the subscription lists are generated as private backing fields
-            // on the entity that *fires* the subscription — the target of the relationship.
-            //
-            // E.g. Patron subscribes to Loan's "when Overdue" → Loan stores _overdueSubscribers.
-            // Since we're on the subscriber entity (Patron), we need to find the target entity (Loan)
-            // and note it needs registration methods for Patron.
-            var targetEntityName = nav.TargetEntityName;
-            var targetEntity = _entities.FirstOrDefault(e =>
-                string.Equals(e.Name, targetEntityName, StringComparison.Ordinal));
-            if (targetEntity is null) continue;
-
-            // Also detect if there's a corresponding registration method pattern
-            // in the target entity's codegen. We record this on the *target's* storage entity
-            // as a subscription list.
             var events = group.Select(s => s.TargetStage).Distinct().ToList();
-
-            // We're on the subscriber entity — the subscription list lives on the
-            // *source* of the navigation (the creator of the child aggregates).
-            // Detect existing subscription lists by convention.
-            var subList = new StorageSubscriptionList(
-                ToPascalCase(group.Key),
-                store.Name,
-                events
-            );
-            store.AddSubscriptionList(subList);
+            store.AddSubscriptionList(new StorageSubscriptionList(
+                ToPascalCase(group.Key), store.Name, events));
         }
     }
 
-    // ── Helpers ───────────────────────────────────────────────
-
-    public bool HasRequiredEntityRef(Entity entity) {
+    private bool HasRequiredEntityRef(Entity entity) {
         if (entity.Properties.Any(p => !p.Constraints.Any(c => c is DefaultValueConstraint)
             && _entityLookup.ContainsKey(p.Type.TypeName)))
             return true;
@@ -303,7 +168,7 @@ public sealed class StorageAnalyzer {
         return false;
     }
 
-    public static string GetColumnType(Property prop, bool isEnum) {
+    private static string GetColumnType(Property prop, bool isEnum) {
         if (isEnum) return prop.Type.TypeName;
         return prop.Type.TypeName switch {
             "Text" or "String" => "nvarchar(max)",
@@ -321,7 +186,7 @@ public sealed class StorageAnalyzer {
         };
     }
 
-    public static string GetClrTypeName(string domainType) => domainType switch {
+    private static string GetClrTypeName(string domainType) => domainType switch {
         "Text" or "String" => "string",
         "Number" or "Int" or "Int64" => "long",
         "Int32" => "int",

@@ -3,18 +3,20 @@ using Poly.DomainModeling.Constraints;
 namespace Poly.DomainModeling.Lowering;
 
 // ═══════════════════════════════════════════════════════════════
-// Storage model — persistence concerns
+// Storage mapping — persistence conventions applied to domain facts
 //
-// Everything about how domain data gets stored and fetched:
-// aggregate boundaries, keys, columns, navigations, foreign keys,
-// soft-delete, stage tracking, and subscription-list shape.
+// This is a *convention-specific view* — it consumes the shared
+// derived facts (EntityStructureMetadata, AggregateModel) and adds
+// storage-layer decisions: column types, table names, foreign key
+// naming, navigation field access mode, subscription list backing
+// fields, and soft-delete/stage tracking storage shape.
 //
-// Storage-agnostic codegen backends (EF, Orleans storage, Dapper,
-// etc.) consume this to map domain concepts to their own
-// storage conventions.
+// Different storage backends (EF, Orleans, Dapper) would consume
+// the same EntityStructure + AggregateModel + structure but produce
+// different StorageMapping conventions.
 // ═══════════════════════════════════════════════════════════════
 
-/// <summary>Top-level storage model for a domain.</summary>
+/// <summary>Top-level storage mapping for a domain.</summary>
 public sealed record StorageModel(
     string DomainName,
     IReadOnlyList<StorageEntity> Entities,
@@ -23,6 +25,8 @@ public sealed record StorageModel(
 
 /// <summary>
 /// Storage-level view of an entity — how it maps to a persistent store.
+/// Consumes shared facts (identity, aggregation, structure) and adds
+/// storage conventions (column/SQL types, field access, FK naming).
 /// </summary>
 public sealed record StorageEntity {
     public StorageEntity(Entity source) {
@@ -38,30 +42,7 @@ public sealed record StorageEntity {
     /// <summary>Pluralized name for table/DbSet naming.</summary>
     public string TableName => Name + "s";
 
-    // ── Aggregate hierarchy ──────────────────────────────────
-
-    /// <summary>
-    /// True if this entity can exist independently (no required entity-ref
-    /// constructor params). Root entities form the top of aggregate hierarchies.
-    /// </summary>
-    public bool IsRoot { get; set; }
-
-    /// <summary>For child entities: the aggregate root entity that owns this one.</summary>
-    public string? AggregateParentName { get; set; }
-
-    /// <summary>For child entities: the relationship from parent to this entity.</summary>
-    public string? ParentRelationshipName { get; set; }
-
-    /// <summary>
-    /// For child entities: the back-reference property name on this entity
-    /// pointing to the parent (e.g. Loan.borrower → Patron).
-    /// </summary>
-    public string? BackReferencePropertyName { get; set; }
-
-    /// <summary>The parent entity resolved from AggregateParentName.</summary>
-    public StorageEntity? AggregateParent { get; set; }
-
-    // ── Key structure ─────────────────────────────────────────
+    // ── Keys (storage convention: natural vs shadow key) ──────
 
     /// <summary>The property used as the natural key (null = shadow key).</summary>
     public Property? KeyProperty { get; set; }
@@ -74,6 +55,14 @@ public sealed record StorageEntity {
 
     /// <summary>True when the entity has no natural key and uses a shadow key.</summary>
     public bool HasShadowKey => KeyProperty is null;
+
+    // ── Aggregate hierarchy (populated from AggregateModel) ───
+
+    /// <summary>True if this entity is an aggregate root.</summary>
+    public bool IsRoot { get; set; }
+
+    /// <summary>For child entities: the aggregate root that owns this one.</summary>
+    public string? AggregateParentName { get; set; }
 
     // ── Columns ───────────────────────────────────────────────
 
@@ -93,12 +82,12 @@ public sealed record StorageEntity {
     public IReadOnlyList<StorageForeignKey> ForeignKeys => _foreignKeys;
     private readonly List<StorageForeignKey> _foreignKeys = new();
 
-    // ── Soft delete ───────────────────────────────────────────
+    // ── Soft delete storage shape ─────────────────────────────
 
     /// <summary>True if this entity has an IsDeleted property (soft-delete).</summary>
     public bool HasSoftDelete { get; set; }
 
-    // ── Stage tracking ────────────────────────────────────────
+    // ── Stage tracking storage shape ──────────────────────────
 
     /// <summary>True if this entity has lifecycle stages.</summary>
     public bool HasStages { get; set; }
@@ -109,7 +98,7 @@ public sealed record StorageEntity {
     /// <summary>The stage enum type name (e.g. "PatronStage").</summary>
     public string? StageEnumTypeName { get; set; }
 
-    // ── Subscription lists ────────────────────────────────────
+    // ── Subscription lists backing fields ─────────────────────
 
     /// <summary>
     /// Backing-field subscriber lists for when-subscriptions.
@@ -165,13 +154,11 @@ public sealed record StorageColumn {
     /// <summary>True if this property is unique (candidate key).</summary>
     public bool IsUnique { get; set; }
 
-    /// <summary>Domain constraints for reference (RawConstraint instances).</summary>
+    /// <summary>Domain constraints for reference.</summary>
     public IReadOnlyList<Constraint> Constraints => Source.Constraints;
 }
 
-/// <summary>
-/// Storage-level view of a navigation property (relationship).
-/// </summary>
+/// <summary>Storage-level view of a navigation property (relationship).</summary>
 public sealed record StorageNavigation {
     public StorageNavigation(Relationship source, string propertyName, bool isCollection) {
         Source = source;

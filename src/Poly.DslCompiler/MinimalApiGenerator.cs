@@ -26,6 +26,7 @@ public sealed class MinimalApiGenerator {
     private readonly InfrastructureModel _infraModel;
     private readonly Dictionary<string, TransportEntity> _transportLookup;
     private readonly Dictionary<string, StorageEntity> _storageLookup;
+    private readonly Dictionary<string, BehaviorEntity> _behaviorLookup;
 
     public MinimalApiGenerator(Domain domain, InfrastructureModel? infraModel = null) {
         _domain = domain;
@@ -34,12 +35,13 @@ public sealed class MinimalApiGenerator {
         _infraModel = infraModel ?? new InfrastructureAnalyzer(domain).Analyze();
         _transportLookup = _infraModel.Transport.Entities.ToDictionary(e => e.Name, StringComparer.Ordinal);
         _storageLookup = _infraModel.Storage.Entities.ToDictionary(e => e.Name, StringComparer.Ordinal);
+        _behaviorLookup = _infraModel.Behavior.Entities.ToDictionary(e => e.Name, StringComparer.Ordinal);
     }
 
-    /// <summary>Returns pre-computed actions for an entity from TransportModel.</summary>
-    private IReadOnlyList<TransportAction> GetTransportActions(Entity entity) {
-        if (_transportLookup.TryGetValue(entity.Name, out var te))
-            return te.Actions;
+    /// <summary>Returns pre-computed actions for an entity from BehaviorModel.</summary>
+    private IReadOnlyList<BehaviorAction> GetBehaviorActions(Entity entity) {
+        if (_behaviorLookup.TryGetValue(entity.Name, out var beh))
+            return beh.Actions;
         return [];
     }
 
@@ -286,9 +288,9 @@ public sealed class MinimalApiGenerator {
         foreach (var entity in _entities) {
             var isChild = !GetStorageEntity(entity).IsRoot;
             var parents = isChild ? GetParentRelationships(entity).ToList() : [];
-            var transportActions = GetTransportActions(entity);
+            var transportActions = GetBehaviorActions(entity);
 
-            // Action endpoints for each entity, using pre-computed TransportAction records
+            // Action endpoints for each entity, using pre-computed BehaviorAction records
             foreach (var ia in transportActions) {
                 AppendActionEndpoint(sb, entity, ia, dbContextName, parents);
             }
@@ -344,7 +346,7 @@ public sealed class MinimalApiGenerator {
     }
 
     private void AppendActionEndpoint(StringBuilder sb, Entity entity,
-        TransportAction ia, string dbContextName,
+        BehaviorAction ia, string dbContextName,
         List<(Entity Parent, Relationship Rel)>? parents = null) {
 
         var (route, keyName, keyType, dbSet, parentRoute, parentKeyName, parentKeyType) =
@@ -436,7 +438,7 @@ public sealed class MinimalApiGenerator {
         sb.AppendLine();
     }
 
-    private void AppendResultSwitch(StringBuilder sb, TransportAction ia) {
+    private void AppendResultSwitch(StringBuilder sb, BehaviorAction ia) {
         sb.AppendLine("        return result switch");
         sb.AppendLine("        {");
 
@@ -472,8 +474,8 @@ public sealed class MinimalApiGenerator {
                 sb.AppendLine($"//   GET  {route}/{{{keyName}}}");
                 sb.AppendLine($"//   POST {route}");
 
-                // Actions on this root entity (from pre-computed TransportAction)
-                var transportActions = GetTransportActions(entity);
+                // Actions on this root entity (from pre-computed BehaviorAction)
+                var transportActions = GetBehaviorActions(entity);
                 foreach (var ia in transportActions) {
                     sb.AppendLine($"//   POST {route}/{{{keyName}}}/{ToCamelCase(ia.Name)}");
                 }
@@ -491,7 +493,7 @@ public sealed class MinimalApiGenerator {
                         sb.AppendLine($"//   GET  {relRoute}");
                         sb.AppendLine($"//   GET  {relRoute}/{{{childKey}}}");
 
-                        var childTransportActions = GetTransportActions(child);
+                        var childTransportActions = GetBehaviorActions(child);
                         foreach (var ia in childTransportActions) {
                             sb.AppendLine($"//   POST {relRoute}/{{{childKey}}}/{ToCamelCase(ia.Name)}");
                         }
@@ -580,8 +582,8 @@ public sealed class MinimalApiGenerator {
 
         // Action DTOs — entity-typed parameters become lookup keys (string ID)
         foreach (var entity in _entities) {
-            var transportActions = GetTransportActions(entity);
-            foreach (var ia in transportActions) {
+            var behaviorActions = GetBehaviorActions(entity);
+            foreach (var ia in behaviorActions) {
                 if (ia.Parameters.Count == 0) continue;
                 var fields = new List<string>();
                 foreach (var param in ia.Parameters) {

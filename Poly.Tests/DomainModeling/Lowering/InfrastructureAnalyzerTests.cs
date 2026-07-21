@@ -30,22 +30,23 @@ public class InfrastructureAnalyzerTests {
         return result.Root!;
     }
 
-    private static StorageModel Analyze(string poly) {
+    private static InfrastructureModel AnalyzeFull(string poly) {
         var domain = ParseDomain(poly);
-        return new InfrastructureAnalyzer(domain).Analyze().Storage;
+        return new InfrastructureAnalyzer(domain).Analyze();
     }
 
     // ── Root/child detection ──────────────────────────────────
 
     [Test]
     public async Task EntityWithoutEntityRefs_IsRoot() {
-        var model = Analyze("""
+        var infra = AnalyzeFull("""
             domain Test
             Book: entity {
               Title: Text required
               ISBN: Text unique
             }
             """);
+        var model = infra.Storage;
 
         await Assert.That(model.Entities).Count().IsEqualTo(1);
         await Assert.That(model.Entities[0].IsRoot).IsTrue();
@@ -55,7 +56,7 @@ public class InfrastructureAnalyzerTests {
 
     [Test]
     public async Task EntityWithEntityRefs_IsNotRoot() {
-        var model = Analyze("""
+        var infra = AnalyzeFull("""
             domain Test
             Book: entity { Title: Text }
             Patron: entity { Name: Text }
@@ -64,6 +65,7 @@ public class InfrastructureAnalyzerTests {
               borrower: Patron
             }
             """);
+        var model = infra.Storage;
 
         var loan = model.Entities.First(e => e.Name == "Loan");
         await Assert.That(loan.IsRoot).IsFalse();
@@ -73,7 +75,7 @@ public class InfrastructureAnalyzerTests {
 
     [Test]
     public async Task ChildEntity_HasAggregateParent() {
-        var model = Analyze("""
+        var infra = AnalyzeFull("""
             domain Test
             Patron: entity {
               Name: Text
@@ -85,24 +87,32 @@ public class InfrastructureAnalyzerTests {
               borrower: Patron
             }
             """);
+        var aggregate = infra.Aggregate;
 
-        var loan = model.Entities.First(e => e.Name == "Loan");
+        // Aggregate model has the parent/backref relationship
+        var loan = aggregate.Entities.First(e => e.Name == "Loan");
         await Assert.That(loan.IsRoot).IsFalse();
         await Assert.That(loan.AggregateParentName).IsEqualTo("Patron");
         await Assert.That(loan.BackReferencePropertyName).IsEqualTo("borrower");
+
+        // Storage model also has IsRoot and parent name
+        var storageLoan = infra.Storage.Entities.First(e => e.Name == "Loan");
+        await Assert.That(storageLoan.IsRoot).IsFalse();
+        await Assert.That(storageLoan.AggregateParentName).IsEqualTo("Patron");
     }
 
     // ── Column classification ─────────────────────────────────
 
     [Test]
     public async Task EntityProperties_BecomeColumns() {
-        var model = Analyze("""
+        var infra = AnalyzeFull("""
             domain Test
             Book: entity {
               Title: Text required
               Pages: Number range(1, 10000)
             }
             """);
+        var model = infra.Storage;
 
         var book = model.Entities[0];
         await Assert.That(book.Columns).Count().IsEqualTo(2);
@@ -119,7 +129,7 @@ public class InfrastructureAnalyzerTests {
 
     [Test]
     public async Task NavigationProperties_NotInColumns() {
-        var model = Analyze("""
+        var infra = AnalyzeFull("""
             domain Test
             Patron: entity {
               Name: Text
@@ -130,9 +140,8 @@ public class InfrastructureAnalyzerTests {
               borrower: Patron
             }
             """);
-
-        var patron = model.Entities.First(e => e.Name == "Patron");
-        var loan = model.Entities.First(e => e.Name == "Loan");
+        var patron = infra.Storage.Entities.First(e => e.Name == "Patron");
+        var loan = infra.Storage.Entities.First(e => e.Name == "Loan");
 
         // Patron.loans is a collection nav, not a column
         await Assert.That(patron.Columns).Count().IsEqualTo(1);
@@ -147,14 +156,13 @@ public class InfrastructureAnalyzerTests {
 
     [Test]
     public async Task EntityWithoutUnique_UsesShadowKey() {
-        var model = Analyze("""
+        var infra = AnalyzeFull("""
             domain Test
             Loan: entity {
               Status: Text
             }
             """);
-
-        var loan = model.Entities[0];
+        var loan = infra.Storage.Entities[0];
         await Assert.That(loan.KeyName).IsEqualTo("id");
         await Assert.That(loan.KeyClrType).IsEqualTo("int");
         await Assert.That(loan.KeyProperty).IsNull();
@@ -162,7 +170,7 @@ public class InfrastructureAnalyzerTests {
 
     [Test]
     public async Task EntityWithOwnedNavigation_HasCollectionNav() {
-        var model = Analyze("""
+        var infra = AnalyzeFull("""
             domain Test
             Order: entity {
               Title: Text
@@ -173,8 +181,7 @@ public class InfrastructureAnalyzerTests {
               Quantity: Number
             }
             """);
-
-        var order = model.Entities.First(e => e.Name == "Order");
+        var order = infra.Storage.Entities.First(e => e.Name == "Order");
         await Assert.That(order.CollectionNavigations).Count().IsEqualTo(1);
         var nav = order.CollectionNavigations[0];
         await Assert.That(nav.TargetEntityName).IsEqualTo("LineItem");

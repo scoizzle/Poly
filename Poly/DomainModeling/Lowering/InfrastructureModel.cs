@@ -3,21 +3,26 @@ namespace Poly.DomainModeling.Lowering;
 /// <summary>
 /// Derived infrastructure model — sits between the domain model and codegen backends.
 ///
-/// Coordinates two independent subsystems:
+/// Coordinates five subsystems:
 /// <list type="bullet">
-///   <item><description><see cref="Storage"/> — aggregate boundaries, keys, columns,
-///         navigations, foreign keys, soft-delete, stage tracking, subscription lists.
-///         Everything about how domain data gets persisted and fetched.</description></item>
-///   <item><description><see cref="Transport"/> — action surface (parameters, return types,
-///         policies, stage transitions), cross-entity effect topology (create-in, invoke,
-///         subscriptions). Everything about how domain data is served over protocols.</description></item>
+///   <item><description><see cref="Storage"/> — columns, navigations, FKs, soft-delete,
+///         stage tracking, subscription lists. Storage conventions applied to
+///         shared domain facts.</description></item>
+///   <item><description><see cref="Aggregate"/> — ownership hierarchy: which entities own
+///         which. A derived domain fact shared by storage and transport.</description></item>
+///   <item><description><see cref="Behavior"/> — action metadata: parameters, return types,
+///         effective policies, stage transitions. A derived domain fact about
+///         what can be done with each entity.</description></item>
+///   <item><description><see cref="Transport"/> — resource hierarchy, routing context,
+///         exposability. Protocol conventions applied to shared domain facts.</description></item>
 /// </list>
 ///
-/// Protocol-specific and storage-specific codegen backends consume their respective subsystem
-/// and map decisions to their own conventions without re-deriving from raw domain types.
+/// Each subsystem is independent and can be consumed or extended independently.
 /// </summary>
 public sealed record InfrastructureModel(
     string DomainName,
     StorageModel Storage,
-    TransportModel Transport
+    AggregateModel Aggregate,
+    BehaviorModel Behavior,
+    TransportSurface Transport
 );

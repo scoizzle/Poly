@@ -17,6 +17,7 @@ public sealed class HttpFileGenerator {
     private readonly InfrastructureModel _infraModel;
     private readonly Dictionary<string, TransportEntity> _transportLookup;
     private readonly Dictionary<string, StorageEntity> _storageLookup;
+    private readonly Dictionary<string, BehaviorEntity> _behaviorLookup;
 
     public HttpFileGenerator(Domain domain, string baseUrl = "http://localhost:5201",
         InfrastructureModel? infraModel = null) {
@@ -26,15 +27,15 @@ public sealed class HttpFileGenerator {
         _infraModel = infraModel ?? new InfrastructureAnalyzer(domain).Analyze();
         _transportLookup = _infraModel.Transport.Entities.ToDictionary(e => e.Name, StringComparer.Ordinal);
         _storageLookup = _infraModel.Storage.Entities.ToDictionary(e => e.Name, StringComparer.Ordinal);
+        _behaviorLookup = _infraModel.Behavior.Entities.ToDictionary(e => e.Name, StringComparer.Ordinal);
     }
 
     private StorageEntity GetStorageEntity(Entity entity) =>
         _storageLookup.GetValueOrDefault(entity.Name) ?? new StorageEntity(entity);
 
-    /// <summary>Returns pre-computed actions for an entity from TransportModel.</summary>
-    private IReadOnlyList<TransportAction> GetTransportActions(Entity entity) {
-        if (_transportLookup.TryGetValue(entity.Name, out var te))
-            return te.Actions;
+    private IReadOnlyList<BehaviorAction> GetBehaviorActions(Entity entity) {
+        if (_behaviorLookup.TryGetValue(entity.Name, out var beh))
+            return beh.Actions;
         return [];
     }
 
@@ -113,7 +114,7 @@ public sealed class HttpFileGenerator {
         }
 
         // Actions on the entity (for both root and child)
-        var transportActions = GetTransportActions(entity);
+        var transportActions = GetBehaviorActions(entity);
         foreach (var ia in transportActions) {
             AppendActionRequest(sb, entity, ia, hasKey, keyExample);
         }
@@ -134,7 +135,7 @@ public sealed class HttpFileGenerator {
     }
 
     private void AppendActionRequest(StringBuilder sb, Entity entity,
-        TransportAction ia, bool hasKey, string keyExample) {
+        BehaviorAction ia, bool hasKey, string keyExample) {
         var actionName = ToCamelCase(ia.Name);
 
         var isChild = !GetStorageEntity(entity).IsRoot;
@@ -227,7 +228,7 @@ public sealed class HttpFileGenerator {
         };
     }
 
-    private string GetExampleJsonValueForTransportParam(TransportParameter param, Entity entity) {
+    private string GetExampleJsonValueForTransportParam(BehaviorParameter param, Entity entity) {
         // If the type is an enum in the domain, use the first member
         var enumType = _domain.Types.OfType<EnumType>()
             .FirstOrDefault(e => string.Equals(e.Name, param.DomainType, StringComparison.Ordinal));

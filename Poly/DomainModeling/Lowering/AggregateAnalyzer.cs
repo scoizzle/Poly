@@ -46,43 +46,38 @@ public sealed class AggregateAnalyzer {
     }
 
     public AggregateModel Analyze(EffectTopology? topology = null) {
-        var aggEntities = new List<AggregateEntity>();
-        var aggLookup = new Dictionary<string, AggregateEntity>(StringComparer.Ordinal);
+        var drafts = new List<(string Name, bool IsRoot)>();
+        foreach (var entity in _entities)
+            drafts.Add((entity.Name, IsRootEntity(entity)));
 
-        foreach (var entity in _entities) {
-            var agg = new AggregateEntity(entity.Name);
-            agg.IsRoot = IsRootEntity(entity);
-            aggEntities.Add(agg);
-            aggLookup[entity.Name] = agg;
+        var resolved = new Dictionary<string, AggregateEntity>(StringComparer.Ordinal);
+        foreach (var (name, isRoot) in drafts) {
+            if (isRoot)
+                resolved[name] = new AggregateEntity(name, isRoot: true);
         }
 
-        // Pass 2: resolve parents
-        foreach (var agg in aggEntities) {
-            ResolveParent(agg, aggLookup, topology);
+        foreach (var (name, isRoot) in drafts) {
+            if (isRoot) continue;
+            resolved[name] = ResolveChild(name, resolved, topology);
         }
 
-        return new AggregateModel(_domain.Name, aggEntities);
+        var ordered = drafts.Select(d => resolved[d.Name]).ToList();
+        return new AggregateModel(_domain.Name, ordered);
     }
 
-    private bool IsRootEntity(Entity entity) {
-        var meta = _analysis?.GetMetadata<EntityStructureMetadata>(entity);
-        if (meta is not null)
-            return meta.IsRoot;
-
-        return !HasRequiredEntityRef(entity);
-    }
-
-    private void ResolveParent(AggregateEntity agg, Dictionary<string, AggregateEntity> aggLookup, EffectTopology? topo) {
-        if (agg.IsRoot) return;
-
-        if (!_incomingRels.TryGetValue(agg.Name, out var incoming)) return;
+    private AggregateEntity ResolveChild(
+        string name,
+        Dictionary<string, AggregateEntity> resolved,
+        EffectTopology? topo) {
+        if (!_incomingRels.TryGetValue(name, out var incoming))
+            return new AggregateEntity(name, isRoot: false);
 
         var createInRelNames = topo?.CreateInRelations
-            .Where(c => string.Equals(c.CreatedEntity, agg.Name, StringComparison.Ordinal))
+            .Where(c => string.Equals(c.CreatedEntity, name, StringComparison.Ordinal))
             .Select(c => c.RelationshipName)
             .ToHashSet(StringComparer.Ordinal) ?? new HashSet<string>();
 
-        AggregateEntity? chosenParent = null;
+        string? chosenParentName = null;
         string? chosenRelName = null;
         Relationship? chosenBackRef = null;
 
@@ -93,52 +88,62 @@ public sealed class AggregateAnalyzer {
             var parentEntity = _entityLookup.GetValueOrDefault(rel.Source.TypeName);
             if (parentEntity is null) continue;
 
-            var parentAgg = aggLookup.GetValueOrDefault(parentEntity.Name);
+            var parentAgg = resolved.GetValueOrDefault(parentEntity.Name);
             if (parentAgg is null || !parentAgg.IsRoot) continue;
 
             var backRef = _relationships.FirstOrDefault(r =>
-                string.Equals(r.Source.TypeName, agg.Name, StringComparison.Ordinal) &&
+                string.Equals(r.Source.TypeName, name, StringComparison.Ordinal) &&
                 string.Equals(r.Target.TypeName, parentEntity.Name, StringComparison.Ordinal) &&
                 r.Cardinality is not (RelationshipCardinality.OneToMany or RelationshipCardinality.ManyToMany));
 
             if (createInRelNames.Contains(rel.Name)) {
-                chosenParent = parentAgg;
+                chosenParentName = parentAgg.Name;
                 chosenRelName = rel.Name;
                 chosenBackRef = backRef;
                 break;
             }
 
-            chosenParent ??= parentAgg;
+            chosenParentName ??= parentAgg.Name;
             chosenRelName ??= rel.Name;
             chosenBackRef ??= backRef;
         }
 
-        if (chosenParent is null && incoming.Count > 0) {
+        if (chosenParentName is null && incoming.Count > 0) {
             var singular = incoming.FirstOrDefault(r =>
                 r.Cardinality is not (RelationshipCardinality.OneToMany or RelationshipCardinality.ManyToMany));
             if (singular is not null && _entityLookup.ContainsKey(singular.Source.TypeName)) {
-                chosenParent = aggLookup.GetValueOrDefault(singular.Source.TypeName);
+                chosenParentName = singular.Source.TypeName;
                 chosenRelName = singular.Name;
                 chosenBackRef = null;
             }
         }
 
-        if (chosenParent is not null) {
-            agg.AggregateParentName = chosenParent.Name;
-            agg.AggregateParent = chosenParent;
-            agg.ParentRelationshipName = chosenRelName;
-            agg.BackReferencePropertyName = chosenBackRef?.Name;
-        }
-
-        if (agg.AggregateParentName is null && topo is not null) {
+        if (chosenParentName is null && topo is not null) {
             var createIn = topo.CreateInRelations.FirstOrDefault(c =>
-                string.Equals(c.CreatedEntity, agg.Name, StringComparison.Ordinal));
+                string.Equals(c.CreatedEntity, name, StringComparison.Ordinal));
             if (createIn is not null) {
-                agg.AggregateParentName = createIn.CreatorEntity;
-                agg.AggregateParent = aggLookup.GetValueOrDefault(createIn.CreatorEntity);
-                agg.ParentRelationshipName = createIn.RelationshipName;
+                chosenParentName = createIn.CreatorEntity;
+                chosenRelName = createIn.RelationshipName;
             }
         }
+
+        return new AggregateEntity(
+            name,
+            isRoot: false,
+            aggregateParentName: chosenParentName,
+            parentRelationshipName: chosenRelName,
+            backReferencePropertyName: chosenBackRef?.Name,
+            aggregateParent: chosenParentName is not null
+                ? resolved.GetValueOrDefault(chosenParentName)
+                : null);
+    }
+
+    private bool IsRootEntity(Entity entity) {
+        var meta = _analysis?.GetMetadata<EntityStructureMetadata>(entity);
+        if (meta is not null)
+            return meta.IsRoot;
+
+        return !HasRequiredEntityRef(entity);
     }
 
     private bool HasRequiredEntityRef(Entity entity) {

@@ -8,8 +8,10 @@ namespace Poly.DomainModeling.Lowering;
 // policy guards, and stage transitions.
 //
 // This is purely derived from the domain model — no protocol or
-// storage conventions. TransportSurface consumes it to define
-// endpoints/mutations/RPCs. Storage never needs it.
+// storage conventions. Transport codegens consume BehaviorAction
+// records and map them to endpoints, mutations, or RPCs.
+// Domain types stay platform-agnostic; host-type projection is
+// the backend's concern (see DomainTypeMapping for C#).
 // ═══════════════════════════════════════════════════════════════
 
 /// <summary>
@@ -22,26 +24,24 @@ public sealed record BehaviorModel(
 );
 
 /// <summary>Behavior-level view of an entity — all actions it exposes.</summary>
-public sealed record BehaviorEntity {
-    public BehaviorEntity(string name) {
+public sealed class BehaviorEntity {
+    public BehaviorEntity(string name, IReadOnlyList<BehaviorAction> actions) {
         Name = name;
+        Actions = actions;
     }
 
     /// <summary>Entity name.</summary>
     public string Name { get; }
 
     /// <summary>All actions (entity-level + stage-scoped).</summary>
-    public IReadOnlyList<BehaviorAction> Actions => _actions;
-    private readonly List<BehaviorAction> _actions = new();
-
-    public void AddAction(BehaviorAction a) => _actions.Add(a);
+    public IReadOnlyList<BehaviorAction> Actions { get; }
 }
 
 /// <summary>
 /// Behavior-level view of an action — parameter shape, return type,
 /// effective policy guards, and stage transitions.
 /// </summary>
-public sealed record BehaviorAction {
+public sealed class BehaviorAction {
     public BehaviorAction(
         string entityName,
         string? stageName,
@@ -50,8 +50,7 @@ public sealed record BehaviorAction {
         bool isVoid,
         string? resultTypeName,
         IReadOnlyList<string> effectivePolicies,
-        IReadOnlyList<StageTransitionTarget> stageTransitions
-    ) {
+        IReadOnlyList<StageTransitionTarget> stageTransitions) {
         EntityName = entityName;
         StageName = stageName;
         Name = name;
@@ -71,7 +70,7 @@ public sealed record BehaviorAction {
     /// <summary>Action name (PascalCase in the domain).</summary>
     public string Name { get; }
 
-    /// <summary>Action parameters with CLR type and entity-ref classification.</summary>
+    /// <summary>Action parameters with domain type and entity-ref classification.</summary>
     public IReadOnlyList<BehaviorParameter> Parameters { get; }
 
     /// <summary>True when the action has no return value (void).</summary>
@@ -87,11 +86,10 @@ public sealed record BehaviorAction {
     public IReadOnlyList<StageTransitionTarget> StageTransitions { get; }
 }
 
-/// <summary>Parameter metadata — shared by transport and any other protocol.</summary>
+/// <summary>Parameter metadata — domain-typed, host-agnostic.</summary>
 public sealed record BehaviorParameter(
     string Name,
     string DomainType,
-    string ClrTypeName,
     bool IsRequired,
     bool IsEntityRef
 );

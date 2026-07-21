@@ -33,7 +33,7 @@ public sealed class DbContextGenerator {
     }
 
     private StorageEntity GetStorageEntity(Entity entity) =>
-        _storageLookup.GetValueOrDefault(entity.Name) ?? new StorageEntity(entity);
+        _storageLookup[entity.Name];
 
     /// <summary>Generates the complete DbContext C# source.</summary>
     public string Generate(string @namespace = "Poly.Generated") {
@@ -117,7 +117,7 @@ public sealed class DbContextGenerator {
     /// <summary>Appends column-level configuration for a single StorageColumn.</summary>
     private static void AppendColumnConfig(StringBuilder sb, StorageColumn col) {
         // Required constraints on nullable CLR types
-        if (col.IsRequired && col.ClrTypeName is not ("int" or "long" or "double" or "decimal" or "float" or "bool" or "DateTime" or "DateOnly" or "TimeOnly" or "TimeSpan" or "Guid")) {
+        if (col.IsRequired && !DomainTypeMapping.IsNonNullableClrValueType(col.ClrTypeName)) {
             sb.AppendLine($"            b.Property(x => x.{col.Name}).IsRequired();");
         }
 

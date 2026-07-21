@@ -1,6 +1,5 @@
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Constraints;
-using Poly.DomainModeling.Effects;
 using Poly.Syntax.Analysis;
 
 namespace Poly.DomainModeling.Lowering;
@@ -42,118 +41,188 @@ public sealed class StorageAnalyzer {
         var aggLookup = aggregate?.Entities.ToDictionary(e => e.Name, StringComparer.Ordinal);
         var storageEntities = new List<StorageEntity>();
 
-        foreach (var entity in _entities) {
+        foreach (var entity in _entities)
             storageEntities.Add(BuildStorageEntity(entity, aggLookup, topology));
-        }
 
         var rels = _relationships.Select(r => new StorageRelationship(r)).ToList();
         return new StorageModel(_domain.Name, storageEntities, rels);
     }
 
-    private StorageEntity BuildStorageEntity(Entity entity,
-        Dictionary<string, AggregateEntity>? aggLookup, EffectTopology? topology) {
-
-        var store = new StorageEntity(entity);
+    private StorageEntity BuildStorageEntity(
+        Entity entity,
+        Dictionary<string, AggregateEntity>? aggLookup,
+        EffectTopology? topology) {
         var meta = _analysis?.GetMetadata<EntityStructureMetadata>(entity);
         var agg = aggLookup?.GetValueOrDefault(entity.Name);
 
-        // ── Entity structure (from metadata or fallback) ──────
+        Property? keyProperty;
+        string keyName;
+        string keyClrType;
+        bool isRoot;
+        bool hasSoftDelete;
+        bool hasStages;
+        string? stagePropertyName = null;
+        string? stageEnumTypeName = null;
+
         if (meta is not null) {
-            store.KeyProperty = meta.KeyPropertyName is not null
+            keyProperty = meta.KeyPropertyName is not null
                 ? entity.Properties.FirstOrDefault(p =>
                     string.Equals(p.Name, meta.KeyPropertyName, StringComparison.Ordinal))
                 : null;
-            store.KeyName = meta.KeyPropertyName is not null
-                ? ToCamelCase(meta.KeyPropertyName) : "id";
-            store.KeyClrType = meta.KeyClrType;
-            store.IsRoot = meta.IsRoot;
-            store.HasSoftDelete = meta.HasSoftDelete;
-            if (meta.HasStages) {
-                store.HasStages = true;
-                store.StagePropertyName = "CurrentStage";
-                store.StageEnumTypeName = meta.StageEnumTypeName;
+            keyName = meta.KeyPropertyName is not null
+                ? DomainTypeMapping.ToCamelCase(meta.KeyPropertyName) : "id";
+            keyClrType = meta.KeyClrType;
+            // Aggregate owns hierarchy; prefer it when present.
+            isRoot = agg?.IsRoot ?? meta.IsRoot;
+            hasSoftDelete = meta.HasSoftDelete;
+            hasStages = meta.HasStages;
+            if (hasStages) {
+                stagePropertyName = "CurrentStage";
+                stageEnumTypeName = meta.StageEnumTypeName;
             }
         }
         else {
             var uniqueProp = entity.Properties.FirstOrDefault(p =>
                 p.Constraints.Any(c => c is UniqueConstraint));
-            store.KeyProperty = uniqueProp;
-            store.KeyName = uniqueProp is not null ? ToCamelCase(uniqueProp.Name) : "id";
-            store.KeyClrType = uniqueProp is not null ? "string" : "int";
-            store.IsRoot = !HasRequiredEntityRef(entity);
-            store.HasSoftDelete = entity.Properties.Any(p =>
+            keyProperty = uniqueProp;
+            keyName = uniqueProp is not null
+                ? DomainTypeMapping.ToCamelCase(uniqueProp.Name) : "id";
+            keyClrType = uniqueProp is not null
+                ? DomainTypeMapping.ToClrTypeName(uniqueProp.Type.TypeName) : "int";
+            isRoot = agg?.IsRoot ?? !HasRequiredEntityRef(entity);
+            hasSoftDelete = entity.Properties.Any(p =>
                 string.Equals(p.Name, "IsDeleted", StringComparison.Ordinal) &&
                 string.Equals(p.Type.TypeName, "Boolean", StringComparison.Ordinal) &&
                 p.Constraints.Any(c => c is DefaultValueConstraint));
             var stageEnumType = _domain.Types.OfType<EnumType>()
                 .FirstOrDefault(e => e.Name == $"{entity.Name}Stage");
             if (stageEnumType is not null || entity.Stages.Count > 0) {
-                store.HasStages = true;
-                store.StagePropertyName = "CurrentStage";
-                store.StageEnumTypeName = stageEnumType?.Name ?? $"{entity.Name}Stage";
+                hasStages = true;
+                stagePropertyName = "CurrentStage";
+                stageEnumTypeName = stageEnumType?.Name ?? $"{entity.Name}Stage";
+            }
+            else {
+                hasStages = false;
             }
         }
 
-        // ── Aggregate parent (from pre-computed AggregateModel) ─
-        if (agg is not null) {
-            store.AggregateParentName = agg.AggregateParentName;
-        }
+        var aggregateParentName = agg?.AggregateParentName;
+        var (columns, collectionNavs, referenceNavs) = ClassifyProperties(entity);
+        var foreignKeys = BuildForeignKeys(entity, agg, aggLookup);
+        var subscriptionLists = DetectSubscriptionLists(entity.Name, collectionNavs, topology);
 
-        // ── Columns / navigations ─────────────────────────────
-        ClassifyProperties(entity, store);
-
-        // ── Subscription lists ────────────────────────────────
-        DetectSubscriptionLists(store, topology);
-
-        return store;
+        return new StorageEntity(
+            entity,
+            keyName,
+            keyClrType,
+            keyProperty,
+            isRoot,
+            aggregateParentName,
+            hasSoftDelete,
+            hasStages,
+            stagePropertyName,
+            stageEnumTypeName,
+            columns,
+            collectionNavs,
+            referenceNavs,
+            foreignKeys,
+            subscriptionLists);
     }
 
-    private void ClassifyProperties(Entity entity, StorageEntity store) {
+    private (List<StorageColumn> Columns, List<StorageNavigation> Collections, List<StorageNavigation> References)
+        ClassifyProperties(Entity entity) {
         var enumTypes = _domain.Types.OfType<EnumType>()
             .ToDictionary(e => e.Name, StringComparer.Ordinal);
+        var columns = new List<StorageColumn>();
+        var collections = new List<StorageNavigation>();
+        var references = new List<StorageNavigation>();
 
         foreach (var prop in entity.Properties) {
             var isEntityRef = _entityLookup.ContainsKey(prop.Type.TypeName);
-            var isEnum = enumTypes.ContainsKey(prop.Type.TypeName);
-
             if (isEntityRef) continue;
 
-            var col = new StorageColumn(prop, GetColumnType(prop, isEnum)) {
-                ClrTypeName = GetClrTypeName(prop.Type.TypeName),
-                IsEnum = isEnum,
-                IsRequired = prop.Constraints.Any(c => c is RequiredConstraint),
-                HasDefault = prop.Constraints.Any(c => c is DefaultValueConstraint),
-                IsUnique = prop.Constraints.Any(c => c is UniqueConstraint),
-                MaxLength = prop.Constraints.OfType<LengthConstraint>().FirstOrDefault()?.MaxLength,
-            };
-            store.AddColumn(col);
+            var isEnum = enumTypes.ContainsKey(prop.Type.TypeName);
+            columns.Add(new StorageColumn(
+                prop,
+                isEnum ? prop.Type.TypeName : DomainTypeMapping.ToSqlColumnType(prop.Type.TypeName),
+                isEnum ? prop.Type.TypeName : DomainTypeMapping.ToClrTypeName(prop.Type.TypeName),
+                isEnum,
+                prop.Constraints.Any(c => c is RequiredConstraint),
+                prop.Constraints.Any(c => c is DefaultValueConstraint),
+                prop.Constraints.Any(c => c is UniqueConstraint),
+                prop.Constraints.OfType<LengthConstraint>().FirstOrDefault()?.MaxLength));
         }
 
         foreach (var rel in _relationships) {
             if (!string.Equals(rel.Source.TypeName, entity.Name, StringComparison.Ordinal)) continue;
             var isCollection = rel.Cardinality is RelationshipCardinality.OneToMany or RelationshipCardinality.ManyToMany;
-            var nav = new StorageNavigation(rel, ToPascalCase(rel.Name), isCollection);
-            if (isCollection) store.AddCollectionNavigation(nav);
-            else store.AddReferenceNavigation(nav);
+            var nav = new StorageNavigation(rel, DomainTypeMapping.ToPascalCase(rel.Name), isCollection);
+            if (isCollection) collections.Add(nav);
+            else references.Add(nav);
         }
+
+        return (columns, collections, references);
     }
 
-    private void DetectSubscriptionLists(StorageEntity store, EffectTopology? topo) {
-        if (topo is null) return;
+    private List<StorageForeignKey> BuildForeignKeys(
+        Entity entity,
+        AggregateEntity? agg,
+        Dictionary<string, AggregateEntity>? aggLookup) {
+        var fks = new List<StorageForeignKey>();
+        if (agg is null || agg.IsRoot || agg.AggregateParentName is null)
+            return fks;
+
+        var parentKeyProperty = "Id";
+        if (aggLookup is not null &&
+            aggLookup.TryGetValue(agg.AggregateParentName, out _) &&
+            _entityLookup.TryGetValue(agg.AggregateParentName, out var parentEntity)) {
+            var parentMeta = _analysis?.GetMetadata<EntityStructureMetadata>(parentEntity);
+            if (parentMeta?.KeyPropertyName is not null)
+                parentKeyProperty = parentMeta.KeyPropertyName;
+            else {
+                var unique = parentEntity.Properties.FirstOrDefault(p =>
+                    p.Constraints.Any(c => c is UniqueConstraint));
+                parentKeyProperty = unique?.Name ?? "Id";
+            }
+        }
+
+        var childPropertyName = agg.BackReferencePropertyName is not null
+            ? DomainTypeMapping.ToPascalCase(agg.BackReferencePropertyName) + "Id"
+            : DomainTypeMapping.ToPascalCase(agg.AggregateParentName) + "Id";
+
+        fks.Add(new StorageForeignKey(
+            childPropertyName,
+            agg.AggregateParentName,
+            parentKeyProperty));
+
+        return fks;
+    }
+
+    private static List<StorageSubscriptionList> DetectSubscriptionLists(
+        string entityName,
+        List<StorageNavigation> collectionNavs,
+        EffectTopology? topo) {
+        var lists = new List<StorageSubscriptionList>();
+        if (topo is null) return lists;
 
         var subsBySubscriber = topo.Subscriptions
-            .Where(s => string.Equals(s.SubscriberEntity, store.Name, StringComparison.Ordinal))
+            .Where(s => string.Equals(s.SubscriberEntity, entityName, StringComparison.Ordinal))
             .GroupBy(s => s.RelationshipName, StringComparer.Ordinal);
 
         foreach (var group in subsBySubscriber) {
-            var nav = store.CollectionNavigations
-                .FirstOrDefault(n => string.Equals(n.PropertyName, ToPascalCase(group.Key), StringComparison.Ordinal));
+            var nav = collectionNavs
+                .FirstOrDefault(n => string.Equals(
+                    n.PropertyName,
+                    DomainTypeMapping.ToPascalCase(group.Key),
+                    StringComparison.Ordinal));
             if (nav is null) continue;
 
             var events = group.Select(s => s.TargetStage).Distinct().ToList();
-            store.AddSubscriptionList(new StorageSubscriptionList(
-                ToPascalCase(group.Key), store.Name, events));
+            lists.Add(new StorageSubscriptionList(
+                DomainTypeMapping.ToPascalCase(group.Key), entityName, events));
         }
+
+        return lists;
     }
 
     private bool HasRequiredEntityRef(Entity entity) {
@@ -166,51 +235,5 @@ public sealed class StorageAnalyzer {
             !string.Equals(r.Target.TypeName, entity.Name, StringComparison.Ordinal)))
             return true;
         return false;
-    }
-
-    private static string GetColumnType(Property prop, bool isEnum) {
-        if (isEnum) return prop.Type.TypeName;
-        return prop.Type.TypeName switch {
-            "Text" or "String" => "nvarchar(max)",
-            "Number" or "Int" or "Int64" => "bigint",
-            "Int32" => "int",
-            "Boolean" or "Bool" => "bit",
-            "DateTime" or "Timestamp" => "datetime2",
-            "Date" or "DateOnly" => "date",
-            "Time" or "TimeOnly" => "time",
-            "Duration" or "TimeSpan" => "time",
-            "Decimal" => "decimal(18,6)",
-            "Float" or "Double" => "float",
-            "Guid" or "Uuid" => "uniqueidentifier",
-            _ => "nvarchar(max)",
-        };
-    }
-
-    private static string GetClrTypeName(string domainType) => domainType switch {
-        "Text" or "String" => "string",
-        "Number" or "Int" or "Int64" => "long",
-        "Int32" => "int",
-        "Boolean" or "Bool" => "bool",
-        "DateTime" or "Timestamp" => "DateTime",
-        "Date" or "DateOnly" => "DateOnly",
-        "Time" or "TimeOnly" => "TimeOnly",
-        "Duration" or "TimeSpan" => "TimeSpan",
-        "Decimal" => "decimal",
-        "Float" or "Double" => "double",
-        "Guid" or "Uuid" => "Guid",
-        _ => "string",
-    };
-
-    private static string ToCamelCase(string name) {
-        if (string.IsNullOrEmpty(name) || char.IsLower(name[0])) return name;
-        int upperCount = 0;
-        for (int i = 0; i < name.Length && char.IsUpper(name[i]); i++) upperCount++;
-        if (upperCount <= 1) return char.ToLowerInvariant(name[0]) + name.Substring(1);
-        return name.Substring(0, upperCount).ToLowerInvariant() + name.Substring(upperCount);
-    }
-
-    private static string ToPascalCase(string name) {
-        if (string.IsNullOrEmpty(name) || char.IsUpper(name[0])) return name;
-        return char.ToUpperInvariant(name[0]) + name.Substring(1);
     }
 }

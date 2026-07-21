@@ -10,8 +10,8 @@ namespace Poly.DomainModeling.Lowering;
 ///   1. Effect topology (cross-entity create-in, invoke, subscriptions)
 ///   2. Aggregate model (ownership hierarchy — needs topology for create-in priority)
 ///   3. Behavior model (action metadata — independent, uses AnalysisResult)
-///   4. Transport surface (resource hierarchy — needs aggregate model)
-///   5. Storage mapping (columns, navs — needs aggregate model)
+///   4. Transport surface (resource hierarchy — needs aggregate; reuses topology)
+///   5. Storage mapping (columns, navs, FKs — needs aggregate + topology)
 /// </summary>
 public sealed class InfrastructureAnalyzer {
     private readonly Domain _domain;
@@ -24,26 +24,18 @@ public sealed class InfrastructureAnalyzer {
 
     /// <summary>Computes the full infrastructure model for the domain.</summary>
     public InfrastructureModel Analyze() {
-        // 1. Effect topology — cross-entity effect scanning
-        var effects = TransportAnalyzer.ScanEffects(_domain);
-
-        // 2. Aggregate model — ownership hierarchy (needs topology for create-in priority)
-        var aggregate = new AggregateAnalyzer(_domain, _analysis).Analyze(effects);
-
-        // 3. Behavior model — action metadata (independent)
+        var topology = EffectTopologyAnalyzer.Scan(_domain);
+        var aggregate = new AggregateAnalyzer(_domain, _analysis).Analyze(topology);
         var behavior = new BehaviorAnalyzer(_domain, _analysis).Analyze();
-
-        // 4. Transport surface — resource hierarchy (needs aggregate)
-        var transport = new TransportAnalyzer(_domain, _analysis).Analyze(aggregate);
-
-        // 5. Storage mapping — columns, navs, FKs (needs aggregate + topology)
-        var storage = new StorageAnalyzer(_domain, _analysis).Analyze(aggregate, effects);
+        var transport = new TransportAnalyzer(_domain).Analyze(aggregate, topology);
+        var storage = new StorageAnalyzer(_domain, _analysis).Analyze(aggregate, topology);
 
         return new InfrastructureModel(
             _domain.Name,
-            storage,
+            topology,
             aggregate,
             behavior,
+            storage,
             transport
         );
     }

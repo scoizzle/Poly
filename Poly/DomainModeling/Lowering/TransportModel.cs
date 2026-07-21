@@ -6,13 +6,11 @@ namespace Poly.DomainModeling.Lowering;
 // This is a *convention-specific view* — it consumes the shared
 // derived facts (AggregateModel, BehaviorModel, EffectTopology)
 // and adds protocol-level decisions: resource hierarchy (parent
-// context), whether an entity is directly exposable, and which
-// entities are reachable via which routing context.
+// context) and whether an entity is directly exposable.
 //
-// Different protocols (REST, GraphQL, gRPC) would consume the
-// same shared facts and map them to their own conventions: REST
-// maps parent context to URL nesting, GraphQL maps it to field
-// resolvers, gRPC maps it to service hierarchy.
+// EffectTopology lives in TopologyModel.cs as a shared fact;
+// TransportSurface may carry a reference for consumers that only
+// receive the transport view.
 // ═══════════════════════════════════════════════════════════════
 
 /// <summary>Top-level transport surface — what's exposable and how it's organized.</summary>
@@ -27,9 +25,11 @@ public sealed record TransportSurface(
 /// the API surface. Actions are not listed here; they come from
 /// <see cref="BehaviorModel"/>.
 /// </summary>
-public sealed record TransportEntity {
-    public TransportEntity(string name) {
+public sealed class TransportEntity {
+    public TransportEntity(string name, string? parentName, bool isExposable) {
         Name = name;
+        ParentName = parentName;
+        IsExposable = isExposable;
     }
 
     /// <summary>Entity name.</summary>
@@ -37,21 +37,13 @@ public sealed record TransportEntity {
 
     /// <summary>
     /// The aggregate root that provides routing context for this entity.
-    /// Null for root entities; set to the parent for children (same as
-    /// AggregateModel.AggregateParentName).
+    /// Null for root entities; set to the parent for children.
     /// </summary>
-    public string? ParentName { get; set; }
+    public string? ParentName { get; }
 
     /// <summary>
-    /// True if this entity has its own independent lifecycle and can be
-    /// directly addressed (GET/POST at top level). False for child
-    /// entities nested under parents.
+    /// Default transport convention: roots are directly addressable.
+    /// Non-roots nest under parents. Future protocols may override.
     /// </summary>
-    public bool IsExposable { get; set; }
+    public bool IsExposable { get; }
 }
-
-// Note: EffectTopology, CreateInRelation, CrossEntityInvoke,
-// SubscriptionRelation live in TransportModel.cs alongside
-// TransportSurface because they describe the cross-entity coupling
-// surface that transport protocols must account for. This may move
-// to a standalone file if other consumers need it.

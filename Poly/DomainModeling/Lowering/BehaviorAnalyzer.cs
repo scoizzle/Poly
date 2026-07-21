@@ -43,21 +43,17 @@ public sealed class BehaviorAnalyzer {
         var behaviorEntities = new List<BehaviorEntity>();
 
         foreach (var entity in _entities) {
-            var beh = new BehaviorEntity(entity.Name);
+            var actions = new List<BehaviorAction>();
 
-            // Entity-level actions
-            foreach (var action in entity.Actions) {
-                beh.AddAction(BuildBehaviorAction(entity, action, stageName: null));
-            }
+            foreach (var action in entity.Actions)
+                actions.Add(BuildBehaviorAction(entity, action, stageName: null));
 
-            // Stage-scoped actions
             foreach (var stage in entity.Stages) {
-                foreach (var action in stage.Actions) {
-                    beh.AddAction(BuildBehaviorAction(entity, action, stage.Name));
-                }
+                foreach (var action in stage.Actions)
+                    actions.Add(BuildBehaviorAction(entity, action, stage.Name));
             }
 
-            behaviorEntities.Add(beh);
+            behaviorEntities.Add(new BehaviorEntity(entity.Name, actions));
         }
 
         return new BehaviorModel(_domain.Name, behaviorEntities);
@@ -67,7 +63,6 @@ public sealed class BehaviorAnalyzer {
         var isVoid = action.Result.Members.Count == 0;
         var resultTypeName = isVoid ? null : action.Result.Members[0].Type.TypeName;
 
-        // EffectivePoliciesMetadata includes inherited policies correctly
         var policies = new List<string>();
         var effectivePolicies = _analysis?.GetMetadata<EffectivePoliciesMetadata>(action);
         if (effectivePolicies is not null) {
@@ -79,32 +74,21 @@ public sealed class BehaviorAnalyzer {
                 policies.Add(p.Name);
         }
 
-        // Parameter analysis with entity-ref detection
         var parameters = action.Parameters.Select(p => {
             var isEntityRef = IsEntityRefParam(p);
             var isRequired = p.Constraints.Any(c => c is RequiredConstraint);
-            return new BehaviorParameter(
-                p.Name,
-                p.Type.TypeName,
-                isEntityRef ? p.Type.TypeName : GetClrTypeName(p.Type.TypeName),
-                isRequired,
-                isEntityRef
-            );
+            return new BehaviorParameter(p.Name, p.Type.TypeName, isRequired, isEntityRef);
         }).ToList();
 
-        // Use ActionCapabilityMetadata for transition targets
         var transitions = new List<StageTransitionTarget>();
         var capability = _analysis?.GetMetadata<ActionCapabilityMetadata>(action);
         if (capability is not null) {
-            foreach (var stage in capability.View.TransitionTargets) {
+            foreach (var stage in capability.View.TransitionTargets)
                 transitions.Add(new StageTransitionTarget(stage.Name));
-            }
         }
         else {
-            // Fallback: walk effects
-            foreach (var effect in action.Effects) {
+            foreach (var effect in action.Effects)
                 WalkEffectsForTransitions(effect, transitions);
-            }
         }
 
         return new BehaviorAction(
@@ -140,19 +124,4 @@ public sealed class BehaviorAnalyzer {
                     WalkEffectsForTransitions(e, targets);
         }
     }
-
-    private static string GetClrTypeName(string domainType) => domainType switch {
-        "Text" or "String" => "string",
-        "Number" or "Int" or "Int64" => "long",
-        "Int32" => "int",
-        "Boolean" or "Bool" => "bool",
-        "DateTime" or "Timestamp" => "DateTime",
-        "Date" or "DateOnly" => "DateOnly",
-        "Time" or "TimeOnly" => "TimeOnly",
-        "Duration" or "TimeSpan" => "TimeSpan",
-        "Decimal" => "decimal",
-        "Float" or "Double" => "double",
-        "Guid" or "Uuid" => "Guid",
-        _ => "string",
-    };
 }

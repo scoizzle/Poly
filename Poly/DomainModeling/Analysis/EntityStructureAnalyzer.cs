@@ -1,4 +1,5 @@
 using Poly.DomainModeling.Constraints;
+using Poly.DomainModeling.Lowering;
 using Poly.Syntax.Analysis;
 
 namespace Poly.DomainModeling.Analysis;
@@ -7,12 +8,12 @@ namespace Poly.DomainModeling.Analysis;
 /// Pre-computes <see cref="EntityStructureMetadata"/> for every entity in the domain.
 ///
 /// This pass runs during the analysis pipeline so lowering passes (StorageAnalyzer,
-/// TransportAnalyzer) can consume the results without re-scanning properties and
+/// AggregateAnalyzer) can consume the results without re-scanning properties and
 /// constraints. The metadata captures entity-local structural properties:
 /// root detection, key structure, soft-delete, and stage tracking.
 ///
 /// Cross-entity parent resolution (aggregate ownership) remains in the lowering
-/// layer because it depends on <see cref="Lowering.EffectTopology"/>.
+/// layer because it depends on <see cref="EffectTopology"/>.
 /// </summary>
 internal sealed class EntityStructureAnalyzer : INodeAnalyzer {
     public const string Id = "DomainEntityStructureAnalyzer";
@@ -50,7 +51,10 @@ internal sealed class EntityStructureAnalyzer : INodeAnalyzer {
             p.Constraints.Any(c => c is UniqueConstraint));
         var hasNaturalKey = uniqueProp is not null;
         var keyPropName = uniqueProp?.Name;
-        var keyClrType = hasNaturalKey ? "string" : "int";
+        // Map domain type → host CLR name for natural keys; shadow keys use int.
+        var keyClrType = hasNaturalKey
+            ? DomainTypeMapping.ToClrTypeName(uniqueProp!.Type.TypeName)
+            : "int";
 
         // ── Root detection ────────────────────────────────────
         var isRoot = !HasRequiredEntityRef(entity, lookup);
@@ -79,19 +83,14 @@ internal sealed class EntityStructureAnalyzer : INodeAnalyzer {
 
     /// <summary>
     /// Determines if an entity has a required entity reference in its
-    /// constructor params (either as a property or an incoming singular nav).
-    /// Reuses <see cref="DomainTypeLookupMetadata"/> to avoid re-scanning.
+    /// constructor params (either as a property or an outgoing singular nav).
     /// </summary>
     private static bool HasRequiredEntityRef(Entity entity, DomainTypeLookupMetadata lookup) {
-        // Entity property whose type is another entity (check via type name)
         if (entity.Properties.Any(p =>
             !p.Constraints.Any(c => c is DefaultValueConstraint) &&
             lookup.Types.TryGetValue(p.Type.TypeName, out var type) && type is Entity))
             return true;
 
-        // Incoming singular navigations from this entity to another
-        // e.g. borrower: Patron on Loan means Loan has a required ref to Patron
-        // This checks relationships where this entity is the source.
         foreach (var rel in lookup.Domain.Relationships) {
             if (!string.Equals(rel.Source.TypeName, entity.Name, StringComparison.Ordinal))
                 continue;

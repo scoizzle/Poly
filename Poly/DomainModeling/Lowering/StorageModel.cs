@@ -10,10 +10,6 @@ namespace Poly.DomainModeling.Lowering;
 // storage-layer decisions: column types, table names, foreign key
 // naming, navigation field access mode, subscription list backing
 // fields, and soft-delete/stage tracking storage shape.
-//
-// Different storage backends (EF, Orleans, Dapper) would consume
-// the same EntityStructure + AggregateModel + structure but produce
-// different StorageMapping conventions.
 // ═══════════════════════════════════════════════════════════════
 
 /// <summary>Top-level storage mapping for a domain.</summary>
@@ -25,12 +21,40 @@ public sealed record StorageModel(
 
 /// <summary>
 /// Storage-level view of an entity — how it maps to a persistent store.
-/// Consumes shared facts (identity, aggregation, structure) and adds
-/// storage conventions (column/SQL types, field access, FK naming).
+/// Lifetime is tied to the source domain graph via <see cref="Source"/>.
 /// </summary>
-public sealed record StorageEntity {
-    public StorageEntity(Entity source) {
+public sealed class StorageEntity {
+    public StorageEntity(
+        Entity source,
+        string keyName,
+        string keyClrType,
+        Property? keyProperty,
+        bool isRoot,
+        string? aggregateParentName,
+        bool hasSoftDelete,
+        bool hasStages,
+        string? stagePropertyName,
+        string? stageEnumTypeName,
+        IReadOnlyList<StorageColumn> columns,
+        IReadOnlyList<StorageNavigation> collectionNavigations,
+        IReadOnlyList<StorageNavigation> referenceNavigations,
+        IReadOnlyList<StorageForeignKey> foreignKeys,
+        IReadOnlyList<StorageSubscriptionList> subscriptionLists) {
         Source = source;
+        KeyName = keyName;
+        KeyClrType = keyClrType;
+        KeyProperty = keyProperty;
+        IsRoot = isRoot;
+        AggregateParentName = aggregateParentName;
+        HasSoftDelete = hasSoftDelete;
+        HasStages = hasStages;
+        StagePropertyName = stagePropertyName;
+        StageEnumTypeName = stageEnumTypeName;
+        Columns = columns;
+        CollectionNavigations = collectionNavigations;
+        ReferenceNavigations = referenceNavigations;
+        ForeignKeys = foreignKeys;
+        SubscriptionLists = subscriptionLists;
     }
 
     /// <summary>The source domain entity.</summary>
@@ -42,147 +66,107 @@ public sealed record StorageEntity {
     /// <summary>Pluralized name for table/DbSet naming.</summary>
     public string TableName => Name + "s";
 
-    // ── Keys (storage convention: natural vs shadow key) ──────
-
     /// <summary>The property used as the natural key (null = shadow key).</summary>
-    public Property? KeyProperty { get; set; }
+    public Property? KeyProperty { get; }
 
     /// <summary>Key parameter name: key property name or "id".</summary>
-    public string KeyName { get; set; } = "id";
+    public string KeyName { get; }
 
-    /// <summary>CLR type for the key: "string" for natural keys, "int" for shadow.</summary>
-    public string KeyClrType { get; set; } = "int";
+    /// <summary>CLR type for the key: natural key CLR type, or "int" for shadow.</summary>
+    public string KeyClrType { get; }
 
     /// <summary>True when the entity has no natural key and uses a shadow key.</summary>
     public bool HasShadowKey => KeyProperty is null;
 
-    // ── Aggregate hierarchy (populated from AggregateModel) ───
-
     /// <summary>True if this entity is an aggregate root.</summary>
-    public bool IsRoot { get; set; }
+    public bool IsRoot { get; }
 
     /// <summary>For child entities: the aggregate root that owns this one.</summary>
-    public string? AggregateParentName { get; set; }
-
-    // ── Columns ───────────────────────────────────────────────
+    public string? AggregateParentName { get; }
 
     /// <summary>Properties that map to database columns (not navigations or FKs).</summary>
-    public IReadOnlyList<StorageColumn> Columns => _columns;
-    private readonly List<StorageColumn> _columns = new();
+    public IReadOnlyList<StorageColumn> Columns { get; }
 
     /// <summary>Collection navigation properties (one-to-many from this entity).</summary>
-    public IReadOnlyList<StorageNavigation> CollectionNavigations => _collectionNavs;
-    private readonly List<StorageNavigation> _collectionNavs = new();
+    public IReadOnlyList<StorageNavigation> CollectionNavigations { get; }
 
     /// <summary>Singular navigation properties (one-to-one references from this entity).</summary>
-    public IReadOnlyList<StorageNavigation> ReferenceNavigations => _refNavs;
-    private readonly List<StorageNavigation> _refNavs = new();
+    public IReadOnlyList<StorageNavigation> ReferenceNavigations { get; }
 
     /// <summary>Foreign keys where this entity's table references a parent.</summary>
-    public IReadOnlyList<StorageForeignKey> ForeignKeys => _foreignKeys;
-    private readonly List<StorageForeignKey> _foreignKeys = new();
-
-    // ── Soft delete storage shape ─────────────────────────────
+    public IReadOnlyList<StorageForeignKey> ForeignKeys { get; }
 
     /// <summary>True if this entity has an IsDeleted property (soft-delete).</summary>
-    public bool HasSoftDelete { get; set; }
-
-    // ── Stage tracking storage shape ──────────────────────────
+    public bool HasSoftDelete { get; }
 
     /// <summary>True if this entity has lifecycle stages.</summary>
-    public bool HasStages { get; set; }
+    public bool HasStages { get; }
 
     /// <summary>Property name for the stage column (e.g. "CurrentStage").</summary>
-    public string? StagePropertyName { get; set; }
+    public string? StagePropertyName { get; }
 
     /// <summary>The stage enum type name (e.g. "PatronStage").</summary>
-    public string? StageEnumTypeName { get; set; }
-
-    // ── Subscription lists backing fields ─────────────────────
+    public string? StageEnumTypeName { get; }
 
     /// <summary>
     /// Backing-field subscriber lists for when-subscriptions.
-    /// Each represents an internal list that stores subscriber references
-    /// for notification dispatch.
     /// </summary>
-    public IReadOnlyList<StorageSubscriptionList> SubscriptionLists => _subLists;
-    private readonly List<StorageSubscriptionList> _subLists = new();
-
-    // ── Mutators ──────────────────────────────────────────────
-
-    public void AddColumn(StorageColumn col) => _columns.Add(col);
-    public void AddCollectionNavigation(StorageNavigation nav) => _collectionNavs.Add(nav);
-    public void AddReferenceNavigation(StorageNavigation nav) => _refNavs.Add(nav);
-    public void AddForeignKey(StorageForeignKey fk) => _foreignKeys.Add(fk);
-    public void AddSubscriptionList(StorageSubscriptionList sl) => _subLists.Add(sl);
+    public IReadOnlyList<StorageSubscriptionList> SubscriptionLists { get; }
 }
 
 /// <summary>Storage-level view of a property — column type, CLR type, constraints.</summary>
-public sealed record StorageColumn {
-    public StorageColumn(Property source, string columnType) {
+public sealed class StorageColumn {
+    public StorageColumn(
+        Property source,
+        string columnType,
+        string clrTypeName,
+        bool isEnum,
+        bool isRequired,
+        bool hasDefault,
+        bool isUnique,
+        int? maxLength) {
         Source = source;
         ColumnType = columnType;
+        ClrTypeName = clrTypeName;
+        IsEnum = isEnum;
+        IsRequired = isRequired;
+        HasDefault = hasDefault;
+        IsUnique = isUnique;
+        MaxLength = maxLength;
     }
 
-    /// <summary>The source domain property.</summary>
     public Property Source { get; }
-
-    /// <summary>Property name.</summary>
     public string Name => Source.Name;
-
-    /// <summary>Domain type name (Text, Number, Boolean, etc.).</summary>
     public string DomainType => Source.Type.TypeName;
-
-    /// <summary>CLR type name for codegen.</summary>
-    public string ClrTypeName { get; set; } = "string";
-
-    /// <summary>Database column type (nvarchar, bigint, etc.).</summary>
-    public string ColumnType { get; set; }
-
-    /// <summary>Maximum length for string columns.</summary>
-    public int? MaxLength { get; set; }
-
-    /// <summary>True if this column is required (NOT NULL).</summary>
-    public bool IsRequired { get; set; }
-
-    /// <summary>True for enum-domain properties needing mapping.</summary>
-    public bool IsEnum { get; set; }
-
-    /// <summary>True if this property has a default value constraint.</summary>
-    public bool HasDefault { get; set; }
-
-    /// <summary>True if this property is unique (candidate key).</summary>
-    public bool IsUnique { get; set; }
-
-    /// <summary>Domain constraints for reference.</summary>
+    public string ClrTypeName { get; }
+    public string ColumnType { get; }
+    public int? MaxLength { get; }
+    public bool IsRequired { get; }
+    public bool IsEnum { get; }
+    public bool HasDefault { get; }
+    public bool IsUnique { get; }
     public IReadOnlyList<Constraint> Constraints => Source.Constraints;
 }
 
 /// <summary>Storage-level view of a navigation property (relationship).</summary>
-public sealed record StorageNavigation {
-    public StorageNavigation(Relationship source, string propertyName, bool isCollection) {
+public sealed class StorageNavigation {
+    public StorageNavigation(
+        Relationship source,
+        string propertyName,
+        bool isCollection,
+        string? inversePropertyName = null) {
         Source = source;
         PropertyName = propertyName;
         IsCollection = isCollection;
+        InversePropertyName = inversePropertyName;
     }
 
-    /// <summary>The source domain relationship.</summary>
     public Relationship Source { get; }
-
-    /// <summary>The property name on the entity (PascalCase).</summary>
     public string PropertyName { get; }
-
-    /// <summary>Target entity name.</summary>
     public string TargetEntityName => Source.Target.TypeName;
-
-    /// <summary>True if this is a collection navigation (one-to-many).</summary>
     public bool IsCollection { get; }
-
-    /// <summary>True if the source entity owns the target (cascade delete).</summary>
     public bool SourceOwnsTarget => Source.SourceOwnsTarget;
-
-    /// <summary>Inverse navigation property name, if known.</summary>
-    public string? InversePropertyName { get; set; }
+    public string? InversePropertyName { get; }
 }
 
 /// <summary>Describes a foreign key for mapping.</summary>
@@ -194,22 +178,18 @@ public sealed record StorageForeignKey(
 
 /// <summary>Describes a subscriber-list backing field for when-subscriptions.</summary>
 public sealed record StorageSubscriptionList(
-    /// <summary>Navigation property this list tracks (e.g. "Loans").</summary>
     string NavigationName,
-    /// <summary>The subscriber entity type (e.g. "Patron").</summary>
     string SubscriberEntity,
-    /// <summary>Event/stage names this subscription listens for.</summary>
     IReadOnlyList<string> EventNames
 );
 
 /// <summary>Storage-level view of a relationship.</summary>
-public sealed record StorageRelationship {
+public sealed class StorageRelationship {
     public StorageRelationship(Relationship source) {
         Source = source;
     }
 
     public Relationship Source { get; }
-
     public string Name => Source.Name;
     public string SourceType => Source.Source.TypeName;
     public string TargetType => Source.Target.TypeName;

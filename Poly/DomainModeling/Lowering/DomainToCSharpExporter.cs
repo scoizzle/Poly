@@ -1503,32 +1503,7 @@ public sealed class DomainToCSharpExporter {
 
     // ── String helpers ──────────────────────────────────────────
 
-    internal static string ToCamelCase(string name) {
-        if (string.IsNullOrEmpty(name) || char.IsLower(name[0]))
-            return name;
+    internal static string ToCamelCase(string name) => DomainTypeMapping.ToCamelCase(name);
 
-        // Handle acronyms: find the leading run of consecutive uppercase letters.
-        // If the run spans the whole word, lowercase all (e.g. "ISBN" → "isbn").
-        // If prefix is > 1 followed by lower, lowercase the entire prefix
-        // (e.g. "XMLParser" → "xmlParser", "ABig" → "abig").
-        // If only first char is uppercase, just lowercase it
-        // (e.g. "Name" → "name").
-        int upperCount = 0;
-        for (int i = 0; i < name.Length && char.IsUpper(name[i]); i++)
-            upperCount++;
-
-        if (upperCount <= 1)
-            return char.ToLowerInvariant(name[0]) + name.Substring(1);
-
-        // Two+ leading uppercase chars — lowercase the entire prefix run
-        // so acronyms produce natural camelCase: "ISBN" → "isbn",
-        // "XMLParser" → "xmlParser".
-        return name.Substring(0, upperCount).ToLowerInvariant()
-             + name.Substring(upperCount);
-    }
-
-    internal static string ToPascalCase(string name) =>
-        string.IsNullOrEmpty(name) || char.IsUpper(name[0])
-            ? name
-            : char.ToUpperInvariant(name[0]) + name.Substring(1);
+    internal static string ToPascalCase(string name) => DomainTypeMapping.ToPascalCase(name);
 }

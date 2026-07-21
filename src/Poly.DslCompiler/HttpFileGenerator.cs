@@ -15,9 +15,9 @@ public sealed class HttpFileGenerator {
     private readonly List<Entity> _entities;
     private readonly string _baseUrl;
     private readonly InfrastructureModel _infraModel;
-    private readonly Dictionary<string, TransportEntity> _transportLookup;
     private readonly Dictionary<string, StorageEntity> _storageLookup;
     private readonly Dictionary<string, BehaviorEntity> _behaviorLookup;
+    private readonly Dictionary<string, AggregateEntity> _aggregateLookup;
 
     public HttpFileGenerator(Domain domain, string baseUrl = "http://localhost:5201",
         InfrastructureModel? infraModel = null) {
@@ -25,18 +25,24 @@ public sealed class HttpFileGenerator {
         _entities = domain.Types.OfType<Entity>().ToList();
         _baseUrl = baseUrl;
         _infraModel = infraModel ?? new InfrastructureAnalyzer(domain).Analyze();
-        _transportLookup = _infraModel.Transport.Entities.ToDictionary(e => e.Name, StringComparer.Ordinal);
         _storageLookup = _infraModel.Storage.Entities.ToDictionary(e => e.Name, StringComparer.Ordinal);
         _behaviorLookup = _infraModel.Behavior.Entities.ToDictionary(e => e.Name, StringComparer.Ordinal);
+        _aggregateLookup = _infraModel.Aggregate.Entities.ToDictionary(e => e.Name, StringComparer.Ordinal);
     }
 
-    private StorageEntity GetStorageEntity(Entity entity) =>
-        _storageLookup.GetValueOrDefault(entity.Name) ?? new StorageEntity(entity);
+    private StorageEntity GetStorageEntity(Entity entity) => _storageLookup[entity.Name];
 
-    private IReadOnlyList<BehaviorAction> GetBehaviorActions(Entity entity) {
-        if (_behaviorLookup.TryGetValue(entity.Name, out var beh))
-            return beh.Actions;
-        return [];
+    private IReadOnlyList<BehaviorAction> GetBehaviorActions(Entity entity) =>
+        _behaviorLookup.TryGetValue(entity.Name, out var beh) ? beh.Actions : [];
+
+    private (Entity Parent, string RelName)? GetAggregateParent(Entity child) {
+        var agg = _aggregateLookup[child.Name];
+        if (agg.IsRoot || agg.AggregateParentName is null || agg.ParentRelationshipName is null)
+            return null;
+        var parent = _entities.FirstOrDefault(e =>
+            string.Equals(e.Name, agg.AggregateParentName, StringComparison.Ordinal));
+        if (parent is null) return null;
+        return (parent, agg.ParentRelationshipName);
     }
 
     public string Generate() {
@@ -59,23 +65,19 @@ public sealed class HttpFileGenerator {
         return sb.ToString();
     }
 
-    /// <param name="isRoot">True if the entity can exist independently (has CRUD endpoints).</param>
     private void AppendEntitySection(StringBuilder sb, Entity entity, bool isRoot) {
+        var store = GetStorageEntity(entity);
         var route = Pluralize(ToCamelCase(entity.Name));
-        var uniqueProp = entity.Properties.FirstOrDefault(p =>
-            p.Constraints.Any(c => c is UniqueConstraint));
-        var hasKey = uniqueProp is not null;
-        var keyExample = hasKey ? GetExampleValue(uniqueProp!) : "1";
+        var keyExample = GetKeyExample(store);
 
         sb.AppendLine($"### ──────────── {Pluralize(entity.Name)} ────────────");
         sb.AppendLine();
 
         if (isRoot) {
-            // CRUD for root entities
             sb.AppendLine($"### List all {Pluralize(ToCamelCase(entity.Name))}");
             sb.AppendLine($"GET {_baseUrl}/api/{route}");
             sb.AppendLine();
-            sb.AppendLine($"### Get {ToCamelCase(entity.Name)} by {(hasKey ? uniqueProp!.Name : "id")}");
+            sb.AppendLine($"### Get {ToCamelCase(entity.Name)} by {(store.KeyProperty?.Name ?? "id")}");
             sb.AppendLine($"GET {_baseUrl}/api/{route}/{keyExample}");
             sb.AppendLine();
             sb.AppendLine($"### Create a new {ToCamelCase(entity.Name)}");
@@ -96,14 +98,13 @@ public sealed class HttpFileGenerator {
             sb.AppendLine();
         }
 
-        // Child entity list/detail under parent
         if (!isRoot) {
-            var parents = GetParentRelationships(entity).ToList();
-            foreach (var (parentEntity, rel) in parents) {
-                var parentUnique = parentEntity.Properties.FirstOrDefault(p =>
-                    p.Constraints.Any(c => c is UniqueConstraint));
-                var parentKeyEx = parentUnique is not null ? GetExampleValue(parentUnique) : "1";
-                var relRoute = $"{Pluralize(ToCamelCase(parentEntity.Name))}/{parentKeyEx}/{ToCamelCase(rel.Name).ToLowerInvariant()}";
+            var parentCtx = GetAggregateParent(entity);
+            if (parentCtx is { } ctx) {
+                var (parentEntity, relName) = ctx;
+                var parentStore = GetStorageEntity(parentEntity);
+                var parentKeyEx = GetKeyExample(parentStore);
+                var relRoute = $"{Pluralize(ToCamelCase(parentEntity.Name))}/{parentKeyEx}/{ToCamelCase(relName).ToLowerInvariant()}";
                 sb.AppendLine($"### List {Pluralize(ToCamelCase(entity.Name))} for {ToCamelCase(parentEntity.Name)}");
                 sb.AppendLine($"GET {_baseUrl}/api/{relRoute}");
                 sb.AppendLine();
@@ -113,41 +114,21 @@ public sealed class HttpFileGenerator {
             }
         }
 
-        // Actions on the entity (for both root and child)
-        var transportActions = GetBehaviorActions(entity);
-        foreach (var ia in transportActions) {
-            AppendActionRequest(sb, entity, ia, hasKey, keyExample);
-        }
+        foreach (var ia in GetBehaviorActions(entity))
+            AppendActionRequest(sb, entity, ia, keyExample);
     }
 
-    /// <summary>Returns parent relationships for a child entity.</summary>
-    private IEnumerable<(Entity Parent, Relationship Rel)> GetParentRelationships(Entity child) {
-        foreach (var rel in _domain.Relationships) {
-            if (!string.Equals(rel.Target.TypeName, child.Name, StringComparison.Ordinal))
-                continue;
-            if (rel.Cardinality is not (RelationshipCardinality.OneToMany or RelationshipCardinality.ManyToMany))
-                continue;
-            var parent = _entities.FirstOrDefault(e =>
-                string.Equals(e.Name, rel.Source.TypeName, StringComparison.Ordinal));
-            if (parent is null) continue;
-            yield return (parent, rel);
-        }
-    }
-
-    private void AppendActionRequest(StringBuilder sb, Entity entity,
-        BehaviorAction ia, bool hasKey, string keyExample) {
+    private void AppendActionRequest(StringBuilder sb, Entity entity, BehaviorAction ia, string keyExample) {
         var actionName = ToCamelCase(ia.Name);
-
         var isChild = !GetStorageEntity(entity).IsRoot;
         var parentRoute = "";
         if (isChild) {
-            var parents = GetParentRelationships(entity).ToList();
-            if (parents.Count > 0) {
-                var (parentEntity, rel) = parents[0];
-                var parentUnique = parentEntity.Properties.FirstOrDefault(p =>
-                    p.Constraints.Any(c => c is UniqueConstraint));
-                var parentKeyExample = parentUnique is not null ? GetExampleValue(parentUnique) : "1";
-                parentRoute = $"{Pluralize(ToCamelCase(parentEntity.Name))}/{parentKeyExample}/{ToCamelCase(rel.Name).ToLowerInvariant()}";
+            var parentCtx = GetAggregateParent(entity);
+            if (parentCtx is { } ctx) {
+                var (parentEntity, relName) = ctx;
+                var parentStore = GetStorageEntity(parentEntity);
+                var parentKeyExample = GetKeyExample(parentStore);
+                parentRoute = $"{Pluralize(ToCamelCase(parentEntity.Name))}/{parentKeyExample}/{ToCamelCase(relName).ToLowerInvariant()}";
             }
         }
 
@@ -164,43 +145,27 @@ public sealed class HttpFileGenerator {
             for (int i = 0; i < ia.Parameters.Count; i++) {
                 var param = ia.Parameters[i];
                 var comma = i < ia.Parameters.Count - 1 ? "," : "";
-                if (param.IsEntityRef) {
+                if (param.IsEntityRef)
                     sb.AppendLine($"    \"{param.Name}Id\": \"example-{ToCamelCase(param.DomainType)}-id\"{comma}");
-                }
-                else {
-                    sb.AppendLine($"    \"{param.Name}\": {GetExampleJsonValueForTransportParam(param, entity)}{comma}");
-                }
+                else
+                    sb.AppendLine($"    \"{param.Name}\": {GetExampleJsonValueForTransportParam(param)}{comma}");
             }
             sb.AppendLine("}");
         }
         sb.AppendLine();
     }
 
-    // ── Helpers ────────────────────────────────────────────────
-
     private static string Pluralize(string name) => name + "s";
+    private static string ToCamelCase(string name) => DomainTypeMapping.ToCamelCase(name);
 
-    private static string ToCamelCase(string name) {
-        if (string.IsNullOrEmpty(name) || char.IsLower(name[0]))
-            return name;
-        int upperCount = 0;
-        for (int i = 0; i < name.Length && char.IsUpper(name[i]); i++)
-            upperCount++;
-        if (upperCount <= 1)
-            return char.ToLowerInvariant(name[0]) + name.Substring(1);
-        return name.Substring(0, upperCount).ToLowerInvariant() + name.Substring(upperCount);
-    }
-
-    private static string GetExampleValue(Property prop) {
-        if (prop.Constraints.Any(c => c is UniqueConstraint)) {
-            return prop.Type.TypeName switch {
-                "Text" or "String" => "example-value",
-                "Number" or "Int" or "Int64" => "42",
-                "Guid" or "Uuid" => "550e8400-e29b-41d4-a716-446655440000",
-                _ => "example",
-            };
-        }
-        return "example";
+    private static string GetKeyExample(StorageEntity store) {
+        if (store.KeyProperty is null) return "1";
+        return store.KeyClrType switch {
+            "string" => "example-value",
+            "long" or "int" => "42",
+            "Guid" => "550e8400-e29b-41d4-a716-446655440000",
+            _ => "example",
+        };
     }
 
     private string GetExampleJsonValue(Property prop) {
@@ -209,7 +174,6 @@ public sealed class HttpFileGenerator {
             var baseVal = ToCamelCase(prop.Name);
             return $"\"example-{baseVal}\"";
         }
-        // If the type is an enum in the domain, use the first member
         var enumType = _domain.Types.OfType<EnumType>()
             .FirstOrDefault(e => string.Equals(e.Name, prop.Type.TypeName, StringComparison.Ordinal));
         if (enumType is not null && enumType.MemberNames.Count > 0)
@@ -228,8 +192,7 @@ public sealed class HttpFileGenerator {
         };
     }
 
-    private string GetExampleJsonValueForTransportParam(BehaviorParameter param, Entity entity) {
-        // If the type is an enum in the domain, use the first member
+    private string GetExampleJsonValueForTransportParam(BehaviorParameter param) {
         var enumType = _domain.Types.OfType<EnumType>()
             .FirstOrDefault(e => string.Equals(e.Name, param.DomainType, StringComparison.Ordinal));
         if (enumType is not null && enumType.MemberNames.Count > 0)

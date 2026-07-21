@@ -9,15 +9,8 @@ namespace Poly.DslCompiler;
 /// <summary>
 /// Generates an ASP.NET Minimal API Program.cs from a <see cref="Domain"/>.
 ///
-/// Produces a self-contained <c>Program.cs</c> with:
-///   • WebApplication setup + JSON/EF config
-///   • CRUD endpoints for every entity
-///   • Action endpoints for every entity action
-///   • Seed data (from entity Create() factories)
-///   • DTO records for POST/action request bodies
-///
-/// This is the "get it working first" implementation — string-based generation.
-/// Next iteration: produce Syntax AST <c>TypeDefinitionNode</c> trees.
+/// Consumes AggregateModel / StorageModel / BehaviorModel from infrastructure
+/// analysis for root detection, parent routing, keys, and action shapes.
 /// </summary>
 public sealed class MinimalApiGenerator {
     private readonly Domain _domain;
@@ -27,6 +20,7 @@ public sealed class MinimalApiGenerator {
     private readonly Dictionary<string, TransportEntity> _transportLookup;
     private readonly Dictionary<string, StorageEntity> _storageLookup;
     private readonly Dictionary<string, BehaviorEntity> _behaviorLookup;
+    private readonly Dictionary<string, AggregateEntity> _aggregateLookup;
 
     public MinimalApiGenerator(Domain domain, InfrastructureModel? infraModel = null) {
         _domain = domain;
@@ -36,23 +30,29 @@ public sealed class MinimalApiGenerator {
         _transportLookup = _infraModel.Transport.Entities.ToDictionary(e => e.Name, StringComparer.Ordinal);
         _storageLookup = _infraModel.Storage.Entities.ToDictionary(e => e.Name, StringComparer.Ordinal);
         _behaviorLookup = _infraModel.Behavior.Entities.ToDictionary(e => e.Name, StringComparer.Ordinal);
+        _aggregateLookup = _infraModel.Aggregate.Entities.ToDictionary(e => e.Name, StringComparer.Ordinal);
     }
 
-    /// <summary>Returns pre-computed actions for an entity from BehaviorModel.</summary>
-    private IReadOnlyList<BehaviorAction> GetBehaviorActions(Entity entity) {
-        if (_behaviorLookup.TryGetValue(entity.Name, out var beh))
-            return beh.Actions;
-        return [];
+    private IReadOnlyList<BehaviorAction> GetBehaviorActions(Entity entity) =>
+        _behaviorLookup.TryGetValue(entity.Name, out var beh) ? beh.Actions : [];
+
+    private StorageEntity GetStorageEntity(Entity entity) => _storageLookup[entity.Name];
+
+    private AggregateEntity GetAggregateEntity(Entity entity) => _aggregateLookup[entity.Name];
+
+    /// <summary>
+    /// Parent context for a child entity from AggregateModel.
+    /// </summary>
+    private (Entity Parent, string RelName, string? BackRefName)? GetAggregateParent(Entity child) {
+        var agg = GetAggregateEntity(child);
+        if (agg.IsRoot || agg.AggregateParentName is null || agg.ParentRelationshipName is null)
+            return null;
+        var parent = _entities.FirstOrDefault(e =>
+            string.Equals(e.Name, agg.AggregateParentName, StringComparison.Ordinal));
+        if (parent is null) return null;
+        return (parent, agg.ParentRelationshipName, agg.BackReferencePropertyName);
     }
 
-    /// <summary>Returns storage info for an entity from StorageModel.</summary>
-    private StorageEntity GetStorageEntity(Entity entity) {
-        return _storageLookup.GetValueOrDefault(entity.Name)
-            ?? new StorageEntity(entity);
-    }
-
-
-    /// <summary>Generates the complete Program.cs C# source.</summary>
     public string Generate(string dbContextName) {
         var sb = new StringBuilder();
         sb.AppendLine("#nullable enable");
@@ -70,8 +70,6 @@ public sealed class MinimalApiGenerator {
         AppendDtos(sb);
         return sb.ToString();
     }
-
-    // ── Program.cs preamble ────────────────────────────────────
 
     private readonly string BuilderVar = "builder";
     private readonly string AppVar = "app";
@@ -101,164 +99,115 @@ public sealed class MinimalApiGenerator {
         sb.AppendLine();
     }
 
-    // ── CRUD endpoints ────────────────────────────────────────
-
     private void AppendCrudEndpoints(StringBuilder sb, string dbContextName) {
-        // CRUD endpoints only for root entities (those that can exist independently).
-        foreach (var entity in _entities.Where(e => GetStorageEntity(e).IsRoot)) {
+        foreach (var entity in _entities.Where(e => GetStorageEntity(e).IsRoot))
             AppendEntityCrud(sb, entity, dbContextName);
-        }
     }
 
-    /// <summary>
-    /// Adds GET list/GET by key endpoints for child entities nested under parent routes.
-    /// E.g. /api/patrons/{email}/loans, /api/patrons/{email}/loans/{id}
-    /// </summary>
     private void AppendChildListEndpoints(StringBuilder sb, string dbContextName) {
         foreach (var entity in _entities.Where(e => !GetStorageEntity(e).IsRoot)) {
-            var parents = GetParentRelationships(entity).ToList();
-            if (parents.Count == 0) continue;
+            var parentCtx = GetAggregateParent(entity);
+            if (parentCtx is null) continue;
 
-            foreach (var (parentEntity, rel) in parents) {
-                var relName = ToCamelCase(rel.Name);
-                var parentProp = parentEntity.Properties.FirstOrDefault(p =>
-                    p.Constraints.Any(c => c is UniqueConstraint));
-                var parentKey = parentProp is not null ? ToCamelCase(parentProp.Name) : "id";
-                var parentKeyType = parentProp is not null ? "string" : "int";
-                var childUnique = entity.Properties.FirstOrDefault(p =>
-                    p.Constraints.Any(c => c is UniqueConstraint));
-                var childKey = childUnique is not null ? ToCamelCase(childUnique.Name) : "id";
+            var (parentEntity, relNameRaw, backRefRaw) = parentCtx.Value;
+            var parentStore = GetStorageEntity(parentEntity);
+            var childStore = GetStorageEntity(entity);
+            var relName = ToCamelCase(relNameRaw);
+            var parentKey = parentStore.KeyName;
+            var parentKeyType = parentStore.KeyClrType;
+            var childKey = childStore.KeyName;
+            var childKeyType = childStore.KeyClrType;
+            var parentKeyPropName = parentStore.KeyProperty?.Name;
+            var childKeyPropName = childStore.KeyProperty?.Name;
+            var pascalRel = Pascalize(relNameRaw);
+            var backRefName = backRefRaw is not null ? Pascalize(backRefRaw) : null;
 
-                var listRoute = $"/api/{Pluralize(parentEntity.Name).ToLowerInvariant()}/{{{parentKey}}}/{relName.ToLowerInvariant()}";
-                var detailRoute = $"{listRoute}/{{{childKey}}}";
+            var listRoute = $"/api/{Pluralize(parentEntity.Name).ToLowerInvariant()}/{{{parentKey}}}/{relName.ToLowerInvariant()}";
+            var detailRoute = $"{listRoute}/{{{childKey}}}";
 
-                // GET list: /api/parents/{parentKey}/{childPlural}
-                sb.AppendLine($"// ── {parentEntity.Name} → {entity.Name} ──");
-                sb.AppendLine($"app.MapGet(\"{listRoute}\", async ({parentKeyType} {parentKey}, {dbContextName} db) =>");
-                sb.AppendLine("{");
+            sb.AppendLine($"// ── {parentEntity.Name} → {entity.Name} ──");
+            sb.AppendLine($"app.MapGet(\"{listRoute}\", async ({parentKeyType} {parentKey}, {dbContextName} db) =>");
+            sb.AppendLine("{");
+            sb.AppendLine($"    var parent = await db.{Pluralize(parentEntity.Name)}.FindAsync({parentKey});");
+            sb.AppendLine($"    if (parent is null) return Results.NotFound(new {{ error = \"{parentEntity.Name} not found\" }});");
+            sb.AppendLine($"    await db.Entry(parent).Collection(e => e.{pascalRel}).LoadAsync();");
+            sb.AppendLine($"    return Results.Ok(parent.{pascalRel});");
+            sb.AppendLine("});");
+            sb.AppendLine();
+
+            sb.AppendLine($"app.MapGet(\"{detailRoute}\", async ({parentKeyType} {parentKey}, {childKeyType} {childKey}, {dbContextName} db) =>");
+            sb.AppendLine("{");
+            if (childKeyPropName is not null && backRefName is not null && parentKeyPropName is not null) {
+                sb.AppendLine($"    var child = await db.{Pluralize(entity.Name)}");
+                sb.AppendLine($"        .Where(e => e.{backRefName}.{parentKeyPropName} == {parentKey})");
+                sb.AppendLine($"        .FirstOrDefaultAsync(e => e.{childKeyPropName} == {childKey});");
+            }
+            else if (backRefName is not null && parentKeyPropName is not null) {
                 sb.AppendLine($"    var parent = await db.{Pluralize(parentEntity.Name)}.FindAsync({parentKey});");
                 sb.AppendLine($"    if (parent is null) return Results.NotFound(new {{ error = \"{parentEntity.Name} not found\" }});");
-                sb.AppendLine($"    await db.Entry(parent).Collection(e => e.{Pascalize(rel.Name)}).LoadAsync();");
-                sb.AppendLine($"    return Results.Ok(parent.{Pascalize(rel.Name)});");
-                sb.AppendLine("});");
-                sb.AppendLine();
-
-                // GET by key: /api/parents/{parentKey}/{childPlural}/{childKey}
-                // Filter by both parent (via back-reference) and child's key.
-                var childKeyType = childUnique is not null ? "string" : "int";
-                var backRefRel = GetBackReferenceRelationship(entity, parentEntity);
-                var backRefName = backRefRel is not null ? Pascalize(backRefRel.Name) : null;
-                sb.AppendLine($"app.MapGet(\"{detailRoute}\", async ({parentKeyType} {parentKey}, {childKeyType} {childKey}, {dbContextName} db) =>");
-                sb.AppendLine("{");
-                if (childUnique is not null && backRefRel is not null && parentProp is not null) {
-                    // Natural-key child — query with Where + FirstOrDefaultAsync
-                    sb.AppendLine($"    var child = await db.{Pluralize(entity.Name)}");
-                    sb.AppendLine($"        .Where(e => e.{backRefName}.{parentProp.Name} == {parentKey})");
-                    sb.AppendLine($"        .FirstOrDefaultAsync(e => e.{childUnique.Name} == {childKey});");
-                }
-                else if (backRefRel is not null && parentProp is not null) {
-                    // Shadow-key child — can't use FirstOrDefault on shadow key in LINQ
-                    // Load parent collection and check membership via back-ref
-                    sb.AppendLine($"    var parent = await db.{Pluralize(parentEntity.Name)}.FindAsync({parentKey});");
-                    sb.AppendLine($"    if (parent is null) return Results.NotFound(new {{ error = \"{parentEntity.Name} not found\" }});");
-                    sb.AppendLine($"    await db.Entry(parent).Collection(e => e.{Pascalize(rel.Name)}).LoadAsync();");
-                    sb.AppendLine($"    var child = parent.{Pascalize(rel.Name)}.FirstOrDefault();");
-                }
-                else {
-                    sb.AppendLine($"    var child = await db.{Pluralize(entity.Name)}.FindAsync({childKey});");
-                }
-                sb.AppendLine($"    if (child is null) return Results.NotFound(new {{ error = \"{entity.Name} not found\" }});");
-                sb.AppendLine($"    return Results.Ok(child);");
-                sb.AppendLine("});");
-                sb.AppendLine();
+                sb.AppendLine($"    await db.Entry(parent).Collection(e => e.{pascalRel}).LoadAsync();");
+                sb.AppendLine($"    var child = parent.{pascalRel}.FirstOrDefault();");
             }
+            else {
+                sb.AppendLine($"    var child = await db.{Pluralize(entity.Name)}.FindAsync({childKey});");
+            }
+            sb.AppendLine($"    if (child is null) return Results.NotFound(new {{ error = \"{entity.Name} not found\" }});");
+            sb.AppendLine($"    return Results.Ok(child);");
+            sb.AppendLine("});");
+            sb.AppendLine();
         }
-    }
-
-    /// <summary>
-    /// Finds the singular navigation from a child entity back to its parent
-    /// (e.g. Loan.borrower → Patron). Returns null if no back-reference exists.
-    /// </summary>
-    private Relationship? GetBackReferenceRelationship(Entity child, Entity parent) {
-        return _domain.Relationships.FirstOrDefault(r =>
-            string.Equals(r.Source.TypeName, child.Name, StringComparison.Ordinal) &&
-            string.Equals(r.Target.TypeName, parent.Name, StringComparison.Ordinal) &&
-            r.Cardinality is not (RelationshipCardinality.OneToMany or RelationshipCardinality.ManyToMany));
     }
 
     private void AppendEntityCrud(StringBuilder sb, Entity entity, string dbContextName) {
-        // Only called for root entities — see AppendCrudEndpoints filter.
+        var store = GetStorageEntity(entity);
         var route = $"/api/{Pluralize(entity.Name).ToLowerInvariant()}";
-        var uniqueProp = entity.Properties.FirstOrDefault(p =>
-            p.Constraints.Any(c => c is UniqueConstraint));
-        var hasKey = uniqueProp is not null;
-        var hasEntityRef = !GetStorageEntity(entity).IsRoot; // safety check
-
-        var keyRoute = hasKey
-            ? $"{route}/{{{ToCamelCase(uniqueProp!.Name)}}}"
-            : $"{route}/{{id}}";
-        var keyParam = hasKey
-            ? $"string {ToCamelCase(uniqueProp!.Name)}"
-            : "int id";
+        var keyName = store.KeyName;
+        var keyType = store.KeyClrType;
+        var keyProp = store.KeyProperty;
+        var keyRoute = $"{route}/{{{keyName}}}";
+        var keyParam = $"{keyType} {keyName}";
         var dbSet = $"db.{Pluralize(entity.Name)}";
-        var dbLookup = hasKey
-            ? $"await {dbSet}.FindAsync({ToCamelCase(uniqueProp!.Name)})"
-            : $"await {dbSet}.FindAsync(id)";
-
+        var dbLookup = $"await {dbSet}.FindAsync({keyName})";
         var dtoName = $"{entity.Name}Dto";
 
-        // GET list
         sb.AppendLine($"// ── {entity.Name} ──");
         sb.AppendLine($"app.MapGet(\"{route}\", async ({dbContextName} db) =>");
         sb.AppendLine($"    await db.{Pluralize(entity.Name)}.ToListAsync());");
         sb.AppendLine();
 
-        // GET single
         sb.AppendLine($"app.MapGet(\"{keyRoute}\", async ({keyParam}, {dbContextName} db) =>");
         sb.AppendLine($"    {dbLookup} is {entity.Name} {ToCamelCase(entity.Name)}");
         sb.AppendLine($"        ? Results.Ok({ToCamelCase(entity.Name)})");
         sb.AppendLine($"        : Results.NotFound());");
         sb.AppendLine();
 
-        // POST create (only for seedable entities — no required entity refs)
-        if (!hasEntityRef) {
+        if (store.IsRoot) {
             sb.AppendLine($"app.MapPost(\"{route}\", async ({dtoName} dto, {dbContextName} db) =>");
             sb.AppendLine("{");
-            AppendCreateCall(sb, entity, dtoName, "dto", route, uniqueProp);
+            AppendCreateCall(sb, entity, dtoName, "dto", route, keyProp);
             sb.AppendLine("});");
         }
         sb.AppendLine();
     }
 
     private void AppendCreateCall(StringBuilder sb, Entity entity, string dtoName, string dtoVar, string route, Property? uniqueProp) {
-        // Build Create() argument list from constructor-level properties.
-        // There are three categories:
-        //   1. Scalar entity properties  → come from DTO fields
-        //   2. Collection navs (IEnumerable<T>) → default to Enumerable.Empty<T>()
-        //   3. Entity reference navs (Book, Patron, etc.) → not supported for POST CRUD;
-        //      entities with required entity-ref params skip POST generation.
         var skipPost = false;
         var args = new List<string>();
         foreach (var prop in entity.Properties.Where(p => !p.Constraints.Any(c => c is DefaultValueConstraint)).OrderBy(p => p.Name)) {
             if (_entities.Any(e => string.Equals(e.Name, prop.Type.TypeName, StringComparison.Ordinal))) {
-                // Entity reference navigation — this entity can't be created standalone via POST
                 skipPost = true;
                 break;
             }
             args.Add($"{dtoVar}.{prop.Name}");
         }
-        // Also handle collection navigations which appear as constructor params via relationships
         foreach (var rel in _domain.Relationships) {
             if (!string.Equals(rel.Source.TypeName, entity.Name, StringComparison.Ordinal)) continue;
             var isMany = rel.Cardinality is RelationshipCardinality.OneToMany or RelationshipCardinality.ManyToMany;
-            if (isMany) {
-                // Collection nav — add Enumerable.Empty<T>() as default
+            if (isMany)
                 args.Add($"Enumerable.Empty<{rel.Target.TypeName}>()");
-            }
         }
 
         if (skipPost) {
-            // Entity requires reference navigations — cannot be created standalone
             sb.AppendLine($"    return Results.BadRequest(new {{ error = \"{entity.Name} requires related entities and cannot be created directly.\" }});");
             return;
         }
@@ -272,112 +221,55 @@ public sealed class MinimalApiGenerator {
         sb.AppendLine($"    db.{Pluralize(entity.Name)}.Add({resultVar}.Value);");
         sb.AppendLine($"    await db.SaveChangesAsync();");
 
-        // Created response with location header
-        if (uniqueProp is not null) {
+        if (uniqueProp is not null)
             sb.AppendLine($"    return Results.Created($\"{route}/{{{resultVar}.Value.{uniqueProp.Name}}}\", {resultVar}.Value);");
-        }
-        else {
-            // Shadow key entities: no CLR property for the key, so omit location
+        else
             sb.AppendLine($"    return Results.Ok({resultVar}.Value);");
-        }
     }
-
-    // ── Action endpoints ──────────────────────────────────────
 
     private void AppendActionEndpoints(StringBuilder sb, string dbContextName) {
         foreach (var entity in _entities) {
-            var isChild = !GetStorageEntity(entity).IsRoot;
-            var parents = isChild ? GetParentRelationships(entity).ToList() : [];
-            var transportActions = GetBehaviorActions(entity);
-
-            // Action endpoints for each entity, using pre-computed BehaviorAction records
-            foreach (var ia in transportActions) {
-                AppendActionEndpoint(sb, entity, ia, dbContextName, parents);
-            }
+            var parentCtx = GetStorageEntity(entity).IsRoot ? null : GetAggregateParent(entity);
+            foreach (var ia in GetBehaviorActions(entity))
+                AppendActionEndpoint(sb, entity, ia, dbContextName, parentCtx);
         }
     }
 
-    /// <summary>
-    /// Returns parent relationships for a child entity — one-to-many rels from
-    /// a root entity to this child. For a child entity with no such relationship
-    /// (unusual but possible), returns empty.
-    /// </summary>
-    private IEnumerable<(Entity Parent, Relationship Rel)> GetParentRelationships(Entity child) {
-        foreach (var rel in _domain.Relationships) {
-            if (!string.Equals(rel.Target.TypeName, child.Name, StringComparison.Ordinal))
-                continue;
-            if (rel.Cardinality is not (RelationshipCardinality.OneToMany or RelationshipCardinality.ManyToMany))
-                continue;
-            var parent = _entities.FirstOrDefault(e =>
-                string.Equals(e.Name, rel.Source.TypeName, StringComparison.Ordinal));
-            if (parent is null) continue;
-            yield return (parent, rel);
-        }
-    }
-
-    /// <summary>
-    /// Gets the route prefix and key info for an entity.
-    /// Root entities: /api/books, /api/patrons
-    /// Child entities: /api/parents/{parentKey}/{childPlural}
-    /// Returns (routePrefix, keyName, keyType, isChild, parentKeyParam).
-    /// </summary>
-    private (string Route, string KeyName, string KeyType, string DbSet,
-            string? ParentRoute, string? ParentKeyName, string? ParentKeyType)
-        GetEntityRouteInfo(Entity entity, List<(Entity Parent, Relationship Rel)>? parents = null) {
-        var uniqueProp = entity.Properties.FirstOrDefault(p =>
-            p.Constraints.Any(c => c is UniqueConstraint));
-        var keyName = uniqueProp is not null ? ToCamelCase(uniqueProp.Name) : "id";
-        var keyType = uniqueProp is not null ? "string" : "int";
+    private void AppendActionEndpoint(
+        StringBuilder sb,
+        Entity entity,
+        BehaviorAction ia,
+        string dbContextName,
+        (Entity Parent, string RelName, string? BackRefName)? parentCtx) {
+        var store = GetStorageEntity(entity);
+        var keyName = store.KeyName;
+        var keyType = store.KeyClrType;
         var dbSet = $"db.{Pluralize(entity.Name)}";
 
-        if (parents is { Count: > 0 }) {
-            // Use the first parent for routing
-            var (parent, rel) = parents[0];
-            var parentProp = parent.Properties.FirstOrDefault(p =>
-                p.Constraints.Any(c => c is UniqueConstraint));
-            var parentKeyName = parentProp is not null ? ToCamelCase(parentProp.Name) : "id";
-            var parentKeyType = parentProp is not null ? "string" : "int";
-            var parentRoute = $"/api/{Pluralize(parent.Name).ToLowerInvariant()}/{{{parentKeyName}}}/{ToCamelCase(rel.Name).ToLowerInvariant()}";
-            return (parentRoute, keyName, keyType, dbSet, parentRoute, parentKeyName, parentKeyType);
-        }
-
-        var route = $"/api/{Pluralize(entity.Name).ToLowerInvariant()}";
-        return (route, keyName, keyType, dbSet, null, null, null);
-    }
-
-    private void AppendActionEndpoint(StringBuilder sb, Entity entity,
-        BehaviorAction ia, string dbContextName,
-        List<(Entity Parent, Relationship Rel)>? parents = null) {
-
-        var (route, keyName, keyType, dbSet, parentRoute, parentKeyName, parentKeyType) =
-            GetEntityRouteInfo(entity, parents);
-
-        if (parents is { Count: > 0 }) {
-            // Child entity: route is under parent: /api/parents/{parentKey}/{childPlural}/{childKey}/action
-            var (parentEntity, rel) = parents[0];
+        if (parentCtx is { } ctx) {
+            var (parentEntity, relNameRaw, _) = ctx;
+            var parentStore = GetStorageEntity(parentEntity);
+            var parentKeyName = parentStore.KeyName;
+            var parentKeyType = parentStore.KeyClrType;
+            var parentRoute = $"/api/{Pluralize(parentEntity.Name).ToLowerInvariant()}/{{{parentKeyName}}}/{ToCamelCase(relNameRaw).ToLowerInvariant()}";
             var childRoute = $"{parentRoute}/{{{keyName}}}";
+            var pascalRel = Pascalize(relNameRaw);
 
             sb.AppendLine($"// ── {parentEntity.Name} → {entity.Name}: {ia.Name} ──");
             sb.AppendLine($"app.MapPost(\"{childRoute}/{ToCamelCase(ia.Name).ToLowerInvariant()}\", async ({parentKeyType} {parentKeyName}, {keyType} {keyName}, {dbContextName} db) =>");
             sb.AppendLine("{");
-
-            var parentSet = $"db.{Pluralize(parentEntity.Name)}";
-            sb.AppendLine($"    var parentEntity = await {parentSet}.FindAsync({parentKeyName});");
+            sb.AppendLine($"    var parentEntity = await db.{Pluralize(parentEntity.Name)}.FindAsync({parentKeyName});");
             sb.AppendLine($"    if (parentEntity is null) return Results.NotFound(new {{ error = \"{parentEntity.Name} not found\" }});");
-
-            var childLookup = keyType == "int"
-                ? $"await {dbSet}.FindAsync({keyName})"
-                : $"await {dbSet}.FindAsync({keyName})";
-            sb.AppendLine($"    var entity = {childLookup};");
+            sb.AppendLine($"    var entity = await {dbSet}.FindAsync({keyName});");
             sb.AppendLine($"    if (entity is null) return Results.NotFound(new {{ error = \"{entity.Name} not found\" }});");
             sb.AppendLine();
             sb.AppendLine($"    // Verify child belongs to parent");
-            sb.AppendLine($"    await db.Entry(parentEntity).Collection(e => e.{Pascalize(rel.Name)}).LoadAsync();");
-            sb.AppendLine($"    if (!parentEntity.{Pascalize(rel.Name)}.Any(e => e == entity))");
+            sb.AppendLine($"    await db.Entry(parentEntity).Collection(e => e.{pascalRel}).LoadAsync();");
+            sb.AppendLine($"    if (!parentEntity.{pascalRel}.Any(e => e == entity))");
             sb.AppendLine($"        return Results.NotFound(new {{ error = \"{entity.Name} not found for this {parentEntity.Name}\" }});");
         }
         else {
-            // Root entity: direct action route
+            var route = $"/api/{Pluralize(entity.Name).ToLowerInvariant()}";
             var actionRoute = $"{route}/{{{keyName}}}/{ToCamelCase(ia.Name).ToLowerInvariant()}";
             var dtoName = ia.Parameters.Count > 0 ? $"{Pascalize(ia.Name)}Dto" : null;
             var paramSignature = dtoName is not null
@@ -391,15 +283,12 @@ public sealed class MinimalApiGenerator {
             sb.AppendLine($"    if (entity is null) return Results.NotFound(new {{ error = \"{entity.Name} not found\" }});");
         }
 
-        // Include navigations for actions that need them
         foreach (var rel in _domain.Relationships) {
             if (!string.Equals(rel.Source.TypeName, entity.Name, StringComparison.Ordinal)) continue;
-            if (rel.Cardinality is RelationshipCardinality.OneToMany or RelationshipCardinality.ManyToMany) {
+            if (rel.Cardinality is RelationshipCardinality.OneToMany or RelationshipCardinality.ManyToMany)
                 sb.AppendLine($"    await db.Entry(entity).Collection(e => e.{Pascalize(rel.Name)}).LoadAsync();");
-            }
         }
 
-        // Build invoke — entity-typed params are looked up from DB
         var entityLookups = new List<string>();
         var invokeArgs = new List<string>();
         foreach (var param in ia.Parameters) {
@@ -422,9 +311,8 @@ public sealed class MinimalApiGenerator {
         sb.AppendLine();
         sb.AppendLine("    try");
         sb.AppendLine("    {");
-        foreach (var lookup in entityLookups) {
+        foreach (var lookup in entityLookups)
             sb.AppendLine($"        {lookup}");
-        }
         sb.AppendLine($"        var result = {invokeCall};");
         sb.AppendLine("        await db.SaveChangesAsync();");
         sb.AppendLine();
@@ -441,19 +329,14 @@ public sealed class MinimalApiGenerator {
     private void AppendResultSwitch(StringBuilder sb, BehaviorAction ia) {
         sb.AppendLine("        return result switch");
         sb.AppendLine("        {");
-
-        if (ia.IsVoid) {
+        if (ia.IsVoid)
             sb.AppendLine("            { IsSuccess: true } => Results.Ok(new { status = \"ok\" }),");
-        }
-        else {
+        else
             sb.AppendLine("            { IsSuccess: true, Value: var resultValue } => Results.Ok(resultValue),");
-        }
         sb.AppendLine("            { ErrorMessage: [..] msg } => Results.Conflict(new { error = msg }),");
         sb.AppendLine("            _ => Results.StatusCode(500)");
         sb.AppendLine("        };");
     }
-
-    // ── Program start ─────────────────────────────────────────
 
     private void AppendStart(StringBuilder sb) {
         sb.AppendLine("// ═══════════════════════════════════════════");
@@ -461,44 +344,32 @@ public sealed class MinimalApiGenerator {
         sb.AppendLine("//  Generated from Poly DSL");
         sb.AppendLine("// ═══════════════════════════════════════════");
         sb.AppendLine();
-        foreach (var entity in _entities) {
-            var isRoot = GetStorageEntity(entity).IsRoot;
+        foreach (var entity in _entities.Where(e => GetStorageEntity(e).IsRoot)) {
+            var store = GetStorageEntity(entity);
+            var keyName = store.KeyName;
+            var route = $"/api/{Pluralize(entity.Name).ToLowerInvariant()}";
 
-            if (isRoot) {
-                var uniqueProp = entity.Properties.FirstOrDefault(p =>
-                    p.Constraints.Any(c => c is UniqueConstraint));
-                var keyName = uniqueProp is not null ? ToCamelCase(uniqueProp.Name) : "id";
-                var route = $"/api/{Pluralize(entity.Name).ToLowerInvariant()}";
+            sb.AppendLine($"//   GET  {route}");
+            sb.AppendLine($"//   GET  {route}/{{{keyName}}}");
+            sb.AppendLine($"//   POST {route}");
 
-                sb.AppendLine($"//   GET  {route}");
-                sb.AppendLine($"//   GET  {route}/{{{keyName}}}");
-                sb.AppendLine($"//   POST {route}");
+            foreach (var ia in GetBehaviorActions(entity))
+                sb.AppendLine($"//   POST {route}/{{{keyName}}}/{ToCamelCase(ia.Name)}");
 
-                // Actions on this root entity (from pre-computed BehaviorAction)
-                var transportActions = GetBehaviorActions(entity);
-                foreach (var ia in transportActions) {
-                    sb.AppendLine($"//   POST {route}/{{{keyName}}}/{ToCamelCase(ia.Name)}");
-                }
+            foreach (var child in _entities.Where(e => !GetStorageEntity(e).IsRoot)) {
+                var parentCtx = GetAggregateParent(child);
+                if (parentCtx is null) continue;
+                var (parentEntity, relName, _) = parentCtx.Value;
+                if (!string.Equals(parentEntity.Name, entity.Name, StringComparison.Ordinal)) continue;
 
-                // Child entities nested under this parent
-                foreach (var child in _entities.Where(e => !GetStorageEntity(e).IsRoot)) {
-                    var parents = GetParentRelationships(child).ToList();
-                    foreach (var (parentEntity, rel) in parents) {
-                        if (!string.Equals(parentEntity.Name, entity.Name, StringComparison.Ordinal)) continue;
-                        var childUnique = child.Properties.FirstOrDefault(p =>
-                            p.Constraints.Any(c => c is UniqueConstraint));
-                        var childKey = childUnique is not null ? ToCamelCase(childUnique.Name) : "id";
-                        var relRoute = $"{route}/{{{keyName}}}/{ToCamelCase(rel.Name).ToLowerInvariant()}";
+                var childStore = GetStorageEntity(child);
+                var childKey = childStore.KeyName;
+                var relRoute = $"{route}/{{{keyName}}}/{ToCamelCase(relName).ToLowerInvariant()}";
 
-                        sb.AppendLine($"//   GET  {relRoute}");
-                        sb.AppendLine($"//   GET  {relRoute}/{{{childKey}}}");
-
-                        var childTransportActions = GetBehaviorActions(child);
-                        foreach (var ia in childTransportActions) {
-                            sb.AppendLine($"//   POST {relRoute}/{{{childKey}}}/{ToCamelCase(ia.Name)}");
-                        }
-                    }
-                }
+                sb.AppendLine($"//   GET  {relRoute}");
+                sb.AppendLine($"//   GET  {relRoute}/{{{childKey}}}");
+                foreach (var ia in GetBehaviorActions(child))
+                    sb.AppendLine($"//   POST {relRoute}/{{{childKey}}}/{ToCamelCase(ia.Name)}");
             }
         }
         sb.AppendLine();
@@ -506,21 +377,12 @@ public sealed class MinimalApiGenerator {
         sb.AppendLine();
     }
 
-    // ── Seed data ─────────────────────────────────────────────
-
     private void AppendSeedMethod(StringBuilder sb, string dbContextName) {
         sb.AppendLine($"static async Task SeedAsync({dbContextName} db)");
         sb.AppendLine("{");
         sb.AppendLine("    if (db is null) return;");
 
-        // Only seed entities that have no required entity reference navs
-        var seedableEntities = _entities
-            .Where(e => !_domain.Relationships
-                .Any(r => string.Equals(r.Source.TypeName, e.Name, StringComparison.Ordinal)
-                    && r.Cardinality is not (RelationshipCardinality.OneToMany or RelationshipCardinality.ManyToMany)
-                    && !string.Equals(r.Target.TypeName, e.Name, StringComparison.Ordinal)))
-            .ToList();
-
+        var seedableEntities = _entities.Where(e => GetStorageEntity(e).IsRoot).ToList();
         if (seedableEntities.Count > 0) {
             sb.AppendLine($"    if (await db.{Pluralize(seedableEntities[0].Name)}.AnyAsync()) return;");
             sb.AppendLine();
@@ -534,11 +396,9 @@ public sealed class MinimalApiGenerator {
                 .ToList();
 
             var sampleArgs = new List<string>();
-            foreach (var prop in scalarProps) {
+            foreach (var prop in scalarProps)
                 sampleArgs.Add(GetSampleValue(entity, prop));
-            }
 
-            // Collection navs: default to empty
             foreach (var rel in _domain.Relationships) {
                 if (!string.Equals(rel.Source.TypeName, entity.Name, StringComparison.Ordinal)) continue;
                 if (rel.Cardinality is not (RelationshipCardinality.OneToMany or RelationshipCardinality.ManyToMany)) continue;
@@ -557,12 +417,9 @@ public sealed class MinimalApiGenerator {
         sb.AppendLine();
     }
 
-    // ── DTOs ──────────────────────────────────────────────────
-
     private void AppendDtos(StringBuilder sb) {
         sb.AppendLine("// ── DTOs ──");
 
-        // CRUD DTOs — only for entities with all-scalar Create() params
         foreach (var entity in _entities) {
             var scalarProps = entity.Properties
                 .Where(p => !p.Constraints.Any(c => c is DefaultValueConstraint))
@@ -570,93 +427,39 @@ public sealed class MinimalApiGenerator {
                 .OrderBy(p => p.Name)
                 .ToList();
 
-            if (scalarProps.Count == 0)
-                continue;
-
-            // Only emit DTO if all non-default params are scalar (no entity refs)
+            if (scalarProps.Count == 0) continue;
             if (!GetStorageEntity(entity).IsRoot) continue;
 
             var fields = scalarProps.Select(prop => $"{GetClrTypeName(prop.Type.TypeName)} {prop.Name}");
             sb.AppendLine($"record {entity.Name}Dto({string.Join(", ", fields)});");
         }
 
-        // Action DTOs — entity-typed parameters become lookup keys (string ID)
         foreach (var entity in _entities) {
-            var behaviorActions = GetBehaviorActions(entity);
-            foreach (var ia in behaviorActions) {
+            foreach (var ia in GetBehaviorActions(entity)) {
                 if (ia.Parameters.Count == 0) continue;
                 var fields = new List<string>();
                 foreach (var param in ia.Parameters) {
-                    // Entity-typed params become string lookups
                     if (param.IsEntityRef)
                         fields.Add($"string {param.Name}Id");
                     else
-                        fields.Add($"{param.ClrTypeName} {param.Name}");
+                        fields.Add($"{GetClrTypeName(param.DomainType)} {param.Name}");
                 }
                 sb.AppendLine($"record {Pascalize(ia.Name)}Dto({string.Join(", ", fields)});");
             }
         }
     }
 
-    // ── Helpers ───────────────────────────────────────────────
-
-    private List<Relationship> GetEntityNavProperties(Entity entity) {
-        return _domain.Relationships
-            .Where(r => string.Equals(r.Source.TypeName, entity.Name, StringComparison.Ordinal)
-                     && r.Cardinality is not (RelationshipCardinality.OneToMany or RelationshipCardinality.ManyToMany))
-            .ToList();
-    }
-
     private static string Pluralize(string name) => name + "s";
-
-    private static string ToCamelCase(string name) {
-        if (string.IsNullOrEmpty(name) || char.IsLower(name[0]))
-            return name;
-        // Handle acronyms
-        int upperCount = 0;
-        for (int i = 0; i < name.Length && char.IsUpper(name[i]); i++)
-            upperCount++;
-        if (upperCount <= 1)
-            return char.ToLowerInvariant(name[0]) + name.Substring(1);
-        return name.Substring(0, upperCount).ToLowerInvariant() + name.Substring(upperCount);
-    }
-
-    private static string Pascalize(string name) {
-        if (string.IsNullOrEmpty(name))
-            return name;
-        if (char.IsUpper(name[0]))
-            return name;
-        return char.ToUpperInvariant(name[0]) + name.Substring(1);
-    }
-
-    private static string FirstLetterToLower(string name) {
-        if (string.IsNullOrEmpty(name))
-            return name;
-        return char.ToLowerInvariant(name[0]) + name.Substring(1);
-    }
-
-    private static string GetClrTypeName(string domainType) => domainType switch {
-        "Text" or "String" => "string",
-        "Number" or "Int" or "Int64" => "long",
-        "Int32" => "int",
-        "Boolean" or "Bool" => "bool",
-        "DateTime" or "Timestamp" => "DateTime",
-        "Date" or "DateOnly" => "DateOnly",
-        "Time" or "TimeOnly" => "TimeOnly",
-        "Duration" or "TimeSpan" => "TimeSpan",
-        "Decimal" => "decimal",
-        "Float" or "Double" => "double",
-        "Guid" or "Uuid" => "Guid",
-        _ => domainType, // enum or entity reference — use the type name as-is
-    };
+    private static string ToCamelCase(string name) => DomainTypeMapping.ToCamelCase(name);
+    private static string Pascalize(string name) => DomainTypeMapping.ToPascalCase(name);
+    private static string GetClrTypeName(string domainType) => DomainTypeMapping.ToClrTypeName(domainType);
 
     private string GetSampleValue(Entity entity, Property prop) {
         if (prop.Constraints.Any(c => c is DefaultValueConstraint))
             return "default";
 
-        // Common property name conventions for better seed data
         var propNameLower = prop.Name.ToLowerInvariant();
-        if (propNameLower == "email" || propNameLower == "emailaddress") {
+        if (propNameLower is "email" or "emailaddress") {
             var length = prop.Constraints.OfType<LengthConstraint>().FirstOrDefault();
             if (length is not null && length.MinLength > 0) {
                 var localPart = length.MinLength > 5 ? new string('x', length.MinLength - 4) : "user";
@@ -665,27 +468,19 @@ public sealed class MinimalApiGenerator {
             return "\"user@test.com\"";
         }
 
-        // Check for RangeConstraint to generate valid seed values
         var range = prop.Constraints.OfType<RangeConstraint>().FirstOrDefault();
         if (range is not null) {
-            if (range.Minimum is not null && range.Minimum is long l && l > 0) {
-                return l.ToString();
-            }
-            if (range.Maximum is not null && range.Maximum is long l2 && l2 > 0) {
-                return (l2 / 2).ToString();
-            }
+            if (range.Minimum is long l && l > 0) return l.ToString();
+            if (range.Maximum is long l2 && l2 > 0) return (l2 / 2).ToString();
             return "1";
         }
 
-        // Check for LengthConstraint on Text — generate a string that fits
         if (prop.Type.TypeName is "Text" or "String") {
             var length = prop.Constraints.OfType<LengthConstraint>().FirstOrDefault();
-            if (length is not null && length.MinLength > 0) {
+            if (length is not null && length.MinLength > 0)
                 return "\"" + new string('X', Math.Max(length.MinLength, 8)) + "\"";
-            }
         }
 
-        // Check for enum types
         var enumType = _domain.Types.OfType<EnumType>()
             .FirstOrDefault(e => string.Equals(e.Name, prop.Type.TypeName, StringComparison.Ordinal));
         if (enumType is not null && enumType.MemberNames.Count > 0)
@@ -704,17 +499,4 @@ public sealed class MinimalApiGenerator {
             _ => "default",
         };
     }
-
-    private static bool IsValueDomainType(string typeName) => typeName switch {
-        "Number" or "Int" or "Int64" or "Int32" => true,
-        "Boolean" or "Bool" => true,
-        "DateTime" or "Timestamp" => true,
-        "Date" or "DateOnly" => true,
-        "Time" or "TimeOnly" => true,
-        "Duration" or "TimeSpan" => true,
-        "Decimal" => true,
-        "Float" or "Double" => true,
-        "Guid" or "Uuid" => true,
-        _ => false,
-    };
 }

@@ -18,7 +18,7 @@ namespace Poly.DomainModeling.Lowering;
 /// Cross-entity aggregate ownership — which entities own which.
 ///
 /// This is a derived domain fact, not a storage or transport
-/// convention. Both StorageMapping and TransportSurface consume it.
+/// convention. Both StorageModel and TransportSurface consume it.
 /// </summary>
 public sealed record AggregateModel(
     string DomainName,
@@ -29,9 +29,20 @@ public sealed record AggregateModel(
 /// Aggregate-level view of an entity — its place in the
 /// ownership hierarchy.
 /// </summary>
-public sealed record AggregateEntity {
-    public AggregateEntity(string name) {
+public sealed class AggregateEntity {
+    public AggregateEntity(
+        string name,
+        bool isRoot,
+        string? aggregateParentName = null,
+        string? parentRelationshipName = null,
+        string? backReferencePropertyName = null,
+        AggregateEntity? aggregateParent = null) {
         Name = name;
+        IsRoot = isRoot;
+        AggregateParentName = aggregateParentName;
+        ParentRelationshipName = parentRelationshipName;
+        BackReferencePropertyName = backReferencePropertyName;
+        AggregateParent = aggregateParent;
     }
 
     /// <summary>Entity name.</summary>
@@ -41,20 +52,20 @@ public sealed record AggregateEntity {
     /// True if this entity is an aggregate root (no required
     /// entity-reference constructor params).
     /// </summary>
-    public bool IsRoot { get; set; }
+    public bool IsRoot { get; }
 
     /// <summary>For child entities: the root that owns this one.</summary>
-    public string? AggregateParentName { get; set; }
+    public string? AggregateParentName { get; }
 
     /// <summary>For child entities: the relationship from parent to child.</summary>
-    public string? ParentRelationshipName { get; set; }
+    public string? ParentRelationshipName { get; }
 
     /// <summary>
     /// For child entities: the singular navigation property on
     /// this entity that points back to the parent (e.g. Loan.borrower).
     /// </summary>
-    public string? BackReferencePropertyName { get; set; }
+    public string? BackReferencePropertyName { get; }
 
     /// <summary>Resolved parent entity reference.</summary>
-    public AggregateEntity? AggregateParent { get; set; }
+    public AggregateEntity? AggregateParent { get; }
 }

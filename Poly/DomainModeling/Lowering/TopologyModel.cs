@@ -6,7 +6,8 @@ namespace Poly.DomainModeling.Lowering;
 // Derived domain fact: describes how entities couple across
 // aggregate boundaries through their effect trees.
 //
-// Shared by aggregate analysis (who creates whom) and transport
+// Shared by aggregate analysis (who creates whom), storage
+// (subscription list backing fields), and transport
 // (nested creation, cross-entity invokes, subscriptions).
 // ═══════════════════════════════════════════════════════════════
 

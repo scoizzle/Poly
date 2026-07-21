@@ -1067,3 +1067,23 @@ public sealed record RemoveStageSubscriptionChange(
         return true;
     }
 }
+
+/// <summary>
+/// Adds a <see cref="StageSubscription"/> to an entity (entity-level subscription).
+/// Entity-level subscriptions fire regardless of the entity's current stage.
+/// </summary>
+public sealed record AddEntitySubscriptionChange(
+    string EntityName,
+    StageSubscription Subscription
+) : DomainChange {
+    internal override void ApplyTo(DomainMutationContext context) {
+        context.RequireUpdate(
+            context.UpdateEntity(EntityName, e => e with {
+                Subscriptions = e.Subscriptions.Append(Subscription).ToList()
+            }),
+            $"Entity '{EntityName}' not found — cannot add entity subscription");
+    }
+
+    internal override string GetDescription() =>
+        $"Add entity subscription '{Subscription.RelationshipName} -> {string.Join("/", Subscription.StageNames)}' to Entity '{EntityName}'";
+}

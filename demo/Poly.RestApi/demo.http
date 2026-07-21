@@ -1,127 +1,113 @@
 ### ═══════════════════════════════════════════════════════════
-###  Library REST API — Demo
-###  Generated from docs/experiments/examples/library-checkout.poly
+###  Library REST API — Generated
 ###
 ###  Start the server:
-###    dotnet run --project demo/Poly.RestApi --urls "https://localhost:5001"
+###    dotnet run --project path/to/project --urls "https://localhost:5001"
 ###
 ###  Then click "Send Request" above any request below.
 ### ═══════════════════════════════════════════════════════════
 
-### ──────────── BOOKS ────────────
+### ──────────── Books ────────────
 
 ### List all books
 GET https://localhost:5001/api/books
 
 ### Get book by ISBN
-GET https://localhost:5001/api/books/978-0441172719
+GET https://localhost:5001/api/books/example-value
 
-### Create a new book (validates constraints: ISBN length 10-17, Pages 1-10000, required fields)
+### Create a new book
 POST https://localhost:5001/api/books
 Content-Type: application/json
 
 {
-    "title": "Snow Crash",
-    "author": "Neal Stephenson",
-    "isbn": "978-0553380958",
-    "pages": 440,
-    "genre": 0
+    "Author": "sample",
+    "Genre": "Fiction",
+    "ISBN": "example-isbn",
+    "Pages": 0,
+    "Title": "sample"
 }
 
-### Create a book with invalid ISBN (too short — expect 409 with validation error)
-POST https://localhost:5001/api/books
-Content-Type: application/json
-
-{
-    "title": "Bad Book",
-    "author": "Test Author",
-    "isbn": "123",
-    "pages": 100,
-    "genre": 0
-}
-
-### ──────────── PATRONS ────────────
+### ──────────── Patrons ────────────
 
 ### List all patrons
 GET https://localhost:5001/api/patrons
 
-### Get patron by email
-GET https://localhost:5001/api/patrons/bob@library.org
+### Get patron by Email
+GET https://localhost:5001/api/patrons/example-value
 
-### Register a new patron (validates: email pattern, Name required, MaxItems 0-20)
+### Create a new patron
 POST https://localhost:5001/api/patrons
 Content-Type: application/json
 
 {
-    "name": "Carol White",
-    "email": "carol@library.org",
-    "maxItems": 10,
-    "currentBorrowCount": 0,
-    "outstandingFines": null
+    "CurrentBorrowCount": 0,
+    "Email": "example-email",
+    "MaxItems": 0,
+    "Name": "sample",
+    "OutstandingFines": 0
 }
 
-### Register a patron with invalid email (expect 409)
-POST https://localhost:5001/api/patrons
+### Action: CheckOut
+POST https://localhost:5001/api/patrons/example-value/checkOut
 Content-Type: application/json
 
 {
-    "name": "Bad Email",
-    "email": "not-an-email",
-    "maxItems": 5,
-    "currentBorrowCount": 0,
-    "outstandingFines": null
+    "bookId": "example-book-id"
 }
 
-### ──────────── ACTIONS (Stage- & Policy-Guarded) ────────────
+### Action: Suspend
+POST https://localhost:5001/api/patrons/example-value/suspend
 
-### CheckOut: Bob borrows Dune (should succeed — Bob is Active, good standing)
-POST https://localhost:5001/api/patrons/bob@library.org/checkout
+### Action: CloseAccount
+POST https://localhost:5001/api/patrons/example-value/closeAccount
+
+### Action: Reinstate
+POST https://localhost:5001/api/patrons/example-value/reinstate
+
+### ──────────── Loans ────────────
+
+### List loans for patron
+GET https://localhost:5001/api/patrons/example-value/loans
+
+### Get loan by id for patron
+GET https://localhost:5001/api/patrons/example-value/loans/1
+
+### Action: Renew
+POST https://localhost:5001/api/patrons/example-value/loans/1/renew
+
+### Action: Return
+POST https://localhost:5001/api/patrons/example-value/loans/1/return
+
+### ──────────── Fines ────────────
+
+### List fines for patron
+GET https://localhost:5001/api/patrons/example-value/fines
+
+### Get fine by id for patron
+GET https://localhost:5001/api/patrons/example-value/fines/1
+
+### Action: Pay
+POST https://localhost:5001/api/patrons/example-value/fines/1/pay
+
+### Action: Waive
+POST https://localhost:5001/api/patrons/example-value/fines/1/waive
+
+### ──────────── PremiumPatrons ────────────
+
+### List all premiumPatrons
+GET https://localhost:5001/api/premiumPatrons
+
+### Get premiumPatron by Email
+GET https://localhost:5001/api/premiumPatrons/example-value
+
+### Create a new premiumPatron
+POST https://localhost:5001/api/premiumPatrons
 Content-Type: application/json
 
 {
-    "isbn": "978-0441172719"
+    "Email": "example-email",
+    "Name": "sample",
+    "PriorityAccess": false,
+    "RewardPoints": 0
 }
 
-### CheckOut: Bob borrows a second book (should succeed)
-POST https://localhost:5001/api/patrons/bob@library.org/checkout
-Content-Type: application/json
-
-{
-    "isbn": "978-0441569595"
-}
-
-### CheckOut: Bob tries a third (should fail — AtLimit policy, MaxItems is 3 but loans could be 2)
-POST https://localhost:5001/api/patrons/bob@library.org/checkout
-Content-Type: application/json
-
-{
-    "isbn": "978-0465026562"
-}
-
-### Suspend: Bob (should succeed — is Active, not AtLimit)
-POST https://localhost:5001/api/patrons/bob@library.org/suspend
-
-### CheckOut: Bob after suspend (should fail — stage guard: requires Active)
-POST https://localhost:5001/api/patrons/bob@library.org/checkout
-Content-Type: application/json
-
-{
-    "isbn": "978-0465026562"
-}
-
-### Reinstate: Bob (will fail with NotSupportedException — HasOverdueLoans uses Q3′ any-quantifier)
-POST https://localhost:5001/api/patrons/bob@library.org/reinstate
-
-### ──────────── LOANS ────────────
-
-### List all loans
-GET https://localhost:5001/api/loans
-
-### ──────────── EXPECTED FLOW ────────────
-###  1. GET /api/books                          → 200, 3 books
-###  2. POST /api/patrons/bob/checkout (Dune)   → 200, Loan returned
-###  3. POST /api/patrons/bob/checkout (N'man)  → 200, Loan returned
-###  4. POST /api/patrons/bob/suspend           → 200, { status: "suspended" }
-###  5. POST /api/patrons/bob/checkout (Gödel)  → 409, requires stage Active
-###  6. POST /api/patrons/bob/reinstate         → 500 (Q3′ not supported yet)
-###  7. GET /api/loans                          → 200, 2 loans

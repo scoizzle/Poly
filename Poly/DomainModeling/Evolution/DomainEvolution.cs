@@ -416,6 +416,30 @@ public sealed class EvolutionBuilder {
         AddStageSubscription(entityName, stageName,
             new StageSubscription(relationshipName, targetStageName, effects));
 
+    // ── Entity-level subscriptions ────────────────────────────────────────────
+
+    /// <summary>
+    /// Adds an entity-level subscription (fires regardless of the entity's current stage).
+    /// </summary>
+    public EvolutionBuilder AddEntitySubscription(string entityName, StageSubscription subscription) =>
+        Apply(new AddEntitySubscriptionChange(entityName, subscription));
+
+    /// <summary>
+    /// Adds an entity-level subscription with explicit quantifier.
+    /// </summary>
+    public EvolutionBuilder AddEntitySubscription(string entityName,
+        string relName, string targetStage, StageSubscriptionQuantifier quantifier, params Effect[] effects) =>
+        AddEntitySubscription(entityName,
+            new StageSubscription(relName, [targetStage], quantifier, effects));
+
+    /// <summary>
+    /// Adds an entity-level subscription with <see cref="StageSubscriptionQuantifier.Each"/>.
+    /// </summary>
+    public EvolutionBuilder AddEntitySubscription(string entityName,
+        string relName, string targetStage, params Effect[] effects) =>
+        AddEntitySubscription(entityName,
+            new StageSubscription(relName, [targetStage], StageSubscriptionQuantifier.Each, effects));
+
     public EvolutionBuilder SetActionResult(string entityName, string actionName, InvocationResult result) =>
         Apply(new SetActionResultChange(entityName, actionName, result));
 

@@ -142,6 +142,10 @@ public sealed class PolyDslParser {
             if (_current.Kind == TokenKind.Relationship) {
                 throw N2RelationshipNotSupported();
             }
+            else if (_current.Kind == TokenKind.When && PeekIs(TokenKind.Identifier)) {
+                // Entity-level subscription: when RelName TargetStage { effects }
+                ParseEntitySubscription(changes);
+            }
             else if (_current.Kind == TokenKind.Identifier
                      && (PeekIs(TokenKind.Colon) || PeekIs(TokenKind.LParen))) {
                 // Member form is Name: kind … (property/stage/action/policy/nav).
@@ -663,6 +667,31 @@ public sealed class PolyDslParser {
 
         var subscription = new StageSubscription(relName, targetStages, StageSubscriptionQuantifier.Each, effects);
         changes.Add(new AddStageSubscriptionChange(_currentEntityName, stageName, subscription));
+    }
+
+    /// <summary>
+    /// Parses an entity-level <c>when RelName TargetStage { effects }</c> block.
+    /// Called when <c>when</c> is encountered at the entity body level (outside any stage).
+    /// </summary>
+    private void ParseEntitySubscription(List<DomainChange> changes) {
+        Advance(); // consume 'when'
+        var relName = ExpectIdentifier(TokenKind.Identifier, "relationship name");
+        var targetStages = new List<string>();
+        targetStages.Add(ExpectIdentifier(TokenKind.Identifier, "target stage name"));
+        while (_current.Kind == TokenKind.Comma) {
+            Advance(); // consume ','
+            targetStages.Add(ExpectIdentifier(TokenKind.Identifier, "target stage name"));
+        }
+        Expect(TokenKind.LBrace);
+
+        var effects = new List<Effect>();
+        while (_current.Kind != TokenKind.RBrace) {
+            effects.Add(ParseEffect());
+        }
+        Expect(TokenKind.RBrace);
+
+        var subscription = new StageSubscription(relName, targetStages, StageSubscriptionQuantifier.Each, effects);
+        changes.Add(new AddEntitySubscriptionChange(_currentEntityName, subscription));
     }
 
     private Exception N2RelationshipNotSupported() =>

@@ -60,25 +60,16 @@ public sealed class DomainToCSharpExporter {
 
         foreach (var entity in entities) {
             var subList = new List<SubscriptionInfo>();
+
+            // Entity-level subscriptions (fire regardless of stage)
+            foreach (var sub in entity.Subscriptions) {
+                CollectSubscriptionInfo(sub, entity, null, domainRelationships, entityLookup, subList, subscriptionsByTarget);
+            }
+
+            // Stage-level subscriptions
             foreach (var stage in entity.Stages) {
                 foreach (var sub in stage.Subscriptions) {
-                    // Resolve the target entity via the relationship
-                    var rel = domainRelationships.FirstOrDefault(r =>
-                        string.Equals(r.Name, sub.RelationshipName, StringComparison.Ordinal) &&
-                        string.Equals(r.Source.TypeName, entity.Name, StringComparison.Ordinal));
-                    if (rel is null) continue;
-
-                    if (!entityLookup.TryGetValue(rel.Target.TypeName, out var targetEntity))
-                        continue;
-
-                    foreach (var stageName in sub.StageNames) {
-                        var info = new SubscriptionInfo(stageName, sub, entity, targetEntity, rel);
-                        subList.Add(info);
-
-                        if (!subscriptionsByTarget.TryGetValue(targetEntity.Name, out var targetList))
-                            subscriptionsByTarget[targetEntity.Name] = targetList = new();
-                        targetList.Add(info);
-                    }
+                    CollectSubscriptionInfo(sub, entity, stage.Name, domainRelationships, entityLookup, subList, subscriptionsByTarget);
                 }
             }
             if (subList.Count > 0)
@@ -119,6 +110,35 @@ public sealed class DomainToCSharpExporter {
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Collects subscription info for a single <see cref="StageSubscription"/> and
+    /// populates the target/subscriber maps used for code generation.
+    /// </summary>
+    private static void CollectSubscriptionInfo(
+        StageSubscription sub, Entity entity, string? stageName,
+        IReadOnlyList<Relationship> domainRelationships,
+        IReadOnlyDictionary<string, Entity> entityLookup,
+        List<SubscriptionInfo> subList,
+        Dictionary<string, List<SubscriptionInfo>> subscriptionsByTarget) {
+
+        var rel = domainRelationships.FirstOrDefault(r =>
+            string.Equals(r.Name, sub.RelationshipName, StringComparison.Ordinal) &&
+            string.Equals(r.Source.TypeName, entity.Name, StringComparison.Ordinal));
+        if (rel is null) return;
+
+        if (!entityLookup.TryGetValue(rel.Target.TypeName, out var targetEntity))
+            return;
+
+        foreach (var sName in sub.StageNames) {
+            var info = new SubscriptionInfo(sName, sub, entity, targetEntity, rel);
+            subList.Add(info);
+
+            if (!subscriptionsByTarget.TryGetValue(targetEntity.Name, out var targetList))
+                subscriptionsByTarget[targetEntity.Name] = targetList = new();
+            targetList.Add(info);
+        }
     }
 
     // ── Per-entity builder ──────────────────────────────────────

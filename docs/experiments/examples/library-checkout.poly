@@ -86,7 +86,6 @@ Patron: entity {
   }
 
   // ── Active — can borrow ────────────────────────────────────────────────────
-  // Prefer declarative require gates over nested conditionals (Principle 0.5).
   Active: stage {
     CheckOut: action (book: Book) -> Loan
       require GoodStanding
@@ -104,13 +103,21 @@ Patron: entity {
       transition to Suspended
     }
 
-    // Subscription handles cross-entity side effects (Principle 0.4).
-    when loans Overdue {
-      create Fine { Amount: 5 Reason: "Overdue item" }
-      assign OutstandingFines to OutstandingFines + 5
-    }
-
     CloseAccount: action { transition to Closed }
+  }
+
+  // Entity-level subscription — fires regardless of Patron's current stage
+  when loans Overdue {
+    create Fine { Amount: 5 Reason: "Overdue item" }
+    assign OutstandingFines to OutstandingFines + 5
+  }
+
+  when loans Returned {
+    assign CurrentBorrowCount to CurrentBorrowCount - 1
+  }
+
+  when fines Paid {
+    assign OutstandingFines to OutstandingFines - 5
   }
 
   // ── Suspended — borrowing frozen ───────────────────────────────────────────
@@ -155,6 +162,10 @@ Loan: entity {
     Renew: action {
       assign DueDate to DueDate + 14
       assign TimesRenewed to TimesRenewed + 1
+    }
+    Return: action {
+      assign ReturnedAt to now
+      transition to Returned
     }
   }
 

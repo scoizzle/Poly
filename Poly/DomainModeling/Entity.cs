@@ -18,6 +18,13 @@ public sealed record Entity(
     IReadOnlyList<Policy> Policies,
     IReadOnlyList<Stage> Stages
 ) : DomainType(Name, Properties, []) {
+    /// <summary>
+    /// Entity-level subscriptions that fire when a related entity transitions into
+    /// a matching stage. Unlike stage-scoped subscriptions, these are active regardless
+    /// of which stage this entity occupies.
+    /// </summary>
+    public IReadOnlyList<StageSubscription> Subscriptions { get; init; } = [];
+
     public sealed override IEnumerable<Node?> Children =>
-        [.. Properties, .. Constraints, .. Actions, .. Policies, .. Stages];
+        [.. Properties, .. Constraints, .. Actions, .. Policies, .. Stages, .. Subscriptions];
 }

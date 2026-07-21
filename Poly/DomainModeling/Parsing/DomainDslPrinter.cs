@@ -102,6 +102,11 @@ public sealed class DomainDslPrinter {
             PrintPolicy(policy, "  ");
         }
 
+        // Entity-level subscriptions
+        foreach (var sub in entity.Subscriptions) {
+            PrintSubscription(sub, "  ");
+        }
+
         // Stages (in declared order)
         foreach (var stage in entity.Stages) {
             PrintStage(stage, "  ");

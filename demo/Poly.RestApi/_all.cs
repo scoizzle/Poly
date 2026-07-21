@@ -138,6 +138,7 @@ public class Patron {
         var loan = loanResult.Value;
         this._loans.Add(loan);
         loan.RegisterPatronOverdueSubscriber(this);
+        loan.RegisterPatronReturnedSubscriber(this);
         return loan;
     }
     private Fine CreateFines(long amount, bool paid, string reason) {
@@ -147,6 +148,7 @@ public class Patron {
         }
         var fine = fineResult.Value;
         this._fines.Add(fine);
+        fine.RegisterPatronPaidSubscriber(this);
         return fine;
     }
     public DomainResult<Loan> CheckOut(Book book) {
@@ -209,6 +211,12 @@ public class Patron {
         var fine = fineResult.Value;
         this.OutstandingFines = this.OutstandingFines + 5L;
     }
+    internal void WhenLoanReturned() {
+        this.CurrentBorrowCount = this.CurrentBorrowCount - 1L;
+    }
+    internal void WhenFinePaid() {
+        this.OutstandingFines = this.OutstandingFines - 5L;
+    }
     public static DomainResult<Patron> Create(long currentBorrowCount, string email, long maxItems, string name, long outstandingFines, IEnumerable<Loan> loans, IEnumerable<Fine> fines) {
         if (!System.Text.RegularExpressions.Regex.IsMatch(email, "^[^@]+@[^@]+$")) {
             return DomainResult<Patron>.Failure("'Email' does not match the required pattern.");
@@ -228,6 +236,12 @@ public class Patron {
         foreach (var target in this.Loans) {
             target.RegisterPatronOverdueSubscriber(this);
         }
+        foreach (var target in this.Loans) {
+            target.RegisterPatronReturnedSubscriber(this);
+        }
+        foreach (var target in this.Fines) {
+            target.RegisterPatronPaidSubscriber(this);
+        }
     }
 }
 
@@ -239,6 +253,7 @@ public enum LoanStage {
 
 public class Loan {
     private List<Patron>? _overdueSubscribers;
+    private List<Patron>? _returnedSubscribers;
     private Loan() {
         // EF materialization.
     }
@@ -270,6 +285,15 @@ public class Loan {
         this.TimesRenewed = this.TimesRenewed + 1L;
         return DomainResult.Success();
     }
+    public DomainResult Return() {
+        if (this.CurrentStage != LoanStage.Active) {
+            return DomainResult.Failure("'Return' requires stage 'Active' on entity 'Loan'.");
+        }
+        this.ReturnedAt = DateTime.UtcNow;
+        this.CurrentStage = LoanStage.Returned;
+        this.NotifyReturnedSubscribers();
+        return DomainResult.Success();
+    }
     internal void RegisterPatronOverdueSubscriber(Patron subscriber) {
         if (this._overdueSubscribers == null) {
             this._overdueSubscribers = new List<Patron>();
@@ -283,6 +307,19 @@ public class Loan {
             }
         }
     }
+    internal void RegisterPatronReturnedSubscriber(Patron subscriber) {
+        if (this._returnedSubscribers == null) {
+            this._returnedSubscribers = new List<Patron>();
+        }
+        this._returnedSubscribers.Add(subscriber);
+    }
+    internal void NotifyReturnedSubscribers() {
+        if (this._returnedSubscribers != null) {
+            foreach (var sub in this._returnedSubscribers) {
+                sub.WhenLoanReturned();
+            }
+        }
+    }
     public static DomainResult<Loan> Create(DateTime checkedOutAt, DateTime dueDate, DateTime returnedAt, string status, long timesRenewed, Book book, Patron borrower) => DomainResult<Loan>.Success(new Loan(checkedOutAt, dueDate, returnedAt, status, timesRenewed, book, borrower));
 }
 
@@ -292,6 +329,7 @@ public enum FineStage {
 }
 
 public class Fine {
+    private List<Patron>? _paidSubscribers;
     private Fine() {
         // EF materialization.
     }
@@ -334,6 +372,19 @@ public class Fine {
         this.Paid = true;
         this.CurrentStage = FineStage.Resolved;
         return DomainResult.Success();
+    }
+    internal void RegisterPatronPaidSubscriber(Patron subscriber) {
+        if (this._paidSubscribers == null) {
+            this._paidSubscribers = new List<Patron>();
+        }
+        this._paidSubscribers.Add(subscriber);
+    }
+    internal void NotifyPaidSubscribers() {
+        if (this._paidSubscribers != null) {
+            foreach (var sub in this._paidSubscribers) {
+                sub.WhenFinePaid();
+            }
+        }
     }
     public static DomainResult<Fine> Create(long amount, bool paid, string reason, Patron patron) => DomainResult<Fine>.Success(new Fine(amount, paid, reason, patron));
 }

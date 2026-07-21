@@ -2,6 +2,7 @@ using System.Text;
 
 using Poly.DomainModeling;
 using Poly.DomainModeling.Constraints;
+using Poly.DomainModeling.Lowering;
 
 namespace Poly.DslCompiler;
 
@@ -13,11 +14,28 @@ public sealed class HttpFileGenerator {
     private readonly Domain _domain;
     private readonly List<Entity> _entities;
     private readonly string _baseUrl;
+    private readonly InfrastructureModel _infraModel;
+    private readonly Dictionary<string, TransportEntity> _transportLookup;
+    private readonly Dictionary<string, StorageEntity> _storageLookup;
 
-    public HttpFileGenerator(Domain domain, string baseUrl = "http://localhost:5201") {
+    public HttpFileGenerator(Domain domain, string baseUrl = "http://localhost:5201",
+        InfrastructureModel? infraModel = null) {
         _domain = domain;
         _entities = domain.Types.OfType<Entity>().ToList();
         _baseUrl = baseUrl;
+        _infraModel = infraModel ?? new InfrastructureAnalyzer(domain).Analyze();
+        _transportLookup = _infraModel.Transport.Entities.ToDictionary(e => e.Name, StringComparer.Ordinal);
+        _storageLookup = _infraModel.Storage.Entities.ToDictionary(e => e.Name, StringComparer.Ordinal);
+    }
+
+    private StorageEntity GetStorageEntity(Entity entity) =>
+        _storageLookup.GetValueOrDefault(entity.Name) ?? new StorageEntity(entity);
+
+    /// <summary>Returns pre-computed actions for an entity from TransportModel.</summary>
+    private IReadOnlyList<TransportAction> GetTransportActions(Entity entity) {
+        if (_transportLookup.TryGetValue(entity.Name, out var te))
+            return te.Actions;
+        return [];
     }
 
     public string Generate() {
@@ -33,7 +51,7 @@ public sealed class HttpFileGenerator {
         sb.AppendLine();
 
         foreach (var entity in _entities) {
-            var isRoot = !HasRequiredEntityRef(entity);
+            var isRoot = GetStorageEntity(entity).IsRoot;
             AppendEntitySection(sb, entity, isRoot);
         }
 
@@ -95,15 +113,9 @@ public sealed class HttpFileGenerator {
         }
 
         // Actions on the entity (for both root and child)
-        foreach (var action in entity.Actions) {
-            AppendActionRequest(sb, entity, action, hasKey, keyExample);
-        }
-
-        // Actions on stages
-        foreach (var stage in entity.Stages) {
-            foreach (var action in stage.Actions) {
-                AppendActionRequest(sb, entity, action, hasKey, keyExample);
-            }
+        var transportActions = GetTransportActions(entity);
+        foreach (var ia in transportActions) {
+            AppendActionRequest(sb, entity, ia, hasKey, keyExample);
         }
     }
 
@@ -122,10 +134,10 @@ public sealed class HttpFileGenerator {
     }
 
     private void AppendActionRequest(StringBuilder sb, Entity entity,
-        DomainModeling.Action action, bool hasKey, string keyExample) {
-        var actionName = ToCamelCase(action.Name);
+        TransportAction ia, bool hasKey, string keyExample) {
+        var actionName = ToCamelCase(ia.Name);
 
-        var isChild = HasRequiredEntityRef(entity);
+        var isChild = !GetStorageEntity(entity).IsRoot;
         var parentRoute = "";
         if (isChild) {
             var parents = GetParentRelationships(entity).ToList();
@@ -142,20 +154,20 @@ public sealed class HttpFileGenerator {
             ? parentRoute
             : $"{Pluralize(ToCamelCase(entity.Name))}";
 
-        sb.AppendLine($"### Action: {action.Name}");
+        sb.AppendLine($"### Action: {ia.Name}");
         sb.AppendLine($"POST {_baseUrl}/api/{route}/{keyExample}/{actionName}");
-        if (action.Parameters.Count > 0) {
+        if (ia.Parameters.Count > 0) {
             sb.AppendLine("Content-Type: application/json");
             sb.AppendLine();
             sb.AppendLine("{");
-            for (int i = 0; i < action.Parameters.Count; i++) {
-                var param = action.Parameters[i];
-                var comma = i < action.Parameters.Count - 1 ? "," : "";
-                if (_entities.Any(e => string.Equals(e.Name, param.Type.TypeName, StringComparison.Ordinal))) {
-                    sb.AppendLine($"    \"{param.Name}Id\": \"example-{ToCamelCase(param.Type.TypeName)}-id\"{comma}");
+            for (int i = 0; i < ia.Parameters.Count; i++) {
+                var param = ia.Parameters[i];
+                var comma = i < ia.Parameters.Count - 1 ? "," : "";
+                if (param.IsEntityRef) {
+                    sb.AppendLine($"    \"{param.Name}Id\": \"example-{ToCamelCase(param.DomainType)}-id\"{comma}");
                 }
                 else {
-                    sb.AppendLine($"    \"{param.Name}\": {GetExampleJsonValue(param)}{comma}");
+                    sb.AppendLine($"    \"{param.Name}\": {GetExampleJsonValueForTransportParam(param, entity)}{comma}");
                 }
             }
             sb.AppendLine("}");
@@ -164,18 +176,6 @@ public sealed class HttpFileGenerator {
     }
 
     // ── Helpers ────────────────────────────────────────────────
-
-    /// <summary>Returns true if the entity has required entity-reference constructor params.</summary>
-    private bool HasRequiredEntityRef(Entity entity) {
-        if (entity.Properties.Any(p => !p.Constraints.Any(c => c is DefaultValueConstraint)
-            && _entities.Any(e => string.Equals(e.Name, p.Type.TypeName, StringComparison.Ordinal))))
-            return true;
-        if (_domain.Relationships.Any(r => string.Equals(r.Source.TypeName, entity.Name, StringComparison.Ordinal)
-            && r.Cardinality is not (RelationshipCardinality.OneToMany or RelationshipCardinality.ManyToMany)
-            && !string.Equals(r.Target.TypeName, entity.Name, StringComparison.Ordinal)))
-            return true;
-        return false;
-    }
 
     private static string Pluralize(string name) => name + "s";
 
@@ -214,6 +214,27 @@ public sealed class HttpFileGenerator {
         if (enumType is not null && enumType.MemberNames.Count > 0)
             return $"\"{enumType.MemberNames[0]}\"";
         return prop.Type.TypeName switch {
+            "Text" or "String" => "\"sample\"",
+            "Number" or "Int" or "Int64" => "0",
+            "Int32" => "0",
+            "Boolean" or "Bool" => "false",
+            "DateTime" or "Timestamp" => "\"2026-07-20T00:00:00Z\"",
+            "Date" or "DateOnly" => "\"2026-07-20\"",
+            "Decimal" => "0.0",
+            "Float" or "Double" => "0.0",
+            "Guid" or "Uuid" => "\"550e8400-e29b-41d4-a716-446655440000\"",
+            _ => "0",
+        };
+    }
+
+    private string GetExampleJsonValueForTransportParam(TransportParameter param, Entity entity) {
+        // If the type is an enum in the domain, use the first member
+        var enumType = _domain.Types.OfType<EnumType>()
+            .FirstOrDefault(e => string.Equals(e.Name, param.DomainType, StringComparison.Ordinal));
+        if (enumType is not null && enumType.MemberNames.Count > 0)
+            return $"\"{enumType.MemberNames[0]}\"";
+
+        return param.DomainType switch {
             "Text" or "String" => "\"sample\"",
             "Number" or "Int" or "Int64" => "0",
             "Int32" => "0",

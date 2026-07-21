@@ -2,6 +2,7 @@ using System.Text;
 
 using Poly.DomainModeling;
 using Poly.DomainModeling.Constraints;
+using Poly.DomainModeling.Lowering;
 
 namespace Poly.DslCompiler;
 
@@ -13,19 +14,26 @@ namespace Poly.DslCompiler;
 /// <c>IReadOnlyList&lt;T&gt;</c> collection navs, private setters, and
 /// <c>unique</c>/<c>required</c>/<c>length</c> constraints.
 ///
-/// This is the "get it working first" implementation — string-based generation.
-/// Future versions may produce <c>TypeDefinitionNode</c> trees for CSharpGenerator.
+/// Consumes <see cref="StorageModel"/> from the infrastructure analysis
+/// for key structure, column metadata, and navigation classification.
 /// </summary>
 public sealed class DbContextGenerator {
     private readonly Domain _domain;
     private readonly List<Entity> _entities;
     private readonly string _contextName;
+    private readonly InfrastructureModel _infraModel;
+    private readonly Dictionary<string, StorageEntity> _storageLookup;
 
-    public DbContextGenerator(Domain domain) {
+    public DbContextGenerator(Domain domain, InfrastructureModel? infraModel = null) {
         _domain = domain;
         _entities = domain.Types.OfType<Entity>().ToList();
         _contextName = $"{domain.Name}DbContext";
+        _infraModel = infraModel ?? new InfrastructureAnalyzer(domain).Analyze();
+        _storageLookup = _infraModel.Storage.Entities.ToDictionary(e => e.Name, StringComparer.Ordinal);
     }
+
+    private StorageEntity GetStorageEntity(Entity entity) =>
+        _storageLookup.GetValueOrDefault(entity.Name) ?? new StorageEntity(entity);
 
     /// <summary>Generates the complete DbContext C# source.</summary>
     public string Generate(string @namespace = "Poly.Generated") {
@@ -68,113 +76,64 @@ public sealed class DbContextGenerator {
     }
 
     private void AppendEntityConfig(StringBuilder sb, Entity entity) {
-        var tableName = Pluralize(entity.Name);
-        var uniqueProp = entity.Properties.FirstOrDefault(p =>
-            p.Constraints.Any(c => c is UniqueConstraint));
+        var store = GetStorageEntity(entity);
+        var tableName = store.TableName;
 
         sb.AppendLine($"        // ── {entity.Name} ─────────────────────────────────────────────────");
         sb.AppendLine($"        modelBuilder.Entity<{entity.Name}>(b =>");
         sb.AppendLine("        {");
 
-        if (uniqueProp is not null) {
-            // Unique property → natural key
-            sb.AppendLine($"            b.HasKey(x => x.{uniqueProp.Name});");
-            // Key property also gets its column config here
-            AppendPropertyConfig(sb, entity, uniqueProp);
+        if (!store.HasShadowKey) {
+            // Natural key from unique property
+            sb.AppendLine($"            b.HasKey(x => x.{store.KeyProperty!.Name});");
+            // Key property gets its column config from the column metadata
+            var keyCol = store.Columns.FirstOrDefault(c =>
+                c.IsUnique && c.HasDefault == false);
+            if (keyCol is not null)
+                AppendColumnConfig(sb, keyCol);
         }
         else {
-            // No unique property → shadow key
+            // No unique property → shadow int key
             sb.AppendLine("            b.Property<int>(\"Id\");");
             sb.AppendLine("            b.HasKey(\"Id\");");
         }
 
-        // Configure remaining properties
-        foreach (var prop in entity.Properties) {
-            if (uniqueProp is not null && string.Equals(prop.Name, uniqueProp.Name, StringComparison.Ordinal))
-                continue;
-            AppendPropertyConfig(sb, entity, prop);
+        // Configure remaining columns (excluding the key, already configured above)
+        foreach (var col in store.Columns) {
+            if (col.IsUnique && !store.HasShadowKey) continue; // skip natural key column
+            AppendColumnConfig(sb, col);
         }
 
         // Collection navigations: set backing field access mode
-        var domainRels = _domain.Relationships.ToList();
-        foreach (var rel in domainRels) {
-            if (!string.Equals(rel.Source.TypeName, entity.Name, StringComparison.Ordinal))
-                continue;
-
-            var isMany = rel.Cardinality is RelationshipCardinality.OneToMany
-                         or RelationshipCardinality.ManyToMany;
-
-            if (isMany) {
-                var pascalName = ToPascalCase(rel.Name);
-                sb.AppendLine($"            b.Metadata.FindNavigation(nameof({entity.Name}.{pascalName}))!");
-                sb.AppendLine($"                .SetPropertyAccessMode(PropertyAccessMode.Field);");
-            }
-            // Singular navs don't need explicit config — EF resolves them automatically
+        foreach (var nav in store.CollectionNavigations) {
+            sb.AppendLine($"            b.Metadata.FindNavigation(nameof({entity.Name}.{nav.PropertyName}))!");
+            sb.AppendLine($"                .SetPropertyAccessMode(PropertyAccessMode.Field);");
         }
 
         sb.AppendLine("        });");
         sb.AppendLine();
     }
 
-    /// <summary>Appends column-level configuration for a single property.</summary>
-    private void AppendPropertyConfig(StringBuilder sb, Entity entity, Property prop) {
-        // Required constraints on nullable types
-        if (prop.Constraints.Any(c => c is RequiredConstraint) && !IsValueDomainType(prop.Type.TypeName)) {
-            sb.AppendLine($"            b.Property(x => x.{prop.Name}).IsRequired();");
+    /// <summary>Appends column-level configuration for a single StorageColumn.</summary>
+    private static void AppendColumnConfig(StringBuilder sb, StorageColumn col) {
+        // Required constraints on nullable CLR types
+        if (col.IsRequired && col.ClrTypeName is not ("int" or "long" or "double" or "decimal" or "float" or "bool" or "DateTime" or "DateOnly" or "TimeOnly" or "TimeSpan" or "Guid")) {
+            sb.AppendLine($"            b.Property(x => x.{col.Name}).IsRequired();");
         }
 
         // Length constraints
-        var lengthC = prop.Constraints.OfType<LengthConstraint>().FirstOrDefault();
-        if (lengthC is not null) {
-            sb.AppendLine($"            b.Property(x => x.{prop.Name}).HasMaxLength({lengthC.MaxLength});");
+        if (col.MaxLength is not null) {
+            sb.AppendLine($"            b.Property(x => x.{col.Name}).HasMaxLength({col.MaxLength});");
         }
         // Pattern-only properties (like Email with a regex but no length constraint)
         // get a reasonable default max length for the DB column.
-        else if (prop.Name.Equals("Email", StringComparison.Ordinal) || prop.Name.Equals("EmailAddress", StringComparison.Ordinal)) {
-            var hasPattern = prop.Constraints.Any(c => c is PatternConstraint);
-            if (hasPattern) {
-                sb.AppendLine($"            b.Property(x => x.{prop.Name}).HasMaxLength(256);");
-            }
+        else if ((col.Name.Equals("Email", StringComparison.Ordinal) || col.Name.Equals("EmailAddress", StringComparison.Ordinal))
+                 && col.Constraints.Any(c => c is PatternConstraint)) {
+            sb.AppendLine($"            b.Property(x => x.{col.Name}).HasMaxLength(256);");
         }
     }
 
     // ── Helpers ────────────────────────────────────────────────
 
-    /// <summary>Returns true if the entity has required entity-reference constructor params.</summary>
-    private bool HasRequiredEntityRef(Entity entity) {
-        if (entity.Properties.Any(p => !p.Constraints.Any(c => c is DefaultValueConstraint)
-            && _entities.Any(e => string.Equals(e.Name, p.Type.TypeName, StringComparison.Ordinal))))
-            return true;
-        if (_domain.Relationships.Any(r => string.Equals(r.Source.TypeName, entity.Name, StringComparison.Ordinal)
-            && r.Cardinality is not (RelationshipCardinality.OneToMany or RelationshipCardinality.ManyToMany)
-            && !string.Equals(r.Target.TypeName, entity.Name, StringComparison.Ordinal)))
-            return true;
-        return false;
-    }
-
-    private static string Pluralize(string name) {
-        // Simple pluralization: add "s". Will be wrong for some words
-        // (e.g. "Book" → "Books" correct, "Person" → "Persons" wrong).
-        // A future version can accept an override or use more sophisticated logic.
-        return name + "s";
-    }
-
-    private static string ToPascalCase(string name) {
-        if (string.IsNullOrEmpty(name) || char.IsUpper(name[0]))
-            return name;
-        return char.ToUpperInvariant(name[0]) + name.Substring(1);
-    }
-
-    private static bool IsValueDomainType(string typeName) => typeName switch {
-        "Number" or "Int" or "Int64" or "Int32" => true,
-        "Boolean" or "Bool" => true,
-        "DateTime" or "Timestamp" => true,
-        "Date" or "DateOnly" => true,
-        "Time" or "TimeOnly" => true,
-        "Duration" or "TimeSpan" => true,
-        "Decimal" => true,
-        "Float" or "Double" => true,
-        "Guid" or "Uuid" => true,
-        _ => false,
-    };
+    private static string Pluralize(string name) => name + "s";
 }

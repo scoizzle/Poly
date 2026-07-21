@@ -4,7 +4,7 @@ using System.Text.Json.Serialization;
 
 using Microsoft.EntityFrameworkCore;
 
-using Poly.RestApi.Data;
+using Poly.Generated;
 
 var builder = WebApplication.CreateBuilder(args);
 

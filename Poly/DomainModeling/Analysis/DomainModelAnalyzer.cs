@@ -40,6 +40,8 @@ public static class DomainModelAnalysisBuilderExtensions {
             builder.AddAnalyzer(new RuleCoverageAnalyzer());
             builder.AddAnalyzer(new ContractIntegrationAnalyzer());
             builder.AddAnalyzer(new ActionParameterUsageAnalyzer());
+            // Entity structure metadata (key, root, soft-delete, stages)
+            builder.AddAnalyzer(new EntityStructureAnalyzer());
             // Stage-subscription analyzers (replaced retired event-centric passes)
             builder.AddAnalyzer(new SubscriptionContractAnalyzer());
             builder.AddAnalyzer(new SubscriptionCausalityAnalyzer());

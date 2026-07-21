@@ -1,7 +1,6 @@
 using System.Text;
 
 using Poly.DomainModeling;
-using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Parsing;
@@ -134,18 +133,21 @@ public sealed class DslCompiler {
             files.Add(($"{entity.Name}.cs", csharp));
         }
 
+        // Infrastructure analysis — shared by all generators below
+        var infraModel = new InfrastructureAnalyzer(domain, analysis).Analyze();
+
         // DbContext (mode: db or all)
         if (mode == CompileMode.Db || mode == CompileMode.All) {
             var dbContextName = $"{domain.Name}DbContext";
-            var dbGen = new DbContextGenerator(domain);
+            var dbGen = new DbContextGenerator(domain, infraModel);
             files.Add(("LibraryDbContext.cs", dbGen.Generate()));
 
             // Minimal API + .http file (mode: all only)
             if (mode == CompileMode.All) {
-                var apiGen = new MinimalApiGenerator(domain);
+                var apiGen = new MinimalApiGenerator(domain, infraModel);
                 files.Add(("Program.cs", apiGen.Generate(dbContextName)));
 
-                var httpGen = new HttpFileGenerator(domain);
+                var httpGen = new HttpFileGenerator(domain, infraModel: infraModel);
                 files.Add(("demo.http", httpGen.Generate()));
             }
         }

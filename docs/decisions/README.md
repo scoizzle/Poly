@@ -25,6 +25,7 @@ These documents exist so that:
 
 ## Current Decisions
 
+- [2026-07-22: Persistence Units, Medium-Scoped Facets, and Pack Syntax Export](2026-07-22-persistence-units-medium-facets-pack-syntax-export.md) — **Analysis hub → downstream artifact consumers**; multi-DBMS persistence units + medium facets; **resulting artifacts**; C# as pack-movable target; single `--dbms` / string generators are transitional scaffolding.
 - [2026-07-11: Platform Trust Bar and Dogfood Gates](2026-07-11-platform-trust-bar-and-dogfood.md) — First customer; product via domain + modules; external contracts; **product generation funds neurosymbolic work**; T1/T2/T3; trust layer 1 = honesty.
 - [2026-05-31: Immutable Core for Domain Modeling (V2 → V3)](2026-05-31-immutable-core-domain-modeling.md) — Strategic shift to immutable records while preserving the transactional evolution/correctness guarantees required by LLM agents.
 - [2026: V2 → V3 Domain Modeling Port Plan](2026-v2-to-v3-domain-modeling-port.md) — Living plan for the port to the immutable core + thin evolution layer (includes integration with the documentation and agent instruction structure).

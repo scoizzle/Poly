@@ -10,6 +10,12 @@ namespace Poly.DomainModeling.Lowering;
 ///
 /// Produces columns, navigations, foreign keys, soft-delete storage shape,
 /// stage tracking storage shape, and subscription list backing fields.
+///
+/// P2: Accepts an optional <see cref="TypeMappingRegistry"/> for per-pack
+/// type overrides and an optional <see cref="IStorageConvention"/> chain
+/// for post-processing. When <c>column</c> / <c>table</c> annotations are
+/// present on entity/property facets, they are applied to override the
+/// baseline column name, column type, and entity table name.
 /// </summary>
 public sealed class StorageAnalyzer {
     private readonly Domain _domain;
@@ -17,10 +23,18 @@ public sealed class StorageAnalyzer {
     private readonly List<Relationship> _relationships;
     private readonly Dictionary<string, Entity> _entityLookup;
     private readonly AnalysisResult? _analysis;
+    private readonly TypeMappingRegistry _typeMaps;
+    private readonly IReadOnlyList<IStorageConvention> _conventions;
 
-    public StorageAnalyzer(Domain domain, AnalysisResult? analysis = null) {
+    public StorageAnalyzer(
+        Domain domain,
+        AnalysisResult? analysis = null,
+        TypeMappingRegistry? typeMaps = null,
+        IReadOnlyList<IStorageConvention>? conventions = null) {
         _domain = domain;
         _analysis = analysis;
+        _typeMaps = typeMaps ?? new TypeMappingRegistry();
+        _conventions = conventions ?? [];
 
         var lookup = analysis?.GetMetadata<DomainTypeLookupMetadata>(default);
         if (lookup is not null) {
@@ -46,6 +60,82 @@ public sealed class StorageAnalyzer {
 
         var rels = _relationships.Select(r => new StorageRelationship(r)).ToList();
         return new StorageModel(_domain.Name, storageEntities, rels);
+    }
+
+    /// <summary>Recognised annotation keywords for storage facets.</summary>
+    internal const string ColumnAnnotationKeyword = "column";
+    internal const string TableAnnotationKeyword = "table";
+
+    /// <summary>
+    /// Reads the last <c>column("NAME" [, "TYPE"])</c> on property facets (last wins).
+    /// Empty/whitespace names fail closed.
+    /// </summary>
+    internal static (string? ColumnName, string? ColumnType) ResolveColumnAnnotation(Property property) {
+        ArgumentNullException.ThrowIfNull(property);
+        string? name = null;
+        string? type = null;
+        var sawColumn = false;
+
+        foreach (var facet in property.Facets) {
+            if (facet is not Annotation ann
+                || !string.Equals(ann.Name, ColumnAnnotationKeyword, StringComparison.Ordinal)) {
+                continue;
+            }
+
+            sawColumn = true;
+            name = null;
+            type = null;
+
+            if (ann.Arguments.TryGetValue("0", out var arg0)) {
+                if (arg0 is not AnnotationString nameStr || string.IsNullOrWhiteSpace(nameStr.Value)) {
+                    throw new InvalidOperationException(
+                        $"Property '{property.Name}': column annotation argument 0 must be a non-empty string.");
+                }
+                name = nameStr.Value;
+            }
+            else {
+                throw new InvalidOperationException(
+                    $"Property '{property.Name}': column annotation requires a non-empty name argument.");
+            }
+
+            if (ann.Arguments.TryGetValue("1", out var arg1)) {
+                if (arg1 is not AnnotationString typeStr || string.IsNullOrWhiteSpace(typeStr.Value)) {
+                    throw new InvalidOperationException(
+                        $"Property '{property.Name}': column annotation argument 1 must be a non-empty string when present.");
+                }
+                type = typeStr.Value;
+            }
+        }
+
+        return sawColumn ? (name, type) : (null, null);
+    }
+
+    /// <summary>
+    /// Reads the last <c>table("NAME")</c> on entity facets (last wins).
+    /// Empty/whitespace names fail closed.
+    /// </summary>
+    internal static string? ResolveTableAnnotation(Entity entity) {
+        ArgumentNullException.ThrowIfNull(entity);
+        string? tableName = null;
+        var sawTable = false;
+
+        foreach (var facet in entity.Facets) {
+            if (facet is not Annotation ann
+                || !string.Equals(ann.Name, TableAnnotationKeyword, StringComparison.Ordinal)) {
+                continue;
+            }
+
+            sawTable = true;
+            if (!ann.Arguments.TryGetValue("0", out var arg0)
+                || arg0 is not AnnotationString nameStr
+                || string.IsNullOrWhiteSpace(nameStr.Value)) {
+                throw new InvalidOperationException(
+                    $"Entity '{entity.Name}': table annotation requires a non-empty name argument.");
+            }
+            tableName = nameStr.Value;
+        }
+
+        return sawTable ? tableName : null;
     }
 
     private StorageEntity BuildStorageEntity(
@@ -111,7 +201,10 @@ public sealed class StorageAnalyzer {
         var foreignKeys = BuildForeignKeys(entity, agg, aggLookup);
         var subscriptionLists = DetectSubscriptionLists(entity.Name, collectionNavs, topology);
 
-        return new StorageEntity(
+        // P2: Apply table annotation override
+        var tableName = ResolveTableAnnotation(entity);
+
+        var storageEntity = new StorageEntity(
             entity,
             keyName,
             keyClrType,
@@ -126,7 +219,17 @@ public sealed class StorageAnalyzer {
             collectionNavs,
             referenceNavs,
             foreignKeys,
-            subscriptionLists);
+            subscriptionLists,
+            tableName);
+
+        // P2: Apply convention chain
+        foreach (var conv in _conventions) {
+            var projected = conv.ProjectEntity(entity, storageEntity);
+            if (projected is not null)
+                storageEntity = projected;
+        }
+
+        return storageEntity;
     }
 
     private (List<StorageColumn> Columns, List<StorageNavigation> Collections, List<StorageNavigation> References)
@@ -142,15 +245,37 @@ public sealed class StorageAnalyzer {
             if (isEntityRef) continue;
 
             var isEnum = enumTypes.ContainsKey(prop.Type.TypeName);
-            columns.Add(new StorageColumn(
+
+            // P2: Default column type from registry, then apply column annotation override
+            var baseColumnType = isEnum
+                ? prop.Type.TypeName
+                : _typeMaps.ToSqlColumnType(prop.Type.TypeName);
+            var baseClrType = isEnum
+                ? prop.Type.TypeName
+                : _typeMaps.ToClrTypeName(prop.Type.TypeName);
+
+            var (colName, colType) = ResolveColumnAnnotation(prop);
+            var columnType = colType ?? baseColumnType;
+
+            var column = new StorageColumn(
                 prop,
-                isEnum ? prop.Type.TypeName : DomainTypeMapping.ToSqlColumnType(prop.Type.TypeName),
-                isEnum ? prop.Type.TypeName : DomainTypeMapping.ToClrTypeName(prop.Type.TypeName),
+                columnType,
+                baseClrType,
                 isEnum,
                 prop.Constraints.Any(c => c is RequiredConstraint),
                 prop.Constraints.Any(c => c is DefaultValueConstraint),
                 prop.Constraints.Any(c => c is UniqueConstraint),
-                prop.Constraints.OfType<LengthConstraint>().FirstOrDefault()?.MaxLength));
+                prop.Constraints.OfType<LengthConstraint>().FirstOrDefault()?.MaxLength,
+                columnName: colName);
+
+            // P2: Apply convention chain
+            foreach (var conv in _conventions) {
+                var projected = conv.ProjectColumn(prop, column);
+                if (projected is not null)
+                    column = projected;
+            }
+
+            columns.Add(column);
         }
 
         foreach (var rel in _relationships) {

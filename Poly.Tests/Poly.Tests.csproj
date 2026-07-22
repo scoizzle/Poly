@@ -12,6 +12,9 @@
 	<ItemGroup>
 		<ProjectReference Include="..\Poly\Poly.csproj" />
 		<ProjectReference Include="..\Poly.Mcp\Poly.Mcp.csproj" />
+		<ProjectReference Include="..\src\Poly.DslCompiler\Poly.DslCompiler.csproj" />
+		<ProjectReference Include="..\src\Poly.Packs.Sqlite\Poly.Packs.Sqlite.csproj" />
+		<ProjectReference Include="..\src\Poly.Packs.SqlServer\Poly.Packs.SqlServer.csproj" />
 	</ItemGroup>
 	<ItemGroup>
 	  <Folder Include="Introspection/" />

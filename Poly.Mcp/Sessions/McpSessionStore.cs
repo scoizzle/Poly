@@ -9,6 +9,21 @@ using Poly.Syntax.Analysis;
 namespace Poly.Mcp.Sessions;
 
 /// <summary>
+/// Shared authoring context for MCP sessions. Currently configured with the core
+/// Sql annotation pack (<c>column</c>, <c>table</c>) so MCP <c>apply_dsl</c> and
+/// <c>export_dsl</c> support portable annotation syntax — same as the DslCompiler.
+///
+/// Future: per-session pack selection (P4.5) will replace this static default.
+/// </summary>
+internal static class McpAuthoring {
+    /// <summary>Gets the shared authoring context with Sql annotation pack.</summary>
+    public static DomainAuthoringContext Context { get; } = DomainAuthoringContext.CreateWithSqlPack();
+
+    /// <summary>Gets the annotation registry from the shared context.</summary>
+    public static AnnotationRegistry Annotations => Context.Annotations;
+}
+
+/// <summary>
 /// V3 session state: holds the current V3 <see cref="Domain"/> root,
 /// the latest analysis result, a monotonically increasing revision number,
 /// and a runtime instance store for exercising domain lifecycle.

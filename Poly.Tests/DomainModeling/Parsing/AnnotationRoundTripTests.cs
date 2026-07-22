@@ -5,12 +5,8 @@ using Poly.DomainModeling.Parsing;
 namespace Poly.Tests.DomainModeling.Parsing;
 
 public class AnnotationRoundTripTests {
-    private static DomainAuthoringContext CreateTestContext() {
-        var ctx = DomainAuthoringContext.Create();
-        ctx.Annotations.Register(new TestColumnAnnotationSyntax());
-        ctx.Annotations.Register(new TestTableAnnotationSyntax());
-        return ctx;
-    }
+    private static DomainAuthoringContext CreateTestContext() =>
+        DomainAuthoringContext.CreateWithSqlPack();
 
     [Test]
     public async Task ColumnAnnotation_ParsePrint_RoundTrips() {
@@ -204,6 +200,36 @@ public class AnnotationRoundTripTests {
         var parser = new PolyDslParser(poly, ctx);
         var ex = Assert.Throws<FormatException>(() => parser.Parse());
         await Assert.That(ex!.Message).Contains("Trailing comma");
+    }
+
+    [Test]
+    public async Task ColumnAnnotation_EscapedQuotes_RoundTrip() {
+        var poly = """
+            domain Test
+
+            Item: entity {
+              Note: Text column("COL_\"X\"")
+            }
+            """;
+
+        var ctx = CreateTestContext();
+        var parser = new PolyDslParser(poly, ctx);
+        var result = new DomainEvolution(new Domain("_", [], [])).Apply(parser.Parse());
+        await Assert.That(result.Succeeded).IsTrue();
+
+        var note = result.Root!.Types.OfType<Entity>().Single().Properties.Single();
+        var ann = (Annotation)note.Facets[0];
+        await Assert.That(((AnnotationString)ann.Arguments["0"]).Value).IsEqualTo("COL_\"X\"");
+
+        var printed = new DomainDslPrinter(ctx.Annotations).Print(result.Root);
+        await Assert.That(printed.Contains("column(\"COL_\\\"X\\\"\")")).IsTrue();
+
+        var result2 = new DomainEvolution(new Domain("_", [], []))
+            .Apply(new PolyDslParser(printed, ctx).Parse());
+        await Assert.That(result2.Succeeded).IsTrue();
+        var note2 = result2.Root!.Types.OfType<Entity>().Single().Properties.Single();
+        await Assert.That(((AnnotationString)((Annotation)note2.Facets[0]).Arguments["0"]).Value)
+            .IsEqualTo("COL_\"X\"");
     }
 
     [Test]

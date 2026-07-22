@@ -39,7 +39,8 @@ public sealed class StorageEntity {
         IReadOnlyList<StorageNavigation> collectionNavigations,
         IReadOnlyList<StorageNavigation> referenceNavigations,
         IReadOnlyList<StorageForeignKey> foreignKeys,
-        IReadOnlyList<StorageSubscriptionList> subscriptionLists) {
+        IReadOnlyList<StorageSubscriptionList> subscriptionLists,
+        string? tableName = null) {
         Source = source;
         KeyName = keyName;
         KeyClrType = keyClrType;
@@ -55,6 +56,9 @@ public sealed class StorageEntity {
         ReferenceNavigations = referenceNavigations;
         ForeignKeys = foreignKeys;
         SubscriptionLists = subscriptionLists;
+        if (tableName is not null && string.IsNullOrWhiteSpace(tableName))
+            throw new ArgumentException("Table name must be non-empty when provided.", nameof(tableName));
+        TableName = tableName ?? Name + "s";
     }
 
     /// <summary>The source domain entity.</summary>
@@ -63,8 +67,8 @@ public sealed class StorageEntity {
     /// <summary>Entity name (also the table/collection name basis).</summary>
     public string Name => Source.Name;
 
-    /// <summary>Pluralized name for table/DbSet naming.</summary>
-    public string TableName => Name + "s";
+    /// <summary>Physical table name. Defaults to <c>Name + "s"</c>; overridable via <c>table("…")</c>.</summary>
+    public string TableName { get; init; }
 
     /// <summary>The property used as the natural key (null = shadow key).</summary>
     public Property? KeyProperty { get; }
@@ -114,7 +118,7 @@ public sealed class StorageEntity {
     public IReadOnlyList<StorageSubscriptionList> SubscriptionLists { get; }
 }
 
-/// <summary>Storage-level view of a property — column type, CLR type, constraints.</summary>
+/// <summary>Storage-level view of a property — column name, type, CLR type, constraints.</summary>
 public sealed class StorageColumn {
     public StorageColumn(
         Property source,
@@ -124,8 +128,16 @@ public sealed class StorageColumn {
         bool isRequired,
         bool hasDefault,
         bool isUnique,
-        int? maxLength) {
+        int? maxLength,
+        string? columnName = null) {
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentException.ThrowIfNullOrWhiteSpace(columnType);
+        ArgumentException.ThrowIfNullOrWhiteSpace(clrTypeName);
+        if (columnName is not null && string.IsNullOrWhiteSpace(columnName))
+            throw new ArgumentException("Column name must be non-empty when provided.", nameof(columnName));
+
         Source = source;
+        ColumnName = columnName ?? DomainTypeMapping.ToCamelCase(Source.Name);
         ColumnType = columnType;
         ClrTypeName = clrTypeName;
         IsEnum = isEnum;
@@ -136,15 +148,21 @@ public sealed class StorageColumn {
     }
 
     public Property Source { get; }
+
+    /// <summary>The domain property name (PascalCase).</summary>
     public string Name => Source.Name;
+
+    /// <summary>The physical column name (camelCase by default, overridable via <c>column("NAME")</c>).</summary>
+    public string ColumnName { get; init; }
+
     public string DomainType => Source.Type.TypeName;
-    public string ClrTypeName { get; }
-    public string ColumnType { get; }
-    public int? MaxLength { get; }
-    public bool IsRequired { get; }
-    public bool IsEnum { get; }
-    public bool HasDefault { get; }
-    public bool IsUnique { get; }
+    public string ClrTypeName { get; init; }
+    public string ColumnType { get; init; }
+    public int? MaxLength { get; init; }
+    public bool IsRequired { get; init; }
+    public bool IsEnum { get; init; }
+    public bool HasDefault { get; init; }
+    public bool IsUnique { get; init; }
     public IReadOnlyList<Constraint> Constraints => Source.Constraints;
 }
 

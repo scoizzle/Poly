@@ -3,7 +3,6 @@ using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Parsing;
-
 namespace Poly.Tests.DomainModeling.Lowering;
 
 /// <summary>
@@ -373,5 +372,288 @@ public class InfrastructureAnalyzerTests {
             """);
         // Same scan result is shared — Transport reuses coordinator topology.
         await Assert.That(ReferenceEquals(infra.Topology, infra.Transport.Effects)).IsTrue();
+    }
+
+    // ═══════════════════════════════════════════════════════════╗
+    // P2 — Annotation-driven storage overrides                 ║
+    // ╚══════════════════════════════════════════════════════════╝
+
+    private static InfrastructureModel AnalyzeWithPacks(string poly) {
+        var ctx = DomainAuthoringContext.CreateWithSqlPack();
+        var parser = new PolyDslParser(poly, ctx);
+        var changes = parser.Parse();
+        var emptyDomain = new Domain("_", [], []);
+        var result = new DomainEvolution(emptyDomain).Apply(changes);
+        if (!result.Succeeded) {
+            var errors = string.Join("; ", result.Analysis.Diagnostics
+                .Where(d => d.Severity == DiagnosticSeverity.Error)
+                .Select(d => d.Message));
+            throw new InvalidOperationException($"Domain evolution failed: {errors}");
+        }
+        return new InfrastructureAnalyzer(result.Root!).Analyze();
+    }
+
+    [Test]
+    public async Task ColumnAnnotation_OverridesColumnName() {
+        var infra = AnalyzeWithPacks("""
+            domain Test
+            Item: entity {
+              Code: Text unique column("CODE")
+              Name: Text column("PRODUCT_NAME")
+            }
+            """);
+        var item = infra.Storage.Entities.Single();
+        var code = item.Columns.Single(c => c.Name == "Code");
+        await Assert.That(code.ColumnName).IsEqualTo("CODE");
+        var name = item.Columns.Single(c => c.Name == "Name");
+        await Assert.That(name.ColumnName).IsEqualTo("PRODUCT_NAME");
+    }
+
+    [Test]
+    public async Task ColumnAnnotation_OverridesColumnNameAndType() {
+        var infra = AnalyzeWithPacks("""
+            domain Test
+            Item: entity {
+              Code: Text unique column("CODE", "VARCHAR2(20)")
+            }
+            """);
+        var code = infra.Storage.Entities.Single().Columns.Single();
+        await Assert.That(code.ColumnName).IsEqualTo("CODE");
+        await Assert.That(code.ColumnType).IsEqualTo("VARCHAR2(20)");
+        // CLR type is unaffected by column annotation
+        await Assert.That(code.ClrTypeName).IsEqualTo("string");
+    }
+
+    [Test]
+    public async Task ColumnAnnotation_WithEnumProperty() {
+        var infra = AnalyzeWithPacks("""
+            domain Test
+            Status: enum { Open, Closed }
+            Ticket: entity {
+              State: Status column("STATE_CD")
+            }
+            """);
+        var state = infra.Storage.Entities.Single().Columns.Single();
+        await Assert.That(state.ColumnName).IsEqualTo("STATE_CD");
+        await Assert.That(state.IsEnum).IsTrue();
+        await Assert.That(state.ClrTypeName).IsEqualTo("Status");
+    }
+
+    [Test]
+    public async Task TableAnnotation_OverridesTableName() {
+        var infra = AnalyzeWithPacks("""
+            domain Test
+            Order: entity table("ORDER_RECORDS") {
+              Total: Number
+            }
+            """);
+        var order = infra.Storage.Entities.Single();
+        await Assert.That(order.TableName).IsEqualTo("ORDER_RECORDS");
+        // Name (domain name) is unchanged
+        await Assert.That(order.Name).IsEqualTo("Order");
+    }
+
+    [Test]
+    public async Task UnannotatedProperties_UseDefaultColumnName() {
+        var infra = AnalyzeWithPacks("""
+            domain Test
+            Item: entity {
+              SomeCamelCaseProperty: Text
+              Title: Text
+            }
+            """);
+        var item = infra.Storage.Entities.Single();
+        await Assert.That(item.Columns.Single(c => c.Name == "Title").ColumnName)
+            .IsEqualTo("title");
+        await Assert.That(item.Columns.Single(c => c.Name == "SomeCamelCaseProperty").ColumnName)
+            .IsEqualTo("someCamelCaseProperty");
+    }
+
+    [Test]
+    public async Task TypeMappingRegistry_CoreDefaults_AreGenericSql() {
+        // D3: core defaults are vendor-neutral (not SQL Server nvarchar/datetime2/…).
+        var registry = new TypeMappingRegistry();
+        await Assert.That(registry.ToSqlColumnType("Text")).IsEqualTo("varchar");
+        await Assert.That(registry.ToSqlColumnType("Number")).IsEqualTo("bigint");
+        await Assert.That(registry.ToSqlColumnType("Boolean")).IsEqualTo("boolean");
+        await Assert.That(registry.ToSqlColumnType("DateTime")).IsEqualTo("timestamp");
+        await Assert.That(registry.ToSqlColumnType("Date")).IsEqualTo("date");
+        await Assert.That(registry.ToSqlColumnType("Decimal")).IsEqualTo("decimal");
+        await Assert.That(registry.ToSqlColumnType("Guid")).IsEqualTo("uuid");
+        await Assert.That(registry.ToSqlColumnType("Binary")).IsEqualTo("binary");
+        await Assert.That(registry.ToSqlColumnType("Unknown")).IsEqualTo("varchar");
+
+        await Assert.That(registry.ToClrTypeName("Text")).IsEqualTo("string");
+        await Assert.That(registry.ToClrTypeName("Number")).IsEqualTo("long");
+        await Assert.That(registry.ToClrTypeName("Boolean")).IsEqualTo("bool");
+        await Assert.That(registry.ToClrTypeName("DateTime")).IsEqualTo("DateTime");
+        await Assert.That(registry.ToClrTypeName("Date")).IsEqualTo("DateOnly");
+        await Assert.That(registry.ToClrTypeName("Guid")).IsEqualTo("Guid");
+        await Assert.That(registry.ToClrTypeName("Unknown")).IsEqualTo("Unknown");
+
+        // Single source of truth: DomainTypeMapping and registry agree on core defaults.
+        await Assert.That(DomainTypeMapping.ToSqlColumnType("Text")).IsEqualTo(registry.ToSqlColumnType("Text"));
+        await Assert.That(DomainTypeMapping.ToClrTypeName("Number")).IsEqualTo(registry.ToClrTypeName("Number"));
+    }
+
+    [Test]
+    public async Task TypeMappingRegistry_OverridesApply() {
+        var registry = new TypeMappingRegistry();
+        registry.OverrideSqlColumnType("Text", "nvarchar(max)");
+        registry.OverrideClrTypeName("Number", "int");
+
+        await Assert.That(registry.ToSqlColumnType("Text")).IsEqualTo("nvarchar(max)");
+        await Assert.That(registry.ToClrTypeName("Number")).IsEqualTo("int");
+
+        // Unoverridden keys keep generic defaults
+        await Assert.That(registry.ToSqlColumnType("Boolean")).IsEqualTo("boolean");
+        await Assert.That(registry.ToClrTypeName("Text")).IsEqualTo("string");
+    }
+
+    [Test]
+    public async Task StorageAnalyzer_WithCustomTypeRegistry() {
+        var domain = ParseDomain("""
+            domain Test
+            Item: entity { Name: Text }
+            """);
+        var registry = new TypeMappingRegistry();
+        registry.OverrideSqlColumnType("Text", "varchar(100)");
+        var analyzer = new StorageAnalyzer(domain, typeMaps: registry);
+        var model = analyzer.Analyze();
+        var col = model.Entities.Single().Columns.Single();
+        await Assert.That(col.ColumnType).IsEqualTo("varchar(100)");
+    }
+
+    [Test]
+    public async Task ConventionChain_AppliesAfterBaseline() {
+        var domain = ParseDomain("""
+            domain Test
+            Item: entity { Name: Text }
+            """);
+
+        var convention = new TestPrefixConvention("stg_");
+        var analyzer = new StorageAnalyzer(domain, conventions: new[] { convention });
+        var model = analyzer.Analyze();
+        var col = model.Entities.Single().Columns.Single();
+        await Assert.That(col.ColumnName).IsEqualTo("stg_name");
+    }
+
+    [Test]
+    public async Task AuthoringContext_ThreadsTypeMapsAndConventions() {
+        var domain = ParseDomain("""
+            domain Test
+            Item: entity { Name: Text }
+            """);
+
+        var ctx = DomainAuthoringContext.Create()
+            .AddStorageConvention(new TestPrefixConvention("p_"));
+        ctx.TypeMaps.OverrideSqlColumnType("Text", "text");
+
+        var infra = new InfrastructureAnalyzer(domain).Analyze(ctx);
+        var col = infra.Storage.Entities.Single().Columns.Single();
+        await Assert.That(col.ColumnName).IsEqualTo("p_name");
+        await Assert.That(col.ColumnType).IsEqualTo("text");
+    }
+
+    [Test]
+    public async Task EmptyColumnName_FailsClosed() {
+        var domain = ParseDomain("""
+            domain Test
+            Item: entity { Name: Text }
+            """);
+        var item = domain.Types.OfType<Entity>().Single();
+        var prop = item.Properties.Single() with {
+            Facets = [
+                new Annotation("column", new Dictionary<string, AnnotationValue> {
+                    ["0"] = new AnnotationString("   "),
+                })
+            ]
+        };
+        var entity = item with { Properties = [prop] };
+        var faceted = domain with { Types = [entity] };
+
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            new StorageAnalyzer(faceted).Analyze());
+        await Assert.That(ex!.Message).Contains("non-empty");
+    }
+
+    [Test]
+    public async Task EmptyTableName_FailsClosed() {
+        var domain = ParseDomain("""
+            domain Test
+            Item: entity { Name: Text }
+            """);
+        var item = domain.Types.OfType<Entity>().Single() with {
+            Facets = [
+                new Annotation("table", new Dictionary<string, AnnotationValue> {
+                    ["0"] = new AnnotationString(""),
+                })
+            ]
+        };
+        var faceted = domain with { Types = [item] };
+
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            new StorageAnalyzer(faceted).Analyze());
+        await Assert.That(ex!.Message).Contains("non-empty");
+    }
+
+    [Test]
+    public async Task LastColumnAnnotation_Wins() {
+        var domain = ParseDomain("""
+            domain Test
+            Item: entity { Name: Text }
+            """);
+        var item = domain.Types.OfType<Entity>().Single();
+        var prop = item.Properties.Single() with {
+            Facets = [
+                new Annotation("column", new Dictionary<string, AnnotationValue> {
+                    ["0"] = new AnnotationString("FIRST"),
+                }),
+                new Annotation("column", new Dictionary<string, AnnotationValue> {
+                    ["0"] = new AnnotationString("SECOND"),
+                    ["1"] = new AnnotationString("varchar(10)"),
+                }),
+            ]
+        };
+        var entity = item with { Properties = [prop] };
+        var faceted = domain with { Types = [entity] };
+
+        var model = new StorageAnalyzer(faceted).Analyze();
+        var col = model.Entities.Single().Columns.Single();
+        await Assert.That(col.ColumnName).IsEqualTo("SECOND");
+        await Assert.That(col.ColumnType).IsEqualTo("varchar(10)");
+    }
+
+    [Test]
+    public async Task Unannotated_UsesGenericSqlColumnType() {
+        var infra = AnalyzeFull("""
+            domain Test
+            Item: entity {
+              Title: Text
+              Active: Boolean
+            }
+            """);
+        var item = infra.Storage.Entities.Single();
+        await Assert.That(item.Columns.Single(c => c.Name == "Title").ColumnType).IsEqualTo("varchar");
+        await Assert.That(item.Columns.Single(c => c.Name == "Active").ColumnType).IsEqualTo("boolean");
+        await Assert.That(item.TableName).IsEqualTo("Items");
+    }
+
+    /// <summary>Test convention that prefixes column names.</summary>
+    private sealed class TestPrefixConvention : IStorageConvention {
+        private readonly string _prefix;
+        public TestPrefixConvention(string prefix) => _prefix = prefix;
+        public StorageEntity? ProjectEntity(Entity entity, StorageEntity baseline) => null;
+        public StorageColumn? ProjectColumn(Property property, StorageColumn baseline) =>
+            new StorageColumn(
+                baseline.Source,
+                baseline.ColumnType,
+                baseline.ClrTypeName,
+                baseline.IsEnum,
+                baseline.IsRequired,
+                baseline.HasDefault,
+                baseline.IsUnique,
+                baseline.MaxLength,
+                columnName: _prefix + baseline.ColumnName);
     }
 }

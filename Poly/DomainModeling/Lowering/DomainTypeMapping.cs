@@ -22,21 +22,25 @@ public static class DomainTypeMapping {
         _ => domainType,
     };
 
-    /// <summary>Maps a domain primitive to a default SQL Server column type.</summary>
+    /// <summary>
+    /// Maps a domain primitive to a <b>generic SQL</b> column type (D3).
+    /// Vendor packs override via <see cref="TypeMappingRegistry"/> — core must
+    /// not bake SQL Server / Oracle / Postgres-specific strings as permanent defaults.
+    /// </summary>
     public static string ToSqlColumnType(string domainType) => domainType switch {
-        "Text" or "String" => "nvarchar(max)",
+        "Text" or "String" => "varchar",
         "Number" or "Int" or "Int64" => "bigint",
-        "Int32" => "int",
-        "Boolean" or "Bool" => "bit",
-        "DateTime" or "Timestamp" => "datetime2",
+        "Int32" => "integer",
+        "Boolean" or "Bool" => "boolean",
+        "DateTime" or "Timestamp" => "timestamp",
         "Date" or "DateOnly" => "date",
         "Time" or "TimeOnly" => "time",
-        "Duration" or "TimeSpan" => "time",
-        "Decimal" => "decimal(18,6)",
-        "Float" or "Double" => "float",
-        "Guid" or "Uuid" => "uniqueidentifier",
-        "Binary" => "varbinary(max)",
-        _ => "nvarchar(max)",
+        "Duration" or "TimeSpan" => "interval",
+        "Decimal" => "decimal",
+        "Float" or "Double" => "double precision",
+        "Guid" or "Uuid" => "uuid",
+        "Binary" => "binary",
+        _ => "varchar",
     };
 
     /// <summary>True when the CLR type is a non-nullable value type in C#.</summary>

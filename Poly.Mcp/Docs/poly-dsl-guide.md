@@ -196,6 +196,39 @@ Item: entity {
 }
 ```
 
+### Annotations (Portable Storage Hints)
+
+Annotations are metadata attached to entities (`table`) or properties (`column`)
+that inform code generation without changing domain semantics. They require the
+Sql annotation pack (enabled by default in MCP `apply_dsl` and the DslCompiler).
+
+| Annotation | Scope | Syntax | Example |
+|-----------|-------|--------|---------|
+| `table` | Entity header | `table("NAME")` | `Patron: entity table("PATRON_MASTER") { … }` |
+| `column` | Property tail | `column("NAME")` or `column("NAME","TYPE")` | `Name: Text column("PRODUCT_NAME")` or `Code: Text column("CODE", "VARCHAR2(20)")` |
+
+- **`column("name")`** overrides the physical column name (default: camelCase property name).
+- **`column("name", "type")`** additionally overrides the SQL column type (default: vendor pack type map, or core generic SQL).
+- **`table("name")`** overrides the table name (default: pluralized entity name, e.g. `Item` → `Items`).
+- Multiple annotations of the same keyword on the same target produce a parse error.
+- Unknown/unregistered annotations produce a parse error (fail-closed).
+
+Annotations interleave with built-in constraints in the property tail. Order does
+not matter:
+
+```poly
+Item: entity table("INVENTORY") {
+  Code: Text unique column("CODE", "VARCHAR2(20)")
+  Name: Text column("NAME") required
+  Qty: Number range(0, ) column("QUANTITY")
+}
+```
+
+Without the Sql pack enabled, `column(...)` and `table(...)` produce a parse error.
+This is deliberate — portable domain text stays DBMS-agnostic; storage hints are
+an opt-in projection layer.
+```
+
 ## 4. Navigation Properties (N1 Relationships Only)
 
 Relationships are declared as **inline navigation properties** on the source entity.
@@ -562,6 +595,17 @@ SetName: action (newName: Text) {
 | Pattern | `pattern(regex)` | `Zip: Text pattern("^\\d{5}$")` |
 | Default | `default(value)` | `Status: Text default("Active")` |
 | Enum | `enum(v1, v2, ...)` | `Color: Text enum(Red, Green, Blue)` |
+
+### Annotations (portable metadata, not constraints)
+
+`column(...)` and `table(...)` are **projection annotations**, not validation constraints.
+They attach storage hints to properties/entities that codegen consumes (EF, DDL).
+See §3 for the full syntax reference.
+
+| Annotation | Scope | Example |
+|-----------|-------|---------|
+| `column` | Property tail | `Name: Text column("PROD_NAME")` |
+| `table` | Entity header | `Item: entity table("INVENTORY") { … }` |
 
 ## 12. Dual Authoring Path
 

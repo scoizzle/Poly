@@ -562,7 +562,7 @@ public sealed class DomainDslPrinter {
     }
 
     /// <summary>Escapes <c>\</c> and <c>"</c> for double-quoted DSL string literals.</summary>
-    internal static string EscapeStringLiteral(string value) =>
+    public static string EscapeStringLiteral(string value) =>
         value.Replace("\\", "\\\\", StringComparison.Ordinal)
              .Replace("\"", "\\\"", StringComparison.Ordinal);
 

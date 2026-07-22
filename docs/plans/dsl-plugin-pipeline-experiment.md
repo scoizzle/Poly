@@ -1,7 +1,7 @@
 # Experiment: DomainModeling Plugin Seams + Provider Pack Libraries
 
-**Status:** P0 locked; **P1 implemented** (annotation IR + parse/print hooks + test double). P2+ not started.  
-**Date:** 2026-07-21 (**rev 4** — post-P1 code review hardening)  
+**Status:** P0 locked; **P1 + P2 + P3 implemented**. **P4:** multi-DBMS packs with **SQLite as first shippable pack** (host `--dbms sqlite`); SqlServer remains available. P4.4 vendor sugar + P4.5 MCP deferred.  
+**Date:** 2026-07-21 (**rev 7** — SQLite first shippable pack + host wiring)  
 **Supersedes:** [`docs/experiments/domain-plugin-extension-platform.md`](../experiments/domain-plugin-extension-platform.md)  
 **Pointer:** [`docs/plans/domain-plugin-extension-platform.md`](domain-plugin-extension-platform.md)  
 **Related:** `src/Poly.DslCompiler/` (first host), `InfrastructureModel`, AGENTS §6, anti-pattern 003
@@ -382,33 +382,34 @@ modelBuilder.Entity<Patron>(b => {
 
 **Non-goals:** EF output, MCP guide listing `column`, vendor sugar, product `poly-dsl-guide` changes (guide stays core-only).
 
-### P2 — Storage fields + convention chain (core)
+### P2 — Storage fields + convention chain (core) ✅
 
-| Step | Deliverable |
-|------|-------------|
-| 2.1 | `StorageColumn.ColumnName`; entity table-name override field/API |
-| 2.2 | `TypeMappingRegistry` (SQL + CLR) threaded through infrastructure/storage analysis; core generic SQL defaults locked by tests |
-| 2.3 | `IStorageConvention` chain after baseline build |
-| 2.4 | Tests: annotation → storage snapshot |
+| Step | Deliverable | Status |
+|------|-------------|--------|
+| 2.1 | `StorageColumn.ColumnName`; entity table-name override field/API | Done |
+| 2.2 | `TypeMappingRegistry` (SQL + CLR) threaded through infrastructure/storage analysis; core generic SQL defaults locked by tests | Done |
+| 2.3 | `IStorageConvention` chain after baseline build | Done |
+| 2.4 | Tests: annotation → storage snapshot (column name, type, table name, enum, convention chain) | Done |
 
-### P3 — First real pack library + host wiring
+### P3 — First real pack library + host wiring ✅
 
-| Step | Deliverable |
-|------|-------------|
-| 3.1 | `Poly.Packs.Sql` (or `src/` until packaging stabilizes): **canonical** `column` / `table`; retire test double as keyword owner |
-| 3.2 | DslCompiler accepts authoring context / pack set; golden tests |
-| 3.3 | DbContext adapter emits `ToTable` / `HasColumnName` / `HasColumnType` from storage |
-| 3.4 | **Document compiler-only** pack enablement; **no** MCP pack parameters (D4) |
+| Step | Deliverable | Status |
+|------|-------------|--------|
+| 3.1 | Canonical `column`/`table` (`ColumnAnnotationSyntax`/`TableAnnotationSyntax` in core); `CreateWithSqlPack()` factory; retire test-only doubles | Done |
+| 3.2 | `DslCompiler` creates `DomainAuthoringContext` with Sql pack, threads to parser + `InfrastructureAnalyzer` | Done |
+| 3.3 | `DbContextGenerator` emits `b.ToTable(…)` always, `HasColumnName(…)` always (camelCase default/annotation override), `HasColumnType(…)` always | Done |
+| 3.4 | 9 tests: default plural, annotation overrides, camelCase, required, max length, shadow key, unique key dedup | Done |
 
 ### P4 — Second engine pack (proves multi-DBMS)
 
-| Step | Deliverable |
-|------|-------------|
-| 4.1 | Choose **Oracle or SqlServer** as first second-engine pack |
-| 4.2 | Type-map overrides + diagnostics (e.g. identifier length) |
-| 4.3 | Same domain, two pack sets → different defaults; explicit column type stable |
-| 4.4 | Optional vendor sugar → desugar to `column` |
-| 4.5 | MCP pack enablement + session pack-set hash + guide honesty for enabled packs |
+| Step | Deliverable | Status |
+|------|-------------|--------|
+| 4.1 | Choose first second-engine pack | Done — **SQLite first shippable** (no server); SqlServer also present |
+| 4.2 | Type-map overrides (+ identifier diagnostics where relevant) | Done (Sqlite + SqlServer) |
+| 4.3 | Same domain, two pack sets → different defaults; explicit column type stable | Done |
+| 4.3b | **Host composition** — `DslCompiler` / CLI `--dbms generic\|sqlite\|sqlserver` | Done |
+| 4.4 | Optional vendor sugar → desugar to `column` | Not started |
+| 4.5 | MCP pack enablement + guide honesty for enabled packs | **Done** — shared `McpAuthoring.Context` (Sql pack) wired into `apply_dsl` and `export_dsl`; `poly-dsl-guide.md` documents `column`/`table` as product surface. Session pack-set hash deferred to second consumer (static context for now). |
 
 **After P4:** optional `IDomainPack` convenience façade; third-party template docs.
 
@@ -464,10 +465,15 @@ Pluralization (`Name + "s"`) remains a separate convention concern; `table("…"
 
 - [x] P0 decisions written (§11)  
 - [x] P1: portable annotation round-trip with test pack; fail-closed parse **and** print without pack  
-- [ ] P2: storage carries `ColumnName` / `ColumnType` / table override from annotations + maps  
-- [ ] P3: Sql pack is canonical `column`/`table` owner; EF adapter emits name/type/table  
-- [ ] P4: second DBMS pack changes defaults without core edits; MCP pack wiring if product needs it  
-- [ ] Core `Poly` has **zero** references to Oracle/SQL Server/Npgsql packages  
+- [x] P2: storage carries `ColumnName` / `ColumnType` / table override from annotations + maps  
+- [x] P3: Sql pack is canonical `column`/`table` owner; EF adapter emits name/type/table  
+- [x] P4: multi-DBMS packs + host wiring  
+  - [x] SQLite first shippable pack (`src/Poly.Packs.Sqlite/`)  
+  - [x] SqlServer pack (`src/Poly.Packs.SqlServer/`)  
+  - [x] Host composition: `DslCompiler` `DbmsPack` + CLI `--dbms`  
+  - [ ] P4.4: vendor sugar (desugar to `column`)  
+  - [x] P4.5: MCP pack enablement — `apply_dsl`/`export_dsl` Sql pack wired; guide updated  
+- [x] Core `Poly` has **zero** references to Oracle/SQL Server/Npgsql packages (packs are separate libraries)  
 - [ ] CORE path intact: domain execution still lowers to existing Syntax only  
 
 ---
@@ -488,6 +494,11 @@ Pluralization (`Name + "s"`) remains a separate convention concern; `table("…"
 | 2026-07-21 | **D7: EfCore stays in DslCompiler as adapter** | `IDomainTargetExporter`. Extract to `Poly.Packs.EfCore` only when a second host appears. |
 | 2026-07-21 | **rev 3 consistency** | Grammar, blast radius, D3/D5 wording, P3 handoff, entity table field, duplicate-keyword fail-closed |
 | 2026-07-21 | **rev 4 P1 code review** | Native parse (no dead `IDslTokenReader`); clear unregistered-annotation errors; enum property tails; trailing-comma reject; content equality for `Annotation`; print handlers fail closed on bad args |
+| 2026-07-21 | **rev 5 P2 code review** | D3 generic SQL defaults in `DomainTypeMapping` (not SQL Server); registry is override layer only; empty column/table names fail closed; last annotation wins; authoring context owns type maps + convention chain; InfrastructureAnalyzer threads authoring |
+| 2026-07-21 | **P3: Sql pack + EF emission** | Canonical `ColumnAnnotationSyntax`/`TableAnnotationSyntax` in core `Poly/DomainModeling/`; `CreateWithSqlPack()` factory; `DbContextGenerator` emits `ToTable`/`HasColumnName`/`HasColumnType` from `StorageModel`; 9 new tests; 1518→1527 green |
+| 2026-07-21 | **P4.1–4.3: SqlServer pack** | `Poly.Packs.SqlServer` library (separate project, no core deps); `SqlServerDefaults.AddSqlServerDefaults()` extension; type-map overrides (nvarchar/bit/datetime2/uniqueidentifier); `SqlServerIdentifierConvention` (128-char limit); 11 tests proving multi-DBMS defaults differ and explicit annotations stable; 1530→1541 green |
+| 2026-07-21 | **P4 shippable: SQLite + host** | `Poly.Packs.Sqlite` first shippable pack (TEXT/INTEGER/REAL/BLOB affinities; no service); `DslCompiler.DbmsPack` + `CreateAuthoring` + CLI `--dbms generic\|sqlite\|sqlserver`; host EF DbContext golden tests prove generic vs sqlite differ; 1541→1552 green |
+| 2026-07-21 | **P4.5: MCP pack enablement** | `McpSessionStore` gains shared `McpAuthoring` static (Sql pack); `apply_dsl` passes `Context` to parser; `export_dsl` passes `Annotations` to printer; `poly-dsl-guide.md` adds `column`/`table` syntax + annotations section. Agents can now use storage annotations in MCP. Suite 1552 green (stable). |
 
 ---
 
@@ -499,4 +510,4 @@ Pluralization (`Name + "s"`) remains a separate convention concern; `table("…"
 **No:** core does not embed vendor types or EF/Oracle packages.  
 **No:** full plugin host / actors / MEF before portable annotation + storage + Sql pack + second engine pack prove the seams.
 
-**P0 + P1 complete.** Next when prioritized: **P2 → P3 → P4**. Everything else is pull-only.
+**P0 + P1 + P2 + P3 + P4 host multi-DBMS (SQLite first shippable) complete.** Next when prioritized: **P4.4–4.5 → P5**. Everything else is pull-only.

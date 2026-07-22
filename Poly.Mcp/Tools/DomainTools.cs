@@ -15,6 +15,9 @@ using Poly.DomainModeling.Queries;
 using Poly.Mcp.Sessions;
 using Poly.Syntax.Analysis;
 
+// Use shared McpAuthoring.Context for pack-aware parse/print.
+using static Poly.Mcp.Sessions.McpAuthoring;
+
 namespace Poly.Mcp.Tools;
 
 // ── Shared response types ──────────────────────────────────────
@@ -1220,7 +1223,8 @@ for exploration and repair.")]
         // ── 1. Parse ───────────────────────────────────────────
         List<DomainChange> changes;
         try {
-            var parser = new PolyDslParser(polyText);
+            // P4.5: Use shared authoring context so column/table annotations are recognised.
+            var parser = new PolyDslParser(polyText, Context);
             changes = parser.Parse();
         }
         catch (FormatException ex) {
@@ -1304,7 +1308,8 @@ for exploration and repair.")]
         if (!McpSessionStore.TryGet(sessionId, out var state))
             return Failure_NotFound(sessionId);
 
-        var printer = new DomainDslPrinter();
+        // P4.5: Use shared annotation registry so column/table facets can be printed.
+        var printer = new DomainDslPrinter(Annotations);
         var polyText = printer.Print(state.Domain);
 
         return new DomainToolResponse(

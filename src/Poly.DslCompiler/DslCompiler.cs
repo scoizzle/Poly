@@ -5,6 +5,8 @@ using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Parsing;
 using Poly.Interpretation.CSharp;
+using Poly.Packs.Sqlite;
+using Poly.Packs.SqlServer;
 using Poly.Syntax.Analysis;
 
 namespace Poly.DslCompiler;
@@ -19,6 +21,20 @@ public enum CompileMode {
     Db,
     /// <summary>Entity types + DbContext + Minimal API. (Not yet implemented)</summary>
     All,
+}
+
+/// <summary>
+/// DBMS pack selection for storage defaults (type maps + conventions).
+/// Annotation keywords (<c>column</c>/<c>table</c>) come from the core Sql pack
+/// in all cases; this selects vendor default projections only.
+/// </summary>
+public enum DbmsPack {
+    /// <summary>Core generic SQL defaults (varchar, boolean, timestamp, …).</summary>
+    Generic,
+    /// <summary>SQLite affinities / EF Core SQLite types (first shippable pack).</summary>
+    Sqlite,
+    /// <summary>SQL Server types (nvarchar, bit, datetime2, …).</summary>
+    SqlServer,
 }
 
 /// <summary>
@@ -44,16 +60,34 @@ public sealed class DslCompiler {
         Compile(polyText, CompileMode.Entities);
 
     /// <summary>
-    /// Compiles .poly DSL text into C# source files with the given mode.
+    /// Compiles .poly DSL text into C# source files with the given mode
+    /// and generic SQL storage defaults.
     /// </summary>
-    public CompileResult Compile(string polyText, CompileMode mode) {
+    public CompileResult Compile(string polyText, CompileMode mode) =>
+        Compile(polyText, mode, DbmsPack.Generic);
+
+    /// <summary>
+    /// Compiles .poly DSL text with the given mode and DBMS pack selection.
+    /// </summary>
+    public CompileResult Compile(string polyText, CompileMode mode, DbmsPack dbms) =>
+        Compile(polyText, mode, CreateAuthoring(dbms));
+
+    /// <summary>
+    /// Compiles .poly DSL text with an explicit authoring context (packs, maps, conventions).
+    /// </summary>
+    public CompileResult Compile(
+        string polyText,
+        CompileMode mode,
+        DomainAuthoringContext authoring) {
+        ArgumentNullException.ThrowIfNull(authoring);
+
         if (string.IsNullOrWhiteSpace(polyText))
             return Fail("DSL text is empty.");
 
         // ── 1. Parse ─────────────────────────────────────────────
         List<DomainChange> changes;
         try {
-            var parser = new PolyDslParser(polyText);
+            var parser = new PolyDslParser(polyText, authoring);
             changes = parser.Parse();
         }
         catch (FormatException ex) {
@@ -94,7 +128,7 @@ public sealed class DslCompiler {
 
         // ── 3. Generate C# ───────────────────────────────────────
         var domain = outcome.Root;
-        var files = GenerateAllFiles(domain, outcome.Analysis, mode);
+        var files = GenerateAllFiles(domain, outcome.Analysis, mode, authoring);
 
         return new CompileResult(
             Success: true,
@@ -103,11 +137,38 @@ public sealed class DslCompiler {
         );
     }
 
+    /// <summary>
+    /// Builds the authoring context for a DBMS pack selection.
+    /// Always includes portable <c>column</c>/<c>table</c> annotation syntax.
+    /// </summary>
+    public static DomainAuthoringContext CreateAuthoring(DbmsPack dbms) {
+        var ctx = DomainAuthoringContext.CreateWithSqlPack();
+        return dbms switch {
+            DbmsPack.Generic => ctx,
+            DbmsPack.Sqlite => ctx.AddSqliteDefaults(),
+            DbmsPack.SqlServer => ctx.AddSqlServerDefaults(),
+            _ => throw new ArgumentOutOfRangeException(nameof(dbms), dbms, "Unknown DBMS pack."),
+        };
+    }
+
+    /// <summary>Parses CLI/host DBMS pack names (fail-closed on unknown).</summary>
+    public static DbmsPack ParseDbmsPack(string name) {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        return name.Trim().ToLowerInvariant() switch {
+            "generic" or "sql" or "core" => DbmsPack.Generic,
+            "sqlite" or "sqlite3" => DbmsPack.Sqlite,
+            "sqlserver" or "mssql" or "sql-server" => DbmsPack.SqlServer,
+            var other => throw new FormatException(
+                $"Unknown DBMS pack '{other}'. Valid values: generic, sqlite, sqlserver"),
+        };
+    }
+
     // ── C# generation ───────────────────────────────────────────
 
     private static IReadOnlyList<(string FileName, string Source)> GenerateAllFiles(
         Domain domain, Poly.Syntax.Analysis.AnalysisResult analysis,
-        CompileMode mode = CompileMode.Entities) {
+        CompileMode mode = CompileMode.Entities,
+        DomainAuthoringContext? authoring = null) {
 
         var files = new List<(string FileName, string Source)>();
 
@@ -133,8 +194,8 @@ public sealed class DslCompiler {
             files.Add(($"{entity.Name}.cs", csharp));
         }
 
-        // Infrastructure analysis — shared by all generators below
-        var infraModel = new InfrastructureAnalyzer(domain, analysis).Analyze();
+        // Infrastructure analysis — shared by all generators below (thread authoring for type maps + conventions)
+        var infraModel = new InfrastructureAnalyzer(domain, analysis).Analyze(authoring);
 
         // DbContext (mode: db or all)
         if (mode == CompileMode.Db || mode == CompileMode.All) {

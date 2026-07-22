@@ -83,12 +83,15 @@ public sealed class DbContextGenerator {
         sb.AppendLine($"        modelBuilder.Entity<{entity.Name}>(b =>");
         sb.AppendLine("        {");
 
+        // P3: table override from annotation / default plural
+        sb.AppendLine($"            b.ToTable(\"{EscapeCSharpString(tableName)}\");");
+
         if (!store.HasShadowKey) {
-            // Natural key from unique property
-            sb.AppendLine($"            b.HasKey(x => x.{store.KeyProperty!.Name});");
-            // Key property gets its column config from the column metadata
+            // Natural key from KeyProperty — match by identity, not "any unique"
+            var keyProp = store.KeyProperty!;
+            sb.AppendLine($"            b.HasKey(x => x.{keyProp.Name});");
             var keyCol = store.Columns.FirstOrDefault(c =>
-                c.IsUnique && c.HasDefault == false);
+                string.Equals(c.Name, keyProp.Name, StringComparison.Ordinal));
             if (keyCol is not null)
                 AppendColumnConfig(sb, keyCol);
         }
@@ -98,9 +101,13 @@ public sealed class DbContextGenerator {
             sb.AppendLine("            b.HasKey(\"Id\");");
         }
 
-        // Configure remaining columns (excluding the key, already configured above)
+        // Remaining columns (skip the natural key once — other unique props still emit)
         foreach (var col in store.Columns) {
-            if (col.IsUnique && !store.HasShadowKey) continue; // skip natural key column
+            if (!store.HasShadowKey
+                && store.KeyProperty is not null
+                && string.Equals(col.Name, store.KeyProperty.Name, StringComparison.Ordinal)) {
+                continue;
+            }
             AppendColumnConfig(sb, col);
         }
 
@@ -116,24 +123,45 @@ public sealed class DbContextGenerator {
 
     /// <summary>Appends column-level configuration for a single StorageColumn.</summary>
     private static void AppendColumnConfig(StringBuilder sb, StorageColumn col) {
+        // P3: physical column name (override or camelCase default)
+        var colName = col.ColumnName;
+        var propName = col.Name;
+        var needsHasColumnName = !string.Equals(colName, propName, StringComparison.Ordinal);
+
+        // Build the property expression and column name call
+        var propCall = $"b.Property(x => x.{propName})";
+
+        if (needsHasColumnName)
+            propCall += $".HasColumnName(\"{EscapeCSharpString(colName)}\")";
+
+        // P3: column type override (from annotation or core default)
+        propCall += $".HasColumnType(\"{EscapeCSharpString(col.ColumnType)}\")";
+
         // Required constraints on nullable CLR types
         if (col.IsRequired && !DomainTypeMapping.IsNonNullableClrValueType(col.ClrTypeName)) {
-            sb.AppendLine($"            b.Property(x => x.{col.Name}).IsRequired();");
+            propCall += ".IsRequired()";
         }
 
         // Length constraints
         if (col.MaxLength is not null) {
-            sb.AppendLine($"            b.Property(x => x.{col.Name}).HasMaxLength({col.MaxLength});");
+            propCall += $".HasMaxLength({col.MaxLength})";
         }
         // Pattern-only properties (like Email with a regex but no length constraint)
         // get a reasonable default max length for the DB column.
-        else if ((col.Name.Equals("Email", StringComparison.Ordinal) || col.Name.Equals("EmailAddress", StringComparison.Ordinal))
+        else if ((propName.Equals("Email", StringComparison.Ordinal) || propName.Equals("EmailAddress", StringComparison.Ordinal))
                  && col.Constraints.Any(c => c is PatternConstraint)) {
-            sb.AppendLine($"            b.Property(x => x.{col.Name}).HasMaxLength(256);");
+            propCall += ".HasMaxLength(256)";
         }
+
+        sb.AppendLine($"            {propCall};");
     }
 
     // ── Helpers ────────────────────────────────────────────────
 
     private static string Pluralize(string name) => name + "s";
+
+    /// <summary>Escapes <c>\</c> and <c>"</c> inside double-quoted C# string literals.</summary>
+    private static string EscapeCSharpString(string value) =>
+        value.Replace("\\", "\\\\", StringComparison.Ordinal)
+             .Replace("\"", "\\\"", StringComparison.Ordinal);
 }

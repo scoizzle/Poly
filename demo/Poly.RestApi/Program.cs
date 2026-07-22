@@ -14,15 +14,17 @@ builder.Services.ConfigureHttpJsonOptions(options => {
     options.SerializerOptions.Converters.Add(new JsonStringEnumConverter());
 });
 
-// ── EF Core InMemory ──
+// ── EF Core SQLite ──
 builder.Services.AddDbContext<LibraryDbContext>(options =>
-    options.UseInMemoryDatabase("Library"));
+    options.UseSqlite("Data Source=library.db"));
 
 var app = builder.Build();
 
 // ── Seed data ──
 using (var scope = app.Services.CreateScope()) {
     var db = scope.ServiceProvider.GetRequiredService<LibraryDbContext>();
+    // Ensure SQLite tables created from OnModelCreating config
+    await db.Database.EnsureCreatedAsync();
     await SeedAsync(db);
 }
 

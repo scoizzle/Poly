@@ -308,19 +308,24 @@ public sealed class PolyDslParser {
 
     /// <summary>
     /// Parses optional constraints then pack annotations on a property tail.
+    /// Constraints and annotations may interleave in any order.
     /// Registered annotations are consumed here. Unregistered annotation-shaped
     /// <c>keyword(literal…)</c> forms fail closed. Legacy <c>Name(params): action</c>
     /// (identifier args / trailing <c>:</c>) is left for the entity body loop.
     /// </summary>
     private void ParsePropertyTail(string propertyName, List<DomainChange> changes) {
-        while (IsConstraint(_current.Kind)) {
-            var constraint = ParseConstraint();
-            if (constraint is not null) {
-                changes.Add(new AddConstraintToPropertyChange(_currentEntityName, propertyName, constraint));
+        while (IsConstraint(_current.Kind)
+               || (_current.Kind == TokenKind.Identifier && PeekIs(TokenKind.LParen))) {
+            if (IsConstraint(_current.Kind)) {
+                var constraint = ParseConstraint();
+                if (constraint is not null) {
+                    changes.Add(new AddConstraintToPropertyChange(
+                        _currentEntityName, propertyName, constraint));
+                }
+                continue;
             }
-        }
 
-        while (_current.Kind == TokenKind.Identifier && PeekIs(TokenKind.LParen)) {
+            // Annotation-shaped identifier(…)
             var keyword = _current.Text;
             if (_authoringContext?.Annotations.CanAccept(keyword) == true) {
                 Advance();

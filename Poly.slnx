@@ -9,6 +9,9 @@
   </Folder>
   <Folder Name="/src/">
     <Project Path="src/Poly.DslCompiler/Poly.DslCompiler.csproj" />
+    <Project Path="src/Poly.Packs.MySql/Poly.Packs.MySql.csproj" />
+    <Project Path="src/Poly.Packs.Sqlite/Poly.Packs.Sqlite.csproj" />
+    <Project Path="src/Poly.Packs.SqlServer/Poly.Packs.SqlServer.csproj" />
   </Folder>
   <Project Path="Poly.Benchmarks/Poly.Benchmarks.csproj" />
   <Project Path="Poly.Mcp/Poly.Mcp.csproj" />

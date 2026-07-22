@@ -2904,4 +2904,125 @@ E: entity {{
         // Bare count round-trips (verified in individual printer tests)
         await Assert.That(exportJson).Contains("TotalOrders");
     }
+
+    // ═════════════════════════════════════════════════════════════
+    // P4.5 — MCP pack enablement: annotation round-trip
+    // ═════════════════════════════════════════════════════════════
+
+    [Test]
+    public async Task ApplyDsl_WithColumnAnnotation_CreatesFacetedProperty() {
+        var (sessionId, _) = McpSessionStore.Create("Test");
+
+        var response = DslTool.ApplyDsl(sessionId, """
+            domain Test
+            Item: entity {
+              ProductName: Text column("PROD_NAME")
+            }
+            """);
+        await Assert.That(response.Success).IsTrue();
+
+        var state = McpSessionStore.TryGet(sessionId, out var s) ? s : null;
+        await Assert.That(state).IsNotNull();
+        var item = state!.Domain.Types.OfType<Entity>().Single();
+        var prop = item.Properties.Single();
+        await Assert.That(prop.Facets.Count).IsEqualTo(1);
+        var ann = prop.Facets[0] as Annotation;
+        await Assert.That(ann).IsNotNull();
+        await Assert.That(ann!.Name).IsEqualTo("column");
+        await Assert.That(((AnnotationString)ann.Arguments["0"]).Value).IsEqualTo("PROD_NAME");
+    }
+
+    [Test]
+    public async Task ApplyDsl_WithColumnAnnotation_ExportRoundTrips() {
+        var (sessionId, _) = McpSessionStore.Create("Test");
+
+        var apply = DslTool.ApplyDsl(sessionId, """
+            domain Test
+            Item: entity {
+              Code: Text unique column("CODE", "VARCHAR2(20)")
+              Name: Text column("NAME")
+            }
+            """);
+        await Assert.That(apply.Success).IsTrue();
+
+        var export = DslTool.ExportDsl(sessionId);
+        await Assert.That(export.Success).IsTrue();
+        var poly = extractPolyFromExport(export);
+        await Assert.That(poly).Contains("column(\"CODE\", \"VARCHAR2(20)\")");
+        await Assert.That(poly).Contains("column(\"NAME\")");
+
+        // Re-import the export to confirm idempotent round-trip
+        var reapply = DslTool.ApplyDsl(sessionId, poly);
+        await Assert.That(reapply.Success).IsTrue();
+        var state = McpSessionStore.TryGet(sessionId, out var s) ? s : null;
+        await Assert.That(state).IsNotNull();
+        var item = state!.Domain.Types.OfType<Entity>().Single();
+        var code = item.Properties.Single(p => p.Name == "Code");
+        await Assert.That(code.Facets.Count).IsEqualTo(1);
+        await Assert.That(((Annotation)code.Facets[0]).Name).IsEqualTo("column");
+    }
+
+    [Test]
+    public async Task ApplyDsl_WithTableAnnotation_ExportRoundTrips() {
+        var (sessionId, _) = McpSessionStore.Create("Test");
+
+        var apply = DslTool.ApplyDsl(sessionId, """
+            domain Test
+            Order: entity table("ORDER_RECORDS") {
+              Total: Number
+            }
+            """);
+        await Assert.That(apply.Success).IsTrue();
+
+        var export = DslTool.ExportDsl(sessionId);
+        await Assert.That(export.Success).IsTrue();
+        var poly = extractPolyFromExport(export);
+        await Assert.That(poly).Contains("table(\"ORDER_RECORDS\")");
+
+        // Re-import to confirm round-trip
+        var reapply = DslTool.ApplyDsl(sessionId, poly);
+        await Assert.That(reapply.Success).IsTrue();
+        var order = McpSessionStore
+            .TryGet(sessionId, out var s) ? s.Domain.Types.OfType<Entity>().Single() : null;
+        await Assert.That(order).IsNotNull();
+        await Assert.That(order!.Facets.Count).IsEqualTo(1);
+        await Assert.That(((Annotation)order.Facets[0]).Name).IsEqualTo("table");
+    }
+
+    [Test]
+    public async Task ApplyDsl_ColumnAfterConstraint_Parses() {
+        // Annotation after constraint in property tail — printer emits constraints
+        // before facets (canonical order), but parsing accepts any interleaving.
+        var (sessionId, _) = McpSessionStore.Create("Test");
+
+        var apply = DslTool.ApplyDsl(sessionId, """
+            domain Test
+            Item: entity {
+              Code: Text unique column("C")
+              Name: Text column("N") required
+              Qty: Number range(0,) column("Q")
+              Flag: Boolean column("F") unique
+            }
+            """);
+        await Assert.That(apply.Success).IsTrue();
+
+        // Printer canonical order: constraints before facets
+        var export = DslTool.ExportDsl(sessionId);
+        await Assert.That(export.Success).IsTrue();
+        var poly = extractPolyFromExport(export);
+        await Assert.That(poly).Contains("unique column(\"C\")");
+        await Assert.That(poly).Contains("required column(\"N\")");
+        await Assert.That(poly).Contains("range(0, ) column(\"Q\")");
+        await Assert.That(poly).Contains("unique column(\"F\")");
+
+        // Re-import confirms idempotent round-trip under canonical order
+        var reapply = DslTool.ApplyDsl(sessionId, poly);
+        await Assert.That(reapply.Success).IsTrue();
+    }
+
+    /// <summary>Extracts the raw .poly DSL text from an export_dsl response.</summary>
+    private static string extractPolyFromExport(DomainToolResponse export) {
+        var dataProp = export.Data!.GetType().GetProperty("poly");
+        return dataProp?.GetValue(export.Data) as string ?? "";
+    }
 }

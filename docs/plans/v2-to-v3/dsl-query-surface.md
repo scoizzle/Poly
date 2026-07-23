@@ -1,9 +1,9 @@
 # DSL Query / Expression Surface (LINQ-inspired subset)
 
 **Date:** 2026-07-18  
-**Revised:** 2026-07-19 — arithmetic **DSL shipped** (E6 gap closure, suite **1398**); Q1′ authoring still complete; Q3′ open  
-**Status:** Active — **parallel to** [`effect-surface-completeness.md`](effect-surface-completeness.md); **before** customer ship confidence  
-**Current pick:** **Q3′ shipped (DSL+RT)** — Q1′ authoring complete; **Q2 arithmetic shipped**; **Q3′ quantifiers shipped**; see effect plan **E6** for RT goldens on invoke/conditional
+**Revised:** 2026-07-23 — Q3′ core **shipped** (`bb5032b`); residual R0–R4 **code-complete uncommitted**; **§17** honesty gate open  
+**Status:** Active — Q1′ + Q3′ product vertical shipped; **do not mark residual batch Done** until §17 high items green  
+**Current pick:** **§17 Q3.R′** — Description/guide honesty before commit  
 **Micro-tasks:** [`simple-agent-tasks/qe-README.md`](simple-agent-tasks/qe-README.md)  
 **Related:** DomainExpression IR · `PolyDslParser` expression grammar · JSON policy parser · effect-surface plan · product guide · formal spec **§4.5**
 
@@ -641,19 +641,20 @@ where_scoped ::=
 
 ---
 
-### Q3′ — Collection quantifiers / count (**medium–large**)
+### Q3′ — Collection quantifiers / count (**shipped** `bb5032b`)
 
-**Goal:** Collection predicates over `many` relationships — **same keyword family as Q1′**, not a new dot/method dialect.
+**Goal:** Collection predicates over OneToMany — keyword forms, not C# LINQ.
 
-- [ ] **Q3.1** New DE nodes (e.g. `Any`, `All`, `Count`) or lower sugar to existing Syntax.  
-- [ ] **Q3.2** Subject rebind: `any orders where Total > 0` — body uses bare props on related. Optional `as x` later.  
-- [ ] **Q3.3** Runtime: enumerate linked instances via store (needs RT session for MCP goldens).  
-- [ ] **Q3.4** Empty collection semantics (any → false, all → true).  
-- [ ] **Q3.5** DSL parse/print + guide (keyword forms).  
-- [ ] **Q3.6** Goldens: any/all/count with 0, 1, N related instances.  
-- [ ] **Q3.7** Analysis: unknown rel, wrong cardinality (`any` on `one`? → suggest `where` / exists).
+- [x] **Q3.1** DE: `AnyExpr` / `AllExpr` / `NoneExpr` / `CountExpr`  
+- [x] **Q3.2** Body rebind; `and`-chain; `or` needs parens  
+- [x] **Q3.3** Runtime: store preprocess → literal before VM  
+- [x] **Q3.4** Empty: any false; **all false** (no vacuous true); none true; count 0  
+- [x] **Q3.5** DSL parse/print + guide  
+- [x] **Q3.6** Library RT goldens + apply/export authoring  
+- [x] **Q3.7** Analysis: OneToMany only; unknown / OneToOne fail  
 
-**Exit:** “Has any open order” / “all lines reserved” / “order count ≥ 1” in product DSL + RT.
+**Exit (core):** met.  
+**Residuals:** R0–R4 code in working tree; **§17 Q3.R′** honesty gate (Description/guide — no invent `link_instances`) before ship.
 
 ---
 
@@ -716,30 +717,30 @@ Customer ship confidence: **kernel effects + Q1′ + (Q3′ or honest “no coll
 - [x] Unknown-rel + reverse-direction analysis (`514e21c`)  
 - [x] Path-prefix body validated against **target** entity (`514e21c`)  
 - [x] **`Rel exists` on real nav** analysis green (`25a79ec`)  
-- [ ] Q3′ any/all **or** explicit non-goal “no collection quantifiers in v1”  
-- [ ] Optional: true RT/eval true-false + soft-miss  
-- [x] JSON policy parity plan (documented DSL-only split)  
-- [x] No full C# LINQ; no I/O in expressions (for Q1′ surface)  
+- [x] Q3′ any/all/none/count **shipped** (`bb5032b`) — library RT + DSL  
+- [~] Q3′ residuals R0–R4 **code-complete in working tree** — **§17** high honesty items before commit  
+- [x] JSON policy split documented (no quantifiers in JSON)  
+- [x] No full C# LINQ; no I/O in expressions  
 
 ---
 
 ## 8. Agent pick
 
-**Micro-tasks:** [`simple-agent-tasks/qe-README.md`](simple-agent-tasks/qe-README.md) · **§15**.
+**Micro-tasks:** [`simple-agent-tasks/qe-README.md`](simple-agent-tasks/qe-README.md) · **§17**.
 
 ```text
-DONE:    Q1′ through Q1'''''' authoring; Q2 arithmetic DSL (E6, suite 1398)
-CURRENT: §15 low hygiene (optional) — Q3′ remains **explicit non-goal**
-THEN:    effect plan E6.1 RT goldens (invoke/conditional/params) if picking effects next
-PULL:    RT eval related policies; Q1b param access in expressions; DateOperation; E3b; link DSL; L*
+DONE:    Q3′ core bb5032b; residual R0–R4 implementation (uncommitted)
+CURRENT: §17 Q3.R′ — honesty blockers (no invent link_instances; guide/instanceId alignment)
+THEN:    Commit residual batch under review gate; optional E1 hygiene
+PULL:    Q4; production IR; E3b; L*; public link MCP tool only if dogfood needs it
 ```
 
 **Implementer watch-outs**
 
-- Related reads are **authorable**; **not RT-evaluated** (guide).  
-- **DMREL001** on many path-prefix; **`Rel exists`** accepts N1 relationship names.  
-- Cross-entity reads OK; writes banned.  
-- Arithmetic (`+ - * /`) is product-shipped; date ops still open.
+- **No inventing MCP tools in Descriptions** (`link_instances` does **not** exist).  
+- `evaluate_policy(instanceId=)` **is** the product path for Q3′ MCP eval when the instance is store-registered with links.  
+- Guide must document **real** linking: store/`create in Rel` / library Link — **not** a fake tool name.  
+- Do not flip plan Status to Complete while §17 high items are open.
 
 ---
 
@@ -770,6 +771,9 @@ PULL:    RT eval related policies; Q1b param access in expressions; DateOperatio
 | 2026-07-18 | **Q1'''''' review** | §14 — Rel exists analysis bug identified |
 | 2026-07-18 | **Q1'''''' ship** | `25a79ec` suite 1385 — Exists accepts N1 rel names; goldens |
 | 2026-07-18 | **Q1''''''' review** | §15 — authoring complete; Q3′ next; low hygiene residual |
+| 2026-07-23 | **Q3′ product vertical shipped** | `bb5032b` — any/all/none/count DSL+RT+analysis+guide |
+| 2026-07-23 | **2B residual route** | Do not re-implement; simple-agent Q3.R0–R4 close-out |
+| 2026-07-23 | **§17 residual review** | R0–R4 code-complete but **not ship-ready** — invent `link_instances` + plan overclaim |
 
 ---
 
@@ -1058,5 +1062,72 @@ Effect-surface review **E6** closed arithmetic authoring (this plan’s former Q
 | Parameter **declaration** on actions | ✅ DSL shipped (effect plan) |
 | Parameter **access** in expressions | ❌ still Q1b |
 | Date ops | ❌ still Q2 residual |
-| Collection quantifiers | 🚫 Q3′ non-goal |
-| Related RT eval | Pull |
+| Collection quantifiers | ✅ **shipped** Q3′ (`bb5032b`) — supersedes prior non-goal |
+| Related RT eval | ✅ store-linked `EvaluatePolicy`; MCP `instanceId` path in residual batch |
+
+---
+
+## 17. Plan review — Q3′ residual batch (uncommitted, 2026-07-23)
+
+**Scope:** Working-tree residual close-out after Q3′ core (`bb5032b`):
+
+| Area | Files |
+|------|--------|
+| MCP | `DomainTools.cs` — `evaluate_policy` optional `instanceId` |
+| Tests | `McpSmokeTests.EvaluatePolicy_Q3Prime_Any_WithLinkedInstances` |
+| Guide | empty-collection table; Q3′ removed from “Not yet shipped”; related-policy eval paragraph |
+| Plans | `qe-README` R0–R4; residual micro-task files; roadmap/README pointers |
+
+**Suite:** Not re-run in this review pass; smoke test is present and asserts Message true/false.  
+**Verdict:** **Do not commit / do not mark Complete** until **high** honesty items below are fixed. Product code direction is right (`instanceId` on store-registered instances). Docs + Description invent a non-existent MCP tool and overclaim residual Done.
+
+### Solid
+
+| Item | Notes |
+|------|--------|
+| `instanceId` path | Correct seam: resolve from `InstanceMap`, entity-name check, fail-loud missing instance |
+| Empty semantics table | Matches product: any F, **all F** (no vacuous true), none T, count 0 |
+| Q3′ off “Not yet shipped” | Correct relative to `bb5032b` |
+| Residual 2B route | Right — do not re-build IR/parser |
+| MCP true/false proof | Smoke exercises `any` true + `none` false with linked orders |
+| Fail-closed instance checks | Unknown id + wrong entity return error responses (not silent local eval) |
+
+### Findings → follow-up tasks
+
+| ID | Sev | Finding | Fix |
+|----|-----|---------|-----|
+| **Q3.R′.1** | **High (honesty)** | `evaluate_policy` MCP **Description** tells agents: `create_instance + link_instances` then `instanceId`. **There is no `link_instances` MCP tool** (grep: zero product tool; only `DomainInstanceStore.Link` / `TryModifyInstances` in tests). | Rewrite Description: no invented tool. Honest path = `create_instance` (store-registered) + graph via **`create in Rel`** / `invoke_action` effects, **or** library Link in tests. Then pass `instanceId`. |
+| **Q3.R′.2** | **High (honesty)** | Both product guides claim the same invented path (`create_instance + link_instances + invoke_action`) **and** still say standalone `evaluate_policy`/`simulate_policy` are local-only only — while residual code **does** evaluate store-linked instances when `instanceId` is provided. | Rewrite related-policies paragraph: (1) local subject bag = local-only; (2) `evaluate_policy(instanceId=)` = store-attached eval for Q3′/related; (3) real linking story without `link_instances`. |
+| **Q3.R′.3** | **Med (contract)** | R2 golden meets “true/false” but links via **`TryModifyInstances` + `InstanceStore.Link`** — not an agent-callable MCP path. R2 exit “Uses MCP/session tools agents would call” is **partial**. | Keep test (valid session-store proof). Document honesty: MCP eval path proven; **agent linking** still `create in` / library. Optional later: pure MCP golden via `create in` + invoke. |
+| **Q3.R′.4** | **Med (plan honesty)** | Plans overclaim Done: header Status Complete; `qe-README` Gate `[x]`; master-roadmap residual **Complete** — while uncommitted + invent-tool Description open. | Flip residual status to open until §17 high green; Gate `[ ]` until re-review. |
+| **Q3.R′.5** | Low | Golden asserts `Message.Contains("true"/"false")` instead of structured `Data.result`. Works with current message text but brittle. | Prefer `Data` / anonymous `result` bool when easy. |
+| **Q3.R′.6** | Low | No MCP golden for **empty links** → `any` false (R2 step mentioned empty; only covered via library goldens). | Optional one smoke: create customer, no links, `any` → false. |
+| **Q3.R′.7** | Low | `qe-q3-r0-status-inventory.md` still claims `link_instances` path and “evaluate_policy throws on Q3′” — stale vs `instanceId`. | Refresh inventory notes or leave historical with strikethrough. |
+| **Q3.R′.8** | Pull | Public `link_instances` MCP tool | Only if dogfood proves agents cannot wire graphs via `create in` alone. Not required to close residual honesty. |
+| **Q3.R′.9** | Low | When `instanceId` set, `age`/`properties` ignored silently | Description note: instanceId wins; subject bag unused. |
+
+### Three-layer defense (this batch)
+
+| Concern | Parse | Analyze | Runtime / MCP |
+|---------|-------|---------|----------------|
+| Q3′ quantifiers | already shipped | OneToMany only | store preprocess + VM |
+| Missing instanceId target | n/a | n/a | fail-loud “not found” ✅ |
+| Invented link tool | n/a | n/a | **Description contract fails agents** — fix before ship |
+| Empty collection | n/a | n/a | fail-closed semantics documented ✅ |
+
+### Follow-up checklist (write-back)
+
+- [ ] **Q3.R′.1** Fix `evaluate_policy` Description — **remove `link_instances`**; document real path + `instanceId`  
+- [ ] **Q3.R′.2** Fix both guides — eval claim + real linking; dual-path local vs `instanceId`  
+- [ ] **Q3.R′.3** Document R2 golden honesty (store Link in test OK; agent link path separate)  
+- [ ] **Q3.R′.4** Plan/README/roadmap status: residual open until high items green + commit  
+- [ ] **Q3.R′.5** (optional) Assert `Data.result` in MCP golden  
+- [ ] **Q3.R′.6** (optional) Empty-links `any` false MCP smoke  
+- [ ] **Q3.R′.7** (optional) Refresh R0 inventory stale claims  
+- [ ] **Q3.R′.9** (optional) Description: `instanceId` supersedes age/properties  
+- [ ] **Gate** Re-run [`pr1-uncommitted-review-gate.md`](simple-agent-tasks/pr1-uncommitted-review-gate.md); build + suite; only then commit  
+- [ ] **Pull Q3.R′.8** Public link tool — only on dogfood pain  
+
+**Recommended next:** Fix **Q3.R′.1 + Q3.R′.2** (smallest honesty loop) → re-review dirty tree → commit residual batch. Do **not** open Q4 / public link tool to close this gate.
+
+---

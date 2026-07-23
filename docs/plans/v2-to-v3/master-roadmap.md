@@ -45,20 +45,20 @@ MCP / direct API as thin consumers
 | 11 | **Q1′′′′ DMREL001 + test honesty** | query §12 | **Complete** `76568a3` |
 | 12 | **Q1''''' hygiene** | query §13 | **Complete** `514e21c` |
 | 13 | **Q1'''''' Rel exists fix** | query §14 | **Complete** `25a79ec` — N1 nav names accepted for `Rel exists`; goldens green |
-| 14 | ▶ **Q3′ decision** | query **[§15](dsl-query-surface.md)** | **Next** — implement any/all/count **or** explicit non-goal “no collection quantifiers in v1” |
-| 15 | **§15 low hygiene** | query §15 Q1'''''''.1–.5 | **Pull** — guide nested path-prefix note; dead code; owned story; test placement |
-| 16 | **Optional RT eval** related policies | query §15 Q1'''''''.8 | **Pull** — store/VM path when product needs evaluate |
+| 14 | **Q3′ collection quantifiers** | query · `bb5032b` | **Complete** — `any`/`all`/`none`/`count` DSL + analysis + store-aware eval |
+| 15 | ▶ **Q3′ residuals** | query **[§17](dsl-query-surface.md)** · [`qe-README`](simple-agent-tasks/qe-README.md) | **Open** — R0–R4 code in tree; honesty gate (no invent `link_instances`; guide/`instanceId` alignment) before commit |
+| 16 | Q4 aggregates / to-one RT eval gaps | query | **Pull** |
 | 17 | E3 / effect-micro / L\* / events | effect · expansion · phase3 §6d | **Pull / post–P3 / never** |
 
 ### Agent pick (one line)
 
 ```text
-CURRENT: Q3′ by dogfood pain OR write explicit non-goal in query success criteria
-THEN:    §15 low hygiene (optional)
-PULL:    RT eval related policies; E3b; link DSL; L*; host I/O
+CURRENT: §17 Q3.R′ — Description + guide honesty (no invent link_instances)
+THEN:    Commit residual batch under review gate
+PULL:    Q4; production IR; E3b; L*; public link MCP only on dogfood pain
 ```
 
-**Honest product claim today:** Path-prefix, `where`, and **`Rel exists` on N1 navs** are **authorable** (parse/print/apply/export) with analysis guards (**DMREL001** on many; unknown-rel; target body props). Guide: **not RT-evaluated** for related expressions. Collection quantifiers (**Q3′**) still missing or non-goal TBD.
+**Honest product claim today:** Q1′ path-prefix / exists / where **authorable**; **Q3′ quantifiers** authorable **and** evaluable via store-linked `EvaluatePolicy` (MCP: `evaluate_policy` + `instanceId` on store-registered instances). **No public `link_instances` tool** — graph wiring is `create in Rel` / library Link. JSON policies still local-only.
 
 ---
 

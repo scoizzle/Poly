@@ -3025,4 +3025,73 @@ E: entity {{
         var dataProp = export.Data!.GetType().GetProperty("poly");
         return dataProp?.GetValue(export.Data) as string ?? "";
     }
+
+    [Test]
+    public async Task EvaluatePolicy_Q3Prime_Any_WithLinkedInstances() {
+        // Q3′ MCP e2e: apply_dsl → create instance with links → evaluate_policy with instanceId
+        var (sessionId, _) = McpSessionStore.Create("Test");
+
+        // 1. Apply DSL with Q3′ policy
+        var dsl = DslTool.ApplyDsl(sessionId, """
+            domain Test
+            Customer: entity {
+              Name: Text
+              orders: many Order
+              HasBigOrder: policy { any orders where Total > 100 }
+              HasNoBigOrder: policy { none orders where Total > 100 }
+            }
+            Order: entity {
+              Total: Number
+              customer: Customer
+            }
+            """);
+        await Assert.That(dsl.Success).IsTrue();
+
+        // 2. Create instances
+        var custResult = RuntimeTool.CreateInstance(sessionId, "Customer", """{"Name":"Alice"}""");
+        await Assert.That(custResult.Success).IsTrue();
+        await Assert.That(custResult.Message).Contains("created");
+        var custDataJson = System.Text.Json.JsonSerializer.Serialize(custResult.Data);
+        await Assert.That(custDataJson).Contains("instanceId");
+
+        var order1Result = RuntimeTool.CreateInstance(sessionId, "Order", """{"Total":50}""");
+        await Assert.That(order1Result.Success).IsTrue();
+
+        var order2Result = RuntimeTool.CreateInstance(sessionId, "Order", """{"Total":200}""");
+        await Assert.That(order2Result.Success).IsTrue();
+
+        // 3. Find instances in session and link them
+        McpSessionStore.TryGet(sessionId, out var st);
+        var custInstance = st.InstanceMap.Values.FirstOrDefault(i => i.Entity.Name == "Customer");
+        var order1 = st.InstanceMap.Values.FirstOrDefault(i => i.Entity.Name == "Order" && i.Snapshot().TryGetValue("Total", out var tv) && tv?.Equals(50L) == true);
+        var order2 = st.InstanceMap.Values.FirstOrDefault(i => i.Entity.Name == "Order" && i.Snapshot().TryGetValue("Total", out var tv2) && tv2?.Equals(200L) == true);
+        await Assert.That(custInstance).IsNotNull();
+        await Assert.That(order1).IsNotNull();
+        await Assert.That(order2).IsNotNull();
+
+        var custId = st.InstanceMap.First(kvp => kvp.Value == custInstance).Key;
+        var order1Id = st.InstanceMap.First(kvp => kvp.Value == order1!).Key;
+        var order2Id = st.InstanceMap.First(kvp => kvp.Value == order2!).Key;
+
+        McpSessionStore.TryModifyInstances(sessionId, state => {
+            if (state.InstanceMap.TryGetValue(custId, out var cust)
+                && state.InstanceMap.TryGetValue(order1Id, out var o1)
+                && state.InstanceMap.TryGetValue(order2Id, out var o2)) {
+                state.InstanceStore!.Link("orders", cust, o1);
+                state.InstanceStore!.Link("orders", cust, o2);
+            }
+        });
+
+        // 4. Evaluate HasBigOrder policy — should be true (order2 has Total 200 > 100)
+        var evalTrue = PolicyTool.EvaluatePolicy(sessionId, "Customer", "HasBigOrder",
+            instanceId: custId);
+        await Assert.That(evalTrue.Success).IsTrue();
+        await Assert.That(evalTrue.Message).Contains("true");
+
+        // 5. Evaluate HasNoBigOrder policy — should be false (order2 matches > 100)
+        var evalFalse = PolicyTool.EvaluatePolicy(sessionId, "Customer", "HasNoBigOrder",
+            instanceId: custId);
+        await Assert.That(evalFalse.Success).IsTrue();
+        await Assert.That(evalFalse.Message).Contains("false");
+    }
 }

@@ -1067,13 +1067,14 @@ internal sealed class PolicyTool {
     /// as a JSON object for multi-property entities (e.g. {"Status":"Active","Total":200}).
     /// Returns the boolean result (true/false) from the VM.
     /// </summary>
-    [McpServerTool(Name = "evaluate_policy"), Description("Evaluates a policy's guard expression against a sample subject. Provide 'age' for simple Age-based policies, or 'properties' as a JSON object for multi-property entities. Returns true if the policy passes, false otherwise.")]
+    [McpServerTool(Name = "evaluate_policy"), Description("Evaluates a policy's guard expression against a sample subject. Provide 'age' for simple Age-based policies, or 'properties' as a JSON object for multi-property entities. To evaluate policies with cross-entity expressions (path-prefix, exists, where, Q3' quantifiers), first create instances via create_instance + link_instances, then provide the instanceId. Returns true if the policy passes, false otherwise.")]
     public static DomainToolResponse EvaluatePolicy(
         [Description("Session ID")] string sessionId,
         [Description("Name of the entity that has the policy")] string entityName,
         [Description("Name of the policy to evaluate")] string policyName,
         [Description("Age value for the sample subject (convenience for Age-based policies)")] int? age = null,
-        [Description("JSON object of property values, e.g. \"{\\\"Status\\\":\\\"Active\\\",\\\"Total\\\":200}\"")] string? properties = null) {
+        [Description("JSON object of property values, e.g. \"{\\\"Status\\\":\\\"Active\\\",\\\"Total\\\":200}\"")] string? properties = null,
+        [Description("Optional instance ID from a previous create_instance call. When provided, evaluates against the store-attached instance (required for cross-entity expressions like Q3' quantifiers).")] string? instanceId = null) {
         if (!McpSessionStore.TryGet(sessionId, out var state))
             return new DomainToolResponse(
                 Success: false,
@@ -1123,8 +1124,27 @@ internal sealed class PolicyTool {
 
         bool result;
         try {
-            var instance = DomainEntityInstance.Create(entity, subjectValues);
-            result = instance.EvaluatePolicy(policy);
+            if (instanceId is not null) {
+                if (!state.InstanceMap.TryGetValue(instanceId, out var existingInstance))
+                    return new DomainToolResponse(
+                        Success: false,
+                        Message: $"Instance '{instanceId}' not found in session. Create it first via create_instance.",
+                        SessionId: sessionId,
+                        Affordances: ["create_instance", "list_instances"]);
+
+                if (!string.Equals(existingInstance.Entity.Name, entityName, StringComparison.Ordinal))
+                    return new DomainToolResponse(
+                        Success: false,
+                        Message: $"Instance '{instanceId}' is for entity '{existingInstance.Entity.Name}', not '{entityName}'.",
+                        SessionId: sessionId,
+                        Affordances: ["get_entity_detail", "list_instances"]);
+
+                result = existingInstance.EvaluatePolicy(policy);
+            }
+            else {
+                var instance = DomainEntityInstance.Create(entity, subjectValues);
+                result = instance.EvaluatePolicy(policy);
+            }
         }
         catch (Exception ex) {
             return new DomainToolResponse(

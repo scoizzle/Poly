@@ -102,22 +102,32 @@ Customer **policies** still cannot **read** related data in product DSL — IR +
 **Q1′′′′ (`76568a3`):** **DMREL001**; authoring-only tests.  
 **Q1''''' (`514e21c`):** guide; nested-where; unknown-rel; body→target.  
 **Q1'''''' (`25a79ec`):** **Rel exists on N1 nav** fixed + goldens.  
-**Current:** parent plan **§15** — **Q3′ decision** or low hygiene.
+**Q3′ core (`bb5032b`):** **any/all/none/count** DSL + analysis + store-aware `EvaluatePolicy` + guide — **shipped** (not “from scratch”).  
+**Current:** **§17 Q3.R′** honesty gate on uncommitted residual batch — **do not invent `link_instances`**.
 
-### Slice Q1''''''' — Post-authoring-complete (§15)
+### Slice Q3′ — Collection quantifiers
 
-| # | ID | Work | Sev | Status |
-|---|-----|------|-----|--------|
-| **1** | Q1'''''''.7 | **Q3′** any/all/count **or** explicit non-goal | Product | `[ ]` |
-| **2** | Q1'''''''.1 | Guide: nested path-prefix in where body allowed | Low | `[ ]` |
-| **3** | Q1'''''''.2–.5 | Exists-only exception tighten; dead code; owned; tests | Low | `[ ]` |
-| **4** | Q1'''''''.8 | Optional RT eval | Pull | `[ ]` |
-| **Gate** | — | Run [`pr1-uncommitted-review-gate.md`](pr1-uncommitted-review-gate.md) before marking this slice `[x]` | Process | `[ ]` |
+**Product vertical already in tree** (do not re-implement IR/parser from zero).  
+Thin “2B” route = **close residuals** with simple-agent tasks, not rewrite Q3′.
+
+| # | Task | File | Status | Difficulty |
+|---|------|------|--------|------------|
+| **Q3.R0** | Inventory shipped Q3′ (read-only) | [`qe-q3-r0-status-inventory.md`](qe-q3-r0-status-inventory.md) | `[x]` code | Small |
+| **Q3.R1** | Guide honesty (shipped vs not; eval claim) | [`qe-q3-r1-guide-honesty.md`](qe-q3-r1-guide-honesty.md) | `[~]` reopen — invent `link_instances` | Small |
+| **Q3.R2** | MCP `evaluate_policy` true/false for `any` | [`qe-q3-r2-mcp-evaluate-any-golden.md`](qe-q3-r2-mcp-evaluate-any-golden.md) | `[~]` true/false green; Description honesty open | Medium |
+| **Q3.R3** | Empty-collection semantics in guide | [`qe-q3-r3-empty-semantics-docs.md`](qe-q3-r3-empty-semantics-docs.md) | `[x]` code | Small |
+| **Q3.R4** | Plan/roadmap status sync | [`qe-q3-r4-plan-sync.md`](qe-q3-r4-plan-sync.md) | `[~]` after §17 | Small |
+| **Q3.R′** | Honesty gate from review | parent **[§17](../dsl-query-surface.md)** | `[ ]` | Small |
+| **Gate** | [`pr1-uncommitted-review-gate.md`](pr1-uncommitted-review-gate.md) before shipping residual batch | — | `[ ]` | Process |
+
+**Pick order:** **Q3.R′.1–.2 first** (Description + guide — no invent `link_instances`) → re-gate → commit.  
+**Exit:** Guide + Description honest; MCP any e2e green; plans say Q3′ shipped + residuals closed **only after commit**.
 
 ### Optional hygiene (parallel anytime; do not block)
 
 | # | Task | File | Status | Notes |
 |---|------|------|--------|-------|
+| **Q1'''''''.1** | Guide: nested path-prefix in where body | (inline if small) | `[ ]` | Low |
 | **E1′′′.1** | Guide: `delete` reserved keyword | [`qe-opt-e1-reserved-delete.md`](qe-opt-e1-reserved-delete.md) | `[ ]` | Low |
 | **E1′′′.3** | Fail-loud bad effect token error-string smoke | [`qe-opt-e1-bad-effect-token-test.md`](qe-opt-e1-bad-effect-token-test.md) | `[ ]` | Low |
 
@@ -125,12 +135,10 @@ Customer **policies** still cannot **read** related data in product DSL — IR +
 
 | Item | Plan | Why |
 |------|------|-----|
-| E2.2–E2.5 link implement | effect-surface | Only if E2.1 picks (b)/(c) |
-| E3a self-invoke DSL | effect-surface | After Q1′ if workflow pain |
-| E3b multi-entity invoke | effect-surface | Peer **writes** / call — new runtime |
-| Q1b parameters | query-surface | After action params story |
-| Q2 arithmetic | query-surface | Pull by domain need |
-| Q3′ any/all/count | query-surface | Needs RT graph + new IR |
+| Re-implement Q3′ IR/parser | — | **Already shipped** `bb5032b` |
+| E2.2–E2.5 link implement | effect-surface | Only if E2.1 reopens |
+| E3b multi-entity invoke | effect-surface | Peer **writes** |
+| Q4 aggregates sum/min/max | query-surface | Pull |
 | E5 micro effect tools | effect-surface | Dogfood quotes only |
 | L\* C#/MSIL/containers | phase3 §6d | Post–P3 |
 | Product dots / C# LINQ chains | — | Rejected |
@@ -141,11 +149,10 @@ Customer **policies** still cannot **read** related data in product DSL — IR +
 
 | Session | Tasks | Outcome |
 |---------|-------|---------|
-| **1 — Honesty** | Q0.1 → Q0.2 → Q0.3 | Guide + matrix honest |
-| **2 — Freeze** | Q0.4 → Q0.5 (+ E2.1 if free) | Keywords + must-haves |
-| **3 — Spec** | Q1.1 | Residual BNF locked |
-| **4 — Parser** | Q1.2 → Q1.3 → Q1.3b | Product authoring |
-| **5 — Prove** | Q1.4 → Q1.6 (+ Q1.5) | Green vertical + guide |
+| **Q3 residual — Honesty** | Q3.R0 → Q3.R1 → Q3.R3 | Guide + empty semantics (partial — reopen R1) |
+| **Q3 residual — Prove MCP** | Q3.R2 | evaluate_policy any true/false (`instanceId`) |
+| **Q3 residual — §17 gate** | Q3.R′.1–.2 → Gate | Remove invent `link_instances`; dual-path guide; re-review |
+| **Q3 residual — Plans** | Q3.R4 after gate | Roadmap/pick sync + commit |
 | **Optional** | E1′′′.1 / .3 | Hygiene |
 
 ---

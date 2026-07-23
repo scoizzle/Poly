@@ -491,6 +491,15 @@ These require a **OneToMany** relationship from the source entity. The body is a
 
 `count` produces a numeric value for use in comparisons. `any`/`all`/`none` produce booleans.
 
+**Empty collection semantics:**
+
+| Form | When related set is empty |
+|------|--------------------------|
+| `any Rel where ...` | `false` |
+| `all Rel where ...` | `false` (no vacuous true) |
+| `none Rel where ...` | `true` (¬any) |
+| `count Rel` | `0` |
+
 ```poly
 HasPriorityOrder: policy { any orders where Priority > 5 }
 AllHighValue: policy { all orders where Total > 100 }
@@ -508,7 +517,7 @@ against the target entity; reverse-side / self-rel / ManyToMany / OneToOne rejec
 - `Rel exists` on `many` is allowed (non-empty check).
 - Cross-entity reads (path-prefix, exists, where) are legal in policies, require, and assign RHS.
 - Cross-entity writes (nav path as assign target) are banned.
-- **Related policies are authoring-complete** — they parse, apply, and export correctly. Full runtime evaluation (true/false via `evaluate_policy`/`simulate_policy` against linked instances) is a future enhancement. Today the `evaluate_policy` and `simulate_policy` tools evaluate local entity properties only — cross-entity expression evaluation through the VM graph traversal pipeline is not yet connected.
+- **Related policies are authoring-complete** — they parse, apply, and export correctly. To-one path-prefix, `Rel exists`, `Rel where`, and Q3′ quantifiers (`any`/`all`/`none`/`count`) are all **runtime-evaluable** via `EvaluatePolicy` when the instance has been added to a store with linked targets (e.g. `create_instance` + `link_instances` + `invoke_action`). The standalone `evaluate_policy`/`simulate_policy` MCP tools create instances without a store and can only evaluate local property expressions — cross-entity Q3′ evaluation through store-linked traversal requires the full instance pipeline.
 
 **Shipped in the current product surface:**
 - Arithmetic (`+`, `-`, `*`, `/`) in expressions
@@ -519,7 +528,6 @@ against the target entity; reverse-side / self-rel / ManyToMany / OneToOne rejec
 - Owned navigation (`rel: owned Entity`)
 
 **Not yet shipped** (planned for future phases):
-- `any`/`all`/`none`/`count` over collections (Q3′ — **shipped**)
 - Date operations
 - Owned/nested access in expressions
 

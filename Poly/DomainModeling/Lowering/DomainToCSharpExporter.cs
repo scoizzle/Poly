@@ -44,79 +44,15 @@ public sealed class DomainToCSharpExporter {
     /// for each entity (produced by <see cref="SemanticDomainAnalyzer"/>).
     /// </param>
     public IReadOnlyList<Syntactic.TypeDefinitionNode> Export(Domain domain,
-        AnalysisResult analysis) {
-        ArgumentNullException.ThrowIfNull(domain);
-        ArgumentNullException.ThrowIfNull(analysis);
-        var domainRelationships = domain.Relationships.ToList();
-        var entities = domain.Types.OfType<Entity>().ToList();
-        var entityLookup = entities.ToDictionary(e => e.Name, StringComparer.Ordinal);
-        var result = new List<Syntactic.TypeDefinitionNode>();
-
-        // ── Collect all subscriptions ─────────────────────────────
-        var subscriptionsByTarget = new Dictionary<string, List<SubscriptionInfo>>(
-            StringComparer.Ordinal);
-        var subscriptionsBySubscriber = new Dictionary<string, List<SubscriptionInfo>>(
-            StringComparer.Ordinal);
-
-        foreach (var entity in entities) {
-            var subList = new List<SubscriptionInfo>();
-
-            // Entity-level subscriptions (fire regardless of stage)
-            foreach (var sub in entity.Subscriptions) {
-                CollectSubscriptionInfo(sub, entity, null, domainRelationships, entityLookup, subList, subscriptionsByTarget);
-            }
-
-            // Stage-level subscriptions
-            foreach (var stage in entity.Stages) {
-                foreach (var sub in stage.Subscriptions) {
-                    CollectSubscriptionInfo(sub, entity, stage.Name, domainRelationships, entityLookup, subList, subscriptionsByTarget);
-                }
-            }
-            if (subList.Count > 0)
-                subscriptionsBySubscriber[entity.Name] = subList;
-        }
-
-        // ── Build enum type definitions ────────────────────────
-        foreach (var enumType in domain.Types.OfType<EnumType>()) {
-            var enumFields = new List<Syntactic.FieldDefinitionNode>();
-            for (int i = 0; i < enumType.MemberNames.Count; i++) {
-                enumFields.Add(new Syntactic.FieldDefinitionNode(
-                    enumType.MemberNames[i],
-                    new Syntactic.PrimitiveTypeReference(PrimType.Int32),
-                    DefaultValue: new Syntactic.Constant((int)i),
-                    AccessModifier: AccessModifier.Public
-                ));
-            }
-            result.Add(new Syntactic.TypeDefinitionNode(
-                enumType.Name,
-                Fields: enumFields,
-                Semantics: Syntactic.TypeDefinitionSemantics.MutableReference
-            ));
-        }
-
-        // ── Build DomainResult infrastructure types ─────────────
-        // Emitted once at the top so all action methods can reference them.
-        result.Add(BuildDomainResultTypeDef());
-        result.Add(BuildDomainResultGenericTypeDef());
-
-        // ── Build entity type definitions ─────────────────────────
-        foreach (var entity in entities) {
-            var targetSubs = subscriptionsByTarget.GetValueOrDefault(entity.Name);
-            var subscriberSubs = subscriptionsBySubscriber.GetValueOrDefault(entity.Name);
-
-            result.AddRange(BuildTypeDefsForEntity(
-                entity, domain, domainRelationships, entityLookup, analysis,
-                targetSubs, subscriberSubs));
-        }
-
-        return result;
+        INodeMetadataProvider metadata) {
+        return DomainProgramProjection.ToSyntax(domain, metadata);
     }
 
     /// <summary>
     /// Collects subscription info for a single <see cref="StageSubscription"/> and
     /// populates the target/subscriber maps used for code generation.
     /// </summary>
-    private static void CollectSubscriptionInfo(
+    internal static void CollectSubscriptionInfo(
         StageSubscription sub, Entity entity, string? stageName,
         IReadOnlyList<Relationship> domainRelationships,
         IReadOnlyDictionary<string, Entity> entityLookup,
@@ -143,12 +79,12 @@ public sealed class DomainToCSharpExporter {
 
     // ── Per-entity builder ──────────────────────────────────────
 
-    internal IReadOnlyList<Syntactic.TypeDefinitionNode> BuildTypeDefsForEntity(
+    internal static IReadOnlyList<Syntactic.TypeDefinitionNode> BuildTypeDefsForEntity(
         Entity entity,
         Domain domain,
         IReadOnlyList<Relationship> domainRelationships,
         IReadOnlyDictionary<string, Entity> entityLookup,
-        AnalysisResult analysis,
+        INodeMetadataProvider metadata,
         List<SubscriptionInfo>? targetSubs = null,
         List<SubscriptionInfo>? subscriberSubs = null) {
 
@@ -1312,7 +1248,7 @@ public sealed class DomainToCSharpExporter {
     /// or <c>DomainResult.Failure(message)</c> instead of throwing or returning void.
     /// Consumers switch on <see cref="IsSuccess"/> to handle success/failure.
     /// </summary>
-    private static Syntactic.TypeDefinitionNode BuildDomainResultTypeDef() {
+    internal static Syntactic.TypeDefinitionNode BuildDomainResultTypeDef() {
         // public readonly record struct DomainResult
         // {
         //     public bool IsSuccess { get; }
@@ -1402,7 +1338,7 @@ public sealed class DomainToCSharpExporter {
     /// for non-void actions. Returns <c>DomainResult&lt;T&gt;.Success(value)</c> or
     /// <c>DomainResult&lt;T&gt;.Failure(message)</c>.
     /// </summary>
-    private static Syntactic.TypeDefinitionNode BuildDomainResultGenericTypeDef() {
+    internal static Syntactic.TypeDefinitionNode BuildDomainResultGenericTypeDef() {
         // public readonly record struct DomainResult<T>
         // {
         //     public bool IsSuccess { get; }

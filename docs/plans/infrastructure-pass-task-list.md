@@ -11,37 +11,43 @@
 
 ## Task Group 1: Layer 0 — Entity Syntax as Analysis Metadata
 
-### Task 1.1 — Write the golden-file test FIRST
+### Task 1.1 — Write structural assertion tests FIRST
 
-**Why first:** The exporter is ~1500 lines with zero tests. You need a safety net before extracting anything.
+**Why first:** The exporter is ~1500 lines with zero tests. You need a safety net that catches *meaningful* regressions (missing entities, wrong property shapes, missing methods) without freezing formatting or C# idiom choices.
 
 **What to do:**
-1. Open `Poly/DomainModeling/Lowering/DomainToCSharpExporter.cs`
-2. Read the `Export(Domain domain, AnalysisResult analysis)` method signature and the `MapDomainTypeRef` helper.
-3. Use a known-good domain from the library example test: run `Poly.DslCompiler --mode entities` (no dbms) on `docs/experiments/examples/library-checkout.poly` and capture `_all.cs` output.
-4. Create a test in `Poly.Tests/DomainModeling/Lowering/DomainToCSharpExporterTests.cs`:
+1. Open `Poly/DomainModeling/Lowering/DomainToCSharpExporter.cs` — understand the `Export(Domain, AnalysisResult)` → `TypeDefinitionNode[]` contract.
+2. Create `Poly.Tests/DomainModeling/Lowering/DomainToCSharpExporterTests.cs` with:
+   - A `ParseAndAnalyze(string poly)` helper that calls `PolyDslParser` + `DomainEvolution` + `DomainModelAnalyzer.Analyze`
+   - An inline DSL string for the library-checkout domain
+   - Structural assertions against the `TypeDefinitionNode[]`:
 
 ```csharp
 [Test]
-public async Task Export_LibraryDomain_ProducesExpectedOutput()
+public async Task Export_Produces_EntityTypes()
 {
-    // Parse + evolve the library-checkout domain
-    var domain = DomainFixture.ParseAndEvolve("library-checkout.poly");
-    var analysis = DomainModelAnalyzer.Analyze(domain);
+    var (domain, analysis) = ParseAndAnalyze(libraryDsl);
     var exporter = new DomainToCSharpExporter();
-
-    var syntaxNodes = exporter.Export(domain, analysis);
-    var csharp = new CSharpGenerator().Generate(syntaxNodes);
-
-    await Assert.That(csharp).IsEqualTo(File.ReadAllText("expected/library_all.cs"));
+    var types = exporter.Export(domain, analysis);
+    await Assert.That(types.Any(t => t.Name == "Book")).IsTrue();
+    await Assert.That(types.Any(t => t.Name == "Patron")).IsTrue();
 }
 ```
 
-5. Capture the current `_all.cs` output and save it as the expected file.
-6. Run the test — it passes (you're asserting against current output).
+Key assertions to cover:
+- Core infrastructure types exist (`DomainResult`, `DomainResult<T>`)
+- Enum types are produced (Genre, PatronStatus, FineStatus, PremiumTier)
+- Entity types exist (Book, Patron, Loan, Fine, PremiumPatron)
+- Book has expected properties (Title, Author, ISBN, Pages, Genre, IsDeleted)
+- Patron has policies lowered to methods (GoodStanding, AtLimit, HasFines)
+- Patron has navigation backing fields (`_loans`, `_fines`)
+- Patron has a stage enum type (`PatronStage`)
+- Entity semantics are `MutableReference`
 
-**Files:** `Poly/DomainModeling/Lowering/DomainToCSharpExporter.cs`, `Poly.Tests/DomainModeling/Lowering/DomainToCSharpExporterTests.cs`
-**Verify:** `dotnet run --project Poly.Tests` — exactly one new test, passing.
+3. Run the tests — they pass against current output.
+
+**Files:** `Poly.Tests/DomainModeling/Lowering/DomainToCSharpExporterTests.cs` (new)
+**Verify:** `dotnet run --project Poly.Tests` — all tests pass.
 
 ---
 

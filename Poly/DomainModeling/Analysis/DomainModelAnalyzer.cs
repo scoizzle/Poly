@@ -48,6 +48,8 @@ public static class DomainModelAnalysisBuilderExtensions {
             builder.AddAnalyzer(new SubscriptionReplaySafetyAnalyzer());
             // Authoring suggestions (advisory hints)
             builder.AddAnalyzer(new AuthoringSuggestionAnalyzer());
+            // Entity Syntax projection (TypeDefinitionNode[] as metadata)
+            builder.AddAnalyzer(new EntitySyntaxPass());
             return builder;
         }
 

@@ -1,6 +1,5 @@
-using System.Text;
-
 using Poly.DomainModeling;
+using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Parsing;
@@ -172,26 +171,26 @@ public sealed class DslCompiler {
 
         var files = new List<(string FileName, string Source)>();
 
-        // Entity types (always generated)
-        var exporter = new DomainToCSharpExporter();
-        var combinedDefs = exporter.Export(domain, analysis);
-        var combinedGenerator = new CSharpGenerator();
-        var combinedSource = combinedGenerator.Generate(combinedDefs);
-        files.Add(("_all.cs", combinedSource));
+        // Entity types (always generated) — from EntitySyntaxMetadata on AnalysisResult
+        var entitySyntax = analysis.GetMetadata<EntitySyntaxMetadata>(domain);
+        if (entitySyntax is not null) {
+            var combinedSource = new CSharpGenerator().Generate(entitySyntax.Types);
+            files.Add(("_all.cs", combinedSource));
 
-        // Per-entity files
-        var entities = domain.Types.OfType<Entity>().ToList();
-        foreach (var entity in entities) {
-            var entityNames = new HashSet<string>(StringComparer.Ordinal) {
-                entity.Name,
-                $"{entity.Name}Stage"
-            };
-            var entityDefs = combinedDefs
-                .Where(d => entityNames.Contains(d.Name))
-                .ToList();
-            var generator = new CSharpGenerator();
-            var csharp = generator.Generate(entityDefs);
-            files.Add(($"{entity.Name}.cs", csharp));
+            // Per-entity files
+            var entities = domain.Types.OfType<Entity>().ToList();
+            foreach (var entity in entities) {
+                var entityNames = new HashSet<string>(StringComparer.Ordinal) {
+                    entity.Name,
+                    $"{entity.Name}Stage"
+                };
+                var entityDefs = entitySyntax.Types
+                    .Where(d => entityNames.Contains(d.Name))
+                    .ToList();
+                if (entityDefs.Count == 0) continue;
+                var csharp = new CSharpGenerator().Generate(entityDefs);
+                files.Add(($"{entity.Name}.cs", csharp));
+            }
         }
 
         // Infrastructure analysis — shared by all generators below (thread authoring for type maps + conventions)

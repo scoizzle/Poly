@@ -34,5 +34,6 @@
              No effect on public API surface or packaged consumers. -->
         <InternalsVisibleTo Include="Poly.Tests" />
         <InternalsVisibleTo Include="Poly.Mcp" />
+        <InternalsVisibleTo Include="Poly.DslCompiler" />
     </ItemGroup>
 </Project>

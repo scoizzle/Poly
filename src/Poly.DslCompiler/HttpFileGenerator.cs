@@ -14,20 +14,21 @@ public sealed class HttpFileGenerator {
     private readonly Domain _domain;
     private readonly List<Entity> _entities;
     private readonly string _baseUrl;
-    private readonly InfrastructureModel _infraModel;
     private readonly Dictionary<string, StorageEntity> _storageLookup;
     private readonly Dictionary<string, BehaviorEntity> _behaviorLookup;
     private readonly Dictionary<string, AggregateEntity> _aggregateLookup;
 
-    public HttpFileGenerator(Domain domain, string baseUrl = "http://localhost:5201",
-        InfrastructureModel? infraModel = null) {
+    public HttpFileGenerator(Domain domain,
+        StorageModel storageModel,
+        BehaviorModel behaviorModel,
+        AggregateModel aggregateModel,
+        string baseUrl = "http://localhost:5201") {
         _domain = domain;
         _entities = domain.Types.OfType<Entity>().ToList();
         _baseUrl = baseUrl;
-        _infraModel = infraModel ?? new InfrastructureAnalyzer(domain).Analyze();
-        _storageLookup = _infraModel.Storage.Entities.ToDictionary(e => e.Name, StringComparer.Ordinal);
-        _behaviorLookup = _infraModel.Behavior.Entities.ToDictionary(e => e.Name, StringComparer.Ordinal);
-        _aggregateLookup = _infraModel.Aggregate.Entities.ToDictionary(e => e.Name, StringComparer.Ordinal);
+        _storageLookup = storageModel.Entities.ToDictionary(e => e.Name, StringComparer.Ordinal);
+        _behaviorLookup = behaviorModel.Entities.ToDictionary(e => e.Name, StringComparer.Ordinal);
+        _aggregateLookup = aggregateModel.Entities.ToDictionary(e => e.Name, StringComparer.Ordinal);
     }
 
     private StorageEntity GetStorageEntity(Entity entity) => _storageLookup[entity.Name];

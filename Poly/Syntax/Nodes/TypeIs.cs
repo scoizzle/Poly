@@ -8,6 +8,7 @@ namespace Poly.Syntax.Nodes;
 /// </summary>
 /// <remarks>
 /// Corresponds to the <c>value is TargetType</c> operator in C#.
+/// When <see cref="VariableName"/> is set, emits a declaration pattern: <c>value is TargetType name</c>.
 /// The target type is specified by <see cref="TargetTypeReference"/>; semantic analysis passes resolve it to an ITypeDefinition.
 /// </remarks>
 public sealed record TypeIs : Expression {
@@ -19,6 +20,11 @@ public sealed record TypeIs : Expression {
     public Node Operand { get; }
 
     public Node TargetTypeReference { get; }
+
+    /// <summary>
+    /// Optional variable name for a declaration pattern: <c>operand is TargetType VariableName</c>.
+    /// </summary>
+    public string? VariableName { get; init; }
 
     public override IEnumerable<Node?> Children => [Operand, TargetTypeReference];
 

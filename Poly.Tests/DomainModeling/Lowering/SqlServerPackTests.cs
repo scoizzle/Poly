@@ -26,10 +26,11 @@ public class SqlServerPackTests {
         return result.Root!;
     }
 
-    private static InfrastructureModel AnalyzeWithPacks(
+    private static StorageModel AnalyzeStorage(
         Domain domain,
         DomainAuthoringContext? authoring = null) {
-        return new InfrastructureAnalyzer(domain).Analyze(authoring);
+        var ctx = authoring ?? DomainAuthoringContext.CreateWithSqlPack();
+        return new StorageAnalyzer(domain, typeMaps: ctx.TypeMaps, conventions: ctx.StorageConventions).Analyze();
     }
 
     #region Type-map overrides
@@ -45,8 +46,8 @@ public class SqlServerPackTests {
             """);
         var ctx = DomainAuthoringContext.CreateWithSqlPack()
             .AddSqlServerDefaults();
-        var infra = AnalyzeWithPacks(domain, ctx);
-        var cols = infra.Storage.Entities.Single().Columns;
+        var storage = AnalyzeStorage(domain, ctx);
+        var cols = storage.Entities.Single().Columns;
         await Assert.That(cols.All(c => c.ColumnType == "nvarchar(max)")).IsTrue();
     }
 
@@ -61,8 +62,8 @@ public class SqlServerPackTests {
             """);
         var ctx = DomainAuthoringContext.CreateWithSqlPack()
             .AddSqlServerDefaults();
-        var infra = AnalyzeWithPacks(domain, ctx);
-        var cols = infra.Storage.Entities.Single().Columns;
+        var storage = AnalyzeStorage(domain, ctx);
+        var cols = storage.Entities.Single().Columns;
         await Assert.That(cols.All(c => c.ColumnType == "bit")).IsTrue();
     }
 
@@ -77,8 +78,8 @@ public class SqlServerPackTests {
             """);
         var ctx = DomainAuthoringContext.CreateWithSqlPack()
             .AddSqlServerDefaults();
-        var infra = AnalyzeWithPacks(domain, ctx);
-        var cols = infra.Storage.Entities.Single().Columns;
+        var storage = AnalyzeStorage(domain, ctx);
+        var cols = storage.Entities.Single().Columns;
         await Assert.That(cols.All(c => c.ColumnType == "datetime2")).IsTrue();
     }
 
@@ -113,15 +114,15 @@ public class SqlServerPackTests {
 
         // Generic SQL defaults (no SqlServer pack)
         var genericCtx = DomainAuthoringContext.CreateWithSqlPack();
-        var genericInfra = AnalyzeWithPacks(domain, genericCtx);
-        var genericCols = genericInfra.Storage.Entities.Single().Columns
+        var genericInfra = AnalyzeStorage(domain, genericCtx);
+        var genericCols = genericInfra.Entities.Single().Columns
             .ToDictionary(c => c.Name, StringComparer.Ordinal);
 
         // SQL Server defaults
         var ssCtx = DomainAuthoringContext.CreateWithSqlPack()
             .AddSqlServerDefaults();
-        var ssInfra = AnalyzeWithPacks(domain, ssCtx);
-        var ssCols = ssInfra.Storage.Entities.Single().Columns
+        var ssInfra = AnalyzeStorage(domain, ssCtx);
+        var ssCols = ssInfra.Entities.Single().Columns
             .ToDictionary(c => c.Name, StringComparer.Ordinal);
 
         // Same domain, different type maps
@@ -150,14 +151,14 @@ public class SqlServerPackTests {
             """);
 
         var genericCtx = DomainAuthoringContext.CreateWithSqlPack();
-        var genericInfra = AnalyzeWithPacks(domain, genericCtx);
-        var genericCol = genericInfra.Storage.Entities.Single().Columns.Single();
+        var genericInfra = AnalyzeStorage(domain, genericCtx);
+        var genericCol = genericInfra.Entities.Single().Columns.Single();
         await Assert.That(genericCol.ColumnType).IsEqualTo("VARCHAR2(20)");
 
         var ssCtx = DomainAuthoringContext.CreateWithSqlPack()
             .AddSqlServerDefaults();
-        var ssInfra = AnalyzeWithPacks(domain, ssCtx);
-        var ssCol = ssInfra.Storage.Entities.Single().Columns.Single();
+        var ssInfra = AnalyzeStorage(domain, ssCtx);
+        var ssCol = ssInfra.Entities.Single().Columns.Single();
         await Assert.That(ssCol.ColumnType).IsEqualTo("VARCHAR2(20)");
     }
 
@@ -186,7 +187,7 @@ public class SqlServerPackTests {
         var ctx = DomainAuthoringContext.CreateWithSqlPack()
             .AddSqlServerDefaults();
         var ex = Assert.Throws<InvalidOperationException>(() =>
-            AnalyzeWithPacks(faceted, ctx));
+            AnalyzeStorage(faceted, ctx));
         await Assert.That(ex!.Message).Contains("exceeds SQL Server maximum");
     }
 
@@ -210,8 +211,8 @@ public class SqlServerPackTests {
 
         var ctx = DomainAuthoringContext.CreateWithSqlPack()
             .AddSqlServerDefaults();
-        var infra = AnalyzeWithPacks(faceted, ctx);
-        await Assert.That(infra.Storage.Entities.Single().Columns.Single().ColumnName)
+        var infra = AnalyzeStorage(faceted, ctx);
+        await Assert.That(infra.Entities.Single().Columns.Single().ColumnName)
             .IsEqualTo(longName);
     }
 
@@ -234,7 +235,7 @@ public class SqlServerPackTests {
         var ctx = DomainAuthoringContext.CreateWithSqlPack()
             .AddSqlServerDefaults();
         var ex = Assert.Throws<InvalidOperationException>(() =>
-            AnalyzeWithPacks(faceted, ctx));
+            AnalyzeStorage(faceted, ctx));
         await Assert.That(ex!.Message).Contains("exceeds SQL Server maximum");
     }
 
@@ -253,8 +254,8 @@ public class SqlServerPackTests {
             .AddSqlServerDefaults()
             .AddStorageConvention(new PrefixConvention("tbl_"));
 
-        var infra = AnalyzeWithPacks(domain, ctx);
-        var col = infra.Storage.Entities.Single().Columns.Single();
+        var infra = AnalyzeStorage(domain, ctx);
+        var col = infra.Entities.Single().Columns.Single();
         await Assert.That(col.ColumnName).IsEqualTo("tbl_name");
         await Assert.That(col.ColumnType).IsEqualTo("nvarchar(max)");
     }

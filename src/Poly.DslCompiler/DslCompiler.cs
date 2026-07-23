@@ -127,13 +127,13 @@ public sealed class DslCompiler {
 
         // ── 3. Generate C# ───────────────────────────────────────
         var domain = outcome.Root;
-        var files = GenerateAllFiles(domain, outcome.Analysis, mode, authoring);
-
-        return new CompileResult(
-            Success: true,
-            Files: files,
-            Errors: null
-        );
+        try {
+            var files = GenerateAllFiles(domain, outcome.Analysis, mode, authoring);
+            return new CompileResult(Success: true, Files: files, Errors: null);
+        }
+        catch (InvalidOperationException ex) {
+            return Fail(ex.Message);
+        }
     }
 
     /// <summary>
@@ -193,21 +193,67 @@ public sealed class DslCompiler {
             }
         }
 
-        // Infrastructure analysis — shared by all generators below (thread authoring for type maps + conventions)
-        var infraModel = new InfrastructureAnalyzer(domain, analysis).Analyze(authoring);
+        // Infrastructure analysis — use new passes pipeline (Task Group 3)
+        var infraPipelineBuilder = new AnalyzerBuilder()
+            .AddAnalyzer(new Poly.DomainModeling.Analysis.EffectTopologyPass())
+            .AddAnalyzer(new Poly.DomainModeling.Analysis.OwnershipAggregatePass(analysis))
+            .AddAnalyzer(new Poly.DomainModeling.Analysis.BehaviorPass(analysis))
+            .AddAnalyzer(new Poly.DomainModeling.Analysis.StoragePass(
+                typeMaps: authoring?.TypeMaps,
+                conventions: authoring?.StorageConventions,
+                analysis: analysis))
+            .AddAnalyzer(new Poly.DomainModeling.Analysis.TransportPass());
+
+        // Issue 19: Wire authoring.Passes.Build() into pipeline
+        if (authoring != null) {
+            foreach (var pass in authoring.Passes.Build())
+                infraPipelineBuilder.AddAnalyzer(pass);
+        }
+
+        var infraPipeline = infraPipelineBuilder.Build();
+        // Issue 14: Thread prior domain analysis into infra pipeline
+        var infraResult = infraPipeline.Analyze(domain, priorAnalysis: analysis, invalidatedNodes: [domain]);
+
+        var storageModel = infraResult.GetMetadata<Poly.DomainModeling.Analysis.StorageMappingMetadata>(domain)?.Storage;
+        var behaviorModel = infraResult.GetMetadata<Poly.DomainModeling.Analysis.BehaviorMetadata>(domain)?.Behavior;
+        var aggregateModel = infraResult.GetMetadata<Poly.DomainModeling.Analysis.OwnershipAggregateMetadata>(domain)?.Aggregate;
+
+        // Fail closed — no silent re-analyze (storage, behavior, aggregate).
+        // Pipeline carries authoring context; missing metadata is a pipeline bug.
+        if ((mode == CompileMode.Db || mode == CompileMode.All) && storageModel == null)
+            throw new InvalidOperationException(
+                "Infrastructure pipeline did not produce storage mapping metadata.");
+
+        if (mode == CompileMode.All) {
+            if (behaviorModel == null)
+                throw new InvalidOperationException(
+                    "Infrastructure pipeline did not produce behavior metadata.");
+            if (aggregateModel == null)
+                throw new InvalidOperationException(
+                    "Infrastructure pipeline did not produce aggregate metadata.");
+        }
+
+        // TransportPass is in pipeline but unused — no consumer yet.
+        // CrossReferencePass deferred — wire when a consumer needs dependency graphs.
 
         // DbContext (mode: db or all)
         if (mode == CompileMode.Db || mode == CompileMode.All) {
             var dbContextName = $"{domain.Name}DbContext";
-            var dbGen = new DbContextGenerator(domain, infraModel);
+            var dbGen = new DbContextGenerator(domain, storageModel!);
             files.Add(("LibraryDbContext.cs", dbGen.Generate()));
 
             // Minimal API + .http file (mode: all only)
             if (mode == CompileMode.All) {
-                var apiGen = new MinimalApiGenerator(domain, infraModel);
+                var apiGen = new MinimalApiGenerator(domain,
+                    storageModel: storageModel!,
+                    behaviorModel: behaviorModel!,
+                    aggregateModel: aggregateModel!);
                 files.Add(("Program.cs", apiGen.Generate(dbContextName)));
 
-                var httpGen = new HttpFileGenerator(domain, infraModel: infraModel);
+                var httpGen = new HttpFileGenerator(domain,
+                    storageModel: storageModel!,
+                    behaviorModel: behaviorModel!,
+                    aggregateModel: aggregateModel!);
                 files.Add(("demo.http", httpGen.Generate()));
             }
         }

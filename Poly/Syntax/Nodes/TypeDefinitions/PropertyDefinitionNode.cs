@@ -42,6 +42,11 @@ public sealed record PropertyDefinitionNode : MemberDefinitionNode {
 
     public IReadOnlyList<Node>? Constraints { get; }
 
+    /// <summary>
+    /// Attributes applied to this property.
+    /// </summary>
+    public IReadOnlyList<AttributeNode> Attributes { get; init; } = [];
+
     public bool IsReadOnly { get; }
 
     public bool IsConst { get; }
@@ -61,6 +66,7 @@ public sealed record PropertyDefinitionNode : MemberDefinitionNode {
     public override IEnumerable<Node?> Children {
         get {
             yield return MemberType;
+            foreach (var a in Attributes) yield return a;
             yield return Getter;
             yield return Setter;
             yield return Initializer;

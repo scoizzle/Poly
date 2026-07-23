@@ -4,6 +4,9 @@ using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Parsing;
 using Poly.DslCompiler;
+using Poly.Interpretation.CSharp;
+using Poly.Syntax;
+using Poly.Syntax.Nodes;
 
 namespace Poly.Tests.DomainModeling.Lowering;
 
@@ -25,8 +28,8 @@ public class DbContextGeneratorTests {
     }
 
     private static string GenerateDb(Domain domain) {
-        var infra = new InfrastructureAnalyzer(domain).Analyze();
-        return new DbContextGenerator(domain, infra).Generate();
+        var storage = new StorageAnalyzer(domain).Analyze();
+        return new DbContextGenerator(domain, storage).Generate();
     }
 
     [Test]
@@ -177,5 +180,111 @@ public class DbContextGeneratorTests {
         var output = GenerateDb(domain);
         await Assert.That(output).Contains(
             "b.Property(x => x.Note).HasColumnName(\"COL_\\\"X\\\"\").HasColumnType(\"varchar\");");
+    }
+
+    // ── Parity tests (Issue 13) ──────────────────────────────────
+
+    /// <summary>Generates IR output via CSharpGenerator + GenerateCompilationUnit.</summary>
+    private static string GenerateIr(Domain domain) {
+        var storage = new StorageAnalyzer(domain).Analyze();
+        var gen = new DbContextGenerator(domain, storage);
+        return new CSharpGenerator().Generate(gen.GenerateCompilationUnit());
+    }
+
+    /// <summary>Extracts all fluent config statement content from both outputs and asserts they match.</summary>
+    private static async Task AssertParity(Domain domain) {
+        var stringOutput = GenerateDb(domain);
+        var irOutput = GenerateIr(domain);
+
+        // Extract all b.xxx fluent statements - find "b." and grab to ";"
+        var stringFluent = ExtractFluentStatements(stringOutput).OrderBy(x => x).ToList();
+        var irFluent = ExtractFluentStatements(irOutput).OrderBy(x => x).ToList();
+
+        if (!stringFluent.SequenceEqual(irFluent)) {
+            await Assert.That(stringFluent.SequenceEqual(irFluent)).IsTrue();
+        }
+    }
+
+    /// <summary>Finds all fluent lines starting with b.Property/b.HasKey/b.ToTable etc.</summary>
+    private static IEnumerable<string> ExtractFluentStatements(string source) {
+        var results = new List<string>();
+        var lines = source.Split('\n');
+        foreach (var line in lines) {
+            var trimmed = line.Trim();
+            // Skip continuation lines (.PropertyAccessMode, .HasColumnName, etc)
+            if (trimmed.StartsWith(".")) continue;
+            // Find all b.xxx "words" in this line (IR puts them inline inside lambdas)
+            int idx = 0;
+            while ((idx = trimmed.IndexOf("b.", idx, StringComparison.Ordinal)) >= 0) {
+                var end = trimmed.IndexOf(';', idx);
+                var stmt = end >= 0 ? trimmed[idx..end] : trimmed[idx..];
+                // Truncate at trailing "!" to normalize multi-line vs single-line FindNavigation
+                var bang = stmt.IndexOf('!');
+                if (bang >= 0) stmt = stmt[..bang];
+                results.Add(stmt);
+                idx = end >= 0 ? end + 1 : trimmed.Length;
+            }
+        }
+        return results;
+    }
+
+    [Test]
+    public async Task Parity_ShadowKey_StringAndIrMatch() {
+        var domain = ParseDomain("""
+            domain Test
+            Item: entity { Name: Text }
+            """);
+        await AssertParity(domain);
+    }
+
+    [Test]
+    public async Task Parity_NaturalKey_Sku() {
+        var domain = ParseDomain("""
+            domain Test
+            Item: entity {
+              SKU: Text unique column("SKU_NBR", "varchar(50)")
+            }
+            """);
+        await AssertParity(domain);
+    }
+
+    [Test]
+    public async Task Parity_MultipleEntitiesWithMaxLength() {
+        var domain = ParseDomain("""
+            domain Test
+            Book: entity {
+              Title: Text length(1, 100)
+              Author: Text
+              Pages: Number
+            }
+            Patron: entity {
+              Email: Text unique
+            }
+            """);
+        await AssertParity(domain);
+    }
+
+    [Test]
+    public async Task Parity_WithCollectionNavigation() {
+        var domain = ParseDomain("""
+            domain Test
+            Patron: entity {
+              Name: Text
+              loans: many Loan
+            }
+            Loan: entity {
+              Amount: Number
+              borrower: Patron
+            }
+            """);
+        await AssertParity(domain);
+    }
+
+    [Test]
+    public async Task Parity_ZeroEntities() {
+        var domain = ParseDomain("""
+            domain Empty
+            """);
+        await AssertParity(domain);
     }
 }

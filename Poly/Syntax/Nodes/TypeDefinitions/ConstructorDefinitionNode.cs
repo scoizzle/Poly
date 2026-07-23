@@ -13,11 +13,17 @@ public sealed record ConstructorDefinitionNode(
     AccessModifier AccessModifier = AccessModifier.Public
 ) : Node {
 
+    /// <summary>
+    /// Typed base constructor invocation (replaces <see cref="BaseCall"/> over time).
+    /// </summary>
+    public BaseConstructorInvocationNode? BaseConstructorInvocation { get; init; }
+
     public override IEnumerable<Node?> Children {
         get {
             if (Parameters != null)
                 foreach (var parameter in Parameters) yield return parameter;
             yield return Body;
+            yield return BaseConstructorInvocation;
             if (BaseCall != null)
                 foreach (var arg in BaseCall) yield return arg;
         }

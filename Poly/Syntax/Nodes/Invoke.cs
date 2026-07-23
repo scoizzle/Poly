@@ -21,8 +21,15 @@ namespace Poly.Syntax.Nodes;
 /// <param name="Delegate">The method reference node, typically a <see cref="Member"/>.</param>
 /// <param name="Arguments">The arguments to pass to the method.</param>
 public sealed record Invoke(Node Delegate, params Node[] Arguments) : Expression {
-    public override IEnumerable<Node?> Children => [Delegate, .. Arguments];
+    /// <summary>
+    /// Optional generic type arguments for the invocation, e.g. <c>&lt;Book&gt;</c> in <c>Set&lt;Book&gt;()</c>.
+    /// </summary>
+    public IReadOnlyList<Node> TypeArguments { get; init; } = [];
 
-    public override string ToString() => $"{Delegate}({string.Join(", ", Arguments)})";
+    public override IEnumerable<Node?> Children => [Delegate, .. TypeArguments, .. Arguments];
 
+    public override string ToString() {
+        var typeArgs = TypeArguments.Count > 0 ? $"<{string.Join(", ", TypeArguments)}>" : "";
+        return $"{Delegate}{typeArgs}({string.Join(", ", Arguments)})";
+    }
 }

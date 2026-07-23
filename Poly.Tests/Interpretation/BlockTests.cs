@@ -124,9 +124,11 @@ public class BlockTests {
     }
 
     [Test]
-    public async Task Block_WithEmptyExpressions_ThrowsArgumentException() {
-        // Act & Assert
-        await Assert.That(() => new Block(Array.Empty<Node>())).Throws<ArgumentException>();
+    public async Task Block_WithEmptyExpressions_IsAllowed() {
+        // A4: Empty blocks are now allowed (codegen needs zero-entity OnModelCreating)
+        var block = new Block(Array.Empty<Node>());
+        await Assert.That(block.Nodes).IsEmpty();
+        await Assert.That(block.Variables).IsEmpty();
     }
 
     [Test]

@@ -11,6 +11,7 @@ Architectural rationale → **`docs/decisions/`**. Module maps → **`Poly/*/REA
 
 | Plan | Role |
 |------|------|
+| [**Infrastructure pass — NEXT**](infrastructure-pass-NEXT.md) | Groups 1–5 **Done** under current bar; pull production IR / Bar B — [task list](infrastructure-pass-task-list.md) |
 | [**MCP Phase 3 + RT + SA**](v2-to-v3/mcp-phase3-oracle-surface.md) | Phase 3 + RT + SA MVP **done**; residuals pull |
 | [**Effect surface completeness**](v2-to-v3/effect-surface-completeness.md) | Usefulness track — IR/DSL/MCP effect parity (delete, link, invoke, …) |
 | [**DSL query surface**](v2-to-v3/dsl-query-surface.md) | Q1′ **authoring complete**; **§15** Q3′ decision; RT eval **pull** |

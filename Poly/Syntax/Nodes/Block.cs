@@ -48,7 +48,9 @@ public sealed record Block : Node {
         }
 
         if (expressionList.Count == 0) {
-            throw new ArgumentException("Block must contain at least one expression.", nameof(expressions));
+            Nodes = Array.Empty<Node>();
+            Variables = Array.Empty<Node>();
+            return;
         }
 
         Nodes = expressionList.AsReadOnly();

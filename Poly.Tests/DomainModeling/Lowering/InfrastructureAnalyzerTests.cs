@@ -1,16 +1,25 @@
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
+using Poly.DomainModeling.Effects;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Parsing;
 namespace Poly.Tests.DomainModeling.Lowering;
 
 /// <summary>
-/// Tests for <see cref="InfrastructureAnalyzer"/> and subsystem models —
+/// Tests for the infrastructure analysis subsystem models —
 /// root/child detection, key analysis, property classification, parent
 /// resolution, behavior metadata, topology, and AnalysisResult-backed path.
 /// </summary>
 public class InfrastructureAnalyzerTests {
+    // ── Helper bundle ──────────────────────────────────────────
+    private sealed record TestInfra(
+        StorageModel Storage,
+        EffectTopology Topology,
+        BehaviorModel Behavior,
+        AggregateModel Aggregate,
+        TransportSurface Transport
+    );
     // ── Helpers ───────────────────────────────────────────────
 
     private static (Domain Domain, AnalysisResult Analysis) ParseDomainWithAnalysis(string poly) {
@@ -29,16 +38,26 @@ public class InfrastructureAnalyzerTests {
 
     private static Domain ParseDomain(string poly) => ParseDomainWithAnalysis(poly).Domain;
 
-    private static InfrastructureModel AnalyzeFull(string poly) {
+    private static TestInfra AnalyzeFull(string poly) {
         var domain = ParseDomain(poly);
-        return new InfrastructureAnalyzer(domain).Analyze();
+        var topology = EffectTopologyAnalyzer.Scan(domain);
+        var aggregate = new AggregateAnalyzer(domain).Analyze(topology);
+        var storage = new StorageAnalyzer(domain).Analyze(aggregate, topology);
+        var behavior = new BehaviorAnalyzer(domain).Analyze();
+        var transport = new TransportAnalyzer(domain).Analyze(aggregate, topology);
+        return new TestInfra(storage, topology, behavior, aggregate, transport);
     }
 
-    private static InfrastructureModel AnalyzeWithAnalysis(string poly) {
-        var (domain, analysis) = ParseDomainWithAnalysis(poly);
-        // Prefer full DomainModelAnalyzer so EntityStructure + capability metadata are present.
-        var full = DomainModelAnalyzer.Analyze(domain);
-        return new InfrastructureAnalyzer(domain, full).Analyze();
+    private static TestInfra AnalyzeWithAnalysis(string poly) {
+        var (domain, _) = ParseDomainWithAnalysis(poly);
+        // Issue 16: Use real DomainModelAnalyzer so EntityStructure + capability metadata are present
+        var analysis = DomainModelAnalyzer.Analyze(domain);
+        var topology = EffectTopologyAnalyzer.Scan(domain);
+        var aggregate = new AggregateAnalyzer(domain, analysis).Analyze(topology);
+        var storage = new StorageAnalyzer(domain, analysis).Analyze(aggregate, topology);
+        var behavior = new BehaviorAnalyzer(domain, analysis).Analyze();
+        var transport = new TransportAnalyzer(domain, analysis).Analyze(aggregate, topology);
+        return new TestInfra(storage, topology, behavior, aggregate, transport);
     }
 
     // ── Root/child detection ──────────────────────────────────
@@ -378,7 +397,7 @@ public class InfrastructureAnalyzerTests {
     // P2 — Annotation-driven storage overrides                 ║
     // ╚══════════════════════════════════════════════════════════╝
 
-    private static InfrastructureModel AnalyzeWithPacks(string poly) {
+    private static TestInfra AnalyzeWithPacks(string poly) {
         var ctx = DomainAuthoringContext.CreateWithSqlPack();
         var parser = new PolyDslParser(poly, ctx);
         var changes = parser.Parse();
@@ -390,7 +409,13 @@ public class InfrastructureAnalyzerTests {
                 .Select(d => d.Message));
             throw new InvalidOperationException($"Domain evolution failed: {errors}");
         }
-        return new InfrastructureAnalyzer(result.Root!).Analyze();
+        var domain = result.Root!;
+        var topology = EffectTopologyAnalyzer.Scan(domain);
+        var aggregate = new AggregateAnalyzer(domain).Analyze(topology);
+        var storage = new StorageAnalyzer(domain, typeMaps: ctx.TypeMaps, conventions: ctx.StorageConventions).Analyze(aggregate, topology);
+        var behavior = new BehaviorAnalyzer(domain).Analyze();
+        var transport = new TransportAnalyzer(domain).Analyze(aggregate, topology);
+        return new TestInfra(storage, topology, behavior, aggregate, transport);
     }
 
     [Test]
@@ -549,8 +574,8 @@ public class InfrastructureAnalyzerTests {
             .AddStorageConvention(new TestPrefixConvention("p_"));
         ctx.TypeMaps.OverrideSqlColumnType("Text", "text");
 
-        var infra = new InfrastructureAnalyzer(domain).Analyze(ctx);
-        var col = infra.Storage.Entities.Single().Columns.Single();
+        var storage = new StorageAnalyzer(domain, typeMaps: ctx.TypeMaps, conventions: ctx.StorageConventions).Analyze();
+        var col = storage.Entities.Single().Columns.Single();
         await Assert.That(col.ColumnName).IsEqualTo("p_name");
         await Assert.That(col.ColumnType).IsEqualTo("text");
     }
@@ -655,5 +680,55 @@ public class InfrastructureAnalyzerTests {
                 baseline.IsUnique,
                 baseline.MaxLength,
                 columnName: _prefix + baseline.ColumnName);
+    }
+}
+
+/// <summary>
+/// Pipeline integration test — builds the same AnalyzerBuilder pipeline
+/// as DslCompiler and asserts all metadata types are produced.
+/// </summary>
+public class InfrastructurePipelineTests {
+    private static Domain ParseDomain(string poly) {
+        var parser = new PolyDslParser(poly);
+        var changes = parser.Parse();
+        var result = new DomainEvolution(new Domain("_", [], [])).Apply(changes);
+        if (!result.Succeeded) throw new InvalidOperationException("Domain evolution failed");
+        return result.Root!;
+    }
+
+    [Test]
+    public async Task Pipeline_Produces_StorageBehaviorAndAggregateMetadata() {
+        var domain = ParseDomain("""
+            domain Test
+            Item: entity { Name: Text }
+            """);
+        var domainResult = DomainModelAnalyzer.Analyze(domain);
+
+        var pipeline = new AnalyzerBuilder()
+            .AddAnalyzer(new EffectTopologyPass())
+            .AddAnalyzer(new OwnershipAggregatePass(domainResult))
+            .AddAnalyzer(new BehaviorPass(domainResult))
+            .AddAnalyzer(new StoragePass(analysis: domainResult))
+            .AddAnalyzer(new TransportPass())
+            .Build();
+
+        var result = pipeline.Analyze(domain, priorAnalysis: domainResult, invalidatedNodes: [domain]);
+
+        var storage = result.GetMetadata<StorageMappingMetadata>(domain);
+        var behavior = result.GetMetadata<BehaviorMetadata>(domain);
+        var aggregate = result.GetMetadata<OwnershipAggregateMetadata>(domain);
+        var topology = result.GetMetadata<EffectTopologyMetadata>(domain);
+        var transport = result.GetMetadata<TransportMetadata>(domain);
+
+        await Assert.That(storage).IsNotNull();
+        await Assert.That(behavior).IsNotNull();
+        await Assert.That(aggregate).IsNotNull();
+        await Assert.That(topology).IsNotNull();
+        await Assert.That(transport).IsNotNull();
+
+        await Assert.That(storage!.Storage.Entities.Count).IsGreaterThan(0);
+        await Assert.That(behavior!.Behavior.Entities.Count).IsGreaterThan(0);
+        await Assert.That(aggregate!.Aggregate.Entities.Count).IsGreaterThan(0);
+        await Assert.That(transport!.Transport.Entities.Count).IsGreaterThan(0);
     }
 }

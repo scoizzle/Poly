@@ -42,6 +42,11 @@ public sealed record TypeDefinitionNode(
     /// </summary>
     public string FullName => Namespace != null ? $"{Namespace}.{Name}" : Name;
 
+    /// <summary>
+    /// Attributes applied to this type (e.g. <c>[Serializable]</c>, <c>[Key]</c>).
+    /// </summary>
+    public IReadOnlyList<AttributeNode> Attributes { get; init; } = [];
+
     public TypeDefinitionSemantics EffectiveSemantics => Semantics ?? TypeDefinitionSemantics.MutableReference;
 
     /// <summary>
@@ -52,6 +57,7 @@ public sealed record TypeDefinitionNode(
     public override IEnumerable<Node?> Children {
         get {
             yield return BaseType;
+            foreach (var a in Attributes) yield return a;
             if (GenericParameters != null)
                 foreach (var g in GenericParameters) yield return g;
             if (Interfaces != null)

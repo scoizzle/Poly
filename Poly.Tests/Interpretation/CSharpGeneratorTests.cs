@@ -603,4 +603,72 @@ public class CSharpGeneratorTests {
         var result = generator.Generate(new Constant(1));
         await Assert.That(result).IsEqualTo("1;");
     }
+
+    // ── Substrate tests (Group 2.4) ──────────────────────────────
+
+    [Test]
+    public async Task Generate_CompilationUnit_TopLevelStatementsBeforeTypes() {
+        // A1: Top-level statements must emit BEFORE type definitions
+        var unit = new CompilationUnitNode(
+            Usings: ["System.Linq"],
+            Namespace: "Test",
+            Types: [
+                new TypeDefinitionNode("MyClass")
+            ],
+            TopLevelStatements: [
+                new Variable("builder", new Invoke(
+                    new Member(new TypeReference("WebApplication"), "CreateBuilder")))
+            ]
+        );
+        var result = new CSharpGenerator().Generate(unit);
+        await Assert.That(result).Contains("var builder = WebApplication.CreateBuilder();");
+        // Statements must appear before the type definition
+        var stmtPos = result.IndexOf("var builder");
+        var typePos = result.IndexOf("class MyClass");
+        await Assert.That(stmtPos).IsLessThan(typePos);
+    }
+
+    [Test]
+    public async Task Generate_LambdaStatementBlock_SemicolonsAfterEachStatement() {
+        // A3: Inline Block in lambda must have ; after each statement
+        var bParam = new Parameter("b");
+        var body = new Block(
+            new Invoke(
+                new Member(new Member(bParam, "Metadata"), "FindNavigation"),
+                new Constant("Loans")),
+            new Invoke(
+                new Member(bParam, "ToTable"),
+                new Constant("Items"))
+        );
+        var lambda = new Lambda([bParam], body);
+        var result = new CSharpGenerator().Generate(lambda);
+        // Each invocation should have a trailing semicolon
+        await Assert.That(result).Contains("FindNavigation(\"Loans\");");
+        await Assert.That(result).Contains("ToTable(\"Items\");");
+    }
+
+    [Test]
+    public async Task Generate_Constructor_NullBodyEmitsBraces() {
+        // A2: Constructor with null Body and a base call emits { }
+        var ctor = new ConstructorDefinitionNode(
+            Parameters: [new Parameter("options",
+                new NamedTypeReference("DbContextOptions",
+                    TypeArguments: [new NamedTypeReference("MyDbContext")]))]
+        ) {
+            BaseConstructorInvocation = new BaseConstructorInvocationNode(
+                [new Parameter("options")])
+        };
+        var type = new TypeDefinitionNode("MyDbContext", Constructors: [ctor]);
+        var result = new CSharpGenerator().Generate(type);
+        await Assert.That(result).Contains(": base(options)");
+        await Assert.That(result).Contains("{ }");
+    }
+
+    [Test]
+    public async Task Generate_EmptyBlock_DoesNotThrow() {
+        // A4: Empty Block must not throw and must emit { }
+        var block = new Block();
+        var result = new CSharpGenerator().Generate(block);
+        await Assert.That(result).IsEqualTo("{ }");
+    }
 }

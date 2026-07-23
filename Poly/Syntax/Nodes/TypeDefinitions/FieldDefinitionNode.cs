@@ -22,6 +22,11 @@ public sealed record FieldDefinitionNode(
     bool IsConst = false,
     AccessModifier AccessModifier = AccessModifier.Public
 ) : MemberDefinitionNode(Name, FieldType, IsStatic, AccessModifier) {
+    /// <summary>
+    /// Attributes applied to this field.
+    /// </summary>
+    public IReadOnlyList<AttributeNode> Attributes { get; init; } = [];
+
     // Enforce: IsConst implies IsReadOnly (as documented). IsLiteral (CLR) implies IsConst.
     public bool IsReadOnly { get; } = IsReadOnly || IsConst;
     public bool IsConst { get; } = IsConst;
@@ -42,6 +47,7 @@ public sealed record FieldDefinitionNode(
 
     public override IEnumerable<Node?> Children {
         get {
+            foreach (var a in Attributes) yield return a;
             yield return FieldType;
             yield return DefaultValue;
         }

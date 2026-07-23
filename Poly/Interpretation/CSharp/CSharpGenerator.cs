@@ -35,6 +35,41 @@ public sealed class CSharpGenerator {
         return sb.ToString().TrimEnd();
     }
 
+    /// <summary>Generates C# source code for a complete compilation unit.</summary>
+    /// <param name="unit">The compilation unit to generate.</param>
+    /// <returns>Formatted C# source code.</returns>
+    public string Generate(CompilationUnitNode unit) {
+        ArgumentNullException.ThrowIfNull(unit);
+        var sb = new StringBuilder();
+        sb.AppendLine("#nullable enable");
+        sb.AppendLine();
+        foreach (var usingNs in unit.Usings) {
+            sb.Append("using ");
+            sb.Append(usingNs);
+            sb.AppendLine(";");
+        }
+        sb.AppendLine();
+        if (unit.Namespace != null) {
+            sb.Append("namespace ");
+            sb.Append(unit.Namespace);
+            sb.AppendLine(";");
+            sb.AppendLine();
+        }
+        // Emit top-level statements BEFORE type definitions (C# top-level statement order)
+        if (unit.TopLevelStatements != null) {
+            foreach (var stmt in unit.TopLevelStatements) {
+                WriteStatement(sb, stmt, 0);
+                sb.AppendLine();
+            }
+            sb.AppendLine();
+        }
+        foreach (var typeDef in unit.Types) {
+            WriteStatement(sb, typeDef, 0);
+            sb.AppendLine();
+        }
+        return sb.ToString().TrimEnd();
+    }
+
     /// <summary>Generates C# source code for a collection of type definitions.</summary>
     /// <param name="typeDefs">The type definitions to emit.</param>
     /// <returns>Formatted C# source code with nullable enabled.</returns>
@@ -87,6 +122,14 @@ public sealed class CSharpGenerator {
 
     private void WriteStatement(StringBuilder sb, Node node, int indent) {
         switch (node) {
+            case AttributedNode attrNode:
+                WriteAttributes(sb, attrNode.Attributes, indent);
+                WriteStatement(sb, attrNode.Inner, indent);
+                return;
+            case MethodDefinitionNode method when indent == 0:
+                // Top-level method: emit as local function without access modifier
+                WriteLocalFunction(sb, method);
+                return;
             case TypeDefinitionNode typeDef:
                 WriteTypeDefinition(sb, typeDef, indent);
                 return;
@@ -190,6 +233,10 @@ public sealed class CSharpGenerator {
 
     private void WriteBlock(StringBuilder sb, Block block, int indent) {
         Indent(sb, indent);
+        if (block.Nodes.Count == 0 && block.Variables.Count == 0) {
+            sb.AppendLine("{ }");
+            return;
+        }
         sb.AppendLine("{");
 
         foreach (var v in block.Variables) {
@@ -369,12 +416,22 @@ public sealed class CSharpGenerator {
     private void WriteUsingStatement(StringBuilder sb, UsingStatement usingStmt, int indent) {
         Indent(sb, indent);
         sb.Append("using (");
-        WriteExpression(sb, usingStmt.Resource);
+        // R2: When resource is a Variable with initializer, emit "var name = value"
+        if (usingStmt.Resource is Variable v && v.Value != null) {
+            sb.Append("var ");
+            sb.Append(v.Name);
+            sb.Append(" = ");
+            WriteExpression(sb, v.Value);
+        }
+        else {
+            WriteExpression(sb, usingStmt.Resource);
+        }
         sb.AppendLine(")");
         WriteStatement(sb, usingStmt.Body, indent);
     }
 
     private void WriteTypeDefinition(StringBuilder sb, TypeDefinitionNode typeDef, int indent) {
+        WriteAttributes(sb, typeDef.Attributes, indent);
         var isEnum = typeDef.Fields?.All(f => f.DefaultValue is Constant) == true
                      && (typeDef.Methods?.Count ?? 0) == 0
                      && (typeDef.Constructors?.Count ?? 0) == 0;
@@ -536,8 +593,10 @@ public sealed class CSharpGenerator {
     }
 
     private void WriteMethodDefinition(StringBuilder sb, MethodDefinitionNode method, int indent) {
+        WriteAttributes(sb, method.Attributes, indent);
         Indent(sb, indent);
         WriteAccessModifier(sb, method.AccessModifier);
+        if (method.IsOverride) sb.Append("override ");
         if (method.IsStatic) sb.Append("static ");
         if (method.IsAsync) sb.Append("async ");
         WriteExpression(sb, method.ReturnType);
@@ -566,6 +625,29 @@ public sealed class CSharpGenerator {
         }
     }
 
+    /// <summary>Emits a top-level local function (no access modifier, no trailing semicolon).</summary>
+    private void WriteLocalFunction(StringBuilder sb, MethodDefinitionNode method) {
+        if (method.IsStatic) sb.Append("static ");
+        if (method.IsAsync) sb.Append("async ");
+        WriteExpression(sb, method.ReturnType);
+        sb.Append(' ');
+        sb.Append(method.Name);
+        sb.Append('(');
+        if (method.Parameters != null) {
+            WriteParameterDeclarations(sb, method.Parameters);
+        }
+        sb.Append(')');
+
+        if (method.Body != null) {
+            sb.AppendLine();
+            WriteStatement(sb, method.Body, 0);
+        }
+        else {
+            sb.AppendLine(";");
+        }
+        sb.AppendLine();
+    }
+
     private void WriteConstructorDefinition(StringBuilder sb, ConstructorDefinitionNode ctor, int indent, string className) {
         Indent(sb, indent);
         WriteAccessModifier(sb, ctor.AccessModifier);
@@ -577,7 +659,11 @@ public sealed class CSharpGenerator {
         sb.Append(')');
 
         // Emit : base(args) when applicable
-        if (ctor.BaseCall is { Count: > 0 }) {
+        if (ctor.BaseConstructorInvocation != null) {
+            sb.Append(" : ");
+            WriteExpression(sb, ctor.BaseConstructorInvocation);
+        }
+        else if (ctor.BaseCall is { Count: > 0 }) {
             sb.Append(" : base(");
             for (int i = 0; i < ctor.BaseCall.Count; i++) {
                 if (i > 0) sb.Append(", ");
@@ -591,11 +677,12 @@ public sealed class CSharpGenerator {
             WriteStatement(sb, ctor.Body, indent);
         }
         else {
-            sb.AppendLine(";");
+            sb.AppendLine(" { }");
         }
     }
 
     private void WritePropertyDefinition(StringBuilder sb, PropertyDefinitionNode prop, int indent) {
+        WriteAttributes(sb, prop.Attributes, indent);
         Indent(sb, indent);
         WriteAccessModifier(sb, prop.AccessModifier);
 
@@ -683,6 +770,7 @@ public sealed class CSharpGenerator {
     }
 
     private void WriteFieldDefinition(StringBuilder sb, FieldDefinitionNode field, int indent) {
+        WriteAttributes(sb, field.Attributes, indent);
         Indent(sb, indent);
         WriteAccessModifier(sb, field.AccessModifier);
         if (field.IsStatic) sb.Append("static ");
@@ -910,6 +998,11 @@ public sealed class CSharpGenerator {
             // Invocation
             case Invoke invoke:
                 WriteExpression(sb, invoke.Delegate);
+                if (invoke.TypeArguments is { Count: > 0 }) {
+                    sb.Append('<');
+                    WriteCommaSeparated(sb, invoke.TypeArguments);
+                    sb.Append('>');
+                }
                 sb.Append('(');
                 WriteCommaSeparated(sb, invoke.Arguments);
                 sb.Append(')');
@@ -935,6 +1028,10 @@ public sealed class CSharpGenerator {
                 WriteExpression(sb, typeIs.Operand);
                 sb.Append(" is ");
                 WriteExpression(sb, typeIs.TargetTypeReference);
+                if (typeIs.VariableName != null) {
+                    sb.Append(' ');
+                    sb.Append(typeIs.VariableName);
+                }
                 return;
             case TypeAs typeAs:
                 WriteExpression(sb, typeAs.Operand);
@@ -950,13 +1047,20 @@ public sealed class CSharpGenerator {
             // Block used inline (e.g., as lambda body) - inline format
             case Block block:
                 sb.Append('{');
-                for (int i = 0; i < block.Nodes.Count; i++) {
-                    var n = block.Nodes[i];
-                    // DCE: skip elidable in inline blocks too (keep last)
-                    if (i == block.Nodes.Count - 1 || _analysisResult == null || !_analysisResult.CanElide(n)) {
-                        if (i > 0) sb.Append(' ');
-                        WriteExpression(sb, n);
+                if (block.Nodes.Count == 0 && block.Variables.Count == 0) {
+                    sb.Append(' ');
+                }
+                else {
+                    for (int i = 0; i < block.Nodes.Count; i++) {
+                        var n = block.Nodes[i];
+                        // DCE: skip elidable in inline blocks too (keep last)
+                        if (i == block.Nodes.Count - 1 || _analysisResult == null || !_analysisResult.CanElide(n)) {
+                            sb.Append(' ');
+                            // R1: Use WriteStatement for proper var/if/return emission
+                            WriteStatement(sb, n, 0);
+                        }
                     }
+                    sb.Append(' ');
                 }
                 sb.Append('}');
                 return;
@@ -1004,6 +1108,11 @@ public sealed class CSharpGenerator {
                 WriteExpression(sb, suspend.Inner);
                 return;
 
+            case BaseConstructorInvocationNode baseCtor:
+                sb.Append("base(");
+                WriteCommaSeparated(sb, baseCtor.Arguments);
+                sb.Append(')');
+                return;
             case Comment c:
                 sb.Append(c.Text.EndsWith('.') ? $"/* {c.Text} */" : $"/* {c.Text} */");
                 return;
@@ -1097,16 +1206,37 @@ public sealed class CSharpGenerator {
     }
 
     private void WriteLambda(StringBuilder sb, Lambda lambda) {
-        if (lambda.Parameters.Count == 1) {
+        // Emit async keyword if body contains Await nodes
+        if (BodyContainsAwait(lambda.Body))
+            sb.Append("async ");
+
+        if (lambda.Parameters.Count == 1 && lambda.Parameters[0].TypeReference is null) {
             WriteExpression(sb, lambda.Parameters[0]);
         }
         else {
             sb.Append('(');
-            WriteCommaSeparated(sb, lambda.Parameters.Cast<Node>());
+            for (int i = 0; i < lambda.Parameters.Count; i++) {
+                if (i > 0) sb.Append(", ");
+                var p = lambda.Parameters[i];
+                if (p.TypeReference != null) {
+                    WriteExpression(sb, p.TypeReference);
+                    sb.Append(' ');
+                }
+                sb.Append(p.Name);
+            }
             sb.Append(')');
         }
         sb.Append(" => ");
         WriteExpression(sb, lambda.Body);
+    }
+
+    /// <summary>Checks if an expression tree contains Await nodes (used for lambda async emission).</summary>
+    private static bool BodyContainsAwait(Node node) {
+        if (node is Await) return true;
+        foreach (var child in node.Children)
+            if (child != null && BodyContainsAwait(child))
+                return true;
+        return false;
     }
 
     private void WriteCommaSeparated(StringBuilder sb, IEnumerable<Node> nodes) {
@@ -1115,6 +1245,20 @@ public sealed class CSharpGenerator {
             if (!first) sb.Append(", ");
             WriteExpression(sb, node);
             first = false;
+        }
+    }
+
+    private void WriteAttributes(StringBuilder sb, IReadOnlyList<AttributeNode> attributes, int indent) {
+        foreach (var attr in attributes) {
+            Indent(sb, indent);
+            sb.Append('[');
+            sb.Append(attr.Name);
+            if (attr.Arguments.Count > 0) {
+                sb.Append('(');
+                WriteCommaSeparated(sb, attr.Arguments);
+                sb.Append(')');
+            }
+            sb.AppendLine("]");
         }
     }
 

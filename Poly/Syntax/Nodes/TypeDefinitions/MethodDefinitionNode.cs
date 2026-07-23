@@ -16,13 +16,20 @@ public sealed record MethodDefinitionNode(
     Node? Body = null,
     bool IsStatic = false,
     bool IsAsync = false,
+    bool IsOverride = false,
     IReadOnlyList<Parameter>? GenericParameters = null,
     AccessModifier AccessModifier = AccessModifier.Public
 ) : MemberDefinitionNode(Name, ReturnType, IsStatic, AccessModifier) {
 
+    /// <summary>
+    /// Attributes applied to this method.
+    /// </summary>
+    public IReadOnlyList<AttributeNode> Attributes { get; init; } = [];
+
     public override IEnumerable<Node?> Children {
         get {
             yield return ReturnType;
+            foreach (var a in Attributes) yield return a;
             if (Parameters != null)
                 foreach (var p in Parameters) yield return p;
             yield return Body;
@@ -34,7 +41,8 @@ public sealed record MethodDefinitionNode(
     public override string ToString() {
         var staticPrefix = IsStatic ? "static " : "";
         var asyncPrefix = IsAsync ? "async " : "";
+        var overridePrefix = IsOverride ? "override " : "";
         var paramList = Parameters != null ? string.Join(", ", Parameters) : "";
-        return $"{asyncPrefix}{staticPrefix}{ReturnType} {Name}({paramList})";
+        return $"{asyncPrefix}{staticPrefix}{overridePrefix}{ReturnType} {Name}({paramList})";
     }
 }

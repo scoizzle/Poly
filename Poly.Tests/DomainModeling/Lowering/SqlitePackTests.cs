@@ -39,8 +39,8 @@ public class SqlitePackTests {
     public async Task SqliteDefaults_TextMapsToText() {
         var domain = ParseDomain(SampleDomain);
         var ctx = DomainAuthoringContext.CreateWithSqlPack().AddSqliteDefaults();
-        var infra = new InfrastructureAnalyzer(domain).Analyze(ctx);
-        var name = infra.Storage.Entities.Single().Columns.Single(c => c.Name == "Name");
+        var storage = new StorageAnalyzer(domain, typeMaps: ctx.TypeMaps, conventions: ctx.StorageConventions).Analyze();
+        var name = storage.Entities.Single().Columns.Single(c => c.Name == "Name");
         await Assert.That(name.ColumnType).IsEqualTo("TEXT");
     }
 
@@ -48,8 +48,8 @@ public class SqlitePackTests {
     public async Task SqliteDefaults_NumberMapsToInteger() {
         var domain = ParseDomain(SampleDomain);
         var ctx = DomainAuthoringContext.CreateWithSqlPack().AddSqliteDefaults();
-        var infra = new InfrastructureAnalyzer(domain).Analyze(ctx);
-        var qty = infra.Storage.Entities.Single().Columns.Single(c => c.Name == "Qty");
+        var storage = new StorageAnalyzer(domain, typeMaps: ctx.TypeMaps, conventions: ctx.StorageConventions).Analyze();
+        var qty = storage.Entities.Single().Columns.Single(c => c.Name == "Qty");
         await Assert.That(qty.ColumnType).IsEqualTo("INTEGER");
     }
 
@@ -57,8 +57,8 @@ public class SqlitePackTests {
     public async Task SqliteDefaults_BooleanMapsToInteger() {
         var domain = ParseDomain(SampleDomain);
         var ctx = DomainAuthoringContext.CreateWithSqlPack().AddSqliteDefaults();
-        var infra = new InfrastructureAnalyzer(domain).Analyze(ctx);
-        var active = infra.Storage.Entities.Single().Columns.Single(c => c.Name == "Active");
+        var storage = new StorageAnalyzer(domain, typeMaps: ctx.TypeMaps, conventions: ctx.StorageConventions).Analyze();
+        var active = storage.Entities.Single().Columns.Single(c => c.Name == "Active");
         await Assert.That(active.ColumnType).IsEqualTo("INTEGER");
     }
 
@@ -66,23 +66,23 @@ public class SqlitePackTests {
     public async Task SqliteDefaults_DateTimeMapsToText() {
         var domain = ParseDomain(SampleDomain);
         var ctx = DomainAuthoringContext.CreateWithSqlPack().AddSqliteDefaults();
-        var infra = new InfrastructureAnalyzer(domain).Analyze(ctx);
-        var created = infra.Storage.Entities.Single().Columns.Single(c => c.Name == "CreatedAt");
-        await Assert.That(created.ColumnType).IsEqualTo("TEXT");
+        var storage = new StorageAnalyzer(domain, typeMaps: ctx.TypeMaps, conventions: ctx.StorageConventions).Analyze();
+        var createdAt = storage.Entities.Single().Columns.Single(c => c.Name == "CreatedAt");
+        await Assert.That(createdAt.ColumnType).IsEqualTo("TEXT");
     }
 
     [Test]
     public async Task SameDomain_GenericVsSqlite_DifferentDefaults() {
         var domain = ParseDomain(SampleDomain);
 
-        var generic = new InfrastructureAnalyzer(domain)
-            .Analyze(DomainAuthoringContext.CreateWithSqlPack())
-            .Storage.Entities.Single().Columns
+        var genericCtx = DomainAuthoringContext.CreateWithSqlPack();
+        var genericStorage = new StorageAnalyzer(domain, typeMaps: genericCtx.TypeMaps, conventions: genericCtx.StorageConventions).Analyze();
+        var generic = genericStorage.Entities.Single().Columns
             .ToDictionary(c => c.Name, StringComparer.Ordinal);
 
-        var sqlite = new InfrastructureAnalyzer(domain)
-            .Analyze(DomainAuthoringContext.CreateWithSqlPack().AddSqliteDefaults())
-            .Storage.Entities.Single().Columns
+        var sqliteCtx = DomainAuthoringContext.CreateWithSqlPack().AddSqliteDefaults();
+        var sqliteStorage = new StorageAnalyzer(domain, typeMaps: sqliteCtx.TypeMaps, conventions: sqliteCtx.StorageConventions).Analyze();
+        var sqlite = sqliteStorage.Entities.Single().Columns
             .ToDictionary(c => c.Name, StringComparer.Ordinal);
 
         await Assert.That(generic["Name"].ColumnType).IsEqualTo("varchar");
@@ -107,8 +107,8 @@ public class SqlitePackTests {
             }
             """);
         var ctx = DomainAuthoringContext.CreateWithSqlPack().AddSqliteDefaults();
-        var col = new InfrastructureAnalyzer(domain).Analyze(ctx)
-            .Storage.Entities.Single().Columns.Single();
+        var storage = new StorageAnalyzer(domain, typeMaps: ctx.TypeMaps, conventions: ctx.StorageConventions).Analyze();
+        var col = storage.Entities.Single().Columns.Single();
         await Assert.That(col.ColumnName).IsEqualTo("CODE");
         await Assert.That(col.ColumnType).IsEqualTo("VARCHAR2(20)");
     }

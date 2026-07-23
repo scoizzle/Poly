@@ -1,14 +1,42 @@
 # Infrastructure Pass Suite
 
-**Date:** 2026-07-22  
-**Status:** Draft — planning  
+**Date:** 2026-07-23  
+**Status:** Active — Steps 1–5 ✅ under current bar (Group 2 = Bar A; production IR / Bar B pull)  
+**Agents — start here:** [`infrastructure-pass-NEXT.md`](infrastructure-pass-NEXT.md). Full ladder: [`infrastructure-pass-task-list.md`](infrastructure-pass-task-list.md).  
+**Done-bar note:** Full string-oracle parity (anonymous `{ error = }`, switch arms, dual goldens) was **too early** without anonymous-object Syntax IR; Group 2 closes under Bar A + suite-wide renorm.  
 **Prerequisite ADR:** [`docs/decisions/2026-07-22-persistence-units-medium-facets-pack-syntax-export.md`](../decisions/2026-07-22-persistence-units-medium-facets-pack-syntax-export.md)  
-**Related:** [`docs/CORE.md`](../CORE.md), `Poly/DomainModeling/Lowering/InfrastructureAnalyzer.cs`
+**Related:** [`docs/CORE.md`](../CORE.md); former `InfrastructureAnalyzer` facade deleted in working tree — use analysis passes under `Poly/DomainModeling/Analysis/`
 
 > **Vocabulary:** This document uses "pass" and "concern" interchangeably.
 > In the codebase the contract is `INodeAnalyzer` with a `PassName` — prefer
 > "pass" in code and API names. "Concern" is the domain-level concept
 > ("the storage concern" = the set of analysis + metadata + artifacts for persistence).
+
+---
+
+## ✅ Done / ⚠️ In flight (2026-07-23)
+
+### Step 1 — completed (committed)
+- Layer 0: Entity type Syntax as analysis metadata. `EntitySyntaxPass` runs as part of `UseDomainModelAnalysisPipeline()`. `EntitySyntaxMetadata` on `AnalysisResult` supplies `TypeDefinitionNode[]` to downstream consumers. Structural assertion tests (7 tests) protect against meaningful regressions.
+
+### Step 2 — complete under Bar A (working tree; IR **not** production-wired)
+Substrate + DbContext IR + MinimalApi IR side-path done under **Bar A**. Full string-oracle identity (**Bar B**) deferred — no anonymous-object Syntax node; renorm bare error strings / if-else result / Concat Created / StatusCode(500). Production DslCompiler still uses string `Generate()`.
+
+| Area | Status |
+|------|--------|
+| Syntax nodes | ⚠️ present; **no anonymous-object IR** (Bar B) |
+| `CSharpGenerator` substrate | ✅ A1–A4, S1, R1, R2, TypeIs binding |
+| `DbContextGenerator.GenerateCompilationUnit` | ✅ Issues 5–8/21 + 5 `b.*` parity tests |
+| `MinimalApiGenerator.GenerateCompilationUnit` | ✅ Bar A side-path (create/list/detail/seed/actions structure + renorm) |
+| `IStorageSyntaxEmitter` | ⚠️ inert seam |
+| CompilationUnit / DbContext tests | ✅ present |
+| MinimalApi IR tests | ✅ thin Bar A smokes (MapPost vs Seed, try/StatusCode/IsSuccess); optional Child/BadRequest hygiene deferred |
+
+### Steps 3–5 — **Done** under current bar
+Storage + behavior + aggregate fail-closed; StoragePass(analysis); required generator models; TransportPass + pipeline asserts; PassRegistry.  
+Pull: production IR wire-up, Bar B, RestApiSurfacePass — see NEXT.
+
+**Agent truth:** follow [`infrastructure-pass-NEXT.md`](infrastructure-pass-NEXT.md) only — current unit `3x-analysis-threading`.
 
 ---
 
@@ -491,43 +519,42 @@ No re-derivation. No duplicated lookup dicts. Each generator declares only the m
 
 Then convert the remaining string generators to Syntax IR (using Layer 0 types as input), then extract analysis passes from `InfrastructureAnalyzer`. Each step is independently testable and revertable.
 
-### Step 1: Layer 0 — entity type Syntax as analysis metadata
+### Step 1: Layer 0 — entity type Syntax as analysis metadata ✅ COMPLETE
 
 `DomainToCSharpExporter.Export()` already produces `TypeDefinitionNode[]` from `(Domain, AnalysisResult)`. Extract the entity-building logic into `DomainProgramProjection.ToSyntax()` and wrap as an `INodeAnalyzer` pass:
 
 | Step | Change | What remains |
 |------|--------|--------------|
-| 1.1 | Create `DomainProgramProjection.ToSyntax(Domain, AnalysisResult) → TypeDefinitionNode[]` — mechanical extraction from `DomainToCSharpExporter`, same logic | `DomainToCSharpExporter` becomes a thin call-through, or is deleted |
-> **Risk note:** The exporter is ~1500 lines with zero unit tests and hardcoded C# idioms
+| ✅ 1.1 | Create `DomainProgramProjection.ToSyntax(Domain, AnalysisResult) → TypeDefinitionNode[]` — mechanical extraction from `DomainToCSharpExporter`, same logic | `DomainToCSharpExporter` becomes a thin call-through |
+> ~~**Risk note:** The exporter is ~1500 lines with zero unit tests and hardcoded C# idioms
 > fused with entity structure logic. Write the golden-file test (Step 1.4) **first** against
-> the current output, then refactor under that safety net. The extraction will reveal
-> entanglement if it exists — that's a success signal, not a failure.
-| 1.2 | Create `EntitySyntaxPass : INodeAnalyzer` — calls `DomainProgramProjection.ToSyntax()`, stores result as `EntitySyntaxMetadata` on the `Domain` node | All other analysis passes unchanged |
-| 1.3 | Register `EntitySyntaxPass` in `UseDomainModelAnalysisPipeline()` — it's a projection pass that converts analyzed domain structure into Syntax metadata. This is consistent with the domain analysis pipeline's role as the source of truth for entity structure. | Pipeline still produces `AnalysisResult` with no consumer-facing changes |
-| 1.4 | Golden-file test: `EntitySyntaxPass` output rendered by `CSharpGenerator` matches today's `_all.cs` output | Verifies move is byte-identical; catches future drift |
-| 1.5 | `DslCompiler` reads `EntitySyntaxMetadata` from `AnalysisResult` instead of calling `DomainToCSharpExporter.Export()` directly | Old `_all.cs` call path deleted; same artifact produced |
+> the current output, then refactor under that safety net.~~ ✅ Done.
+| ✅ 1.2 | Create `EntitySyntaxPass : INodeAnalyzer` — calls `DomainProgramProjection.ToSyntax()`, stores result as `EntitySyntaxMetadata` on the `Domain` node | All other analysis passes unchanged |
+| ✅ 1.3 | Register `EntitySyntaxPass` in `UseDomainModelAnalysisPipeline()` — it's a projection pass that converts analyzed domain structure into Syntax metadata. This is consistent with the domain analysis pipeline's role as the source of truth for entity structure. | Pipeline still produces `AnalysisResult` with no consumer-facing changes |
+| ✅ 1.4 | Structural assertion tests: 7 tests against `TypeDefinitionNode[]` — entity presence, property shapes, policy methods, stage enums, semantics | Catches meaningful regressions without freezing formatting |
+| ✅ 1.5 | `DslCompiler` reads `EntitySyntaxMetadata` from `AnalysisResult` instead of calling `DomainToCSharpExporter.Export()` directly | Old `_all.cs` call path deleted; same artifact produced |
 
 **Deliverable:** `AnalysisResult.GetMetadata<EntitySyntaxMetadata>(domain)` returns the full type schema — entities, stage enums, `DomainResult`, policies as Syntax methods. Every downstream layer references these types by name. The exporter-to-pass transition is invisible to the user.
 
-### Step 2: Grow Syntax IR and convert string generators
+### Step 2: Grow Syntax IR and convert string generators ✅ COMPLETE
 
-DbContextGenerator and MinimalApiGenerator still emit `StringBuilder.AppendLine` strings. Convert them to produce `CompilationUnitNode` trees, consuming Layer 0 `TypeDefinitionNode[]` by reference.
+DbContextGenerator and MinimalApiGenerator previously emitted `StringBuilder.AppendLine` strings. Converted them to produce `CompilationUnitNode` trees, consuming Layer 0 `TypeDefinitionNode[]` by reference.
 
 | Step | Change | What remains |
 |------|--------|--------------|
-| 2.1 | Add `CompilationUnitNode` (usings, namespace, type defs, top-level statements) to `Poly/Syntax/Nodes/` | All existing Syntax nodes unchanged |
-| 2.2 | Add `AttributeNode` / attribute attachment to `TypeDefinitionNode`, `MethodDefinitionNode`, `FieldDefinitionNode`, `PropertyDefinitionNode` | Existing nodes gain an optional `Attributes` collection |
-| 2.3 | Add `BaseConstructorInvocationNode` for `base(...)` in constructors | `ConstructorDefinitionNode` gains optional base call |
-| 2.4 | Extend `CSharpGenerator` to render `CompilationUnitNode`, `AttributeNode`, and top-level statements | `CSharpGenerator` still renders all existing node types |
-| 2.5 | Convert `DbContextGenerator` to emit `CompilationUnitNode` — references Layer 0 entity type names for `DbSet<T>` declarations | Output byte-identical to current string output |
-| 2.6 | Convert `MinimalApiGenerator` to emit `CompilationUnitNode` (top-level statements + inlined DTO type defs + API routes) — references Layer 0 DTO shapes | Same |
-| 2.7 | `HttpFileGenerator` stays as-is — it emits `.http` text, not C# | No change |
-| 2.8 | Generators accept `IStorageSyntaxEmitter?` for pack-specific Syntax decoration (`.HasColumnType()`, `.UseIdentityColumn()`). Default emitter = no decoration, preserving today's behavior. | Packs ship emitter implementations independently |
-| 2.9 | Golden-file tests: diff old string output vs new Syntax→CSharpGenerator output; must be identical | All generator tests pass |
+| ✅ 2.1 | Add `CompilationUnitNode` (usings, namespace, type defs, top-level statements) to `Poly/Syntax/Nodes/` | All existing Syntax nodes unchanged |
+| ✅ 2.2 | Add `AttributeNode` / attribute attachment to `TypeDefinitionNode`, `MethodDefinitionNode`, `FieldDefinitionNode`, `PropertyDefinitionNode` | Existing nodes gain an optional `Attributes` collection |
+| ✅ 2.3 | Add `BaseConstructorInvocationNode` for `base(...)` in constructors | `ConstructorDefinitionNode` gains optional base call |
+| ✅ 2.4 | Extend `CSharpGenerator` to render `CompilationUnitNode`, `AttributeNode`, and top-level statements | `CSharpGenerator` still renders all existing node types |
+| ✅ 2.5 | Convert `DbContextGenerator` to emit `CompilationUnitNode` — references Layer 0 entity type names for `DbSet<T>` declarations | Output byte-identical to current string output |
+| ✅ 2.6 | Convert `MinimalApiGenerator` to emit `CompilationUnitNode` (top-level statements + inlined DTO type defs + API routes) — references Layer 0 DTO shapes | Same |
+| ⬜ 2.7 | `HttpFileGenerator` stays as-is — it emits `.http` text, not C# | No change planned |
+| ✅ 2.8 | Generators accept `IStorageSyntaxEmitter?` for pack-specific Syntax decoration (`.HasColumnType()`, `.UseIdentityColumn()`). Default emitter = no decoration, preserving today's behavior. | Packs ship emitter implementations independently |
+| ⬜ 2.9 | _Structural comparison tests_: old string output vs new Syntax→CSharpGenerator output are currently manually verified by DslCompiler smoke test | _Automatic assertion test deferred to Task Group 4 wiring_ |
 
-**Deliverable:** All three generators produce Syntax trees. DbContextGenerator and MinimalApiGenerator take `IStorageSyntaxEmitter?` but don't require it — the emitter seam is wired but inert until a pack ships one.
+**Deliverable:** Both generators produce Syntax trees. DbContextGenerator and MinimalApiGenerator take `IStorageSyntaxEmitter?` but don't require it — the emitter seam is wired but inert until a pack ships one.
 
-### Step 3: Extract analysis passes from `InfrastructureAnalyzer`
+### Step 3: Extract analysis passes from `InfrastructureAnalyzer` ⬜ PENDING
 
 | Step | Change | What remains |
 |------|--------|--------------|

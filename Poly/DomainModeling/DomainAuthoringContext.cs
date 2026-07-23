@@ -8,8 +8,8 @@ namespace Poly.DomainModeling;
 /// conventions).
 ///
 /// A core-only context (no packs) is the default. Pack-aware parsing is
-/// opt-in via <c>new PolyDslParser(text, context)</c>. Infrastructure analysis
-/// accepts the same context via <c>InfrastructureAnalyzer.Analyze(authoring)</c>.
+/// opt-in via <c>new PolyDslParser(text, context)</c>. The passes pipeline
+/// consumes type maps and storage conventions from this context.
 /// </summary>
 public sealed class DomainAuthoringContext {
     private readonly List<IStorageConvention> _storageConventions = [];
@@ -22,6 +22,9 @@ public sealed class DomainAuthoringContext {
 
     /// <summary>Ordered storage convention chain applied after baseline analysis.</summary>
     public IReadOnlyList<IStorageConvention> StorageConventions => _storageConventions;
+
+    /// <summary>Pack-contributed analysis passes, registered during pack configuration.</summary>
+    public PassRegistry Passes { get; } = new();
 
     /// <summary>Creates a core-only authoring context (no packs enabled).</summary>
     public static DomainAuthoringContext Create() => new();

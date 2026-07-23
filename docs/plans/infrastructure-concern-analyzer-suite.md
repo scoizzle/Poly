@@ -177,10 +177,10 @@ Each pass below corresponds roughly to one sub-analyzer or sub-model from today'
 
 | Pass class | Replaces | Dependencies | Produces metadata on `Domain` node | Always runs? |
 |-----------|----------|--------------|-------------------------------------|:------------:|
-| `EffectTopologyPass` | `EffectTopologyAnalyzer.Scan()` | — | `EffectTopologyMetadata` | ✅ Phase 0 core
-| `OwnershipAggregatePass` | `AggregateAnalyzer` | `EffectTopologyPass` | `OwnershipAggregateMetadata` | ✅ Phase 0 core
-| `BehaviorPass` | `BehaviorAnalyzer` | — (reads `AnalysisResult` directly) | `BehaviorMetadata` | ✅ Phase 0 core
-| **`CrossReferencePass`** | *(new)* cross-entity dep graph + cycle detection | `EffectTopologyPass`, `OwnershipAggregatePass` | `EntityDependencyGraphMetadata` | ✅ Phase 0 core
+| `EffectTopologyPass` | `EffectTopologyAnalyzer.Scan()` | — | `EffectTopologyMetadata` | Only when coupling analysis is requested |
+| `OwnershipAggregatePass` | `AggregateAnalyzer` | `EffectTopologyPass` | `OwnershipAggregateMetadata` | Only when coupling analysis is requested |
+| `BehaviorPass` | `BehaviorAnalyzer` | — (reads `AnalysisResult` directly) | `BehaviorMetadata` | Only when coupling analysis is requested |
+| **`CrossReferencePass`** | *(new)* cross-entity dep graph + cycle detection | `EffectTopologyPass`, `OwnershipAggregatePass` | `EntityDependencyGraphMetadata` | Only when coupling analysis is requested |
 | **`StoragePass`** | **`StorageAnalyzer`** | **`OwnershipAggregatePass`, `CrossReferencePass`** | **`StorageMappingMetadata`** | Only when storage is requested |
 | **`StorageAccessPass`** | *(new)* query/mutation patterns from structure | **`StoragePass`** | **`StorageAccessMetadata`** | Only when query/mutation gen is requested |
 | `TransportPass` | `TransportAnalyzer` | `OwnershipAggregatePass` | `TransportMetadata` | Only when REST surface is requested |

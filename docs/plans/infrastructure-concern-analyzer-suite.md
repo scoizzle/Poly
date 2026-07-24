@@ -1,7 +1,7 @@
 # Infrastructure Pass Suite
 
 **Date:** 2026-07-23  
-**Status:** Active — Steps 1–5 ✅; **Group 6 product bar met** — commit pending (All-mode smoke green)  
+**Status:** Active — Steps 1–6 ✅ (`c5d2220`); G6.5/G7 product bar met — **commit pending** (§ Review G7′′)  
 **Agents — start here:** [`infrastructure-pass-NEXT.md`](infrastructure-pass-NEXT.md) · micro-tasks [`simple-agent-tasks/ip-README.md`](simple-agent-tasks/ip-README.md)  
 **Full ladder:** [`infrastructure-pass-task-list.md`](infrastructure-pass-task-list.md)  
 **Done-bar note:** Full string-oracle parity (**Bar B**) still deferred. Group 6 ships **production use of Bar A IR** for DbContext + Program — not oracle identity.  
@@ -22,23 +22,26 @@
 
 ### Step 2 — complete under Bar A (IR side-path; production wire-up = Group 6)
 Substrate + DbContext IR + MinimalApi IR side-path done under **Bar A**. Full string-oracle identity (**Bar B**) deferred.  
-**Production:** working tree wires DbContext + Program via IR; All-mode smoke green. HttpFile remains string. **Commit pending.**
+**Production:** DbContext + Program via IR **committed** `c5d2220`. G6.5/G7 unify emit + structural tests — **product bar met, commit pending**. HttpFile remains string.
 
 | Area | Status |
 |------|--------|
 | Syntax nodes | ⚠️ present; **no anonymous-object IR** (Bar B) |
 | `CSharpGenerator` substrate | ✅ A1–A4, S1, R1, R2, TypeIs binding |
-| `DbContextGenerator.GenerateCompilationUnit` | ✅ tests + production path (uncommitted) |
-| `MinimalApiGenerator.GenerateCompilationUnit` | ✅ tests + production path (uncommitted) |
+| `DbContextGenerator` / `MinimalApiGenerator` | ✅ IR-only emit (string path deleted) |
 | `IStorageSyntaxEmitter` | ⚠️ inert seam |
-| Compiler `CompileMode.All` smoke | ✅ `DslCompiler_AllMode_EmitsDbContextAndProgramViaIr` |
+| Compiler `CompileMode.All` smoke | ✅ committed |
+| Structural IR asserts (G7) | ✅ green; ⬜ commit — § Review G7′′ |
 
 ### Steps 3–5 — **Done** under current bar
 Storage + behavior + aggregate fail-closed; StoragePass(analysis); required generator models; TransportPass + pipeline asserts; PassRegistry.
 
-### Step 6 — **Product bar met** (production IR wire-up)
-See [`infrastructure-pass-NEXT.md`](infrastructure-pass-NEXT.md) **§ Review G6′**.  
-**Agent truth:** **Commit** G6 batch (exclude demo drift). Optional G6.5 / Bar B later.
+### Step 6 — **Done** (`c5d2220`)
+Production IR wire-up. G6.5 Generate→IR is part of Step 7 batch.
+
+### Step 7 — **Product bar met** (structural IR tests + G6.5 cleanup)
+See [`infrastructure-pass-NEXT.md`](infrastructure-pass-NEXT.md) **§ Review G7′′**.  
+**Agent truth:** **Commit** product + tests + plans. Optional assert tighten after.
 
 ---
 

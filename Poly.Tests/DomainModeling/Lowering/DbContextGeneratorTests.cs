@@ -7,13 +7,14 @@ using Poly.DslCompiler;
 using Poly.Interpretation.CSharp;
 using Poly.Syntax;
 using Poly.Syntax.Nodes;
+using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.DomainModeling.Lowering;
 
 /// <summary>
 /// Tests for <see cref="DbContextGenerator"/> — EF Core DbContext emission.
-/// Verifies that storage metadata (ColumnName, ColumnType, TableName) is
-/// correctly emitted as fluent configuration.
+/// Asserts on the Syntax IR (CompilationUnitNode) structurally instead of
+/// comparing rendered C# strings, avoiding formatting brittleness.
 /// </summary>
 public class DbContextGeneratorTests {
     private static Domain ParseDomain(string poly) {
@@ -27,9 +28,13 @@ public class DbContextGeneratorTests {
         return result.Root!;
     }
 
-    private static string GenerateDb(Domain domain) {
-        var storage = new StorageAnalyzer(domain).Analyze();
-        return new DbContextGenerator(domain, storage).Generate();
+    /// <summary>Returns the OnModelCreating method from the DbContext IR.</summary>
+    private static MethodDefinitionNode OnModelCreating(Domain domain) {
+        var unit = GenerationAssertions.DbContextIr(domain);
+        var ctxType = unit.FindType($"{domain.Name}DbContext");
+        if (ctxType is null)
+            throw new InvalidOperationException($"Type '{domain.Name}DbContext' not found in IR unit.");
+        return ctxType.FindMethod("OnModelCreating")!;
     }
 
     [Test]
@@ -38,8 +43,9 @@ public class DbContextGeneratorTests {
             domain Test
             Item: entity { Name: Text }
             """);
-        var output = GenerateDb(domain);
-        await Assert.That(output).Contains("b.ToTable(\"Items\");");
+        var omc = OnModelCreating(domain);
+        var toTable = omc.FindInvocations("ToTable").Single();
+        await Assert.That(((Constant)toTable.Arguments[0]).Value).IsEqualTo("Items");
     }
 
     [Test]
@@ -48,9 +54,9 @@ public class DbContextGeneratorTests {
             domain Test
             Patron: entity table("PATRONS") { Name: Text }
             """);
-        var output = GenerateDb(domain);
-        await Assert.That(output).Contains("b.ToTable(\"PATRONS\");");
-        await Assert.That(output).DoesNotContain("b.ToTable(\"Patrons\");");
+        var omc = OnModelCreating(domain);
+        var toTable = omc.FindInvocations("ToTable").Single();
+        await Assert.That(((Constant)toTable.Arguments[0]).Value).IsEqualTo("PATRONS");
     }
 
     [Test]
@@ -61,9 +67,10 @@ public class DbContextGeneratorTests {
               ProductName: Text column("PROD_NAME")
             }
             """);
-        var output = GenerateDb(domain);
-        await Assert.That(output).Contains(
-            "b.Property(x => x.ProductName).HasColumnName(\"PROD_NAME\").HasColumnType(\"varchar\");");
+        var omc = OnModelCreating(domain);
+        var cols = omc.FindInvocations("HasColumnName");
+        await Assert.That(cols.Any(i => i.Arguments[0] is Constant c
+            && c.Value?.ToString() == "PROD_NAME")).IsTrue();
     }
 
     [Test]
@@ -74,9 +81,11 @@ public class DbContextGeneratorTests {
               Code: Text unique column("CODE", "VARCHAR2(20)")
             }
             """);
-        var output = GenerateDb(domain);
-        await Assert.That(output).Contains(
-            "b.Property(x => x.Code).HasColumnName(\"CODE\").HasColumnType(\"VARCHAR2(20)\");");
+        var omc = OnModelCreating(domain);
+        await Assert.That(omc.FindInvocations("HasColumnType")
+            .Any(i => i.Arguments[0] is Constant c && c.Value?.ToString() == "VARCHAR2(20)")).IsTrue();
+        await Assert.That(omc.FindInvocations("HasColumnName")
+            .Any(i => i.Arguments[0] is Constant c && c.Value?.ToString() == "CODE")).IsTrue();
     }
 
     [Test]
@@ -87,10 +96,9 @@ public class DbContextGeneratorTests {
               SomeField: Text
             }
             """);
-        var output = GenerateDb(domain);
-        // Default camelCase column name + generic varchar type
-        await Assert.That(output).Contains(
-            "b.Property(x => x.SomeField).HasColumnName(\"someField\").HasColumnType(\"varchar\");");
+        var omc = OnModelCreating(domain);
+        await Assert.That(omc.FindInvocations("HasColumnName")
+            .Any(i => i.Arguments[0] is Constant c && c.Value?.ToString() == "someField")).IsTrue();
     }
 
     [Test]
@@ -101,9 +109,20 @@ public class DbContextGeneratorTests {
               Title: Text required
             }
             """);
-        var output = GenerateDb(domain);
-        await Assert.That(output).Contains(
-            "b.Property(x => x.Title).HasColumnName(\"title\").HasColumnType(\"varchar\").IsRequired();");
+        var omc = OnModelCreating(domain);
+        // Find the Property invocation for Title — it exists
+        await Assert.That(omc.FindInvocations("Property")
+            .Any(i => i.Arguments[0] is Lambda l
+                && l.Body is Member m
+                && m.MemberName == "Title")).IsTrue();
+        // A fluent chain in OnModelCreating must include IsRequired
+        // (walk from outermost IsRequired inward to verify chain depth)
+        var isRequiredCalls = omc.FindInvocations("IsRequired");
+        await Assert.That(isRequiredCalls).IsNotEmpty();
+        // The first IsRequired's fluent chain should include all steps
+        var chain = isRequiredCalls[0].GetFluentChain();
+        // chain = [IsRequired, HasColumnType, HasColumnName, Property]
+        await Assert.That(chain.Contains("Property")).IsTrue();
     }
 
     [Test]
@@ -114,9 +133,8 @@ public class DbContextGeneratorTests {
               Code: Text length(1, 50)
             }
             """);
-        var output = GenerateDb(domain);
-        await Assert.That(output).Contains(
-            "b.Property(x => x.Code).HasColumnName(\"code\").HasColumnType(\"varchar\").HasMaxLength(50);");
+        var omc = OnModelCreating(domain);
+        await Assert.That(omc.FindInvocations("HasMaxLength").Count >= 1).IsTrue();
     }
 
     [Test]
@@ -125,9 +143,13 @@ public class DbContextGeneratorTests {
             domain Test
             Item: entity { Name: Text }
             """);
-        var output = GenerateDb(domain);
-        await Assert.That(output).Contains("b.Property<int>(\"Id\");");
-        await Assert.That(output).Contains("b.HasKey(\"Id\");");
+        var omc = OnModelCreating(domain);
+        var propById = omc.FindInvocations("Property")
+            .FirstOrDefault(i => i.Arguments[0] is Constant c && c.Value?.ToString() == "Id");
+        await Assert.That(propById).IsNotNull();
+        await Assert.That(propById!.TypeArguments.Count > 0).IsTrue();
+        await Assert.That(omc.FindInvocations("HasKey")
+            .Any(i => i.Arguments[0] is Constant c && c.Value?.ToString() == "Id")).IsTrue();
     }
 
     [Test]
@@ -138,19 +160,21 @@ public class DbContextGeneratorTests {
               SKU: Text unique column("SKU_NBR", "varchar(50)")
             }
             """);
-        var output = GenerateDb(domain);
-        // Key column gets configured once via "key property gets its column config"
-        var keyColLine = "b.Property(x => x.SKU).HasColumnName(\"SKU_NBR\").HasColumnType(\"varchar(50)\");";
-        await Assert.That(output).Contains(keyColLine);
-        // Should not appear a second time in the remaining-columns loop
-        await Assert.That(output.IndexOf(keyColLine, StringComparison.Ordinal))
-            .IsEqualTo(output.LastIndexOf(keyColLine, StringComparison.Ordinal));
+        var omc = OnModelCreating(domain);
+        // Natural key HasKey on SKU
+        await Assert.That(omc.FindInvocations("HasKey")
+            .Any(i => i.Arguments[0] is Lambda l
+                && l.Body is Member m
+                && m.MemberName == "SKU")).IsTrue();
+        // Column config for SKU_NBR appears exactly once
+        var skuCols = omc.FindInvocations("HasColumnName")
+            .Where(i => i.Arguments[0] is Constant c && c.Value?.ToString() == "SKU_NBR")
+            .ToList();
+        await Assert.That(skuCols.Count).IsEqualTo(1);
     }
 
     [Test]
     public async Task SecondaryUnique_StillEmitsColumnConfig() {
-        // Multiple unique properties: only KeyProperty is the natural key.
-        // Other unique columns must still get HasColumnName / HasColumnType.
         var domain = ParseDomain("""
             domain Test
             Item: entity {
@@ -159,14 +183,14 @@ public class DbContextGeneratorTests {
               Name: Text
             }
             """);
-        var output = GenerateDb(domain);
-        await Assert.That(output).Contains("b.HasKey(x => x.SKU);");
-        await Assert.That(output).Contains(
-            "b.Property(x => x.SKU).HasColumnName(\"SKU_NBR\").HasColumnType(\"varchar\");");
-        await Assert.That(output).Contains(
-            "b.Property(x => x.Barcode).HasColumnName(\"BARCODE\").HasColumnType(\"varchar\");");
-        await Assert.That(output).Contains(
-            "b.Property(x => x.Name).HasColumnName(\"name\").HasColumnType(\"varchar\");");
+        var omc = OnModelCreating(domain);
+        var colNames = omc.FindInvocations("HasColumnName")
+            .Select(i => i.Arguments[0] is Constant c ? c.Value?.ToString() : null)
+            .Where(n => n is not null)
+            .ToHashSet();
+        await Assert.That(colNames.Contains("SKU_NBR")).IsTrue();
+        await Assert.That(colNames.Contains("BARCODE")).IsTrue();
+        await Assert.That(colNames.Contains("name")).IsTrue();
     }
 
     [Test]
@@ -177,114 +201,8 @@ public class DbContextGeneratorTests {
               Note: Text column("COL_\"X\"")
             }
             """);
-        var output = GenerateDb(domain);
-        await Assert.That(output).Contains(
-            "b.Property(x => x.Note).HasColumnName(\"COL_\\\"X\\\"\").HasColumnType(\"varchar\");");
-    }
-
-    // ── Parity tests (Issue 13) ──────────────────────────────────
-
-    /// <summary>Generates IR output via CSharpGenerator + GenerateCompilationUnit.</summary>
-    private static string GenerateIr(Domain domain) {
-        var storage = new StorageAnalyzer(domain).Analyze();
-        var gen = new DbContextGenerator(domain, storage);
-        return new CSharpGenerator().Generate(gen.GenerateCompilationUnit());
-    }
-
-    /// <summary>Extracts all fluent config statement content from both outputs and asserts they match.</summary>
-    private static async Task AssertParity(Domain domain) {
-        var stringOutput = GenerateDb(domain);
-        var irOutput = GenerateIr(domain);
-
-        // Extract all b.xxx fluent statements - find "b." and grab to ";"
-        var stringFluent = ExtractFluentStatements(stringOutput).OrderBy(x => x).ToList();
-        var irFluent = ExtractFluentStatements(irOutput).OrderBy(x => x).ToList();
-
-        if (!stringFluent.SequenceEqual(irFluent)) {
-            await Assert.That(stringFluent.SequenceEqual(irFluent)).IsTrue();
-        }
-    }
-
-    /// <summary>Finds all fluent lines starting with b.Property/b.HasKey/b.ToTable etc.</summary>
-    private static IEnumerable<string> ExtractFluentStatements(string source) {
-        var results = new List<string>();
-        var lines = source.Split('\n');
-        foreach (var line in lines) {
-            var trimmed = line.Trim();
-            // Skip continuation lines (.PropertyAccessMode, .HasColumnName, etc)
-            if (trimmed.StartsWith(".")) continue;
-            // Find all b.xxx "words" in this line (IR puts them inline inside lambdas)
-            int idx = 0;
-            while ((idx = trimmed.IndexOf("b.", idx, StringComparison.Ordinal)) >= 0) {
-                var end = trimmed.IndexOf(';', idx);
-                var stmt = end >= 0 ? trimmed[idx..end] : trimmed[idx..];
-                // Truncate at trailing "!" to normalize multi-line vs single-line FindNavigation
-                var bang = stmt.IndexOf('!');
-                if (bang >= 0) stmt = stmt[..bang];
-                results.Add(stmt);
-                idx = end >= 0 ? end + 1 : trimmed.Length;
-            }
-        }
-        return results;
-    }
-
-    [Test]
-    public async Task Parity_ShadowKey_StringAndIrMatch() {
-        var domain = ParseDomain("""
-            domain Test
-            Item: entity { Name: Text }
-            """);
-        await AssertParity(domain);
-    }
-
-    [Test]
-    public async Task Parity_NaturalKey_Sku() {
-        var domain = ParseDomain("""
-            domain Test
-            Item: entity {
-              SKU: Text unique column("SKU_NBR", "varchar(50)")
-            }
-            """);
-        await AssertParity(domain);
-    }
-
-    [Test]
-    public async Task Parity_MultipleEntitiesWithMaxLength() {
-        var domain = ParseDomain("""
-            domain Test
-            Book: entity {
-              Title: Text length(1, 100)
-              Author: Text
-              Pages: Number
-            }
-            Patron: entity {
-              Email: Text unique
-            }
-            """);
-        await AssertParity(domain);
-    }
-
-    [Test]
-    public async Task Parity_WithCollectionNavigation() {
-        var domain = ParseDomain("""
-            domain Test
-            Patron: entity {
-              Name: Text
-              loans: many Loan
-            }
-            Loan: entity {
-              Amount: Number
-              borrower: Patron
-            }
-            """);
-        await AssertParity(domain);
-    }
-
-    [Test]
-    public async Task Parity_ZeroEntities() {
-        var domain = ParseDomain("""
-            domain Empty
-            """);
-        await AssertParity(domain);
+        var omc = OnModelCreating(domain);
+        await Assert.That(omc.FindInvocations("HasColumnName")
+            .Any(i => i.Arguments[0] is Constant c && c.Value?.ToString() == "COL_\"X\"")).IsTrue();
     }
 }

@@ -4,7 +4,7 @@
 > Micro-tasks: [`simple-agent-tasks/ip-README.md`](simple-agent-tasks/ip-README.md)
 
 **Date:** 2026-07-23  
-**Status:** Groups 1–5 ✅ | **Group 6 product bar met** — commit pending (§ Review G6′)  
+**Status:** Groups 1–5 ✅ | Group 6 ✅ `c5d2220` | **G6.5+G7 product bar met** — commit pending (§ Review G7′′ on NEXT)  
 **Derived from:** `docs/plans/infrastructure-concern-analyzer-suite.md`
 
 ---
@@ -14,7 +14,9 @@
 | Bar | Meaning | Status |
 |-----|---------|--------|
 | **A — IR side-path** | Valid main-path C#; thin smokes; **renormed** IR dialects | ✅ Group 2 Done |
-| **Production IR** | `DslCompiler` emits DbContext + Program via IR + `CSharpGenerator` | ✅ wire-up + AllMode smoke; ⬜ commit |
+| **Production IR** | `DslCompiler` emits DbContext + Program via IR + `CSharpGenerator` | ✅ **Done** `c5d2220` |
+| **Structural generator tests** | Assert IR nodes, not string dual-parity | ✅ code; ⬜ commit — § Review G7′′ |
+| **G6.5 one emit body** | `Generate()` → IR + `CSharpGenerator`; dead string path gone | ✅ code; ⬜ commit |
 | **B — Full string oracle** | Anonymous `{ error = }`, switch arms, dual SequenceEqual | ❌ Pull — not Group 6 |
 
 **Why Bar B stays deferred:** Syntax has no anonymous-object node; Group 6 ships **production use of existing Bar A IR**, not oracle identity.
@@ -76,26 +78,33 @@ Generators take required non-nullable sub-models.
 Pipeline + priorAnalysis + TransportPass + PassRegistry.  
 Fail-closed: **storage** (db/all), **behavior** + **aggregate** (all).
 
-Group 6: production Db/API use IR (working tree); string `Generate()` still dual body (G6.5 pull).
+Group 6 committed production IR; G6.5 makes `Generate()` IR-only (uncommitted cleanup).
 
 ---
 
-## Task Group 6: Production IR wire-up ✅ PRODUCT BAR MET — COMMIT PENDING
+## Task Group 6: Production IR wire-up ✅ COMPLETE (`c5d2220`)
 
 **Micro-tasks:** [`simple-agent-tasks/ip-README.md`](simple-agent-tasks/ip-README.md)  
-**Review:** [`infrastructure-pass-NEXT.md`](infrastructure-pass-NEXT.md) **§ Review G6′**
+**Reviews:** NEXT § Review G6 / G6′ (historical)
 
-| Unit | File | Status |
-|------|------|--------|
-| **G6.0** Inventory | [`ip-g6-0-inventory.md`](simple-agent-tasks/ip-g6-0-inventory.md) | `[x]` |
-| **G6.1** DbContext production IR | [`ip-g6-1-dbcontext-production-ir.md`](simple-agent-tasks/ip-g6-1-dbcontext-production-ir.md) | `[x]` uncommitted |
-| **G6.2** MinimalApi production IR | [`ip-g6-2-minimalapi-production-ir.md`](simple-agent-tasks/ip-g6-2-minimalapi-production-ir.md) | `[x]` uncommitted |
-| **G6.3** Compiler smoke Db+All | [`ip-g6-3-compiler-ir-smoke.md`](simple-agent-tasks/ip-g6-3-compiler-ir-smoke.md) | `[x]` AllMode test |
-| **G6.4** Plan honesty | [`ip-g6-4-plan-honesty.md`](simple-agent-tasks/ip-g6-4-plan-honesty.md) | `[~]` after commit |
-| **G6.5** Optional Generate→IR delegate | [`ip-g6-5-generate-delegates-ir.md`](simple-agent-tasks/ip-g6-5-generate-delegates-ir.md) | `[ ]` pull |
-| **G6.6** CLI usage text | `Program.cs` | `[x]` uncommitted |
-| **G6.R / G6′** Review residuals | NEXT § Review G6′ | `[~]` commit + hygiene |
-| **Gate** | Product proof | `[x]` AllMode green; **commit is remaining ops** |
+| Unit | Status |
+|------|--------|
+| G6.0–G6.4, G6.6, AllMode smoke | `[x]` committed |
+| **G6.5** string Generate→IR | `[x]` code; ⬜ commit (Group 7 batch) |
+
+---
+
+## Task Group 7: Structural IR + G6.5 ✅ PRODUCT BAR MET — COMMIT PENDING
+
+**Review:** [`infrastructure-pass-NEXT.md`](infrastructure-pass-NEXT.md) **§ Review G7′′**
+
+| Unit | Status |
+|------|--------|
+| G6.5 `Generate()` → IR (both generators) | `[x]` |
+| DbContext + MinimalApi string-path delete | `[x]` |
+| `GenerationAssertions` + suites (11+24) + AllMode | `[x]` green |
+| **Gate / product proof** | `[x]` |
+| **Commit** | `[ ]` **G7′′.4** |
 
 **Production path (in working tree):**
 
@@ -137,8 +146,9 @@ files.Add(("demo.http", httpGen.Generate())); // still string
 
 | Claim | Reality |
 |-------|---------|
-| Group 1–5 Done | ✅ under current bar |
-| IR production path | ✅ wired + AllMode smoke; ⬜ **commit** |
+| Group 1–5 Done | ✅ |
+| IR production path | ✅ `c5d2220` |
+| G6.5 / structural tests / dead-code delete | ✅ code green; ⬜ **commit** |
 | Full oracle parity | ❌ Bar B deferred |
 
-**Next agent action:** **Commit** G6 (exclude demo drift) — [`infrastructure-pass-NEXT.md`](infrastructure-pass-NEXT.md) § Review G6′.
+**Next agent action:** **Commit** G6.5+G7 batch — NEXT § Review G7′′.

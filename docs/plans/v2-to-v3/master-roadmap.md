@@ -56,7 +56,7 @@ MCP / direct API as thin consumers
 ```text
 CURRENT: Commit §18 link_instances batch (exclude demo.http / library.db)
 THEN:    Next product work
-PULL:    Q4; production IR; E3b; L*; unlink MCP
+PULL:    Q4; infra Group 6 production IR ([`ip-README`](../simple-agent-tasks/ip-README.md)); E3b; L*; unlink MCP
 ```
 
 **Honest product claim today:** Q1′ path-prefix / exists / where **authorable**; **Q3′ quantifiers** authorable **and** evaluable via store-linked `EvaluatePolicy` (MCP: `create_instance` → `link_instances` → `evaluate_policy(instanceId=…)`). **DSL still no `link` keyword** — spawn-and-wire remains `create in Rel`. JSON policies still local-only.

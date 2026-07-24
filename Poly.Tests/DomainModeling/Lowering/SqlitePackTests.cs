@@ -177,4 +177,35 @@ public class SqlitePackTests {
         await Assert.That(ctx.Annotations.CanAccept("column")).IsTrue();
         await Assert.That(ctx.Annotations.CanAccept("table")).IsTrue();
     }
+
+    [Test]
+    public async Task DslCompiler_AllMode_EmitsDbContextAndProgramViaIr() {
+        // G6.R.1: CompileMode.All production IR wire-up smoke.
+        // Verifies both DbContext and Program.cs emit through the
+        // GenerateCompilationUnit + CSharpGenerator production path.
+        var compiler = new Compiler();
+        var result = compiler.Compile(SampleDomain, CompileMode.All, DbmsPack.Sqlite);
+        await Assert.That(result.Success).IsTrue();
+
+        // Must have entity files + DbContext + Program.cs + demo.http
+        var fileNames = result.Files!.Select(f => f.FileName).ToList();
+
+        // DbContext file is domain-named (not hardcoded "LibraryDbContext.cs")
+        await Assert.That(fileNames).Contains("CatalogDbContext.cs");
+        await Assert.That(fileNames).Contains("Program.cs");
+        await Assert.That(fileNames).Contains("demo.http");
+
+        // Structural markers: IR-backed DbContext
+        var files = result.Files!;
+        var dbFile = files.Single(f => f.FileName == "CatalogDbContext.cs");
+        await Assert.That(dbFile.Source).Contains("class CatalogDbContext : DbContext");
+        await Assert.That(dbFile.Source).Contains("DbSet<Item> Items");
+        await Assert.That(dbFile.Source).Contains("OnModelCreating(ModelBuilder modelBuilder)");
+
+        // Structural markers: IR-backed Program.cs
+        var progFile = files.Single(f => f.FileName == "Program.cs");
+        await Assert.That(progFile.Source).Contains("WebApplication.CreateBuilder(args)");
+        await Assert.That(progFile.Source).Contains("MapGet");
+        await Assert.That(progFile.Source).Contains("MapPost");
+    }
 }

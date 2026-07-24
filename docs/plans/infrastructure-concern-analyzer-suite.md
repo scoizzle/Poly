@@ -1,11 +1,12 @@
 # Infrastructure Pass Suite
 
 **Date:** 2026-07-23  
-**Status:** Active — Steps 1–5 ✅ under current bar (Group 2 = Bar A; production IR / Bar B pull)  
-**Agents — start here:** [`infrastructure-pass-NEXT.md`](infrastructure-pass-NEXT.md). Full ladder: [`infrastructure-pass-task-list.md`](infrastructure-pass-task-list.md).  
-**Done-bar note:** Full string-oracle parity (anonymous `{ error = }`, switch arms, dual goldens) was **too early** without anonymous-object Syntax IR; Group 2 closes under Bar A + suite-wide renorm.  
+**Status:** Active — Steps 1–5 ✅; **Group 6 product bar met** — commit pending (All-mode smoke green)  
+**Agents — start here:** [`infrastructure-pass-NEXT.md`](infrastructure-pass-NEXT.md) · micro-tasks [`simple-agent-tasks/ip-README.md`](simple-agent-tasks/ip-README.md)  
+**Full ladder:** [`infrastructure-pass-task-list.md`](infrastructure-pass-task-list.md)  
+**Done-bar note:** Full string-oracle parity (**Bar B**) still deferred. Group 6 ships **production use of Bar A IR** for DbContext + Program — not oracle identity.  
 **Prerequisite ADR:** [`docs/decisions/2026-07-22-persistence-units-medium-facets-pack-syntax-export.md`](../decisions/2026-07-22-persistence-units-medium-facets-pack-syntax-export.md)  
-**Related:** [`docs/CORE.md`](../CORE.md); former `InfrastructureAnalyzer` facade deleted in working tree — use analysis passes under `Poly/DomainModeling/Analysis/`
+**Related:** [`docs/CORE.md`](../CORE.md); former `InfrastructureAnalyzer` facade deleted — use analysis passes under `Poly/DomainModeling/Analysis/`
 
 > **Vocabulary:** This document uses "pass" and "concern" interchangeably.
 > In the codebase the contract is `INodeAnalyzer` with a `PassName` — prefer
@@ -19,24 +20,25 @@
 ### Step 1 — completed (committed)
 - Layer 0: Entity type Syntax as analysis metadata. `EntitySyntaxPass` runs as part of `UseDomainModelAnalysisPipeline()`. `EntitySyntaxMetadata` on `AnalysisResult` supplies `TypeDefinitionNode[]` to downstream consumers. Structural assertion tests (7 tests) protect against meaningful regressions.
 
-### Step 2 — complete under Bar A (working tree; IR **not** production-wired)
-Substrate + DbContext IR + MinimalApi IR side-path done under **Bar A**. Full string-oracle identity (**Bar B**) deferred — no anonymous-object Syntax node; renorm bare error strings / if-else result / Concat Created / StatusCode(500). Production DslCompiler still uses string `Generate()`.
+### Step 2 — complete under Bar A (IR side-path; production wire-up = Group 6)
+Substrate + DbContext IR + MinimalApi IR side-path done under **Bar A**. Full string-oracle identity (**Bar B**) deferred.  
+**Production:** working tree wires DbContext + Program via IR; All-mode smoke green. HttpFile remains string. **Commit pending.**
 
 | Area | Status |
 |------|--------|
 | Syntax nodes | ⚠️ present; **no anonymous-object IR** (Bar B) |
 | `CSharpGenerator` substrate | ✅ A1–A4, S1, R1, R2, TypeIs binding |
-| `DbContextGenerator.GenerateCompilationUnit` | ✅ Issues 5–8/21 + 5 `b.*` parity tests |
-| `MinimalApiGenerator.GenerateCompilationUnit` | ✅ Bar A side-path (create/list/detail/seed/actions structure + renorm) |
+| `DbContextGenerator.GenerateCompilationUnit` | ✅ tests + production path (uncommitted) |
+| `MinimalApiGenerator.GenerateCompilationUnit` | ✅ tests + production path (uncommitted) |
 | `IStorageSyntaxEmitter` | ⚠️ inert seam |
-| CompilationUnit / DbContext tests | ✅ present |
-| MinimalApi IR tests | ✅ thin Bar A smokes (MapPost vs Seed, try/StatusCode/IsSuccess); optional Child/BadRequest hygiene deferred |
+| Compiler `CompileMode.All` smoke | ✅ `DslCompiler_AllMode_EmitsDbContextAndProgramViaIr` |
 
 ### Steps 3–5 — **Done** under current bar
-Storage + behavior + aggregate fail-closed; StoragePass(analysis); required generator models; TransportPass + pipeline asserts; PassRegistry.  
-Pull: production IR wire-up, Bar B, RestApiSurfacePass — see NEXT.
+Storage + behavior + aggregate fail-closed; StoragePass(analysis); required generator models; TransportPass + pipeline asserts; PassRegistry.
 
-**Agent truth:** follow [`infrastructure-pass-NEXT.md`](infrastructure-pass-NEXT.md) only — current unit `3x-analysis-threading`.
+### Step 6 — **Product bar met** (production IR wire-up)
+See [`infrastructure-pass-NEXT.md`](infrastructure-pass-NEXT.md) **§ Review G6′**.  
+**Agent truth:** **Commit** G6 batch (exclude demo drift). Optional G6.5 / Bar B later.
 
 ---
 

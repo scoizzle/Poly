@@ -240,7 +240,8 @@ public sealed class DslCompiler {
         if (mode == CompileMode.Db || mode == CompileMode.All) {
             var dbContextName = $"{domain.Name}DbContext";
             var dbGen = new DbContextGenerator(domain, storageModel!);
-            files.Add(("LibraryDbContext.cs", dbGen.Generate()));
+            files.Add(($"{dbContextName}.cs",
+                new CSharpGenerator().Generate(dbGen.GenerateCompilationUnit())));
 
             // Minimal API + .http file (mode: all only)
             if (mode == CompileMode.All) {
@@ -248,7 +249,8 @@ public sealed class DslCompiler {
                     storageModel: storageModel!,
                     behaviorModel: behaviorModel!,
                     aggregateModel: aggregateModel!);
-                files.Add(("Program.cs", apiGen.Generate(dbContextName)));
+                files.Add(("Program.cs",
+                    new CSharpGenerator().Generate(apiGen.GenerateCompilationUnit(dbContextName))));
 
                 var httpGen = new HttpFileGenerator(domain,
                     storageModel: storageModel!,

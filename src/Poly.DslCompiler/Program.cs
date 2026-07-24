@@ -49,7 +49,7 @@ if (inputPath is null) {
     Console.Error.WriteLine("Compiles a .poly DSL domain model into C# source files.");
     Console.Error.WriteLine("  --mode entities    Entity type definitions only (default)");
     Console.Error.WriteLine("  --mode db          Entity types + EF Core DbContext");
-    Console.Error.WriteLine("  --mode all         Entity types + DbContext + Minimal API (not yet ready)");
+    Console.Error.WriteLine("  --mode all          Entity types + DbContext + Minimal API (via Syntax IR)");
     Console.Error.WriteLine("  --dbms generic     Core generic SQL column types (default)");
     Console.Error.WriteLine("  --dbms sqlite      SQLite affinities (first shippable pack; no server required)");
     Console.Error.WriteLine("  --dbms sqlserver   SQL Server column types");

@@ -2,8 +2,9 @@
 
 **Date:** 2026-07-23  
 **Status:** Active — Steps 1–6 ✅ (`c5d2220`); G6.5/G7 product bar met — **commit pending** (§ Review G7′′)  
-**Agents — start here:** [`infrastructure-pass-NEXT.md`](infrastructure-pass-NEXT.md) · micro-tasks [`simple-agent-tasks/ip-README.md`](simple-agent-tasks/ip-README.md)  
-**Full ladder:** [`infrastructure-pass-task-list.md`](infrastructure-pass-task-list.md)  
+**ARCHIVED.** Live status: [`../../infrastructure-pass-NEXT.md`](../../infrastructure-pass-NEXT.md) · archive index [`README.md`](README.md)  
+**Historical ladder:** [`infrastructure-pass-task-list.md`](infrastructure-pass-task-list.md) · [`simple-agent-tasks/ip-README.md`](simple-agent-tasks/ip-README.md)  
+
 **Done-bar note:** Full string-oracle parity (**Bar B**) still deferred. Group 6 ships **production use of Bar A IR** for DbContext + Program — not oracle identity.  
 **Prerequisite ADR:** [`docs/decisions/2026-07-22-persistence-units-medium-facets-pack-syntax-export.md`](../decisions/2026-07-22-persistence-units-medium-facets-pack-syntax-export.md)  
 **Related:** [`docs/CORE.md`](../CORE.md); former `InfrastructureAnalyzer` facade deleted — use analysis passes under `Poly/DomainModeling/Analysis/`

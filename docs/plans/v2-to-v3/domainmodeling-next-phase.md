@@ -3,7 +3,8 @@
 **Date:** 2026-07-18  
 **Revised:** 2026-07-18 (final — P2′′′′′′ shipped; suite **1323**)  
 **Status:** Phase 2 product vertical **complete** (main `12f2926`; residual ready to commit)  
-**Current pick:** Phase 2 + RT + SA + E1 **complete** — next usefulness: [`simple-agent-tasks/qe-README.md`](simple-agent-tasks/qe-README.md) (query Q0→Q1′ related **reads**) · [`effect-surface-completeness.md`](effect-surface-completeness.md) E2.1  
+**Current pick:** Phase 2 + RT + SA + E1 + Q1′/Q3′ **complete** — historical plan. Day-to-day: [`master-roadmap.md`](master-roadmap.md) · dogfood · effect pull.  
+
 **Predecessor:** Phase 1a product-complete ([`dsl-sync-toward-phase1.md`](dsl-sync-toward-phase1.md)); BR.4.4 (`8f46f05`); MR/MR′; N2 dropped  
 **Related:** [`dsl-phase1a-grammar.md`](dsl-phase1a-grammar.md), [`mcp-tool-surface-expansion.md`](mcp-tool-surface-expansion.md) (§0 MCP remaining), [`docs/CORE.md`](../../CORE.md), AGENTS.md principles  
 

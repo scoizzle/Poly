@@ -1,6 +1,6 @@
 # Infrastructure Pass Suite — Executable Task List
 
-> **Agents — start here:** [`infrastructure-pass-NEXT.md`](infrastructure-pass-NEXT.md)  
+> **ARCHIVED.** Live status: [`../../infrastructure-pass-NEXT.md`](../../infrastructure-pass-NEXT.md) · this folder [`README.md`](README.md)  
 > Micro-tasks: [`simple-agent-tasks/ip-README.md`](simple-agent-tasks/ip-README.md)
 
 **Date:** 2026-07-23  

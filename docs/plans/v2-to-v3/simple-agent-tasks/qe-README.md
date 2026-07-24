@@ -1,179 +1,81 @@
-# Query + Effect Suite (post-E1) — Simple Agents
+# Query + Effect Suite — Simple Agents (`qe-*`)
 
 **Parents:**  
-- [`../dsl-query-surface.md`](../dsl-query-surface.md) — **§3.1 + §4.0 frozen surface**; Q0 → Q1′  
-- [`../effect-surface-completeness.md`](../effect-surface-completeness.md) — E2.1 (decision only in this suite)
+- [`../dsl-query-surface.md`](../dsl-query-surface.md) — product design + shipped Q1′/Q3′  
+- [`../effect-surface-completeness.md`](../effect-surface-completeness.md) — effects track  
 
-**Date:** 2026-07-18  
-**Baseline:** E1 delete-self shipped (`121cd92`); suite **1360** at suite open.  
-**Audience:** One micro-task at a time; tiny reading list per file.
+**Status:** **Complete under current bar** (2026-07-24).  
+**Audience:** Historical micro-task index. **Do not pick new work from open Q3 residual tables.**
+
+> **Do not reopen Q0–Q3′ authoring from this queue.**  
+> Product claims live in the parent plans + guides. Optional hygiene only if listed under Pull.
 
 ---
 
-## Frozen product direction (read before any Q* task)
+## Shipped (do not re-implement)
+
+| Slice | Outcome | Commits / note |
+|-------|---------|----------------|
+| Q0–Q1′ | Subject-first path-prefix, `Rel exists`, `where`, anti-dot | through `25a79ec` |
+| Q3′ | `any`/`all`/`none`/`count` DSL + analysis + store eval | `bb5032b` |
+| Q3 residuals | Guide empty semantics; `evaluate_policy(instanceId=)`; MCP e2e | `85d28fe` |
+| `link_instances` | Public MCP link + validation + smokes; E2.1′ | `7d067c0` |
+| E2.1 | create-in only for DSL graph spawn; MCP link for existing instances (E2.1′) | effect decision log |
+
+**Honest product claim:** Q1′ + Q3′ authorable and evaluable via store-linked `EvaluatePolicy` (`create_instance` → `link_instances` → `evaluate_policy(instanceId=…)`). DSL still has **no** `link` keyword — spawn-and-wire remains `create in Rel`. JSON policies remain local comparison-only.
+
+---
+
+## Agent pick
+
+```text
+DONE:    Q0–Q3′; link_instances MCP; E2.1′
+CURRENT: (none in qe queue) — dogfood / next product pain
+PULL:    Q4 aggregates; date ops; JSON quantifiers; unlink_instances; optional E1 hygiene
+```
+
+---
+
+## Optional hygiene (parallel anytime; do not invent a new suite)
+
+| ID | Work | File | Status |
+|----|------|------|--------|
+| **Q1'''''''.1** | Guide: nested path-prefix in where body | (inline if small) | `[ ]` Low |
+| **E1′′′.1** | Guide: `delete` reserved keyword | [`qe-opt-e1-reserved-delete.md`](qe-opt-e1-reserved-delete.md) | `[ ]` Low |
+| **E1′′′.3** | Fail-loud bad effect token error-string smoke | [`qe-opt-e1-bad-effect-token-test.md`](qe-opt-e1-bad-effect-token-test.md) | `[ ]` Low |
+
+---
+
+## Do not pick
+
+| Item | Why |
+|------|-----|
+| Re-implement Q3′ IR/parser | Shipped `bb5032b` |
+| Product dots / C# LINQ chains | Rejected product direction |
+| Q4 / date ops without dogfood pain | Pull |
+| Full JSON policy = DSL quantifiers | Documented split |
+| Infrastructure IR Bar B | Infra track pull — [`../../infrastructure-pass-NEXT.md`](../../infrastructure-pass-NEXT.md) |
+
+---
+
+## Frozen product direction (still binding)
 
 | Rule | Product form |
 |------|----------------|
 | **Anti-dot** | No `rel.Prop`, no `rel->Prop` |
 | **Subject-first path-prefix** | `assignee Active`, `customer Tier is "VIP"` |
 | **Postfix exists** | `assignee exists` |
-| **Absence** | `not assignee exists` only (not `assignee not exists`, not prefix `exists assignee`) |
-| **`where`** | Scope keyword; **no forced parens**: `customer where Status is "Active" and Tier is "VIP"` |
-| **Quantifiers (Q3′)** | `any`/`all`/`none`/`count` **Rel where …** |
-| **Cross-entity reads** | **Legal** — policies + **scalar** assign RHS (`assign Label to customer Tier`) |
-| **Cross-entity writes** | **Banned** — assign target is **this** entity only |
+| **Absence** | `not assignee exists` only |
+| **`where`** | Scope keyword; no forced parens |
+| **Quantifiers** | `any`/`all`/`none`/`count` **Rel where …** |
+| **Cross-entity reads** | Legal in policies + scalar assign RHS |
+| **Cross-entity writes** | Banned on assign target |
 
-Full design: parent plan §3.1 + §4.0. **Do not re-open dots or C# LINQ method chains.**
-
----
-
-## Why this suite
-
-Lifecycle **effects** are green enough for Order/Customer dogfood.  
-Customer **policies** still cannot **read** related data in product DSL — IR + lowering already can.  
-**Link** still needs a written E2.1 decision (graph **writes** stay explicit).
-
-**Usefulness bar:** kernel effects + **Q1′** (path-prefix + `Rel exists` + to-one `where`) + honest non-goals. Not full LINQ. Not multi-entity invoke yet.
+Depth: parent [`../dsl-query-surface.md`](../dsl-query-surface.md) §3.1 + §4.0.
 
 ---
 
-## Operating rules (mandatory)
+## Micro-task files
 
-1. **One task at a time.** Claim it (Status → `[~]`) before coding.
-2. **Pick the first `[ ]` in the ordered table below.** Do not skip unless the row says **parallel OK**.
-3. **Do not start Slice Q1′** until **Slice Q0** exit is met (all required Q0 tasks `[x]`).
-4. **E2.1** may run **after Q0.1–Q0.2** (parallel OK with Q0.3–Q0.5) — decision-only, no link DSL.
-5. **Do not open Q3′ / E3b / E5 / L\*** unless an orchestrator reopens them.
-6. After Done: write `../agent-summaries/qe-<task-id>-summary.md` using [`TEMPLATE-task-summary.md`](../agent-summaries/TEMPLATE-task-summary.md). Update only the Status line on the task file.
-7. Build: `dotnet build Poly.Benchmarks/Poly.Benchmarks.csproj`  
-   Tests: `dotnet run --project Poly.Tests/Poly.Tests.csproj` (filter when possible).
-8. Principles: AGENTS.md — domain fidelity, thin slice, guide honesty same PR as surface change, rebuild `get_dsl_guide` embed after guide edits.
-9. **Shipped only after commit** — do not mark parent plans “shipped” while the tree is dirty.
-10. **Assign:** never accept related **LHS**; scalar related **RHS** is a cross-entity **read** (legal when path-prefix ships).
-11. **Pre-ship review gate:** Before marking any slice `[x]`, execute [`pr1-uncommitted-review-gate.md`](pr1-uncommitted-review-gate.md) — review dirty files, categorize findings (🔴🟠🟡⚪), harden with three-layer defense + fail-closed posture, re-review, and only ship when clean. The review gate is not a separate task to claim — it is the **last step before `[x]` on every slice**.
-
-### Status marks
-
-| Mark | Meaning |
-|------|---------|
-| `[ ]` | Not Started — pickable when prerequisites Done |
-| `[~]` | In Progress |
-| `[x]` | Done |
-| **Skip** | Do not execute (deferred / pull) |
-
----
-
-## Pick order
-
-### Slice Q0 — Expression honesty + freeze (**required first**)
-
-| # | Task | File | Status | Notes |
-|---|------|------|--------|-------|
-| **Q0.1** | Document **shipped** DSL expression grammar in guide | [`qe-q0-1-guide-expression-grammar.md`](qe-q0-1-guide-expression-grammar.md) | `[x]` | Local and/or/not/compare only — no overclaim |
-| **Q0.2** | Document IR gaps + **planned** subject-first surface | [`qe-q0-2-guide-ir-expression-gaps.md`](qe-q0-2-guide-ir-expression-gaps.md) | `[x]` | Planned ≠ shipped |
-| **Q0.3** | Expression matrix: DE × DSL × JSON × lower × VM | [`qe-q0-3-expression-parity-matrix.md`](qe-q0-3-expression-parity-matrix.md) | `[x]` | Mark Q1′ / Q3′ columns |
-| **Q0.4** | Confirm Q3′ keyword set (`any`/`all`/`none`/`count` + `where`) | [`qe-q0-4-method-syntax-keywords.md`](qe-q0-4-method-syntax-keywords.md) | `[x]` | Keyword form, not C# methods |
-| **Q0.5** | Customer must-have list (product spellings) | [`qe-q0-5-customer-must-have.md`](qe-q0-5-customer-must-have.md) | `[x]` | Ticket/Order sentences |
-
-**Slice Q0 exit:** Guide honest about shipped; planned dialect named; matrix exists; Q1′ vs Q3′ clear.
-
-### Slice E — Link decision (**after Q0.1–Q0.2; parallel OK with rest of Q0**)
-
-| # | Task | File | Status | Notes |
-|---|------|------|--------|-------|
-| **E2.1** | Record create-in-only vs bag/param link decision | [`qe-e21-link-product-decision.md`](qe-e21-link-product-decision.md) | `[x]` | Graph **writes**; no link DSL |
-
-**Default if unsure:** **(a) create-in only** — aligns with “cross-entity writes banned” via assign.
-
-### Slice Q1′ — Path-prefix + postfix exists + to-one `where` (**after Q0 exit**)
-
-| # | Task | File | Status | Notes |
-|---|------|------|--------|-------|
-| **Q1.1** | Spec residual: BNF, where-body, many-exists | [`qe-q1-1-nav-exists-syntax-spec.md`](qe-q1-1-nav-exists-syntax-spec.md) | `[x]` | Direction frozen; fill open bits only |
-| **Q1.2** | Parse/print/lower **path-prefix** (+ scalar assign RHS) | [`qe-q1-2-parse-nav-owned.md`](qe-q1-2-parse-nav-owned.md) | `[x]` | `Rel Prop`, `Rel Prop op value` |
-| **Q1.3** | Parse/print/lower **`Rel exists`** / **`not Rel exists`** | [`qe-q1-3-parse-exists.md`](qe-q1-3-parse-exists.md) | `[x]` | Postfix only |
-| **Q1.3b** | Parse/print/lower to-one **`Rel where` and-chain** | [`qe-q1-3b-parse-where-rebind.md`](qe-q1-3b-parse-where-rebind.md) | `[x]` | No forced parens |
-| **Q1.4** | Goldens: policies + assign RHS read + reject related LHS | [`qe-q1-4-nav-exists-goldens.md`](qe-q1-4-nav-exists-goldens.md) | `[x]` | evaluate / simulate / require |
-| **Q1.5** | JSON policy parity or documented split | [`qe-q1-5-json-policy-parity.md`](qe-q1-5-json-policy-parity.md) | `[x]` | Prefer document split if thin |
-| **Q1.6** | Guide examples + §3.1 read/write rule | [`qe-q1-6-guide-nav-exists-examples.md`](qe-q1-6-guide-nav-exists-examples.md) | `[x]` | Subject-first only |
-
-**Slice Q1′ exit (parse/print):** met (`959c6e7`).  
-**Q1′′′ partial (`3c99221`):** assign + owned print + apply/export.  
-**Q1′′′′ (`76568a3`):** **DMREL001**; authoring-only tests.  
-**Q1''''' (`514e21c`):** guide; nested-where; unknown-rel; body→target.  
-**Q1'''''' (`25a79ec`):** **Rel exists on N1 nav** fixed + goldens.  
-**Q3′ core (`bb5032b`):** **any/all/none/count** DSL + analysis + store-aware `EvaluatePolicy` + guide — **shipped** (not “from scratch”).  
-**Current:** **§18 ready to commit** — `link_instances` golden + validation + E2.1′ + guides. Residual batch **committed** (`85d28fe`).
-
-### Slice Q3′ — Collection quantifiers
-
-**Product vertical already in tree** (do not re-implement IR/parser from zero).  
-Thin “2B” route = **close residuals** with simple-agent tasks, not rewrite Q3′.
-
-| # | Task | File | Status | Difficulty |
-|---|------|------|--------|------------|
-| **Q3.R0** | Inventory shipped Q3′ (read-only) | [`qe-q3-r0-status-inventory.md`](qe-q3-r0-status-inventory.md) | `[x]` | Small |
-| **Q3.R1** | Guide honesty (shipped vs not; eval claim) | [`qe-q3-r1-guide-honesty.md`](qe-q3-r1-guide-honesty.md) | `[x]` `85d28fe` | Small |
-| **Q3.R2** | MCP `evaluate_policy` true/false for `any` | [`qe-q3-r2-mcp-evaluate-any-golden.md`](qe-q3-r2-mcp-evaluate-any-golden.md) | `[x]` library Link; **§18 L.1** use public tool | Medium |
-| **Q3.R3** | Empty-collection semantics in guide | [`qe-q3-r3-empty-semantics-docs.md`](qe-q3-r3-empty-semantics-docs.md) | `[x]` | Small |
-| **Q3.R4** | Plan/roadmap status sync | [`qe-q3-r4-plan-sync.md`](qe-q3-r4-plan-sync.md) | `[x]` residual ship; reopen for §18 | Small |
-| **Q3.R′** | §17 honesty (invent tool) | parent **[§17](../dsl-query-surface.md)** | `[~]` tool built; **§18** is ship gate | Small |
-| **Q3.L** | `link_instances` ship gate | parent **[§18](../dsl-query-surface.md)** | `[x]` ready to commit | Medium |
-| **Gate** | [`pr1-uncommitted-review-gate.md`](pr1-uncommitted-review-gate.md) before shipping link tool | — | `[x]` | 1602 tests; build 0 errors; all 🔴🟠 resolved |
-
-**Pick order:** **Q3.L.1 → L.2 → L.3** (golden + E2.1′ decision + guide §9); L.4 fail-closed if touching Link validation.  
-**Exit:** Public `link_instances` proven by MCP smoke; effect E2.1′ logged; guides consistent; suite green; committed.
-
-### Optional hygiene (parallel anytime; do not block)
-
-| # | Task | File | Status | Notes |
-|---|------|------|--------|-------|
-| **Q1'''''''.1** | Guide: nested path-prefix in where body | (inline if small) | `[ ]` | Low |
-| **E1′′′.1** | Guide: `delete` reserved keyword | [`qe-opt-e1-reserved-delete.md`](qe-opt-e1-reserved-delete.md) | `[ ]` | Low |
-| **E1′′′.3** | Fail-loud bad effect token error-string smoke | [`qe-opt-e1-bad-effect-token-test.md`](qe-opt-e1-bad-effect-token-test.md) | `[ ]` | Low |
-
-### Explicitly not in this suite (pull / later)
-
-| Item | Plan | Why |
-|------|------|-----|
-| Re-implement Q3′ IR/parser | — | **Already shipped** `bb5032b` |
-| E2.2–E2.5 link DSL | effect-surface | MCP `link_instances` is §18; DSL link still deferred unless pain |
-| E3b multi-entity invoke | effect-surface | Peer **writes** |
-| Q4 aggregates sum/min/max | query-surface | Pull |
-| E5 micro effect tools | effect-surface | Dogfood quotes only |
-| L\* C#/MSIL/containers | phase3 §6d | Post–P3 |
-| Product dots / C# LINQ chains | — | Rejected |
-
----
-
-## Suggested agent sessions
-
-| Session | Tasks | Outcome |
-|---------|-------|---------|
-| **Q3 residual** | R0–R4 | **Committed** `85d28fe` |
-| **link_instances** | §18 L.1–L.3 | Golden + E2.1′ + guide consistency |
-| **link fail-closed** | §18 L.4 (+ L.7) | Validate rel + ends |
-| **Optional** | E1′′′.1 / .3; L.5–L.10 | Hygiene / drift / unlink |
-
----
-
-## Parent plan updates (orchestrator after slice exits)
-
-| When | Update |
-|------|--------|
-| Q0 exit | `dsl-query-surface.md` Q0 checklist + agent pick → Q1′ |
-| E2.1 done | `effect-surface-completeness.md` decision log + E2.1 checkbox |
-| Q1′ exit | query success criteria; expansion §0; master-roadmap row 8 |
-| Any guide edit | Rebuild MCP so `get_dsl_guide` embeds new content |
-
----
-
-## Canonical reading (suite-wide)
-
-- `Agents.md` principles 1–5  
-- `docs/CORE.md` — DomainModeling ownership  
-- **Parent plan §3.1 + §4.0** (frozen surface)  
-- Product guide: `Poly.Mcp/Docs/poly-dsl-agent-guide.md`  
-- IR: `Poly/DomainModeling/DomainExpression.cs`  
-- Lower: `Poly/DomainModeling/Lowering/DomainExpressionLoweringPass.cs`  
-- Parser/printer: `Poly/DomainModeling/Parsing/PolyDslParser.cs`, `DomainDslPrinter.cs`
+Completed `qe-q0-*`, `qe-q1-*`, `qe-q3-r*`, `qe-e21-*` files remain in this folder for history (same pattern as [`vs-README.md`](vs-README.md)). **Do not execute them as open work.**  
+Always-on process: [`pr1-uncommitted-review-gate.md`](pr1-uncommitted-review-gate.md).

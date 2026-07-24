@@ -1,10 +1,10 @@
 # DSL Query / Expression Surface (LINQ-inspired subset)
 
 **Date:** 2026-07-18  
-**Revised:** 2026-07-23 — Q3′ core + residuals **committed** (`85d28fe`); `link_instances` tool **shipped** — L.1–L.7 + Gate all green  
-**Status:** **Complete** — Q1′ + Q3′ shipped; `link_instances` MCP tool with validation and smokes  
-**Current pick:** Post-suite — next product work  
-**Micro-tasks:** [`simple-agent-tasks/qe-README.md`](simple-agent-tasks/qe-README.md)  
+**Revised:** 2026-07-24 — suite closed; plans cleaned  
+**Status:** **Complete** — Q1′ + Q3′ + `link_instances` shipped; design reference only  
+**Current pick:** (none on this track) — dogfood / Q4 pull  
+**Micro-tasks:** [`simple-agent-tasks/qe-README.md`](simple-agent-tasks/qe-README.md) — **do not reopen** closed Q* tasks  
 **Related:** DomainExpression IR · `PolyDslParser` expression grammar · JSON policy parser · effect-surface plan · product guide · formal spec **§4.5**
 
 **Principle:** Policies and guards are only as useful as the **query language** inside them. Prefer a **small, lowerable, subject-first keyword subset** that maps to existing `DomainExpression` + Syntax AST over a full LINQ / SQL / C# clone. **Cross-entity reads legal; cross-entity writes banned** (§3.1). No host I/O in expressions.
@@ -727,16 +727,15 @@ Customer ship confidence: **kernel effects + Q1′ + (Q3′ or honest “no coll
 
 ## 8. Agent pick
 
-**Micro-tasks:** [`simple-agent-tasks/qe-README.md`](simple-agent-tasks/qe-README.md) · **§18**.
+**Micro-tasks:** [`simple-agent-tasks/qe-README.md`](simple-agent-tasks/qe-README.md) — **complete; do not pick closed Q\***.
 
 ```text
-DONE:    Q3′ core bb5032b; residual batch 85d28fe; §18 L.1–L.7 (validation + smokes + E2.1′)
-CURRENT: Commit link_instances batch — exclude demo.http / library.db
-THEN:    Next product work
-PULL:    Q4; production IR; E3b; L*; unlink MCP
+DONE:    Q1′; Q3′ bb5032b; residuals 85d28fe; link_instances 7d067c0
+CURRENT: (none) — dogfood / next product pain
+PULL:    Q4 aggregates; date ops; JSON quantifiers; unlink_instances
 ```
 
-**Honesty:** `link_instances` validates relationship + entity ends; guides dual-path + §9 consistent; E2.1′ on effect plan (own table row).
+**Honesty:** `link_instances` validates relationship + entity ends; dual-path eval documented; E2.1′ on effect plan.
 
 ---
 

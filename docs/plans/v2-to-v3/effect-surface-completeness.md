@@ -315,15 +315,13 @@ What you cannot write in DSL without this plan is the backlog order.
 
 ## 9. Agent pick (right now)
 
-**Micro-tasks:** [`simple-agent-tasks/qe-README.md`](simple-agent-tasks/qe-README.md) — pick first `[ ]` there.
+**Micro-tasks:** [`simple-agent-tasks/qe-README.md`](simple-agent-tasks/qe-README.md) — query suite **complete**; optional E1 hygiene only.
 
 ```text
-DONE:    E1; E2.1; E3a/E3b cross-entity invoke with quantifiers+filter; E4 DSL+RT; params DSL+RT; E6.1–E6.10; Q1′ authoring; arithmetic/equals/enum/inheritance/owned DSL; Q3′ collection quantifiers (DSL+RT)
-CURRENT: dogfood OR E5 micro-tools
-THEN:    dogfood-driven
-LATER:   Host I/O; micro-catalog; L*; TRE; link DSL; E6.11–E6.12
-THEN:    E5 micro-tools only with named dogfood pain
-LATER:   Host I/O; micro-catalog; L*; TRE; link DSL; E6.11–E6.12
+DONE:    E1; E2.1/E2.1′; E3a/E3b; E4; params; E6 authoring; Q1′+Q3′; link_instances MCP
+CURRENT: dogfood OR E5 micro-tools (only with named pain)
+PULL:    E6.1 RT goldens; TRE runtime-or-hide; unlink MCP; L*
+LATER:   Host I/O; micro-catalog; link DSL keyword
 ```
 
 **Implementer watch-outs**

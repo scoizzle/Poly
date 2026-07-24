@@ -2,7 +2,7 @@
 
 **Date:** 2026-07-22  
 **Status:** Exploratory — not implementation plans  
-**Related:** [`docs/plans/infrastructure-concern-analyzer-suite.md`](../plans/infrastructure-concern-analyzer-suite.md)
+**Related:** [`docs/plans/archive/infrastructure-pass/infrastructure-concern-analyzer-suite.md`](../plans/archive/infrastructure-pass/infrastructure-concern-analyzer-suite.md) (archived suite)
 
 > These thought experiments validate the pass-suite design against hypothetical future
 > targets. Nothing here should be built until a real consumer exists (AGENTS §6).

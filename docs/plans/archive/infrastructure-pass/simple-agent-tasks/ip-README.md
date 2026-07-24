@@ -1,7 +1,8 @@
 # Infrastructure Pass — Simple-Agent Queue (`ip-*`)
 
-**Parent:** [`../infrastructure-pass-NEXT.md`](../infrastructure-pass-NEXT.md)  
-**Full ladder:** [`../infrastructure-pass-task-list.md`](../infrastructure-pass-task-list.md)  
+**Archived** with parent suite. See [`../README.md`](../README.md).  
+**Historical parent:** [`../infrastructure-pass-NEXT-history.md`](../infrastructure-pass-NEXT-history.md)  
+**Ladder:** [`../infrastructure-pass-task-list.md`](../infrastructure-pass-task-list.md)  
 **Suite design:** [`../infrastructure-concern-analyzer-suite.md`](../infrastructure-concern-analyzer-suite.md)
 
 ---

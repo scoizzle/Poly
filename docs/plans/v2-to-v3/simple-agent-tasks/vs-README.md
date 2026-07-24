@@ -1,10 +1,10 @@
 # Vertical Slice Micro-Tasks (Simple Agents)
 
 **Parent plan:** [`../vertical-slice-finish-plan.md`](../vertical-slice-finish-plan.md)  
-**Last Updated:** 2026-07-18 — M2 complete; **active queue is [`qe-README.md`](qe-README.md)** (post-E1)  
+**Last Updated:** 2026-07-24 — M2 complete; **qe suite also complete**  
 **Audience:** Smaller / cheaper agents — one file per claim, tiny reading list.
 
-> **Do not pick new work from this file.** Historical M2 suite is done. Next product work: **[`qe-README.md`](qe-README.md)** (Q0 → Q1 + E2.1).
+> **Do not pick new work from this file.** Historical M2 suite is done. Query/effect queue: **[`qe-README.md`](qe-README.md)** (also complete — dogfood / pull only).
 
 ## Operating rules (mandatory)
 

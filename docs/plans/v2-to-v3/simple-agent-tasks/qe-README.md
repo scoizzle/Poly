@@ -103,7 +103,7 @@ Customer **policies** still cannot **read** related data in product DSL — IR +
 **Q1''''' (`514e21c`):** guide; nested-where; unknown-rel; body→target.  
 **Q1'''''' (`25a79ec`):** **Rel exists on N1 nav** fixed + goldens.  
 **Q3′ core (`bb5032b`):** **any/all/none/count** DSL + analysis + store-aware `EvaluatePolicy` + guide — **shipped** (not “from scratch”).  
-**Current:** **§17 Q3.R′** honesty gate on uncommitted residual batch — **do not invent `link_instances`**.
+**Current:** **§18 ready to commit** — `link_instances` golden + validation + E2.1′ + guides. Residual batch **committed** (`85d28fe`).
 
 ### Slice Q3′ — Collection quantifiers
 
@@ -112,16 +112,17 @@ Thin “2B” route = **close residuals** with simple-agent tasks, not rewrite Q
 
 | # | Task | File | Status | Difficulty |
 |---|------|------|--------|------------|
-| **Q3.R0** | Inventory shipped Q3′ (read-only) | [`qe-q3-r0-status-inventory.md`](qe-q3-r0-status-inventory.md) | `[x]` code | Small |
-| **Q3.R1** | Guide honesty (shipped vs not; eval claim) | [`qe-q3-r1-guide-honesty.md`](qe-q3-r1-guide-honesty.md) | `[~]` reopen — invent `link_instances` | Small |
-| **Q3.R2** | MCP `evaluate_policy` true/false for `any` | [`qe-q3-r2-mcp-evaluate-any-golden.md`](qe-q3-r2-mcp-evaluate-any-golden.md) | `[~]` true/false green; Description honesty open | Medium |
-| **Q3.R3** | Empty-collection semantics in guide | [`qe-q3-r3-empty-semantics-docs.md`](qe-q3-r3-empty-semantics-docs.md) | `[x]` code | Small |
-| **Q3.R4** | Plan/roadmap status sync | [`qe-q3-r4-plan-sync.md`](qe-q3-r4-plan-sync.md) | `[~]` after §17 | Small |
-| **Q3.R′** | Honesty gate from review | parent **[§17](../dsl-query-surface.md)** | `[ ]` | Small |
-| **Gate** | [`pr1-uncommitted-review-gate.md`](pr1-uncommitted-review-gate.md) before shipping residual batch | — | `[ ]` | Process |
+| **Q3.R0** | Inventory shipped Q3′ (read-only) | [`qe-q3-r0-status-inventory.md`](qe-q3-r0-status-inventory.md) | `[x]` | Small |
+| **Q3.R1** | Guide honesty (shipped vs not; eval claim) | [`qe-q3-r1-guide-honesty.md`](qe-q3-r1-guide-honesty.md) | `[x]` `85d28fe` | Small |
+| **Q3.R2** | MCP `evaluate_policy` true/false for `any` | [`qe-q3-r2-mcp-evaluate-any-golden.md`](qe-q3-r2-mcp-evaluate-any-golden.md) | `[x]` library Link; **§18 L.1** use public tool | Medium |
+| **Q3.R3** | Empty-collection semantics in guide | [`qe-q3-r3-empty-semantics-docs.md`](qe-q3-r3-empty-semantics-docs.md) | `[x]` | Small |
+| **Q3.R4** | Plan/roadmap status sync | [`qe-q3-r4-plan-sync.md`](qe-q3-r4-plan-sync.md) | `[x]` residual ship; reopen for §18 | Small |
+| **Q3.R′** | §17 honesty (invent tool) | parent **[§17](../dsl-query-surface.md)** | `[~]` tool built; **§18** is ship gate | Small |
+| **Q3.L** | `link_instances` ship gate | parent **[§18](../dsl-query-surface.md)** | `[x]` ready to commit | Medium |
+| **Gate** | [`pr1-uncommitted-review-gate.md`](pr1-uncommitted-review-gate.md) before shipping link tool | — | `[x]` | 1602 tests; build 0 errors; all 🔴🟠 resolved |
 
-**Pick order:** **Q3.R′.1–.2 first** (Description + guide — no invent `link_instances`) → re-gate → commit.  
-**Exit:** Guide + Description honest; MCP any e2e green; plans say Q3′ shipped + residuals closed **only after commit**.
+**Pick order:** **Q3.L.1 → L.2 → L.3** (golden + E2.1′ decision + guide §9); L.4 fail-closed if touching Link validation.  
+**Exit:** Public `link_instances` proven by MCP smoke; effect E2.1′ logged; guides consistent; suite green; committed.
 
 ### Optional hygiene (parallel anytime; do not block)
 
@@ -136,7 +137,7 @@ Thin “2B” route = **close residuals** with simple-agent tasks, not rewrite Q
 | Item | Plan | Why |
 |------|------|-----|
 | Re-implement Q3′ IR/parser | — | **Already shipped** `bb5032b` |
-| E2.2–E2.5 link implement | effect-surface | Only if E2.1 reopens |
+| E2.2–E2.5 link DSL | effect-surface | MCP `link_instances` is §18; DSL link still deferred unless pain |
 | E3b multi-entity invoke | effect-surface | Peer **writes** |
 | Q4 aggregates sum/min/max | query-surface | Pull |
 | E5 micro effect tools | effect-surface | Dogfood quotes only |
@@ -149,11 +150,10 @@ Thin “2B” route = **close residuals** with simple-agent tasks, not rewrite Q
 
 | Session | Tasks | Outcome |
 |---------|-------|---------|
-| **Q3 residual — Honesty** | Q3.R0 → Q3.R1 → Q3.R3 | Guide + empty semantics (partial — reopen R1) |
-| **Q3 residual — Prove MCP** | Q3.R2 | evaluate_policy any true/false (`instanceId`) |
-| **Q3 residual — §17 gate** | Q3.R′.1–.2 → Gate | Remove invent `link_instances`; dual-path guide; re-review |
-| **Q3 residual — Plans** | Q3.R4 after gate | Roadmap/pick sync + commit |
-| **Optional** | E1′′′.1 / .3 | Hygiene |
+| **Q3 residual** | R0–R4 | **Committed** `85d28fe` |
+| **link_instances** | §18 L.1–L.3 | Golden + E2.1′ + guide consistency |
+| **link fail-closed** | §18 L.4 (+ L.7) | Validate rel + ends |
+| **Optional** | E1′′′.1 / .3; L.5–L.10 | Hygiene / drift / unlink |
 
 ---
 

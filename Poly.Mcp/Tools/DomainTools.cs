@@ -1067,7 +1067,7 @@ internal sealed class PolicyTool {
     /// as a JSON object for multi-property entities (e.g. {"Status":"Active","Total":200}).
     /// Returns the boolean result (true/false) from the VM.
     /// </summary>
-    [McpServerTool(Name = "evaluate_policy"), Description("Evaluates a policy's guard expression against a sample subject. Provide 'age' for simple Age-based policies, or 'properties' as a JSON object for multi-property entities. To evaluate policies with cross-entity expressions (path-prefix, exists, where, Q3' quantifiers), first create instances via create_instance + link_instances, then provide the instanceId. Returns true if the policy passes, false otherwise.")]
+    [McpServerTool(Name = "evaluate_policy"), Description("Evaluates a policy's guard expression against a sample subject. Provide 'age' for simple Age-based policies, or 'properties' as a JSON object for multi-property entities. To evaluate policies with cross-entity expressions (path-prefix, exists, where, Q3' quantifiers), first create and link instances via create_instance + link_instances(relationshipName), then pass the source instanceId. When instanceId is provided, age/properties are ignored (the store-attached instance supplies all values). Returns true if the policy passes, false otherwise.")]
     public static DomainToolResponse EvaluatePolicy(
         [Description("Session ID")] string sessionId,
         [Description("Name of the entity that has the policy")] string entityName,

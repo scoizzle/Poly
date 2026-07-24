@@ -3060,7 +3060,7 @@ E: entity {{
         var order2Result = RuntimeTool.CreateInstance(sessionId, "Order", """{"Total":200}""");
         await Assert.That(order2Result.Success).IsTrue();
 
-        // 3. Find instances in session and link them
+        // 3. Resolve instance IDs and link via the public MCP tool
         McpSessionStore.TryGet(sessionId, out var st);
         var custInstance = st.InstanceMap.Values.FirstOrDefault(i => i.Entity.Name == "Customer");
         var order1 = st.InstanceMap.Values.FirstOrDefault(i => i.Entity.Name == "Order" && i.Snapshot().TryGetValue("Total", out var tv) && tv?.Equals(50L) == true);
@@ -3073,14 +3073,13 @@ E: entity {{
         var order1Id = st.InstanceMap.First(kvp => kvp.Value == order1!).Key;
         var order2Id = st.InstanceMap.First(kvp => kvp.Value == order2!).Key;
 
-        McpSessionStore.TryModifyInstances(sessionId, state => {
-            if (state.InstanceMap.TryGetValue(custId, out var cust)
-                && state.InstanceMap.TryGetValue(order1Id, out var o1)
-                && state.InstanceMap.TryGetValue(order2Id, out var o2)) {
-                state.InstanceStore!.Link("orders", cust, o1);
-                state.InstanceStore!.Link("orders", cust, o2);
-            }
-        });
+        var link1 = RuntimeTool.LinkInstances(sessionId, custId, "orders", order1Id);
+        await Assert.That(link1.Success).IsTrue();
+        await Assert.That(link1.Message).Contains("Linked");
+
+        var link2 = RuntimeTool.LinkInstances(sessionId, custId, "orders", order2Id);
+        await Assert.That(link2.Success).IsTrue();
+        await Assert.That(link2.Message).Contains("Linked");
 
         // 4. Evaluate HasBigOrder policy — should be true (order2 has Total 200 > 100)
         var evalTrue = PolicyTool.EvaluatePolicy(sessionId, "Customer", "HasBigOrder",
@@ -3093,5 +3092,95 @@ E: entity {{
             instanceId: custId);
         await Assert.That(evalFalse.Success).IsTrue();
         await Assert.That(evalFalse.Message).Contains("false");
+    }
+
+    [Test]
+    public async Task LinkInstances_UnknownRelationship_Fails() {
+        var (sessionId, _) = McpSessionStore.Create("Test");
+        var dsl = DslTool.ApplyDsl(sessionId, """
+            domain Test
+            A: entity { b: many B }
+            B: entity { a: A }
+            """);
+        await Assert.That(dsl.Success).IsTrue();
+
+        var aResult = RuntimeTool.CreateInstance(sessionId, "A", "{}");
+        await Assert.That(aResult.Success).IsTrue();
+        var bResult = RuntimeTool.CreateInstance(sessionId, "B", "{}");
+        await Assert.That(bResult.Success).IsTrue();
+
+        McpSessionStore.TryGet(sessionId, out var st);
+        var aId = st.InstanceMap.First(kvp => kvp.Value.Entity.Name == "A").Key;
+        var bId = st.InstanceMap.First(kvp => kvp.Value.Entity.Name == "B").Key;
+
+        var link = RuntimeTool.LinkInstances(sessionId, aId, "nonexistent_rel", bId);
+        await Assert.That(link.Success).IsFalse();
+        await Assert.That(link.Message).Contains("not found");
+    }
+
+    [Test]
+    public async Task LinkInstances_WrongEntityTypes_Fails() {
+        var (sessionId, _) = McpSessionStore.Create("Test");
+        var dsl = DslTool.ApplyDsl(sessionId, """
+            domain Test
+            Customer: entity { orders: many Order }
+            Order: entity { customer: Customer }
+            Invoice: entity { }
+            """);
+        await Assert.That(dsl.Success).IsTrue();
+
+        var custResult = RuntimeTool.CreateInstance(sessionId, "Customer", "{}");
+        await Assert.That(custResult.Success).IsTrue();
+        var invResult = RuntimeTool.CreateInstance(sessionId, "Invoice", "{}");
+        await Assert.That(invResult.Success).IsTrue();
+
+        McpSessionStore.TryGet(sessionId, out var st);
+        var custId = st.InstanceMap.First(kvp => kvp.Value.Entity.Name == "Customer").Key;
+        var invId = st.InstanceMap.First(kvp => kvp.Value.Entity.Name == "Invoice").Key;
+
+        // Customer → Invoice via "orders" (Invoice is not Order)
+        var link = RuntimeTool.LinkInstances(sessionId, custId, "orders", invId);
+        await Assert.That(link.Success).IsFalse();
+        await Assert.That(link.Message).Contains("connects");
+    }
+
+    [Test]
+    public async Task LinkInstances_ReversedEnds_Fails() {
+        var (sessionId, _) = McpSessionStore.Create("Test");
+        var dsl = DslTool.ApplyDsl(sessionId, """
+            domain Test
+            Customer: entity { orders: many Order }
+            Order: entity { customer: Customer }
+            """);
+        await Assert.That(dsl.Success).IsTrue();
+
+        var custResult = RuntimeTool.CreateInstance(sessionId, "Customer", "{}");
+        await Assert.That(custResult.Success).IsTrue();
+        var orderResult = RuntimeTool.CreateInstance(sessionId, "Order", "{}");
+        await Assert.That(orderResult.Success).IsTrue();
+
+        McpSessionStore.TryGet(sessionId, out var st);
+        var custId = st.InstanceMap.First(kvp => kvp.Value.Entity.Name == "Customer").Key;
+        var orderId = st.InstanceMap.First(kvp => kvp.Value.Entity.Name == "Order").Key;
+
+        // Pass order as source, customer as target — reversed for directed "orders" link
+        var link = RuntimeTool.LinkInstances(sessionId, orderId, "orders", custId);
+        await Assert.That(link.Success).IsFalse();
+        await Assert.That(link.Message).Contains("reversed");
+    }
+
+    [Test]
+    public async Task LinkInstances_MissingSource_Fails() {
+        var (sessionId, _) = McpSessionStore.Create("Test");
+        DslTool.ApplyDsl(sessionId, "domain T A: entity { bs: many B } B: entity { a: A }");
+        var bResult = RuntimeTool.CreateInstance(sessionId, "B", "{}");
+        await Assert.That(bResult.Success).IsTrue();
+
+        McpSessionStore.TryGet(sessionId, out var st);
+        var bId = st.InstanceMap.First(kvp => kvp.Value.Entity.Name == "B").Key;
+
+        var link = RuntimeTool.LinkInstances(sessionId, "nonexistent-id", "bs", bId);
+        await Assert.That(link.Success).IsFalse();
+        await Assert.That(link.Message).Contains("not found");
     }
 }

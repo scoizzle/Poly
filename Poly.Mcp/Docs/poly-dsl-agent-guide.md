@@ -321,7 +321,13 @@ against the target entity; reverse-side / self-rel / ManyToMany / OneToOne rejec
 - `Rel exists` on `many` is allowed (non-empty check).
 - Cross-entity reads (path-prefix, exists, where) are legal in policies, require, and assign RHS.
 - Cross-entity writes (nav path as assign target) are banned.
-- **Related policies are authoring-complete** — they parse, apply, and export correctly. To-one path-prefix, `Rel exists`, `Rel where`, and Q3′ quantifiers (`any`/`all`/`none`/`count`) are all **runtime-evaluable** via `EvaluatePolicy` when the instance has been added to a store with linked targets (e.g. `create_instance` + `link_instances` + `invoke_action`). The standalone `evaluate_policy`/`simulate_policy` MCP tools create instances without a store and can only evaluate local property expressions — cross-entity Q3′ evaluation through store-linked traversal requires the full instance pipeline.
+- **Related policies are authoring-complete and runtime-evaluable** — they parse, apply, and export correctly. To-one path-prefix, `Rel exists`, `Rel where`, and Q3′ quantifiers (`any`/`all`/`none`/`count`) are all **runtime-evaluable** via `evaluate_policy` when the instance has been added to a store with linked targets.
+
+  **Dual evaluation path:**
+  - `evaluate_policy(age=…)` or `evaluate_policy(properties=…)` → standalone, no store, evaluates local expressions only.
+  - `create_instance` → `link_instances(relationshipName=…)` → `evaluate_policy(entityName, policyName, instanceId=sourceId)` → **store-attached**, resolves cross-entity expressions (path-prefix, exists, where, Q3′ quantifiers) against linked targets.
+
+  For agent workflows: use the `instanceId` path when the policy reads related data.
 
 **Shipped in the current product surface:**
 - Arithmetic (`+`, `-`, `*`, `/`) in expressions
@@ -365,7 +371,7 @@ and lowering pipeline but are **not yet authorable in product DSL**:
 | `if (expr) { … } else if … else { … }` | action, entry, exit |
 
 The following effects exist in the runtime library but have **no DSL syntax** yet:
-- **link / unlink**: Connect existing instances. **Product path uses `create in Rel { ... }`** for graph writes instead (or `create` with `RelationshipName`). Link/Unlink remain available through the `DomainInstanceStore` library API for test code.
+- **link / unlink**: Connect existing instances. The MCP `link_instances` tool provides public access to `DomainInstanceStore.Link` with relationship + entity-type validation at the tool boundary. **DSL has no `link` keyword** — the product graph-write path for spawn-and-wire remains `create in Rel { … }` (or `create` with `RelationshipName`). `unlink_instances` deferred. Library API (`DomainInstanceStore.Link`/`Unlink`) remains available for test code.
 - **TransitionRelationship**: IR exists but **not executed at runtime** — do not use.
 
 > **Note:** `delete` performs a **soft-delete** — it sets the `IsDeleted` flag on the current instance. Any subsequent `invoke_action` on a deleted instance is refused. This is not a typed mass-delete.

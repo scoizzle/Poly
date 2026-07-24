@@ -46,19 +46,20 @@ MCP / direct API as thin consumers
 | 12 | **Q1''''' hygiene** | query §13 | **Complete** `514e21c` |
 | 13 | **Q1'''''' Rel exists fix** | query §14 | **Complete** `25a79ec` — N1 nav names accepted for `Rel exists`; goldens green |
 | 14 | **Q3′ collection quantifiers** | query · `bb5032b` | **Complete** — `any`/`all`/`none`/`count` DSL + analysis + store-aware eval |
-| 15 | ▶ **Q3′ residuals** | query **[§17](dsl-query-surface.md)** · [`qe-README`](simple-agent-tasks/qe-README.md) | **Open** — R0–R4 code in tree; honesty gate (no invent `link_instances`; guide/`instanceId` alignment) before commit |
-| 16 | Q4 aggregates / to-one RT eval gaps | query | **Pull** |
-| 17 | E3 / effect-micro / L\* / events | effect · expansion · phase3 §6d | **Pull / post–P3 / never** |
+| 15 | **Q3′ residuals** | query · `85d28fe` · [`qe-README`](simple-agent-tasks/qe-README.md) | **Complete** — empty semantics; `evaluate_policy(instanceId=)`; MCP any e2e (library Link) |
+| 16 | **`link_instances` MCP** | query **[§18](dsl-query-surface.md)** | **Ready to commit** — golden + validation smokes + E2.1′ + guide §9 |
+| 17 | Q4 aggregates / to-one RT eval gaps | query | **Pull** |
+| 18 | E3 / effect-micro / L\* / events | effect · expansion · phase3 §6d | **Pull / post–P3 / never** |
 
 ### Agent pick (one line)
 
 ```text
-CURRENT: §17 Q3.R′ — Description + guide honesty (no invent link_instances)
-THEN:    Commit residual batch under review gate
-PULL:    Q4; production IR; E3b; L*; public link MCP only on dogfood pain
+CURRENT: Commit §18 link_instances batch (exclude demo.http / library.db)
+THEN:    Next product work
+PULL:    Q4; production IR; E3b; L*; unlink MCP
 ```
 
-**Honest product claim today:** Q1′ path-prefix / exists / where **authorable**; **Q3′ quantifiers** authorable **and** evaluable via store-linked `EvaluatePolicy` (MCP: `evaluate_policy` + `instanceId` on store-registered instances). **No public `link_instances` tool** — graph wiring is `create in Rel` / library Link. JSON policies still local-only.
+**Honest product claim today:** Q1′ path-prefix / exists / where **authorable**; **Q3′ quantifiers** authorable **and** evaluable via store-linked `EvaluatePolicy` (MCP: `create_instance` → `link_instances` → `evaluate_policy(instanceId=…)`). **DSL still no `link` keyword** — spawn-and-wire remains `create in Rel`. JSON policies still local-only.
 
 ---
 

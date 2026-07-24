@@ -100,7 +100,8 @@ The instance starts in the first defined stage (if stages exist) and is immediat
 available for action execution, policy evaluation, and stage subscriptions.
 
 Use 'invoke_action' to invoke actions on the instance, 'get_instance' to inspect its
-current state, and 'list_instances' to enumerate all instances in the session.
+current state, 'link_instances' to wire relationship edges between instances for
+cross-entity policy evaluation, and 'list_instances' to enumerate all instances.
 
 Thin wrapper around DomainEntityInstance.Create — no new runtime machinery.")]
     public static DomainToolResponse CreateInstance(
@@ -173,10 +174,128 @@ Thin wrapper around DomainEntityInstance.Create — no new runtime machinery.")]
             Message: $"Instance '{instanceId}' of entity '{entityName}' created. Stage: '{instance.CurrentStage ?? "(none)"}'.",
             SessionId: sessionId,
             Data: new { instance = snapshot },
-            Affordances: ["get_instance", "invoke_action", "list_instances"]);
+            Affordances: ["get_instance", "invoke_action", "link_instances", "list_instances"]);
     }
 
-    // ── RT.1: get_instance ─────────────────────────────────────
+    // ── RT.2: link_instances ───────────────────────────────────
+
+    /// <summary>
+    /// Links two runtime instances via a named relationship, creating an edge
+    /// in the session's instance store. Enables cross-entity policy evaluation
+    /// (e.g. Q3′ quantifiers like <c>any orders where Total > 100</c>) and
+    /// stage-subscription fan-out.
+    ///
+    /// Both instances must already exist (created via <c>create_instance</c>).
+    /// The relationship must be defined in the domain model between the entities.
+    /// Calling Link multiple times with the same arguments is idempotent.
+    ///
+    /// To evaluate a policy that reads linked targets, call
+    /// <c>evaluate_policy(instanceId=sourceId)</c> after linking.
+    /// </summary>
+    [McpServerTool(Name = "link_instances"), Description(@"Links two runtime instances via a named relationship.
+
+Both instances must already exist (created via create_instance).
+The relationship must be defined in the domain model between the source and target entities.
+
+After linking, you can evaluate cross-entity policies by passing the
+source instance's ID to evaluate_policy(instanceId=...).
+
+Idempotent: calling link_instances with the same arguments multiple times
+is safe and will not create duplicate edges.
+
+Use case — Q3′ quantifiers:
+  1. create_instance for source entity (e.g. Customer)
+  2. create_instance for target entity (e.g. Order)
+  3. link_instances with relationship name (e.g. ""orders"")
+  4. evaluate_policy(entityName, policyName, instanceId=sourceId)")]
+    public static DomainToolResponse LinkInstances(
+        [Description("Session ID")] string sessionId,
+        [Description("Instance ID of the source (owning) instance")] string sourceInstanceId,
+        [Description("Relationship name as defined in the domain (e.g. 'orders', 'loans')")] string relationshipName,
+        [Description("Instance ID of the target (owned) instance")] string targetInstanceId) {
+        if (!McpSessionStore.TryGet(sessionId, out var state))
+            return Failure_NotFound(sessionId);
+
+        if (!state.InstanceMap.TryGetValue(sourceInstanceId, out var source))
+            return new DomainToolResponse(
+                Success: false,
+                Message: $"Source instance '{sourceInstanceId}' not found.",
+                SessionId: sessionId,
+                Affordances: ["create_instance", "list_instances"]);
+
+        if (!state.InstanceMap.TryGetValue(targetInstanceId, out var target))
+            return new DomainToolResponse(
+                Success: false,
+                Message: $"Target instance '{targetInstanceId}' not found.",
+                SessionId: sessionId,
+                Affordances: ["create_instance", "list_instances"]);
+
+        if (state.InstanceStore is null)
+            return new DomainToolResponse(
+                Success: false,
+                Message: "No instance store available. Create at least one instance first.",
+                SessionId: sessionId,
+                Affordances: ["create_instance"]);
+
+        // Validate relationship exists in domain model and entity ends match
+        var relationship = state.Domain.Relationships
+            .FirstOrDefault(r => string.Equals(r.Name, relationshipName, StringComparison.Ordinal));
+        if (relationship is null)
+            return new DomainToolResponse(
+                Success: false,
+                Message: $"Relationship '{relationshipName}' not found in domain '{state.Domain.Name}'. " +
+                    $"Available: {string.Join(", ", state.Domain.Relationships.Select(r => r.Name))}.",
+                SessionId: sessionId,
+                Affordances: ["get_relationships"]);
+
+        var sourceEntityName = source.Entity.Name;
+        var targetEntityName = target.Entity.Name;
+        var sourceMatch = string.Equals(relationship.Source.TypeName, sourceEntityName, StringComparison.Ordinal);
+        var targetMatch = string.Equals(relationship.Target.TypeName, targetEntityName, StringComparison.Ordinal);
+        if (!sourceMatch || !targetMatch) {
+            // Also check reversed (target is source side of relationship)
+            var revSourceMatch = string.Equals(relationship.Source.TypeName, targetEntityName, StringComparison.Ordinal);
+            var revTargetMatch = string.Equals(relationship.Target.TypeName, sourceEntityName, StringComparison.Ordinal);
+            if (revSourceMatch && revTargetMatch)
+                return new DomainToolResponse(
+                    Success: false,
+                    Message: $"Relationship '{relationshipName}' connects '{relationship.Source.TypeName}' → '{relationship.Target.TypeName}', " +
+                        $"but the source/target instance IDs are reversed for a directed link. " +
+                        $"Pass source instance (entity '{relationship.Source.TypeName}') first, then target (entity '{relationship.Target.TypeName}').",
+                    SessionId: sessionId,
+                    Affordances: ["get_relationships", "get_entity_detail"]);
+
+            return new DomainToolResponse(
+                Success: false,
+                Message: $"Relationship '{relationshipName}' connects '{relationship.Source.TypeName}' → '{relationship.Target.TypeName}', " +
+                    $"but the provided instances are of types '{sourceEntityName}' and '{targetEntityName}'.",
+                SessionId: sessionId,
+                Affordances: ["get_relationships", "get_entity_detail"]);
+        }
+
+        try {
+            if (!McpSessionStore.TryModifyInstances(sessionId, st => {
+                st.InstanceStore!.Link(relationshipName, source, target);
+            }))
+                return Failure_NotFound(sessionId);
+        }
+        catch (Exception ex) {
+            return new DomainToolResponse(
+                Success: false,
+                Message: $"Failed to link instances: {ex.Message}",
+                SessionId: sessionId,
+                Affordances: ["get_relationships", "get_entity_detail"]);
+        }
+
+        return new DomainToolResponse(
+            Success: true,
+            Message: $"Linked '{sourceInstanceId}' → '{targetInstanceId}' via '{relationshipName}'.",
+            SessionId: sessionId,
+            Data: new { sourceInstanceId, relationshipName, targetInstanceId },
+            Affordances: ["link_instances", "evaluate_policy", "invoke_action", "list_instances"]);
+    }
+
+    // ── RT.3: get_instance ─────────────────────────────────────
 
     /// <summary>
     /// Returns a full snapshot of a runtime instance: current stage, all property values,
@@ -205,7 +324,7 @@ Thin wrapper around DomainEntityInstance.Create — no new runtime machinery.")]
             Affordances: ["invoke_action", "list_instances", "create_instance"]);
     }
 
-    // ── RT.1: list_instances ───────────────────────────────────
+    // ── RT.4: list_instances ───────────────────────────────────
 
     /// <summary>
     /// Lists all runtime instances in the session, optionally filtered by entity name.
@@ -238,7 +357,7 @@ Thin wrapper around DomainEntityInstance.Create — no new runtime machinery.")]
                 : ["create_instance"]);
     }
 
-    // ── RT.2: invoke_action ─────────────────────────────────────
+    // ── RT.5: invoke_action ─────────────────────────────────────
 
     /// <summary>
     /// Calls an action on a runtime instance. The action is resolved from the

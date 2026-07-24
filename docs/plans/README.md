@@ -14,9 +14,9 @@ Architectural rationale → **`docs/decisions/`**. Module maps → **`Poly/*/REA
 | [**Infrastructure pass — NEXT**](infrastructure-pass-NEXT.md) | Groups 1–5 **Done** under current bar; pull production IR / Bar B — [task list](infrastructure-pass-task-list.md) |
 | [**MCP Phase 3 + RT + SA**](v2-to-v3/mcp-phase3-oracle-surface.md) | Phase 3 + RT + SA MVP **done**; residuals pull |
 | [**Effect surface completeness**](v2-to-v3/effect-surface-completeness.md) | Usefulness track — IR/DSL/MCP effect parity (delete, link, invoke, …) |
-| [**DSL query surface**](v2-to-v3/dsl-query-surface.md) | Q1′ + **Q3′ shipped**; residual batch **§17** honesty gate before commit |
+| [**DSL query surface**](v2-to-v3/dsl-query-surface.md) | Q1′ + **Q3′ shipped**; **§18** `link_instances` ready to commit |
 | [**MCP dogfood orchestrator**](v2-to-v3/mcp-dogfood-orchestrator.md) | Dogfood — [report 1](v2-to-v3/agent-summaries/dogfood/DOGFOOD-REPORT-20260718.md) · [report 2](v2-to-v3/agent-summaries/dogfood/DOGFOOD-REPORT-2-20260718.md) |
-| [**Simple-agent queue (`qe-*`)**](v2-to-v3/simple-agent-tasks/qe-README.md) | **Primary pick** — §17 Q3.R′ honesty (no invent `link_instances`) |
+| [**Simple-agent queue (`qe-*`)**](v2-to-v3/simple-agent-tasks/qe-README.md) | **§18 Q3.L ready** — commit link tool (exclude demo drift) |
 | [**Simple-agent queue (`vs-*`)**](v2-to-v3/simple-agent-tasks/vs-README.md) | Historical M2 vertical-slice tasks — **done**; do not reopen |
 | [**MCP tool-surface expansion**](v2-to-v3/mcp-tool-surface-expansion.md) | Backlog §0 — RT next; pull-only after |
 | [**Vertical-slice finish plan**](v2-to-v3/vertical-slice-finish-plan.md) | Product path status; M2 **Done**; post-M2 calendar |

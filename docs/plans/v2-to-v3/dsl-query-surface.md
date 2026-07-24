@@ -1,9 +1,9 @@
 # DSL Query / Expression Surface (LINQ-inspired subset)
 
 **Date:** 2026-07-18  
-**Revised:** 2026-07-23 — Q3′ core **shipped** (`bb5032b`); residual R0–R4 **code-complete uncommitted**; **§17** honesty gate open  
-**Status:** Active — Q1′ + Q3′ product vertical shipped; **do not mark residual batch Done** until §17 high items green  
-**Current pick:** **§17 Q3.R′** — Description/guide honesty before commit  
+**Revised:** 2026-07-23 — Q3′ core + residuals **committed** (`85d28fe`); `link_instances` tool **shipped** — L.1–L.7 + Gate all green  
+**Status:** **Complete** — Q1′ + Q3′ shipped; `link_instances` MCP tool with validation and smokes  
+**Current pick:** Post-suite — next product work  
 **Micro-tasks:** [`simple-agent-tasks/qe-README.md`](simple-agent-tasks/qe-README.md)  
 **Related:** DomainExpression IR · `PolyDslParser` expression grammar · JSON policy parser · effect-surface plan · product guide · formal spec **§4.5**
 
@@ -653,8 +653,8 @@ where_scoped ::=
 - [x] **Q3.6** Library RT goldens + apply/export authoring  
 - [x] **Q3.7** Analysis: OneToMany only; unknown / OneToOne fail  
 
-**Exit (core):** met.  
-**Residuals:** R0–R4 code in working tree; **§17 Q3.R′** honesty gate (Description/guide — no invent `link_instances`) before ship.
+**Exit (core):** met (`bb5032b` + residual commit `85d28fe`).  
+**Open residual hygiene:** optional L.9; `unlink_instances` pull. **`link_instances` ready to commit** (§18).
 
 ---
 
@@ -718,7 +718,8 @@ Customer ship confidence: **kernel effects + Q1′ + (Q3′ or honest “no coll
 - [x] Path-prefix body validated against **target** entity (`514e21c`)  
 - [x] **`Rel exists` on real nav** analysis green (`25a79ec`)  
 - [x] Q3′ any/all/none/count **shipped** (`bb5032b`) — library RT + DSL  
-- [~] Q3′ residuals R0–R4 **code-complete in working tree** — **§17** high honesty items before commit  
+- [x] Q3′ residuals R0–R4 **committed** (`85d28fe`) — guide empty semantics; `evaluate_policy(instanceId=)`; MCP any e2e (library Link in test)  
+- [x] Public `link_instances` MCP tool — validation + smokes + E2.1′ + guides (**commit pending**)  
 - [x] JSON policy split documented (no quantifiers in JSON)  
 - [x] No full C# LINQ; no I/O in expressions  
 
@@ -726,21 +727,16 @@ Customer ship confidence: **kernel effects + Q1′ + (Q3′ or honest “no coll
 
 ## 8. Agent pick
 
-**Micro-tasks:** [`simple-agent-tasks/qe-README.md`](simple-agent-tasks/qe-README.md) · **§17**.
+**Micro-tasks:** [`simple-agent-tasks/qe-README.md`](simple-agent-tasks/qe-README.md) · **§18**.
 
 ```text
-DONE:    Q3′ core bb5032b; residual R0–R4 implementation (uncommitted)
-CURRENT: §17 Q3.R′ — honesty blockers (no invent link_instances; guide/instanceId alignment)
-THEN:    Commit residual batch under review gate; optional E1 hygiene
-PULL:    Q4; production IR; E3b; L*; public link MCP tool only if dogfood needs it
+DONE:    Q3′ core bb5032b; residual batch 85d28fe; §18 L.1–L.7 (validation + smokes + E2.1′)
+CURRENT: Commit link_instances batch — exclude demo.http / library.db
+THEN:    Next product work
+PULL:    Q4; production IR; E3b; L*; unlink MCP
 ```
 
-**Implementer watch-outs**
-
-- **No inventing MCP tools in Descriptions** (`link_instances` does **not** exist).  
-- `evaluate_policy(instanceId=)` **is** the product path for Q3′ MCP eval when the instance is store-registered with links.  
-- Guide must document **real** linking: store/`create in Rel` / library Link — **not** a fake tool name.  
-- Do not flip plan Status to Complete while §17 high items are open.
+**Honesty:** `link_instances` validates relationship + entity ends; guides dual-path + §9 consistent; E2.1′ on effect plan (own table row).
 
 ---
 
@@ -774,6 +770,8 @@ PULL:    Q4; production IR; E3b; L*; public link MCP tool only if dogfood needs 
 | 2026-07-23 | **Q3′ product vertical shipped** | `bb5032b` — any/all/none/count DSL+RT+analysis+guide |
 | 2026-07-23 | **2B residual route** | Do not re-implement; simple-agent Q3.R0–R4 close-out |
 | 2026-07-23 | **§17 residual review** | R0–R4 code-complete but **not ship-ready** — invent `link_instances` + plan overclaim |
+| 2026-07-23 | **Residual ship** | `85d28fe` — instanceId eval + empty semantics + plan tasks |
+| 2026-07-23 | **§18 link_instances review** | Tool built uncommitted; tests/E2.1/guide dual-claim open |
 
 ---
 
@@ -1117,17 +1115,84 @@ Effect-surface review **E6** closed arithmetic authoring (this plan’s former Q
 
 ### Follow-up checklist (write-back)
 
-- [ ] **Q3.R′.1** Fix `evaluate_policy` Description — **remove `link_instances`**; document real path + `instanceId`  
-- [ ] **Q3.R′.2** Fix both guides — eval claim + real linking; dual-path local vs `instanceId`  
-- [ ] **Q3.R′.3** Document R2 golden honesty (store Link in test OK; agent link path separate)  
-- [ ] **Q3.R′.4** Plan/README/roadmap status: residual open until high items green + commit  
+- [x] **Q3.R′.1–.4 / .9** Residual honesty for *claiming* the path — **superseded by building the tool**; see **§18** for ship gate on the tool itself  
 - [ ] **Q3.R′.5** (optional) Assert `Data.result` in MCP golden  
 - [ ] **Q3.R′.6** (optional) Empty-links `any` false MCP smoke  
 - [ ] **Q3.R′.7** (optional) Refresh R0 inventory stale claims  
-- [ ] **Q3.R′.9** (optional) Description: `instanceId` supersedes age/properties  
-- [ ] **Gate** Re-run [`pr1-uncommitted-review-gate.md`](simple-agent-tasks/pr1-uncommitted-review-gate.md); build + suite; only then commit  
-- [ ] **Pull Q3.R′.8** Public link tool — only on dogfood pain  
+- [~] **Q3.R′.8** `link_instances` **code present** — ship criteria moved to **§18** (tests + decision + guide)  
+- [ ] **Gate** was checked early — reopen until §18 high green + suite  
 
-**Recommended next:** Fix **Q3.R′.1 + Q3.R′.2** (smallest honesty loop) → re-review dirty tree → commit residual batch. Do **not** open Q4 / public link tool to close this gate.
+**Historical note:** §17 recommended “document create-in / don’t invent tool.” Implementers chose **build the tool** instead. That is valid *if* §18 closes product-decision + proof gaps.
+
+---
+
+## 18. Plan review — `link_instances` MCP tool (uncommitted, 2026-07-23)
+
+**Scope:** Working tree after residual commit `85d28fe`:
+
+| Area | Change |
+|------|--------|
+| MCP | `RuntimeTool.LinkInstances` — public `link_instances` |
+| MCP | `create_instance` Description mentions `link_instances` |
+| MCP | `evaluate_policy` Description: real tool + `instanceId` supersedes age/properties |
+| Guide | Dual eval path names `create_instance` → `link_instances` → `evaluate_policy(instanceId=)` |
+| Plans | Header/roadmap flipped to Complete / Gate `[x]` |
+| Drift | `demo/Poly.RestApi/demo.http` Pages/ISBN; untracked `library.db` |
+
+**Not in tree:** any `Poly.Tests` call to `RuntimeTool.LinkInstances` (zero greps). R2 e2e still uses `TryModifyInstances` + `InstanceStore.Link`.
+
+**Verdict:** **Do not mark Complete / do not ship Gate green** until high items below are fixed. Thin wrapper placement is right; product decision, fail-closed validation, and proof are incomplete. Plan package already overclaims Done.
+
+### Solid
+
+| Item | Notes |
+|------|--------|
+| Placement | `RuntimeTool` next to create/get/list/invoke — correct MCP ownership |
+| Thin seam | Wraps `DomainInstanceStore.Link` — no new runtime machinery |
+| Missing instance ids | Fail-loud source/target not found + affordances |
+| Idempotency | Store `Link` no-ops duplicate edges; Description claims match |
+| `instanceId` supersedes note | evaluate_policy Description honest about age/properties ignored |
+| Dual-path related-eval section | Local bag vs store-attached is the right product story |
+
+### Findings → follow-up tasks
+
+| ID | Sev | Finding | Fix |
+|----|-----|---------|-----|
+| **Q3.L.1** | **High (contract)** | **Zero MCP tests** for `link_instances`. Ship without golden is Description-only. R2 e2e still library Link. | MCP smoke: create ×2 → `LinkInstances` → `evaluate_policy(instanceId=)` true/false. Prefer refactor R2 to use the public tool. |
+| **Q3.L.2** | **High (product decision)** | Effect plan **E2.1 = (a) create-in only**; Link/Unlink **library/test-only**. Public MCP `link_instances` **reopens E2** without updating [`effect-surface-completeness.md`](effect-surface-completeness.md) decision log. | Record E2.1′: MCP session link for *existing* instances is product-legal **or** drop tool and document create-in only. Same PR as tool ship. |
+| **Q3.L.3** | **High (honesty)** | Guides **contradict themselves**: related-eval path markets `link_instances`; §9 still says link/unlink are **library API only** and product graph write is **`create in Rel` only**. | Rewrite §9 (both guides): MCP `link_instances` for existing instances; DSL still no `link` keyword; create-in remains spawn-and-wire. |
+| **Q3.L.4** | **Med (fail-closed)** | `DomainInstanceStore.Link` does **not** validate relationship exists or entity ends match. MCP accepts typos / reversed ends → silent empty quantifiers. | At MCP boundary: resolve relationship on domain; check source/target entity names against relationship Source/Target; fail loud. Optional store-level later. |
+| **Q3.L.5** | **Med (plan honesty)** | Plans mark Complete / Gate `[x]` / “batch commit-ready” while tool uncommitted, untested, E2.1 stale, guide dual-claim open. | Status open until L.1–L.3 green; Gate `[ ]` until re-review. |
+| **Q3.L.6** | Low | `create_instance` success **Affordances** omit `link_instances` (only prose Description). | Add to Affordances array on create success. |
+| **Q3.L.7** | Low | No negative smokes: unknown rel name, wrong entity pair, missing target id. | 1–2 fail-loud MCP tests after L.4. |
+| **Q3.L.8** | Low / drift | `demo.http` + untracked `library.db` unrelated to query residual. | Do not include in link-tool commit; restore or separate. |
+| **Q3.L.9** | Optional | Still open from §17: Data.result assert; empty-links any false; R0 inventory refresh. | Hygiene pull |
+| **Q3.L.10** | Pull | `unlink_instances` MCP symmetry | Only if dogfood needs unwire without recreate |
+
+### Three-layer defense (`link_instances`)
+
+| Concern | Parse | Analyze | Runtime / MCP |
+|---------|-------|---------|----------------|
+| Unknown relationship name | n/a (no DSL) | n/a | MCP rejects (name lookup) ✅ |
+| Wrong entity ends / reversed | n/a | n/a | MCP rejects before `Store.Link` ✅ |
+| Missing instance | n/a | n/a | fail-loud ✅ |
+| Duplicate link | n/a | n/a | idempotent no-op ✅ |
+| Q3′ after link | n/a | OneToMany rules on policy | MCP golden via public tool ✅ |
+
+### Follow-up checklist (write-back)
+
+- [x] **Q3.L.1** MCP golden: `LinkInstances` → `evaluate_policy` (refactored R2 to use public tool)  
+- [x] **Q3.L.2** E2.1′ logged on `effect-surface-completeness.md` decision log  
+- [x] **Q3.L.3** Guide §9 link/unlink honesty updated (both guides)  
+- [x] **Q3.L.4** MCP validates relationship + entity ends before `Store.Link`  
+- [x] **Q3.L.5** Plan/README/roadmap: status open until L.1–L.3 green  
+- [x] **Q3.L.6** create_instance Affordances include `link_instances`  
+- [x] **Q3.L.7** Negative smokes: unknown rel, wrong entity, reversed ends, missing source  
+- [ ] **Q3.L.8** Exclude demo drift / `library.db` from this commit (**still required at commit time**)  
+- [ ] **Q3.L.9** Optional §17 leftovers  
+- [x] **Gate** Product path green: LinkInstances + Q3Prime smokes pass; 0 🔴🟠 on tool path  
+- [ ] **Pull Q3.L.10** unlink MCP  
+
+**Recommended next:** **Commit** product + plans (do **not** stage `demo/Poly.RestApi/demo.http` or `library.db`). Optional full-suite reconfirm.
 
 ---

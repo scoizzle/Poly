@@ -69,7 +69,7 @@ internal static class McpSessionStore {
                 : preferredSessionId;
 
             var domain = DomainFactory.Create(domainName);
-            var analysis = DomainModelAnalyzer.Analyze(domain);
+            var analysis = DomainModelAnalyzer.Analyze(domain, McpAuthoring.Context);
             var state = new McpSessionState(domain, analysis, Revision: 0);
             Sessions[sessionId] = state;
             return (sessionId, state);

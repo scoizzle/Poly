@@ -7,8 +7,7 @@ namespace Poly.DomainModeling.Analysis;
 /// Analysis pass that produces <see cref="StorageMappingMetadata"/> —
 /// storage mapping structure: columns, navigations, FKs, keys, table names.
 ///
-/// Wraps <see cref="StorageAnalyzer"/> as a pass, consuming
-/// <see cref="OwnershipAggregateMetadata"/> and <see cref="EffectTopologyMetadata"/>
+/// Consumes <see cref="OwnershipAggregateMetadata"/> and <see cref="EffectTopologyMetadata"/>
 /// from prior passes.
 /// Depends on <see cref="OwnershipAggregatePass"/> and <see cref="EffectTopologyPass"/>.
 /// 
@@ -18,9 +17,10 @@ namespace Poly.DomainModeling.Analysis;
 internal sealed class StoragePass : INodeAnalyzer {
     public const string Id = "StoragePass";
     public string PassName => Id;
-    public string[] Dependencies => [];
-    // Topology and aggregate metadata are inherited from the domain pipeline
-    // via the priorAnalysis argument passed to the codegen pipeline.
+    public string[] Dependencies => [EffectTopologyPass.Id, OwnershipAggregatePass.Id];
+    // Note: standalone usage (new StoragePass() + priorAnalysis) bypasses the
+    // AnalyzerBuilder and thus avoids the Dependencies check. The runtime
+    // fallback to _analysis handles that case.
 
     private readonly TypeMappingRegistry? _typeMaps;
     private readonly IReadOnlyList<IStorageConvention>? _conventions;

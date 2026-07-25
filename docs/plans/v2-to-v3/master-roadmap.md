@@ -51,11 +51,13 @@ MCP / direct API as thin consumers
 
 ```text
 DONE:    M1–M4; Q1′+Q3′+link_instances; infra IR; APM registration
-CURRENT: DAU D3.0 StoragePass fail-closed → D3 storage/transport/MCP facts ([`dau-README.md`](../simple-agent-tasks/dau-README.md))
-PULL:    Q4; dates; Bar B; dialect packs; unlink MCP; E5; D2.1–D2.3 walk unify
+CURRENT: DAU product done uncommitted — commit when asked ([`dau-README.md`](../simple-agent-tasks/dau-README.md) §16)
+PULL:    Q4; dates; Bar B; dialect packs; unlink MCP; E5; D2.1–D2.3
 ```
 
 **Honest product claim today:** Path-prefix / exists / where **and** Q3′ quantifiers are authorable **and** evaluable (store-linked `EvaluatePolicy`). MCP: `create_instance` → `link_instances` → `evaluate_policy(instanceId=…)`. DSL has **no** `link` keyword (`create in Rel` for spawn-and-wire). JSON policies still local-only. Codegen DbContext/Program via Syntax IR; `.http` still string.
+
+**Velocity risks (full project):** [`../platform-velocity-review.md`](../platform-velocity-review.md) — dual storage/transport pipeline, authoring context not on analyze, MCP metadata not projected; finish DAU D3 before packs/RestApi/E5 sprawl.
 
 ---
 

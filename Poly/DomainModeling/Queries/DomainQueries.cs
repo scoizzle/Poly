@@ -96,7 +96,9 @@ public sealed record AnalysisSummary(
     int WarningCount,
     int InfoCount,
     bool HasStructuralFailure,
-    IReadOnlyList<string> Messages
+    IReadOnlyList<string> Messages,
+    int EntityCount = 0,
+    int RelationshipCount = 0
 );
 
 /// <summary>

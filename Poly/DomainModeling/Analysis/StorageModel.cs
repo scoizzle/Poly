@@ -1,6 +1,7 @@
 using Poly.DomainModeling.Constraints;
+using Poly.DomainModeling.Lowering;
 
-namespace Poly.DomainModeling.Lowering;
+namespace Poly.DomainModeling.Analysis;
 
 // ═══════════════════════════════════════════════════════════════
 // Storage mapping — persistence conventions applied to domain facts

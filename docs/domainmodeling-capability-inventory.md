@@ -142,16 +142,16 @@ Registered in `UseDomainModelAnalysisPipeline()` (`DomainModelAnalyzer.cs`):
 | Authoring suggestions + C# entity IR | `AuthoringSuggestionAnalyzer`, `EntitySyntaxPass` | ✅ |
 | Cycle detection | `CrossReferencePass` — entity dependency graph | ✅ domain pipeline · pack/coupling surface — **do not delete as unused** |
 
-**Migration in flight:** [`plans/domain-analysis-unification.md`](plans/domain-analysis-unification.md) (`dau-*`). APM finished **registration**; ownership of algorithms, walk unification, and always-on storage/transport are **DAU**. Thin `*Pass` → `Lowering/*Analyzer` bridges are temporary.
+**Migration complete:** [`plans/domain-analysis-unification.md`](plans/domain-analysis-unification.md) (`dau-*`). Storage + Transport are now always-on domain pipeline passes. Pack refinement via `DomainAuthoringContext` conventions. Thin `*Pass` → `Lowering/*Analyzer` bridges eliminated.
 
 ### 5.2 Codegen pipeline — `DslCompiler.GenerateAllFiles` (today)
 
-Topology/aggregate/behavior metadata come from domain analysis (`priorAnalysis`). Storage/transport still registered on codegen today — **DAU Phase 3** moves them into domain analysis (pack-refined via `DomainAuthoringContext`). **Do not** treat Transport as dead code; packs will consume operational surfaces.
+Topology/aggregate/behavior/storage/transport metadata all come from domain analysis (`priorAnalysis`). Codegen is emit-first — no second fact world for domain metadata. Pack storage conventions refine via narrow `StoragePass` fallback in `DslCompiler` (only when conventions differ from domain pipeline defaults). **Do not** treat Transport as dead code; packs will consume operational surfaces.
 
 | Pass | Output | Domain fact? | Status |
 |------|--------|--------------|--------|
-| `StoragePass` | `StorageMappingMetadata` | **Yes (shape)** + pack maps | 🟡 codegen today → **DAU D3** domain + context |
-| `TransportPass` | `TransportMetadata` | **Yes (exposable surface)** | 🟡 codegen today → **DAU D3**; keep for packs |
+| `StoragePass` | `StorageMappingMetadata` | **Yes (shape)** + pack maps | ✅ always-on domain pipeline; pack refinement via `DomainAuthoringContext` |
+| `TransportPass` | `TransportMetadata` | **Yes (exposable surface)** | ✅ always-on domain pipeline; keep for packs |
 | Pack `PassRegistry` | storage enrichment | Pack-specific | ✅ stays pack-attached; prefer prior domain result |
 
 Fail-closed: missing storage (db/all); missing behavior/aggregate (all) → `InvalidOperationException` in `DslCompiler`.
@@ -236,7 +236,7 @@ Shipped highlights: entities, properties, constraints, enums, navs, stages, acti
 | Capability | Notes | Status |
 |-----------|--------|--------|
 | **Analysis pipeline merge (APM)** | Registration of topo/agg/beh/crossref on domain pipeline | ✅ **Done** |
-| **Domain analysis unification (DAU)** | Finish ownership, unify walks, storage/transport in Analysis | ⬜ [`plans/domain-analysis-unification.md`](plans/domain-analysis-unification.md) · [`dau-*`](plans/simple-agent-tasks/dau-README.md) |
+| **Domain analysis unification (DAU)** | Storage/transport always-on, authoring context, emit-first | ✅ [`plans/domain-analysis-unification.md`](plans/domain-analysis-unification.md) · [`dau-*`](plans/simple-agent-tasks/dau-README.md) |
 | CrossReference / coupling surface | Cycle + graph facets | ✅ registered · pack-ready — don’t delete |
 | Transport in domain analysis | Exposable surface + packs | ⬜ DAU D3 (not “delete unused”) |
 | Bar B full string oracle | Anonymous-object Syntax needed | ⬜ Pull |

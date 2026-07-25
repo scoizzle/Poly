@@ -1,6 +1,4 @@
-using Poly.DomainModeling.Analysis;
-
-namespace Poly.DomainModeling.Lowering;
+namespace Poly.DomainModeling.Analysis;
 
 // ═══════════════════════════════════════════════════════════════
 // Transport surface — protocol conventions applied to domain facts

@@ -12,7 +12,8 @@ Architectural rationale → **`docs/decisions/`**. Module maps → **`Poly/*/REA
 | Plan | Role |
 |------|------|
 | [**Master roadmap**](v2-to-v3/master-roadmap.md) | Milestone index + one-line agent pick |
-| [**Domain analysis unification**](domain-analysis-unification.md) | **Primary** — D3 next (§12 design-integration follow-ups) · [`dau-*`](simple-agent-tasks/dau-README.md) |
+| [**Domain analysis unification**](domain-analysis-unification.md) | **Product complete** (uncommitted) — §16 · [`dau-*`](simple-agent-tasks/dau-README.md) |
+| [**Platform velocity review**](platform-velocity-review.md) | Full-project pain points for planned/future features (2026-07-25) |
 | [**Analysis pipeline merge**](analysis-pipeline-merge.md) | **Complete** (registration only) — predecessor to DAU · [`apm-*`](simple-agent-tasks/apm-README.md) |
 | [**Capability inventory**](../domainmodeling-capability-inventory.md) | What ships (reference, not a queue) |
 | [**Effect surface completeness**](v2-to-v3/effect-surface-completeness.md) | Effects track — kernel shipped; dogfood / E5 / E6.1 pull |
@@ -27,7 +28,7 @@ Architectural rationale → **`docs/decisions/`**. Module maps → **`Poly/*/REA
 
 | Queue | Role |
 |-------|------|
-| [**`dau-*` (domain analysis unification)**](simple-agent-tasks/dau-README.md) | **Primary** — D0→D1 wrappers→D2 walks→D3 storage/transport→D4 |
+| [**`dau-*` (domain analysis unification)**](simple-agent-tasks/dau-README.md) | **Complete** — D0→D4 storage/transport; 1618 green |
 | [**`apm-*` (analysis pipeline merge)**](simple-agent-tasks/apm-README.md) | **Complete** — registration predecessor; do not reopen |
 | [**`qe-*` (query/effect)**](v2-to-v3/simple-agent-tasks/qe-README.md) | **Complete** — do not reopen Q0–Q3′; optional hygiene only |
 | [**`vs-*` (vertical slice)**](v2-to-v3/simple-agent-tasks/vs-README.md) | Historical M2 — **done**; do not reopen |

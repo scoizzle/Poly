@@ -102,7 +102,22 @@ internal sealed record AnalysisData(
     [property: JsonPropertyName("infoCount")] int InfoCount,
     [property: JsonPropertyName("hintCount")] int HintCount,
     [property: JsonPropertyName("hasStructuralFailure")] bool HasStructuralFailure,
-    [property: JsonPropertyName("messages")] IReadOnlyList<string> Messages
+    [property: JsonPropertyName("messages")] IReadOnlyList<string> Messages,
+    [property: JsonPropertyName("entityCount")] int EntityCount = 0,
+    [property: JsonPropertyName("relationshipCount")] int RelationshipCount = 0,
+    [property: JsonPropertyName("rootEntityNames")] IReadOnlyList<string>? RootEntityNames = null,
+    [property: JsonPropertyName("createInCount")] int CreateInCount = 0,
+    [property: JsonPropertyName("subscriptionCount")] int SubscriptionCount = 0,
+    [property: JsonPropertyName("actionSummary")] IReadOnlyList<ActionFact>? ActionSummary = null,
+    [property: JsonPropertyName("hasStorageMapping")] bool HasStorageMapping = false,
+    [property: JsonPropertyName("hasTransport")] bool HasTransport = false
+);
+
+internal sealed record ActionFact(
+    [property: JsonPropertyName("entityName")] string EntityName,
+    [property: JsonPropertyName("actionName")] string ActionName,
+    [property: JsonPropertyName("stageName")] string? StageName,
+    [property: JsonPropertyName("resultType")] string? ResultTypeName
 );
 
 // ── Tool classes ───────────────────────────────────────────────
@@ -227,9 +242,10 @@ internal sealed class QueryTool {
     }
 
     /// <summary>
-    /// Returns the domain's analysis diagnostics: error/warning/info counts and the most important messages.
+    /// Returns analysis diagnostics and structured domain facts for the current domain state.
+    /// Structured facts (roots, topology, action names) are derived from LatestAnalysis metadata.
     /// </summary>
-    [McpServerTool(Name = "get_domain_analysis"), Description("Returns analysis diagnostics for the current domain state (errors, warnings, info).")]
+    [McpServerTool(Name = "get_domain_analysis"), Description("Returns analysis diagnostics and structured domain facts (entity structure, topology, actions) for the current domain state.")]
     public static DomainToolResponse GetDomainAnalysis(
         [Description("Session ID")] string sessionId) {
         if (!McpSessionStore.TryGet(sessionId, out var state))
@@ -249,9 +265,48 @@ internal sealed class QueryTool {
         var hintCount = state.LatestAnalysis.Diagnostics
             .Count(d => d.Severity == DiagnosticSeverity.Hint);
 
+        // ── Structured facts from LatestAnalysis metadata ──
+
+        var entityCount = state.Domain.Types.OfType<Entity>().Count();
+        var relationshipCount = state.Domain.Relationships.Count;
+
+        // Root entity names from EntityStructureMetadata (produced by EntityStructureAnalyzer)
+        var rootEntityNames = state.Domain.Types.OfType<Entity>()
+            .Select(e => (Entity: e, Structure: state.LatestAnalysis.GetMetadata<EntityStructureMetadata>(e)))
+            .Where(t => t.Structure?.IsRoot == true)
+            .Select(t => t.Entity.Name)
+            .ToList();
+
+        // Topology summary from EffectTopologyMetadata
+        var topology = state.LatestAnalysis.GetMetadata<EffectTopologyMetadata>(state.Domain)?.Topology;
+        var createInCount = topology?.CreateInRelations.Count ?? 0;
+        var subscriptionCount = topology?.Subscriptions.Count ?? 0;
+
+        // Action names from BehaviorMetadata
+        var behavior = state.LatestAnalysis.GetMetadata<BehaviorMetadata>(state.Domain)?.Behavior;
+        var actionSummary = behavior?.Entities
+            .SelectMany(e => e.Actions.Select(a => new ActionFact(
+                EntityName: e.Name,
+                ActionName: a.Name,
+                StageName: a.StageName,
+                ResultTypeName: a.ResultTypeName)))
+            .ToList();
+
+        // Infrastructure booleans
+        var hasStorage = state.LatestAnalysis.GetMetadata<StorageMappingMetadata>(state.Domain) is not null;
+        var hasTransport = state.LatestAnalysis.GetMetadata<TransportMetadata>(state.Domain) is not null;
+
         var data = new AnalysisData(
             summary.ErrorCount, summary.WarningCount, summary.InfoCount, hintCount,
-            summary.HasStructuralFailure, summary.Messages
+            summary.HasStructuralFailure, summary.Messages,
+            EntityCount: entityCount,
+            RelationshipCount: relationshipCount,
+            RootEntityNames: rootEntityNames.Count > 0 ? rootEntityNames : null,
+            CreateInCount: createInCount,
+            SubscriptionCount: subscriptionCount,
+            ActionSummary: actionSummary?.Count > 0 ? actionSummary : null,
+            HasStorageMapping: hasStorage,
+            HasTransport: hasTransport
         );
 
         var message = summary.ErrorCount > 0
@@ -778,7 +833,7 @@ This safety net prevents silent no-ops from empty stage copies.")]
         var preRevision = snapshot.Revision;
 
         var outcome = McpSessionStore.Evolve(sessionId, domain => {
-            var result = new DomainEvolution(domain).Evolve();
+            var result = new DomainEvolution(domain, McpAuthoring.Context).Evolve();
             result = mutate(result);
             return result.Apply();
         });
@@ -1032,7 +1087,7 @@ internal sealed class PolicyTool {
 
         // Atomic read-modify-write through McpSessionStore.Evolve.
         var outcome = McpSessionStore.Evolve(sessionId, domain =>
-            new DomainEvolution(domain).Evolve()
+            new DomainEvolution(domain, McpAuthoring.Context).Evolve()
                 .AddPolicyToEntity(entityName, policyName, domainExpr)
                 .Apply());
 
@@ -1264,7 +1319,7 @@ for exploration and repair.")]
 
         EvolutionResult outcome;
         try {
-            outcome = new DomainEvolution(emptyDomain).Apply(changes);
+            outcome = new DomainEvolution(emptyDomain, McpAuthoring.Context).Apply(changes);
         }
         catch (Exception ex) {
             return new DomainToolResponse(

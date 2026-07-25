@@ -1,6 +1,5 @@
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
-using Poly.DomainModeling.Lowering;
 using Poly.DslCompiler;
 using Poly.Interpretation.CSharp;
 using Poly.Syntax.Nodes;
@@ -19,7 +18,9 @@ internal static class GenerationAssertions {
     /// Produces the IR CompilationUnitNode for a DbContext from the given domain.
     /// </summary>
     public static CompilationUnitNode DbContextIr(Domain domain) {
-        var storage = new StorageAnalyzer(domain).Analyze();
+        var analysis = DomainModelAnalyzer.Analyze(domain);
+        var storage = analysis.GetMetadata<StorageMappingMetadata>(domain)?.Storage
+            ?? throw new InvalidOperationException("Domain analysis did not produce StorageMappingMetadata.");
         var gen = new DbContextGenerator(domain, storage);
         return gen.GenerateCompilationUnit();
     }
@@ -28,9 +29,13 @@ internal static class GenerationAssertions {
     /// Produces the IR CompilationUnitNode for a MinimalApi program from the given domain.
     /// </summary>
     public static CompilationUnitNode MinimalApiIr(Domain domain) {
-        var storage = new StorageAnalyzer(domain).Analyze();
-        var behavior = Poly.DomainModeling.Analysis.BehaviorPass.BuildBehavior(domain);
-        var aggregate = Poly.DomainModeling.Analysis.OwnershipAggregatePass.BuildAggregate(domain, null, null);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
+        var storage = analysis.GetMetadata<StorageMappingMetadata>(domain)?.Storage
+            ?? throw new InvalidOperationException("Domain analysis did not produce StorageMappingMetadata.");
+        var behavior = analysis.GetMetadata<BehaviorMetadata>(domain)?.Behavior
+            ?? throw new InvalidOperationException("Domain analysis did not produce BehaviorMetadata.");
+        var aggregate = analysis.GetMetadata<OwnershipAggregateMetadata>(domain)?.Aggregate
+            ?? throw new InvalidOperationException("Domain analysis did not produce OwnershipAggregateMetadata.");
         var gen = new MinimalApiGenerator(domain, storageModel: storage, behaviorModel: behavior, aggregateModel: aggregate);
         return gen.GenerateCompilationUnit("TDbCtx");
     }

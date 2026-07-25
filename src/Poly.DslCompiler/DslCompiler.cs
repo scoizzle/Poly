@@ -103,7 +103,7 @@ public sealed class DslCompiler {
         var emptyDomain = new Domain(domainName, [], []);
         EvolutionResult outcome;
         try {
-            outcome = new DomainEvolution(emptyDomain).Apply(changes);
+            outcome = new DomainEvolution(emptyDomain, authoring).Apply(changes);
         }
         catch (Exception ex) {
             return Fail($"Evolution failed: {ex.Message}");
@@ -193,30 +193,33 @@ public sealed class DslCompiler {
             }
         }
 
-        // Infrastructure analysis — codegen-specific passes only.
-        // Topology, aggregate, and behavior are now produced by the domain pipeline
-        // (UseDomainModelAnalysisPipeline) and available on the analysis argument.
-        var infraPipelineBuilder = new AnalyzerBuilder()
-            .AddAnalyzer(new StoragePass(
-                typeMaps: authoring?.TypeMaps,
-                conventions: authoring?.StorageConventions,
-                analysis: analysis))
-            .AddAnalyzer(new TransportPass());
-
-        // Issue 19: Wire authoring.Passes.Build() into pipeline
-        if (authoring != null) {
-            foreach (var pass in authoring.Passes.Build())
-                infraPipelineBuilder.AddAnalyzer(pass);
-        }
-
-        var infraPipeline = infraPipelineBuilder.Build();
-        // Issue 14: Thread prior domain analysis into infra pipeline
-        var infraResult = infraPipeline.Analyze(domain, priorAnalysis: analysis, invalidatedNodes: [domain]);
-
-        // Storage model from the codegen pipeline; behavior and aggregate from domain analysis
-        var storageModel = infraResult.GetMetadata<StorageMappingMetadata>(domain)?.Storage;
+        // Infrastructure metadata — prefer domain analysis result (which already ran
+        // StoragePass + TransportPass via UseDomainModelAnalysisPipeline). Fall back
+        // to a narrow StoragePass re-run only when pack-specific type maps or
+        // conventions require refinement (e.g., Sqlite type mappings).
+        var storageModel = analysis.GetMetadata<StorageMappingMetadata>(domain)?.Storage;
         var behaviorModel = analysis.GetMetadata<BehaviorMetadata>(domain)?.Behavior;
         var aggregateModel = analysis.GetMetadata<OwnershipAggregateMetadata>(domain)?.Aggregate;
+
+        var needsInfraPipeline = (mode == CompileMode.Db || mode == CompileMode.All)
+            && (storageModel == null || authoring?.StorageConventions.Count > 0);
+
+        if (needsInfraPipeline) {
+            var infraPipelineBuilder = new AnalyzerBuilder()
+                .AddAnalyzer(new StoragePass(
+                    typeMaps: authoring?.TypeMaps,
+                    conventions: authoring?.StorageConventions,
+                    analysis: analysis));
+
+            if (authoring != null) {
+                foreach (var pass in authoring.Passes.Build())
+                    infraPipelineBuilder.AddAnalyzer(pass);
+            }
+
+            var infraPipeline = infraPipelineBuilder.Build();
+            var infraResult = infraPipeline.Analyze(domain, priorAnalysis: analysis, invalidatedNodes: [domain]);
+            storageModel = infraResult.GetMetadata<StorageMappingMetadata>(domain)?.Storage;
+        }
 
         // Fail closed — no silent re-analyze (storage, behavior, aggregate).
         if ((mode == CompileMode.Db || mode == CompileMode.All) && storageModel == null)
@@ -231,9 +234,6 @@ public sealed class DslCompiler {
                 throw new InvalidOperationException(
                     "Domain analysis did not produce aggregate metadata. Ensure OwnershipAggregatePass is registered in the domain analysis pipeline.");
         }
-
-        // TransportPass is in pipeline but unused — no consumer yet.
-        // CrossReferencePass deferred — wire when a consumer needs dependency graphs.
 
         // DbContext (mode: db or all)
         if (mode == CompileMode.Db || mode == CompileMode.All) {

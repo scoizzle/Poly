@@ -1,8 +1,8 @@
-using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Constraints;
+using Poly.DomainModeling.Lowering;
 using Poly.Syntax.Analysis;
 
-namespace Poly.DomainModeling.Lowering;
+namespace Poly.DomainModeling.Analysis;
 
 /// <summary>
 /// Builds <see cref="StorageModel"/> — storage conventions applied to

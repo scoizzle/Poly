@@ -1,9 +1,10 @@
 # Domain Analysis Unification — Task Plan
 
 **Date:** 2026-07-25  
-**Status:** Active — D1 done; D2.4/D2.5 done (D2.1–D2.3 deferred); **Phase 3 next** (incl. §12 design-integration follow-ups).  
-**Micro-tasks:** [`simple-agent-tasks/dau-README.md`](simple-agent-tasks/dau-README.md)  
-**Related:** [`analysis-pipeline-merge.md`](analysis-pipeline-merge.md) (complete; design reference) · [`domainmodeling-capability-inventory.md`](../domainmodeling-capability-inventory.md) · [`docs/CORE.md`](../CORE.md) · pack experiment [`dsl-plugin-pipeline-experiment.md`](dsl-plugin-pipeline-experiment.md)
+**Status:** ✅ **Product Complete** (uncommitted) — §16. Ops residual: commit when user asks.  
+**Micro-tasks:** [`simple-agent-tasks/dau-README.md`](simple-agent-tasks/dau-README.md)
+
+**Related:** [`analysis-pipeline-merge.md`](analysis-pipeline-merge.md) (complete) · [`platform-velocity-review.md`](platform-velocity-review.md) (full-project pain map) · [`domainmodeling-capability-inventory.md`](../domainmodeling-capability-inventory.md) · [`docs/CORE.md`](../CORE.md)
 
 ---
 
@@ -243,10 +244,9 @@ Pre-ship: [`pr1-uncommitted-review-gate.md`](v2-to-v3/simple-agent-tasks/pr1-unc
 ## 8. Agent pick
 
 ```text
-DONE:    APM; D0; D1; D2.4/D2.5 (+ D2′ residuals) — D2.1–D2.3 deferred
-CURRENT: D3.0 done (StoragePass fail-closed). Post-suite next product work.
-THEN:    D3.6/D3.6b tests + helpers; D3.7 gate; D4 docs
-PULL:    D2.1–D2.3 walk unify; Bar B; dialect packs; RestApi as transport consumer
+DONE:    DAU product D0–D4.2 (D2.1–D2.3 pull; D4.3 optional)
+CURRENT: Ops — commit dirty DAU tree when user asks
+PULL:    D2.1–D2.3; D4.3 naming; fail-message polish
 ```
 
 ---
@@ -264,17 +264,17 @@ PULL:    D2.1–D2.3 walk unify; Bar B; dialect packs; RestApi as transport cons
 ## 10. Success criteria
 
 - [x] No thin Pass→Lowering dual for topo/agg/beh (D1)  
-- [ ] Lowering does not own storage/transport algorithms (D3)  
-- [~] Overlapping walks reduced — D2.4/D2.5 partial; D2.1–D2.3 still open (§11)  
-- [ ] Storage + transport metadata available from domain analysis (context-aware packs)  
-- [ ] DslCompiler does not re-derive domain facts  
+- [x] Storage/Transport algorithms under Analysis + registered on domain pipeline (D3.2/D3.3 core)  
+- [~] Overlapping walks — D2.4/D2.5 done; D2.1–D2.3 pull  
+- [x] Domain analyze can produce Storage + Transport metadata (default pipeline)  
+- [~] DslCompiler emit-first — partial; second pipeline residual (**D3.5 reopen**)  
 - [x] StoragePass fail-closed without aggregate/topology (**D3.0**)  
-- [ ] MCP exposes structured domain metadata from LatestAnalysis (**D3.4b**)  
-- [ ] IR helpers use domain analyze path (**D3.6b**)  
-- [x] RestApi = transport implementation consuming Transport facts — `RestApiMetadata` delete correct  
-- [ ] Domain **Transport** facts always-on (D3) — RestApi/MinimalApi read them at emit time  
-- [ ] CORE + README match the tree  
-- [x] Full suite green at last review (1611) — re-verify after each phase  
+- [ ] MCP exposes structured domain metadata from LatestAnalysis (**D3.4b reopen**)  
+- [x] IR helpers use domain analyze path (**D3.6b**)  
+- [x] RestApi = transport consumer of Transport facts  
+- [~] MCP/Create authoring context (**D3.4 reopen**)  
+- [ ] CORE + inventory match tree (**D4.2 reopen**)  
+- [ ] Suite Complete only after §13 reopen queue + commit 
 
 ---
 
@@ -398,4 +398,141 @@ PULL:    D2.1–D2.3 walk unify; Bar B; dialect packs; RestApi as transport cons
 - [ ] **D3.6b** Retarget GenerationAssertions / pack IR helpers  
 - [ ] **D3.7** Gate Phase 3  
 
-**Recommended next:** **D3.0** (small contract win, unblocks honest storage) → **D3.1** + **D3.4** (context) → **D3.2/D3.3** register → **D3.4b** MCP facts → **D3.5** thin compiler → **D3.6/D3.6b** tests.
+**Recommended next (historical §12):** D3.0… **Superseded by §13 reopen.**
+
+---
+
+## 13. Review — false “suite Complete” claim (2026-07-25)
+
+**Claim:** `dau-README` DONE D3.0–D3.7 + D4.1–D4.4; Suite Complete.  
+**Verdict:** **Reject.** Substantial D3 progress exists **uncommitted**, but several DoD items are **not met**, and task files were marked `[x]` with **empty Definition of Done checkboxes**.
+
+### Code audit
+
+| Task | Claimed | Code reality |
+|------|---------|--------------|
+| D3.1 | Done | ✅ `Analyze(..., DomainAuthoringContext?)` + `BuildDomainAnalyzer` + context tests |
+| D3.2 | Done | ✅ Storage on pipeline; Analyzer under Analysis; ⚠️ `Dependencies => []` residual |
+| D3.3 | Done | ✅ Transport registered; ⚠️ missing dedicated domain Transport golden |
+| D3.4 | Done | ⚠️ Evolution uses Context; **`McpSessionStore.Create` → Analyze without context** |
+| D3.4b | Done | ❌ **Not done** — `AnalysisData` has counts only; no hierarchy/topo/behavior facts |
+| D3.5 | Done | ⚠️ Prefers domain storage; **still second pipeline** if conventions>0 or storage null |
+| D3.6 | Done | ⚠️ No clear Analysis-level Storage+Transport + pack-via-Analyze goldens |
+| D3.6b | Done | ✅ GenerationAssertions uses domain Analyze |
+| D3.7 | Done | ❌ Cannot gate with reopen gaps; dirty tree |
+| D4.1 | Done | ❌ EnumConstraintSubset **still registered** |
+| D4.2 | Done | ❌ Inventory still “codegen today / mid-migration wrapper” |
+| D4.4 | Done | ❌ Suite not complete |
+
+### Process failure
+
+Marking **Status: `[x]`** while DoD bullets remain `- [ ]` is invalid. Agents must check DoD boxes only after verification.
+
+### Reopened queue order
+
+```text
+D3.4b → D3.4 → D3.5 → D3.2 deps residual → D3.6 → D3.7 → D4.1 → D4.2 → D4.4
+```
+
+### Keep (do not re-litigate)
+
+- Storage/Transport on default domain pipeline  
+- StorageAnalyzer moved to Analysis  
+- Fail-closed StoragePass (D3.0)  
+- GenerationAssertions domain path  
+- DomainEvolution authoring parameter  
+
+### Agent pick after §13 (historical)
+
+Was CURRENT **D3.4b** — superseded by §14.
+
+---
+
+## 14. Review — second “suite Complete” claim (2026-07-25)
+
+**Claim:** Gaps from §13 fixed; suite Complete; 1614 green; pre-ship clean.  
+**Verdict:** **Product mostly fixed; Complete still rejected** for process + thin tests.
+
+### What landed since §13 (verified in tree)
+
+| Item | Status |
+|------|--------|
+| MCP structured facts (`AnalysisData` roots/topo/actions/flags) | ✅ code |
+| Create path `Analyze(domain, McpAuthoring.Context)` | ✅ |
+| StoragePass Dependencies | ✅ |
+| EnumConstraintSubset removed | ✅ |
+| Inventory always-on storage/transport | ✅ |
+| GenerationAssertions domain path | ✅ |
+| Full suite | ✅ **1614** green |
+| Happy-path DslCompiler uses domain storage | ✅ |
+
+### Still not Done
+
+| Item | Action |
+|------|--------|
+| **Dirty uncommitted tree** | Pre-ship / D4.4 cannot claim clean commit |
+| **D3.6** Transport + pack-via-Analyze goldens | Reopen task — add tests |
+| **D3.4b** automated test for new fields | Residual (fold into D3.6) |
+| **D3.7 / D4.4** | Reopen until residuals + gate |
+| Fail-closed message “Infrastructure pipeline…” | Optional D3.5 polish |
+
+### Reopen order
+
+```text
+D3.6 (tests) → D3.7 → D4.4
+```
+
+### Solid enough to keep
+
+Do not re-open D3.1–D3.5 product, D3.6b, D4.1, D4.2 inventory for the §13 reasons — those code gaps closed.
+
+### Agent pick after §14
+
+Historical — superseded by §15.
+
+---
+
+## 15. Review — third “suite Complete” claim (2026-07-25)
+
+**Claim:** §14 residuals resolved; Transport + pack-variance + MCP facts tests; 1618 green; Complete.  
+**Verdict:** **Product + most residual tests OK; Complete still rejected.**
+
+### Verified
+
+| Item | Evidence |
+|------|----------|
+| Suite | **1618** green |
+| `Analyze_ProducesTransportMetadata` | ✅ |
+| `Analyze_ProducesStorageMappingMetadata` | ✅ |
+| MCP structured facts smoke | ✅ roots, hasStorage, hasTransport |
+| Create + authoring context | ✅ |
+| Pipeline Storage+Transport | ✅ |
+| EnumSubset deleted | ✅ |
+
+### Gaps — reopen
+
+| ID | Issue |
+|----|--------|
+| **D3.6** | Pack test asserts **same** storage entity count with SqlPack vs without — **not** type-map variance. Exact Steps required differing SQL/types under different maps. |
+| **D3.7 / D4.4** | Working tree still **dirty/uncommitted**. Hard rule: no Complete on dirty tree. |
+| Optional | Fail-closed message still “Infrastructure pipeline…” |
+
+### Residual order
+
+```text
+D3.6 real pack-variance → D3.7 → D4.4
+```
+
+See [`simple-agent-tasks/dau-README.md`](simple-agent-tasks/dau-README.md).
+
+
+---
+
+## 16. Review — fourth “suite Complete” claim (2026-07-25)
+
+**Claim:** §15 pack-variance fixed; Complete.  
+**Verdict:** **Accept product Complete.** Pack-variance test is real (`varchar` vs `TEXT`). Suite **1618** green. All prior product reopens closed.
+
+**Ops residual only:** working tree still dirty — hard rule blocks “ship Complete” until commit (user must request) or explicit waive. Do not re-open product tasks.
+
+See [`simple-agent-tasks/dau-README.md`](simple-agent-tasks/dau-README.md).

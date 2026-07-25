@@ -65,6 +65,31 @@ public class McpSmokeTests {
     }
 
     [Test]
+    public async Task GetDomainAnalysis_WithEntityAndRelationship_IncludesStructuredFacts() {
+        // D3.4b: MCP structured facts from LatestAnalysis metadata.
+        var (sessionId, _) = McpSessionStore.Create("Test");
+
+        // Create a parent entity, child entity, and relationship
+        EvolveTool.AddEntity(sessionId, "Patron");
+        EvolveTool.AddProperty(sessionId, "Patron", "Name", "Text");
+        EvolveTool.AddEntity(sessionId, "Loan");
+        EvolveTool.AddProperty(sessionId, "Loan", "Amount", "Number");
+        EvolveTool.AddRelationship(sessionId, "Loans", "Patron", "Loan", "OneToMany");
+
+        var response = QueryTool.GetDomainAnalysis(sessionId);
+        await Assert.That(response.Success).IsTrue();
+        await Assert.That(response.Data).IsTypeOf<AnalysisData>();
+
+        var data = (AnalysisData)response.Data!;
+        await Assert.That(data.EntityCount).IsGreaterThanOrEqualTo(2);
+        await Assert.That(data.RelationshipCount).IsGreaterThanOrEqualTo(1);
+        await Assert.That(data.HasStorageMapping).IsTrue();
+        await Assert.That(data.HasTransport).IsTrue();
+        await Assert.That(data.RootEntityNames).IsNotNull();
+        await Assert.That(data.RootEntityNames!.Count).IsGreaterThanOrEqualTo(1);
+    }
+
+    [Test]
     public async Task AddEntityTool_CreatesEntity() {
         var (sessionId, _) = McpSessionStore.Create("Test");
 

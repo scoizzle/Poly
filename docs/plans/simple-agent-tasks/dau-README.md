@@ -1,106 +1,111 @@
-# Domain Analysis Unification — Simple-Agent Queue (`dau-*`)
+# Domain Analysis Unification — Agent Queue (`dau-*`)
 
 **Parent:** [`../domain-analysis-unification.md`](../domain-analysis-unification.md)  
-**Predecessor:** [`apm-README.md`](apm-README.md) (complete — registration only)  
-**CORE:** [`../../CORE.md`](../../CORE.md)  
-**Inventory:** [`../../domainmodeling-capability-inventory.md`](../../domainmodeling-capability-inventory.md)  
+**Velocity map:** [`../platform-velocity-review.md`](../platform-velocity-review.md)  
 **Gate:** [`../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md`](../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md)
+
+**Reviews:**  
+- §13–§15: earlier false Completes.  
+- **§16:** product + residual tests **accepted**; only **ops residual** = uncommitted tree.
 
 ---
 
-## Rules
+## How to pick
 
-1. **One micro-task at a time** (one ID from the parent plan).  
-2. **Phase order:** D0 → D1 → D2 → D3 → D4. D1 done — D3.0 may start before full D3 always-on. D2.1–D2.3 deferred (not blocking D3).  
-3. **Lowering depends on Analysis** — do not reintroduce Analysis → Lowering domain-fact wrappers.  
-4. **Pack surfaces:** do **not** delete Transport / coupling / capability facets because “no GetMetadata today.”  
-5. **Proven residue only** for deletes (e.g. EnumConstraintSubset after inheritance removal).  
-6. Mid-migration dual homes are **expected** until D1 exits — fix by finishing the move, not by freezing the bridge.  
-7. Pre-ship gate before marking a phase Done.  
-8. Tests grow more specific; production more generic. Prefer `DomainModelAnalyzer.Analyze` for multi-fact tests.
+1. First required `[ ]` below (if any).  
+2. **No product DAU tasks left** unless reopened by review.  
+3. **D4.4 ops:** commit when user asks — do not invent product work.
 
 ---
 
 ## Agent pick
 
 ```text
-DONE:    D0; D1; D2.4/D2.5 (+ D2′); D2.1–D2.3 deferred
-CURRENT: Post-suite — next product work
-PULL:    D2.1–D2.3 walk unify; D3.1–D3.6 context/transport/MCP; D4 docs
-PULL:    D2.1–D2.3 walk unify; D4 docs
+DONE:    D0–D4.2 product + tests (D4.3 optional skip)
+CURRENT: D4.4 ops only — commit dirty DAU tree when user requests (product DoD met)
+THEN:    Post-DAU product work
+PULL:    D2.1–D2.3; D4.3 naming; D3.5 fail-message polish (“Infrastructure pipeline…”)
 ```
 
 ---
 
-## Phase 0 — Framing
+## Hard rules
 
-| # | Task | Parent | Status | Diff |
-|---|------|--------|--------|------|
-| **D0.1** | Successor framing in plans index / APM status | §5 D0.1 | `[x]` | S |
-| **D0.2** | Inventory: migration in flight + pack-surface policy | §5 D0.2 | `[x]` | S |
-
-**Exit 0:** Agents pick DAU, not “post-APM random delete.” ✅
-
----
-
-## Phase 1 — Collapse wrappers
-
-| # | Task | Parent | Status | Diff |
-|---|------|--------|--------|------|
-| **D1.1** | Topology: algorithm + model → Analysis; one `INodeAnalyzer` | §5 D1.1 | `[x]` | M |
-| **D1.2** | Aggregate/ownership: same | §5 D1.2 | `[x]` | M |
-| **D1.3** | Behavior: same (may still exist until D2.2) | §5 D1.3 | `[x]` | M |
-| **D1.4** | Retarget tests off Lowering dual APIs | §5 D1.4 | `[x]` | M |
-| **D1.5** | Gate Phase 1 | §5 D1.5 | `[x]` | S |
-
-**Exit 1:** No `Analysis` pass constructs `Lowering.*Analyzer` for topo/agg/beh.
-
-**Required reading for D1:** parent §1–§2, `DomainModelAnalyzer.cs`, existing `*Pass.cs` + `Lowering/*Analyzer.cs` pair.
+| Rule | Why |
+|------|-----|
+| Lowering depends on Analysis | No dual homes |
+| RestApi ≠ domain analysis | Transport emit consumer |
+| Fail-closed storage without hierarchy | D3.0 |
+| Emit-first happy path | No second fact world when analysis complete |
+| Do not mark Done with empty DoD | §13 |
+| Do not claim **ship Complete** on dirty tree without user waive | §14–§16 — product may be Done; commit still open |
 
 ---
 
-## Phase 2 — Unify overlapping cores
+## Phase 0–2
 
-| # | Task | Parent | Status | Diff |
-|---|------|--------|--------|------|
-| **D2.1** | Root + ownership single story | §5 D2.1 | `[ ]` defer | M |
-| **D2.2** | Capability + Behavior one action walk | §5 D2.2 | `[ ]` defer | M |
-| **D2.3** | Topology + CrossReference coupling | §5 D2.3 | `[ ]` defer | M |
-| **D2.4** | Effect ordering + unused param into EffectAnalyzer | §5 D2.4 | `[x]` | S–M |
-| **D2.5** | Subscription trio → `SubscriptionAnalyzer` | §5 D2.5 | `[x]` | M |
-| **D2.6** | Gate Phase 2 | §5 D2.6 | `[~]` partial — D2.1–D2.3 deferred | S |
+| ID | Status |
+|----|--------|
+| D0, D1, D2.4, D2.5, D3.0 | `[x]` |
+| D2.1–D2.3 | `[ ]` PULL |
 
 ---
 
-## Phase 3 — Storage + transport in domain analysis
+## Phase 3
 
-**Also:** parent **§12** (design-integration review of `Poly/DomainModeling`).
+| ID | Status | Notes |
+|----|--------|-------|
+| **D3.1–D3.5** | `[x]` | Verified in tree |
+| **D3.4b** | `[x]` | Facts + MCP smoke |
+| **D3.6** | `[x]` | Storage/Transport goldens + `Analyze_WithDifferentTypeMaps_ProducesDifferentColumnTypes` (varchar vs TEXT) |
+| **D3.6b** | `[x]` | GenerationAssertions domain analyze |
+| **D3.7** | `[x]` product | 1618 green; **tree still dirty** — pre-ship product bar met; commit is D4.4 ops |
 
-| # | Task | Parent | Status | Diff |
-|---|------|--------|--------|------|
-| **D3.0** | StoragePass fail-closed (missing agg/topo) + test | §5 / §12 | `[x]` | S |
-| **D3.1** | `Analyze(domain, DomainAuthoringContext?)` | §5 D3.1 | `[ ]` | M |
-| **D3.2** | Storage always-on domain pipeline | §5 D3.2 | `[ ]` | M |
-| **D3.3** | Transport always-on domain pipeline | §5 D3.3 | `[ ]` | M |
-| **D3.4** | MCP/DSL session context → analyze/evolve | §5 D3.4 | `[ ]` | M |
-| **D3.4b** | MCP structured facts from LatestAnalysis | §12 | `[ ]` | M |
-| **D3.5** | DslCompiler emit-first | §5 D3.5 | `[ ]` | M |
-| **D3.6** | Tests (domain metadata + pack variance + AllMode) | §5 D3.6 | `[ ]` | M |
-| **D3.6b** | Retarget GenerationAssertions / IR helpers | §12 | `[ ]` | M |
-| **D3.7** | Gate Phase 3 | §5 D3.7 | `[ ]` | S |
-
-**Exit 3:** Domain analysis carries storage + transport; codegen emit-first; MCP facts; StoragePass fail-closed.
+**Phase 3 product:** ✅ met.
 
 ---
 
-## Phase 4 — Residue + docs
+## Phase 4
 
-| # | Task | Parent | Status | Diff |
-|---|------|--------|--------|------|
-| **D4.1** | Proven residue only (EnumSubset / DMCS002 if dead) | §5 D4.1 | `[ ]` | S |
-| **D4.2** | CORE + README + inventory sync | §5 D4.2 | `[ ]` | S |
-| **D4.3** | Naming / alias hygiene (optional) | §5 D4.3 | `[ ]` | S |
-| **D4.4** | Final gate → plan Complete | §5 D4.4 | `[ ]` | S |
+| ID | Status | Notes |
+|----|--------|-------|
+| **D4.1** | `[x]` | EnumSubset deleted |
+| **D4.2** | `[x]` | Inventory always-on |
+| **D4.3** | `[ ]` optional | |
+| **D4.4** | `[~]` **ops residual** | Product Complete **yes**; **ship Complete** after commit when user asks |
+
+**Product suite Done.** Ship/ops: commit remaining dirty DAU batch.
+
+---
+
+## §16 audit (2026-07-25, fourth Complete claim)
+
+### Product + tests — accept
+
+| Check | Evidence |
+|-------|----------|
+| Suite | **1618** green |
+| Transport | `Analyze_ProducesTransportMetadata` |
+| Storage | `Analyze_ProducesStorageMappingMetadata` |
+| Pack variance | `Analyze_WithDifferentTypeMaps_ProducesDifferentColumnTypes` (varchar vs TEXT) |
+| MCP facts | structured smoke |
+| Create + Context | yes |
+| Pipeline Storage+Transport | yes |
+| Storage under Analysis | yes |
+| EnumSubset | gone |
+
+### Ops residual only
+
+| Item | Status |
+|------|--------|
+| Dirty uncommitted tree | Still dirty — not a product reopen |
+| DslCompiler “Infrastructure pipeline” message | Optional polish |
+| DomainModeling README Analysis table | Optional polish |
+
+### Verdict
+
+**Product DAU: Done.**  
+**Ship Complete:** open until user commits (or waives). Do **not** re-open D3.1–D3.6 product tasks.
 
 ---
 
@@ -108,23 +113,7 @@ PULL:    D2.1–D2.3 walk unify; D4 docs
 
 | Item | Why |
 |------|-----|
-| Delete Transport “unused” | Domain exposable surface may be always-on (D3); not the same as RestApi IR |
-| Put RestApi / route-DTO bags on domain pipeline | RestApi is a **transport consumer** of domain **Transport** facts — emit path only |
-| Claim D2 Done without D2.1–D2.3 | Registration merge ≠ walk unify (§11) |
-| Simplify causality without tests for dropped behavior | Restore algorithm or re-scope + goldens |
-| Storage always-on with hard-coded SQL Server types | Use context defaults + packs |
-| Start D2 merge before D1 home move | Dual homes make merge thrash |
-| Move PolicyEvaluator / DE lowering into Analysis | True Lowering stays |
-| Reopen APM Phase A registration as if unfinished | Registration done; ownership is DAU |
-| Collapse Pass/Analyzer by adding *more* wrappers | Unify into one type |
-
----
-
-## Principles
-
-- Domain fidelity + CORE seams  
-- Finish the migration; mid-move weirdness is residue  
-- Packs consume unified metadata  
-- Tests specific; production generic  
-- Fail-closed codegen retained  
-- Pre-ship before phase Done  
+| Re-implement D3 product | Accepted §16 |
+| D2.1–D2.3 | Pull |
+| RestApi analysis bags | Emit only |
+| Commit without user ask | AGENTS: only commit when requested |

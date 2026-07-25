@@ -4,6 +4,9 @@ using Poly.DomainModeling.Effects;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Parsing;
+using Poly.Introspection;
+using Poly.Introspection.CommonLanguageRuntime;
+using Poly.Syntax.Analysis;
 namespace Poly.Tests.DomainModeling.Lowering;
 
 /// <summary>
@@ -713,11 +716,13 @@ public class InfrastructurePipelineTests {
         await Assert.That(behavior).IsNotNull();
         await Assert.That(aggregate).IsNotNull();
 
+        // Use the full domain analysis pipeline to produce all metadata,
+        // then verify StoragePass can consume priorAnalysis stand-alone.
         var pipeline = new AnalyzerBuilder()
-            .AddAnalyzer(new StoragePass(analysis: domainResult))
+            .UseDomainModelAnalysisPipeline()
             .Build();
 
-        var result = pipeline.Analyze(domain, priorAnalysis: domainResult, invalidatedNodes: [domain]);
+        var result = pipeline.Analyze(domain);
 
         var storage = result.GetMetadata<StorageMappingMetadata>(domain);
         await Assert.That(storage).IsNotNull();
@@ -728,22 +733,21 @@ public class InfrastructurePipelineTests {
     public async Task StoragePass_FailsClosed_WithoutAggregateAndTopology() {
         // D3.0: StoragePass must fail-loud (not silently produce incomplete storage)
         // when EffectTopologyMetadata or OwnershipAggregateMetadata are missing.
+        // Invoked directly (not via AnalyzerBuilder) to bypass the Dependencies check
+        // — standalone usage simulates the codegen fallback path.
         var domain = ParseDomain("""
             domain Test
             Item: entity { Name: Text }
             """);
 
-        // Build a pipeline with StoragePass alone — no domain analysis passes.
-        var pipeline = new AnalyzerBuilder()
-            .AddAnalyzer(new StoragePass())
-            .Build();
+        var context = new AnalysisContext(ClrTypeDefinitionRegistry.Shared);
+        var storagePass = new StoragePass();
+        storagePass.Analyze(context, domain);
 
-        var result = pipeline.Analyze(domain);
-
-        var storage = result.GetMetadata<StorageMappingMetadata>(domain);
+        var storage = context.GetMetadata<StorageMappingMetadata>(domain);
         await Assert.That(storage).IsNull();
 
-        await Assert.That(result.Diagnostics.Any(d =>
+        await Assert.That(context.Diagnostics.SelectMany(d => d.Value).Any(d =>
             d.Message.Contains("StoragePass requires"))).IsTrue();
     }
 }

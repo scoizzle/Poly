@@ -43,9 +43,6 @@ internal sealed class JumpTargetAnalyzer : INodeAnalyzer {
     public string PassName => Id;
     public string[] Dependencies => [];
     public void Analyze(AnalysisContext context, Node node) {
-        if (!context.TryBeginAnalyzerVisit<JumpTargetAnalyzer>(node))
-            return;
-
         // Walk the tree from any scope boundary — TypeDefinitionNode members,
         // MethodDefinitionNode bodies, Lambda bodies, or the script root.
         switch (node) {

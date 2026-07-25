@@ -8,9 +8,6 @@ internal sealed class LambdaReturnTypeAnalyzer : INodeAnalyzer {
     public string PassName => Id;
     public string[] Dependencies => [];
     public void Analyze(AnalysisContext context, Node node) {
-        if (!context.TryBeginAnalyzerVisit<LambdaReturnTypeAnalyzer>(node))
-            return;
-
         if (node is Lambda lambda && lambda.Body is not null) {
             // The TypeResolver already resolved the body's type.
             // If the Lambda's own type is still unresolved (typeof(object) fallback),

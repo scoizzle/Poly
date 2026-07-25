@@ -11,10 +11,6 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
     public string PassName => Id;
     public string[] Dependencies => [ThisReferenceContextAnalyzer.Id];
     public void Analyze(AnalysisContext context, Node node) {
-        if (!context.TryBeginAnalyzerVisit<TypeAndMemberResolver>(node)) {
-            return;
-        }
-
         var resolvedType = ResolveNodeType(context, node);
 
         if (resolvedType != null) {

@@ -24,9 +24,6 @@ internal sealed class PolicyConstraintAnalyzer : INodeAnalyzer {
     }
 
     private static void AnalyzeEntity(AnalysisContext context, Entity entity) {
-        if (!context.TryBeginAnalyzerVisit<PolicyConstraintAnalyzer>(entity))
-            return;
-
         var requiredByPolicy = new List<Property>();
         var referencedByPolicy = new List<Property>();
         var lookup = context.GetMetadata<DomainTypeLookupMetadata>(default);
@@ -73,9 +70,6 @@ internal sealed class PolicyConstraintAnalyzer : INodeAnalyzer {
     }
 
     private static void AnalyzeStage(AnalysisContext context, Stage stage) {
-        if (!context.TryBeginAnalyzerVisit<PolicyConstraintAnalyzer>(stage))
-            return;
-
         var required = new List<Property>();
 
         foreach (var policy in stage.Policies) {

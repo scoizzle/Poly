@@ -16,10 +16,6 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
     public string PassName => Id;
     public string[] Dependencies => [TypeAndMemberResolver.Id, SideEffectAnalyzer.Id];
     public void Analyze(AnalysisContext context, Node node) {
-        if (!context.TryBeginAnalyzerVisit<ConstantFoldingPass>(node)) {
-            return;
-        }
-
         if (node is Constant) {
             return;
         }

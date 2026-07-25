@@ -17,10 +17,6 @@ public sealed class TypeDefinitionNodeAnalyzer : INodeAnalyzer, ITypeDefinitionP
     private TypeDefinitionProviderCollection? _lastRegisteredCollection;
 
     public void Analyze(AnalysisContext context, Node node) {
-        if (!context.TryBeginAnalyzerVisit<TypeDefinitionNodeAnalyzer>(node)) {
-            return;
-        }
-
         if (node is TypeDefinitionNode typeDef) {
             if (context.TypeDefinitions != _lastRegisteredCollection) {
                 context.TypeDefinitions.Add(this);

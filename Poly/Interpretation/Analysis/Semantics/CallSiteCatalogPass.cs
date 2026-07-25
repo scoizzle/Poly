@@ -68,9 +68,6 @@ internal sealed class CallSiteCatalogAnalyzer : INodeAnalyzer {
     public string PassName => Id;
     public string[] Dependencies => [TypeAndMemberResolver.Id, ValueRepresentationAnalyzer.Id];
     public void Analyze(AnalysisContext context, Node node) {
-        if (!context.TryBeginAnalyzerVisit<CallSiteCatalogAnalyzer>(node))
-            return;
-
         // Get or create per-traversal state. Reuses existing state from parent
         // node traversal so catalog is shared across the entire tree.
         var state = context.GetMetadata<CallSiteCatalogState>(null);

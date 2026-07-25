@@ -34,8 +34,6 @@ internal sealed class SubscriptionAnalyzer : INodeAnalyzer {
     }
 
     private static void ValidateDomain(AnalysisContext context, Domain domain) {
-        if (!context.TryBeginAnalyzerVisit<SubscriptionAnalyzer>(domain)) return;
-
         var lookup = context.GetMetadata<DomainTypeLookupMetadata>(default);
         if (lookup is null) return;
 

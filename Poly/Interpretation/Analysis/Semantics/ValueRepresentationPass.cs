@@ -49,9 +49,6 @@ internal sealed class ValueRepresentationAnalyzer : INodeAnalyzer {
     public string PassName => Id;
     public string[] Dependencies => [TypeAndMemberResolver.Id, ControlFlowAnalysisPass.Id];
     public void Analyze(AnalysisContext context, Node node) {
-        if (!context.TryBeginAnalyzerVisit<ValueRepresentationAnalyzer>(node))
-            return;
-
         // Post-order: classify children first
         this.AnalyzeChildren(context, node);
 

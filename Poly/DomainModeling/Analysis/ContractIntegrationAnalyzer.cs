@@ -20,10 +20,6 @@ internal sealed class ContractIntegrationAnalyzer : INodeAnalyzer {
     }
 
     private static void ValidateDomain(AnalysisContext context, Domain domain) {
-        if (!context.TryBeginAnalyzerVisit<ContractIntegrationAnalyzer>(domain)) {
-            return;
-        }
-
         foreach (var contract in domain.ImportedContracts) {
             ValidateContract(context, contract);
         }

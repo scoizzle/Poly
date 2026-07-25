@@ -45,10 +45,6 @@ internal sealed class SemanticDomainAnalyzer : INodeAnalyzer {
     }
 
     private static void AnalyzeDomain(AnalysisContext context, Domain domain) {
-        if (!context.TryBeginAnalyzerVisit<SemanticDomainAnalyzer>(domain)) {
-            return;
-        }
-
         var types = domain.Types
             .GroupBy(static type => type.Name, StringComparer.Ordinal)
             .ToDictionary(static group => group.Key, static group => group.Last(), StringComparer.Ordinal);
@@ -62,10 +58,6 @@ internal sealed class SemanticDomainAnalyzer : INodeAnalyzer {
     }
 
     private static void AnalyzePrimitiveType(AnalysisContext context, PrimitiveType primitiveType) {
-        if (!context.TryBeginAnalyzerVisit<SemanticDomainAnalyzer>(primitiveType)) {
-            return;
-        }
-
         if (primitiveType.TypeCategory.Is(TypeCategory.Nullable)) {
             context.ReportError(
                 primitiveType,
@@ -104,10 +96,6 @@ internal sealed class SemanticDomainAnalyzer : INodeAnalyzer {
     }
 
     private static void ValidateEntity(AnalysisContext context, Entity entity) {
-        if (!context.TryBeginAnalyzerVisit<SemanticDomainAnalyzer>(entity)) {
-            return;
-        }
-
         ValidateStages(context, entity);
         PublishEffectivePolicies(context, entity);
         PublishEffectiveMemberMetadata(context, entity);
@@ -183,10 +171,6 @@ internal sealed class SemanticDomainAnalyzer : INodeAnalyzer {
     }
 
     private static void ValidateRelationship(AnalysisContext context, Relationship relationship) {
-        if (!context.TryBeginAnalyzerVisit<SemanticDomainAnalyzer>(relationship)) {
-            return;
-        }
-
         ValidateRelationshipEndpoint(context, relationship.Source, relationship, relationship.Name, "source");
         ValidateRelationshipEndpoint(context, relationship.Target, relationship, relationship.Name, "target");
     }
@@ -216,10 +200,6 @@ internal sealed class SemanticDomainAnalyzer : INodeAnalyzer {
     }
 
     private static void ValidateCreateEntity(AnalysisContext context, CreateEntityInstance createEntityInstance) {
-        if (!context.TryBeginAnalyzerVisit<SemanticDomainAnalyzer>(createEntityInstance)) {
-            return;
-        }
-
         ResolveTypeReference(context, createEntityInstance.Type, createEntityInstance, "CreateEntityInstance");
 
         if (context.GetMetadata<ResolvedTypeReferenceMetadata>(createEntityInstance.Type) is not ResolvedTypeReferenceMetadata resolved) {

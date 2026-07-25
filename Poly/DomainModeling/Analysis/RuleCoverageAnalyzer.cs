@@ -21,10 +21,6 @@ internal sealed class RuleCoverageAnalyzer : INodeAnalyzer {
     }
 
     private static void ValidateDomain(AnalysisContext context, Domain domain) {
-        if (!context.TryBeginAnalyzerVisit<RuleCoverageAnalyzer>(domain)) {
-            return;
-        }
-
         DomainAnalysis.ForEachEntity(domain, entity => {
             var requiredMeta = context.GetMetadata<RequiredPropertiesMetadata>(entity);
             if (requiredMeta is null || requiredMeta.RequiredProperties.Count == 0) return;

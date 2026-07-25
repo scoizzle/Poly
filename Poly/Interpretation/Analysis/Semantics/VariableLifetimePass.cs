@@ -27,9 +27,6 @@ internal sealed class ScopeValidator : INodeAnalyzer {
     public string PassName => Id;
     public string[] Dependencies => [TypeAndMemberResolver.Id];
     public void Analyze(AnalysisContext context, Node node) {
-        if (!context.TryBeginAnalyzerVisit<ScopeValidator>(node))
-            return;
-
         var state = new ScopeState(
             Meta: new(
                 BlockScopes: [],

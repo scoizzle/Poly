@@ -25,10 +25,6 @@ internal sealed class ConstraintQualityAnalyzer : INodeAnalyzer {
     }
 
     private static void ValidateDomainFixedPoint(AnalysisContext context, Domain domain) {
-        if (!context.TryBeginAnalyzerVisit<ConstraintQualityAnalyzer>(domain)) {
-            return;
-        }
-
         var lookup = context.GetMetadata<DomainTypeLookupMetadata>(default);
         if (lookup is null) return;
 
@@ -36,10 +32,6 @@ internal sealed class ConstraintQualityAnalyzer : INodeAnalyzer {
     }
 
     private static void ValidatePropertyConstraints(AnalysisContext context, Property property) {
-        if (!context.TryBeginAnalyzerVisit<ConstraintQualityAnalyzer>(property)) {
-            return;
-        }
-
         var constraints = property.Constraints;
         ValidateRangeSatisfiability(context, property, constraints);
         ValidateLengthSatisfiability(context, property, constraints);

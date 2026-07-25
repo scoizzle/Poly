@@ -22,10 +22,6 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
     }
 
     private static void ValidateDomainEffects(AnalysisContext context, Domain domain) {
-        if (!context.TryBeginAnalyzerVisit<EffectAnalyzer>(domain)) {
-            return;
-        }
-
         var lookup = context.GetMetadata<DomainTypeLookupMetadata>(default);
         if (lookup is null) {
             return;

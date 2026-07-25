@@ -58,10 +58,6 @@ internal sealed class CapabilityAnalyzer : INodeAnalyzer {
     }
 
     private static void AnalyzeDomain(AnalysisContext context, Domain domain) {
-        if (!context.TryBeginAnalyzerVisit<CapabilityAnalyzer>(domain)) {
-            return;
-        }
-
         DomainAnalysis.ForEachEntity(domain, entity => {
             foreach (var action in entity.Actions) {
                 AnalyzeAction(context, action);
@@ -77,10 +73,6 @@ internal sealed class CapabilityAnalyzer : INodeAnalyzer {
     }
 
     private static void AnalyzeAction(AnalysisContext context, Action action) {
-        if (!context.TryBeginAnalyzerVisit<CapabilityAnalyzer>(action)) {
-            return;
-        }
-
         var lookup = context.GetMetadata<DomainTypeLookupMetadata>(default);
 
         var transitionTargetStages = new List<Stage>();
@@ -101,10 +93,6 @@ internal sealed class CapabilityAnalyzer : INodeAnalyzer {
     }
 
     private static void AnalyzeStage(AnalysisContext context, Stage stage) {
-        if (!context.TryBeginAnalyzerVisit<CapabilityAnalyzer>(stage)) {
-            return;
-        }
-
         var localActionViews = stage.Actions
             .Select(a => context.GetMetadata<ActionCapabilityMetadata>(a)?.View)
             .OfType<ActionCapabilityView>()
@@ -129,10 +117,6 @@ internal sealed class CapabilityAnalyzer : INodeAnalyzer {
     }
 
     private static void AnalyzeRelationship(AnalysisContext context, Relationship relationship) {
-        if (!context.TryBeginAnalyzerVisit<CapabilityAnalyzer>(relationship)) {
-            return;
-        }
-
         var view = new RelationshipCapabilityView(
             RelationshipName: relationship.Name,
             Source: relationship.Source,

@@ -20,10 +20,6 @@ internal sealed class EnumConstraintSubsetAnalyzer : INodeAnalyzer {
     }
 
     private static void ValidateProperty(AnalysisContext context, Property property) {
-        if (!context.TryBeginAnalyzerVisit<EnumConstraintSubsetAnalyzer>(property)) {
-            return;
-        }
-
         var enumConstraint = property.Constraints.OfType<EnumConstraint>().FirstOrDefault();
         if (enumConstraint is null) {
             return;

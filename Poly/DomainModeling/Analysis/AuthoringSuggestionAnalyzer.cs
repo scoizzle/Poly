@@ -25,9 +25,6 @@ internal sealed class AuthoringSuggestionAnalyzer : INodeAnalyzer {
     }
 
     private static void ValidateDomainSuggestions(AnalysisContext context, Domain domain) {
-        if (!context.TryBeginAnalyzerVisit<AuthoringSuggestionAnalyzer>(domain))
-            return;
-
         var lookup = context.GetMetadata<DomainTypeLookupMetadata>(default);
         if (lookup is null) return;
 

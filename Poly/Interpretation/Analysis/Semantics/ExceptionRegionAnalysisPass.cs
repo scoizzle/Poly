@@ -85,9 +85,6 @@ internal sealed class ExceptionRegionAnalyzer : INodeAnalyzer {
     public string PassName => Id;
     public string[] Dependencies => [TypeAndMemberResolver.Id, ControlFlowAnalysisPass.Id];
     public void Analyze(AnalysisContext context, Node node) {
-        if (!context.TryBeginAnalyzerVisit<ExceptionRegionAnalyzer>(node))
-            return;
-
         // Get or create per-traversal state. Reuses existing state from parent
         // node traversal so ProtectedNodeIds and Regions are shared across the
         // entire tree.

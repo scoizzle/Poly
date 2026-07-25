@@ -24,10 +24,6 @@ internal sealed class ConstraintPropagationAnalyzer : INodeAnalyzer {
     }
 
     private static void ValidateDomain(AnalysisContext context, Domain domain) {
-        if (!context.TryBeginAnalyzerVisit<ConstraintPropagationAnalyzer>(domain)) {
-            return;
-        }
-
         foreach (var type in domain.Types) {
             if (type is Entity entity) {
                 foreach (var action in entity.Actions) {

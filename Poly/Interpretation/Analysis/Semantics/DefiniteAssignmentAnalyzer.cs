@@ -9,9 +9,6 @@ internal sealed class DefiniteAssignmentAnalyzer : INodeAnalyzer {
     public string PassName => Id;
     public string[] Dependencies => [ControlFlowAnalysisPass.Id];
     public void Analyze(AnalysisContext context, Node node) {
-        if (!context.TryBeginAnalyzerVisit<DefiniteAssignmentAnalyzer>(node))
-            return;
-
         var scopeStack = new Stack<HashSet<string>>();
         var assigned = new HashSet<string>();
         AnalyzeImpl(context, node, scopeStack, ref assigned);

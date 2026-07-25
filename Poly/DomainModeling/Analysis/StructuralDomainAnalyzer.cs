@@ -37,18 +37,10 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
     }
 
     private static void AnalyzeDomain(AnalysisContext context, Domain domain) {
-        if (!context.TryBeginAnalyzerVisit<StructuralDomainAnalyzer>(domain)) {
-            return;
-        }
-
         ReportDuplicateNames(context, domain.Types.Cast<DomainMember>().Concat(domain.Relationships), "domain", domain.Name);
     }
 
     private static void AnalyzeEntity(AnalysisContext context, Entity entity) {
-        if (!context.TryBeginAnalyzerVisit<StructuralDomainAnalyzer>(entity)) {
-            return;
-        }
-
         ReportDuplicateNames(context, entity.Properties, "entity", entity.Name);
         ReportDuplicateNames(context, entity.Actions, "entity", entity.Name);
         ReportDuplicateNames(context, entity.Policies, "entity", entity.Name);
@@ -56,10 +48,6 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
     }
 
     private static void AnalyzeStage(AnalysisContext context, Stage stage) {
-        if (!context.TryBeginAnalyzerVisit<StructuralDomainAnalyzer>(stage)) {
-            return;
-        }
-
         ReportDuplicateNames(context, stage.Actions, "stage", stage.Name);
         ReportDuplicateNames(context, stage.Policies, "stage", stage.Name);
 
@@ -68,20 +56,12 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
     }
 
     private static void AnalyzeAction(AnalysisContext context, Action action) {
-        if (!context.TryBeginAnalyzerVisit<StructuralDomainAnalyzer>(action)) {
-            return;
-        }
-
         ReportDuplicateNames(context, action.Parameters, "action", action.Name);
         ReportDuplicateNames(context, action.Result.Members, "action result", action.Name);
         ReportDuplicateNames(context, action.Policies, "action", action.Name);
     }
 
     private static void AnalyzeRelationship(AnalysisContext context, Relationship relationship) {
-        if (!context.TryBeginAnalyzerVisit<StructuralDomainAnalyzer>(relationship)) {
-            return;
-        }
-
         ReportDuplicateNames(context, relationship.Properties, "relationship", relationship.Name);
         ValidateOwnershipCardinality(context, relationship);
     }

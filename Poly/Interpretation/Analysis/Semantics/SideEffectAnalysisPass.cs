@@ -19,10 +19,6 @@ internal sealed class SideEffectAnalyzer : INodeAnalyzer {
     private static readonly SideEffectMetadata PureMeta = new(SideEffectKind.Pure);
     private static readonly ElisionMetadata Elidable = new(true);
     public void Analyze(AnalysisContext context, Node node) {
-        if (!context.TryBeginAnalyzerVisit<SideEffectAnalyzer>(node)) {
-            return;
-        }
-
         if (node is Block block) {
             // Most optimum path for Blocks (the high-fanout case for DCE):
             // - Direct indexed loops over concrete collections (no IEnumerable.Children overhead).

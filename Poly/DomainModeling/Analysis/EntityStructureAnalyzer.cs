@@ -32,8 +32,6 @@ internal sealed class EntityStructureAnalyzer : INodeAnalyzer {
     }
 
     private static void AnalyzeDomain(AnalysisContext context, Domain domain) {
-        if (!context.TryBeginAnalyzerVisit<EntityStructureAnalyzer>(domain)) return;
-
         var lookup = context.GetMetadata<DomainTypeLookupMetadata>(default);
         if (lookup is null) return;
 

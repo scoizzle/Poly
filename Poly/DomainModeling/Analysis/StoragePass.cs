@@ -36,10 +36,25 @@ internal sealed class StoragePass : INodeAnalyzer {
 
     public void Analyze(AnalysisContext context, Node node) {
         if (node is not Domain domain) return;
-        if (context.HasStructuralFailure) return;
 
-        var topology = context.GetMetadata<EffectTopologyMetadata>(domain)?.Topology;
-        var aggregate = context.GetMetadata<OwnershipAggregateMetadata>(domain)?.Aggregate;
+        // The codegen pipeline invalidates all nodes (including domain), which means
+        // the AnalysisContext is fresh and inherits no metadata. Fall back to _analysis
+        // when context lookup fails — that's the prior domain analysis result.
+        var topology = context.GetMetadata<EffectTopologyMetadata>(domain)?.Topology
+            ?? _analysis?.GetMetadata<EffectTopologyMetadata>(domain)?.Topology;
+        var aggregate = context.GetMetadata<OwnershipAggregateMetadata>(domain)?.Aggregate
+            ?? _analysis?.GetMetadata<OwnershipAggregateMetadata>(domain)?.Aggregate;
+
+        // Fail closed: storage requires aggregate and topology metadata.
+        if (aggregate == null || topology == null) {
+            context.ReportDiagnostic(domain,
+                DiagnosticSeverity.Error,
+                "StoragePass requires EffectTopologyMetadata and OwnershipAggregateMetadata. " +
+                "These are produced by the domain analysis pipeline (EffectTopologyPass, OwnershipAggregatePass) " +
+                "and must be passed via priorAnalysis.",
+                code: "StoragePass.MissingDependency");
+            return;
+        }
 
         var analyzer = new StorageAnalyzer(domain, _analysis, typeMaps: _typeMaps, conventions: _conventions);
         var storage = analyzer.Analyze(aggregate, topology);

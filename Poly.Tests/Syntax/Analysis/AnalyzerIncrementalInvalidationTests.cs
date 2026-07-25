@@ -96,18 +96,6 @@ public class AnalyzerIncrementalInvalidationTests {
     }
 
     [Test]
-    public async Task Analyze_WhenAnalyzerRevisitsSameNode_MetadataSkipPreventsDuplicateWork() {
-        var analyzer = DefaultIncrementalAnalyzer<DuplicateVisitAnalyzer>();
-        var leaf = new TestLeaf(1);
-
-        var result = analyzer.Analyze(leaf);
-        var metadata = result.GetMetadata<TestVisitCountMetadata>(leaf);
-
-        await Assert.That(metadata).IsNotNull();
-        await Assert.That(metadata!.Count).IsEqualTo(1);
-    }
-
-    [Test]
     public async Task Analyze_WhenPassesAreNamed_TelemetryPreservesExecutionOrder() {
         var analyzer = new AnalyzerBuilder()
             .AddAnalyzer(new NoopAnalyzer())
@@ -208,26 +196,6 @@ public class AnalyzerIncrementalInvalidationTests {
         }
     }
 
-    private sealed class DuplicateVisitAnalyzer : INodeAnalyzer {
-        public const string Id = "TestDuplicateVisit";
-        public string PassName => Id;
-        public string[] Dependencies => [];
-        public void Analyze(AnalysisContext context, Node node) {
-            if (!context.TryBeginAnalyzerVisit<DuplicateVisitAnalyzer>(node)) {
-                return;
-            }
-
-            if (node is TestLeaf leaf) {
-                var visit = context.GetMetadata<TestVisitCountMetadata>(leaf)?.Count ?? 0;
-                context.SetMetadata(leaf, new TestVisitCountMetadata(visit + 1));
-
-                Analyze(context, leaf);
-            }
-
-            this.AnalyzeChildren(context, node);
-        }
-    }
-
     private sealed record TestLeaf(int Value) : Node;
 
     private sealed record TestParent(Node Child) : Node {
@@ -248,8 +216,6 @@ public class AnalyzerIncrementalInvalidationTests {
     }
 
     private sealed record TestValueMetadata(int Value) : IAnalysisMetadata;
-
-    private sealed record TestVisitCountMetadata(int Count) : IAnalysisMetadata;
 
     private sealed class NoopTypeDefinitionProvider : ITypeDefinitionProvider {
         public ITypeDefinition? GetTypeDefinition(string name) => null;

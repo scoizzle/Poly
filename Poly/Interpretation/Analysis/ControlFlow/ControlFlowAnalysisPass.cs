@@ -31,10 +31,6 @@ public sealed class ControlFlowAnalysisPass : INodeAnalyzer {
     public string PassName => Id;
     public string[] Dependencies => [TypeAndMemberResolver.Id, SideEffectAnalyzer.Id, JumpTargetAnalyzer.Id];
     public void Analyze(AnalysisContext context, Node node) {
-        if (!context.TryBeginAnalyzerVisit<ControlFlowAnalysisPass>(node)) {
-            return;
-        }
-
         var state = new CfgState();
         state.CurrentBlock = state.Cfg.CreateBlock();
         BuildCfg(context, node, state);

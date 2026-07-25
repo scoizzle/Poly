@@ -62,7 +62,7 @@ internal sealed class CrossReferencePass : INodeAnalyzer {
             context.ReportDiagnostic(domain,
                 DiagnosticSeverity.Warning,
                 $"Cross-entity dependency cycle detected involving: {string.Join(", ", cycleEntityNames)}",
-                code: "CrossReferencePass.CycleDetected");
+                code: DomainModelDiagnosticCodes.DependencyCycle);
         }
     }
 

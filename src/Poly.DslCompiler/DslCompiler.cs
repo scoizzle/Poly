@@ -193,11 +193,10 @@ public sealed class DslCompiler {
             }
         }
 
-        // Infrastructure analysis — use new passes pipeline (Task Group 3)
+        // Infrastructure analysis — codegen-specific passes only.
+        // Topology, aggregate, and behavior are now produced by the domain pipeline
+        // (UseDomainModelAnalysisPipeline) and available on the analysis argument.
         var infraPipelineBuilder = new AnalyzerBuilder()
-            .AddAnalyzer(new Poly.DomainModeling.Analysis.EffectTopologyPass())
-            .AddAnalyzer(new Poly.DomainModeling.Analysis.OwnershipAggregatePass(analysis))
-            .AddAnalyzer(new Poly.DomainModeling.Analysis.BehaviorPass(analysis))
             .AddAnalyzer(new Poly.DomainModeling.Analysis.StoragePass(
                 typeMaps: authoring?.TypeMaps,
                 conventions: authoring?.StorageConventions,
@@ -214,12 +213,12 @@ public sealed class DslCompiler {
         // Issue 14: Thread prior domain analysis into infra pipeline
         var infraResult = infraPipeline.Analyze(domain, priorAnalysis: analysis, invalidatedNodes: [domain]);
 
+        // Storage model from the codegen pipeline; behavior and aggregate from domain analysis
         var storageModel = infraResult.GetMetadata<Poly.DomainModeling.Analysis.StorageMappingMetadata>(domain)?.Storage;
-        var behaviorModel = infraResult.GetMetadata<Poly.DomainModeling.Analysis.BehaviorMetadata>(domain)?.Behavior;
-        var aggregateModel = infraResult.GetMetadata<Poly.DomainModeling.Analysis.OwnershipAggregateMetadata>(domain)?.Aggregate;
+        var behaviorModel = analysis.GetMetadata<Poly.DomainModeling.Analysis.BehaviorMetadata>(domain)?.Behavior;
+        var aggregateModel = analysis.GetMetadata<Poly.DomainModeling.Analysis.OwnershipAggregateMetadata>(domain)?.Aggregate;
 
         // Fail closed — no silent re-analyze (storage, behavior, aggregate).
-        // Pipeline carries authoring context; missing metadata is a pipeline bug.
         if ((mode == CompileMode.Db || mode == CompileMode.All) && storageModel == null)
             throw new InvalidOperationException(
                 "Infrastructure pipeline did not produce storage mapping metadata.");
@@ -227,10 +226,10 @@ public sealed class DslCompiler {
         if (mode == CompileMode.All) {
             if (behaviorModel == null)
                 throw new InvalidOperationException(
-                    "Infrastructure pipeline did not produce behavior metadata.");
+                    "Domain analysis did not produce behavior metadata. Ensure BehaviorPass is registered in the domain analysis pipeline.");
             if (aggregateModel == null)
                 throw new InvalidOperationException(
-                    "Infrastructure pipeline did not produce aggregate metadata.");
+                    "Domain analysis did not produce aggregate metadata. Ensure OwnershipAggregatePass is registered in the domain analysis pipeline.");
         }
 
         // TransportPass is in pipeline but unused — no consumer yet.

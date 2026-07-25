@@ -18,7 +18,9 @@ namespace Poly.DomainModeling.Analysis;
 internal sealed class StoragePass : INodeAnalyzer {
     public const string Id = "StoragePass";
     public string PassName => Id;
-    public string[] Dependencies => [EffectTopologyPass.Id, OwnershipAggregatePass.Id];
+    public string[] Dependencies => [];
+    // Topology and aggregate metadata are inherited from the domain pipeline
+    // via the priorAnalysis argument passed to the codegen pipeline.
 
     private readonly TypeMappingRegistry? _typeMaps;
     private readonly IReadOnlyList<IStorageConvention>? _conventions;

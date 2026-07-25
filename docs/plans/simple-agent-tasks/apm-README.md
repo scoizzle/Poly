@@ -9,51 +9,53 @@
 
 ## Rules
 
-1. **One micro-task at a time.** Do not skip A1 (metadata bridge).
-2. Read only the **Required Reading** on the task file + parent § referenced.
-3. **Phase A before Phase B.** No new diagnostic codes in Phase A.
-4. Do **not** merge StoragePass into the domain pipeline.
-5. Do **not** drop `_analysis` / context bridging — silent root/policy regression risk (parent §4).
-6. Pre-ship gate before marking Phase A Done.
-7. Prefer smallest coherent PR: A1→A5 in one commit only if green; otherwise A1 alone first.
+1. **One micro-task at a time** when fixing residuals.  
+2. **Phase A before treating Phase B as Done** — B needs diagnostic tests (§14).  
+3. Do **not** merge StoragePass into the domain pipeline.  
+4. Do **not** drop context metadata bridging.  
+5. Pre-ship gate before claiming suite complete.
 
 ---
 
 ## Agent pick
 
 ```text
-DONE:    (none)
-CURRENT: APM.A1 — metadata bridge (AnalysisContext)
-THEN:    A2 → A3 → A4 → A5 → Gate
-PULL:    Phase B diagnostics; CrossReferencePass consumer; Transport keep/drop
+DONE:    APM product bar (A+B) — uncommitted; 1609 green; 11 PipelineMerge fixtures
+CURRENT: C′.0 commit; optional C′.1 Dependencies (parent §15)
+THEN:    C′.2 inventory §5; dogfood DMDEP001 bidir (C′.4)
+PULL:    Transport keep/drop; cycle refinement
 ```
 
 ---
 
-## Phase A — Merge (ship first)
+## Phase A — Merge
 
 | # | Task | File | Status | Difficulty |
 |---|------|------|--------|------------|
-| **A1** | Metadata bridge for Aggregate/Behavior | [`apm-a1-metadata-bridge.md`](apm-a1-metadata-bridge.md) | `[ ]` | Medium |
-| **A2** | Register 3 passes on domain pipeline | [`apm-a2-register-domain-pipeline.md`](apm-a2-register-domain-pipeline.md) | `[ ]` | Small |
-| **A3** | Slim DslCompiler codegen pipeline | [`apm-a3-dslcompiler-slim.md`](apm-a3-dslcompiler-slim.md) | `[ ]` | Small |
-| **A4** | Domain analysis metadata tests | [`apm-a4-domain-metadata-tests.md`](apm-a4-domain-metadata-tests.md) | `[ ]` | Medium |
-| **A5** | Codegen regression (AllMode + generators) | [`apm-a5-codegen-regression.md`](apm-a5-codegen-regression.md) | `[ ]` | Small |
-| **Gate** | Pre-ship review Phase A | [`apm-gate-phase-a.md`](apm-gate-phase-a.md) | `[ ]` | Process |
+| **A1** | Metadata bridge | [`apm-a1-metadata-bridge.md`](apm-a1-metadata-bridge.md) | `[x]` code | Medium |
+| **A2** | Register 3 passes | [`apm-a2-register-domain-pipeline.md`](apm-a2-register-domain-pipeline.md) | `[x]` code | Small |
+| **A3** | Slim DslCompiler | [`apm-a3-dslcompiler-slim.md`](apm-a3-dslcompiler-slim.md) | `[x]` code | Small |
+| **A4** | Domain metadata tests | [`apm-a4-domain-metadata-tests.md`](apm-a4-domain-metadata-tests.md) | `[x]` 4 green | Medium |
+| **A5** | Codegen regression | [`apm-a5-codegen-regression.md`](apm-a5-codegen-regression.md) | `[x]` green | Small |
+| **A′** | Review residuals (Dependencies, Transport msg) | parent §13 | `[x]` | Small |
+| **Gate A** | Pre-ship Phase A | [`apm-gate-phase-a.md`](apm-gate-phase-a.md) | `[x]` | Process |
 
-**Exit A:** `DomainModelAnalyzer.Analyze` exposes Topology + Aggregate + Behavior metadata; DslCompiler only runs Storage (+ Transport/packs); codegen green; no new diagnostic codes.
+**Exit A:** Metadata on domain analysis + slim codegen **committed**.
 
 ---
 
-## Phase B — Diagnostics (optional; after Gate A)
+## Phase B — Diagnostics
 
 | # | Task | File | Status | Difficulty |
 |---|------|------|--------|------------|
-| **B1** | DMAGG001 / DMAGG002 on OwnershipAggregatePass | [`apm-b1-aggregate-diagnostics.md`](apm-b1-aggregate-diagnostics.md) | `[ ]` | Medium |
-| **B2** | Cycle story: CrossReferencePass **or** topology | [`apm-b2-cycle-diagnostics.md`](apm-b2-cycle-diagnostics.md) | `[ ]` | Medium |
-| **B3** | Unconditional-action hint (suggestions, not error) | [`apm-b3-behavior-hint.md`](apm-b3-behavior-hint.md) | `[ ]` | Small |
+| **B1** | DMAGG001 (orphan warning) | [`apm-b1-aggregate-diagnostics.md`](apm-b1-aggregate-diagnostics.md) | `[x]` | Medium |
+| **B2** | CrossReference + DMDEP001 | [`apm-b2-cycle-diagnostics.md`](apm-b2-cycle-diagnostics.md) | `[x]` | Medium |
+| **B3** | DMBEH001 hint (narrowed) | [`apm-b3-behavior-hint.md`](apm-b3-behavior-hint.md) | `[x]` | Small |
+| **B′** | Review residuals (B′.1–B′.3 done) | parent §14 | `[x]` product | Small |
+| **C′** | Post-review residuals | parent **§15** | `[ ]` commit + deps | Small |
 
-**Exit B:** Crafted fixtures show codes via analysis/MCP; noise acceptable; suite green.
+**Exit B (product):** 7 diagnostic fixtures green; DMAGG002 removed; DMBEH001 narrowed.  
+**Exit suite (ops):** Clean tree after **§15 C′.0** commit; inventory sync **C′.2**.
 
 ---
 
@@ -61,22 +63,10 @@ PULL:    Phase B diagnostics; CrossReferencePass consumer; Transport keep/drop
 
 | Item | Why |
 |------|-----|
-| Move StoragePass to domain pipeline | Needs packs/type maps on every evolve |
-| Bar B / RestApiSurfacePass | Infra pull — different track |
-| Skip A1 “just register passes” | Silent Aggregate/Behavior regression |
+| Move StoragePass to domain pipeline | Needs packs on every evolve |
+| Claim Phase B Done without B′.1 | Exit criteria unmet |
 | DMBEH001 as Error | Noisy for valid void actions |
-| Second cycle algorithm if CrossReferencePass can wire | Prefer one cycle story |
-
----
-
-## Session sketch
-
-| Session | Tasks | Outcome |
-|---------|-------|---------|
-| **1 — Bridge** | A1 | Context metadata; tests that fallback path unchanged |
-| **2 — Wire** | A2 + A3 | Domain registers three passes; DslCompiler slim |
-| **3 — Prove** | A4 + A5 + Gate | Metadata on domain result; codegen green |
-| **4 — Optional** | B1–B3 | Early diagnostics if dogfood wants them |
+| Second cycle algorithm | CrossReference already wired |
 
 ---
 
@@ -84,5 +74,5 @@ PULL:    Phase B diagnostics; CrossReferencePass consumer; Transport keep/drop
 
 - Domain fidelity + CORE seams  
 - Tests more specific; production more generic  
-- Smallest coherent slice (Phase A without diagnostics)  
-- Fail-closed: keep DslCompiler throws for missing storage/behavior/aggregate  
+- Fail-closed codegen retained  
+- Diagnostics without tests are not “Done”  

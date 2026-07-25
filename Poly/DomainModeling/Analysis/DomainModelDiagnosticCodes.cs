@@ -49,4 +49,23 @@ internal static class DomainModelDiagnosticCodes {
 
     /// Assigned value violates property constraints (range, length, pattern, enum, required).
     public const string EffectConstraintViolation = "DMEFF008";
+
+    // ── Aggregate / ownership diagnostics (APM Phase B) ────────
+
+    /// Non-root entity has no aggregate parent — potentially orphaned.
+    public const string AggregateOrphan = "DMAGG001";
+
+    // DMAGG002 removed — AggregateAnalyzer reads IsRoot from EntityStructureMetadata,
+    // so the two can never conflict in the pipeline. Add back if a real conflict signal
+    // emerges (e.g. structural heuristic vs aggregate topology with create-in override).
+
+    // ── Cross-reference / cycle diagnostics (APM Phase B) ──────
+
+    /// Cross-entity dependency cycle detected (relationships + subscriptions).
+    public const string DependencyCycle = "DMDEP001";
+
+    // ── Behavior / action diagnostics (APM Phase B) ────────────
+
+    /// Action has no require gates and no parameters — unconditionally invocable.
+    public const string UnconditionalAction = "DMBEH001";
 }

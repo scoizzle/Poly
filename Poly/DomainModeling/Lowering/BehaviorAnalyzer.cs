@@ -21,12 +21,14 @@ public sealed class BehaviorAnalyzer {
     private readonly List<Entity> _entities;
     private readonly Dictionary<string, Entity> _entityLookup;
     private readonly AnalysisResult? _analysis;
+    private readonly AnalysisContext? _context;
 
-    public BehaviorAnalyzer(Domain domain, AnalysisResult? analysis = null) {
+    public BehaviorAnalyzer(Domain domain, AnalysisResult? analysis = null, AnalysisContext? context = null) {
         _domain = domain;
         _analysis = analysis;
+        _context = context;
 
-        var lookup = analysis?.GetMetadata<DomainTypeLookupMetadata>(default);
+        var lookup = ResolveDomainTypeLookup(domain, analysis, context);
         if (lookup is not null) {
             _entities = lookup.Entities.ToList();
             _entityLookup = lookup.Types
@@ -37,6 +39,13 @@ public sealed class BehaviorAnalyzer {
             _entities = domain.Types.OfType<Entity>().ToList();
             _entityLookup = _entities.ToDictionary(e => e.Name, StringComparer.Ordinal);
         }
+    }
+
+    private static DomainTypeLookupMetadata? ResolveDomainTypeLookup(
+        Domain domain, AnalysisResult? analysis, AnalysisContext? context) {
+        var fromContext = context?.GetMetadata<DomainTypeLookupMetadata>(default);
+        if (fromContext is not null) return fromContext;
+        return analysis?.GetMetadata<DomainTypeLookupMetadata>(default);
     }
 
     public BehaviorModel Analyze() {
@@ -64,7 +73,7 @@ public sealed class BehaviorAnalyzer {
         var resultTypeName = isVoid ? null : action.Result.Members[0].Type.TypeName;
 
         var policies = new List<string>();
-        var effectivePolicies = _analysis?.GetMetadata<EffectivePoliciesMetadata>(action);
+        var effectivePolicies = ResolveMetadata<EffectivePoliciesMetadata>(action);
         if (effectivePolicies is not null) {
             foreach (var p in effectivePolicies.Policies)
                 policies.Add(p.Name);
@@ -81,7 +90,7 @@ public sealed class BehaviorAnalyzer {
         }).ToList();
 
         var transitions = new List<StageTransitionTarget>();
-        var capability = _analysis?.GetMetadata<ActionCapabilityMetadata>(action);
+        var capability = ResolveMetadata<ActionCapabilityMetadata>(action);
         if (capability is not null) {
             foreach (var stage in capability.View.TransitionTargets)
                 transitions.Add(new StageTransitionTarget(stage.Name));
@@ -103,8 +112,13 @@ public sealed class BehaviorAnalyzer {
         );
     }
 
+    private T? ResolveMetadata<T>(DomainModeling.Action action) where T : class, IAnalysisMetadata {
+        return _context?.GetMetadata<T>(action) ?? _analysis?.GetMetadata<T>(action);
+    }
+
     private bool IsEntityRefParam(Property param) {
-        var resolved = _analysis?.GetMetadata<ResolvedTypeReferenceMetadata>(param.Type);
+        var resolved = _context?.GetMetadata<ResolvedTypeReferenceMetadata>(param.Type)
+            ?? _analysis?.GetMetadata<ResolvedTypeReferenceMetadata>(param.Type);
         if (resolved is not null)
             return resolved.Type is Entity;
         return _entityLookup.ContainsKey(param.Type.TypeName);

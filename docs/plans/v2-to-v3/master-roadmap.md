@@ -51,8 +51,8 @@ MCP / direct API as thin consumers
 
 ```text
 DONE:    M1–M4; Q1′+Q3′+link_instances; infra IR Groups 1–7 under bar
-CURRENT: APM.A1 metadata bridge — [`apm-README.md`](../simple-agent-tasks/apm-README.md)
-PULL:    Q4; dates; Bar B; RestApiSurface; unlink MCP; E5 micro-tools
+CURRENT: APM commit (product green, uncommitted) — parent §15
+PULL:    Q4; dates; Bar B; RestApiSurface; unlink MCP; E5; DMDEP bidir noise
 ```
 
 **Honest product claim today:** Path-prefix / exists / where **and** Q3′ quantifiers are authorable **and** evaluable (store-linked `EvaluatePolicy`). MCP: `create_instance` → `link_instances` → `evaluate_policy(instanceId=…)`. DSL has **no** `link` keyword (`create in Rel` for spawn-and-wire). JSON policies still local-only. Codegen DbContext/Program via Syntax IR; `.http` still string.

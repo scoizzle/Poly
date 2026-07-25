@@ -35,6 +35,40 @@ internal sealed class AuthoringSuggestionAnalyzer : INodeAnalyzer {
             SuggestMissingStages(context, entity);
             SuggestMissingActions(context, entity);
             SuggestMissingPolicies(context, entity);
+            SuggestUnconditionalActions(context, entity);
+        }
+    }
+
+    /// <summary>
+    /// Suggests adding require gates when an action has no guards and no parameters.
+    /// (DMBEH001 — hint only, never blocks evolution.)
+    /// </summary>
+    private static void SuggestUnconditionalActions(AnalysisContext context, Entity entity) {
+        // Only warn when the entity has policies elsewhere — otherwise unconditional
+        // actions are likely intentional (no guard pattern established at all).
+        var hasPoliciesElsewhere = entity.Policies.Count > 0
+            || entity.Actions.Any(a => a.Policies.Count > 0)
+            || entity.Stages.Any(s => s.Policies.Count > 0 || s.Actions.Any(a => a.Policies.Count > 0));
+
+        foreach (var action in entity.Actions) {
+            if (action.Policies.Count == 0 && action.Parameters.Count == 0 && hasPoliciesElsewhere) {
+                context.ReportHint(action,
+                    $"Action '{entity.Name}.{action.Name}' has no require gates and no parameters — " +
+                    "it is unconditionally invocable. Consider adding a 'require PolicyName' guard " +
+                    "if business rules should gate this action.",
+                    DomainModelDiagnosticCodes.UnconditionalAction);
+            }
+        }
+        foreach (var stage in entity.Stages) {
+            foreach (var action in stage.Actions) {
+                if (action.Policies.Count == 0 && action.Parameters.Count == 0 && hasPoliciesElsewhere) {
+                    context.ReportHint(action,
+                        $"Action '{entity.Name}.{action.Name}' (stage '{stage.Name}') has no require gates " +
+                        "and no parameters — it is unconditionally invocable. Consider adding " +
+                        "a 'require PolicyName' guard if business rules should gate this action.",
+                        DomainModelDiagnosticCodes.UnconditionalAction);
+                }
+            }
         }
     }
 

@@ -19,12 +19,14 @@ public sealed class AggregateAnalyzer {
     private readonly Dictionary<string, Entity> _entityLookup;
     private readonly Dictionary<string, List<Relationship>> _incomingRels;
     private readonly AnalysisResult? _analysis;
+    private readonly AnalysisContext? _context;
 
-    public AggregateAnalyzer(Domain domain, AnalysisResult? analysis = null) {
+    public AggregateAnalyzer(Domain domain, AnalysisResult? analysis = null, AnalysisContext? context = null) {
         _domain = domain;
         _analysis = analysis;
+        _context = context;
 
-        var lookup = analysis?.GetMetadata<DomainTypeLookupMetadata>(default);
+        var lookup = ResolveDomainTypeLookup(domain, analysis, context);
         if (lookup is not null) {
             _entities = lookup.Entities.ToList();
             _entityLookup = lookup.Types
@@ -43,6 +45,13 @@ public sealed class AggregateAnalyzer {
                 _incomingRels[rel.Target.TypeName] = list = new();
             list.Add(rel);
         }
+    }
+
+    private static DomainTypeLookupMetadata? ResolveDomainTypeLookup(
+        Domain domain, AnalysisResult? analysis, AnalysisContext? context) {
+        var fromContext = context?.GetMetadata<DomainTypeLookupMetadata>(default);
+        if (fromContext is not null) return fromContext;
+        return analysis?.GetMetadata<DomainTypeLookupMetadata>(default);
     }
 
     public AggregateModel Analyze(EffectTopology? topology = null) {
@@ -139,7 +148,9 @@ public sealed class AggregateAnalyzer {
     }
 
     private bool IsRootEntity(Entity entity) {
-        var meta = _analysis?.GetMetadata<EntityStructureMetadata>(entity);
+        // Context first (in-pipeline), then AnalysisResult (legacy), then heuristics
+        var meta = _context?.GetMetadata<EntityStructureMetadata>(entity)
+            ?? _analysis?.GetMetadata<EntityStructureMetadata>(entity);
         if (meta is not null)
             return meta.IsRoot;
 

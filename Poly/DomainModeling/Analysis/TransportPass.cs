@@ -14,7 +14,9 @@ namespace Poly.DomainModeling.Analysis;
 internal sealed class TransportPass : INodeAnalyzer {
     public const string Id = "TransportPass";
     public string PassName => Id;
-    public string[] Dependencies => [EffectTopologyPass.Id, OwnershipAggregatePass.Id];
+    public string[] Dependencies => [];
+    // Topology and aggregate metadata are inherited from the domain pipeline
+    // via the priorAnalysis argument passed to the codegen pipeline.
 
     public void Analyze(AnalysisContext context, Node node) {
         if (node is not Domain domain) return;
@@ -28,7 +30,8 @@ internal sealed class TransportPass : INodeAnalyzer {
             context.ReportDiagnostic(domain,
                 DiagnosticSeverity.Error,
                 "TransportPass requires EffectTopologyMetadata and OwnershipAggregateMetadata. " +
-                "Ensure EffectTopologyPass and OwnershipAggregatePass run before TransportPass.",
+                "These are produced by the domain analysis pipeline (EffectTopologyPass, OwnershipAggregatePass) " +
+                "and must be passed via priorAnalysis.",
                 code: "TransportPass.MissingDependency");
             return;
         }

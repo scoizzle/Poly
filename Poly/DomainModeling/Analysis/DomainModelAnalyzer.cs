@@ -46,6 +46,14 @@ public static class DomainModelAnalysisBuilderExtensions {
             builder.AddAnalyzer(new SubscriptionContractAnalyzer());
             builder.AddAnalyzer(new SubscriptionCausalityAnalyzer());
             builder.AddAnalyzer(new SubscriptionReplaySafetyAnalyzer());
+            // Cross-entity effect topology (create-in, invoke, subscriptions)
+            builder.AddAnalyzer(new EffectTopologyPass());
+            // Ownership hierarchy (roots, children, aggregate parents)
+            builder.AddAnalyzer(new OwnershipAggregatePass());
+            // Action metadata (parameters, return types, effective policies, transitions)
+            builder.AddAnalyzer(new BehaviorPass());
+            // Cross-entity dependency graph + cycle detection
+            builder.AddAnalyzer(new CrossReferencePass());
             // Authoring suggestions (advisory hints)
             builder.AddAnalyzer(new AuthoringSuggestionAnalyzer());
             // Entity Syntax projection (TypeDefinitionNode[] as metadata)

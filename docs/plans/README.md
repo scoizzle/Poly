@@ -12,6 +12,8 @@ Architectural rationale → **`docs/decisions/`**. Module maps → **`Poly/*/REA
 | Plan | Role |
 |------|------|
 | [**Master roadmap**](v2-to-v3/master-roadmap.md) | Milestone index + one-line agent pick |
+| [**Analysis pipeline merge**](analysis-pipeline-merge.md) | **Primary pick** — topology/aggregate/behavior → domain pipeline · [`apm-*` tasks](simple-agent-tasks/apm-README.md) |
+| [**Capability inventory**](../domainmodeling-capability-inventory.md) | What ships (reference, not a queue) |
 | [**Effect surface completeness**](v2-to-v3/effect-surface-completeness.md) | Effects track — kernel shipped; dogfood / E5 / E6.1 pull |
 | [**DSL query surface**](v2-to-v3/dsl-query-surface.md) | **Complete** Q1′+Q3′+`link_instances` — design reference; pull Q4/dates |
 | [**MCP dogfood orchestrator**](v2-to-v3/mcp-dogfood-orchestrator.md) | Dogfood loop — [report 1](v2-to-v3/agent-summaries/dogfood/DOGFOOD-REPORT-20260718.md) · [report 2](v2-to-v3/agent-summaries/dogfood/DOGFOOD-REPORT-2-20260718.md) |
@@ -24,6 +26,7 @@ Architectural rationale → **`docs/decisions/`**. Module maps → **`Poly/*/REA
 
 | Queue | Role |
 |-------|------|
+| [**`apm-*` (analysis pipeline merge)**](simple-agent-tasks/apm-README.md) | **Primary** — Phase A1→Gate then optional B |
 | [**`qe-*` (query/effect)**](v2-to-v3/simple-agent-tasks/qe-README.md) | **Complete** — do not reopen Q0–Q3′; optional hygiene only |
 | [**`vs-*` (vertical slice)**](v2-to-v3/simple-agent-tasks/vs-README.md) | Historical M2 — **done**; do not reopen |
 | [**`pr1` review gate**](v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md) | Always-on pre-ship process |
@@ -81,7 +84,7 @@ Agents **must not** implement archive work without an explicit re-open validated
 
 ## Guidelines
 
-1. **What next?** → [`v2-to-v3/master-roadmap.md`](v2-to-v3/master-roadmap.md) agent pick · dogfood · effect/query **pull** lists (not closed residual tables).  
+1. **What next?** → [`simple-agent-tasks/apm-README.md`](simple-agent-tasks/apm-README.md) (pipeline merge) · [`v2-to-v3/master-roadmap.md`](v2-to-v3/master-roadmap.md) · dogfood.  
 2. Consult `docs/decisions/` and `CORE.md` before significant work.  
 3. Do not invent a second product IR or reintroduce V2.  
 4. Prefer thin vertical slices; archive completed suites instead of leaving stale “CURRENT: commit…”.

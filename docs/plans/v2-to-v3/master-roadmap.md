@@ -51,7 +51,7 @@ MCP / direct API as thin consumers
 
 ```text
 DONE:    M1–M4; Q1′+Q3′+link_instances; infra IR Groups 1–7 under bar
-CURRENT: Dogfood / product pain — effect pull or Q4 only if needed
+CURRENT: APM.A1 metadata bridge — [`apm-README.md`](../simple-agent-tasks/apm-README.md)
 PULL:    Q4; dates; Bar B; RestApiSurface; unlink MCP; E5 micro-tools
 ```
 

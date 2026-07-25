@@ -183,20 +183,13 @@ internal sealed class ConstraintPropagationAnalyzer : INodeAnalyzer {
     }
 
     private static bool ExpressionReferencesParameter(DomainExpression expr, string paramName) {
-        switch (expr) {
-            case ParameterAccess pa:
-                return string.Equals(pa.Name, paramName, StringComparison.Ordinal);
-            case Add add:
-                return ExpressionReferencesParameter(add.Left, paramName)
-                    || ExpressionReferencesParameter(add.Right, paramName);
-            case Subtract sub:
-                return ExpressionReferencesParameter(sub.Left, paramName)
-                    || ExpressionReferencesParameter(sub.Right, paramName);
-            case OwnedAccess oa:
-                return ExpressionReferencesParameter(oa.Inner, paramName);
-            default:
-                return false;
+        if (expr is ParameterAccess pa)
+            return string.Equals(pa.Name, paramName, StringComparison.Ordinal);
+        foreach (var child in expr.Children.OfType<DomainExpression>()) {
+            if (ExpressionReferencesParameter(child, paramName))
+                return true;
         }
+        return false;
     }
 
     private static long? GetExpressionOffset(DomainExpression expr, string paramName) {

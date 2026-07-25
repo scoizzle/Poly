@@ -162,58 +162,11 @@ public static class PolicyEvaluator {
     }
 
     private static void CollectPropertyAccesses(DomainExpression expr, HashSet<string> result) {
-        switch (expr) {
-            case PropertyAccess pa:
-                result.Add(pa.Name);
-                break;
-            case OwnedAccess oa:
-                CollectPropertyAccesses(oa.Inner, result);
-                break;
-            case Exists e:
-                CollectPropertyAccesses(e.Target, result);
-                break;
-            case NotExists ne:
-                CollectPropertyAccesses(ne.Target, result);
-                break;
-            case Subtract s:
-                CollectPropertyAccesses(s.Left, result);
-                CollectPropertyAccesses(s.Right, result);
-                break;
-            case Add a:
-                CollectPropertyAccesses(a.Left, result);
-                CollectPropertyAccesses(a.Right, result);
-                break;
-            case Multiply m:
-                CollectPropertyAccesses(m.Left, result);
-                CollectPropertyAccesses(m.Right, result);
-                break;
-            case Divide d:
-                CollectPropertyAccesses(d.Left, result);
-                CollectPropertyAccesses(d.Right, result);
-                break;
-            case DateOperation dateOp:
-                CollectPropertyAccesses(dateOp.Date, result);
-                CollectPropertyAccesses(dateOp.Offset, result);
-                break;
-            case RelationshipNavigation rn:
-                CollectPropertyAccesses(rn.TargetProperty, result);
-                break;
-            case Comparison comp:
-                CollectPropertyAccesses(comp.Left, result);
-                CollectPropertyAccesses(comp.Right, result);
-                break;
-            case And and:
-                CollectPropertyAccesses(and.Left, result);
-                CollectPropertyAccesses(and.Right, result);
-                break;
-            case Or or:
-                CollectPropertyAccesses(or.Left, result);
-                CollectPropertyAccesses(or.Right, result);
-                break;
-            case Not not:
-                CollectPropertyAccesses(not.Operand, result);
-                break;
-                // Literal, ParameterAccess — no property references
+        if (expr is PropertyAccess pa) {
+            result.Add(pa.Name);
+            return;
         }
+        foreach (var child in expr.Children.OfType<DomainExpression>())
+            CollectPropertyAccesses(child, result);
     }
 }

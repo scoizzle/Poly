@@ -44,7 +44,7 @@ public class InfrastructureAnalyzerTests {
         var aggregate = Poly.DomainModeling.Analysis.OwnershipAggregatePass.BuildAggregate(domain, null, topology);
         var storage = new StorageAnalyzer(domain).Analyze(aggregate, topology);
         var behavior = Poly.DomainModeling.Analysis.BehaviorPass.BuildBehavior(domain);
-        var transport = new TransportAnalyzer(domain).Analyze(aggregate, topology);
+        var transport = Poly.DomainModeling.Analysis.TransportPass.BuildTransport(domain, aggregate, topology);
         return new TestInfra(storage, topology, behavior, aggregate, transport);
     }
 
@@ -56,7 +56,7 @@ public class InfrastructureAnalyzerTests {
         var aggregate = Poly.DomainModeling.Analysis.OwnershipAggregatePass.BuildAggregate(domain, null, topology);
         var storage = new StorageAnalyzer(domain, analysis).Analyze(aggregate, topology);
         var behavior = Poly.DomainModeling.Analysis.BehaviorPass.BuildBehavior(domain);
-        var transport = new TransportAnalyzer(domain, analysis).Analyze(aggregate, topology);
+        var transport = Poly.DomainModeling.Analysis.TransportPass.BuildTransport(domain, aggregate, topology);
         return new TestInfra(storage, topology, behavior, aggregate, transport);
     }
 
@@ -414,7 +414,7 @@ public class InfrastructureAnalyzerTests {
         var aggregate = Poly.DomainModeling.Analysis.OwnershipAggregatePass.BuildAggregate(domain, null, topology);
         var storage = new StorageAnalyzer(domain, typeMaps: ctx.TypeMaps, conventions: ctx.StorageConventions).Analyze(aggregate, topology);
         var behavior = Poly.DomainModeling.Analysis.BehaviorPass.BuildBehavior(domain);
-        var transport = new TransportAnalyzer(domain).Analyze(aggregate, topology);
+        var transport = Poly.DomainModeling.Analysis.TransportPass.BuildTransport(domain, aggregate, topology);
         return new TestInfra(storage, topology, behavior, aggregate, transport);
     }
 
@@ -722,5 +722,28 @@ public class InfrastructurePipelineTests {
         var storage = result.GetMetadata<StorageMappingMetadata>(domain);
         await Assert.That(storage).IsNotNull();
         await Assert.That(storage!.Storage.Entities.Count).IsGreaterThan(0);
+    }
+
+    [Test]
+    public async Task StoragePass_FailsClosed_WithoutAggregateAndTopology() {
+        // D3.0: StoragePass must fail-loud (not silently produce incomplete storage)
+        // when EffectTopologyMetadata or OwnershipAggregateMetadata are missing.
+        var domain = ParseDomain("""
+            domain Test
+            Item: entity { Name: Text }
+            """);
+
+        // Build a pipeline with StoragePass alone — no domain analysis passes.
+        var pipeline = new AnalyzerBuilder()
+            .AddAnalyzer(new StoragePass())
+            .Build();
+
+        var result = pipeline.Analyze(domain);
+
+        var storage = result.GetMetadata<StorageMappingMetadata>(domain);
+        await Assert.That(storage).IsNull();
+
+        await Assert.That(result.Diagnostics.Any(d =>
+            d.Message.Contains("StoragePass requires"))).IsTrue();
     }
 }

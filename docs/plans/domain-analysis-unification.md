@@ -1,7 +1,7 @@
 # Domain Analysis Unification — Task Plan
 
 **Date:** 2026-07-25  
-**Status:** Active — D1 committed; D2 partial (D2.4/D2.5 done, D2.1–D2.3 deferred). D2′ residuals resolved. **See §11.**  
+**Status:** Active — D1 done; D2.4/D2.5 done (D2.1–D2.3 deferred); **Phase 3 next** (incl. §12 design-integration follow-ups).  
 **Micro-tasks:** [`simple-agent-tasks/dau-README.md`](simple-agent-tasks/dau-README.md)  
 **Related:** [`analysis-pipeline-merge.md`](analysis-pipeline-merge.md) (complete; design reference) · [`domainmodeling-capability-inventory.md`](../domainmodeling-capability-inventory.md) · [`docs/CORE.md`](../CORE.md) · pack experiment [`dsl-plugin-pipeline-experiment.md`](dsl-plugin-pipeline-experiment.md)
 
@@ -180,15 +180,20 @@ Execute **in order** within a phase unless noted. Gate before claiming phase Don
 
 | ID | Task | Notes | Diff |
 |----|------|-------|------|
+| **D3.0** | **StoragePass fail-closed** (pre-register contract) | Mirror TransportPass: if aggregate or topology metadata is null, **Error**, do **not** `SetMetadata(StorageMappingMetadata)`. Test: priorAnalysis without OwnershipAggregate fails closed. **Can ship before full always-on registration.** | S |
 | **D3.1** | Design API: `DomainModelAnalyzer.Analyze(Domain, DomainAuthoringContext? context = null)` (or pipeline factory on context) | Cached pipelines keyed by context identity/fingerprint if needed; null context ⇒ core defaults | M |
 | **D3.2** | Move/absorb `StorageAnalyzer` into Analysis as real `INodeAnalyzer`; register on domain pipeline | Type maps + conventions from context; defaults when null; Dependencies on ownership + topology (or unified successors) | M |
 | **D3.3** | Move/absorb `TransportAnalyzer` into Analysis; register on domain pipeline | Domain **Transport facts** (exposable surface from ownership/actions). RestApi/MinimalApi **consume** this — they are not separate analysis. **Do not delete** Transport for “no RestApi reader yet.” | M |
 | **D3.4** | Thread MCP / DSL session context into domain analyze (already `CreateWithSqlPack` on MCP) | Evolution path should pass the same context used for parse when available | M |
+| **D3.4b** | **MCP structured facts** from `LatestAnalysis` | Extend `get_domain_analysis` / AnalysisData **or** thin `get_domain_facts`: roots/parents, topology summary, behavior action names — from existing metadata bags; **no second store** | M |
 | **D3.5** | DslCompiler: prefer storage/transport from **domain** `analysis`; remove re-run of domain-fact passes; pack `PassRegistry` only for true refinements | Fail-closed messages point at domain pipeline + packs | M |
 | **D3.6** | Tests: domain analyze has Storage (+ Transport) metadata; pack tests still differ SQLite vs generic; AllMode green | | M |
+| **D3.6b** | **Retarget GenerationAssertions / IR helpers** | Product-shaped IR tests use `DomainModelAnalyzer.Analyze` + storage metadata (or full Compile); stop `StorageAnalyzer`/`BuildAggregate(null)` as product path | M |
 | **D3.7** | Gate Phase 3 | Pre-ship; update inventory §5.1/§5.2 | S |
 
-**Exit 3:** `DomainModelAnalyzer.Analyze` (with session context when available) produces storage + transport metadata; codegen is emit-first.
+**Exit 3:** `DomainModelAnalyzer.Analyze` (with session context when available) produces storage + transport metadata; codegen is emit-first; MCP can read hierarchy/topology/behavior facts; StoragePass never vacuous-succeeds without hierarchy.
+
+**Source:** design-integration-review on `Poly/DomainModeling` (2026-07-25) — see **§12**.
 
 ### Phase 4 — Residue + docs
 
@@ -238,10 +243,10 @@ Pre-ship: [`pr1-uncommitted-review-gate.md`](v2-to-v3/simple-agent-tasks/pr1-unc
 ## 8. Agent pick
 
 ```text
-DONE:    APM; DAU D0; D1 (topo/agg/beh algorithms in Analysis) on 7ba716d
-CURRENT: §11 residuals — honesty + causality restore + finish real D2.1–D2.3
-THEN:    Commit partial D2 (D2.4/D2.5) after residuals; D3 storage/transport
-PULL:    Bar B; dialect packs; RestApi as transport consumer of domain Transport
+DONE:    APM; D0; D1; D2.4/D2.5 (+ D2′ residuals) — D2.1–D2.3 deferred
+CURRENT: D3.0 done (StoragePass fail-closed). Post-suite next product work.
+THEN:    D3.6/D3.6b tests + helpers; D3.7 gate; D4 docs
+PULL:    D2.1–D2.3 walk unify; Bar B; dialect packs; RestApi as transport consumer
 ```
 
 ---
@@ -263,10 +268,13 @@ PULL:    Bar B; dialect packs; RestApi as transport consumer of domain Transport
 - [~] Overlapping walks reduced — D2.4/D2.5 partial; D2.1–D2.3 still open (§11)  
 - [ ] Storage + transport metadata available from domain analysis (context-aware packs)  
 - [ ] DslCompiler does not re-derive domain facts  
+- [x] StoragePass fail-closed without aggregate/topology (**D3.0**)  
+- [ ] MCP exposes structured domain metadata from LatestAnalysis (**D3.4b**)  
+- [ ] IR helpers use domain analyze path (**D3.6b**)  
 - [x] RestApi = transport implementation consuming Transport facts — `RestApiMetadata` delete correct  
 - [ ] Domain **Transport** facts always-on (D3) — RestApi/MinimalApi read them at emit time  
 - [ ] CORE + README match the tree  
-- [x] Full suite green at last review (1611) — re-verify after §11 fixes  
+- [x] Full suite green at last review (1611) — re-verify after each phase  
 
 ---
 
@@ -344,6 +352,50 @@ PULL:    Bar B; dialect packs; RestApi as transport consumer of domain Transport
 
 **Exit:** D2.4/D2.5 shipped (effect ordering fold + unused-param fold + subscription unify with full causality). D2.1–D2.3 deferred to next pass. 1611 tests green. Plan status honest.  
 
-**Verdict:** Direction of D2.4/D2.5 is right (fewer registrations). **Do not mark Phase 2 complete.** Fix **D2′.1** + **D2′.2** before treating this batch as shippable under the plan’s own exit criteria. Prefer commit of “D2 partial: effect ordering + subscription registration merge” only after causality parity decision is explicit.
+**Recommended next (historical):** D2′ residuals → commit. **Now:** **§12** / Phase **D3.0** onward.
 
-**Recommended next:** D2′.2 (causality) → D2′.1/D2′.5 honesty → commit → real D2.1 or D2.2.
+---
+
+## 12. Design-integration review — `Poly/DomainModeling` (2026-07-25)
+
+**Source:** workflow `design-integration-review-2` · target `Poly/DomainModeling` · cohesion **partial** · verified 7/14.
+
+**Verdict (workflow):** Mid-DAU is healthy for structure/topo/agg/behavior/crossref on one domain pipeline. Cohesion break is **storage/transport + pack authoring** still a second DslCompiler/Lowering world; MCP does not surface paid-for metadata bags; StoragePass can soft-succeed without hierarchy.
+
+### Ranked findings → DAU tasks
+
+| Review finding | Sev | Plan ID | Action |
+|----------------|-----|---------|--------|
+| Storage/transport second pipeline under Lowering | Structure | **D3.2**, **D3.3**, **D3.5** | Always-on Analysis; DslCompiler emit-only |
+| DomainAuthoringContext / PassRegistry only on codegen | Structure | **D3.1**, **D3.4** | Thread context into Analyze + evolve/MCP |
+| StoragePass fails open without aggregate/topology | Contract | **D3.0** | Fail-closed like TransportPass + test (**do first**) |
+| MCP `get_domain_analysis` omits metadata bags | Contract | **D3.4b** | Project roots/topology/behavior from LatestAnalysis |
+| GenerationAssertions / IR helpers bypass domain analyze | Edge | **D3.6b** | Retarget to Analyze + metadata or full Compile |
+
+### Integration checklist (from review)
+
+| Check | Status | Closes with |
+|-------|--------|-------------|
+| Always-on Storage+Transport same bags as codegen | No | D3.2–D3.3, D3.5 |
+| Evolve/MCP one pipeline for structure/topo/agg/behavior | Yes | — |
+| LatestAnalysis → structured facts for agents | No | D3.4b |
+| StoragePass fail-closed on missing hierarchy | No | D3.0 |
+| DslCompiler uses domain bags for behavior/agg; storage re-derived | Partial | D3.5 |
+| Authoring context on evolve/analyze | No | D3.1, D3.4 |
+| Product IR tests via domain analyze | No | D3.6b |
+| DAU target documented | Yes | — |
+
+### Follow-up checklist (from review)
+
+- [x] **D3.0** StoragePass fail-closed + golden (mirror TransportPass)  
+- [ ] **D3.1** `Analyze(domain, DomainAuthoringContext?)`  
+- [ ] **D3.2** Storage always-on domain pipeline (absorb into Analysis)  
+- [ ] **D3.3** Transport always-on domain pipeline  
+- [ ] **D3.4** MCP/DSL session context → analyze/evolve  
+- [ ] **D3.4b** MCP structured facts from LatestAnalysis metadata  
+- [ ] **D3.5** DslCompiler emit-first (no second fact world)  
+- [ ] **D3.6** Domain metadata + pack variance + AllMode tests  
+- [ ] **D3.6b** Retarget GenerationAssertions / pack IR helpers  
+- [ ] **D3.7** Gate Phase 3  
+
+**Recommended next:** **D3.0** (small contract win, unblocks honest storage) → **D3.1** + **D3.4** (context) → **D3.2/D3.3** register → **D3.4b** MCP facts → **D3.5** thin compiler → **D3.6/D3.6b** tests.

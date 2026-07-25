@@ -51,8 +51,8 @@ MCP / direct API as thin consumers
 
 ```text
 DONE:    M1–M4; Q1′+Q3′+link_instances; infra IR; APM registration
-CURRENT: DAU D2′ residuals (§11) then finish D2 / D3 ([`dau-README.md`](../simple-agent-tasks/dau-README.md))
-PULL:    Q4; dates; Bar B; dialect packs; unlink MCP; E5
+CURRENT: DAU D3.0 StoragePass fail-closed → D3 storage/transport/MCP facts ([`dau-README.md`](../simple-agent-tasks/dau-README.md))
+PULL:    Q4; dates; Bar B; dialect packs; unlink MCP; E5; D2.1–D2.3 walk unify
 ```
 
 **Honest product claim today:** Path-prefix / exists / where **and** Q3′ quantifiers are authorable **and** evaluable (store-linked `EvaluatePolicy`). MCP: `create_instance` → `link_instances` → `evaluate_policy(instanceId=…)`. DSL has **no** `link` keyword (`create in Rel` for spawn-and-wire). JSON policies still local-only. Codegen DbContext/Program via Syntax IR; `.http` still string.

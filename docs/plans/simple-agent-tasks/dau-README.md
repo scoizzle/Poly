@@ -11,7 +11,7 @@
 ## Rules
 
 1. **One micro-task at a time** (one ID from the parent plan).  
-2. **Phase order:** D0 → D1 → D2 → D3 → D4. Do not start D3 storage/transport until D1 wrappers are gone.  
+2. **Phase order:** D0 → D1 → D2 → D3 → D4. D1 done — D3.0 may start before full D3 always-on. D2.1–D2.3 deferred (not blocking D3).  
 3. **Lowering depends on Analysis** — do not reintroduce Analysis → Lowering domain-fact wrappers.  
 4. **Pack surfaces:** do **not** delete Transport / coupling / capability facets because “no GetMetadata today.”  
 5. **Proven residue only** for deletes (e.g. EnumConstraintSubset after inheritance removal).  
@@ -24,11 +24,10 @@
 ## Agent pick
 
 ```text
-DONE:    D0; D1; D2 partial (D2.4 effects fold; D2.5 subscription unify + rename)
-        D2′.2 causality DFS+filter restored; D2′.3 param usage fold done
-CURRENT: D2.1–D2.3 not started — explicit defer; D2.6 gate
-THEN:    D2.1–D2.3 or skip to D3
-PULL:    D3 storage+transport; D2.1–D2.3; D4 docs
+DONE:    D0; D1; D2.4/D2.5 (+ D2′); D2.1–D2.3 deferred
+CURRENT: Post-suite — next product work
+PULL:    D2.1–D2.3 walk unify; D3.1–D3.6 context/transport/MCP; D4 docs
+PULL:    D2.1–D2.3 walk unify; D4 docs
 ```
 
 ---
@@ -75,17 +74,22 @@ PULL:    D3 storage+transport; D2.1–D2.3; D4 docs
 
 ## Phase 3 — Storage + transport in domain analysis
 
+**Also:** parent **§12** (design-integration review of `Poly/DomainModeling`).
+
 | # | Task | Parent | Status | Diff |
 |---|------|--------|--------|------|
-| **D3.1** | `Analyze(domain, DomainAuthoringContext?)` (or equiv.) | §5 D3.1 | `[ ]` | M |
-| **D3.2** | Storage always-on (defaults + context maps) | §5 D3.2 | `[ ]` | M |
-| **D3.3** | Transport always-on (pack-ready; do not delete) | §5 D3.3 | `[ ]` | M |
-| **D3.4** | MCP/DSL session context → analyze | §5 D3.4 | `[ ]` | M |
+| **D3.0** | StoragePass fail-closed (missing agg/topo) + test | §5 / §12 | `[x]` | S |
+| **D3.1** | `Analyze(domain, DomainAuthoringContext?)` | §5 D3.1 | `[ ]` | M |
+| **D3.2** | Storage always-on domain pipeline | §5 D3.2 | `[ ]` | M |
+| **D3.3** | Transport always-on domain pipeline | §5 D3.3 | `[ ]` | M |
+| **D3.4** | MCP/DSL session context → analyze/evolve | §5 D3.4 | `[ ]` | M |
+| **D3.4b** | MCP structured facts from LatestAnalysis | §12 | `[ ]` | M |
 | **D3.5** | DslCompiler emit-first | §5 D3.5 | `[ ]` | M |
 | **D3.6** | Tests (domain metadata + pack variance + AllMode) | §5 D3.6 | `[ ]` | M |
+| **D3.6b** | Retarget GenerationAssertions / IR helpers | §12 | `[ ]` | M |
 | **D3.7** | Gate Phase 3 | §5 D3.7 | `[ ]` | S |
 
-**Exit 3:** Domain analysis carries storage + transport; codegen does not re-derive domain facts.
+**Exit 3:** Domain analysis carries storage + transport; codegen emit-first; MCP facts; StoragePass fail-closed.
 
 ---
 

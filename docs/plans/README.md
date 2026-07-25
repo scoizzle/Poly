@@ -12,7 +12,7 @@ Architectural rationale → **`docs/decisions/`**. Module maps → **`Poly/*/REA
 | Plan | Role |
 |------|------|
 | [**Master roadmap**](v2-to-v3/master-roadmap.md) | Milestone index + one-line agent pick |
-| [**Domain analysis unification**](domain-analysis-unification.md) | **Primary** — D1 done; D2 partial (§11 residuals) · [`dau-*`](simple-agent-tasks/dau-README.md) |
+| [**Domain analysis unification**](domain-analysis-unification.md) | **Primary** — D3 next (§12 design-integration follow-ups) · [`dau-*`](simple-agent-tasks/dau-README.md) |
 | [**Analysis pipeline merge**](analysis-pipeline-merge.md) | **Complete** (registration only) — predecessor to DAU · [`apm-*`](simple-agent-tasks/apm-README.md) |
 | [**Capability inventory**](../domainmodeling-capability-inventory.md) | What ships (reference, not a queue) |
 | [**Effect surface completeness**](v2-to-v3/effect-surface-completeness.md) | Effects track — kernel shipped; dogfood / E5 / E6.1 pull |

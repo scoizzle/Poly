@@ -136,21 +136,22 @@ Registered in `UseDomainModelAnalysisPipeline()` (`DomainModelAnalyzer.cs`):
 | Capabilities / rules / contracts | `CapabilityAnalyzer`, `RuleCoverageAnalyzer`, `ContractIntegrationAnalyzer` | ✅ |
 | Entity structure | `EntityStructureAnalyzer` (key, root, stages) | ✅ |
 | Subscriptions | contract, causality, replay safety | ✅ |
-| Suggestions / C# entity IR | `AuthoringSuggestionAnalyzer`, `EntitySyntaxPass` | ✅ |
-
-**Not registered here today:** `EffectTopologyPass`, `OwnershipAggregatePass`, `BehaviorPass` (codegen-only — merge proposal below).
+| Effect topology | `EffectTopologyPass` — cross-entity coupling | ✅ now runs in domain pipeline |
+| Ownership/aggregate | `OwnershipAggregatePass` — root/child hierarchy | ✅ now runs in domain pipeline |
+| Behavior metadata | `BehaviorPass` — actions, parameters, transitions | ✅ now runs in domain pipeline |
+| Authoring suggestions + C# entity IR | `AuthoringSuggestionAnalyzer`, `EntitySyntaxPass` | ✅ |
+| Cycle detection | `CrossReferencePass` — entity dependency graph | ✅ now runs in domain pipeline |
 
 ### 5.2 Codegen pipeline — `DslCompiler.GenerateAllFiles` only
 
+The topology/aggregate/behavior passes now run in the domain pipeline (see §5.1 above).
+The codegen pipeline receives their metadata via `AnalysisResult` (`priorAnalysis:` argument).
+
 | Pass | Output | Domain fact? | Status |
 |------|--------|--------------|--------|
-| `EffectTopologyPass` | `EffectTopologyMetadata` | **Yes** | ✅ codegen only → **[merge proposal](plans/analysis-pipeline-merge.md)** |
-| `OwnershipAggregatePass` | `OwnershipAggregateMetadata` | **Yes** | ✅ codegen only → merge |
-| `BehaviorPass` | `BehaviorMetadata` | **Yes** | ✅ codegen only → merge |
 | `StoragePass` | `StorageMappingMetadata` | No (SQL/maps) | ✅ stays codegen |
 | `TransportPass` | `TransportMetadata` | No | ✅ registered; **no production consumer** |
 | Pack `PassRegistry` | storage enrichment | Pack-specific | ✅ feeds **codegen** builder, not domain pipeline |
-| `CrossReferencePass` | `EntityDependencyGraphMetadata` + cycle warning | Yes | 🟡 **deferred** (implemented, not wired) |
 
 Fail-closed: missing storage (db/all); missing behavior/aggregate (all) → `InvalidOperationException` in `DslCompiler`.
 
@@ -162,8 +163,6 @@ Fail-closed: missing storage (db/all); missing behavior/aggregate (all) → `Inv
 | Node replacement | `NodeReplacementMetadata` |
 | Interpretation semantic passes | `Poly/Interpretation/Analysis/` |
 | Policy VM path | `PolicyEvaluator` → `Interpreter` |
-
-**Open design work:** unify domain-fact infra passes into the domain pipeline — [`plans/analysis-pipeline-merge.md`](plans/analysis-pipeline-merge.md).
 
 ---
 
@@ -235,8 +234,8 @@ Shipped highlights: entities, properties, constraints, enums, navs, stages, acti
 
 | Capability | Notes | Status |
 |-----------|--------|--------|
-| **Analysis pipeline merge** | Topology/aggregate/behavior → domain pipeline | ⬜ [Proposal](plans/analysis-pipeline-merge.md) · [**`apm-*` tasks**](plans/simple-agent-tasks/apm-README.md) |
-| CrossReferencePass wiring | Cycle graph exists; not in either pipeline | 🟡 Deferred |
+| **Analysis pipeline merge** | Topology/aggregate/behavior → domain pipeline | ✅ **Done** — Phase A+B in tree |
+| CrossReferencePass | Entity dependency cycle detection | ✅ runs in domain pipeline |
 | TransportPass keep/drop | Registered, unused | 🟡 G6.h1 |
 | Bar B full string oracle | Anonymous-object Syntax needed | ⬜ Pull |
 | RestApiSurfacePass / StorageAccessPass | No consumer | ⬜ Pull |

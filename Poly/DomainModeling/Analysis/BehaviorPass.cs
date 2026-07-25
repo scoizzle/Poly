@@ -7,25 +7,20 @@ namespace Poly.DomainModeling.Analysis;
 /// Analysis pass that produces <see cref="BehaviorMetadata"/> —
 /// per-entity action metadata (parameters, return types, effective policies, stage transitions).
 ///
-/// Wraps <see cref="BehaviorAnalyzer"/> as a pass. No dependencies on other infra passes.
+/// Wraps <see cref="BehaviorAnalyzer"/> as a pass.
+/// Depends on <see cref="SemanticDomainAnalyzer"/> for type resolution and
+/// <see cref="CapabilityAnalyzer"/> for action capability views.
 /// </summary>
 internal sealed class BehaviorPass : INodeAnalyzer {
     public const string Id = "BehaviorPass";
     public string PassName => Id;
-    public string[] Dependencies => [OwnershipAggregatePass.Id];
-    // Semantic/Capability metadata is consumed from priorAnalysis/AnalysisContext.
-
-    private readonly AnalysisResult? _analysis;
-
-    public BehaviorPass(AnalysisResult? analysis = null) {
-        _analysis = analysis;
-    }
+    public string[] Dependencies => [SemanticDomainAnalyzer.Id, CapabilityAnalyzer.Id];
 
     public void Analyze(AnalysisContext context, Node node) {
         if (node is not Domain domain) return;
         if (context.HasStructuralFailure) return;
 
-        var analyzer = new BehaviorAnalyzer(domain, _analysis, context);
+        var analyzer = new BehaviorAnalyzer(domain, context: context);
         var behavior = analyzer.Analyze();
         context.SetMetadata(domain, new BehaviorMetadata(behavior));
     }

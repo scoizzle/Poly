@@ -7,13 +7,13 @@ namespace Poly.DomainModeling.Analysis;
 /// Analysis pass that produces <see cref="EntityDependencyGraphMetadata"/> —
 /// a directed graph from entity navigations and subscriptions, with cycle detection.
 ///
-/// Depends on <see cref="EffectTopologyPass"/> and <see cref="OwnershipAggregatePass"/>.
-/// This is the first net-new pass (not extracted from <see cref="InfrastructureAnalyzer"/>).
+/// Depends on <see cref="EffectTopologyPass"/> (subscription/invoke edges).
+/// Ownership aggregate metadata is not required for the graph.
 /// </summary>
 internal sealed class CrossReferencePass : INodeAnalyzer {
     public const string Id = "CrossReferencePass";
     public string PassName => Id;
-    public string[] Dependencies => [EffectTopologyPass.Id, OwnershipAggregatePass.Id];
+    public string[] Dependencies => [EffectTopologyPass.Id];
 
     public void Analyze(AnalysisContext context, Node node) {
         if (node is not Domain domain) return;
@@ -26,34 +26,45 @@ internal sealed class CrossReferencePass : INodeAnalyzer {
         var relLookup = relationships.ToDictionary(r => r.Name, StringComparer.Ordinal);
 
         var edges = new List<EntityDependencyEdge>();
-        var adjacency = new Dictionary<string, List<string>>(StringComparer.Ordinal);
+        var relationshipPairs = new HashSet<(string From, string To)>();
 
-        // Build edges from relationships
+        // Full edge list (including pure inverse navigations) for metadata consumers
         foreach (var rel in relationships) {
             if (!entityNames.Contains(rel.Source.TypeName) || !entityNames.Contains(rel.Target.TypeName))
                 continue;
 
             edges.Add(new EntityDependencyEdge(rel.Source.TypeName, rel.Target.TypeName, "Relationship"));
-            AddEdge(adjacency, rel.Source.TypeName, rel.Target.TypeName);
+            relationshipPairs.Add((rel.Source.TypeName, rel.Target.TypeName));
         }
 
-        // Build edges from subscriptions — derive target from the relationship
+        var subscriptionInvokeEdges = new List<(string From, string To)>();
         if (topology != null) {
             foreach (var sub in topology.Subscriptions) {
                 if (relLookup.TryGetValue(sub.RelationshipName, out var rel)) {
                     edges.Add(new EntityDependencyEdge(sub.SubscriberEntity, rel.Target.TypeName, "Subscription"));
-                    AddEdge(adjacency, sub.SubscriberEntity, rel.Target.TypeName);
+                    subscriptionInvokeEdges.Add((sub.SubscriberEntity, rel.Target.TypeName));
                 }
             }
             foreach (var invoke in topology.CrossEntityInvokes) {
                 if (invoke.TargetRelationship != null && relLookup.TryGetValue(invoke.TargetRelationship, out var rel2)) {
                     edges.Add(new EntityDependencyEdge(invoke.SourceEntity, rel2.Target.TypeName, "Invoke"));
-                    AddEdge(adjacency, invoke.SourceEntity, rel2.Target.TypeName);
+                    subscriptionInvokeEdges.Add((invoke.SourceEntity, rel2.Target.TypeName));
                 }
             }
         }
 
-        // Cycle detection — DFS
+        // Cycle detection adjacency: drop pure inverse relationship pairs
+        // (Patron.loans ↔ Loan.borrower) which are intentional navigations, not smell cycles.
+        // Subscription/invoke edges always participate; 3+ entity relationship cycles still fire.
+        var adjacency = new Dictionary<string, List<string>>(StringComparer.Ordinal);
+        foreach (var (from, to) in relationshipPairs) {
+            if (relationshipPairs.Contains((to, from)))
+                continue;
+            AddEdge(adjacency, from, to);
+        }
+        foreach (var (from, to) in subscriptionInvokeEdges)
+            AddEdge(adjacency, from, to);
+
         var cycleEntityNames = DetectCycles(adjacency, entityNames);
 
         context.SetMetadata(domain, new EntityDependencyGraphMetadata(edges, cycleEntityNames));

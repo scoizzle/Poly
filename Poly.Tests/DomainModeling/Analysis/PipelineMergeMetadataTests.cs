@@ -151,8 +151,8 @@ public class PipelineMergeMetadataTests {
     }
 
     [Test]
-    public async Task DomainAnalysis_CyclicDependency_EmitsDMDEP001() {
-        // DMDEP001: cross-entity cycle — A has relationship to B, B has relationship to A
+    public async Task DomainAnalysis_ThreeEntityCycle_EmitsDMDEP001() {
+        // DMDEP001: real smell cycle A→B→C→A (not a pure inverse navigation pair)
         var domain = ParseDomain("""
             domain Test
             A: entity {
@@ -160,6 +160,10 @@ public class PipelineMergeMetadataTests {
               b: B
             }
             B: entity {
+              name: Text
+              c: C
+            }
+            C: entity {
               name: Text
               a: A
             }
@@ -170,12 +174,32 @@ public class PipelineMergeMetadataTests {
     }
 
     [Test]
-    public async Task DomainAnalysis_NoCycle_OnSingleRelationship() {
-        // No cycle with a single one-way relationship (no back-reference that creates a closed loop)
+    public async Task DomainAnalysis_NoCycle_OnBidirectionalNavigations() {
+        // Pure inverse pair (root collection + child back-ref) is intentional — not DMDEP001
         var domain = ParseDomain("""
             domain Test
-            Item: entity {
+            Patron: entity {
               Name: Text
+              loans: many Loan
+            }
+            Loan: entity {
+              Amount: Number
+              borrower: Patron
+            }
+            """);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
+        await Assert.That(analysis.Diagnostics.Any(d =>
+            d.Code == DomainModelDiagnosticCodes.DependencyCycle)).IsFalse();
+    }
+
+    [Test]
+    public async Task DomainAnalysis_NoCycle_OnOneWayRelationship() {
+        var domain = ParseDomain("""
+            domain Test
+            Patron: entity { Name: Text }
+            Loan: entity {
+              Amount: Number
+              borrower: Patron
             }
             """);
         var analysis = DomainModelAnalyzer.Analyze(domain);
@@ -230,5 +254,23 @@ public class PipelineMergeMetadataTests {
         var analysis = DomainModelAnalyzer.Analyze(domain);
         await Assert.That(analysis.Diagnostics.Any(d =>
             d.Code == DomainModelDiagnosticCodes.UnconditionalAction)).IsFalse();
+    }
+
+    [Test]
+    public async Task DomainAnalysis_StageUnguardedActionWithPolicies_EmitsDMBEH001() {
+        var domain = ParseDomain("""
+            domain Test
+            Item: entity {
+              Name: Text
+              IsActive: Boolean
+              ActivePolicy: policy { IsActive is true }
+              Active: stage {
+                Submit: action { }
+              }
+            }
+            """);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
+        await Assert.That(analysis.Diagnostics.Any(d =>
+            d.Code == DomainModelDiagnosticCodes.UnconditionalAction)).IsTrue();
     }
 }

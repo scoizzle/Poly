@@ -8,27 +8,21 @@ namespace Poly.DomainModeling.Analysis;
 /// the cross-entity ownership hierarchy.
 ///
 /// Wraps <see cref="AggregateAnalyzer"/> as a pass, consuming
-/// <see cref="EffectTopologyMetadata"/> for create-in parent prioritization.
-/// Depends on <see cref="EffectTopologyPass"/>.
+/// <see cref="EffectTopologyMetadata"/> for create-in parent prioritization
+/// and <see cref="EntityStructureMetadata"/> for root detection.
+/// Depends on <see cref="EffectTopologyPass"/> and <see cref="EntityStructureAnalyzer"/>.
 /// </summary>
 internal sealed class OwnershipAggregatePass : INodeAnalyzer {
     public const string Id = "OwnershipAggregatePass";
     public string PassName => Id;
-    public string[] Dependencies => [EffectTopologyPass.Id];
-    // EntityStructureAnalyzer metadata is consumed from priorAnalysis/AnalysisContext.
-
-    private readonly AnalysisResult? _analysis;
-
-    public OwnershipAggregatePass(AnalysisResult? analysis = null) {
-        _analysis = analysis;
-    }
+    public string[] Dependencies => [EffectTopologyPass.Id, EntityStructureAnalyzer.Id];
 
     public void Analyze(AnalysisContext context, Node node) {
         if (node is not Domain domain) return;
         if (context.HasStructuralFailure) return;
 
         var topology = context.GetMetadata<EffectTopologyMetadata>(domain)?.Topology;
-        var analyzer = new AggregateAnalyzer(domain, _analysis, context);
+        var analyzer = new AggregateAnalyzer(domain, context: context);
         var aggregate = analyzer.Analyze(topology);
         context.SetMetadata(domain, new OwnershipAggregateMetadata(aggregate));
 

@@ -1,7 +1,7 @@
 # Analysis Pipeline Merge — Proposal
 
 **Date:** 2026-07-24  
-**Status:** ✅ Product bar met (A + B) — **commit pending**. 1609 tests green; 11 `PipelineMergeMetadataTests` (4 metadata + 7 diagnostic). Residuals: **§15**.  
+**Status:** ✅ **Complete** — A + B + C′ + D′ + E′ residual closed. 1611 green. Design reference; pull only Transport keep/drop.  
 **Micro-tasks:** [`simple-agent-tasks/apm-README.md`](simple-agent-tasks/apm-README.md)  
 **Related:** [`docs/domainmodeling-capability-inventory.md`](../domainmodeling-capability-inventory.md) · archived infra suite [`archive/infrastructure-pass/README.md`](archive/infrastructure-pass/README.md) · [`docs/CORE.md`](../CORE.md)
 
@@ -319,10 +319,9 @@ No new diagnostic codes. Smallest coherent customer win: domain analysis and cod
 **Micro-tasks:** [`simple-agent-tasks/apm-README.md`](simple-agent-tasks/apm-README.md)
 
 ```text
-DONE:    Phase A + B product (uncommitted) — metadata merge, diagnostics, fixtures
-CURRENT: Commit working tree; optional B′.4 Dependencies before or after
-THEN:    Inventory §5 sync (C′.2); dogfood DMDEP001 bidir noise
-PULL:    Transport keep/drop; Storage always-on (no); cycle refinement
+DONE:    APM suite complete (A–E′ residuals closed). 1611 green.
+CURRENT: Post-suite — next product work
+PULL:    Transport keep/drop; optional heuristic-root test
 ```
 
 ---
@@ -514,18 +513,183 @@ PULL:    Transport keep/drop; Storage always-on (no); cycle refinement
 |-----|-------|----------------|
 | 🔴 Structure | 0 | — |
 | 🟠 Contract | 0 | — |
-| 🟡 Edge / fragility | **C′.1**, **C′.4** | No — file and commit; fix C′.1 in same commit if cheap |
-| ⚪ Hygiene / ops | **C′.0**, **C′.2**, **C′.3**, **C′.5–C′.7** | **C′.0** required before claiming Done |
+| 🟡 Edge / fragility | **C′.4** | No — documented known behavior; pull refinement |
+| ⚪ Hygiene / ops | **C′.3**, **C′.5**, **C′.7** | Pull / optional |
 
-### Follow-up checklist
+### Follow-up checklist (historical §15)
 
-- [ ] **C′.0** **Commit** A+B product + tests + plan honesty  
-- [ ] **C′.1** Full / correct Dependencies (and drop Behavior→Aggregate)  
-- [ ] **C′.2** Inventory §5 (domain pipeline for topo/agg/beh)  
-- [ ] **C′.3** (optional / later) Drop dead `AnalysisResult?` when tests allow  
-- [ ] **C′.4** (pull) DMDEP001 bidirectional noise  
+- [x] **C′.0** A+B product committed as `cc0ccef`  
+- [x] **C′.1** Full Dependencies implemented in working tree (uncommitted) — see **§16**  
+- [~] **C′.2** Inventory §5.1 updated; **§5.2/§5.3/§10 leftovers** → **§16 D′.2**  
+- [ ] **C′.3** (keep / pull) Dead `AnalysisResult?` ctor while frozen-result tests exist  
+- [ ] **C′.4** (pull) DMDEP001 bidir noise — comment landed → **§16**  
 - [ ] **C′.5** (optional) Stage DMBEH001 fixture  
-- [ ] **C′.6** EOF newline on diagnostic codes  
+- [x] **C′.6** EOF newline (uncommitted with residual)  
 - [ ] **C′.7** (optional) Context-vs-heuristic root test  
+- [x] **B′.6** Infra pipeline test registers Semantic/EntityStructure/Capability for dep order  
 
-**Recommended next:** **C′.0 commit now** (product bar green). Optionally fold **C′.1** + **C′.6** into the same commit (small, locks order). Leave **C′.4** as post-suite dogfood/pull.
+**§15 recommended next was commit C′.1.** Residual still dirty — **§16**.
+
+---
+
+## 16. Plan review — residual C′ delta (uncommitted, 2026-07-24)
+
+**Base:** `cc0ccef` (APM Phase A+B product + tests + initial plans).  
+**Dirty residual (8 files):** Dependencies, inventory partial sync, CrossReference C′.4 note, EOF newline, infra test deps, plan/README picks.
+
+| Area | Change |
+|------|--------|
+| **C′.1** | `OwnershipAggregatePass` → `[EffectTopologyPass, EntityStructureAnalyzer]`; `BehaviorPass` → `[SemanticDomainAnalyzer, CapabilityAnalyzer]` (dropped Aggregate) |
+| **B′.6** | `Pipeline_Produces_StorageBehaviorAndAggregateMetadata` registers Semantic + EntityStructure + Capability so `AnalyzerBuilder` accepts new Dependencies |
+| **C′.4** | Comment on CrossReference cycle detection (bidir pairs are honest graph cycles) |
+| **C′.6** | Trailing newline on `DomainModelDiagnosticCodes.cs` |
+| **C′.2 partial** | Inventory §5.1 lists topo/agg/beh/CrossReference on domain pipeline; §5.2 drops three codegen-only rows |
+
+**Re-verified this review**
+
+| Check | Result |
+|-------|--------|
+| `dotnet build` | Clean |
+| `DomainAnalysis_*` / PipelineMerge | 13 green |
+| `Pipeline_Produces_StorageBehaviorAndAggregateMetadata` | Green |
+| `DslCompiler_AllMode_*` | Green |
+| Full suite | **1609 / 1609** |
+
+**Verdict:** Residual is **correct and shippable**. No 🔴/🟠. **Do not mark suite “Complete” in docs until this residual is committed** — product is already on `cc0ccef`; honesty gap is residual-only.
+
+### Solid
+
+| Item | Notes |
+|------|--------|
+| Dependencies match §3.1 | Aggregate needs structure metadata; Behavior needs semantic + capability |
+| No artificial Behavior→Aggregate | Matches B′.5 |
+| Infra test fix | Required: builder throws if deps unregistered |
+| C′.4 documented | Comment is enough for pull; no behavior change |
+| Suite green with residual | Safe to commit residual as follow-up commit |
+
+### Findings → follow-up tasks
+
+| ID | Sev | Finding | Fix |
+|----|-----|---------|-----|
+| **D′.0** | **Ops** | Residual C′ still **uncommitted** while header/apm-README say “Complete / post-suite”. | Commit residual (deps + inventory + tests + plans). Then true post-suite. |
+| **D′.1** | Low (hygiene) | Pass XML docs stale: `BehaviorPass` says “No dependencies on other infra passes”; `OwnershipAggregatePass` only mentions EffectTopology. | Update summaries to match `Dependencies`. |
+| **D′.2** | Hygiene | Inventory leftovers after partial C′.2: (1) §5.2 still lists `CrossReferencePass` under **codegen** table; (2) §5.3 still “Open design work: unify…”; (3) §10 row “CrossReferencePass wiring … Deferred” contradicts §5.1. | Drop CrossReference from §5.2 table; close §5.3 open-work line; mark §10 CrossReference ✅ Done / remove row. |
+| **D′.3** | Low | `InfrastructurePipelineTests` still re-runs Topology/Aggregate/Behavior in a mini pipeline — **not** production codegen shape (storage-only). Useful for dep smoke; diverges from real path. | Optional: slim test to Storage(+Transport) + `priorAnalysis: domainResult` only, assert metadata already on domain result. |
+| **D′.4** | Pull | **C′.4** bidir DMDEP001 noise — documented, not refined. | Dogfood; exclude pure inverse pairs only with a test. |
+| **D′.5** | Pull | **C′.3** frozen `AnalysisResult?` pass ctors. | Keep while infra tests pass frozen result. |
+| **D′.6** | Optional | **C′.5** stage DMBEH001; **C′.7** context-vs-heuristic root. | Only if dogfood wants them. |
+| **D′.7** | Hygiene | Plan §12 agent pick + plans README + master-roadmap still lag residual. | Sync on D′.0 commit. |
+
+### Three-layer
+
+| Concern | Status |
+|---------|--------|
+| Dep order locked by framework | ✅ C′.1 + infra test |
+| Diagnostics (B) | ✅ fixtures |
+| Inventory product claim | ✅ **D′.2** synced |
+| Infrastructure test | ✅ **D′.3** slimmed to production shape |
+| Plan/README picks | ✅ **D′.7** synced |
+| Residual committed | ❌ **D′.0** |
+
+### Severity summary
+
+| Sev | Count | Ship-blocking? |
+|-----|-------|----------------|
+| 🔴 Structure | 0 | — |
+| 🟠 Contract | 0 | — |
+| 🟡 | 0 new product | — |
+| ⚪ Ops / hygiene | **D′.4–D′.6** | Pull / optional — suite closed |
+
+### Follow-up checklist (historical §16)
+
+- [ ] **D′.0** **Commit residual** — product done in tree, **not** committed → **§17 E′.0**  
+- [x] **D′.1** XML doc sync on Aggregate/Behavior passes  
+- [x] **D′.2** Inventory §5.2 / §5.3 / §10 CrossReference honesty  
+- [x] **D′.3** `InfrastructurePipelineTests` slimmed to storage-only codegen shape  
+- [ ] **D′.4** (pull) DMDEP001 bidir refinement  
+- [ ] **D′.5** (pull) Drop frozen pass ctors when safe  
+- [ ] **D′.6** (optional) Stage DMBEH + heuristic-root tests  
+- [~] **D′.7** Picks partially updated; header falsely claimed “suite closed” → **§17**  
+
+**§16 product residual met; suite not closed until E′.0 commit. See §17.**
+
+---
+
+## 17. Plan review — D′ product residual (uncommitted, 2026-07-25)
+
+**Base:** `cc0ccef` (APM A+B on origin).  
+**Dirty (10 files):** C′.1 Dependencies + XML, inventory honesty, slim infra test, CrossReference C′.4 note, EOF newline, plan/README/roadmap picks.
+
+| Area | Change vs `cc0ccef` |
+|------|---------------------|
+| **C′.1 / D′.1** | Aggregate deps → Topology + EntityStructure; Behavior → Semantic + Capability; XML matches |
+| **D′.2** | Inventory §5.1 domain rows; §5.2 storage/transport/packs only; §5.3 open-work removed; §10 CrossReference ✅ |
+| **D′.3** | `Pipeline_Produces_*` asserts topo/agg/beh on **domain** result; codegen builder = StoragePass only |
+| **C′.4** | CrossReference cycle comment (bidir known noise) |
+| **C′.6** | `DomainModelDiagnosticCodes` trailing newline |
+
+**Re-verified this review**
+
+| Check | Result |
+|-------|--------|
+| `dotnet build` | Clean |
+| `DomainAnalysis_*` | 13 green |
+| `Pipeline_Produces_StorageBehaviorAndAggregateMetadata` | Green (slim path) |
+| `DslCompiler_AllMode_*` | Green |
+| Full suite | **1609 / 1609** |
+
+**Verdict:** **Product residual is done and correct.** No 🔴 Structure. No 🟠 Contract. The only ship-blocking gap is **ops honesty**: docs/checklist claimed “Complete / D′.0 done / suite closed” while the residual tree is still dirty. **Commit, then close.**
+
+### Solid
+
+| Item | Notes |
+|------|--------|
+| Dependencies | Match design §3.1; Behavior no longer couples to Aggregate |
+| Inventory | Domain vs codegen split matches production |
+| Infra test | Mirrors real DslCompiler shape (storage + prior domain analysis) |
+| Domain metadata assertions | Still prove merge (topo/agg/beh on `DomainModelAnalyzer.Analyze`) |
+| Diagnostics | Unchanged on `cc0ccef`; still covered by PipelineMerge fixtures |
+| Suite | Full green with residual applied |
+
+### Findings → follow-up tasks
+
+| ID | Sev | Finding | Fix |
+|----|-----|---------|-----|
+| **E′.0** | **Ops** | Residual D′ still **uncommitted**. §16 checklist had D′.0 `[x]` and “suite closed” prematurely. | `git add` product + inventory + plans; commit; only then mark Complete / post-suite. |
+| **E′.1** | Low | `InfrastructureAnalyzerTests.cs` missing trailing newline after slim edit. | Add EOF newline in residual commit. |
+| **E′.2** | Low | Test name `Pipeline_Produces_StorageBehaviorAndAggregateMetadata` still OK (asserts all three + storage) but “Pipeline” now means domain+codegen hybrid. | Optional rename e.g. `DomainAnalysis_HasInfraMetadata_CodegenProducesStorage` — not required. |
+| **E′.3** | Pull | **D′.4** DMDEP001 on intentional bidir navigations. | Dogfood / exclude pure inverses with a test. |
+| **E′.4** | Pull | **D′.5** `AnalysisResult?` pass ctors unused on domain registration; analyzers still take frozen result for unit tests (`GenerationAssertions`, analyzer unit tests). | Keep; drop only when no callers pass non-null. |
+| **E′.5** | Optional | **D′.6** stage DMBEH001 + context-vs-heuristic root. | Only if dogfood wants. |
+| **E′.6** | Hygiene | §12 pick / plans README / master-roadmap lag or overclaim vs dirty tree. | Fixed with this §17 + E′.0 commit. |
+
+### Three-layer
+
+| Concern | Status |
+|---------|--------|
+| Dep order | ✅ framework + registration |
+| Domain metadata | ✅ PipelineMerge + slim infra test |
+| Codegen storage | ✅ StoragePass + priorAnalysis |
+| Residual on origin | ❌ until **E′.0** |
+
+### Severity summary
+
+| Sev | Count | Ship-blocking? |
+|-----|-------|----------------|
+| 🔴 | 0 | — |
+| 🟠 | 0 | — |
+| 🟡 product | 0 | — |
+| ⚪ Ops | **E′.0** | **Yes for “Done”** — not for product correctness |
+| Pull | E′.3–E′.5 | No |
+
+### Follow-up checklist (historical §17)
+
+- [x] **E′.0** Residual committed with E′ product fixes  
+- [x] **E′.1** EOF newline on `InfrastructureAnalyzerTests.cs`  
+- [x] **E′.2** Renamed slim test → `DomainAnalysis_HasInfraMetadata_CodegenProducesStorage`  
+- [x] **E′.3** DMDEP001 excludes pure inverse relationship pairs; 3-entity cycle + bidir negatives  
+- [x] **E′.4** Dropped unused `AnalysisResult?` from OwnershipAggregatePass / BehaviorPass  
+- [x] **E′.5** Stage DMBEH001 fixture added (heuristic-root still optional pull)  
+- [x] **E′.6** Plan honesty  
+
+**§17 residual closed in commit after this checklist.** Suite complete — see status header.

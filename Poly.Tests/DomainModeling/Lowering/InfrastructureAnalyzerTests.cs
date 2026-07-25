@@ -697,38 +697,30 @@ public class InfrastructurePipelineTests {
     }
 
     [Test]
-    public async Task Pipeline_Produces_StorageBehaviorAndAggregateMetadata() {
+    public async Task DomainAnalysis_HasInfraMetadata_CodegenProducesStorage() {
+        // After APM merge: domain pipeline produces topology/aggregate/behavior;
+        // codegen pipeline is StoragePass only (TransportPass has no production consumer).
         var domain = ParseDomain("""
             domain Test
             Item: entity { Name: Text }
             """);
         var domainResult = DomainModelAnalyzer.Analyze(domain);
 
+        var topology = domainResult.GetMetadata<EffectTopologyMetadata>(domain);
+        var behavior = domainResult.GetMetadata<BehaviorMetadata>(domain);
+        var aggregate = domainResult.GetMetadata<OwnershipAggregateMetadata>(domain);
+        await Assert.That(topology).IsNotNull();
+        await Assert.That(behavior).IsNotNull();
+        await Assert.That(aggregate).IsNotNull();
+
         var pipeline = new AnalyzerBuilder()
-            .AddAnalyzer(new EffectTopologyPass())
-            .AddAnalyzer(new OwnershipAggregatePass(domainResult))
-            .AddAnalyzer(new BehaviorPass(domainResult))
             .AddAnalyzer(new StoragePass(analysis: domainResult))
-            .AddAnalyzer(new TransportPass())
             .Build();
 
         var result = pipeline.Analyze(domain, priorAnalysis: domainResult, invalidatedNodes: [domain]);
 
         var storage = result.GetMetadata<StorageMappingMetadata>(domain);
-        var behavior = result.GetMetadata<BehaviorMetadata>(domain);
-        var aggregate = result.GetMetadata<OwnershipAggregateMetadata>(domain);
-        var topology = result.GetMetadata<EffectTopologyMetadata>(domain);
-        var transport = result.GetMetadata<TransportMetadata>(domain);
-
         await Assert.That(storage).IsNotNull();
-        await Assert.That(behavior).IsNotNull();
-        await Assert.That(aggregate).IsNotNull();
-        await Assert.That(topology).IsNotNull();
-        await Assert.That(transport).IsNotNull();
-
         await Assert.That(storage!.Storage.Entities.Count).IsGreaterThan(0);
-        await Assert.That(behavior!.Behavior.Entities.Count).IsGreaterThan(0);
-        await Assert.That(aggregate!.Aggregate.Entities.Count).IsGreaterThan(0);
-        await Assert.That(transport!.Transport.Entities.Count).IsGreaterThan(0);
     }
 }

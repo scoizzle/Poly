@@ -20,10 +20,9 @@
 ## Agent pick
 
 ```text
-DONE:    APM product bar (A+B) — uncommitted; 1609 green; 11 PipelineMerge fixtures
-CURRENT: C′.0 commit; optional C′.1 Dependencies (parent §15)
-THEN:    C′.2 inventory §5; dogfood DMDEP001 bidir (C′.4)
-PULL:    Transport keep/drop; cycle refinement
+DONE:    APM suite complete (A–E′). 1611 tests; residual closed.
+CURRENT: Post-suite — next product work
+PULL:    Transport keep/drop; optional heuristic-root test
 ```
 
 ---
@@ -52,10 +51,11 @@ PULL:    Transport keep/drop; cycle refinement
 | **B2** | CrossReference + DMDEP001 | [`apm-b2-cycle-diagnostics.md`](apm-b2-cycle-diagnostics.md) | `[x]` | Medium |
 | **B3** | DMBEH001 hint (narrowed) | [`apm-b3-behavior-hint.md`](apm-b3-behavior-hint.md) | `[x]` | Small |
 | **B′** | Review residuals (B′.1–B′.3 done) | parent §14 | `[x]` product | Small |
-| **C′** | Post-review residuals | parent **§15** | `[ ]` commit + deps | Small |
+| **C′** | Post-review residuals | parent **§15** | `[x]` | Small |
+| **D′** | Residual product (deps/inventory/slim) | parent **§16** | `[x]` | Small |
+| **E′** | Residual close-out | parent **§17** | `[x]` E′.0–E′.5 | Small |
 
-**Exit B (product):** 7 diagnostic fixtures green; DMAGG002 removed; DMBEH001 narrowed.  
-**Exit suite (ops):** Clean tree after **§15 C′.0** commit; inventory sync **C′.2**.
+**Exit suite:** Residual committed; 1611 green; DMDEP001 inverse noise fixed; pass ctors cleaned.
 
 ---
 

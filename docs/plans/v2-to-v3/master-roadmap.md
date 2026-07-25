@@ -51,7 +51,7 @@ MCP / direct API as thin consumers
 
 ```text
 DONE:    M1–M4; Q1′+Q3′+link_instances; infra IR; APM registration
-CURRENT: DAU — domain analysis unification ([`dau-README.md`](../simple-agent-tasks/dau-README.md))
+CURRENT: DAU D2′ residuals (§11) then finish D2 / D3 ([`dau-README.md`](../simple-agent-tasks/dau-README.md))
 PULL:    Q4; dates; Bar B; dialect packs; unlink MCP; E5
 ```
 

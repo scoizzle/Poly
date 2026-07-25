@@ -240,7 +240,8 @@ Shipped highlights: entities, properties, constraints, enums, navs, stages, acti
 | CrossReference / coupling surface | Cycle + graph facets | ✅ registered · pack-ready — don’t delete |
 | Transport in domain analysis | Exposable surface + packs | ⬜ DAU D3 (not “delete unused”) |
 | Bar B full string oracle | Anonymous-object Syntax needed | ⬜ Pull |
-| RestApiSurfacePass / StorageAccessPass | No consumer | ⬜ Pull |
+| RestApi / MinimalApi / `.http` | **Transport implementation** (codegen) — consumes domain **Transport** + ownership/contracts/behavior; not an Analysis bag | ⬜ Pull (emit path) |
+| StorageAccessPass | No consumer | ⬜ Pull |
 | Q4 aggregates sum/min/max | No demand | ⬜ Pull |
 | Date ops DSL | IR only | ⬜ Pull |
 | Deeper owned expressions | Limited today | 🟡 |

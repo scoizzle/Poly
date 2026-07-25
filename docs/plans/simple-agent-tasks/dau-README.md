@@ -24,10 +24,11 @@
 ## Agent pick
 
 ```text
-DONE:    APM registration; DAU plan + D0 framing (index, inventory, roadmap)
-CURRENT: D1 complete — D1.5 gate passed (1611 tests).
-THEN:    D2 unify walks (root+ownership, action shape, coupling)
-PULL:    D3 storage+transport always-on; D4 residue/docs
+DONE:    D0; D1; D2 partial (D2.4 effects fold; D2.5 subscription unify + rename)
+        D2′.2 causality DFS+filter restored; D2′.3 param usage fold done
+CURRENT: D2.1–D2.3 not started — explicit defer; D2.6 gate
+THEN:    D2.1–D2.3 or skip to D3
+PULL:    D3 storage+transport; D2.1–D2.3; D4 docs
 ```
 
 ---
@@ -63,14 +64,12 @@ PULL:    D3 storage+transport always-on; D4 residue/docs
 
 | # | Task | Parent | Status | Diff |
 |---|------|--------|--------|------|
-| **D2.1** | Root + ownership single story | §5 D2.1 | `[ ]` | M |
-| **D2.2** | Capability + Behavior one action walk | §5 D2.2 | `[ ]` | M |
-| **D2.3** | Topology + CrossReference coupling | §5 D2.3 | `[ ]` | M |
-| **D2.4** | Effect ordering + unused param into EffectAnalyzer | §5 D2.4 | `[ ]` | S–M |
-| **D2.5** | Subscription trio → one analyzer | §5 D2.5 | `[ ]` | M |
-| **D2.6** | Gate Phase 2 | §5 D2.6 | `[ ]` | S |
-
-**Exit 2:** Fewer registrations; dual walks gone for listed clusters.
+| **D2.1** | Root + ownership single story | §5 D2.1 | `[ ]` defer | M |
+| **D2.2** | Capability + Behavior one action walk | §5 D2.2 | `[ ]` defer | M |
+| **D2.3** | Topology + CrossReference coupling | §5 D2.3 | `[ ]` defer | M |
+| **D2.4** | Effect ordering + unused param into EffectAnalyzer | §5 D2.4 | `[x]` | S–M |
+| **D2.5** | Subscription trio → `SubscriptionAnalyzer` | §5 D2.5 | `[x]` | M |
+| **D2.6** | Gate Phase 2 | §5 D2.6 | `[~]` partial — D2.1–D2.3 deferred | S |
 
 ---
 
@@ -105,7 +104,10 @@ PULL:    D3 storage+transport always-on; D4 residue/docs
 
 | Item | Why |
 |------|-----|
-| Delete Transport / RestApi “unused” | Pack-bound; promote into Analysis (D3), don’t scavenge |
+| Delete Transport “unused” | Domain exposable surface may be always-on (D3); not the same as RestApi IR |
+| Put RestApi / route-DTO bags on domain pipeline | RestApi is a **transport consumer** of domain **Transport** facts — emit path only |
+| Claim D2 Done without D2.1–D2.3 | Registration merge ≠ walk unify (§11) |
+| Simplify causality without tests for dropped behavior | Restore algorithm or re-scope + goldens |
 | Storage always-on with hard-coded SQL Server types | Use context defaults + packs |
 | Start D2 merge before D1 home move | Dual homes make merge thrash |
 | Move PolicyEvaluator / DE lowering into Analysis | True Lowering stays |

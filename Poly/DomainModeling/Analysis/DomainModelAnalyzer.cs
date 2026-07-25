@@ -33,19 +33,15 @@ public static class DomainModelAnalysisBuilderExtensions {
             builder.AddAnalyzer(new PolicyConstraintAnalyzer());
             builder.AddAnalyzer(new EffectAnalyzer());
             builder.AddAnalyzer(new ConstraintQualityAnalyzer());
-            builder.AddAnalyzer(new EffectOrderingAnalyzer());
             builder.AddAnalyzer(new EnumConstraintSubsetAnalyzer());
             builder.AddAnalyzer(new CapabilityAnalyzer());
             builder.AddAnalyzer(new ConstraintPropagationAnalyzer());
             builder.AddAnalyzer(new RuleCoverageAnalyzer());
             builder.AddAnalyzer(new ContractIntegrationAnalyzer());
-            builder.AddAnalyzer(new ActionParameterUsageAnalyzer());
             // Entity structure metadata (key, root, soft-delete, stages)
             builder.AddAnalyzer(new EntityStructureAnalyzer());
-            // Stage-subscription analyzers (replaced retired event-centric passes)
-            builder.AddAnalyzer(new SubscriptionContractAnalyzer());
-            builder.AddAnalyzer(new SubscriptionCausalityAnalyzer());
-            builder.AddAnalyzer(new SubscriptionReplaySafetyAnalyzer());
+            // Stage-subscription validation (contract, causality, replay — unified in D2.5)
+            builder.AddAnalyzer(new SubscriptionAnalyzer());
             // Cross-entity effect topology (create-in, invoke, subscriptions)
             builder.AddAnalyzer(new EffectTopologyPass());
             // Ownership hierarchy (roots, children, aggregate parents)

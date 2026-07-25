@@ -58,7 +58,7 @@ public class SubscriptionAnalysisTests {
             d.Message.Contains("nothing to remove"))).IsTrue();
     }
 
-    // ── A′.2 SubscriptionContractAnalyzer real checks ──────────
+    // ── A′.2 SubscriptionAnalyzer real checks ──────────
 
     [Test]
     public async Task Analyze_UnknownRelationshipName_ReportsDMSS003() {

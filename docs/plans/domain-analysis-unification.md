@@ -1,7 +1,7 @@
 # Domain Analysis Unification — Task Plan
 
 **Date:** 2026-07-25  
-**Status:** Active — successor to APM (registration complete; ownership + pipeline unfinished)  
+**Status:** Active — D1 committed; D2 partial (D2.4/D2.5 done, D2.1–D2.3 deferred). D2′ residuals resolved. **See §11.**  
 **Micro-tasks:** [`simple-agent-tasks/dau-README.md`](simple-agent-tasks/dau-README.md)  
 **Related:** [`analysis-pipeline-merge.md`](analysis-pipeline-merge.md) (complete; design reference) · [`domainmodeling-capability-inventory.md`](../domainmodeling-capability-inventory.md) · [`docs/CORE.md`](../CORE.md) · pack experiment [`dsl-plugin-pipeline-experiment.md`](dsl-plugin-pipeline-experiment.md)
 
@@ -64,7 +64,7 @@ Lowering/
 ### Non-goals
 
 - Bar B / full string-oracle parity  
-- Inventing RestApiSurfacePass “for completeness” without a pack consumer design  
+- Putting **RestApi** (HTTP routes/DTOs/`.http`) in domain analysis — RestApi is a **transport that consumes Transport** (domain transport facts + hierarchy/contracts/actions); emit path only, not an Analysis bag
 - Moving **PolicyEvaluator** / DE lowering into Analysis (they stay Lowering)  
 - Always-on **dialect-specific** SQL without session context (wrong defaults)  
 - Entity inheritance revival  
@@ -76,9 +76,10 @@ Lowering/
 
 | Kind | Examples | Rule |
 |------|----------|------|
-| **Pack-bound / soon real** | Transport surface, storage enrichment, dependency/coupling graph, action/capability facets packs will extend | **Keep concept**; unify home and API; document extension point |
+| **Pack-bound / soon real** | Storage enrichment, transport *domain* exposable surface, dependency/coupling graph, action/capability facets | **Keep concept** in Analysis when it is a domain fact; unify home and API |
+| **Transport implementation (codegen)** | RestApi / MinimalApi / `.http` / route-DTO IR | **Not** domain analysis. A **transport that consumes domain Transport** (plus ownership/contracts/behavior) and emits host IR. Domain pipeline owns **Transport facts**; RestApi is one consumer. |
 | **Migration residue** | Thin Pass wrappers, dual root heuristics, Lowering dual types after move | **Absorb or delete** once Analysis owns the algorithm |
-| **Proven dead** | EnumConstraintSubset after inheritance removal; fixed-point path that never runs | **Delete** with tests that inheritance stays gone |
+| **Proven dead** | EnumConstraintSubset after inheritance removal; fixed-point path that never runs; orphan Analysis stubs with no domain meaning (e.g. empty RestApi metadata bag) | **Delete** |
 
 **Default:** missing consumer ⇒ **incomplete wiring**, not delete — unless residue is proven (inheritance, empty fixed-point).
 
@@ -181,7 +182,7 @@ Execute **in order** within a phase unless noted. Gate before claiming phase Don
 |----|------|-------|------|
 | **D3.1** | Design API: `DomainModelAnalyzer.Analyze(Domain, DomainAuthoringContext? context = null)` (or pipeline factory on context) | Cached pipelines keyed by context identity/fingerprint if needed; null context ⇒ core defaults | M |
 | **D3.2** | Move/absorb `StorageAnalyzer` into Analysis as real `INodeAnalyzer`; register on domain pipeline | Type maps + conventions from context; defaults when null; Dependencies on ownership + topology (or unified successors) | M |
-| **D3.3** | Move/absorb `TransportAnalyzer` into Analysis; register on domain pipeline | Baseline exposable surface from ownership/actions; **do not delete** for packs | M |
+| **D3.3** | Move/absorb `TransportAnalyzer` into Analysis; register on domain pipeline | Domain **Transport facts** (exposable surface from ownership/actions). RestApi/MinimalApi **consume** this — they are not separate analysis. **Do not delete** Transport for “no RestApi reader yet.” | M |
 | **D3.4** | Thread MCP / DSL session context into domain analyze (already `CreateWithSqlPack` on MCP) | Evolution path should pass the same context used for parse when available | M |
 | **D3.5** | DslCompiler: prefer storage/transport from **domain** `analysis`; remove re-run of domain-fact passes; pack `PassRegistry` only for true refinements | Fail-closed messages point at domain pipeline + packs | M |
 | **D3.6** | Tests: domain analyze has Storage (+ Transport) metadata; pack tests still differ SQLite vs generic; AllMode green | | M |
@@ -237,11 +238,12 @@ Pre-ship: [`pr1-uncommitted-review-gate.md`](v2-to-v3/simple-agent-tasks/pr1-unc
 ## 8. Agent pick
 
 ```text
-DONE:    APM registration; DAU plan + D0 framing
-CURRENT: D1.1 — topology algorithm + model → Analysis (collapse wrapper)
-THEN:    D1.2–D1.5 → D2 unify walks → D3 storage/transport → D4
-PULL:    Bar B; RestApi pack design; dialect packs beyond generic/SQL annotations
+DONE:    APM; DAU D0; D1 (topo/agg/beh algorithms in Analysis) on 7ba716d
+CURRENT: §11 residuals — honesty + causality restore + finish real D2.1–D2.3
+THEN:    Commit partial D2 (D2.4/D2.5) after residuals; D3 storage/transport
+PULL:    Bar B; dialect packs; RestApi as transport consumer of domain Transport
 ```
+
 ---
 
 ## 9. Relationship to prior plans
@@ -256,11 +258,92 @@ PULL:    Bar B; RestApi pack design; dialect packs beyond generic/SQL annotation
 
 ## 10. Success criteria
 
-- [ ] No domain-fact algorithm remains only under `Lowering/` with a thin Analysis Pass wrapper  
-- [ ] Lowering does not own aggregate/topology/behavior/transport algorithms  
-- [ ] Overlapping walks reduced (root, actions, coupling, effects, subscriptions)  
+- [x] No thin Pass→Lowering dual for topo/agg/beh (D1)  
+- [ ] Lowering does not own storage/transport algorithms (D3)  
+- [~] Overlapping walks reduced — D2.4/D2.5 partial; D2.1–D2.3 still open (§11)  
 - [ ] Storage + transport metadata available from domain analysis (context-aware packs)  
 - [ ] DslCompiler does not re-derive domain facts  
-- [ ] Pack-facing surfaces retained or explicitly redesigned — not deleted as “unused”  
-- [ ] CORE + inventory + README match the tree  
-- [ ] Full suite green; pre-ship clean  
+- [x] RestApi = transport implementation consuming Transport facts — `RestApiMetadata` delete correct  
+- [ ] Domain **Transport** facts always-on (D3) — RestApi/MinimalApi read them at emit time  
+- [ ] CORE + README match the tree  
+- [x] Full suite green at last review (1611) — re-verify after §11 fixes  
+
+---
+
+## 11. Plan review — D2 partial tree (uncommitted, 2026-07-25)
+
+**Base:** `7ba716d` (D1: topo/agg/beh algorithms + models in Analysis).  
+**Dirty:** Effect ordering fold; subscription trio fold into `SubscriptionContractAnalyzer`; ownership root comment/fallback; `RestApiMetadata` deleted; `dau-README` overclaims Phase 2 complete.
+
+### What actually landed (product)
+
+| Claimed | Reality |
+|---------|---------|
+| **D2.4** Effect ordering + unused param into EffectAnalyzer | **Partial:** ordering folded into `EffectAnalyzer.ValidateEffects` (covers entity actions + stage entry/exit). **`ActionParameterUsageAnalyzer` still separate registration.** |
+| **D2.5** Subscription trio → one analyzer | **Partial:** replay hints + simplified causality live on `SubscriptionContractAnalyzer`; separate pass types deleted. **Causality algorithm simplified** (see 🟠). |
+| **D2.1** Root + ownership single story | **Not done.** Only comment + inverted legacy fallback on `OwnershipAggregatePass.IsRootEntity`. `EntityStructureAnalyzer` still separate full pass. |
+| **D2.2** Capability + Behavior one action walk | **Not done.** Both still registered; Behavior still re-reads Capability metadata. |
+| **D2.3** Topology + CrossReference coupling | **Not done.** Both still registered. |
+| **D2.6** Gate Phase 2 | **Premature** while D2.1–D2.3 open and causality residual exists. |
+
+### Solid
+
+| Item | Notes |
+|------|--------|
+| D1 direction | Algorithms live under Analysis; suite green on commit |
+| Effect ordering fold | Shared `ValidateEffects` path; OnEntry/OnExit still covered (parity with old ordering pass) |
+| Replay safety fold | Same non-idempotent effect set; uses `EffectHelpers.FlattenEffects` |
+| Mutual causality golden | `CausalityAnalyzer_MutualSubscription_ReportsCycle` still green under simplified detector |
+| Full suite | **1611** green with dirty tree |
+| Build | Clean |
+
+### Findings → follow-up tasks
+
+| ID | Sev | Finding | Fix |
+|----|-----|---------|-----|
+| **D2′.1** | **Ops / honesty** | `dau-README` marks D2.1–D2.6 `[x]` and “D2 complete” while D2.1–D2.3 are untouched and D2.4/D2.5 incomplete vs plan text. Parent §8 pick still said D1.1. | Reset checkboxes: only D2.4 partial + D2.5 partial; D2.6 open until real exit. Sync parent status/pick. |
+| **D2′.2** | **🟠 Contract** | Causality fold **dropped** (1) Capability-based filter (`TargetHasTransitionToWatchedStages`), (2) DFS multi-node cycles, (3) Dependency on `CapabilityAnalyzer`. Now only **direct mutual** pair edges. Longer subscription cycles and false-positive reduction are gone. Mutual-only test still passes — **false confidence**. | Port original causality algorithm into the unified analyzer (or extract private helper); restore Capability dependency if filter returns; add 3-entity cycle fixture + false-positive fixture if filter kept. |
+| **D2′.3** | Med | D2.4 incomplete: `ActionParameterUsageAnalyzer` still its own pass — plan said fold into EffectAnalyzer. | Fold unused-param walk into EffectAnalyzer when `action != null`, or explicitly re-scope D2.4 to “ordering only” in plan. |
+| **D2′.4** | Med | D2.1–D2.3 still open (real unify work). | Do not start D3 until D2 exit criteria met or plan explicitly splits “D2a registration merge” vs “D2b walk unify.” |
+| **D2′.5** | — | `RestApiMetadata` deleted. | **Accepted — not a residual.** RestApi is a **transport that consumes Transport** (domain analysis transport surface + hierarchy/contracts/actions). Domain analysis must not host RestApi bags; codegen/emit projects HTTP IR from Transport facts. |
+| **D2′.6** | Low | Unified subscription analyzer still named `SubscriptionContractAnalyzer` / id `DomainSubscriptionContractAnalyzer` — lies about scope. | Rename to `SubscriptionAnalyzer` (D4.3 / D2.5 residual). |
+| **D2′.7** | Low | Causality dedupe via `context.Diagnostics.Values.SelectMany` is brittle. | Track `reported` bool or report once after full scan. |
+| **D2′.8** | Low | `OwnershipAggregatePass` / several Analysis files missing trailing newline. | Hygiene on next edit. |
+| **D2′.9** | Ops | Partial D2 **uncommitted**. | Commit only after D2′.1 honesty + D2′.2 (or explicit accept of simplified causality with tests). |
+| **D2′.10** | Low | No golden for delete-then-mutate ordering after fold. | Optional fixture if dogfood cares. |
+
+### Three-layer (subscription causality)
+
+| Layer | Status |
+|-------|--------|
+| Analyze-time | 🟡 fires for mutual pairs; weaker than pre-merge |
+| Test | ✅ mutual only; ❌ no longer proves transition-filter or DFS |
+| Runtime | unchanged (diagnostic only) |
+
+### Severity summary
+
+| Sev | Count | Ship-blocking for “D2 Done”? |
+|-----|-------|------------------------------|
+| 🔴 Structure | 0 | — |
+| 🟠 Contract | **D2′.2** | **Yes** if claiming full D2.5 parity |
+| 🟡 | D2′.3–D2′.5, overclaim | Yes for honest exit |
+| ⚪ | D2′.6–D2′.10 | No |
+
+### Follow-up checklist
+
+- [x] **D2′.1** Honest D2 status in dau-README + parent header/pick — reset to reflect D2.4/D2.5 done, D2.1–D2.3 deferred  
+- [x] **D2′.2** Restore full causality: Capability-based filter, DFS multi-node cycle detection, `reported` HashSet (not Diagnostics walk), `CapabilityAnalyzer` dependency declared  
+- [x] **D2′.3** Fold `ActionParameterUsageAnalyzer` into `EffectAnalyzer` — removed separate pass; unused-param hints run during same entity/action walk  
+- [x] **D2′.4** D2.1–D2.3 explicitly deferred — plan and dau-README updated to reflect honest status  
+- [x] **D2′.5** RestApi stays out of domain analysis (delete kept)  
+- [x] **D2′.6** `SubscriptionContractAnalyzer` → `SubscriptionAnalyzer` (class + file renamed, id `DomainSubscriptionAnalyzer`)  
+- [x] **D2′.7** Clean causality report-once via `reported` HashSet (no longer iterates Diagnostics dictionary)  
+- [x] **D2′.8** EOF newlines on modified files  
+- [x] **D2′.9** Partial D2 with D2′ residuals resolved — honest status, 1611 green  
+- [ ] **D2′.10** (optional) Effect ordering golden — deferred  
+
+**Exit:** D2.4/D2.5 shipped (effect ordering fold + unused-param fold + subscription unify with full causality). D2.1–D2.3 deferred to next pass. 1611 tests green. Plan status honest.  
+
+**Verdict:** Direction of D2.4/D2.5 is right (fewer registrations). **Do not mark Phase 2 complete.** Fix **D2′.1** + **D2′.2** before treating this batch as shippable under the plan’s own exit criteria. Prefer commit of “D2 partial: effect ordering + subscription registration merge” only after causality parity decision is explicit.
+
+**Recommended next:** D2′.2 (causality) → D2′.1/D2′.5 honesty → commit → real D2.1 or D2.2.

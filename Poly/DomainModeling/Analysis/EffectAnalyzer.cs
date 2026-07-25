@@ -35,12 +35,90 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
             foreach (var action in entity.Actions) {
                 ValidateEffects(context, action.Effects, action, entity, domain, lookup);
                 ValidateUnsatisfiedRequirements(context, action, entity, lookup);
+                ValidateActionParameterUsage(context, action);
             }
             foreach (var stage in entity.Stages) {
                 ValidateEffects(context, stage.OnEntryEffects, null, entity, domain, lookup);
                 ValidateEffects(context, stage.OnExitEffects, null, entity, domain, lookup);
             }
         });
+    }
+
+    /// <summary>
+    /// Reports hints for declared action parameters that are never referenced by any effect expression.
+    /// (Folded from ActionParameterUsageAnalyzer — D2.3)
+    /// </summary>
+    private static void ValidateActionParameterUsage(AnalysisContext context, Action action) {
+        if (action.Parameters.Count == 0) return;
+
+        var paramNames = new HashSet<string>(
+            action.Parameters.Select(p => p.Name),
+            StringComparer.Ordinal);
+        var usedParams = CollectParameterReferences(action.Effects, paramNames);
+        foreach (var param in action.Parameters) {
+            if (!usedParams.Contains(param.Name)) {
+                context.ReportHint(
+                    param,
+                    $"Action parameter '{param.Name}' on '{action.Name}' is declared but never referenced by any effect expression.",
+                    DomainModelDiagnosticCodes.EffectUnusedParameter);
+            }
+        }
+    }
+
+    private static HashSet<string> CollectParameterReferences(
+        IReadOnlyList<Effect> effects,
+        HashSet<string> paramNames) {
+        var referenced = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var effect in effects)
+            CollectFromEffect(effect, referenced, paramNames);
+        return referenced;
+    }
+
+    private static void CollectFromEffect(Effect effect, HashSet<string> referenced, HashSet<string> paramNames) {
+        switch (effect) {
+            case ConditionalEffect ce:
+                CollectFromExpression(ce.Condition, referenced, paramNames);
+                foreach (var e in ce.ThenEffects) CollectFromEffect(e, referenced, paramNames);
+                if (ce.ElseEffects is not null)
+                    foreach (var e in ce.ElseEffects) CollectFromEffect(e, referenced, paramNames);
+                break;
+            case CompositeEffect ce:
+                foreach (var e in ce.Effects) CollectFromEffect(e, referenced, paramNames);
+                break;
+            case AssignEffect ae:
+                CollectFromExpression(ae.Target, referenced, paramNames);
+                CollectFromExpression(ae.Value, referenced, paramNames);
+                break;
+            case CreateEntityInstance cei:
+                foreach (var init in cei.Initializers)
+                    CollectFromExpression(init.Expression, referenced, paramNames);
+                break;
+            case InvokeActionEffect iae:
+                foreach (var binding in iae.ParameterBindings)
+                    CollectFromExpression(binding.Expression, referenced, paramNames);
+                break;
+            case StageTransitionEffect:
+            case DeleteEntityInstance:
+            case LinkRelationshipEffect:
+            case UnlinkRelationshipEffect:
+            case TransitionRelationshipEffect:
+            case CreateEntityInRelationshipEffect:
+                break;
+        }
+    }
+
+    private static void CollectFromExpression(DomainExpression expr, HashSet<string> referenced, HashSet<string> paramNames) {
+        if (expr is ParameterAccess pa) {
+            if (paramNames.Contains(pa.Name))
+                referenced.Add(pa.Name);
+            return;
+        }
+        // Recursively walk Children to find ParameterAccess nodes at any depth.
+        // Avoids a brittle switch over every DomainExpression subtype.
+        foreach (var child in expr.Children) {
+            if (child is DomainExpression de)
+                CollectFromExpression(de, referenced, paramNames);
+        }
     }
 
     private static void ValidateEffects(
@@ -50,10 +128,29 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
         Entity entity,
         Domain domain,
         DomainTypeLookupMetadata lookup) {
+        // ── Per-effect validation ─────────────────────────────
         foreach (var effect in effects) {
             ValidateEffect(context, effect, action, entity, domain, lookup);
         }
+
+        // ── Cross-effect ordering (folded from EffectOrderingAnalyzer — D2.4) ──
+        var flattened = EffectHelpers.FlattenEffects(effects).ToArray();
+        var deleteIndex = Array.FindIndex(flattened, static e => e is DeleteEntityInstance);
+        if (deleteIndex >= 0 && flattened.Skip(deleteIndex + 1).Any(IsMutatingEffect)) {
+            context.ReportWarning(
+                flattened[deleteIndex],
+                "Mutating effect executes after DeleteEntityInstance, which is a no-op on a deleted instance.",
+                DomainModelDiagnosticCodes.EffectPrePostCondition);
+        }
     }
+
+    private static bool IsMutatingEffect(Effect effect) =>
+        effect is AssignEffect
+            or CreateEntityInstance
+            or StageTransitionEffect
+            or LinkRelationshipEffect
+            or UnlinkRelationshipEffect
+            or TransitionRelationshipEffect;
 
     private static void ValidateEffect(
         AnalysisContext context,

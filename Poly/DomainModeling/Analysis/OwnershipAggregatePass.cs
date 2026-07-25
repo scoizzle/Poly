@@ -143,22 +143,20 @@ internal sealed class OwnershipAggregatePass : INodeAnalyzer {
 
     private static bool IsRootEntity(Entity entity, AnalysisContext? context,
         Dictionary<string, Entity> entityLookup, List<Relationship> relationships) {
+        // EntityStructureMetadata.IsRoot is the authoritative root signal from EntityStructureAnalyzer.
+        // If metadata is absent (test/legacy path), fall back to structural heuristic.
         var meta = context?.GetMetadata<EntityStructureMetadata>(entity);
         if (meta is not null)
             return meta.IsRoot;
-        return !HasRequiredEntityRef(entity, entityLookup, relationships);
-    }
-
-    private static bool HasRequiredEntityRef(Entity entity,
-        Dictionary<string, Entity> entityLookup, List<Relationship> relationships) {
+        // Legacy fallback — no EntityStructureAnalyzer ran
         if (entity.Properties.Any(p => !p.Constraints.Any(c => c is DefaultValueConstraint)
             && entityLookup.ContainsKey(p.Type.TypeName)))
-            return true;
+            return false;
         if (relationships.Any(r =>
             string.Equals(r.Source.TypeName, entity.Name, StringComparison.Ordinal) &&
             r.Cardinality is not (RelationshipCardinality.OneToMany or RelationshipCardinality.ManyToMany) &&
             !string.Equals(r.Target.TypeName, entity.Name, StringComparison.Ordinal)))
-            return true;
-        return false;
+            return false;
+        return true;
     }
 }

@@ -15,9 +15,9 @@ public class InfrastructureAnalyzerTests {
     // ── Helper bundle ──────────────────────────────────────────
     private sealed record TestInfra(
         StorageModel Storage,
-        EffectTopology Topology,
-        BehaviorModel Behavior,
-        AggregateModel Aggregate,
+        Poly.DomainModeling.Analysis.EffectTopology Topology,
+        Poly.DomainModeling.Analysis.BehaviorModel Behavior,
+        Poly.DomainModeling.Analysis.AggregateModel Aggregate,
         TransportSurface Transport
     );
     // ── Helpers ───────────────────────────────────────────────
@@ -40,10 +40,10 @@ public class InfrastructureAnalyzerTests {
 
     private static TestInfra AnalyzeFull(string poly) {
         var domain = ParseDomain(poly);
-        var topology = EffectTopologyAnalyzer.Scan(domain);
-        var aggregate = new AggregateAnalyzer(domain).Analyze(topology);
+        var topology = Poly.DomainModeling.Analysis.EffectTopologyPass.Scan(domain);
+        var aggregate = Poly.DomainModeling.Analysis.OwnershipAggregatePass.BuildAggregate(domain, null, topology);
         var storage = new StorageAnalyzer(domain).Analyze(aggregate, topology);
-        var behavior = new BehaviorAnalyzer(domain).Analyze();
+        var behavior = Poly.DomainModeling.Analysis.BehaviorPass.BuildBehavior(domain);
         var transport = new TransportAnalyzer(domain).Analyze(aggregate, topology);
         return new TestInfra(storage, topology, behavior, aggregate, transport);
     }
@@ -52,10 +52,10 @@ public class InfrastructureAnalyzerTests {
         var (domain, _) = ParseDomainWithAnalysis(poly);
         // Issue 16: Use real DomainModelAnalyzer so EntityStructure + capability metadata are present
         var analysis = DomainModelAnalyzer.Analyze(domain);
-        var topology = EffectTopologyAnalyzer.Scan(domain);
-        var aggregate = new AggregateAnalyzer(domain, analysis).Analyze(topology);
+        var topology = Poly.DomainModeling.Analysis.EffectTopologyPass.Scan(domain);
+        var aggregate = Poly.DomainModeling.Analysis.OwnershipAggregatePass.BuildAggregate(domain, null, topology);
         var storage = new StorageAnalyzer(domain, analysis).Analyze(aggregate, topology);
-        var behavior = new BehaviorAnalyzer(domain, analysis).Analyze();
+        var behavior = Poly.DomainModeling.Analysis.BehaviorPass.BuildBehavior(domain);
         var transport = new TransportAnalyzer(domain, analysis).Analyze(aggregate, topology);
         return new TestInfra(storage, topology, behavior, aggregate, transport);
     }
@@ -410,10 +410,10 @@ public class InfrastructureAnalyzerTests {
             throw new InvalidOperationException($"Domain evolution failed: {errors}");
         }
         var domain = result.Root!;
-        var topology = EffectTopologyAnalyzer.Scan(domain);
-        var aggregate = new AggregateAnalyzer(domain).Analyze(topology);
+        var topology = Poly.DomainModeling.Analysis.EffectTopologyPass.Scan(domain);
+        var aggregate = Poly.DomainModeling.Analysis.OwnershipAggregatePass.BuildAggregate(domain, null, topology);
         var storage = new StorageAnalyzer(domain, typeMaps: ctx.TypeMaps, conventions: ctx.StorageConventions).Analyze(aggregate, topology);
-        var behavior = new BehaviorAnalyzer(domain).Analyze();
+        var behavior = Poly.DomainModeling.Analysis.BehaviorPass.BuildBehavior(domain);
         var transport = new TransportAnalyzer(domain).Analyze(aggregate, topology);
         return new TestInfra(storage, topology, behavior, aggregate, transport);
     }

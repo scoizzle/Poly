@@ -1,8 +1,9 @@
 # Analysis Pipeline Merge — Proposal
 
 **Date:** 2026-07-24  
-**Status:** ✅ **Complete** — A + B + C′ + D′ + E′ residual closed. 1611 green. Design reference; pull only Transport keep/drop.  
-**Micro-tasks:** [`simple-agent-tasks/apm-README.md`](simple-agent-tasks/apm-README.md)  
+**Status:** ✅ **Complete** — registration of topo/agg/beh/crossref + diagnostics. Design reference only.  
+**Successor:** [`domain-analysis-unification.md`](domain-analysis-unification.md) · [`dau-*`](simple-agent-tasks/dau-README.md) (finish ownership, unify walks, storage/transport in Analysis).  
+**Micro-tasks:** [`simple-agent-tasks/apm-README.md`](simple-agent-tasks/apm-README.md) (closed)  
 **Related:** [`docs/domainmodeling-capability-inventory.md`](../domainmodeling-capability-inventory.md) · archived infra suite [`archive/infrastructure-pass/README.md`](archive/infrastructure-pass/README.md) · [`docs/CORE.md`](../CORE.md)
 
 ---

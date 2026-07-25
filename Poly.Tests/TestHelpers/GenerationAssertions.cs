@@ -29,8 +29,8 @@ internal static class GenerationAssertions {
     /// </summary>
     public static CompilationUnitNode MinimalApiIr(Domain domain) {
         var storage = new StorageAnalyzer(domain).Analyze();
-        var behavior = new BehaviorAnalyzer(domain).Analyze();
-        var aggregate = new AggregateAnalyzer(domain).Analyze();
+        var behavior = Poly.DomainModeling.Analysis.BehaviorPass.BuildBehavior(domain);
+        var aggregate = Poly.DomainModeling.Analysis.OwnershipAggregatePass.BuildAggregate(domain, null, null);
         var gen = new MinimalApiGenerator(domain, storageModel: storage, behaviorModel: behavior, aggregateModel: aggregate);
         return gen.GenerateCompilationUnit("TDbCtx");
     }

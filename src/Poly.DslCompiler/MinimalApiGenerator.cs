@@ -1,4 +1,5 @@
 using Poly.DomainModeling;
+using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Constraints;
 using Poly.DomainModeling.Lowering;
 using Poly.Interpretation.CSharp;

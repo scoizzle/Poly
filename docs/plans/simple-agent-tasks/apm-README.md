@@ -20,9 +20,9 @@
 ## Agent pick
 
 ```text
-DONE:    APM suite complete (A–E′). 1611 tests; residual closed.
-CURRENT: Post-suite — next product work
-PULL:    Transport keep/drop; optional heuristic-root test
+DONE:    APM suite complete (registration + diagnostics). Do not reopen.
+CURRENT: DAU — [`dau-README.md`](dau-README.md) / parent domain-analysis-unification.md
+PULL:    (none on APM track)
 ```
 
 ---

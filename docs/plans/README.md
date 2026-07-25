@@ -12,7 +12,8 @@ Architectural rationale → **`docs/decisions/`**. Module maps → **`Poly/*/REA
 | Plan | Role |
 |------|------|
 | [**Master roadmap**](v2-to-v3/master-roadmap.md) | Milestone index + one-line agent pick |
-| [**Analysis pipeline merge**](analysis-pipeline-merge.md) | **Complete** — A–E′ closed; 1611 green. [`apm-*`](simple-agent-tasks/apm-README.md) |
+| [**Domain analysis unification**](domain-analysis-unification.md) | **Primary pick** — finish lowering→Analysis migration, unify walks, storage/transport in domain analysis · [`dau-*`](simple-agent-tasks/dau-README.md) |
+| [**Analysis pipeline merge**](analysis-pipeline-merge.md) | **Complete** (registration only) — predecessor to DAU · [`apm-*`](simple-agent-tasks/apm-README.md) |
 | [**Capability inventory**](../domainmodeling-capability-inventory.md) | What ships (reference, not a queue) |
 | [**Effect surface completeness**](v2-to-v3/effect-surface-completeness.md) | Effects track — kernel shipped; dogfood / E5 / E6.1 pull |
 | [**DSL query surface**](v2-to-v3/dsl-query-surface.md) | **Complete** Q1′+Q3′+`link_instances` — design reference; pull Q4/dates |
@@ -26,7 +27,8 @@ Architectural rationale → **`docs/decisions/`**. Module maps → **`Poly/*/REA
 
 | Queue | Role |
 |-------|------|
-| [**`apm-*` (analysis pipeline merge)**](simple-agent-tasks/apm-README.md) | **Primary** — Phase A1→Gate then optional B |
+| [**`dau-*` (domain analysis unification)**](simple-agent-tasks/dau-README.md) | **Primary** — D0→D1 wrappers→D2 walks→D3 storage/transport→D4 |
+| [**`apm-*` (analysis pipeline merge)**](simple-agent-tasks/apm-README.md) | **Complete** — registration predecessor; do not reopen |
 | [**`qe-*` (query/effect)**](v2-to-v3/simple-agent-tasks/qe-README.md) | **Complete** — do not reopen Q0–Q3′; optional hygiene only |
 | [**`vs-*` (vertical slice)**](v2-to-v3/simple-agent-tasks/vs-README.md) | Historical M2 — **done**; do not reopen |
 | [**`pr1` review gate**](v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md) | Always-on pre-ship process |

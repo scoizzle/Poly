@@ -1,4 +1,4 @@
-namespace Poly.DomainModeling.Lowering;
+namespace Poly.DomainModeling.Analysis;
 
 // ═══════════════════════════════════════════════════════════════
 // Behavior model — action metadata
@@ -30,10 +30,7 @@ public sealed class BehaviorEntity {
         Actions = actions;
     }
 
-    /// <summary>Entity name.</summary>
     public string Name { get; }
-
-    /// <summary>All actions (entity-level + stage-scoped).</summary>
     public IReadOnlyList<BehaviorAction> Actions { get; }
 }
 
@@ -49,50 +46,54 @@ public sealed class BehaviorAction {
         IReadOnlyList<BehaviorParameter> parameters,
         bool isVoid,
         string? resultTypeName,
-        IReadOnlyList<string> effectivePolicies,
-        IReadOnlyList<StageTransitionTarget> stageTransitions) {
+        IReadOnlyList<string> policies,
+        IReadOnlyList<StageTransitionTarget> transitions) {
         EntityName = entityName;
         StageName = stageName;
         Name = name;
         Parameters = parameters;
         IsVoid = isVoid;
         ResultTypeName = resultTypeName;
-        EffectivePolicies = effectivePolicies;
-        StageTransitions = stageTransitions;
+        Policies = policies;
+        Transitions = transitions;
     }
 
-    /// <summary>The entity this action belongs to.</summary>
     public string EntityName { get; }
-
-    /// <summary>Non-null when scoped to a specific lifecycle stage.</summary>
     public string? StageName { get; }
-
-    /// <summary>Action name (PascalCase in the domain).</summary>
     public string Name { get; }
-
-    /// <summary>Action parameters with domain type and entity-ref classification.</summary>
     public IReadOnlyList<BehaviorParameter> Parameters { get; }
-
-    /// <summary>True when the action has no return value (void).</summary>
     public bool IsVoid { get; }
-
-    /// <summary>The result type name when non-void (e.g. "Loan").</summary>
     public string? ResultTypeName { get; }
-
-    /// <summary>Names of policies guarding this action (entity+stage+action combined).</summary>
-    public IReadOnlyList<string> EffectivePolicies { get; }
-
-    /// <summary>Stage transitions caused by this action (0 or 1 entries typically).</summary>
-    public IReadOnlyList<StageTransitionTarget> StageTransitions { get; }
+    public IReadOnlyList<string> Policies { get; }
+    public IReadOnlyList<StageTransitionTarget> Transitions { get; }
+    /// <summary>Alias for <see cref="Transitions"/> — compatibility.</summary>
+    public IReadOnlyList<StageTransitionTarget> StageTransitions => Transitions;
 }
 
-/// <summary>Parameter metadata — domain-typed, host-agnostic.</summary>
-public sealed record BehaviorParameter(
-    string Name,
-    string DomainType,
-    bool IsRequired,
-    bool IsEntityRef
-);
+/// <summary>Action parameter metadata.</summary>
+public sealed class BehaviorParameter {
+    public BehaviorParameter(string name, string typeName, bool isRequired, bool isEntityRef) {
+        Name = name;
+        TypeName = typeName;
+        IsRequired = isRequired;
+        IsEntityRef = isEntityRef;
+    }
 
-/// <summary>Target stage for a stage-transition effect.</summary>
-public sealed record StageTransitionTarget(string TargetStageName);
+    /// <summary>Parameter name.</summary>
+    public string Name { get; }
+    /// <summary>Domain-level type name (e.g. "Text", "Number", "Book").</summary>
+    public string TypeName { get; }
+    /// <summary>Alias for <see cref="TypeName"/> — used by codegen.</summary>
+    public string DomainType => TypeName;
+    /// <summary>Whether this parameter is required.</summary>
+    public bool IsRequired { get; }
+    /// <summary>Whether this parameter is an entity reference.</summary>
+    public bool IsEntityRef { get; }
+}
+
+/// <summary>Target stage for a transition effect.</summary>
+public sealed record StageTransitionTarget(string Name)
+{
+    /// <summary>Alias for <see cref="Name"/> — compatibility with existing callers.</summary>
+    public string TargetStageName => Name;
+}

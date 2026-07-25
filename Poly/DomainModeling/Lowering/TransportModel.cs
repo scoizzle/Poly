@@ -1,3 +1,5 @@
+using Poly.DomainModeling.Analysis;
+
 namespace Poly.DomainModeling.Lowering;
 
 // ═══════════════════════════════════════════════════════════════

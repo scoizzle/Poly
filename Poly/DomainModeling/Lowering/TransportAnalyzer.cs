@@ -7,8 +7,8 @@ namespace Poly.DomainModeling.Lowering;
 /// Builds <see cref="TransportSurface"/> — the protocol-level resource hierarchy.
 ///
 /// Consumes a pre-computed <see cref="AggregateModel"/> and <see cref="EffectTopology"/>.
-/// Action metadata is NOT built here — use <see cref="BehaviorAnalyzer"/>.
-/// Topology scanning lives in <see cref="EffectTopologyAnalyzer"/>.
+/// Action metadata is NOT built here — use <see cref="Analysis.BehaviorPass"/>.
+/// Topology scanning lives in <see cref="Analysis.EffectTopologyPass"/>.
 /// </summary>
 public sealed class TransportAnalyzer {
     private readonly Domain _domain;

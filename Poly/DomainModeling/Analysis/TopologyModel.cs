@@ -1,4 +1,4 @@
-namespace Poly.DomainModeling.Lowering;
+namespace Poly.DomainModeling.Analysis;
 
 // ═══════════════════════════════════════════════════════════════
 // Topology model — cross-entity effect relationships

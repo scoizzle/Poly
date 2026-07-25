@@ -1,4 +1,4 @@
-namespace Poly.DomainModeling.Lowering;
+namespace Poly.DomainModeling.Analysis;
 
 // ═══════════════════════════════════════════════════════════════
 // Aggregate model — ownership hierarchy
@@ -45,27 +45,10 @@ public sealed class AggregateEntity {
         AggregateParent = aggregateParent;
     }
 
-    /// <summary>Entity name.</summary>
     public string Name { get; }
-
-    /// <summary>
-    /// True if this entity is an aggregate root (no required
-    /// entity-reference constructor params).
-    /// </summary>
     public bool IsRoot { get; }
-
-    /// <summary>For child entities: the root that owns this one.</summary>
     public string? AggregateParentName { get; }
-
-    /// <summary>For child entities: the relationship from parent to child.</summary>
     public string? ParentRelationshipName { get; }
-
-    /// <summary>
-    /// For child entities: the singular navigation property on
-    /// this entity that points back to the parent (e.g. Loan.borrower).
-    /// </summary>
     public string? BackReferencePropertyName { get; }
-
-    /// <summary>Resolved parent entity reference.</summary>
     public AggregateEntity? AggregateParent { get; }
 }

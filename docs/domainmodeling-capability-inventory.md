@@ -136,22 +136,23 @@ Registered in `UseDomainModelAnalysisPipeline()` (`DomainModelAnalyzer.cs`):
 | Capabilities / rules / contracts | `CapabilityAnalyzer`, `RuleCoverageAnalyzer`, `ContractIntegrationAnalyzer` | ✅ |
 | Entity structure | `EntityStructureAnalyzer` (key, root, stages) | ✅ |
 | Subscriptions | contract, causality, replay safety | ✅ |
-| Effect topology | `EffectTopologyPass` — cross-entity coupling | ✅ now runs in domain pipeline |
-| Ownership/aggregate | `OwnershipAggregatePass` — root/child hierarchy | ✅ now runs in domain pipeline |
-| Behavior metadata | `BehaviorPass` — actions, parameters, transitions | ✅ now runs in domain pipeline |
+| Effect topology | `EffectTopologyPass` — cross-entity coupling | ✅ domain pipeline · **DAU:** algorithm still under Lowering (wrapper) |
+| Ownership/aggregate | `OwnershipAggregatePass` — root/child hierarchy | ✅ domain pipeline · **DAU:** same mid-migration pattern |
+| Behavior metadata | `BehaviorPass` — actions, parameters, transitions | ✅ domain pipeline · **DAU:** same |
 | Authoring suggestions + C# entity IR | `AuthoringSuggestionAnalyzer`, `EntitySyntaxPass` | ✅ |
-| Cycle detection | `CrossReferencePass` — entity dependency graph | ✅ now runs in domain pipeline |
+| Cycle detection | `CrossReferencePass` — entity dependency graph | ✅ domain pipeline · pack/coupling surface — **do not delete as unused** |
 
-### 5.2 Codegen pipeline — `DslCompiler.GenerateAllFiles` only
+**Migration in flight:** [`plans/domain-analysis-unification.md`](plans/domain-analysis-unification.md) (`dau-*`). APM finished **registration**; ownership of algorithms, walk unification, and always-on storage/transport are **DAU**. Thin `*Pass` → `Lowering/*Analyzer` bridges are temporary.
 
-The topology/aggregate/behavior passes now run in the domain pipeline (see §5.1 above).
-The codegen pipeline receives their metadata via `AnalysisResult` (`priorAnalysis:` argument).
+### 5.2 Codegen pipeline — `DslCompiler.GenerateAllFiles` (today)
+
+Topology/aggregate/behavior metadata come from domain analysis (`priorAnalysis`). Storage/transport still registered on codegen today — **DAU Phase 3** moves them into domain analysis (pack-refined via `DomainAuthoringContext`). **Do not** treat Transport as dead code; packs will consume operational surfaces.
 
 | Pass | Output | Domain fact? | Status |
 |------|--------|--------------|--------|
-| `StoragePass` | `StorageMappingMetadata` | No (SQL/maps) | ✅ stays codegen |
-| `TransportPass` | `TransportMetadata` | No | ✅ registered; **no production consumer** |
-| Pack `PassRegistry` | storage enrichment | Pack-specific | ✅ feeds **codegen** builder, not domain pipeline |
+| `StoragePass` | `StorageMappingMetadata` | **Yes (shape)** + pack maps | 🟡 codegen today → **DAU D3** domain + context |
+| `TransportPass` | `TransportMetadata` | **Yes (exposable surface)** | 🟡 codegen today → **DAU D3**; keep for packs |
+| Pack `PassRegistry` | storage enrichment | Pack-specific | ✅ stays pack-attached; prefer prior domain result |
 
 Fail-closed: missing storage (db/all); missing behavior/aggregate (all) → `InvalidOperationException` in `DslCompiler`.
 
@@ -234,9 +235,10 @@ Shipped highlights: entities, properties, constraints, enums, navs, stages, acti
 
 | Capability | Notes | Status |
 |-----------|--------|--------|
-| **Analysis pipeline merge** | Topology/aggregate/behavior → domain pipeline | ✅ **Done** — Phase A+B in tree |
-| CrossReferencePass | Entity dependency cycle detection | ✅ runs in domain pipeline |
-| TransportPass keep/drop | Registered, unused | 🟡 G6.h1 |
+| **Analysis pipeline merge (APM)** | Registration of topo/agg/beh/crossref on domain pipeline | ✅ **Done** |
+| **Domain analysis unification (DAU)** | Finish ownership, unify walks, storage/transport in Analysis | ⬜ [`plans/domain-analysis-unification.md`](plans/domain-analysis-unification.md) · [`dau-*`](plans/simple-agent-tasks/dau-README.md) |
+| CrossReference / coupling surface | Cycle + graph facets | ✅ registered · pack-ready — don’t delete |
+| Transport in domain analysis | Exposable surface + packs | ⬜ DAU D3 (not “delete unused”) |
 | Bar B full string oracle | Anonymous-object Syntax needed | ⬜ Pull |
 | RestApiSurfacePass / StorageAccessPass | No consumer | ⬜ Pull |
 | Q4 aggregates sum/min/max | No demand | ⬜ Pull |

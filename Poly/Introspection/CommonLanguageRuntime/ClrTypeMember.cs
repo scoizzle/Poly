@@ -39,13 +39,13 @@ internal abstract class ClrTypeMember : ITypeMember {
     /// Reads this member's value from <paramref name="instance"/> as an expression tree,
     /// or returns <c>null</c> if not readable. Override in derived types.
     /// </summary>
-    public virtual System.Linq.Expressions.Expression? EmitRead(System.Linq.Expressions.Expression? instance) => null;
+    public virtual Expression? EmitRead(Expression? instance) => null;
 
     /// <summary>
     /// Writes <paramref name="value"/> to this member on <paramref name="instance"/>
     /// as an expression tree, or returns <c>null</c> if not writable. Override in derived types.
     /// </summary>
-    public virtual System.Linq.Expressions.Expression? EmitWrite(System.Linq.Expressions.Expression? instance, System.Linq.Expressions.Expression value) => null;
+    public virtual Expression? EmitWrite(Expression? instance, Expression value) => null;
 
     public override string ToString() => $"{MemberTypeDefinition} {DeclaringTypeDefinition}.{Name}";
 }

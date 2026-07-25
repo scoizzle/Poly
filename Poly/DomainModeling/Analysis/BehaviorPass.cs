@@ -54,7 +54,7 @@ internal sealed class BehaviorPass : INodeAnalyzer {
     }
 
     private static BehaviorAction BuildBehaviorAction(
-        AnalysisContext context, Entity entity, DomainModeling.Action action,
+        AnalysisContext context, Entity entity, Action action,
         Dictionary<string, Entity> entityLookup, string? stageName) {
         var isVoid = action.Result.Members.Count == 0;
         var resultTypeName = isVoid ? null : action.Result.Members[0].Type.TypeName;
@@ -90,7 +90,7 @@ internal sealed class BehaviorPass : INodeAnalyzer {
         return new BehaviorAction(entity.Name, stageName, action.Name, parameters, isVoid, resultTypeName, policies, transitions);
     }
 
-    private static T? GetMetadata<T>(AnalysisContext context, DomainModeling.Action action) where T : class, IAnalysisMetadata =>
+    private static T? GetMetadata<T>(AnalysisContext context, Action action) where T : class, IAnalysisMetadata =>
         context.GetMetadata<T>(action);
 
     private static bool IsEntityRefParam(AnalysisContext context, Property param, Dictionary<string, Entity> entityLookup) {

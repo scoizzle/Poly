@@ -10,7 +10,7 @@ using Syntactic = Poly.Syntax.Nodes;
 namespace Poly.DomainModeling.Lowering;
 
 /// <summary>
-/// Produces Syntax AST <see cref="Syntactic.TypeDefinitionNode"/> trees from a
+/// Produces Syntax AST <see cref="TypeDefinitionNode"/> trees from a
 /// <see cref="Domain"/>, suitable for C# code generation via
 /// <see cref="Interpretation.CSharp.CSharpGenerator"/>.
 ///
@@ -43,7 +43,7 @@ public sealed class DomainToCSharpExporter {
     /// The analysis result (required). Must include <see cref="EffectiveMemberMetadata"/>
     /// for each entity (produced by <see cref="SemanticDomainAnalyzer"/>).
     /// </param>
-    public IReadOnlyList<Syntactic.TypeDefinitionNode> Export(Domain domain,
+    public IReadOnlyList<TypeDefinitionNode> Export(Domain domain,
         INodeMetadataProvider metadata) {
         return DomainProgramProjection.ToSyntax(domain, metadata);
     }
@@ -79,7 +79,7 @@ public sealed class DomainToCSharpExporter {
 
     // ── Per-entity builder ──────────────────────────────────────
 
-    internal static IReadOnlyList<Syntactic.TypeDefinitionNode> BuildTypeDefsForEntity(
+    internal static IReadOnlyList<TypeDefinitionNode> BuildTypeDefsForEntity(
         Entity entity,
         Domain domain,
         IReadOnlyList<Relationship> domainRelationships,
@@ -88,21 +88,21 @@ public sealed class DomainToCSharpExporter {
         List<SubscriptionInfo>? targetSubs = null,
         List<SubscriptionInfo>? subscriberSubs = null) {
 
-        var typeDefs = new List<Syntactic.TypeDefinitionNode>();
-        var props = new List<Syntactic.PropertyDefinitionNode>();
-        var methods = new List<Syntactic.MethodDefinitionNode>();
-        var fields = new List<Syntactic.FieldDefinitionNode>();
-        var ctorParams = new List<Syntactic.Parameter>();
-        var ctorAssignments = new List<Poly.Syntax.Node>();
+        var typeDefs = new List<TypeDefinitionNode>();
+        var props = new List<PropertyDefinitionNode>();
+        var methods = new List<MethodDefinitionNode>();
+        var fields = new List<FieldDefinitionNode>();
+        var ctorParams = new List<Parameter>();
+        var ctorAssignments = new List<Node>();
 
         var stageEnumTypeName = $"{entity.Name}Stage";
 
         // ── Common property: IsDeleted (always emitted) ────────────
-        props.Add(new Syntactic.PropertyDefinitionNode(
+        props.Add(new PropertyDefinitionNode(
             "IsDeleted",
-            new Syntactic.PrimitiveTypeReference(PrimType.Boolean),
-            Getter: new Syntactic.PropertyGetterDefinitionNode(),
-            Setter: new Syntactic.PropertySetterDefinitionNode(
+            new PrimitiveTypeReference(PrimType.Boolean),
+            Getter: new PropertyGetterDefinitionNode(),
+            Setter: new PropertySetterDefinitionNode(
                 AccessModifier: AccessModifier.Private)
         ));
 
@@ -110,14 +110,14 @@ public sealed class DomainToCSharpExporter {
         foreach (var prop in entity.Properties.OrderBy(p => p.Name)) {
             var propRef = MapDomainTypeRef(prop.Type, domain);
             var isRequired = prop.Constraints.Any(c => c is RequiredConstraint);
-            List<Poly.Syntax.Node>? constraints = null;
+            List<Node>? constraints = null;
             if (isRequired)
-                constraints = [new Syntactic.Constant("required")];
+                constraints = [new Constant("required")];
 
-            props.Add(new Syntactic.PropertyDefinitionNode(
+            props.Add(new PropertyDefinitionNode(
                 prop.Name, propRef,
-                Getter: new Syntactic.PropertyGetterDefinitionNode(),
-                Setter: new Syntactic.PropertySetterDefinitionNode(
+                Getter: new PropertyGetterDefinitionNode(),
+                Setter: new PropertySetterDefinitionNode(
                     AccessModifier: AccessModifier.Private),
                 Constraints: constraints
             ));
@@ -128,20 +128,20 @@ public sealed class DomainToCSharpExporter {
                 // Try to lower as a runtime default (now, today, guid)
                 var runtimeExpr = EffectLoweringPass.LowerDefaultExpression(defaultValue.Expression);
                 if (runtimeExpr is not null) {
-                    ctorAssignments.Add(new Syntactic.Assignment(
-                        new Syntactic.Member(new Syntactic.ThisReference(), prop.Name),
+                    ctorAssignments.Add(new Assignment(
+                        new Member(new ThisReference(), prop.Name),
                         runtimeExpr));
                     continue; // skip ctor param — runtime value set in body
                 }
                 // If it's a literal, emit directly in body as default
-                if (defaultValue.Expression is Poly.DomainModeling.Literal lit) {
-                    ctorAssignments.Add(new Syntactic.Assignment(
-                        new Syntactic.Member(new Syntactic.ThisReference(), prop.Name),
-                        new Syntactic.Constant(lit.Value)));
+                if (defaultValue.Expression is Literal lit) {
+                    ctorAssignments.Add(new Assignment(
+                        new Member(new ThisReference(), prop.Name),
+                        new Constant(lit.Value)));
                     continue; // skip ctor param — constant default in body
                 }
                 // If it's an enum member (PropertyAccess), also emit directly
-                if (defaultValue.Expression is Poly.DomainModeling.PropertyAccess pa && domain is not null) {
+                if (defaultValue.Expression is PropertyAccess pa && domain is not null) {
                     // Try to resolve as enum member: EnumType.MemberName
                     var enumProp = entity.Properties.FirstOrDefault(p =>
                         string.Equals(p.Name, prop.Name, StringComparison.Ordinal));
@@ -149,10 +149,10 @@ public sealed class DomainToCSharpExporter {
                         var enumTypes = domain.Types.OfType<EnumType>()
                             .ToDictionary(e => e.Name, StringComparer.Ordinal);
                         if (enumTypes.TryGetValue(enumProp.Type.TypeName, out var enumType)) {
-                            ctorAssignments.Add(new Syntactic.Assignment(
-                                new Syntactic.Member(new Syntactic.ThisReference(), prop.Name),
-                                new Syntactic.Member(
-                                    new Syntactic.NamedTypeReference(enumType.Name), pa.Name)));
+                            ctorAssignments.Add(new Assignment(
+                                new Member(new ThisReference(), prop.Name),
+                                new Member(
+                                    new NamedTypeReference(enumType.Name), pa.Name)));
                             continue; // skip ctor param
                         }
                     }
@@ -161,10 +161,10 @@ public sealed class DomainToCSharpExporter {
 
             // No default expression — full constructor param + assignment
             var paramName = ToCamelCase(prop.Name);
-            ctorParams.Add(new Syntactic.Parameter(paramName, propRef));
-            ctorAssignments.Add(new Syntactic.Assignment(
-                new Syntactic.Member(new Syntactic.ThisReference(), prop.Name),
-                new Syntactic.Parameter(paramName)));
+            ctorParams.Add(new Parameter(paramName, propRef));
+            ctorAssignments.Add(new Assignment(
+                new Member(new ThisReference(), prop.Name),
+                new Parameter(paramName)));
         }
 
         // ── Navigation properties (PascalCase; IReadOnlyList for collections) ──
@@ -174,7 +174,7 @@ public sealed class DomainToCSharpExporter {
 
             var isMany = rel.Cardinality is RelationshipCardinality.OneToMany
                          or RelationshipCardinality.ManyToMany;
-            var targetType = new Syntactic.NamedTypeReference(rel.Target.TypeName);
+            var targetType = new NamedTypeReference(rel.Target.TypeName);
             var pascalName = ToPascalCase(rel.Name);
             var paramName = ToCamelCase(pascalName);
 
@@ -182,50 +182,50 @@ public sealed class DomainToCSharpExporter {
                 // Collection nav: private field, IEnumerable<T> constructor param,
                 // getter-only property. EF passes loaded items in via the constructor.
                 var fieldName = $"_{paramName}";
-                var listType = new Syntactic.NamedTypeReference("List",
+                var listType = new NamedTypeReference("List",
                     TypeArguments: [targetType]);
-                var readOnlyType = new Syntactic.NamedTypeReference("IReadOnlyList",
+                var readOnlyType = new NamedTypeReference("IReadOnlyList",
                     TypeArguments: [targetType]);
-                var enumerableType = new Syntactic.NamedTypeReference("IEnumerable",
+                var enumerableType = new NamedTypeReference("IEnumerable",
                     TypeArguments: [targetType]);
 
-                fields.Add(new Syntactic.FieldDefinitionNode(
+                fields.Add(new FieldDefinitionNode(
                     fieldName,
                     listType,
                     AccessModifier: AccessModifier.Private
                 ));
 
-                props.Add(new Syntactic.PropertyDefinitionNode(
+                props.Add(new PropertyDefinitionNode(
                     pascalName, readOnlyType,
-                    Getter: new Syntactic.PropertyGetterDefinitionNode(
-                        Body: new Syntactic.Member(new Syntactic.ThisReference(), fieldName)),
+                    Getter: new PropertyGetterDefinitionNode(
+                        Body: new Member(new ThisReference(), fieldName)),
                     IsReadOnly: true
                 ));
 
                 // Constructor param: IEnumerable<T> items → _field = new List<T>(items)
-                var param = new Syntactic.Parameter(paramName, enumerableType);
+                var param = new Parameter(paramName, enumerableType);
                 ctorParams.Add(param);
-                ctorAssignments.Add(new Syntactic.Assignment(
-                    new Syntactic.Member(new Syntactic.ThisReference(), fieldName),
-                    new Syntactic.New(listType, [new Syntactic.Parameter(paramName)])));
+                ctorAssignments.Add(new Assignment(
+                    new Member(new ThisReference(), fieldName),
+                    new New(listType, [new Parameter(paramName)])));
 
                 // Generate CreateNavName(args) factory method on the source entity
                 AddCreateNavMethod(entity, rel, domain!, subscriberSubs, fieldName, methods);
             }
             else {
                 // Singular nav: property with private setter (constructor param)
-                props.Add(new Syntactic.PropertyDefinitionNode(
+                props.Add(new PropertyDefinitionNode(
                     pascalName, targetType,
-                    Getter: new Syntactic.PropertyGetterDefinitionNode(),
-                    Setter: new Syntactic.PropertySetterDefinitionNode(
+                    Getter: new PropertyGetterDefinitionNode(),
+                    Setter: new PropertySetterDefinitionNode(
                         AccessModifier: AccessModifier.Private)
                 ));
 
-                var param = new Syntactic.Parameter(paramName, targetType);
+                var param = new Parameter(paramName, targetType);
                 ctorParams.Add(param);
-                ctorAssignments.Add(new Syntactic.Assignment(
-                    new Syntactic.Member(new Syntactic.ThisReference(), pascalName),
-                    new Syntactic.Parameter(paramName)));
+                ctorAssignments.Add(new Assignment(
+                    new Member(new ThisReference(), pascalName),
+                    new Parameter(paramName)));
             }
         }
 
@@ -237,8 +237,8 @@ public sealed class DomainToCSharpExporter {
             foreach (var group in targetSubs.GroupBy(s => s.StageName)) {
                 var nodes = new List<Node>();
                 foreach (var info in group)
-                    nodes.Add(new Syntactic.Invoke(
-                        new Syntactic.Member(new Syntactic.ThisReference(),
+                    nodes.Add(new Invoke(
+                        new Member(new ThisReference(),
                             $"Notify{info.StageName}Subscribers")));
                 postTransitionNodes[group.Key] = nodes;
             }
@@ -253,7 +253,7 @@ public sealed class DomainToCSharpExporter {
 
         // ── Policies as bool methods ──────────────────────────────
         foreach (var policy in entity.Policies) {
-            Poly.Syntax.Node? body;
+            Node? body;
             try {
                 body = LowerExpressionToMethodBody(policy.Expression, entity, domain);
             }
@@ -261,17 +261,17 @@ public sealed class DomainToCSharpExporter {
                 // Q3′ quantifiers (any/all/none/count) and other store-dependent
                 // expressions cannot be lowered to standalone C# methods yet.
                 // Generate a runtime exception so calling code fails loud.
-                body = new Syntactic.Block([
-                    new Syntactic.ThrowStatement(
-                        new Syntactic.New(
-                            new Syntactic.NamedTypeReference("NotSupportedException"),
-                            new Syntactic.Constant(
+                body = new Block([
+                    new ThrowStatement(
+                        new New(
+                            new NamedTypeReference("NotSupportedException"),
+                            new Constant(
                                 $"Policy '{policy.Name}' requires store-aware evaluation and cannot be compiled to standalone C#.")))
                 ]);
             }
-            methods.Add(new Syntactic.MethodDefinitionNode(
+            methods.Add(new MethodDefinitionNode(
                 policy.Name,
-                new Syntactic.PrimitiveTypeReference(PrimType.Boolean),
+                new PrimitiveTypeReference(PrimType.Boolean),
                 Body: body,
                 AccessModifier: AccessModifier.Public
             ));
@@ -285,15 +285,15 @@ public sealed class DomainToCSharpExporter {
                 var key = (info.StageName, info.SourceEntity.Name);
                 if (!emitted.Add(key)) continue;
 
-                var srcType = new Syntactic.NamedTypeReference(info.SourceEntity.Name);
+                var srcType = new NamedTypeReference(info.SourceEntity.Name);
                 var fieldName = $"_{ToCamelCase(info.StageName)}Subscribers";
                 var paramName = "subscriber";
 
                 // private List<TA>? _DamagedSubscribers;
-                fields.Add(new Syntactic.FieldDefinitionNode(
+                fields.Add(new FieldDefinitionNode(
                     fieldName,
-                    new Syntactic.OptionalTypeReference(
-                        new Syntactic.NamedTypeReference("List",
+                    new OptionalTypeReference(
+                        new NamedTypeReference("List",
                             TypeArguments: [srcType])),
                     AccessModifier: AccessModifier.Private
                 ));
@@ -303,24 +303,24 @@ public sealed class DomainToCSharpExporter {
                 //         _damagedSubscribers = new List<TA>();
                 //     _damagedSubscribers.Add(sub);
                 // }
-                var fieldAcc = new Syntactic.Member(new Syntactic.ThisReference(), fieldName);
-                var registerBody = new Syntactic.Block([
-                    new Syntactic.IfStatement(
-                        new Syntactic.Equal(fieldAcc, new Syntactic.Constant(null)),
-                        new Syntactic.Block([
-                            new Syntactic.Assignment(fieldAcc,
-                                new Syntactic.New(
-                                    new Syntactic.NamedTypeReference("List",
+                var fieldAcc = new Member(new ThisReference(), fieldName);
+                var registerBody = new Block([
+                    new IfStatement(
+                        new Equal(fieldAcc, new Constant(null)),
+                        new Block([
+                            new Assignment(fieldAcc,
+                                new New(
+                                    new NamedTypeReference("List",
                                         TypeArguments: [srcType])))
                         ])),
-                    new Syntactic.Invoke(
-                        new Syntactic.Member(fieldAcc, "Add"),
-                        [new Syntactic.Parameter(paramName)])
+                    new Invoke(
+                        new Member(fieldAcc, "Add"),
+                        [new Parameter(paramName)])
                 ]);
-                methods.Add(new Syntactic.MethodDefinitionNode(
+                methods.Add(new MethodDefinitionNode(
                     $"Register{info.SourceEntity.Name}{info.StageName}Subscriber",
-                    new Syntactic.TypeReference("void"),
-                    Parameters: [new Syntactic.Parameter(paramName, srcType)],
+                    new TypeReference("void"),
+                    Parameters: [new Parameter(paramName, srcType)],
                     Body: registerBody,
                     AccessModifier: AccessModifier.Internal
                 ));
@@ -332,23 +332,23 @@ public sealed class DomainToCSharpExporter {
                 // }
                 var handlerName = $"When{info.TargetEntity.Name}{info.StageName}";
                 var subVar = "sub";
-                var foreachBody = new Syntactic.Block([
-                    new Syntactic.Invoke(
-                        new Syntactic.Member(
-                            new Syntactic.Variable(subVar), handlerName))
+                var foreachBody = new Block([
+                    new Invoke(
+                        new Member(
+                            new Variable(subVar), handlerName))
                 ]);
-                var notifyBody = new Syntactic.IfStatement(
-                    new Syntactic.NotEqual(
-                        new Syntactic.Member(new Syntactic.ThisReference(), fieldName),
-                        new Syntactic.Constant(null)),
-                    new Syntactic.ForEachLoop(
-                        new Syntactic.Variable(subVar),
-                        new Syntactic.Member(new Syntactic.ThisReference(), fieldName),
+                var notifyBody = new IfStatement(
+                    new NotEqual(
+                        new Member(new ThisReference(), fieldName),
+                        new Constant(null)),
+                    new ForEachLoop(
+                        new Variable(subVar),
+                        new Member(new ThisReference(), fieldName),
                         foreachBody));
-                methods.Add(new Syntactic.MethodDefinitionNode(
+                methods.Add(new MethodDefinitionNode(
                     $"Notify{info.StageName}Subscribers",
-                    new Syntactic.TypeReference("void"),
-                    Body: new Syntactic.Block([notifyBody]),
+                    new TypeReference("void"),
+                    Body: new Block([notifyBody]),
                     AccessModifier: AccessModifier.Internal
                 ));
             }
@@ -361,11 +361,11 @@ public sealed class DomainToCSharpExporter {
 
                 // Lower the subscription effects into the handler body
                 var subscriptionEffects = info.Subscription.Effects;
-                Poly.Syntax.Node handlerBody;
+                Node handlerBody;
                 if (subscriptionEffects.Count > 0) {
                     var context = new LoweringContext(
-                        new Syntactic.Parameter("entity",
-                            new Syntactic.TypeReference(entity.Name)),
+                        new Parameter("entity",
+                            new TypeReference(entity.Name)),
                         UseThisReference: true,
                         LowerStageTransitions: true,
                         Domain: domain,
@@ -376,15 +376,15 @@ public sealed class DomainToCSharpExporter {
                     var effectPass = new EffectLoweringPass(entity, context);
                     var composite = new CompositeEffect(subscriptionEffects);
                     handlerBody = effectPass.TryLowerVmNode(composite)
-                        ?? new Syntactic.Block([new Syntactic.Comment("no-op")]);
+                        ?? new Block([new Comment("no-op")]);
                 }
                 else {
-                    handlerBody = new Syntactic.Block([new Syntactic.Comment("no-op")]);
+                    handlerBody = new Block([new Comment("no-op")]);
                 }
 
-                methods.Add(new Syntactic.MethodDefinitionNode(
+                methods.Add(new MethodDefinitionNode(
                     handlerName,
-                    new Syntactic.TypeReference("void"),
+                    new TypeReference("void"),
                     Body: handlerBody,
                     AccessModifier: AccessModifier.Internal
                 ));
@@ -394,42 +394,42 @@ public sealed class DomainToCSharpExporter {
         // ── Stage enum + CurrentStage property ────────────────────
         if (entity.Stages.Count > 0) {
             var enumTypeName = $"{entity.Name}Stage";
-            var stageEnumFields = new List<Syntactic.FieldDefinitionNode>();
+            var stageEnumFields = new List<FieldDefinitionNode>();
             for (int si = 0; si < entity.Stages.Count; si++) {
-                stageEnumFields.Add(new Syntactic.FieldDefinitionNode(
+                stageEnumFields.Add(new FieldDefinitionNode(
                     entity.Stages[si].Name,
-                    new Syntactic.PrimitiveTypeReference(PrimType.Int32),
-                    DefaultValue: new Syntactic.Constant((int)si),
+                    new PrimitiveTypeReference(PrimType.Int32),
+                    DefaultValue: new Constant((int)si),
                     AccessModifier: AccessModifier.Public
                 ));
             }
-            typeDefs.Add(new Syntactic.TypeDefinitionNode(
+            typeDefs.Add(new TypeDefinitionNode(
                 enumTypeName,
                 Fields: stageEnumFields,
                 Semantics: Syntactic.TypeDefinitionSemantics.MutableReference
             ));
 
-            props.Add(new Syntactic.PropertyDefinitionNode(
+            props.Add(new PropertyDefinitionNode(
                 "CurrentStage",
-                new Syntactic.NamedTypeReference(enumTypeName),
-                Getter: new Syntactic.PropertyGetterDefinitionNode(),
-                Setter: new Syntactic.PropertySetterDefinitionNode(
+                new NamedTypeReference(enumTypeName),
+                Getter: new PropertyGetterDefinitionNode(),
+                Setter: new PropertySetterDefinitionNode(
                     AccessModifier: AccessModifier.Private)
             ));
         }
 
         // ── Private constructor + public static Create factory ─────
-        List<Syntactic.ConstructorDefinitionNode>? ctors = null;
+        List<ConstructorDefinitionNode>? ctors = null;
         if (ctorParams.Count > 0 || entity.Stages.Count > 0) {
-            var bodyNodes = new List<Poly.Syntax.Node>();
+            var bodyNodes = new List<Node>();
             bodyNodes.AddRange(ctorAssignments);
 
             if (entity.Stages.Count > 0) {
                 var firstStage = entity.Stages[0];
-                bodyNodes.Add(new Syntactic.Assignment(
-                    new Syntactic.Member(new Syntactic.ThisReference(), "CurrentStage"),
-                    new Syntactic.Member(
-                        new Syntactic.NamedTypeReference($"{entity.Name}Stage"),
+                bodyNodes.Add(new Assignment(
+                    new Member(new ThisReference(), "CurrentStage"),
+                    new Member(
+                        new NamedTypeReference($"{entity.Name}Stage"),
                         firstStage.Name)));
 
                 // Apply the initial stage's entry effects in the constructor.
@@ -438,8 +438,8 @@ public sealed class DomainToCSharpExporter {
                 // construction, not just during explicit stage transitions.
                 if (firstStage.OnEntryEffects.Count > 0) {
                     var entryCtx = new LoweringContext(
-                        new Syntactic.Parameter("entity",
-                            new Syntactic.TypeReference(entity.Name)),
+                        new Parameter("entity",
+                            new TypeReference(entity.Name)),
                         UseThisReference: true,
                         LowerStageTransitions: false,
                         Domain: domain,
@@ -460,38 +460,38 @@ public sealed class DomainToCSharpExporter {
             // state (including collections passed from data-store materialization)
             // is set before subscription wiring runs.
             if (subscriberSubs is { Count: > 0 }) {
-                bodyNodes.Add(new Syntactic.Invoke(
-                    new Syntactic.Member(new Syntactic.ThisReference(), "InitializeSubscriptions")));
+                bodyNodes.Add(new Invoke(
+                    new Member(new ThisReference(), "InitializeSubscriptions")));
             }
 
             // Private parameterless constructor for EF Core materialization.
-            var paramlessBody = new List<Poly.Syntax.Node>();
+            var paramlessBody = new List<Node>();
             foreach (var f in fields) {
-                var isOptional = f.FieldType is Syntactic.OptionalTypeReference;
+                var isOptional = f.FieldType is OptionalTypeReference;
                 if (isOptional) continue;
-                paramlessBody.Add(new Syntactic.Assignment(
-                    new Syntactic.Member(new Syntactic.ThisReference(), f.Name),
-                    new Syntactic.New(f.FieldType)));
+                paramlessBody.Add(new Assignment(
+                    new Member(new ThisReference(), f.Name),
+                    new New(f.FieldType)));
             }
             if (paramlessBody.Count == 0)
-                paramlessBody.Add(new Syntactic.Comment("EF materialization"));
-            ctors = [new Syntactic.ConstructorDefinitionNode(
+                paramlessBody.Add(new Comment("EF materialization"));
+            ctors = [new ConstructorDefinitionNode(
                 Parameters: null,
-                Body: new Syntactic.Block(paramlessBody),
+                Body: new Block(paramlessBody),
                 AccessModifier: AccessModifier.Private
             )];
 
             // Full constructor — only the static Create factory can construct
             // instances with data. EntityFramework uses the parameterless ctor.
-            ctors = [.. ctors, new Syntactic.ConstructorDefinitionNode(
+            ctors = [.. ctors, new ConstructorDefinitionNode(
                 Parameters: ctorParams,
-                Body: bodyNodes.Count > 0 ? new Syntactic.Block(bodyNodes) : null,
+                Body: bodyNodes.Count > 0 ? new Block(bodyNodes) : null,
                 AccessModifier: AccessModifier.Private
             )];
 
             // public static DomainResult<EntityName> Create(args...)
-            var createResultType = new Syntactic.NamedTypeReference("DomainResult",
-                TypeArguments: [new Syntactic.NamedTypeReference(entity.Name)]);
+            var createResultType = new NamedTypeReference("DomainResult",
+                TypeArguments: [new NamedTypeReference(entity.Name)]);
 
             // Build constraint validation checks before the constructor call.
             // Only entity properties (not navigations) are validated — navs
@@ -499,20 +499,20 @@ public sealed class DomainToCSharpExporter {
             var constraintChecks = BuildCreateConstraintChecks(entity, domain);
 
             // return DomainResult<EntityName>.Success(new EntityName(args...));
-            var createSuccessNodes = new List<Poly.Syntax.Node>();
+            var createSuccessNodes = new List<Node>();
             createSuccessNodes.AddRange(constraintChecks);
-            createSuccessNodes.Add(new Syntactic.Return(
-                new Syntactic.Invoke(
-                    new Syntactic.Member(createResultType, "Success"),
-                    [new Syntactic.New(
-                        new Syntactic.NamedTypeReference(entity.Name),
-                        ctorParams.Select(p => new Syntactic.Parameter(p.Name)).ToArray())])));
+            createSuccessNodes.Add(new Return(
+                new Invoke(
+                    new Member(createResultType, "Success"),
+                    [new New(
+                        new NamedTypeReference(entity.Name),
+                        ctorParams.Select(p => new Parameter(p.Name)).ToArray())])));
 
-            methods.Add(new Syntactic.MethodDefinitionNode(
+            methods.Add(new MethodDefinitionNode(
                 "Create",
                 createResultType,
                 Parameters: ctorParams,
-                Body: new Syntactic.Block(createSuccessNodes),
+                Body: new Block(createSuccessNodes),
                 IsStatic: true,
                 AccessModifier: AccessModifier.Public
             ));
@@ -520,19 +520,19 @@ public sealed class DomainToCSharpExporter {
 
         // ── InitializeSubscriptions — for post-load subscription wiring ──
         if (subscriberSubs is { Count: > 0 }) {
-            var initBody = new List<Poly.Syntax.Node>();
+            var initBody = new List<Node>();
             AddSubscriberRegistrationNodes(subscriberSubs, initBody);
             if (initBody.Count > 0) {
-                methods.Add(new Syntactic.MethodDefinitionNode(
+                methods.Add(new MethodDefinitionNode(
                     "InitializeSubscriptions",
-                    new Syntactic.TypeReference("void"),
-                    Body: new Syntactic.Block(initBody),
+                    new TypeReference("void"),
+                    Body: new Block(initBody),
                     AccessModifier: AccessModifier.Private
                 ));
             }
         }
 
-        typeDefs.Add(new Syntactic.TypeDefinitionNode(
+        typeDefs.Add(new TypeDefinitionNode(
             entity.Name,
             Constructors: ctors,
             Properties: props.Count > 0 ? props : null,
@@ -551,7 +551,7 @@ public sealed class DomainToCSharpExporter {
     /// </summary>
     private static void AddSubscriberRegistrationNodes(
         List<SubscriptionInfo>? subscriberSubs,
-        List<Poly.Syntax.Node> bodyNodes) {
+        List<Node> bodyNodes) {
         if (subscriberSubs is { Count: > 0 }) {
             foreach (var group in subscriberSubs.GroupBy(s => s.Relationship.Name)) {
                 var rel = group.First().Relationship;
@@ -562,26 +562,26 @@ public sealed class DomainToCSharpExporter {
                 if (isMany) {
                     foreach (var info in group) {
                         var subVarName = "target";
-                        bodyNodes.Add(new Syntactic.ForEachLoop(
-                            new Syntactic.Variable(subVarName),
-                            new Syntactic.Member(new Syntactic.ThisReference(), pascalNavName),
-                            new Syntactic.Block([
-                                new Syntactic.Invoke(
-                                    new Syntactic.Member(
-                                        new Syntactic.Variable(subVarName),
+                        bodyNodes.Add(new ForEachLoop(
+                            new Variable(subVarName),
+                            new Member(new ThisReference(), pascalNavName),
+                            new Block([
+                                new Invoke(
+                                    new Member(
+                                        new Variable(subVarName),
                                         $"Register{info.SourceEntity.Name}{info.StageName}Subscriber"),
-                                    [new Syntactic.ThisReference()])
+                                    [new ThisReference()])
                             ])
                         ));
                     }
                 }
                 else {
                     foreach (var info in group) {
-                        bodyNodes.Add(new Syntactic.Invoke(
-                            new Syntactic.Member(
-                                new Syntactic.Member(new Syntactic.ThisReference(), pascalNavName),
+                        bodyNodes.Add(new Invoke(
+                            new Member(
+                                new Member(new ThisReference(), pascalNavName),
                                 $"Register{info.SourceEntity.Name}{info.StageName}Subscriber"),
-                            [new Syntactic.ThisReference()])
+                            [new ThisReference()])
                         );
                     }
                 }
@@ -615,11 +615,11 @@ public sealed class DomainToCSharpExporter {
         Domain domain,
         List<SubscriptionInfo>? subscriberSubs,
         string fieldName,
-        List<Syntactic.MethodDefinitionNode> methods) {
+        List<MethodDefinitionNode> methods) {
 
         var pascalName = ToPascalCase(rel.Name);
         var targetTypeName = rel.Target.TypeName;
-        var targetType = new Syntactic.NamedTypeReference(targetTypeName);
+        var targetType = new NamedTypeReference(targetTypeName);
         var targetEntity = domain.Types.OfType<Entity>()
             .FirstOrDefault(e => string.Equals(e.Name, targetTypeName, StringComparison.Ordinal));
         if (targetEntity is null) return;
@@ -634,16 +634,16 @@ public sealed class DomainToCSharpExporter {
                      && r.Cardinality is not (RelationshipCardinality.OneToMany or RelationshipCardinality.ManyToMany))
             .ToList();
 
-        var methodParams = new List<Syntactic.Parameter>();
-        var createArgs = new List<Poly.Syntax.Node>();
+        var methodParams = new List<Parameter>();
+        var createArgs = new List<Node>();
 
         // Add regular properties without defaults (sorted to match Create factory)
         foreach (var prop in targetEntity.Properties.OrderBy(p => p.Name)) {
             if (prop.Constraints.Any(c => c is DefaultValueConstraint)) continue;
             var paramName = ToCamelCase(prop.Name);
             var propRef = MapDomainTypeRef(prop.Type, domain);
-            methodParams.Add(new Syntactic.Parameter(paramName, propRef));
-            createArgs.Add(new Syntactic.Parameter(paramName));
+            methodParams.Add(new Parameter(paramName, propRef));
+            createArgs.Add(new Parameter(paramName));
         }
 
         // Add singular navigation properties (e.g. book: Book, borrower: Patron)
@@ -652,9 +652,9 @@ public sealed class DomainToCSharpExporter {
             if (string.Equals(trel.Target.TypeName, entity.Name, StringComparison.Ordinal)) continue;
 
             var paramName = ToCamelCase(trel.Name);
-            var trgType = new Syntactic.NamedTypeReference(trel.Target.TypeName);
-            methodParams.Add(new Syntactic.Parameter(paramName, trgType));
-            createArgs.Add(new Syntactic.Parameter(paramName));
+            var trgType = new NamedTypeReference(trel.Target.TypeName);
+            methodParams.Add(new Parameter(paramName, trgType));
+            createArgs.Add(new Parameter(paramName));
         }
 
         // Back-ref check — find the relationship where target points back to source
@@ -662,7 +662,7 @@ public sealed class DomainToCSharpExporter {
             .FirstOrDefault(r => string.Equals(r.Target.TypeName, entity.Name, StringComparison.Ordinal));
         // Auto-wire back-reference (borrower: Patron → this)
         if (backRefRel is not null) {
-            createArgs.Add(new Syntactic.ThisReference());
+            createArgs.Add(new ThisReference());
         }
 
         // NOTE: properties with DefaultValueConstraint are NOT included in
@@ -670,84 +670,84 @@ public sealed class DomainToCSharpExporter {
         // constructor body from their default expression. Do NOT append them
         // to createArgs here; the Create factory already handles them.
 
-        var bodyNodes = new List<Poly.Syntax.Node>();
+        var bodyNodes = new List<Node>();
         var localResultName = $"{ToCamelCase(targetTypeName)}Result";
         var localName = ToCamelCase(targetTypeName);
 
         // var loanResult = Loan.Create(book: book, borrower: this, ...);
-        bodyNodes.Add(new Syntactic.Variable(localResultName,
-            new Syntactic.Invoke(
-                new Syntactic.Member(targetType, "Create"),
+        bodyNodes.Add(new Variable(localResultName,
+            new Invoke(
+                new Member(targetType, "Create"),
                 [.. createArgs])));
 
         // Unwrap: the Create factory now returns DomainResult<T>, and it may
         // reject invalid inputs via constraint checks. Since CreateNav methods
         // are only called from action bodies with controlled defaults, a
         // failure here is a programmer error — assert fast.
-        bodyNodes.Add(new Syntactic.IfStatement(
+        bodyNodes.Add(new IfStatement(
             new Syntactic.Not(
-                new Syntactic.Member(
-                    new Syntactic.Variable(localResultName), "IsSuccess")),
-            new Syntactic.Block([
-                new Syntactic.ThrowStatement(
-                    new Syntactic.New(
-                        new Syntactic.NamedTypeReference("InvalidOperationException"),
-                        new Syntactic.Member(
-                            new Syntactic.Variable(localResultName), "ErrorMessage")))
+                new Member(
+                    new Variable(localResultName), "IsSuccess")),
+            new Block([
+                new ThrowStatement(
+                    new New(
+                        new NamedTypeReference("InvalidOperationException"),
+                        new Member(
+                            new Variable(localResultName), "ErrorMessage")))
             ])));
 
         // var loan = loanResult.Value;
-        bodyNodes.Add(new Syntactic.Variable(localName,
-            new Syntactic.Member(
-                new Syntactic.Variable(localResultName), "Value")));
+        bodyNodes.Add(new Variable(localName,
+            new Member(
+                new Variable(localResultName), "Value")));
 
         // _loans.Add(loan);
-        bodyNodes.Add(new Syntactic.Invoke(
-            new Syntactic.Member(
-                new Syntactic.Member(new Syntactic.ThisReference(), fieldName), "Add"),
-            [new Syntactic.Variable(localName)]));
+        bodyNodes.Add(new Invoke(
+            new Member(
+                new Member(new ThisReference(), fieldName), "Add"),
+            [new Variable(localName)]));
 
         // Subscription registration: loan.RegisterPatronOverdueSubscriber(this)
         if (subscriberSubs is { Count: > 0 }) {
             foreach (var info in subscriberSubs) {
                 if (string.Equals(info.Relationship.Name, rel.Name, StringComparison.Ordinal)) {
-                    bodyNodes.Add(new Syntactic.Invoke(
-                        new Syntactic.Member(
-                            new Syntactic.Variable(localName),
+                    bodyNodes.Add(new Invoke(
+                        new Member(
+                            new Variable(localName),
                             $"Register{info.SourceEntity.Name}{info.StageName}Subscriber"),
-                        [new Syntactic.ThisReference()]));
+                        [new ThisReference()]));
                 }
             }
         }
 
         // return loan;
-        bodyNodes.Add(new Syntactic.Return(new Syntactic.Variable(localName)));
+        bodyNodes.Add(new Return(new Variable(localName)));
 
-        methods.Add(new Syntactic.MethodDefinitionNode(
+        methods.Add(new MethodDefinitionNode(
             methodName,
             targetType,
             Parameters: methodParams.Count > 0 ? methodParams : null,
-            Body: new Syntactic.Block(bodyNodes),
+            Body: new Block(bodyNodes),
             AccessModifier: AccessModifier.Private
         ));
     }
 
     /// <summary>Returns a default-value Syntax node for a property (null, 0, false, etc.).</summary>
-    private static Poly.Syntax.Node DefaultValueForProp(Property prop, Domain domain) {
+    private static Node DefaultValueForProp(Property prop, Domain domain) {
         var defaultValue = prop.Constraints.OfType<DefaultValueConstraint>().FirstOrDefault();
         if (defaultValue is not null) {
             var runtimeExpr = EffectLoweringPass.LowerDefaultExpression(defaultValue.Expression);
             if (runtimeExpr is not null) return runtimeExpr;
-            if (defaultValue.Expression is Poly.DomainModeling.Literal lit)
-                return new Syntactic.Constant(lit.Value);
-            if (defaultValue.Expression is Poly.DomainModeling.PropertyAccess pa) {
+            if (defaultValue.Expression is Literal lit)
+                return new Constant(lit.Value);
+            if (defaultValue.Expression is PropertyAccess pa) {
                 var enumTypes = domain.Types.OfType<EnumType>()
                     .ToDictionary(e => e.Name, StringComparer.Ordinal);
                 if (enumTypes.TryGetValue(prop.Type.TypeName, out var enumType))
-                    return new Syntactic.Member(new Syntactic.NamedTypeReference(enumType.Name), pa.Name);
+                    return new Member(new NamedTypeReference(enumType.Name), pa.Name);
             }
         }
-        return new Syntactic.Constant(null);
+        return new Constant(null);
     }
 
     /// <summary>
@@ -758,12 +758,12 @@ public sealed class DomainToCSharpExporter {
     /// Only entity properties (not navigation properties) are validated — navs do not
     /// carry constraints in the current domain model.
     /// </summary>
-    private static List<Poly.Syntax.Node> BuildCreateConstraintChecks(
+    private static List<Node> BuildCreateConstraintChecks(
         Entity entity, Domain? domain) {
 
-        var checks = new List<Poly.Syntax.Node>();
-        var entityTypeRef = new Syntactic.NamedTypeReference(entity.Name);
-        var resultType = new Syntactic.NamedTypeReference("DomainResult",
+        var checks = new List<Node>();
+        var entityTypeRef = new NamedTypeReference(entity.Name);
+        var resultType = new NamedTypeReference("DomainResult",
             TypeArguments: [entityTypeRef]);
 
         foreach (var prop in entity.Properties.OrderBy(p => p.Name)) {
@@ -771,16 +771,16 @@ public sealed class DomainToCSharpExporter {
             if (prop.Constraints.Any(c => c is DefaultValueConstraint)) continue;
 
             var paramName = ToCamelCase(prop.Name);
-            var paramRef = new Syntactic.Parameter(paramName);
+            var paramRef = new Parameter(paramName);
             var isText = string.Equals(prop.Type.TypeName, "Text", StringComparison.Ordinal)
                       || string.Equals(prop.Type.TypeName, "String", StringComparison.Ordinal);
             var isNumber = string.Equals(prop.Type.TypeName, "Number", StringComparison.Ordinal)
                         || string.Equals(prop.Type.TypeName, "Int", StringComparison.Ordinal);
 
-            Poly.Syntax.Node Failure(string msg) => new Syntactic.Return(
-                new Syntactic.Invoke(
-                    new Syntactic.Member(resultType, "Failure"),
-                    new Syntactic.Constant(msg)));
+            Node Failure(string msg) => new Return(
+                new Invoke(
+                    new Member(resultType, "Failure"),
+                    new Constant(msg)));
 
             foreach (var constraint in prop.Constraints) {
                 switch (constraint) {
@@ -790,19 +790,19 @@ public sealed class DomainToCSharpExporter {
                         // Only Text/String and entity reference types benefit
                         // from runtime required checks.
                         if (isText) {
-                            checks.Add(new Syntactic.IfStatement(
-                                new Syntactic.Invoke(
-                                    new Syntactic.Member(
-                                        new Syntactic.NamedTypeReference("string"),
+                            checks.Add(new IfStatement(
+                                new Invoke(
+                                    new Member(
+                                        new NamedTypeReference("string"),
                                         "IsNullOrEmpty"),
                                     [paramRef]),
-                                new Syntactic.Block([Failure(
+                                new Block([Failure(
                                     $"'{prop.Name}' is required.")])));
                         }
                         else if (IsNullableDomainType(prop.Type.TypeName)) {
-                            checks.Add(new Syntactic.IfStatement(
-                                new Syntactic.Equal(paramRef, new Syntactic.Constant(null)),
-                                new Syntactic.Block([Failure(
+                            checks.Add(new IfStatement(
+                                new Equal(paramRef, new Constant(null)),
+                                new Block([Failure(
                                     $"'{prop.Name}' is required.")])));
                         }
                         break;
@@ -811,18 +811,18 @@ public sealed class DomainToCSharpExporter {
                         if (isNumber && r.Minimum is not null) {
                             var minVal = ConvertToConstant(r.Minimum);
                             if (minVal is not null) {
-                                checks.Add(new Syntactic.IfStatement(
-                                    new Syntactic.LessThan(paramRef, minVal),
-                                    new Syntactic.Block([Failure(
+                                checks.Add(new IfStatement(
+                                    new LessThan(paramRef, minVal),
+                                    new Block([Failure(
                                         $"'{prop.Name}' must be >= {FormatConstraintValue(r.Minimum)}.")])));
                             }
                         }
                         if (isNumber && r.Maximum is not null) {
                             var maxVal = ConvertToConstant(r.Maximum);
                             if (maxVal is not null) {
-                                checks.Add(new Syntactic.IfStatement(
-                                    new Syntactic.GreaterThan(paramRef, maxVal),
-                                    new Syntactic.Block([Failure(
+                                checks.Add(new IfStatement(
+                                    new GreaterThan(paramRef, maxVal),
+                                    new Block([Failure(
                                         $"'{prop.Name}' must be <= {FormatConstraintValue(r.Maximum)}.")])));
                             }
                         }
@@ -830,19 +830,19 @@ public sealed class DomainToCSharpExporter {
 
                     case LengthConstraint l:
                         if (isText) {
-                            var lenAccess = new Syntactic.Member(paramRef, "Length");
+                            var lenAccess = new Member(paramRef, "Length");
                             if (l.MinLength > 0) {
-                                checks.Add(new Syntactic.IfStatement(
-                                    new Syntactic.LessThan(lenAccess,
-                                        new Syntactic.Constant((long)l.MinLength)),
-                                    new Syntactic.Block([Failure(
+                                checks.Add(new IfStatement(
+                                    new LessThan(lenAccess,
+                                        new Constant((long)l.MinLength)),
+                                    new Block([Failure(
                                         $"'{prop.Name}' must be at least {l.MinLength} characters.")])));
                             }
                             if (l.MaxLength < int.MaxValue) {
-                                checks.Add(new Syntactic.IfStatement(
-                                    new Syntactic.GreaterThan(lenAccess,
-                                        new Syntactic.Constant((long)l.MaxLength)),
-                                    new Syntactic.Block([Failure(
+                                checks.Add(new IfStatement(
+                                    new GreaterThan(lenAccess,
+                                        new Constant((long)l.MaxLength)),
+                                    new Block([Failure(
                                         $"'{prop.Name}' must be at most {l.MaxLength} characters.")])));
                             }
                         }
@@ -850,26 +850,26 @@ public sealed class DomainToCSharpExporter {
 
                     case PatternConstraint p:
                         if (isText) {
-                            checks.Add(new Syntactic.IfStatement(
+                            checks.Add(new IfStatement(
                                 new Syntactic.Not(
-                                    new Syntactic.Invoke(
-                                        new Syntactic.Member(
-                                            new Syntactic.NamedTypeReference(
+                                    new Invoke(
+                                        new Member(
+                                            new NamedTypeReference(
                                                 "System.Text.RegularExpressions.Regex"),
                                             "IsMatch"),
                                         [paramRef,
-                                         new Syntactic.Constant(p.Pattern)])),
-                                new Syntactic.Block([Failure(
+                                         new Constant(p.Pattern)])),
+                                new Block([Failure(
                                     $"'{prop.Name}' does not match the required pattern.")])));
                         }
                         break;
 
                     case EqualityConstraint eq:
                         if (eq.ExpectedValue is not null) {
-                            checks.Add(new Syntactic.IfStatement(
-                                new Syntactic.NotEqual(paramRef,
-                                    new Syntactic.Constant(eq.ExpectedValue)),
-                                new Syntactic.Block([Failure(
+                            checks.Add(new IfStatement(
+                                new NotEqual(paramRef,
+                                    new Constant(eq.ExpectedValue)),
+                                new Block([Failure(
                                     $"'{prop.Name}' must equal {eq.ExpectedValue}.")])));
                         }
                         break;
@@ -887,17 +887,17 @@ public sealed class DomainToCSharpExporter {
     }
 
     /// <summary>Converts a constraint value object to a Syntax Constant.</summary>
-    private static Syntactic.Constant? ConvertToConstant(object? value) {
+    private static Constant? ConvertToConstant(object? value) {
         if (value is null) return null;
-        if (value is long l) return new Syntactic.Constant(l);
-        if (value is int i) return new Syntactic.Constant((long)i);
+        if (value is long l) return new Constant(l);
+        if (value is int i) return new Constant((long)i);
         if (value is double d) return d == Math.Floor(d)
-            ? new Syntactic.Constant((long)d)
-            : new Syntactic.Constant(d);
-        if (value is decimal m) return new Syntactic.Constant((double)m);
-        if (value is string s) return new Syntactic.Constant(s);
-        if (value is bool b) return new Syntactic.Constant(b);
-        return new Syntactic.Constant(value?.ToString());
+            ? new Constant((long)d)
+            : new Constant(d);
+        if (value is decimal m) return new Constant((double)m);
+        if (value is string s) return new Constant(s);
+        if (value is bool b) return new Constant(b);
+        return new Constant(value?.ToString());
     }
 
     /// <summary>Formats a constraint boundary value for error messages.</summary>
@@ -933,33 +933,33 @@ public sealed class DomainToCSharpExporter {
     /// <c>null</c> for <c>Text</c>). For enum types, returns the first member.
     /// Used by <see cref="BuildActionBodyWithGuards"/> for guard-clause default returns.
     /// </summary>
-    private static Poly.Syntax.Node DefaultValueForTypeRef(DomainTypeReference typeRef, Domain? domain) {
+    private static Node DefaultValueForTypeRef(DomainTypeReference typeRef, Domain? domain) {
         if (domain is not null) {
             var enumType = domain.Types.OfType<EnumType>()
                 .FirstOrDefault(e => string.Equals(e.Name, typeRef.TypeName, StringComparison.Ordinal));
             if (enumType is not null && enumType.MemberNames.Count > 0)
-                return new Syntactic.Member(
-                    new Syntactic.NamedTypeReference(enumType.Name), enumType.MemberNames[0]);
+                return new Member(
+                    new NamedTypeReference(enumType.Name), enumType.MemberNames[0]);
         }
         return typeRef.TypeName switch {
-            "Text" or "String" => new Syntactic.Constant(""),
-            "Number" or "Int" or "Int64" => new Syntactic.Constant(0L),
-            "Int32" => new Syntactic.Constant(0),
-            "Boolean" or "Bool" => new Syntactic.Constant(false),
-            "DateTime" or "Timestamp" => new Syntactic.Member(
-                new Syntactic.NamedTypeReference("DateTime"), "MinValue"),
-            "Date" or "DateOnly" => new Syntactic.Member(
-                new Syntactic.NamedTypeReference("DateOnly"), "MinValue"),
-            "Guid" or "Uuid" => new Syntactic.Member(
-                new Syntactic.NamedTypeReference("Guid"), "Empty"),
-            _ => new Syntactic.Constant(null),
+            "Text" or "String" => new Constant(""),
+            "Number" or "Int" or "Int64" => new Constant(0L),
+            "Int32" => new Constant(0),
+            "Boolean" or "Bool" => new Constant(false),
+            "DateTime" or "Timestamp" => new Member(
+                new NamedTypeReference("DateTime"), "MinValue"),
+            "Date" or "DateOnly" => new Member(
+                new NamedTypeReference("DateOnly"), "MinValue"),
+            "Guid" or "Uuid" => new Member(
+                new NamedTypeReference("Guid"), "Empty"),
+            _ => new Constant(null),
         };
     }
 
     // ── Action method builder ───────────────────────────────────
 
-    private static void AddActionMethod(Entity entity, Poly.DomainModeling.Action action,
-        List<Syntactic.MethodDefinitionNode> methods, string? stageEnumTypeName = null,
+    private static void AddActionMethod(Entity entity, Action action,
+        List<MethodDefinitionNode> methods, string? stageEnumTypeName = null,
         IReadOnlyDictionary<string, IReadOnlyList<Node>>? postTransitionNodes = null,
         string? sourceStageName = null, Domain? domain = null) {
         var paramNames = new HashSet<string>(
@@ -974,21 +974,21 @@ public sealed class DomainToCSharpExporter {
 
         // All actions return DomainResult (void) or DomainResult<T> (typed).
         // This lets callers pattern-match on IsSuccess without exceptions.
-        Poly.Syntax.Node returnType;
+        Node returnType;
         if (isVoid) {
-            returnType = new Syntactic.NamedTypeReference("DomainResult");
+            returnType = new NamedTypeReference("DomainResult");
         }
         else {
             var innerType = MapDomainTypeRef(action.Result.Members[0].Type, domain);
-            returnType = new Syntactic.NamedTypeReference("DomainResult",
+            returnType = new NamedTypeReference("DomainResult",
                 TypeArguments: [innerType]);
         }
 
-        methods.Add(new Syntactic.MethodDefinitionNode(
+        methods.Add(new MethodDefinitionNode(
             action.Name,
             returnType,
             Parameters: action.Parameters
-                .Select(p => new Syntactic.Parameter(p.Name, MapDomainTypeRef(p.Type, domain)))
+                .Select(p => new Parameter(p.Name, MapDomainTypeRef(p.Type, domain)))
                 .ToList(),
             Body: body,
             AccessModifier: AccessModifier.Public
@@ -1011,46 +1011,46 @@ public sealed class DomainToCSharpExporter {
     ///   <c>require AtLimit</c>     → <c>return DomainResult.Failure("Policy 'AtLimit' not satisfied.");</c>
     ///   <c>require not AtLimit</c> → <c>return DomainResult.Failure("Policy 'AtLimit' not satisfied.");</c>
     ///
-    /// Returns a <see cref="Syntactic.Block"/> with at least an empty body — never null —
+    /// Returns a <see cref="Block"/> with at least an empty body — never null —
     /// so the C# generator emits <c>{ }</c> rather than an invalid semicolon.
     /// </summary>
-    private static Syntactic.Block BuildActionBodyWithGuards(
-        Poly.DomainModeling.Action action, Entity entity, Poly.Syntax.Node? effectsBody,
+    private static Block BuildActionBodyWithGuards(
+        Action action, Entity entity, Node? effectsBody,
         Domain? domain = null, string? sourceStageName = null, string? stageEnumTypeName = null,
         bool isVoid = true) {
 
         // Build the DomainResult type reference for failure/success returns
-        Poly.Syntax.Node actionResultType;
-        Poly.Syntax.Node resultTypeRef;
+        Node actionResultType;
+        Node resultTypeRef;
         if (isVoid) {
-            actionResultType = new Syntactic.NamedTypeReference("DomainResult");
-            resultTypeRef = new Syntactic.NamedTypeReference("DomainResult");
+            actionResultType = new NamedTypeReference("DomainResult");
+            resultTypeRef = new NamedTypeReference("DomainResult");
         }
         else {
             resultTypeRef = MapDomainTypeRef(action.Result!.Members[0].Type, domain);
-            actionResultType = new Syntactic.NamedTypeReference("DomainResult",
+            actionResultType = new NamedTypeReference("DomainResult",
                 TypeArguments: [resultTypeRef]);
         }
 
         // Helper: DomainResult[<T>].Failure("message")
-        Poly.Syntax.Node FailureReturn(string message) => new Syntactic.Return(
-            new Syntactic.Invoke(
-                new Syntactic.Member(actionResultType, "Failure"),
-                new Syntactic.Constant(message)));
+        Node FailureReturn(string message) => new Return(
+            new Invoke(
+                new Member(actionResultType, "Failure"),
+                new Constant(message)));
 
         // Collect all nodes: require guards first, then effects
-        var nodes = new List<Poly.Syntax.Node>();
+        var nodes = new List<Node>();
 
         // Emit stage guard for stage-scoped actions.
         // Returns DomainResult[<T>].Failure("'CheckOut' requires stage 'Active' on entity 'Patron'.")
         if (sourceStageName is not null && stageEnumTypeName is not null) {
-            nodes.Add(new Syntactic.IfStatement(
-                new Syntactic.NotEqual(
-                    new Syntactic.Member(new Syntactic.ThisReference(), "CurrentStage"),
-                    new Syntactic.Member(
-                        new Syntactic.NamedTypeReference(stageEnumTypeName),
+            nodes.Add(new IfStatement(
+                new NotEqual(
+                    new Member(new ThisReference(), "CurrentStage"),
+                    new Member(
+                        new NamedTypeReference(stageEnumTypeName),
                         sourceStageName)),
-                new Syntactic.Block([
+                new Block([
                     FailureReturn(
                         $"'{action.Name}' requires stage '{sourceStageName}' on entity '{entity.Name}'.")
                 ])));
@@ -1061,25 +1061,25 @@ public sealed class DomainToCSharpExporter {
         foreach (var policy in action.Policies) {
             if (policy.Name.StartsWith("not_", StringComparison.Ordinal)) {
                 var realName = policy.Name.Substring(4);
-                var guardCall = new Syntactic.Invoke(
-                    new Syntactic.Member(new Syntactic.ThisReference(), realName));
-                nodes.Add(new Syntactic.IfStatement(
+                var guardCall = new Invoke(
+                    new Member(new ThisReference(), realName));
+                nodes.Add(new IfStatement(
                     guardCall,
-                    new Syntactic.Block([FailureReturn(
+                    new Block([FailureReturn(
                         $"'{action.Name}' blocked by policy '{realName}'.")])));
             }
             else {
-                var guardCall = new Syntactic.Invoke(
-                    new Syntactic.Member(new Syntactic.ThisReference(), policy.Name));
-                nodes.Add(new Syntactic.IfStatement(
+                var guardCall = new Invoke(
+                    new Member(new ThisReference(), policy.Name));
+                nodes.Add(new IfStatement(
                     new Syntactic.Not(guardCall),
-                    new Syntactic.Block([FailureReturn(
+                    new Block([FailureReturn(
                         $"'{action.Name}' blocked by policy '{policy.Name}'.")])));
             }
         }
 
         // Append the effects body
-        if (effectsBody is Syntactic.Block block) {
+        if (effectsBody is Block block) {
             nodes.AddRange(block.Nodes);
         }
         else if (effectsBody is not null) {
@@ -1088,10 +1088,10 @@ public sealed class DomainToCSharpExporter {
 
         if (isVoid) {
             // Void actions end with return DomainResult.Success();
-            nodes.Add(new Syntactic.Return(
-                new Syntactic.Invoke(
-                    new Syntactic.Member(
-                        new Syntactic.NamedTypeReference("DomainResult"), "Success"))));
+            nodes.Add(new Return(
+                new Invoke(
+                    new Member(
+                        new NamedTypeReference("DomainResult"), "Success"))));
         }
         else {
             // Non-void actions: wrap the last effect node in DomainResult<T>.Success(value).
@@ -1103,7 +1103,7 @@ public sealed class DomainToCSharpExporter {
                 var lastIdx = nodes.Count - 1;
                 var last = nodes[lastIdx];
 
-                if (last is Syntactic.Return) {
+                if (last is Return) {
                     // Already wrapped — leave as-is.
                 }
                 else if (last is Syntactic.Assignment or Syntactic.Invoke
@@ -1111,24 +1111,24 @@ public sealed class DomainToCSharpExporter {
                          or Syntactic.New or Syntactic.UnaryMinus
                          or Syntactic.Not or Syntactic.Add or Syntactic.Subtract
                          or Syntactic.Multiply or Syntactic.Divide) {
-                    nodes[lastIdx] = new Syntactic.Return(
-                        new Syntactic.Invoke(
-                            new Syntactic.Member(actionResultType, "Success"),
+                    nodes[lastIdx] = new Return(
+                        new Invoke(
+                            new Member(actionResultType, "Success"),
                             [last]));
                 }
-                else if (last is Syntactic.Variable { Value: not null } v) {
+                else if (last is Variable { Value: not null } v) {
                     // var x = expr → return DomainResult<T>.Success(expr)
-                    nodes[lastIdx] = new Syntactic.Return(
-                        new Syntactic.Invoke(
-                            new Syntactic.Member(actionResultType, "Success"),
+                    nodes[lastIdx] = new Return(
+                        new Invoke(
+                            new Member(actionResultType, "Success"),
                             [v.Value]));
                 }
                 else {
                     // Non-returnable last node — structural error (still throw)
-                    nodes.Add(new Syntactic.ThrowStatement(
-                        new Syntactic.New(
-                            new Syntactic.NamedTypeReference("NotSupportedException"),
-                            new Syntactic.Constant(
+                    nodes.Add(new ThrowStatement(
+                        new New(
+                            new NamedTypeReference("NotSupportedException"),
+                            new Constant(
                                 $"Action '{action.Name}' has return type but its last effect " +
                                 $"does not produce a value. Use an 'assign' statement as the " +
                                 $"final effect, or remove the -> return type declaration."))));
@@ -1136,32 +1136,32 @@ public sealed class DomainToCSharpExporter {
             }
             else {
                 // Empty action body with declared return type — structural error
-                nodes.Add(new Syntactic.ThrowStatement(
-                    new Syntactic.New(
-                        new Syntactic.NamedTypeReference("NotSupportedException"),
-                        new Syntactic.Constant(
+                nodes.Add(new ThrowStatement(
+                    new New(
+                        new NamedTypeReference("NotSupportedException"),
+                        new Constant(
                             $"Action '{action.Name}' has return type but has no effects."))));
             }
         }
 
         // Block requires ≥1 node; use Comment for empty method bodies
         if (nodes.Count == 0)
-            nodes.Add(new Syntactic.Comment("no-op"));
+            nodes.Add(new Comment("no-op"));
 
-        return new Syntactic.Block(nodes);
+        return new Block(nodes);
     }
 
     // ── Lowering helpers ────────────────────────────────────────
 
-    internal static Poly.Syntax.Node? LowerActionToMethodBody(
-        Entity entity, Poly.DomainModeling.Action action,
+    internal static Node? LowerActionToMethodBody(
+        Entity entity, Action action,
         HashSet<string>? paramNames = null, string? stageEnumTypeName = null,
         IReadOnlyDictionary<string, IReadOnlyList<Node>>? postTransitionNodes = null,
         string? sourceStageName = null, Domain? domain = null) {
         if (action.Effects.Count == 0) return null;
         var enumProps = domain is not null ? BuildEnumPropertyNames(entity, domain) : null;
         var context = new LoweringContext(
-            new Syntactic.Parameter("entity", new Syntactic.TypeReference(entity.Name)),
+            new Parameter("entity", new TypeReference(entity.Name)),
             UseThisReference: true,
             ActionParameterNames: paramNames,
             LowerStageTransitions: true,
@@ -1176,18 +1176,18 @@ public sealed class DomainToCSharpExporter {
         return effectPass.TryLowerVmNode(composite);
     }
 
-    internal static Poly.Syntax.Node? LowerExpressionToMethodBody(
+    internal static Node? LowerExpressionToMethodBody(
         DomainExpression expr, Entity entity, Domain? domain = null) {
         var enumProps = domain is not null ? BuildEnumPropertyNames(entity, domain) : null;
         var context = new LoweringContext(
-            new Syntactic.Parameter("entity", new Syntactic.TypeReference(entity.Name)),
+            new Parameter("entity", new TypeReference(entity.Name)),
             UseThisReference: true,
             EnumPropertyNames: enumProps
         );
         var pass = new DomainExpressionLoweringPass(context);
-        var lowered = pass.Lower(expr, new Syntactic.Parameter("entity"));
+        var lowered = pass.Lower(expr, new Parameter("entity"));
         return lowered is not null
-            ? new Syntactic.Block([new Syntactic.Return(lowered)])
+            ? new Block([new Return(lowered)])
             : null;
     }
 
@@ -1213,7 +1213,7 @@ public sealed class DomainToCSharpExporter {
 
     // ── Type mapping ────────────────────────────────────────────
 
-    internal static Poly.Syntax.Node MapDomainTypeRef(DomainTypeReference domainType,
+    internal static Node MapDomainTypeRef(DomainTypeReference domainType,
         Domain? domain = null) {
         var typeName = domainType.TypeName;
 
@@ -1222,21 +1222,21 @@ public sealed class DomainToCSharpExporter {
             var enumType = domain.Types.OfType<EnumType>()
                 .FirstOrDefault(e => string.Equals(e.Name, typeName, StringComparison.Ordinal));
             if (enumType is not null)
-                return new Syntactic.NamedTypeReference(typeName);
+                return new NamedTypeReference(typeName);
         }
 
         return typeName switch {
-            "Text" => new Syntactic.PrimitiveTypeReference(PrimType.String),
-            "Number" or "Int" => new Syntactic.PrimitiveTypeReference(PrimType.Int64),
-            "Boolean" or "Bool" => new Syntactic.PrimitiveTypeReference(PrimType.Boolean),
-            "DateTime" or "Timestamp" => new Syntactic.PrimitiveTypeReference(PrimType.DateTime),
-            "Date" or "DateOnly" => new Syntactic.PrimitiveTypeReference(PrimType.DateOnly),
-            "Time" or "TimeOnly" => new Syntactic.PrimitiveTypeReference(PrimType.TimeOnly),
-            "Duration" or "TimeSpan" => new Syntactic.PrimitiveTypeReference(PrimType.TimeSpan),
-            "Uuid" or "Guid" => new Syntactic.PrimitiveTypeReference(PrimType.Guid),
-            "Decimal" => new Syntactic.PrimitiveTypeReference(PrimType.Decimal),
-            "Float" or "Double" => new Syntactic.PrimitiveTypeReference(PrimType.Float64),
-            _ => new Syntactic.NamedTypeReference(typeName)
+            "Text" => new PrimitiveTypeReference(PrimType.String),
+            "Number" or "Int" => new PrimitiveTypeReference(PrimType.Int64),
+            "Boolean" or "Bool" => new PrimitiveTypeReference(PrimType.Boolean),
+            "DateTime" or "Timestamp" => new PrimitiveTypeReference(PrimType.DateTime),
+            "Date" or "DateOnly" => new PrimitiveTypeReference(PrimType.DateOnly),
+            "Time" or "TimeOnly" => new PrimitiveTypeReference(PrimType.TimeOnly),
+            "Duration" or "TimeSpan" => new PrimitiveTypeReference(PrimType.TimeSpan),
+            "Uuid" or "Guid" => new PrimitiveTypeReference(PrimType.Guid),
+            "Decimal" => new PrimitiveTypeReference(PrimType.Decimal),
+            "Float" or "Double" => new PrimitiveTypeReference(PrimType.Float64),
+            _ => new NamedTypeReference(typeName)
         };
     }
 
@@ -1248,7 +1248,7 @@ public sealed class DomainToCSharpExporter {
     /// or <c>DomainResult.Failure(message)</c> instead of throwing or returning void.
     /// Consumers switch on <see cref="IsSuccess"/> to handle success/failure.
     /// </summary>
-    internal static Syntactic.TypeDefinitionNode BuildDomainResultTypeDef() {
+    internal static TypeDefinitionNode BuildDomainResultTypeDef() {
         // public readonly record struct DomainResult
         // {
         //     public bool IsSuccess { get; }
@@ -1264,67 +1264,67 @@ public sealed class DomainToCSharpExporter {
         //     public static DomainResult Failure(string message) => new(false, message);
         // }
 
-        var props = new List<Syntactic.PropertyDefinitionNode>
+        var props = new List<PropertyDefinitionNode>
         {
             new("IsSuccess",
-                new Syntactic.PrimitiveTypeReference(PrimType.Boolean),
-                Getter: new Syntactic.PropertyGetterDefinitionNode()),
+                new PrimitiveTypeReference(PrimType.Boolean),
+                Getter: new PropertyGetterDefinitionNode()),
             new("ErrorMessage",
-                new Syntactic.OptionalTypeReference(
-                    new Syntactic.PrimitiveTypeReference(PrimType.String)),
-                Getter: new Syntactic.PropertyGetterDefinitionNode()),
+                new OptionalTypeReference(
+                    new PrimitiveTypeReference(PrimType.String)),
+                Getter: new PropertyGetterDefinitionNode()),
         };
 
-        var ctor = new Syntactic.ConstructorDefinitionNode(
+        var ctor = new ConstructorDefinitionNode(
             Parameters: [
-                new Syntactic.Parameter("isSuccess",
-                    new Syntactic.PrimitiveTypeReference(PrimType.Boolean)),
-                new Syntactic.Parameter("errorMessage",
-                    new Syntactic.OptionalTypeReference(
-                        new Syntactic.PrimitiveTypeReference(PrimType.String))),
+                new Parameter("isSuccess",
+                    new PrimitiveTypeReference(PrimType.Boolean)),
+                new Parameter("errorMessage",
+                    new OptionalTypeReference(
+                        new PrimitiveTypeReference(PrimType.String))),
             ],
-            Body: new Syntactic.Block([
-                new Syntactic.Assignment(
-                    new Syntactic.Member(new Syntactic.ThisReference(), "IsSuccess"),
-                    new Syntactic.Parameter("isSuccess")),
-                new Syntactic.Assignment(
-                    new Syntactic.Member(new Syntactic.ThisReference(), "ErrorMessage"),
-                    new Syntactic.Parameter("errorMessage")),
+            Body: new Block([
+                new Assignment(
+                    new Member(new ThisReference(), "IsSuccess"),
+                    new Parameter("isSuccess")),
+                new Assignment(
+                    new Member(new ThisReference(), "ErrorMessage"),
+                    new Parameter("errorMessage")),
             ]),
             AccessModifier: AccessModifier.Private
         );
 
-        var methods = new List<Syntactic.MethodDefinitionNode>
+        var methods = new List<MethodDefinitionNode>
         {
             new("Success",
-                new Syntactic.NamedTypeReference("DomainResult"),
-                Body: new Syntactic.Block([
-                    new Syntactic.Return(
-                        new Syntactic.New(
-                            new Syntactic.NamedTypeReference("DomainResult"),
-                            new Syntactic.Constant(true),
-                            new Syntactic.Constant(null)))
+                new NamedTypeReference("DomainResult"),
+                Body: new Block([
+                    new Return(
+                        new New(
+                            new NamedTypeReference("DomainResult"),
+                            new Constant(true),
+                            new Constant(null)))
                 ]),
                 IsStatic: true,
                 AccessModifier: AccessModifier.Public),
             new("Failure",
-                new Syntactic.NamedTypeReference("DomainResult"),
+                new NamedTypeReference("DomainResult"),
                 Parameters: [
-                    new Syntactic.Parameter("message",
-                        new Syntactic.PrimitiveTypeReference(PrimType.String))
+                    new Parameter("message",
+                        new PrimitiveTypeReference(PrimType.String))
                 ],
-                Body: new Syntactic.Block([
-                    new Syntactic.Return(
-                        new Syntactic.New(
-                            new Syntactic.NamedTypeReference("DomainResult"),
-                            new Syntactic.Constant(false),
-                            new Syntactic.Parameter("message")))
+                Body: new Block([
+                    new Return(
+                        new New(
+                            new NamedTypeReference("DomainResult"),
+                            new Constant(false),
+                            new Parameter("message")))
                 ]),
                 IsStatic: true,
                 AccessModifier: AccessModifier.Public),
         };
 
-        return new Syntactic.TypeDefinitionNode(
+        return new TypeDefinitionNode(
             "DomainResult",
             Properties: props,
             Constructors: [ctor],
@@ -1338,7 +1338,7 @@ public sealed class DomainToCSharpExporter {
     /// for non-void actions. Returns <c>DomainResult&lt;T&gt;.Success(value)</c> or
     /// <c>DomainResult&lt;T&gt;.Failure(message)</c>.
     /// </summary>
-    internal static Syntactic.TypeDefinitionNode BuildDomainResultGenericTypeDef() {
+    internal static TypeDefinitionNode BuildDomainResultGenericTypeDef() {
         // public readonly record struct DomainResult<T>
         // {
         //     public bool IsSuccess { get; }
@@ -1356,80 +1356,80 @@ public sealed class DomainToCSharpExporter {
         //     public static DomainResult<T> Failure(string message) => new(false, default!, message);
         // }
 
-        var tParam = new Syntactic.NamedTypeReference("T");
-        var actionResultT = new Syntactic.NamedTypeReference("DomainResult",
+        var tParam = new NamedTypeReference("T");
+        var actionResultT = new NamedTypeReference("DomainResult",
             TypeArguments: [tParam]);
 
-        var props = new List<Syntactic.PropertyDefinitionNode>
+        var props = new List<PropertyDefinitionNode>
         {
             new("IsSuccess",
-                new Syntactic.PrimitiveTypeReference(PrimType.Boolean),
-                Getter: new Syntactic.PropertyGetterDefinitionNode()),
+                new PrimitiveTypeReference(PrimType.Boolean),
+                Getter: new PropertyGetterDefinitionNode()),
             new("Value", tParam,
-                Getter: new Syntactic.PropertyGetterDefinitionNode()),
+                Getter: new PropertyGetterDefinitionNode()),
             new("ErrorMessage",
-                new Syntactic.OptionalTypeReference(
-                    new Syntactic.PrimitiveTypeReference(PrimType.String)),
-                Getter: new Syntactic.PropertyGetterDefinitionNode()),
+                new OptionalTypeReference(
+                    new PrimitiveTypeReference(PrimType.String)),
+                Getter: new PropertyGetterDefinitionNode()),
         };
 
-        var ctor = new Syntactic.ConstructorDefinitionNode(
+        var ctor = new ConstructorDefinitionNode(
             Parameters: [
-                new Syntactic.Parameter("isSuccess",
-                    new Syntactic.PrimitiveTypeReference(PrimType.Boolean)),
-                new Syntactic.Parameter("value", tParam),
-                new Syntactic.Parameter("errorMessage",
-                    new Syntactic.OptionalTypeReference(
-                        new Syntactic.PrimitiveTypeReference(PrimType.String))),
+                new Parameter("isSuccess",
+                    new PrimitiveTypeReference(PrimType.Boolean)),
+                new Parameter("value", tParam),
+                new Parameter("errorMessage",
+                    new OptionalTypeReference(
+                        new PrimitiveTypeReference(PrimType.String))),
             ],
-            Body: new Syntactic.Block([
-                new Syntactic.Assignment(
-                    new Syntactic.Member(new Syntactic.ThisReference(), "IsSuccess"),
-                    new Syntactic.Parameter("isSuccess")),
-                new Syntactic.Assignment(
-                    new Syntactic.Member(new Syntactic.ThisReference(), "Value"),
-                    new Syntactic.Parameter("value")),
-                new Syntactic.Assignment(
-                    new Syntactic.Member(new Syntactic.ThisReference(), "ErrorMessage"),
-                    new Syntactic.Parameter("errorMessage")),
+            Body: new Block([
+                new Assignment(
+                    new Member(new ThisReference(), "IsSuccess"),
+                    new Parameter("isSuccess")),
+                new Assignment(
+                    new Member(new ThisReference(), "Value"),
+                    new Parameter("value")),
+                new Assignment(
+                    new Member(new ThisReference(), "ErrorMessage"),
+                    new Parameter("errorMessage")),
             ]),
             AccessModifier: AccessModifier.Private
         );
 
-        var methods = new List<Syntactic.MethodDefinitionNode>
+        var methods = new List<MethodDefinitionNode>
         {
             new("Success", actionResultT,
                 Parameters: [
-                    new Syntactic.Parameter("value", tParam)
+                    new Parameter("value", tParam)
                 ],
-                Body: new Syntactic.Block([
-                    new Syntactic.Return(
-                        new Syntactic.New(actionResultT,
-                            new Syntactic.Constant(true),
-                            new Syntactic.Parameter("value"),
-                            new Syntactic.Constant(null)))
+                Body: new Block([
+                    new Return(
+                        new New(actionResultT,
+                            new Constant(true),
+                            new Parameter("value"),
+                            new Constant(null)))
                 ]),
                 IsStatic: true,
                 AccessModifier: AccessModifier.Public),
             new("Failure", actionResultT,
                 Parameters: [
-                    new Syntactic.Parameter("message",
-                        new Syntactic.PrimitiveTypeReference(PrimType.String))
+                    new Parameter("message",
+                        new PrimitiveTypeReference(PrimType.String))
                 ],
-                Body: new Syntactic.Block([
-                    new Syntactic.Return(
-                        new Syntactic.New(actionResultT,
-                            new Syntactic.Constant(false),
-                            new Syntactic.NullForgiving(new Syntactic.Default()),
-                            new Syntactic.Parameter("message")))
+                Body: new Block([
+                    new Return(
+                        new New(actionResultT,
+                            new Constant(false),
+                            new NullForgiving(new Default()),
+                            new Parameter("message")))
                 ]),
                 IsStatic: true,
                 AccessModifier: AccessModifier.Public),
         };
 
-        return new Syntactic.TypeDefinitionNode(
+        return new TypeDefinitionNode(
             "DomainResult",
-            GenericParameters: [new Syntactic.Parameter("T")],
+            GenericParameters: [new Parameter("T")],
             Properties: props,
             Constructors: [ctor],
             Methods: methods,

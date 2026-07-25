@@ -249,7 +249,7 @@ public sealed record DomainEntityInstance {
 
         // Find action: first check current stage (and its parent chain) for effective actions,
         // then entity-level. Stage-scoped actions are only available while on that stage.
-        Poly.DomainModeling.Action? action = null;
+        Action? action = null;
         if (CurrentStage is not null) {
             // Walk the stage hierarchy: current stage, then parent, then grandparent, etc.
             var currentStageRef = Entity.Stages
@@ -814,7 +814,7 @@ public sealed record DomainEntityInstance {
     /// parameters so bag-injected args resolve as members during effect compile.
     /// </summary>
     private TypeDefinitionNodeAnalyzer BuildActionScopedTypeDefAnalyzer(
-        Poly.DomainModeling.Action action) =>
+        Action action) =>
         BuildTypeDefAnalyzer(Entity.Name, Entity.Properties, action.Parameters);
 
     /// <summary>

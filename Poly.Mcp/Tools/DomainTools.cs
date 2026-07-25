@@ -837,13 +837,13 @@ This safety net prevents silent no-ops from empty stage copies.")]
     // ── Batch tool spec types ───────────────────────────────────
 
     private sealed record PropertySpec(
-        [property: System.Text.Json.Serialization.JsonPropertyName("name")] string Name,
-        [property: System.Text.Json.Serialization.JsonPropertyName("typeName")] string TypeName);
+        [property: JsonPropertyName("name")] string Name,
+        [property: JsonPropertyName("typeName")] string TypeName);
     private sealed record StageSpec(
-        [property: System.Text.Json.Serialization.JsonPropertyName("name")] string Name);
+        [property: JsonPropertyName("name")] string Name);
     private sealed record ActionToStageSpec(
-        [property: System.Text.Json.Serialization.JsonPropertyName("stageName")] string StageName,
-        [property: System.Text.Json.Serialization.JsonPropertyName("actionName")] string ActionName);
+        [property: JsonPropertyName("stageName")] string StageName,
+        [property: JsonPropertyName("actionName")] string ActionName);
 
     // ── Constraint tools ────────────────────────────────────────
 
@@ -1170,7 +1170,7 @@ internal sealed class PolicyTool {
     /// <summary>
     /// Converts a JSON element to a CLR value for subject bag properties.
     /// </summary>
-    private static object? JsonElementToClrValue(System.Text.Json.JsonElement je) => je.ValueKind switch {
+    private static object? JsonElementToClrValue(JsonElement je) => je.ValueKind switch {
         System.Text.Json.JsonValueKind.Number when je.TryGetInt32(out var i) => (long)i,
         System.Text.Json.JsonValueKind.Number when je.TryGetInt64(out var l) => l,
         System.Text.Json.JsonValueKind.Number => (long)je.GetDecimal(),

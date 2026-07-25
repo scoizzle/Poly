@@ -22,7 +22,7 @@ public record PersonRecord(string Name, int Age);
 /// </summary>
 public class DomainExpressionVmExecutionTests {
     private static readonly DomainExpressionLoweringPass Pass = new();
-    private static readonly SN.ParameterReference Subject = new();
+    private static readonly ParameterReference Subject = new();
 
     private static AnalysisResult Analyze(Node node) =>
         Interpreter.Analyzer.Analyze(node);
@@ -266,7 +266,7 @@ public class DomainExpressionVmExecutionTests {
     [Test]
     public async Task PropertyAccess_OnClrRecord_ReturnsPropertyValue() {
         var person = new PersonRecord("Alice", 30);
-        var subject = new SN.Constant(person);
+        var subject = new Constant(person);
 
         var node = Pass.Lower(DomainExpression.Property("Name"), subject);
         var result = ExecuteDomain(DomainExpression.Property("Name"), subject);
@@ -279,7 +279,7 @@ public class DomainExpressionVmExecutionTests {
     [Test]
     public async Task PropertyAccess_OnClrRecord_ReturnsNumericProperty() {
         var person = new PersonRecord("Bob", 42);
-        var subject = new SN.Constant(person);
+        var subject = new Constant(person);
 
         var result = ExecuteDomain(DomainExpression.Property("Age"), subject);
 
@@ -290,7 +290,7 @@ public class DomainExpressionVmExecutionTests {
     [Test]
     public async Task PropertyAccess_WithArithmetic_ComputesCorrectly() {
         var person = new PersonRecord("Charlie", 25);
-        var subject = new SN.Constant(person);
+        var subject = new Constant(person);
 
         var result = ExecuteDomain(
             DomainExpression.Add(DomainExpression.Property("Age"), DomainExpression.Literal(10)),
@@ -303,7 +303,7 @@ public class DomainExpressionVmExecutionTests {
     [Test]
     public async Task PropertyAccess_WithComparison_ComputesCorrectly() {
         var person = new PersonRecord("Diana", 17);
-        var subject = new SN.Constant(person);
+        var subject = new Constant(person);
 
         var result = ExecuteDomain(
             DomainExpression.GreaterThan(DomainExpression.Property("Age"), DomainExpression.Literal(18)),
@@ -534,8 +534,8 @@ public class DomainExpressionVmExecutionTests {
     // ParameterAccess: standalone test (used via Policies above, but test explicitly)
     [Test]
     public async Task ParameterAccess_WithExplicitSubject_ResolvesParameter() {
-        var param = new SN.Parameter("x");
-        var node = Pass.Lower(DomainExpression.Parameter("x"), new SN.Constant(null));
+        var param = new Parameter("x");
+        var node = Pass.Lower(DomainExpression.Parameter("x"), new Constant(null));
         // ParameterAccess with no matching subject — resolves to fresh Parameter node
         // This tests lowering doesn't throw
         await Assert.That(node).IsNotNull();
@@ -545,7 +545,7 @@ public class DomainExpressionVmExecutionTests {
     [Test]
     public async Task OwnedAccess_LowersWithoutThrowing() {
         var expr = DomainExpression.Owned("Address", DomainExpression.Property("City"));
-        var subject = new SN.Constant(new { Address = new { City = "Seattle" } });
+        var subject = new Constant(new { Address = new { City = "Seattle" } });
         var node = Pass.Lower(expr, subject);
 
         await Assert.That(node).IsNotNull();
@@ -562,7 +562,7 @@ public class DomainExpressionVmExecutionTests {
             DomainExpression.Property("BirthDate"),
             DomainExpression.Literal(1),
             DateOperationKind.AddDays);
-        var subject = new SN.Constant(new { BirthDate = DateTime.Now });
+        var subject = new Constant(new { BirthDate = DateTime.Now });
         var node = Pass.Lower(expr, subject);
 
         await Assert.That(node).IsNotNull();
@@ -576,7 +576,7 @@ public class DomainExpressionVmExecutionTests {
     [Test]
     public async Task RelationshipNavigation_LowersWithoutThrowing() {
         var expr = DomainExpression.RelationshipNav("Owner", DomainExpression.Property("Name"));
-        var subject = new SN.Constant(new { Owner = new { Name = "Alice" } });
+        var subject = new Constant(new { Owner = new { Name = "Alice" } });
         var node = Pass.Lower(expr, subject);
 
         await Assert.That(node).IsNotNull();
@@ -589,7 +589,7 @@ public class DomainExpressionVmExecutionTests {
     [Test]
     public async Task Exists_NonNullValue_ReturnsTrue() {
         // Exists(Property("X")) with subject { X = "hello" } → NotEqual(Member(subject, "X"), null)
-        var subject = new SN.Constant(new { X = "hello" });
+        var subject = new Constant(new { X = "hello" });
         var node = Pass.Lower(DomainExpression.Exists(DomainExpression.Property("X")), subject);
 
         var result = Execute(node);
@@ -599,7 +599,7 @@ public class DomainExpressionVmExecutionTests {
     [Test]
     public async Task NotExists_NullValue_ReturnsTrue() {
         // NotExists(Property("X")) with subject { X = null } → Equal(Member(subject, "X"), null)
-        var subject = new SN.Constant(new { X = default(string) });
+        var subject = new Constant(new { X = default(string) });
         var node = Pass.Lower(DomainExpression.NotExists(DomainExpression.Property("X")), subject);
 
         var result = Execute(node);

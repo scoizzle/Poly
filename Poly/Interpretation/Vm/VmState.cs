@@ -266,7 +266,7 @@ public sealed class VmState : IDisposable {
     public VmProgram Program { get; }
 
     /// <summary>The pooled value stack for scalars and heap handles.
-    /// Backed by <see cref="System.Buffers.ArrayPool{long}"/>.</summary>
+    /// Backed by <see cref="ArrayPool{long}"/>.</summary>
     public ValueStack Stack { get; } = new();
 
     /// <summary>General-purpose register file used during µop execution.
@@ -410,7 +410,7 @@ public sealed class VmState : IDisposable {
     }
 
     /// <summary>Releases the pooled value stack back to the
-    /// <see cref="System.Buffers.ArrayPool{long}"/>. After disposal,
+    /// <see cref="ArrayPool{long}"/>. After disposal,
     /// this state must not be used for execution.</summary>
     public void Dispose() => Stack.Dispose();
 }

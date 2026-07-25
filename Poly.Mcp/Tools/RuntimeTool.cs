@@ -413,7 +413,7 @@ Returns the result including new stage and any guard failures.")]
         if (!string.IsNullOrWhiteSpace(argsJson)) {
             try {
                 var parsed = System.Text.Json.JsonSerializer
-                    .Deserialize<Dictionary<string, System.Text.Json.JsonElement>>(argsJson);
+                    .Deserialize<Dictionary<string, JsonElement>>(argsJson);
                 if (parsed is not null) {
                     args = new Dictionary<string, object?>(StringComparer.Ordinal);
                     foreach (var (key, je) in parsed)

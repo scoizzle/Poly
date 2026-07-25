@@ -77,7 +77,7 @@ internal sealed class ClrTypeField : ClrTypeMember, ITypeField {
 
     public override string ToString() => $"{MemberTypeDefinition} {DeclaringTypeDefinition}.{Name}";
 
-    public override System.Linq.Expressions.Expression? EmitRead(System.Linq.Expressions.Expression? instance) {
+    public override Expression? EmitRead(Expression? instance) {
         if (FieldInfo.IsStatic || instance is not null) {
             var typedInst = FieldInfo.IsStatic ? null : System.Linq.Expressions.Expression.Convert(instance!, FieldInfo.DeclaringType!);
             var access = System.Linq.Expressions.Expression.Field(typedInst, FieldInfo);
@@ -88,7 +88,7 @@ internal sealed class ClrTypeField : ClrTypeMember, ITypeField {
         return null;
     }
 
-    public override System.Linq.Expressions.Expression? EmitWrite(System.Linq.Expressions.Expression? instance, System.Linq.Expressions.Expression value) {
+    public override Expression? EmitWrite(Expression? instance, Expression value) {
         if (FieldInfo.IsInitOnly || FieldInfo.IsLiteral) return null;
         var typedInst = FieldInfo.IsStatic ? null : System.Linq.Expressions.Expression.Convert(instance!, FieldInfo.DeclaringType!);
         var access = System.Linq.Expressions.Expression.Field(typedInst, FieldInfo);

@@ -61,7 +61,7 @@ public static class NodeTestHelpers {
     /// <returns>Tuple of expression and generated parameter expressions.</returns>
     public static (Expr Expression, Exprs.ParameterExpression[] Parameters) BuildExpressionWithParameters(
         this Node node,
-        params (SN.Parameter param, Type clrType)[] parameters) {
+        params (Parameter param, Type clrType)[] parameters) {
 
         // Pre-register parameter types with a setup action before analysis
         var analysisResult = _analyzer.Analyze(node, setup: ctx => {
@@ -103,7 +103,7 @@ public static class NodeTestHelpers {
     /// <summary>
     /// Compiles a node into a delegate, registering provided parameters and using emitted parameter expressions.
     /// </summary>
-    public static TDelegate CompileLambda<TDelegate>(this Node node, params (SN.Parameter param, Type clrType)[] parameters)
+    public static TDelegate CompileLambda<TDelegate>(this Node node, params (Parameter param, Type clrType)[] parameters)
         where TDelegate : Delegate {
         var (expression, parameterExpressions) = node.BuildExpressionWithParameters(parameters);
         return (TDelegate)System.Linq.Expressions.Expression.Lambda(expression, parameterExpressions).Compile();

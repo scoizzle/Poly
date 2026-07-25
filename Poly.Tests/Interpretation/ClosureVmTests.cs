@@ -69,7 +69,7 @@ public class ClosureVmTests {
         // g(x) = f(x)
         // g(41) → 42
         var pF = new Parameter("x", TypeReference.To<long>());
-        var f = new Lambda([pF], new SN.Add(pF, new Constant(1L)));
+        var f = new Lambda([pF], new Add(pF, new Constant(1L)));
 
         var pG = new Parameter("x", TypeReference.To<long>());
         var g = new Lambda([pG], new Invoke(f, pG));
@@ -89,7 +89,7 @@ public class ClosureVmTests {
         var f = new Lambda([pF], pF);
 
         var pG = new Parameter("x", TypeReference.To<long>());
-        var g = new Lambda([pG], new Invoke(f, new SN.Multiply(pG, new Constant(2L))));
+        var g = new Lambda([pG], new Invoke(f, new Multiply(pG, new Constant(2L))));
 
         var invoke = new Invoke(g, new Constant(20L));
         var program = Interpreter.Compile(invoke);
@@ -105,11 +105,11 @@ public class ClosureVmTests {
         // The inner call f(40) exercises SavedSp ring save in g's delegate:
         // g's ring state must not be clobbered by f's ring allocation.
         var pF = new Parameter("x", TypeReference.To<long>());
-        var fBody = new SN.Add(pF, new Constant(1L));
+        var fBody = new Add(pF, new Constant(1L));
         var f = new Lambda([pF], fBody);
 
         var pG = new Parameter("x", TypeReference.To<long>());
-        var gBody = new Invoke(f, new SN.Multiply(pG, new Constant(2L)));
+        var gBody = new Invoke(f, new Multiply(pG, new Constant(2L)));
         var g = new Lambda([pG], gBody);
 
         var invoke = new Invoke(g, new Constant(20L));
@@ -122,7 +122,7 @@ public class ClosureVmTests {
     public async Task Lambda_Call_RingPreservedAcrossCalls() {
         // f(x) = x + 1; f(41) → 42
         var p = new Parameter("x", TypeReference.To<long>());
-        var body = new SN.Add(p, new Constant(1L));
+        var body = new Add(p, new Constant(1L));
         var lambda = new Lambda([p], body);
         var invoke = new Invoke(lambda, new Constant(41L));
         var program = Interpreter.Compile(invoke);

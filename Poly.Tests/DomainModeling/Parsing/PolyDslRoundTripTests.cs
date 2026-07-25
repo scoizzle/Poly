@@ -411,7 +411,7 @@ public class PolyDslRoundTripTests {
         var policy = activate.Policies[0];
         await Assert.That(policy.Name).IsEqualTo("HasName");
         // Should be the real expression (Comparison for "is not null"), not Literal(true)
-        await Assert.That(policy.Expression).IsTypeOf<Poly.DomainModeling.Comparison>();
+        await Assert.That(policy.Expression).IsTypeOf<Comparison>();
     }
 
     [Test]
@@ -996,7 +996,7 @@ public class PolyDslRoundTripTests {
 
         var prop = result.Root!.Types.OfType<Entity>().Single().Properties.Single();
         var dv = prop.Constraints.OfType<DefaultValueConstraint>().Single();
-        var lit = dv.Expression as Poly.DomainModeling.Literal;
+        var lit = dv.Expression as Literal;
         await Assert.That(lit?.Value).IsEqualTo("say \"hi\"");
 
         var printed = new DomainDslPrinter().Print(result.Root);
@@ -1007,7 +1007,7 @@ public class PolyDslRoundTripTests {
         await Assert.That(result2.Succeeded).IsTrue();
         var dv2 = result2.Root!.Types.OfType<Entity>().Single().Properties.Single()
             .Constraints.OfType<DefaultValueConstraint>().Single();
-        var lit2 = dv2.Expression as Poly.DomainModeling.Literal;
+        var lit2 = dv2.Expression as Literal;
         await Assert.That(lit2?.Value).IsEqualTo("say \"hi\"");
     }
 }

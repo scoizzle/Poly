@@ -373,7 +373,7 @@ public class CSharpGeneratorTests {
 
     [Test]
     public async Task Generate_Throw_ProducesThrow() {
-        var result = new CSharpGenerator().Generate(new ThrowStatement(new New(TypeReference.To<System.Exception>())));
+        var result = new CSharpGenerator().Generate(new ThrowStatement(new New(TypeReference.To<Exception>())));
         await Assert.That(result).IsEqualTo("throw new System.Exception();");
     }
 
@@ -381,7 +381,7 @@ public class CSharpGeneratorTests {
     public async Task Generate_TryCatchFinally_ProducesFullStructure() {
         var node = new TryCatchFinally(
             new Block(new Constant(1)),
-            [new CatchClause(TypeReference.To<System.Exception>(), "ex", new Block(new Constant(2)))],
+            [new CatchClause(TypeReference.To<Exception>(), "ex", new Block(new Constant(2)))],
             new Block(new Constant(3)));
         var result = new CSharpGenerator().Generate(node);
         var expected = "try" + Environment.NewLine +

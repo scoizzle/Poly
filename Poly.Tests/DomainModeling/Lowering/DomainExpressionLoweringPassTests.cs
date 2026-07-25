@@ -9,15 +9,15 @@ namespace Poly.Tests.DomainModeling.Lowering;
 public class DomainExpressionLoweringPassTests {
     private static readonly DomainExpressionLoweringPass Pass = new();
 
-    private static readonly SN.ParameterReference Subject = new();
+    private static readonly ParameterReference Subject = new();
 
     [Test]
     public async Task PropertyAccess_LowersToMember() {
         var expr = DomainExpression.Property("Name");
         var result = Pass.Lower(expr, Subject);
 
-        await Assert.That(result).IsTypeOf<SN.Member>();
-        var member = (SN.Member)result;
+        await Assert.That(result).IsTypeOf<Member>();
+        var member = (Member)result;
         await Assert.That(member.MemberName).IsEqualTo("Name");
         await Assert.That(member.Value).IsSameReferenceAs(Subject);
     }
@@ -48,8 +48,8 @@ public class DomainExpressionLoweringPassTests {
         var expr = DomainExpression.Literal(42);
         var result = Pass.Lower(expr, Subject);
 
-        await Assert.That(result).IsTypeOf<SN.Constant>();
-        await Assert.That(((SN.Constant)result).Value).IsEqualTo(42);
+        await Assert.That(result).IsTypeOf<Constant>();
+        await Assert.That(((Constant)result).Value).IsEqualTo(42);
     }
 
     [Test]
@@ -57,7 +57,7 @@ public class DomainExpressionLoweringPassTests {
         var expr = DomainExpression.Literal(null);
         var result = Pass.Lower(expr, Subject);
 
-        await Assert.That(((SN.Constant)result).Value).IsNull();
+        await Assert.That(((Constant)result).Value).IsNull();
     }
 
     [Test]
@@ -68,12 +68,12 @@ public class DomainExpressionLoweringPassTests {
         var result = Pass.Lower(expr, Subject);
 
         // Expected: Member(Member(subject, "BirthCert"), "Time")
-        await Assert.That(result).IsTypeOf<SN.Member>();
-        var outer = (SN.Member)result;
+        await Assert.That(result).IsTypeOf<Member>();
+        var outer = (Member)result;
         await Assert.That(outer.MemberName).IsEqualTo("Time");
 
-        await Assert.That(outer.Value).IsTypeOf<SN.Member>();
-        var innerMember = (SN.Member)outer.Value;
+        await Assert.That(outer.Value).IsTypeOf<Member>();
+        var innerMember = (Member)outer.Value;
         await Assert.That(innerMember.MemberName).IsEqualTo("BirthCert");
         await Assert.That(innerMember.Value).IsSameReferenceAs(Subject);
     }
@@ -85,12 +85,12 @@ public class DomainExpressionLoweringPassTests {
 
         var result = Pass.Lower(expr, Subject);
 
-        await Assert.That(result).IsTypeOf<SN.Member>();
-        var outer = (SN.Member)result;
+        await Assert.That(result).IsTypeOf<Member>();
+        var outer = (Member)result;
         await Assert.That(outer.MemberName).IsEqualTo("AvailableCopies");
 
-        await Assert.That(outer.Value).IsTypeOf<SN.Member>();
-        var nav = (SN.Member)outer.Value;
+        await Assert.That(outer.Value).IsTypeOf<Member>();
+        var nav = (Member)outer.Value;
         await Assert.That(nav.MemberName).IsEqualTo("Book");
         await Assert.That(nav.Value).IsSameReferenceAs(Subject);
     }
@@ -102,13 +102,13 @@ public class DomainExpressionLoweringPassTests {
 
         var result = Pass.Lower(expr, Subject);
 
-        await Assert.That(result).IsTypeOf<SN.NotEqual>();
-        var neq = (SN.NotEqual)result;
+        await Assert.That(result).IsTypeOf<NotEqual>();
+        var neq = (NotEqual)result;
 
-        await Assert.That(neq.LeftHandValue).IsTypeOf<SN.Member>();
-        await Assert.That(((SN.Member)neq.LeftHandValue).MemberName).IsEqualTo("Name");
-        await Assert.That(neq.RightHandValue).IsTypeOf<SN.Constant>();
-        await Assert.That(((SN.Constant)neq.RightHandValue).Value).IsNull();
+        await Assert.That(neq.LeftHandValue).IsTypeOf<Member>();
+        await Assert.That(((Member)neq.LeftHandValue).MemberName).IsEqualTo("Name");
+        await Assert.That(neq.RightHandValue).IsTypeOf<Constant>();
+        await Assert.That(((Constant)neq.RightHandValue).Value).IsNull();
     }
 
     [Test]
@@ -117,10 +117,10 @@ public class DomainExpressionLoweringPassTests {
 
         var result = Pass.Lower(expr, Subject);
 
-        await Assert.That(result).IsTypeOf<SN.Equal>();
-        var eq = (SN.Equal)result;
-        await Assert.That(eq.RightHandValue).IsTypeOf<SN.Constant>();
-        await Assert.That(((SN.Constant)eq.RightHandValue).Value).IsNull();
+        await Assert.That(result).IsTypeOf<Equal>();
+        var eq = (Equal)result;
+        await Assert.That(eq.RightHandValue).IsTypeOf<Constant>();
+        await Assert.That(((Constant)eq.RightHandValue).Value).IsNull();
     }
 
     [Test]
@@ -131,8 +131,8 @@ public class DomainExpressionLoweringPassTests {
 
         await Assert.That(result).IsTypeOf<SN.Add>();
         var add = (SN.Add)result;
-        await Assert.That(((SN.Constant)add.LeftHandValue).Value).IsEqualTo(1);
-        await Assert.That(((SN.Constant)add.RightHandValue).Value).IsEqualTo(2);
+        await Assert.That(((Constant)add.LeftHandValue).Value).IsEqualTo(1);
+        await Assert.That(((Constant)add.RightHandValue).Value).IsEqualTo(2);
     }
 
     [Test]
@@ -199,7 +199,7 @@ public class DomainExpressionLoweringPassTests {
             DomainExpression.Equal(DomainExpression.Property("Count"), DomainExpression.Literal(5)),
             Subject);
 
-        await Assert.That(result).IsTypeOf<SN.Equal>();
+        await Assert.That(result).IsTypeOf<Equal>();
     }
 
     [Test]
@@ -208,7 +208,7 @@ public class DomainExpressionLoweringPassTests {
             DomainExpression.NotEqual(DomainExpression.Property("Status"), DomainExpression.Literal(0)),
             Subject);
 
-        await Assert.That(result).IsTypeOf<SN.NotEqual>();
+        await Assert.That(result).IsTypeOf<NotEqual>();
     }
 
     [Test]
@@ -217,7 +217,7 @@ public class DomainExpressionLoweringPassTests {
             DomainExpression.LessThan(DomainExpression.Property("Qty"), DomainExpression.Property("Min")),
             Subject);
 
-        await Assert.That(result).IsTypeOf<SN.LessThan>();
+        await Assert.That(result).IsTypeOf<LessThan>();
     }
 
     [Test]
@@ -226,7 +226,7 @@ public class DomainExpressionLoweringPassTests {
             DomainExpression.LessThanOrEqual(DomainExpression.Property("Qty"), DomainExpression.Property("Min")),
             Subject);
 
-        await Assert.That(result).IsTypeOf<SN.LessThanOrEqual>();
+        await Assert.That(result).IsTypeOf<LessThanOrEqual>();
     }
 
     [Test]
@@ -235,7 +235,7 @@ public class DomainExpressionLoweringPassTests {
             DomainExpression.GreaterThan(DomainExpression.Property("Qty"), DomainExpression.Property("Max")),
             Subject);
 
-        await Assert.That(result).IsTypeOf<SN.GreaterThan>();
+        await Assert.That(result).IsTypeOf<GreaterThan>();
     }
 
     [Test]
@@ -244,7 +244,7 @@ public class DomainExpressionLoweringPassTests {
             DomainExpression.GreaterThanOrEqual(DomainExpression.Property("Qty"), DomainExpression.Property("Max")),
             Subject);
 
-        await Assert.That(result).IsTypeOf<SN.GreaterThanOrEqual>();
+        await Assert.That(result).IsTypeOf<GreaterThanOrEqual>();
     }
 
     [Test]
@@ -256,10 +256,10 @@ public class DomainExpressionLoweringPassTests {
 
         var result = Pass.Lower(expr, Subject);
 
-        await Assert.That(result).IsTypeOf<SN.Invoke>();
-        var invoke = (SN.Invoke)result;
-        await Assert.That(invoke.Delegate).IsTypeOf<SN.Member>();
-        await Assert.That(((SN.Member)invoke.Delegate).MemberName).IsEqualTo("AddDays");
+        await Assert.That(result).IsTypeOf<Invoke>();
+        var invoke = (Invoke)result;
+        await Assert.That(invoke.Delegate).IsTypeOf<Member>();
+        await Assert.That(((Member)invoke.Delegate).MemberName).IsEqualTo("AddDays");
         await Assert.That(invoke.Arguments.Length).IsEqualTo(1);
     }
 
@@ -272,8 +272,8 @@ public class DomainExpressionLoweringPassTests {
 
         var result = Pass.Lower(expr, Subject);
 
-        await Assert.That(result).IsTypeOf<SN.Invoke>();
-        await Assert.That(((SN.Member)((SN.Invoke)result).Delegate).MemberName).IsEqualTo("AddMonths");
+        await Assert.That(result).IsTypeOf<Invoke>();
+        await Assert.That(((Member)((Invoke)result).Delegate).MemberName).IsEqualTo("AddMonths");
     }
 
     [Test]
@@ -285,8 +285,8 @@ public class DomainExpressionLoweringPassTests {
 
         var result = Pass.Lower(expr, Subject);
 
-        await Assert.That(result).IsTypeOf<SN.Invoke>();
-        await Assert.That(((SN.Member)((SN.Invoke)result).Delegate).MemberName).IsEqualTo("Subtract");
+        await Assert.That(result).IsTypeOf<Invoke>();
+        await Assert.That(((Member)((Invoke)result).Delegate).MemberName).IsEqualTo("Subtract");
     }
 
     [Test]
@@ -306,20 +306,20 @@ public class DomainExpressionLoweringPassTests {
         var and = (SN.And)result;
 
         // Left: NotEqual(Member(Member(subject, "Cert"), "Time"), null)
-        await Assert.That(and.LeftHandValue).IsTypeOf<SN.NotEqual>();
-        var neq = (SN.NotEqual)and.LeftHandValue;
-        await Assert.That(neq.RightHandValue).IsTypeOf<SN.Constant>();
-        await Assert.That(((SN.Constant)neq.RightHandValue).Value).IsNull();
-        await Assert.That(neq.LeftHandValue).IsTypeOf<SN.Member>();
-        await Assert.That(((SN.Member)neq.LeftHandValue).MemberName).IsEqualTo("Time");
+        await Assert.That(and.LeftHandValue).IsTypeOf<NotEqual>();
+        var neq = (NotEqual)and.LeftHandValue;
+        await Assert.That(neq.RightHandValue).IsTypeOf<Constant>();
+        await Assert.That(((Constant)neq.RightHandValue).Value).IsNull();
+        await Assert.That(neq.LeftHandValue).IsTypeOf<Member>();
+        await Assert.That(((Member)neq.LeftHandValue).MemberName).IsEqualTo("Time");
 
         // Right: GreaterThan(Member(subject, "Age"), Constant(18))
-        await Assert.That(and.RightHandValue).IsTypeOf<SN.GreaterThan>();
-        var gt = (SN.GreaterThan)and.RightHandValue;
-        await Assert.That(gt.LeftHandValue).IsTypeOf<SN.Member>();
-        await Assert.That(((SN.Member)gt.LeftHandValue).MemberName).IsEqualTo("Age");
-        await Assert.That(gt.RightHandValue).IsTypeOf<SN.Constant>();
-        await Assert.That(((SN.Constant)gt.RightHandValue).Value).IsEqualTo(18);
+        await Assert.That(and.RightHandValue).IsTypeOf<GreaterThan>();
+        var gt = (GreaterThan)and.RightHandValue;
+        await Assert.That(gt.LeftHandValue).IsTypeOf<Member>();
+        await Assert.That(((Member)gt.LeftHandValue).MemberName).IsEqualTo("Age");
+        await Assert.That(gt.RightHandValue).IsTypeOf<Constant>();
+        await Assert.That(((Constant)gt.RightHandValue).Value).IsEqualTo(18);
     }
 
     [Test]

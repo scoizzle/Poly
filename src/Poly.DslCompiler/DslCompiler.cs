@@ -165,7 +165,7 @@ public sealed class DslCompiler {
     // ── C# generation ───────────────────────────────────────────
 
     private static IReadOnlyList<(string FileName, string Source)> GenerateAllFiles(
-        Domain domain, Poly.Syntax.Analysis.AnalysisResult analysis,
+        Domain domain, AnalysisResult analysis,
         CompileMode mode = CompileMode.Entities,
         DomainAuthoringContext? authoring = null) {
 
@@ -197,11 +197,11 @@ public sealed class DslCompiler {
         // Topology, aggregate, and behavior are now produced by the domain pipeline
         // (UseDomainModelAnalysisPipeline) and available on the analysis argument.
         var infraPipelineBuilder = new AnalyzerBuilder()
-            .AddAnalyzer(new Poly.DomainModeling.Analysis.StoragePass(
+            .AddAnalyzer(new StoragePass(
                 typeMaps: authoring?.TypeMaps,
                 conventions: authoring?.StorageConventions,
                 analysis: analysis))
-            .AddAnalyzer(new Poly.DomainModeling.Analysis.TransportPass());
+            .AddAnalyzer(new TransportPass());
 
         // Issue 19: Wire authoring.Passes.Build() into pipeline
         if (authoring != null) {
@@ -214,9 +214,9 @@ public sealed class DslCompiler {
         var infraResult = infraPipeline.Analyze(domain, priorAnalysis: analysis, invalidatedNodes: [domain]);
 
         // Storage model from the codegen pipeline; behavior and aggregate from domain analysis
-        var storageModel = infraResult.GetMetadata<Poly.DomainModeling.Analysis.StorageMappingMetadata>(domain)?.Storage;
-        var behaviorModel = analysis.GetMetadata<Poly.DomainModeling.Analysis.BehaviorMetadata>(domain)?.Behavior;
-        var aggregateModel = analysis.GetMetadata<Poly.DomainModeling.Analysis.OwnershipAggregateMetadata>(domain)?.Aggregate;
+        var storageModel = infraResult.GetMetadata<StorageMappingMetadata>(domain)?.Storage;
+        var behaviorModel = analysis.GetMetadata<BehaviorMetadata>(domain)?.Behavior;
+        var aggregateModel = analysis.GetMetadata<OwnershipAggregateMetadata>(domain)?.Aggregate;
 
         // Fail closed — no silent re-analyze (storage, behavior, aggregate).
         if ((mode == CompileMode.Db || mode == CompileMode.All) && storageModel == null)

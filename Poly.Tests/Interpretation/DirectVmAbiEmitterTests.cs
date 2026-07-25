@@ -279,7 +279,7 @@ public class DirectVmAbiEmitterTests {
         await Assert.That(ExecDirect(
             new Block([
                 new Assignment(result, new Constant(99)),
-                new WhileLoop(new Constant(0L), new SN.Block([new Constant(0L)], []))
+                new WhileLoop(new Constant(0L), new Block([new Constant(0L)], []))
             ], [result])
         )).IsEqualTo(99);
     }

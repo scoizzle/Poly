@@ -15,9 +15,9 @@ public class InfrastructureAnalyzerTests {
     // ── Helper bundle ──────────────────────────────────────────
     private sealed record TestInfra(
         StorageModel Storage,
-        Poly.DomainModeling.Analysis.EffectTopology Topology,
-        Poly.DomainModeling.Analysis.BehaviorModel Behavior,
-        Poly.DomainModeling.Analysis.AggregateModel Aggregate,
+        EffectTopology Topology,
+        BehaviorModel Behavior,
+        AggregateModel Aggregate,
         TransportSurface Transport
     );
     // ── Helpers ───────────────────────────────────────────────

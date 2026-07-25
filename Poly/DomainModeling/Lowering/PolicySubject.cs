@@ -18,7 +18,7 @@ public static class PolicySubject {
         if (subject is null)
             throw new ArgumentNullException(nameof(subject), "Policy subject must not be null.");
 
-        if (subject is System.Collections.IDictionary or System.Collections.Generic.IDictionary<string, object?>) {
+        if (subject is System.Collections.IDictionary or IDictionary<string, object?>) {
             throw new ArgumentException(
                 $"Policy subject type '{subject.GetType().Name}' is not supported. " +
                 "Subjects must have real CLR properties (records, POCOs).");
@@ -32,8 +32,8 @@ public static class PolicySubject {
     /// </summary>
     public static void ValidateType<T>() {
         var type = typeof(T);
-        if (typeof(System.Collections.IDictionary).IsAssignableFrom(type) ||
-            typeof(System.Collections.Generic.IDictionary<string, object?>).IsAssignableFrom(type) ||
+        if (typeof(IDictionary).IsAssignableFrom(type) ||
+            typeof(IDictionary<string, object?>).IsAssignableFrom(type) ||
             type == typeof(System.Dynamic.ExpandoObject)) {
             throw new ArgumentException(
                 $"Subject type '{type.Name}' is not supported. " +

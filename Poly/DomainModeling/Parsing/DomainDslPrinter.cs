@@ -476,56 +476,56 @@ public sealed class DomainDslPrinter {
             return ep.Route(expr);
         }
 
-        protected override string PropertyAccess(Poly.DomainModeling.PropertyAccess p) => p.Name;
-        protected override string ParameterAccess(Poly.DomainModeling.ParameterAccess p) => p.Name;
-        protected override string Literal(Poly.DomainModeling.Literal l) => DomainDslPrinter.PrintLiteral(l);
+        protected override string PropertyAccess(PropertyAccess p) => p.Name;
+        protected override string ParameterAccess(ParameterAccess p) => p.Name;
+        protected override string Literal(Literal l) => DomainDslPrinter.PrintLiteral(l);
 
-        protected override string OwnedAccess(Poly.DomainModeling.OwnedAccess o) =>
+        protected override string OwnedAccess(OwnedAccess o) =>
             $"{o.OwnedName} {Run(_printer, o.Inner)}";
 
-        protected override string RelationshipNavigation(Poly.DomainModeling.RelationshipNavigation r) =>
+        protected override string RelationshipNavigation(RelationshipNavigation r) =>
             _printer.PrintRelationshipNav(r);
 
-        protected override string Comparison(Poly.DomainModeling.Comparison c) =>
+        protected override string Comparison(Comparison c) =>
             $"{Run(_printer, c.Left)} {DomainDslPrinter.PrintComparisonKind(c.Kind)} {Run(_printer, c.Right)}";
 
-        protected override string And(Poly.DomainModeling.And a) =>
+        protected override string And(And a) =>
             $"({Run(_printer, a.Left)} and {Run(_printer, a.Right)})";
 
-        protected override string Or(Poly.DomainModeling.Or o) =>
+        protected override string Or(Or o) =>
             $"({Run(_printer, o.Left)} or {Run(_printer, o.Right)})";
 
-        protected override string Not(Poly.DomainModeling.Not n) =>
+        protected override string Not(Not n) =>
             $"not {Run(_printer, n.Operand)}";
 
-        protected override string Add(Poly.DomainModeling.Add a) =>
+        protected override string Add(Add a) =>
             $"({Run(_printer, a.Left)} + {Run(_printer, a.Right)})";
 
-        protected override string Subtract(Poly.DomainModeling.Subtract s) =>
+        protected override string Subtract(Subtract s) =>
             $"({Run(_printer, s.Left)} - {Run(_printer, s.Right)})";
 
-        protected override string Multiply(Poly.DomainModeling.Multiply m) =>
+        protected override string Multiply(Multiply m) =>
             $"({Run(_printer, m.Left)} * {Run(_printer, m.Right)})";
 
-        protected override string Divide(Poly.DomainModeling.Divide d) =>
+        protected override string Divide(Divide d) =>
             $"({Run(_printer, d.Left)} / {Run(_printer, d.Right)})";
 
-        protected override string Exists(Poly.DomainModeling.Exists e) =>
+        protected override string Exists(Exists e) =>
             $"{Run(_printer, e.Target)} exists";
 
-        protected override string NotExists(Poly.DomainModeling.NotExists n) =>
+        protected override string NotExists(NotExists n) =>
             $"not {Run(_printer, n.Target)} exists";
 
-        protected override string AnyExpr(Poly.DomainModeling.AnyExpr a) =>
+        protected override string AnyExpr(AnyExpr a) =>
             $"any {a.RelationshipName} where {Run(_printer, a.Body)}";
 
-        protected override string AllExpr(Poly.DomainModeling.AllExpr a) =>
+        protected override string AllExpr(AllExpr a) =>
             $"all {a.RelationshipName} where {Run(_printer, a.Body)}";
 
-        protected override string NoneExpr(Poly.DomainModeling.NoneExpr n) =>
+        protected override string NoneExpr(NoneExpr n) =>
             $"none {n.RelationshipName} where {Run(_printer, n.Body)}";
 
-        protected override string CountExpr(Poly.DomainModeling.CountExpr c) =>
+        protected override string CountExpr(CountExpr c) =>
             c.Body is not null
                 ? $"count {c.RelationshipName} where {Run(_printer, c.Body)}"
                 : $"count {c.RelationshipName}";
@@ -599,8 +599,8 @@ public sealed class DomainDslPrinter {
     };
 
     private static string PrintDomainExpression(DomainExpression expr) => expr switch {
-        Poly.DomainModeling.Literal l => PrintLiteralValue(l.Value),
-        Poly.DomainModeling.PropertyAccess pa => pa.Name,
+        Literal l => PrintLiteralValue(l.Value),
+        PropertyAccess pa => pa.Name,
         _ => expr.ToString() ?? "?",
     };
 

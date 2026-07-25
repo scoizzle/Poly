@@ -10,7 +10,7 @@ namespace Poly.DomainModeling.Lowering;
 
 /// <summary>
 /// Shared domain → Syntax projection layer.
-/// Produces language-agnostic <see cref="Syntactic.TypeDefinitionNode"/> trees
+/// Produces language-agnostic <see cref="TypeDefinitionNode"/> trees
 /// from an analyzed <see cref="Domain"/>. Entity types, stage enums,
 /// DomainResult scaffolding, and lowered policies.
 ///
@@ -23,14 +23,14 @@ public static class DomainProgramProjection {
     /// Currently delegates to static methods on <see cref="DomainToCSharpExporter"/>
     /// which will be migrated here incrementally.
     /// </summary>
-    public static IReadOnlyList<Syntactic.TypeDefinitionNode> ToSyntax(
+    public static IReadOnlyList<TypeDefinitionNode> ToSyntax(
         Domain domain, INodeMetadataProvider metadata) {
         ArgumentNullException.ThrowIfNull(domain);
         ArgumentNullException.ThrowIfNull(metadata);
         var domainRelationships = domain.Relationships.ToList();
         var entities = domain.Types.OfType<Entity>().ToList();
         var entityLookup = entities.ToDictionary(e => e.Name, StringComparer.Ordinal);
-        var result = new List<Syntactic.TypeDefinitionNode>();
+        var result = new List<TypeDefinitionNode>();
 
         // ── Collect all subscriptions ─────────────────────────────
         var subscriptionsByTarget = new Dictionary<string, List<DomainToCSharpExporter.SubscriptionInfo>>(
@@ -54,16 +54,16 @@ public static class DomainProgramProjection {
 
         // ── Build enum type definitions ────────────────────────
         foreach (var enumType in domain.Types.OfType<EnumType>()) {
-            var enumFields = new List<Syntactic.FieldDefinitionNode>();
+            var enumFields = new List<FieldDefinitionNode>();
             for (int i = 0; i < enumType.MemberNames.Count; i++) {
-                enumFields.Add(new Syntactic.FieldDefinitionNode(
+                enumFields.Add(new FieldDefinitionNode(
                     enumType.MemberNames[i],
-                    new Syntactic.PrimitiveTypeReference(PrimType.Int32),
-                    DefaultValue: new Syntactic.Constant((int)i),
+                    new PrimitiveTypeReference(PrimType.Int32),
+                    DefaultValue: new Constant((int)i),
                     AccessModifier: AccessModifier.Public
                 ));
             }
-            result.Add(new Syntactic.TypeDefinitionNode(
+            result.Add(new TypeDefinitionNode(
                 enumType.Name,
                 Fields: enumFields,
                 Semantics: Syntactic.TypeDefinitionSemantics.MutableReference

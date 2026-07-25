@@ -43,7 +43,7 @@ internal sealed class ClrTypeProperty : ClrPropertyMember {
         _isReadOnly = setMethod is null;
         _hasInitSetter = setMethod?.ReturnParameter
             .GetRequiredCustomModifiers()
-            .Contains(typeof(System.Runtime.CompilerServices.IsExternalInit)) == true;
+            .Contains(typeof(IsExternalInit)) == true;
     }
 
     /// <summary>
@@ -107,7 +107,7 @@ internal sealed class ClrTypeProperty : ClrPropertyMember {
 
     public override string ToString() => $"{MemberTypeDefinition} {DeclaringTypeDefinition}.{Name}{(_parameters is null ? string.Empty : $"[{string.Join(", ", _parameters)}]")}";
 
-    public override System.Linq.Expressions.Expression? EmitRead(System.Linq.Expressions.Expression? instance) {
+    public override Expression? EmitRead(Expression? instance) {
         if (IsStatic || instance is not null) {
             var typedInst = IsStatic ? null : System.Linq.Expressions.Expression.Convert(instance!, _propertyInfo.DeclaringType!);
             var access = System.Linq.Expressions.Expression.Property(typedInst, _propertyInfo);
@@ -118,7 +118,7 @@ internal sealed class ClrTypeProperty : ClrPropertyMember {
         return null;
     }
 
-    public override System.Linq.Expressions.Expression? EmitWrite(System.Linq.Expressions.Expression? instance, System.Linq.Expressions.Expression value) {
+    public override Expression? EmitWrite(Expression? instance, Expression value) {
         if (_isReadOnly) return null;
         var typedInst = IsStatic ? null : System.Linq.Expressions.Expression.Convert(instance!, _propertyInfo.DeclaringType!);
         var val = System.Linq.Expressions.Expression.Convert(value, _propertyInfo.PropertyType);

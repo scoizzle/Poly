@@ -92,8 +92,7 @@ public sealed class BehaviorParameter {
 }
 
 /// <summary>Target stage for a transition effect.</summary>
-public sealed record StageTransitionTarget(string Name)
-{
+public sealed record StageTransitionTarget(string Name) {
     /// <summary>Alias for <see cref="Name"/> — compatibility with existing callers.</summary>
     public string TargetStageName => Name;
 }

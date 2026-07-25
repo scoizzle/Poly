@@ -59,7 +59,7 @@ internal sealed class CallSiteCatalogState : IAnalysisMetadata {
 /// <see cref="New"/> node with its stable index in the catalog.
 ///
 /// This enables portable (serializable) call references without embedding
-/// CLR <see cref="System.Reflection.MethodInfo"/> directly in the IR.
+/// CLR <see cref="MethodInfo"/> directly in the IR.
 ///
 /// Placement: after <c>ValueRepresentationAnalysis</c>, before <c>ConstantFolding</c>.
 /// </summary>
@@ -76,7 +76,7 @@ internal sealed class CallSiteCatalogAnalyzer : INodeAnalyzer {
         var state = context.GetMetadata<CallSiteCatalogState>(null);
         if (state is null) {
             state = new CallSiteCatalogState();
-            context.SetMetadata<CallSiteCatalogState>(null, state);
+            context.SetMetadata(null, state);
         }
 
         bool isRootEntry = state.Depth == 0;

@@ -203,7 +203,7 @@ public sealed class PolyDslTokenizer {
         var startLine = _line;
         var startCol = _col;
         _pos++; _col++; // skip opening "
-        var sb = new System.Text.StringBuilder();
+        var sb = new StringBuilder();
         while (_pos < _text.Length) {
             var ch = _text[_pos];
             if (ch == '"') {
@@ -231,7 +231,7 @@ public sealed class PolyDslTokenizer {
     private Token ScanNumber() {
         var startLine = _line;
         var startCol = _col;
-        var sb = new System.Text.StringBuilder();
+        var sb = new StringBuilder();
         while (_pos < _text.Length && char.IsDigit(_text[_pos])) {
             sb.Append(_text[_pos]);
             _pos++; _col++;

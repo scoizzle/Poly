@@ -267,7 +267,7 @@ public sealed class MinimalApiGenerator {
 
         // if (!result.IsSuccess) return Results.Conflict(new { error = result.ErrorMessage });
         bodyNodes.Add(new IfStatement(
-            new Poly.Syntax.Nodes.Not(new Member(new Variable(resultVarName), "IsSuccess")),
+            new Syntax.Nodes.Not(new Member(new Variable(resultVarName), "IsSuccess")),
             new Block(
                 new Return(
                     new Invoke(
@@ -453,7 +453,7 @@ public sealed class MinimalApiGenerator {
                 var parColl = new Invoke(new Member(parEntry, "Collection"), new Lambda([new Parameter("e")], new Member(new Variable("e"), pascalRel)));
                 preActionNodes.Add(new Await(new Invoke(new Member(parColl, "LoadAsync"))));
                 preActionNodes.Add(new IfStatement(
-                    new Poly.Syntax.Nodes.Not(
+                    new Syntax.Nodes.Not(
                         new Invoke(
                             new Member(new Member(new Variable("parentEntity"), pascalRel), "Any"),
                             new Lambda([new Parameter("e")], new Equal(new Variable("e"), new Variable("entity"))))),

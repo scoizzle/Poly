@@ -1798,8 +1798,8 @@ public class McpSmokeTests {
     public async Task Parser_Exists_RelExists_CreatesExists() {
         // Q1.3: `Rel exists` → Exists(PropertyAccess)
         var parsed = ParseExpression("assignee exists");
-        await Assert.That(parsed).IsTypeOf<Poly.DomainModeling.Exists>();
-        var exists = (Poly.DomainModeling.Exists)parsed;
+        await Assert.That(parsed).IsTypeOf<Exists>();
+        var exists = (Exists)parsed;
         await Assert.That(exists.Target).IsTypeOf<PropertyAccess>();
         await Assert.That(((PropertyAccess)exists.Target).Name).IsEqualTo("assignee");
     }
@@ -1810,7 +1810,7 @@ public class McpSmokeTests {
         var parsed = ParseExpression("not certificate exists");
         await Assert.That(parsed).IsTypeOf<Poly.DomainModeling.Not>();
         var notExpr = (Poly.DomainModeling.Not)parsed;
-        await Assert.That(notExpr.Operand).IsTypeOf<Poly.DomainModeling.Exists>();
+        await Assert.That(notExpr.Operand).IsTypeOf<Exists>();
         var exists = (Exists)notExpr.Operand;
         await Assert.That(exists.Target).IsTypeOf<PropertyAccess>();
         await Assert.That(((PropertyAccess)exists.Target).Name).IsEqualTo("certificate");
@@ -1851,7 +1851,7 @@ public class McpSmokeTests {
         await Assert.That(printed).IsEqualTo("assignee exists");
 
         var reParsed = ParseExpression(printed);
-        await Assert.That(reParsed).IsTypeOf<Poly.DomainModeling.Exists>();
+        await Assert.That(reParsed).IsTypeOf<Exists>();
     }
 
     [Test]
@@ -1882,13 +1882,13 @@ public class McpSmokeTests {
     public async Task Parser_LocalProperty_StillWorks() {
         // Verify that existing local property expressions are unaffected
         var parsed = ParseExpression("Age >= 18");
-        await Assert.That(parsed).IsTypeOf<Poly.DomainModeling.Comparison>();
+        await Assert.That(parsed).IsTypeOf<Comparison>();
     }
 
     [Test]
     public async Task Parser_SimpleIdentifier_StillWorks() {
         var parsed = ParseExpression("Name");
-        await Assert.That(parsed).IsTypeOf<Poly.DomainModeling.PropertyAccess>();
+        await Assert.That(parsed).IsTypeOf<PropertyAccess>();
     }
 
     [Test]
@@ -2029,7 +2029,7 @@ E: entity {{
         await Assert.That(state).IsNotNull();
         var itemEntity = state!.Domain.Types.OfType<Entity>().First(e => e.Name == "Item");
         var isSetPolicy = itemEntity.Policies.First(p => p.Name == "IsSet");
-        await Assert.That(isSetPolicy.Expression).IsTypeOf<Poly.DomainModeling.Exists>();
+        await Assert.That(isSetPolicy.Expression).IsTypeOf<Exists>();
     }
 
     [Test]
@@ -2067,7 +2067,7 @@ E: entity {{
         await Assert.That(state).IsNotNull();
         var ticketEntity = state!.Domain.Types.OfType<Entity>().First(e => e.Name == "Ticket");
         var activeVipPolicy = ticketEntity.Policies.First(p => p.Name == "ActiveVip");
-        await Assert.That(activeVipPolicy.Expression).IsTypeOf<Poly.DomainModeling.RelationshipNavigation>();
+        await Assert.That(activeVipPolicy.Expression).IsTypeOf<RelationshipNavigation>();
     }
 
     [Test]
@@ -2126,8 +2126,8 @@ E: entity {{
         // Q1′′′′.2 / Q1'''''.5: Parser accepts `orders Status` (many + property) syntactically,
         // but the analysis pipeline rejects it via RelationshipNavigationCardinality check.
         var parsed = ParseExpression("orders Status is \"Open\"");
-        await Assert.That(parsed).IsTypeOf<Poly.DomainModeling.RelationshipNavigation>();
-        var nav = (Poly.DomainModeling.RelationshipNavigation)parsed;
+        await Assert.That(parsed).IsTypeOf<RelationshipNavigation>();
+        var nav = (RelationshipNavigation)parsed;
         await Assert.That(nav.RelationshipName).IsEqualTo("orders");
 
         // Verify analysis rejection via apply_dsl on a domain with a many relationship
@@ -2175,7 +2175,7 @@ E: entity {{
         var parsed = ParseExpression("not certificate exists");
         await Assert.That(parsed).IsTypeOf<Poly.DomainModeling.Not>();
         var notExpr = (Poly.DomainModeling.Not)parsed;
-        await Assert.That(notExpr.Operand).IsTypeOf<Poly.DomainModeling.Exists>();
+        await Assert.That(notExpr.Operand).IsTypeOf<Exists>();
     }
 
     [Test]
@@ -2207,7 +2207,7 @@ E: entity {{
         await Assert.That(state).IsNotNull();
         var ticketEntity = state!.Domain.Types.OfType<Entity>().First(e => e.Name == "Ticket");
         var policy = ticketEntity.Policies.First(p => p.Name == "HasAssignee");
-        await Assert.That(policy.Expression).IsTypeOf<Poly.DomainModeling.Exists>();
+        await Assert.That(policy.Expression).IsTypeOf<Exists>();
     }
 
     [Test]

@@ -90,7 +90,7 @@ public interface ITypeMember {
     /// For static members <paramref name="instance"/> may be <c>null</c>.
     /// Default implementation returns <c>null</c> (not readable).
     /// </summary>
-    System.Linq.Expressions.Expression? EmitRead(System.Linq.Expressions.Expression? instance) => null;
+    Expression? EmitRead(Expression? instance) => null;
 
     /// <summary>
     /// Returns <c>true</c> when <see cref="LifetimeModifier"/> is <see cref="LifetimeModifier.Static"/>.
@@ -104,5 +104,5 @@ public interface ITypeMember {
     /// For static members <paramref name="instance"/> may be <c>null</c>.
     /// Default implementation returns <c>null</c> (not writable).
     /// </summary>
-    System.Linq.Expressions.Expression? EmitWrite(System.Linq.Expressions.Expression? instance, System.Linq.Expressions.Expression value) => null;
+    Expression? EmitWrite(Expression? instance, Expression value) => null;
 }

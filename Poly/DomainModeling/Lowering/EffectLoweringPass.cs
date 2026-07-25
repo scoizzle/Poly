@@ -62,14 +62,14 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         // Convert string literals to qualified enum member access when the
         // target property is enum-typed:  assign Status to "Suspended"
         // on PatronStatus-typed property →  this.Status = PatronStatus.Suspended
-        if (_domain is not null && a.Target is Poly.DomainModeling.PropertyAccess propAccess) {
+        if (_domain is not null && a.Target is PropertyAccess propAccess) {
             var enumTypes = _domain.Types.OfType<EnumType>()
                 .ToDictionary(e => e.Name, StringComparer.Ordinal);
             var entityProp = _entity.Properties.FirstOrDefault(p =>
                 string.Equals(p.Name, propAccess.Name, StringComparison.Ordinal));
             if (entityProp is not null
                 && enumTypes.TryGetValue(entityProp.Type.TypeName, out var enumType)
-                && a.Value is Poly.DomainModeling.Literal { Value: string strVal }
+                && a.Value is Literal { Value: string strVal }
                 && !string.IsNullOrEmpty(strVal)) {
                 value = new Member(new NamedTypeReference(enumType.Name), strVal);
             }
@@ -78,7 +78,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
             // The domain type names "DateTime", "Timestamp", "Date", "DateOnly"
             // map to CLR types where + long is invalid — use AddDays instead.
             if (entityProp is not null
-                && value is Poly.Syntax.Nodes.Add { LeftHandValue: Node lhs, RightHandValue: Node rhs }
+                && value is Syntax.Nodes.Add { LeftHandValue: Node lhs, RightHandValue: Node rhs }
                 && IsDateTimeDomainType(entityProp.Type.TypeName)) {
                 value = new Invoke(new Member(lhs, "AddDays"), [rhs]);
             }
@@ -256,7 +256,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
 
         // if (!fineResult.IsSuccess) throw new InvalidOperationException(fineResult.ErrorMessage);
         nds.Add(new IfStatement(
-            new Poly.Syntax.Nodes.Not(new Member(new Variable(resultVar), "IsSuccess")),
+            new Syntax.Nodes.Not(new Member(new Variable(resultVar), "IsSuccess")),
             new Block(new Node[] {
                 new ThrowStatement(
                     new New(
@@ -347,7 +347,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     /// Returns null for literal defaults (handled directly by the exporter).
     /// </summary>
     internal static Node? LowerDefaultExpression(DomainExpression expr, Node? typeHint = null) {
-        if (expr is Poly.DomainModeling.PropertyAccess pa) {
+        if (expr is PropertyAccess pa) {
             return pa.Name switch {
                 "now" or "utcnow" => new Member(
                     new NamedTypeReference("DateTime"), "UtcNow"),

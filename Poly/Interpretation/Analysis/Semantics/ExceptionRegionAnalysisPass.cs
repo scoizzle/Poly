@@ -94,7 +94,7 @@ internal sealed class ExceptionRegionAnalyzer : INodeAnalyzer {
         var state = context.GetMetadata<ExceptionRegionState>(null);
         if (state is null) {
             state = new ExceptionRegionState();
-            context.SetMetadata<ExceptionRegionState>(null, state);
+            context.SetMetadata(null, state);
         }
 
         bool isRootEntry = state.Depth == 0;

@@ -60,7 +60,7 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Node
     protected override Node Default() => throw new NotSupportedException(
         $"DomainExpression node type is not supported");
 
-    protected override Node PropertyAccess(Poly.DomainModeling.PropertyAccess p) {
+    protected override Node PropertyAccess(PropertyAccess p) {
         // Runtime default expressions: now/today/guid should resolve to CLR
         // expressions (DateTime.UtcNow, DateOnly.FromDateTime, Guid.NewGuid)
         // instead of entity property access.
@@ -75,16 +75,16 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Node
         return new Member(_currentSubject, p.Name);
     }
 
-    protected override Node ParameterAccess(Poly.DomainModeling.ParameterAccess p)
+    protected override Node ParameterAccess(ParameterAccess p)
         => _parameters.TryGetValue(p.Name, out var param) ? param : new Parameter(p.Name);
 
-    protected override Node Literal(Poly.DomainModeling.Literal l)
+    protected override Node Literal(Literal l)
         => new Constant(l.Value);
 
-    protected override Node OwnedAccess(Poly.DomainModeling.OwnedAccess oa)
+    protected override Node OwnedAccess(OwnedAccess oa)
         => Route(oa.Inner, new Member(_currentSubject, oa.OwnedName));
 
-    protected override Node RelationshipNavigation(Poly.DomainModeling.RelationshipNavigation rn)
+    protected override Node RelationshipNavigation(RelationshipNavigation rn)
         => Route(rn.TargetProperty, new Member(_currentSubject, rn.RelationshipName));
 
     // --- Recurse into a new subject — helper to avoid confusion with Route(expr) ---
@@ -95,34 +95,34 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Node
         finally { _currentSubject = saved; }
     }
 
-    protected override Node Exists(Poly.DomainModeling.Exists e)
+    protected override Node Exists(Exists e)
         => new NotEqual(Lower(e.Target, _currentSubject), new Constant(null));
 
-    protected override Node NotExists(Poly.DomainModeling.NotExists ne)
+    protected override Node NotExists(NotExists ne)
         => new Equal(Lower(ne.Target, _currentSubject), new Constant(null));
 
-    protected override Node Add(Poly.DomainModeling.Add a)
+    protected override Node Add(Add a)
         => new SN.Add(Lower(a.Left, _currentSubject), Lower(a.Right, _currentSubject));
 
-    protected override Node Subtract(Poly.DomainModeling.Subtract s)
+    protected override Node Subtract(Subtract s)
         => new SN.Subtract(Lower(s.Left, _currentSubject), Lower(s.Right, _currentSubject));
 
-    protected override Node Multiply(Poly.DomainModeling.Multiply m)
+    protected override Node Multiply(Multiply m)
         => new SN.Multiply(Lower(m.Left, _currentSubject), Lower(m.Right, _currentSubject));
 
-    protected override Node Divide(Poly.DomainModeling.Divide d)
+    protected override Node Divide(Divide d)
         => new SN.Divide(Lower(d.Left, _currentSubject), Lower(d.Right, _currentSubject));
 
-    protected override Node And(Poly.DomainModeling.And a)
+    protected override Node And(And a)
         => new SN.And(Lower(a.Left, _currentSubject), Lower(a.Right, _currentSubject));
 
-    protected override Node Or(Poly.DomainModeling.Or o)
+    protected override Node Or(Or o)
         => new SN.Or(Lower(o.Left, _currentSubject), Lower(o.Right, _currentSubject));
 
-    protected override Node Not(Poly.DomainModeling.Not n)
+    protected override Node Not(Not n)
         => new SN.Not(Lower(n.Operand, _currentSubject));
 
-    protected override Node Comparison(Poly.DomainModeling.Comparison c) {
+    protected override Node Comparison(Comparison c) {
         var loweredLeft = Lower(c.Left, _currentSubject);
         var loweredRight = Lower(c.Right, _currentSubject);
 
@@ -138,11 +138,11 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Node
         // Simplify boolean comparisons: boolProp == true  → boolProp
         //                            boolProp == false → !boolProp
         if (c.Kind == ComparisonKind.Equal
-            && loweredRight is SN.Constant { Value: bool b }) {
+            && loweredRight is Constant { Value: bool b }) {
             return b ? loweredLeft : new SN.Not(loweredLeft);
         }
         if (c.Kind == ComparisonKind.NotEqual
-            && loweredRight is SN.Constant { Value: bool b2 }) {
+            && loweredRight is Constant { Value: bool b2 }) {
             return b2 ? new SN.Not(loweredLeft) : loweredLeft;
         }
 
@@ -164,18 +164,18 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Node
     /// Returns null if no substitution is needed.
     /// </summary>
     private Node? FixEnumLiteral(DomainExpression valueExpr, DomainExpression otherSide, Node otherSideNode) {
-        if (valueExpr is Poly.DomainModeling.Literal { Value: string strVal }
+        if (valueExpr is Literal { Value: string strVal }
             && !string.IsNullOrEmpty(strVal)
             && strVal is not "true" and not "false" and not "null"
             && !char.IsDigit(strVal[0])
-            && otherSide is Poly.DomainModeling.PropertyAccess prop
+            && otherSide is PropertyAccess prop
             && _enumPropertyNames!.TryGetValue(prop.Name, out var enumTypeName)) {
-            return new SN.Member(new SN.NamedTypeReference(enumTypeName), strVal);
+            return new Member(new NamedTypeReference(enumTypeName), strVal);
         }
         return null;
     }
 
-    protected override Node DateOperation(Poly.DomainModeling.DateOperation d)
+    protected override Node DateOperation(DateOperation d)
         => d.Kind switch {
             DateOperationKind.AddDays => new Invoke(
                 new Member(Lower(d.Date, _currentSubject), "AddDays"),
@@ -190,10 +190,10 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Node
         };
 
     // Q3′ quantifiers — authoring-only for now (need store-aware evaluation).
-    protected override Node AnyExpr(Poly.DomainModeling.AnyExpr a) => throw Q3NotSupported("any", a.RelationshipName);
-    protected override Node AllExpr(Poly.DomainModeling.AllExpr a) => throw Q3NotSupported("all", a.RelationshipName);
-    protected override Node NoneExpr(Poly.DomainModeling.NoneExpr n) => throw Q3NotSupported("none", n.RelationshipName);
-    protected override Node CountExpr(Poly.DomainModeling.CountExpr c) => throw Q3NotSupported("count", c.RelationshipName);
+    protected override Node AnyExpr(AnyExpr a) => throw Q3NotSupported("any", a.RelationshipName);
+    protected override Node AllExpr(AllExpr a) => throw Q3NotSupported("all", a.RelationshipName);
+    protected override Node NoneExpr(NoneExpr n) => throw Q3NotSupported("none", n.RelationshipName);
+    protected override Node CountExpr(CountExpr c) => throw Q3NotSupported("count", c.RelationshipName);
 
     private static Exception Q3NotSupported(string quantifier, string relName) =>
         new NotSupportedException(

@@ -64,7 +64,7 @@ internal sealed class EffectTopologyPass : INodeAnalyzer {
 
     private static void ScanActionEffects(
         Entity entity,
-        DomainModeling.Action action,
+        Action action,
         List<Relationship> relationships,
         List<CreateInRelation> createInRels,
         List<CrossEntityInvoke> crossInvokes) {

@@ -25,7 +25,7 @@ public class PolicySampleSubjectSpikeTests {
 
     [Test]
     public async Task AnonymousType_PropertyAccess_Works() {
-        var subject = new SN.Constant(new { Name = "Alice", Age = 25 });
+        var subject = new Constant(new { Name = "Alice", Age = 25 });
 
         var node = Pass.Lower(
             DomainExpression.GreaterThanOrEqual(
@@ -35,7 +35,7 @@ public class PolicySampleSubjectSpikeTests {
         var result = ExecuteOnVm(node);
         await Assert.That((long)result.Value!).IsEqualTo(1L);
 
-        var minor = new SN.Constant(new { Name = "Bob", Age = 15 });
+        var minor = new Constant(new { Name = "Bob", Age = 15 });
         var minorNode = Pass.Lower(
             DomainExpression.GreaterThanOrEqual(
                 DomainExpression.Property("Age"), DomainExpression.Literal(18)),
@@ -51,7 +51,7 @@ public class PolicySampleSubjectSpikeTests {
     [Test]
     public async Task DictionaryStringObject_GivesWrongResults() {
         var dict = new Dictionary<string, object> { ["Age"] = 99999 };
-        var subject = new SN.Constant(dict);
+        var subject = new Constant(dict);
 
         var node = Pass.Lower(DomainExpression.Property("Age"), subject);
 
@@ -77,7 +77,7 @@ public class PolicySampleSubjectSpikeTests {
     public async Task ExpandoObject_GivesWrongResults() {
         dynamic expando = new System.Dynamic.ExpandoObject();
         expando.Age = 99999;
-        var subject = new SN.Constant((object)expando);
+        var subject = new Constant((object)expando);
 
         var node = Pass.Lower(DomainExpression.Property("Age"), subject);
 
@@ -101,7 +101,7 @@ public class PolicySampleSubjectSpikeTests {
     [Test]
     public async Task CustomRecord_PropertyAccess_Works() {
         var person = new PersonRecord("Alice", 25);
-        var subject = new SN.Constant(person);
+        var subject = new Constant(person);
 
         var node = Pass.Lower(
             DomainExpression.GreaterThanOrEqual(
@@ -120,7 +120,7 @@ public class PolicySampleSubjectSpikeTests {
     [Test]
     public async Task PropBag_WithNonNullValue_Works() {
         var bag = new PropBag(Age: 25, Status: "Active", Total: 100, Name: null);
-        var subject = new SN.Constant(bag);
+        var subject = new Constant(bag);
 
         var node = Pass.Lower(
             DomainExpression.GreaterThanOrEqual(
@@ -134,7 +134,7 @@ public class PolicySampleSubjectSpikeTests {
     [Test]
     public async Task PropBag_WithNullValue_FailsOnVm() {
         var bag = new PropBag(Age: null, Total: 100, Status: null, Name: "Test");
-        var subject = new SN.Constant(bag);
+        var subject = new Constant(bag);
 
         // Accessing a nullable int? property with null value on VM throws
         // because the VM tries to unbox the nullable struct and fails.
@@ -151,7 +151,7 @@ public class PolicySampleSubjectSpikeTests {
     [Test]
     public async Task StrictBag_PropertyAccess_Works() {
         var bag = new StrictBag(Age: 25, Name: "Alice", Status: "", Total: 0);
-        var subject = new SN.Constant(bag);
+        var subject = new Constant(bag);
 
         var node = Pass.Lower(
             DomainExpression.GreaterThanOrEqual(

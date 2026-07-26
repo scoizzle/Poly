@@ -936,7 +936,24 @@ public sealed record DomainEntityInstance {
             case Multiply m: return m with { Left = PreprocessQuantifiers(m.Left), Right = PreprocessQuantifiers(m.Right) };
             case Divide d: return d with { Left = PreprocessQuantifiers(d.Left), Right = PreprocessQuantifiers(d.Right) };
             case DateOperation d: return d with { Date = PreprocessQuantifiers(d.Date), Offset = PreprocessQuantifiers(d.Offset) };
-            case RelationshipNavigation r: return r with { TargetProperty = PreprocessQuantifiers(r.TargetProperty) };
+            case RelationshipNavigation r:
+                // To-one path-prefix: resolve the linked instance and evaluate
+                // the inner expression against its property bag (like quantifiers do).
+                if (Store is not null) {
+                    try {
+                        var targets = GetOutboundRelatedInstances(r.RelationshipName);
+                        if (targets.Count > 0) {
+                            var inner = PreprocessQuantifiers(r.TargetProperty);
+                            var result = EvaluateBodyOnTarget(inner, targets[0]);
+                            return DomainExpression.Literal(result);
+                        }
+                    }
+                    catch {
+                        // If resolution fails (no store, wrong direction, etc.),
+                        // fall through to the recursive pass-through below.
+                    }
+                }
+                return r with { TargetProperty = PreprocessQuantifiers(r.TargetProperty) };
             case OwnedAccess o: return o with { Inner = PreprocessQuantifiers(o.Inner) };
             case Exists e: return e with { Target = PreprocessQuantifiers(e.Target) };
             case NotExists ne: return ne with { Target = PreprocessQuantifiers(ne.Target) };

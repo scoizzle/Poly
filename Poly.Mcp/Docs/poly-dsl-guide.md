@@ -431,6 +431,7 @@ Expression JSON format (for `add_policy` / `simulate_policy`):
 | OR | `{"or":[...]}` |
 | NOT | `{"not":{...}}` |
 | Literal | `{"literal":true}` |
+| Relationship (path-prefix) | `{"relationship":"profile","inner":{"property":"City","op":"==","value":"Metropolis"}}` |
 
 ### Expression Grammar (Shipped in Phase 1a/1b)
 
@@ -535,7 +536,6 @@ against the target entity; reverse-side / self-rel / ManyToMany / OneToOne rejec
 
 **Not yet shipped** (planned for future phases):
 - Date operations
-- Owned/nested access in expressions
 
 ### Expression Gaps — IR vs DSL
 
@@ -547,12 +547,12 @@ and lowering pipeline but are **not yet authorable in product DSL**:
 | Relationship navigation | ✅ | ✅ **shipped** (path-prefix) | `customer Tier`, not `customer.Tier` |
 | Existence check | ✅ | ✅ **shipped** (postfix `Rel exists`) | `assignee exists` / `not assignee exists` |
 | Scoped filter (`where`) | ✅ | ✅ **shipped** (`rel where and-chain`) | `customer where Status is "Active"` |
-| Owned/nested access | ✅ | Pull (same path-prefix approach) | `profile Field is "x"` — not `profile.Field` |
+| Owned/nested access | ✅ | ✅ **shipped** (path-prefix) | `profile City is "Metropolis"` — same space-delimited syntax as relationship nav |
 | Collection quantifiers (`any`/`all`/`none`/`count`) | ✅ | ✅ **Q3′ shipped** | `any items where Status is "Open"`; store-aware runtime eval before VM lowering. |
 | Arithmetic (`+`, `-`, `*`, `/`) | ✅ | ✅ **shipped** | `Total + 5 > 10`, `Total * 0.9` |
 | Action parameters | ✅ | ✅ **shipped** | `actionName: action (param: Text) { ... }` |
 
-**JSON policies** (`add_policy` / `simulate_policy`) support comparison + and/or/not + literal only — **not** path-prefix, `Rel exists`, or `where`. Use DSL for related reads; JSON remains limited to local property comparisons and logical composition.
+**JSON policies** (`add_policy` / `simulate_policy`) support comparison + and/or/not + literal + **relationship navigation**: `{"relationship":"profile","inner":{…}}`. For full expression capabilities (exists, where, quantifiers), use DSL policies instead.
 
 ## 9. Supported Effect Summary
 

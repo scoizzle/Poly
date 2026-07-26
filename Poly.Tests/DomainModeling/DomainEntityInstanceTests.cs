@@ -2063,4 +2063,60 @@ public class DomainEntityInstanceTests {
         var policy = domain.Types.OfType<Entity>().First(e => e.Name == "Source").Policies.First(p => p.Name == "HasBig");
         await Assert.That(() => src.EvaluatePolicy(policy)).Throws<InvalidOperationException>();
     }
+
+    // ── owned-3: to-one RelationshipNavigation in policy evaluation ──
+
+    [Test]
+    public async Task EvaluatePolicy_ToOneRelationshipNav_ResolvesLinkedProperty() {
+        var target = new Entity("Profile", [
+            new Property("City", new DomainTypeReference("Text"), [])
+        ], [], [], []);
+        var source = new Entity("Customer", [
+            new Property("Name", new DomainTypeReference("Text"), [])
+        ], [], [
+            new Policy("IsUrban", DomainExpression.RelationshipNav("profile",
+                DomainExpression.Equal(
+                    DomainExpression.Property("City"),
+                    DomainExpression.Literal("Metropolis"))))
+        ], []);
+        var rel = new Relationship("profile",
+            new DomainTypeReference("Customer"), new DomainTypeReference("Profile"),
+            RelationshipCardinality.OneToOne, []);
+        var domain = new Domain("Test", [source, target], [rel]);
+        var store = new DomainInstanceStore();
+        var cust = DomainEntityInstance.Create(source, new Dictionary<string, object?> { ["Name"] = "Alice" }, domain: domain);
+        var profile = DomainEntityInstance.Create(target, new Dictionary<string, object?> { ["City"] = "Metropolis" }, domain: domain);
+        store.Add(cust); store.Add(profile);
+        store.Link("profile", cust, profile);
+
+        var policy = domain.Types.OfType<Entity>().First(e => e.Name == "Customer").Policies.First(p => p.Name == "IsUrban");
+        await Assert.That(cust.EvaluatePolicy(policy)).IsTrue();
+    }
+
+    [Test]
+    public async Task EvaluatePolicy_ToOneRelationshipNav_NonMatching_ReturnsFalse() {
+        var target = new Entity("Profile", [
+            new Property("City", new DomainTypeReference("Text"), [])
+        ], [], [], []);
+        var source = new Entity("Customer", [
+            new Property("Name", new DomainTypeReference("Text"), [])
+        ], [], [
+            new Policy("IsUrban", DomainExpression.RelationshipNav("profile",
+                DomainExpression.Equal(
+                    DomainExpression.Property("City"),
+                    DomainExpression.Literal("Metropolis"))))
+        ], []);
+        var rel = new Relationship("profile",
+            new DomainTypeReference("Customer"), new DomainTypeReference("Profile"),
+            RelationshipCardinality.OneToOne, []);
+        var domain = new Domain("Test", [source, target], [rel]);
+        var store = new DomainInstanceStore();
+        var cust = DomainEntityInstance.Create(source, new Dictionary<string, object?> { ["Name"] = "Bob" }, domain: domain);
+        var profile = DomainEntityInstance.Create(target, new Dictionary<string, object?> { ["City"] = "Gotham" }, domain: domain);
+        store.Add(cust); store.Add(profile);
+        store.Link("profile", cust, profile);
+
+        var policy = domain.Types.OfType<Entity>().First(e => e.Name == "Customer").Policies.First(p => p.Name == "IsUrban");
+        await Assert.That(cust.EvaluatePolicy(policy)).IsFalse();
+    }
 }

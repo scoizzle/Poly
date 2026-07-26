@@ -230,6 +230,63 @@ public class OracleToolTests {
         await Assert.That(response.Message).Contains("not present");
     }
 
+    // ── owned-2: relationship navigation in JSON expressions ──
+
+    [Test]
+    public async Task SimulatePolicy_RelationshipJson_Accepted() {
+        // owned-2: verify the JSON format is parsed and accepted by simulate_policy.
+        // Full runtime evaluation requires store-linked instances (owned-3).
+        var response = OracleTool.SimulatePolicy(
+            @"{""relationship"":""profile"",""inner"":{""property"":""City"",""op"":""=="",""value"":""Metropolis""}}",
+            @"{""City"":""Metropolis""}");
+
+        // The JSON is valid and should parse successfully
+        await Assert.That(response.Success).IsTrue();
+        // The VM evaluates the expression; relationship nav may not resolve
+        // against a flat bag, but parsing and lowering succeeds without error.
+    }
+
+    [Test]
+    public async Task AddPolicy_RelationshipJson_ValidSyntax() {
+        // Verify the JSON format is accepted via add_policy
+        var (sessionId, _) = McpSessionStore.Create("Owned2Test");
+        DslTool.ApplyDsl(sessionId, """
+            domain Owned2Test
+            Profile: entity { City: Text }
+            Customer: entity {
+              Name: Text
+              profile: owned Profile
+            }
+            """);
+
+        // Add policy using the relationship JSON format
+        var response = PolicyTool.AddPolicy(sessionId, "Customer", "IsUrban",
+            @"{""relationship"":""profile"",""inner"":{""property"":""City"",""op"":""=="",""value"":""Metropolis""}}");
+
+        await Assert.That(response.Success).IsTrue();
+        await Assert.That(response.Message).Contains("IsUrban");
+    }
+
+    [Test]
+    public async Task SimulatePolicy_Relationship_MissingInner_Fails() {
+        var response = OracleTool.SimulatePolicy(
+            @"{""relationship"":""profile""}",
+            @"{""City"":""Metropolis""}");
+
+        await Assert.That(response.Success).IsFalse();
+        await Assert.That(response.Message).Contains("inner");
+    }
+
+    [Test]
+    public async Task SimulatePolicy_Relationship_EmptyName_Fails() {
+        var response = OracleTool.SimulatePolicy(
+            @"{""relationship"":"""",""inner"":{""property"":""City"",""op"":""=="",""value"":""Metropolis""}}",
+            @"{""City"":""Metropolis""}");
+
+        await Assert.That(response.Success).IsFalse();
+        await Assert.That(response.Message).Contains("not be empty");
+    }
+
     // ── A2.2: get_domain_suggestions smoke test ────────────────
 
     [Test]

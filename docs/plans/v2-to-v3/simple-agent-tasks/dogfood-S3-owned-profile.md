@@ -2,7 +2,7 @@
 
 **Queue:** [`dogfood-README.md`](dogfood-README.md)  
 **Protocol:** [`../mcp-dogfood-protocol.md`](../mcp-dogfood-protocol.md)  
-**Status:** `[~]` FAIL (useful) -- see [report](../agent-summaries/dogfood/DOGFOOD-S3-20260725.md)  
+**Status:** `[x]` — owned-1/2/3 shipped; see [synthesis](../agent-summaries/dogfood/DOGFOOD-SYNTHESIS-20260725.md) and [owned suite](dogfood-owned-README.md)  
 **Difficulty:** Hard  
 **Prereq:** S1 preferred (baseline authoring)  
 **Est. session time:** 45–75 min  

@@ -23,6 +23,9 @@ namespace Poly.DomainModeling.Lowering;
 ///
 /// // Literal
 /// {"literal": true}
+///
+/// // Relationship navigation (path-prefix)
+/// {"relationship":"profile", "inner":{"property":"City","op":"==","value":"Metropolis"}}
 /// </code>
 /// </summary>
 public static class DomainExpressionJsonParser {
@@ -50,13 +53,14 @@ public static class DomainExpressionJsonParser {
         bool hasOr = e.TryGetProperty("or", out var orEl);
         bool hasNot = e.TryGetProperty("not", out var notEl);
         bool hasLit = e.TryGetProperty("literal", out var litEl);
+        bool hasRel = e.TryGetProperty("relationship", out var relEl);
 
         int branches = (hasProp ? 1 : 0) + (hasAnd ? 1 : 0) + (hasOr ? 1 : 0) +
-                       (hasNot ? 1 : 0) + (hasLit ? 1 : 0);
+                       (hasNot ? 1 : 0) + (hasLit ? 1 : 0) + (hasRel ? 1 : 0);
 
         if (branches == 0)
             throw new ArgumentException(
-                "Expression must specify 'property', 'and', 'or', 'not', or 'literal'.");
+                "Expression must specify 'property', 'and', 'or', 'not', 'literal', or 'relationship'.");
 
         if (branches > 1)
             throw new ArgumentException(
@@ -129,6 +133,20 @@ public static class DomainExpressionJsonParser {
             if (notEl.ValueKind != JsonValueKind.Object)
                 throw new ArgumentException("'not' must be a JSON object.");
             return DomainExpression.Not(ParseElement(notEl));
+        }
+
+        // ── Relationship navigation (path-prefix) ──────────────
+        if (hasRel) {
+            var relationshipName = relEl.GetString();
+            if (string.IsNullOrWhiteSpace(relationshipName))
+                throw new ArgumentException("Relationship name must not be empty.");
+
+            if (!e.TryGetProperty("inner", out var innerEl))
+                throw new ArgumentException(
+                    "'inner' expression is required for relationship navigation.");
+
+            var inner = ParseElement(innerEl);
+            return DomainExpression.RelationshipNav(relationshipName, inner);
         }
 
         throw new InvalidOperationException("Unexpected: no branch matched after validation.");

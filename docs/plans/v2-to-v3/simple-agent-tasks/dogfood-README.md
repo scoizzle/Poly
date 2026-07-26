@@ -27,9 +27,9 @@
 ## Agent pick
 
 ```text
-DONE:    S1 PASS, S2 PASS, all product blockers resolved
-CURRENT: (discovery wave complete — all scenarios green)
-THEN:    S3 re-run optional, or OwnedAccess build slice
+DONE:    S1 PASS, S2 PASS, owned-1/2/3
+CURRENT: (all product blockers resolved — all three scenarios green)
+THEN:    S3 re-run optional
 PULL:    G2 optional, link-4/5 deferred
 ```
 

@@ -148,9 +148,17 @@ public sealed class Matcher<TKind> where TKind : struct {
                 }
                 return true;
 
-            case AnyToken<TKind>:
-                consumed = [_reader.Peek(offset + 1)];
-                return true;
+            case AnyToken<TKind>: {
+                    var wild = _reader.Peek(offset + 1);
+                    // Don't match virtual end-of-file tokens — prevents infinite
+                    // scan loops that would keep consuming cached EOFs.
+                    if (_reader.IsEndOfFile(wild.Kind)) {
+                        consumed = [];
+                        return false;
+                    }
+                    consumed = [wild];
+                    return true;
+                }
 
             case ManyOf<TKind> many: {
                     var manyTokens = new List<Token<TKind>>();

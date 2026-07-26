@@ -153,6 +153,12 @@ public sealed class PatternBuilder<TKind> where TKind : struct {
         return this;
     }
 
+    /// <summary>Appends an optional compound element (any <see cref="IPatternElement{TKind}"/>).</summary>
+    public PatternBuilder<TKind> Optional(IPatternElement<TKind> element) {
+        _elements.Add(new Optional<TKind>(element));
+        return this;
+    }
+
     /// <summary>
     /// Appends a repeat: zero or more matches of patterns from the named rule.
     /// </summary>

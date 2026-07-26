@@ -293,4 +293,99 @@ public class PipelineMergeMetadataTests {
         await Assert.That(analysis.Diagnostics.Any(d =>
             d.Message.Contains("Duplicate"))).IsTrue();
     }
+
+    // ── Pipeline integrity: every pass produced expected output ──
+
+    [Test]
+    public async Task DomainAnalysis_AllPasses_ProduceExpectedMetadata() {
+        // Every pass in UseDomainModelAnalysisPipeline must produce its expected
+        // metadata on a representative domain. This catches passes that silently
+        // skip, exception early, or misorder dependencies.
+        var domain = ParseDomain("""
+            domain Test
+            Profile: entity { City: Text }
+            Customer: entity {
+              Name: Text required
+              Email: Text unique
+              Status: Text default(Active)
+              profile: owned Profile
+              GoodStanding: policy { Status is "Active" }
+              Active: stage {
+                Submit: action { transition to Done }
+              }
+              Done: stage { }
+            }
+            Loan: entity {
+              Amount: Number
+              customer: Customer
+              Active: stage { }
+            }
+            """);
+
+        var analysis = DomainModelAnalyzer.Analyze(domain);
+
+        // Telemetry — all passes must have run (count matches UseDomainModelAnalysisPipeline)
+        // 18 passes registered in the pipeline
+        await Assert.That(analysis.Telemetry.Passes.Count).IsGreaterThanOrEqualTo(18);
+        await Assert.That(analysis.Telemetry.Passes.All(p => p.Elapsed > TimeSpan.Zero)).IsTrue();
+
+        // ── Metadata produced by each pass ──
+
+        // StructuralDomainAnalyzer — diagnostics only (no metadata)
+        var structuralError = analysis.Diagnostics.Any(d => d.Code is "DMSTR001" or "DMSTR002" or "DMSTR003");
+        await Assert.That(structuralError).IsFalse();
+
+        // SemanticDomainAnalyzer — DomainTypeLookupMetadata, ResolvedTypeReferenceMetadata
+        await Assert.That(analysis.GetMetadata<DomainTypeLookupMetadata>(default)).IsNotNull();
+
+        // PolicyConstraintAnalyzer — RequiredPropertiesMetadata (per entity with policies)
+        var customerEntity = domain.Types.OfType<Entity>().First(e => e.Name == "Customer");
+        await Assert.That(analysis.GetMetadata<RequiredPropertiesMetadata>(customerEntity)).IsNotNull();
+
+        // EffectAnalyzer — diagnostics only (effect binding/validation)
+
+        // ConstraintQualityAnalyzer — diagnostics only
+
+        // CapabilityAnalyzer — internal metadata (ActionCapabilityMetadata, etc.)
+        // tested via downstream pass consumption
+
+        // ConstraintPropagationAnalyzer — DownstreamConstraintsMetadata (internal)
+
+        // RuleCoverageAnalyzer — diagnostics only
+
+        // ContractIntegrationAnalyzer — diagnostics only
+
+        // EntityStructureAnalyzer — EntityStructureMetadata per entity
+        var customer = domain.Types.OfType<Entity>().First(e => e.Name == "Customer");
+        var profile = domain.Types.OfType<Entity>().First(e => e.Name == "Profile");
+        var loan = domain.Types.OfType<Entity>().First(e => e.Name == "Loan");
+        await Assert.That(analysis.GetMetadata<EntityStructureMetadata>(customer)).IsNotNull();
+        await Assert.That(analysis.GetMetadata<EntityStructureMetadata>(profile)).IsNotNull();
+        await Assert.That(analysis.GetMetadata<EntityStructureMetadata>(loan)).IsNotNull();
+
+        // SubscriptionAnalyzer — diagnostics only
+
+        // EffectTopologyPass — EffectTopologyMetadata
+        await Assert.That(analysis.GetMetadata<EffectTopologyMetadata>(domain)).IsNotNull();
+
+        // OwnershipAggregatePass — OwnershipAggregateMetadata
+        await Assert.That(analysis.GetMetadata<OwnershipAggregateMetadata>(domain)).IsNotNull();
+
+        // BehaviorPass — BehaviorMetadata
+        await Assert.That(analysis.GetMetadata<BehaviorMetadata>(domain)).IsNotNull();
+
+        // CrossReferencePass — EntityDependencyGraphMetadata
+        await Assert.That(analysis.GetMetadata<EntityDependencyGraphMetadata>(domain)).IsNotNull();
+
+        // StoragePass — StorageMappingMetadata
+        await Assert.That(analysis.GetMetadata<StorageMappingMetadata>(domain)).IsNotNull();
+
+        // TransportPass — TransportMetadata
+        await Assert.That(analysis.GetMetadata<TransportMetadata>(domain)).IsNotNull();
+
+        // AuthoringSuggestionAnalyzer — diagnostics only (DMAS001 hints)
+
+        // EntitySyntaxPass — EntitySyntaxMetadata
+        await Assert.That(analysis.GetMetadata<EntitySyntaxMetadata>(domain)).IsNotNull();
+    }
 }

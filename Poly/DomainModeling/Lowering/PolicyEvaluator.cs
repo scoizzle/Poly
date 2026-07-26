@@ -1,13 +1,13 @@
+using Poly.Analysis;
+using Poly.Ast;
 using Poly.Interpretation;
 using Poly.Interpretation.Analysis;
 using Poly.Interpretation.Analysis.ControlFlow;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Interpretation.LinqExpressions;
 using Poly.Interpretation.Vm;
-using Poly.Syntax;
-using Poly.Syntax.Analysis;
 
-using SN = Poly.Syntax.Nodes;
+using SN = Poly.Ast.Nodes;
 
 namespace Poly.DomainModeling.Lowering;
 

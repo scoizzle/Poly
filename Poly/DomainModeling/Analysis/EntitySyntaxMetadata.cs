@@ -1,5 +1,5 @@
-using Poly.Syntax.Analysis;
-using Poly.Syntax.Nodes;
+using Poly.Analysis;
+using Poly.Ast.Nodes;
 
 namespace Poly.DomainModeling.Analysis;
 

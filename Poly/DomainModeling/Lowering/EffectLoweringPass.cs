@@ -1,6 +1,6 @@
+using Poly.Ast.Nodes;
 using Poly.DomainModeling.Constraints;
 using Poly.DomainModeling.Effects;
-using Poly.Syntax.Nodes;
 
 namespace Poly.DomainModeling.Lowering;
 
@@ -78,7 +78,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
             // The domain type names "DateTime", "Timestamp", "Date", "DateOnly"
             // map to CLR types where + long is invalid — use AddDays instead.
             if (entityProp is not null
-                && value is Syntax.Nodes.Add { LeftHandValue: Node lhs, RightHandValue: Node rhs }
+                && value is Ast.Nodes.Add { LeftHandValue: Node lhs, RightHandValue: Node rhs }
                 && IsDateTimeDomainType(entityProp.Type.TypeName)) {
                 value = new Invoke(new Member(lhs, "AddDays"), [rhs]);
             }
@@ -256,7 +256,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
 
         // if (!fineResult.IsSuccess) throw new InvalidOperationException(fineResult.ErrorMessage);
         nds.Add(new IfStatement(
-            new Syntax.Nodes.Not(new Member(new Variable(resultVar), "IsSuccess")),
+            new Ast.Nodes.Not(new Member(new Variable(resultVar), "IsSuccess")),
             new Block(new Node[] {
                 new ThrowStatement(
                     new New(

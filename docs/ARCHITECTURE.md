@@ -78,7 +78,7 @@ This document describes the architecture of the Poly system — a neurosymbolic 
 
 ## 1. Syntax — AST Layer
 
-**Location:** `Poly/Syntax/`
+**Location:** `Poly/Ast/`
 
 The AST is a forest of immutable C# record types. Nodes carry no semantic information — they are pure data. All semantic resolution is the job of analysis passes.
 
@@ -98,7 +98,7 @@ The AST is a forest of immutable C# record types. Nodes carry no semantic inform
 
 ### Expression Node Types
 
-All in `Poly/Syntax/Nodes/`:
+All in `Poly/Ast/Nodes/`:
 
 **Arithmetic:** `Add`, `Subtract`, `Multiply`, `Divide`, `Modulo`, `UnaryMinus`
 
@@ -128,7 +128,7 @@ All in `Poly/Syntax/Nodes/`:
 
 ### Type Reference Nodes
 
-All in `Poly/Syntax/Nodes/` (some in `TypeDefinitions/` subdirectory):
+All in `Poly/Ast/Nodes/` (some in `TypeDefinitions/` subdirectory):
 
 | Node | Purpose |
 |---|---|
@@ -144,7 +144,7 @@ All in `Poly/Syntax/Nodes/` (some in `TypeDefinitions/` subdirectory):
 
 ### Type Definition Nodes
 
-All in `Poly/Syntax/Nodes/TypeDefinitions/`:
+All in `Poly/Ast/Nodes/TypeDefinitions/`:
 
 | Node | Purpose |
 |---|---|
@@ -159,9 +159,9 @@ All in `Poly/Syntax/Nodes/TypeDefinitions/`:
 
 ## 2. Analysis — Semantic Pipeline
 
-**Location:** `Poly/Interpretation/Analysis/`, `Poly/Syntax/Analysis/`
+**Location:** `Poly/Interpretation/Analysis/`, `Poly/Analysis/`
 
-### Framework (`Poly/Syntax/Analysis/`)
+### Framework (`Poly/Analysis/`)
 
 | File | Purpose |
 |---|---|
@@ -611,10 +611,10 @@ Mutable directed acyclic graph with transactional mutation support. Used for int
 ## File Index
 
 ### Syntax
-- Base: `Poly/Syntax/Node.cs`, `NodeId.cs`, `NodeExtensions.cs`
-- Nodes: `Poly/Syntax/Nodes/` (all expression and statement types)
-- Type defs: `Poly/Syntax/Nodes/TypeDefinitions/`
-- Analysis framework: `Poly/Syntax/Analysis/`
+- Base: `Poly/Ast/Node.cs`, `NodeId.cs`, `NodeExtensions.cs`
+- Nodes: `Poly/Ast/Nodes/` (all expression and statement types)
+- Type defs: `Poly/Ast/Nodes/TypeDefinitions/`
+- Analysis framework: `Poly/Analysis/`
 
 ### Interpretation
 - Analysis passes: `Poly/Interpretation/Analysis/Semantics/`

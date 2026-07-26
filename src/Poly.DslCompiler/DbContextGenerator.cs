@@ -1,11 +1,11 @@
+using Poly.Ast;
+using Poly.Ast.Nodes;
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Constraints;
 using Poly.DomainModeling.Lowering;
 using Poly.Interpretation.CSharp;
 using Poly.Introspection;
-using Poly.Syntax;
-using Poly.Syntax.Nodes;
 
 namespace Poly.DslCompiler;
 

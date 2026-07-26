@@ -1,6 +1,6 @@
+using Poly.Analysis;
+using Poly.Ast.Nodes;
 using Poly.Interpretation.Analysis.ControlFlow;
-using Poly.Syntax.Analysis;
-using Poly.Syntax.Nodes;
 
 namespace Poly.Interpretation.Analysis.Semantics;
 

@@ -1,4 +1,4 @@
-using SN = Poly.Syntax.Nodes;
+using SN = Poly.Ast.Nodes;
 
 namespace Poly.DomainModeling.Lowering;
 

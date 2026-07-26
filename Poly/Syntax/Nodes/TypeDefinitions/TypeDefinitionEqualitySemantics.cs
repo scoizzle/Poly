@@ -1,4 +1,4 @@
-namespace Poly.Syntax.Nodes;
+namespace Poly.Ast.Nodes;
 
 public enum TypeDefinitionEqualitySemantics {
     Reference,

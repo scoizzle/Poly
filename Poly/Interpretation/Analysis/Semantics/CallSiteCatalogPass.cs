@@ -1,8 +1,8 @@
 using System.Reflection;
 
+using Poly.Analysis;
+using Poly.Ast.Nodes;
 using Poly.Introspection.CommonLanguageRuntime;
-using Poly.Syntax.Analysis;
-using Poly.Syntax.Nodes;
 
 namespace Poly.Interpretation.Analysis.Semantics;
 

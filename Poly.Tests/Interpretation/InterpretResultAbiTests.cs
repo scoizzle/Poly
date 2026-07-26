@@ -1,6 +1,6 @@
+using Poly.Ast;
+using Poly.Ast.Nodes;
 using Poly.Interpretation;
-using Poly.Syntax;
-using Poly.Syntax.Nodes;
 
 namespace Poly.Tests.Interpretation;
 

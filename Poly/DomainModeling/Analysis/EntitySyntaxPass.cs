@@ -1,4 +1,4 @@
-using Poly.Syntax.Analysis;
+using Poly.Analysis;
 
 namespace Poly.DomainModeling.Analysis;
 
@@ -27,7 +27,7 @@ internal sealed class EntitySyntaxPass : INodeAnalyzer {
             // Projection failed — likely due to partial/immature domain state.
             // Metadata simply won't be available; consumers check for null.
             context.ReportDiagnostic(domain,
-                Poly.Syntax.Analysis.DiagnosticSeverity.Warning,
+                Poly.Analysis.DiagnosticSeverity.Warning,
                 $"Entity syntax projection failed: {ex.Message}");
         }
     }

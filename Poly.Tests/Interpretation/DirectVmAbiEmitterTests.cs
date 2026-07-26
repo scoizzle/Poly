@@ -1,9 +1,9 @@
+using Poly.Ast;
+using Poly.Ast.Nodes;
 using Poly.Interpretation;
 using Poly.Interpretation.Vm;
-using Poly.Syntax;
-using Poly.Syntax.Nodes;
 
-using SN = Poly.Syntax.Nodes;
+using SN = Poly.Ast.Nodes;
 
 namespace Poly.Tests.Interpretation;
 

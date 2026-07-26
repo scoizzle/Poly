@@ -1,4 +1,4 @@
-namespace Poly.Syntax.Nodes;
+namespace Poly.Ast.Nodes;
 
 /// <summary>
 /// AST node representing a reference to a primitive type by its ID.

@@ -1,10 +1,10 @@
+using Poly.Analysis;
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Parsing;
 using Poly.DslCompiler;
-using Poly.Syntax.Analysis;
 
 namespace Poly.Tests.DomainModeling.Analysis;
 

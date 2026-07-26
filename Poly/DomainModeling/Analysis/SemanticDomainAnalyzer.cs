@@ -1,7 +1,7 @@
+using Poly.Analysis;
 using Poly.DomainModeling;
 using Poly.DomainModeling.Effects;
 using Poly.Introspection;
-using Poly.Syntax.Analysis;
 
 namespace Poly.DomainModeling.Analysis;
 

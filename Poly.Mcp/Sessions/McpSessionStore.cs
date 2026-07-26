@@ -1,10 +1,10 @@
 using System.Collections.Concurrent;
 
+using Poly.Analysis;
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Bootstrap;
 using Poly.DomainModeling.Evolution;
-using Poly.Syntax.Analysis;
 
 namespace Poly.Mcp.Sessions;
 

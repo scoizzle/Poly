@@ -1,6 +1,6 @@
+using Poly.Analysis;
 using Poly.DomainModeling;
 using Poly.DomainModeling.Lowering;
-using Poly.Syntax.Analysis;
 
 namespace Poly.DomainModeling.Analysis;
 

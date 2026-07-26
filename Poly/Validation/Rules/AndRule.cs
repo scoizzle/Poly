@@ -1,6 +1,6 @@
-using Poly.Syntax;
+using Poly.Ast;
 
-using static Poly.Syntax.NodeExtensions;
+using static Poly.Ast.NodeExtensions;
 
 namespace Poly.Validation.Rules;
 

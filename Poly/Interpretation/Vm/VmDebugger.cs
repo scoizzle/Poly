@@ -1,4 +1,4 @@
-using Poly.Syntax.Nodes;
+using Poly.Ast.Nodes;
 
 namespace Poly.Interpretation.Vm;
 

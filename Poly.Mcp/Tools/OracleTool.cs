@@ -15,7 +15,7 @@ using Poly.Interpretation;
 using Poly.Interpretation.CSharp;
 using Poly.Mcp.Sessions;
 
-using Syntactic = Poly.Syntax.Nodes;
+using Syntactic = Poly.Ast.Nodes;
 
 namespace Poly.Mcp.Tools;
 
@@ -47,7 +47,7 @@ internal sealed class OracleTool {
         return BuildNodeData(lowered);
     }
 
-    private static LoweredNodeData BuildNodeData(Syntax.Node node) {
+    private static LoweredNodeData BuildNodeData(Ast.Node node) {
         return node switch {
             Syntactic.Parameter p => new LoweredNodeData("Parameter", p.Name, null),
             Syntactic.Constant c => new LoweredNodeData("Constant", c.Value?.ToString() ?? "null", null),
@@ -70,7 +70,7 @@ internal sealed class OracleTool {
         };
     }
 
-    private static string? GetMemberName(Syntax.Node node) =>
+    private static string? GetMemberName(Ast.Node node) =>
         node is Syntactic.Member m ? m.MemberName : node.ToString();
 
     private static DescribeExpressionData DescribeExpression(DomainExpression expr) {
@@ -151,15 +151,15 @@ internal sealed class OracleTool {
 
     /// <summary>
     /// Runs the Interpreter's 13-pass Syntax AST analysis on a lowered node
-    /// and returns the <see cref="Syntax.Analysis.AnalysisResult"/>.
+    /// and returns the <see cref="AnalysisResult"/>.
     /// Returns null if analysis is not available (no regression).
     /// <summary>
     /// Runs the Interpreter's 13-pass Syntax AST analysis on a lowered node.
     /// If analysis reports errors, a non-null <paramref name="error"/> is set.
     /// On success, <paramref name="analysis"/> is set and <paramref name="error"/> is null.
     /// </summary>
-    private static bool TryAnalyze(Syntax.Node lowered,
-        out Syntax.Analysis.AnalysisResult? analysis,
+    private static bool TryAnalyze(Ast.Node lowered,
+        out Poly.Analysis.AnalysisResult? analysis,
         out DomainToolResponse? error) {
         analysis = null;
         error = null;
@@ -174,7 +174,7 @@ internal sealed class OracleTool {
 
         if (analysis.HasErrors) {
             var errorDiags = analysis.Diagnostics
-                .Where(d => d.Severity == Poly.Syntax.Analysis.DiagnosticSeverity.Error)
+                .Where(d => d.Severity == Poly.Analysis.DiagnosticSeverity.Error)
                 .ToList();
             error = new DomainToolResponse(Success: false,
                 Message: $"C# generation blocked: analysis found {errorDiags.Count} error(s).",
@@ -199,7 +199,7 @@ internal sealed class OracleTool {
     /// Generates C# from a lowered node, running Interpreter analysis first.
     /// Returns the C# text on success, or an error with diagnostics if analysis failed.
     /// </summary>
-    private static DomainToolResponse CSharpWithAnalysis(Syntax.Node lowered, string successMessage,
+    private static DomainToolResponse CSharpWithAnalysis(Ast.Node lowered, string successMessage,
         Func<string, object>? buildData = null, string[]? affordances = null) {
         if (!TryAnalyze(lowered, out var analysis, out var error))
             return error!;
@@ -400,7 +400,7 @@ internal sealed class OracleTool {
     /// <summary>
     /// Parses and lowers a DomainExpression to a Syntax AST Node.
     /// </summary>
-    private static Syntax.Node LowerExpressionToNode(DomainExpression expr) {
+    private static Ast.Node LowerExpressionToNode(DomainExpression expr) {
         var pass = new DomainExpressionLoweringPass();
         return pass.Lower(expr, new Syntactic.Parameter("entity"));
     }

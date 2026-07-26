@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
 
-using Poly.Syntax;
+using Poly.Ast;
 
 namespace Poly.Validation;
 

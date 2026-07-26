@@ -1,4 +1,4 @@
-using Poly.Syntax.Analysis;
+using Poly.Analysis;
 
 namespace Poly.DomainModeling.Analysis;
 

@@ -1,3 +1,4 @@
+using Poly.Analysis;
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Effects;
@@ -6,7 +7,6 @@ using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Parsing;
 using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
-using Poly.Syntax.Analysis;
 namespace Poly.Tests.DomainModeling.Lowering;
 
 /// <summary>

@@ -7,7 +7,7 @@ using Poly.Interpretation.Vm;
 
 using Expr = System.Linq.Expressions.Expression;
 using Exprs = System.Linq.Expressions;
-using SN = Poly.Syntax.Nodes;
+using SN = Poly.Ast.Nodes;
 
 namespace Poly.Tests.TestHelpers;
 

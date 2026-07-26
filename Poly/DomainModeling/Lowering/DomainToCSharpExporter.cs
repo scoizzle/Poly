@@ -1,11 +1,11 @@
+using Poly.Analysis;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Constraints;
 using Poly.DomainModeling.Effects;
-using Poly.Syntax.Analysis;
 
 using AccessModifier = Poly.Introspection.AccessModifier;
 using PrimType = Poly.Introspection.PrimitiveType;
-using Syntactic = Poly.Syntax.Nodes;
+using Syntactic = Poly.Ast.Nodes;
 
 namespace Poly.DomainModeling.Lowering;
 

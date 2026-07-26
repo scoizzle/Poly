@@ -1,5 +1,6 @@
 using System.Linq;
 
+using Poly.Analysis;
 using Poly.DomainModeling;
 using Poly.DomainModeling.Lowering;
 using Poly.Interpretation;
@@ -8,9 +9,8 @@ using Poly.Interpretation.Analysis.ControlFlow;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Interpretation.LinqExpressions;
 using Poly.Interpretation.Vm;
-using Poly.Syntax.Analysis;
 
-using SN = Poly.Syntax.Nodes;
+using SN = Poly.Ast.Nodes;
 
 namespace Poly.Tests.DomainModeling.Lowering;
 

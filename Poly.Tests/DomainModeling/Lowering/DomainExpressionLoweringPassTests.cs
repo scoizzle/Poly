@@ -1,8 +1,8 @@
 using Poly.DomainModeling;
 using Poly.DomainModeling.Lowering;
 
-using Parameter = Poly.Syntax.Nodes.Parameter;
-using SN = Poly.Syntax.Nodes;
+using Parameter = Poly.Ast.Nodes.Parameter;
+using SN = Poly.Ast.Nodes;
 
 namespace Poly.Tests.DomainModeling.Lowering;
 

@@ -1,6 +1,6 @@
 namespace Poly.Interpretation.Analysis.Semantics;
 
-using Poly.Syntax.Nodes;
+using Poly.Ast.Nodes;
 
 /// <summary>Resolves both types and member references for all AST nodes.
 /// Merged from the former separate TypeResolver + MemberResolver passes

@@ -1,3 +1,4 @@
+using Poly.Analysis;
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Evolution;
@@ -6,7 +7,6 @@ using Poly.DomainModeling.Parsing;
 using Poly.Interpretation.CSharp;
 using Poly.Packs.Sqlite;
 using Poly.Packs.SqlServer;
-using Poly.Syntax.Analysis;
 
 namespace Poly.DslCompiler;
 

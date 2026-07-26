@@ -1,10 +1,10 @@
+using Poly.Analysis;
+using Poly.Ast.Nodes;
 using Poly.DomainModeling.Effects;
 using Poly.DomainModeling.Lowering;
 using Poly.Interpretation;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Interpretation.Vm;
-using Poly.Syntax.Analysis;
-using Poly.Syntax.Nodes;
 
 using Prim = Poly.Introspection.PrimitiveType;
 

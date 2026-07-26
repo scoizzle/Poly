@@ -1,3 +1,5 @@
+using Poly.Ast;
+using Poly.Ast.Nodes;
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Evolution;
@@ -5,8 +7,6 @@ using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Parsing;
 using Poly.DslCompiler;
 using Poly.Interpretation.CSharp;
-using Poly.Syntax;
-using Poly.Syntax.Nodes;
 using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.DomainModeling.Lowering;

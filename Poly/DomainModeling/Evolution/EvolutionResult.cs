@@ -1,4 +1,4 @@
-using AnalysisResult = Poly.Syntax.Analysis.AnalysisResult;
+using AnalysisResult = Poly.Analysis.AnalysisResult;
 
 namespace Poly.DomainModeling.Evolution;
 

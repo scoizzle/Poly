@@ -1,4 +1,4 @@
+global using Poly.Analysis;
+global using Poly.Ast;
+global using Poly.Ast.Nodes;
 global using Poly.Introspection;
-global using Poly.Syntax;
-global using Poly.Syntax.Analysis;
-global using Poly.Syntax.Nodes;

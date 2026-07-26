@@ -1,10 +1,10 @@
+using Poly.Analysis;
+using Poly.Ast;
+using Poly.Ast.Nodes;
 using Poly.Interpretation.Analysis;
 using Poly.Interpretation.Analysis.ConstantFolding;
 using Poly.Interpretation.Analysis.ControlFlow;
 using Poly.Interpretation.Analysis.Semantics;
-using Poly.Syntax;
-using Poly.Syntax.Analysis;
-using Poly.Syntax.Nodes;
 
 namespace Poly.Tests.Interpretation;
 

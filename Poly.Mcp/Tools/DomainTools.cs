@@ -4,6 +4,7 @@ using System.Text.Json.Serialization;
 
 using ModelContextProtocol.Server;
 
+using Poly.Analysis;
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Bootstrap;
@@ -13,8 +14,6 @@ using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Parsing;
 using Poly.DomainModeling.Queries;
 using Poly.Mcp.Sessions;
-using Poly.Syntax.Analysis;
-
 // Use shared McpAuthoring.Context for pack-aware parse/print.
 using static Poly.Mcp.Sessions.McpAuthoring;
 

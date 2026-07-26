@@ -3,7 +3,7 @@ using Poly.DomainModeling.Lowering;
 using Poly.Interpretation;
 using Poly.Interpretation.Vm;
 
-using SN = Poly.Syntax.Nodes;
+using SN = Poly.Ast.Nodes;
 
 namespace Poly.Tests.DomainModeling.Lowering;
 

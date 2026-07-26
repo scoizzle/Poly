@@ -4,11 +4,11 @@
 **Job:** Purpose, boundaries, and **existing machinery you must not reinvent**.  
 **Not this doc:** Execution plans (`docs/plans/`), decision history (`docs/decisions/`), product recipes, pass-writing tutorials.
 
-**Load rule:** Read this end-to-end before changing `Syntax`, `Interpretation`, `Introspection`, `DomainModeling`, or `Poly.Mcp`. Keep it short — if a change needs more prose here, link out instead of growing this file.
+**Load rule:** Read this end-to-end before changing `Poly.Ast`, `Poly.Analysis`, `Interpretation`, `Introspection`, `DomainModeling`, or `Poly.Mcp`. Keep it short — if a change needs more prose here, link out instead of growing this file.
 
 **Maintenance:** Update this file in the same change that alters a listed mechanism. Stale CORE is worse than no CORE.
 
-**Deferred packaging:** A future rename may split today’s `Poly.Syntax` into `Poly.Ast` + `Poly.Analysis` (nodes vs analysis framework). See [`docs/plans/poly-ast-analysis-module-split.md`](plans/poly-ast-analysis-module-split.md) — **do not execute** while other platform work is in flight. Until then, paths in this file remain `Syntax` / `Syntax/Analysis`.
+**Module split:** `Poly.Syntax` has been split into `Poly.Ast` (node records, NodeId, fluent API) + `Poly.Analysis` (analysis framework, metadata, node replacement). See [`docs/plans/poly-ast-analysis-module-split.md`](plans/poly-ast-analysis-module-split.md) (completed 2026-07-26). Paths in this file use the new layout.
 
 ---
 
@@ -45,7 +45,8 @@ TFM: `net10.0`, nullable on, zero external dependencies in core `Poly/`.
 
 | Concern | Owns | Must not |
 |---------|------|----------|
-| **Syntax** | `Node` records, `NodeId`, analysis framework (`Analyzer`, `AnalysisContext`, metadata store, **node replacement**) | Execution semantics, domain shapes, MCP session |
+| **Ast** | `Node` records, `NodeId`, fluent construction API | Execution semantics, domain shapes, analysis logic |
+| **Analysis** | Analysis framework (`Analyzer`, `AnalysisContext`, metadata store, **node replacement**) | Execution semantics, domain concepts, MCP session |
 | **Interpretation** | Semantic passes, `Interpreter`, `DirectVmAbiEmitter`, VM runtime | Domain concepts; one-off ABI/emitter forks for a single consumer |
 | **Introspection** | Platform-agnostic type/member model so Interpretation can **simulate any reasonable type system on any reasonable platform**; CLR is the first provider | Depending on Interpretation; baking one host into the core contract |
 | **DomainModeling** | Immutable `Domain`, evolution, `DomainExpression`, lower-to-AST; **stage transitions are the authorable observable** (no event/publish/subscribe surface — see `docs/decisions/2026-07-17-stage-transition-as-observable.md`) | Domain VM opcodes; tree rewrites outside analysis + node replacement |
@@ -73,7 +74,7 @@ Use these. If you think you need a parallel facility, stop and re-read this sect
 
 | Piece | Location |
 |-------|----------|
-| Framework | `Poly/Syntax/Analysis/` — `AnalyzerBuilder`, `Analyzer`, `AnalysisContext`, `AnalysisResult`, `NodeMetadataStore` |
+| Framework | `Poly/Analysis/` — `AnalyzerBuilder`, `Analyzer`, `AnalysisContext`, `AnalysisResult`, `NodeMetadataStore` |
 | Pass contract | `INodeAnalyzer` — post-order walk, `TryBeginAnalyzerVisit`, dependencies |
 | Facts on nodes | `IAnalysisMetadata` via `context.SetMetadata` / `GetMetadata<T>` |
 | Semantic passes | `Poly/Interpretation/Analysis/` (types, scopes, CFG, side effects, folding, …) |
@@ -90,7 +91,7 @@ Pass order and registry: `Poly/Interpretation/Analysis/README.md`. Authoring gui
 | | |
 |--|--|
 | **API** | `context.SetNodeReplacement(node, replacement)` / `provider.GetNodeReplacement(node)` |
-| **Impl** | `Poly/Syntax/Analysis/NodeReplacementMetadata.cs` (metadata; AST nodes stay immutable) |
+| **Impl** | `Poly/Analysis/NodeReplacementMetadata.cs` (metadata; AST nodes stay immutable) |
 | **Producer example** | `ConstantFoldingPass` — folds/simplifies, then `SetNodeReplacement` |
 | **Consumers** | `DirectVmAbiEmitter.CompileNode` (honors replacement before dispatch); `LinqExpressionGenerator` likewise |
 

@@ -113,8 +113,9 @@ The product guide is the single source of truth for MCP `apply_dsl`.
 
 | What | Where |
 |------|--------|
-| AST nodes | `Poly/Syntax/Nodes/` |
-| Analysis **framework** (context, metadata, node replacement) | `Poly/Syntax/Analysis/` |
+| AST nodes | `Poly/Ast/Nodes/` |
+| AST base (Node, NodeId, fluent API) | `Poly/Ast/` |
+| Analysis **framework** (context, metadata, node replacement) | `Poly/Analysis/` |
 | Semantic analysis **passes** | `Poly/Interpretation/Analysis/` |
 | VM + direct AST→VM compile | `Poly/Interpretation/Vm/` (`DirectVmAbiEmitter`, `Interpreter` façade) |
 | Type/member model + CLR host | `Poly/Introspection/` |

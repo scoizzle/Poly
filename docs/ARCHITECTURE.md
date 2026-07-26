@@ -1,18 +1,19 @@
 # Poly Architecture
 
-> **Status: historical / may be stale.** For the current short platform map (purpose, boundaries, critical support including node replacement and direct AST→VM), use **[`docs/CORE.md`](CORE.md)**. Prefer module READMEs under `Poly/*/` and ADRs under `docs/decisions/` over diagrams in this file when they conflict. Sections below that describe an intermediate **primitive IR** / separate µop-compiler path are **superseded** by direct AST→VM-ABI (`DirectVmAbiEmitter`).
-
-This document describes the architecture of the Poly system — a neurosymbolic platform where models codify algorithms and heuristics as composable macros in a symbolic IR, validated by the VM (canonical semantics), and compiled to native backends.
+> **Status: current.** For the short platform map (purpose, boundaries, critical machinery), use **[`docs/CORE.md`](CORE.md)**. Module READMEs under `Poly/*/` and ADRs under `docs/decisions/` provide deeper detail. This document describes the high-level architecture of the Poly system — a neurosymbolic platform where domain models and policies are authored as structured data, lowered to a symbolic AST, analyzed, then executed by the VM.
 
 ## System Overview
 
 ```
+DomainModeling ──[DomainExpression lowering]──┐
+                                              │
+                                              ▼
 ┌──────────────────────────────────────────────────────────┐
-│                     Syntax (AST Layer)                    │
+│               Ast (Symbolic IR)                            │
 │  Node records, NodeId, fluent construction API           │
-└──────────────┬───────────────────────────────────────────┘
-               │
-               ▼
+└──────────────────────┬───────────────────────────────────┘
+                       │
+                       ▼
 ┌──────────────────────────────────────────────────────────┐
 │               Analysis Pipeline (INodeAnalyzer passes)    │
 │                                                          │
@@ -27,50 +28,28 @@ This document describes the architecture of the Poly system — a neurosymbolic 
 │  └──────────────┘ └──────────────┘ └──────────────────┘  │
 │                                                          │
 │  Produces: AnalysisResult (metadata + diagnostics)        │
-└──────────────┬───────────────────────────────────────────┘
-               │
-               ▼
+└──────────────────────┬───────────────────────────────────┘
+                       │ analyzed AST + metadata
+                       ▼
 ┌──────────────────────────────────────────────────────────┐
-│              Canonical Execution IR (Primitives) │
+│               DirectVmAbiEmitter                           │
 │                                                          │
-│  PrimitiveNode instruction set (enhanced with ValueSlot, │
-│  explicit dataflow, Phi, etc.). The canonical IR for the │
-│  VM execution engine. AST remains the primary symbolic   │
-│  / model-facing / serializable form.                     │
+│  Compiles analyzed AST directly to VmProgram (no         │
+│  intermediate IR). Honors NodeReplacementMetadata for    │
+│  constant folding, desugaring, and other rewrites.       │
 │                                                          │
-│  Lowering (ToPrimitives) is the point to expand metadata │
-│  rather than discard structure.                          │
-│                                                          │
-│  Produces: primitives + expanded metadata for execution  │
-└──────────────┬───────────────────────────────────────────┘
-               │
-               ▼
-┌──────────────────────────────────────────────────────────┐
-│                   Lowering (IR → µops)                   │
-│                                                          │
-│  UopCompiler walks IR blocks, emits flat µop      │
-│  list. Resolves CondBranch/Goto targets to absolute PCs, │
-│  maps Phi → PhiMarker with ConsumedFromPcs.              │
-│                                                          │
-│  Consumes: ModuleMetadata (blocks, values, terminators)   │
-└──────────────┬───────────────────────────────────────────┘
-               │
-               ▼
-┌──────────────────────────────────────────────────────────┐
-│              ProgramCompiler (µops → delegate)            │
-│                                                          │
-│  Compiles flat µop list into Action<VmState> delegate     │
-│  using LINQ Expression trees. Uses CompilationContext     │
-│  for stack management, tracing, breakpoint support.      │
-└──────────────┬───────────────────────────────────────────┘
-               │
-               ▼
+│  Output: VmProgram (function table + bytecode + consts)   │
+└──────────────────────┬───────────────────────────────────┘
+                       │ VmProgram
+                       ▼
 ┌──────────────────────────────────────────────────────────┐
 │                     VM Execution                          │
 │                                                          │
-│  Vm.Execute(state) runs the compiled delegate, handles   │
-│  call/return, closures, exceptions, external calls,      │
-│  debugging, and µop-level tracing.                       │
+│  VmProgram.EnsureCompiled() → compiled delegate via      │
+│  ring-allocated stack (long[], ArrayPool<long>),         │
+│  PC-based dispatch, breakpoint support, µop-level trace. │
+│                                                          │
+│  Canonical semantics — all backends match this behavior. │
 └──────────────────────────────────────────────────────────┘
 ```
 
@@ -240,241 +219,133 @@ new AnalyzerBuilder()
 
 ---
 
-## 3. Canonical IR — The Neurosymbolic Pivot
+## 3. Direct AST → VM ABI
 
-**Location:** `Poly/Ir/`
+**Location:** `Poly/Interpretation/Vm/DirectVmAbiEmitter.cs`
 
-The Canonical IR is the structural layer between AST/domain-level expression and all execution backends. It is the **pivot** of Poly's neurosymbolic architecture: models express intent at the domain level, the compiler lowers it deterministically through IR, the VM validates it, and every backend projects the same IR into its target form.
-
-### The Three Levels of Expression
-
-Poly provides three levels at which code can be expressed, each with a distinct role:
-
-| Level | Module | Role | Who authors it |
-|-------|--------|------|---------------|
-| **Domain** | `DomainModeling` | Entities, actions, stages, policies — the model's primary surface | Model (default), User |
-| **IR** | `Ir` | Blocks, instructions, phi nodes — semantically complete, execution-model-agnostic | Compiler (lowering), Model (escape hatch) |
-| **µops** | `Interpretation/Vm` | Stack-machine instructions with PC offsets, ring allocation | Compiler only (never model-authored) |
-
-The lowering pipeline is **deterministic and traceable** at every step:
-
-```
-Domain Modeling ──→ AST ──→ IR ──→ µops ──→ delegate
-     ↑                ↑       ↑        ↑
-  model authors   lowering  model     compiler
-  here (default)  pass      can       only
-                            inspect
-                            or inject
-```
-
-### Why the Model Defaults to the Domain Level
-
-Forcing models to work at the domain level — with strong analysis and diagnostics — is more effective than allowing them to operate at the IR or µop level by default:
-
-- **Domain errors are meaningful.** "`Order.Confirm` requires `Order` to be in `Pending` stage" is actionable. "Phi at block_3 has mismatched incoming values" is a compiler artifact the model shouldn't need to reason about.
-- **Deterministic lowering means the model doesn't author execution concerns.** Ring allocation, PC offsets, `ConsumedFromPcs` arrays, and `PhiMarker` placement are the compiler's job. The model describes *what* should happen; the compiler determines *how* the stack machine executes it.
-- **Iteration happens at the right level.** If a model's domain description produces incorrect behavior, the model inspects the lowered IR (not the µops) to understand *why* — and fixes the domain description, not the µop listing.
-
-### When the Model Drops to IR (the Escape Hatch)
-
-For performance-critical paths, custom data structures, or algorithms that don't map neatly to domain constructs, the model can inject IR directly:
-
-```
-Domain Modeling ──→ AST ──→ IR ──→ µops
-                              ↑
-                     model injects IR here
-                     (opt-in, not default)
-```
-
-The IR is the right escape hatch because it is the **lowest level that is still semantically complete** — every IR `Module` has a deterministic execution result — but the model is not burdened with execution-model concerns like ring allocation or PC offsets.
-
-### Projection, Not Generation
-
-Once the IR is verified by the VM, every backend is a deterministic projection. The model (or user) can request:
-
-- **C# source** (`CSharpCodeGenerator`) — idiomatic code for human review
-- **µop listing** (`UopCompiler`) — stack-machine trace for debugging
-- **CFG visualization** — Mermaid diagram with blocks, branches, and phi nodes
-- **Domain-level trace** — "`Order.Confirm` merge point: result is `confirmed_total` (from authorization branch) or `rejected_total` (from rejection branch)"
-
-Each projection is derived from the same canonical IR. The model never generates per-language code — it generates IR, and the compiler handles everything downstream.
-
-### Traceability as the Foundation
-
-Every `Instr` carries a `NodeId? Source` linking back to the AST node (and thus the domain construct) that produced it. This means:
-
-- **VM traces reference domain concepts**, not µop PCs. "At `Order.Confirm` merge point, `Phi` selects `confirmed_total`" instead of "pc12: PhiMarker([pc6], pc7)."
-- **The model can inspect lowering decisions.** "This `CondBranch` at block_2 corresponds to your `if (payment.Authorized)` check."
-- **Errors localize to the source.** A VM exception at a given µop PC can be traced back through IR → AST → the exact domain construct the model authored.
-
-### IR Design Summary
-
-The IR is a **block-structured CFG with SSA values**:
-
-- **16 instruction types**: `Const`, `BinOp`, `UnaryOp`, `LoadLocal`, `StoreLocal`, `Parameter`, `Call`, `AllocClosure`, `LoadUpvalue`, `StoreUpvalue`, `AllocHeap`, `Phi`
-- **5 terminator types**: `Goto`, `CondBranch`, `Ret`, `Throw`
-- **4 type kinds**: `Word`, `Boolean`, `Handle`, `Void`
-- **Explicit φ nodes** replace the ring-based heuristic in `Lowering.Assemble()`
-- **SSA optional**: the VM backend can work with or without SSA; optimization passes enable it as needed
-
-Each AST node lowers to IR via a `virtual Value? Emit(EmissionContext ctx)` method on the `Node` base class, replacing the monolithic 700-line `UopGenerationPass` switch.
-
-For the full IR design, see `docs/experiments/interpretation-compiler-framework-plan.md`.
-
----
-
-## 4. Lowering — IR → µops
-
-**Location:** `Poly/Interpretation/Ir/Backends/UopCompiler.cs`
-
-### Architecture
-
-The `UopCompiler` walks IR blocks (not AST nodes) and emits a flat list of `MicroOp` records. It replaces the combined `UopGenerationPass` + `Lowering.Assemble()` pipeline:
-
-1. **Block ordering**: topologically sort blocks (dominator-tree DFS). Assign contiguous PC ranges per block.
-2. **Instruction emission**: for each `Instr`, emit the corresponding µop (`Const` → `LoadConst`, `BinOp` → `BinOp`, `Phi` → `PhiMarker` + resolved `ConsumedFromPcs`, etc.)
-3. **Ring analysis**: `RingAnalyzer` computes eval-stack ring depths from the IR's explicit `Phi` nodes — simpler than the current heuristic because φ is already explicit.
-4. **Label resolution**: `Goto.Target` and `CondBranch.ThenTarget`/`ElseTarget` are `BasicBlock` references (not integer IDs) — they cannot dangle. Resolved to absolute PCs during emission.
-
-### What Lowering Consumes from Analysis
-
-| Metadata | Source Pass | Used For |
-|---|---|---|
-| `VariableAnalysisMetadata` | ScopeValidator | `IsAliasEligible` check, scope traversal for captures/locals |
-| `DefiniteAssignmentMetadata` | DefiniteAssignmentAnalyzer | Skip zero-init for definitely-assigned lambda locals |
-| `ConstantValueMetadata` | ConstantFoldingPass | `TryGetConstantLong` for immediate-bearing µops |
-| `TypeResolutionMetadata` | TypeResolver | Array type detection, member type checks |
-| `MemberResolutionMetadata` | MemberResolver | AstMethodDefinition → CallOp, ClrMethod → CallExternalOp |
-| `NodeReplacementMetadata` | ConstantFoldingPass | Node substitution before emission |
-
-### µop Types
-
-**Location:** `Poly/Interpretation/VirtualMachine/MicroOperations.cs`
-
-All µops inherit from `abstract record MicroOp(NodeId? Source)` and implement `ToExpression(CompilationContext ctx)`.
-
-| Category | µops | Purpose |
-|---|---|---|
-| Stack | `PushOp`, `PopOp`, `DupOp` | Stack manipulation |
-| Arithmetic | `AddOp`, `SubOp`, `MulOp`, `DivOp`, `NegOp`, `NotOp` | Binary/unary ops |
-| Immediate | `AddImmOp`, `SubImmOp`, `EqImmOp`, etc. | Fused push+op for constant right operands |
-| Local | `LoadLocalOp`, `StoreLocalOp`, `IncLocalOp` | Local variable access |
-| Argument | `LoadArgOp`, `StoreArgOp` | Function argument access |
-| Control | `JumpOp`, `JumpIfFalseOp`, `ReturnOp`, `ReturnFromCallOp` | Control flow |
-| Heap | `LoadValueOp`, `StoreValueOp` | Heap reference access |
-| Closure | `AllocClosureOp`, `LoadUpvalueOp`, `StoreUpvalueOp` | Closure management |
-| Call | `CallOp`, `CallClosureOp`, `CallExternalOp` | Function/method calls |
-| Exception | `ThrowOp`, `EndFinallyOp` | Exception handling |
-| Array | `ArrayLoadOp`, `NewArrayOp`, `ArrayStoreOp` | Direct long[] array ops |
-| Batch | `BatchReduceOp` (Sum, CountNonZero, Min, Max, etc.) | Compiled batch loops |
-| Special | `CountBitsOp`, `StridedSetOp` | Bit-counting, composite marking |
-| Marker | `CommentOp` | No-op for trace readability |
-
-### `CompilationContext`
-
-**Location:** `MicroOperations.cs` (nested record)
-
-Carries `ParameterExpression`s for the compiled delegate: `State` (VmState), `Slots` (stack array), `SP`, `PC`, `FB` (FrameBase), `CAS` (CachedArgSlots), `CodeLen`. Provides helper methods:
-
-- `Push(value)`, `Pop()`, `Top()` — stack operations
-- `BinaryArith(op)`, `BinaryCmp(cmp)` — fused stack ops
-- `ResyncPC()`, `ResyncSP()` — read back from state
-- `WritebackSP()`, `WritebackPC()` — write local to state
-- `TraceBefore(op)` — gated trace call
-- `GetOrCreateAlias(name, type)` — typed alias variables
-
----
-
-## 5. Code Generation — µops → Compiled Delegate
-
-**Location:** `Poly/Interpretation/VirtualMachine/ProgramCompiler.cs`
+The `DirectVmAbiEmitter` compiles analyzed AST directly into a `VmProgram` — there is no intermediate primitive IR or separate µop-generation pass. This is the canonical compilation path for all AST-backed programs (domain policies, standalone expressions, interpreted scripts).
 
 ### Compilation Flow
 
-1. Create `ParameterExpression` for `VmState s`
-2. Extract `stack` → `RawSlots` → `sp`, `pc`, `fb`, `cas` expressions
-3. Build `CompilationContext` with these expressions
-4. For each µop at index `i`:
-   - Emit `TraceBefore(uop)` (if source present)
-   - Emit `uop.ToExpression(ctx)`
-   - If not a control-flow µop, emit `pc++`
-   - Wrap in breakpoint check: `DebugMode && BreakpointPCs.Contains(pc) → suspend`
-   - Create `SwitchCase(i)` for the dispatch loop
-5. Loop body: `if (pc < codeLen) → switch(pc) → ... else break`
-6. Final block: sync SP and PC back to `VmState`
+`DirectVmAbiEmitter.CompileNode(Node node, AnalysisResult analysis)`:
 
-### Call Site Compilation
+1. **Node dispatch**: each node type has a dedicated compile method (`CompileConstant`, `CompileAdd`, `CompileInvoke`, etc.) that emits `VmInstruction` records into the growing program buffer.
+2. **Replacement awareness**: before dispatching, checks `analysis.GetNodeReplacement(node)` — constant folding and other rewrite passes substitute nodes transparently.
+3. **Ring allocation**: the emitter performs live analysis of the eval-stack to assign ring slots, eliminating stack-overflow checks at runtime.
+4. **Branch resolution**: forward jumps (`Conditional`, `WhileLoop`, etc.) use deferred label targets that are resolved to absolute PCs after all nodes are processed.
+5. **Output**: a `VmProgram` containing a `FunctionEntry[]` table (one per top-level lambda/block), `VmInstruction[]` bytecode, and a constant pool (`Constant[]`).
 
-**Location:** `CallSiteCompiler.cs`
+### What the Emitter Consumes from Analysis
 
-Compiles CLR method calls into `CallSiteDelegate(VmState)` instances. Bridges the VM's `long[]` stack slot format to CLR method parameters (type conversion, heap lookup for reference types).
+| Metadata | Source Pass | Used For |
+|---|---|---|
+| `TypeResolutionMetadata` | TypeResolver | Member type checks, array detection |
+| `MemberResolutionMetadata` | MemberResolver | Resolve call targets (`CallExternalOp`) |
+| `ConstantValueMetadata` | ConstantFoldingPass | Inline constant immediates |
+| `VariableAnalysisMetadata` | ScopeValidator | Alias eligibility, scope size |
+| `DefiniteAssignmentMetadata` | DefiniteAssignmentAnalyzer | Skip zero-init for definitely-assigned locals |
+| `NodeReplacementMetadata` | Any pass | Substitute folded/desugared nodes |
+
+### Domain Expression Lowering
+
+**Location:** `Poly/DomainModeling/Lowering/DomainExpressionLoweringPass.cs`
+
+Before the emitter runs, domain-level expressions (policies, rules, conditions) must be lowered to AST nodes. This pass expands `DomainExpression` trees — `PropertyAccess`, `RelationshipNavigation`, `And`, `Or`, `Exists`, `Literal`, arithmetic, date ops — into `Poly.Ast` node records. The AST is then analyzed and compiled via the standard path above.
+
+```
+DomainExpression ──→ Ast nodes ──→ Analysis ──→ DirectVmAbiEmitter ──→ VM
+```
+
+Policy compilation (`PolicyEvaluator`) also uses this path, with the VM as the primary execution engine and LINQ expressions as a dual-oracle reference.
 
 ---
 
-## 6. VM Execution
+## 4. VM Program & Bytecode
 
-**Location:** `Poly/Interpretation/VirtualMachine/Vm.cs`
+**Location:** `Poly/Interpretation/Vm/VmProgram.cs`
 
-### Flow
+`VmProgram` is the compiled output — a sealed record containing:
+
+| Field | Purpose |
+|---|---|
+| `FunctionEntry[] Functions` | One entry per compiled function/lambda; holds function index, start PC, arity, local count |
+| `VmInstruction[] Instructions` | Flat bytecode array; each instruction has an opcode, an optional immediate operand, and a `NodeId? Source` for traceability |
+| `Constant[] Constants` | Constant pool (longs, doubles, strings, heap object references) |
+| `HashSet<int> BreakpointPCs` | Active breakpoint PCs (populated by the debugger) |
+
+The instruction set is a compact stack-machine encoding with ~60 opcodes covering arithmetic, comparison, control flow (conditional/unconditional jumps), call/return, closure operations, heap access, and exception handling. Each instruction is 4–12 bytes.
+
+### Compilation to Delegate
+
+`VmProgram.EnsureCompiled()` builds the delegate lazily:
+
+1. Allocate `VmProgramRuntime` — an `Action<VmState>` delegate.
+2. Build a dispatch loop using `Expression` trees that reads the next instruction, switches on opcode, and emits `Expression` nodes for each case.
+3. The dispatch uses a local `pc` variable and a `switch` inside a `while (pc < codeLen)` loop.
+4. Compile to a `Func<VmState, ValueStack, ..., int>` and wrap as `Action<VmState>`.
+5. On first call, the delegate runs the dispatch loop; subsequent calls reuse the compiled delegate.
+
+---
+
+## 5. VM Execution
+
+**Location:** `Poly/Interpretation/Vm/`
+
+### Execution Flow
 
 ```
-Vm.Execute(state)
-  ├─ Load program constants into heap
-  ├─ prog.EnsureCompiled() → Action<VmState>
-  ├─ Invoke compiled delegate (runs dispatch loop)
-  ├─ Handle suspension (restore PC)
+VmProgram.Execute(state)
+  ├─ EnsureCompiled() → compiled delegate (lazy)
+  ├─ Invoke delegate(VmState)
+  │    └─ Dispatch loop: while(pc < codeLen) switch(instruction[pc])
+  ├─ Handle suspension (restore PC on debugger break)
   └─ Extract result from stack
 ```
 
-### Key Handler Methods
+### Key Files
 
-Called from compiled µops via `Expression.Call` with `MemberHelper.MethodOf()` for compile-time-safe references:
+| File | Purpose |
+|---|---|
+| `DirectVmAbiEmitter.cs` | Compiles analyzed AST → `VmProgram` |
+| `VmProgram.cs` | Sealed record holding bytecode, functions, constants |
+| `VmState.cs` | Execution state: PC, FrameBase, stack, heap, debug flags, trace writer |
+| `ValueStack.cs` | `long[]` backed by `ArrayPool<long>.Shared` — zero-GC push/pop |
+| `Heap.cs` | `List<object?>` with free-list — GC-free object storage |
+| `Closure.cs` | Function index + captures array |
+| `VmDebugger.cs` | PC-level debugger: breakpoints, stepping, `VmState.DebugInterrupt` |
+| `VmTrace.cs` | µop-level trace output, gated by trace flag (~1 ns when inactive) |
+| `VmValueMarshaller.cs` | Converts between VM `long[]` slots and CLR types for external calls |
 
-| Handler | µop | Purpose |
-|---|---|---|
-| `HandleCall` | `CallOp` | Set up call frame, push return address, jump to function |
-| `HandleCallClosure` | `CallClosureOp` | Resolve closure from heap, set up frame |
-| `HandleCallExternal` | `CallExternalOp` | Invoke compiled call site delegate |
-| `HandleAllocClosure` | `AllocClosureOp` | Pop captures, create Closure on heap |
-| `HandleLoadUpvalue` | `LoadUpvalueOp` | Read from closure captures |
-| `HandleStoreUpvalue` | `StoreUpvalueOp` | Write to closure captures |
-| `HandleThrow` | `ThrowOp` | Find exception region, jump to catch/finally |
-| `HandleEndFinally` | `EndFinallyOp` | Re-throw pending exception or continue |
-
-### Runtime State
-
-**Location:** `VmState.cs`, `ValueStack.cs`, `Heap.cs`, `Closure.cs`
+### Runtime State Model
 
 | Component | Purpose |
 |---|---|
-| `VmState` | PC, FrameBase, stack, heap, debug state, trace writer |
-| `ValueStack` | `long[]` backed by `ArrayPool<long>.Shared` for zero-GC push/pop |
-| `Heap` | `List<object?>` with free-list for GC-free object storage |
-| `Closure` | Function index + captures array |
+| `VmState` | PC, FrameBase, stack pointer, heap reference, debug state, active trace writer |
+| `ValueStack` | `long[]` slots with ring allocation — single array shared across call frames |
+| `Heap` | Flat `List<object?>` — values stored by index; free-list recycles dead entries |
+| `FunctionEntry` | Per-function metadata: start PC, arity, local count, name |
+| `Closure` | Function index + captured variable values |
+| `Ref<T>` | Heap-allocated reference cell for mutable captures |
 
-### Debugger
-
-**Location:** `VmDebugger.cs`
-
-PC-level debugger managing breakpoints and stepping. Integrates with `VmState.BreakpointPCs` and `Bytecode.NodeRanges` (AST node → µop PC range mapping) for step-over.
+The VM is the **canonical semantics** — all backends (C# code gen, LINQ expressions) should produce behavior equivalent to the VM execution. Debugging and tracing always reference domain-level concepts via `NodeId? Source` on instructions.
 
 ---
 
-## 7. Metadata Flow
+## 6. Metadata Flow
 
 ### What Gets Produced Where
 
 | Metadata Type | Produced By | Stored On | Consumed By |
 |---|---|---|---|---|
-| `TypeResolutionMetadata` | TypeResolver | Each node | MemberResolver, Lowering, code gen |
-| `MemberResolutionMetadata` | MemberResolver | Invoke/Member/New nodes | Lowering (CallOp, CallExternalOp) |
-| `VariableAnalysisMetadata` | ScopeValidator | Root node (via `context.SetMetadata`) | Lowering (alias, scope, captures) |
-| `ConstantValueMetadata` | ConstantFoldingPass | Folded nodes | Lowering (immediate µops), code gen |
-| `DefiniteAssignmentMetadata` | DefiniteAssignmentAnalyzer | Lambda body nodes | Lowering (zero-init skip) |
+| `TypeResolutionMetadata` | TypeResolver | Each node | MemberResolver, emitter, code gen |
+| `MemberResolutionMetadata` | MemberResolver | Invoke/Member/New nodes | Emitter (call targets) |
+| `VariableAnalysisMetadata` | ScopeValidator | Root node (via `context.SetMetadata`) | Emitter (alias, scope, captures) |
+| `ConstantValueMetadata` | ConstantFoldingPass | Folded nodes | Emitter (constant immediates) |
+| `DefiniteAssignmentMetadata` | DefiniteAssignmentAnalyzer | Lambda body nodes | Emitter (zero-init skip) |
 | `SideEffectMetadata` | SideEffectAnalyzer | Each node | LinqExpressionGenerator (DCE) |
 | `ControlFlowMetadata` | ControlFlowAnalysisPass | Control-flow nodes | Dead code diagnostics |
-| `StackDepthMetadata` | StackDepthAnalyzer | Each node | Verification, optimization |
-| `NodeReplacementMetadata` | ConstantFoldingPass | Replaced nodes | All backends |
+| `StackDepthMetadata` | StackDepthAnalyzer | Each node | Ring allocation, optimization |
+| `NodeReplacementMetadata` | Any analysis pass | Replaced nodes | All backends |
 
 ### How Semantic Information Flows
 
@@ -492,25 +363,25 @@ Analysis Pipeline ──► AnalysisResult
   │                     └── Diagnostics
   │
   ▼
-Lowering ──► Bytecode (µops + function table + constants + metadata)
+DirectVmAbiEmitter ──► VmProgram (bytecode + functions + constants)
   │
-  ├── EmitContext consumes analysis metadata via Analysis field
-  ├── Uses TryGetConstantLong from ConstantFolding analysis
-  ├── Uses VariableAnalysisMetadata for alias eligibility
-  └── Uses DefiniteAssignmentMetadata for zero-init optimization
+  ├── CompileNode dispatches by node type
+  ├── Honors NodeReplacementMetadata before dispatch
+  ├── Consumes VariableAnalysisMetadata for alias eligibility
+  └── Consumes DefiniteAssignmentMetadata for zero-init optimization
 ```
 
 ---
 
-## 8. Execution Backends
+## 7. Execution Backends
 
-### VM Backend (µops)
+### VM Backend (primary)
 
-The primary execution engine. Lowest-level representation — a flat list of `MicroOp` records compiled to a single `Action<VmState>` delegate. Optimized for speed:
+The primary execution engine. Analyzed AST is compiled by `DirectVmAbiEmitter` into a `VmProgram` with a flat bytecode array. `VmProgram.EnsureCompiled()` builds an `Action<VmState>` delegate via Expression trees. Optimized for speed:
 
 - Direct `long[]` stack via `ArrayPool<long>.Shared`
 - Compiled dispatch loop with no interpretive overhead
-- µop-level tracing gated at ~1 ns when inactive
+- Instruction-level tracing gated at ~1 ns when inactive
 - Breakpoints via `HashSet<int>` PC check gated by `DebugMode` flag
 
 ### LINQ Expressions Backend
@@ -566,23 +437,46 @@ A provider-based type abstraction decoupled from CLR reflection. Consumers work 
 
 ## 10. Domain Modeling
 
-Poly has two domain modeling subsystems:
+**Location:** `Poly/DomainModeling/`
 
-### V3 — Immutable Core (`Poly/DomainModeling/`)
+The domain model is an **immutable record graph** — the primary model for analysis, evolution, and lowering to the AST. All mutation happens through the analysis-gated evolution pipeline (`DomainEvolution` + `Apply`), which returns a new `Domain` root on success or rolls back with diagnostics on failure.
 
-Immutable record types constructed via a fluent builder API. The primary model for analysis and lowering.
+### Key Types
 
-**Key Types:** `Domain`, `Entity`, `Stage`, `Action`, `Effect`, `Policy`, `Relationship`, `Property`, `Event`, `DomainExpression`, `Constraint`
+- `Domain` — root container; entities, relationships, policies, types
+- `Entity` — named entity with properties, stages, actions
+- `Stage` — lifecycle stage within an entity
+- `Action` — named action with optional require gates, effects
+- `Effect` — effect types: create, transition, assign, conditional, composite, link/unlink, invoke-action
+- `Policy` — named policy with a `DomainExpression` condition
+- `Relationship` — named relationship connecting two entities
+- `Property` — typed property with constraints
+- `DomainExpression` — unified expression model for policies, rules, and guards
+- `Constraint` — validation constraint (Range, Length, Pattern, Required, Unique)
 
-**Builders:** `DomainBuilder` → `EntityBuilder` → `StageBuilder` / `ActionBuilder` / ... → `Build()`
+### Builders
 
-**Expression System:** `DomainExpression` — unified expression type for policies and rules: `PropertyAccess`, `ParameterAccess`, `Literal`, `And`, `Or`, `RelationshipNavigation`, `Exists`, arithmetic, date operations.
+`DomainBuilder` → `EntityBuilder` → `StageBuilder` / `ActionBuilder` / ... → `Build()`
 
-### V2 — Mutable Graph (`Poly/Data/Modeling/`)
+### Expression System
 
-Mutable directed acyclic graph with transactional mutation support. Used for interactive model editing.
+`DomainExpression` is a unified expression type covering: `PropertyAccess`, `ParameterAccess`, `Literal` (all primitive types), `And`, `Or`, `Not`, `RelationshipNavigation`, `Exists`, comparison/arithmetic/date operations, and collection queries.
 
-**Key Difference:** V2 objects carry a `Domain` reference and mutate in-place via `DomainMutationCommand` steps. V3 objects are immutable records constructed once.
+### Sub-modules
+
+| Directory | Purpose | Lines |
+|-----------|---------|-------|
+| `Analysis/` | Domain-model analyzers (entity structure, effects, topology, storage, transport, ownership, subscriptions, constraints) | ~5,260 |
+| `Lowering/` | DomainExpression→AST lowering, C# code export, policy evaluation via VM | ~2,830 |
+| `Parsing/` | Poly DSL tokenizer, parser, and printer (`.poly` text format) | ~2,340 |
+| `Evolution/` | `DomainEvolution`, `DomainChange`, `EvolutionTransaction` — atomic changes with analysis gate + rollback | ~1,970 |
+| `Bootstrap/` | `DomainFactory`, `CanonicalBuiltInTypeCatalog` — domain creation with built-in types | ~360 |
+| `Queries/` | `DomainQueries` — model-optimized query projections | ~290 |
+| `Builders/` | Fluent construction API (alternative to DSL/evolution) | ~580 |
+| `Effects/` | Effect type records (Create, Transition, Assign, Conditional, Composite, Link, etc.) | ~140 |
+| `Constraints/` | Constraint type records (Range, Length, Pattern, Required, Unique, etc.) | ~30 |
+
+**Note:** The V2 mutable subsystem (`Poly/Data/Modeling/`) has been **deleted**. Only the immutable V3 core remains.
 
 ---
 
@@ -597,10 +491,11 @@ Mutable directed acyclic graph with transactional mutation support. Used for int
 4. **Metadata flows unidirectionally** — Analysis produces metadata, lowering consumes it. Lowering does not run its own analysis. The `ScopeValidator` produces `VariableAnalysisMetadata` (assignment counts, escape info) that replaced lowering's previous hand-rolled `CollectEscapeInfo` pre-scan.
 
 5. **Module boundaries are enforced**:
-   - `Interpretation` → `Introspection`
-   - `Validation` → `Interpretation`
-   - `Synthesis` → `Syntax`, `Interpretation`
-   - No module depends on `Synthesis` except `DomainModeling`
+   - `Interpretation` → `Ast`, `Analysis`, `Introspection`
+   - `DomainModeling` → `Ast` (pure lowering) + `Interpretation` (policy evaluation bridge)
+   - `Analysis` → `Ast` (framework references nodes only)
+   - `Introspection` ↛ `Interpretation`
+   - `MCP` → `DomainModeling`, `Ast`, `Analysis` (thin adapter, no domain logic)
 
 6. **Domain concepts lower to generic VM opcodes** — no domain-specific opcodes.
 
@@ -610,24 +505,25 @@ Mutable directed acyclic graph with transactional mutation support. Used for int
 
 ## File Index
 
-### Syntax
+### Ast (Symbolic IR)
 - Base: `Poly/Ast/Node.cs`, `NodeId.cs`, `NodeExtensions.cs`
 - Nodes: `Poly/Ast/Nodes/` (all expression and statement types)
 - Type defs: `Poly/Ast/Nodes/TypeDefinitions/`
-- Analysis framework: `Poly/Analysis/`
+
+### Analysis Framework
+- `Poly/Analysis/` — Analyzer, AnalysisContext, metadata store, node replacement, diagnostics
 
 ### Interpretation
-- Analysis passes: `Poly/Interpretation/Analysis/Semantics/`
-- Constant folding: `Poly/Interpretation/Analysis/ConstantFolding/`
-- Control flow: `Poly/Interpretation/Analysis/ControlFlow/`
-- VM: `Poly/Interpretation/VirtualMachine/` (all µops, lowering, compiler, runtime)
+- Analysis passes: `Poly/Interpretation/Analysis/` (semantics, CFG, constant folding)
+- VM/ABI: `Poly/Interpretation/Vm/` (DirectVmAbiEmitter, VmProgram, VmState, runtime)
 - LINQ backend: `Poly/Interpretation/LinqExpressions/`
 - C# backend: `Poly/Interpretation/CSharp/`
+- Mermaid visualization: `Poly/Interpretation/Mermaid/`
 
 ### Introspection
 - Interfaces: `Poly/Introspection/` (ITypeDefinition, ITypeMember, etc.)
 - CLR backing: `Poly/Introspection/CommonLanguageRuntime/`
 
 ### Domain Modeling
-- V3 (immutable): `Poly/DomainModeling/` (core types + `Builders/`)
-- V2 (mutable): `Poly/Data/Modeling/` (core, `Analysis/`, `CodeGeneration/`, `Effects/`, `Validation/`)
+- Core: `Poly/DomainModeling/` (Domain, Entity, Action, Effect, Policy, Relationship, etc.)
+- Sub-modules: `Analysis/`, `Builders/`, `Bootstrap/`, `Constraints/`, `Effects/`, `Evolution/`, `Lowering/`, `Parsing/`, `Queries/`

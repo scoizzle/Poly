@@ -287,14 +287,24 @@ public sealed record DomainEntityInstance {
         var stage = Entity.Stages.FirstOrDefault(
             s => string.Equals(s.Name, CurrentStage, StringComparison.Ordinal));
         if (stage is not null)
-            foreach (var guard in stage.Policies)
+            foreach (var guard in stage.Policies) {
+                if (action.Policies.Any(p => string.Equals(p.Name, $"not_{guard.Name}", StringComparison.Ordinal)))
+                    continue;
                 if (!EvaluatePolicy(guard)) failures.Add(guard.Name);
+            }
 
         if (failures.Count > 0)
             return ActionInvocationResult.Blocked(actionName, failures);
 
-        foreach (var guard in Entity.Policies)
+        foreach (var guard in Entity.Policies) {
+            // Skip entity-level policies that are inverted by an action-level
+            // "require not PolicyName" guard (synthetic not_PolicyName).
+            // Otherwise the entity-level guard would redundantly block the action
+            // even though the action explicitly opted out via "require not".
+            if (action.Policies.Any(p => string.Equals(p.Name, $"not_{guard.Name}", StringComparison.Ordinal)))
+                continue;
             if (!EvaluatePolicy(guard)) failures.Add(guard.Name);
+        }
 
         if (failures.Count > 0)
             return ActionInvocationResult.Blocked(actionName, failures);

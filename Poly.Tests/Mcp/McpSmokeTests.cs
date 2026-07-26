@@ -3208,4 +3208,314 @@ E: entity {{
         await Assert.That(link.Success).IsFalse();
         await Assert.That(link.Message).Contains("not found");
     }
+
+    // ── link-1: unlink_instances tests ─────────────────────────
+
+    [Test]
+    public async Task UnlinkInstances_LinkThenUnlink_Succeeds() {
+        var (sessionId, _) = McpSessionStore.Create("Test");
+        DslTool.ApplyDsl(sessionId, "domain T A: entity { bs: many B } B: entity { a: A }");
+
+        var aResult = RuntimeTool.CreateInstance(sessionId, "A", "{}");
+        await Assert.That(aResult.Success).IsTrue();
+        var bResult = RuntimeTool.CreateInstance(sessionId, "B", "{}");
+        await Assert.That(bResult.Success).IsTrue();
+
+        McpSessionStore.TryGet(sessionId, out var st);
+        var aId = st.InstanceMap.First(kvp => kvp.Value.Entity.Name == "A").Key;
+        var bId = st.InstanceMap.First(kvp => kvp.Value.Entity.Name == "B").Key;
+
+        // Link first
+        var link = RuntimeTool.LinkInstances(sessionId, aId, "bs", bId);
+        await Assert.That(link.Success).IsTrue();
+
+        // Then unlink
+        var unlink = RuntimeTool.UnlinkInstances(sessionId, aId, "bs", bId);
+        await Assert.That(unlink.Success).IsTrue();
+        await Assert.That(unlink.Message).Contains("Unlinked");
+
+        // Verify link is gone — IsLinked should return false
+        await Assert.That(st.InstanceStore!.IsLinked("bs", st.InstanceMap[aId], st.InstanceMap[bId])).IsFalse();
+    }
+
+    [Test]
+    public async Task UnlinkInstances_NoExistingLink_Fails() {
+        var (sessionId, _) = McpSessionStore.Create("Test");
+        DslTool.ApplyDsl(sessionId, "domain T A: entity { bs: many B } B: entity { a: A }");
+
+        var aResult = RuntimeTool.CreateInstance(sessionId, "A", "{}");
+        await Assert.That(aResult.Success).IsTrue();
+        var bResult = RuntimeTool.CreateInstance(sessionId, "B", "{}");
+        await Assert.That(bResult.Success).IsTrue();
+
+        McpSessionStore.TryGet(sessionId, out var st);
+        var aId = st.InstanceMap.First(kvp => kvp.Value.Entity.Name == "A").Key;
+        var bId = st.InstanceMap.First(kvp => kvp.Value.Entity.Name == "B").Key;
+
+        // Unlink without linking first — should fail
+        var unlink = RuntimeTool.UnlinkInstances(sessionId, aId, "bs", bId);
+        await Assert.That(unlink.Success).IsFalse();
+        await Assert.That(unlink.Message).Contains("No link found");
+    }
+
+    [Test]
+    public async Task UnlinkInstances_UnknownRelationship_Fails() {
+        var (sessionId, _) = McpSessionStore.Create("Test");
+        DslTool.ApplyDsl(sessionId, "domain T A: entity { } B: entity { }");
+        var aResult = RuntimeTool.CreateInstance(sessionId, "A", "{}");
+        await Assert.That(aResult.Success).IsTrue();
+        var bResult = RuntimeTool.CreateInstance(sessionId, "B", "{}");
+        await Assert.That(bResult.Success).IsTrue();
+
+        McpSessionStore.TryGet(sessionId, out var st);
+        var aId = st.InstanceMap.First(kvp => kvp.Value.Entity.Name == "A").Key;
+        var bId = st.InstanceMap.First(kvp => kvp.Value.Entity.Name == "B").Key;
+
+        var unlink = RuntimeTool.UnlinkInstances(sessionId, aId, "nonexistent_rel", bId);
+        await Assert.That(unlink.Success).IsFalse();
+        await Assert.That(unlink.Message).Contains("not found");
+    }
+
+    [Test]
+    public async Task UnlinkInstances_MissingSource_Fails() {
+        var (sessionId, _) = McpSessionStore.Create("Test");
+        DslTool.ApplyDsl(sessionId, "domain T A: entity { bs: many B } B: entity { a: A }");
+        var bResult = RuntimeTool.CreateInstance(sessionId, "B", "{}");
+        await Assert.That(bResult.Success).IsTrue();
+
+        McpSessionStore.TryGet(sessionId, out var st);
+        var bId = st.InstanceMap.First(kvp => kvp.Value.Entity.Name == "B").Key;
+
+        var unlink = RuntimeTool.UnlinkInstances(sessionId, "nonexistent-id", "bs", bId);
+        await Assert.That(unlink.Success).IsFalse();
+        await Assert.That(unlink.Message).Contains("not found");
+    }
+
+    // ── link-2: create-in child registration ───────────────────
+
+    [Test]
+    public async Task InvokeAction_WithCreateIn_RegistersChildInInstanceMap() {
+        // link-2: After create in Relationship { ... } executes via invoke_action,
+        // the created child must appear in list_instances.
+        var (sessionId, _) = McpSessionStore.Create("Test");
+        var dsl = DslTool.ApplyDsl(sessionId, """
+            domain Test
+            Patron: entity {
+              Name: Text
+              loans: many Loan
+              Active: stage {
+                CheckOut: action (amount: Number) {
+                  create in loans { Amount: amount }
+                }
+              }
+            }
+            Loan: entity {
+              Amount: Number
+              borrower: Patron
+            }
+            """);
+        await Assert.That(dsl.Success).IsTrue();
+
+        var createResult = RuntimeTool.CreateInstance(sessionId, "Patron", """{"Name":"Alice"}""");
+        await Assert.That(createResult.Success).IsTrue();
+
+        McpSessionStore.TryGet(sessionId, out var st);
+        var patronId = st.InstanceMap.First(kvp => kvp.Value.Entity.Name == "Patron").Key;
+
+        // Before invoke, list_instances for Loan should be empty
+        var before = RuntimeTool.ListInstances(sessionId, "Loan");
+        await Assert.That(before.Success).IsTrue();
+        await Assert.That(before.Message).Contains("0 instance");
+
+        // Invoke CheckOut with create in
+        var invoke = RuntimeTool.InvokeAction(sessionId, patronId, "CheckOut", """{"amount":100}""");
+        await Assert.That(invoke.Success).IsTrue();
+
+        // After invoke, list_instances for Loan should find the child (1 instance)
+        var after = RuntimeTool.ListInstances(sessionId, "Loan");
+        await Assert.That(after.Success).IsTrue();
+        await Assert.That(after.Message).Contains("1 instance");
+    }
+
+    [Test]
+    public async Task InvokeAction_WithCreateIn_ChildIsGetInstanceAble() {
+        // link-2: Child created by create-in should be accessible via get_instance.
+        var (sessionId, _) = McpSessionStore.Create("Test");
+        var dsl = DslTool.ApplyDsl(sessionId, """
+            domain Test
+            Patron: entity {
+              Name: Text
+              tasks: many Task
+              Active: stage {
+                AssignTask: action (desc: Text) {
+                  create in tasks { Description: desc }
+                }
+              }
+            }
+            Task: entity {
+              Description: Text
+              owner: Patron
+            }
+            """);
+        await Assert.That(dsl.Success).IsTrue();
+
+        var createResult = RuntimeTool.CreateInstance(sessionId, "Patron", """{"Name":"Alice"}""");
+        await Assert.That(createResult.Success).IsTrue();
+
+        McpSessionStore.TryGet(sessionId, out var st);
+        var patronId = st.InstanceMap.First(kvp => kvp.Value.Entity.Name == "Patron").Key;
+
+        // Invoke AssignTask to create child via create in
+        var invoke = RuntimeTool.InvokeAction(sessionId, patronId, "AssignTask", """{"desc":"Write report"}""");
+        await Assert.That(invoke.Success).IsTrue();
+
+        // Find the child in the InstanceMap by entity name
+        var childEntry = st.InstanceMap.FirstOrDefault(kvp => kvp.Value.Entity.Name == "Task");
+        await Assert.That(childEntry.Value).IsNotNull();
+
+        // Verify get_instance works for the child
+        var getChild = RuntimeTool.GetInstance(sessionId, childEntry.Key);
+        await Assert.That(getChild.Success).IsTrue();
+        var getJson = System.Text.Json.JsonSerializer.Serialize(getChild.Data);
+        await Assert.That(getJson).Contains("Task");
+    }
+
+    // ── link-3: get_instance shows navigation links ────────────
+
+    [Test]
+    public async Task GetInstance_AfterLink_ShowsNavLink() {
+        var (sessionId, _) = McpSessionStore.Create("Test");
+        var dsl = DslTool.ApplyDsl(sessionId, """
+            domain Test
+            Patron: entity {
+              Name: Text
+              loans: many Loan
+            }
+            Loan: entity {
+              Amount: Number
+              borrower: Patron
+            }
+            """);
+        await Assert.That(dsl.Success).IsTrue();
+
+        var patronResult = RuntimeTool.CreateInstance(sessionId, "Patron", """{"Name":"Alice"}""");
+        await Assert.That(patronResult.Success).IsTrue();
+        var loanResult = RuntimeTool.CreateInstance(sessionId, "Loan", """{"Amount":100}""");
+        await Assert.That(loanResult.Success).IsTrue();
+
+        McpSessionStore.TryGet(sessionId, out var st);
+        var patronId = st.InstanceMap.First(kvp => kvp.Value.Entity.Name == "Patron").Key;
+        var loanId = st.InstanceMap.First(kvp => kvp.Value.Entity.Name == "Loan").Key;
+
+        // Link and verify
+        var link = RuntimeTool.LinkInstances(sessionId, patronId, "loans", loanId);
+        await Assert.That(link.Success).IsTrue();
+
+        // get_instance for Patron should show a nav link to Loan via "loans"
+        var patronGet = RuntimeTool.GetInstance(sessionId, patronId);
+        await Assert.That(patronGet.Success).IsTrue();
+        var patronJson = System.Text.Json.JsonSerializer.Serialize(patronGet.Data);
+        await Assert.That(patronJson).Contains("loans");
+        await Assert.That(patronJson).Contains("linkedInstanceIds");
+        await Assert.That(patronJson).Contains(loanId);
+
+        // get_instance for Loan should also show a nav link back to Patron
+        // (it appears via the same "loans" relationship, from the target side)
+        var loanGet = RuntimeTool.GetInstance(sessionId, loanId);
+        await Assert.That(loanGet.Success).IsTrue();
+        var loanJson = System.Text.Json.JsonSerializer.Serialize(loanGet.Data);
+        await Assert.That(loanJson).Contains("loans");
+        await Assert.That(loanJson).Contains(patronId);
+    }
+
+    [Test]
+    public async Task GetInstance_WithoutLinks_NavsEmpty() {
+        var (sessionId, _) = McpSessionStore.Create("Test");
+        DslTool.ApplyDsl(sessionId, "domain T A: entity { Name: Text }");
+        var result = RuntimeTool.CreateInstance(sessionId, "A", """{"Name":"x"}""");
+        await Assert.That(result.Success).IsTrue();
+
+        McpSessionStore.TryGet(sessionId, out var st);
+        var aId = st.InstanceMap.First(kvp => kvp.Value.Entity.Name == "A").Key;
+
+        var get = RuntimeTool.GetInstance(sessionId, aId);
+        await Assert.That(get.Success).IsTrue();
+        var getJson = System.Text.Json.JsonSerializer.Serialize(get.Data);
+        // Should have navigationLinks field — and it should be empty
+        await Assert.That(getJson).Contains("navigationLinks");
+    }
+
+    // ── S1-R-B1: require not policy negation ───────────────────
+
+    [Test]
+    public async Task InvokeAction_RequireNotPolicy_WhenPolicyFalse_Succeeds() {
+        // require not PolicyName must ALLOW the action when Policy evaluates to false.
+        var (sessionId, _) = McpSessionStore.Create("Test");
+        var dsl = DslTool.ApplyDsl(sessionId, """
+            domain Test
+            Counter: entity {
+              Value: Number default(0)
+              Max: Number default(5)
+              AtLimit: policy { Value >= Max }
+              Active: stage {
+                Increment: action
+                  require not AtLimit
+                {
+                  assign Value to Value + 1
+                }
+              }
+            }
+            """);
+        await Assert.That(dsl.Success).IsTrue();
+
+        // Create instance where AtLimit is false (0 >= 5 is false)
+        var create = RuntimeTool.CreateInstance(sessionId, "Counter", """{"Value":0,"Max":5}""");
+        await Assert.That(create.Success).IsTrue();
+
+        McpSessionStore.TryGet(sessionId, out var st);
+        var counterId = st.InstanceMap.First(kvp => kvp.Value.Entity.Name == "Counter").Key;
+
+        // require not AtLimit should succeed — AtLimit is false
+        var invoke = RuntimeTool.InvokeAction(sessionId, counterId, "Increment");
+        await Assert.That(invoke.Success).IsTrue();
+
+        // Verify Value was incremented
+        var get = RuntimeTool.GetInstance(sessionId, counterId);
+        var getJson = System.Text.Json.JsonSerializer.Serialize(get.Data);
+        await Assert.That(getJson).Contains("\"value\":\"1\"");
+    }
+
+    [Test]
+    public async Task InvokeAction_RequireNotPolicy_WhenPolicyTrue_Fails() {
+        // require not PolicyName must DENY the action when Policy evaluates to true.
+        var (sessionId, _) = McpSessionStore.Create("Test");
+        var dsl = DslTool.ApplyDsl(sessionId, """
+            domain Test
+            Counter: entity {
+              Value: Number default(0)
+              Max: Number default(5)
+              AtLimit: policy { Value >= Max }
+              Active: stage {
+                Increment: action
+                  require not AtLimit
+                {
+                  assign Value to Value + 1
+                }
+              }
+            }
+            """);
+        await Assert.That(dsl.Success).IsTrue();
+
+        // Create instance where AtLimit is true (5 >= 5 is true)
+        var create = RuntimeTool.CreateInstance(sessionId, "Counter", """{"Value":5,"Max":5}""");
+        await Assert.That(create.Success).IsTrue();
+
+        McpSessionStore.TryGet(sessionId, out var st);
+        var counterId = st.InstanceMap.First(kvp => kvp.Value.Entity.Name == "Counter").Key;
+
+        // require not AtLimit should fail — AtLimit is true, so not AtLimit is false
+        var invoke = RuntimeTool.InvokeAction(sessionId, counterId, "Increment");
+        await Assert.That(invoke.Success).IsFalse();
+        await Assert.That(invoke.Message).Contains("AtLimit");
+    }
 }

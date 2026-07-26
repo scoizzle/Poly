@@ -36,6 +36,7 @@ internal sealed class StoragePass : INodeAnalyzer {
 
     public void Analyze(AnalysisContext context, Node node) {
         if (node is not Domain domain) return;
+        if (context.HasStructuralFailure) return;
 
         // The codegen pipeline invalidates all nodes (including domain), which means
         // the AnalysisContext is fresh and inherits no metadata. Fall back to _analysis

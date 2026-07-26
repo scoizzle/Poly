@@ -1,16 +1,17 @@
 # MCP Dogfood Orchestrator — Supervisory Agent Plan
 
-**Date:** 2026-07-18  
-**Status:** **Two runs complete** — [report 1](agent-summaries/dogfood/DOGFOOD-REPORT-20260718.md) · [report 2](agent-summaries/dogfood/DOGFOOD-REPORT-2-20260718.md)  
-**Outcomes:** (1) **R** → RT shipped; (2) post-RT → **RT′** + **SA** stage-action semantics ([`mcp-phase3-oracle-surface.md`](mcp-phase3-oracle-surface.md) §6c–§6e)  
-**Audience:** One **supervisor** agent that spawns/coordinates **child** agents; human reviews ranked pain  
-**Goal:** Use the **shipped MCP surface only** to discover the **next biggest product painpoints** — not to implement fixes during the dogfood run  
-**Related:**  
-- [`mcp-tool-surface-expansion.md`](mcp-tool-surface-expansion.md) §0 — product backlog targets  
-- [`mcp-phase3-oracle-surface.md`](mcp-phase3-oracle-surface.md) — oracle / guide shipped  
-- [`domainmodeling-next-phase.md`](domainmodeling-next-phase.md) — Phase 2 runtime (outside MCP)  
-- [`Poly.Mcp/README.md`](../../../Poly.Mcp/README.md) — tool table + dual path  
-- [`Poly.Mcp/Docs/poly-dsl-agent-guide.md`](../../../Poly.Mcp/Docs/poly-dsl-agent-guide.md) — product-true DSL only  
+**Date:** 2026-07-18 (superseded 2026-07-25)  
+**Status:** **Historical** — two rounds complete; Wave 1 now uses [`mcp-dogfood-protocol.md`](mcp-dogfood-protocol.md) as single source of truth.
+
+This document describes the methodology for the July 18 dogfood rounds. It is preserved for context but **superseded**. The protocol doc defines the unified taxonomy (section 4), report template, and synthesis process for all future rounds. New agents should read the protocol, not this file.
+
+## Crosswalk to protocol
+
+| This doc | Protocol equivalent |
+|----------|---------------------|
+| Pain taxonomy T/H/D/O/A/W/R/E/X | Unified taxonomy C/I/M/G/A/R/S/W (see protocol section 4.1 for mapping) |
+| PainScore = 2xSeverity + Frequency + Blocker + CheapnessInverse | Score = Frequency + BlocksScenario + NoWorkaround (each 1-5) |
+| Supervisor spawns child agents | Serial scenario execution per protocol section 2 + 7 |  
 
 ---
 

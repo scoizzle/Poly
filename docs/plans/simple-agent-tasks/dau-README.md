@@ -21,12 +21,11 @@
 ## Agent pick
 
 ```text
-DONE:    D0–D4.2 product + tests (D4.3 optional skip)
-CURRENT: D4.4 ops only — commit dirty DAU tree when user requests (product DoD met)
-THEN:    Post-DAU product work
-PULL:    D2.1–D2.3; D4.3 naming; D3.5 fail-message polish (“Infrastructure pipeline…”)
+DONE:    DAU product bar met (parked — enough codegen investment for now)
+CURRENT: (none on DAU) — domain modeling capability / dogfood pain next
+THEN:    Commit DAU tree only if user asks
+PULL:    D2.1–D2.3; D4.3 naming; fail-message polish
 ```
-
 ---
 
 ## Hard rules

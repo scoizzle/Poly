@@ -215,6 +215,21 @@ public class OracleToolTests {
 
         await Assert.That(response.Success).IsFalse();
     }
+
+    // ── G1: simulate_policy fail-closed on missing properties ──
+
+    [Test]
+    public async Task SimulatePolicy_UnknownProperty_FailsClosed() {
+        // Expression references "NonExistent" which is not in the subject bag.
+        var response = OracleTool.SimulatePolicy(
+            @"{""property"":""NonExistent"",""op"":""=="",""value"":1}",
+            @"{""Something"":5}");
+
+        await Assert.That(response.Success).IsFalse();
+        await Assert.That(response.Message).Contains("NonExistent");
+        await Assert.That(response.Message).Contains("not present");
+    }
+
     // ── A2.2: get_domain_suggestions smoke test ────────────────
 
     [Test]

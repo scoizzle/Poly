@@ -12,7 +12,8 @@ Architectural rationale → **`docs/decisions/`**. Module maps → **`Poly/*/REA
 | Plan | Role |
 |------|------|
 | [**Master roadmap**](v2-to-v3/master-roadmap.md) | Milestone index + one-line agent pick |
-| [**Domain analysis unification**](domain-analysis-unification.md) | **Product complete** (uncommitted) — §16 · [`dau-*`](simple-agent-tasks/dau-README.md) |
+| [**Domain analysis unification**](domain-analysis-unification.md) | **Parked** — product bar met; codegen track paused · [`dau-*`](simple-agent-tasks/dau-README.md) |
+| [**MCP dogfood protocol**](v2-to-v3/mcp-dogfood-protocol.md) | Scenario dogfood → core concepts · [`dogfood-*`](v2-to-v3/simple-agent-tasks/dogfood-README.md) · **fixes:** [`dogfood-fix-*`](v2-to-v3/simple-agent-tasks/dogfood-fix-README.md) |
 | [**Platform velocity review**](platform-velocity-review.md) | Full-project pain points for planned/future features (2026-07-25) |
 | [**Analysis pipeline merge**](analysis-pipeline-merge.md) | **Complete** (registration only) — predecessor to DAU · [`apm-*`](simple-agent-tasks/apm-README.md) |
 | [**Capability inventory**](../domainmodeling-capability-inventory.md) | What ships (reference, not a queue) |
@@ -28,7 +29,9 @@ Architectural rationale → **`docs/decisions/`**. Module maps → **`Poly/*/REA
 
 | Queue | Role |
 |-------|------|
-| [**`dau-*` (domain analysis unification)**](simple-agent-tasks/dau-README.md) | **Complete** — D0→D4 storage/transport; 1618 green |
+| [**`dogfood-fix-*` (S1 findings)**](v2-to-v3/simple-agent-tasks/dogfood-fix-README.md) | **Primary** — G1 fail-closed → G3 noise → S1-R |
+| [**`dogfood-*` (MCP discovery)**](v2-to-v3/simple-agent-tasks/dogfood-README.md) | S1 done partial; S2→S3 after fixes or in parallel |
+| [**`dau-*` (domain analysis unification)**](simple-agent-tasks/dau-README.md) | **Parked** — product bar met; commit ops optional |
 | [**`apm-*` (analysis pipeline merge)**](simple-agent-tasks/apm-README.md) | **Complete** — registration predecessor; do not reopen |
 | [**`qe-*` (query/effect)**](v2-to-v3/simple-agent-tasks/qe-README.md) | **Complete** — do not reopen Q0–Q3′; optional hygiene only |
 | [**`vs-*` (vertical slice)**](v2-to-v3/simple-agent-tasks/vs-README.md) | Historical M2 — **done**; do not reopen |
@@ -87,7 +90,7 @@ Agents **must not** implement archive work without an explicit re-open validated
 
 ## Guidelines
 
-1. **What next?** → [`simple-agent-tasks/apm-README.md`](simple-agent-tasks/apm-README.md) (pipeline merge) · [`v2-to-v3/master-roadmap.md`](v2-to-v3/master-roadmap.md) · dogfood.  
+1. **What next?** → [`v2-to-v3/simple-agent-tasks/dogfood-README.md`](v2-to-v3/simple-agent-tasks/dogfood-README.md) · [`v2-to-v3/master-roadmap.md`](v2-to-v3/master-roadmap.md).  
 2. Consult `docs/decisions/` and `CORE.md` before significant work.  
 3. Do not invent a second product IR or reintroduce V2.  
 4. Prefer thin vertical slices; archive completed suites instead of leaving stale “CURRENT: commit…”.

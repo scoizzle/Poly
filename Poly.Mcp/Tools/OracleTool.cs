@@ -618,6 +618,18 @@ internal sealed class OracleTool {
             return new DomainToolResponse(Success: false, Message: "Subject properties must not be empty.", Affordances: []);
         }
 
+        // G1: Fail closed — validate all property references exist in the subject bag.
+        var missingProperties = CollectPropertyNames(expr)
+            .Where(p => !subjectValues.ContainsKey(p))
+            .ToList();
+        if (missingProperties.Count > 0) {
+            return new DomainToolResponse(
+                Success: false,
+                Message: $"Expression references properties not present in the subject properties bag: [{string.Join(", ", missingProperties)}]. " +
+                         "Provide values for these properties in the propertiesJson parameter.",
+                Affordances: ["lower_expression", "describe_expression"]);
+        }
+
         try {
             // Infer property types from the expression to ensure VM compatibility
             var propertyTypes = InferPropertyTypes(expr);
@@ -635,6 +647,73 @@ internal sealed class OracleTool {
         }
         catch (Exception ex) {
             return new DomainToolResponse(Success: false, Message: $"Simulation failed: {ex.Message}", Data: new { error = ex.Message }, Affordances: []);
+        }
+    }
+
+    /// <summary>Collects all <see cref="PropertyAccess"/> names from an expression tree.</summary>
+    private static HashSet<string> CollectPropertyNames(DomainExpression expr) {
+        var names = new HashSet<string>(StringComparer.Ordinal);
+        Walk(expr);
+        return names;
+
+        void Walk(DomainExpression e) {
+            switch (e) {
+                case PropertyAccess pa:
+                    names.Add(pa.Name);
+                    break;
+                case OwnedAccess oa:
+                    Walk(oa.Inner);
+                    break;
+                case Exists ex:
+                    Walk(ex.Target);
+                    break;
+                case NotExists nex:
+                    Walk(nex.Target);
+                    break;
+                case Subtract sub:
+                    Walk(sub.Left); Walk(sub.Right);
+                    break;
+                case Add add:
+                    Walk(add.Left); Walk(add.Right);
+                    break;
+                case Multiply mul:
+                    Walk(mul.Left); Walk(mul.Right);
+                    break;
+                case Divide div:
+                    Walk(div.Left); Walk(div.Right);
+                    break;
+                case DateOperation dOp:
+                    Walk(dOp.Date); Walk(dOp.Offset);
+                    break;
+                case RelationshipNavigation rn:
+                    Walk(rn.TargetProperty);
+                    break;
+                case AnyExpr any:
+                    Walk(any.Body);
+                    break;
+                case AllExpr all:
+                    Walk(all.Body);
+                    break;
+                case NoneExpr none:
+                    Walk(none.Body);
+                    break;
+                case CountExpr cnt:
+                    if (cnt.Body is not null) Walk(cnt.Body);
+                    break;
+                case Comparison cmp:
+                    Walk(cmp.Left); Walk(cmp.Right);
+                    break;
+                case And and:
+                    Walk(and.Left); Walk(and.Right);
+                    break;
+                case Or or:
+                    Walk(or.Left); Walk(or.Right);
+                    break;
+                case Not not:
+                    Walk(not.Operand);
+                    break;
+                    // ParameterAccess, Literal — no property references
+            }
         }
     }
 

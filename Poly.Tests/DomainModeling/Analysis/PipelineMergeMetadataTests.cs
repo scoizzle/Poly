@@ -273,4 +273,24 @@ public class PipelineMergeMetadataTests {
         await Assert.That(analysis.Diagnostics.Any(d =>
             d.Code == DomainModelDiagnosticCodes.UnconditionalAction)).IsTrue();
     }
+
+    // ── G3: StoragePass noise on structural failure ─────────────
+
+    [Test]
+    public async Task DomainAnalysis_StructuralFailure_StoragePassNoiseAbsent() {
+        // G3: When a structural failure exists (e.g. duplicate entity name),
+        // StoragePass must NOT emit its "requires EffectTopology and OwnershipAggregate"
+        // error — it should short-circuit via HasStructuralFailure guard.
+        var analysis = DomainModelAnalyzer.Analyze(new Domain("Test", [
+            new Entity("Item", [], [], [], []),
+            new Entity("Item", [], [], [], []),
+        ], []));
+
+        await Assert.That(analysis.Diagnostics.Any(d =>
+            d.Message.Contains("StoragePass requires"))).IsFalse();
+
+        // The real error should be present
+        await Assert.That(analysis.Diagnostics.Any(d =>
+            d.Message.Contains("Duplicate"))).IsTrue();
+    }
 }

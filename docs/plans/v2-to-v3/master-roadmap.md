@@ -50,14 +50,15 @@ MCP / direct API as thin consumers
 ### Agent pick (one line)
 
 ```text
-DONE:    M1–M4; Q1′+Q3′+link_instances; infra IR; APM registration
-CURRENT: DAU product done uncommitted — commit when asked ([`dau-README.md`](../simple-agent-tasks/dau-README.md) §16)
-PULL:    Q4; dates; Bar B; dialect packs; unlink MCP; E5; D2.1–D2.3
+DONE:    M1–M4; Q1′+Q3′+link; infra IR; DAU product parked
+CURRENT: Dogfood fix-G1 simulate_policy fail-closed ([`dogfood-fix-README.md`](simple-agent-tasks/dogfood-fix-README.md))
+THEN:    G3 → S1-R / S2 → S3 → synthesis
+PULL:    Q4; dates; unlink; E5; Bar B; DAU commit
 ```
 
 **Honest product claim today:** Path-prefix / exists / where **and** Q3′ quantifiers are authorable **and** evaluable (store-linked `EvaluatePolicy`). MCP: `create_instance` → `link_instances` → `evaluate_policy(instanceId=…)`. DSL has **no** `link` keyword (`create in Rel` for spawn-and-wire). JSON policies still local-only. Codegen DbContext/Program via Syntax IR; `.http` still string.
 
-**Velocity risks (full project):** [`../platform-velocity-review.md`](../platform-velocity-review.md) — dual storage/transport pipeline, authoring context not on analyze, MCP metadata not projected; finish DAU D3 before packs/RestApi/E5 sprawl.
+**Focus shift (2026-07-25):** Enough investment in codegen / DAU. Next work is **direct domain modeling** (DSL, effects, policies, instance graph, MCP honesty) — not packs/RestApi/Bar B unless dogfood forces it. DAU product is parked; commit ops optional.
 
 ---
 

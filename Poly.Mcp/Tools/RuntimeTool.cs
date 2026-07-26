@@ -51,7 +51,8 @@ internal sealed class RuntimeTool {
             CurrentStage: instance.CurrentStage,
             Properties: props,
             IsDeleted: instance.IsDeleted,
-            CreatedChildCount: instance.CreatedChildren.Count
+            CreatedChildCount: instance.CreatedChildren.Count,
+            NavigationLinks: []
         );
     }
 
@@ -68,7 +69,14 @@ internal sealed class RuntimeTool {
         [property: JsonPropertyName("currentStage")] string? CurrentStage,
         [property: JsonPropertyName("properties")] IReadOnlyList<PropertyValueData> Properties,
         [property: JsonPropertyName("isDeleted")] bool IsDeleted,
-        [property: JsonPropertyName("createdChildCount")] int CreatedChildCount
+        [property: JsonPropertyName("createdChildCount")] int CreatedChildCount,
+        [property: JsonPropertyName("navigationLinks")] IReadOnlyList<NavigationLinkData> NavigationLinks
+    );
+
+    internal sealed record NavigationLinkData(
+        [property: JsonPropertyName("relationshipName")] string RelationshipName,
+        [property: JsonPropertyName("direction")] string Direction,
+        [property: JsonPropertyName("linkedInstanceIds")] IReadOnlyList<string> LinkedInstanceIds
     );
 
     internal sealed record InstanceSummaryData(
@@ -295,6 +303,120 @@ Use case — Q3′ quantifiers:
             Affordances: ["link_instances", "evaluate_policy", "invoke_action", "list_instances"]);
     }
 
+    // ── RT.2b: unlink_instances ────────────────────────────────
+
+    /// <summary>
+    /// Removes a link between two runtime instances for a named relationship.
+    /// Both instances must already exist and be linked via <c>link_instances</c>.
+    /// Fails if the link does not exist (fail-closed).
+    ///
+    /// Use case — reassign a child entity from one parent to another:
+    ///   1. unlink_instances to remove child from old parent
+    ///   2. link_instances to attach child to new parent
+    /// </summary>
+    [McpServerTool(Name = "unlink_instances"), Description(@"Removes a link between two runtime instances for a named relationship.
+
+Both instances must already exist and be linked via link_instances.
+Fails if the link does not exist — use link_instances to create the link first.
+
+Use case — reassign a child from one parent to another:
+  1. unlink_instances(sessionId, oldParentId, ""relationshipName"", childId)
+  2. link_instances(sessionId, newParentId, ""relationshipName"", childId)")]
+    public static DomainToolResponse UnlinkInstances(
+        [Description("Session ID")] string sessionId,
+        [Description("Instance ID of the source (owning) instance")] string sourceInstanceId,
+        [Description("Relationship name as defined in the domain (e.g. 'orders', 'loans')")] string relationshipName,
+        [Description("Instance ID of the target (owned) instance")] string targetInstanceId) {
+        if (!McpSessionStore.TryGet(sessionId, out var state))
+            return Failure_NotFound(sessionId);
+
+        if (!state.InstanceMap.TryGetValue(sourceInstanceId, out var source))
+            return new DomainToolResponse(
+                Success: false,
+                Message: $"Source instance '{sourceInstanceId}' not found.",
+                SessionId: sessionId,
+                Affordances: ["create_instance", "list_instances"]);
+
+        if (!state.InstanceMap.TryGetValue(targetInstanceId, out var target))
+            return new DomainToolResponse(
+                Success: false,
+                Message: $"Target instance '{targetInstanceId}' not found.",
+                SessionId: sessionId,
+                Affordances: ["create_instance", "list_instances"]);
+
+        if (state.InstanceStore is null)
+            return new DomainToolResponse(
+                Success: false,
+                Message: "No instance store available. Create at least one instance first.",
+                SessionId: sessionId,
+                Affordances: ["create_instance"]);
+
+        // Validate relationship exists in domain model and entity ends match
+        var relationship = state.Domain.Relationships
+            .FirstOrDefault(r => string.Equals(r.Name, relationshipName, StringComparison.Ordinal));
+        if (relationship is null)
+            return new DomainToolResponse(
+                Success: false,
+                Message: $"Relationship '{relationshipName}' not found in domain '{state.Domain.Name}'. " +
+                    $"Available: {string.Join(", ", state.Domain.Relationships.Select(r => r.Name))}.",
+                SessionId: sessionId,
+                Affordances: ["get_relationships"]);
+
+        var sourceEntityName = source.Entity.Name;
+        var targetEntityName = target.Entity.Name;
+        var sourceMatch = string.Equals(relationship.Source.TypeName, sourceEntityName, StringComparison.Ordinal);
+        var targetMatch = string.Equals(relationship.Target.TypeName, targetEntityName, StringComparison.Ordinal);
+        if (!sourceMatch || !targetMatch) {
+            var revSourceMatch = string.Equals(relationship.Source.TypeName, targetEntityName, StringComparison.Ordinal);
+            var revTargetMatch = string.Equals(relationship.Target.TypeName, sourceEntityName, StringComparison.Ordinal);
+            if (revSourceMatch && revTargetMatch)
+                return new DomainToolResponse(
+                    Success: false,
+                    Message: $"Relationship '{relationshipName}' connects '{relationship.Source.TypeName}' → '{relationship.Target.TypeName}', " +
+                        $"but the source/target instance IDs are reversed. " +
+                        $"Pass source instance (entity '{relationship.Source.TypeName}') first, then target (entity '{relationship.Target.TypeName}').",
+                    SessionId: sessionId,
+                    Affordances: ["get_relationships", "get_entity_detail"]);
+
+            return new DomainToolResponse(
+                Success: false,
+                Message: $"Relationship '{relationshipName}' connects '{relationship.Source.TypeName}' → '{relationship.Target.TypeName}', " +
+                    $"but the provided instances are of types '{sourceEntityName}' and '{targetEntityName}'.",
+                SessionId: sessionId,
+                Affordances: ["get_relationships", "get_entity_detail"]);
+        }
+
+        // Fail-closed: link must exist to unlink
+        if (!state.InstanceStore.IsLinked(relationshipName, source, target))
+            return new DomainToolResponse(
+                Success: false,
+                Message: $"No link found between '{sourceInstanceId}' and '{targetInstanceId}' via '{relationshipName}'. " +
+                    $"Use link_instances to create the link first.",
+                SessionId: sessionId,
+                Affordances: ["link_instances", "get_relationships"]);
+
+        try {
+            if (!McpSessionStore.TryModifyInstances(sessionId, st => {
+                st.InstanceStore!.Unlink(relationshipName, source, target);
+            }))
+                return Failure_NotFound(sessionId);
+        }
+        catch (Exception ex) {
+            return new DomainToolResponse(
+                Success: false,
+                Message: $"Failed to unlink instances: {ex.Message}",
+                SessionId: sessionId,
+                Affordances: ["get_relationships", "get_entity_detail"]);
+        }
+
+        return new DomainToolResponse(
+            Success: true,
+            Message: $"Unlinked '{sourceInstanceId}' -/→ '{targetInstanceId}' via '{relationshipName}'.",
+            SessionId: sessionId,
+            Data: new { sourceInstanceId, relationshipName, targetInstanceId },
+            Affordances: ["link_instances", "evaluate_policy", "invoke_action", "list_instances", "unlink_instances"]);
+    }
+
     // ── RT.3: get_instance ─────────────────────────────────────
 
     /// <summary>
@@ -316,6 +438,36 @@ Use case — Q3′ quantifiers:
                 Affordances: ["create_instance", "list_instances"]);
 
         var snapshot = BuildSnapshot(instance) with { InstanceId = instanceId };
+
+        // Populate navigation links from the instance store (link-3)
+        var navs = new List<NavigationLinkData>();
+        if (state.InstanceStore is not null) {
+            var entityName = instance.Entity.Name;
+            foreach (var rel in state.Domain.Relationships) {
+                var isSource = string.Equals(rel.Source.TypeName, entityName, StringComparison.Ordinal);
+                var isTarget = string.Equals(rel.Target.TypeName, entityName, StringComparison.Ordinal);
+                if (!isSource && !isTarget) continue;
+
+                var linked = state.InstanceStore.GetRelatedInstances(rel.Name, instance);
+                if (linked.Count == 0) continue;
+
+                var ids = new List<string>(linked.Count);
+                foreach (var linkedInstance in linked) {
+                    var kvp = state.InstanceMap.FirstOrDefault(
+                        kv => ReferenceEquals(kv.Value, linkedInstance));
+                    if (kvp.Value is not null)
+                        ids.Add(kvp.Key);
+                }
+
+                if (ids.Count > 0) {
+                    var direction = isSource ? "source→target" : "target→source";
+                    navs.Add(new NavigationLinkData(rel.Name, direction, ids));
+                }
+            }
+        }
+
+        snapshot = snapshot with { NavigationLinks = navs };
+
         return new DomainToolResponse(
             Success: true,
             Message: $"Instance '{instanceId}' of '{instance.Entity.Name}', stage: '{instance.CurrentStage ?? "(none)"}'.",
@@ -440,6 +592,29 @@ Returns the result including new stage and any guard failures.")]
                 SessionId: sessionId,
                 Data: new { actionName, error = ex.Message },
                 Affordances: ["get_instance", "list_instances"]);
+        }
+
+        // Register any newly created children in session InstanceMap so they
+        // appear in list_instances and get_instance.
+        if (result.Succeeded && instance.CreatedChildren.Count > 0) {
+            var newChildren = new List<DomainEntityInstance>();
+            foreach (var child in instance.CreatedChildren) {
+                var alreadyRegistered = state.InstanceMap.Values
+                    .Any(v => ReferenceEquals(v, child));
+                if (!alreadyRegistered)
+                    newChildren.Add(child);
+            }
+
+            if (newChildren.Count > 0) {
+                McpSessionStore.TryModifyInstances(sessionId, st => {
+                    foreach (var child in newChildren) {
+                        var childId = NewInstanceId();
+                        st.InstanceStore ??= new DomainInstanceStore();
+                        st.InstanceStore.Add(child);
+                        st.InstanceMap[childId] = child;
+                    }
+                });
+            }
         }
 
         var resultData = new InvokeActionResultData(

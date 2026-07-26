@@ -155,8 +155,6 @@ public sealed class AnalysisContext : INodeMetadataProvider {
     /// Analyzers can call this to decide whether to do expensive work.
     /// </summary>
     public bool ShouldContinue(AnalysisOptions options) {
-        if (options.ShouldStopOnStructuralErrors && HasStructuralFailure)
-            return false;
-        return true;
+        return !options.ShouldStopOnStructuralErrors || !HasStructuralFailure;
     }
 }

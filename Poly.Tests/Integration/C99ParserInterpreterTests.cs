@@ -3,6 +3,7 @@ using System.Reflection;
 
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Interpretation.LinqExpressions;
+using Poly.Text.Grammar;
 
 namespace Poly.Tests.Integration;
 
@@ -36,54 +37,7 @@ public class C99ParserInterpreterTests {
         Eof
     }
 
-    private record C99Token(C99TokenKind Kind, string Text, int Position);
-
-    private sealed class C99Lexer {
-        private readonly string _src;
-        private int _pos;
-
-        public C99Lexer(string src) => _src = src;
-
-        public List<C99Token> Tokenize() {
-            var tokens = new List<C99Token>();
-            while (_pos < _src.Length) {
-                SkipWhitespace();
-                if (_pos >= _src.Length) break;
-
-                char c = _src[_pos];
-                if (char.IsDigit(c) || (c == '.' && _pos + 1 < _src.Length && char.IsDigit(_src[_pos + 1]))) {
-                    tokens.Add(ReadNumber());
-                }
-                else if (char.IsLetter(c) || c == '_') {
-                    tokens.Add(ReadIdentOrKeyword());
-                }
-                else {
-                    tokens.Add(ReadPunctuation());
-                }
-            }
-            tokens.Add(new C99Token(C99TokenKind.Eof, "", _pos));
-            return tokens;
-        }
-
-        private void SkipWhitespace() {
-            while (_pos < _src.Length && char.IsWhiteSpace(_src[_pos])) _pos++;
-        }
-
-        private C99Token ReadNumber() {
-            int start = _pos;
-            bool hasDecimal = false;
-            while (_pos < _src.Length && (char.IsDigit(_src[_pos]) || _src[_pos] == '.')) {
-                if (_src[_pos] == '.') hasDecimal = true;
-                _pos++;
-            }
-            if (_pos < _src.Length && (_src[_pos] == 'f' || _src[_pos] == 'F')) {
-                _pos++;
-                return new C99Token(C99TokenKind.FloatLiteral, _src[start.._pos], start);
-            }
-            var kind = hasDecimal ? C99TokenKind.DoubleLiteral : C99TokenKind.IntLiteral;
-            return new C99Token(kind, _src[start.._pos], start);
-        }
-
+    private sealed class C99TokenReader : StringTokenReader<C99TokenKind> {
         private static readonly Dictionary<string, C99TokenKind> Keywords = new() {
             ["int"] = C99TokenKind.KwInt,
             ["float"] = C99TokenKind.KwFloat,
@@ -97,50 +51,95 @@ public class C99ParserInterpreterTests {
             ["for"] = C99TokenKind.KwFor,
         };
 
-        private C99Token ReadIdentOrKeyword() {
-            int start = _pos;
-            while (_pos < _src.Length && (char.IsLetterOrDigit(_src[_pos]) || _src[_pos] == '_')) _pos++;
-            var text = _src[start.._pos];
-            var kind = Keywords.GetValueOrDefault(text, C99TokenKind.Identifier);
-            return new C99Token(kind, text, start);
-        }
+        public C99TokenReader(string text) : base(text) { }
 
-        private C99Token ReadPunctuation() {
-            int start = _pos;
-            char c = _src[_pos++];
+        public override bool IsEndOfFile(C99TokenKind kind) => kind == C99TokenKind.Eof;
+
+        protected override Token<C99TokenKind> ScanNextToken() {
+            SkipWhitespace();
+            if (Position >= Text.Length)
+                return MakeToken(C99TokenKind.Eof, "");
+
+            var c = PeekChar();
+            if (char.IsDigit(c) || (c == '.' && Position + 1 < Text.Length && char.IsDigit(Text[Position + 1])))
+                return ScanNumber();
+            if (char.IsLetter(c) || c == '_')
+                return ScanIdentOrKeyword();
+
+            AdvanceChar(); // consume the punctuation character
+
+            // Multi-character operators with single-char fallback
+            if (c == '<')
+                return TryConsumeChar('=')
+                    ? MakeToken(C99TokenKind.LtEq, "<=")
+                    : MakeToken(C99TokenKind.Lt, "<");
+            if (c == '>')
+                return TryConsumeChar('=')
+                    ? MakeToken(C99TokenKind.GtEq, ">=")
+                    : MakeToken(C99TokenKind.Gt, ">");
+            if (c == '=')
+                return TryConsumeChar('=')
+                    ? MakeToken(C99TokenKind.EqEq, "==")
+                    : MakeToken(C99TokenKind.Eq, "=");
+            if (c == '!')
+                return TryConsumeChar('=')
+                    ? MakeToken(C99TokenKind.BangEq, "!=")
+                    : MakeToken(C99TokenKind.Bang, "!");
+
+            // Two-char only operators (single & or | will throw in switch default)
+            if (c == '&' && TryConsumeChar('&')) return MakeToken(C99TokenKind.AmpAmp, "&&");
+            if (c == '|' && TryConsumeChar('|')) return MakeToken(C99TokenKind.PipePipe, "||");
+
             return c switch {
-                '+' => new C99Token(C99TokenKind.Plus, "+", start),
-                '-' => new C99Token(C99TokenKind.Minus, "-", start),
-                '*' => new C99Token(C99TokenKind.Star, "*", start),
-                '/' => new C99Token(C99TokenKind.Slash, "/", start),
-                '%' => new C99Token(C99TokenKind.Percent, "%", start),
-                '<' when TryPeek('=') => new C99Token(C99TokenKind.LtEq, "<=", start),
-                '<' => new C99Token(C99TokenKind.Lt, "<", start),
-                '>' when TryPeek('=') => new C99Token(C99TokenKind.GtEq, ">=", start),
-                '>' => new C99Token(C99TokenKind.Gt, ">", start),
-                '=' when TryPeek('=') => new C99Token(C99TokenKind.EqEq, "==", start),
-                '=' => new C99Token(C99TokenKind.Eq, "=", start),
-                '!' when TryPeek('=') => new C99Token(C99TokenKind.BangEq, "!=", start),
-                '!' => new C99Token(C99TokenKind.Bang, "!", start),
-                '&' when TryPeek('&') => new C99Token(C99TokenKind.AmpAmp, "&&", start),
-                '|' when TryPeek('|') => new C99Token(C99TokenKind.PipePipe, "||", start),
-                '(' => new C99Token(C99TokenKind.LParen, "(", start),
-                ')' => new C99Token(C99TokenKind.RParen, ")", start),
-                '[' => new C99Token(C99TokenKind.LBracket, "[", start),
-                ']' => new C99Token(C99TokenKind.RBracket, "]", start),
-                '{' => new C99Token(C99TokenKind.LBrace, "{", start),
-                '}' => new C99Token(C99TokenKind.RBrace, "}", start),
-                ';' => new C99Token(C99TokenKind.Semicolon, ";", start),
-                ',' => new C99Token(C99TokenKind.Comma, ",", start),
-                '?' => new C99Token(C99TokenKind.Question, "?", start),
-                ':' => new C99Token(C99TokenKind.Colon, ":", start),
-                '.' => new C99Token(C99TokenKind.Dot, ".", start),
-                _ => throw new InvalidOperationException($"Unexpected character '{c}' at position {start}")
+                '+' => MakeToken(C99TokenKind.Plus, "+"),
+                '-' => MakeToken(C99TokenKind.Minus, "-"),
+                '*' => MakeToken(C99TokenKind.Star, "*"),
+                '/' => MakeToken(C99TokenKind.Slash, "/"),
+                '%' => MakeToken(C99TokenKind.Percent, "%"),
+                '(' => MakeToken(C99TokenKind.LParen, "("),
+                ')' => MakeToken(C99TokenKind.RParen, ")"),
+                '[' => MakeToken(C99TokenKind.LBracket, "["),
+                ']' => MakeToken(C99TokenKind.RBracket, "]"),
+                '{' => MakeToken(C99TokenKind.LBrace, "{"),
+                '}' => MakeToken(C99TokenKind.RBrace, "}"),
+                ';' => MakeToken(C99TokenKind.Semicolon, ";"),
+                ',' => MakeToken(C99TokenKind.Comma, ","),
+                '?' => MakeToken(C99TokenKind.Question, "?"),
+                ':' => MakeToken(C99TokenKind.Colon, ":"),
+                '.' => MakeToken(C99TokenKind.Dot, "."),
+                _ => throw new InvalidOperationException($"Unexpected character '{c}'")
             };
         }
 
-        private bool TryPeek(char expected) {
-            if (_pos < _src.Length && _src[_pos] == expected) { _pos++; return true; }
+        private Token<C99TokenKind> ScanNumber() {
+            var start = Position;
+            bool hasDecimal = false;
+            while (Position < Text.Length && (char.IsDigit(PeekChar()) || PeekChar() == '.')) {
+                if (PeekChar() == '.') hasDecimal = true;
+                AdvanceChar();
+            }
+            if (Position < Text.Length && (PeekChar() == 'f' || PeekChar() == 'F')) {
+                AdvanceChar();
+                return MakeToken(C99TokenKind.FloatLiteral, Text[start..Position]);
+            }
+            var kind = hasDecimal ? C99TokenKind.DoubleLiteral : C99TokenKind.IntLiteral;
+            return MakeToken(kind, Text[start..Position]);
+        }
+
+        private Token<C99TokenKind> ScanIdentOrKeyword() {
+            var start = Position;
+            while (Position < Text.Length && (char.IsLetterOrDigit(PeekChar()) || PeekChar() == '_'))
+                AdvanceChar();
+            var text = Text[start..Position];
+            var kind = Keywords.GetValueOrDefault(text, C99TokenKind.Identifier);
+            return MakeToken(kind, text);
+        }
+
+        private bool TryConsumeChar(char expected) {
+            if (Position < Text.Length && PeekChar() == expected) {
+                AdvanceChar();
+                return true;
+            }
             return false;
         }
     }
@@ -175,8 +174,7 @@ public class C99ParserInterpreterTests {
     }
 
     private sealed class C99Parser {
-        private readonly List<C99Token> _tokens;
-        private int _cur;
+        private readonly TokenReader<C99TokenKind> _reader;
 
         // Shared symbol table: all in-scope identifiers (function params + local variables)
         private readonly Dictionary<string, (Parameter Param, Type ClrType)> _symbols = new();
@@ -189,7 +187,7 @@ public class C99ParserInterpreterTests {
         };
         private readonly Dictionary<string, Type> _structTypes = new(KnownStructTypes);
 
-        public C99Parser(List<C99Token> tokens) => _tokens = tokens;
+        public C99Parser(TokenReader<C99TokenKind> reader) => _reader = reader;
 
         public C99ParsedFunction ParseFunction() {
             if (Check(C99TokenKind.KwNamespace)) {
@@ -222,9 +220,12 @@ public class C99ParserInterpreterTests {
 
         private bool IsStructDefinition() {
             if (!Check(C99TokenKind.KwStruct)) return false;
-            if (_cur + 2 >= _tokens.Count) return false;
-            return _tokens[_cur + 1].Kind == C99TokenKind.Identifier
-                && _tokens[_cur + 2].Kind == C99TokenKind.LBrace;
+            var next = _reader.Peek(2);
+            if (next.Kind == C99TokenKind.Eof) return false;
+            var nextNext = _reader.Peek(3);
+            if (nextNext.Kind == C99TokenKind.Eof) return false;
+            return next.Kind == C99TokenKind.Identifier
+                && nextNext.Kind == C99TokenKind.LBrace;
         }
 
         private void ParseStructDefinition() {
@@ -520,17 +521,26 @@ public class C99ParserInterpreterTests {
 
         // Handles `ident = expr` and `ident.member = expr` assignments, or falls through to a plain expression.
         private Node ParseAssignmentOrExpr() {
-            if (Check(C99TokenKind.Identifier)) {
-                int checkpoint = _cur;
+            if (IsAssignmentAhead()) {
                 var destination = ParseAssignmentDestination();
-                if (TryConsume(C99TokenKind.Eq)) {
-                    return new Assignment(destination, ParseExpr());
-                }
-
-                _cur = checkpoint;
+                _reader.Read(); // consume =
+                return new Assignment(destination, ParseExpr());
             }
 
             return ParseExpr();
+        }
+
+        private bool IsAssignmentAhead() {
+            if (!Check(C99TokenKind.Identifier)) return false;
+            var depth = 1;
+            while (true) {
+                var kind = _reader.Peek(1 + depth).Kind;
+                if (kind is C99TokenKind.Dot or C99TokenKind.Identifier) {
+                    depth++;
+                    continue;
+                }
+                return kind == C99TokenKind.Eq;
+            }
         }
 
         private Node ParseAssignmentDestination() {
@@ -659,7 +669,7 @@ public class C99ParserInterpreterTests {
                 case C99TokenKind.Identifier:
                     Advance();
                     if (_symbols.TryGetValue(tok.Text, out var sym)) return sym.Param;
-                    throw new InvalidOperationException($"Undefined identifier '{tok.Text}' at position {tok.Position}");
+                    throw new InvalidOperationException($"Undefined identifier '{tok.Text}'");
 
                 case C99TokenKind.LParen:
                     Advance();
@@ -668,7 +678,7 @@ public class C99ParserInterpreterTests {
                     return inner;
 
                 default:
-                    throw new InvalidOperationException($"Unexpected token '{tok.Text}' ({tok.Kind}) at position {tok.Position}");
+                    throw new InvalidOperationException($"Unexpected token '{tok.Text}' ({tok.Kind})");
             }
         }
 
@@ -707,17 +717,19 @@ public class C99ParserInterpreterTests {
             return new Parameter(name);
         }
 
-        private C99Token Peek() => _tokens[_cur];
-        private C99Token Advance() => _tokens[_cur++];
-        private bool Check(C99TokenKind kind) => _tokens[_cur].Kind == kind;
+        private Token<C99TokenKind> Peek() => _reader.Peek();
+        private Token<C99TokenKind> Advance() => _reader.Read();
+        private bool Check(C99TokenKind kind) => _reader.Peek().Kind == kind;
         private bool TryConsume(C99TokenKind kind) {
-            if (Check(kind)) { _cur++; return true; }
+            if (Check(kind)) { _reader.Read(); return true; }
             return false;
         }
-        private C99Token Expect(C99TokenKind kind) {
-            if (!Check(kind))
-                throw new InvalidOperationException($"Expected {kind}, got '{Peek().Text}' at position {Peek().Position}");
-            return Advance();
+        private Token<C99TokenKind> Expect(C99TokenKind kind) {
+            if (!Check(kind)) {
+                var tok = _reader.Peek();
+                throw new InvalidOperationException($"Expected {kind}, got '{tok.Text}'");
+            }
+            return _reader.Read();
         }
     }
 
@@ -726,8 +738,8 @@ public class C99ParserInterpreterTests {
     // =========================================================================
 
     private static TDelegate CompileC99<TDelegate>(string source) where TDelegate : Delegate {
-        var tokens = new C99Lexer(source).Tokenize();
-        var fn = new C99Parser(tokens).ParseFunction();
+        var reader = new C99TokenReader(source);
+        var fn = new C99Parser(reader).ParseFunction();
         var invokeMethod = typeof(TDelegate).GetMethod("Invoke")
             ?? throw new InvalidOperationException($"Delegate type {typeof(TDelegate).Name} does not expose an Invoke method.");
 

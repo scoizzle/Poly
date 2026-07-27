@@ -245,17 +245,18 @@ public sealed class DomainToCSharpExporter {
         }
 
         // ── Actions as void methods ───────────────────────────────
+        var analysis = metadata as AnalysisResult;
         foreach (var action in entity.Actions)
-            AddActionMethod(entity, action, methods, stageEnumTypeName, postTransitionNodes, domain: domain);
+            AddActionMethod(entity, action, methods, stageEnumTypeName, postTransitionNodes, domain: domain, analysis: analysis);
         foreach (var stage in entity.Stages)
             foreach (var action in stage.Actions)
-                AddActionMethod(entity, action, methods, stageEnumTypeName, postTransitionNodes, stage.Name, domain);
+                AddActionMethod(entity, action, methods, stageEnumTypeName, postTransitionNodes, stage.Name, domain, analysis);
 
         // ── Policies as bool methods ──────────────────────────────
         foreach (var policy in entity.Policies) {
             Node? body;
             try {
-                body = LowerExpressionToMethodBody(policy.Expression, entity, domain);
+                body = LowerExpressionToMethodBody(policy.Expression, entity, domain, analysis: analysis);
             }
             catch (NotSupportedException) {
                 // Q3′ quantifiers (any/all/none/count) and other store-dependent
@@ -366,6 +367,7 @@ public sealed class DomainToCSharpExporter {
                     var context = new LoweringContext(
                         new Parameter("entity",
                             new TypeReference(entity.Name)),
+                        Analysis: metadata as AnalysisResult,
                         UseThisReference: true,
                         LowerStageTransitions: true,
                         Domain: domain,
@@ -440,6 +442,7 @@ public sealed class DomainToCSharpExporter {
                     var entryCtx = new LoweringContext(
                         new Parameter("entity",
                             new TypeReference(entity.Name)),
+                        Analysis: metadata as AnalysisResult,
                         UseThisReference: true,
                         LowerStageTransitions: false,
                         Domain: domain,
@@ -961,11 +964,12 @@ public sealed class DomainToCSharpExporter {
     private static void AddActionMethod(Entity entity, Action action,
         List<MethodDefinitionNode> methods, string? stageEnumTypeName = null,
         IReadOnlyDictionary<string, IReadOnlyList<Node>>? postTransitionNodes = null,
-        string? sourceStageName = null, Domain? domain = null) {
+        string? sourceStageName = null, Domain? domain = null,
+        AnalysisResult? analysis = null) {
         var paramNames = new HashSet<string>(
             action.Parameters.Select(p => p.Name), StringComparer.Ordinal);
         var effectsBody = LowerActionToMethodBody(entity, action, paramNames, stageEnumTypeName,
-            postTransitionNodes, sourceStageName, domain);
+            postTransitionNodes, sourceStageName, domain, analysis);
 
         // Build the full method body: require guards first, then effects
         var isVoid = action.Result is not { Members.Count: > 0 };
@@ -1157,11 +1161,13 @@ public sealed class DomainToCSharpExporter {
         Entity entity, Action action,
         HashSet<string>? paramNames = null, string? stageEnumTypeName = null,
         IReadOnlyDictionary<string, IReadOnlyList<Node>>? postTransitionNodes = null,
-        string? sourceStageName = null, Domain? domain = null) {
+        string? sourceStageName = null, Domain? domain = null,
+        AnalysisResult? analysis = null) {
         if (action.Effects.Count == 0) return null;
         var enumProps = domain is not null ? BuildEnumPropertyNames(entity, domain) : null;
         var context = new LoweringContext(
             new Parameter("entity", new TypeReference(entity.Name)),
+            Analysis: analysis,
             UseThisReference: true,
             ActionParameterNames: paramNames,
             LowerStageTransitions: true,
@@ -1177,10 +1183,12 @@ public sealed class DomainToCSharpExporter {
     }
 
     internal static Node? LowerExpressionToMethodBody(
-        DomainExpression expr, Entity entity, Domain? domain = null) {
+        DomainExpression expr, Entity entity, Domain? domain = null,
+        AnalysisResult? analysis = null) {
         var enumProps = domain is not null ? BuildEnumPropertyNames(entity, domain) : null;
         var context = new LoweringContext(
             new Parameter("entity", new TypeReference(entity.Name)),
+            Analysis: analysis,
             UseThisReference: true,
             EnumPropertyNames: enumProps
         );

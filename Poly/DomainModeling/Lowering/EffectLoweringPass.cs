@@ -1,3 +1,4 @@
+using Poly.Analysis;
 using Poly.Ast.Nodes;
 using Poly.DomainModeling.Constraints;
 using Poly.DomainModeling.Effects;
@@ -15,16 +16,24 @@ namespace Poly.DomainModeling.Lowering;
 /// execute directly on <see cref="DomainEntityInstance"/> rather than
 /// through the VM — they produce <c>null</c> from <see cref="Route"/>
 /// and are handled by the caller.</para>
+///
+/// <para>When <see cref="Analysis"/> is set, lowering reads pre-computed
+/// <see cref="IAnalysisMetadata"/> instead of re-scanning domain collections.
+/// Null-safe — falls back to re-scan when absent.</para>
 /// </summary>
 public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     private readonly Entity _entity;
     private readonly Domain? _domain;
     private readonly DomainExpressionLoweringPass _expressionPass;
+    private readonly AnalysisResult? _analysis;
     private readonly bool _useThisReference;
     private readonly bool _lowerStageTransitions;
     private readonly string? _stageEnumTypeName;
     private readonly IReadOnlyDictionary<string, IReadOnlyList<Node>>? _postTransitionNodes;
     private readonly string? _sourceStageName;
+
+    /// <summary>Pre-computed analysis metadata, when available.</summary>
+    public AnalysisResult? Analysis => _analysis;
 
     public EffectLoweringPass(Entity entity, Node subject)
         : this(entity, new LoweringContext(subject)) { }
@@ -32,6 +41,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     public EffectLoweringPass(Entity entity, LoweringContext context) {
         _entity = entity;
         _domain = context.Domain;
+        _analysis = context.Analysis;
         _useThisReference = context.UseThisReference;
         _lowerStageTransitions = context.LowerStageTransitions;
         _stageEnumTypeName = context.StageEnumTypeName;
@@ -275,7 +285,10 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     /// Lowers CreateEntityInRelationshipEffect for C# mode. Emits a call to the
     /// source entity's <c>Create{Nav}()</c> factory method, which handles
     /// construction, collection wiring, and subscription registration.
-    /// E.g. <c>create in loans { book: book }</c> → <c>this.CreateLoans(book)</c>.
+    /// E.g. <c>create in loans { book: book }</c> → <c>var loan = this.CreateLoans(book);</c>
+    ///
+    /// The return value is captured in a local variable so subsequent effects
+    /// and the action's return value can reference the created instance.
     ///
     /// Builds the argument list to match the factory method signature produced
     /// by <see cref="DomainToCSharpExporter.AddCreateNavMethod"/>: entity
@@ -327,7 +340,12 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
                 args.Add(DefaultForDomainType(trel.Target, _domain));
         }
 
-        return new Invoke(new Member(Subject, methodName), [.. args]);
+        // Capture the return value in a local variable, matching CreateEntityInstance lowering
+        var localName = DomainToCSharpExporter.ToCamelCase(targetEntity.Name);
+        return new Block([
+            new Variable(localName,
+                new Invoke(new Member(Subject, methodName), [.. args]))
+        ]);
     }
 
     /// <summary>

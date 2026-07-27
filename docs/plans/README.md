@@ -25,6 +25,7 @@ Architectural rationale → **`docs/decisions/`**. Module maps → **`Poly/*/REA
 | [**Post–V2-delete naming cleanup**](post-v2-delete-naming-cleanup.md) | Drop product `V3*` labels — idle green tree |
 | [**Post–system-review correctness hardening**](2026-07-11-review-fix-plan.md) | Mostly Done; optional residuals |
 | [**Grammar framework integration**](grammar-integration.md) | **Draft** — `Poly.Text.Grammar` prototype complete (54 tests); integrate into DSL pipeline |
+| [**Analysis-consuming lowering**](analysis-consuming-lowering.md) | **Draft** — wire 22 re-discovery operations in lowering to pre-existing analysis metadata |
 
 ### Simple-agent queues
 

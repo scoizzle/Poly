@@ -401,13 +401,11 @@ public sealed record DomainEntityInstance {
         }
 
         protected override object? CreateEntityInstance(CreateEntityInstance create) {
-            _instance.CreateChildInstance(create);
-            return null;
+            return _instance.CreateChildInstance(create);
         }
 
         protected override object? CreateEntityInRelationship(CreateEntityInRelationshipEffect createIn) {
-            _instance.ExecuteCreateInRelationship(createIn);
-            return null;
+            return _instance.ExecuteCreateInRelationship(createIn);
         }
 
         protected override object? InvokeAction(InvokeActionEffect invoke) {
@@ -674,7 +672,7 @@ public sealed record DomainEntityInstance {
     /// entity (same-type creation). Initializer expressions are evaluated
     /// against the <em>parent</em> instance and bound to the child's properties.
     /// </summary>
-    private void CreateChildInstance(CreateEntityInstance createEffect) {
+    private DomainEntityInstance CreateChildInstance(CreateEntityInstance createEffect) {
         var targetTypeName = createEffect.Type.TypeName;
 
         // Resolve target entity definition
@@ -734,14 +732,17 @@ public sealed record DomainEntityInstance {
             }
             Store.Link(createEffect.RelationshipName, this, child);
         }
+
+        return child;
     }
 
     /// <summary>
     /// Executes a <see cref="CreateEntityInRelationshipEffect"/>: resolves the target
     /// entity type from the relationship definition on the domain, creates the instance,
     /// auto-registers it, and links it via the named relationship.
+    /// Returns the created <see cref="DomainEntityInstance"/>.
     /// </summary>
-    private void ExecuteCreateInRelationship(CreateEntityInRelationshipEffect effect) {
+    private DomainEntityInstance ExecuteCreateInRelationship(CreateEntityInRelationshipEffect effect) {
         if (Domain is null)
             throw new InvalidOperationException(
                 "Cannot execute 'create in' effect without a domain to resolve relationship targets.");
@@ -773,7 +774,7 @@ public sealed record DomainEntityInstance {
             effect.Initializers,
             effect.RelationshipName);
 
-        CreateChildInstance(createEffect);
+        return CreateChildInstance(createEffect);
     }
 
     /// <summary>

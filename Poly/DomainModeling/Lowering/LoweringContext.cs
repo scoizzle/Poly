@@ -1,14 +1,23 @@
+using Poly.Analysis;
 using Poly.Ast.Nodes;
 
 namespace Poly.DomainModeling.Lowering;
 
 /// <summary>
-/// Shared context for lowering passes. Bundles the subject (current-instance root)
-/// and optional parameter map so both <see cref="DomainExpressionLoweringPass"/>
-/// and <see cref="EffectLoweringPass"/> see the same context.
+/// Shared context for lowering passes. Bundles the subject (current-instance root),
+/// optional parameter map, and the analysis result so lowering passes can consume
+/// pre-computed metadata instead of re-scanning <see cref="Domain"/> collections.
+///
+/// When <see cref="Analysis"/> is provided, lowering reads <see cref="IAnalysisMetadata"/>
+/// from it — every caller already has the <see cref="AnalysisResult"/> in hand.
+/// When null, lowering falls back to the pre-Phase-0 re-scan logic.
 /// </summary>
 /// <param name="Subject">The Syntax AST node representing the current entity instance.</param>
 /// <param name="Parameters">Optional map of parameter names to Syntax AST nodes.</param>
+/// <param name="Analysis">
+/// The analysis result with pre-computed metadata. When present, lowering uses
+/// metadata lookups instead of scanning domain collections. Null-safe (falls
+/// back to re-scan).</param>
 /// <param name="UseThisReference">
 /// When true, the lowered tree uses <see cref="ThisReference"/> as the instance root
 /// instead of <see cref="Parameter"/>. Useful when generating C# method bodies where
@@ -48,6 +57,7 @@ namespace Poly.DomainModeling.Lowering;
 public sealed record LoweringContext(
     Node Subject,
     IReadOnlyDictionary<string, Node>? Parameters = null,
+    AnalysisResult? Analysis = null,
     bool UseThisReference = false,
     HashSet<string>? ActionParameterNames = null,
     bool LowerStageTransitions = false,

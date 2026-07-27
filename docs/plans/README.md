@@ -24,6 +24,7 @@ Architectural rationale → **`docs/decisions/`**. Module maps → **`Poly/*/REA
 | [**Infrastructure pass — NEXT**](infrastructure-pass-NEXT.md) | **Complete** under bar; pull Bar B / RestApi — [archive](archive/infrastructure-pass/README.md) |
 | [**Post–V2-delete naming cleanup**](post-v2-delete-naming-cleanup.md) | Drop product `V3*` labels — idle green tree |
 | [**Post–system-review correctness hardening**](2026-07-11-review-fix-plan.md) | Mostly Done; optional residuals |
+| [**Grammar framework integration**](grammar-integration.md) | **Draft** — `Poly.Text.Grammar` prototype complete (54 tests); integrate into DSL pipeline |
 
 ### Simple-agent queues
 

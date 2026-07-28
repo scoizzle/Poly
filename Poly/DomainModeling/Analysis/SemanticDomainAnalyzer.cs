@@ -54,7 +54,12 @@ internal sealed class SemanticDomainAnalyzer : INodeAnalyzer {
             types,
             new HashSet<Entity>(domain.Types.OfType<Entity>(), ReferenceEqualityComparer.Instance));
 
+        var relationships = domain.Relationships
+            .GroupBy(static relationship => relationship.Name, StringComparer.Ordinal)
+            .ToDictionary(static group => group.Key, static group => group.Last(), StringComparer.Ordinal);
+
         context.SetMetadata(default, lookup);
+        context.SetMetadata(default, new RelationshipLookupMetadata(relationships));
     }
 
     private static void AnalyzePrimitiveType(AnalysisContext context, PrimitiveType primitiveType) {

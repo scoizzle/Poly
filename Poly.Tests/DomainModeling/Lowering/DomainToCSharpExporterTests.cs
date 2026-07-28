@@ -2,6 +2,7 @@ using Poly.Analysis;
 using Poly.Ast.Nodes;
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
+using Poly.DomainModeling.Effects;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Parsing;
@@ -198,6 +199,61 @@ public class DomainToCSharpExporterTests {
         await Assert.That(types.Any(t => t.Name == "Loan")).IsTrue();
         await Assert.That(types.Any(t => t.Name == "Fine")).IsTrue();
         await Assert.That(types.Any(t => t.Name == "PremiumPatron")).IsTrue();
+    }
+
+    [Test]
+    public async Task EffectLowering_UsesAnalysisMetadata_WhenDomainIsAbsent() {
+        var (domain, analysis) = ParseAndAnalyze("""
+            domain Demo
+
+            Person: entity {
+              Name: Text
+            }
+            """);
+        var entity = domain.Types.OfType<Entity>().Single(e => e.Name == "Person");
+        var effect = new CreateEntityInstance(new DomainTypeReference("Person"));
+        var context = new LoweringContext(
+            new Parameter("entity", new TypeReference(entity.Name)),
+            Analysis: analysis,
+            UseThisReference: true,
+            LowerStageTransitions: true);
+        var pass = new EffectLoweringPass(entity, context);
+
+        var lowered = pass.TryLowerVmNode(effect);
+
+        await Assert.That(lowered).IsNotNull();
+        await Assert.That(lowered).IsTypeOf<Block>();
+    }
+
+    [Test]
+    public async Task EffectLowering_UsesResolvedCreateInTargetMetadata_WhenAvailable() {
+        var (domain, analysis) = ParseAndAnalyze("""
+            domain Demo
+
+            Customer: entity {
+              Name: Text
+              orders: many Order
+            }
+
+            Order: entity {
+              Number: Text
+              customer: Customer
+            }
+            """);
+        var entity = domain.Types.OfType<Entity>().Single(e => e.Name == "Customer");
+        var effect = new CreateEntityInRelationshipEffect("orders", []);
+        var context = new LoweringContext(
+            new Parameter("entity", new TypeReference(entity.Name)),
+            Analysis: analysis,
+            UseThisReference: true,
+            LowerStageTransitions: true,
+            Domain: domain);
+        var pass = new EffectLoweringPass(entity, context);
+
+        var lowered = pass.TryLowerVmNode(effect);
+
+        await Assert.That(lowered).IsNotNull();
+        await Assert.That(lowered).IsTypeOf<Block>();
     }
 
     [Test]

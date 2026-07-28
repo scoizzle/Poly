@@ -31,5 +31,15 @@ public sealed record EntityStructureMetadata(
     bool HasStages,
 
     /// <summary>The stage enum type name (e.g. "PatronStage"), null when <see cref="HasStages"/> is false.</summary>
-    string? StageEnumTypeName
+    string? StageEnumTypeName,
+
+    /// <summary>Constructor parameter order for entity creation lowering.</summary>
+    IReadOnlyList<ConstructorParameterOrder> ConstructorParameters
 ) : IAnalysisMetadata;
+
+public sealed record ConstructorParameterOrder(
+    string Name,
+    DomainTypeReference Type,
+    bool IsNavigation,
+    bool IsBackReference
+);

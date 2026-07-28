@@ -33,6 +33,7 @@ Domain (immutable records)
 | VM is canonical execution | LINQ path is secondary (oracle / reference), not a second product engine |
 | Domain lowers to **generic** ops | No domain-specific VM opcodes |
 | Extend the platform **in the pipeline** | New meaning: lower to existing nodes, analyze, and/or **replace nodes** — not special-case the emitter, ABI, or one host’s type filter |
+| Analysis is required for downstream semantics | Domain/runtime/tooling paths that resolve semantic meaning must consume an `AnalysisResult`; no semantic execution path without analysis |
 | One coherent path | Prefer composing existing mechanisms over a parallel rewriter, evaluator, or type registry |
 | Immutability at domain boundary | Mutate via `DomainEvolution`…`Apply`, not by editing graphs in place |
 | Smallest coherent platform | Prefer using an existing mechanism over inventing a parallel one |
@@ -81,6 +82,8 @@ Use these. If you think you need a parallel facility, stop and re-read this sect
 | Standard entry | `Interpreter.Analyze` / `Interpreter.Compile` (cached full pass list) |
 
 **Principle:** Facts about a program live on nodes via analysis metadata. Do not attach parallel side tables or re-walk the tree outside the pass model for work that belongs in a pass.
+
+**Contract:** For downstream consumers that answer semantic questions (lowering decisions, runtime semantic dispatch, MCP semantic inspection, compiler semantic mapping), analysis is non-optional. Those paths must fail closed when `AnalysisResult` or required metadata is missing.
 
 Pass order and registry: `Poly/Interpretation/Analysis/README.md`. Authoring guide: `docs/interpretation/analysis-pass-guide.md`.
 

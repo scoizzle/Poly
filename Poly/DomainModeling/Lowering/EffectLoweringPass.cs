@@ -1,5 +1,6 @@
 using Poly.Analysis;
 using Poly.Ast.Nodes;
+using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Constraints;
 using Poly.DomainModeling.Effects;
 
@@ -72,13 +73,12 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         // Convert string literals to qualified enum member access when the
         // target property is enum-typed:  assign Status to "Suspended"
         // on PatronStatus-typed property →  this.Status = PatronStatus.Suspended
-        if (_domain is not null && a.Target is PropertyAccess propAccess) {
-            var enumTypes = _domain.Types.OfType<EnumType>()
-                .ToDictionary(e => e.Name, StringComparer.Ordinal);
+        if (a.Target is PropertyAccess propAccess) {
             var entityProp = _entity.Properties.FirstOrDefault(p =>
                 string.Equals(p.Name, propAccess.Name, StringComparison.Ordinal));
             if (entityProp is not null
-                && enumTypes.TryGetValue(entityProp.Type.TypeName, out var enumType)
+                && DomainToCSharpExporter.TryResolveEnumType(_domain, _analysis, entityProp.Type.TypeName, out var enumType)
+                && enumType is not null
                 && a.Value is Literal { Value: string strVal }
                 && !string.IsNullOrEmpty(strVal)) {
                 value = new Member(new NamedTypeReference(enumType.Name), strVal);
@@ -242,10 +242,9 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     /// When <see cref="_domain"/> is null or the target entity is not found, returns null.
     /// </summary>
     protected override Node? CreateEntityInstance(CreateEntityInstance cei) {
-        if (!_lowerStageTransitions || _domain is null) return null;
+        if (!_lowerStageTransitions) return null;
 
-        var targetEntity = _domain.Types.OfType<Entity>().FirstOrDefault(e =>
-            string.Equals(e.Name, cei.Type.TypeName, StringComparison.Ordinal));
+        var targetEntity = ResolveEntity(cei.Type.TypeName);
         if (targetEntity is null) return null;
 
         var args = BuildConstructorArgs(cei.Initializers, targetEntity);
@@ -301,13 +300,14 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         var pascalName = DomainToCSharpExporter.ToPascalCase(cr.RelationshipName);
         var methodName = $"Create{pascalName}";
 
-        // Resolve the relationship to find the target entity
-        var relationship = _domain.Relationships.FirstOrDefault(r =>
-            string.Equals(r.Name, cr.RelationshipName, StringComparison.Ordinal));
+        // Resolve the relationship to find the target entity.
+        // Prefer analysis metadata when available; fall back to the domain graph.
+        var relationship = _analysis?.GetMetadata<ResolvedRelationshipTargetMetadata>(cr)?.Relationship
+            ?? ResolveRelationship(cr.RelationshipName);
         if (relationship is null) return null;
 
-        var targetEntity = _domain.Types.OfType<Entity>().FirstOrDefault(e =>
-            string.Equals(e.Name, relationship.Target.TypeName, StringComparison.Ordinal));
+        var targetEntity = _analysis?.GetMetadata<ResolvedRelationshipTargetMetadata>(cr)?.TargetEntity
+            ?? ResolveEntity(relationship.Target.TypeName);
         if (targetEntity is null) return null;
 
         // Build initializer map keyed by property name (camelCase and PascalCase)
@@ -316,28 +316,14 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
             initMap[init.PropertyName] = init.Expression;
 
         var args = new List<Node>();
+        var parameterMetadata = GetConstructorParameterOrder(targetEntity);
 
-        // 1. Entity properties without DefaultValueConstraint (same order as AddCreateNavMethod — sorted by Name)
-        foreach (var prop in targetEntity.Properties.OrderBy(p => p.Name)) {
-            if (prop.Constraints.Any(c => c is DefaultValueConstraint)) continue;
-            if (initMap.TryGetValue(prop.Name, out var expr))
+        foreach (var parameter in parameterMetadata) {
+            if (parameter.IsBackReference) continue;
+            if (initMap.TryGetValue(parameter.Name, out var expr))
                 args.Add(_expressionPass.Lower(expr, Subject));
             else
-                args.Add(DefaultForDomainType(prop.Type, _domain));
-        }
-
-        // 2. Singular navs excluding back-reference (auto-wired by factory method)
-        var targetRelationships = _domain.Relationships
-            .Where(r => string.Equals(r.Source.TypeName, targetEntity.Name, StringComparison.Ordinal)
-                     && r.Cardinality is not (RelationshipCardinality.OneToMany or RelationshipCardinality.ManyToMany))
-            .ToList();
-        foreach (var trel in targetRelationships) {
-            if (string.Equals(trel.Target.TypeName, _entity.Name, StringComparison.Ordinal))
-                continue; // back-ref is auto-wired by factory method
-            if (initMap.TryGetValue(trel.Name, out var expr))
-                args.Add(_expressionPass.Lower(expr, Subject));
-            else
-                args.Add(DefaultForDomainType(trel.Target, _domain));
+                args.Add(DefaultForDomainType(parameter.Type, _domain, _analysis));
         }
 
         // Capture the return value in a local variable, matching CreateEntityInstance lowering
@@ -403,36 +389,49 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
             initMap[init.PropertyName] = init.Expression;
 
         var args = new List<Node>();
+        var parameterMetadata = GetConstructorParameterOrder(targetEntity);
 
-        // 1. Entity properties without DefaultValueConstraint (sorted by name)
-        foreach (var prop in targetEntity.Properties.OrderBy(p => p.Name)) {
-            if (prop.Constraints.Any(c => c is DefaultValueConstraint)) continue;
-            if (initMap.TryGetValue(prop.Name, out var expr))
+        foreach (var parameter in parameterMetadata) {
+            if (parameter.IsBackReference) {
+                args.Add(Subject);
+                continue;
+            }
+
+            if (initMap.TryGetValue(parameter.Name, out var expr))
                 args.Add(_expressionPass.Lower(expr, Subject));
             else
-                args.Add(DefaultForDomainType(prop.Type, _domain));
-        }
-
-        // 2. Singular navigation properties (one-to-one where target is source)
-        if (_domain is not null) {
-            var targetRelationships = _domain.Relationships
-                .Where(r => string.Equals(r.Source.TypeName, targetEntity.Name, StringComparison.Ordinal)
-                         && r.Cardinality is not (RelationshipCardinality.OneToMany or RelationshipCardinality.ManyToMany))
-                .ToList();
-            foreach (var trel in targetRelationships) {
-                // Auto-wire back-references to the creating entity
-                if (string.Equals(trel.Target.TypeName, _entity.Name, StringComparison.Ordinal)) {
-                    args.Add(Subject);
-                    continue;
-                }
-                if (initMap.TryGetValue(trel.Name, out var expr))
-                    args.Add(_expressionPass.Lower(expr, Subject));
-                else
-                    args.Add(DefaultForDomainType(trel.Target, _domain));
-            }
+                args.Add(DefaultForDomainType(parameter.Type, _domain, _analysis));
         }
 
         return args;
+    }
+
+    private IReadOnlyList<ConstructorParameterOrder> GetConstructorParameterOrder(Entity targetEntity) {
+        if (_analysis?.GetMetadata<EntityStructureMetadata>(targetEntity) is EntityStructureMetadata metadata
+            && metadata.ConstructorParameters.Count > 0) {
+            return metadata.ConstructorParameters;
+        }
+
+        var parameters = targetEntity.Properties
+            .Where(p => !p.Constraints.Any(c => c is DefaultValueConstraint))
+            .OrderBy(p => p.Name)
+            .Select(p => new ConstructorParameterOrder(p.Name, p.Type, false, false))
+            .ToList();
+
+        if (_domain is not null) {
+            foreach (var rel in _domain.Relationships.Where(r =>
+                         string.Equals(r.Source.TypeName, targetEntity.Name, StringComparison.Ordinal)
+                         && r.Cardinality is not (RelationshipCardinality.OneToMany or RelationshipCardinality.ManyToMany))) {
+                if (string.Equals(rel.Target.TypeName, _entity.Name, StringComparison.Ordinal)) {
+                    parameters.Add(new ConstructorParameterOrder(rel.Name, rel.Target, true, true));
+                    continue;
+                }
+
+                parameters.Add(new ConstructorParameterOrder(rel.Name, rel.Target, true, false));
+            }
+        }
+
+        return parameters;
     }
 
     /// <summary>
@@ -440,13 +439,9 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     /// Used by <see cref="BuildConstructorArgs"/> and <see cref="CreateEntityInRelationship"/>
     /// to emit valid defaults instead of bare <c>null</c> for value-type properties.
     /// </summary>
-    private static Node DefaultForDomainType(DomainTypeReference typeRef, Domain? domain) {
-        if (domain is not null) {
-            var enumType = domain.Types.OfType<EnumType>()
-                .FirstOrDefault(e => string.Equals(e.Name, typeRef.TypeName, StringComparison.Ordinal));
-            if (enumType is not null)
-                return new Member(new NamedTypeReference(enumType.Name), enumType.MemberNames[0]);
-        }
+    private Node DefaultForDomainType(DomainTypeReference typeRef, Domain? domain, AnalysisResult? analysis = null) {
+        if (DomainToCSharpExporter.TryResolveEnumType(domain, analysis, typeRef.TypeName, out var enumType) && enumType is not null)
+            return new Member(new NamedTypeReference(enumType.Name), enumType.MemberNames[0]);
         return typeRef.TypeName switch {
             "Text" or "String" => new Constant(""),
             "Number" or "Int" or "Int64" => new Constant(0L),
@@ -460,6 +455,35 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
                 new NamedTypeReference("Guid"), "Empty"),
             _ => new Constant(null),
         };
+    }
+
+    private Entity? ResolveEntity(string typeName) {
+        if (_analysis?.GetMetadata<DomainTypeLookupMetadata>(default) is DomainTypeLookupMetadata lookup
+            && lookup.Types.TryGetValue(typeName, out var domainType)
+            && domainType is Entity entity) {
+            return entity;
+        }
+
+        if (_domain is not null) {
+            return _domain.Types.OfType<Entity>().FirstOrDefault(e =>
+                string.Equals(e.Name, typeName, StringComparison.Ordinal));
+        }
+
+        return null;
+    }
+
+    private Relationship? ResolveRelationship(string relationshipName) {
+        if (_analysis?.GetMetadata<RelationshipLookupMetadata>(default) is RelationshipLookupMetadata lookup
+            && lookup.Relationships.TryGetValue(relationshipName, out var relationship)) {
+            return relationship;
+        }
+
+        if (_domain is not null) {
+            return _domain.Relationships.FirstOrDefault(r =>
+                string.Equals(r.Name, relationshipName, StringComparison.Ordinal));
+        }
+
+        return null;
     }
 
     /// <summary>

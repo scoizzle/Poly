@@ -17,3 +17,12 @@ public sealed record EffectiveMemberMetadata(
     IReadOnlyList<Policy> EffectivePolicies,
     IReadOnlyList<Stage> EffectiveStages
 ) : IAnalysisMetadata;
+
+public sealed record RelationshipLookupMetadata(
+    IReadOnlyDictionary<string, Relationship> Relationships
+) : IAnalysisMetadata;
+
+public sealed record ResolvedRelationshipTargetMetadata(
+    Relationship Relationship,
+    Entity TargetEntity
+) : IAnalysisMetadata;

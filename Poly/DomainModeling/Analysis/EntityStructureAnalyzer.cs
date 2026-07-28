@@ -73,10 +73,35 @@ internal sealed class EntityStructureAnalyzer : INodeAnalyzer {
                 ?.Name ?? $"{entity.Name}Stage";
         }
 
+        var constructorParameters = ComputeConstructorParameterOrder(entity, domain, lookup);
+
         return new EntityStructureMetadata(
             isRoot, hasNaturalKey, keyPropName, keyClrType,
-            hasSoftDelete, hasStages, stageEnumTypeName
+            hasSoftDelete, hasStages, stageEnumTypeName, constructorParameters
         );
+    }
+
+    private static IReadOnlyList<ConstructorParameterOrder> ComputeConstructorParameterOrder(
+        Entity entity, Domain domain, DomainTypeLookupMetadata lookup) {
+        var parameters = new List<ConstructorParameterOrder>();
+
+        foreach (var prop in entity.Properties.OrderBy(p => p.Name)) {
+            if (prop.Constraints.Any(c => c is DefaultValueConstraint)) continue;
+            parameters.Add(new ConstructorParameterOrder(prop.Name, prop.Type, IsNavigation: false, IsBackReference: false));
+        }
+
+        foreach (var rel in domain.Relationships.Where(r =>
+                string.Equals(r.Source.TypeName, entity.Name, StringComparison.Ordinal)
+                && r.Cardinality is not (RelationshipCardinality.OneToMany or RelationshipCardinality.ManyToMany))) {
+            if (string.Equals(rel.Target.TypeName, entity.Name, StringComparison.Ordinal)) {
+                parameters.Add(new ConstructorParameterOrder(rel.Name, rel.Target, IsNavigation: true, IsBackReference: true));
+                continue;
+            }
+
+            parameters.Add(new ConstructorParameterOrder(rel.Name, rel.Target, IsNavigation: true, IsBackReference: false));
+        }
+
+        return parameters;
     }
 
     /// <summary>

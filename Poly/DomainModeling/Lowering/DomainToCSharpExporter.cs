@@ -57,11 +57,10 @@ public sealed class DomainToCSharpExporter {
         IReadOnlyList<Relationship> domainRelationships,
         IReadOnlyDictionary<string, Entity> entityLookup,
         List<SubscriptionInfo> subList,
-        Dictionary<string, List<SubscriptionInfo>> subscriptionsByTarget) {
+        Dictionary<string, List<SubscriptionInfo>> subscriptionsByTarget,
+        AnalysisResult? analysis = null) {
 
-        var rel = domainRelationships.FirstOrDefault(r =>
-            string.Equals(r.Name, sub.RelationshipName, StringComparison.Ordinal) &&
-            string.Equals(r.Source.TypeName, entity.Name, StringComparison.Ordinal));
+        var rel = ResolveRelationship(domainRelationships, sub.RelationshipName, entity.Name, analysis);
         if (rel is null) return;
 
         if (!entityLookup.TryGetValue(rel.Target.TypeName, out var targetEntity))
@@ -96,6 +95,7 @@ public sealed class DomainToCSharpExporter {
         var ctorAssignments = new List<Node>();
 
         var stageEnumTypeName = $"{entity.Name}Stage";
+        var analysis = metadata as AnalysisResult;
 
         // ── Common property: IsDeleted (always emitted) ────────────
         props.Add(new PropertyDefinitionNode(
@@ -210,7 +210,7 @@ public sealed class DomainToCSharpExporter {
                     new New(listType, [new Parameter(paramName)])));
 
                 // Generate CreateNavName(args) factory method on the source entity
-                AddCreateNavMethod(entity, rel, domain!, subscriberSubs, fieldName, methods);
+                AddCreateNavMethod(entity, rel, domain!, subscriberSubs, fieldName, methods, analysis);
             }
             else {
                 // Singular nav: property with private setter (constructor param)
@@ -245,7 +245,6 @@ public sealed class DomainToCSharpExporter {
         }
 
         // ── Actions as void methods ───────────────────────────────
-        var analysis = metadata as AnalysisResult;
         foreach (var action in entity.Actions)
             AddActionMethod(entity, action, methods, stageEnumTypeName, postTransitionNodes, domain: domain, analysis: analysis);
         foreach (var stage in entity.Stages)
@@ -618,7 +617,8 @@ public sealed class DomainToCSharpExporter {
         Domain domain,
         List<SubscriptionInfo>? subscriberSubs,
         string fieldName,
-        List<MethodDefinitionNode> methods) {
+        List<MethodDefinitionNode> methods,
+        AnalysisResult? analysis = null) {
 
         var pascalName = ToPascalCase(rel.Name);
         var targetTypeName = rel.Target.TypeName;
@@ -632,40 +632,20 @@ public sealed class DomainToCSharpExporter {
         // Collect all target entity constructor-level properties:
         // regular entity properties (minus those with DefaultValueConstraint)
         // plus singular nav properties (one-to-one relationships to other entities)
-        var targetRelationships = domain.Relationships
-            .Where(r => string.Equals(r.Source.TypeName, targetTypeName, StringComparison.Ordinal)
-                     && r.Cardinality is not (RelationshipCardinality.OneToMany or RelationshipCardinality.ManyToMany))
-            .ToList();
-
         var methodParams = new List<Parameter>();
         var createArgs = new List<Node>();
+        var parameterMetadata = GetConstructorParameters(targetEntity, analysis);
 
-        // Add regular properties without defaults (sorted to match Create factory)
-        foreach (var prop in targetEntity.Properties.OrderBy(p => p.Name)) {
-            if (prop.Constraints.Any(c => c is DefaultValueConstraint)) continue;
-            var paramName = ToCamelCase(prop.Name);
-            var propRef = MapDomainTypeRef(prop.Type, domain);
+        foreach (var parameter in parameterMetadata) {
+            if (parameter.IsBackReference) {
+                createArgs.Add(new ThisReference());
+                continue;
+            }
+
+            var paramName = ToCamelCase(parameter.Name);
+            var propRef = MapDomainTypeRef(parameter.Type, domain);
             methodParams.Add(new Parameter(paramName, propRef));
             createArgs.Add(new Parameter(paramName));
-        }
-
-        // Add singular navigation properties (e.g. book: Book, borrower: Patron)
-        foreach (var trel in targetRelationships) {
-            // Skip the back-reference to the source entity (auto-wired as 'this')
-            if (string.Equals(trel.Target.TypeName, entity.Name, StringComparison.Ordinal)) continue;
-
-            var paramName = ToCamelCase(trel.Name);
-            var trgType = new NamedTypeReference(trel.Target.TypeName);
-            methodParams.Add(new Parameter(paramName, trgType));
-            createArgs.Add(new Parameter(paramName));
-        }
-
-        // Back-ref check — find the relationship where target points back to source
-        var backRefRel = targetRelationships
-            .FirstOrDefault(r => string.Equals(r.Target.TypeName, entity.Name, StringComparison.Ordinal));
-        // Auto-wire back-reference (borrower: Patron → this)
-        if (backRefRel is not null) {
-            createArgs.Add(new ThisReference());
         }
 
         // NOTE: properties with DefaultValueConstraint are NOT included in
@@ -733,6 +713,21 @@ public sealed class DomainToCSharpExporter {
             Body: new Block(bodyNodes),
             AccessModifier: AccessModifier.Private
         ));
+    }
+
+    private static IReadOnlyList<ConstructorParameterOrder> GetConstructorParameters(
+        Entity targetEntity,
+        AnalysisResult? analysis) {
+        if (analysis?.GetMetadata<EntityStructureMetadata>(targetEntity) is EntityStructureMetadata metadata
+            && metadata.ConstructorParameters.Count > 0) {
+            return metadata.ConstructorParameters;
+        }
+
+        return targetEntity.Properties
+            .Where(p => !p.Constraints.Any(c => c is DefaultValueConstraint))
+            .OrderBy(p => p.Name)
+            .Select(p => new ConstructorParameterOrder(p.Name, p.Type, false, false))
+            .ToList();
     }
 
     /// <summary>Returns a default-value Syntax node for a property (null, 0, false, etc.).</summary>
@@ -1199,6 +1194,25 @@ public sealed class DomainToCSharpExporter {
             : null;
     }
 
+    internal static bool TryResolveEnumType(Domain? domain, AnalysisResult? analysis, string typeName, out EnumType? enumType) {
+        enumType = null;
+
+        if (analysis?.GetMetadata<DomainTypeLookupMetadata>(default) is DomainTypeLookupMetadata lookup
+            && lookup.Types.TryGetValue(typeName, out var resolvedType)
+            && resolvedType is EnumType resolvedEnum) {
+            enumType = resolvedEnum;
+            return true;
+        }
+
+        if (domain is not null) {
+            enumType = domain.Types.OfType<EnumType>()
+                .FirstOrDefault(e => string.Equals(e.Name, typeName, StringComparison.Ordinal));
+            return enumType is not null;
+        }
+
+        return false;
+    }
+
     /// <summary>
     /// Builds a map from property name → enum type name for all properties of
     /// <paramref name="entity"/> whose type resolves to an <see cref="EnumType"/>.
@@ -1220,6 +1234,22 @@ public sealed class DomainToCSharpExporter {
     }
 
     // ── Type mapping ────────────────────────────────────────────
+
+    internal static Relationship? ResolveRelationship(
+        IReadOnlyList<Relationship> domainRelationships,
+        string relationshipName,
+        string sourceEntityName,
+        AnalysisResult? analysis = null) {
+        if (analysis?.GetMetadata<RelationshipLookupMetadata>(default) is RelationshipLookupMetadata lookup
+            && lookup.Relationships.TryGetValue(relationshipName, out var relationship)
+            && string.Equals(relationship.Source.TypeName, sourceEntityName, StringComparison.Ordinal)) {
+            return relationship;
+        }
+
+        return domainRelationships.FirstOrDefault(r =>
+            string.Equals(r.Name, relationshipName, StringComparison.Ordinal) &&
+            string.Equals(r.Source.TypeName, sourceEntityName, StringComparison.Ordinal));
+    }
 
     internal static Node MapDomainTypeRef(DomainTypeReference domainType,
         Domain? domain = null) {

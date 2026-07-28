@@ -380,6 +380,8 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
             return;
         }
 
+        context.SetMetadata(createIn, new ResolvedRelationshipTargetMetadata(relationship, targetEntity));
+
         // Validate initializer property names against target entity
         foreach (var initializer in createIn.Initializers) {
             var targetProp = targetEntity.Properties

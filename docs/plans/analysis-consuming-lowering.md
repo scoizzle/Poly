@@ -9,6 +9,18 @@ queried. `EffectLoweringPass` has no access to it at all.
 `domain.Types.OfType<T>()`, `domain.Relationships`, and `entity.Properties`
 independently. Eliminate duplicate resolution logic.
 
+**Status (2026-07-28):** Phases 0–4 are now implemented in the repo. The
+remaining work is Phase 5 (resolved create-in target metadata) and the later
+stage/cleanup slices.
+
+**Cross-cutting follow-on:** For runtime, MCP, DslCompiler, and evolution
+consumer migration beyond lowering, see
+`docs/plans/downstream-analysis-consumption-remediation.md`.
+
+**Policy update (2026-07-28):** Analysis is mandatory for downstream semantic
+consumers. Lowering migration now targets AnalysisResult-required contracts;
+legacy null-safe fallback scanning is transitional debt to remove.
+
 ---
 
 ## Phase 0: Thread AnalysisResult into lowering context ✅
@@ -26,13 +38,12 @@ independently. Eliminate duplicate resolution logic.
 
 **Verification:** Build 0W/0E, tests 1691/1691 passed.
 
-**Risk:** None. Null-safe — falls back to current re-scan when metadata absent.
-Callers with `AnalysisContext` (not `AnalysisResult`) pass null until
-`EntitySyntaxPass` is updated.
+**Risk:** Contract tightening required. Callers must supply `AnalysisResult` for
+semantic lowering paths; missing analysis should fail closed.
 
 ---
 
-## Phase 1: Enum type lookup (7 re-scans → 1 lookup)
+## Phase 1: Enum type lookup (implemented) ✅
 
 **Current cost:** `domain.Types.OfType<EnumType>()` called 7 times across two
 files. The fresh iterator + ToDictionary repeats identical work.
@@ -65,7 +76,7 @@ new record.
 
 ---
 
-## Phase 2: Entity by name (3 re-scans → 0)
+## Phase 2: Entity by name (implemented) ✅
 
 **Current:** `domain.Types.OfType<Entity>().FirstOrDefault(name)` — full iteration
 each time.
@@ -85,7 +96,7 @@ No change needed to metadata shapes.
 
 ---
 
-## Phase 3: Relationship by name (3 re-scans → 0)
+## Phase 3: Relationship by name (implemented) ✅
 
 **Current:** `domain.Relationships.FirstOrDefault(name)` — full iteration.
 
@@ -112,7 +123,7 @@ Produced by a new pass or appended to `EffectTopologyPass`.
 
 ---
 
-## Phase 4: Constructor parameter ordering (4 duplicates → 1 source)
+## Phase 4: Constructor parameter ordering (implemented) ✅
 
 **Current cost:** The "properties without DefaultValueConstraint, then singular
 navs" ordering is computed independently in 4 locations:
@@ -151,7 +162,7 @@ metadata. The ordering logic lives in one place: the analysis pass.
 
 ---
 
-## Phase 5: Resolved target type for CreateEntityInRelationship (1 fix, 0 re-scans)
+## Phase 5: Resolved target type for CreateEntityInRelationship (next slice)
 
 **Current:** `EffectLoweringPass.CreateEntityInRelationship` re-resolves
 relationship → target entity → target properties.
@@ -170,9 +181,8 @@ internal sealed record ResolvedRelationshipTargetMetadata(
 ) : IAnalysisMetadata;
 ```
 
-**Lowering change:** `CreateEntityInRelationship` checks metadata first.
-If present, skips the re-resolution entirely. Falls back to current logic
-as safety net.
+**Lowering change:** `CreateEntityInRelationship` uses resolved metadata and
+fails closed when required metadata is missing.
 
 **Bonus:** This makes `ResolvedTargetType` on `CreateEntityInRelationshipEffect`
 actually wired — lowering reads the resolved target from metadata and could
@@ -237,6 +247,11 @@ works end-to-end.
 ---
 
 ## Verification
+
+- Current implementation status: Phases 0–4 are wired through lowering and
+  verified by the existing regression suite.
+- Test evidence: `dotnet run --project Poly.Tests/Poly.Tests.csproj`
+  reported 1692 passed, 0 failed, 0 skipped.
 
 - **No behavioral changes.** Lowering output must be identical before and after
   each phase (metadata reads produce same results as current scans).

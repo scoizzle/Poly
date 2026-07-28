@@ -14,8 +14,6 @@ using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Parsing;
 using Poly.DomainModeling.Queries;
 using Poly.Mcp.Sessions;
-// Use shared McpAuthoring.Context for pack-aware parse/print.
-using static Poly.Mcp.Sessions.McpAuthoring;
 
 namespace Poly.Mcp.Tools;
 
@@ -832,7 +830,7 @@ This safety net prevents silent no-ops from empty stage copies.")]
         var preRevision = snapshot.Revision;
 
         var outcome = McpSessionStore.Evolve(sessionId, domain => {
-            var result = new DomainEvolution(domain, McpAuthoring.Context).Evolve();
+            var result = new DomainEvolution(domain).Evolve();
             result = mutate(result);
             return result.Apply();
         });
@@ -1084,9 +1082,15 @@ internal sealed class PolicyTool {
                 Affordances: ["get_entity_detail", "get_domain_overview"]);
         }
 
+        if (!McpSessionStore.TryGet(sessionId, out _))
+            return new DomainToolResponse(
+                Success: false,
+                Message: $"Session '{sessionId}' not found.",
+                Affordances: ["create_domain_session", "list_sessions"]);
+
         // Atomic read-modify-write through McpSessionStore.Evolve.
         var outcome = McpSessionStore.Evolve(sessionId, domain =>
-            new DomainEvolution(domain, McpAuthoring.Context).Evolve()
+            new DomainEvolution(domain).Evolve()
                 .AddPolicyToEntity(entityName, policyName, domainExpr)
                 .Apply());
 
@@ -1297,8 +1301,10 @@ for exploration and repair.")]
         // ── 1. Parse ───────────────────────────────────────────
         List<DomainChange> changes;
         try {
-            // P4.5: Use shared authoring context so column/table annotations are recognised.
-            var parser = new PolyDslParser(polyText, Context);
+            if (!McpSessionStore.TryGet(sessionId, out var parseState))
+                return Failure_NotFound(sessionId);
+
+            var parser = new PolyDslParser(polyText, parseState.ParserInputs);
             changes = parser.Parse();
         }
         catch (FormatException ex) {
@@ -1318,7 +1324,7 @@ for exploration and repair.")]
 
         EvolutionResult outcome;
         try {
-            outcome = new DomainEvolution(emptyDomain, McpAuthoring.Context).Apply(changes);
+            outcome = new DomainEvolution(emptyDomain).Apply(changes);
         }
         catch (Exception ex) {
             return new DomainToolResponse(
@@ -1382,8 +1388,7 @@ for exploration and repair.")]
         if (!McpSessionStore.TryGet(sessionId, out var state))
             return Failure_NotFound(sessionId);
 
-        // P4.5: Use shared annotation registry so column/table facets can be printed.
-        var printer = new DomainDslPrinter(Annotations);
+        var printer = new DomainDslPrinter(state.ParserInputs.Annotations);
         var polyText = printer.Print(state.Domain);
 
         return new DomainToolResponse(

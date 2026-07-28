@@ -12,8 +12,8 @@ namespace Poly.Tests.DomainModeling.Lowering;
 
 public class MinimalApiGeneratorTests {
     private static Domain ParseDomain(string poly) {
-        var ctx = DomainAuthoringContext.CreateWithSqlPack();
-        var parser = new PolyDslParser(poly, ctx);
+        var ctx = DomainInputBuilder.CreateWithSqlPack().Build();
+        var parser = new PolyDslParser(poly, ctx.Parser);
         var changes = parser.Parse();
         var emptyDomain = new Domain("_", [], []);
         var result = new DomainEvolution(emptyDomain).Apply(changes);

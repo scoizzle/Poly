@@ -4,7 +4,7 @@ using Poly.DomainModeling.Lowering;
 namespace Poly.Packs.SqlServer;
 
 /// <summary>
-/// Applies SQL Server vendor defaults to a <see cref="DomainAuthoringContext"/>.
+/// Applies SQL Server vendor defaults to explicit domain input builders.
 ///
 /// Overrides core generic SQL type maps with SQL Server-specific strings:
 /// <c>Text</c> → <c>nvarchar(max)</c>, <c>Boolean</c> → <c>bit</c>,
@@ -14,22 +14,22 @@ namespace Poly.Packs.SqlServer;
 ///
 /// Usage:
 /// <code>
-/// var ctx = DomainAuthoringContext.CreateWithSqlPack()
+/// var inputs = DomainInputBuilder.CreateWithSqlPack()
 ///     .AddSqlServerDefaults();
 /// </code>
 /// </summary>
 public static class SqlServerDefaults {
     /// <summary>
     /// Registers SQL Server type-map overrides and the identifier-length
-    /// convention on <paramref name="ctx"/>.
+    /// convention on <paramref name="builder"/>.
     /// </summary>
-    public static DomainAuthoringContext AddSqlServerDefaults(this DomainAuthoringContext ctx) {
-        ArgumentNullException.ThrowIfNull(ctx);
+    public static DomainInputBuilder AddSqlServerDefaults(this DomainInputBuilder builder) {
+        ArgumentNullException.ThrowIfNull(builder);
 
-        ApplyTypeMaps(ctx.TypeMaps);
-        ctx.AddStorageConvention(new SqlServerIdentifierConvention());
+        ApplyTypeMaps(builder.TypeMaps);
+        builder.AddStorageConvention(new SqlServerIdentifierConvention());
 
-        return ctx;
+        return builder;
     }
 
     /// <summary>

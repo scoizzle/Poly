@@ -4,7 +4,7 @@ using Poly.DomainModeling.Lowering;
 namespace Poly.Packs.Sqlite;
 
 /// <summary>
-/// Applies SQLite vendor defaults to a <see cref="DomainAuthoringContext"/>.
+/// Applies SQLite vendor defaults to explicit domain input builders.
 ///
 /// First shippable DBMS pack: no external database service required to dogfood.
 /// Overrides core generic SQL type maps with SQLite storage-class / EF-friendly
@@ -15,18 +15,18 @@ namespace Poly.Packs.Sqlite;
 ///
 /// Usage:
 /// <code>
-/// var ctx = DomainAuthoringContext.CreateWithSqlPack()
+/// var inputs = DomainInputBuilder.CreateWithSqlPack()
 ///     .AddSqliteDefaults();
 /// </code>
 /// </summary>
 public static class SqliteDefaults {
     /// <summary>
-    /// Registers SQLite type-map overrides on <paramref name="ctx"/>.
+    /// Registers SQLite type-map overrides on <paramref name="builder"/>.
     /// </summary>
-    public static DomainAuthoringContext AddSqliteDefaults(this DomainAuthoringContext ctx) {
-        ArgumentNullException.ThrowIfNull(ctx);
-        ApplyTypeMaps(ctx.TypeMaps);
-        return ctx;
+    public static DomainInputBuilder AddSqliteDefaults(this DomainInputBuilder builder) {
+        ArgumentNullException.ThrowIfNull(builder);
+        ApplyTypeMaps(builder.TypeMaps);
+        return builder;
     }
 
     /// <summary>

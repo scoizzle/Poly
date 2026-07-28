@@ -22,7 +22,7 @@ public class SyntaxDiffUtilTests {
                 new TestLeaf("added", 20) { Id = addedId }
             ]) { Id = sharedRootId };
 
-        var diff = SyntaxDiffUtil.Compare(before, after, GetNodeName, BuildFingerprint);
+        var diff = NodeDiffUtil.Compare(before, after, GetNodeName, BuildFingerprint);
 
         await Assert.That(diff.Added.Any(node => node.NodeId == addedId)).IsTrue();
         await Assert.That(diff.Removed.Any(node => node.NodeId == removedId)).IsTrue();
@@ -43,14 +43,14 @@ public class SyntaxDiffUtilTests {
             Name: "root",
             ChildrenList: [afterLeaf]) { Id = sharedRootId };
 
-        var beforeSnapshot = SyntaxDiffUtil.CaptureSnapshot(before, GetNodeName, BuildFingerprint);
-        var afterSnapshot = SyntaxDiffUtil.CaptureSnapshot(after, GetNodeName, BuildFingerprint);
+        var beforeSnapshot = NodeDiffUtil.CaptureSnapshot(before, GetNodeName, BuildFingerprint);
+        var afterSnapshot = NodeDiffUtil.CaptureSnapshot(after, GetNodeName, BuildFingerprint);
 
         var context = new AnalysisContext(Poly.Introspection.CommonLanguageRuntime.ClrTypeDefinitionRegistry.Shared);
         context.ReportWarning(afterLeaf, "changed leaf", "DIFF001");
         var analysis = new AnalysisResult(context, AnalysisTelemetry.Empty);
 
-        var diff = SyntaxDiffUtil.CompareSnapshots(beforeSnapshot, afterSnapshot, analysis);
+        var diff = NodeDiffUtil.CompareSnapshots(beforeSnapshot, afterSnapshot, analysis);
         var changed = diff.Changed.Single(entry => entry.NodeId == changedId);
 
         await Assert.That(changed.RelatedDiagnostics.Count).IsEqualTo(1);

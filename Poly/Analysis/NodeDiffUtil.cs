@@ -27,7 +27,7 @@ public sealed record NodeDiffReport(
     IReadOnlyList<NodeChange> Changed
 );
 
-public static class SyntaxDiffUtil {
+public static class NodeDiffUtil {
     public static NodeSnapshotSet CaptureSnapshot(
         Node root,
         Func<Node, string> getNodeName,

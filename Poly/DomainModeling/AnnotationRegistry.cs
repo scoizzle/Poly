@@ -8,6 +8,16 @@ namespace Poly.DomainModeling;
 public sealed class AnnotationRegistry {
     private readonly Dictionary<string, IAnnotationSyntax> _syntaxByKeyword = new(StringComparer.Ordinal);
 
+    public AnnotationRegistry() {
+    }
+
+    public AnnotationRegistry(AnnotationRegistry source) {
+        ArgumentNullException.ThrowIfNull(source);
+        foreach (var pair in source._syntaxByKeyword) {
+            _syntaxByKeyword[pair.Key] = pair.Value;
+        }
+    }
+
     /// <summary>Registers a syntax handler. Throws on duplicate keyword.</summary>
     public void Register(IAnnotationSyntax syntax) {
         ArgumentNullException.ThrowIfNull(syntax);
@@ -45,4 +55,7 @@ public sealed class AnnotationRegistry {
         }
         return null;
     }
+
+    internal IReadOnlyCollection<IAnnotationSyntax> GetRegisteredSyntaxes() =>
+        _syntaxByKeyword.Values.ToArray();
 }

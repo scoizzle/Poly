@@ -4,7 +4,7 @@ using Poly.DomainModeling.Lowering;
 namespace Poly.Packs.MySql;
 
 /// <summary>
-/// Applies MySQL vendor defaults to a <see cref="DomainAuthoringContext"/>.
+/// Applies MySQL vendor defaults to explicit domain input builders.
 ///
 /// Type maps follow MySQL conventions / EF Core MySQL provider defaults:
 /// <c>Text</c> → <c>longtext</c>, <c>Number</c> → <c>bigint</c>,
@@ -13,15 +13,15 @@ namespace Poly.Packs.MySql;
 ///
 /// Usage:
 /// <code>
-/// var ctx = DomainAuthoringContext.CreateWithSqlPack()
+/// var inputs = DomainInputBuilder.CreateWithSqlPack()
 ///     .AddMySqlDefaults();
 /// </code>
 /// </summary>
 public static class MySqlDefaults {
-    public static DomainAuthoringContext AddMySqlDefaults(this DomainAuthoringContext ctx) {
-        ArgumentNullException.ThrowIfNull(ctx);
-        ApplyTypeMaps(ctx.TypeMaps);
-        return ctx;
+    public static DomainInputBuilder AddMySqlDefaults(this DomainInputBuilder builder) {
+        ArgumentNullException.ThrowIfNull(builder);
+        ApplyTypeMaps(builder.TypeMaps);
+        return builder;
     }
 
     public static void ApplyTypeMaps(TypeMappingRegistry registry) {

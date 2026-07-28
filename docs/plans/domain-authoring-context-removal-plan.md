@@ -211,6 +211,10 @@ Final acceptance criteria:
 
 ## Suggested Task Breakdown
 
+Execution queue:
+
+- docs/plans/simple-agent-tasks/dar-README.md
+
 1. A1: Deprecation attributes + single-pipeline guard tests.
 2. B1: Introduce immutable analysis input model + mapping from existing pack options.
 3. C1: Remove context branch from `DomainModelAnalyzer`.

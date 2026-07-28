@@ -401,8 +401,8 @@ public class InfrastructureAnalyzerTests {
     // ╚══════════════════════════════════════════════════════════╝
 
     private static TestInfra AnalyzeWithPacks(string poly) {
-        var ctx = DomainAuthoringContext.CreateWithSqlPack();
-        var parser = new PolyDslParser(poly, ctx);
+        var ctx = DomainInputBuilder.CreateWithSqlPack().Build();
+        var parser = new PolyDslParser(poly, ctx.Parser);
         var changes = parser.Parse();
         var emptyDomain = new Domain("_", [], []);
         var result = new DomainEvolution(emptyDomain).Apply(changes);
@@ -415,7 +415,7 @@ public class InfrastructureAnalyzerTests {
         var domain = result.Root!;
         var topology = Poly.DomainModeling.Analysis.EffectTopologyPass.Scan(domain);
         var aggregate = Poly.DomainModeling.Analysis.OwnershipAggregatePass.BuildAggregate(domain, null, topology);
-        var storage = new StorageAnalyzer(domain, typeMaps: ctx.TypeMaps, conventions: ctx.StorageConventions).Analyze(aggregate, topology);
+        var storage = new StorageAnalyzer(domain, typeMaps: ctx.Analysis.TypeMaps, conventions: ctx.Analysis.StorageConventions).Analyze(aggregate, topology);
         var behavior = Poly.DomainModeling.Analysis.BehaviorPass.BuildBehavior(domain);
         var transport = Poly.DomainModeling.Analysis.TransportPass.BuildTransport(domain, aggregate, topology);
         return new TestInfra(storage, topology, behavior, aggregate, transport);
@@ -573,11 +573,12 @@ public class InfrastructureAnalyzerTests {
             Item: entity { Name: Text }
             """);
 
-        var ctx = DomainAuthoringContext.Create()
-            .AddStorageConvention(new TestPrefixConvention("p_"));
-        ctx.TypeMaps.OverrideSqlColumnType("Text", "text");
+        var ctx = DomainInputBuilder.Create()
+            .AddStorageConvention(new TestPrefixConvention("p_"))
+            .Build();
+        ctx.Analysis.TypeMaps.OverrideSqlColumnType("Text", "text");
 
-        var storage = new StorageAnalyzer(domain, typeMaps: ctx.TypeMaps, conventions: ctx.StorageConventions).Analyze();
+        var storage = new StorageAnalyzer(domain, typeMaps: ctx.Analysis.TypeMaps, conventions: ctx.Analysis.StorageConventions).Analyze();
         var col = storage.Entities.Single().Columns.Single();
         await Assert.That(col.ColumnName).IsEqualTo("p_name");
         await Assert.That(col.ColumnType).IsEqualTo("text");

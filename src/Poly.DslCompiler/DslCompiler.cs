@@ -69,16 +69,18 @@ public sealed class DslCompiler {
     /// Compiles .poly DSL text with the given mode and DBMS pack selection.
     /// </summary>
     public CompileResult Compile(string polyText, CompileMode mode, DbmsPack dbms) =>
-        Compile(polyText, mode, CreateAuthoring(dbms));
+        Compile(polyText, mode, CreateInputs(dbms));
 
     /// <summary>
-    /// Compiles .poly DSL text with an explicit authoring context (packs, maps, conventions).
+    /// Compiles .poly DSL text with explicit parse and analyze inputs.
     /// </summary>
     public CompileResult Compile(
         string polyText,
         CompileMode mode,
-        DomainAuthoringContext authoring) {
-        ArgumentNullException.ThrowIfNull(authoring);
+        DomainParserInputs parserInputs,
+        DomainAnalysisInputs analysisInputs) {
+        ArgumentNullException.ThrowIfNull(parserInputs);
+        ArgumentNullException.ThrowIfNull(analysisInputs);
 
         if (string.IsNullOrWhiteSpace(polyText))
             return Fail("DSL text is empty.");
@@ -86,7 +88,7 @@ public sealed class DslCompiler {
         // ── 1. Parse ─────────────────────────────────────────────
         List<DomainChange> changes;
         try {
-            var parser = new PolyDslParser(polyText, authoring);
+            var parser = new PolyDslParser(polyText, parserInputs);
             changes = parser.Parse();
         }
         catch (FormatException ex) {
@@ -103,7 +105,7 @@ public sealed class DslCompiler {
         var emptyDomain = new Domain(domainName, [], []);
         EvolutionResult outcome;
         try {
-            outcome = new DomainEvolution(emptyDomain, authoring).Apply(changes);
+            outcome = new DomainEvolution(emptyDomain).Apply(changes);
         }
         catch (Exception ex) {
             return Fail($"Evolution failed: {ex.Message}");
@@ -128,7 +130,7 @@ public sealed class DslCompiler {
         // ── 3. Generate C# ───────────────────────────────────────
         var domain = outcome.Root;
         try {
-            var files = GenerateAllFiles(domain, outcome.Analysis, mode, authoring);
+            var files = GenerateAllFiles(domain, outcome.Analysis, mode, analysisInputs);
             return new CompileResult(Success: true, Files: files, Errors: null);
         }
         catch (InvalidOperationException ex) {
@@ -137,17 +139,30 @@ public sealed class DslCompiler {
     }
 
     /// <summary>
-    /// Builds the authoring context for a DBMS pack selection.
+    /// Compiles .poly DSL text with an upstream convenience parse/analyze bundle.
+    /// </summary>
+    public CompileResult Compile(
+        string polyText,
+        CompileMode mode,
+        DomainInputSet inputs) {
+        ArgumentNullException.ThrowIfNull(inputs);
+        return Compile(polyText, mode, inputs.Parser, inputs.Analysis);
+    }
+
+    /// <summary>
+    /// Builds explicit parse/analyze inputs for a DBMS pack selection.
     /// Always includes portable <c>column</c>/<c>table</c> annotation syntax.
     /// </summary>
-    public static DomainAuthoringContext CreateAuthoring(DbmsPack dbms) {
-        var ctx = DomainAuthoringContext.CreateWithSqlPack();
-        return dbms switch {
-            DbmsPack.Generic => ctx,
-            DbmsPack.Sqlite => ctx.AddSqliteDefaults(),
-            DbmsPack.SqlServer => ctx.AddSqlServerDefaults(),
+    public static DomainInputSet CreateInputs(DbmsPack dbms) {
+        var builder = DomainInputBuilder.CreateWithSqlPack();
+        var configured = dbms switch {
+            DbmsPack.Generic => builder,
+            DbmsPack.Sqlite => builder.AddSqliteDefaults(),
+            DbmsPack.SqlServer => builder.AddSqlServerDefaults(),
             _ => throw new ArgumentOutOfRangeException(nameof(dbms), dbms, "Unknown DBMS pack."),
         };
+
+        return configured.Build();
     }
 
     /// <summary>Parses CLI/host DBMS pack names (fail-closed on unknown).</summary>
@@ -167,7 +182,7 @@ public sealed class DslCompiler {
     private static IReadOnlyList<(string FileName, string Source)> GenerateAllFiles(
         Domain domain, AnalysisResult analysis,
         CompileMode mode = CompileMode.Entities,
-        DomainAuthoringContext? authoring = null) {
+        DomainAnalysisInputs? analysisInputs = null) {
 
         var files = new List<(string FileName, string Source)>();
 
@@ -202,23 +217,19 @@ public sealed class DslCompiler {
         var aggregateModel = analysis.GetMetadata<OwnershipAggregateMetadata>(domain)?.Aggregate;
 
         var needsInfraPipeline = (mode == CompileMode.Db || mode == CompileMode.All)
-            && (storageModel == null || authoring?.StorageConventions.Count > 0);
+            && (storageModel == null
+                || (analysisInputs?.TypeMaps.HasOverrides ?? false)
+                || (analysisInputs?.StorageConventions.Count ?? 0) > 0
+                || (analysisInputs?.AdditionalPasses.Count ?? 0) > 0);
 
         if (needsInfraPipeline) {
-            var infraPipelineBuilder = new AnalyzerBuilder()
-                .AddAnalyzer(new StoragePass(
-                    typeMaps: authoring?.TypeMaps,
-                    conventions: authoring?.StorageConventions,
-                    analysis: analysis));
-
-            if (authoring != null) {
-                foreach (var pass in authoring.Passes.Build())
-                    infraPipelineBuilder.AddAnalyzer(pass);
-            }
-
-            var infraPipeline = infraPipelineBuilder.Build();
-            var infraResult = infraPipeline.Analyze(domain, priorAnalysis: analysis, invalidatedNodes: [domain]);
-            storageModel = infraResult.GetMetadata<StorageMappingMetadata>(domain)?.Storage;
+            var context = AnalysisContext.CreateDefault();
+            var storagePass = new StoragePass(
+                typeMaps: analysisInputs?.TypeMaps,
+                conventions: analysisInputs?.StorageConventions,
+                analysis: analysis);
+            storagePass.Analyze(context, domain);
+            storageModel = context.GetMetadata<StorageMappingMetadata>(domain)?.Storage;
         }
 
         // Fail closed — no silent re-analyze (storage, behavior, aggregate).

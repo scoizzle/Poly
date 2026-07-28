@@ -45,8 +45,8 @@ public sealed class PolyDslParser {
     // Q1′′′.5 / Q1'''''.2: Prevents recursive `Rel where ...` parsing inside a where body.
     private bool _inWhereBody;
 
-    // Packs / annotation support
-    private readonly DomainAuthoringContext? _authoringContext;
+    // Explicit parse inputs / annotation support
+    private readonly DomainParserInputs? _parserInputs;
 
     private readonly record struct PendingRequire(
         string ActionName,
@@ -67,12 +67,12 @@ public sealed class PolyDslParser {
     }
 
     /// <summary>
-    /// Creates a parser with an optional <see cref="DomainAuthoringContext"/> for pack-aware parsing.
+    /// Creates a parser with optional parser inputs for pack-aware parsing.
     /// When a context is provided, its registered <see cref="IAnnotationSyntax"/> handlers
     /// are consulted for property-tail and entity-header annotations.
     /// </summary>
-    public PolyDslParser(string text, DomainAuthoringContext? context) : this(text) {
-        _authoringContext = context;
+    public PolyDslParser(string text, DomainParserInputs? parserInputs) : this(text) {
+        _parserInputs = parserInputs;
     }
 
     /// <summary>
@@ -149,7 +149,7 @@ public sealed class PolyDslParser {
         // ── Entity header facets (pack-registered annotations) ──
         while (_current.Kind == TokenKind.Identifier) {
             var keyword = _current.Text;
-            if (_authoringContext?.Annotations.CanAccept(keyword) == true) {
+            if (_parserInputs?.Annotations.CanAccept(keyword) == true) {
                 Advance();
                 changes.Add(new AddFacetToDomainTypeChange(entityName, ParseAnnotation(keyword)));
                 continue;
@@ -327,7 +327,7 @@ public sealed class PolyDslParser {
 
             // Annotation-shaped identifier(…)
             var keyword = _current.Text;
-            if (_authoringContext?.Annotations.CanAccept(keyword) == true) {
+            if (_parserInputs?.Annotations.CanAccept(keyword) == true) {
                 Advance();
                 changes.Add(new AddFacetToPropertyChange(
                     _currentEntityName, propertyName, ParseAnnotation(keyword)));

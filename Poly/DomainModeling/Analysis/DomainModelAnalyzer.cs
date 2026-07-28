@@ -6,9 +6,7 @@ namespace Poly.DomainModeling.Analysis;
 
 /// <summary>
 /// Static analyzer for V3 domain models. Uses a cached pipeline internally
-/// for the default (no-authoring-context) path. When a <see cref="DomainAuthoringContext"/>
-/// is provided, a fresh pipeline is built per call to allow pack-contributed
-/// passes to participate in domain analysis.
+/// for all analysis entry points.
 /// Thread-safe — the underlying passes are stateless.
 /// </summary>
 public static class DomainModelAnalyzer {
@@ -17,30 +15,9 @@ public static class DomainModelAnalyzer {
         .UseDomainModelValidation()
         .Build();
 
-    /// <summary>Builds a domain analyzer pipeline, optionally configured with pack passes from the authoring context.</summary>
-    internal static Analyzer BuildDomainAnalyzer(DomainAuthoringContext? authoring = null) {
-        if (authoring is null)
-            return _analyzer;
-
-        var builder = new AnalyzerBuilder()
-            .UseIncrementalAnalysis()
-            .UseDomainModelAnalysisPipeline(authoring);
-
-        foreach (var pass in authoring.Passes.Build())
-            builder.AddAnalyzer(pass);
-
-        return builder.Build();
-    }
-
     public static AnalysisResult Analyze(Domain domain) {
         ArgumentNullException.ThrowIfNull(domain);
         return _analyzer.Analyze(domain);
-    }
-
-    public static AnalysisResult Analyze(Domain domain, DomainAuthoringContext? authoring) {
-        ArgumentNullException.ThrowIfNull(domain);
-        var analyzer = BuildDomainAnalyzer(authoring);
-        return analyzer.Analyze(domain);
     }
 
     public static AnalysisResult Analyze(Domain domain, AnalysisResult priorAnalysis, IEnumerable<Node> invalidatedNodes) {
@@ -50,13 +27,6 @@ public static class DomainModelAnalyzer {
         return _analyzer.Analyze(domain, priorAnalysis, invalidatedNodes);
     }
 
-    public static AnalysisResult Analyze(Domain domain, DomainAuthoringContext? authoring, AnalysisResult priorAnalysis, IEnumerable<Node> invalidatedNodes) {
-        ArgumentNullException.ThrowIfNull(domain);
-        ArgumentNullException.ThrowIfNull(priorAnalysis);
-        ArgumentNullException.ThrowIfNull(invalidatedNodes);
-        var analyzer = BuildDomainAnalyzer(authoring);
-        return analyzer.Analyze(domain, priorAnalysis, invalidatedNodes);
-    }
 }
 
 public static class DomainModelAnalysisBuilderExtensions {
@@ -92,34 +62,6 @@ public static class DomainModelAnalysisBuilderExtensions {
             // Authoring suggestions (advisory hints)
             builder.AddAnalyzer(new AuthoringSuggestionAnalyzer());
             // Entity Syntax projection (TypeDefinitionNode[] as metadata)
-            builder.AddAnalyzer(new EntitySyntaxPass());
-            return builder;
-        }
-
-        /// <summary>Builds the pipeline with pack-aware storage configuration.</summary>
-        public AnalyzerBuilder UseDomainModelAnalysisPipeline(DomainAuthoringContext authoring) {
-            builder.AddAnalyzer(new StructuralDomainAnalyzer());
-            builder.AddAnalyzer(new SemanticDomainAnalyzer());
-            builder.AddAnalyzer(new RuntimeContractAnalyzer());
-            builder.AddAnalyzer(new PolicyConstraintAnalyzer());
-            builder.AddAnalyzer(new EffectAnalyzer());
-            builder.AddAnalyzer(new ConstraintQualityAnalyzer());
-
-            builder.AddAnalyzer(new CapabilityAnalyzer());
-            builder.AddAnalyzer(new ConstraintPropagationAnalyzer());
-            builder.AddAnalyzer(new RuleCoverageAnalyzer());
-            builder.AddAnalyzer(new ContractIntegrationAnalyzer());
-            builder.AddAnalyzer(new EntityStructureAnalyzer());
-            builder.AddAnalyzer(new SubscriptionAnalyzer());
-            builder.AddAnalyzer(new EffectTopologyPass());
-            builder.AddAnalyzer(new OwnershipAggregatePass());
-            builder.AddAnalyzer(new BehaviorPass());
-            builder.AddAnalyzer(new CrossReferencePass());
-            builder.AddAnalyzer(new StoragePass(
-                typeMaps: authoring.TypeMaps,
-                conventions: authoring.StorageConventions));
-            builder.AddAnalyzer(new TransportPass());
-            builder.AddAnalyzer(new AuthoringSuggestionAnalyzer());
             builder.AddAnalyzer(new EntitySyntaxPass());
             return builder;
         }

@@ -12,6 +12,21 @@ public sealed class TypeMappingRegistry {
     private readonly Dictionary<string, string> _sqlOverrides = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, string> _clrOverrides = new(StringComparer.OrdinalIgnoreCase);
 
+    public bool HasOverrides => _sqlOverrides.Count > 0 || _clrOverrides.Count > 0;
+
+    public TypeMappingRegistry() {
+    }
+
+    private TypeMappingRegistry(TypeMappingRegistry source) {
+        foreach (var pair in source._sqlOverrides) {
+            _sqlOverrides[pair.Key] = pair.Value;
+        }
+
+        foreach (var pair in source._clrOverrides) {
+            _clrOverrides[pair.Key] = pair.Value;
+        }
+    }
+
     /// <summary>Looks up the SQL column type for a domain type (override or core default).</summary>
     public string ToSqlColumnType(string domainType) {
         ArgumentException.ThrowIfNullOrWhiteSpace(domainType);
@@ -41,4 +56,6 @@ public sealed class TypeMappingRegistry {
         ArgumentException.ThrowIfNullOrWhiteSpace(clrTypeName);
         _clrOverrides[domainType] = clrTypeName;
     }
+
+    public TypeMappingRegistry Clone() => new(this);
 }

@@ -9,18 +9,11 @@ using Poly.DomainModeling.Evolution;
 namespace Poly.Mcp.Sessions;
 
 /// <summary>
-/// Shared authoring context for MCP sessions. Currently configured with the core
-/// Sql annotation pack (<c>column</c>, <c>table</c>) so MCP <c>apply_dsl</c> and
-/// <c>export_dsl</c> support portable annotation syntax — same as the DslCompiler.
-///
-/// Future: per-session pack selection (P4.5) will replace this static default.
+/// Shared default parser/analyzer inputs for MCP sessions.
+/// New sessions snapshot these defaults into session state.
 /// </summary>
-internal static class McpAuthoring {
-    /// <summary>Gets the shared authoring context with Sql annotation pack.</summary>
-    public static DomainAuthoringContext Context { get; } = DomainAuthoringContext.CreateWithSqlPack();
-
-    /// <summary>Gets the annotation registry from the shared context.</summary>
-    public static AnnotationRegistry Annotations => Context.Annotations;
+internal static class McpDefaults {
+    public static DomainParserInputs ParserInputs { get; } = DomainInputDefaults.SqlParser;
 }
 
 /// <summary>
@@ -33,7 +26,8 @@ internal static class McpAuthoring {
 internal sealed record McpSessionState(
     Domain Domain,
     AnalysisResult? LatestAnalysis,
-    long Revision
+    long Revision,
+    DomainParserInputs ParserInputs
 ) {
     /// <summary>
     /// Runtime instance store for executing action/lifecycle behavior.
@@ -69,8 +63,9 @@ internal static class McpSessionStore {
                 : preferredSessionId;
 
             var domain = DomainFactory.Create(domainName);
-            var analysis = DomainModelAnalyzer.Analyze(domain, McpAuthoring.Context);
-            var state = new McpSessionState(domain, analysis, Revision: 0);
+            var parserInputs = McpDefaults.ParserInputs;
+            var analysis = DomainModelAnalyzer.Analyze(domain);
+            var state = new McpSessionState(domain, analysis, Revision: 0, parserInputs);
             Sessions[sessionId] = state;
             return (sessionId, state);
         }
@@ -116,7 +111,11 @@ internal static class McpSessionStore {
             }
 
             // Fresh state: new domain root clears InstanceMap/InstanceStore (entity refs stale).
-            var next = new McpSessionState(outcome.Root, outcome.Analysis, current.Revision + 1);
+            var next = new McpSessionState(
+                outcome.Root,
+                outcome.Analysis,
+                current.Revision + 1,
+                current.ParserInputs);
             Sessions[sessionId] = next;
             return outcome;
         }
@@ -152,7 +151,11 @@ internal static class McpSessionStore {
             if (!Sessions.TryGetValue(sessionId, out var current))
                 return false;
             // Fresh state: domain + analysis only. InstanceMap/InstanceStore reset.
-            Sessions[sessionId] = new McpSessionState(domain, analysis, current.Revision + 1);
+            Sessions[sessionId] = new McpSessionState(
+                domain,
+                analysis,
+                current.Revision + 1,
+                current.ParserInputs);
             return true;
         }
     }

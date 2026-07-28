@@ -12,22 +12,15 @@ namespace Poly.DomainModeling.Evolution;
 /// is immutable records. There is no explicit transaction/commit/rollback model.
 /// On analysis failure the proposed new root is simply discarded; the caller retains
 /// the original snapshot. Atomicity is free because of immutability.
-/// 
-/// Optionally accepts a <see cref="DomainAuthoringContext"/> which is passed through
-/// to <see cref="DomainModelAnalyzer.Analyze"/> for pack-aware analysis (type maps,
-/// storage conventions, pack passes).
 /// </summary>
 public sealed class DomainEvolution {
     private readonly Domain _current;
-    private readonly DomainAuthoringContext? _authoring;
 
-    public DomainEvolution(Domain current, DomainAuthoringContext? authoring = null) {
+    public DomainEvolution(Domain current) {
         _current = current ?? throw new ArgumentNullException(nameof(current));
-        _authoring = authoring;
     }
 
     public Domain Current => _current;
-    public DomainAuthoringContext? Authoring => _authoring;
 
     /// <summary>
     /// Applies a batch of changes against the current snapshot.
@@ -42,8 +35,8 @@ public sealed class DomainEvolution {
         var (proposed, modifiedNodes, evalErrors) = ApplyChanges(_current, changes, mutationIndex);
 
         var analysis = priorAnalysis is null
-            ? DomainModelAnalyzer.Analyze(proposed, _authoring)
-            : DomainModelAnalyzer.Analyze(proposed, _authoring, priorAnalysis, modifiedNodes);
+            ? DomainModelAnalyzer.Analyze(proposed)
+            : DomainModelAnalyzer.Analyze(proposed, priorAnalysis, modifiedNodes);
 
         // Integrate change history as first-class Information diagnostics *immediately*
         // after analysis, before any access to .Diagnostics. This ensures the EVOLUTION_STEP
@@ -122,7 +115,7 @@ public sealed class DomainEvolution {
         if (index is not null)
             return index;
 
-        var currentAnalysis = DomainModelAnalyzer.Analyze(_current, _authoring);
+        var currentAnalysis = DomainModelAnalyzer.Analyze(_current);
         return currentAnalysis.GetMetadata<MutationTargetIndexMetadata>(_current)
             ?? throw new InvalidOperationException(
                 $"Domain analysis did not produce {nameof(MutationTargetIndexMetadata)} for mutation-target resolution.");

@@ -28,8 +28,8 @@ public class SqlitePackTests {
         """;
 
     private static Domain ParseDomain(string poly) {
-        var ctx = DomainAuthoringContext.CreateWithSqlPack();
-        var changes = new PolyDslParser(poly, ctx).Parse();
+        var ctx = DomainInputBuilder.CreateWithSqlPack().Build();
+        var changes = new PolyDslParser(poly, ctx.Parser).Parse();
         var result = new DomainEvolution(new Domain("_", [], [])).Apply(changes);
         if (!result.Succeeded)
             throw new InvalidOperationException("Domain evolution failed");
@@ -39,8 +39,8 @@ public class SqlitePackTests {
     [Test]
     public async Task SqliteDefaults_TextMapsToText() {
         var domain = ParseDomain(SampleDomain);
-        var ctx = DomainAuthoringContext.CreateWithSqlPack().AddSqliteDefaults();
-        var storage = new StorageAnalyzer(domain, typeMaps: ctx.TypeMaps, conventions: ctx.StorageConventions).Analyze();
+        var ctx = DomainInputBuilder.CreateWithSqlPack().AddSqliteDefaults().Build();
+        var storage = new StorageAnalyzer(domain, typeMaps: ctx.Analysis.TypeMaps, conventions: ctx.Analysis.StorageConventions).Analyze();
         var name = storage.Entities.Single().Columns.Single(c => c.Name == "Name");
         await Assert.That(name.ColumnType).IsEqualTo("TEXT");
     }
@@ -48,8 +48,8 @@ public class SqlitePackTests {
     [Test]
     public async Task SqliteDefaults_NumberMapsToInteger() {
         var domain = ParseDomain(SampleDomain);
-        var ctx = DomainAuthoringContext.CreateWithSqlPack().AddSqliteDefaults();
-        var storage = new StorageAnalyzer(domain, typeMaps: ctx.TypeMaps, conventions: ctx.StorageConventions).Analyze();
+        var ctx = DomainInputBuilder.CreateWithSqlPack().AddSqliteDefaults().Build();
+        var storage = new StorageAnalyzer(domain, typeMaps: ctx.Analysis.TypeMaps, conventions: ctx.Analysis.StorageConventions).Analyze();
         var qty = storage.Entities.Single().Columns.Single(c => c.Name == "Qty");
         await Assert.That(qty.ColumnType).IsEqualTo("INTEGER");
     }
@@ -57,8 +57,8 @@ public class SqlitePackTests {
     [Test]
     public async Task SqliteDefaults_BooleanMapsToInteger() {
         var domain = ParseDomain(SampleDomain);
-        var ctx = DomainAuthoringContext.CreateWithSqlPack().AddSqliteDefaults();
-        var storage = new StorageAnalyzer(domain, typeMaps: ctx.TypeMaps, conventions: ctx.StorageConventions).Analyze();
+        var ctx = DomainInputBuilder.CreateWithSqlPack().AddSqliteDefaults().Build();
+        var storage = new StorageAnalyzer(domain, typeMaps: ctx.Analysis.TypeMaps, conventions: ctx.Analysis.StorageConventions).Analyze();
         var active = storage.Entities.Single().Columns.Single(c => c.Name == "Active");
         await Assert.That(active.ColumnType).IsEqualTo("INTEGER");
     }
@@ -66,8 +66,8 @@ public class SqlitePackTests {
     [Test]
     public async Task SqliteDefaults_DateTimeMapsToText() {
         var domain = ParseDomain(SampleDomain);
-        var ctx = DomainAuthoringContext.CreateWithSqlPack().AddSqliteDefaults();
-        var storage = new StorageAnalyzer(domain, typeMaps: ctx.TypeMaps, conventions: ctx.StorageConventions).Analyze();
+        var ctx = DomainInputBuilder.CreateWithSqlPack().AddSqliteDefaults().Build();
+        var storage = new StorageAnalyzer(domain, typeMaps: ctx.Analysis.TypeMaps, conventions: ctx.Analysis.StorageConventions).Analyze();
         var createdAt = storage.Entities.Single().Columns.Single(c => c.Name == "CreatedAt");
         await Assert.That(createdAt.ColumnType).IsEqualTo("TEXT");
     }
@@ -76,13 +76,13 @@ public class SqlitePackTests {
     public async Task SameDomain_GenericVsSqlite_DifferentDefaults() {
         var domain = ParseDomain(SampleDomain);
 
-        var genericCtx = DomainAuthoringContext.CreateWithSqlPack();
-        var genericStorage = new StorageAnalyzer(domain, typeMaps: genericCtx.TypeMaps, conventions: genericCtx.StorageConventions).Analyze();
+        var genericCtx = DomainInputBuilder.CreateWithSqlPack().Build();
+        var genericStorage = new StorageAnalyzer(domain, typeMaps: genericCtx.Analysis.TypeMaps, conventions: genericCtx.Analysis.StorageConventions).Analyze();
         var generic = genericStorage.Entities.Single().Columns
             .ToDictionary(c => c.Name, StringComparer.Ordinal);
 
-        var sqliteCtx = DomainAuthoringContext.CreateWithSqlPack().AddSqliteDefaults();
-        var sqliteStorage = new StorageAnalyzer(domain, typeMaps: sqliteCtx.TypeMaps, conventions: sqliteCtx.StorageConventions).Analyze();
+        var sqliteCtx = DomainInputBuilder.CreateWithSqlPack().AddSqliteDefaults().Build();
+        var sqliteStorage = new StorageAnalyzer(domain, typeMaps: sqliteCtx.Analysis.TypeMaps, conventions: sqliteCtx.Analysis.StorageConventions).Analyze();
         var sqlite = sqliteStorage.Entities.Single().Columns
             .ToDictionary(c => c.Name, StringComparer.Ordinal);
 
@@ -107,8 +107,8 @@ public class SqlitePackTests {
               Code: Text column("CODE", "VARCHAR2(20)")
             }
             """);
-        var ctx = DomainAuthoringContext.CreateWithSqlPack().AddSqliteDefaults();
-        var storage = new StorageAnalyzer(domain, typeMaps: ctx.TypeMaps, conventions: ctx.StorageConventions).Analyze();
+        var ctx = DomainInputBuilder.CreateWithSqlPack().AddSqliteDefaults().Build();
+        var storage = new StorageAnalyzer(domain, typeMaps: ctx.Analysis.TypeMaps, conventions: ctx.Analysis.StorageConventions).Analyze();
         var col = storage.Entities.Single().Columns.Single();
         await Assert.That(col.ColumnName).IsEqualTo("CODE");
         await Assert.That(col.ColumnType).IsEqualTo("VARCHAR2(20)");
@@ -171,12 +171,12 @@ public class SqlitePackTests {
 
     [Test]
     public async Task CreateAuthoring_Sqlite_RegistersTypeMaps() {
-        var ctx = Compiler.CreateAuthoring(DbmsPack.Sqlite);
-        await Assert.That(ctx.TypeMaps.ToSqlColumnType("Text")).IsEqualTo("TEXT");
-        await Assert.That(ctx.TypeMaps.ToSqlColumnType("Boolean")).IsEqualTo("INTEGER");
+        var ctx = Compiler.CreateInputs(DbmsPack.Sqlite);
+        await Assert.That(ctx.Analysis.TypeMaps.ToSqlColumnType("Text")).IsEqualTo("TEXT");
+        await Assert.That(ctx.Analysis.TypeMaps.ToSqlColumnType("Boolean")).IsEqualTo("INTEGER");
         // Annotation pack still present
-        await Assert.That(ctx.Annotations.CanAccept("column")).IsTrue();
-        await Assert.That(ctx.Annotations.CanAccept("table")).IsTrue();
+        await Assert.That(ctx.Parser.Annotations.CanAccept("column")).IsTrue();
+        await Assert.That(ctx.Parser.Annotations.CanAccept("table")).IsTrue();
     }
 
     [Test]

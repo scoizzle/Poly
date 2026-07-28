@@ -3,14 +3,13 @@ using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Parsing;
 using Poly.Introspection;
-using Poly.Packs.Sqlite;
 
 namespace Poly.Tests.DomainModeling.Analysis;
 
 public class DomainModelAnalyzerContextTests {
     private static Domain ParseDomain(string poly) {
-        var ctx = DomainAuthoringContext.CreateWithSqlPack();
-        var parser = new PolyDslParser(poly, ctx);
+        var ctx = DomainInputBuilder.CreateWithSqlPack().Build();
+        var parser = new PolyDslParser(poly, ctx.Parser);
         var changes = parser.Parse();
         var result = new DomainEvolution(new Domain("_", [], [])).Apply(changes);
         if (!result.Succeeded)
@@ -24,39 +23,24 @@ public class DomainModelAnalyzerContextTests {
     private static readonly Property AmountProp = new("Amount", new DomainTypeReference("Number"), []);
 
     [Test]
-    public async Task Analyze_WithNullAuthoring_MatchesParameterless() {
+    public async Task Analyze_WithDomainTree_DoesNotThrow() {
         var entity = new Entity("Widget", [NameProp], [], [], []);
         var domain = new Domain("Test", [entity], []);
 
-        var resultDefault = DomainModelAnalyzer.Analyze(domain);
-        var resultWithContext = DomainModelAnalyzer.Analyze(domain, authoring: null);
-
-        await Assert.That(resultWithContext).IsNotNull();
-        await Assert.That(resultWithContext.Diagnostics.Count)
-            .IsEqualTo(resultDefault.Diagnostics.Count);
-    }
-
-    [Test]
-    public async Task Analyze_WithAuthoringContext_DoesNotThrow() {
-        var entity = new Entity("Widget", [NameProp], [], [], []);
-        var domain = new Domain("Test", [entity], []);
-        var authoring = DomainAuthoringContext.CreateWithSqlPack();
-
-        var result = DomainModelAnalyzer.Analyze(domain, authoring);
+        var result = DomainModelAnalyzer.Analyze(domain);
 
         await Assert.That(result).IsNotNull();
     }
 
     [Test]
-    public async Task Analyze_WithAuthoringContext_Incremental_DoesNotThrow() {
+    public async Task Analyze_Incremental_WithDomainTree_DoesNotThrow() {
         var entity = new Entity("Widget", [NameProp], [], [], []);
         var domain = new Domain("Test", [entity], []);
 
         var priorAnalysis = DomainModelAnalyzer.Analyze(domain);
-        var authoring = DomainAuthoringContext.CreateWithSqlPack();
 
         var updatedDomain = new Domain("Test", [entity], []);
-        var result = DomainModelAnalyzer.Analyze(updatedDomain, authoring, priorAnalysis, [updatedDomain]);
+        var result = DomainModelAnalyzer.Analyze(updatedDomain, priorAnalysis, [updatedDomain]);
 
         await Assert.That(result).IsNotNull();
     }
@@ -90,34 +74,25 @@ public class DomainModelAnalyzerContextTests {
     }
 
     [Test]
-    public async Task Analyze_WithDifferentTypeMaps_ProducesDifferentColumnTypes() {
-        // D3.6: Real pack-variance via DomainModelAnalyzer.Analyze(domain, authoring).
-        // Prove that different TypeMappingRegistry configurations produce different
-        // storage column types in the AnalysisResult.
+    public async Task Analyze_StorageMapping_IsDeterministicForSameDomainTree() {
         var domain = ParseDomain("""
             domain Test
             Item: entity { Name: Text }
             """);
 
-        var generic = DomainAuthoringContext.CreateWithSqlPack();
-        var sqlite = DomainAuthoringContext.CreateWithSqlPack().AddSqliteDefaults();
+        var resultFirst = DomainModelAnalyzer.Analyze(domain);
+        var resultSecond = DomainModelAnalyzer.Analyze(domain);
 
-        var resultGeneric = DomainModelAnalyzer.Analyze(domain, generic);
-        var resultSqlite = DomainModelAnalyzer.Analyze(domain, sqlite);
+        var storageFirst = resultFirst.GetMetadata<StorageMappingMetadata>(domain);
+        var storageSecond = resultSecond.GetMetadata<StorageMappingMetadata>(domain);
 
-        var storageGeneric = resultGeneric.GetMetadata<StorageMappingMetadata>(domain);
-        var storageSqlite = resultSqlite.GetMetadata<StorageMappingMetadata>(domain);
+        await Assert.That(storageFirst).IsNotNull();
+        await Assert.That(storageSecond).IsNotNull();
 
-        await Assert.That(storageGeneric).IsNotNull();
-        await Assert.That(storageSqlite).IsNotNull();
+        var firstNameCol = storageFirst!.Storage.Entities[0].Columns[0];
+        var secondNameCol = storageSecond!.Storage.Entities[0].Columns[0];
 
-        // Same logical entity, same property — different type map → different column type
-        var genericNameCol = storageGeneric!.Storage.Entities[0].Columns[0];
-        var sqliteNameCol = storageSqlite!.Storage.Entities[0].Columns[0];
-
-        await Assert.That(genericNameCol.ColumnName).IsEqualTo(sqliteNameCol.ColumnName);
-        await Assert.That(genericNameCol.ColumnType).IsNotEqualTo(sqliteNameCol.ColumnType);
-        await Assert.That(genericNameCol.ColumnType).IsEqualTo("varchar");
-        await Assert.That(sqliteNameCol.ColumnType).IsEqualTo("TEXT");
+        await Assert.That(firstNameCol.ColumnName).IsEqualTo(secondNameCol.ColumnName);
+        await Assert.That(firstNameCol.ColumnType).IsEqualTo(secondNameCol.ColumnType);
     }
 }

@@ -245,6 +245,7 @@ public sealed class DslCompiler {
             // Minimal API + .http file (mode: all only)
             if (mode == CompileMode.All) {
                 var apiGen = new MinimalApiGenerator(domain,
+                    analysis: analysis,
                     storageModel: storageModel!,
                     behaviorModel: behaviorModel!,
                     aggregateModel: aggregateModel!);
@@ -252,6 +253,7 @@ public sealed class DslCompiler {
                     new CSharpGenerator().Generate(apiGen.GenerateCompilationUnit(dbContextName))));
 
                 var httpGen = new HttpFileGenerator(domain,
+                    analysis: analysis,
                     storageModel: storageModel!,
                     behaviorModel: behaviorModel!,
                     aggregateModel: aggregateModel!);

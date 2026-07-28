@@ -256,6 +256,8 @@ internal sealed class OracleTool {
         [Description("Optional stage name for stage-scoped actions")] string? stageName = null) {
         if (!McpSessionStore.TryGet(sessionId, out var state))
             return new DomainToolResponse(Success: false, Message: $"Session '{sessionId}' not found.", Affordances: ["create_domain_session", "list_sessions"]);
+        if (state.LatestAnalysis is null)
+            return new DomainToolResponse(Success: false, Message: $"Session '{sessionId}' has no analysis. Apply a domain first (apply_dsl or evolution).", SessionId: sessionId, Affordances: ["apply_dsl", "get_domain_overview"]);
 
         var entity = state.Domain.Types.OfType<Entity>().FirstOrDefault(e =>
             string.Equals(e.Name, entityName, StringComparison.Ordinal));
@@ -283,9 +285,11 @@ internal sealed class OracleTool {
             var paramNames = new HashSet<string>(action.Parameters.Select(p => p.Name), StringComparer.Ordinal);
             var context = new LoweringContext(
                 new Syntactic.Parameter("entity", new Syntactic.TypeReference(entity.Name)),
+                Analysis: state.LatestAnalysis,
                 UseThisReference: true,
                 ActionParameterNames: paramNames,
-                LowerStageTransitions: true
+                LowerStageTransitions: true,
+                Domain: state.Domain
             );
             var effectPass = new EffectLoweringPass(entity, context);
             var composite = new CompositeEffect(action.Effects);
@@ -347,6 +351,8 @@ internal sealed class OracleTool {
         [Description("Optional stage name for stage-scoped actions")] string? stageName = null) {
         if (!McpSessionStore.TryGet(sessionId, out var state))
             return new DomainToolResponse(Success: false, Message: $"Session '{sessionId}' not found.", Affordances: ["create_domain_session", "list_sessions"]);
+        if (state.LatestAnalysis is null)
+            return new DomainToolResponse(Success: false, Message: $"Session '{sessionId}' has no analysis. Apply a domain first (apply_dsl or evolution).", SessionId: sessionId, Affordances: ["apply_dsl", "get_domain_overview"]);
 
         var entity = state.Domain.Types.OfType<Entity>().FirstOrDefault(e =>
             string.Equals(e.Name, entityName, StringComparison.Ordinal));
@@ -375,9 +381,11 @@ internal sealed class OracleTool {
             var paramNames = new HashSet<string>(action.Parameters.Select(p => p.Name), StringComparer.Ordinal);
             var context = new LoweringContext(
                 new Syntactic.Parameter("entity", new Syntactic.TypeReference(entity.Name)),
+                Analysis: state.LatestAnalysis,
                 UseThisReference: true,
                 ActionParameterNames: paramNames,
-                LowerStageTransitions: true
+                LowerStageTransitions: true,
+                Domain: state.Domain
             );
             var effectPass = new EffectLoweringPass(entity, context);
             // Lower the action as a composite of all its effects

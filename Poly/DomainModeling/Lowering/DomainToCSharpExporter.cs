@@ -44,8 +44,9 @@ public sealed class DomainToCSharpExporter {
     /// for each entity (produced by <see cref="SemanticDomainAnalyzer"/>).
     /// </param>
     public IReadOnlyList<TypeDefinitionNode> Export(Domain domain,
-        INodeMetadataProvider metadata) {
-        return DomainProgramProjection.ToSyntax(domain, metadata);
+        AnalysisResult analysis) {
+        ArgumentNullException.ThrowIfNull(analysis);
+        return DomainProgramProjection.ToSyntax(domain, analysis);
     }
 
     /// <summary>
@@ -1204,6 +1205,8 @@ public sealed class DomainToCSharpExporter {
             return true;
         }
 
+        // DM-META-REMOVE-FALLBACK: remove domain scan once all semantic callers
+        // are AnalysisResult-required and enum lookup metadata is mandatory.
         if (domain is not null) {
             enumType = domain.Types.OfType<EnumType>()
                 .FirstOrDefault(e => string.Equals(e.Name, typeName, StringComparison.Ordinal));
@@ -1246,6 +1249,8 @@ public sealed class DomainToCSharpExporter {
             return relationship;
         }
 
+        // DM-META-REMOVE-FALLBACK: remove relationship list scan when analysis
+        // metadata becomes mandatory for all semantic lookup paths.
         return domainRelationships.FirstOrDefault(r =>
             string.Equals(r.Name, relationshipName, StringComparison.Ordinal) &&
             string.Equals(r.Source.TypeName, sourceEntityName, StringComparison.Ordinal));

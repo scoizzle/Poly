@@ -19,6 +19,16 @@ namespace Poly.DomainModeling.Lowering;
 /// </summary>
 public static class DomainProgramProjection {
     /// <summary>
+    /// Projects the domain into language-agnostic Syntax type definitions
+    /// for downstream consumers where analysis is required.
+    /// </summary>
+    public static IReadOnlyList<TypeDefinitionNode> ToSyntax(
+        Domain domain, AnalysisResult analysis) {
+        ArgumentNullException.ThrowIfNull(analysis);
+        return ToSyntax(domain, (INodeMetadataProvider)analysis);
+    }
+
+    /// <summary>
     /// Projects the domain into language-agnostic Syntax type definitions.
     /// Currently delegates to static methods on <see cref="DomainToCSharpExporter"/>
     /// which will be migrated here incrementally.

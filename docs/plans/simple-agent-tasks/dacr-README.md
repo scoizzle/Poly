@@ -19,12 +19,12 @@ semantic downstream paths require AnalysisResult and fail closed when analysis o
 
 | Phase | Task File | Status |
 |---|---|---|
-| Phase 0 | dacr-p0-guardrails.md | [ ] |
-| Phase 1 | dacr-p1-lowering-required-analysis.md | [ ] |
-| Phase 2 | dacr-p2-mcp-semantic-lookups.md | [ ] |
-| Phase 3 | dacr-p3-dslcompiler-semantic-lookups.md | [ ] |
-| Phase 4 | dacr-p4-runtime-static-dynamic.md | [ ] |
-| Phase 5 | dacr-p5-evolution-target-index.md | [ ] |
+| Phase 0 | dacr-p0-guardrails.md | [~] |
+| Phase 1 | dacr-p1-lowering-required-analysis.md | [~] |
+| Phase 2 | dacr-p2-mcp-semantic-lookups.md | [~] |
+| Phase 3 | dacr-p3-dslcompiler-semantic-lookups.md | [x] |
+| Phase 4 | dacr-p4-runtime-static-dynamic.md | [~] |
+| Phase 5 | dacr-p5-evolution-target-index.md | [~] |
 | Phase 6 | dacr-p6-contract-enforcement.md | [ ] |
 | Gate | dacr-gate.md | [ ] |
 

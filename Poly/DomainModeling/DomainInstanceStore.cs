@@ -1,5 +1,7 @@
 namespace Poly.DomainModeling;
 
+using Poly.DomainModeling.Analysis;
+
 /// <summary>
 /// Minimal in-memory store for <see cref="DomainEntityInstance"/> objects.
 /// Provides relationship-based lookup for stage-subscription fan-out and
@@ -129,55 +131,69 @@ public sealed class DomainInstanceStore {
         var domain = transitionedInstance.Domain;
         if (domain is null) return;
 
-        // Find relationships where the transitioned instance is the Target (someone subscribes to it).
-        // The subscriber must be the relationship Source (matching SubscriptionContractAnalyzer).
-        var incomingRelationships = domain.Relationships
-            .Where(r =>
-                string.Equals(r.Target.TypeName, transitionedInstance.Entity.Name, StringComparison.Ordinal))
+        var analysis = RuntimeAnalysisCache.GetOrAnalyze(domain);
+        var relationshipContracts = analysis.GetMetadata<RelationshipContractMetadata>(default)
+            ?? throw new InvalidOperationException(
+                $"Runtime dispatch requires {nameof(RelationshipContractMetadata)}.");
+
+        var incomingContracts = relationshipContracts.Contracts
+            .Where(c => string.Equals(c.TargetEntityName, transitionedInstance.Entity.Name, StringComparison.Ordinal))
             .ToList();
 
-        if (incomingRelationships.Count == 0) return;
+        if (incomingContracts.Count == 0) return;
 
         // For each subscriber instance, check if any of its active subscriptions match
         foreach (var subscriber in _instances) {
             if (subscriber.IsDeleted) continue;
             if (subscriber.CurrentStage is null) continue;
 
-            // Find the stage the subscriber is currently in
-            var subscriberStage = subscriber.Entity.Stages
-                .FirstOrDefault(s => string.Equals(s.Name, subscriber.CurrentStage, StringComparison.Ordinal));
+            var actionResolution = analysis.GetMetadata<ActionResolutionMetadata>(subscriber.Entity)
+                ?? throw new InvalidOperationException(
+                    $"Runtime dispatch requires {nameof(ActionResolutionMetadata)} for entity '{subscriber.Entity.Name}'.");
+
+            if (!actionResolution.StageByName.TryGetValue(subscriber.CurrentStage, out var subscriberStage)
+                || subscriberStage is null) {
+                continue;
+            }
+
+            var dispatchPlan = analysis.GetMetadata<SubscriptionDispatchPlanMetadata>(subscriberStage)
+                ?? throw new InvalidOperationException(
+                    $"Runtime dispatch requires {nameof(SubscriptionDispatchPlanMetadata)} for stage '{subscriberStage.Name}'.");
+
+            var applicableEntries = dispatchPlan.ByRelationshipName.Values
+                .SelectMany(entries => entries)
+                .Where(entry =>
+                    string.Equals(entry.SourceEntityName, subscriber.Entity.Name, StringComparison.Ordinal)
+                    && string.Equals(entry.TargetEntityName, transitionedInstance.Entity.Name, StringComparison.Ordinal)
+                    && incomingContracts.Any(contract =>
+                        string.Equals(contract.Name, entry.RelationshipName, StringComparison.Ordinal)
+                        && string.Equals(contract.SourceEntityName, entry.SourceEntityName, StringComparison.Ordinal)
+                        && string.Equals(contract.TargetEntityName, entry.TargetEntityName, StringComparison.Ordinal)))
+                .ToList();
+
             if (subscriberStage is null) continue;
 
-            // Check each subscription on this stage
-            foreach (var subscription in subscriberStage.Subscriptions) {
-                // Subscription must name a relationship where:
-                // - Name matches
-                // - Source entity = subscriber entity, Target entity = transitioned instance entity
-                var matchingRel = incomingRelationships.FirstOrDefault(r =>
-                    string.Equals(r.Name, subscription.RelationshipName, StringComparison.Ordinal) &&
-                    string.Equals(r.Source.TypeName, subscriber.Entity.Name, StringComparison.Ordinal));
-                if (matchingRel is null) continue;
-
+            foreach (var entry in applicableEntries) {
                 // Instance-level link required (BR.4.4)
-                if (!IsLinked(matchingRel.Name, subscriber, transitionedInstance))
+                if (!IsLinked(entry.RelationshipName, subscriber, transitionedInstance))
                     continue;
 
                 // Does the target stage match?
-                if (!subscription.StageNames.Any(sn =>
+                if (!entry.StageNames.Any(sn =>
                         string.Equals(sn, targetStageName, StringComparison.Ordinal)))
                     continue;
 
                 // Dispatch based on quantifier
-                if (subscription.Quantifier == StageSubscriptionQuantifier.Each) {
+                if (entry.Quantifier == StageSubscriptionQuantifier.Each) {
                     // Each: fire effects for every matching transition (default)
-                    subscriber.ExecuteSubscriptionEffects(subscription.Effects, transitionedInstance);
+                    subscriber.ExecuteSubscriptionEffects(entry.Effects, transitionedInstance);
                 }
-                else if (subscription.Quantifier is StageSubscriptionQuantifier.Any or StageSubscriptionQuantifier.All) {
+                else if (entry.Quantifier is StageSubscriptionQuantifier.Any or StageSubscriptionQuantifier.All) {
                     // Any: fire once when at least one related entity is in matching stage.
                     // All: fire once when every related entity is in matching stage.
                     // Both check the current state of all linked targets for that relationship.
                     var allLinkedTargets = _links
-                        .Where(l => string.Equals(l.RelationshipName, matchingRel.Name, StringComparison.Ordinal)
+                        .Where(l => string.Equals(l.RelationshipName, entry.RelationshipName, StringComparison.Ordinal)
                                  && ReferenceEquals(l.Source, subscriber))
                         .Select(l => l.Target)
                         .ToList();
@@ -187,14 +203,14 @@ public sealed class DomainInstanceStore {
                     var matchedCount = allLinkedTargets.Count(t =>
                         string.Equals(t.CurrentStage, targetStageName, StringComparison.Ordinal));
 
-                    bool shouldFire = subscription.Quantifier switch {
+                    bool shouldFire = entry.Quantifier switch {
                         StageSubscriptionQuantifier.Any => matchedCount >= 1,
                         StageSubscriptionQuantifier.All => matchedCount == allLinkedTargets.Count,
                         _ => false
                     };
 
                     if (!shouldFire) continue;
-                    subscriber.ExecuteSubscriptionEffects(subscription.Effects, transitionedInstance);
+                    subscriber.ExecuteSubscriptionEffects(entry.Effects, transitionedInstance);
                 }
 
                 // Recurse if the subscriber also transitioned as a side effect

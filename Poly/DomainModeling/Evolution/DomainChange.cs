@@ -265,6 +265,13 @@ public sealed record AddPolicyToActionChange(
     Policy Policy
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
+        var actionStatus = context.ResolveAction(EntityName, ActionName, searchStages: true, out _);
+        if (actionStatus == DomainMutationContext.ResolveStatus.AmbiguousAction) {
+            context.Errors.Add(
+                $"Action '{ActionName}' on Entity '{EntityName}' is ambiguous — cannot add policy '{Policy.Name}'.");
+            return;
+        }
+
         context.RequireUpdate(
             context.UpdateAction(EntityName, ActionName, a => a with {
                 Policies = a.Policies.Append(Policy).ToList()
@@ -299,15 +306,21 @@ public sealed record RemovePolicyFromStageChange(
     string PolicyName
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
-        var entity = context.FindEntity(EntityName);
-        if (entity is not null) {
-            var stage = entity.Stages.FirstOrDefault(s => string.Equals(s.Name, StageName, StringComparison.Ordinal));
-            if (stage is not null && !stage.Policies.Any(p => string.Equals(p.Name, PolicyName, StringComparison.Ordinal))) {
-                context.RequireTarget(false,
-                    $"Policy '{PolicyName}' not found on Stage '{StageName}' of Entity '{EntityName}' — nothing to remove");
-                return;
-            }
+        var stageStatus = context.ResolveStage(EntityName, StageName, out var stage);
+        if (stageStatus == DomainMutationContext.ResolveStatus.AmbiguousStage) {
+            context.Errors.Add(
+                $"Stage '{StageName}' on Entity '{EntityName}' is ambiguous — cannot remove policy '{PolicyName}'.");
+            return;
         }
+
+        if (stageStatus == DomainMutationContext.ResolveStatus.Found
+            && stage is not null
+            && !stage.Policies.Any(p => string.Equals(p.Name, PolicyName, StringComparison.Ordinal))) {
+            context.RequireTarget(false,
+                $"Policy '{PolicyName}' not found on Stage '{StageName}' of Entity '{EntityName}' — nothing to remove");
+            return;
+        }
+
         context.RequireUpdate(
             context.UpdateStage(EntityName, StageName, s => s with {
                 Policies = s.Policies.Where(p => !string.Equals(p.Name, PolicyName, StringComparison.Ordinal)).ToList()
@@ -324,16 +337,21 @@ public sealed record RemovePolicyFromActionChange(
     string PolicyName
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
-        var entity = context.FindEntity(EntityName);
-        if (entity is not null) {
-            var action = entity.Actions.FirstOrDefault(a => string.Equals(a.Name, ActionName, StringComparison.Ordinal))
-                ?? entity.Stages.SelectMany(s => s.Actions).FirstOrDefault(a => string.Equals(a.Name, ActionName, StringComparison.Ordinal));
-            if (action is not null && !action.Policies.Any(p => string.Equals(p.Name, PolicyName, StringComparison.Ordinal))) {
-                context.RequireTarget(false,
-                    $"Policy '{PolicyName}' not found on Action '{ActionName}' of Entity '{EntityName}' — nothing to remove");
-                return;
-            }
+        var actionStatus = context.ResolveAction(EntityName, ActionName, searchStages: true, out var action);
+        if (actionStatus == DomainMutationContext.ResolveStatus.AmbiguousAction) {
+            context.Errors.Add(
+                $"Action '{ActionName}' on Entity '{EntityName}' is ambiguous — cannot remove policy '{PolicyName}'.");
+            return;
         }
+
+        if (actionStatus == DomainMutationContext.ResolveStatus.Found
+            && action is not null
+            && !action.Policies.Any(p => string.Equals(p.Name, PolicyName, StringComparison.Ordinal))) {
+            context.RequireTarget(false,
+                $"Policy '{PolicyName}' not found on Action '{ActionName}' of Entity '{EntityName}' — nothing to remove");
+            return;
+        }
+
         context.RequireUpdate(
             context.UpdateAction(EntityName, ActionName, a => a with {
                 Policies = a.Policies.Where(p => !string.Equals(p.Name, PolicyName, StringComparison.Ordinal)).ToList()
@@ -563,9 +581,12 @@ public sealed record AddActionToStageChange(
         // no-op that occurs when AddActionToStage creates an empty copy while
         // effects were added to the entity-level action only.
         // See Phase 3 §6e (Stage-Action Semantics).
-        var entity = context.FindEntity(EntityName);
-        var source = entity?.Actions.FirstOrDefault(a =>
-            string.Equals(a.Name, Name, StringComparison.Ordinal));
+        var actionStatus = context.ResolveAction(EntityName, Name, searchStages: false, out var source);
+        if (actionStatus == DomainMutationContext.ResolveStatus.AmbiguousAction) {
+            context.Errors.Add(
+                $"Action '{Name}' on Entity '{EntityName}' is ambiguous — cannot add action to stage '{StageName}'.");
+            return;
+        }
 
         context.RequireUpdate(
             context.UpdateStage(EntityName, StageName, s => s with {
@@ -588,15 +609,21 @@ public sealed record RemoveActionFromStageChange(
     string Name
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
-        var entity = context.FindEntity(EntityName);
-        if (entity is not null) {
-            var stage = entity.Stages.FirstOrDefault(s => string.Equals(s.Name, StageName, StringComparison.Ordinal));
-            if (stage is not null && !stage.Actions.Any(a => string.Equals(a.Name, Name, StringComparison.Ordinal))) {
-                context.RequireTarget(false,
-                    $"Action '{Name}' not found on Stage '{StageName}' of Entity '{EntityName}' — nothing to remove");
-                return;
-            }
+        var stageStatus = context.ResolveStage(EntityName, StageName, out var stage);
+        if (stageStatus == DomainMutationContext.ResolveStatus.AmbiguousStage) {
+            context.Errors.Add(
+                $"Stage '{StageName}' on Entity '{EntityName}' is ambiguous — cannot remove action '{Name}'.");
+            return;
         }
+
+        if (stageStatus == DomainMutationContext.ResolveStatus.Found
+            && stage is not null
+            && !stage.Actions.Any(a => string.Equals(a.Name, Name, StringComparison.Ordinal))) {
+            context.RequireTarget(false,
+                $"Action '{Name}' not found on Stage '{StageName}' of Entity '{EntityName}' — nothing to remove");
+            return;
+        }
+
         context.RequireUpdate(
             context.UpdateStage(EntityName, StageName, s => s with {
                 Actions = s.Actions.Where(a => !string.Equals(a.Name, Name, StringComparison.Ordinal)).ToList()
@@ -1065,16 +1092,22 @@ public sealed record RemoveStageSubscriptionChange(
     StageSubscription SubscriptionToRemove
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
-        var entity = context.FindEntity(EntityName);
-        if (entity is not null) {
-            var stage = entity.Stages.FirstOrDefault(s => string.Equals(s.Name, StageName, StringComparison.Ordinal));
-            if (stage is not null && !stage.Subscriptions.Any(sub => SemanticMatch(sub, SubscriptionToRemove))) {
-                context.RequireTarget(false,
-                    $"Stage subscription with key '{SubscriptionKey(SubscriptionToRemove)}' not found " +
-                    $"on Stage '{StageName}' of Entity '{EntityName}' — nothing to remove");
-                return;
-            }
+        var stageStatus = context.ResolveStage(EntityName, StageName, out var stage);
+        if (stageStatus == DomainMutationContext.ResolveStatus.AmbiguousStage) {
+            context.Errors.Add(
+                $"Stage '{StageName}' on Entity '{EntityName}' is ambiguous — cannot remove stage subscription '{SubscriptionKey(SubscriptionToRemove)}'.");
+            return;
         }
+
+        if (stageStatus == DomainMutationContext.ResolveStatus.Found
+            && stage is not null
+            && !stage.Subscriptions.Any(sub => SemanticMatch(sub, SubscriptionToRemove))) {
+            context.RequireTarget(false,
+                $"Stage subscription with key '{SubscriptionKey(SubscriptionToRemove)}' not found " +
+                $"on Stage '{StageName}' of Entity '{EntityName}' — nothing to remove");
+            return;
+        }
+
         context.RequireUpdate(
             context.UpdateStage(EntityName, StageName, s => s with {
                 Subscriptions = s.Subscriptions.Where(sub => !SemanticMatch(sub, SubscriptionToRemove)).ToList()

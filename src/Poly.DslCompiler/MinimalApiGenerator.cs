@@ -1,3 +1,4 @@
+using Poly.Analysis;
 using Poly.Ast;
 using Poly.Ast.Nodes;
 using Poly.DomainModeling;
@@ -21,14 +22,18 @@ public sealed class MinimalApiGenerator {
     private readonly Dictionary<string, StorageEntity> _storageLookup;
     private readonly Dictionary<string, BehaviorEntity> _behaviorLookup;
     private readonly Dictionary<string, AggregateEntity> _aggregateLookup;
+    private readonly Dictionary<string, EnumType> _enumLookup;
+    private readonly Dictionary<string, EntityStructureMetadata> _entityStructureLookup;
 
     private readonly IStorageSyntaxEmitter? _emitter;
 
     public MinimalApiGenerator(Domain domain,
+        AnalysisResult analysis,
         StorageModel storageModel,
         BehaviorModel behaviorModel,
         AggregateModel aggregateModel,
         IStorageSyntaxEmitter? emitter = null) {
+        ArgumentNullException.ThrowIfNull(analysis);
         _emitter = emitter;
         _domain = domain;
         _entities = domain.Types.OfType<Entity>().ToList();
@@ -36,6 +41,11 @@ public sealed class MinimalApiGenerator {
         _storageLookup = storageModel.Entities.ToDictionary(e => e.Name, StringComparer.Ordinal);
         _behaviorLookup = behaviorModel.Entities.ToDictionary(e => e.Name, StringComparer.Ordinal);
         _aggregateLookup = aggregateModel.Entities.ToDictionary(e => e.Name, StringComparer.Ordinal);
+        _enumLookup = domain.Types.OfType<EnumType>().ToDictionary(e => e.Name, StringComparer.Ordinal);
+        _entityStructureLookup = _entities
+            .Select(entity => new { entity.Name, Metadata = analysis.GetMetadata<EntityStructureMetadata>(entity) })
+            .Where(x => x.Metadata is not null)
+            .ToDictionary(x => x.Name, x => x.Metadata!, StringComparer.Ordinal);
     }
 
     private IReadOnlyList<BehaviorAction> GetBehaviorActions(Entity entity) =>
@@ -44,6 +54,12 @@ public sealed class MinimalApiGenerator {
     private StorageEntity GetStorageEntity(Entity entity) => _storageLookup[entity.Name];
 
     private AggregateEntity GetAggregateEntity(Entity entity) => _aggregateLookup[entity.Name];
+
+    private IReadOnlyList<ConstructorParameterOrder>? GetConstructorOrder(Entity entity) {
+        if (_entityStructureLookup.TryGetValue(entity.Name, out var metadata))
+            return metadata.ConstructorParameters;
+        return null;
+    }
 
     /// <summary>
     /// Parent context for a child entity from AggregateModel.
@@ -241,21 +257,36 @@ public sealed class MinimalApiGenerator {
             return;
         }
 
-        // Build Entity.Create(dto.Prop1, dto.Prop2, ...) call
+        // Prefer analyzer-provided constructor order; keep a structural fallback.
         var createArgs = new List<Node>();
-        foreach (var prop in entity.Properties
-            .Where(p => !p.Constraints.Any(c => c is DefaultValueConstraint))
-            .OrderBy(p => p.Name)) {
-            if (_entities.Any(e => string.Equals(e.Name, prop.Type.TypeName, StringComparison.Ordinal)))
-                break;
-            createArgs.Add(new Member(new Variable("dto"), prop.Name));
+        var constructorOrder = GetConstructorOrder(entity);
+        if (constructorOrder is not null && constructorOrder.Count > 0) {
+            foreach (var parameter in constructorOrder) {
+                if (parameter.IsNavigation) {
+                    createArgs.Add(new Invoke(new Member(new TypeReference("Enumerable"), "Empty")) {
+                        TypeArguments = [new TypeReference(parameter.Type.TypeName)]
+                    });
+                    continue;
+                }
+
+                createArgs.Add(new Member(new Variable("dto"), parameter.Name));
+            }
         }
-        foreach (var rel in _domain.Relationships) {
-            if (!string.Equals(rel.Source.TypeName, entity.Name, StringComparison.Ordinal)) continue;
-            if (rel.Cardinality is RelationshipCardinality.OneToMany or RelationshipCardinality.ManyToMany)
+        else {
+            // DM-META-REMOVE-FALLBACK: remove once constructor ordering metadata is
+            // guaranteed for all DslCompiler create-call routes.
+            foreach (var prop in entity.Properties
+                .Where(p => !p.Constraints.Any(c => c is DefaultValueConstraint))
+                .OrderBy(p => p.Name)) {
+                if (_entities.Any(e => string.Equals(e.Name, prop.Type.TypeName, StringComparison.Ordinal)))
+                    break;
+                createArgs.Add(new Member(new Variable("dto"), prop.Name));
+            }
+            foreach (var nav in store.CollectionNavigations) {
                 createArgs.Add(new Invoke(new Member(new TypeReference("Enumerable"), "Empty")) {
-                    TypeArguments = [new TypeReference(rel.Target.TypeName)]
+                    TypeArguments = [new TypeReference(nav.TargetEntityName)]
                 });
+            }
         }
 
         var resultVarName = $"{ToCamelCase(entity.Name)}Result";
@@ -474,13 +505,10 @@ public sealed class MinimalApiGenerator {
             }
 
             // Load collection navigations
-            foreach (var rel in _domain.Relationships) {
-                if (!string.Equals(rel.Source.TypeName, entity.Name, StringComparison.Ordinal)) continue;
-                if (rel.Cardinality is RelationshipCardinality.OneToMany or RelationshipCardinality.ManyToMany) {
-                    var en = new Invoke(new Member(new TypeReference("db"), "Entry"), new Variable("entity"));
-                    var col = new Invoke(new Member(en, "Collection"), new Lambda([new Parameter("e")], new Member(new Variable("e"), Pascalize(rel.Name))));
-                    preActionNodes.Add(new Await(new Invoke(new Member(col, "LoadAsync"))));
-                }
+            foreach (var nav in store.CollectionNavigations) {
+                var en = new Invoke(new Member(new TypeReference("db"), "Entry"), new Variable("entity"));
+                var col = new Invoke(new Member(en, "Collection"), new Lambda([new Parameter("e")], new Member(new Variable("e"), nav.PropertyName)));
+                preActionNodes.Add(new Await(new Invoke(new Member(col, "LoadAsync"))));
             }
 
             // ── Try body: entity-ref lookups + invoke + result switch ──
@@ -606,22 +634,46 @@ public sealed class MinimalApiGenerator {
                 new Block(new Return(null))));
 
             foreach (var entity in seedableEntities) {
-                var scalarProps = entity.Properties
-                    .Where(p => !p.Constraints.Any(c => c is DefaultValueConstraint))
-                    .Where(p => !_entities.Any(e => string.Equals(e.Name, p.Type.TypeName, StringComparison.Ordinal)))
-                    .OrderBy(p => p.Name)
-                    .ToList();
-
                 var createArgs = new List<Node>();
-                foreach (var prop in scalarProps)
-                    createArgs.Add(MakeSampleValue(prop));
+                var constructorOrder = GetConstructorOrder(entity);
+                if (constructorOrder is not null && constructorOrder.Count > 0) {
+                    foreach (var parameter in constructorOrder) {
+                        if (parameter.IsNavigation) {
+                            createArgs.Add(new Invoke(new Member(new TypeReference("Enumerable"), "Empty")) {
+                                TypeArguments = [new TypeReference(parameter.Type.TypeName)]
+                            });
+                            continue;
+                        }
 
-                foreach (var rel in _domain.Relationships) {
-                    if (!string.Equals(rel.Source.TypeName, entity.Name, StringComparison.Ordinal)) continue;
-                    if (rel.Cardinality is not (RelationshipCardinality.OneToMany or RelationshipCardinality.ManyToMany)) continue;
-                    createArgs.Add(new Invoke(new Member(new TypeReference("Enumerable"), "Empty")) {
-                        TypeArguments = [new TypeReference(rel.Target.TypeName)]
-                    });
+                        var prop = entity.Properties.FirstOrDefault(p =>
+                            string.Equals(p.Name, parameter.Name, StringComparison.Ordinal));
+                        if (prop is null) {
+                            // DM-META-REMOVE-FALLBACK: remove once constructor metadata is
+                            // guaranteed to reference existing properties.
+                            createArgs.Add(new Constant("Sample"));
+                            continue;
+                        }
+
+                        createArgs.Add(MakeSampleValue(prop));
+                    }
+                }
+                else {
+                    // DM-META-REMOVE-FALLBACK: remove once constructor ordering metadata is
+                    // guaranteed for all DslCompiler seed routes.
+                    var scalarProps = entity.Properties
+                        .Where(p => !p.Constraints.Any(c => c is DefaultValueConstraint))
+                        .Where(p => !_entities.Any(e => string.Equals(e.Name, p.Type.TypeName, StringComparison.Ordinal)))
+                        .OrderBy(p => p.Name)
+                        .ToList();
+
+                    foreach (var prop in scalarProps)
+                        createArgs.Add(MakeSampleValue(prop));
+
+                    foreach (var nav in GetStorageEntity(entity).CollectionNavigations) {
+                        createArgs.Add(new Invoke(new Member(new TypeReference("Enumerable"), "Empty")) {
+                            TypeArguments = [new TypeReference(nav.TargetEntityName)]
+                        });
+                    }
                 }
 
                 var dtoVar = ToCamelCase(entity.Name);
@@ -684,9 +736,8 @@ public sealed class MinimalApiGenerator {
             "Decimal" => new Constant(1m),
             "Float" or "Double" => new Constant(1.0),
             "Guid" or "Uuid" => new Invoke(new Member(new TypeReference("Guid"), "NewGuid")),
-            _ when _domain.Types.OfType<EnumType>().Any(e => string.Equals(e.Name, typeName, StringComparison.Ordinal))
-                => new Member(new TypeReference(typeName), _domain.Types.OfType<EnumType>()
-                    .First(e => string.Equals(e.Name, typeName, StringComparison.Ordinal)).MemberNames[0]),
+            _ when _enumLookup.TryGetValue(typeName, out var enumType) && enumType.MemberNames.Count > 0
+                => new Member(new TypeReference(typeName), enumType.MemberNames[0]),
             _ => new Constant("Sample"),
         };
     }

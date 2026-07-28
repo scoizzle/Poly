@@ -1,5 +1,6 @@
 using System.Text;
 
+using Poly.Analysis;
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Constraints;
@@ -18,18 +19,22 @@ public sealed class HttpFileGenerator {
     private readonly Dictionary<string, StorageEntity> _storageLookup;
     private readonly Dictionary<string, BehaviorEntity> _behaviorLookup;
     private readonly Dictionary<string, AggregateEntity> _aggregateLookup;
+    private readonly Dictionary<string, EnumType> _enumLookup;
 
     public HttpFileGenerator(Domain domain,
+        AnalysisResult analysis,
         StorageModel storageModel,
         BehaviorModel behaviorModel,
         AggregateModel aggregateModel,
         string baseUrl = "http://localhost:5201") {
+        ArgumentNullException.ThrowIfNull(analysis);
         _domain = domain;
         _entities = domain.Types.OfType<Entity>().ToList();
         _baseUrl = baseUrl;
         _storageLookup = storageModel.Entities.ToDictionary(e => e.Name, StringComparer.Ordinal);
         _behaviorLookup = behaviorModel.Entities.ToDictionary(e => e.Name, StringComparer.Ordinal);
         _aggregateLookup = aggregateModel.Entities.ToDictionary(e => e.Name, StringComparer.Ordinal);
+        _enumLookup = domain.Types.OfType<EnumType>().ToDictionary(e => e.Name, StringComparer.Ordinal);
     }
 
     private StorageEntity GetStorageEntity(Entity entity) => _storageLookup[entity.Name];
@@ -176,8 +181,7 @@ public sealed class HttpFileGenerator {
             var baseVal = ToCamelCase(prop.Name);
             return $"\"example-{baseVal}\"";
         }
-        var enumType = _domain.Types.OfType<EnumType>()
-            .FirstOrDefault(e => string.Equals(e.Name, prop.Type.TypeName, StringComparison.Ordinal));
+        _enumLookup.TryGetValue(prop.Type.TypeName, out var enumType);
         if (enumType is not null && enumType.MemberNames.Count > 0)
             return $"\"{enumType.MemberNames[0]}\"";
         return prop.Type.TypeName switch {
@@ -195,8 +199,7 @@ public sealed class HttpFileGenerator {
     }
 
     private string GetExampleJsonValueForTransportParam(BehaviorParameter param) {
-        var enumType = _domain.Types.OfType<EnumType>()
-            .FirstOrDefault(e => string.Equals(e.Name, param.DomainType, StringComparison.Ordinal));
+        _enumLookup.TryGetValue(param.DomainType, out var enumType);
         if (enumType is not null && enumType.MemberNames.Count > 0)
             return $"\"{enumType.MemberNames[0]}\"";
 

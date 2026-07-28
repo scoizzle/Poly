@@ -395,4 +395,37 @@ public class EvolutionRollbackTests {
 
         await Assert.That(result.Succeeded).IsTrue();
     }
+
+    [Test]
+    public async Task RemovePolicyFromAction_WhenAmbiguousBetweenEntityAndStage_FailsLoud() {
+        var guard = new Policy("Guard", DomainExpression.Literal(true));
+        var original = DomainFactory.Create("Test", builder =>
+            builder.AddEntity("Order")
+                .AddStage("Order", "Active")
+                .AddAction("Order", "Submit")
+                .AddActionToStage("Order", "Active", "Submit")
+                .AddPolicyToAction("Order", "Submit", guard));
+
+        var result = new DomainEvolution(original)
+            .Apply([new RemovePolicyFromActionChange("Order", "Submit", "Guard")]);
+
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(result.WasRolledBack).IsTrue();
+    }
+
+    [Test]
+    public async Task AddPolicyToAction_WhenAmbiguousBetweenEntityAndStage_FailsLoud() {
+        var guard = new Policy("Guard", DomainExpression.Literal(true));
+        var original = DomainFactory.Create("Test", builder =>
+            builder.AddEntity("Order")
+                .AddStage("Order", "Active")
+                .AddAction("Order", "Submit")
+                .AddActionToStage("Order", "Active", "Submit"));
+
+        var result = new DomainEvolution(original)
+            .Apply([new AddPolicyToActionChange("Order", "Submit", guard)]);
+
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(result.WasRolledBack).IsTrue();
+    }
 }

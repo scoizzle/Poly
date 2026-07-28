@@ -359,9 +359,15 @@ public class PipelineMergeMetadataTests {
         var customer = domain.Types.OfType<Entity>().First(e => e.Name == "Customer");
         var profile = domain.Types.OfType<Entity>().First(e => e.Name == "Profile");
         var loan = domain.Types.OfType<Entity>().First(e => e.Name == "Loan");
-        await Assert.That(analysis.GetMetadata<EntityStructureMetadata>(customer)).IsNotNull();
+        var customerStructure = analysis.GetMetadata<EntityStructureMetadata>(customer);
+        await Assert.That(customerStructure).IsNotNull();
         await Assert.That(analysis.GetMetadata<EntityStructureMetadata>(profile)).IsNotNull();
         await Assert.That(analysis.GetMetadata<EntityStructureMetadata>(loan)).IsNotNull();
+
+        // Stage lookup metadata is available for stage-bearing entities
+        await Assert.That(customerStructure!.HasStages).IsTrue();
+        await Assert.That(customerStructure.StageByName).IsNotNull();
+        await Assert.That(customerStructure.StageByName!.ContainsKey("Active")).IsTrue();
 
         // SubscriptionAnalyzer — diagnostics only
 

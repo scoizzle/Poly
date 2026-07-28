@@ -37,7 +37,9 @@ public sealed class DomainEvolution {
     public EvolutionResult Apply(IReadOnlyList<DomainChange> changes, AnalysisResult? priorAnalysis = null) {
         var start = DateTime.UtcNow;
 
-        var (proposed, modifiedNodes, evalErrors) = ApplyChanges(_current, changes);
+        var mutationIndex = ResolveMutationTargetIndex(priorAnalysis);
+
+        var (proposed, modifiedNodes, evalErrors) = ApplyChanges(_current, changes, mutationIndex);
 
         var analysis = priorAnalysis is null
             ? DomainModelAnalyzer.Analyze(proposed, _authoring)
@@ -100,17 +102,30 @@ public sealed class DomainEvolution {
     public EvolutionBuilder Evolve() => new(this, _current);
 
     private (Domain Domain, IReadOnlyList<Node> ModifiedNodes, IReadOnlyList<string> Errors) ApplyChanges(
-        Domain current, IReadOnlyList<DomainChange> changes) {
+        Domain current,
+        IReadOnlyList<DomainChange> changes,
+        MutationTargetIndexMetadata mutationIndex) {
         if (changes.Count == 0)
             return (current, [], []);
 
-        var context = new DomainMutationContext(current);
+        var context = new DomainMutationContext(current, mutationIndex);
 
         foreach (var change in changes) {
             change.ApplyTo(context);
         }
 
         return (context.ToDomain(), context.ModifiedNodes, context.Errors);
+    }
+
+    private MutationTargetIndexMetadata ResolveMutationTargetIndex(AnalysisResult? priorAnalysis) {
+        var index = priorAnalysis?.GetMetadata<MutationTargetIndexMetadata>(_current);
+        if (index is not null)
+            return index;
+
+        var currentAnalysis = DomainModelAnalyzer.Analyze(_current, _authoring);
+        return currentAnalysis.GetMetadata<MutationTargetIndexMetadata>(_current)
+            ?? throw new InvalidOperationException(
+                $"Domain analysis did not produce {nameof(MutationTargetIndexMetadata)} for mutation-target resolution.");
     }
 
     private EvolutionTrace BuildTrace(

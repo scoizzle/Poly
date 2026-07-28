@@ -33,6 +33,12 @@ public sealed record EntityStructureMetadata(
     /// <summary>The stage enum type name (e.g. "PatronStage"), null when <see cref="HasStages"/> is false.</summary>
     string? StageEnumTypeName,
 
+    /// <summary>
+    /// Optional stage-name lookup table for this entity. Null when
+    /// <see cref="HasStages"/> is false.
+    /// </summary>
+    IReadOnlyDictionary<string, Stage>? StageByName,
+
     /// <summary>Constructor parameter order for entity creation lowering.</summary>
     IReadOnlyList<ConstructorParameterOrder> ConstructorParameters
 ) : IAnalysisMetadata;

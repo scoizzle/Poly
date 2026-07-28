@@ -1,5 +1,6 @@
 using Poly.Analysis;
 using Poly.Ast.Nodes;
+using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Effects;
 using Poly.DomainModeling.Lowering;
 using Poly.Interpretation;
@@ -246,18 +247,30 @@ public sealed record DomainEntityInstance {
     /// Core action execution after args have been injected into <see cref="_values"/>.
     /// </summary>
     private ActionInvocationResult InvokeActionInternal(string actionName) {
+        AnalysisResult? runtimeAnalysis = null;
+        ActionResolutionMetadata? actionResolution = null;
+        if (Domain is not null) {
+            runtimeAnalysis = RuntimeAnalysisCache.GetOrAnalyze(Domain);
+            actionResolution = runtimeAnalysis.GetMetadata<ActionResolutionMetadata>(Entity);
+        }
 
         // Find action: first check current stage (and its parent chain) for effective actions,
         // then entity-level. Stage-scoped actions are only available while on that stage.
         Action? action = null;
+        Action? entityAction = null;
         if (CurrentStage is not null) {
-            // Walk the stage hierarchy: current stage, then parent, then grandparent, etc.
-            var currentStageRef = Entity.Stages
-                .FirstOrDefault(s => string.Equals(s.Name, CurrentStage, StringComparison.Ordinal));
-
-            // All stages are flat — no parent/child hierarchy.
-            action = currentStageRef?.Actions
-                .FirstOrDefault(a => string.Equals(a.Name, actionName, StringComparison.Ordinal));
+            if (actionResolution is not null
+                && actionResolution.StageActions.TryGetValue(CurrentStage, out var stageActions)) {
+                stageActions.TryGetValue(actionName, out action);
+            }
+            else {
+                // DM-META-REMOVE-FALLBACK: remove runtime stage-action scans once
+                // ActionResolutionMetadata is required for all runtime routes.
+                var currentStageRef = Entity.Stages
+                    .FirstOrDefault(s => string.Equals(s.Name, CurrentStage, StringComparison.Ordinal));
+                action = currentStageRef?.Actions
+                    .FirstOrDefault(a => string.Equals(a.Name, actionName, StringComparison.Ordinal));
+            }
         }
 
         // SA: If the stage-scoped action is an empty copy (no effects, no policies,
@@ -265,8 +278,15 @@ public sealed record DomainEntityInstance {
         // This prevents the silent no-op that occurs when AddActionToStage creates an
         // empty stage copy while effects were added to the entity-level action only.
         // See Phase 3 §6e (Stage-Action Semantics) in mcp-phase3-oracle-surface.md.
-        var entityAction = Entity.Actions
-            .FirstOrDefault(a => string.Equals(a.Name, actionName, StringComparison.Ordinal));
+        if (actionResolution is not null) {
+            actionResolution.EntityActions.TryGetValue(actionName, out entityAction);
+        }
+        else {
+            // DM-META-REMOVE-FALLBACK: remove runtime entity-action scans once
+            // ActionResolutionMetadata is required for all runtime routes.
+            entityAction = Entity.Actions
+                .FirstOrDefault(a => string.Equals(a.Name, actionName, StringComparison.Ordinal));
+        }
         if (action is not null && action.Effects.Count == 0 && action.Policies.Count == 0
             && entityAction is not null)
             action = entityAction;
@@ -284,8 +304,16 @@ public sealed record DomainEntityInstance {
         if (failures.Count > 0)
             return ActionInvocationResult.Blocked(actionName, failures);
 
-        var stage = Entity.Stages.FirstOrDefault(
-            s => string.Equals(s.Name, CurrentStage, StringComparison.Ordinal));
+        Stage? stage = null;
+        if (CurrentStage is not null && actionResolution is not null) {
+            actionResolution.StageByName.TryGetValue(CurrentStage, out stage);
+        }
+        else {
+            // DM-META-REMOVE-FALLBACK: remove runtime stage scans once
+            // ActionResolutionMetadata is required for all runtime routes.
+            stage = Entity.Stages.FirstOrDefault(
+                s => string.Equals(s.Name, CurrentStage, StringComparison.Ordinal));
+        }
         if (stage is not null)
             foreach (var guard in stage.Policies) {
                 if (action.Policies.Any(p => string.Equals(p.Name, $"not_{guard.Name}", StringComparison.Ordinal)))
@@ -311,7 +339,11 @@ public sealed record DomainEntityInstance {
 
         // ── Execute effects ─────────────────────────────────────
         var subjectParam = new Parameter("entity", new TypeReference(Entity.Name));
-        var effectPass = new EffectLoweringPass(Entity, subjectParam);
+        var loweringContext = new LoweringContext(
+            subjectParam,
+            Analysis: runtimeAnalysis,
+            Domain: Domain);
+        var effectPass = new EffectLoweringPass(Entity, loweringContext);
         // Action parameters are injected into _values for the call duration, but are not
         // entity schema properties. Compile with an action-scoped type def so PropertyAccess
         // to parameter names resolves (otherwise Member passthrough assigns the whole bag).

@@ -64,6 +64,7 @@ public static class DomainModelAnalysisBuilderExtensions {
         public AnalyzerBuilder UseDomainModelAnalysisPipeline() {
             builder.AddAnalyzer(new StructuralDomainAnalyzer());
             builder.AddAnalyzer(new SemanticDomainAnalyzer());
+            builder.AddAnalyzer(new RuntimeContractAnalyzer());
             builder.AddAnalyzer(new PolicyConstraintAnalyzer());
             builder.AddAnalyzer(new EffectAnalyzer());
             builder.AddAnalyzer(new ConstraintQualityAnalyzer());
@@ -99,6 +100,7 @@ public static class DomainModelAnalysisBuilderExtensions {
         public AnalyzerBuilder UseDomainModelAnalysisPipeline(DomainAuthoringContext authoring) {
             builder.AddAnalyzer(new StructuralDomainAnalyzer());
             builder.AddAnalyzer(new SemanticDomainAnalyzer());
+            builder.AddAnalyzer(new RuntimeContractAnalyzer());
             builder.AddAnalyzer(new PolicyConstraintAnalyzer());
             builder.AddAnalyzer(new EffectAnalyzer());
             builder.AddAnalyzer(new ConstraintQualityAnalyzer());

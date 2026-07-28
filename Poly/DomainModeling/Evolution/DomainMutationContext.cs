@@ -1,4 +1,5 @@
 using Poly.DomainModeling;
+using Poly.DomainModeling.Analysis;
 
 namespace Poly.DomainModeling.Evolution;
 
@@ -8,6 +9,17 @@ namespace Poly.DomainModeling.Evolution;
 /// — these are surfaced as structural failures in the evolution result.
 /// </summary>
 internal sealed class DomainMutationContext {
+    private readonly MutationTargetIndexMetadata? _mutationIndex;
+
+    internal enum ResolveStatus {
+        Found,
+        MissingEntity,
+        MissingStage,
+        MissingAction,
+        AmbiguousStage,
+        AmbiguousAction
+    }
+
     public string DomainName { get; set; }
 
     public List<DomainType> Types { get; }
@@ -30,12 +42,13 @@ internal sealed class DomainMutationContext {
     /// </summary>
     public List<string> Errors { get; } = new();
 
-    public DomainMutationContext(Domain source) {
+    public DomainMutationContext(Domain source, MutationTargetIndexMetadata? mutationIndex = null) {
         DomainName = source.Name;
         Types = new List<DomainType>(source.Types);
         Relationships = new List<Relationship>(source.Relationships);
         ImportedContracts = new List<ImportedContract>(source.ImportedContracts);
         ContractBindings = new List<ContractBinding>(source.ContractBindings);
+        _mutationIndex = mutationIndex;
     }
 
     public Domain ToDomain() => new Domain(DomainName, Types, Relationships) {
@@ -122,13 +135,18 @@ internal sealed class DomainMutationContext {
             });
     }
 
-    public bool UpdateStage(string entityName, string stageName, Func<Stage, Stage> transform) =>
-        ReplaceInEntity(entityName,
+    public bool UpdateStage(string entityName, string stageName, Func<Stage, Stage> transform) {
+        var status = ResolveStage(entityName, stageName, out _);
+        if (status is ResolveStatus.MissingEntity or ResolveStatus.MissingStage or ResolveStatus.AmbiguousStage)
+            return false;
+
+        return ReplaceInEntity(entityName,
             e => e.Stages.Any(s => string.Equals(s.Name, stageName, StringComparison.Ordinal)),
             e => e with {
                 Stages = e.Stages.Select(s =>
                 string.Equals(s.Name, stageName, StringComparison.Ordinal) ? transform(s) : s).ToList()
             });
+    }
 
     public bool UpdateProperty(string entityName, string propertyName, Func<Property, Property> transform) =>
         ReplaceInEntity(entityName,
@@ -193,6 +211,109 @@ internal sealed class DomainMutationContext {
             }
         }
         return null;
+    }
+
+    public ResolveStatus ResolveStage(string entityName, string stageName, out Stage? stage) {
+        stage = null;
+        if (_mutationIndex is not null) {
+            if (_mutationIndex.EntitiesByName.ContainsKey(entityName)
+                && _mutationIndex.StagesByEntity.TryGetValue(entityName, out var stagesByName)
+                && stagesByName.TryGetValue(stageName, out var resolvedStage)) {
+                stage = resolvedStage;
+                return ResolveStatus.Found;
+            }
+
+            // DM-META-REMOVE-FALLBACK: allow newly-added stages in the same
+            // mutation batch to resolve from the live context.
+            var liveEntity = FindEntity(entityName);
+            if (liveEntity is null)
+                return ResolveStatus.MissingEntity;
+
+            var liveMatches = liveEntity.Stages
+                .Where(s => string.Equals(s.Name, stageName, StringComparison.Ordinal))
+                .ToList();
+
+            if (liveMatches.Count == 0)
+                return ResolveStatus.MissingStage;
+            if (liveMatches.Count > 1)
+                return ResolveStatus.AmbiguousStage;
+
+            stage = liveMatches[0];
+            return ResolveStatus.Found;
+        }
+
+        // DM-META-REMOVE-FALLBACK: remove direct stage scan once mutation target
+        // index metadata is required for all evolution mutation contexts.
+        var entity = FindEntity(entityName);
+        if (entity is null)
+            return ResolveStatus.MissingEntity;
+
+        var matches = entity.Stages
+            .Where(s => string.Equals(s.Name, stageName, StringComparison.Ordinal))
+            .ToList();
+
+        if (matches.Count == 0)
+            return ResolveStatus.MissingStage;
+        if (matches.Count > 1)
+            return ResolveStatus.AmbiguousStage;
+
+        stage = matches[0];
+        return ResolveStatus.Found;
+    }
+
+    public ResolveStatus ResolveAction(
+        string entityName,
+        string actionName,
+        bool searchStages,
+        out Action? action) {
+        action = null;
+        if (_mutationIndex is not null) {
+            if (_mutationIndex.EntitiesByName.ContainsKey(entityName)
+                && _mutationIndex.ActionsByEntity.TryGetValue(entityName, out var actionsByName)
+                && actionsByName.TryGetValue(actionName, out var matches)
+                && matches.Count > 0) {
+                if (!searchStages) {
+                    var entityAction = matches.FirstOrDefault(candidate =>
+                        _mutationIndex.EntitiesByName[entityName].Actions.Any(a => ReferenceEquals(a, candidate)));
+                    if (entityAction is null)
+                        return ResolveStatus.MissingAction;
+                    action = entityAction;
+                    return ResolveStatus.Found;
+                }
+
+                if (matches.Count > 1)
+                    return ResolveStatus.AmbiguousAction;
+
+                action = matches[0];
+                return ResolveStatus.Found;
+            }
+
+            // DM-META-REMOVE-FALLBACK: allow newly-added actions in the same
+            // mutation batch to resolve from the live context.
+        }
+
+        // DM-META-REMOVE-FALLBACK: remove direct action scan once mutation target
+        // index metadata is required for all evolution mutation contexts.
+        var entity = FindEntity(entityName);
+        if (entity is null)
+            return ResolveStatus.MissingEntity;
+
+        List<Action> actionMatches =
+            entity.Actions.Where(a => string.Equals(a.Name, actionName, StringComparison.Ordinal)).ToList();
+
+        if (searchStages) {
+            actionMatches.AddRange(entity.Stages
+                .SelectMany(s => s.Actions)
+                .Where(a => string.Equals(a.Name, actionName, StringComparison.Ordinal)));
+        }
+
+        if (actionMatches.Count == 0)
+            return ResolveStatus.MissingAction;
+        if (actionMatches.Count > 1)
+            return ResolveStatus.AmbiguousAction;
+
+        action = actionMatches[0];
+        return ResolveStatus.Found;
     }
 
     /// <summary>

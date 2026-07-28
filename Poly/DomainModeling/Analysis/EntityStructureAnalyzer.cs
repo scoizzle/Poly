@@ -66,18 +66,20 @@ internal sealed class EntityStructureAnalyzer : INodeAnalyzer {
         // ── Stage tracking ────────────────────────────────────
         var hasStages = entity.Stages.Count > 0;
         string? stageEnumTypeName = null;
+        IReadOnlyDictionary<string, Stage>? stageByName = null;
         if (hasStages) {
             stageEnumTypeName = domain.Types
                 .OfType<EnumType>()
                 .FirstOrDefault(e => e.Name == $"{entity.Name}Stage")
                 ?.Name ?? $"{entity.Name}Stage";
+            stageByName = entity.Stages.ToDictionary(s => s.Name, StringComparer.Ordinal);
         }
 
         var constructorParameters = ComputeConstructorParameterOrder(entity, domain, lookup);
 
         return new EntityStructureMetadata(
             isRoot, hasNaturalKey, keyPropName, keyClrType,
-            hasSoftDelete, hasStages, stageEnumTypeName, constructorParameters
+            hasSoftDelete, hasStages, stageEnumTypeName, stageByName, constructorParameters
         );
     }
 

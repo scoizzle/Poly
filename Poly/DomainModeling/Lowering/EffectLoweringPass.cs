@@ -113,11 +113,14 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         if (!_lowerStageTransitions) return null;
 
         var nodes = new List<Node>();
+        var stageLookup = _analysis?.GetMetadata<EntityStructureMetadata>(_entity)?.StageByName;
 
         // Include exit effects from the source stage (if known)
         if (_sourceStageName is not null) {
-            var sourceStage = _entity.Stages.FirstOrDefault(s =>
-                string.Equals(s.Name, _sourceStageName, StringComparison.Ordinal));
+            var sourceStage = stageLookup is not null
+                ? stageLookup.GetValueOrDefault(_sourceStageName)
+                : _entity.Stages.FirstOrDefault(s =>
+                    string.Equals(s.Name, _sourceStageName, StringComparison.Ordinal));
             if (sourceStage is not null) {
                 foreach (var exitEffect in sourceStage.OnExitEffects) {
                     var lowered = Route(exitEffect);
@@ -128,8 +131,10 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         }
 
         // Include entry effects from the target stage
-        var targetStage = _entity.Stages.FirstOrDefault(s =>
-            string.Equals(s.Name, t.TargetStage.StageName, StringComparison.Ordinal));
+        var targetStage = stageLookup is not null
+            ? stageLookup.GetValueOrDefault(t.TargetStage.StageName)
+            : _entity.Stages.FirstOrDefault(s =>
+                string.Equals(s.Name, t.TargetStage.StageName, StringComparison.Ordinal));
         if (targetStage is not null) {
             foreach (var entryEffect in targetStage.OnEntryEffects) {
                 var lowered = Route(entryEffect);
@@ -297,16 +302,23 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     protected override Node? CreateEntityInRelationship(CreateEntityInRelationshipEffect cr) {
         if (!_lowerStageTransitions || _domain is null) return null;
 
+        if (_analysis is null) {
+            throw new InvalidOperationException(
+                "Create-in lowering requires AnalysisResult. Semantic lowering without analysis is not supported.");
+        }
+
         var pascalName = DomainToCSharpExporter.ToPascalCase(cr.RelationshipName);
         var methodName = $"Create{pascalName}";
 
-        // Resolve the relationship to find the target entity.
-        // Prefer analysis metadata when available; fall back to the domain graph.
-        var relationship = _analysis?.GetMetadata<ResolvedRelationshipTargetMetadata>(cr)?.Relationship
+        var resolvedTarget = _analysis.GetMetadata<ResolvedRelationshipTargetMetadata>(cr);
+
+        // DM-META-REMOVE-FALLBACK: remove fallback resolution once
+        // ResolvedRelationshipTargetMetadata is guaranteed for all create-in routes.
+        var relationship = resolvedTarget?.Relationship
             ?? ResolveRelationship(cr.RelationshipName);
         if (relationship is null) return null;
 
-        var targetEntity = _analysis?.GetMetadata<ResolvedRelationshipTargetMetadata>(cr)?.TargetEntity
+        var targetEntity = resolvedTarget?.TargetEntity
             ?? ResolveEntity(relationship.Target.TypeName);
         if (targetEntity is null) return null;
 
@@ -412,6 +424,8 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
             return metadata.ConstructorParameters;
         }
 
+        // DM-META-REMOVE-FALLBACK: remove constructor ordering re-derivation
+        // once constructor metadata is required for semantic lowering paths.
         var parameters = targetEntity.Properties
             .Where(p => !p.Constraints.Any(c => c is DefaultValueConstraint))
             .OrderBy(p => p.Name)
@@ -464,6 +478,8 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
             return entity;
         }
 
+        // DM-META-REMOVE-FALLBACK: remove entity type scan when AnalysisResult
+        // contract is fully enforced for semantic lowering.
         if (_domain is not null) {
             return _domain.Types.OfType<Entity>().FirstOrDefault(e =>
                 string.Equals(e.Name, typeName, StringComparison.Ordinal));
@@ -478,6 +494,8 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
             return relationship;
         }
 
+        // DM-META-REMOVE-FALLBACK: remove relationship scan when
+        // analysis-backed lookup is mandatory.
         if (_domain is not null) {
             return _domain.Relationships.FirstOrDefault(r =>
                 string.Equals(r.Name, relationshipName, StringComparison.Ordinal));

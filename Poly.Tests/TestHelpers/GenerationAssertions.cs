@@ -36,7 +36,7 @@ internal static class GenerationAssertions {
             ?? throw new InvalidOperationException("Domain analysis did not produce BehaviorMetadata.");
         var aggregate = analysis.GetMetadata<OwnershipAggregateMetadata>(domain)?.Aggregate
             ?? throw new InvalidOperationException("Domain analysis did not produce OwnershipAggregateMetadata.");
-        var gen = new MinimalApiGenerator(domain, storageModel: storage, behaviorModel: behavior, aggregateModel: aggregate);
+        var gen = new MinimalApiGenerator(domain, analysis, storageModel: storage, behaviorModel: behavior, aggregateModel: aggregate);
         return gen.GenerateCompilationUnit("TDbCtx");
     }
 

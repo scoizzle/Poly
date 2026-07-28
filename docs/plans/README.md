@@ -26,6 +26,7 @@ Architectural rationale → **`docs/decisions/`**. Module maps → **`Poly/*/REA
 | [**Post–system-review correctness hardening**](2026-07-11-review-fix-plan.md) | Mostly Done; optional residuals |
 | [**Grammar framework integration**](grammar-integration.md) | **Draft** — `Poly.Text.Grammar` prototype complete (54 tests); integrate into DSL pipeline |
 | [**Analysis-consuming lowering**](analysis-consuming-lowering.md) | **Draft** — wire 22 re-discovery operations in lowering to pre-existing analysis metadata |
+| [**DomainAuthoringContext removal**](domain-authoring-context-removal-plan.md) | **Draft** — converge to one analyzer system definition; remove context-driven analyzer branching |
 
 ### Simple-agent queues
 

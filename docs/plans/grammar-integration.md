@@ -59,6 +59,45 @@ This plan closes the gap between "pattern-table engine works for toy grammars" a
 | `DomainAuthoringContext.cs` | ~45 | Annotations, TypeMaps, Passes, StorageConventions | Add grammar extension point |
 | `DomainExpressionJsonParser.cs` | ~200 | `ParseJson(string)` → `DomainExpression` | Phase 2 — port to `Grammar<JsonKind>` (separate track) |
 
+## 2.1 Grammar Generalization Commitments
+
+This section owns token-model evolution decisions that were previously mixed into
+domain-analyzer planning.
+
+Decision:
+
+1. Non-text token payloads (including binary encodings): committed capability.
+- Text-first remains the initial delivery shape for the current DSL pipeline.
+- Binary/non-text streams are a planned follow-on capability through the same
+    grammar seams (`TokenReader`, `Matcher`, `Printer`), not a second parser
+    subsystem.
+
+2. Non-enum token identifiers: supported as an exception path.
+- Keep enum-first ergonomics for the primary DSL authoring path.
+- Maintain an incremental path for other token identifier forms when a consumer
+    justifies it.
+
+3. Facets/attributes-first policy for packs: default.
+- Most pack scenarios should extend via facets/attributes plus custom nodes and
+    analysis passes.
+- Token identity/payload generalization is for cases where facets cannot express
+    transport or encoding constraints.
+
+Sequencing:
+
+1. Keep DomainAuthoringContext removal and one-analyzer unification as the active critical path.
+2. Deliver dedicated grammar slices for non-text streams:
+     - token payload channel (typed/non-text value path)
+     - stream-backed reader path (non-string input)
+     - printer/writer compatibility contracts for non-text outputs
+3. Validate with one concrete pack/transport consumer before broad API expansion.
+
+Non-goals for this sequence:
+
+- No alternate analyzer system definition.
+- No pack-specific parser forks.
+- No broad token API expansion without a first concrete consumer.
+
 ---
 
 ## 3. Tasks
@@ -221,6 +260,27 @@ Port the JSON expression parser from hand-written recursive descent to `Grammar<
 
 ---
 
+### GI-8: Non-text token streams (binary-capable path)
+
+Add a grammar-level non-text stream capability without replacing the existing
+text DSL path.
+
+Scope:
+- Add token payload abstraction (typed value channel in addition to display text).
+- Add stream-backed reader path for non-string inputs (binary-friendly).
+- Add printer/writer compatibility contracts for non-text outputs.
+- Keep current text DSL behavior unchanged.
+
+Acceptance:
+- Existing DSL round-trip suite remains green without behavior drift.
+- One binary/non-text consumer demonstrates parse + match + print path.
+- Errors remain position-aware or equivalently diagnosable for non-text streams.
+
+Risk:
+- Medium. Requires API shape care to avoid destabilizing text-first ergonomics.
+
+---
+
 ## 4. Agent pick
 
 ```text
@@ -231,6 +291,7 @@ THEN:    GI-4 (pack annotations)
 THEN:    GI-5 (printer port)
 THEN:    GI-6 (expression JSON port)
 THEN:    GI-7 (deprecation + docs)
+THEN:    GI-8 (non-text token streams)
 DEFER:   Expression sub-grammar improvements, ExpectedTokens completeness
 ```
 

@@ -94,9 +94,23 @@ try {
         Console.WriteLine($"Done: {result.Files!.Count} file(s) written to {outputDir}");
     }
     else {
-        // stdout mode: emit only the combined file (avoids duplication with per-entity files)
-        var combined = result.Files!.First(f => f.FileName == "_all.cs").Source;
-        await Console.Out.WriteLineAsync(combined);
+        // stdout mode: prefer combined entity file when present;
+        // otherwise emit all generated files with stable file headers.
+        var files = result.Files!;
+        var combined = files.FirstOrDefault(f => f.FileName == "_all.cs");
+        if (combined != default) {
+            await Console.Out.WriteLineAsync(combined.Source);
+        }
+        else {
+            for (int i = 0; i < files.Count; i++) {
+                var file = files[i];
+                await Console.Out.WriteLineAsync($"// ===== {file.FileName} =====");
+                await Console.Out.WriteLineAsync(file.Source);
+                if (i < files.Count - 1) {
+                    await Console.Out.WriteLineAsync();
+                }
+            }
+        }
     }
 
     return 0;

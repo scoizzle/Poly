@@ -52,11 +52,11 @@ public static class DomainProgramProjection {
             var subList = new List<DomainToCSharpExporter.SubscriptionInfo>();
 
             foreach (var sub in entity.Subscriptions)
-                DomainToCSharpExporter.CollectSubscriptionInfo(sub, entity, null, domainRelationships, entityLookup, subList, subscriptionsByTarget, metadata as AnalysisResult);
+                DomainToCSharpExporter.CollectSubscriptionInfo(sub, entity, null, domainRelationships, entityLookup, subList, subscriptionsByTarget, metadata);
 
             foreach (var stage in entity.Stages)
                 foreach (var sub in stage.Subscriptions)
-                    DomainToCSharpExporter.CollectSubscriptionInfo(sub, entity, stage.Name, domainRelationships, entityLookup, subList, subscriptionsByTarget, metadata as AnalysisResult);
+                    DomainToCSharpExporter.CollectSubscriptionInfo(sub, entity, stage.Name, domainRelationships, entityLookup, subList, subscriptionsByTarget, metadata);
 
             if (subList.Count > 0)
                 subscriptionsBySubscriber[entity.Name] = subList;

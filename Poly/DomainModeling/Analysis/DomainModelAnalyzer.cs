@@ -35,6 +35,8 @@ public static class DomainModelAnalysisBuilderExtensions {
             builder.AddAnalyzer(new StructuralDomainAnalyzer());
             builder.AddAnalyzer(new SemanticDomainAnalyzer());
             builder.AddAnalyzer(new RuntimeContractAnalyzer());
+            // Single domain catalog (DAS W1) — composes semantic + runtime indexes
+            builder.AddAnalyzer(new DomainCatalogPass());
             builder.AddAnalyzer(new PolicyConstraintAnalyzer());
             builder.AddAnalyzer(new EffectAnalyzer());
             builder.AddAnalyzer(new ConstraintQualityAnalyzer());
@@ -61,8 +63,7 @@ public static class DomainModelAnalysisBuilderExtensions {
             builder.AddAnalyzer(new TransportPass());
             // Authoring suggestions (advisory hints)
             builder.AddAnalyzer(new AuthoringSuggestionAnalyzer());
-            // Entity Syntax projection (TypeDefinitionNode[] as metadata)
-            builder.AddAnalyzer(new EntitySyntaxPass());
+            // Entity Syntax projection is export-time only (DAS W0) — not an analysis fact.
             return builder;
         }
 

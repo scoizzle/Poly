@@ -310,4 +310,57 @@ public class DomainToCSharpExporterTests {
 
         await Assert.That(types.Any(t => t.Name == "PatronStage")).IsTrue();
     }
+
+    [Test]
+    public async Task Export_WithAnalysis_ResolvesSubscriptionsViaRlm() {
+        var (domain, analysis) = ParseAndAnalyze(LibraryCheckoutDsl);
+        await Assert.That(analysis.GetMetadata<RelationshipLookupMetadata>(default)).IsNotNull();
+
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var patron = types.First(t => t.Name == "Patron");
+        var loan = types.First(t => t.Name == "Loan");
+        var patronMethods = patron.Methods?.Select(m => m.Name).ToHashSet(StringComparer.Ordinal) ?? [];
+        var loanMethods = loan.Methods?.Select(m => m.Name).ToHashSet(StringComparer.Ordinal) ?? [];
+
+        await Assert.That(patronMethods.Contains("WhenLoanOverdue")).IsTrue();
+        await Assert.That(patronMethods.Contains("WhenLoanReturned")).IsTrue();
+        await Assert.That(patronMethods.Contains("InitializeSubscriptions")).IsTrue();
+        await Assert.That(loanMethods.Contains("NotifyOverdueSubscribers")).IsTrue();
+        await Assert.That(loanMethods.Contains("NotifyReturnedSubscribers")).IsTrue();
+    }
+
+    [Test]
+    public async Task Export_WithAnalysis_UsesEsmConstructorOrderForCreateNav() {
+        var (domain, analysis) = ParseAndAnalyze(LibraryCheckoutDsl);
+        var loan = domain.Types.OfType<Entity>().Single(e => e.Name == "Loan");
+        var esm = analysis.GetMetadata<EntityStructureMetadata>(loan);
+        await Assert.That(esm).IsNotNull();
+        await Assert.That(esm!.ConstructorParameters.Count).IsGreaterThan(0);
+
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var patron = types.First(t => t.Name == "Patron");
+        var createLoans = patron.Methods?.FirstOrDefault(m => m.Name == "CreateLoans");
+        await Assert.That(createLoans).IsNotNull();
+
+        var createParams = createLoans!.Parameters?.Select(p => p.Name).ToArray() ?? [];
+        var expected = esm.ConstructorParameters
+            .Where(p => !p.IsBackReference)
+            .Select(p => DomainToCSharpExporter.ToCamelCase(p.Name))
+            .ToArray();
+        await Assert.That(createParams).IsEquivalentTo(expected);
+    }
+
+    [Test]
+    public async Task ToSyntax_ViaProvider_DoesNotRequireAnalysisResultCast() {
+        var (domain, analysis) = ParseAndAnalyze(LibraryCheckoutDsl);
+        INodeMetadataProvider metadata = analysis;
+
+        var types = DomainProgramProjection.ToSyntax(domain, metadata);
+
+        await Assert.That(types.Any(t => t.Name == "Patron")).IsTrue();
+        await Assert.That(types.Any(t => t.Name == "Loan")).IsTrue();
+        var patronMethods = types.First(t => t.Name == "Patron").Methods?
+            .Select(m => m.Name).ToHashSet(StringComparer.Ordinal) ?? [];
+        await Assert.That(patronMethods.Contains("WhenLoanOverdue")).IsTrue();
+    }
 }

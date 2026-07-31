@@ -52,8 +52,8 @@ public sealed class DomainToCSharpExporter {
     /// <summary>
     /// Collects subscription info for a single <see cref="StageSubscription"/> and
     /// populates the target/subscriber maps used for code generation.
-    /// Fail-closed: when analysis is present, <see cref="ResolveRelationship"/> throws
-    /// if <see cref="RelationshipLookupMetadata"/> is absent (F5).
+    /// Fail-closed: <see cref="ResolveRelationship"/> throws if
+    /// <see cref="RelationshipLookupMetadata"/> is absent (F5).
     /// </summary>
     internal static void CollectSubscriptionInfo(
         StageSubscription sub, Entity entity, string? stageName,
@@ -61,15 +61,10 @@ public sealed class DomainToCSharpExporter {
         IReadOnlyDictionary<string, Entity> entityLookup,
         List<SubscriptionInfo> subList,
         Dictionary<string, List<SubscriptionInfo>> subscriptionsByTarget,
-        // DM-META-REMOVE-FALLBACK: remove nullable analysis once all callers
-        // provide required AnalysisResult for subscription resolution.
-        AnalysisResult? analysis = null) {
+        INodeMetadataProvider metadata) {
+        ArgumentNullException.ThrowIfNull(metadata);
 
-        var rel = analysis is not null
-            ? ResolveRelationship(domainRelationships, sub.RelationshipName, entity.Name, analysis)
-            : domainRelationships.FirstOrDefault(r =>
-                string.Equals(r.Name, sub.RelationshipName, StringComparison.Ordinal) &&
-                string.Equals(r.Source.TypeName, entity.Name, StringComparison.Ordinal));
+        var rel = ResolveRelationship(domainRelationships, sub.RelationshipName, entity.Name, metadata);
         if (rel is null) return;
 
         if (!entityLookup.TryGetValue(rel.Target.TypeName, out var targetEntity))
@@ -106,7 +101,6 @@ public sealed class DomainToCSharpExporter {
         var ctorAssignments = new List<Node>();
 
         var stageEnumTypeName = $"{entity.Name}Stage";
-        var analysis = metadata as AnalysisResult;
 
         // ── Common property: IsDeleted (always emitted) ────────────
         props.Add(new PropertyDefinitionNode(
@@ -221,7 +215,7 @@ public sealed class DomainToCSharpExporter {
                     new New(listType, [new Parameter(paramName)])));
 
                 // Generate CreateNavName(args) factory method on the source entity
-                AddCreateNavMethod(entity, rel, domain!, subscriberSubs, fieldName, methods, analysis);
+                AddCreateNavMethod(entity, rel, domain!, subscriberSubs, fieldName, methods, metadata);
             }
             else {
                 // Singular nav: property with private setter (constructor param)
@@ -257,16 +251,16 @@ public sealed class DomainToCSharpExporter {
 
         // ── Actions as void methods ───────────────────────────────
         foreach (var action in entity.Actions)
-            AddActionMethod(entity, action, methods, stageEnumTypeName, postTransitionNodes, domain: domain, analysis: analysis);
+            AddActionMethod(entity, action, methods, stageEnumTypeName, postTransitionNodes, domain: domain, analysis: metadata);
         foreach (var stage in entity.Stages)
             foreach (var action in stage.Actions)
-                AddActionMethod(entity, action, methods, stageEnumTypeName, postTransitionNodes, stage.Name, domain, analysis);
+                AddActionMethod(entity, action, methods, stageEnumTypeName, postTransitionNodes, stage.Name, domain, metadata);
 
         // ── Policies as bool methods ──────────────────────────────
         foreach (var policy in entity.Policies) {
             Node? body;
             try {
-                body = LowerExpressionToMethodBody(policy.Expression, entity, domain, analysis: analysis);
+                body = LowerExpressionToMethodBody(policy.Expression, entity, domain, analysis: metadata);
             }
             catch (NotSupportedException) {
                 // Q3′ quantifiers (any/all/none/count) and other store-dependent
@@ -377,7 +371,7 @@ public sealed class DomainToCSharpExporter {
                     var context = new LoweringContext(
                         new Parameter("entity",
                             new TypeReference(entity.Name)),
-                        Analysis: metadata as AnalysisResult,
+                        Analysis: metadata,
                         UseThisReference: true,
                         LowerStageTransitions: true,
                         Domain: domain,
@@ -452,7 +446,7 @@ public sealed class DomainToCSharpExporter {
                     var entryCtx = new LoweringContext(
                         new Parameter("entity",
                             new TypeReference(entity.Name)),
-                        Analysis: metadata as AnalysisResult,
+                        Analysis: metadata,
                         UseThisReference: true,
                         LowerStageTransitions: false,
                         Domain: domain,
@@ -629,9 +623,8 @@ public sealed class DomainToCSharpExporter {
         List<SubscriptionInfo>? subscriberSubs,
         string fieldName,
         List<MethodDefinitionNode> methods,
-        // DM-META-REMOVE-FALLBACK: remove nullable analysis once all callers
-        // provide required AnalysisResult for nav method generation.
-        AnalysisResult? analysis = null) {
+        INodeMetadataProvider metadata) {
+        ArgumentNullException.ThrowIfNull(metadata);
 
         var pascalName = ToPascalCase(rel.Name);
         var targetTypeName = rel.Target.TypeName;
@@ -649,7 +642,7 @@ public sealed class DomainToCSharpExporter {
         // plus singular nav properties (one-to-one relationships to other entities)
         var methodParams = new List<Parameter>();
         var createArgs = new List<Node>();
-        var parameterMetadata = GetConstructorParameters(targetEntity, analysis);
+        var parameterMetadata = GetConstructorParameters(targetEntity, metadata);
 
         foreach (var parameter in parameterMetadata) {
             if (parameter.IsBackReference) {
@@ -732,18 +725,14 @@ public sealed class DomainToCSharpExporter {
 
     private static IReadOnlyList<ConstructorParameterOrder> GetConstructorParameters(
         Entity targetEntity,
-        // DM-META-REMOVE-FALLBACK: make AnalysisResult required once all callers
-        // provide it for constructor parameter resolution.
-        AnalysisResult? analysis) {
-        if (analysis?.GetMetadata<EntityStructureMetadata>(targetEntity) is EntityStructureMetadata metadata
-            && metadata.ConstructorParameters.Count > 0) {
-            return metadata.ConstructorParameters;
+        INodeMetadataProvider analysis) {
+        if (analysis.GetMetadata<EntityStructureMetadata>(targetEntity) is EntityStructureMetadata esm
+            && esm.ConstructorParameters.Count > 0) {
+            return esm.ConstructorParameters;
         }
 
         // DM-META-REMOVE-FALLBACK: remove property scan fallback once
         // EntityStructureMetadata is mandatory for constructor ordering.
-        // This path is exercised when analysis is null (EntitySyntaxPass path)
-        // or when EntityStructureMetadata has not yet been populated.
         return targetEntity.Properties
             .Where(p => !p.Constraints.Any(c => c is DefaultValueConstraint))
             .OrderBy(p => p.Name)
@@ -981,9 +970,7 @@ public sealed class DomainToCSharpExporter {
         List<MethodDefinitionNode> methods, string? stageEnumTypeName = null,
         IReadOnlyDictionary<string, IReadOnlyList<Node>>? postTransitionNodes = null,
         string? sourceStageName = null, Domain? domain = null,
-        // DM-META-REMOVE-FALLBACK: make AnalysisResult required once callers
-        // provide it for action method semantic lowering.
-        AnalysisResult? analysis = null) {
+        INodeMetadataProvider? analysis = null) {
         var paramNames = new HashSet<string>(
             action.Parameters.Select(p => p.Name), StringComparer.Ordinal);
         var effectsBody = LowerActionToMethodBody(entity, action, paramNames, stageEnumTypeName,
@@ -1180,7 +1167,7 @@ public sealed class DomainToCSharpExporter {
         HashSet<string>? paramNames = null, string? stageEnumTypeName = null,
         IReadOnlyDictionary<string, IReadOnlyList<Node>>? postTransitionNodes = null,
         string? sourceStageName = null, Domain? domain = null,
-        AnalysisResult? analysis = null) {
+        INodeMetadataProvider? analysis = null) {
         if (action.Effects.Count == 0) return null;
         var enumProps = domain is not null ? BuildEnumPropertyNames(entity, domain) : null;
         var context = new LoweringContext(
@@ -1202,9 +1189,7 @@ public sealed class DomainToCSharpExporter {
 
     internal static Node? LowerExpressionToMethodBody(
         DomainExpression expr, Entity entity, Domain? domain = null,
-        // DM-META-REMOVE-FALLBACK: make AnalysisResult required once all
-        // callers provide it for expression method body lowering.
-        AnalysisResult? analysis = null) {
+        INodeMetadataProvider? analysis = null) {
         var enumProps = domain is not null ? BuildEnumPropertyNames(entity, domain) : null;
         var context = new LoweringContext(
             new Parameter("entity", new TypeReference(entity.Name)),
@@ -1219,7 +1204,7 @@ public sealed class DomainToCSharpExporter {
             : null;
     }
 
-    internal static bool TryResolveEnumType(Domain? domain, AnalysisResult? analysis, string typeName, out EnumType? enumType) {
+    internal static bool TryResolveEnumType(Domain? domain, INodeMetadataProvider? analysis, string typeName, out EnumType? enumType) {
         enumType = null;
 
         if (analysis?.GetMetadata<DomainTypeLookupMetadata>(default) is DomainTypeLookupMetadata lookup
@@ -1230,7 +1215,7 @@ public sealed class DomainToCSharpExporter {
         }
 
         // DM-META-REMOVE-FALLBACK: remove domain scan once all semantic callers
-        // are AnalysisResult-required and enum lookup metadata is mandatory.
+        // are analysis-required and enum lookup metadata is mandatory.
         if (domain is not null) {
             enumType = domain.Types.OfType<EnumType>()
                 .FirstOrDefault(e => string.Equals(e.Name, typeName, StringComparison.Ordinal));
@@ -1268,7 +1253,7 @@ public sealed class DomainToCSharpExporter {
         IReadOnlyList<Relationship> domainRelationships,
         string relationshipName,
         string sourceEntityName,
-        AnalysisResult? analysis = null) {
+        INodeMetadataProvider? analysis = null) {
         if (analysis is not null) {
             var rlm = analysis.GetMetadata<RelationshipLookupMetadata>(default);
             if (rlm is null)

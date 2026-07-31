@@ -26,15 +26,15 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     private readonly Entity _entity;
     private readonly Domain? _domain;
     private readonly DomainExpressionLoweringPass _expressionPass;
-    private readonly AnalysisResult? _analysis;
+    private readonly INodeMetadataProvider? _analysis;
     private readonly bool _useThisReference;
     private readonly bool _lowerStageTransitions;
     private readonly string? _stageEnumTypeName;
     private readonly IReadOnlyDictionary<string, IReadOnlyList<Node>>? _postTransitionNodes;
     private readonly string? _sourceStageName;
 
-    /// <summary>Pre-computed analysis metadata, when available.</summary>
-    public AnalysisResult? Analysis => _analysis;
+    /// <summary>Pre-computed analysis metadata provider, when available.</summary>
+    public INodeMetadataProvider? Analysis => _analysis;
 
     public EffectLoweringPass(Entity entity, Node subject)
         : this(entity, new LoweringContext(subject)) { }
@@ -318,16 +318,13 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
 
         if (_analysis is null) {
             throw new InvalidOperationException(
-                "Create-in lowering requires AnalysisResult. Semantic lowering without analysis is not supported.");
+                "Create-in lowering requires analysis metadata. Semantic lowering without analysis is not supported.");
         }
 
         var pascalName = DomainToCSharpExporter.ToPascalCase(cr.RelationshipName);
         var methodName = $"Create{pascalName}";
 
         var resolvedTarget = _analysis.GetMetadata<ResolvedRelationshipTargetMetadata>(cr);
-
-        // DM-META-REMOVE-FALLBACK: remove fallback resolution once
-        // ResolvedRelationshipTargetMetadata is guaranteed for all create-in routes.
         var relationship = resolvedTarget?.Relationship
             ?? ResolveRelationship(cr.RelationshipName);
         if (relationship is null) return null;
@@ -438,15 +435,15 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
             return metadata.ConstructorParameters;
         }
 
-        // DM-META-REMOVE-FALLBACK: remove constructor ordering re-derivation
-        // once constructor metadata is required for semantic lowering paths.
+        // Analysis present without ESM ctor list: empty (fail soft for lower to skip) is worse
+        // than property-only order for incomplete analysis trees.
         var parameters = targetEntity.Properties
             .Where(p => !p.Constraints.Any(c => c is DefaultValueConstraint))
             .OrderBy(p => p.Name)
             .Select(p => new ConstructorParameterOrder(p.Name, p.Type, false, false))
             .ToList();
 
-        if (_domain is not null) {
+        if (_analysis is null && _domain is not null) {
             foreach (var rel in _domain.Relationships.Where(r =>
                          string.Equals(r.Source.TypeName, targetEntity.Name, StringComparison.Ordinal)
                          && r.Cardinality is not (RelationshipCardinality.OneToMany or RelationshipCardinality.ManyToMany))) {
@@ -467,9 +464,9 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     /// Used by <see cref="BuildConstructorArgs"/> and <see cref="CreateEntityInRelationship"/>
     /// to emit valid defaults instead of bare <c>null</c> for value-type properties.
     /// </summary>
-    // DM-META-REMOVE-FALLBACK: make AnalysisResult required once all callers
+    // DM-META-REMOVE-FALLBACK: make analysis metadata required once all callers
     // provide it for default domain type resolution.
-    private Node DefaultForDomainType(DomainTypeReference typeRef, Domain? domain, AnalysisResult? analysis = null) {
+    private Node DefaultForDomainType(DomainTypeReference typeRef, Domain? domain, INodeMetadataProvider? analysis = null) {
         if (DomainToCSharpExporter.TryResolveEnumType(domain, analysis, typeRef.TypeName, out var enumType) && enumType is not null)
             return new Member(new NamedTypeReference(enumType.Name), enumType.MemberNames[0]);
         return typeRef.TypeName switch {
@@ -494,8 +491,9 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
             return entity;
         }
 
-        // DM-META-REMOVE-FALLBACK: remove entity type scan when AnalysisResult
-        // contract is fully enforced for semantic lowering.
+        // Analysis present: fail closed (no domain tree rescan).
+        if (_analysis is not null) return null;
+
         if (_domain is not null) {
             return _domain.Types.OfType<Entity>().FirstOrDefault(e =>
                 string.Equals(e.Name, typeName, StringComparison.Ordinal));
@@ -510,8 +508,8 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
             return relationship;
         }
 
-        // DM-META-REMOVE-FALLBACK: remove relationship scan when
-        // analysis-backed lookup is mandatory.
+        if (_analysis is not null) return null;
+
         if (_domain is not null) {
             return _domain.Relationships.FirstOrDefault(r =>
                 string.Equals(r.Name, relationshipName, StringComparison.Ordinal));

@@ -133,8 +133,9 @@ public sealed class DslCompiler {
             var files = GenerateAllFiles(domain, outcome.Analysis, mode, analysisInputs);
             return new CompileResult(Success: true, Files: files, Errors: null);
         }
-        catch (InvalidOperationException ex) {
-            return Fail(ex.Message);
+        catch (Exception ex) {
+            // Projection / emit failures must surface as compile errors (fail loud).
+            return Fail($"Code generation failed: {ex.Message}");
         }
     }
 
@@ -186,26 +187,23 @@ public sealed class DslCompiler {
 
         var files = new List<(string FileName, string Source)>();
 
-        // Entity types (always generated) — from EntitySyntaxMetadata on AnalysisResult
-        var entitySyntax = analysis.GetMetadata<EntitySyntaxMetadata>(domain);
-        if (entitySyntax is not null) {
-            var combinedSource = new CSharpGenerator().Generate(entitySyntax.Types);
-            files.Add(("_all.cs", combinedSource));
-
-            // Per-entity files
-            var entities = domain.Types.OfType<Entity>().ToList();
-            foreach (var entity in entities) {
-                var entityNames = new HashSet<string>(StringComparer.Ordinal) {
-                    entity.Name,
-                    $"{entity.Name}Stage"
-                };
-                var entityDefs = entitySyntax.Types
-                    .Where(d => entityNames.Contains(d.Name))
-                    .ToList();
-                if (entityDefs.Count == 0) continue;
-                var csharp = new CSharpGenerator().Generate(entityDefs);
-                files.Add(($"{entity.Name}.cs", csharp));
-            }
+        // Entity types (always generated) — export-time projection on finished AnalysisResult.
+        // No mid-pipeline EntitySyntaxMetadata; failures throw (caught as compile errors).
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
+        var entities = domain.Types.OfType<Entity>().ToList();
+        foreach (var entity in entities) {
+            var entityNames = new HashSet<string>(StringComparer.Ordinal) {
+                entity.Name,
+                $"{entity.Name}Stage"
+            };
+            var entityDefs = types
+                .Where(d => entityNames.Contains(d.Name))
+                .ToList();
+            if (entityDefs.Count == 0)
+                throw new InvalidOperationException(
+                    $"DomainProgramProjection produced no type definitions for entity '{entity.Name}'.");
+            var csharp = new CSharpGenerator().Generate(entityDefs);
+            files.Add(($"{entity.Name}.cs", csharp));
         }
 
         // Infrastructure metadata — prefer domain analysis result (which already ran

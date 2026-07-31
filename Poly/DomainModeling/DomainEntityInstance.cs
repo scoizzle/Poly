@@ -129,8 +129,7 @@ public sealed record DomainEntityInstance {
 
         var typeDefAnalyzer = BuildTypeDefAnalyzer(entity.Name, entity.Properties);
 
-        // DM-META-REMOVE-FALLBACK: remove direct stage scan once StageLookupMetadata
-        // (or EntityStructureMetadata.StageByName) is required for Create factory.
+        // Initial stage: first declared stage name (factory shape; not a semantic rediscovery).
         var currentStage = entity.Stages.FirstOrDefault()?.Name;
 
         return new DomainEntityInstance(entity, values, typeDefAnalyzer, currentStage, domain);
@@ -253,14 +252,13 @@ public sealed record DomainEntityInstance {
         if (Domain is not null)
             runtimeAnalysis = RuntimeAnalysisCache.GetOrAnalyze(Domain);
 
-        // Resolve action via metadata (stage-scoped with SA semantics, then entity fallback)
+        // Domain-bound: catalog/ARM only. Standalone (Domain null): structural SA scan.
         Action? action = null;
         if (runtimeAnalysis is not null) {
             runtimeAnalysis.TryResolveAction(Entity, CurrentStage, actionName, out action);
         }
-        if (action is null && runtimeAnalysis is null) {
-            // DM-META-REMOVE-FALLBACK: remove runtime action scans once
-            // analysis is always available for runtime routes.
+        else if (Domain is null) {
+            // Standalone instances only — reduced contract (no domain analysis).
             Action? entityAction = null;
             if (CurrentStage is not null) {
                 var currentStageRef = Entity.Stages
@@ -271,12 +269,6 @@ public sealed record DomainEntityInstance {
             entityAction = Entity.Actions
                 .FirstOrDefault(a => string.Equals(a.Name, actionName, StringComparison.Ordinal));
 
-            // SA semantics (same predicate as the metadata path in
-            // TryResolveAction, Phase 3 §6e): an empty stage copy — no effects, no
-            // policies — falls through to the entity-level action. Parameters are
-            // intentionally excluded: AddActionToStageChange copies the entity
-            // action's parameters into the stage copy, so a params-carrying copy
-            // must still fall through or the runtime silently no-ops.
             if (action is not null
                 && action.Effects.Count == 0
                 && action.Policies.Count == 0
@@ -312,9 +304,8 @@ public sealed record DomainEntityInstance {
                 throw new InvalidOperationException(
                     $"Stage '{CurrentStage}' not resolvable for entity '{Entity.Name}' during action dispatch.");
         }
-        else if (runtimeAnalysis is null && CurrentStage is not null) {
-            // DM-META-REMOVE-FALLBACK: remove runtime stage scans once
-            // TryGetStage succeeds for all runtime routes.
+        else if (Domain is null && CurrentStage is not null) {
+            // Standalone only.
             stage = Entity.Stages.FirstOrDefault(
                 s => string.Equals(s.Name, CurrentStage, StringComparison.Ordinal));
         }
@@ -614,9 +605,7 @@ public sealed record DomainEntityInstance {
             Stage? prevStage = null;
             if (analysis is not null)
                 analysis.TryGetStage(Entity, previousStageName, out prevStage);
-            if (prevStage is null && analysis is null) {
-                // DM-META-REMOVE-FALLBACK: remove direct stage scan once
-                // TryGetStage succeeds for all runtime stage resolution.
+            if (prevStage is null && analysis is null && Domain is null) {
                 prevStage = Entity.Stages.FirstOrDefault(
                     s => string.Equals(s.Name, previousStageName, StringComparison.Ordinal));
             }
@@ -638,9 +627,7 @@ public sealed record DomainEntityInstance {
             Stage? targetStage = null;
             if (analysis is not null)
                 analysis.TryGetStage(Entity, targetStageName, out targetStage);
-            if (targetStage is null && analysis is null) {
-                // DM-META-REMOVE-FALLBACK: remove direct stage scan once
-                // TryGetStage succeeds for all runtime stage resolution.
+            if (targetStage is null && analysis is null && Domain is null) {
                 targetStage = Entity.Stages.FirstOrDefault(
                     s => string.Equals(s.Name, targetStageName, StringComparison.Ordinal));
             }

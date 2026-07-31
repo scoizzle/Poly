@@ -85,6 +85,9 @@ Use these. If you think you need a parallel facility, stop and re-read this sect
 
 **Contract:** For downstream consumers that answer semantic questions (lowering decisions, runtime semantic dispatch, MCP semantic inspection, compiler semantic mapping), analysis is non-optional. Those paths must fail closed when `AnalysisResult` or required metadata is missing.
 
+**Domain analysis future state:** target pipeline (validate · catalog · derive), single catalog, consumer contracts, export boundary — [`docs/plans/domain-analysis-future-state.md`](plans/domain-analysis-future-state.md).  
+**Present inventory / cutover notes:** [`docs/plans/domain-analysis-simplification.md`](plans/domain-analysis-simplification.md). Syntax IR projection is an **export** step on a finished `AnalysisResult`, not a domain-fact analysis pass.
+
 Pass order and registry: `Poly/Interpretation/Analysis/README.md`. Authoring guide: `docs/interpretation/analysis-pass-guide.md`.
 
 ### 3.2 Node replacement (AST rewrite support)

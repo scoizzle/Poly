@@ -115,6 +115,24 @@ public class SqlitePackTests {
     }
 
     [Test]
+    public async Task DslCompiler_EntitiesMode_EmitsEntityTypesFromProjection() {
+        // DAS W0.2: entity emit uses DomainProgramProjection.ToSyntax on finished AnalysisResult
+        // (no mid-pipeline EntitySyntaxMetadata soft-skip).
+        var compiler = new Compiler();
+        var result = compiler.Compile(SampleDomain, CompileMode.Entities);
+        await Assert.That(result.Success).IsTrue();
+        await Assert.That(result.Files).IsNotNull();
+
+        var fileNames = result.Files!.Select(f => f.FileName).ToList();
+        await Assert.That(fileNames).Contains("Item.cs");
+
+        var item = result.Files!.Single(f => f.FileName == "Item.cs").Source;
+        await Assert.That(item).Contains("Item");
+        await Assert.That(item).Contains("Name");
+        await Assert.That(item).Contains("Qty");
+    }
+
+    [Test]
     public async Task DslCompiler_SqlitePack_EmitsSqliteColumnTypesInDbContext() {
         // Host composition proof: compiler + --dbms sqlite path is not test-only.
         var compiler = new Compiler();
@@ -127,6 +145,9 @@ public class SqlitePackTests {
         await Assert.That(db).DoesNotContain(".HasColumnType(\"varchar\")");
         await Assert.That(db).DoesNotContain(".HasColumnType(\"boolean\")");
         await Assert.That(db).DoesNotContain(".HasColumnType(\"timestamp\")");
+
+        // Entity files still emit under Db mode (export-time projection).
+        await Assert.That(result.Files!.Select(f => f.FileName)).Contains("Item.cs");
     }
 
     [Test]

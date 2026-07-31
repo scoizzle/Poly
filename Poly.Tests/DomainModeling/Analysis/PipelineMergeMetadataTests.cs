@@ -391,7 +391,15 @@ public class PipelineMergeMetadataTests {
 
         // AuthoringSuggestionAnalyzer — diagnostics only (DMAS001 hints)
 
-        // EntitySyntaxPass — EntitySyntaxMetadata
-        await Assert.That(analysis.GetMetadata<EntitySyntaxMetadata>(domain)).IsNotNull();
+        // DomainCatalogPass — single catalog (DAS W1)
+        var catalog = analysis.GetMetadata<DomainCatalogMetadata>(domain);
+        await Assert.That(catalog).IsNotNull();
+        await Assert.That(catalog!.Index).IsNotNull();
+        await Assert.That(catalog.Types).IsNotNull();
+        await Assert.That(catalog.Relationships).IsNotNull();
+        await Assert.That(catalog.ActionsByEntityName.ContainsKey("Customer")).IsTrue();
+
+        // Entity/program Syntax projection is export-time only (DomainProgramProjection /
+        // DomainToCSharpExporter) — analyze alone must not require mid-pipeline IR bags.
     }
 }

@@ -56,7 +56,18 @@ if (inputPath is null) {
     Console.Error.WriteLine();
     Console.Error.WriteLine("If output-dir is provided, files are written there.");
     Console.Error.WriteLine("Otherwise, the combined file is written to stdout.");
+
+#if DEBUG
+    Console.WriteLine(Environment.CurrentDirectory);
+    inputPath = Console.ReadLine() ?? throw new InvalidOperationException("No input path provided.");
+
+    if (string.IsNullOrEmpty(inputPath)) {
+        Console.Error.WriteLine("Error: No input path provided.");
+        return 1;
+    }
+#else
     return 1;
+#endif
 }
 
 if (!File.Exists(inputPath)) {

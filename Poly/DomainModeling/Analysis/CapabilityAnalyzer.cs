@@ -74,11 +74,19 @@ internal sealed class CapabilityAnalyzer : INodeAnalyzer {
 
     private static void AnalyzeAction(AnalysisContext context, Action action) {
         var lookup = context.GetMetadata<DomainTypeLookupMetadata>(default);
+        var ownerEntity = FindOwnerEntity(lookup, action);
 
         var transitionTargetStages = new List<Stage>();
         foreach (var effect in FlattenEffects(action.Effects)) {
             if (effect is StageTransitionEffect ste) {
-                transitionTargetStages.Add(new Stage(ste.TargetStage.StageName, [], [], [], []));
+                // Prefer real Stage nodes from the owner entity (DAS W2) over stubs.
+                Stage? resolved = null;
+                if (ownerEntity is not null) {
+                    resolved = ownerEntity.Stages.FirstOrDefault(s =>
+                        string.Equals(s.Name, ste.TargetStage.StageName, StringComparison.Ordinal));
+                }
+                transitionTargetStages.Add(resolved
+                    ?? new Stage(ste.TargetStage.StageName, [], [], [], []));
             }
         }
 
@@ -90,6 +98,17 @@ internal sealed class CapabilityAnalyzer : INodeAnalyzer {
             TransitionTargets: transitionTargetStages);
 
         context.SetMetadata(action, new ActionCapabilityMetadata(view));
+    }
+
+    private static Entity? FindOwnerEntity(DomainTypeLookupMetadata? lookup, Action action) {
+        if (lookup is null) return null;
+        foreach (var entity in lookup.Entities) {
+            if (entity.Actions.Contains(action)) return entity;
+            foreach (var stage in entity.Stages) {
+                if (stage.Actions.Contains(action)) return entity;
+            }
+        }
+        return null;
     }
 
     private static void AnalyzeStage(AnalysisContext context, Stage stage) {

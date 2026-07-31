@@ -29,8 +29,7 @@ public sealed record ResolvedRelationshipTargetMetadata(
 
 public sealed record ActionResolutionMetadata(
     IReadOnlyDictionary<string, Action> EntityActions,
-    IReadOnlyDictionary<string, IReadOnlyDictionary<string, Action>> StageActions,
-    IReadOnlyDictionary<string, Stage> StageByName
+    IReadOnlyDictionary<string, IReadOnlyDictionary<string, Action>> StageActions
 ) : IAnalysisMetadata;
 
 public sealed record RelationshipContractMetadata(

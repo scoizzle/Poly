@@ -52,6 +52,8 @@ public sealed class DomainToCSharpExporter {
     /// <summary>
     /// Collects subscription info for a single <see cref="StageSubscription"/> and
     /// populates the target/subscriber maps used for code generation.
+    /// Fail-closed: when analysis is present, <see cref="ResolveRelationship"/> throws
+    /// if <see cref="RelationshipLookupMetadata"/> is absent (F5).
     /// </summary>
     internal static void CollectSubscriptionInfo(
         StageSubscription sub, Entity entity, string? stageName,
@@ -59,9 +61,15 @@ public sealed class DomainToCSharpExporter {
         IReadOnlyDictionary<string, Entity> entityLookup,
         List<SubscriptionInfo> subList,
         Dictionary<string, List<SubscriptionInfo>> subscriptionsByTarget,
+        // DM-META-REMOVE-FALLBACK: remove nullable analysis once all callers
+        // provide required AnalysisResult for subscription resolution.
         AnalysisResult? analysis = null) {
 
-        var rel = ResolveRelationship(domainRelationships, sub.RelationshipName, entity.Name, analysis);
+        var rel = analysis is not null
+            ? ResolveRelationship(domainRelationships, sub.RelationshipName, entity.Name, analysis)
+            : domainRelationships.FirstOrDefault(r =>
+                string.Equals(r.Name, sub.RelationshipName, StringComparison.Ordinal) &&
+                string.Equals(r.Source.TypeName, entity.Name, StringComparison.Ordinal));
         if (rel is null) return;
 
         if (!entityLookup.TryGetValue(rel.Target.TypeName, out var targetEntity))
@@ -87,6 +95,8 @@ public sealed class DomainToCSharpExporter {
         INodeMetadataProvider metadata,
         List<SubscriptionInfo>? targetSubs = null,
         List<SubscriptionInfo>? subscriberSubs = null) {
+
+        ArgumentNullException.ThrowIfNull(metadata);
 
         var typeDefs = new List<TypeDefinitionNode>();
         var props = new List<PropertyDefinitionNode>();
@@ -619,11 +629,15 @@ public sealed class DomainToCSharpExporter {
         List<SubscriptionInfo>? subscriberSubs,
         string fieldName,
         List<MethodDefinitionNode> methods,
+        // DM-META-REMOVE-FALLBACK: remove nullable analysis once all callers
+        // provide required AnalysisResult for nav method generation.
         AnalysisResult? analysis = null) {
 
         var pascalName = ToPascalCase(rel.Name);
         var targetTypeName = rel.Target.TypeName;
         var targetType = new NamedTypeReference(targetTypeName);
+        // DM-META-REMOVE-FALLBACK: use DomainTypeLookupMetadata for
+        // entity resolution instead of direct domain type scan.
         var targetEntity = domain.Types.OfType<Entity>()
             .FirstOrDefault(e => string.Equals(e.Name, targetTypeName, StringComparison.Ordinal));
         if (targetEntity is null) return;
@@ -718,12 +732,18 @@ public sealed class DomainToCSharpExporter {
 
     private static IReadOnlyList<ConstructorParameterOrder> GetConstructorParameters(
         Entity targetEntity,
+        // DM-META-REMOVE-FALLBACK: make AnalysisResult required once all callers
+        // provide it for constructor parameter resolution.
         AnalysisResult? analysis) {
         if (analysis?.GetMetadata<EntityStructureMetadata>(targetEntity) is EntityStructureMetadata metadata
             && metadata.ConstructorParameters.Count > 0) {
             return metadata.ConstructorParameters;
         }
 
+        // DM-META-REMOVE-FALLBACK: remove property scan fallback once
+        // EntityStructureMetadata is mandatory for constructor ordering.
+        // This path is exercised when analysis is null (EntitySyntaxPass path)
+        // or when EntityStructureMetadata has not yet been populated.
         return targetEntity.Properties
             .Where(p => !p.Constraints.Any(c => c is DefaultValueConstraint))
             .OrderBy(p => p.Name)
@@ -961,6 +981,8 @@ public sealed class DomainToCSharpExporter {
         List<MethodDefinitionNode> methods, string? stageEnumTypeName = null,
         IReadOnlyDictionary<string, IReadOnlyList<Node>>? postTransitionNodes = null,
         string? sourceStageName = null, Domain? domain = null,
+        // DM-META-REMOVE-FALLBACK: make AnalysisResult required once callers
+        // provide it for action method semantic lowering.
         AnalysisResult? analysis = null) {
         var paramNames = new HashSet<string>(
             action.Parameters.Select(p => p.Name), StringComparer.Ordinal);
@@ -1180,6 +1202,8 @@ public sealed class DomainToCSharpExporter {
 
     internal static Node? LowerExpressionToMethodBody(
         DomainExpression expr, Entity entity, Domain? domain = null,
+        // DM-META-REMOVE-FALLBACK: make AnalysisResult required once all
+        // callers provide it for expression method body lowering.
         AnalysisResult? analysis = null) {
         var enumProps = domain is not null ? BuildEnumPropertyNames(entity, domain) : null;
         var context = new LoweringContext(
@@ -1224,6 +1248,8 @@ public sealed class DomainToCSharpExporter {
     internal static Dictionary<string, string>? BuildEnumPropertyNames(
         Entity entity, Domain domain) {
         Dictionary<string, string>? map = null;
+        // DM-META-REMOVE-FALLBACK: use DomainTypeLookupMetadata for
+        // enum type resolution instead of direct domain scan.
         var enumTypes = domain.Types.OfType<EnumType>()
             .ToDictionary(e => e.Name, StringComparer.Ordinal);
         if (enumTypes.Count == 0) return null;
@@ -1243,10 +1269,17 @@ public sealed class DomainToCSharpExporter {
         string relationshipName,
         string sourceEntityName,
         AnalysisResult? analysis = null) {
-        if (analysis?.GetMetadata<RelationshipLookupMetadata>(default) is RelationshipLookupMetadata lookup
-            && lookup.Relationships.TryGetValue(relationshipName, out var relationship)
-            && string.Equals(relationship.Source.TypeName, sourceEntityName, StringComparison.Ordinal)) {
-            return relationship;
+        if (analysis is not null) {
+            var rlm = analysis.GetMetadata<RelationshipLookupMetadata>(default);
+            if (rlm is null)
+                throw new InvalidOperationException(
+                    $"{nameof(RelationshipLookupMetadata)} is required for subscription resolution when analysis is present.");
+            if (rlm.Relationships.TryGetValue(relationshipName, out var relationship)
+                && string.Equals(relationship.Source.TypeName, sourceEntityName, StringComparison.Ordinal)) {
+                return relationship;
+            }
+            // Metadata-backed lookup complete — relationship not found.
+            return null;
         }
 
         // DM-META-REMOVE-FALLBACK: remove relationship list scan when analysis

@@ -129,6 +129,8 @@ public sealed record DomainEntityInstance {
 
         var typeDefAnalyzer = BuildTypeDefAnalyzer(entity.Name, entity.Properties);
 
+        // DM-META-REMOVE-FALLBACK: remove direct stage scan once StageLookupMetadata
+        // (or EntityStructureMetadata.StageByName) is required for Create factory.
         var currentStage = entity.Stages.FirstOrDefault()?.Name;
 
         return new DomainEntityInstance(entity, values, typeDefAnalyzer, currentStage, domain);
@@ -248,50 +250,41 @@ public sealed record DomainEntityInstance {
     /// </summary>
     private ActionInvocationResult InvokeActionInternal(string actionName) {
         AnalysisResult? runtimeAnalysis = null;
-        ActionResolutionMetadata? actionResolution = null;
-        if (Domain is not null) {
+        if (Domain is not null)
             runtimeAnalysis = RuntimeAnalysisCache.GetOrAnalyze(Domain);
-            actionResolution = runtimeAnalysis.GetMetadata<ActionResolutionMetadata>(Entity);
-        }
 
-        // Find action: first check current stage (and its parent chain) for effective actions,
-        // then entity-level. Stage-scoped actions are only available while on that stage.
+        // Resolve action via metadata (stage-scoped with SA semantics, then entity fallback)
         Action? action = null;
-        Action? entityAction = null;
-        if (CurrentStage is not null) {
-            if (actionResolution is not null
-                && actionResolution.StageActions.TryGetValue(CurrentStage, out var stageActions)) {
-                stageActions.TryGetValue(actionName, out action);
-            }
-            else {
-                // DM-META-REMOVE-FALLBACK: remove runtime stage-action scans once
-                // ActionResolutionMetadata is required for all runtime routes.
+        if (runtimeAnalysis is not null) {
+            runtimeAnalysis.TryResolveAction(Entity, CurrentStage, actionName, out action);
+        }
+        if (action is null && runtimeAnalysis is null) {
+            // DM-META-REMOVE-FALLBACK: remove runtime action scans once
+            // analysis is always available for runtime routes.
+            Action? entityAction = null;
+            if (CurrentStage is not null) {
                 var currentStageRef = Entity.Stages
                     .FirstOrDefault(s => string.Equals(s.Name, CurrentStage, StringComparison.Ordinal));
                 action = currentStageRef?.Actions
                     .FirstOrDefault(a => string.Equals(a.Name, actionName, StringComparison.Ordinal));
             }
-        }
-
-        // SA: If the stage-scoped action is an empty copy (no effects, no policies,
-        // no parameters), fall through to the entity-level action if one exists.
-        // This prevents the silent no-op that occurs when AddActionToStage creates an
-        // empty stage copy while effects were added to the entity-level action only.
-        // See Phase 3 §6e (Stage-Action Semantics) in mcp-phase3-oracle-surface.md.
-        if (actionResolution is not null) {
-            actionResolution.EntityActions.TryGetValue(actionName, out entityAction);
-        }
-        else {
-            // DM-META-REMOVE-FALLBACK: remove runtime entity-action scans once
-            // ActionResolutionMetadata is required for all runtime routes.
             entityAction = Entity.Actions
                 .FirstOrDefault(a => string.Equals(a.Name, actionName, StringComparison.Ordinal));
-        }
-        if (action is not null && action.Effects.Count == 0 && action.Policies.Count == 0
-            && entityAction is not null)
-            action = entityAction;
 
-        action ??= entityAction;
+            // SA semantics (same predicate as the metadata path in
+            // TryResolveAction, Phase 3 §6e): an empty stage copy — no effects, no
+            // policies — falls through to the entity-level action. Parameters are
+            // intentionally excluded: AddActionToStageChange copies the entity
+            // action's parameters into the stage copy, so a params-carrying copy
+            // must still fall through or the runtime silently no-ops.
+            if (action is not null
+                && action.Effects.Count == 0
+                && action.Policies.Count == 0
+                && entityAction is not null)
+                action = entityAction;
+
+            action ??= entityAction;
+        }
 
         if (action is null)
             return ActionInvocationResult.Missing(Entity.Name, actionName);
@@ -305,12 +298,23 @@ public sealed record DomainEntityInstance {
             return ActionInvocationResult.Blocked(actionName, failures);
 
         Stage? stage = null;
-        if (CurrentStage is not null && actionResolution is not null) {
-            actionResolution.StageByName.TryGetValue(CurrentStage, out stage);
+        if (runtimeAnalysis is not null && CurrentStage is not null) {
+            // Fail closed: when analysis ran, a stage-guard lookup miss must not
+            // silently skip the stage's policy guards. Unreachable for a
+            // consistently-analyzed domain (CurrentStage is drawn from
+            // Entity.Stages, which is the same source as ESM.StageByName), so this
+            // only fires when analysis and instance disagree.
+            var esm = runtimeAnalysis.GetMetadata<EntityStructureMetadata>(Entity);
+            if (esm is null)
+                throw new InvalidOperationException(
+                    $"Runtime dispatch requires {nameof(EntityStructureMetadata)} for entity '{Entity.Name}' during action dispatch.");
+            if (esm.StageByName is null || !esm.StageByName.TryGetValue(CurrentStage, out stage))
+                throw new InvalidOperationException(
+                    $"Stage '{CurrentStage}' not resolvable for entity '{Entity.Name}' during action dispatch.");
         }
-        else {
+        else if (runtimeAnalysis is null && CurrentStage is not null) {
             // DM-META-REMOVE-FALLBACK: remove runtime stage scans once
-            // ActionResolutionMetadata is required for all runtime routes.
+            // TryGetStage succeeds for all runtime routes.
             stage = Entity.Stages.FirstOrDefault(
                 s => string.Equals(s.Name, CurrentStage, StringComparison.Ordinal));
         }
@@ -597,10 +601,25 @@ public sealed record DomainEntityInstance {
         if (string.Equals(previousStageName, targetStageName, StringComparison.Ordinal))
             return;
 
+        // Resolve analysis once for the entire transition (F9).
+        var analysis = Domain is not null ? RuntimeAnalysisCache.GetOrAnalyze(Domain) : null;
+
+        // OnExit/OnEntry effects are best-effort: a TryGetStage miss with analysis
+        // present can only mean analysis/instance disagreement (CurrentStage is
+        // drawn from Entity.Stages), so skipping effects here is safe rather than a
+        // fail-closed violation (contrast InvokeActionInternal's dispatch throw).
+
         // ── Run OnExit effects on the current stage ────────────
         if (previousStageName is not null) {
-            var prevStage = Entity.Stages.FirstOrDefault(
-                s => string.Equals(s.Name, previousStageName, StringComparison.Ordinal));
+            Stage? prevStage = null;
+            if (analysis is not null)
+                analysis.TryGetStage(Entity, previousStageName, out prevStage);
+            if (prevStage is null && analysis is null) {
+                // DM-META-REMOVE-FALLBACK: remove direct stage scan once
+                // TryGetStage succeeds for all runtime stage resolution.
+                prevStage = Entity.Stages.FirstOrDefault(
+                    s => string.Equals(s.Name, previousStageName, StringComparison.Ordinal));
+            }
             if (prevStage?.OnExitEffects is { Count: > 0 }) {
                 var exitPass = new EffectLoweringPass(Entity,
                     new Parameter("entity", new TypeReference(Entity.Name)));
@@ -616,8 +635,15 @@ public sealed record DomainEntityInstance {
         // Notify subscribers runs in a finally block so it fires even if
         // OnEntry effects throw (the stage is already set).
         try {
-            var targetStage = Entity.Stages.FirstOrDefault(
-                s => string.Equals(s.Name, targetStageName, StringComparison.Ordinal));
+            Stage? targetStage = null;
+            if (analysis is not null)
+                analysis.TryGetStage(Entity, targetStageName, out targetStage);
+            if (targetStage is null && analysis is null) {
+                // DM-META-REMOVE-FALLBACK: remove direct stage scan once
+                // TryGetStage succeeds for all runtime stage resolution.
+                targetStage = Entity.Stages.FirstOrDefault(
+                    s => string.Equals(s.Name, targetStageName, StringComparison.Ordinal));
+            }
             if (targetStage?.OnEntryEffects is { Count: > 0 }) {
                 var entryPass = new EffectLoweringPass(Entity,
                     new Parameter("entity", new TypeReference(Entity.Name)));
@@ -707,13 +733,19 @@ public sealed record DomainEntityInstance {
     private DomainEntityInstance CreateChildInstance(CreateEntityInstance createEffect) {
         var targetTypeName = createEffect.Type.TypeName;
 
-        // Resolve target entity definition
+        // Resolve analysis once for the whole creation (F21).
+        var analysis = Domain is not null ? RuntimeAnalysisCache.GetOrAnalyze(Domain) : null;
+
+        // Resolve target entity definition.
+        // DTLM mirrors Domain.Types (SemanticDomainAnalyzer), so with analysis
+        // present a TryGetEntity miss is a genuine not-found — fail closed
+        // (no structural fallback scan).
         Entity targetEntity;
-        if (Domain is not null) {
-            targetEntity = Domain.Types.OfType<Entity>()
-                .FirstOrDefault(e => string.Equals(e.Name, targetTypeName, StringComparison.Ordinal))
-                ?? throw new InvalidOperationException(
-                    $"Entity type '{targetTypeName}' not found in domain '{Domain.Name}'.");
+        if (analysis is not null) {
+            targetEntity = analysis.TryGetEntity(targetTypeName, out var resolvedEntity)
+                ? resolvedEntity!
+                : throw new InvalidOperationException(
+                    $"Entity type '{targetTypeName}' not found in domain '{Domain!.Name}'.");
         }
         else {
             targetEntity = Entity; // same-type creation when no domain reference
@@ -742,12 +774,14 @@ public sealed record DomainEntityInstance {
         // If Domain is available, validate the relationship exists, source entity, and target type.
         // If Domain is null, link is best-effort (standalone instance).
         if (createEffect.RelationshipName is not null && Store is not null) {
-            if (Domain is not null) {
-                var relationship = Domain.Relationships.FirstOrDefault(r =>
-                    string.Equals(r.Name, createEffect.RelationshipName, StringComparison.Ordinal));
-                if (relationship is null) {
+            if (analysis is not null) {
+                // RLM mirrors Domain.Relationships (SemanticDomainAnalyzer), so a
+                // TryGetRelationship miss with analysis present is a genuine
+                // not-found — fail closed (no structural fallback scan).
+                if (!analysis.TryGetRelationship(createEffect.RelationshipName, out var relationship)
+                    || relationship is null) {
                     throw new InvalidOperationException(
-                        $"Relationship '{createEffect.RelationshipName}' not found in domain '{Domain.Name}'.");
+                        $"Relationship '{createEffect.RelationshipName}' not found in domain '{Domain!.Name}'.");
                 }
                 // Verify source entity matches (defense-in-depth after analysis)
                 if (!string.Equals(relationship.Source.TypeName, Entity.Name, StringComparison.Ordinal)) {
@@ -779,10 +813,12 @@ public sealed record DomainEntityInstance {
             throw new InvalidOperationException(
                 "Cannot execute 'create in' effect without a domain to resolve relationship targets.");
 
-        // Find the relationship
-        var relationship = Domain.Relationships.FirstOrDefault(r =>
-            string.Equals(r.Name, effect.RelationshipName, StringComparison.Ordinal));
-        if (relationship is null)
+        var analysis = RuntimeAnalysisCache.GetOrAnalyze(Domain);
+        // RLM mirrors Domain.Relationships (SemanticDomainAnalyzer), so a
+        // TryGetRelationship miss with analysis present is a genuine not-found —
+        // fail closed (no structural fallback scan).
+        if (!analysis.TryGetRelationship(effect.RelationshipName, out var relationship)
+            || relationship is null)
             throw new InvalidOperationException(
                 $"Relationship '{effect.RelationshipName}' not found in domain '{Domain.Name}'.");
 
@@ -793,10 +829,11 @@ public sealed record DomainEntityInstance {
                 $"Source is '{relationship.Source.TypeName}'. 'Create in' must run on the source entity.");
         }
 
-        // The target entity must be the relationship's Target type
-        var targetEntity = Domain.Types.OfType<Entity>()
-            .FirstOrDefault(e => string.Equals(e.Name, relationship.Target.TypeName, StringComparison.Ordinal));
-        if (targetEntity is null)
+        // DTLM mirrors Domain.Types (SemanticDomainAnalyzer), so a TryGetEntity
+        // miss with analysis present is a genuine not-found — fail closed (no
+        // structural fallback scan).
+        if (!analysis.TryGetEntity(relationship.Target.TypeName, out var targetEntity)
+            || targetEntity is null)
             throw new InvalidOperationException(
                 $"Target entity '{relationship.Target.TypeName}' for relationship '{effect.RelationshipName}' not found.");
 
@@ -887,9 +924,12 @@ public sealed record DomainEntityInstance {
             throw new InvalidOperationException(
                 $"Cannot resolve relationship '{relationshipName}' without a domain.");
 
-        var relationship = Domain.Relationships.FirstOrDefault(r =>
-            string.Equals(r.Name, relationshipName, StringComparison.Ordinal));
-        if (relationship is null)
+        var analysis = RuntimeAnalysisCache.GetOrAnalyze(Domain);
+        // RLM mirrors Domain.Relationships (SemanticDomainAnalyzer), so a
+        // TryGetRelationship miss with analysis present is a genuine not-found —
+        // fail closed (no structural fallback scan).
+        if (!analysis.TryGetRelationship(relationshipName, out var relationship)
+            || relationship is null)
             throw new InvalidOperationException(
                 $"Relationship '{relationshipName}' not found in domain '{Domain.Name}'.");
 

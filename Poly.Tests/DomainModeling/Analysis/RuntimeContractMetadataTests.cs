@@ -48,7 +48,6 @@ public class RuntimeContractMetadataTests {
 
         await Assert.That(metadata).IsNotNull();
         await Assert.That(metadata!.EntityActions.ContainsKey("Reset")).IsTrue();
-        await Assert.That(metadata.StageByName.ContainsKey("Pending")).IsTrue();
         await Assert.That(metadata.StageActions.ContainsKey("Pending")).IsTrue();
         await Assert.That(metadata.StageActions["Pending"].ContainsKey("Escalate")).IsTrue();
     }

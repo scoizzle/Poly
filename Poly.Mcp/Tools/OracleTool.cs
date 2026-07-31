@@ -453,7 +453,8 @@ internal sealed class OracleTool {
         [property: JsonPropertyName("name")] string Name,
         [property: JsonPropertyName("parentEntity")] string? ParentEntity,
         [property: JsonPropertyName("detail")] string Detail,
-        [property: JsonPropertyName("description")] string Description
+        [property: JsonPropertyName("description")] string Description,
+        [property: JsonPropertyName("expression")] DescribeExpressionData? Expression = null
     );
 
     // ── V0.1: lower_expression ──────────────────────────────────
@@ -527,15 +528,47 @@ internal sealed class OracleTool {
     }
 
     private static DomainToolResponse DescribeStage(string sessionId, McpSessionState state, string name, string? entityName = null) {
-        // V0′.1: If entityName provided, scope search to that entity
-        var entities = entityName is not null
+        // Structural entity enumeration (projection/rendering — allowed)
+        // with metadata-backed stage resolution via DomainSemanticLookupExtensions.
+        if (state.LatestAnalysis is not null) {
+            var entities = entityName is not null
+                ? state.Domain.Types.OfType<Entity>().Where(e => string.Equals(e.Name, entityName, StringComparison.Ordinal))
+                : state.Domain.Types.OfType<Entity>();
+            foreach (var entity in entities) {
+                if (!state.LatestAnalysis.TryGetStage(entity, name, out var stage) || stage is null)
+                    continue;
+
+                var stageCap = state.LatestAnalysis.GetMetadata<StageCapabilityMetadata>(stage);
+                var effectiveActionCount = stageCap?.View.EffectiveActions.Count
+                    ?? stage.Actions.Count;
+                var effectivePolicyCount = stageCap?.View.EffectivePolicies.Count
+                    ?? state.LatestAnalysis.GetEffectivePolicies(state.Domain, entity, name).Count;
+
+                var sb = new StringBuilder();
+                sb.Append($"Stage '{name}' on entity '{entity.Name}' with {effectiveActionCount} effective actions, {effectivePolicyCount} effective policies, {stage.Subscriptions.Count} subscriptions.");
+                if (stage.OnEntryEffects.Count > 0) sb.Append($" Has {stage.OnEntryEffects.Count} entry effect(s).");
+                if (stage.OnExitEffects.Count > 0) sb.Append($" Has {stage.OnExitEffects.Count} exit effect(s).");
+                if (effectiveActionCount > stage.Actions.Count)
+                    sb.Append($" Includes {effectiveActionCount - stage.Actions.Count} inherited action(s).");
+                return new DomainToolResponse(Success: true, Message: sb.ToString(), SessionId: sessionId, Data: new DomainElementData("stage", name, entity.Name, sb.ToString(), sb.ToString()), Affordances: ["get_entity_detail"]);
+            }
+        }
+
+        // When analysis is present, do not fall through to structural scan (F4).
+        if (state.LatestAnalysis is not null)
+            return new DomainToolResponse(Success: false, Message: $"Stage '{name}' not found on any entity.", SessionId: sessionId, Affordances: ["get_domain_overview"]);
+
+        // DM-META-REMOVE-FALLBACK: remove direct domain scan once DescribeStage
+        // always has analysis available for metadata-backed stage resolution.
+        var entities2 = entityName is not null
             ? state.Domain.Types.OfType<Entity>().Where(e => string.Equals(e.Name, entityName, StringComparison.Ordinal))
             : state.Domain.Types.OfType<Entity>();
-        foreach (var entity in entities) {
+        foreach (var entity in entities2) {
             var stage = entity.Stages.FirstOrDefault(s => string.Equals(s.Name, name, StringComparison.Ordinal));
             if (stage is null) continue;
 
-            var stageCap = state.LatestAnalysis?.GetMetadata<StageCapabilityMetadata>(stage);
+            // state.LatestAnalysis is null in this fallback path (analysis-present guard returned above)
+            StageCapabilityMetadata? stageCap = null;
             var effectiveActionCount = stageCap?.View.EffectiveActions.Count ?? stage.Actions.Count;
             var effectivePolicyCount = stageCap?.View.EffectivePolicies.Count ?? stage.Policies.Count;
 
@@ -551,11 +584,54 @@ internal sealed class OracleTool {
     }
 
     private static DomainToolResponse DescribeAction(string sessionId, McpSessionState state, string name, string? entityName = null) {
-        // V0′.1: If entityName provided, scope search to that entity
-        var entities = entityName is not null
+        // Metadata-first action resolution via ActionResolutionMetadata when analysis is available.
+        if (state.LatestAnalysis is not null) {
+            var entities = entityName is not null
+                ? state.Domain.Types.OfType<Entity>().Where(e => string.Equals(e.Name, entityName, StringComparison.Ordinal))
+                : state.Domain.Types.OfType<Entity>();
+            foreach (var entity in entities) {
+                // Entity-first search priority: this is a describe/search tool, not
+                // runtime dispatch. TryResolveAction (used by InvokeActionInternal)
+                // uses stage-first + SA semantics, which is correct for execution.
+                // Entity-first is preferred here for broad search results.
+                var arm = state.LatestAnalysis.GetMetadata<ActionResolutionMetadata>(entity);
+                Poly.DomainModeling.Action? action = null;
+                if (arm is not null) {
+                    arm.EntityActions.TryGetValue(name, out action);
+                    if (action is null) {
+                        foreach (var kv in arm.StageActions) {
+                            if (kv.Value.TryGetValue(name, out var sa)) {
+                                action = sa;
+                                break;
+                            }
+                        }
+                    }
+                }
+                if (action is null) continue;
+
+                var actionCap = state.LatestAnalysis.GetMetadata<ActionCapabilityMetadata>(action);
+                var transitionTargets = actionCap?.View.TransitionTargets.Select(t => t.Name).ToList() ?? [];
+
+                var sb = new StringBuilder();
+                sb.Append($"Action '{name}' on entity '{entity.Name}'");
+                if (action.Parameters.Count > 0) sb.Append($" with parameters: {string.Join(", ", action.Parameters.Select(p => $"{p.Name}: {p.Type.TypeName}"))}");
+                sb.Append($", {action.Effects.Count} effect(s), {action.Policies.Count} guard(s).");
+                if (transitionTargets.Count > 0)
+                    sb.Append($" Transitions to: {string.Join(", ", transitionTargets)}.");
+                return new DomainToolResponse(Success: true, Message: sb.ToString(), SessionId: sessionId, Data: new DomainElementData("action", name, entity.Name, sb.ToString(), sb.ToString()), Affordances: ["get_entity_detail"]);
+            }
+        }
+
+        // When analysis is present, do not fall through to structural scan (F4).
+        if (state.LatestAnalysis is not null)
+            return new DomainToolResponse(Success: false, Message: $"Action '{name}' not found on any entity.", SessionId: sessionId, Affordances: ["get_entity_detail"]);
+
+        // DM-META-REMOVE-FALLBACK: remove direct domain/entity scan once DescribeAction
+        // always has analysis available for metadata-backed action resolution.
+        var entities2 = entityName is not null
             ? state.Domain.Types.OfType<Entity>().Where(e => string.Equals(e.Name, entityName, StringComparison.Ordinal))
             : state.Domain.Types.OfType<Entity>();
-        foreach (var entity in entities) {
+        foreach (var entity in entities2) {
             var action = entity.Actions.FirstOrDefault(a => string.Equals(a.Name, name, StringComparison.Ordinal))
                 ?? entity.Stages.SelectMany(s => s.Actions).FirstOrDefault(a => string.Equals(a.Name, name, StringComparison.Ordinal));
             if (action is null) continue;
@@ -575,23 +651,92 @@ internal sealed class OracleTool {
     }
 
     private static DomainToolResponse DescribePolicy(string sessionId, McpSessionState state, string name, string? entityName = null) {
-        // V0′.1: If entityName provided, scope search to that entity
-        var entities = entityName is not null
+        // Metadata-first policy resolution via MutationTargetIndexMetadata when analysis is available.
+        if (state.LatestAnalysis is not null) {
+            var mti = state.LatestAnalysis.GetMetadata<MutationTargetIndexMetadata>(state.Domain);
+            if (mti is not null) {
+                var entities = entityName is not null
+                    ? state.Domain.Types.OfType<Entity>().Where(e => string.Equals(e.Name, entityName, StringComparison.Ordinal))
+                    : state.Domain.Types.OfType<Entity>();
+                foreach (var entity in entities) {
+                    // Search across entity, stage, and action policy maps (F3).
+                    Policy? policy = null;
+                    string? scope = null;
+
+                    // Entity-level
+                    if (mti.EntityPoliciesByEntity.TryGetValue(entity.Name, out var entityPols)
+                        && entityPols.TryGetValue(name, out var ep)) {
+                        policy = ep;
+                        scope = "entity";
+                    }
+
+                    // Stage-level (first match wins)
+                    if (policy is null
+                        && mti.StagePoliciesByEntity.TryGetValue(entity.Name, out var stagePols)) {
+                        foreach (var kv in stagePols) {
+                            if (kv.Value.TryGetValue(name, out var sp)) {
+                                policy = sp;
+                                scope = $"stage '{kv.Key}'";
+                                break;
+                            }
+                        }
+                    }
+
+                    // Action-level (first match wins)
+                    if (policy is null
+                        && mti.ActionPoliciesByEntity.TryGetValue(entity.Name, out var actionPols)) {
+                        foreach (var kv in actionPols) {
+                            if (kv.Value.TryGetValue(name, out var ap)) {
+                                policy = ap;
+                                scope = $"action '{kv.Key}'";
+                                break;
+                            }
+                        }
+                    }
+
+                    if (policy is null) continue;
+
+                    var exprDescription = DescribeExpression(policy.Expression);
+                    var sb = new StringBuilder();
+                    sb.Append($"Policy '{name}' on entity '{entity.Name}'");
+                    if (scope is not null) sb.Append($" ({scope} scope)");
+                    sb.Append($": {exprDescription.PlainEnglish}.");
+                    return new DomainToolResponse(Success: true, Message: sb.ToString(), SessionId: sessionId, Data: new DomainElementData("policy", name, entity.Name, sb.ToString(), sb.ToString(), exprDescription), Affordances: ["get_policy_expression", "get_entity_detail"]);
+                }
+            }
+        }
+
+        // When analysis is present, do not fall through to structural scan (F4).
+        if (state.LatestAnalysis is not null)
+            return new DomainToolResponse(Success: false, Message: $"Policy '{name}' not found on any entity.", SessionId: sessionId, Affordances: ["get_entity_detail"]);
+
+        // DM-META-REMOVE-FALLBACK: remove direct domain scan once DescribePolicy
+        // always has analysis available for metadata-backed policy resolution.
+        var entities2 = entityName is not null
             ? state.Domain.Types.OfType<Entity>().Where(e => string.Equals(e.Name, entityName, StringComparison.Ordinal))
             : state.Domain.Types.OfType<Entity>();
-        foreach (var entity in entities) {
+        foreach (var entity in entities2) {
             var policy = entity.Policies.FirstOrDefault(p => string.Equals(p.Name, name, StringComparison.Ordinal));
             if (policy is null) continue;
             var exprDescription = DescribeExpression(policy.Expression);
             var sb = new StringBuilder();
             sb.Append($"Policy '{name}' on entity '{entity.Name}': {exprDescription.PlainEnglish}.");
-            return new DomainToolResponse(Success: true, Message: sb.ToString(), SessionId: sessionId, Data: new { kind = "policy", name, parentEntity = entity.Name, detail = sb.ToString(), description = sb.ToString(), expression = exprDescription }, Affordances: ["get_policy_expression", "get_entity_detail"]);
+            return new DomainToolResponse(Success: true, Message: sb.ToString(), SessionId: sessionId, Data: new DomainElementData("policy", name, entity.Name, sb.ToString(), sb.ToString(), exprDescription), Affordances: ["get_policy_expression", "get_entity_detail"]);
         }
         return new DomainToolResponse(Success: false, Message: $"Policy '{name}' not found on any entity.", SessionId: sessionId, Affordances: ["get_domain_overview"]);
     }
 
     private static DomainToolResponse DescribeRelationship(string sessionId, McpSessionState state, string name) {
-        var rel = state.Domain.Relationships.FirstOrDefault(r => string.Equals(r.Name, name, StringComparison.Ordinal));
+        // Metadata-first lookup via RelationshipLookupMetadata when analysis is available
+        Relationship? rel = null;
+        if (state.LatestAnalysis is not null) {
+            state.LatestAnalysis.TryGetRelationship(name, out rel);
+        }
+        if (rel is null && state.LatestAnalysis is null) {
+            // DM-META-REMOVE-FALLBACK: remove direct domain scan once DescribeRelationship
+            // always has analysis available for metadata-backed relationship resolution.
+            rel = state.Domain.Relationships.FirstOrDefault(r => string.Equals(r.Name, name, StringComparison.Ordinal));
+        }
         if (rel is null) return new DomainToolResponse(Success: false, Message: $"Relationship '{name}' not found.", SessionId: sessionId, Affordances: ["get_domain_overview", "add_relationship"]);
         var cardinality = rel.Cardinality switch { RelationshipCardinality.OneToOne => "one-to-one", RelationshipCardinality.OneToMany => "one-to-many", RelationshipCardinality.ManyToMany => "many-to-many", _ => rel.Cardinality.ToString() };
         var sb = new StringBuilder();

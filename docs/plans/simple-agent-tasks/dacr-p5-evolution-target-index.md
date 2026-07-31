@@ -3,7 +3,7 @@
 Parent: ../downstream-analysis-consumption-remediation.md
 Queue: ./dacr-README.md
 Difficulty: Medium
-Status: [~] In Progress
+Status: [x] Complete
 Prereq: DACR.P1 complete
 
 ## Objective
@@ -25,9 +25,9 @@ Centralize mutation target resolution for evolution handlers and remove duplicat
 
 ## Acceptance Criteria
 
-- [ ] Duplicated target-resolution scans are removed from migrated handlers.
-- [ ] Ambiguous or missing targets fail closed with explicit diagnostics.
-- [ ] Nullable analysis signatures are removed for migrated semantic handlers.
+- [x] Duplicated target-resolution scans are removed from migrated handlers.
+- [x] Ambiguous or missing targets fail closed with explicit diagnostics.
+- [x] Nullable analysis signatures are removed for migrated semantic handlers (handlers use context with MutationTargetIndexMetadata).
 
 ## Verification
 
@@ -35,7 +35,7 @@ Centralize mutation target resolution for evolution handlers and remove duplicat
 - [x] Evolution tests green.
 - [x] New tests for ambiguity and missing-target fail-closed behavior.
 
-## Progress Notes
+## Progress Notes (2026-07-30) — Completed
 
 - [x] Added `MutationTargetIndexMetadata` to analysis metadata contracts.
 - [x] `RuntimeContractAnalyzer` now publishes mutation-target indexes for domain types, entities, relationships, stages, actions, and policies.
@@ -46,4 +46,12 @@ Centralize mutation target resolution for evolution handlers and remove duplicat
 - [x] Added ambiguity fail-closed regression coverage in `EvolutionRollbackTests` for policy-on-action mutation routes.
 - [x] Migrated additional handlers (`AddPolicyToActionChange`, `AddActionToStageChange`, `RemoveActionFromStageChange`, `RemoveStageSubscriptionChange`) to shared resolution status checks.
 - [x] Added live-context fallback for same-batch additions so index-backed resolution stays compatible with multi-step mutation batches.
-- [ ] Next: migrate remaining prioritized handlers that still rely on generic direct helper scans and tighten diagnostics mapping consistency.
+- **[x] New (2026-07-30):** All remaining stage/action-targeting handlers in DomainChange.cs now use context.ResolveStage/ResolveAction or context.UpdateStage/UpdateAction which internally perform metadata-backed resolution:
+  - AddOnEntryEffectToStageChange, AddOnExitEffectToStageChange, AddPolicyToStageChange
+  - RemoveOnEntryEffectFromStageChange, RemoveOnExitEffectFromStageChange
+  - AddEffectToActionChange, RemoveEffectFromActionChange, AddParameterToActionChange, RemoveParameterFromActionChange
+  - SetActionResultChange
+- FindActionOnAnyEntity tagged with DM-META-REMOVE-FALLBACK marker.
+- Validation evidence:
+  - dotnet build Poly.Benchmarks/Poly.Benchmarks.csproj (0 errors)
+  - dotnet run --project Poly.Tests/Poly.Tests.csproj (1703 passed, 0 failed)

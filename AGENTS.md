@@ -8,6 +8,7 @@
 | **This file** | Principles, placement, build/test, coding ops |
 | **`docs/decisions/`** | Why (ADRs). Index: [`docs/decisions/README.md`](docs/decisions/README.md) |
 | **`docs/plans/`** | Execution work only — not evergreen rules |
+| **[`docs/agent/`](docs/agent/)** | Tool-agnostic agent protocols (review, etc.). Index: [`docs/agent/README.md`](docs/agent/README.md) |
 
 When a change alters a mechanism listed in CORE, update CORE in the same change. Significant cross-cutting choices get an ADR.
 
@@ -140,6 +141,17 @@ Layout sketch: `Poly/` (core library), `Poly.Tests/` (TUnit), `Poly.Benchmarks/`
 - **Test style:** TUnit — `async [Test]`, `await Assert.That(result).IsEqualTo(expected)`, names `Method_Condition_ExpectedResult`.
 - Helpers under `Poly.Tests/TestHelpers/` are **test-only** — never promote into core `Poly/`.
 - Isolated single-file prototyping: [`docs/file-based-csharp-apps.md`](docs/file-based-csharp-apps.md).
+
+### Deep review (any agent)
+
+For an **adversarial correctness / contract** review of a diff (findings only; follow-ups must land in docs), follow the portable protocol:
+
+**[`docs/agent/phenomenal-review.md`](docs/agent/phenomenal-review.md)**
+
+Any tool can run it with: *“Read docs/agent/phenomenal-review.md and execute it against local changes. Assume the code is wrong until evidence says otherwise.”*  
+Optional multi-pass (independent second context): add `mode: multi`.  
+Thin wrappers (same bar): Grok `/phenomenal-review` → [`.grok/skills/phenomenal-review/`](.grok/skills/phenomenal-review/); Copilot → [`.github/skills/phenomenal-review/`](.github/skills/phenomenal-review/).  
+This is **not** the pre-ship fix loop below and not a maintainability refactor pass. Inspired in part by [Bun’s adversarial review loops](https://bun.com/blog/bun-in-rust).
 
 ### Pre-ship review gate
 

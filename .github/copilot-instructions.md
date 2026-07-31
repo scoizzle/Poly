@@ -39,6 +39,16 @@ maintainer must update the guide content proactively.
 
 This ensures consistent behavior across all AI tools the maintainer uses (Copilot, OpenCode, Grok, etc.).
 
+## Deep / phenomenal review
+
+For an **adversarial correctness and contract** review of a diff (findings only; follow-ups in docs), follow:
+
+**[`docs/agent/phenomenal-review.md`](../../docs/agent/phenomenal-review.md)**
+
+Assume the code is wrong until evidence says otherwise. Prefer split-context multi-pass when this session also wrote the change.  
+Project skill wrapper: [`.github/skills/phenomenal-review/SKILL.md`](../skills/phenomenal-review/SKILL.md).  
+This is **not** the pre-ship fix loop below.
+
 ## Pre-Ship Review Gate
 
 Before marking any task or slice as complete, you **must** execute the

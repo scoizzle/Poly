@@ -113,14 +113,23 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         if (!_lowerStageTransitions) return null;
 
         var nodes = new List<Node>();
-        var stageLookup = _analysis?.GetMetadata<EntityStructureMetadata>(_entity)?.StageByName;
+
+        // Exit/entry effects are best-effort at lowering time: with analysis present a
+        // TryGetStage miss implies analysis/domain disagreement (both derive from the
+        // same entity.Stages), so skipping is safe; InvokeActionInternal's fail-closed
+        // throw covers the dispatch contract.
 
         // Include exit effects from the source stage (if known)
         if (_sourceStageName is not null) {
-            var sourceStage = stageLookup is not null
-                ? stageLookup.GetValueOrDefault(_sourceStageName)
-                : _entity.Stages.FirstOrDefault(s =>
+            Stage? sourceStage = null;
+            if (_analysis is not null)
+                _analysis.TryGetStage(_entity, _sourceStageName, out sourceStage);
+            if (sourceStage is null && _analysis is null) {
+                // DM-META-REMOVE-FALLBACK: remove direct stage scan once
+                // TryGetStage succeeds for all semantic lowering paths.
+                sourceStage = _entity.Stages.FirstOrDefault(s =>
                     string.Equals(s.Name, _sourceStageName, StringComparison.Ordinal));
+            }
             if (sourceStage is not null) {
                 foreach (var exitEffect in sourceStage.OnExitEffects) {
                     var lowered = Route(exitEffect);
@@ -131,10 +140,15 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         }
 
         // Include entry effects from the target stage
-        var targetStage = stageLookup is not null
-            ? stageLookup.GetValueOrDefault(t.TargetStage.StageName)
-            : _entity.Stages.FirstOrDefault(s =>
+        Stage? targetStage = null;
+        if (_analysis is not null)
+            _analysis.TryGetStage(_entity, t.TargetStage.StageName, out targetStage);
+        if (targetStage is null && _analysis is null) {
+            // DM-META-REMOVE-FALLBACK: remove direct stage scan once
+            // TryGetStage succeeds for all semantic lowering paths.
+            targetStage = _entity.Stages.FirstOrDefault(s =>
                 string.Equals(s.Name, t.TargetStage.StageName, StringComparison.Ordinal));
+        }
         if (targetStage is not null) {
             foreach (var entryEffect in targetStage.OnEntryEffects) {
                 var lowered = Route(entryEffect);
@@ -453,6 +467,8 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     /// Used by <see cref="BuildConstructorArgs"/> and <see cref="CreateEntityInRelationship"/>
     /// to emit valid defaults instead of bare <c>null</c> for value-type properties.
     /// </summary>
+    // DM-META-REMOVE-FALLBACK: make AnalysisResult required once all callers
+    // provide it for default domain type resolution.
     private Node DefaultForDomainType(DomainTypeReference typeRef, Domain? domain, AnalysisResult? analysis = null) {
         if (DomainToCSharpExporter.TryResolveEnumType(domain, analysis, typeRef.TypeName, out var enumType) && enumType is not null)
             return new Member(new NamedTypeReference(enumType.Name), enumType.MemberNames[0]);

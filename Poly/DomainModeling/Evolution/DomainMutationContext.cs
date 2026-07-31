@@ -203,6 +203,8 @@ internal sealed class DomainMutationContext {
         Types.Find(t => string.Equals(t.Name, name, StringComparison.Ordinal));
 
     public Action? FindActionOnAnyEntity(string actionName) {
+        // DM-META-REMOVE-FALLBACK: use MutationTargetIndexMetadata.ActionsByEntity
+        // for cross-entity action resolution in evolution handlers.
         for (int i = 0; i < Types.Count; i++) {
             if (Types[i] is Entity e) {
                 var action = e.Actions.FirstOrDefault(a =>

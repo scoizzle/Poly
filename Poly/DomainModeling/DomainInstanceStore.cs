@@ -147,12 +147,19 @@ public sealed class DomainInstanceStore {
             if (subscriber.IsDeleted) continue;
             if (subscriber.CurrentStage is null) continue;
 
-            var actionResolution = analysis.GetMetadata<ActionResolutionMetadata>(subscriber.Entity)
-                ?? throw new InvalidOperationException(
-                    $"Runtime dispatch requires {nameof(ActionResolutionMetadata)} for entity '{subscriber.Entity.Name}'.");
+            var subscriberEntityStructure = analysis.GetMetadata<EntityStructureMetadata>(subscriber.Entity);
+            if (subscriberEntityStructure is null)
+                throw new InvalidOperationException(
+                    $"Runtime dispatch requires {nameof(EntityStructureMetadata)} for subscriber entity '{subscriber.Entity.Name}'.");
+            if (subscriberEntityStructure.StageByName is null)
+                throw new InvalidOperationException(
+                    $"Entity '{subscriber.Entity.Name}' has no lifecycle stages; cannot dispatch subscription for current stage '{subscriber.CurrentStage}'.");
 
-            if (!actionResolution.StageByName.TryGetValue(subscriber.CurrentStage, out var subscriberStage)
-                || subscriberStage is null) {
+            // Subscriber dispatch is best-effort per subscriber: a subscriber whose
+            // current stage is not in its own stage set (analysis/instance
+            // disagreement) is skipped rather than failing the whole transition
+            // (contrast InvokeActionInternal's fail-closed dispatch throw).
+            if (!subscriberEntityStructure.StageByName.TryGetValue(subscriber.CurrentStage, out var subscriberStage)) {
                 continue;
             }
 
@@ -170,8 +177,6 @@ public sealed class DomainInstanceStore {
                         && string.Equals(contract.SourceEntityName, entry.SourceEntityName, StringComparison.Ordinal)
                         && string.Equals(contract.TargetEntityName, entry.TargetEntityName, StringComparison.Ordinal)))
                 .ToList();
-
-            if (subscriberStage is null) continue;
 
             foreach (var entry in applicableEntries) {
                 // Instance-level link required (BR.4.4)

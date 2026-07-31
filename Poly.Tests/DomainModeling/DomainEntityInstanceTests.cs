@@ -114,6 +114,37 @@ public class DomainEntityInstanceTests {
     }
 
     [Test]
+    public async Task InvokeAction_Standalone_EmptyStageCopyWithParams_FallsThroughToEntityAction() {
+        // B-2 regression: standalone instances (domain: null) take the analysis-absent
+        // scan path in InvokeActionInternal, which must apply the same SA fallthrough
+        // as the metadata path (Phase 3 §6e). A params-carrying stage copy with no
+        // effects must fall through to the entity action that carries the transition
+        // effect — otherwise the transition silently no-ops (the B-1 bug class).
+        var entityAction = new Poly.DomainModeling.Action("Submit", InvocationResult.Void,
+            Parameters: [new Property("Note", new DomainTypeReference("Text"), [])],
+            Effects: [new StageTransitionEffect(new StageReference("Active"))],
+            Policies: []);
+        var draft = new Stage("Draft",
+            Actions: [new Poly.DomainModeling.Action("Submit", InvocationResult.Void,
+                Parameters: [new Property("Note", new DomainTypeReference("Text"), [])],
+                Effects: [], Policies: [])],
+            Policies: [], OnEntryEffects: [], OnExitEffects: []);
+        var active = new Stage("Active", Actions: [], Policies: [], OnEntryEffects: [], OnExitEffects: []);
+        var entity = new Entity("Order",
+            Properties: [new Property("Name", new DomainTypeReference("Text"), [])],
+            Actions: [entityAction], Policies: [], Stages: [draft, active]);
+
+        var instance = DomainEntityInstance.Create(entity,
+            new Dictionary<string, object?>());
+
+        var result = instance.InvokeAction("Submit");
+
+        await Assert.That(result.Succeeded).IsTrue();
+        await Assert.That(result.NewStage).IsEqualTo("Active");
+        await Assert.That(instance.CurrentStage).IsEqualTo("Active");
+    }
+
+    [Test]
     public async Task Create_UnknownProperty_Throws() {
         var entity = CreatePersonEntity();
 

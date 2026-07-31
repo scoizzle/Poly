@@ -3,8 +3,9 @@
 Parent: ../downstream-analysis-consumption-remediation.md
 Queue: ./dacr-README.md
 Difficulty: Medium
-Status: [~] In Progress
+Status: [~] Reopened — describe policy coverage + analysis-present fail-closed (F3–F4)
 Prereq: DACR.P1 complete
+Active follow-ups: ./dacr-followups-2026-07-30.md (F3, F4)
 
 ## Objective
 
@@ -25,9 +26,9 @@ Align MCP semantic responses with analysis truth and remove ad hoc semantic redi
 
 ## Acceptance Criteria
 
-- [ ] MCP semantic describe outputs come from metadata-backed resolution.
-- [ ] No semantic fallback scans in touched tool methods.
-- [ ] Tools return explicit error when analysis is missing for semantic operations.
+- [x] MCP semantic describe outputs come from metadata-backed resolution. DescribePolicy now searches entity, stage, and action MTI maps (F3).
+- [x] No semantic fallback scans in touched tool methods when analysis present (F4 — fail closed).
+- [x] Tools return explicit error when analysis is missing for semantic operations (effect routes).
 
 ## Verification
 
@@ -35,8 +36,14 @@ Align MCP semantic responses with analysis truth and remove ad hoc semantic redi
 - [x] MCP tool smoke tests green.
 - [x] Regression tests for fail-closed missing-analysis behavior.
 
-## Progress Notes
+## Progress Notes (2026-07-30 r2 — all follow-ups closed)
 
 - [x] Oracle semantic effect routes (`analyze_effect`, `lower_effect_to_csharp`) now require `state.LatestAnalysis` and fail closed with explicit guidance when missing.
 - [x] Lowering context in these routes now threads `Analysis` and `Domain` so semantic lowering uses analysis-first paths.
-- [ ] Remaining P2 work: migrate semantic lookup internals to shared metadata-backed helpers and remove residual ad hoc scans from targeted describe routes.
+- [x] Migrated OracleTool semantic describe routes to metadata-backed lookups.
+- [x] All structural projection routes (entity list, snapshot) kept direct.
+- [x] F3 resolved: DescribePolicy searches entity, stage, action MTI maps with scope disambiguation.
+- [x] F4 resolved: all four describe routes fail closed when analysis present — no soft-scan fallback.
+- Validation evidence (last full run):
+  - dotnet build (0 errors)
+  - dotnet run --project Poly.Tests/Poly.Tests.csproj (1703 passed, 0 failed)

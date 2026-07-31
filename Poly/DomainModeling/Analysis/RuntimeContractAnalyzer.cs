@@ -52,10 +52,6 @@ internal sealed class RuntimeContractAnalyzer : INodeAnalyzer {
             .GroupBy(a => a.Name, StringComparer.Ordinal)
             .ToDictionary(g => g.Key, g => g.Last(), StringComparer.Ordinal);
 
-        var stageByName = entity.Stages
-            .GroupBy(s => s.Name, StringComparer.Ordinal)
-            .ToDictionary(g => g.Key, g => g.Last(), StringComparer.Ordinal);
-
         var stageActions = new Dictionary<string, IReadOnlyDictionary<string, Action>>(StringComparer.Ordinal);
         foreach (var stage in entity.Stages) {
             var actions = stage.Actions
@@ -64,7 +60,7 @@ internal sealed class RuntimeContractAnalyzer : INodeAnalyzer {
             stageActions[stage.Name] = actions;
         }
 
-        context.SetMetadata(entity, new ActionResolutionMetadata(entityActions, stageActions, stageByName));
+        context.SetMetadata(entity, new ActionResolutionMetadata(entityActions, stageActions));
     }
 
     private static void PublishMutationTargetIndex(AnalysisContext context, Domain domain) {

@@ -1773,6 +1773,64 @@ public class McpSmokeTests {
         await Assert.That(get.Message).Contains("Active");
     }
 
+    [Test]
+    public async Task AddActionToStage_WithParameters_EntityEffectStillFallsThrough() {
+        // SA regression (B-1): a stage copy inherits the entity action's parameters
+        // (AddActionToStageChange copies Parameters), so the SA fallthrough predicate
+        // must NOT include a Parameters.Count check — otherwise a params-carrying
+        // stage copy with no effects silently no-ops instead of falling through to
+        // the entity action that carries the transition effect.
+        var (sessionId, _) = McpSessionStore.Create("Test");
+
+        EvolveTool.AddEntity(sessionId, "Task");
+        EvolveTool.AddProperty(sessionId, "Task", "Name", "Text");
+        EvolveTool.AddStage(sessionId, "Task", "Draft");
+        EvolveTool.AddStage(sessionId, "Task", "Active");
+
+        // Step 1: entity-level action (empty shell)
+        var r1 = EvolveTool.AddAction(sessionId, "Task", "Submit");
+        await Assert.That(r1.Success).IsTrue();
+
+        // Step 2: add a parameter to the entity action (entity-first)
+        var paramResult = McpSessionStore.Evolve(sessionId, domain =>
+            new DomainEvolution(domain).Evolve()
+                .AddParameterToAction("Task", "Submit",
+                    new Property("Note", new DomainTypeReference("Text"), []))
+                .Apply());
+        await Assert.That(paramResult).IsNotNull();
+        await Assert.That(paramResult!.Succeeded).IsTrue();
+
+        // Step 3: add action to stage — the stage copy carries the parameter
+        // but no effects (the entity action has none yet at copy time).
+        var r3 = EvolveTool.AddActionToStage(sessionId, "Task", "Draft", "Submit");
+        await Assert.That(r3.Success).IsTrue();
+
+        // Step 4: add the transition effect entity-only — the stage copy stays effect-less.
+        var evolveResult = McpSessionStore.Evolve(sessionId, domain =>
+            new DomainEvolution(domain).Evolve()
+                .AddStageTransitionEffect("Task", "Submit", "Active")
+                .Apply());
+        await Assert.That(evolveResult).IsNotNull();
+        await Assert.That(evolveResult!.Succeeded).IsTrue();
+
+        // Runtime: InvokeAction must fall through to the entity action and transition,
+        // not silently no-op on the params-carrying stage copy.
+        var create = RuntimeTool.CreateInstance(sessionId, "Task");
+        await Assert.That(create.Success).IsTrue();
+        await Assert.That(create.Message).Contains("Draft");
+
+        var instanceId = ExtractInstanceId(
+            System.Text.Json.JsonSerializer.Serialize(create.Data));
+
+        var call = RuntimeTool.InvokeAction(sessionId, instanceId!, "Submit");
+        await Assert.That(call.Success).IsTrue();
+        await Assert.That(call.Message).Contains("Active");
+
+        var get = RuntimeTool.GetInstance(sessionId, instanceId!);
+        await Assert.That(get.Success).IsTrue();
+        await Assert.That(get.Message).Contains("Active");
+    }
+
     // ═════════════════════════════════════════════════════════════
     // Q1′ — Subject-First Related Reads (Phase 4)
     // ═════════════════════════════════════════════════════════════

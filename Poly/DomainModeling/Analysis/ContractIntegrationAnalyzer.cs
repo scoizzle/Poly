@@ -2,6 +2,7 @@ using Poly.Analysis;
 
 namespace Poly.DomainModeling.Analysis;
 
+/// <summary>Lint-only: imported-contract / binding checks; writes no metadata others read.</summary>
 internal sealed class ContractIntegrationAnalyzer : INodeAnalyzer {
     public const string Id = "DomainContractIntegrationAnalyzer";
     public string PassName => Id;

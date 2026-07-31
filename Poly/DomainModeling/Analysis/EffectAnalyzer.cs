@@ -4,10 +4,20 @@ using Poly.DomainModeling.Effects;
 
 namespace Poly.DomainModeling.Analysis;
 
+/// <summary>
+/// Validate pack: effect binding, ordering, parameter usage, and requirement coverage diagnostics.
+/// Writes no analysis facts — create-in resolution is published by <see cref="EffectFactsPass"/>.
+/// </summary>
 internal sealed class EffectAnalyzer : INodeAnalyzer {
     public const string Id = "DomainEffectAnalyzer";
     public string PassName => Id;
-    public string[] Dependencies => [];
+    // Lint-only: reads DTLM/ResolvedType (Semantic), RequiredProperties (facts),
+    // DownstreamConstraints (ConstraintPropagation). No metadata publication.
+    public string[] Dependencies => [
+        SemanticDomainAnalyzer.Id,
+        RequiredPropertiesPass.Id,
+        ConstraintPropagationAnalyzer.Id,
+    ];
     public void Analyze(AnalysisContext context, Node node) {
         if (!context.ShouldAnalyze(node)) {
             return;
@@ -380,7 +390,7 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
             return;
         }
 
-        context.SetMetadata(createIn, new ResolvedRelationshipTargetMetadata(relationship, targetEntity));
+        // ResolvedRelationshipTargetMetadata is published by EffectFactsPass (fact emitter).
 
         // Validate initializer property names against target entity
         foreach (var initializer in createIn.Initializers) {

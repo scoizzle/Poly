@@ -1,0 +1,136 @@
+using Poly.Analysis;
+using Poly.DomainModeling;
+using Poly.DomainModeling.Analysis;
+using Poly.DomainModeling.Evolution;
+using Poly.DomainModeling.Parsing;
+
+namespace Poly.Tests.DomainModeling.Analysis;
+
+/// <summary>
+/// DAS W3.1 — known fact-consumer passes must declare real Dependencies;
+/// pipeline order must honor those edges (no silent undeclared catalog/structure/topology reads).
+/// </summary>
+public class PassDependencyDeclarationTests {
+    private static Domain ParseDomain(string poly) {
+        var ctx = DomainInputBuilder.CreateWithSqlPack().Build();
+        var parser = new PolyDslParser(poly, ctx.Parser);
+        var changes = parser.Parse();
+        var emptyDomain = new Domain("_", [], []);
+        var result = new DomainEvolution(emptyDomain).Apply(changes);
+        if (!result.Succeeded)
+            throw new InvalidOperationException("Domain evolution failed: " +
+                string.Join("; ", result.Analysis.Diagnostics.Where(d =>
+                    d.Severity == DiagnosticSeverity.Error).Select(d => d.Message)));
+        return result.Root!;
+    }
+
+    private static void AssertDeclares(INodeAnalyzer pass, params string[] requiredDeps) {
+        foreach (var dep in requiredDeps) {
+            if (!pass.Dependencies.Contains(dep, StringComparer.Ordinal))
+                throw new Exception(
+                    $"Pass '{pass.PassName}' must declare dependency '{dep}'. " +
+                    $"Actual: [{string.Join(", ", pass.Dependencies)}]");
+        }
+    }
+
+    [Test]
+    public async Task FactConsumerPasses_DeclareKnownDependencies() {
+        AssertDeclares(new DomainCatalogPass(), SemanticDomainAnalyzer.Id);
+        AssertDeclares(new RuntimeContractAnalyzer(), SemanticDomainAnalyzer.Id);
+        AssertDeclares(new RequiredPropertiesPass(), SemanticDomainAnalyzer.Id);
+        AssertDeclares(new PolicyConstraintAnalyzer(), SemanticDomainAnalyzer.Id); // lint pack
+        AssertDeclares(new ConstraintPropagationAnalyzer()); // root fact publisher
+        AssertDeclares(new EffectFactsPass(), SemanticDomainAnalyzer.Id);
+        AssertDeclares(
+            new EffectAnalyzer(), // lint pack
+            SemanticDomainAnalyzer.Id,
+            RequiredPropertiesPass.Id,
+            ConstraintPropagationAnalyzer.Id);
+        AssertDeclares(
+            new CapabilityAnalyzer(),
+            SemanticDomainAnalyzer.Id,
+            DomainCatalogPass.Id);
+        AssertDeclares(new EntityStructureAnalyzer(), SemanticDomainAnalyzer.Id);
+        AssertDeclares(new EffectTopologyPass()); // pure tree scan
+        AssertDeclares(
+            new OwnershipAggregatePass(),
+            EffectTopologyPass.Id,
+            EntityStructureAnalyzer.Id);
+        AssertDeclares(
+            new BehaviorPass(),
+            SemanticDomainAnalyzer.Id,
+            CapabilityAnalyzer.Id);
+        AssertDeclares(new CrossReferencePass(), EffectTopologyPass.Id);
+        AssertDeclares(
+            new StoragePass(),
+            EffectTopologyPass.Id,
+            OwnershipAggregatePass.Id);
+        AssertDeclares(
+            new TransportPass(),
+            EffectTopologyPass.Id,
+            OwnershipAggregatePass.Id);
+
+        // Lint consumers that still read analysis bags
+        AssertDeclares(new RuleCoverageAnalyzer(), RequiredPropertiesPass.Id);
+        AssertDeclares(
+            new SubscriptionAnalyzer(),
+            SemanticDomainAnalyzer.Id,
+            CapabilityAnalyzer.Id);
+        AssertDeclares(new ConstraintQualityAnalyzer(), SemanticDomainAnalyzer.Id);
+        AssertDeclares(new AuthoringSuggestionAnalyzer(), SemanticDomainAnalyzer.Id);
+
+        // Spot-check: catalog must not silently depend on RuntimeContract (not read).
+        var catalogDeps = new DomainCatalogPass().Dependencies;
+        await Assert.That(catalogDeps.Contains(RuntimeContractAnalyzer.Id)).IsFalse();
+        await Assert.That(catalogDeps.Contains(SemanticDomainAnalyzer.Id)).IsTrue();
+    }
+
+    [Test]
+    public async Task DomainPipeline_PassOrder_HonorsDeclaredDependencies() {
+        var domain = ParseDomain("""
+            domain Test
+            Customer: entity {
+              Name: Text
+              Active: stage {
+                Submit: action { transition to Done }
+              }
+              Done: stage { }
+            }
+            """);
+
+        var analysis = DomainModelAnalyzer.Analyze(domain);
+        var order = analysis.Telemetry.Passes.Select(p => p.PassName).ToList();
+
+        int Index(string id) {
+            var i = order.IndexOf(id);
+            if (i < 0)
+                throw new Exception($"Pass '{id}' missing from pipeline telemetry. Passes: [{string.Join(", ", order)}]");
+            return i;
+        }
+
+        // Catalog / structure / topology consumers after their publishers
+        await Assert.That(Index(SemanticDomainAnalyzer.Id)).IsLessThan(Index(DomainCatalogPass.Id));
+        await Assert.That(Index(DomainCatalogPass.Id)).IsLessThan(Index(CapabilityAnalyzer.Id));
+        await Assert.That(Index(SemanticDomainAnalyzer.Id)).IsLessThan(Index(EntityStructureAnalyzer.Id));
+        await Assert.That(Index(EffectTopologyPass.Id)).IsLessThan(Index(OwnershipAggregatePass.Id));
+        await Assert.That(Index(EntityStructureAnalyzer.Id)).IsLessThan(Index(OwnershipAggregatePass.Id));
+        await Assert.That(Index(OwnershipAggregatePass.Id)).IsLessThan(Index(StoragePass.Id));
+        await Assert.That(Index(OwnershipAggregatePass.Id)).IsLessThan(Index(TransportPass.Id));
+        await Assert.That(Index(EffectTopologyPass.Id)).IsLessThan(Index(CrossReferencePass.Id));
+        await Assert.That(Index(CapabilityAnalyzer.Id)).IsLessThan(Index(BehaviorPass.Id));
+        await Assert.That(Index(ConstraintPropagationAnalyzer.Id)).IsLessThan(Index(EffectAnalyzer.Id));
+        await Assert.That(Index(RequiredPropertiesPass.Id)).IsLessThan(Index(EffectAnalyzer.Id));
+        await Assert.That(Index(RequiredPropertiesPass.Id)).IsLessThan(Index(RuleCoverageAnalyzer.Id));
+        await Assert.That(Index(EffectFactsPass.Id)).IsLessThan(Index(EffectAnalyzer.Id));
+        await Assert.That(Index(CapabilityAnalyzer.Id)).IsLessThan(Index(SubscriptionAnalyzer.Id));
+    }
+
+    [Test]
+    public async Task AnalyzerBuilder_MissingDeclaredDependency_Throws() {
+        // Lightweight guard: consumer registered without its dep fails closed at build time.
+        await Assert.That(() =>
+            new AnalyzerBuilder()
+                .AddAnalyzer(new OwnershipAggregatePass())
+                .Build()).ThrowsExactly<InvalidOperationException>();
+    }
+}

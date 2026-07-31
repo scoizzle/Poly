@@ -325,8 +325,8 @@ public class PipelineMergeMetadataTests {
         var analysis = DomainModelAnalyzer.Analyze(domain);
 
         // Telemetry — all passes must have run (count matches UseDomainModelAnalysisPipeline)
-        // 18 passes registered in the pipeline
-        await Assert.That(analysis.Telemetry.Passes.Count).IsGreaterThanOrEqualTo(18);
+        // 20 passes registered (includes RequiredPropertiesPass + EffectFactsPass, DAS W3.2)
+        await Assert.That(analysis.Telemetry.Passes.Count).IsGreaterThanOrEqualTo(20);
         await Assert.That(analysis.Telemetry.Passes.All(p => p.Elapsed > TimeSpan.Zero)).IsTrue();
 
         // ── Metadata produced by each pass ──
@@ -338,10 +338,12 @@ public class PipelineMergeMetadataTests {
         // SemanticDomainAnalyzer — DomainTypeLookupMetadata, ResolvedTypeReferenceMetadata
         await Assert.That(analysis.GetMetadata<DomainTypeLookupMetadata>(default)).IsNotNull();
 
-        // PolicyConstraintAnalyzer — RequiredPropertiesMetadata (per entity with policies)
+        // RequiredPropertiesPass — RequiredPropertiesMetadata (per entity with policies)
         var customerEntity = domain.Types.OfType<Entity>().First(e => e.Name == "Customer");
         await Assert.That(analysis.GetMetadata<RequiredPropertiesMetadata>(customerEntity)).IsNotNull();
 
+        // PolicyConstraintAnalyzer — diagnostics only (policy reference integrity)
+        // EffectFactsPass — ResolvedRelationshipTargetMetadata on create-in (when present)
         // EffectAnalyzer — diagnostics only (effect binding/validation)
 
         // ConstraintQualityAnalyzer — diagnostics only
@@ -391,13 +393,15 @@ public class PipelineMergeMetadataTests {
 
         // AuthoringSuggestionAnalyzer — diagnostics only (DMAS001 hints)
 
-        // DomainCatalogPass — single catalog (DAS W1)
+        // DomainCatalogPass — sole name→member catalog (DAS W1.4)
         var catalog = analysis.GetMetadata<DomainCatalogMetadata>(domain);
         await Assert.That(catalog).IsNotNull();
         await Assert.That(catalog!.Index).IsNotNull();
         await Assert.That(catalog.Types).IsNotNull();
         await Assert.That(catalog.Relationships).IsNotNull();
         await Assert.That(catalog.ActionsByEntityName.ContainsKey("Customer")).IsTrue();
+        await Assert.That(analysis.GetMetadata<MutationTargetIndexMetadata>(domain)).IsNull();
+        await Assert.That(analysis.GetMetadata<ActionResolutionMetadata>(customer)).IsNull();
 
         // Entity/program Syntax projection is export-time only (DomainProgramProjection /
         // DomainToCSharpExporter) — analyze alone must not require mid-pipeline IR bags.

@@ -3,10 +3,12 @@ using Poly.DomainModeling.Constraints;
 
 namespace Poly.DomainModeling.Analysis;
 
+/// <summary>Lint-only: constraint quality diagnostics; writes no metadata others read.</summary>
 internal sealed class ConstraintQualityAnalyzer : INodeAnalyzer {
     public const string Id = "DomainConstraintQualityAnalyzer";
     public string PassName => Id;
-    public string[] Dependencies => [];
+    // Reads DomainTypeLookupMetadata / ResolvedTypeReferenceMetadata.
+    public string[] Dependencies => [SemanticDomainAnalyzer.Id];
     public void Analyze(AnalysisContext context, Node node) {
         if (!context.ShouldAnalyze(node)) {
             return;

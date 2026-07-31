@@ -39,17 +39,20 @@ public class RuntimeContractMetadataTests {
     }
 
     [Test]
-    public async Task Analyze_ProducesActionResolutionMetadata_ForEntity() {
+    public async Task Analyze_ProducesCatalogActionResolution_ForEntity() {
         var domain = BuildDomain();
         var tracker = domain.Types.OfType<Entity>().First(e => e.Name == "Tracker");
 
         var analysis = DomainModelAnalyzer.Analyze(domain);
-        var metadata = analysis.GetMetadata<ActionResolutionMetadata>(tracker);
+        var catalog = analysis.GetMetadata<DomainCatalogMetadata>(domain);
 
-        await Assert.That(metadata).IsNotNull();
+        await Assert.That(catalog).IsNotNull();
+        await Assert.That(catalog!.ActionsByEntityName.TryGetValue("Tracker", out var metadata)).IsTrue();
         await Assert.That(metadata!.EntityActions.ContainsKey("Reset")).IsTrue();
         await Assert.That(metadata.StageActions.ContainsKey("Pending")).IsTrue();
         await Assert.That(metadata.StageActions["Pending"].ContainsKey("Escalate")).IsTrue();
+        // No entity-keyed ARM dual-write (DAS W1.4).
+        await Assert.That(analysis.GetMetadata<ActionResolutionMetadata>(tracker)).IsNull();
     }
 
     [Test]
@@ -90,11 +93,12 @@ public class RuntimeContractMetadataTests {
     }
 
     [Test]
-    public async Task Analyze_ProducesMutationTargetIndexMetadata_ForDomain() {
+    public async Task Analyze_ProducesCatalogMutationIndex_ForDomain() {
         var domain = BuildDomain();
 
         var analysis = DomainModelAnalyzer.Analyze(domain);
-        var index = analysis.GetMetadata<MutationTargetIndexMetadata>(domain);
+        var catalog = analysis.GetMetadata<DomainCatalogMetadata>(domain);
+        var index = catalog?.Index;
 
         await Assert.That(index).IsNotNull();
         await Assert.That(index!.TypesByName.ContainsKey("Order")).IsTrue();
@@ -102,5 +106,7 @@ public class RuntimeContractMetadataTests {
         await Assert.That(index.RelationshipsByName.ContainsKey("Tracks")).IsTrue();
         await Assert.That(index.StagesByEntity["Tracker"].ContainsKey("Pending")).IsTrue();
         await Assert.That(index.ActionsByEntity["Tracker"].ContainsKey("Reset")).IsTrue();
+        // No domain-keyed MTI dual-write (DAS W1.4).
+        await Assert.That(analysis.GetMetadata<MutationTargetIndexMetadata>(domain)).IsNull();
     }
 }

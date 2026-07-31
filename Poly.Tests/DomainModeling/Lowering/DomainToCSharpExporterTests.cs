@@ -257,6 +257,30 @@ public class DomainToCSharpExporterTests {
     }
 
     [Test]
+    public async Task EffectLowering_MissingEntityStructureMetadata_Throws() {
+        var (domain, analysis) = ParseAndAnalyze("""
+            domain Demo
+
+            Person: entity {
+              Name: Text
+            }
+            """);
+        var entity = domain.Types.OfType<Entity>().Single(e => e.Name == "Person");
+        analysis.GetMetadataStore().Remove<EntityStructureMetadata>(entity);
+        var effect = new CreateEntityInstance(new DomainTypeReference("Person"));
+        var context = new LoweringContext(
+            new Parameter("entity", new TypeReference(entity.Name)),
+            Analysis: analysis,
+            UseThisReference: true,
+            LowerStageTransitions: true,
+            Domain: domain);
+        var pass = new EffectLoweringPass(entity, context);
+
+        var ex = Assert.Throws<InvalidOperationException>(() => pass.TryLowerVmNode(effect));
+        await Assert.That(ex!.Message).Contains("EntityStructureMetadata is required");
+    }
+
+    [Test]
     public async Task Export_BookEntity_HasExpectedProperties() {
         var (domain, analysis) = ParseAndAnalyze(LibraryCheckoutDsl);
         var exporter = new DomainToCSharpExporter();

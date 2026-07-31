@@ -203,4 +203,19 @@ public class MinimalApiGeneratorTests {
         await Assert.That(rendered.Contains("/* child")).IsFalse();
         await Assert.That(rendered.Contains("/* action")).IsFalse();
     }
+
+    [Test]
+    public async Task Create_MissingEntityStructureMetadata_Throws() {
+        var d = ParseDomain("domain T\nItem: entity { Name: Text }");
+        var analysis = DomainModelAnalyzer.Analyze(d);
+        var storage = analysis.GetMetadata<StorageMappingMetadata>(d)!.Storage;
+        var behavior = analysis.GetMetadata<BehaviorMetadata>(d)!.Behavior;
+        var aggregate = analysis.GetMetadata<OwnershipAggregateMetadata>(d)!.Aggregate;
+        var item = d.Types.OfType<Entity>().First();
+        analysis.GetMetadataStore().Remove<EntityStructureMetadata>(item);
+        var gen = new MinimalApiGenerator(d, analysis, storage, behavior, aggregate);
+
+        var ex = Assert.Throws<InvalidOperationException>(() => gen.GenerateCompilationUnit("TDbCtx"));
+        await Assert.That(ex!.Message).Contains("EntityStructureMetadata is required");
+    }
 }

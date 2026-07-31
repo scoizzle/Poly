@@ -2,7 +2,7 @@
 
 Parent: ../downstream-analysis-consumption-remediation.md
 Queue: ./dacr-README.md
-Status: [x] Helpers + tagging complete; r1–r5 follow-ups F1–F31 resolved
+Status: [x] Helpers + tagging complete; r1–r5 F1–F31 resolved; Done Definition item 4 closed via DAS W4.3
 
 ## Goal
 
@@ -16,10 +16,11 @@ Prevent partial completion claims by enforcing semantic-contract and fail-closed
   - OracleTool.analyze_effect/lower_effect_to_csharp check LatestAnalysis and fail closed.
   - DomainInstanceStore.NotifyTransition throws when required metadata is missing.
   - EffectLoweringPass.CreateEntityInRelationship throws when _analysis is null.
-- [x] G2: Metadata-first path is primary; fallback scans tagged for future removal.
-  - All semantic fallback sites tagged with DM-META-REMOVE-FALLBACK markers (34 total: DomainEntityInstance 5, DomainMutationContext 5, EffectLoweringPass 7, DomainToCSharpExporter 10, OracleTool 4, MinimalApiGenerator 3).
-  - Metadata-first path is always the primary (fast) path; fallbacks are guarded by null checks.
-  - Fallback scans NOT yet removed — removal deferred until AnalysisResult is universally required.
+- [x] G2: Metadata-first path is primary; dual-path fallbacks removed (DAS W4) — **closed 2026-07-31**.
+  - Markers: `rg DM-META-REMOVE-FALLBACK` over `**/*.cs` = **0** (W4.3).
+  - Fail-closed monopaths: runtime, MCP describe, export, evolution, MinimalApi, EffectLowering ctor order under analysis (W4.1–W4.3).
+  - `EffectLoweringPass.GetConstructorParameterOrder`: analysis present → ESM required (throw); no property-order rebuild. Analysis-null structural rebuild retained as standalone only.
+  - Evidence: [`das-w4-3-marker-zero-and-dacr-close.md`](./das-w4-3-marker-zero-and-dacr-close.md), [`das-gate.md`](./das-gate.md) G4.2.
 - [x] G3: Missing analysis and missing required metadata fail closed.
   - DomainInstanceStore.NotifyTransition: throws when RelationshipContractMetadata or EntityStructureMetadata is missing for live subscribers; SubscriptionDispatchPlanMetadata also required per subscriber stage.
   - EffectLoweringPass.CreateEntityInRelationship: throws when _analysis is null.
@@ -56,6 +57,12 @@ Changed files:
   - docs/plans/simple-agent-tasks/dacr-*.md (status updates + progress notes)
 Tests run: 1728 total (1728 passed, 0 failed)
 Remaining risks:
-  - Nullable AnalysisResult internal signatures preserved for dual-use paths (EntitySyntaxPass vs export pipeline)
-  - Fallback scans preserved behind DM-META-REMOVE-FALLBACK markers for future removal when AnalysisResult is universally required
-  - Follow-ups F1–F31 all resolved; no open items (./dacr-followups-2026-07-30.md)
+  - Standalone (`Domain == null`) runtime keeps a reduced contract (DAS non-goal; not full peer of domain-bound).
+  - Follow-ups F1–F31 resolved; F33 closed via DAS W4.3; F34 optional hygiene may remain.
+
+### DAS W4 / item 4 (2026-07-31) — closed
+
+- W4.1: DomainEntityInstance / DomainInstanceStore — zero markers; domain-bound catalog-only.
+- W4.2: OracleTool, export, evolution — markers 0; analysis-present fail-closed on scoped routes.
+- W4.3: MinimalApiGenerator ESM constructor order required; EffectLowering ctor order fail-closed under analysis; workspace `*.cs` markers **0**; full suite 1762/0.
+- Pointers: [`das-gate.md`](./das-gate.md) G4.1–G4.5, [`das-w4-3-marker-zero-and-dacr-close.md`](./das-w4-3-marker-zero-and-dacr-close.md).

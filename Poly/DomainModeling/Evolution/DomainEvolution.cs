@@ -111,14 +111,14 @@ public sealed class DomainEvolution {
     }
 
     private MutationTargetIndexMetadata ResolveMutationTargetIndex(AnalysisResult? priorAnalysis) {
-        var index = priorAnalysis?.GetMetadata<MutationTargetIndexMetadata>(_current);
+        var index = priorAnalysis?.GetMutationIndex(_current);
         if (index is not null)
             return index;
 
         var currentAnalysis = DomainModelAnalyzer.Analyze(_current);
-        return currentAnalysis.GetMetadata<MutationTargetIndexMetadata>(_current)
+        return currentAnalysis.GetMutationIndex(_current)
             ?? throw new InvalidOperationException(
-                $"Domain analysis did not produce {nameof(MutationTargetIndexMetadata)} for mutation-target resolution.");
+                $"Domain analysis did not produce catalog mutation-target index for mutation-target resolution.");
     }
 
     private EvolutionTrace BuildTrace(

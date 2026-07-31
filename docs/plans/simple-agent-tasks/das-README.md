@@ -61,11 +61,11 @@ Hard rules in das-README apply. Land follow-ups in docs. Run das-gate after each
 | Wave | Theme | Task files | Status |
 |------|--------|------------|--------|
 | **W0** | Export boundary (projection out of analysis) | `das-w0-*` | `[x]` |
-| **W1** | Single domain catalog | `das-w1-*` | `[~]` catalog dual-write landed |
-| **W2** | One effective-action/policy surface | `das-w2-*` | `[~]` StageCapability preferred for effective policies |
-| **W3** | Validate vs facts; honest deps | `das-w3-*` | `[ ]` |
-| **W4** | Zero semantic dual paths | `das-w4-*` | `[~]` domain-bound runtime/lowering scans tightened |
-| **Gate** | Suite completion | `das-gate.md` | `[ ]` |
+| **W1** | Single domain catalog | `das-w1-*` | `[x]` catalog sole name→member publisher (W1.4 dual-write retired) |
+| **W2** | One effective-action/policy surface | `das-w2-*` | `[x]` effective surface unified; unknown stage fail-closed |
+| **W3** | Validate vs facts; honest deps | `das-w3-*` | `[x]` deps declared (W3.1); fact vs validate split template (W3.2) |
+| **W4** | Zero semantic dual paths | `das-w4-*` | `[x]` markers 0; EffectLowering/MinimalApi/export monopath; DACR item 4 closed |
+| **Gate** | Suite completion | `das-gate.md` | `[x]` Wave 4 + suite closed 2026-07-31 |
 
 ---
 
@@ -86,33 +86,33 @@ Hard rules in das-README apply. Land follow-ups in docs. Run das-gate after each
 |----|------|--------|--------|
 | **W1.1** | [`das-w1-1-catalog-design.md`](./das-w1-1-catalog-design.md) | `[x]` | — |
 | **W1.2** | [`das-w1-2-catalog-publish.md`](./das-w1-2-catalog-publish.md) | `[x]` | — |
-| **W1.3** | [`das-w1-3-catalog-consumers.md`](./das-w1-3-catalog-consumers.md) | `[~]` | lookups prefer catalog |
-| **W1.4** | [`das-w1-4-retire-duplicate-indexes.md`](./das-w1-4-retire-duplicate-indexes.md) | `[ ]` | dual-write still on |
-| **W1.G** | [`das-gate.md`](./das-gate.md) § Wave 1 | `[ ]` | optional |
+| **W1.3** | [`das-w1-3-catalog-consumers.md`](./das-w1-3-catalog-consumers.md) | `[x]` | catalog-primary consumers |
+| **W1.4** | [`das-w1-4-retire-duplicate-indexes.md`](./das-w1-4-retire-duplicate-indexes.md) | `[x]` | catalog sole publisher |
+| **W1.G** | [`das-gate.md`](./das-gate.md) § Wave 1 | `[x]` | W1.1–W1.4 product ACs; G1.1–G1.6 |
 
 ### Wave 2 — Effective surface
 
 | ID | File | Status | Prereq |
 |----|------|--------|--------|
-| **W2.1** | [`das-w2-1-unify-effective-surface.md`](./das-w2-1-unify-effective-surface.md) | `[~]` | StageCapability preferred |
-| **W2.G** | [`das-gate.md`](./das-gate.md) § Wave 2 | `[ ]` | optional |
+| **W2.1** | [`das-w2-1-unify-effective-surface.md`](./das-w2-1-unify-effective-surface.md) | `[x]` | W1 gate; verify severity none |
+| **W2.G** | [`das-gate.md`](./das-gate.md) § Wave 2 | `[x]` | W2.1 product ACs (G2.1–G2.5) |
 
 ### Wave 3 — Validate / deps
 
 | ID | File | Status | Prereq |
 |----|------|--------|--------|
-| **W3.1** | [`das-w3-1-declare-dependencies.md`](./das-w3-1-declare-dependencies.md) | `[ ]` | — |
-| **W3.2** | [`das-w3-2-split-validation-facts.md`](./das-w3-2-split-validation-facts.md) | `[ ]` | — |
-| **W3.G** | [`das-gate.md`](./das-gate.md) § Wave 3 | `[ ]` | optional |
+| **W3.1** | [`das-w3-1-declare-dependencies.md`](./das-w3-1-declare-dependencies.md) | `[x]` | — |
+| **W3.2** | [`das-w3-2-split-validation-facts.md`](./das-w3-2-split-validation-facts.md) | `[x]` | W3.1; fact/lint template landed; verify 2026-07-31 severity nit |
+| **W3.G** | [`das-gate.md`](./das-gate.md) § Wave 3 | `[~]` | product ACs met (G3.1–G3.4); optional gate ceremony |
 
 ### Wave 4 — Dual-path removal
 
 | ID | File | Status | Prereq |
 |----|------|--------|--------|
-| **W4.1** | [`das-w4-1-runtime-no-fallback-scans.md`](./das-w4-1-runtime-no-fallback-scans.md) | `[~]` | domain-bound no scan |
-| **W4.2** | [`das-w4-2-mcp-lowering-export-no-fallback.md`](./das-w4-2-mcp-lowering-export-no-fallback.md) | `[~]` | analysis-present resolve closed |
-| **W4.3** | [`das-w4-3-marker-zero-and-dacr-close.md`](./das-w4-3-marker-zero-and-dacr-close.md) | `[ ]` | markers remain (evolution/export) |
-| **W4.G** | [`das-gate.md`](./das-gate.md) § Wave 4 + suite | `[ ]` | optional |
+| **W4.1** | [`das-w4-1-runtime-no-fallback-scans.md`](./das-w4-1-runtime-no-fallback-scans.md) | `[x]` | domain-bound catalog-only; standalone reduced contract; verify 2026-07-31 pass (nit) |
+| **W4.2** | [`das-w4-2-mcp-lowering-export-no-fallback.md`](./das-w4-2-mcp-lowering-export-no-fallback.md) | `[x]` | MCP/export/mutation no analysis-present soft-scan; implement 1760 green; verify 2026-07-31 pass (suggestion) |
+| **W4.3** | [`das-w4-3-marker-zero-and-dacr-close.md`](./das-w4-3-marker-zero-and-dacr-close.md) | `[x]` | markers 0; EffectLowering ESM monopath under analysis; DACR item 4 / suite closed 2026-07-31 (verify pass, suggestion) |
+| **W4.G** | [`das-gate.md`](./das-gate.md) § Wave 4 + suite | `[x]` | W4.1–W4.3 product ACs + G4.1–G4.5 |
 
 ---
 

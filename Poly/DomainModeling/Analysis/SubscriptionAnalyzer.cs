@@ -4,23 +4,16 @@ using Poly.DomainModeling.Effects;
 namespace Poly.DomainModeling.Analysis;
 
 /// <summary>
-/// Unified subscription analysis pass: contract validation, causality cycle detection,
-/// and replay-safety hints — all in one subscription walk.
-///
-/// Validates that stage subscriptions have correct structure:
-/// - The subscription's relationship name resolves to an existing relationship on the owning entity.
-/// - Target stage names exist on the target entity type (resolved from the relationship).
-/// - Basic structural checks (non-empty names, defined quantifier).
-/// - Expression bindings in subscription effects reference valid <c>this.*</c> and <c>event.*</c> properties.
-/// - Replay safety: warns on non-idempotent subscription effects.
-/// - Causality cycles: detects mutual/transitive subscription cycles filtered by capability metadata.
+/// Lint-only: unified subscription contract, causality, and replay diagnostics.
+/// Writes no metadata others read. Depends on Semantic (type lookup) and Capability
+/// (transition targets for causality filtering).
 /// </summary>
 internal sealed class SubscriptionAnalyzer : INodeAnalyzer {
     public const string Id = "DomainSubscriptionAnalyzer";
     public string PassName => Id;
-    public string[] Dependencies => [CapabilityAnalyzer.Id];
-    // Requires CapabilityAnalyzer for ActionCapabilityMetadata (transition targets)
-    // to filter causality edges to only those that can actually produce cycles.
+    // DomainTypeLookupMetadata (Semantic) + ActionCapabilityMetadata (Capability)
+    // for causality edges filtered to transitions that can produce cycles.
+    public string[] Dependencies => [SemanticDomainAnalyzer.Id, CapabilityAnalyzer.Id];
 
     public void Analyze(AnalysisContext context, Node node) {
         if (!context.ShouldAnalyze(node)) return;

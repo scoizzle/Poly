@@ -115,11 +115,8 @@ public class DomainEntityInstanceTests {
 
     [Test]
     public async Task InvokeAction_Standalone_EmptyStageCopyWithParams_FallsThroughToEntityAction() {
-        // B-2 regression: standalone instances (domain: null) take the analysis-absent
-        // scan path in InvokeActionInternal, which must apply the same SA fallthrough
-        // as the metadata path (Phase 3 §6e). A params-carrying stage copy with no
-        // effects must fall through to the entity action that carries the transition
-        // effect — otherwise the transition silently no-ops (the B-1 bug class).
+        // Standalone reduced contract (Domain null): structural SA fallthrough must
+        // match catalog semantics. Params-carrying empty stage-copy → entity action.
         var entityAction = new Poly.DomainModeling.Action("Submit", InvocationResult.Void,
             Parameters: [new Property("Note", new DomainTypeReference("Text"), [])],
             Effects: [new StageTransitionEffect(new StageReference("Active"))],
@@ -137,11 +134,88 @@ public class DomainEntityInstanceTests {
         var instance = DomainEntityInstance.Create(entity,
             new Dictionary<string, object?>());
 
+        await Assert.That(instance.Domain).IsNull();
         var result = instance.InvokeAction("Submit");
 
         await Assert.That(result.Succeeded).IsTrue();
         await Assert.That(result.NewStage).IsEqualTo("Active");
         await Assert.That(instance.CurrentStage).IsEqualTo("Active");
+    }
+
+    [Test]
+    public async Task InvokeAction_DomainBound_EmptyStageCopy_UsesCatalogFallthrough() {
+        var entityAction = new Poly.DomainModeling.Action("Submit", InvocationResult.Void, [],
+            [new StageTransitionEffect(new StageReference("Active"))], []);
+        var draft = new Stage("Draft",
+            [new Poly.DomainModeling.Action("Submit", InvocationResult.Void, [], [], [])],
+            [], [], []);
+        var active = new Stage("Active", [], [], [], []);
+        var order = new Entity("Order",
+            [new Property("Name", new DomainTypeReference("Text"), [])],
+            Actions: [entityAction], Policies: [], Stages: [draft, active]);
+        var domain = new Domain("OrderDomain", [order], []);
+
+        var instance = DomainEntityInstance.Create(order,
+            new Dictionary<string, object?>(), domain);
+
+        await Assert.That(instance.Domain).IsNotNull();
+        var result = instance.InvokeAction("Submit");
+
+        await Assert.That(result.Succeeded).IsTrue();
+        await Assert.That(result.NewStage).IsEqualTo("Active");
+        await Assert.That(instance.CurrentStage).IsEqualTo("Active");
+    }
+
+    [Test]
+    public async Task InvokeAction_DomainBound_Throws_WhenCatalogMissing() {
+        var entityAction = new Poly.DomainModeling.Action("Submit", InvocationResult.Void, [],
+            [new StageTransitionEffect(new StageReference("Active"))], []);
+        var draft = new Stage("Draft",
+            [new Poly.DomainModeling.Action("Submit", InvocationResult.Void, [], [], [])],
+            [], [], []);
+        var active = new Stage("Active", [], [], [], []);
+        var order = new Entity("Order",
+            [new Property("Name", new DomainTypeReference("Text"), [])],
+            Actions: [entityAction], Policies: [], Stages: [draft, active]);
+        var domain = new Domain("OrderDomain", [order], []);
+
+        var instance = DomainEntityInstance.Create(order,
+            new Dictionary<string, object?>(), domain);
+        var analysis = RuntimeAnalysisCache.GetOrAnalyze(domain);
+        analysis.GetMetadataStore().Remove<DomainCatalogMetadata>(domain);
+
+        var ex = Assert.Throws<InvalidOperationException>(() => instance.InvokeAction("Submit"));
+        await Assert.That(ex!.Message).Contains("DomainCatalogMetadata");
+    }
+
+    [Test]
+    public async Task InvokeAction_DomainBound_UnknownAction_ReturnsMissing_WhenCatalogPresent() {
+        var order = new Entity("Order",
+            [new Property("Name", new DomainTypeReference("Text"), [])],
+            Actions: [], Policies: [],
+            Stages: [new Stage("Draft", [], [], [], [])]);
+        var domain = new Domain("OrderDomain", [order], []);
+        var instance = DomainEntityInstance.Create(order, domain: domain);
+
+        var result = instance.InvokeAction("DoesNotExist");
+
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(result.ErrorMessage).Contains("not found");
+    }
+
+    [Test]
+    public async Task InvokeAction_Standalone_CreateInRelationship_Unsupported() {
+        // Standalone reduced contract: relationship semantic resolve requires Domain.
+        var createIn = new Poly.DomainModeling.Action("Spawn", InvocationResult.Void, [],
+            [new CreateEntityInRelationshipEffect("Owns", [])], []);
+        var entity = new Entity("Parent",
+            [new Property("Name", new DomainTypeReference("Text"), [])],
+            Actions: [createIn], Policies: [], Stages: []);
+        var instance = DomainEntityInstance.Create(entity);
+
+        await Assert.That(instance.Domain).IsNull();
+        var ex = Assert.Throws<InvalidOperationException>(() => instance.InvokeAction("Spawn"));
+        await Assert.That(ex!.Message).Contains("domain");
     }
 
     [Test]

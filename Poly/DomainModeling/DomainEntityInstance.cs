@@ -25,6 +25,18 @@ namespace Poly.DomainModeling;
 /// <para><b>RAII-style:</b> the static factory <see cref="Create"/> returns
 /// only valid instances. Structural validation (required properties exist,
 /// types are coercible) happens at creation time.</para>
+///
+/// <para><b>Domain-bound vs standalone (DAS W4.1):</b></para>
+/// <list type="bullet">
+///   <item><b>Domain non-null:</b> semantic dispatch uses analysis catalog/helpers only
+///     (<see cref="RuntimeAnalysisCache"/> → catalog / structure / subscription plans).
+///     Missing required bags fail closed (throw). No structural tree-scan fallback.</item>
+///   <item><b>Standalone (<see cref="Domain"/> null):</b> reduced contract only —
+///     structural <see cref="InvokeAction"/> / OnEntry-OnExit on the entity definition
+///     (including SA fallthrough empty stage-copy → entity action); no subscriptions
+///     (<see cref="DomainInstanceStore.NotifyTransition"/> no-ops), no relationship
+///     semantic resolve, no <c>create in</c>. Not a second full SA/catalog implementation.</item>
+/// </list>
 /// </summary>
 public sealed record DomainEntityInstance {
     private readonly Dictionary<string, object?> _values;
@@ -246,36 +258,24 @@ public sealed record DomainEntityInstance {
 
     /// <summary>
     /// Core action execution after args have been injected into <see cref="_values"/>.
+    /// Domain-bound: catalog/helpers only; missing action map or stage structure throws.
+    /// Standalone: structural entity/stage lookup only (reduced contract).
     /// </summary>
     private ActionInvocationResult InvokeActionInternal(string actionName) {
         AnalysisResult? runtimeAnalysis = null;
-        if (Domain is not null)
+        Action? action;
+
+        if (Domain is not null) {
             runtimeAnalysis = RuntimeAnalysisCache.GetOrAnalyze(Domain);
-
-        // Domain-bound: catalog/ARM only. Standalone (Domain null): structural SA scan.
-        Action? action = null;
-        if (runtimeAnalysis is not null) {
-            runtimeAnalysis.TryResolveAction(Entity, CurrentStage, actionName, out action);
+            // Fail closed: domain-bound dispatch requires catalog action map (no scan).
+            if (runtimeAnalysis.GetActionResolution(Domain, Entity) is null)
+                throw new InvalidOperationException(
+                    $"Runtime dispatch requires {nameof(DomainCatalogMetadata)} action map for entity '{Entity.Name}' in domain '{Domain.Name}'.");
+            runtimeAnalysis.TryResolveAction(Domain, Entity, CurrentStage, actionName, out action);
         }
-        else if (Domain is null) {
-            // Standalone instances only — reduced contract (no domain analysis).
-            Action? entityAction = null;
-            if (CurrentStage is not null) {
-                var currentStageRef = Entity.Stages
-                    .FirstOrDefault(s => string.Equals(s.Name, CurrentStage, StringComparison.Ordinal));
-                action = currentStageRef?.Actions
-                    .FirstOrDefault(a => string.Equals(a.Name, actionName, StringComparison.Ordinal));
-            }
-            entityAction = Entity.Actions
-                .FirstOrDefault(a => string.Equals(a.Name, actionName, StringComparison.Ordinal));
-
-            if (action is not null
-                && action.Effects.Count == 0
-                && action.Policies.Count == 0
-                && entityAction is not null)
-                action = entityAction;
-
-            action ??= entityAction;
+        else {
+            // Standalone reduced contract — structural SA only (see type remarks).
+            action = ResolveStandaloneAction(actionName);
         }
 
         if (action is null)
@@ -305,7 +305,7 @@ public sealed record DomainEntityInstance {
                     $"Stage '{CurrentStage}' not resolvable for entity '{Entity.Name}' during action dispatch.");
         }
         else if (Domain is null && CurrentStage is not null) {
-            // Standalone only.
+            // Standalone reduced contract: stage policies from Entity.Stages only.
             stage = Entity.Stages.FirstOrDefault(
                 s => string.Equals(s.Name, CurrentStage, StringComparison.Ordinal));
         }
@@ -592,7 +592,7 @@ public sealed record DomainEntityInstance {
         if (string.Equals(previousStageName, targetStageName, StringComparison.Ordinal))
             return;
 
-        // Resolve analysis once for the entire transition (F9).
+        // Domain-bound: structure metadata only. Standalone: Entity.Stages scan (reduced contract).
         var analysis = Domain is not null ? RuntimeAnalysisCache.GetOrAnalyze(Domain) : null;
 
         // OnExit/OnEntry effects are best-effort: a TryGetStage miss with analysis
@@ -605,7 +605,7 @@ public sealed record DomainEntityInstance {
             Stage? prevStage = null;
             if (analysis is not null)
                 analysis.TryGetStage(Entity, previousStageName, out prevStage);
-            if (prevStage is null && analysis is null && Domain is null) {
+            else if (Domain is null) {
                 prevStage = Entity.Stages.FirstOrDefault(
                     s => string.Equals(s.Name, previousStageName, StringComparison.Ordinal));
             }
@@ -627,7 +627,7 @@ public sealed record DomainEntityInstance {
             Stage? targetStage = null;
             if (analysis is not null)
                 analysis.TryGetStage(Entity, targetStageName, out targetStage);
-            if (targetStage is null && analysis is null && Domain is null) {
+            else if (Domain is null) {
                 targetStage = Entity.Stages.FirstOrDefault(
                     s => string.Equals(s.Name, targetStageName, StringComparison.Ordinal));
             }
@@ -723,13 +723,11 @@ public sealed record DomainEntityInstance {
         // Resolve analysis once for the whole creation (F21).
         var analysis = Domain is not null ? RuntimeAnalysisCache.GetOrAnalyze(Domain) : null;
 
-        // Resolve target entity definition.
-        // DTLM mirrors Domain.Types (SemanticDomainAnalyzer), so with analysis
-        // present a TryGetEntity miss is a genuine not-found — fail closed
-        // (no structural fallback scan).
+        // Resolve target entity definition via catalog/DTLM.
+        // With analysis present a miss is a genuine not-found — fail closed.
         Entity targetEntity;
         if (analysis is not null) {
-            targetEntity = analysis.TryGetEntity(targetTypeName, out var resolvedEntity)
+            targetEntity = analysis.TryGetEntity(Domain!, targetTypeName, out var resolvedEntity)
                 ? resolvedEntity!
                 : throw new InvalidOperationException(
                     $"Entity type '{targetTypeName}' not found in domain '{Domain!.Name}'.");
@@ -762,10 +760,8 @@ public sealed record DomainEntityInstance {
         // If Domain is null, link is best-effort (standalone instance).
         if (createEffect.RelationshipName is not null && Store is not null) {
             if (analysis is not null) {
-                // RLM mirrors Domain.Relationships (SemanticDomainAnalyzer), so a
-                // TryGetRelationship miss with analysis present is a genuine
-                // not-found — fail closed (no structural fallback scan).
-                if (!analysis.TryGetRelationship(createEffect.RelationshipName, out var relationship)
+                // Catalog/RLM miss with analysis present is a genuine not-found — fail closed.
+                if (!analysis.TryGetRelationship(Domain!, createEffect.RelationshipName, out var relationship)
                     || relationship is null) {
                     throw new InvalidOperationException(
                         $"Relationship '{createEffect.RelationshipName}' not found in domain '{Domain!.Name}'.");
@@ -801,10 +797,8 @@ public sealed record DomainEntityInstance {
                 "Cannot execute 'create in' effect without a domain to resolve relationship targets.");
 
         var analysis = RuntimeAnalysisCache.GetOrAnalyze(Domain);
-        // RLM mirrors Domain.Relationships (SemanticDomainAnalyzer), so a
-        // TryGetRelationship miss with analysis present is a genuine not-found —
-        // fail closed (no structural fallback scan).
-        if (!analysis.TryGetRelationship(effect.RelationshipName, out var relationship)
+        // Catalog/RLM miss with analysis present is a genuine not-found — fail closed.
+        if (!analysis.TryGetRelationship(Domain, effect.RelationshipName, out var relationship)
             || relationship is null)
             throw new InvalidOperationException(
                 $"Relationship '{effect.RelationshipName}' not found in domain '{Domain.Name}'.");
@@ -816,10 +810,8 @@ public sealed record DomainEntityInstance {
                 $"Source is '{relationship.Source.TypeName}'. 'Create in' must run on the source entity.");
         }
 
-        // DTLM mirrors Domain.Types (SemanticDomainAnalyzer), so a TryGetEntity
-        // miss with analysis present is a genuine not-found — fail closed (no
-        // structural fallback scan).
-        if (!analysis.TryGetEntity(relationship.Target.TypeName, out var targetEntity)
+        // Catalog/DTLM miss with analysis present is a genuine not-found — fail closed.
+        if (!analysis.TryGetEntity(Domain, relationship.Target.TypeName, out var targetEntity)
             || targetEntity is null)
             throw new InvalidOperationException(
                 $"Target entity '{relationship.Target.TypeName}' for relationship '{effect.RelationshipName}' not found.");
@@ -839,6 +831,32 @@ public sealed record DomainEntityInstance {
     public IReadOnlyDictionary<string, object?> Snapshot() => _values.AsReadOnly();
 
     // ── Private helpers ─────────────────────────────────────────
+
+    /// <summary>
+    /// Standalone (<see cref="Domain"/> null) action resolve: structural stage then
+    /// entity actions with SA fallthrough (empty stage-copy → entity action).
+    /// Parameters are ignored in the empty-copy predicate (same as catalog path).
+    /// </summary>
+    private Action? ResolveStandaloneAction(string actionName) {
+        Action? stageAction = null;
+        if (CurrentStage is not null) {
+            var currentStageRef = Entity.Stages
+                .FirstOrDefault(s => string.Equals(s.Name, CurrentStage, StringComparison.Ordinal));
+            stageAction = currentStageRef?.Actions
+                .FirstOrDefault(a => string.Equals(a.Name, actionName, StringComparison.Ordinal));
+        }
+
+        var entityAction = Entity.Actions
+            .FirstOrDefault(a => string.Equals(a.Name, actionName, StringComparison.Ordinal));
+
+        if (stageAction is not null
+            && stageAction.Effects.Count == 0
+            && stageAction.Policies.Count == 0
+            && entityAction is not null)
+            return entityAction;
+
+        return stageAction ?? entityAction;
+    }
 
     /// <summary>
     /// Builds a dictionary-backed type definition for <paramref name="entityName"/>
@@ -912,10 +930,8 @@ public sealed record DomainEntityInstance {
                 $"Cannot resolve relationship '{relationshipName}' without a domain.");
 
         var analysis = RuntimeAnalysisCache.GetOrAnalyze(Domain);
-        // RLM mirrors Domain.Relationships (SemanticDomainAnalyzer), so a
-        // TryGetRelationship miss with analysis present is a genuine not-found —
-        // fail closed (no structural fallback scan).
-        if (!analysis.TryGetRelationship(relationshipName, out var relationship)
+        // Catalog/RLM miss with analysis present is a genuine not-found — fail closed.
+        if (!analysis.TryGetRelationship(Domain, relationshipName, out var relationship)
             || relationship is null)
             throw new InvalidOperationException(
                 $"Relationship '{relationshipName}' not found in domain '{Domain.Name}'.");

@@ -32,36 +32,36 @@ public static class DomainModelAnalyzer {
 public static class DomainModelAnalysisBuilderExtensions {
     extension(AnalyzerBuilder builder) {
         public AnalyzerBuilder UseDomainModelAnalysisPipeline() {
+            // Registration order must introduce each pass only after its declared
+            // Dependencies are present (AnalyzerBuilder inserts after the last dep).
+            // Fact emitters vs validate packs (DAS W3.2):
+            //   RequiredPropertiesPass / EffectFactsPass publish bags;
+            //   PolicyConstraintAnalyzer / EffectAnalyzer are diagnostic packs only.
+            // Lint-only: Structural, PolicyConstraint, Effect, ConstraintQuality,
+            // RuleCoverage, ContractIntegration, Subscription, AuthoringSuggestion.
             builder.AddAnalyzer(new StructuralDomainAnalyzer());
             builder.AddAnalyzer(new SemanticDomainAnalyzer());
             builder.AddAnalyzer(new RuntimeContractAnalyzer());
-            // Single domain catalog (DAS W1) — composes semantic + runtime indexes
+            // Sole name→member catalog publisher (DAS W1.4)
             builder.AddAnalyzer(new DomainCatalogPass());
+            builder.AddAnalyzer(new RequiredPropertiesPass());
             builder.AddAnalyzer(new PolicyConstraintAnalyzer());
+            // DownstreamConstraintsMetadata consumed by EffectAnalyzer — register first
+            builder.AddAnalyzer(new ConstraintPropagationAnalyzer());
+            builder.AddAnalyzer(new EffectFactsPass());
             builder.AddAnalyzer(new EffectAnalyzer());
             builder.AddAnalyzer(new ConstraintQualityAnalyzer());
-
             builder.AddAnalyzer(new CapabilityAnalyzer());
-            builder.AddAnalyzer(new ConstraintPropagationAnalyzer());
             builder.AddAnalyzer(new RuleCoverageAnalyzer());
             builder.AddAnalyzer(new ContractIntegrationAnalyzer());
-            // Entity structure metadata (key, root, soft-delete, stages)
             builder.AddAnalyzer(new EntityStructureAnalyzer());
-            // Stage-subscription validation (contract, causality, replay — unified in D2.5)
             builder.AddAnalyzer(new SubscriptionAnalyzer());
-            // Cross-entity effect topology (create-in, invoke, subscriptions)
             builder.AddAnalyzer(new EffectTopologyPass());
-            // Ownership hierarchy (roots, children, aggregate parents)
             builder.AddAnalyzer(new OwnershipAggregatePass());
-            // Action metadata (parameters, return types, effective policies, transitions)
             builder.AddAnalyzer(new BehaviorPass());
-            // Cross-entity dependency graph + cycle detection
             builder.AddAnalyzer(new CrossReferencePass());
-            // Storage mapping (columns, navigations, FKs, keys, table names)
             builder.AddAnalyzer(new StoragePass());
-            // Transport surface (exposable API roots and nesting)
             builder.AddAnalyzer(new TransportPass());
-            // Authoring suggestions (advisory hints)
             builder.AddAnalyzer(new AuthoringSuggestionAnalyzer());
             // Entity Syntax projection is export-time only (DAS W0) — not an analysis fact.
             return builder;

@@ -128,6 +128,7 @@ public sealed class DomainInstanceStore {
         const int maxDepth = 10;
         if (depth >= maxDepth) return;
 
+        // Standalone reduced contract: no subscription fan-out without a Domain/catalog.
         var domain = transitionedInstance.Domain;
         if (domain is null) return;
 

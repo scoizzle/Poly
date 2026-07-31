@@ -338,13 +338,15 @@ Detail of present-day pass inventory and EntitySyntax failure modes: **[`domain-
 
 ## 11. Success picture (how we’ll know we’ve arrived)
 
-1. **Agent can explain** the pipeline in three stages (Validate / Catalog / Derive) without listing twenty pass names.  
-2. **Grep** for `DM-META-REMOVE-FALLBACK` in DomainModeling semantic routes is empty.  
-3. **DslCompiler** entity emit never reads `EntitySyntaxMetadata` from analysis.  
-4. **One type** is the authoritative catalog; MTI/ARM/DTLM-as-separate-owners are gone or are pure type aliases.  
-5. **Runtime, MCP, export** all call the same lookup helpers for action/policy/relationship resolution.  
-6. **EntitySyntax-class failures** cannot soft-skip entity generation: export fails loud or succeeds fully.  
-7. **New feature** that needs “find action by name” does not add a pass—it extends the catalog or a pure helper.
+Checklist status after **DAS W4.3 close** (2026-07-31). Suite gate: [`simple-agent-tasks/das-gate.md`](./simple-agent-tasks/das-gate.md) (Wave 4 + suite **complete**).
+
+1. [x] **Agent can explain** the pipeline in three stages (Validate / Catalog / Derive) without listing twenty pass names. *(CORE §3.1 + this plan; pass inventory is implementation detail)*  
+2. [x] **Grep** for `DM-META-REMOVE-FALLBACK` in DomainModeling semantic routes is empty. *(W4.3: `rg` over `**/*.cs` = 0; EffectLowering/MinimalApi/export ctor monopaths fail-closed under analysis)*  
+3. [x] **DslCompiler** entity emit never reads `EntitySyntaxMetadata` from analysis. *(W0: EntitySyntaxPass/Metadata deleted; emit via `DomainProgramProjection.ToSyntax`)*  
+4. [x] **One type** is the authoritative catalog; MTI/ARM/DTLM-as-separate-owners are gone or are pure type aliases. *(W1.4: catalog sole publisher; ARM/MTI not published)*  
+5. [x] **Runtime, MCP, export** all call the same lookup helpers for action/policy/relationship resolution. *(W1.3 + W4.1–W4.3: `DomainSemanticLookupExtensions` / catalog / ESM ctor order)*  
+6. [x] **EntitySyntax-class failures** cannot soft-skip entity generation: export fails loud or succeeds fully. *(W0.2: projection missing defs throw)*  
+7. [x] **New feature** that needs “find action by name” does not add a pass—it extends the catalog or a pure helper. *(W1 catalog design; no new parallel indexes)*
 
 ---
 
@@ -363,10 +365,8 @@ Detail of present-day pass inventory and EntitySyntax failure modes: **[`domain-
 
 ## 13. Next concrete step
 
-**W0 (projection boundary)** is the highest-leverage move toward this future state: it restores a correct dependency arrow (export → analysis), unblocks codegen, and stops analysis from pretending to be a compiler.
+**DAS W0–W4 landed (2026-07-31).** Markers zero; analysis-present soft dual paths removed on scoped semantic routes including `EffectLoweringPass.GetConstructorParameterOrder` (ESM required; no property-order rebuild). Analysis-null structural rebuild retained only as the standalone (`Domain == null`) reduced contract — non-goal to make it a full peer. Suite Done Definition met — see [`simple-agent-tasks/das-gate.md`](./simple-agent-tasks/das-gate.md).
 
-Then **W1 (catalog)** removes the class of bugs that made DACR and dual paths necessary.
+Ongoing: do not reintroduce semantic dual paths or mid-pipeline Syntax IR; prefer catalog/helpers for new name resolution; keep CORE and this plan accurate when mechanisms change.
 
-**Execute:** first unchecked task in [`simple-agent-tasks/das-README.md`](./simple-agent-tasks/das-README.md) (`das-w0-1-remove-entity-syntax-pass.md`).
-
-Until those land, treat this document as the **acceptance target** for design reviews of any new analysis metadata or pass.
+Treat this document as the **acceptance target** for design reviews of any new analysis metadata or pass.

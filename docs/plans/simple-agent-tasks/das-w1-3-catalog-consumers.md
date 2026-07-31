@@ -3,7 +3,7 @@
 **Wave:** W1 · **Queue:** [`das-README.md`](./das-README.md)  
 **Future state:** [`../domain-analysis-future-state.md`](../domain-analysis-future-state.md) §4.2, §5  
 **Difficulty:** Large  
-**Status:** `[ ]`  
+**Status:** `[x]`  
 **Prereq:** W1.2  
 
 ## Objective
@@ -12,12 +12,12 @@ Lookup surface and product consumers read the catalog (or dual-read with catalog
 
 ## Tasks
 
-- [ ] W1.3.1 Retarget `DomainSemanticLookupExtensions` to catalog.
-- [ ] W1.3.2 Runtime: `TryResolveAction` / related paths use catalog helper (sibling-path: analysis-present only until W4).
-- [ ] W1.3.3 MCP describe routes use catalog (entity/stage/action/policy/relationship).
-- [ ] W1.3.4 Evolution mutation index resolution uses catalog.
-- [ ] W1.3.5 Lowering type/relationship resolve prefers catalog when analysis present.
-- [ ] W1.3.6 Tests: existing DACR fail-closed + new catalog-backed describe/runtime cases still green.
+- [x] W1.3.1 Retarget `DomainSemanticLookupExtensions` to catalog.
+- [x] W1.3.2 Runtime: `TryResolveAction` / related paths use catalog helper (sibling-path: analysis-present only until W4).
+- [x] W1.3.3 MCP describe routes use catalog (entity/stage/action/policy/relationship).
+- [x] W1.3.4 Evolution mutation index resolution uses catalog.
+- [x] W1.3.5 Lowering type/relationship resolve prefers catalog when analysis present.
+- [x] W1.3.6 Tests: existing DACR fail-closed + new catalog-backed describe/runtime cases still green.
 
 ## Primary files
 
@@ -30,10 +30,14 @@ Lookup surface and product consumers read the catalog (or dual-read with catalog
 
 ## Acceptance criteria
 
-- [ ] No new consumer of ARM/MTI/DTLM as *separate* sources of truth without going through catalog API.
-- [ ] SA implemented once; documented.
-- [ ] Build + tests green; sibling-path considered for any dual path left.
+- [x] No new consumer of ARM/MTI/DTLM as *separate* sources of truth without going through catalog API.
+- [x] SA implemented once; documented.
+- [x] Build + tests green; sibling-path considered for any dual path left.
 
 ## Progress notes
 
-(empty)
+- Catalog helpers: `GetCatalog`, `GetActionResolution`, `GetMutationIndex`, `GetTypeLookup`, `GetRelationshipLookup` (catalog primary, dual-read bags).
+- SA only in `TryResolveAction` (doc + design note).
+- Runtime/MCP/evolution/lowering retargeted; fail-closed tests strip catalog+bag (sibling-path); new catalog-backed cases when only raw bag stripped.
+- `DomainCatalogPass` no longer skips on `HasStructuralFailure` while dual-write is on (composes whenever source bags exist).
+- Build green; suite filter green (1739 passed).

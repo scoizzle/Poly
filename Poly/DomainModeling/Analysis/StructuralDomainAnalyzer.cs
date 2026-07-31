@@ -2,6 +2,7 @@ using Poly.Analysis;
 
 namespace Poly.DomainModeling.Analysis;
 
+/// <summary>Lint-only: tree-shape diagnostics; writes no metadata others read.</summary>
 internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
     public const string Id = "DomainStructuralDomainAnalyzer";
     public string PassName => Id;

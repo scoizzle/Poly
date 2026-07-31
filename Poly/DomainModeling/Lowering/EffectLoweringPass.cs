@@ -119,17 +119,16 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         // same entity.Stages), so skipping is safe; InvokeActionInternal's fail-closed
         // throw covers the dispatch contract.
 
-        // Include exit effects from the source stage (if known)
+        // Include exit effects from the source stage (if known).
+        // Analysis-present: TryGetStage only (no entity.Stages rescan).
+        // Null analysis: structural stage list for non-product/test callers only.
         if (_sourceStageName is not null) {
             Stage? sourceStage = null;
             if (_analysis is not null)
                 _analysis.TryGetStage(_entity, _sourceStageName, out sourceStage);
-            if (sourceStage is null && _analysis is null) {
-                // DM-META-REMOVE-FALLBACK: remove direct stage scan once
-                // TryGetStage succeeds for all semantic lowering paths.
+            else
                 sourceStage = _entity.Stages.FirstOrDefault(s =>
                     string.Equals(s.Name, _sourceStageName, StringComparison.Ordinal));
-            }
             if (sourceStage is not null) {
                 foreach (var exitEffect in sourceStage.OnExitEffects) {
                     var lowered = Route(exitEffect);
@@ -139,16 +138,13 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
             }
         }
 
-        // Include entry effects from the target stage
+        // Include entry effects from the target stage (same analysis contract as exit).
         Stage? targetStage = null;
         if (_analysis is not null)
             _analysis.TryGetStage(_entity, t.TargetStage.StageName, out targetStage);
-        if (targetStage is null && _analysis is null) {
-            // DM-META-REMOVE-FALLBACK: remove direct stage scan once
-            // TryGetStage succeeds for all semantic lowering paths.
+        else
             targetStage = _entity.Stages.FirstOrDefault(s =>
                 string.Equals(s.Name, t.TargetStage.StageName, StringComparison.Ordinal));
-        }
         if (targetStage is not null) {
             foreach (var entryEffect in targetStage.OnEntryEffects) {
                 var lowered = Route(entryEffect);
@@ -430,20 +426,22 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     }
 
     private IReadOnlyList<ConstructorParameterOrder> GetConstructorParameterOrder(Entity targetEntity) {
-        if (_analysis?.GetMetadata<EntityStructureMetadata>(targetEntity) is EntityStructureMetadata metadata
-            && metadata.ConstructorParameters.Count > 0) {
-            return metadata.ConstructorParameters;
+        if (_analysis is not null) {
+            if (_analysis.GetMetadata<EntityStructureMetadata>(targetEntity) is EntityStructureMetadata metadata)
+                return metadata.ConstructorParameters;
+
+            throw new InvalidOperationException(
+                $"EntityStructureMetadata is required for constructor ordering on entity '{targetEntity.Name}'.");
         }
 
-        // Analysis present without ESM ctor list: empty (fail soft for lower to skip) is worse
-        // than property-only order for incomplete analysis trees.
+        // Analysis absent: structural property-order rebuild (standalone / no-analysis path only).
         var parameters = targetEntity.Properties
             .Where(p => !p.Constraints.Any(c => c is DefaultValueConstraint))
             .OrderBy(p => p.Name)
             .Select(p => new ConstructorParameterOrder(p.Name, p.Type, false, false))
             .ToList();
 
-        if (_analysis is null && _domain is not null) {
+        if (_domain is not null) {
             foreach (var rel in _domain.Relationships.Where(r =>
                          string.Equals(r.Source.TypeName, targetEntity.Name, StringComparison.Ordinal)
                          && r.Cardinality is not (RelationshipCardinality.OneToMany or RelationshipCardinality.ManyToMany))) {
@@ -463,9 +461,8 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     /// Returns a type-appropriate default value Syntax node for a domain type.
     /// Used by <see cref="BuildConstructorArgs"/> and <see cref="CreateEntityInRelationship"/>
     /// to emit valid defaults instead of bare <c>null</c> for value-type properties.
+    /// Enum defaults use catalog lookup when <paramref name="analysis"/> is present.
     /// </summary>
-    // DM-META-REMOVE-FALLBACK: make analysis metadata required once all callers
-    // provide it for default domain type resolution.
     private Node DefaultForDomainType(DomainTypeReference typeRef, Domain? domain, INodeMetadataProvider? analysis = null) {
         if (DomainToCSharpExporter.TryResolveEnumType(domain, analysis, typeRef.TypeName, out var enumType) && enumType is not null)
             return new Member(new NamedTypeReference(enumType.Name), enumType.MemberNames[0]);
@@ -485,14 +482,17 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     }
 
     private Entity? ResolveEntity(string typeName) {
-        if (_analysis?.GetMetadata<DomainTypeLookupMetadata>(default) is DomainTypeLookupMetadata lookup
-            && lookup.Types.TryGetValue(typeName, out var domainType)
-            && domainType is Entity entity) {
-            return entity;
-        }
+        // Catalog primary when domain + analysis present (DAS W1.3).
+        if (_analysis is not null) {
+            var lookup = _analysis.GetTypeLookup(_domain);
+            if (lookup is not null
+                && lookup.Types.TryGetValue(typeName, out var domainType)
+                && domainType is Entity entity)
+                return entity;
 
-        // Analysis present: fail closed (no domain tree rescan).
-        if (_analysis is not null) return null;
+            // Analysis present: fail closed (no domain tree rescan).
+            return null;
+        }
 
         if (_domain is not null) {
             return _domain.Types.OfType<Entity>().FirstOrDefault(e =>
@@ -503,12 +503,14 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     }
 
     private Relationship? ResolveRelationship(string relationshipName) {
-        if (_analysis?.GetMetadata<RelationshipLookupMetadata>(default) is RelationshipLookupMetadata lookup
-            && lookup.Relationships.TryGetValue(relationshipName, out var relationship)) {
-            return relationship;
-        }
+        if (_analysis is not null) {
+            var lookup = _analysis.GetRelationshipLookup(_domain);
+            if (lookup is not null
+                && lookup.Relationships.TryGetValue(relationshipName, out var relationship))
+                return relationship;
 
-        if (_analysis is not null) return null;
+            return null;
+        }
 
         if (_domain is not null) {
             return _domain.Relationships.FirstOrDefault(r =>

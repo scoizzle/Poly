@@ -7,6 +7,15 @@ namespace Poly.DomainModeling.Evolution;
 /// Mutable snapshot of a <see cref="Domain"/> used during change application.
 /// Collects errors when changes target missing entities, stages, or actions
 /// — these are surfaced as structural failures in the evolution result.
+/// <para>
+/// <b>Resolve contract (DAS W4.2):</b> product evolution always supplies
+/// <see cref="MutationTargetIndexMetadata"/> from the catalog. Stage/action
+/// resolution is catalog-first; on index miss a single live-overlay scan of
+/// the mutable entity in this context covers targets added earlier in the
+/// same batch (prior analysis cannot know them). There is no ad-hoc multi-scan
+/// beyond that overlay. Callers without an index use live entity lists only
+/// (legacy single-change <c>DomainChange.ApplyTo(Domain)</c>).
+/// </para>
 /// </summary>
 internal sealed class DomainMutationContext {
     private readonly MutationTargetIndexMetadata? _mutationIndex;
@@ -203,8 +212,14 @@ internal sealed class DomainMutationContext {
         Types.Find(t => string.Equals(t.Name, name, StringComparison.Ordinal));
 
     public Action? FindActionOnAnyEntity(string actionName) {
-        // DM-META-REMOVE-FALLBACK: use MutationTargetIndexMetadata.ActionsByEntity
-        // for cross-entity action resolution in evolution handlers.
+        // Catalog-first when index present; live entity actions as overlay / no-index path.
+        if (_mutationIndex is not null) {
+            foreach (var kv in _mutationIndex.ActionsByEntity) {
+                if (kv.Value.TryGetValue(actionName, out var matches) && matches.Count > 0)
+                    return matches[0];
+            }
+        }
+
         for (int i = 0; i < Types.Count; i++) {
             if (Types[i] is Entity e) {
                 var action = e.Actions.FirstOrDefault(a =>
@@ -215,37 +230,22 @@ internal sealed class DomainMutationContext {
         return null;
     }
 
+    /// <summary>
+    /// Resolves a stage by catalog index, then a single live-overlay of the
+    /// mutable entity in this context (in-batch additions).
+    /// </summary>
     public ResolveStatus ResolveStage(string entityName, string stageName, out Stage? stage) {
         stage = null;
-        if (_mutationIndex is not null) {
-            if (_mutationIndex.EntitiesByName.ContainsKey(entityName)
-                && _mutationIndex.StagesByEntity.TryGetValue(entityName, out var stagesByName)
-                && stagesByName.TryGetValue(stageName, out var resolvedStage)) {
-                stage = resolvedStage;
-                return ResolveStatus.Found;
-            }
 
-            // DM-META-REMOVE-FALLBACK: allow newly-added stages in the same
-            // mutation batch to resolve from the live context.
-            var liveEntity = FindEntity(entityName);
-            if (liveEntity is null)
-                return ResolveStatus.MissingEntity;
-
-            var liveMatches = liveEntity.Stages
-                .Where(s => string.Equals(s.Name, stageName, StringComparison.Ordinal))
-                .ToList();
-
-            if (liveMatches.Count == 0)
-                return ResolveStatus.MissingStage;
-            if (liveMatches.Count > 1)
-                return ResolveStatus.AmbiguousStage;
-
-            stage = liveMatches[0];
+        if (_mutationIndex is not null
+            && _mutationIndex.EntitiesByName.ContainsKey(entityName)
+            && _mutationIndex.StagesByEntity.TryGetValue(entityName, out var stagesByName)
+            && stagesByName.TryGetValue(stageName, out var resolvedStage)) {
+            stage = resolvedStage;
             return ResolveStatus.Found;
         }
 
-        // DM-META-REMOVE-FALLBACK: remove direct stage scan once mutation target
-        // index metadata is required for all evolution mutation contexts.
+        // Live overlay (in-batch) or sole path when no mutation index was supplied.
         var entity = FindEntity(entityName);
         if (entity is null)
             return ResolveStatus.MissingEntity;
@@ -263,39 +263,39 @@ internal sealed class DomainMutationContext {
         return ResolveStatus.Found;
     }
 
+    /// <summary>
+    /// Resolves an action by catalog index, then a single live-overlay of the
+    /// mutable entity in this context (in-batch additions).
+    /// </summary>
     public ResolveStatus ResolveAction(
         string entityName,
         string actionName,
         bool searchStages,
         out Action? action) {
         action = null;
-        if (_mutationIndex is not null) {
-            if (_mutationIndex.EntitiesByName.ContainsKey(entityName)
-                && _mutationIndex.ActionsByEntity.TryGetValue(entityName, out var actionsByName)
-                && actionsByName.TryGetValue(actionName, out var matches)
-                && matches.Count > 0) {
-                if (!searchStages) {
-                    var entityAction = matches.FirstOrDefault(candidate =>
-                        _mutationIndex.EntitiesByName[entityName].Actions.Any(a => ReferenceEquals(a, candidate)));
-                    if (entityAction is null)
-                        return ResolveStatus.MissingAction;
-                    action = entityAction;
-                    return ResolveStatus.Found;
-                }
 
-                if (matches.Count > 1)
-                    return ResolveStatus.AmbiguousAction;
-
-                action = matches[0];
+        if (_mutationIndex is not null
+            && _mutationIndex.EntitiesByName.ContainsKey(entityName)
+            && _mutationIndex.ActionsByEntity.TryGetValue(entityName, out var actionsByName)
+            && actionsByName.TryGetValue(actionName, out var matches)
+            && matches.Count > 0) {
+            if (!searchStages) {
+                var entityAction = matches.FirstOrDefault(candidate =>
+                    _mutationIndex.EntitiesByName[entityName].Actions.Any(a => ReferenceEquals(a, candidate)));
+                if (entityAction is null)
+                    return ResolveStatus.MissingAction;
+                action = entityAction;
                 return ResolveStatus.Found;
             }
 
-            // DM-META-REMOVE-FALLBACK: allow newly-added actions in the same
-            // mutation batch to resolve from the live context.
+            if (matches.Count > 1)
+                return ResolveStatus.AmbiguousAction;
+
+            action = matches[0];
+            return ResolveStatus.Found;
         }
 
-        // DM-META-REMOVE-FALLBACK: remove direct action scan once mutation target
-        // index metadata is required for all evolution mutation contexts.
+        // Live overlay (in-batch) or sole path when no mutation index was supplied.
         var entity = FindEntity(entityName);
         if (entity is null)
             return ResolveStatus.MissingEntity;

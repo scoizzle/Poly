@@ -6,6 +6,10 @@ namespace Poly.DomainModeling.Analysis;
 
 internal sealed record DownstreamConstraintsMetadata(IReadOnlyList<Constraint> Constraints) : IAnalysisMetadata;
 
+/// <summary>
+/// Publishes <see cref="DownstreamConstraintsMetadata"/> from the effect tree.
+/// No upstream analysis bags required.
+/// </summary>
 internal sealed class ConstraintPropagationAnalyzer : INodeAnalyzer {
     public const string Id = "DomainConstraintPropagationAnalyzer";
     public string PassName => Id;

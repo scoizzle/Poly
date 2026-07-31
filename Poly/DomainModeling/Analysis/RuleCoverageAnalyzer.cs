@@ -3,10 +3,12 @@ using Poly.DomainModeling.Effects;
 
 namespace Poly.DomainModeling.Analysis;
 
+/// <summary>Lint-only: rule coverage hints; writes no metadata others read.</summary>
 internal sealed class RuleCoverageAnalyzer : INodeAnalyzer {
     public const string Id = "DomainRuleCoverageAnalyzer";
     public string PassName => Id;
-    public string[] Dependencies => [];
+    // Reads RequiredPropertiesMetadata published by RequiredPropertiesPass.
+    public string[] Dependencies => [RequiredPropertiesPass.Id];
     public void Analyze(AnalysisContext context, Node node) {
         if (!context.ShouldAnalyze(node)) {
             return;

@@ -55,10 +55,13 @@ public sealed class MinimalApiGenerator {
 
     private AggregateEntity GetAggregateEntity(Entity entity) => _aggregateLookup[entity.Name];
 
-    private IReadOnlyList<ConstructorParameterOrder>? GetConstructorOrder(Entity entity) {
-        if (_entityStructureLookup.TryGetValue(entity.Name, out var metadata))
-            return metadata.ConstructorParameters;
-        return null;
+    private IReadOnlyList<ConstructorParameterOrder> GetConstructorOrder(Entity entity) {
+        if (!_entityStructureLookup.TryGetValue(entity.Name, out var metadata)) {
+            throw new InvalidOperationException(
+                $"EntityStructureMetadata is required for constructor ordering on entity '{entity.Name}'.");
+        }
+
+        return metadata.ConstructorParameters;
     }
 
     /// <summary>
@@ -236,14 +239,14 @@ public sealed class MinimalApiGenerator {
         // POST endpoint for root entities (S3: proper Entity.Create + result handling)
         if (store.IsRoot) {
             var dtoParam = new Parameter("dto", new TypeReference($"{entity.Name}Dto"));
-            AppendCreateCallStatements(statements, entity, store, dtoParam, dbParam, route, keyProp, dbContextName);
+            AppendCreateCallStatements(statements, entity, dtoParam, dbParam, route, keyProp);
         }
     }
 
     /// <summary>Appends Syntax IR for POST /api/entities endpoint — calls Entity.Create with result handling.</summary>
     private void AppendCreateCallStatements(List<Node> statements, Entity entity,
-        StorageEntity store, Parameter dtoParam, Parameter dbParam,
-        string route, Property? uniqueProp, string dbContextName) {
+        Parameter dtoParam, Parameter dbParam,
+        string route, Property? uniqueProp) {
         // Check if entity references other entities (cannot create directly) — emit BadRequest endpoint
         if (entity.Properties.Any(p => _entities.Any(e => string.Equals(e.Name, p.Type.TypeName, StringComparison.Ordinal)))) {
             statements.Add(new Invoke(
@@ -257,36 +260,16 @@ public sealed class MinimalApiGenerator {
             return;
         }
 
-        // Prefer analyzer-provided constructor order; keep a structural fallback.
         var createArgs = new List<Node>();
-        var constructorOrder = GetConstructorOrder(entity);
-        if (constructorOrder is not null && constructorOrder.Count > 0) {
-            foreach (var parameter in constructorOrder) {
-                if (parameter.IsNavigation) {
-                    createArgs.Add(new Invoke(new Member(new TypeReference("Enumerable"), "Empty")) {
-                        TypeArguments = [new TypeReference(parameter.Type.TypeName)]
-                    });
-                    continue;
-                }
-
-                createArgs.Add(new Member(new Variable("dto"), parameter.Name));
-            }
-        }
-        else {
-            // DM-META-REMOVE-FALLBACK: remove once constructor ordering metadata is
-            // guaranteed for all DslCompiler create-call routes.
-            foreach (var prop in entity.Properties
-                .Where(p => !p.Constraints.Any(c => c is DefaultValueConstraint))
-                .OrderBy(p => p.Name)) {
-                if (_entities.Any(e => string.Equals(e.Name, prop.Type.TypeName, StringComparison.Ordinal)))
-                    break;
-                createArgs.Add(new Member(new Variable("dto"), prop.Name));
-            }
-            foreach (var nav in store.CollectionNavigations) {
+        foreach (var parameter in GetConstructorOrder(entity)) {
+            if (parameter.IsNavigation) {
                 createArgs.Add(new Invoke(new Member(new TypeReference("Enumerable"), "Empty")) {
-                    TypeArguments = [new TypeReference(nav.TargetEntityName)]
+                    TypeArguments = [new TypeReference(parameter.Type.TypeName)]
                 });
+                continue;
             }
+
+            createArgs.Add(new Member(new Variable("dto"), parameter.Name));
         }
 
         var resultVarName = $"{ToCamelCase(entity.Name)}Result";
@@ -635,45 +618,22 @@ public sealed class MinimalApiGenerator {
 
             foreach (var entity in seedableEntities) {
                 var createArgs = new List<Node>();
-                var constructorOrder = GetConstructorOrder(entity);
-                if (constructorOrder is not null && constructorOrder.Count > 0) {
-                    foreach (var parameter in constructorOrder) {
-                        if (parameter.IsNavigation) {
-                            createArgs.Add(new Invoke(new Member(new TypeReference("Enumerable"), "Empty")) {
-                                TypeArguments = [new TypeReference(parameter.Type.TypeName)]
-                            });
-                            continue;
-                        }
-
-                        var prop = entity.Properties.FirstOrDefault(p =>
-                            string.Equals(p.Name, parameter.Name, StringComparison.Ordinal));
-                        if (prop is null) {
-                            // DM-META-REMOVE-FALLBACK: remove once constructor metadata is
-                            // guaranteed to reference existing properties.
-                            createArgs.Add(new Constant("Sample"));
-                            continue;
-                        }
-
-                        createArgs.Add(MakeSampleValue(prop));
-                    }
-                }
-                else {
-                    // DM-META-REMOVE-FALLBACK: remove once constructor ordering metadata is
-                    // guaranteed for all DslCompiler seed routes.
-                    var scalarProps = entity.Properties
-                        .Where(p => !p.Constraints.Any(c => c is DefaultValueConstraint))
-                        .Where(p => !_entities.Any(e => string.Equals(e.Name, p.Type.TypeName, StringComparison.Ordinal)))
-                        .OrderBy(p => p.Name)
-                        .ToList();
-
-                    foreach (var prop in scalarProps)
-                        createArgs.Add(MakeSampleValue(prop));
-
-                    foreach (var nav in GetStorageEntity(entity).CollectionNavigations) {
+                foreach (var parameter in GetConstructorOrder(entity)) {
+                    if (parameter.IsNavigation) {
                         createArgs.Add(new Invoke(new Member(new TypeReference("Enumerable"), "Empty")) {
-                            TypeArguments = [new TypeReference(nav.TargetEntityName)]
+                            TypeArguments = [new TypeReference(parameter.Type.TypeName)]
                         });
+                        continue;
                     }
+
+                    var prop = entity.Properties.FirstOrDefault(p =>
+                        string.Equals(p.Name, parameter.Name, StringComparison.Ordinal));
+                    if (prop is null) {
+                        throw new InvalidOperationException(
+                            $"Constructor parameter '{parameter.Name}' on entity '{entity.Name}' does not match a property.");
+                    }
+
+                    createArgs.Add(MakeSampleValue(prop));
                 }
 
                 var dtoVar = ToCamelCase(entity.Name);

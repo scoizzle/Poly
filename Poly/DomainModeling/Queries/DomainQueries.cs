@@ -174,17 +174,20 @@ public static class DomainQueries {
             .Select(p => new PolicyDetail(p.Name))
             .ToList();
 
-        // Stages: use effective stages from metadata, but enrich with StageCapabilityMetadata
-        // for effective action/policy lists when available
+        // Stages: use effective stages from metadata; stage-effective policies from
+        // the canonical StageCapability surface (DAS W2) when present.
         var stages = (effectiveMemberMeta?.EffectiveStages ?? entity.Stages)
             .Select(s => {
                 var stageCap = metadata?.GetMetadata<StageCapabilityMetadata>(s);
                 var effectivePolicyNames = stageCap is not null
                     ? stageCap.View.EffectivePolicies.Select(p => p.Name).ToList()
                     : s.Policies.Select(p => p.Name).ToList();
+                var effectiveActionNames = stageCap is not null
+                    ? stageCap.View.EffectiveActions.Select(a => a.ActionName).ToList()
+                    : s.Actions.Select(a => a.Name).ToList();
                 return new StageDetail(
                     s.Name,
-                    s.Actions.Select(a => a.Name).ToList(),
+                    effectiveActionNames,
                     effectivePolicyNames,
                     s.Subscriptions.Select(sub => new SubscriptionDetail(
                         sub.RelationshipName,

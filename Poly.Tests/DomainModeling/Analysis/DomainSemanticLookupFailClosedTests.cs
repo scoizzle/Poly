@@ -1,6 +1,7 @@
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Effects;
+using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Lowering;
 using Poly.Mcp.Sessions;
 using Poly.Mcp.Tools;
@@ -8,10 +9,11 @@ using Poly.Mcp.Tools;
 namespace Poly.Tests.DomainModeling.Analysis;
 
 /// <summary>
-/// Fail-closed coverage for the DACR semantic lookup surface (r4 follow-ups F5/F18):
-/// exporter RLM throw, DomainSemanticLookupExtensions helper contracts (including the
-/// SA fallthrough regression B-1), and MCP describe routes returning not-found when
-/// analysis is present but the backing metadata has been stripped.
+/// Fail-closed coverage for the DACR semantic lookup surface (r4 follow-ups F5/F18)
+/// and DAS W4.2: exporter RLM throw, DomainSemanticLookupExtensions helper contracts
+/// (including the SA fallthrough regression B-1), and MCP describe routes that
+/// distinguish not-found (catalog complete, name absent) from missing required
+/// metadata bags (catalog/ESM stripped).
 /// </summary>
 public class DomainSemanticLookupFailClosedTests {
 
@@ -68,6 +70,39 @@ public class DomainSemanticLookupFailClosedTests {
         return new Domain("PolicyDomain", [order], []);
     }
 
+    /// <summary>
+    /// Multi-policy fixture: entity + stage + action policies and a stage-local action.
+    /// Stage-effective surface must count entity+stage only (not the action policy).
+    /// </summary>
+    private static Domain BuildMultiPolicyFixture() {
+        var adult = new Policy("Adult",
+            DomainExpression.GreaterThanOrEqual(
+                DomainExpression.Property("Age"),
+                DomainExpression.Literal(18)));
+        var active = new Policy("Active",
+            DomainExpression.Equal(DomainExpression.Property("Status"),
+                DomainExpression.Literal("Active")));
+        var hasNote = new Policy("HasNote",
+            DomainExpression.NotEqual(
+                DomainExpression.Property("Note"),
+                DomainExpression.Literal("")));
+        var submit = new Poly.DomainModeling.Action("Submit", InvocationResult.Void, [],
+            [new StageTransitionEffect(new StageReference("Active"))],
+            [hasNote]);
+        var draft = new Stage("Draft", [submit], [active], [], []);
+        var activeStage = new Stage("Active", [], [], [], []);
+        var order = new Entity("Order",
+            [
+                new Property("Age", new DomainTypeReference("Number"), []),
+                new Property("Status", new DomainTypeReference("Text"), []),
+                new Property("Note", new DomainTypeReference("Text"), []),
+            ],
+            Actions: [],
+            Policies: [adult],
+            Stages: [draft, activeStage]);
+        return new Domain("MultiPolicyDomain", [order], []);
+    }
+
     private static Domain BuildRelationshipDomain() {
         var order = new Entity("Order", [], Actions: [], Policies: [], Stages: []);
         var line = new Entity("Line", [], Actions: [], Policies: [], Stages: []);
@@ -83,10 +118,11 @@ public class DomainSemanticLookupFailClosedTests {
     public async Task ResolveRelationship_Throws_WhenAnalysisPresent_ButRlmMissing() {
         var domain = BuildRelationshipDomain();
         var analysis = RuntimeAnalysisCache.GetOrAnalyze(domain);
-        analysis.GetMetadataStore().Remove<RelationshipLookupMetadata>(null);
+        // Domain-keyed lookup is catalog-only; strip catalog for fail-closed.
+        analysis.GetMetadataStore().Remove<DomainCatalogMetadata>(domain);
 
         await Assert.That(() =>
-            DomainToCSharpExporter.ResolveRelationship(domain.Relationships, "Owns", "Order", analysis))
+            DomainToCSharpExporter.ResolveRelationship(domain.Relationships, "Owns", "Order", analysis, domain))
             .Throws<InvalidOperationException>();
     }
 
@@ -95,7 +131,7 @@ public class DomainSemanticLookupFailClosedTests {
         var domain = BuildRelationshipDomain();
         var analysis = RuntimeAnalysisCache.GetOrAnalyze(domain);
 
-        var rel = DomainToCSharpExporter.ResolveRelationship(domain.Relationships, "Owns", "Order", analysis);
+        var rel = DomainToCSharpExporter.ResolveRelationship(domain.Relationships, "Owns", "Order", analysis, domain);
 
         await Assert.That(rel).IsNotNull();
         await Assert.That(rel!.Name).IsEqualTo("Owns");
@@ -106,8 +142,8 @@ public class DomainSemanticLookupFailClosedTests {
         var domain = BuildRelationshipDomain();
         var analysis = RuntimeAnalysisCache.GetOrAnalyze(domain);
 
-        // RLM present, but the relationship name is not in it — not-found, not throw.
-        var rel = DomainToCSharpExporter.ResolveRelationship(domain.Relationships, "Missing", "Order", analysis);
+        // Catalog/RLM present, but the relationship name is not in it — not-found, not throw.
+        var rel = DomainToCSharpExporter.ResolveRelationship(domain.Relationships, "Missing", "Order", analysis, domain);
 
         await Assert.That(rel).IsNull();
     }
@@ -192,13 +228,26 @@ public class DomainSemanticLookupFailClosedTests {
     }
 
     [Test]
-    public async Task TryResolveAction_ReturnsFalse_WhenArmMissing() {
+    public async Task TryResolveAction_ReturnsFalse_WhenCatalogMissing() {
         var domain = BuildOrderDomain();
         var analysis = RuntimeAnalysisCache.GetOrAnalyze(domain);
         var order = (Entity)domain.Types[0];
-        analysis.GetMetadataStore().Remove<ActionResolutionMetadata>(order);
+        analysis.GetMetadataStore().Remove<DomainCatalogMetadata>(domain);
 
-        await Assert.That(analysis.TryResolveAction(order, "Draft", "Submit", out _)).IsFalse();
+        await Assert.That(analysis.TryResolveAction(domain, order, "Draft", "Submit", out _)).IsFalse();
+    }
+
+    [Test]
+    public async Task TryResolveAction_UsesCatalog_WithoutEntityKeyedArm() {
+        var domain = BuildOrderDomain();
+        var analysis = RuntimeAnalysisCache.GetOrAnalyze(domain);
+        var order = (Entity)domain.Types[0];
+        var entityAction = order.Actions[0];
+
+        await Assert.That(analysis.GetMetadata<ActionResolutionMetadata>(order)).IsNull();
+        await Assert.That(analysis.GetCatalog(domain)).IsNotNull();
+        await Assert.That(analysis.TryResolveAction(domain, order, "Draft", "Submit", out var resolved)).IsTrue();
+        await Assert.That(resolved).IsSameReferenceAs(entityAction);
     }
 
     [Test]
@@ -228,15 +277,179 @@ public class DomainSemanticLookupFailClosedTests {
     }
 
     [Test]
-    public async Task GetEffectivePolicies_ReturnsEmpty_WhenMtiMissing() {
+    public async Task GetEffectivePolicies_ReturnsEmpty_WhenCapabilityAndCatalogMissing() {
         var domain = BuildPolicyDomain();
         var analysis = RuntimeAnalysisCache.GetOrAnalyze(domain);
         var order = (Entity)domain.Types[0];
-        analysis.GetMetadataStore().Remove<MutationTargetIndexMetadata>(domain);
+        var draft = order.Stages[0];
+        // StageCapability is preferred (W2); strip it plus catalog for empty.
+        analysis.GetMetadataStore().Remove<StageCapabilityMetadata>(draft);
+        analysis.GetMetadataStore().Remove<DomainCatalogMetadata>(domain);
 
         var policies = analysis.GetEffectivePolicies(domain, order, "Draft");
 
         await Assert.That(policies).IsEmpty();
+    }
+
+    [Test]
+    public async Task GetEffectivePolicies_UsesCatalogIndex_WhenCapabilityStripped() {
+        var domain = BuildPolicyDomain();
+        var analysis = RuntimeAnalysisCache.GetOrAnalyze(domain);
+        var order = (Entity)domain.Types[0];
+        var draft = order.Stages[0];
+        // Force catalog Index path (not StageCapability).
+        analysis.GetMetadataStore().Remove<StageCapabilityMetadata>(draft);
+
+        await Assert.That(analysis.GetMetadata<MutationTargetIndexMetadata>(domain)).IsNull();
+        await Assert.That(analysis.GetCatalog(domain)).IsNotNull();
+        var policies = analysis.GetEffectivePolicies(domain, order, "Draft");
+
+        await Assert.That(policies.Count).IsEqualTo(2);
+    }
+
+    [Test]
+    public async Task GetEffectivePolicies_UnknownStage_ReturnsEmpty_NotEntityPolicies() {
+        var domain = BuildPolicyDomain();
+        var analysis = RuntimeAnalysisCache.GetOrAnalyze(domain);
+        var order = (Entity)domain.Types[0];
+
+        // Capability path: unknown stage never resolves → empty (not entity policies).
+        var withCap = analysis.GetEffectivePolicies(domain, order, "DoesNotExist");
+        await Assert.That(withCap).IsEmpty();
+
+        // Catalog-compose path: strip stage capability bags so MTI fallthrough would
+        // have returned entity policies before the fail-closed fix.
+        foreach (var stage in order.Stages)
+            analysis.GetMetadataStore().Remove<StageCapabilityMetadata>(stage);
+
+        var viaCatalog = analysis.GetEffectivePolicies(domain, order, "DoesNotExist");
+        await Assert.That(viaCatalog).IsEmpty();
+        // Sanity: known stage still composes entity+stage policies via catalog.
+        await Assert.That(analysis.GetEffectivePolicies(domain, order, "Draft").Count).IsEqualTo(2);
+    }
+
+    [Test]
+    public async Task GetEffectiveActions_UnknownStage_ReturnsEmpty() {
+        var domain = BuildMultiPolicyFixture();
+        var analysis = RuntimeAnalysisCache.GetOrAnalyze(domain);
+        var order = (Entity)domain.Types[0];
+
+        var actions = analysis.GetEffectiveActions(domain, order, "DoesNotExist");
+        await Assert.That(actions).IsEmpty();
+    }
+
+    // ── DAS W2: unified effective surface ─────────────────────
+
+    [Test]
+    public async Task GetEffectivePolicies_ExcludesActionPolicies_OnMultiPolicyFixture() {
+        var domain = BuildMultiPolicyFixture();
+        var analysis = RuntimeAnalysisCache.GetOrAnalyze(domain);
+        var order = (Entity)domain.Types[0];
+        var draft = order.Stages[0];
+
+        var policies = analysis.GetEffectivePolicies(domain, order, "Draft");
+        var cap = analysis.GetMetadata<StageCapabilityMetadata>(draft);
+
+        await Assert.That(policies.Count).IsEqualTo(2);
+        await Assert.That(policies.Select(p => p.Name)).Contains("Adult");
+        await Assert.That(policies.Select(p => p.Name)).Contains("Active");
+        await Assert.That(policies.Any(p => p.Name == "HasNote")).IsFalse();
+        await Assert.That(cap).IsNotNull();
+        await Assert.That(cap!.View.EffectivePolicies.Count).IsEqualTo(policies.Count);
+    }
+
+    [Test]
+    public async Task GetEffectiveActions_ReturnsStageLocalActions() {
+        var domain = BuildMultiPolicyFixture();
+        var analysis = RuntimeAnalysisCache.GetOrAnalyze(domain);
+        var order = (Entity)domain.Types[0];
+        var draft = order.Stages[0];
+
+        var actions = analysis.GetEffectiveActions(domain, order, "Draft");
+        var cap = analysis.GetMetadata<StageCapabilityMetadata>(draft);
+
+        await Assert.That(actions.Count).IsEqualTo(1);
+        await Assert.That(actions[0].Name).IsEqualTo("Submit");
+        await Assert.That(cap!.View.EffectiveActions.Count).IsEqualTo(actions.Count);
+    }
+
+    [Test]
+    public async Task GetEffectiveActions_ReturnsEmpty_WhenCapabilityAndCatalogMissing() {
+        var domain = BuildMultiPolicyFixture();
+        var analysis = RuntimeAnalysisCache.GetOrAnalyze(domain);
+        var order = (Entity)domain.Types[0];
+        var draft = order.Stages[0];
+        analysis.GetMetadataStore().Remove<StageCapabilityMetadata>(draft);
+        analysis.GetMetadataStore().Remove<DomainCatalogMetadata>(domain);
+
+        var actions = analysis.GetEffectiveActions(domain, order, "Draft");
+
+        await Assert.That(actions).IsEmpty();
+    }
+
+    [Test]
+    public async Task ActionCapability_TransitionTargets_AreRealStageRefs() {
+        var domain = BuildMultiPolicyFixture();
+        var analysis = RuntimeAnalysisCache.GetOrAnalyze(domain);
+        var order = (Entity)domain.Types[0];
+        var draft = order.Stages[0];
+        var active = order.Stages[1];
+        var submit = draft.Actions[0];
+
+        var cap = analysis.GetMetadata<ActionCapabilityMetadata>(submit);
+
+        await Assert.That(cap).IsNotNull();
+        await Assert.That(cap!.View.TransitionTargets.Count).IsEqualTo(1);
+        await Assert.That(cap.View.TransitionTargets[0]).IsSameReferenceAs(active);
+    }
+
+    [Test]
+    public async Task DescribeStage_EffectiveCounts_MatchHelpers() {
+        var (sessionId, _) = McpSessionStore.Create("W2Effective");
+
+        var outcome = McpSessionStore.Evolve(sessionId, domain =>
+            new DomainEvolution(domain).Evolve()
+                .AddEntity("Order")
+                .AddPropertyToEntity("Order", new Property("Age", new DomainTypeReference("Number"), []))
+                .AddPropertyToEntity("Order", new Property("Status", new DomainTypeReference("Text"), []))
+                .AddPropertyToEntity("Order", new Property("Note", new DomainTypeReference("Text"), []))
+                .AddPolicyToEntity("Order", "Adult",
+                    DomainExpression.GreaterThanOrEqual(
+                        DomainExpression.Property("Age"),
+                        DomainExpression.Literal(18)))
+                .AddStage("Order", "Draft")
+                .AddStage("Order", "Active")
+                .AddPolicyToStage("Order", "Draft", "Active",
+                    DomainExpression.Equal(
+                        DomainExpression.Property("Status"),
+                        DomainExpression.Literal("Active")))
+                .AddActionToStage("Order", "Draft", "Submit")
+                .AddPolicyToAction("Order", "Submit", "HasNote",
+                    DomainExpression.NotEqual(
+                        DomainExpression.Property("Note"),
+                        DomainExpression.Literal("")))
+                .Apply());
+        await Assert.That(outcome).IsNotNull();
+        await Assert.That(outcome!.Succeeded).IsTrue();
+
+        var state = GetFreshState(sessionId)!;
+        var analysis = state.LatestAnalysis!;
+        var order = state.Domain.Types.OfType<Entity>()
+            .First(e => string.Equals(e.Name, "Order", StringComparison.Ordinal));
+        var helperPolicies = analysis.GetEffectivePolicies(state.Domain, order, "Draft").Count;
+        var helperActions = analysis.GetEffectiveActions(state.Domain, order, "Draft").Count;
+        var draft = order.Stages.First(s => s.Name == "Draft");
+        var cap = analysis.GetMetadata<StageCapabilityMetadata>(draft);
+
+        await Assert.That(helperPolicies).IsEqualTo(2);
+        await Assert.That(helperActions).IsEqualTo(1);
+        await Assert.That(cap!.View.EffectivePolicies.Count).IsEqualTo(helperPolicies);
+        await Assert.That(cap.View.EffectiveActions.Count).IsEqualTo(helperActions);
+
+        var desc = OracleTool.DescribeDomainElement(sessionId, "stage", "Draft", entityName: "Order");
+        await Assert.That(desc.Success).IsTrue();
+        await Assert.That(desc.Message).Contains($"{helperActions} effective actions");
+        await Assert.That(desc.Message).Contains($"{helperPolicies} effective policies");
     }
 
     // ── DomainSemanticLookupExtensions: TryGetRelationship ────
@@ -252,12 +465,23 @@ public class DomainSemanticLookupFailClosedTests {
     }
 
     [Test]
-    public async Task TryGetRelationship_ReturnsFalse_WhenRlmMissing() {
+    public async Task TryGetRelationship_ReturnsFalse_WhenCatalogMissing() {
         var domain = BuildRelationshipDomain();
         var analysis = RuntimeAnalysisCache.GetOrAnalyze(domain);
+        analysis.GetMetadataStore().Remove<DomainCatalogMetadata>(domain);
+
+        await Assert.That(analysis.TryGetRelationship(domain, "Owns", out _)).IsFalse();
+    }
+
+    [Test]
+    public async Task TryGetRelationship_UsesCatalog_WhenRawRlmStripped() {
+        var domain = BuildRelationshipDomain();
+        var analysis = RuntimeAnalysisCache.GetOrAnalyze(domain);
+        // Intermediate Semantic RLM still published; domain-keyed path uses catalog only.
         analysis.GetMetadataStore().Remove<RelationshipLookupMetadata>(null);
 
-        await Assert.That(analysis.TryGetRelationship("Owns", out _)).IsFalse();
+        await Assert.That(analysis.TryGetRelationship(domain, "Owns", out var rel)).IsTrue();
+        await Assert.That(rel!.Name).IsEqualTo("Owns");
     }
 
     // ── DomainSemanticLookupExtensions: TryGetEntity ──────────
@@ -281,15 +505,26 @@ public class DomainSemanticLookupFailClosedTests {
     }
 
     [Test]
-    public async Task TryGetEntity_ReturnsFalse_WhenDtlMissing() {
+    public async Task TryGetEntity_ReturnsFalse_WhenCatalogMissing() {
         var domain = BuildRelationshipDomain();
         var analysis = RuntimeAnalysisCache.GetOrAnalyze(domain);
-        analysis.GetMetadataStore().Remove<DomainTypeLookupMetadata>(null);
+        analysis.GetMetadataStore().Remove<DomainCatalogMetadata>(domain);
 
-        await Assert.That(analysis.TryGetEntity("Order", out _)).IsFalse();
+        await Assert.That(analysis.TryGetEntity(domain, "Order", out _)).IsFalse();
     }
 
-    // ── F4: MCP describe routes fail closed on missing metadata ──
+    [Test]
+    public async Task TryGetEntity_UsesCatalog_WhenRawDtlmStripped() {
+        var domain = BuildRelationshipDomain();
+        var analysis = RuntimeAnalysisCache.GetOrAnalyze(domain);
+        // Intermediate Semantic DTLM still published; domain-keyed path uses catalog only.
+        analysis.GetMetadataStore().Remove<DomainTypeLookupMetadata>(null);
+
+        await Assert.That(analysis.TryGetEntity(domain, "Order", out var entity)).IsTrue();
+        await Assert.That(entity!.Name).IsEqualTo("Order");
+    }
+
+    // ── F4 / DAS W4.2: MCP describe not-found vs missing metadata ──
 
     private static McpSessionState? GetFreshState(string sessionId) {
         McpSessionStore.TryGet(sessionId, out var state);
@@ -297,7 +532,7 @@ public class DomainSemanticLookupFailClosedTests {
     }
 
     [Test]
-    public async Task DescribeStage_ReturnsNotFound_WhenEsmMissing() {
+    public async Task DescribeStage_ReturnsMissingMetadata_WhenEsmMissing() {
         var (sessionId, _) = McpSessionStore.Create("Test");
 
         var r1 = EvolveTool.AddEntity(sessionId, "Order");
@@ -312,11 +547,60 @@ public class DomainSemanticLookupFailClosedTests {
 
         var desc = OracleTool.DescribeDomainElement(sessionId, "stage", "Draft", entityName: "Order");
         await Assert.That(desc.Success).IsFalse();
-        await Assert.That(desc.Message).Contains("not found");
+        await Assert.That(desc.Message).Contains("missing EntityStructureMetadata");
+        await Assert.That(desc.Message).DoesNotContain("not found");
     }
 
     [Test]
-    public async Task DescribeAction_ReturnsNotFound_WhenArmMissing() {
+    public async Task DescribeStage_ReturnsNotFound_WhenStageAbsentAndEsmPresent() {
+        var (sessionId, _) = McpSessionStore.Create("Test");
+
+        var r1 = EvolveTool.AddEntity(sessionId, "Order");
+        await Assert.That(r1.Success).IsTrue();
+        var r2 = EvolveTool.AddStage(sessionId, "Order", "Draft");
+        await Assert.That(r2.Success).IsTrue();
+
+        var desc = OracleTool.DescribeDomainElement(sessionId, "stage", "NoSuchStage", entityName: "Order");
+        await Assert.That(desc.Success).IsFalse();
+        await Assert.That(desc.Message).Contains("not found");
+        await Assert.That(desc.Message).DoesNotContain("missing EntityStructureMetadata");
+    }
+
+    [Test]
+    public async Task DescribeAction_ReturnsMissingMetadata_WhenCatalogMissing() {
+        var (sessionId, _) = McpSessionStore.Create("Test");
+
+        var r1 = EvolveTool.AddEntity(sessionId, "Order");
+        await Assert.That(r1.Success).IsTrue();
+        var r2 = EvolveTool.AddAction(sessionId, "Order", "Submit");
+        await Assert.That(r2.Success).IsTrue();
+
+        var state = GetFreshState(sessionId)!;
+        state.LatestAnalysis!.GetMetadataStore().Remove<DomainCatalogMetadata>(state.Domain);
+
+        var desc = OracleTool.DescribeDomainElement(sessionId, "action", "Submit", entityName: "Order");
+        await Assert.That(desc.Success).IsFalse();
+        await Assert.That(desc.Message).Contains("missing DomainCatalogMetadata");
+        await Assert.That(desc.Message).DoesNotContain("not found");
+    }
+
+    [Test]
+    public async Task DescribeAction_ReturnsNotFound_WhenActionAbsentAndCatalogPresent() {
+        var (sessionId, _) = McpSessionStore.Create("Test");
+
+        var r1 = EvolveTool.AddEntity(sessionId, "Order");
+        await Assert.That(r1.Success).IsTrue();
+        var r2 = EvolveTool.AddAction(sessionId, "Order", "Submit");
+        await Assert.That(r2.Success).IsTrue();
+
+        var desc = OracleTool.DescribeDomainElement(sessionId, "action", "NoSuchAction", entityName: "Order");
+        await Assert.That(desc.Success).IsFalse();
+        await Assert.That(desc.Message).Contains("not found");
+        await Assert.That(desc.Message).DoesNotContain("missing DomainCatalogMetadata");
+    }
+
+    [Test]
+    public async Task DescribeAction_UsesCatalog_WithoutEntityKeyedArm() {
         var (sessionId, _) = McpSessionStore.Create("Test");
 
         var r1 = EvolveTool.AddEntity(sessionId, "Order");
@@ -327,15 +611,15 @@ public class DomainSemanticLookupFailClosedTests {
         var state = GetFreshState(sessionId)!;
         var order = state.Domain.Types.OfType<Entity>()
             .First(e => string.Equals(e.Name, "Order", StringComparison.Ordinal));
-        state.LatestAnalysis!.GetMetadataStore().Remove<ActionResolutionMetadata>(order);
+        await Assert.That(state.LatestAnalysis!.GetMetadata<ActionResolutionMetadata>(order)).IsNull();
 
         var desc = OracleTool.DescribeDomainElement(sessionId, "action", "Submit", entityName: "Order");
-        await Assert.That(desc.Success).IsFalse();
-        await Assert.That(desc.Message).Contains("not found");
+        await Assert.That(desc.Success).IsTrue();
+        await Assert.That(System.Text.Json.JsonSerializer.Serialize(desc.Data)).Contains("Submit");
     }
 
     [Test]
-    public async Task DescribePolicy_ReturnsNotFound_WhenMtiMissing() {
+    public async Task DescribePolicy_ReturnsMissingMetadata_WhenCatalogMissing() {
         var (sessionId, _) = McpSessionStore.Create("Test");
 
         var r1 = EvolveTool.AddEntity(sessionId, "Order");
@@ -347,15 +631,91 @@ public class DomainSemanticLookupFailClosedTests {
         await Assert.That(r2.Success).IsTrue();
 
         var state = GetFreshState(sessionId)!;
-        state.LatestAnalysis!.GetMetadataStore().Remove<MutationTargetIndexMetadata>(state.Domain);
+        state.LatestAnalysis!.GetMetadataStore().Remove<DomainCatalogMetadata>(state.Domain);
 
         var desc = OracleTool.DescribeDomainElement(sessionId, "policy", "Adult", entityName: "Order");
         await Assert.That(desc.Success).IsFalse();
-        await Assert.That(desc.Message).Contains("not found");
+        await Assert.That(desc.Message).Contains("missing DomainCatalogMetadata");
+        await Assert.That(desc.Message).DoesNotContain("not found");
     }
 
     [Test]
-    public async Task DescribeRelationship_ReturnsNotFound_WhenRlmMissing() {
+    public async Task DescribePolicy_ReturnsNotFound_WhenPolicyAbsentAndCatalogPresent() {
+        var (sessionId, _) = McpSessionStore.Create("Test");
+
+        var r1 = EvolveTool.AddEntity(sessionId, "Order");
+        await Assert.That(r1.Success).IsTrue();
+        var r1b = EvolveTool.AddProperty(sessionId, "Order", "Age", "Number");
+        await Assert.That(r1b.Success).IsTrue();
+        var r2 = PolicyTool.AddPolicy(sessionId, "Order", "Adult",
+            @"{""property"":""Age"",""op"":"">="",""value"":18}");
+        await Assert.That(r2.Success).IsTrue();
+
+        var desc = OracleTool.DescribeDomainElement(sessionId, "policy", "NoSuchPolicy", entityName: "Order");
+        await Assert.That(desc.Success).IsFalse();
+        await Assert.That(desc.Message).Contains("not found");
+        await Assert.That(desc.Message).DoesNotContain("missing DomainCatalogMetadata");
+    }
+
+    [Test]
+    public async Task DescribePolicy_UsesCatalog_WithoutDomainKeyedMti() {
+        var (sessionId, _) = McpSessionStore.Create("Test");
+
+        var r1 = EvolveTool.AddEntity(sessionId, "Order");
+        await Assert.That(r1.Success).IsTrue();
+        var r1b = EvolveTool.AddProperty(sessionId, "Order", "Age", "Number");
+        await Assert.That(r1b.Success).IsTrue();
+        var r2 = PolicyTool.AddPolicy(sessionId, "Order", "Adult",
+            @"{""property"":""Age"",""op"":"">="",""value"":18}");
+        await Assert.That(r2.Success).IsTrue();
+
+        var state = GetFreshState(sessionId)!;
+        await Assert.That(state.LatestAnalysis!.GetMetadata<MutationTargetIndexMetadata>(state.Domain)).IsNull();
+
+        var desc = OracleTool.DescribeDomainElement(sessionId, "policy", "Adult", entityName: "Order");
+        await Assert.That(desc.Success).IsTrue();
+        await Assert.That(System.Text.Json.JsonSerializer.Serialize(desc.Data)).Contains("Adult");
+    }
+
+    [Test]
+    public async Task DescribeRelationship_ReturnsMissingMetadata_WhenCatalogMissing() {
+        var (sessionId, _) = McpSessionStore.Create("Test");
+
+        var r1 = EvolveTool.AddEntity(sessionId, "Order");
+        await Assert.That(r1.Success).IsTrue();
+        var r2 = EvolveTool.AddEntity(sessionId, "Line");
+        await Assert.That(r2.Success).IsTrue();
+        var r3 = EvolveTool.AddRelationship(sessionId, "Owns", "Order", "Line", "OneToMany");
+        await Assert.That(r3.Success).IsTrue();
+
+        var state = GetFreshState(sessionId)!;
+        state.LatestAnalysis!.GetMetadataStore().Remove<DomainCatalogMetadata>(state.Domain);
+
+        var desc = OracleTool.DescribeDomainElement(sessionId, "relationship", "Owns");
+        await Assert.That(desc.Success).IsFalse();
+        await Assert.That(desc.Message).Contains("missing DomainCatalogMetadata");
+        await Assert.That(desc.Message).DoesNotContain("not found");
+    }
+
+    [Test]
+    public async Task DescribeRelationship_ReturnsNotFound_WhenRelationshipAbsentAndCatalogPresent() {
+        var (sessionId, _) = McpSessionStore.Create("Test");
+
+        var r1 = EvolveTool.AddEntity(sessionId, "Order");
+        await Assert.That(r1.Success).IsTrue();
+        var r2 = EvolveTool.AddEntity(sessionId, "Line");
+        await Assert.That(r2.Success).IsTrue();
+        var r3 = EvolveTool.AddRelationship(sessionId, "Owns", "Order", "Line", "OneToMany");
+        await Assert.That(r3.Success).IsTrue();
+
+        var desc = OracleTool.DescribeDomainElement(sessionId, "relationship", "NoSuchRel");
+        await Assert.That(desc.Success).IsFalse();
+        await Assert.That(desc.Message).Contains("not found");
+        await Assert.That(desc.Message).DoesNotContain("missing DomainCatalogMetadata");
+    }
+
+    [Test]
+    public async Task DescribeRelationship_UsesCatalog_WhenRawRlmStripped() {
         var (sessionId, _) = McpSessionStore.Create("Test");
 
         var r1 = EvolveTool.AddEntity(sessionId, "Order");
@@ -369,8 +729,8 @@ public class DomainSemanticLookupFailClosedTests {
         state.LatestAnalysis!.GetMetadataStore().Remove<RelationshipLookupMetadata>(null);
 
         var desc = OracleTool.DescribeDomainElement(sessionId, "relationship", "Owns");
-        await Assert.That(desc.Success).IsFalse();
-        await Assert.That(desc.Message).Contains("not found");
+        await Assert.That(desc.Success).IsTrue();
+        await Assert.That(System.Text.Json.JsonSerializer.Serialize(desc.Data)).Contains("Owns");
     }
 
     // ── F18: describe success coverage (action/relationship had zero tests) ──
@@ -406,4 +766,5 @@ public class DomainSemanticLookupFailClosedTests {
         var json = System.Text.Json.JsonSerializer.Serialize(desc.Data);
         await Assert.That(json).Contains("Owns");
     }
+
 }

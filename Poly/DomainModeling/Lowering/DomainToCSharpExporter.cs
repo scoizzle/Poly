@@ -61,10 +61,11 @@ public sealed class DomainToCSharpExporter {
         IReadOnlyDictionary<string, Entity> entityLookup,
         List<SubscriptionInfo> subList,
         Dictionary<string, List<SubscriptionInfo>> subscriptionsByTarget,
-        INodeMetadataProvider metadata) {
+        INodeMetadataProvider metadata,
+        Domain? domain = null) {
         ArgumentNullException.ThrowIfNull(metadata);
 
-        var rel = ResolveRelationship(domainRelationships, sub.RelationshipName, entity.Name, metadata);
+        var rel = ResolveRelationship(domainRelationships, sub.RelationshipName, entity.Name, metadata, domain);
         if (rel is null) return;
 
         if (!entityLookup.TryGetValue(rel.Target.TypeName, out var targetEntity))
@@ -376,7 +377,7 @@ public sealed class DomainToCSharpExporter {
                         LowerStageTransitions: true,
                         Domain: domain,
                         EnumPropertyNames: domain is not null
-                            ? BuildEnumPropertyNames(entity, domain)
+                            ? BuildEnumPropertyNames(entity, domain, metadata)
                             : null
                     );
                     var effectPass = new EffectLoweringPass(entity, context);
@@ -451,7 +452,7 @@ public sealed class DomainToCSharpExporter {
                         LowerStageTransitions: false,
                         Domain: domain,
                         EnumPropertyNames: domain is not null
-                            ? BuildEnumPropertyNames(entity, domain)
+                            ? BuildEnumPropertyNames(entity, domain, metadata)
                             : null
                     );
                     var entryPass = new EffectLoweringPass(entity, entryCtx);
@@ -629,11 +630,12 @@ public sealed class DomainToCSharpExporter {
         var pascalName = ToPascalCase(rel.Name);
         var targetTypeName = rel.Target.TypeName;
         var targetType = new NamedTypeReference(targetTypeName);
-        // DM-META-REMOVE-FALLBACK: use DomainTypeLookupMetadata for
-        // entity resolution instead of direct domain type scan.
-        var targetEntity = domain.Types.OfType<Entity>()
-            .FirstOrDefault(e => string.Equals(e.Name, targetTypeName, StringComparison.Ordinal));
-        if (targetEntity is null) return;
+        var lookup = metadata.GetTypeLookup(domain)
+            ?? throw new InvalidOperationException(
+                "Domain catalog type lookup is required for CreateNav export.");
+        if (!lookup.Types.TryGetValue(targetTypeName, out var resolvedType)
+            || resolvedType is not Entity targetEntity)
+            return;
 
         var methodName = $"Create{pascalName}";
 
@@ -726,18 +728,11 @@ public sealed class DomainToCSharpExporter {
     private static IReadOnlyList<ConstructorParameterOrder> GetConstructorParameters(
         Entity targetEntity,
         INodeMetadataProvider analysis) {
-        if (analysis.GetMetadata<EntityStructureMetadata>(targetEntity) is EntityStructureMetadata esm
-            && esm.ConstructorParameters.Count > 0) {
+        if (analysis.GetMetadata<EntityStructureMetadata>(targetEntity) is EntityStructureMetadata esm)
             return esm.ConstructorParameters;
-        }
 
-        // DM-META-REMOVE-FALLBACK: remove property scan fallback once
-        // EntityStructureMetadata is mandatory for constructor ordering.
-        return targetEntity.Properties
-            .Where(p => !p.Constraints.Any(c => c is DefaultValueConstraint))
-            .OrderBy(p => p.Name)
-            .Select(p => new ConstructorParameterOrder(p.Name, p.Type, false, false))
-            .ToList();
+        throw new InvalidOperationException(
+            $"EntityStructureMetadata is required for constructor ordering on entity '{targetEntity.Name}'.");
     }
 
     /// <summary>Returns a default-value Syntax node for a property (null, 0, false, etc.).</summary>
@@ -1169,7 +1164,7 @@ public sealed class DomainToCSharpExporter {
         string? sourceStageName = null, Domain? domain = null,
         INodeMetadataProvider? analysis = null) {
         if (action.Effects.Count == 0) return null;
-        var enumProps = domain is not null ? BuildEnumPropertyNames(entity, domain) : null;
+        var enumProps = domain is not null ? BuildEnumPropertyNames(entity, domain, analysis) : null;
         var context = new LoweringContext(
             new Parameter("entity", new TypeReference(entity.Name)),
             Analysis: analysis,
@@ -1190,7 +1185,7 @@ public sealed class DomainToCSharpExporter {
     internal static Node? LowerExpressionToMethodBody(
         DomainExpression expr, Entity entity, Domain? domain = null,
         INodeMetadataProvider? analysis = null) {
-        var enumProps = domain is not null ? BuildEnumPropertyNames(entity, domain) : null;
+        var enumProps = domain is not null ? BuildEnumPropertyNames(entity, domain, analysis) : null;
         var context = new LoweringContext(
             new Parameter("entity", new TypeReference(entity.Name)),
             Analysis: analysis,
@@ -1207,15 +1202,20 @@ public sealed class DomainToCSharpExporter {
     internal static bool TryResolveEnumType(Domain? domain, INodeMetadataProvider? analysis, string typeName, out EnumType? enumType) {
         enumType = null;
 
-        if (analysis?.GetMetadata<DomainTypeLookupMetadata>(default) is DomainTypeLookupMetadata lookup
-            && lookup.Types.TryGetValue(typeName, out var resolvedType)
-            && resolvedType is EnumType resolvedEnum) {
-            enumType = resolvedEnum;
-            return true;
+        // Catalog primary when analysis present (DAS W1.3 / W4.2).
+        if (analysis is not null) {
+            var lookup = analysis.GetTypeLookup(domain);
+            if (lookup is not null
+                && lookup.Types.TryGetValue(typeName, out var resolvedType)
+                && resolvedType is EnumType resolvedEnum) {
+                enumType = resolvedEnum;
+                return true;
+            }
+            // Analysis present: fail closed (no domain tree rescan).
+            return false;
         }
 
-        // DM-META-REMOVE-FALLBACK: remove domain scan once all semantic callers
-        // are analysis-required and enum lookup metadata is mandatory.
+        // Null-analysis residual for non-product/test callers only.
         if (domain is not null) {
             enumType = domain.Types.OfType<EnumType>()
                 .FirstOrDefault(e => string.Equals(e.Name, typeName, StringComparison.Ordinal));
@@ -1229,18 +1229,25 @@ public sealed class DomainToCSharpExporter {
     /// Builds a map from property name → enum type name for all properties of
     /// <paramref name="entity"/> whose type resolves to an <see cref="EnumType"/>.
     /// Used by the expression lowering pass to emit qualified enum member access.
+    /// Catalog-only when <paramref name="analysis"/> is present.
     /// </summary>
     internal static Dictionary<string, string>? BuildEnumPropertyNames(
-        Entity entity, Domain domain) {
+        Entity entity, Domain domain, INodeMetadataProvider? analysis = null) {
         Dictionary<string, string>? map = null;
-        // DM-META-REMOVE-FALLBACK: use DomainTypeLookupMetadata for
-        // enum type resolution instead of direct domain scan.
-        var enumTypes = domain.Types.OfType<EnumType>()
-            .ToDictionary(e => e.Name, StringComparer.Ordinal);
-        if (enumTypes.Count == 0) return null;
+        IReadOnlyDictionary<string, DomainType> types;
+        if (analysis is not null) {
+            var lookup = analysis.GetTypeLookup(domain)
+                ?? throw new InvalidOperationException(
+                    "Domain catalog type lookup is required for enum property mapping when analysis is present.");
+            types = lookup.Types;
+        }
+        else {
+            types = domain.Types.ToDictionary(t => t.Name, StringComparer.Ordinal);
+        }
 
         foreach (var prop in entity.Properties) {
-            if (enumTypes.TryGetValue(prop.Type.TypeName, out _)) {
+            if (types.TryGetValue(prop.Type.TypeName, out var resolved)
+                && resolved is EnumType) {
                 (map ??= new(StringComparer.Ordinal))[prop.Name] = prop.Type.TypeName;
             }
         }
@@ -1253,12 +1260,13 @@ public sealed class DomainToCSharpExporter {
         IReadOnlyList<Relationship> domainRelationships,
         string relationshipName,
         string sourceEntityName,
-        INodeMetadataProvider? analysis = null) {
+        INodeMetadataProvider? analysis = null,
+        Domain? domain = null) {
         if (analysis is not null) {
-            var rlm = analysis.GetMetadata<RelationshipLookupMetadata>(default);
+            var rlm = analysis.GetRelationshipLookup(domain);
             if (rlm is null)
                 throw new InvalidOperationException(
-                    $"{nameof(RelationshipLookupMetadata)} is required for subscription resolution when analysis is present.");
+                    "Domain catalog relationship lookup is required for subscription resolution when analysis is present.");
             if (rlm.Relationships.TryGetValue(relationshipName, out var relationship)
                 && string.Equals(relationship.Source.TypeName, sourceEntityName, StringComparison.Ordinal)) {
                 return relationship;
@@ -1267,8 +1275,7 @@ public sealed class DomainToCSharpExporter {
             return null;
         }
 
-        // DM-META-REMOVE-FALLBACK: remove relationship list scan when analysis
-        // metadata becomes mandatory for all semantic lookup paths.
+        // Null-analysis residual for non-product/test callers only.
         return domainRelationships.FirstOrDefault(r =>
             string.Equals(r.Name, relationshipName, StringComparison.Ordinal) &&
             string.Equals(r.Source.TypeName, sourceEntityName, StringComparison.Ordinal));

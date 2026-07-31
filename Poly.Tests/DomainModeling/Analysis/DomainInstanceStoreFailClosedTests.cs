@@ -116,9 +116,10 @@ public class DomainInstanceStoreFailClosedTests {
         var tracker = (Entity)domain.Types[1];
         var pending = tracker.Stages[0];
 
-        // Assert that ALL required runtime metadata contracts are present
-        var arm = analysis.GetMetadata<ActionResolutionMetadata>(tracker);
-        await Assert.That(arm).IsNotNull();
+        // Catalog owns action maps (DAS W1.4); stage plans + contracts remain separate.
+        var catalog = analysis.GetMetadata<DomainCatalogMetadata>(domain);
+        await Assert.That(catalog).IsNotNull();
+        await Assert.That(catalog!.ActionsByEntityName.TryGetValue("Tracker", out var arm)).IsTrue();
         await Assert.That(arm!.EntityActions.ContainsKey("Reset")).IsTrue();
 
         var esm = analysis.GetMetadata<EntityStructureMetadata>(tracker);

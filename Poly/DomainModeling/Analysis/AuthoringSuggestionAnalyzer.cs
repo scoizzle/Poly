@@ -3,14 +3,14 @@ using Poly.Analysis;
 namespace Poly.DomainModeling.Analysis;
 
 /// <summary>
-/// Analyzer that produces actionable authoring suggestions (hints) for domain models.
-/// These are advisory — they do not block evolution, but help agents identify
-/// common gaps in lifecycle definitions.
+/// Lint-only: actionable authoring suggestions (hints) for domain models.
+/// Advisory — does not block evolution; writes no metadata others read.
 /// </summary>
 internal sealed class AuthoringSuggestionAnalyzer : INodeAnalyzer {
     public const string Id = "DomainAuthoringSuggestionAnalyzer";
     public string PassName => Id;
-    public string[] Dependencies => [];
+    // Reads DomainTypeLookupMetadata for entity enumeration.
+    public string[] Dependencies => [SemanticDomainAnalyzer.Id];
 
     public void Analyze(AnalysisContext context, Node node) {
         if (!context.ShouldAnalyze(node))

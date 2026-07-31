@@ -8,6 +8,7 @@ namespace Poly.DomainModeling.Analysis;
 internal sealed class SemanticDomainAnalyzer : INodeAnalyzer {
     public const string Id = "DomainSemanticDomainAnalyzer";
     public string PassName => Id;
+    // Root fact publisher (DTLM/RLM/EPM/…); no upstream analysis bags.
     public string[] Dependencies => [];
     public void Analyze(AnalysisContext context, Node node) {
         if (!context.ShouldAnalyze(node)) {
@@ -126,12 +127,9 @@ internal sealed class SemanticDomainAnalyzer : INodeAnalyzer {
             }
         }
 
-        var stages = entity.Stages
-            .GroupBy(static stage => stage.Name, StringComparer.Ordinal)
-            .ToDictionary(static group => group.Key, static group => group.Last(), StringComparer.Ordinal);
-
         foreach (var stage in entity.Stages) {
-            var stagePolicies = GetEffectiveStagePolicies(entityPolicies, stage, stages);
+            // Same algorithm as Capability / GetEffectivePolicies (DAS W2).
+            var stagePolicies = DomainEffectiveSurface.ComposeStagePolicies(entityPolicies, stage);
             if (stagePolicies.Count > 0) {
                 context.SetMetadata(stage, new EffectivePoliciesMetadata(stagePolicies));
             }
@@ -143,27 +141,6 @@ internal sealed class SemanticDomainAnalyzer : INodeAnalyzer {
                 }
             }
         }
-    }
-
-    private static IReadOnlyList<Policy> GetEffectiveStagePolicies(
-        IReadOnlyList<Policy> entityPolicies,
-        Stage stage,
-        IReadOnlyDictionary<string, Stage> stages) {
-        List<Policy> effectivePolicies = [.. entityPolicies];
-        AppendStagePolicies(stage, stages, effectivePolicies, []);
-        return effectivePolicies;
-    }
-
-    private static void AppendStagePolicies(
-        Stage stage,
-        IReadOnlyDictionary<string, Stage> stages,
-        List<Policy> effectivePolicies,
-        HashSet<string> visited) {
-        if (!visited.Add(stage.Name)) {
-            return;
-        }
-
-        effectivePolicies.AddRange(stage.Policies);
     }
 
     private static void PublishEffectiveMemberMetadata(AnalysisContext context, Entity entity) {

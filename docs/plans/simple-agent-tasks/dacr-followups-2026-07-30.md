@@ -6,8 +6,8 @@ Source reviews:
 - `./dacr-local-review-2026-07-30.md` (r1 — early dirty tree; most items fixed)
 - Latest local `/review` r2 (scratch notes folded into this file; do not leave follow-ups only outside `docs/`)
 
-Status: [~] r5 code items F24–F31 verified fixed in tree (r6); **docs pick-order stale → F32–F33 open** (2026-07-30)
-Difficulty: Small residual (plan honesty + G2 wording nits)
+Status: [~] r5 code F24–F31 closed; F32/F33/F35 done (F33 closed via DAS W4.3 EffectLowering fail-closed, 2026-07-31); F34 optional hygiene open
+Difficulty: Small residual (F34 DescribeStage nit only)
 
 ## Agent rule
 
@@ -228,8 +228,8 @@ Much improved vs r1: MTI is domain-keyed, `GetEffectivePolicies` is entity+stage
 
 **Source**: `dacr-local-review-2026-07-30-r6.md`
 
-**Status**: [ ] Open — docs honesty only  
-**Verdict**: 0 bugs, 2 suggestions, 2 nits. No blocking runtime/MCP defects found on re-verify. Close F32–F35 for pick-order cleanliness.
+**Status**: [~] F32/F33/F35 closed; F34 optional hygiene open  
+**Verdict**: 0 bugs, 2 suggestions, 2 nits. No blocking runtime/MCP defects found on re-verify. F32–F33/F35 closed; F34 remains optional.
 
 ### Suggestions
 
@@ -237,9 +237,9 @@ Much improved vs r1: MTI is domain-keyed, `GetEffectivePolicies` is entity+stage
   Files: `dacr-README.md:14,30`, this file’s header/status  
   **Done (r6)**: pick order + status table no longer advertise F24 as blocking.
 
-- [ ] **F33** — Narrow G2 “fallbacks guarded by null checks” claim  
-  File: `dacr-gate.md:21`  
-  Runtime dual paths match; evolution `DomainMutationContext` still has intentional live-tree scans (5 tags).
+- [x] **F33** — G2 dual-path / fallback claims honest  
+  File: `dacr-gate.md` G2  
+  **Closed (DAS W4.3 re-open fix 2026-07-31):** `EffectLoweringPass.GetConstructorParameterOrder` fail-closed under analysis (ESM required); markers `*.cs` = 0; G2 + DACR item 4 closed. Evidence: [`das-gate.md`](./das-gate.md) G4.2 + [`das-w4-3-marker-zero-and-dacr-close.md`](./das-w4-3-marker-zero-and-dacr-close.md).
 
 ### Nits
 
@@ -251,6 +251,6 @@ Much improved vs r1: MTI is domain-keyed, `GetEffectivePolicies` is entity+stage
 
 ## Done definition (r6 slice)
 
-1. [x] F32 README/follow-ups pick order honest; [ ] F33 G2 wording still open.
+1. [x] F32 README/follow-ups pick order honest; [x] F33 G2 wording closed (EffectLowering fail-closed).
 2. [ ] F34 optional hygiene; [x] F35 historical table fixed.
-3. [ ] Suite Done Definition item 4 still open by design (`DM-META-REMOVE-FALLBACK` remaining).
+3. [x] Suite Done Definition item 4: markers 0 + analysis-present dual paths removed (DAS W4.3).

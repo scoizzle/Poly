@@ -3,7 +3,7 @@
 Parent: ../downstream-analysis-consumption-remediation.md
 Queue: ./dacr-README.md
 Difficulty: Medium
-Status: [~] In progress — helpers/tests/tagging done; AC incomplete (fallbacks + residual fail-closed)
+Status: [~] Helpers/tests/tagging done; fallback AC closed via DAS W4; nullable-API cleanup residual (P6.1/P6.2)
 Prereq: DACR.P1-P5 complete
 Active follow-ups: ./dacr-followups-2026-07-30.md (F1–F8)
 
@@ -40,12 +40,13 @@ Resolved per F1–F10 in follow-ups slice:
 - [x] DescribePolicy searches entity, stage, and action MTI maps with scope disambiguation (F3).
 - [x] InvokeActionInternal fail-closed: when analysis ran but TryResolveAction/TryGetStage returns null, skip scan (F2).
 - [x] TransitionStage reuses single GetOrAnalyze call (F9).
-- Not yet AC-true:
-  - Residual `DM-META-REMOVE-FALLBACK` scans remain in semantic routes for when analysis is null.
-  - Nullable analysis internal signatures still tolerated for dual-use paths (EntitySyntaxPass).
+- AC-true via DAS W4:
+  - `DM-META-REMOVE-FALLBACK` **markers** gone (`rg **/*.cs` = 0 as of DAS W4.3, 2026-07-31).
+  - Analysis-present soft dual path in `EffectLoweringPass.GetConstructorParameterOrder` fail-closed (ESM required; empty list honest monopath).
+  - Nullable analysis internal signatures still tolerated on some dual-use / standalone paths (DAS non-goals apply).
 
 ## Verification
 
 - [x] Build green.
-- [x] Full tests green (1703 passed, 0 failed).
-- [ ] All `DM-META-REMOVE-FALLBACK` markers resolved (requires analysis universally required — deferred).
+- [x] Full tests green (1762 passed, 0 failed — DAS W4.3 re-open fix 2026-07-31).
+- [x] Fallback scans fully removed on scoped semantic routes (markers 0 + EffectLowering ctor-order monopath).

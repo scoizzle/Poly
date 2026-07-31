@@ -4,8 +4,9 @@ namespace Poly.DomainModeling.Analysis;
 
 /// <summary>
 /// Single domain-scoped catalog of name→member maps for semantic lookup.
-/// Published after semantic + runtime-contract indexes exist (DAS W1).
-/// Consumers should prefer this bag over reading MTI/DTLM/RLM/ARM separately.
+/// Sole write site for action-resolution and mutation-target indexes (DAS W1.4).
+/// Embeds intermediate Semantic type/relationship lookups; product consumers
+/// read this bag via <see cref="DomainSemanticLookupExtensions"/>.
 /// </summary>
 internal sealed record DomainCatalogMetadata(
     Domain Domain,

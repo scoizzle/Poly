@@ -88,6 +88,12 @@ Use these. If you think you need a parallel facility, stop and re-read this sect
 **Domain analysis future state:** target pipeline (validate · catalog · derive), single catalog, consumer contracts, export boundary — [`docs/plans/domain-analysis-future-state.md`](plans/domain-analysis-future-state.md).  
 **Present inventory / cutover notes:** [`docs/plans/domain-analysis-simplification.md`](plans/domain-analysis-simplification.md). Syntax IR projection is an **export** step on a finished `AnalysisResult`, not a domain-fact analysis pass.
 
+**Domain catalog (DAS W1):** `DomainCatalogPass` is the sole product publisher of name→member maps (`DomainCatalogMetadata` on the domain node). Product lookups go through `DomainSemanticLookupExtensions` (catalog-only when domain-keyed). Intermediate Semantic DTLM/RLM still publish for mid-pipeline analyzers and are embedded in the catalog; entity-keyed ARM and domain-keyed MTI dual-write are retired. Remaining non-catalog bags (relationship contracts, stage subscription plans, entity structure, capabilities): ownership matrix in [`docs/plans/das-catalog-design.md`](plans/das-catalog-design.md).
+
+**Effective stage surface (DAS W2):** `CapabilityAnalyzer` publishes the canonical stage-effective view (`StageCapabilityMetadata`). Composition is one algorithm in `DomainEffectiveSurface` — policies = entity + stage (not action policies); actions = stage-local only. Product paths use `GetEffectivePolicies` / `GetEffectiveActions`; MCP `DescribeStage` uses those helpers. `BehaviorPass` is a pack DTO adapter over Capability + action-level EPM (no third composition path).
+
+**Fact vs validate packs (DAS W3.2):** Small fact emitters publish bags consumers read; megapass diagnostics stay in validate packs. Template split: `RequiredPropertiesPass` → `RequiredPropertiesMetadata`; `EffectFactsPass` → `ResolvedRelationshipTargetMetadata` on create-in. `PolicyConstraintAnalyzer` / `EffectAnalyzer` are lint-only (no fact publication). Further thinning of remaining diagnostic LOC is follow-up — see `docs/plans/simple-agent-tasks/das-w3-2-split-validation-facts.md`.
+
 Pass order and registry: `Poly/Interpretation/Analysis/README.md`. Authoring guide: `docs/interpretation/analysis-pass-guide.md`.
 
 ### 3.2 Node replacement (AST rewrite support)

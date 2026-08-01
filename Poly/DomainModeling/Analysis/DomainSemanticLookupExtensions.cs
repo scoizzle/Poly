@@ -192,14 +192,10 @@ public static class DomainSemanticLookupExtensions {
         if (!analysis.TryGetStage(entity, stageName, out var stage) || stage is null)
             return Array.Empty<Action>();
 
-        var cap = analysis.GetMetadata<StageCapabilityMetadata>(stage);
-        if (cap is not null) {
-            // Capability EffectiveActions are stage-local views built from stage.Actions.
-            return DomainEffectiveSurface.ComposeStageActions(stage);
-        }
-
-        // Catalog present → same composition without capability bag.
-        if (analysis.GetCatalog(domain) is not null)
+        // Stage-local only (Capability EffectiveActions mirror stage.Actions; SA entity
+        // actions stay on TryResolveAction for runtime dispatch, not this list).
+        if (analysis.GetMetadata<StageCapabilityMetadata>(stage) is not null
+            || analysis.GetCatalog(domain) is not null)
             return DomainEffectiveSurface.ComposeStageActions(stage);
 
         return Array.Empty<Action>();

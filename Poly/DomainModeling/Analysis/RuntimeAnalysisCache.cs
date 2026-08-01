@@ -17,7 +17,8 @@ internal static class RuntimeAnalysisCache {
             return holder.Analysis;
         }
 
-        var analysis = DomainModelAnalyzer.Analyze(domain);
+        // Require catalog for domain-bound runtime when the tree is analyzable.
+        var analysis = DomainModelAnalyzer.AnalyzeRequiringCatalog(domain);
         Cache.Add(domain, new Holder { Analysis = analysis });
         return analysis;
     }

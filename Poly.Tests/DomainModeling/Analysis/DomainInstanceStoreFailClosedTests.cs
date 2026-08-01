@@ -88,6 +88,59 @@ public class DomainInstanceStoreFailClosedTests {
     }
 
     [Test]
+    public async Task TransitionStage_Throws_WhenDomainCatalogMissing() {
+        var domain = BuildDomainWithSubscriptions();
+        var order = DomainEntityInstance.Create(
+            (Entity)domain.Types[0], new Dictionary<string, object?>(), domain);
+
+        var analysis = RuntimeAnalysisCache.GetOrAnalyze(domain);
+        analysis.GetMetadataStore().Remove<DomainCatalogMetadata>(domain);
+
+        var ex = Assert.Throws<InvalidOperationException>(() => order.TransitionStage("Active"));
+        await Assert.That(ex!.Message).Contains("DomainCatalogMetadata");
+        await Assert.That(ex.Message).Contains("TransitionStage");
+    }
+
+    [Test]
+    public async Task NotifyTransition_Throws_WhenDomainCatalogMissing() {
+        // Call store.NotifyTransition directly — TransitionStage would throw first (Q1).
+        var domain = BuildDomainWithSubscriptions();
+        var store = new DomainInstanceStore();
+
+        var order = DomainEntityInstance.Create(
+            (Entity)domain.Types[0], new Dictionary<string, object?>(), domain);
+        var tracker = DomainEntityInstance.Create(
+            (Entity)domain.Types[1], new Dictionary<string, object?>(), domain);
+
+        store.Add(order);
+        store.Add(tracker);
+        store.Link("Tracks", tracker, order);
+
+        // Advance stage without notify so we can hit NotifyTransition alone.
+        order.TransitionStage("Active", notifyStore: false);
+
+        var analysis = RuntimeAnalysisCache.GetOrAnalyze(domain);
+        analysis.GetMetadataStore().Remove<DomainCatalogMetadata>(domain);
+
+        var ex = Assert.Throws<InvalidOperationException>(() => store.NotifyTransition(order, "Active"));
+        await Assert.That(ex!.Message).Contains("DomainCatalogMetadata");
+        await Assert.That(ex.Message).Contains("NotifyTransition");
+    }
+
+    [Test]
+    public async Task TransitionStage_DomainBound_Throws_WhenEntityStructureMetadataMissing() {
+        var domain = BuildDomainWithSubscriptions();
+        var orderEntity = (Entity)domain.Types[0];
+        var order = DomainEntityInstance.Create(orderEntity, new Dictionary<string, object?>(), domain);
+
+        var analysis = RuntimeAnalysisCache.GetOrAnalyze(domain);
+        analysis.GetMetadataStore().Remove<EntityStructureMetadata>(orderEntity);
+
+        var ex = Assert.Throws<InvalidOperationException>(() => order.TransitionStage("Active"));
+        await Assert.That(ex!.Message).Contains("EntityStructureMetadata");
+    }
+
+    [Test]
     public async Task NotifyTransition_Succeeds_WhenAllMetadataPresent() {
         // Arrange: Full analysis without corruption — happy path
         var domain = BuildDomainWithSubscriptions();

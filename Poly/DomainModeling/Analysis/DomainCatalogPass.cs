@@ -20,8 +20,14 @@ internal sealed class DomainCatalogPass : INodeAnalyzer {
 
         var types = context.GetMetadata<DomainTypeLookupMetadata>(default);
         var relationships = context.GetMetadata<RelationshipLookupMetadata>(default);
-        if (types is null || relationships is null)
+        if (types is null || relationships is null) {
+            // Fail closed: catalog is required for product semantic consumers.
+            context.ReportStructuralFailure(
+                domain,
+                "Domain catalog requires DomainTypeLookupMetadata and RelationshipLookupMetadata from SemanticDomainAnalyzer.",
+                DomainModelDiagnosticCodes.SemanticReferenceResolution);
             return;
+        }
 
         var actionsByEntity = new Dictionary<string, ActionResolutionMetadata>(StringComparer.Ordinal);
         foreach (var entity in types.Entities) {

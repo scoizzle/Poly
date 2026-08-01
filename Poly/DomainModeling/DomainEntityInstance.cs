@@ -45,8 +45,11 @@ public sealed record DomainEntityInstance {
     private Dictionary<string, object?>? _eventValues;
     private bool _isExecutingSubscription;
     private int _invokeDepth;
+    private int _transitionDepth;
     /// <summary>Max nested <see cref="InvokeAction"/> depth (self-invoke / re-entrancy).</summary>
     public const int MaxInvokeDepth = 16;
+    /// <summary>Max nested <see cref="TransitionStage"/> depth (OnEntry/OnExit re-entrancy).</summary>
+    public const int MaxTransitionDepth = 16;
     internal DomainInstanceStore? Store { get; set; }
 
     /// <summary>
@@ -578,11 +581,12 @@ public sealed record DomainEntityInstance {
     /// is performed by analyzers (walking the hierarchy), while runtime scenario gating is
     /// still a per-stage concern.
     ///
-    /// <b>OnEntry re-entrancy:</b> If an OnEntry effect calls <see cref="InvokeAction"/> which
-    /// triggers another transition on the <b>same instance</b>, the resulting <c>TransitionStage</c>
-    /// call is <b>not</b> bounded by the store&#x2019;s <c>maxDepth</c> (which limits subscription
-    /// fan-out across <b>different</b> instances). Re-entrant same-instance transitions risk
-    /// stack overflow and should be avoided until a depth budget is added.
+    /// <b>OnEntry re-entrancy:</b> Nested same-instance transitions (e.g. OnEntry →
+    /// another <c>TransitionStage</c>) are bounded by <see cref="MaxTransitionDepth"/>
+    /// (default 16). Exceeding it throws <see cref="InvalidOperationException"/>.
+    /// Partial stage application is possible if a nested throw occurs after
+    /// <c>CurrentStage</c> was already updated. Store subscription fan-out remains
+    /// separately bounded by <see cref="DomainInstanceStore"/> cascade <c>maxDepth</c>.
     /// </remarks>
     internal void TransitionStage(string targetStageName, bool notifyStore = true) {
         if (!Entity.Stages.Any(s => string.Equals(s.Name, targetStageName, StringComparison.Ordinal)))
@@ -592,58 +596,81 @@ public sealed record DomainEntityInstance {
         if (string.Equals(previousStageName, targetStageName, StringComparison.Ordinal))
             return;
 
-        // Domain-bound: structure metadata only. Standalone: Entity.Stages scan (reduced contract).
-        var analysis = Domain is not null ? RuntimeAnalysisCache.GetOrAnalyze(Domain) : null;
+        if (_transitionDepth >= MaxTransitionDepth)
+            throw new InvalidOperationException(
+                $"Stage transition re-entrancy exceeded max depth ({MaxTransitionDepth}) on entity '{Entity.Name}'.");
 
-        // OnExit/OnEntry effects are best-effort: a TryGetStage miss with analysis
-        // present can only mean analysis/instance disagreement (CurrentStage is
-        // drawn from Entity.Stages), so skipping effects here is safe rather than a
-        // fail-closed violation (contrast InvokeActionInternal's dispatch throw).
-
-        // ── Run OnExit effects on the current stage ────────────
-        if (previousStageName is not null) {
-            Stage? prevStage = null;
-            if (analysis is not null)
-                analysis.TryGetStage(Entity, previousStageName, out prevStage);
-            else if (Domain is null) {
-                prevStage = Entity.Stages.FirstOrDefault(
-                    s => string.Equals(s.Name, previousStageName, StringComparison.Ordinal));
-            }
-            if (prevStage?.OnExitEffects is { Count: > 0 }) {
-                var exitPass = new EffectLoweringPass(Entity,
-                    new Parameter("entity", new TypeReference(Entity.Name)));
-                foreach (var effect in prevStage.OnExitEffects)
-                    ExecuteEffect(effect, exitPass, _typeDefAnalyzer);
-            }
-        }
-
-        // ── Set new stage ──────────────────────────────────────
-        CurrentStage = targetStageName;
-
-        // ── Run OnEntry effects on the target stage ────────────
-        // Notify subscribers runs in a finally block so it fires even if
-        // OnEntry effects throw (the stage is already set).
+        _transitionDepth++;
         try {
-            Stage? targetStage = null;
-            if (analysis is not null)
-                analysis.TryGetStage(Entity, targetStageName, out targetStage);
-            else if (Domain is null) {
-                targetStage = Entity.Stages.FirstOrDefault(
-                    s => string.Equals(s.Name, targetStageName, StringComparison.Ordinal));
+            // Domain-bound: structure metadata + analysis-aware effect lowering.
+            // Standalone: Entity.Stages scan (reduced contract).
+            AnalysisResult? analysis = null;
+            if (Domain is not null) {
+                analysis = RuntimeAnalysisCache.GetOrAnalyze(Domain);
+                if (analysis.GetCatalog(Domain) is null)
+                    throw new InvalidOperationException(
+                        $"Runtime transition requires {nameof(DomainCatalogMetadata)} for domain '{Domain.Name}' (TransitionStage).");
             }
-            if (targetStage?.OnEntryEffects is { Count: > 0 }) {
-                var entryPass = new EffectLoweringPass(Entity,
-                    new Parameter("entity", new TypeReference(Entity.Name)));
-                foreach (var effect in targetStage.OnEntryEffects)
-                    ExecuteEffect(effect, entryPass, _typeDefAnalyzer);
+
+            var subject = new Parameter("entity", new TypeReference(Entity.Name));
+            var loweringContext = new LoweringContext(
+                subject,
+                Analysis: analysis,
+                Domain: Domain);
+
+            // ── Run OnExit effects on the current stage ────────────
+            if (previousStageName is not null) {
+                var prevStage = ResolveTransitionStage(analysis, previousStageName);
+                if (prevStage?.OnExitEffects is { Count: > 0 }) {
+                    var exitPass = new EffectLoweringPass(Entity, loweringContext);
+                    foreach (var effect in prevStage.OnExitEffects)
+                        ExecuteEffect(effect, exitPass, _typeDefAnalyzer);
+                }
+            }
+
+            // ── Set new stage ──────────────────────────────────────
+            CurrentStage = targetStageName;
+
+            // ── Run OnEntry effects on the target stage ────────────
+            // Notify subscribers runs in a finally block so it fires even if
+            // OnEntry effects throw (the stage is already set).
+            try {
+                var targetStage = ResolveTransitionStage(analysis, targetStageName);
+                if (targetStage?.OnEntryEffects is { Count: > 0 }) {
+                    var entryPass = new EffectLoweringPass(Entity, loweringContext);
+                    foreach (var effect in targetStage.OnEntryEffects)
+                        ExecuteEffect(effect, entryPass, _typeDefAnalyzer);
+                }
+            }
+            finally {
+                if (notifyStore && Store is not null && !_isExecutingSubscription) {
+                    Store.NotifyTransition(this, targetStageName);
+                }
             }
         }
         finally {
-            // Notify subscribers (skip during subscription execution — cascading already handled by store)
-            if (notifyStore && Store is not null && !_isExecutingSubscription) {
-                Store.NotifyTransition(this, targetStageName);
-            }
+            _transitionDepth--;
         }
+    }
+
+    /// <summary>
+    /// Domain-bound: resolve stage via ESM (fail closed on miss). Standalone: structural scan.
+    /// </summary>
+    private Stage? ResolveTransitionStage(AnalysisResult? analysis, string stageName) {
+        if (analysis is not null) {
+            if (!analysis.TryGetStage(Entity, stageName, out var stage) || stage is null)
+                throw new InvalidOperationException(
+                    $"Stage '{stageName}' not resolvable for entity '{Entity.Name}' during transition " +
+                    $"(requires {nameof(EntityStructureMetadata)}).");
+            return stage;
+        }
+
+        if (Domain is null) {
+            return Entity.Stages.FirstOrDefault(
+                s => string.Equals(s.Name, stageName, StringComparison.Ordinal));
+        }
+
+        return null;
     }
 
     /// <summary>
@@ -690,7 +717,18 @@ public sealed record DomainEntityInstance {
             }
 
             var subjectParam = new Parameter("entity", new TypeReference(Entity.Name));
-            var effectPass = new EffectLoweringPass(Entity, subjectParam);
+            // Domain-bound: same analysis-aware lowering as TransitionStage / InvokeAction (Q5).
+            EffectLoweringPass effectPass;
+            if (Domain is not null) {
+                var analysis = RuntimeAnalysisCache.GetOrAnalyze(Domain);
+                effectPass = new EffectLoweringPass(Entity, new LoweringContext(
+                    subjectParam,
+                    Analysis: analysis,
+                    Domain: Domain));
+            }
+            else {
+                effectPass = new EffectLoweringPass(Entity, subjectParam);
+            }
 
             foreach (var effect in effects) {
                 ExecuteEffect(effect, effectPass, _typeDefAnalyzer);

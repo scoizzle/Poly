@@ -27,6 +27,31 @@ public static class DomainModelAnalyzer {
         return _analyzer.Analyze(domain, priorAnalysis, invalidatedNodes);
     }
 
+    /// <summary>
+    /// Analyzes <paramref name="domain"/> and requires a product catalog for
+    /// non-failed trees. Prefer for runtime/export entrypoints that cannot proceed
+    /// without <see cref="DomainCatalogMetadata"/>.
+    /// </summary>
+    public static AnalysisResult AnalyzeRequiringCatalog(Domain domain) {
+        var analysis = Analyze(domain);
+        RequireCatalog(analysis, domain);
+        return analysis;
+    }
+
+    /// <summary>
+    /// Fail closed when a non-failed analysis is missing <see cref="DomainCatalogMetadata"/>.
+    /// Structural failures may omit the catalog without throwing (callers inspect diagnostics).
+    /// </summary>
+    public static void RequireCatalog(AnalysisResult analysis, Domain domain) {
+        ArgumentNullException.ThrowIfNull(analysis);
+        ArgumentNullException.ThrowIfNull(domain);
+        if (analysis.HasStructuralFailure)
+            return;
+        if (analysis.GetCatalog(domain) is null)
+            throw new InvalidOperationException(
+                $"Domain analysis for '{domain.Name}' did not produce {nameof(DomainCatalogMetadata)}.");
+    }
+
 }
 
 public static class DomainModelAnalysisBuilderExtensions {

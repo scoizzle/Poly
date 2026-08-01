@@ -133,6 +133,9 @@ public sealed class DomainInstanceStore {
         if (domain is null) return;
 
         var analysis = RuntimeAnalysisCache.GetOrAnalyze(domain);
+        if (analysis.GetCatalog(domain) is null)
+            throw new InvalidOperationException(
+                $"Runtime dispatch requires {nameof(DomainCatalogMetadata)} for domain '{domain.Name}' (NotifyTransition).");
         var relationshipContracts = analysis.GetMetadata<RelationshipContractMetadata>(default)
             ?? throw new InvalidOperationException(
                 $"Runtime dispatch requires {nameof(RelationshipContractMetadata)}.");

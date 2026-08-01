@@ -64,6 +64,25 @@ var summary = DomainQueries.GetAnalysisSummary(analysis);
 4. **Batch efficiency**: Compose multiple changes in one `Evolve()` call for
    a single analysis pass.
 5. **No workspace here**: Session/revision management belongs in the MCP layer.
+6. **Semantic lookups**: Prefer `DomainSemanticLookupExtensions` over tree scans.
+   Domain-bound runtime requires `DomainCatalogMetadata` (fail closed).
+7. **Export ≠ analysis**: C# / program Syntax IR is produced at export time
+   (`DomainProgramProjection.ToSyntax`), not mid-pipeline.
+
+### Analysis pipeline (product shape)
+
+```text
+Validate  →  Catalog (DomainCatalogPass)  →  Derive (structure, capability, topology, …)
+                │
+                ▼
+         DomainCatalogMetadata on domain node
+                │
+    ┌───────────┼───────────┬──────────────┐
+    ▼           ▼           ▼              ▼
+ Runtime      MCP        Evolution       Export
+```
+
+Future-state detail: [`docs/plans/domain-analysis-future-state.md`](../../docs/plans/domain-analysis-future-state.md).
 
 ## Architectural Decisions
 

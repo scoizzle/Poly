@@ -1,3 +1,4 @@
+using Poly.Analysis;
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Bootstrap;
@@ -216,6 +217,102 @@ public class DomainEntityInstanceTests {
         await Assert.That(instance.Domain).IsNull();
         var ex = Assert.Throws<InvalidOperationException>(() => instance.InvokeAction("Spawn"));
         await Assert.That(ex!.Message).Contains("domain");
+    }
+
+    [Test]
+    public async Task TransitionStage_Reentrancy_ExceedsMaxDepth_Throws_Standalone() {
+        // Standalone sibling: Entity.Stages scan path.
+        var stages = new List<Stage>();
+        for (var i = DomainEntityInstance.MaxTransitionDepth + 2; i >= 0; i--) {
+            var onEntry = i == DomainEntityInstance.MaxTransitionDepth + 2
+                ? Array.Empty<Effect>()
+                : new Effect[] { new StageTransitionEffect(new StageReference($"S{i + 1}")) };
+            stages.Insert(0, new Stage($"S{i}", [], [], onEntry, []));
+        }
+
+        var entity = new Entity("Loop",
+            [new Property("Name", new DomainTypeReference("Text"), [])],
+            Actions: [], Policies: [], Stages: stages);
+        var instance = DomainEntityInstance.Create(entity);
+
+        var ex = Assert.Throws<InvalidOperationException>(() => instance.TransitionStage("S1"));
+        await Assert.That(ex!.Message).Contains("re-entrancy");
+        await Assert.That(ex.Message).Contains(DomainEntityInstance.MaxTransitionDepth.ToString());
+    }
+
+    [Test]
+    public async Task TransitionStage_Reentrancy_ExceedsMaxDepth_Throws_DomainBound() {
+        // Domain-bound sibling: catalog + TryGetStage + analysis-aware lowering (Q6).
+        var stages = new List<Stage>();
+        for (var i = DomainEntityInstance.MaxTransitionDepth + 2; i >= 0; i--) {
+            var onEntry = i == DomainEntityInstance.MaxTransitionDepth + 2
+                ? Array.Empty<Effect>()
+                : new Effect[] { new StageTransitionEffect(new StageReference($"S{i + 1}")) };
+            stages.Insert(0, new Stage($"S{i}", [], [], onEntry, []));
+        }
+
+        var entity = new Entity("Loop",
+            [new Property("Name", new DomainTypeReference("Text"), [])],
+            Actions: [], Policies: [], Stages: stages);
+        var domain = new Domain("LoopDomain", [entity], []);
+        var instance = DomainEntityInstance.Create(entity, domain: domain);
+
+        var ex = Assert.Throws<InvalidOperationException>(() => instance.TransitionStage("S1"));
+        await Assert.That(ex!.Message).Contains("re-entrancy");
+        await Assert.That(ex.Message).Contains(DomainEntityInstance.MaxTransitionDepth.ToString());
+    }
+
+    [Test]
+    public async Task AnalyzeRequiringCatalog_ProducesCatalog_ForValidDomain() {
+        var order = new Entity("Order",
+            [new Property("Name", new DomainTypeReference("Text"), [])],
+            Actions: [], Policies: [],
+            Stages: [new Stage("Draft", [], [], [], [])]);
+        var domain = new Domain("Orders", [order], []);
+
+        var analysis = DomainModelAnalyzer.AnalyzeRequiringCatalog(domain);
+
+        await Assert.That(analysis.GetCatalog(domain)).IsNotNull();
+        await Assert.That(analysis.GetCatalog(domain)!.ActionsByEntityName.ContainsKey("Order")).IsTrue();
+    }
+
+    [Test]
+    public async Task RequireCatalog_Throws_WhenCatalogMissingWithoutStructuralFailure() {
+        // Success tree with catalog stripped — RequireCatalog throw branch (Q3).
+        // Full analyze is required so HasStructuralFailure is false; partial Semantic-only
+        // hosts still structural-fail on unknown built-in type names without bootstrap.
+        var domain = DomainFactory.Create("Orders", b =>
+            b.AddEntity("Order")
+             .AddPropertyToEntity("Order", new Property("Name", new DomainTypeReference("Text"), []))
+             .AddStage("Order", "Draft"));
+
+        var analysis = DomainModelAnalyzer.Analyze(domain);
+        await Assert.That(analysis.HasStructuralFailure).IsFalse();
+        await Assert.That(analysis.GetCatalog(domain)).IsNotNull();
+
+        analysis.GetMetadataStore().Remove<DomainCatalogMetadata>(domain);
+        await Assert.That(analysis.GetCatalog(domain)).IsNull();
+
+        var ex = Assert.Throws<InvalidOperationException>(
+            () => DomainModelAnalyzer.RequireCatalog(analysis, domain));
+        await Assert.That(ex!.Message).Contains("DomainCatalogMetadata");
+        await Assert.That(ex.Message).Contains(domain.Name);
+    }
+
+    [Test]
+    public async Task RequireCatalog_Returns_WhenStructuralFailureWithoutCatalog() {
+        // CatalogPass without Semantic bags → structural failure, no catalog (Q2/Q3).
+        // Invoke pass directly; AnalyzerBuilder rejects CatalogPass without its dep registered.
+        var domain = new Domain("EmptyStructural", [], []);
+        var context = AnalysisContext.CreateDefault();
+        new DomainCatalogPass().Analyze(context, domain);
+        var analysis = new AnalysisResult(context, AnalysisTelemetry.Empty);
+
+        await Assert.That(analysis.HasStructuralFailure).IsTrue();
+        await Assert.That(analysis.GetCatalog(domain)).IsNull();
+
+        // Must not throw — structural failures may omit catalog.
+        DomainModelAnalyzer.RequireCatalog(analysis, domain);
     }
 
     [Test]
@@ -820,6 +917,53 @@ public class DomainEntityInstanceTests {
         await Assert.That(status).IsNotEqualTo("ABC-123");     // but event.* didn't resolve
         // When event.* lowering is implemented, change to:
         //   await Assert.That(trackerInstance.GetProperty<string>("Status")).IsEqualTo("ABC-123");
+    }
+
+    [Test]
+    public async Task ExecuteSubscriptionEffects_DomainBound_UsesAnalysisAwareLowering() {
+        // Q5: domain-bound subscription effects must lower with analysis/domain context
+        // (same path as TransitionStage OnEntry/OnExit). Assign still fires.
+        var trackerStatus = new Property("Status", new DomainTypeReference("Text"), []);
+        var tracker = new Entity("Tracker", [trackerStatus], [], [], [
+            new Stage("Pending", [], [], [], []) {
+                Subscriptions = [
+                    new StageSubscription("Tracks", ["Active"], StageSubscriptionQuantifier.Each, [
+                        new AssignEffect(
+                            DomainExpression.Property("Status"),
+                            DomainExpression.Literal("NOTIFIED"))
+                    ])
+                ]
+            }
+        ]);
+
+        var order = new Entity("Order", [
+            new Property("Code", new DomainTypeReference("Text"), [])
+        ], [
+            new Poly.DomainModeling.Action("Activate", InvocationResult.Void, [], [
+                new StageTransitionEffect(new StageReference("Active"))
+            ], [])
+        ], [], [
+            new Stage("Draft", [], [], [], []),
+            new Stage("Active", [], [], [], [])
+        ]);
+
+        var tracks = new Relationship("Tracks",
+            new DomainTypeReference("Tracker"),
+            new DomainTypeReference("Order"),
+            RelationshipCardinality.OneToMany, []);
+        var domain = new Domain("SubDomain", [order, tracker], [tracks]);
+        var store = new DomainInstanceStore();
+        var orderInstance = DomainEntityInstance.Create(order,
+            new Dictionary<string, object?> { ["Code"] = "X" }, domain);
+        var trackerInstance = DomainEntityInstance.Create(tracker,
+            new Dictionary<string, object?> { ["Status"] = "IDLE" }, domain);
+        store.Add(orderInstance);
+        store.Add(trackerInstance);
+        store.Link("Tracks", trackerInstance, orderInstance);
+
+        orderInstance.InvokeAction("Activate");
+
+        await Assert.That(trackerInstance.GetProperty<string>("Status")).IsEqualTo("NOTIFIED");
     }
 
     [Test]

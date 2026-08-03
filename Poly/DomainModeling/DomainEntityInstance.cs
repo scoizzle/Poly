@@ -42,7 +42,6 @@ public sealed record DomainEntityInstance {
     private readonly Dictionary<string, object?> _values;
     private readonly TypeDefinitionNodeAnalyzer _typeDefAnalyzer;
     private readonly List<DomainEntityInstance> _createdChildren = [];
-    private Dictionary<string, object?>? _eventValues;
     private bool _isExecutingSubscription;
     private int _invokeDepth;
     private int _transitionDepth;
@@ -51,24 +50,6 @@ public sealed record DomainEntityInstance {
     /// <summary>Max nested <see cref="TransitionStage"/> depth (OnEntry/OnExit re-entrancy).</summary>
     public const int MaxTransitionDepth = 16;
     internal DomainInstanceStore? Store { get; set; }
-
-    /// <summary>
-    /// Makes the transitioning entity's properties available as "event" in
-    /// subscription effect evaluation. Called by <see cref="DomainInstanceStore"/>
-    /// during fan-out.
-    /// </summary>
-    internal void SetEventInstance(DomainEntityInstance? eventInstance) {
-        if (eventInstance is null) {
-            _eventValues = null;
-            return;
-        }
-        // Build a real Dictionary from the snapshot (Snapshot() returns IReadOnlyDictionary)
-        var snapshot = eventInstance.Snapshot();
-        var dict = new Dictionary<string, object?>(StringComparer.Ordinal);
-        foreach (var kv in snapshot)
-            dict[kv.Key] = kv.Value;
-        _eventValues = dict;
-    }
 
     private DomainEntityInstance(
         Entity entity,
@@ -675,49 +656,24 @@ public sealed record DomainEntityInstance {
 
     /// <summary>
     /// Executes subscription effects in this instance's context (subscriber).
-    /// The <paramref name="eventInstance"/> is the entity that transitioned.
+    /// <paramref name="peerInstance"/> is the related entity that transitioned.
+    /// When <paramref name="peerBinding"/> is set (<c>when Rel Stage as name</c>),
+    /// path-prefix roots equal to that name resolve against the peer bag before
+    /// lowering (notification-only subscriptions omit the binder).
     /// Called by <see cref="DomainInstanceStore.NotifyTransition"/>.
     ///
     /// Subscription-triggered transitions suppress store notification via
     /// <c>_isExecutingSubscription</c> — cascading is handled by the store's
     /// depth-limited recursion instead.
     /// </summary>
-    ///
-    /// <remarks>
-    /// <b>Option B (current):</b> Event-instance property values are injected into
-    /// the subscriber's <c>_values</c> dictionary with an "event." prefix, but
-    /// this is <b>not</b> visible to the VM's member-resolution pipeline (which
-    /// resolves properties against CLR type definitions, not the dictionary).
-    /// Expressions like <c>event.Code</c> in subscription effects will <b>not</b>
-    /// resolve to the transitioning instance's value through the current lowering
-    /// path. The characterization test
-    /// <c>SubscriptionEffect_EventPropertyAccess_Gap_Documented</c> documents this.
-    /// Until proper "event" lowering is implemented (when a named consumer needs
-    /// it), subscription effects should use only literal values and "this" properties.
-    /// </remarks>
-    /// <summary>
-    /// Prefix used to store event instance property values in <c>_values</c>
-    /// during subscription effect execution. Note: the VM's member-resolution
-    /// pipeline does <b>not</b> currently resolve keys with this prefix — see
-    /// remarks on <see cref="ExecuteSubscriptionEffects"/>.
-    /// </summary>
-    internal void ExecuteSubscriptionEffects(IReadOnlyList<Effect> effects, DomainEntityInstance eventInstance) {
-        SetEventInstance(eventInstance);
+    internal void ExecuteSubscriptionEffects(
+        IReadOnlyList<Effect> effects,
+        DomainEntityInstance peerInstance,
+        string? peerBinding = null) {
         _isExecutingSubscription = true;
 
-        // eventKeys must be declared outside try so cleanup in finally can access it.
-        var eventKeys = new List<string>();
         try {
-            if (_eventValues is not null) {
-                foreach (var kv in _eventValues) {
-                    var key = $"{SubscriptionEventAccess.Prefix}{kv.Key}";
-                    _values[key] = kv.Value;
-                    eventKeys.Add(key);
-                }
-            }
-
             var subjectParam = new Parameter("entity", new TypeReference(Entity.Name));
-            // Domain-bound: same analysis-aware lowering as TransitionStage / InvokeAction (Q5).
             EffectLoweringPass effectPass;
             if (Domain is not null) {
                 var analysis = RuntimeAnalysisCache.GetOrAnalyze(Domain);
@@ -731,21 +687,153 @@ public sealed record DomainEntityInstance {
             }
 
             foreach (var effect in effects) {
-                ExecuteEffect(effect, effectPass, _typeDefAnalyzer);
+                var bound = peerBinding is { Length: > 0 }
+                    ? BindPeerInEffect(effect, peerBinding, peerInstance)
+                    : effect;
+                ExecuteEffect(bound, effectPass, _typeDefAnalyzer);
             }
         }
         finally {
-            // Always clean up merged event values (even on throw) so _values
-            // doesn't accumulate stale "event.*" keys that might confuse
-            // subsequent non-subscription access.
-            // Note: the VM's member-resolution pipeline does NOT resolve
-            // "event.*" dictionary keys — see Option B remarks above.
-            foreach (var key in eventKeys)
-                _values.Remove(key);
-
             _isExecutingSubscription = false;
-            SetEventInstance(null);
         }
+    }
+
+    /// <summary>
+    /// Rewrites peer path-prefix roots (<c>name Prop</c> → <see cref="RelationshipNavigation"/>)
+    /// into literals evaluated against the transitioned peer bag.
+    /// </summary>
+    private static Effect BindPeerInEffect(Effect effect, string peerBinding, DomainEntityInstance peer) {
+        return effect switch {
+            AssignEffect a => a with {
+                // Peer path-prefix is value-side only (F4/F16 defense in depth).
+                Target = RejectPeerAssignTarget(a.Target, peerBinding),
+                Value = BindPeerInExpression(a.Value, peerBinding, peer)
+            },
+            ConditionalEffect c => c with {
+                Condition = BindPeerInExpression(c.Condition, peerBinding, peer),
+                ThenEffects = c.ThenEffects.Select(e => BindPeerInEffect(e, peerBinding, peer)).ToList(),
+                ElseEffects = c.ElseEffects?.Select(e => BindPeerInEffect(e, peerBinding, peer)).ToList()
+            },
+            CompositeEffect c => c with {
+                Effects = c.Effects.Select(e => BindPeerInEffect(e, peerBinding, peer)).ToList()
+            },
+            CreateEntityInstance cei => cei with {
+                Initializers = cei.Initializers
+                    .Select(i => i with { Expression = BindPeerInExpression(i.Expression, peerBinding, peer) })
+                    .ToList()
+            },
+            CreateEntityInRelationshipEffect cir => cir with {
+                Initializers = cir.Initializers
+                    .Select(i => i with { Expression = BindPeerInExpression(i.Expression, peerBinding, peer) })
+                    .ToList()
+            },
+            InvokeActionEffect iae => iae with {
+                ParameterBindings = iae.ParameterBindings
+                    .Select(b => b with { Expression = BindPeerInExpression(b.Expression, peerBinding, peer) })
+                    .ToList(),
+                Filter = iae.Filter is null ? null : BindPeerInExpression(iae.Filter, peerBinding, peer)
+            },
+            LinkRelationshipEffect link => link with {
+                Target = BindPeerInExpression(link.Target, peerBinding, peer)
+            },
+            UnlinkRelationshipEffect unlink => unlink with {
+                Target = BindPeerInExpression(unlink.Target, peerBinding, peer)
+            },
+            _ => effect
+        };
+    }
+
+    private static DomainExpression RejectPeerAssignTarget(DomainExpression target, string peerBinding) {
+        if (target is RelationshipNavigation rn
+            && string.Equals(rn.RelationshipName, peerBinding, StringComparison.Ordinal)) {
+            throw new InvalidOperationException(
+                $"Peer binder '{peerBinding}' cannot be an assign target in a subscription effect. " +
+                "Use peer fields only on the right-hand side.");
+        }
+        return target;
+    }
+
+    private static DomainExpression BindPeerInExpression(
+        DomainExpression expr, string peerBinding, DomainEntityInstance peer) {
+        switch (expr) {
+            case RelationshipNavigation rn when string.Equals(rn.RelationshipName, peerBinding, StringComparison.Ordinal):
+                return DomainExpression.Literal(EvaluateExprOnPeer(rn.TargetProperty, peer));
+            case And a:
+                return a with {
+                    Left = BindPeerInExpression(a.Left, peerBinding, peer),
+                    Right = BindPeerInExpression(a.Right, peerBinding, peer)
+                };
+            case Or o:
+                return o with {
+                    Left = BindPeerInExpression(o.Left, peerBinding, peer),
+                    Right = BindPeerInExpression(o.Right, peerBinding, peer)
+                };
+            case Not n:
+                return n with { Operand = BindPeerInExpression(n.Operand, peerBinding, peer) };
+            case Comparison c:
+                return c with {
+                    Left = BindPeerInExpression(c.Left, peerBinding, peer),
+                    Right = BindPeerInExpression(c.Right, peerBinding, peer)
+                };
+            case Add a:
+                return a with {
+                    Left = BindPeerInExpression(a.Left, peerBinding, peer),
+                    Right = BindPeerInExpression(a.Right, peerBinding, peer)
+                };
+            case Subtract s:
+                return s with {
+                    Left = BindPeerInExpression(s.Left, peerBinding, peer),
+                    Right = BindPeerInExpression(s.Right, peerBinding, peer)
+                };
+            case Multiply m:
+                return m with {
+                    Left = BindPeerInExpression(m.Left, peerBinding, peer),
+                    Right = BindPeerInExpression(m.Right, peerBinding, peer)
+                };
+            case Divide d:
+                return d with {
+                    Left = BindPeerInExpression(d.Left, peerBinding, peer),
+                    Right = BindPeerInExpression(d.Right, peerBinding, peer)
+                };
+            case OwnedAccess o:
+                return o with { Inner = BindPeerInExpression(o.Inner, peerBinding, peer) };
+            case Exists e:
+                return e with { Target = BindPeerInExpression(e.Target, peerBinding, peer) };
+            case NotExists ne:
+                return ne with { Target = BindPeerInExpression(ne.Target, peerBinding, peer) };
+            case DateOperation d:
+                return d with {
+                    Date = BindPeerInExpression(d.Date, peerBinding, peer),
+                    Offset = BindPeerInExpression(d.Offset, peerBinding, peer)
+                };
+            case AnyExpr a:
+                return a with { Body = BindPeerInExpression(a.Body, peerBinding, peer) };
+            case AllExpr a:
+                return a with { Body = BindPeerInExpression(a.Body, peerBinding, peer) };
+            case NoneExpr n:
+                return n with { Body = BindPeerInExpression(n.Body, peerBinding, peer) };
+            case CountExpr c:
+                return c with {
+                    Body = c.Body is null ? null : BindPeerInExpression(c.Body, peerBinding, peer)
+                };
+            case RelationshipNavigation rn:
+                return rn with { TargetProperty = BindPeerInExpression(rn.TargetProperty, peerBinding, peer) };
+            default:
+                return expr;
+        }
+    }
+
+    /// <summary>
+    /// Lowers and executes <paramref name="expr"/> against the peer instance bag.
+    /// </summary>
+    private static object? EvaluateExprOnPeer(DomainExpression expr, DomainEntityInstance peer) {
+        var pass = new DomainExpressionLoweringPass();
+        var lowered = pass.Lower(expr,
+            new Parameter("entity", new TypeReference(peer.Entity.Name)));
+        var compiled = Interpreter.Compile(lowered, peer._typeDefAnalyzer);
+        using var exec = Interpreter.Execute(compiled,
+            s => s.SetArgs(new object?[] { peer._values }));
+        return exec.Result.GetValue<object>();
     }
 
     /// <summary>
@@ -1022,12 +1110,15 @@ public sealed record DomainEntityInstance {
 
     /// <summary>
     /// Walks an expression tree and evaluates Q3′ quantifier nodes
-    /// (AnyExpr/AllExpr/NoneExpr/CountExpr) against the current store,
-    /// replacing them with literal results. Non-quantifier nodes are
+    /// (AnyExpr/AllExpr/NoneExpr/CountExpr) and to-one
+    /// <see cref="RelationshipNavigation"/> against the current store,
+    /// replacing them with literal results. Non-store nodes are
     /// returned unchanged (or with preprocessed children for composites).
     ///
-    /// <para>If <see cref="Store"/> is null, quantifiers throw (consistent
-    /// with fail-closed policy — instance must be store-attached).</para>
+    /// <para>Fail-closed: missing <see cref="Store"/>, missing relationship
+    /// metadata, or missing outbound link throws
+    /// <see cref="InvalidOperationException"/> — no soft pass-through to bag
+    /// <c>Member</c> chains (no vacuous true/false).</para>
     /// </summary>
     private DomainExpression PreprocessQuantifiers(DomainExpression expr) {
         switch (expr) {
@@ -1050,24 +1141,22 @@ public sealed record DomainEntityInstance {
             case Multiply m: return m with { Left = PreprocessQuantifiers(m.Left), Right = PreprocessQuantifiers(m.Right) };
             case Divide d: return d with { Left = PreprocessQuantifiers(d.Left), Right = PreprocessQuantifiers(d.Right) };
             case DateOperation d: return d with { Date = PreprocessQuantifiers(d.Date), Offset = PreprocessQuantifiers(d.Offset) };
-            case RelationshipNavigation r:
-                // To-one path-prefix: resolve the linked instance and evaluate
-                // the inner expression against its property bag (like quantifiers do).
-                if (Store is not null) {
-                    try {
-                        var targets = GetOutboundRelatedInstances(r.RelationshipName);
-                        if (targets.Count > 0) {
-                            var inner = PreprocessQuantifiers(r.TargetProperty);
-                            var result = EvaluateBodyOnTarget(inner, targets[0]);
-                            return DomainExpression.Literal(result);
-                        }
-                    }
-                    catch {
-                        // If resolution fails (no store, wrong direction, etc.),
-                        // fall through to the recursive pass-through below.
-                    }
+            case RelationshipNavigation r: {
+                    // Singular path-prefix: exactly one linked target (to-one product shape).
+                    // Use quantifiers (any/all) for collections — never pick targets[0] silently.
+                    var targets = GetOutboundRelatedInstances(r.RelationshipName);
+                    if (targets.Count == 0)
+                        throw new InvalidOperationException(
+                            $"No linked instances found for relationship '{r.RelationshipName}' on entity '{Entity.Name}'.");
+                    if (targets.Count > 1)
+                        throw new InvalidOperationException(
+                            $"Path-prefix on relationship '{r.RelationshipName}' requires exactly one linked target " +
+                            $"(found {targets.Count} on entity '{Entity.Name}'). Use any/all quantifiers for collections.");
+
+                    var inner = PreprocessQuantifiers(r.TargetProperty);
+                    var result = EvaluateBodyOnTarget(inner, targets[0]);
+                    return DomainExpression.Literal(result);
                 }
-                return r with { TargetProperty = PreprocessQuantifiers(r.TargetProperty) };
             case OwnedAccess o: return o with { Inner = PreprocessQuantifiers(o.Inner) };
             case Exists e: return e with { Target = PreprocessQuantifiers(e.Target) };
             case NotExists ne: return ne with { Target = PreprocessQuantifiers(ne.Target) };

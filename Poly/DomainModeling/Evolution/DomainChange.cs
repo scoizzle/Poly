@@ -1119,12 +1119,15 @@ public sealed record RemoveStageSubscriptionChange(
         $"Remove stage subscription '{SubscriptionKey(SubscriptionToRemove)}' from Stage '{StageName}' on Entity '{EntityName}'";
 
     private static string SubscriptionKey(StageSubscription sub) =>
-        $"{sub.RelationshipName} -> {string.Join("/", sub.StageNames)} ({sub.Quantifier})";
+        $"{sub.RelationshipName} -> {string.Join("/", sub.StageNames)} ({sub.Quantifier}" +
+        (sub.PeerBinding is { Length: > 0 } ? $", as {sub.PeerBinding}" : "") + ")";
 
     private static bool SemanticMatch(StageSubscription a, StageSubscription b) {
         if (!string.Equals(a.RelationshipName, b.RelationshipName, StringComparison.Ordinal))
             return false;
         if (a.Quantifier != b.Quantifier)
+            return false;
+        if (!string.Equals(a.PeerBinding, b.PeerBinding, StringComparison.Ordinal))
             return false;
         if (a.StageNames.Count != b.StageNames.Count)
             return false;

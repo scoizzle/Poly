@@ -31,6 +31,12 @@ internal sealed class SubscriptionAnalyzer : INodeAnalyzer {
         if (lookup is null) return;
 
         foreach (var entity in lookup.Entities) {
+            // Entity-level when is always-active (SPE-L2 dispatch); same contract + binding
+            // validation as stage-scoped (including optional peer binder).
+            foreach (var entitySub in entity.Subscriptions) {
+                ValidateSubscription(context, entitySub, entity, domain, lookup);
+            }
+
             foreach (var stage in entity.Stages) {
                 // ── Check for duplicate subscription keys on this stage ────
                 for (int i = 0; i < stage.Subscriptions.Count; i++) {
@@ -266,34 +272,74 @@ internal sealed class SubscriptionAnalyzer : INodeAnalyzer {
         }
 
         // ── Validate that subscription effect expressions reference known properties ──
-        ValidateSubscriptionEffectBindings(context, subscription, entity, targetEntity);
+        var subscriberRelNames = new HashSet<string>(
+            domain.Relationships
+                .Where(r => string.Equals(r.Source.TypeName, entity.Name, StringComparison.Ordinal))
+                .Select(r => r.Name),
+            StringComparer.Ordinal);
+        ValidateSubscriptionEffectBindings(context, subscription, entity, targetEntity, subscriberRelNames);
     }
 
     /// <summary>
-    /// Validates that property accesses in subscription effect expressions resolve to
-    /// valid properties on the subscriber entity (<c>this.*</c>) or the event (target)
-    /// entity (<c>event.*</c>). This catches typos and stale property references that
-    /// would silently fail at runtime.
+    /// Validates subscription effect bindings: subscriber props, optional peer binder
+    /// (<c>as name</c> → scalar <c>name Prop</c>), reject legacy event, unbound peer-like
+    /// roots, peer l-values, and nested peer path-prefix (F1–F4, F7).
     /// </summary>
     private static void ValidateSubscriptionEffectBindings(
         AnalysisContext context,
         StageSubscription subscription,
         Entity subscriberEntity,
-        Entity targetEntity) {
+        Entity targetEntity,
+        HashSet<string> subscriberRelNames) {
         if (subscription.Effects.Count == 0) return;
 
         var subscriberProps = new HashSet<string>(
             subscriberEntity.Properties.Select(p => p.Name), StringComparer.Ordinal);
         var targetProps = new HashSet<string>(
             targetEntity.Properties.Select(p => p.Name), StringComparer.Ordinal);
+        var peerBinding = subscription.PeerBinding;
 
         foreach (var effect in subscription.Effects) {
-            var subscriberRefs = new HashSet<string>(StringComparer.Ordinal);
-            var eventRefs = new HashSet<string>(StringComparer.Ordinal);
-            CollectPropertyAccesses(effect, subscriberRefs, eventRefs);
+            var flags = new SubBindingFlags();
+            CollectPropertyAccesses(effect, peerBinding, subscriberRelNames, flags, isAssignTarget: false);
 
-            // Validate this.* property accesses
-            foreach (var propName in subscriberRefs) {
+            if (flags.UsesLegacyEvent) {
+                context.ReportError(
+                    subscription,
+                    "Subscription effects must not use 'event' / 'event.Prop'. " +
+                    "Declare a peer binder: when Rel Stage as name { … name Prop … }.",
+                    DomainModelDiagnosticCodes.SubscriptionEffectBinding);
+            }
+
+            if (flags.UnboundPeerRoot is { Length: > 0 }) {
+                var binderHint = peerBinding is { Length: > 0 }
+                    ? $"It is not peer binder '{peerBinding}' and not a subscriber relationship. " +
+                      "Use the binder name for peer fields, or a real relationship for subscriber navigation."
+                    : "No peer binder was declared. Use 'when Rel Stage as name { … name Prop … }' " +
+                      "to read the transitioned peer, or a real relationship name for subscriber navigation.";
+                context.ReportError(
+                    subscription,
+                    $"Subscription effect path-prefix root '{flags.UnboundPeerRoot}' is invalid. {binderHint}",
+                    DomainModelDiagnosticCodes.SubscriptionEffectBinding);
+            }
+
+            if (flags.PeerAsAssignTarget) {
+                context.ReportError(
+                    subscription,
+                    "Peer binder path-prefix cannot be an assign target. " +
+                    "Use peer fields only on the right-hand side (values, conditions, initializers).",
+                    DomainModelDiagnosticCodes.SubscriptionEffectBinding);
+            }
+
+            if (flags.NestedPeerPath) {
+                context.ReportError(
+                    subscription,
+                    "Nested path-prefix under the peer binder is not supported. " +
+                    "Only scalar peer properties are allowed (e.g. 'order Code').",
+                    DomainModelDiagnosticCodes.SubscriptionEffectBinding);
+            }
+
+            foreach (var propName in flags.SubscriberRefs) {
                 if (!subscriberProps.Contains(propName)) {
                     context.ReportWarning(
                         subscription,
@@ -304,57 +350,76 @@ internal sealed class SubscriptionAnalyzer : INodeAnalyzer {
                 }
             }
 
-            // Validate event.* property accesses
-            foreach (var propName in eventRefs) {
-                if (!targetProps.Contains(propName)) {
-                    context.ReportWarning(
-                        subscription,
-                        $"Subscription effect references event property '{propName}' on target entity " +
-                        $"'{targetEntity.Name}', but that property does not exist. " +
-                        $"Available: {string.Join(", ", targetProps)}.",
-                        DomainModelDiagnosticCodes.SubscriptionEffectBinding);
+            if (peerBinding is { Length: > 0 }) {
+                foreach (var propName in flags.PeerRefs) {
+                    if (!targetProps.Contains(propName)) {
+                        context.ReportWarning(
+                            subscription,
+                            $"Subscription effect references peer property '{propName}' via binder " +
+                            $"'{peerBinding}' on target entity '{targetEntity.Name}', but that property " +
+                            $"does not exist. Available: {string.Join(", ", targetProps)}.",
+                            DomainModelDiagnosticCodes.SubscriptionEffectBinding);
+                    }
                 }
             }
         }
     }
 
-    /// <summary>
-    /// Walks all expressions in <paramref name="effect"/> and collects:
-    /// - <paramref name="subscriberRefs"/>: bare <see cref="PropertyAccess"/> names (this.* context)
-    /// - <paramref name="eventRefs"/>: <see cref="PropertyAccess"/> names prefixed with "event."
-    /// </summary>
+    private sealed class SubBindingFlags {
+        public HashSet<string> SubscriberRefs { get; } = new(StringComparer.Ordinal);
+        public HashSet<string> PeerRefs { get; } = new(StringComparer.Ordinal);
+        public bool UsesLegacyEvent;
+        public string? UnboundPeerRoot;
+        public bool PeerAsAssignTarget;
+        public bool NestedPeerPath;
+    }
+
     private static void CollectPropertyAccesses(
         Effect effect,
-        HashSet<string> subscriberRefs,
-        HashSet<string> eventRefs) {
+        string? peerBinding,
+        HashSet<string> subscriberRelNames,
+        SubBindingFlags flags,
+        bool isAssignTarget) {
         switch (effect) {
             case AssignEffect ae:
-                CollectFromExpression(ae.Target, subscriberRefs, eventRefs);
-                CollectFromExpression(ae.Value, subscriberRefs, eventRefs);
+                CollectFromExpression(ae.Target, peerBinding, subscriberRelNames, flags, isAssignTarget: true);
+                CollectFromExpression(ae.Value, peerBinding, subscriberRelNames, flags, isAssignTarget: false);
                 break;
             case StageTransitionEffect:
             case DeleteEntityInstance:
                 break;
             case CreateEntityInstance cei:
                 foreach (var init in cei.Initializers)
-                    CollectFromExpression(init.Expression, subscriberRefs, eventRefs);
+                    CollectFromExpression(init.Expression, peerBinding, subscriberRelNames, flags, isAssignTarget: false);
+                break;
+            case CreateEntityInRelationshipEffect cir:
+                foreach (var init in cir.Initializers)
+                    CollectFromExpression(init.Expression, peerBinding, subscriberRelNames, flags, isAssignTarget: false);
                 break;
             case InvokeActionEffect iae:
-                // Bindings are subscriber-scoped; filter is target-scoped (EffectAnalyzer).
                 foreach (var binding in iae.ParameterBindings)
-                    CollectFromExpression(binding.Expression, subscriberRefs, eventRefs);
+                    CollectFromExpression(binding.Expression, peerBinding, subscriberRelNames, flags, isAssignTarget: false);
+                if (iae.Filter is not null)
+                    CollectFromExpression(iae.Filter, peerBinding, subscriberRelNames, flags, isAssignTarget: false);
                 break;
             case ConditionalEffect ce:
-                CollectFromExpression(ce.Condition, subscriberRefs, eventRefs);
-                foreach (var e in ce.ThenEffects) CollectPropertyAccesses(e, subscriberRefs, eventRefs);
+                CollectFromExpression(ce.Condition, peerBinding, subscriberRelNames, flags, isAssignTarget: false);
+                foreach (var e in ce.ThenEffects)
+                    CollectPropertyAccesses(e, peerBinding, subscriberRelNames, flags, isAssignTarget: false);
                 if (ce.ElseEffects is not null)
-                    foreach (var e in ce.ElseEffects) CollectPropertyAccesses(e, subscriberRefs, eventRefs);
+                    foreach (var e in ce.ElseEffects)
+                        CollectPropertyAccesses(e, peerBinding, subscriberRelNames, flags, isAssignTarget: false);
                 break;
             case CompositeEffect ce:
-                foreach (var e in ce.Effects) CollectPropertyAccesses(e, subscriberRefs, eventRefs);
+                foreach (var e in ce.Effects)
+                    CollectPropertyAccesses(e, peerBinding, subscriberRelNames, flags, isAssignTarget: false);
                 break;
-            case LinkRelationshipEffect:
-            case UnlinkRelationshipEffect:
+            case LinkRelationshipEffect link:
+                CollectFromExpression(link.Target, peerBinding, subscriberRelNames, flags, isAssignTarget: false);
+                break;
+            case UnlinkRelationshipEffect unlink:
+                CollectFromExpression(unlink.Target, peerBinding, subscriberRelNames, flags, isAssignTarget: false);
+                break;
             case TransitionRelationshipEffect:
                 break;
         }
@@ -362,41 +427,80 @@ internal sealed class SubscriptionAnalyzer : INodeAnalyzer {
 
     private static void CollectFromExpression(
         DomainExpression expr,
-        HashSet<string> subscriberRefs,
-        HashSet<string> eventRefs) {
+        string? peerBinding,
+        HashSet<string> subscriberRelNames,
+        SubBindingFlags flags,
+        bool isAssignTarget) {
         switch (expr) {
             case PropertyAccess pa:
-                // "event.PropertyName" convention: bare property starting with Prefix
-                // references the event (transitioned) instance, not the subscriber.
-                if (pa.Name.StartsWith(SubscriptionEventAccess.Prefix, StringComparison.Ordinal)) {
-                    eventRefs.Add(pa.Name[SubscriptionEventAccess.Prefix.Length..]);
+                if (pa.Name.StartsWith(SubscriptionEventAccess.Prefix, StringComparison.Ordinal)
+                    || string.Equals(pa.Name, SubscriptionEventAccess.RelationshipName, StringComparison.Ordinal)) {
+                    flags.UsesLegacyEvent = true;
                 }
                 else {
-                    // Bare property access — references subscriber's property (this.*)
-                    subscriberRefs.Add(pa.Name);
+                    flags.SubscriberRefs.Add(pa.Name);
                 }
                 break;
             case RelationshipNavigation rn:
-                // Lowered from "event PropertyName": RelationshipName = "event",
-                // TargetProperty = PropertyAccess("PropertyName").
-                if (string.Equals(rn.RelationshipName, SubscriptionEventAccess.RelationshipName, StringComparison.Ordinal)
-                    && rn.TargetProperty is PropertyAccess eventPa) {
-                    eventRefs.Add(eventPa.Name);
+                if (string.Equals(rn.RelationshipName, SubscriptionEventAccess.RelationshipName, StringComparison.Ordinal)) {
+                    flags.UsesLegacyEvent = true;
+                    return;
                 }
-                // Recurse into target property (may have further access patterns)
-                CollectFromExpression(rn.TargetProperty, subscriberRefs, eventRefs);
-                return; // children already handled
+
+                if (peerBinding is { Length: > 0 }
+                    && string.Equals(rn.RelationshipName, peerBinding, StringComparison.Ordinal)) {
+                    if (isAssignTarget)
+                        flags.PeerAsAssignTarget = true;
+                    if (rn.TargetProperty is RelationshipNavigation)
+                        flags.NestedPeerPath = true;
+                    else if (rn.TargetProperty is PropertyAccess peerPa)
+                        flags.PeerRefs.Add(peerPa.Name);
+                    else {
+                        // Comparisons under peer root still need leaf props; nested rel is rejected above.
+                        CollectPeerScalars(rn.TargetProperty, flags);
+                        if (HasNestedRelationship(rn.TargetProperty))
+                            flags.NestedPeerPath = true;
+                    }
+                    return;
+                }
+
+                if (!subscriberRelNames.Contains(rn.RelationshipName)) {
+                    // Not a subscriber relationship and not the peer binder → unbound peer-like root (F1).
+                    flags.UnboundPeerRoot ??= rn.RelationshipName;
+                    return;
+                }
+
+                // Real subscriber relationship path-prefix — walk inner for bare props.
+                CollectFromExpression(rn.TargetProperty, peerBinding, subscriberRelNames, flags, isAssignTarget);
+                return;
         }
 
-        // Recurse into children
         foreach (var child in expr.Children.OfType<DomainExpression>())
-            CollectFromExpression(child, subscriberRefs, eventRefs);
+            CollectFromExpression(child, peerBinding, subscriberRelNames, flags, isAssignTarget);
     }
+
+    private static void CollectPeerScalars(DomainExpression expr, SubBindingFlags flags) {
+        switch (expr) {
+            case PropertyAccess pa:
+                flags.PeerRefs.Add(pa.Name);
+                break;
+            default:
+                foreach (var child in expr.Children.OfType<DomainExpression>())
+                    CollectPeerScalars(child, flags);
+                break;
+        }
+    }
+
+    private static bool HasNestedRelationship(DomainExpression expr) =>
+        expr is RelationshipNavigation
+        || expr.Children.OfType<DomainExpression>().Any(HasNestedRelationship);
 
     private static bool SemanticKeyMatch(StageSubscription a, StageSubscription b) {
         if (!string.Equals(a.RelationshipName, b.RelationshipName, StringComparison.Ordinal))
             return false;
         if (a.Quantifier != b.Quantifier)
+            return false;
+        if (!string.Equals(a.PeerBinding, b.PeerBinding, StringComparison.Ordinal))
             return false;
         if (a.StageNames.Count != b.StageNames.Count)
             return false;
@@ -408,5 +512,6 @@ internal sealed class SubscriptionAnalyzer : INodeAnalyzer {
     }
 
     private static string SubscriptionKey(StageSubscription sub) =>
-        $"{sub.RelationshipName} -> {string.Join("/", sub.StageNames)} ({sub.Quantifier})";
+        $"{sub.RelationshipName} -> {string.Join("/", sub.StageNames)} ({sub.Quantifier}" +
+        (sub.PeerBinding is { Length: > 0 } ? $", as {sub.PeerBinding}" : "") + ")";
 }

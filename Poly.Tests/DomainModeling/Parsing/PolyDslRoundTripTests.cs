@@ -105,6 +105,54 @@ public class PolyDslRoundTripTests {
     }
 
     [Test]
+    public async Task Parse_When_WithPeerBinding_RoundTrips() {
+        var poly = """
+            domain Test
+
+            Tracker: entity {
+              Status: Text
+              Tracks: Order
+
+              Pending: stage {
+                when Tracks Active as order {
+                  assign Status to order Code
+                }
+              }
+            }
+
+            Order: entity {
+              Code: Text
+              Draft: stage { }
+              Active: stage { }
+            }
+            """;
+
+        var parser = new PolyDslParser(poly);
+        var changes = parser.Parse();
+        var emptyDomain = new Domain("_", [], []);
+        var result = new DomainEvolution(emptyDomain).Apply(changes);
+        await Assert.That(result.Succeeded).IsTrue();
+
+        var tracker = result.Root.Types.OfType<Entity>().Single(e => e.Name == "Tracker");
+        var pending = tracker.Stages.Single(s => s.Name == "Pending");
+        await Assert.That(pending.Subscriptions.Count).IsEqualTo(1);
+        await Assert.That(pending.Subscriptions[0].PeerBinding).IsEqualTo("order");
+        var assign = pending.Subscriptions[0].Effects.OfType<AssignEffect>().Single();
+        await Assert.That(assign.Value).IsTypeOf<RelationshipNavigation>();
+        var nav = (RelationshipNavigation)assign.Value;
+        await Assert.That(nav.RelationshipName).IsEqualTo("order");
+
+        var printed = new DomainDslPrinter().Print(result.Root);
+        await Assert.That(printed.Contains("as order", StringComparison.Ordinal)).IsTrue();
+
+        var reparsed = new DomainEvolution(new Domain("_", [], [])).Apply(new PolyDslParser(printed).Parse());
+        await Assert.That(reparsed.Succeeded).IsTrue();
+        var sub2 = reparsed.Root.Types.OfType<Entity>().Single(e => e.Name == "Tracker")
+            .Stages.Single(s => s.Name == "Pending").Subscriptions[0];
+        await Assert.That(sub2.PeerBinding).IsEqualTo("order");
+    }
+
+    [Test]
     public async Task Parse_MultiStageWhen_RoundTrips() {
         // P2.5: when Rel Stage1, Stage2 should parse and print round-trip
         var poly = """

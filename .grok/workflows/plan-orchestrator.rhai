@@ -1,9 +1,9 @@
 let meta = #{
     name: "plan-orchestrator",
-    description: "Orchestrate the DAS suite: one task (next) or loop until plan complete (until-done)",
-    when_to_use: "When running docs/plans/simple-agent-tasks/das-* (W0–W4). Use mode until-done to chain tasks until the suite is complete, blocked, or max_tasks/budget exhausted",
+    description: "Orchestrate a simple-agent-tasks suite README: one task (next) or loop until-done",
+    when_to_use: "When running a suite under docs/plans/simple-agent-tasks/ (e.g. spe-README.md, das-README.md). Pass suite= path. mode until-done chains tasks until complete/blocked/budget.",
     phases: [
-        #{ title: "Orient", detail: "read suite + future-state; pick next unchecked task" },
+        #{ title: "Orient", detail: "read suite + parent plan; pick next unchecked task" },
         #{ title: "Implement", detail: "execute selected task under hard rules" },
         #{ title: "Verify", detail: "adversarial AC check" },
         #{ title: "Record", detail: "update task/suite docs; loop if until-done" },
@@ -103,7 +103,8 @@ let record_schema = #{
 };
 
 // --- args ---
-// suite: "das" (default) | path to suite README
+// suite: path to suite README (preferred) | short key "das" | "spe"
+//        also accepts args.suite_readme / args.path if the host passes @file that way
 // task: optional forced task id (only first iteration in until-done)
 // mode: "next" | "status-only" | "until-done"
 // skip_implement: bool
@@ -120,30 +121,81 @@ let stop_on_verify_fail = false;
 let min_budget_remaining = 8;
 
 if args != () {
+    // Structured fields (when host supplies them)
     if args.suite != () { suite_key = args.suite; }
+    if args.suite_readme != () { suite_key = args.suite_readme; }
+    if args.path != () { suite_key = args.path; }
+    if args.suite_path != () { suite_key = args.suite_path; }
     if args.mode != () { mode = args.mode; }
     if args.task != () { task_override = args.task; }
     if args.skip_implement == true { skip_implement = true; }
     if args.max_tasks != () { max_tasks = args.max_tasks; }
     if args.stop_on_verify_fail == true { stop_on_verify_fail = true; }
     if args.min_budget_remaining != () { min_budget_remaining = args.min_budget_remaining; }
+
+    // Freeform slash-command host: args is often
+    //   { "query": "suite=spe mode=until-done", "objective": "..." }
+    // not { suite: "spe", mode: "until-done" }.
+    let freeform = ();
+    if args.query != () { freeform = args.query; }
+    else if args.objective != () { freeform = args.objective; }
+    else if args.text != () { freeform = args.text; }
+    else if args.prompt != () { freeform = args.prompt; }
+
+    if freeform != () && type_of(freeform) == "string" {
+        let ff = freeform;
+        if ff.contains("suite=spe") || ff.contains("suite:spe") || ff.contains("spe-README") || ff.contains("spe-readme") {
+            suite_key = "spe";
+        } else if ff.contains("suite=das") || ff.contains("suite:das") || ff.contains("das-README") {
+            suite_key = "das";
+        }
+        // Path form: suite=docs/plans/.../spe-README.md already covered by spe-README contains
+        if ff.contains("until-done") {
+            mode = "until-done";
+        } else if ff.contains("status-only") {
+            mode = "status-only";
+        } else if ff.contains("mode=next") {
+            mode = "next";
+        }
+        // task=E1 or task=spe-e1
+        if ff.contains("task=E1") || ff.contains("task=e1") || ff.contains("task=spe-e1") { task_override = "E1"; }
+        else if ff.contains("task=L1") || ff.contains("task=l1") || ff.contains("task=spe-l1") { task_override = "L1"; }
+        else if ff.contains("task=O1") || ff.contains("task=o1") || ff.contains("task=spe-o1") { task_override = "O1"; }
+    }
 }
 
 if max_tasks < 1 { max_tasks = 1; }
 if max_tasks > 32 { max_tasks = 32; }
 
 let suite_readme = "docs/plans/simple-agent-tasks/das-README.md";
-let future_state = "docs/plans/domain-analysis-future-state.md";
+let parent_plan = "docs/plans/domain-analysis-future-state.md";
 let inventory = "docs/plans/domain-analysis-simplification.md";
 let suite_gate = "docs/plans/simple-agent-tasks/das-gate.md";
+let suite_label = "DAS";
 
-if suite_key != "das" {
-    if type_of(suite_key) == "string" {
-        let sk = suite_key;
-        sk.trim();
-        if sk != "" && sk != "das" {
-            suite_readme = sk;
-        }
+if type_of(suite_key) == "string" {
+    let sk = suite_key;
+    sk.trim();
+    // Normalize bare keys and full paths
+    if sk == "spe" || sk.contains("spe-README") || sk.contains("spe-readme") {
+        suite_readme = "docs/plans/simple-agent-tasks/spe-README.md";
+        parent_plan = "docs/plans/domain-surface-extensions-plan.md";
+        inventory = "docs/plans/domain-surface-extensions-plan.md";
+        suite_gate = "docs/plans/simple-agent-tasks/spe-gate.md";
+        suite_label = "SPE";
+    } else if sk == "das" || sk.contains("das-README") || sk.contains("das-readme") {
+        suite_readme = "docs/plans/simple-agent-tasks/das-README.md";
+        parent_plan = "docs/plans/domain-analysis-future-state.md";
+        inventory = "docs/plans/domain-analysis-simplification.md";
+        suite_gate = "docs/plans/simple-agent-tasks/das-gate.md";
+        suite_label = "DAS";
+    } else if sk != "" {
+        // Arbitrary suite README path: infer companion gate/plan from parent plan link later
+        suite_readme = sk;
+        suite_gate = "";
+        parent_plan = "";
+        inventory = "";
+        suite_label = "custom";
     }
 }
 
@@ -166,8 +218,11 @@ let force_task_used = false;
 
 let report = "";
 report += "# Plan orchestrator result\n\n";
-report += "- **Suite**: `" + suite_readme + "`\n";
+report += "- **Suite label**: `" + suite_label + "`\n";
+report += "- **Suite README**: `" + suite_readme + "`\n";
 report += "- **Mode**: `" + mode + "`\n";
+report += "- **suite_key resolved**: `" + suite_key + "`\n";
+log("Suite resolved: label=" + suite_label + " readme=" + suite_readme + " mode=" + mode);
 if loop_until_done {
     report += "- **max_tasks**: " + max_tasks.to_string() + "\n";
     report += "- **stop_on_verify_fail**: " + stop_on_verify_fail.to_string() + "\n";
@@ -195,28 +250,38 @@ while iteration < max_iterations {
     phase("Orient");
 
     let orient_prompt = "";
-    orient_prompt += "You are the orient step of plan-orchestrator for Poly's domain-analysis suite.\n";
-    orient_prompt += "Use read_file/grep — do not answer from memory. Re-read current disk state every time.\n\n";
+    orient_prompt += "You are the orient step of plan-orchestrator for Poly suite **" + suite_label + "**.\n";
+    orient_prompt += "Use read_file/grep — do not answer from memory. Re-read current disk state every time.\n";
+    orient_prompt += "CRITICAL: Only pick tasks from THIS suite README. Do not report DAS complete if suite is SPE (or vice versa).\n\n";
     orient_prompt += "Read:\n";
-    orient_prompt += "1) " + suite_readme + "\n";
-    orient_prompt += "2) " + future_state + "\n";
-    orient_prompt += "3) " + inventory + " (skim if long)\n";
-    orient_prompt += "4) " + suite_gate + "\n\n";
-    orient_prompt += "Mode: " + mode + " | iteration: " + iteration.to_string() + "\n";
+    orient_prompt += "1) Suite README (authoritative pick order): " + suite_readme + "\n";
+    if parent_plan != "" {
+        orient_prompt += "2) Parent plan / design locks: " + parent_plan + "\n";
+    }
+    if inventory != "" && inventory != parent_plan {
+        orient_prompt += "3) Inventory (skim if long): " + inventory + "\n";
+    }
+    if suite_gate != "" {
+        orient_prompt += "4) Suite gate (optional bookkeeping): " + suite_gate + "\n";
+    }
+    orient_prompt += "\nMode: " + mode + " | iteration: " + iteration.to_string() + "\n";
 
     if task_override != () && force_task_used == false {
         orient_prompt += "User forced first task: " + task_override + "\n";
         orient_prompt += "Resolve that task file if it exists; else fall back to first unchecked.\n";
     } else {
-        orient_prompt += "Pick the FIRST unchecked task in suite pick order (W0 before W1, etc.).\n";
-        orient_prompt += "Gate rows (W*.G) are optional bookkeeping — skip them; pick the next product task with Status [ ] or [~].\n";
-    orient_prompt += "Do NOT block on wave gates or prereq gates — full-send mode: if a product task is open, pick it even if earlier gates are incomplete.\n";
+        orient_prompt += "Pick the FIRST unchecked product task in the suite README pick order.\n";
+        orient_prompt += "Open markers: Status `[ ]` or `[~]` on task rows/files. Optional gates (*.G, spe-gate until streams done) skip unless no product tasks remain.\n";
+        orient_prompt += "For SPE: open heads are E1, L1, O1 in parallel — pick ONE head (prefer first open in table: 0 optional, then E1, L1, O1).\n";
+        orient_prompt += "Do NOT block on soft prereqs in full-send — if a product task is open, pick it.\n";
+        orient_prompt += "Do NOT open das-* tasks when suite is SPE. Do NOT open spe-* when suite is DAS.\n";
     }
 
-    orient_prompt += "\nIf ALL product tasks are [x], set suite_complete=true, task_id=\"\", task_file=\"\", wave=\"\", objective=\"\", prereqs_met=true, blocked_reason=\"\".\n";
+    orient_prompt += "\nIf ALL product tasks in THIS suite are [x], set suite_complete=true, task_id=\"\", task_file=\"\", wave=\"\", objective=\"\", prereqs_met=true, blocked_reason=\"\".\n";
     orient_prompt += "Always set prereqs_met=true for an open product task in full-send (prereqs are soft guidance only).\n";
-    orient_prompt += "open_task_count = number of still-open product tasks in pick order.\n";
-    orient_prompt += "List hard rules from the suite README.\n";
+    orient_prompt += "open_task_count = number of still-open product tasks in THIS suite pick order.\n";
+    orient_prompt += "List hard rules from the suite README (not from a different suite).\n";
+    orient_prompt += "task_file must be a path under docs/plans/simple-agent-tasks/ matching this suite (e.g. spe-e1-*.md).\n";
 
     let orient_label = "orient:" + iteration.to_string();
     let orient = agent(orient_prompt, #{
@@ -281,12 +346,16 @@ while iteration < max_iterations {
     phase("Implement");
 
     let impl_prompt = "";
-    impl_prompt += "You are the implementer for Poly DAS suite task " + o.task_id + ".\n";
+    impl_prompt += "You are the implementer for Poly **" + suite_label + "** suite task " + o.task_id + ".\n";
     impl_prompt += "Read and execute ONLY this task file: " + o.task_file + "\n";
-    impl_prompt += "Re-read hard rules from suite README and future-state as needed.\n\n";
-    impl_prompt += "Objective: " + o.objective + "\n\n";
+    impl_prompt += "Re-read hard rules from suite README: " + suite_readme + "\n";
+    if parent_plan != "" {
+        impl_prompt += "Parent plan / design locks: " + parent_plan + "\n";
+    }
+    impl_prompt += "\nObjective: " + o.objective + "\n\n";
     impl_prompt += "Rules:\n";
     impl_prompt += "- Minimal diffs; match Agents.md / docs/CORE.md.\n";
+    impl_prompt += "- Respect file ownership in the task (do not thrash other SPE streams).\n";
     impl_prompt += "- Analysis = facts + diagnostics only; no Syntax IR mid-pipeline.\n";
     impl_prompt += "- Prefer delete dual path over documenting it when the task allows.\n";
     impl_prompt += "- Fail closed when analysis is present and required metadata is missing.\n";
@@ -370,9 +439,10 @@ while iteration < max_iterations {
     record_prompt += "\nActions:\n";
     record_prompt += "1) If implement+verify ok: Status [x], check AC, Progress notes.\n";
     record_prompt += "2) Else: leave open/[~], note failures; do not mark complete.\n";
-    record_prompt += "3) Update das-README status table for this task.\n";
-    record_prompt += "4) Do NOT mark wave gate complete unless all wave tasks are truly [x].\n";
+    record_prompt += "3) Update suite README status table for this task: " + suite_readme + "\n";
+    record_prompt += "4) Do NOT mark suite gate complete unless all product tasks are truly [x].\n";
     record_prompt += "5) next_task_id = first still-open product task after your edits (or empty if none).\n";
+    record_prompt += "6) Only edit THIS suite's task files (SPE vs DAS — do not cross-suite).\n";
     record_prompt += "Markdown only; no production code.\n";
 
     let rec = agent(record_prompt, #{

@@ -13,6 +13,7 @@ Architectural rationale → **`docs/decisions/`**. Module maps → **`Poly/*/REA
 |------|------|
 | [**Master roadmap**](v2-to-v3/master-roadmap.md) | Milestone index + one-line agent pick |
 | [**Domain analysis unification**](domain-analysis-unification.md) | **Parked** — product bar met; codegen track paused · [`dau-*`](simple-agent-tasks/dau-README.md) |
+| [**Domain surface extensions (SPE)**](domain-surface-extensions-plan.md) | **Done** — export peer · entity-level when · owned policies · suite [`spe-*`](simple-agent-tasks/spe-README.md) |
 | [**MCP dogfood protocol**](v2-to-v3/mcp-dogfood-protocol.md) | Scenario dogfood → core concepts · [`dogfood-*`](v2-to-v3/simple-agent-tasks/dogfood-README.md) · **fixes:** [`dogfood-fix-*`](v2-to-v3/simple-agent-tasks/dogfood-fix-README.md) |
 | [**Platform velocity review**](platform-velocity-review.md) | Full-project pain points for planned/future features (2026-07-25) |
 | [**Analysis pipeline merge**](analysis-pipeline-merge.md) | **Complete** (registration only) — predecessor to DAU · [`apm-*`](simple-agent-tasks/apm-README.md) |
@@ -32,7 +33,8 @@ Architectural rationale → **`docs/decisions/`**. Module maps → **`Poly/*/REA
 
 | Queue | Role |
 |-------|------|
-| [**`dogfood-fix-*` (S1 findings)**](v2-to-v3/simple-agent-tasks/dogfood-fix-README.md) | **Primary** — G1 fail-closed → G3 noise → S1-R |
+| [**`spe-*` (surface extensions)**](simple-agent-tasks/spe-README.md) | **Complete** — export peer · entity-level when · owned policies (G1–G6) |
+| [**`dogfood-fix-*` (S1 findings)**](v2-to-v3/simple-agent-tasks/dogfood-fix-README.md) | Dogfood fixes — mostly done; optional G2 |
 | [**`dogfood-*` (MCP discovery)**](v2-to-v3/simple-agent-tasks/dogfood-README.md) | S1 done partial; S2→S3 after fixes or in parallel |
 | [**`dau-*` (domain analysis unification)**](simple-agent-tasks/dau-README.md) | **Parked** — product bar met; commit ops optional |
 | [**`apm-*` (analysis pipeline merge)**](simple-agent-tasks/apm-README.md) | **Complete** — registration predecessor; do not reopen |

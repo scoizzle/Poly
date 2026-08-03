@@ -160,6 +160,30 @@ public class DomainInstanceStoreFailClosedTests {
     }
 
     [Test]
+    public async Task NotifyTransition_Throws_WhenEntityLevelSubscriptionPlanMissing() {
+        var domain = BuildDomainWithSubscriptions();
+        var store = new DomainInstanceStore();
+
+        var order = DomainEntityInstance.Create(
+            (Entity)domain.Types[0], new Dictionary<string, object?>(), domain);
+        var trackerEntity = (Entity)domain.Types[1];
+        var tracker = DomainEntityInstance.Create(trackerEntity, new Dictionary<string, object?>(), domain);
+
+        store.Add(order);
+        store.Add(tracker);
+        store.Link("Tracks", tracker, order);
+
+        order.TransitionStage("Active", notifyStore: false);
+
+        var analysis = RuntimeAnalysisCache.GetOrAnalyze(domain);
+        analysis.GetMetadataStore().Remove<SubscriptionDispatchPlanMetadata>(trackerEntity);
+
+        var ex = Assert.Throws<InvalidOperationException>(() => store.NotifyTransition(order, "Active"));
+        await Assert.That(ex!.Message).Contains(nameof(SubscriptionDispatchPlanMetadata));
+        await Assert.That(ex.Message).Contains("Tracker");
+    }
+
+    [Test]
     public async Task RuntimeAnalysisCache_ReturnedAnalysis_ContainsRequiredRuntimeMetadata() {
         // Arrange
         var domain = BuildDomainWithSubscriptions();

@@ -23,7 +23,7 @@ internal static class DomainModelDiagnosticCodes {
     public const string SubscriptionCausalityCycle = "DMSS001";
     public const string SubscriptionIdempotencyReplay = "DMSS002";
     public const string SubscriptionContractMismatch = "DMSS003";
-    /// Unknown this.* / event.* property reference in a subscription effect expression.
+    /// Subscription effect binding: subscriber props, peer binder path-prefix, legacy event ban.
     public const string SubscriptionEffectBinding = "DMSS004";
 
     // General system diagnostics

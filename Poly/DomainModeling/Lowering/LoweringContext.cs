@@ -13,7 +13,13 @@ namespace Poly.DomainModeling.Lowering;
 /// <see cref="AnalysisResult"/>). When null, lowering falls back to re-scan logic.
 /// </summary>
 /// <param name="Subject">The Syntax AST node representing the current entity instance.</param>
-/// <param name="Parameters">Optional map of parameter names to Syntax AST nodes.</param>
+/// <param name="Parameters">
+/// Optional map of parameter names to Syntax AST nodes. Used for
+/// <c>ParameterAccess</c> and for path-prefix roots that should resolve as
+/// parameter subjects (e.g. peer binders in C# subscription handlers:
+/// <c>order Code</c> → <c>order.Code</c>, not <c>this.order.Code</c>).
+/// Does not rewrite bag values — VM peer binding remains a separate pre-lower rewrite.
+/// </param>
 /// <param name="Analysis">
 /// Metadata provider with pre-computed analysis bags. When present, lowering uses
 /// provider lookups instead of scanning domain collections. Null-safe (falls

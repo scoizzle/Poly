@@ -738,6 +738,12 @@ public sealed class PolyDslParser {
             Advance(); // consume ','
             targetStages.Add(ExpectIdentifier(TokenKind.Identifier, "target stage name"));
         }
+        // Optional peer binder: when Rel Stage as name { … }
+        string? peerBinding = null;
+        if (_current.Kind == TokenKind.As) {
+            Advance();
+            peerBinding = ExpectIdentifier(TokenKind.Identifier, "peer binding name");
+        }
         Expect(TokenKind.LBrace);
 
         var effects = new List<Effect>();
@@ -746,12 +752,12 @@ public sealed class PolyDslParser {
         }
         Expect(TokenKind.RBrace);
 
-        var subscription = new StageSubscription(relName, targetStages, StageSubscriptionQuantifier.Each, effects);
+        var subscription = new StageSubscription(relName, targetStages, StageSubscriptionQuantifier.Each, effects, peerBinding);
         changes.Add(new AddStageSubscriptionChange(_currentEntityName, stageName, subscription));
     }
 
     /// <summary>
-    /// Parses an entity-level <c>when RelName TargetStage { effects }</c> block.
+    /// Parses an entity-level <c>when RelName TargetStage [as name] { effects }</c> block.
     /// Called when <c>when</c> is encountered at the entity body level (outside any stage).
     /// </summary>
     private void ParseEntitySubscription(List<DomainChange> changes) {
@@ -763,6 +769,11 @@ public sealed class PolyDslParser {
             Advance(); // consume ','
             targetStages.Add(ExpectIdentifier(TokenKind.Identifier, "target stage name"));
         }
+        string? peerBinding = null;
+        if (_current.Kind == TokenKind.As) {
+            Advance();
+            peerBinding = ExpectIdentifier(TokenKind.Identifier, "peer binding name");
+        }
         Expect(TokenKind.LBrace);
 
         var effects = new List<Effect>();
@@ -771,7 +782,7 @@ public sealed class PolyDslParser {
         }
         Expect(TokenKind.RBrace);
 
-        var subscription = new StageSubscription(relName, targetStages, StageSubscriptionQuantifier.Each, effects);
+        var subscription = new StageSubscription(relName, targetStages, StageSubscriptionQuantifier.Each, effects, peerBinding);
         changes.Add(new AddEntitySubscriptionChange(_currentEntityName, subscription));
     }
 

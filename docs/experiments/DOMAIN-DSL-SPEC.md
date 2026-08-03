@@ -354,7 +354,8 @@ Every other concept is a member of an entity or actor (property, stage, action, 
 | `invoke target.Action(params)` | Call action on reachable entity | `invoke customer.SendConfirmation(id)` |
 | `start EntityName(params)` | Factory/initialization pattern | `start FulfillOrder(order)` |
 | `schedule at expr { effects }` | Execute effects at future time | `schedule at endDate { transition to Completed }` |
-| `when property Stage { effects }` | React to related entity's stage transition | `when calls Ended { assign total to event.duration }` |
+| `when property Stage { effects }` | React to related entity's stage transition (notification-only) | `when calls Ended { assign total to 0 }` |
+| `when property Stage as name { effects }` | Same, with peer binder for related-record fields | `when calls Ended as call { assign total to call duration }` |
 | `for var in coll where cond { effects }` | Iterate and apply effects per element | `for line in lines where line.matches(p) { create MatchLine{content:line.text} }` |
 | `parallel { step require deps { effects } }` | Parallel fork/join with constraint solving | `parallel { step require src, cfg { assign r to process(src,cfg) } }` |
 
@@ -983,7 +984,7 @@ Names referenced in `when` and `require` clauses are resolved hierarchically:
 - **In an entity action body** — the entity instance
 - **In a policy expression on an entity** — the entity instance
 - **In an initializer block** — the entity being created
-- **In a subscription body (`when property Stage`)** — the subscriber entity instance (not the transitioning entity). The transitioning entity is accessed via the implicit `event` variable.
+- **In a subscription body (`when property Stage`)** — bare names resolve to the **subscriber**. Peer fields require an optional binder: `when property Stage as name { … name Prop … }` (notification-only bodies omit `as`). The retired implicit `event` root is not product-true.
 - **In a value function body** — the value instance
 
 ```swift
@@ -1845,7 +1846,7 @@ Add:
 - Three deployment modes: in-memory, queue-backed, database outbox
 - Cross-entity mutation rule enforcement
 - Actor policy resolution in `require` on actions
-- Implicit `event` variable in `when property Stage` subscription bodies
+- Optional peer binder in subscriptions: `when property Stage as name { … }` (replaces implicit `event`)
 - MCP tools for all constructs
 
 ### Phase 3

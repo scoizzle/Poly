@@ -233,17 +233,15 @@ public class OracleToolTests {
     // ── owned-2: relationship navigation in JSON expressions ──
 
     [Test]
-    public async Task SimulatePolicy_RelationshipJson_Accepted() {
-        // owned-2: verify the JSON format is parsed and accepted by simulate_policy.
-        // Full runtime evaluation requires store-linked instances (owned-3).
+    public async Task SimulatePolicy_RelationshipJson_WithoutStore_FailsClosed() {
+        // SPE-O3 / O2: relationship path-prefix JSON parses, but evaluate without store
+        // is fail-closed (no vacuous bag pass-through). Use create+link+evaluate_policy.
         var response = OracleTool.SimulatePolicy(
             @"{""relationship"":""profile"",""inner"":{""property"":""City"",""op"":""=="",""value"":""Metropolis""}}",
             @"{""City"":""Metropolis""}");
 
-        // The JSON is valid and should parse successfully
-        await Assert.That(response.Success).IsTrue();
-        // The VM evaluates the expression; relationship nav may not resolve
-        // against a flat bag, but parsing and lowering succeeds without error.
+        await Assert.That(response.Success).IsFalse();
+        await Assert.That(response.Message).Contains("Simulation failed");
     }
 
     [Test]

@@ -3178,6 +3178,65 @@ E: entity {{
     }
 
     [Test]
+    public async Task EvaluatePolicy_OwnedToOnePathPrefix_CreateLink_TrueAndFalse() {
+        // SPE-O3 golden: owned to-one path-prefix → create/link → evaluate_policy true + false
+        var (sessionId, _) = McpSessionStore.Create("OwnedPolicyGolden");
+
+        var dsl = DslTool.ApplyDsl(sessionId, """
+            domain OwnedPolicyGolden
+            Customer: entity {
+              Name: Text
+              profile: owned Profile
+              IsUrban: policy { profile City is "Metropolis" }
+            }
+            Profile: entity {
+              City: Text
+            }
+            """);
+        await Assert.That(dsl.Success).IsTrue();
+
+        var alice = RuntimeTool.CreateInstance(sessionId, "Customer", """{"Name":"Alice"}""");
+        await Assert.That(alice.Success).IsTrue();
+        var bob = RuntimeTool.CreateInstance(sessionId, "Customer", """{"Name":"Bob"}""");
+        await Assert.That(bob.Success).IsTrue();
+        var urbanProfile = RuntimeTool.CreateInstance(sessionId, "Profile", """{"City":"Metropolis"}""");
+        await Assert.That(urbanProfile.Success).IsTrue();
+        var ruralProfile = RuntimeTool.CreateInstance(sessionId, "Profile", """{"City":"Gotham"}""");
+        await Assert.That(ruralProfile.Success).IsTrue();
+
+        McpSessionStore.TryGet(sessionId, out var st);
+        var aliceId = st.InstanceMap.First(kvp =>
+            kvp.Value.Entity.Name == "Customer"
+            && kvp.Value.Snapshot().TryGetValue("Name", out var n)
+            && n?.Equals("Alice") == true).Key;
+        var bobId = st.InstanceMap.First(kvp =>
+            kvp.Value.Entity.Name == "Customer"
+            && kvp.Value.Snapshot().TryGetValue("Name", out var n2)
+            && n2?.Equals("Bob") == true).Key;
+        var urbanId = st.InstanceMap.First(kvp =>
+            kvp.Value.Entity.Name == "Profile"
+            && kvp.Value.Snapshot().TryGetValue("City", out var c)
+            && c?.Equals("Metropolis") == true).Key;
+        var ruralId = st.InstanceMap.First(kvp =>
+            kvp.Value.Entity.Name == "Profile"
+            && kvp.Value.Snapshot().TryGetValue("City", out var c2)
+            && c2?.Equals("Gotham") == true).Key;
+
+        var linkUrban = RuntimeTool.LinkInstances(sessionId, aliceId, "profile", urbanId);
+        await Assert.That(linkUrban.Success).IsTrue();
+        var linkRural = RuntimeTool.LinkInstances(sessionId, bobId, "profile", ruralId);
+        await Assert.That(linkRural.Success).IsTrue();
+
+        var evalTrue = PolicyTool.EvaluatePolicy(sessionId, "Customer", "IsUrban", instanceId: aliceId);
+        await Assert.That(evalTrue.Success).IsTrue();
+        await Assert.That(evalTrue.Message).Contains("true");
+
+        var evalFalse = PolicyTool.EvaluatePolicy(sessionId, "Customer", "IsUrban", instanceId: bobId);
+        await Assert.That(evalFalse.Success).IsTrue();
+        await Assert.That(evalFalse.Message).Contains("false");
+    }
+
+    [Test]
     public async Task LinkInstances_UnknownRelationship_Fails() {
         var (sessionId, _) = McpSessionStore.Create("Test");
         var dsl = DslTool.ApplyDsl(sessionId, """

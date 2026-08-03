@@ -13,7 +13,8 @@ using Poly.DomainModeling.Analysis;
 ///   <item><c>NotifyTransition</c> iterates registered instances to find subscribers.</item>
 ///   <item>A subscriber matches if:
 ///     <list type="bullet">
-///       <item>It is in a stage that declares a <see cref="StageSubscription"/>.</item>
+///       <item>Stage-scoped: it is in a stage that declares a <see cref="StageSubscription"/>, <b>or</b>
+///         entity-level: <see cref="Entity.Subscriptions"/> (active regardless of current stage).</item>
 ///       <item>The subscription's <c>RelationshipName</c> matches a domain relationship
 ///         where Source = subscriber entity type and Target = transitioned entity type.</item>
 ///       <item>An <b>instance link</b> exists for that relationship from subscriber → transitioned
@@ -24,8 +25,9 @@ using Poly.DomainModeling.Analysis;
 ///         <see cref="StageSubscriptionQuantifier.All"/> (fires if all linked targets match).</item>
 ///     </list>
 ///   </item>
+///   <item><b>Order:</b> stage-scoped handlers first, then entity-level (SPE-L2).</item>
 ///   <item>Subscription effects execute on the subscriber with <c>this</c>=subscriber,
-///     <c>event</c>=transitioned instance.</item>
+///     peer bag when <c>PeerBinding</c> is set.</item>
 ///   <item>If a subscriber transitions as a side effect, notification recurses (depth-limited).</item>
 /// </list>
 ///
@@ -118,8 +120,9 @@ public sealed class DomainInstanceStore {
 
     /// <summary>
     /// Called after an instance transitions to a new stage.
-    /// Finds subscriber instances whose active subscription matches the transition
-    /// <b>and</b> that are instance-linked to the transitioned entity, then runs effects.
+    /// Finds subscriber instances whose stage-scoped or entity-level subscription matches
+    /// the transition <b>and</b> that are instance-linked to the transitioned entity, then runs effects.
+    /// Stage-scoped handlers run first; entity-level handlers run second (same match rules).
     /// </summary>
     /// <param name="transitionedInstance">The instance that changed stage.</param>
     /// <param name="targetStageName">The stage entered.</param>
@@ -146,86 +149,121 @@ public sealed class DomainInstanceStore {
 
         if (incomingContracts.Count == 0) return;
 
-        // For each subscriber instance, check if any of its active subscriptions match
+        // For each subscriber: stage-scoped plan first, then always-active entity-level plan.
         foreach (var subscriber in _instances) {
             if (subscriber.IsDeleted) continue;
-            if (subscriber.CurrentStage is null) continue;
 
-            var subscriberEntityStructure = analysis.GetMetadata<EntityStructureMetadata>(subscriber.Entity);
-            if (subscriberEntityStructure is null)
-                throw new InvalidOperationException(
-                    $"Runtime dispatch requires {nameof(EntityStructureMetadata)} for subscriber entity '{subscriber.Entity.Name}'.");
-            if (subscriberEntityStructure.StageByName is null)
-                throw new InvalidOperationException(
-                    $"Entity '{subscriber.Entity.Name}' has no lifecycle stages; cannot dispatch subscription for current stage '{subscriber.CurrentStage}'.");
+            // --- Stage-scoped (requires resolvable current stage) ---
+            if (subscriber.CurrentStage is not null) {
+                var subscriberEntityStructure = analysis.GetMetadata<EntityStructureMetadata>(subscriber.Entity);
+                if (subscriberEntityStructure is null)
+                    throw new InvalidOperationException(
+                        $"Runtime dispatch requires {nameof(EntityStructureMetadata)} for subscriber entity '{subscriber.Entity.Name}'.");
+                if (subscriberEntityStructure.StageByName is null)
+                    throw new InvalidOperationException(
+                        $"Entity '{subscriber.Entity.Name}' has no lifecycle stages; cannot dispatch subscription for current stage '{subscriber.CurrentStage}'.");
 
-            // Subscriber dispatch is best-effort per subscriber: a subscriber whose
-            // current stage is not in its own stage set (analysis/instance
-            // disagreement) is skipped rather than failing the whole transition
-            // (contrast InvokeActionInternal's fail-closed dispatch throw).
-            if (!subscriberEntityStructure.StageByName.TryGetValue(subscriber.CurrentStage, out var subscriberStage)) {
-                continue;
+                // Best-effort per subscriber: unknown current stage skips stage path only
+                // (entity-level still runs). Contrast InvokeActionInternal's fail-closed throw.
+                if (subscriberEntityStructure.StageByName.TryGetValue(subscriber.CurrentStage, out var subscriberStage)) {
+                    var stagePlan = analysis.GetMetadata<SubscriptionDispatchPlanMetadata>(subscriberStage)
+                        ?? throw new InvalidOperationException(
+                            $"Runtime dispatch requires {nameof(SubscriptionDispatchPlanMetadata)} for stage '{subscriberStage.Name}'.");
+
+                    DispatchMatchingEntries(
+                        subscriber,
+                        transitionedInstance,
+                        targetStageName,
+                        stagePlan,
+                        incomingContracts,
+                        stageNameBeforeEffects: subscriberStage.Name,
+                        depth,
+                        maxDepth);
+                }
             }
 
-            var dispatchPlan = analysis.GetMetadata<SubscriptionDispatchPlanMetadata>(subscriberStage)
+            // --- Entity-level (regardless of subscriber current stage) ---
+            var entityPlan = analysis.GetMetadata<SubscriptionDispatchPlanMetadata>(subscriber.Entity)
                 ?? throw new InvalidOperationException(
-                    $"Runtime dispatch requires {nameof(SubscriptionDispatchPlanMetadata)} for stage '{subscriberStage.Name}'.");
+                    $"Runtime dispatch requires {nameof(SubscriptionDispatchPlanMetadata)} for entity '{subscriber.Entity.Name}'.");
 
-            var applicableEntries = dispatchPlan.ByRelationshipName.Values
-                .SelectMany(entries => entries)
-                .Where(entry =>
-                    string.Equals(entry.SourceEntityName, subscriber.Entity.Name, StringComparison.Ordinal)
-                    && string.Equals(entry.TargetEntityName, transitionedInstance.Entity.Name, StringComparison.Ordinal)
-                    && incomingContracts.Any(contract =>
-                        string.Equals(contract.Name, entry.RelationshipName, StringComparison.Ordinal)
-                        && string.Equals(contract.SourceEntityName, entry.SourceEntityName, StringComparison.Ordinal)
-                        && string.Equals(contract.TargetEntityName, entry.TargetEntityName, StringComparison.Ordinal)))
-                .ToList();
+            DispatchMatchingEntries(
+                subscriber,
+                transitionedInstance,
+                targetStageName,
+                entityPlan,
+                incomingContracts,
+                stageNameBeforeEffects: subscriber.CurrentStage,
+                depth,
+                maxDepth);
+        }
+    }
 
-            foreach (var entry in applicableEntries) {
-                // Instance-level link required (BR.4.4)
-                if (!IsLinked(entry.RelationshipName, subscriber, transitionedInstance))
-                    continue;
+    private void DispatchMatchingEntries(
+        DomainEntityInstance subscriber,
+        DomainEntityInstance transitionedInstance,
+        string targetStageName,
+        SubscriptionDispatchPlanMetadata dispatchPlan,
+        List<RelationshipContract> incomingContracts,
+        string? stageNameBeforeEffects,
+        int depth,
+        int maxDepth) {
+        var applicableEntries = dispatchPlan.ByRelationshipName.Values
+            .SelectMany(entries => entries)
+            .Where(entry =>
+                string.Equals(entry.SourceEntityName, subscriber.Entity.Name, StringComparison.Ordinal)
+                && string.Equals(entry.TargetEntityName, transitionedInstance.Entity.Name, StringComparison.Ordinal)
+                && incomingContracts.Any(contract =>
+                    string.Equals(contract.Name, entry.RelationshipName, StringComparison.Ordinal)
+                    && string.Equals(contract.SourceEntityName, entry.SourceEntityName, StringComparison.Ordinal)
+                    && string.Equals(contract.TargetEntityName, entry.TargetEntityName, StringComparison.Ordinal)))
+            .ToList();
 
-                // Does the target stage match?
-                if (!entry.StageNames.Any(sn =>
-                        string.Equals(sn, targetStageName, StringComparison.Ordinal)))
-                    continue;
+        foreach (var entry in applicableEntries) {
+            // Instance-level link required (BR.4.4)
+            if (!IsLinked(entry.RelationshipName, subscriber, transitionedInstance))
+                continue;
 
-                // Dispatch based on quantifier
-                if (entry.Quantifier == StageSubscriptionQuantifier.Each) {
-                    // Each: fire effects for every matching transition (default)
-                    subscriber.ExecuteSubscriptionEffects(entry.Effects, transitionedInstance);
-                }
-                else if (entry.Quantifier is StageSubscriptionQuantifier.Any or StageSubscriptionQuantifier.All) {
-                    // Any: fire once when at least one related entity is in matching stage.
-                    // All: fire once when every related entity is in matching stage.
-                    // Both check the current state of all linked targets for that relationship.
-                    var allLinkedTargets = _links
-                        .Where(l => string.Equals(l.RelationshipName, entry.RelationshipName, StringComparison.Ordinal)
-                                 && ReferenceEquals(l.Source, subscriber))
-                        .Select(l => l.Target)
-                        .ToList();
+            // Does the target stage match?
+            if (!entry.StageNames.Any(sn =>
+                    string.Equals(sn, targetStageName, StringComparison.Ordinal)))
+                continue;
 
-                    if (allLinkedTargets.Count == 0) continue;
-
-                    var matchedCount = allLinkedTargets.Count(t =>
-                        string.Equals(t.CurrentStage, targetStageName, StringComparison.Ordinal));
-
-                    bool shouldFire = entry.Quantifier switch {
-                        StageSubscriptionQuantifier.Any => matchedCount >= 1,
-                        StageSubscriptionQuantifier.All => matchedCount == allLinkedTargets.Count,
-                        _ => false
-                    };
-
-                    if (!shouldFire) continue;
-                    subscriber.ExecuteSubscriptionEffects(entry.Effects, transitionedInstance);
-                }
-
-                // Recurse if the subscriber also transitioned as a side effect
-                if (depth + 1 < maxDepth && subscriber.CurrentStage != subscriberStage.Name)
-                    NotifyTransition(subscriber, subscriber.CurrentStage, depth + 1);
+            // Dispatch based on quantifier
+            if (entry.Quantifier == StageSubscriptionQuantifier.Each) {
+                // Each: fire effects for every matching transition (default)
+                subscriber.ExecuteSubscriptionEffects(entry.Effects, transitionedInstance, entry.PeerBinding);
             }
+            else if (entry.Quantifier is StageSubscriptionQuantifier.Any or StageSubscriptionQuantifier.All) {
+                // Any: fire once when at least one related entity is in matching stage.
+                // All: fire once when every related entity is in matching stage.
+                // Both check the current state of all linked targets for that relationship.
+                var allLinkedTargets = _links
+                    .Where(l => string.Equals(l.RelationshipName, entry.RelationshipName, StringComparison.Ordinal)
+                             && ReferenceEquals(l.Source, subscriber))
+                    .Select(l => l.Target)
+                    .ToList();
+
+                if (allLinkedTargets.Count == 0) continue;
+
+                var matchedCount = allLinkedTargets.Count(t =>
+                    string.Equals(t.CurrentStage, targetStageName, StringComparison.Ordinal));
+
+                bool shouldFire = entry.Quantifier switch {
+                    StageSubscriptionQuantifier.Any => matchedCount >= 1,
+                    StageSubscriptionQuantifier.All => matchedCount == allLinkedTargets.Count,
+                    _ => false
+                };
+
+                if (!shouldFire) continue;
+                subscriber.ExecuteSubscriptionEffects(entry.Effects, transitionedInstance, entry.PeerBinding);
+            }
+
+            // Recurse if the subscriber also transitioned as a side effect
+            if (depth + 1 < maxDepth
+                && !string.Equals(subscriber.CurrentStage, stageNameBeforeEffects, StringComparison.Ordinal)
+                && subscriber.CurrentStage is not null)
+                NotifyTransition(subscriber, subscriber.CurrentStage, depth + 1);
         }
     }
 }

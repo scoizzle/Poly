@@ -398,20 +398,76 @@ Submit: action
 ## 7. Stage Subscriptions
 
 ```
-"when" relationship-name stage-name ("," stage-name)* "{" effect* "}"
+"when" relationship-name stage-name ("," stage-name)* ["as" binder-name] "{" effect* "}"
 ```
 
-Subscriptions trigger when a related entity enters one of the named stages.
+Subscriptions trigger when a related entity (reachable via the named relationship /
+navigation property on the **subscriber**) enters one of the listed stages.
+
+### Placement (stage vs entity-level)
+
+| Placement | Active when | Optional `as name` |
+|-----------|-------------|--------------------|
+| **Stage-scoped** (`when` inside a stage body) | Only while the subscriber is **in that stage** | Yes — same peer rules |
+| **Entity-level** (`when` on the entity, outside stages) | **Always-active** (any subscriber stage) | Yes — same peer rules |
+
+Store notify runs stage-scoped handlers first, then entity-level. Both placements use the
+same effect-binding fail-closed checks.
+
+### Two shapes
+
+| Shape | Form | Body may use peer fields? |
+|-------|------|---------------------------|
+| **Notification-only** | `when Rel Stage { … }` | No — subscriber props, literals, local effects only |
+| **Peer-dependent** | `when Rel Stage as name { … }` | Yes — **scalar** path-prefix `name Prop` on the transitioned peer |
+
+The optional **`as name`** binder names the **instance that just entered** one of
+the listed stages for this firing (the related record). It is **not** an event
+object and not the relationship collection. Allowed on **both** stage-scoped and
+entity-level `when`.
+
+- Bare property names in the body always mean the **subscriber**.
+- Peer fields are available **only** through the binder (`order Code`, not a
+  magic `event.*` root). Nested path-prefix under the binder (e.g. `order item Price`)
+  is **not** supported — analysis rejects it.
+- Notification-only subscriptions are intentional: many reactions need only the
+  stage signal, not values from the related record.
+- Path-prefix roots that are **not** a subscriber relationship require `as name`
+  (analysis fail-closed — do not invent a peer root without a binder). Declaring
+  `as name` without using it is allowed.
+- Peer path-prefix is value-side only (RHS / conditions / initializers) — not an
+  assign target.
+- Multi-stage lists use the same binder for every listed stage:
+  `when Tracks Active, Completed as order { … }`.
+- **C# export:** peer-dependent `when … as name` emits a handler parameter typed as the
+  target entity and named as the binder; notify calls `handler(this)`. Binder path-prefix
+  (e.g. `order Code`) lowers to that parameter (`order.Code`). Notification-only `when`
+  stays zero-arg. Nested path-prefix under the binder is rejected (analysis + export).
 
 ```poly
+// Notification-only — peer values not needed
 Pending: stage {
   when orders Active, Completed {
     assign Status to "fulfilled"
   }
 }
+
+// Peer-dependent — copy a field from the order that just became Active
+Pending: stage {
+  when orders Active as order {
+    assign LastCode to order Code
+  }
+}
+
+// Entity-level (always-active) — same shapes, including optional peer binder
+when orders Active as order {
+  assign LastCode to order Code
+}
 ```
 
-The relationship name refers to a navigation property on the same entity.
+The relationship name (`orders` above) is the correlation edge. The binder
+(`order`) is a local name for the transitioned peer and need not match the
+relationship name.
 
 ## 8. Policies
 
@@ -464,8 +520,8 @@ Cross-entity **writes** via assign are **banned** — only local entity properti
 |------|---------|---------|
 | Path-prefix (bool prop) | `assignee Active` | `RelationshipNavigation` + `PropertyAccess` |
 | Path-prefix (compare) | `customer Tier is "VIP"` | `RelationshipNavigation` + `Comparison` |
-| Presence | `assignee exists` | `Exists` |
-| Absence | `not certificate exists` | `Not(Exists(...))` — wraps `Exists` in `Not` |
+| Presence | `assignee exists` | `Exists(PropertyAccess)` — **bag null-lower**, not store-link presence |
+| Absence | `not certificate exists` | `Not(Exists(...))` — wraps `Exists` in `Not` (same bag path) |
 | Multi-predicate | `customer where Status is "Active" and CreditLimit >= 1000` | `RelationshipNavigation` with `And` body |
 
 ```poly
@@ -515,16 +571,17 @@ against the target entity; reverse-side / self-rel / ManyToMany / OneToOne rejec
 
 **Rules:**
 - `Rel Prop` on `many` relationships is invalid (use `any Rel where …` — Q3′ shipped). Cardinality validation is enforced at domain analysis time; the parser accepts the syntax but the analysis pipeline will reject it when relationship metadata is available.
-- `Rel exists` on `many` is allowed (non-empty check).
+- `Rel exists` on `many` is allowed (authoring: non-empty intent). **Runtime today is not store-link presence** — see dual paths below.
 - Cross-entity reads (path-prefix, exists, where) are legal in policies, require, and assign RHS.
 - Cross-entity writes (nav path as assign target) are banned.
-- **Related policies are authoring-complete and runtime-evaluable** — they parse, apply, and export correctly. To-one path-prefix, `Rel exists`, `Rel where`, and Q3′ quantifiers (`any`/`all`/`none`/`count`) are all **runtime-evaluable** via `evaluate_policy` when the instance has been added to a store with linked targets.
+- **Path-prefix / owned / quantifier policy reads require a store + links.** To-one path-prefix (including `owned` navs such as `profile City is "Metropolis"`), `Rel where`, and Q3′ quantifiers (`any`/`all`/`none`/`count`) parse, apply, and export correctly, and are **runtime-evaluable** only when the source instance is store-attached with outbound targets linked. Ownership (`SourceOwnsTarget`) is a modeling flag; evaluation resolves the same outbound links as plain to-one / many.
 
-  **Dual evaluation path:**
-  - `evaluate_policy(age=…)` or `evaluate_policy(properties=…)` → standalone, no store, evaluates local expressions only.
-  - `create_instance` → `link_instances(relationshipName=…)` → `evaluate_policy(entityName, policyName, instanceId=sourceId)` → **store-attached**, resolves cross-entity expressions (path-prefix, exists, where, Q3′ quantifiers) against linked targets.
+  **Dual evaluation path (do not conflate):**
+  - **Store + link (product path for nested/related property reads):** `create_instance` → `link_instances(relationshipName=…)` → `evaluate_policy(entityName, policyName, instanceId=sourceId)`. Resolves **singular path-prefix** (`RelationshipNavigation`, including owned) and **Q3′ quantifiers** against linked targets. **Fail closed:** missing store, missing domain metadata, missing outbound link, or **more than one** link for bare path-prefix throws (use `any`/`all` for collections — never silent `targets[0]`).
+  - **Standalone bag:** `evaluate_policy(age=…)` or `evaluate_policy(properties=…)` — **local expressions only**. Do not use for path-prefix / owned / quantifier policies.
+  - **`Rel exists` sibling path (incomplete vs store links):** DSL `Rel exists` / `not Rel exists` parses to `Exists(PropertyAccess)` / `Not(Exists(…))` and **lowers to a subject-bag null check** on the relationship name (VM `Member` ≠ null). It does **not** call store outbound-link resolution in `EvaluatePolicy` preprocess. Putting a related instance into the bag key named like the relationship can make exists true without `link_instances`; store links alone do not populate that bag key. Prefer path-prefix / quantifiers + store for product honesty until a store-aware exists residual ships.
 
-  For agent workflows: use the `instanceId` path when the policy reads related data.
+  For agent workflows: always use the `instanceId` + store + link path when the policy uses path-prefix, owned, or quantifiers. Do not assume `Rel exists` proves store linkage.
 
 **Shipped in the current product surface:**
 - Arithmetic (`+`, `-`, `*`, `/`) in expressions
@@ -532,10 +589,14 @@ against the target entity; reverse-side / self-rel / ManyToMany / OneToOne rejec
 - Invoke effect (`invoke ActionName` with optional arguments; cross-entity via `invoke RelName.ActionName`; quantifiers `any`/`all`; filter `where`)
 - Action parameters (`actionName: action (param: Type, ...)`)
 - `default` and `enum` constraints
-- Owned navigation (`rel: owned Entity`)
+- Owned navigation declaration (`rel: owned Entity`) + **single-hop** path-prefix policy reads over owned/to-one links (store + `link_instances` required)
 
-**Not yet shipped** (planned for future phases):
+**Not yet shipped** (planned for future phases / residual gaps):
 - Date operations
+- **Store-aware `Rel exists` / link presence** — today `Exists(PropertyAccess)` + bag null-lower only; not fail-closed store outbound-link presence (sibling incomplete path vs path-prefix/quantifiers)
+- **Multi-hop nested owned** (e.g. `customer profile City` / owned-of-owned path-prefix runtime honesty)
+- **Product DSL for IR-only `OwnedAccess`** (nested value-doc shape) — path-prefix → `RelationshipNavigation` is the product authoring surface; do not treat bag `OwnedAccess` as a second policy product path
+- Dedicated many-owned policy demos beyond Q3′ quantifiers on plain `many` (ownership flag is unused at eval; use `any`/`all`/`none`/`count` on `many owned` the same way)
 
 ### Expression Gaps — IR vs DSL
 
@@ -544,15 +605,16 @@ and lowering pipeline but are **not yet authorable in product DSL**:
 
 | Capability | IR exists | DSL status | Notes |
 |------------|-----------|------------|-------|
-| Relationship navigation | ✅ | ✅ **shipped** (path-prefix) | `customer Tier`, not `customer.Tier` |
-| Existence check | ✅ | ✅ **shipped** (postfix `Rel exists`) | `assignee exists` / `not assignee exists` |
+| Relationship navigation | ✅ | ✅ **shipped** (path-prefix) | `customer Tier`, not `customer.Tier`; **store + link** at `evaluate_policy` |
+| Existence check | ✅ | ✅ **shipped authoring** (postfix `Rel exists`) | Parses to `Exists(PropertyAccess)`; **bag null-lower**, not store-link presence (see residual above) |
 | Scoped filter (`where`) | ✅ | ✅ **shipped** (`rel where and-chain`) | `customer where Status is "Active"` |
-| Owned/nested access | ✅ | ✅ **shipped** (path-prefix) | `profile City is "Metropolis"` — same space-delimited syntax as relationship nav |
+| Owned / related single-hop | ✅ | ✅ **shipped** (path-prefix) | `profile City is "Metropolis"` — same space-delimited syntax as to-one nav; **requires store + link** at `evaluate_policy` |
+| Nested multi-hop owned | 🟡 | ❌ **not shipped** | Multi-level composition (owned of owned) is not a product runtime claim |
 | Collection quantifiers (`any`/`all`/`none`/`count`) | ✅ | ✅ **Q3′ shipped** | `any items where Status is "Open"`; store-aware runtime eval before VM lowering. |
 | Arithmetic (`+`, `-`, `*`, `/`) | ✅ | ✅ **shipped** | `Total + 5 > 10`, `Total * 0.9` |
 | Action parameters | ✅ | ✅ **shipped** | `actionName: action (param: Text) { ... }` |
 
-**JSON policies** (`add_policy` / `simulate_policy`) support comparison + and/or/not + literal + **relationship navigation**: `{"relationship":"profile","inner":{…}}`. For full expression capabilities (exists, where, quantifiers), use DSL policies instead.
+**JSON policies** (`add_policy` / `simulate_policy`) support comparison + and/or/not + literal + **relationship navigation**: `{"relationship":"profile","inner":{…}}`. `add_policy` accepts the relationship form for later store-attached `evaluate_policy(instanceId=…)`. **`simulate_policy` is bag-only** — relationship/owned path-prefix expressions fail closed without a store (use create + link + `evaluate_policy`). For path-prefix and quantifiers use DSL + store; for `Rel exists` prefer path-prefix/quantifiers until store-aware exists ships (bag-null exists is not store honesty).
 
 ## 9. Supported Effect Summary
 
@@ -582,7 +644,8 @@ The following effects exist in the runtime library but have **no DSL syntax** ye
 
 | `relationship Name from A to B` | Use N1 nav properties instead |
 | `function` | Functions not supported |
-| Event/publish/subscribe | Event model retired |
+| Event/publish/subscribe | Event model retired — stage transitions are the observable |
+| `event.Prop` / `event Prop` in `when` bodies | Use optional peer binder: `when Rel Stage as name { … name Prop … }` |
 
 ## 11. Additional Features
 

@@ -84,8 +84,25 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Node
     protected override Node OwnedAccess(OwnedAccess oa)
         => Route(oa.Inner, new Member(_currentSubject, oa.OwnedName));
 
-    protected override Node RelationshipNavigation(RelationshipNavigation rn)
-        => Route(rn.TargetProperty, new Member(_currentSubject, rn.RelationshipName));
+    protected override Node RelationshipNavigation(RelationshipNavigation rn) {
+        // Peer binder / other parameter-backed path-prefix roots: subject is the
+        // parameter node, not Member(this, name). Nested path-prefix under that
+        // root is unsupported (analysis rejects; fail loud here for defense).
+        if (_parameters.TryGetValue(rn.RelationshipName, out var parameterSubject)) {
+            if (ContainsRelationshipNavigation(rn.TargetProperty)) {
+                throw new InvalidOperationException(
+                    $"Nested path-prefix under binder '{rn.RelationshipName}' is not supported. " +
+                    "Use a single peer property (e.g. 'order Code'), not nested navigation.");
+            }
+            return Route(rn.TargetProperty, parameterSubject);
+        }
+
+        return Route(rn.TargetProperty, new Member(_currentSubject, rn.RelationshipName));
+    }
+
+    private static bool ContainsRelationshipNavigation(DomainExpression expr) =>
+        expr is RelationshipNavigation
+        || expr.Children.OfType<DomainExpression>().Any(ContainsRelationshipNavigation);
 
     // --- Recurse into a new subject — helper to avoid confusion with Route(expr) ---
     private Node Route(DomainExpression expr, Node subject) {

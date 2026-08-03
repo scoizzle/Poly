@@ -70,6 +70,24 @@ public sealed class StageBuilder {
         return this;
     }
 
+    /// <summary>
+    /// Stage subscription with optional peer binder (<c>when Rel Stage as name</c>).
+    /// </summary>
+    public StageBuilder Subscribe(
+        string relationshipName,
+        string targetStageName,
+        string peerBinding,
+        StageSubscriptionQuantifier quantifier = StageSubscriptionQuantifier.Each,
+        params Effect[] effects) {
+        _subscriptions.Add(new StageSubscription(
+            Guard.ThrowIfNullOrEmpty(relationshipName),
+            Guard.ThrowIfNullOrEmpty(targetStageName),
+            quantifier,
+            effects,
+            Guard.ThrowIfNullOrEmpty(peerBinding)));
+        return this;
+    }
+
     public StageBuilder OnEntry(Effect effect) {
         _onEntryEffects.Add(effect);
         return this;

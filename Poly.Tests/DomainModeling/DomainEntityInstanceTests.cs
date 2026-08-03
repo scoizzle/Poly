@@ -850,28 +850,23 @@ public class DomainEntityInstanceTests {
     }
 
     [Test]
-    public async Task SubscriptionEffect_EventPropertyAccess_Gap_Documented() {
-        // BR.1 / Option B: event.* property access in subscription effects
-        // is NOT yet supported. The string-prefix convention (injecting
-        // "event.{prop}" keys into _values) is not visible to the VM's
-        // member resolution pipeline, which uses CLR type definitions.
-        //
-        // This test proves:
-        //   1. The subscription DOES fire (initial Status is not null).
-        //   2. The RHS "event.Code" DOES NOT resolve to the transitioning
-        //      instance's value — it evaluates to null/default.
-        //
-        // When the DSL parser defines an "event" keyword and proper lowering
-        // support is added, change this test to assert the expected value.
+    public async Task SubscriptionEffect_PeerBinding_CopiesPeerProperty() {
+        // when Tracks Active as order { assign Status to order Code }
         var trackerStatus = new Property("Status", new DomainTypeReference("Text"), []);
         var tracker = new Entity("Tracker", [trackerStatus], [], [], [
             new Stage("Pending", [], [], [], []) {
                 Subscriptions = [
-                    new StageSubscription("Tracks", ["Active"], StageSubscriptionQuantifier.Each, [
-                        new AssignEffect(
-                            DomainExpression.Property("Status"),
-                            DomainExpression.Property("event.Code"))
-                    ])
+                    new StageSubscription(
+                        RelationshipName: "Tracks",
+                        StageNames: ["Active"],
+                        Quantifier: StageSubscriptionQuantifier.Each,
+                        Effects: [
+                            new AssignEffect(
+                                DomainExpression.Property("Status"),
+                                DomainExpression.RelationshipNav("order",
+                                    DomainExpression.Property("Code")))
+                        ],
+                        PeerBinding: "order")
                 ]
             }
         ]);
@@ -894,7 +889,8 @@ public class DomainEntityInstanceTests {
 
         var analysis = DomainModelAnalyzer.Analyze(domain);
         await Assert.That(analysis.Diagnostics.Any(d =>
-            d.Code == DomainModelDiagnosticCodes.SubscriptionContractMismatch)).IsFalse();
+            d.Code == DomainModelDiagnosticCodes.SubscriptionEffectBinding
+            && d.Severity == DiagnosticSeverity.Error)).IsFalse();
 
         var store = new DomainInstanceStore();
         var orderInstance = DomainEntityInstance.Create(order,
@@ -907,16 +903,51 @@ public class DomainEntityInstanceTests {
 
         orderInstance.InvokeAction("Activate");
 
-        // Subscription fires (Status was "UNTOUCHED", now it's "" because
-        // AssignEffect wrote a default value), but "event.Code" does NOT
-        // resolve to "ABC-123" through the VM's member resolution.
-        // We prove both: subscription fired (Status changed from initial value)
-        // AND the event.* reference did NOT work (Status != "ABC-123").
-        var status = trackerInstance.GetProperty<string>("Status");
-        await Assert.That(status).IsNotEqualTo("UNTOUCHED");  // subscription fired
-        await Assert.That(status).IsNotEqualTo("ABC-123");     // but event.* didn't resolve
-        // When event.* lowering is implemented, change to:
-        //   await Assert.That(trackerInstance.GetProperty<string>("Status")).IsEqualTo("ABC-123");
+        await Assert.That(trackerInstance.GetProperty<string>("Status")).IsEqualTo("ABC-123");
+    }
+
+    [Test]
+    public async Task SubscriptionEffect_NotificationOnly_DoesNotRequirePeerBinding() {
+        var trackerStatus = new Property("Status", new DomainTypeReference("Text"), []);
+        var tracker = new Entity("Tracker", [trackerStatus], [], [], [
+            new Stage("Pending", [], [], [], []) {
+                Subscriptions = [
+                    new StageSubscription("Tracks", ["Active"], StageSubscriptionQuantifier.Each, [
+                        new AssignEffect(
+                            DomainExpression.Property("Status"),
+                            DomainExpression.Literal("NOTIFIED"))
+                    ])
+                ]
+            }
+        ]);
+
+        var order = new Entity("Order", [
+            new Property("Code", new DomainTypeReference("Text"), [])
+        ], [
+            new Poly.DomainModeling.Action("Activate", InvocationResult.Void, [], [
+                new StageTransitionEffect(new StageReference("Active"))
+            ], [])
+        ], [], [
+            new Stage("Draft", [], [], [], []),
+            new Stage("Active", [], [], [], [])
+        ]);
+
+        var rel = new Relationship("Tracks",
+            new DomainTypeReference("Tracker"), new DomainTypeReference("Order"),
+            RelationshipCardinality.OneToOne, []);
+        var domain = new Domain("Test", [tracker, order], [rel]);
+        var store = new DomainInstanceStore();
+        var orderInstance = DomainEntityInstance.Create(order,
+            new Dictionary<string, object?> { ["Code"] = "X" }, domain: domain);
+        var trackerInstance = DomainEntityInstance.Create(tracker,
+            new Dictionary<string, object?> { ["Status"] = "IDLE" }, domain: domain);
+        store.Add(orderInstance);
+        store.Add(trackerInstance);
+        store.Link("Tracks", trackerInstance, orderInstance);
+
+        orderInstance.InvokeAction("Activate");
+
+        await Assert.That(trackerInstance.GetProperty<string>("Status")).IsEqualTo("NOTIFIED");
     }
 
     [Test]
@@ -967,14 +998,10 @@ public class DomainEntityInstanceTests {
     }
 
     [Test]
-    public async Task ExecuteSubscriptionEffects_Exception_DoesNotLeakEventKeys() {
-        // BR.2′: If a subscription effect throws, _isExecutingSubscription must be
-        // cleared and "event.*" keys must be removed from _values.
-        // We test this by creating a subscription with an effect that throws.
+    public async Task ExecuteSubscriptionEffects_Exception_ClearsSubscriptionFlag_AllowsRetry() {
+        // If a subscription effect throws, _isExecutingSubscription must clear so a later
+        // transition can fire subscriptions again (F8 — retired event.* bag oracle).
         var trackerStatus = new Property("Status", new DomainTypeReference("Text"), []);
-        // Use a bad property reference that will throw during lowering
-        // (nonexistent property on a known entity). The VM will throw when
-        // trying to resolve the property access.
         var tracker = new Entity("Tracker", [trackerStatus], [], [], [
             new Stage("Pending", [], [], [], []) {
                 Subscriptions = [
@@ -1013,29 +1040,17 @@ public class DomainEntityInstanceTests {
         store.Add(trackerInstance);
         store.Link("Tracks", trackerInstance, orderInstance);
 
-        // Activate will trigger subscription effects that throw on the bad RHS
         var threw = false;
         try {
             orderInstance.InvokeAction("Activate");
         }
         catch {
-            // Expected — subscription effect throws during VM compilation/execution
             threw = true;
         }
         await Assert.That(threw).IsTrue();
-
-        // After the exception, the finally block ran:
-        //   1. "event.*" keys were removed from _values. Direct verification:
-        var snapshot = trackerInstance.Snapshot();
-        await Assert.That(snapshot.Keys.Any(k => k.StartsWith("event."))).IsFalse();
-        //   2. _isExecutingSubscription was set to false.
-        //   3. Status is unchanged (subscription effect never ran to completion).
         await Assert.That(trackerInstance.GetProperty<string>("Status")).IsEqualTo("UNTOUCHED");
 
-        // _isExecutingSubscription was cleared — a second order transitioning to
-        // Active triggers subscription effects again (and throws again, since
-        // the subscription still has the bad RHS). This proves the flag was reset.
-        // Create a fresh Order in Draft and transition it.
+        // Flag cleared: a second linked subscriber still receives the next notify (and throws).
         var freshTracker = DomainEntityInstance.Create(tracker,
             new Dictionary<string, object?> { ["Status"] = "FRESH" }, domain: domain);
         store.Add(freshTracker);
@@ -1053,13 +1068,572 @@ public class DomainEntityInstanceTests {
             threw = true;
         }
         await Assert.That(threw).IsTrue();
-        // The subscription ran (and threw), so it changed freshTracker.Status
-        // via the default AssignEffect path. The event.* reference still didn't
-        // resolve, but the subscription DID fire on the correct subscriber.
-        await Assert.That(freshTracker.Snapshot().Keys.Any(k => k.StartsWith("event."))).IsFalse();
-        // No stale event keys on the original tracker either.
-        var snapshot3 = trackerInstance.Snapshot();
-        await Assert.That(snapshot3.Keys.Any(k => k.StartsWith("event."))).IsFalse();
+        await Assert.That(freshTracker.GetProperty<string>("Status")).IsEqualTo("FRESH");
+    }
+
+    [Test]
+    public async Task SubscriptionEffect_PathPrefixWithoutPeerBinding_AnalysisError() {
+        // F1: unbound peer-like root without `as name` fails closed at analysis.
+        var tracker = new Entity("Tracker", [
+            new Property("Status", new DomainTypeReference("Text"), [])
+        ], [], [], [
+            new Stage("Pending", [], [], [], []) {
+                Subscriptions = [
+                    new StageSubscription("Tracks", ["Active"], StageSubscriptionQuantifier.Each, [
+                        new AssignEffect(
+                            DomainExpression.Property("Status"),
+                            DomainExpression.RelationshipNav("order",
+                                DomainExpression.Property("Code")))
+                    ])
+                ]
+            }
+        ]);
+        var order = new Entity("Order", [
+            new Property("Code", new DomainTypeReference("Text"), [])
+        ], [], [], [
+            new Stage("Draft", [], [], [], []),
+            new Stage("Active", [], [], [], [])
+        ]);
+        var rel = new Relationship("Tracks",
+            new DomainTypeReference("Tracker"), new DomainTypeReference("Order"),
+            RelationshipCardinality.OneToOne, []);
+        var domain = new Domain("Test", [tracker, order], [rel]);
+
+        var analysis = DomainModelAnalyzer.Analyze(domain);
+        await Assert.That(analysis.Diagnostics.Any(d =>
+            d.Code == DomainModelDiagnosticCodes.SubscriptionEffectBinding
+            && d.Severity == DiagnosticSeverity.Error
+            && d.Message.Contains("as name", StringComparison.Ordinal))).IsTrue();
+    }
+
+    [Test]
+    public async Task SubscriptionEffect_LegacyEventRoot_AnalysisError() {
+        var tracker = new Entity("Tracker", [
+            new Property("Status", new DomainTypeReference("Text"), [])
+        ], [], [], [
+            new Stage("Pending", [], [], [], []) {
+                Subscriptions = [
+                    new StageSubscription("Tracks", ["Active"], StageSubscriptionQuantifier.Each, [
+                        new AssignEffect(
+                            DomainExpression.Property("Status"),
+                            DomainExpression.RelationshipNav("event",
+                                DomainExpression.Property("Code")))
+                    ])
+                ]
+            }
+        ]);
+        var order = new Entity("Order", [
+            new Property("Code", new DomainTypeReference("Text"), [])
+        ], [], [], [
+            new Stage("Draft", [], [], [], []),
+            new Stage("Active", [], [], [], [])
+        ]);
+        var rel = new Relationship("Tracks",
+            new DomainTypeReference("Tracker"), new DomainTypeReference("Order"),
+            RelationshipCardinality.OneToOne, []);
+        var domain = new Domain("Test", [tracker, order], [rel]);
+
+        var analysis = DomainModelAnalyzer.Analyze(domain);
+        await Assert.That(analysis.Diagnostics.Any(d =>
+            d.Code == DomainModelDiagnosticCodes.SubscriptionEffectBinding
+            && d.Message.Contains("event", StringComparison.Ordinal))).IsTrue();
+    }
+
+    [Test]
+    public async Task RuntimeDispatchPlan_CarriesPeerBinding() {
+        var tracker = new Entity("Tracker", [
+            new Property("Status", new DomainTypeReference("Text"), [])
+        ], [], [], [
+            new Stage("Pending", [], [], [], []) {
+                Subscriptions = [
+                    new StageSubscription(
+                        RelationshipName: "Tracks",
+                        StageNames: ["Active"],
+                        Quantifier: StageSubscriptionQuantifier.Each,
+                        Effects: [
+                            new AssignEffect(
+                                DomainExpression.Property("Status"),
+                                DomainExpression.RelationshipNav("order",
+                                    DomainExpression.Property("Code")))
+                        ],
+                        PeerBinding: "order")
+                ]
+            }
+        ]);
+        var order = new Entity("Order", [
+            new Property("Code", new DomainTypeReference("Text"), [])
+        ], [], [], [
+            new Stage("Draft", [], [], [], []),
+            new Stage("Active", [], [], [], [])
+        ]);
+        var domain = new Domain("Test", [tracker, order], [
+            new Relationship("Tracks",
+                new DomainTypeReference("Tracker"), new DomainTypeReference("Order"),
+                RelationshipCardinality.OneToOne, [])
+        ]);
+
+        var analysis = DomainModelAnalyzer.Analyze(domain);
+        var pending = tracker.Stages[0];
+        var plan = analysis.GetMetadata<SubscriptionDispatchPlanMetadata>(pending);
+        await Assert.That(plan).IsNotNull();
+        await Assert.That(plan!.ByRelationshipName.TryGetValue("Tracks", out var entries)).IsTrue();
+        await Assert.That(entries![0].PeerBinding).IsEqualTo("order");
+    }
+
+    [Test]
+    public async Task EntityLevelSubscription_AnalysisAccepts_WhenRelAndStagesValid() {
+        // SPE-L3: entity-level when is always-active; no dispatch warn / peer hard error.
+        var entity = new Entity("Tracker", [
+            new Property("Status", new DomainTypeReference("Text"), [])
+        ], [], [], [
+            new Stage("Idle", [], [], [], [])
+        ]) {
+            Subscriptions = [
+                new StageSubscription("Tracks", ["Active"], StageSubscriptionQuantifier.Each, [])
+            ]
+        };
+        var order = new Entity("Order", [], [], [], [
+            new Stage("Active", [], [], [], [])
+        ]);
+        var domain = new Domain("Test", [entity, order], [
+            new Relationship("Tracks",
+                new DomainTypeReference("Tracker"), new DomainTypeReference("Order"),
+                RelationshipCardinality.OneToOne, [])
+        ]);
+
+        var analysis = DomainModelAnalyzer.Analyze(domain);
+        await Assert.That(analysis.Diagnostics.Any(d =>
+            d.Code == DomainModelDiagnosticCodes.SubscriptionContractMismatch
+            && d.Message.Contains("Entity-level", StringComparison.Ordinal))).IsFalse();
+        await Assert.That(analysis.Diagnostics.Any(d =>
+            d.Code == DomainModelDiagnosticCodes.SubscriptionEffectBinding
+            && d.Severity == DiagnosticSeverity.Error)).IsFalse();
+    }
+
+    [Test]
+    public async Task EntityLevelSubscription_Fires_WhenSubscriberNotInStageWithWhen() {
+        // SPE-L2: entity-level when fires regardless of subscriber stage (Idle has no stage-local when).
+        var tracker = new Entity("Tracker", [
+            new Property("Status", new DomainTypeReference("Text"), [])
+        ], [], [], [
+            new Stage("Idle", [], [], [], []),
+            new Stage("Busy", [], [], [], [])
+        ]) {
+            Subscriptions = [
+                new StageSubscription("Tracks", ["Active"], StageSubscriptionQuantifier.Each, [
+                    new AssignEffect(
+                        DomainExpression.Property("Status"),
+                        DomainExpression.Literal("NOTIFIED"))
+                ])
+            ]
+        };
+
+        var order = new Entity("Order", [
+            new Property("Code", new DomainTypeReference("Text"), [])
+        ], [
+            new Poly.DomainModeling.Action("Activate", InvocationResult.Void, [], [
+                new StageTransitionEffect(new StageReference("Active"))
+            ], [])
+        ], [], [
+            new Stage("Draft", [], [], [], []),
+            new Stage("Active", [], [], [], [])
+        ]);
+
+        var domain = new Domain("EntityLevelNotify", [tracker, order], [
+            new Relationship("Tracks",
+                new DomainTypeReference("Tracker"), new DomainTypeReference("Order"),
+                RelationshipCardinality.OneToOne, [])
+        ]);
+
+        var store = new DomainInstanceStore();
+        var orderInstance = DomainEntityInstance.Create(order,
+            new Dictionary<string, object?> { ["Code"] = "X" }, domain: domain);
+        var trackerInstance = DomainEntityInstance.Create(tracker,
+            new Dictionary<string, object?> { ["Status"] = "IDLE" }, domain: domain);
+        store.Add(orderInstance);
+        store.Add(trackerInstance);
+        store.Link("Tracks", trackerInstance, orderInstance);
+
+        await Assert.That(trackerInstance.CurrentStage).IsEqualTo("Idle");
+        orderInstance.InvokeAction("Activate");
+
+        await Assert.That(trackerInstance.GetProperty<string>("Status")).IsEqualTo("NOTIFIED");
+    }
+
+    [Test]
+    public async Task EntityLevelAndStageSubscription_StageFirstThenEntityLevel() {
+        // SPE-L2 order lock: stage-scoped effects run before entity-level for the same notify.
+        var tracker = new Entity("Tracker", [
+            new Property("Status", new DomainTypeReference("Text"), [])
+        ], [], [], [
+            new Stage("Pending", [], [], [], []) {
+                Subscriptions = [
+                    new StageSubscription("Tracks", ["Active"], StageSubscriptionQuantifier.Each, [
+                        new AssignEffect(
+                            DomainExpression.Property("Status"),
+                            DomainExpression.Literal("STAGE"))
+                    ])
+                ]
+            }
+        ]) {
+            Subscriptions = [
+                new StageSubscription("Tracks", ["Active"], StageSubscriptionQuantifier.Each, [
+                    new AssignEffect(
+                        DomainExpression.Property("Status"),
+                        DomainExpression.Literal("ENTITY"))
+                ])
+            ]
+        };
+
+        var order = new Entity("Order", [
+            new Property("Code", new DomainTypeReference("Text"), [])
+        ], [
+            new Poly.DomainModeling.Action("Activate", InvocationResult.Void, [], [
+                new StageTransitionEffect(new StageReference("Active"))
+            ], [])
+        ], [], [
+            new Stage("Draft", [], [], [], []),
+            new Stage("Active", [], [], [], [])
+        ]);
+
+        var domain = new Domain("DispatchOrder", [tracker, order], [
+            new Relationship("Tracks",
+                new DomainTypeReference("Tracker"), new DomainTypeReference("Order"),
+                RelationshipCardinality.OneToOne, [])
+        ]);
+
+        var store = new DomainInstanceStore();
+        var orderInstance = DomainEntityInstance.Create(order,
+            new Dictionary<string, object?> { ["Code"] = "X" }, domain: domain);
+        var trackerInstance = DomainEntityInstance.Create(tracker,
+            new Dictionary<string, object?> { ["Status"] = "INIT" }, domain: domain);
+        store.Add(orderInstance);
+        store.Add(trackerInstance);
+        store.Link("Tracks", trackerInstance, orderInstance);
+
+        orderInstance.InvokeAction("Activate");
+
+        // Last writer wins: entity-level after stage → ENTITY
+        await Assert.That(trackerInstance.GetProperty<string>("Status")).IsEqualTo("ENTITY");
+    }
+
+    [Test]
+    public async Task StageLocalSubscription_StillFires_AlongsideEntityPath() {
+        // Sibling: stage-local when still works (entity bag empty for this entity).
+        var tracker = new Entity("Tracker", [
+            new Property("Status", new DomainTypeReference("Text"), [])
+        ], [], [], [
+            new Stage("Pending", [], [], [], []) {
+                Subscriptions = [
+                    new StageSubscription("Tracks", ["Active"], StageSubscriptionQuantifier.Each, [
+                        new AssignEffect(
+                            DomainExpression.Property("Status"),
+                            DomainExpression.Literal("STAGE_ONLY"))
+                    ])
+                ]
+            }
+        ]);
+
+        var order = new Entity("Order", [
+            new Property("Code", new DomainTypeReference("Text"), [])
+        ], [
+            new Poly.DomainModeling.Action("Activate", InvocationResult.Void, [], [
+                new StageTransitionEffect(new StageReference("Active"))
+            ], [])
+        ], [], [
+            new Stage("Draft", [], [], [], []),
+            new Stage("Active", [], [], [], [])
+        ]);
+
+        var domain = new Domain("StageLocalSibling", [tracker, order], [
+            new Relationship("Tracks",
+                new DomainTypeReference("Tracker"), new DomainTypeReference("Order"),
+                RelationshipCardinality.OneToOne, [])
+        ]);
+
+        var store = new DomainInstanceStore();
+        var orderInstance = DomainEntityInstance.Create(order,
+            new Dictionary<string, object?> { ["Code"] = "X" }, domain: domain);
+        var trackerInstance = DomainEntityInstance.Create(tracker,
+            new Dictionary<string, object?> { ["Status"] = "INIT" }, domain: domain);
+        store.Add(orderInstance);
+        store.Add(trackerInstance);
+        store.Link("Tracks", trackerInstance, orderInstance);
+
+        orderInstance.InvokeAction("Activate");
+
+        await Assert.That(trackerInstance.GetProperty<string>("Status")).IsEqualTo("STAGE_ONLY");
+    }
+
+    [Test]
+    public async Task EntityLevelSubscription_WithPeerBinding_AnalysisAccepts() {
+        // SPE-L3: as name on entity-level is allowed under the same rules as stage.
+        var entity = new Entity("Tracker", [
+            new Property("Status", new DomainTypeReference("Text"), [])
+        ], [], [], [
+            new Stage("Idle", [], [], [], [])
+        ]) {
+            Subscriptions = [
+                new StageSubscription(
+                    RelationshipName: "Tracks",
+                    StageNames: ["Active"],
+                    Quantifier: StageSubscriptionQuantifier.Each,
+                    Effects: [
+                        new AssignEffect(
+                            DomainExpression.Property("Status"),
+                            DomainExpression.RelationshipNav("order",
+                                DomainExpression.Property("Code")))
+                    ],
+                    PeerBinding: "order")
+            ]
+        };
+        var order = new Entity("Order", [
+            new Property("Code", new DomainTypeReference("Text"), [])
+        ], [], [], [
+            new Stage("Active", [], [], [], [])
+        ]);
+        var domain = new Domain("Test", [entity, order], [
+            new Relationship("Tracks",
+                new DomainTypeReference("Tracker"), new DomainTypeReference("Order"),
+                RelationshipCardinality.OneToOne, [])
+        ]);
+
+        var analysis = DomainModelAnalyzer.Analyze(domain);
+        await Assert.That(analysis.Diagnostics.Any(d =>
+            d.Code == DomainModelDiagnosticCodes.SubscriptionContractMismatch
+            && d.Message.Contains("peer binder", StringComparison.Ordinal))).IsFalse();
+        await Assert.That(analysis.Diagnostics.Any(d =>
+            d.Code == DomainModelDiagnosticCodes.SubscriptionEffectBinding
+            && d.Severity == DiagnosticSeverity.Error)).IsFalse();
+        await Assert.That(analysis.Diagnostics.Any(d =>
+            d.Message.Contains("Entity-level", StringComparison.Ordinal)
+            && d.Message.Contains("not supported", StringComparison.Ordinal))).IsFalse();
+    }
+
+    [Test]
+    public async Task EntityLevelSubscription_PeerBinding_CopiesPeerProperty() {
+        // SPE-L3 golden: entity-level when Tracks Active as order { assign Status to order Code }
+        var tracker = new Entity("Tracker", [
+            new Property("Status", new DomainTypeReference("Text"), [])
+        ], [], [], [
+            new Stage("Idle", [], [], [], [])
+        ]) {
+            Subscriptions = [
+                new StageSubscription(
+                    RelationshipName: "Tracks",
+                    StageNames: ["Active"],
+                    Quantifier: StageSubscriptionQuantifier.Each,
+                    Effects: [
+                        new AssignEffect(
+                            DomainExpression.Property("Status"),
+                            DomainExpression.RelationshipNav("order",
+                                DomainExpression.Property("Code")))
+                    ],
+                    PeerBinding: "order")
+            ]
+        };
+
+        var order = new Entity("Order", [
+            new Property("Code", new DomainTypeReference("Text"), [])
+        ], [
+            new Poly.DomainModeling.Action("Activate", InvocationResult.Void, [], [
+                new StageTransitionEffect(new StageReference("Active"))
+            ], [])
+        ], [], [
+            new Stage("Draft", [], [], [], []),
+            new Stage("Active", [], [], [], [])
+        ]);
+
+        var domain = new Domain("EntityLevelPeer", [tracker, order], [
+            new Relationship("Tracks",
+                new DomainTypeReference("Tracker"), new DomainTypeReference("Order"),
+                RelationshipCardinality.OneToOne, [])
+        ]);
+
+        var analysis = DomainModelAnalyzer.Analyze(domain);
+        await Assert.That(analysis.Diagnostics.Any(d =>
+            d.Code == DomainModelDiagnosticCodes.SubscriptionEffectBinding
+            && d.Severity == DiagnosticSeverity.Error)).IsFalse();
+        await Assert.That(analysis.Diagnostics.Any(d =>
+            d.Code == DomainModelDiagnosticCodes.SubscriptionContractMismatch
+            && d.Message.Contains("peer binder", StringComparison.Ordinal))).IsFalse();
+
+        var store = new DomainInstanceStore();
+        var orderInstance = DomainEntityInstance.Create(order,
+            new Dictionary<string, object?> { ["Code"] = "EL-PEER-99" }, domain: domain);
+        var trackerInstance = DomainEntityInstance.Create(tracker,
+            new Dictionary<string, object?> { ["Status"] = "UNTOUCHED" }, domain: domain);
+        store.Add(orderInstance);
+        store.Add(trackerInstance);
+        store.Link("Tracks", trackerInstance, orderInstance);
+
+        await Assert.That(trackerInstance.CurrentStage).IsEqualTo("Idle");
+        orderInstance.InvokeAction("Activate");
+
+        await Assert.That(trackerInstance.GetProperty<string>("Status")).IsEqualTo("EL-PEER-99");
+    }
+
+    [Test]
+    public async Task EntityLevelSubscription_UnboundPathPrefix_AnalysisError() {
+        // F11: entity-level runs same binding fail-closed as stage.
+        var entity = new Entity("Tracker", [
+            new Property("Status", new DomainTypeReference("Text"), [])
+        ], [], [], []) {
+            Subscriptions = [
+                new StageSubscription("Tracks", ["Active"], StageSubscriptionQuantifier.Each, [
+                    new AssignEffect(
+                        DomainExpression.Property("Status"),
+                        DomainExpression.RelationshipNav("order",
+                            DomainExpression.Property("Code")))
+                ])
+            ]
+        };
+        var order = new Entity("Order", [
+            new Property("Code", new DomainTypeReference("Text"), [])
+        ], [], [], [
+            new Stage("Active", [], [], [], [])
+        ]);
+        var domain = new Domain("Test", [entity, order], [
+            new Relationship("Tracks",
+                new DomainTypeReference("Tracker"), new DomainTypeReference("Order"),
+                RelationshipCardinality.OneToOne, [])
+        ]);
+
+        var analysis = DomainModelAnalyzer.Analyze(domain);
+        await Assert.That(analysis.Diagnostics.Any(d =>
+            d.Code == DomainModelDiagnosticCodes.SubscriptionEffectBinding
+            && d.Severity == DiagnosticSeverity.Error
+            && d.Message.Contains("order", StringComparison.Ordinal))).IsTrue();
+    }
+
+    [Test]
+    public async Task SubscriptionEffect_NestedPeerPath_AnalysisError() {
+        var tracker = new Entity("Tracker", [
+            new Property("Status", new DomainTypeReference("Text"), [])
+        ], [], [], [
+            new Stage("Pending", [], [], [], []) {
+                Subscriptions = [
+                    new StageSubscription(
+                        RelationshipName: "Tracks",
+                        StageNames: ["Active"],
+                        Quantifier: StageSubscriptionQuantifier.Each,
+                        Effects: [
+                            new AssignEffect(
+                                DomainExpression.Property("Status"),
+                                DomainExpression.RelationshipNav("order",
+                                    DomainExpression.RelationshipNav("Item",
+                                        DomainExpression.Property("Price"))))
+                        ],
+                        PeerBinding: "order")
+                ]
+            }
+        ]);
+        var order = new Entity("Order", [
+            new Property("Code", new DomainTypeReference("Text"), [])
+        ], [], [], [
+            new Stage("Draft", [], [], [], []),
+            new Stage("Active", [], [], [], [])
+        ]);
+        var domain = new Domain("Test", [tracker, order], [
+            new Relationship("Tracks",
+                new DomainTypeReference("Tracker"), new DomainTypeReference("Order"),
+                RelationshipCardinality.OneToOne, [])
+        ]);
+
+        var analysis = DomainModelAnalyzer.Analyze(domain);
+        await Assert.That(analysis.Diagnostics.Any(d =>
+            d.Code == DomainModelDiagnosticCodes.SubscriptionEffectBinding
+            && d.Message.Contains("Nested path-prefix", StringComparison.Ordinal))).IsTrue();
+    }
+
+    [Test]
+    public async Task SubscriptionEffect_PeerAsAssignTarget_AnalysisError() {
+        var tracker = new Entity("Tracker", [
+            new Property("Status", new DomainTypeReference("Text"), [])
+        ], [], [], [
+            new Stage("Pending", [], [], [], []) {
+                Subscriptions = [
+                    new StageSubscription(
+                        RelationshipName: "Tracks",
+                        StageNames: ["Active"],
+                        Quantifier: StageSubscriptionQuantifier.Each,
+                        Effects: [
+                            new AssignEffect(
+                                DomainExpression.RelationshipNav("order",
+                                    DomainExpression.Property("Code")),
+                                DomainExpression.Literal("X"))
+                        ],
+                        PeerBinding: "order")
+                ]
+            }
+        ]);
+        var order = new Entity("Order", [
+            new Property("Code", new DomainTypeReference("Text"), [])
+        ], [], [], [
+            new Stage("Draft", [], [], [], []),
+            new Stage("Active", [], [], [], [])
+        ]);
+        var domain = new Domain("Test", [tracker, order], [
+            new Relationship("Tracks",
+                new DomainTypeReference("Tracker"), new DomainTypeReference("Order"),
+                RelationshipCardinality.OneToOne, [])
+        ]);
+
+        var analysis = DomainModelAnalyzer.Analyze(domain);
+        await Assert.That(analysis.Diagnostics.Any(d =>
+            d.Code == DomainModelDiagnosticCodes.SubscriptionEffectBinding
+            && d.Message.Contains("assign target", StringComparison.Ordinal))).IsTrue();
+    }
+
+    [Test]
+    public async Task SubscriptionEffect_AnyQuantifier_PeerBinding_CopiesPeerProperty() {
+        // F14: Any/All store path passes PeerBinding (product DSL is Each-only).
+        var tracker = new Entity("Tracker", [
+            new Property("Status", new DomainTypeReference("Text"), [])
+        ], [], [], [
+            new Stage("Pending", [], [], [], []) {
+                Subscriptions = [
+                    new StageSubscription(
+                        RelationshipName: "Tracks",
+                        StageNames: ["Active"],
+                        Quantifier: StageSubscriptionQuantifier.Any,
+                        Effects: [
+                            new AssignEffect(
+                                DomainExpression.Property("Status"),
+                                DomainExpression.RelationshipNav("order",
+                                    DomainExpression.Property("Code")))
+                        ],
+                        PeerBinding: "order")
+                ]
+            }
+        ]);
+        var order = new Entity("Order", [
+            new Property("Code", new DomainTypeReference("Text"), [])
+        ], [
+            new Poly.DomainModeling.Action("Activate", InvocationResult.Void, [], [
+                new StageTransitionEffect(new StageReference("Active"))
+            ], [])
+        ], [], [
+            new Stage("Draft", [], [], [], []),
+            new Stage("Active", [], [], [], [])
+        ]);
+        var domain = new Domain("Test", [tracker, order], [
+            new Relationship("Tracks",
+                new DomainTypeReference("Tracker"), new DomainTypeReference("Order"),
+                RelationshipCardinality.OneToMany, [])
+        ]);
+
+        var store = new DomainInstanceStore();
+        var orderInstance = DomainEntityInstance.Create(order,
+            new Dictionary<string, object?> { ["Code"] = "ANY-1" }, domain: domain);
+        var trackerInstance = DomainEntityInstance.Create(tracker,
+            new Dictionary<string, object?> { ["Status"] = "IDLE" }, domain: domain);
+        store.Add(orderInstance);
+        store.Add(trackerInstance);
+        store.Link("Tracks", trackerInstance, orderInstance);
+
+        orderInstance.InvokeAction("Activate");
+        await Assert.That(trackerInstance.GetProperty<string>("Status")).IsEqualTo("ANY-1");
     }
 
     [Test]
@@ -2367,5 +2941,91 @@ public class DomainEntityInstanceTests {
 
         var policy = domain.Types.OfType<Entity>().First(e => e.Name == "Customer").Policies.First(p => p.Name == "IsUrban");
         await Assert.That(cust.EvaluatePolicy(policy)).IsFalse();
+    }
+
+    [Test]
+    public async Task EvaluatePolicy_ToOneRelationshipNav_WithoutStore_Throws() {
+        var target = new Entity("Profile", [
+            new Property("City", new DomainTypeReference("Text"), [])
+        ], [], [], []);
+        var source = new Entity("Customer", [
+            new Property("Name", new DomainTypeReference("Text"), [])
+        ], [], [
+            new Policy("IsUrban", DomainExpression.RelationshipNav("profile",
+                DomainExpression.Equal(
+                    DomainExpression.Property("City"),
+                    DomainExpression.Literal("Metropolis"))))
+        ], []);
+        var rel = new Relationship("profile",
+            new DomainTypeReference("Customer"), new DomainTypeReference("Profile"),
+            RelationshipCardinality.OneToOne, []);
+        var domain = new Domain("Test", [source, target], [rel]);
+        var cust = DomainEntityInstance.Create(source,
+            new Dictionary<string, object?> { ["Name"] = "Alice" }, domain: domain);
+        var policy = domain.Types.OfType<Entity>().First(e => e.Name == "Customer").Policies.First(p => p.Name == "IsUrban");
+        await Assert.That(() => cust.EvaluatePolicy(policy)).Throws<InvalidOperationException>();
+    }
+
+    [Test]
+    public async Task EvaluatePolicy_ToOneRelationshipNav_Unlinked_Throws() {
+        var target = new Entity("Profile", [
+            new Property("City", new DomainTypeReference("Text"), [])
+        ], [], [], []);
+        var source = new Entity("Customer", [
+            new Property("Name", new DomainTypeReference("Text"), [])
+        ], [], [
+            new Policy("IsUrban", DomainExpression.RelationshipNav("profile",
+                DomainExpression.Equal(
+                    DomainExpression.Property("City"),
+                    DomainExpression.Literal("Metropolis"))))
+        ], []);
+        var rel = new Relationship("profile",
+            new DomainTypeReference("Customer"), new DomainTypeReference("Profile"),
+            RelationshipCardinality.OneToOne, []);
+        var domain = new Domain("Test", [source, target], [rel]);
+        var store = new DomainInstanceStore();
+        var cust = DomainEntityInstance.Create(source,
+            new Dictionary<string, object?> { ["Name"] = "Alice" }, domain: domain);
+        store.Add(cust);
+
+        var policy = domain.Types.OfType<Entity>().First(e => e.Name == "Customer").Policies.First(p => p.Name == "IsUrban");
+        await Assert.That(() => cust.EvaluatePolicy(policy)).Throws<InvalidOperationException>();
+    }
+
+    [Test]
+    public async Task EvaluatePolicy_PathPrefix_MultipleLinkedTargets_Throws() {
+        // Pre-ship: bare path-prefix must not silently pick targets[0] on many-links.
+        var item = new Entity("Item", [
+            new Property("Sku", new DomainTypeReference("Text"), [])
+        ], [], [], []);
+        var order = new Entity("Order", [
+            new Property("Name", new DomainTypeReference("Text"), [])
+        ], [], [
+            new Policy("HasSkuX", DomainExpression.RelationshipNav("items",
+                DomainExpression.Equal(
+                    DomainExpression.Property("Sku"),
+                    DomainExpression.Literal("X"))))
+        ], []);
+        var rel = new Relationship("items",
+            new DomainTypeReference("Order"), new DomainTypeReference("Item"),
+            RelationshipCardinality.OneToMany, []);
+        var domain = new Domain("Test", [order, item], [rel]);
+        var store = new DomainInstanceStore();
+        var orderInst = DomainEntityInstance.Create(order,
+            new Dictionary<string, object?> { ["Name"] = "O1" }, domain: domain);
+        var a = DomainEntityInstance.Create(item,
+            new Dictionary<string, object?> { ["Sku"] = "X" }, domain: domain);
+        var b = DomainEntityInstance.Create(item,
+            new Dictionary<string, object?> { ["Sku"] = "Y" }, domain: domain);
+        store.Add(orderInst);
+        store.Add(a);
+        store.Add(b);
+        store.Link("items", orderInst, a);
+        store.Link("items", orderInst, b);
+
+        var policy = order.Policies.First(p => p.Name == "HasSkuX");
+        var ex = Assert.Throws<InvalidOperationException>(() => orderInst.EvaluatePolicy(policy));
+        await Assert.That(ex!.Message).Contains("exactly one linked target");
+        await Assert.That(ex.Message).Contains("quantifiers");
     }
 }

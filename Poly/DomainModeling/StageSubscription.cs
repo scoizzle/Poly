@@ -30,23 +30,27 @@ public enum StageSubscriptionQuantifier {
 /// while the subscriber entity occupies that stage. The <see cref="Quantifier"/> controls
 /// how collections are evaluated (per-element, any-match, or all-match).
 ///
-/// Implicit bindings in effect bodies:
+/// Effect-body subjects:
 /// <list type="bullet">
-///   <item><c>this</c> resolves to the subscriber entity instance.</item>
-///   <item><c>event</c> resolves to the transitioning entity instance.</item>
+///   <item>Bare property names resolve to the <b>subscriber</b> instance.</item>
+///   <item>When <see cref="PeerBinding"/> is set (<c>when Rel Stage as name</c>), path-prefix
+///     <c>name Prop</c> resolves to the <b>transitioned peer</b> for this firing.</item>
+///   <item>When <see cref="PeerBinding"/> is null, the subscription is notification-only
+///     (stage signal without peer field access).</item>
 /// </list>
 /// </remarks>
 public sealed record StageSubscription(
     string RelationshipName,
     IReadOnlyList<string> StageNames,
     StageSubscriptionQuantifier Quantifier,
-    IReadOnlyList<Effect> Effects
+    IReadOnlyList<Effect> Effects,
+    string? PeerBinding = null
 ) : DomainObject {
-    public StageSubscription(string relationshipName, string stageName, StageSubscriptionQuantifier quantifier, IReadOnlyList<Effect> effects)
-        : this(relationshipName, [stageName], quantifier, effects) { }
+    public StageSubscription(string relationshipName, string stageName, StageSubscriptionQuantifier quantifier, IReadOnlyList<Effect> effects, string? peerBinding = null)
+        : this(relationshipName, [stageName], quantifier, effects, peerBinding) { }
 
-    public StageSubscription(string relationshipName, string stageName, IReadOnlyList<Effect> effects)
-        : this(relationshipName, [stageName], StageSubscriptionQuantifier.Each, effects) { }
+    public StageSubscription(string relationshipName, string stageName, IReadOnlyList<Effect> effects, string? peerBinding = null)
+        : this(relationshipName, [stageName], StageSubscriptionQuantifier.Each, effects, peerBinding) { }
 
     public sealed override IEnumerable<Node?> Children => [.. Effects];
 }

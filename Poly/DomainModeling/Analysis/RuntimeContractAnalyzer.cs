@@ -4,9 +4,19 @@ namespace Poly.DomainModeling.Analysis;
 
 /// <summary>
 /// Publishes runtime-oriented contracts that are not the domain name→member
-/// catalog: relationship contracts and stage-keyed subscription dispatch plans.
+/// catalog: relationship contracts and subscription dispatch plans
+/// (stage-scoped on <see cref="Stage"/>; entity-level always-active on <see cref="Entity"/>).
 /// Action/policy/type indexes are owned by <see cref="DomainCatalogPass"/> (DAS W1.4).
 /// </summary>
+/// <remarks>
+/// <para>
+/// SPE-L1 design: entity-level <c>Entity.Subscriptions</c> use the same
+/// <see cref="SubscriptionDispatchPlanMetadata"/> / <see cref="SubscriptionDispatchPlanEntry"/>
+/// shape as stage plans, bagged on the <see cref="Entity"/> node (not a domain-scoped map).
+/// Runtime notify (SPE-L2) consults the entity bag in addition to the current stage plan;
+/// this pass only publishes facts.
+/// </para>
+/// </remarks>
 internal sealed class RuntimeContractAnalyzer : INodeAnalyzer {
     public const string Id = "DomainRuntimeContractAnalyzer";
 
@@ -22,6 +32,9 @@ internal sealed class RuntimeContractAnalyzer : INodeAnalyzer {
         switch (node) {
             case Domain domain:
                 PublishRelationshipContracts(context, domain);
+                break;
+            case Entity entity:
+                PublishEntitySubscriptionDispatchPlan(context, entity);
                 break;
             case Stage stage:
                 PublishSubscriptionDispatchPlan(context, stage);
@@ -44,6 +57,33 @@ internal sealed class RuntimeContractAnalyzer : INodeAnalyzer {
         context.SetMetadata(default, new RelationshipContractMetadata(contracts));
     }
 
+    private static void PublishEntitySubscriptionDispatchPlan(AnalysisContext context, Entity entity) {
+        if (entity.Subscriptions.Count == 0) {
+            context.SetMetadata(entity,
+                new SubscriptionDispatchPlanMetadata(
+                    new Dictionary<string, IReadOnlyList<SubscriptionDispatchPlanEntry>>(StringComparer.Ordinal)));
+            return;
+        }
+
+        if (context.GetMetadata<RelationshipContractMetadata>(default) is not RelationshipContractMetadata relationshipContracts) {
+            return;
+        }
+
+        var entries = BuildSubscriptionEntries(
+            context,
+            relationshipContracts,
+            entity.Name,
+            entity.Subscriptions,
+            scopeLabel: $"entity '{entity.Name}'",
+            reportOn: entity);
+
+        var byRelationship = entries
+            .GroupBy(e => e.RelationshipName, StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => (IReadOnlyList<SubscriptionDispatchPlanEntry>)g.ToList(), StringComparer.Ordinal);
+
+        context.SetMetadata(entity, new SubscriptionDispatchPlanMetadata(byRelationship));
+    }
+
     private static void PublishSubscriptionDispatchPlan(AnalysisContext context, Stage stage) {
         if (stage.Subscriptions.Count == 0) {
             context.SetMetadata(stage,
@@ -61,15 +101,41 @@ internal sealed class RuntimeContractAnalyzer : INodeAnalyzer {
             return;
         }
 
+        var entries = BuildSubscriptionEntries(
+            context,
+            relationshipContracts,
+            sourceEntity.Name,
+            stage.Subscriptions,
+            scopeLabel: $"stage '{stage.Name}'",
+            reportOn: stage);
+
+        var byRelationship = entries
+            .GroupBy(e => e.RelationshipName, StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => (IReadOnlyList<SubscriptionDispatchPlanEntry>)g.ToList(), StringComparer.Ordinal);
+
+        context.SetMetadata(stage, new SubscriptionDispatchPlanMetadata(byRelationship));
+    }
+
+    /// <summary>
+    /// Shared contract resolution for stage- and entity-scoped subscription plans.
+    /// Fails closed (structural) when the relationship name is not unique for the source entity.
+    /// </summary>
+    private static List<SubscriptionDispatchPlanEntry> BuildSubscriptionEntries(
+        AnalysisContext context,
+        RelationshipContractMetadata relationshipContracts,
+        string sourceEntityName,
+        IReadOnlyList<StageSubscription> subscriptions,
+        string scopeLabel,
+        Node reportOn) {
         var entries = new List<SubscriptionDispatchPlanEntry>();
-        foreach (var subscription in stage.Subscriptions) {
+        foreach (var subscription in subscriptions) {
             var contracts = relationshipContracts.Contracts.Where(c =>
                 string.Equals(c.Name, subscription.RelationshipName, StringComparison.Ordinal)
-                && string.Equals(c.SourceEntityName, sourceEntity.Name, StringComparison.Ordinal)).ToList();
+                && string.Equals(c.SourceEntityName, sourceEntityName, StringComparison.Ordinal)).ToList();
 
             if (contracts.Count != 1) {
-                context.ReportStructuralFailure(stage,
-                    $"Subscription relationship '{subscription.RelationshipName}' on stage '{stage.Name}' could not be uniquely resolved for source entity '{sourceEntity.Name}'.",
+                context.ReportStructuralFailure(reportOn,
+                    $"Subscription relationship '{subscription.RelationshipName}' on {scopeLabel} could not be uniquely resolved for source entity '{sourceEntityName}'.",
                     DomainModelDiagnosticCodes.SemanticReferenceResolution);
                 continue;
             }
@@ -82,14 +148,11 @@ internal sealed class RuntimeContractAnalyzer : INodeAnalyzer {
                 TargetEntityName: contract.TargetEntityName,
                 Quantifier: subscription.Quantifier,
                 StageNames: stageNames,
-                Effects: subscription.Effects));
+                Effects: subscription.Effects,
+                PeerBinding: subscription.PeerBinding));
         }
 
-        var byRelationship = entries
-            .GroupBy(e => e.RelationshipName, StringComparer.Ordinal)
-            .ToDictionary(g => g.Key, g => (IReadOnlyList<SubscriptionDispatchPlanEntry>)g.ToList(), StringComparer.Ordinal);
-
-        context.SetMetadata(stage, new SubscriptionDispatchPlanMetadata(byRelationship));
+        return entries;
     }
 
     private static Entity? FindOwnerEntity(AnalysisContext context, Stage stage) {

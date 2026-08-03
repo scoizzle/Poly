@@ -20,8 +20,11 @@ namespace Poly.DomainModeling.Lowering;
 /// bool methods). Constructor parameters are auto-generated for every property.
 ///
 /// Stage subscriptions (<c>when RelName Stage</c>) generate cross-entity notification:
-/// the subscriber entity declares a <c>When{Target}{Stage}()</c> handler method, and
-/// the target entity emits a subscriber list + notify call after each stage transition.
+/// the subscriber entity declares a <c>When{Target}{Stage}</c> handler method
+/// (zero-arg when notification-only; one peer parameter of the target entity type named
+/// <c>PeerBinding</c> when <c>when … as name</c>), and the target entity emits a
+/// subscriber list + notify call after each stage transition
+/// (<c>sub.When…()</c> or <c>sub.When…(this)</c>).
 /// </summary>
 public sealed class DomainToCSharpExporter {
     /// <summary>Collected subscription data for cross-entity notification.</summary>
@@ -334,14 +337,18 @@ public sealed class DomainToCSharpExporter {
                 // internal void NotifyDamagedSubscribers() {
                 //     if (_damagedSubscribers != null)
                 //         foreach (var sub in _damagedSubscribers)
-                //             sub.WhenBookDamaged();
+                //             sub.WhenBookDamaged();      // notification-only
+                //             // or sub.WhenBookDamaged(this);  // peer-dependent
                 // }
                 var handlerName = $"When{info.TargetEntity.Name}{info.StageName}";
                 var subVar = "sub";
+                Node[] invokeArgs = info.Subscription.PeerBinding is { Length: > 0 }
+                    ? [new ThisReference()]
+                    : [];
                 var foreachBody = new Block([
                     new Invoke(
-                        new Member(
-                            new Variable(subVar), handlerName))
+                        new Member(new Variable(subVar), handlerName),
+                        invokeArgs)
                 ]);
                 var notifyBody = new IfStatement(
                     new NotEqual(
@@ -364,14 +371,27 @@ public sealed class DomainToCSharpExporter {
         if (subscriberSubs is { Count: > 0 }) {
             foreach (var info in subscriberSubs) {
                 var handlerName = $"When{info.TargetEntity.Name}{info.StageName}";
+                var peerBinding = info.Subscription.PeerBinding;
+                IReadOnlyList<Parameter>? handlerParams = peerBinding is { Length: > 0 }
+                    ? [new Parameter(peerBinding, new NamedTypeReference(info.TargetEntity.Name))]
+                    : null;
 
-                // Lower the subscription effects into the handler body
+                // Lower subscription effects into the handler body.
+                // Peer path-prefix roots (binder name) resolve via Parameters to the
+                // peer method parameter; bare props / this stay on the subscriber.
                 var subscriptionEffects = info.Subscription.Effects;
                 Node handlerBody;
                 if (subscriptionEffects.Count > 0) {
+                    IReadOnlyDictionary<string, Node>? peerParams = null;
+                    if (peerBinding is { Length: > 0 }) {
+                        peerParams = new Dictionary<string, Node>(StringComparer.Ordinal) {
+                            [peerBinding] = new Parameter(peerBinding)
+                        };
+                    }
                     var context = new LoweringContext(
                         new Parameter("entity",
                             new TypeReference(entity.Name)),
+                        Parameters: peerParams,
                         Analysis: metadata,
                         UseThisReference: true,
                         LowerStageTransitions: true,
@@ -392,6 +412,7 @@ public sealed class DomainToCSharpExporter {
                 methods.Add(new MethodDefinitionNode(
                     handlerName,
                     new TypeReference("void"),
+                    Parameters: handlerParams,
                     Body: handlerBody,
                     AccessModifier: AccessModifier.Internal
                 ));

@@ -251,6 +251,10 @@ public sealed class DomainDslPrinter {
         _sb.Append(sub.RelationshipName);
         _sb.Append(' ');
         _sb.Append(string.Join(", ", sub.StageNames));
+        if (!string.IsNullOrEmpty(sub.PeerBinding)) {
+            _sb.Append(" as ");
+            _sb.Append(sub.PeerBinding);
+        }
         _sb.AppendLine(" {");
 
         foreach (var effect in sub.Effects) {

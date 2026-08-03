@@ -44,6 +44,12 @@ public sealed record RelationshipContract(
     bool SourceOwnsTarget
 );
 
+/// <summary>
+/// Subscription dispatch plan keyed by relationship name.
+/// Published on <see cref="Stage"/> for stage-scoped <c>when</c>, and on
+/// <see cref="Entity"/> for always-active entity-level <see cref="Entity.Subscriptions"/>
+/// (same entry shape; SPE-L1 bags entity plans on the entity node).
+/// </summary>
 public sealed record SubscriptionDispatchPlanMetadata(
     IReadOnlyDictionary<string, IReadOnlyList<SubscriptionDispatchPlanEntry>> ByRelationshipName
 ) : IAnalysisMetadata;
@@ -54,7 +60,8 @@ public sealed record SubscriptionDispatchPlanEntry(
     string TargetEntityName,
     StageSubscriptionQuantifier Quantifier,
     IReadOnlySet<string> StageNames,
-    IReadOnlyList<Effect> Effects
+    IReadOnlyList<Effect> Effects,
+    string? PeerBinding = null
 );
 
 public sealed record MutationTargetIndexMetadata(

@@ -2993,6 +2993,127 @@ public class DomainEntityInstanceTests {
     }
 
     [Test]
+    public async Task EvaluatePolicy_RelExists_Linked_ReturnsTrue() {
+        var profile = new Entity("Profile", [
+            new Property("City", new DomainTypeReference("Text"), [])
+        ], [], [], []);
+        var customer = new Entity("Customer", [
+            new Property("Name", new DomainTypeReference("Text"), [])
+        ], [], [
+            new Policy("HasProfile", DomainExpression.Exists(DomainExpression.Property("profile")))
+        ], []);
+        var rel = new Relationship("profile",
+            new DomainTypeReference("Customer"), new DomainTypeReference("Profile"),
+            RelationshipCardinality.OneToOne, []);
+        var domain = new Domain("Test", [customer, profile], [rel]);
+        var store = new DomainInstanceStore();
+        var cust = DomainEntityInstance.Create(customer,
+            new Dictionary<string, object?> { ["Name"] = "Alice" }, domain: domain);
+        var prof = DomainEntityInstance.Create(profile,
+            new Dictionary<string, object?> { ["City"] = "X" }, domain: domain);
+        store.Add(cust);
+        store.Add(prof);
+        store.Link("profile", cust, prof);
+
+        var policy = customer.Policies.First(p => p.Name == "HasProfile");
+        await Assert.That(cust.EvaluatePolicy(policy)).IsTrue();
+    }
+
+    [Test]
+    public async Task EvaluatePolicy_RelExists_Unlinked_ReturnsFalse() {
+        var profile = new Entity("Profile", [
+            new Property("City", new DomainTypeReference("Text"), [])
+        ], [], [], []);
+        var customer = new Entity("Customer", [
+            new Property("Name", new DomainTypeReference("Text"), [])
+        ], [], [
+            new Policy("HasProfile", DomainExpression.Exists(DomainExpression.Property("profile")))
+        ], []);
+        var rel = new Relationship("profile",
+            new DomainTypeReference("Customer"), new DomainTypeReference("Profile"),
+            RelationshipCardinality.OneToOne, []);
+        var domain = new Domain("Test", [customer, profile], [rel]);
+        var store = new DomainInstanceStore();
+        var cust = DomainEntityInstance.Create(customer,
+            new Dictionary<string, object?> { ["Name"] = "Alice" }, domain: domain);
+        store.Add(cust);
+
+        var policy = customer.Policies.First(p => p.Name == "HasProfile");
+        await Assert.That(cust.EvaluatePolicy(policy)).IsFalse();
+    }
+
+    [Test]
+    public async Task EvaluatePolicy_RelExists_WithoutStore_Throws() {
+        var profile = new Entity("Profile", [
+            new Property("City", new DomainTypeReference("Text"), [])
+        ], [], [], []);
+        var customer = new Entity("Customer", [
+            new Property("Name", new DomainTypeReference("Text"), [])
+        ], [], [
+            new Policy("HasProfile", DomainExpression.Exists(DomainExpression.Property("profile")))
+        ], []);
+        var rel = new Relationship("profile",
+            new DomainTypeReference("Customer"), new DomainTypeReference("Profile"),
+            RelationshipCardinality.OneToOne, []);
+        var domain = new Domain("Test", [customer, profile], [rel]);
+        var cust = DomainEntityInstance.Create(customer,
+            new Dictionary<string, object?> { ["Name"] = "Alice" }, domain: domain);
+
+        var policy = customer.Policies.First(p => p.Name == "HasProfile");
+        await Assert.That(() => cust.EvaluatePolicy(policy)).Throws<InvalidOperationException>();
+    }
+
+    [Test]
+    public async Task EvaluatePolicy_RelNotExists_Unlinked_ReturnsTrue() {
+        var profile = new Entity("Profile", [
+            new Property("City", new DomainTypeReference("Text"), [])
+        ], [], [], []);
+        var customer = new Entity("Customer", [
+            new Property("Name", new DomainTypeReference("Text"), [])
+        ], [], [
+            new Policy("NoProfile", DomainExpression.NotExists(DomainExpression.Property("profile")))
+        ], []);
+        var rel = new Relationship("profile",
+            new DomainTypeReference("Customer"), new DomainTypeReference("Profile"),
+            RelationshipCardinality.OneToOne, []);
+        var domain = new Domain("Test", [customer, profile], [rel]);
+        var store = new DomainInstanceStore();
+        var cust = DomainEntityInstance.Create(customer,
+            new Dictionary<string, object?> { ["Name"] = "Alice" }, domain: domain);
+        store.Add(cust);
+
+        var policy = customer.Policies.First(p => p.Name == "NoProfile");
+        await Assert.That(cust.EvaluatePolicy(policy)).IsTrue();
+    }
+
+    [Test]
+    public async Task EvaluatePolicy_RelExists_Many_AnyLinked_ReturnsTrue() {
+        var item = new Entity("Item", [
+            new Property("Sku", new DomainTypeReference("Text"), [])
+        ], [], [], []);
+        var order = new Entity("Order", [
+            new Property("Name", new DomainTypeReference("Text"), [])
+        ], [], [
+            new Policy("HasItems", DomainExpression.Exists(DomainExpression.Property("items")))
+        ], []);
+        var rel = new Relationship("items",
+            new DomainTypeReference("Order"), new DomainTypeReference("Item"),
+            RelationshipCardinality.OneToMany, []);
+        var domain = new Domain("Test", [order, item], [rel]);
+        var store = new DomainInstanceStore();
+        var orderInst = DomainEntityInstance.Create(order,
+            new Dictionary<string, object?> { ["Name"] = "O1" }, domain: domain);
+        var a = DomainEntityInstance.Create(item,
+            new Dictionary<string, object?> { ["Sku"] = "X" }, domain: domain);
+        store.Add(orderInst);
+        store.Add(a);
+        store.Link("items", orderInst, a);
+
+        var policy = order.Policies.First(p => p.Name == "HasItems");
+        await Assert.That(orderInst.EvaluatePolicy(policy)).IsTrue();
+    }
+
+    [Test]
     public async Task EvaluatePolicy_PathPrefix_MultipleLinkedTargets_Throws() {
         // Pre-ship: bare path-prefix must not silently pick targets[0] on many-links.
         var item = new Entity("Item", [

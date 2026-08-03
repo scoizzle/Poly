@@ -520,8 +520,8 @@ Cross-entity **writes** via assign are **banned** — only local entity properti
 |------|---------|---------|
 | Path-prefix (bool prop) | `assignee Active` | `RelationshipNavigation` + `PropertyAccess` |
 | Path-prefix (compare) | `customer Tier is "VIP"` | `RelationshipNavigation` + `Comparison` |
-| Presence | `assignee exists` | `Exists(PropertyAccess)` — **bag null-lower**, not store-link presence |
-| Absence | `not certificate exists` | `Not(Exists(...))` — wraps `Exists` in `Not` (same bag path) |
+| Presence | `assignee exists` | `Exists(PropertyAccess)` — **store outbound-link presence** for relationship names |
+| Absence | `not certificate exists` | `Not(Exists(...))` / `NotExists` — store-aware when target is a relationship |
 | Multi-predicate | `customer where Status is "Active" and CreditLimit >= 1000` | `RelationshipNavigation` with `And` body |
 
 ```poly
@@ -574,14 +574,13 @@ against the target entity; reverse-side / self-rel / ManyToMany / OneToOne rejec
 - `Rel exists` on `many` is allowed (authoring: non-empty intent). **Runtime today is not store-link presence** — see dual paths below.
 - Cross-entity reads (path-prefix, exists, where) are legal in policies, require, and assign RHS.
 - Cross-entity writes (nav path as assign target) are banned.
-- **Path-prefix / owned / quantifier policy reads require a store + links.** To-one path-prefix (including `owned` navs such as `profile City is "Metropolis"`), `Rel where`, and Q3′ quantifiers (`any`/`all`/`none`/`count`) parse, apply, and export correctly, and are **runtime-evaluable** only when the source instance is store-attached with outbound targets linked. Ownership (`SourceOwnsTarget`) is a modeling flag; evaluation resolves the same outbound links as plain to-one / many.
+- **Path-prefix / owned / quantifier / Rel exists policy reads require a store + links** when the name is an outbound relationship. Ownership (`SourceOwnsTarget`) is a modeling flag; evaluation uses the same outbound links as path-prefix / many.
 
   **Dual evaluation path (do not conflate):**
-  - **Store + link (product path for nested/related property reads):** `create_instance` → `link_instances(relationshipName=…)` → `evaluate_policy(entityName, policyName, instanceId=sourceId)`. Resolves **singular path-prefix** (`RelationshipNavigation`, including owned) and **Q3′ quantifiers** against linked targets. **Fail closed:** missing store, missing domain metadata, missing outbound link, or **more than one** link for bare path-prefix throws (use `any`/`all` for collections — never silent `targets[0]`).
-  - **Standalone bag:** `evaluate_policy(age=…)` or `evaluate_policy(properties=…)` — **local expressions only**. Do not use for path-prefix / owned / quantifier policies.
-  - **`Rel exists` sibling path (incomplete vs store links):** DSL `Rel exists` / `not Rel exists` parses to `Exists(PropertyAccess)` / `Not(Exists(…))` and **lowers to a subject-bag null check** on the relationship name (VM `Member` ≠ null). It does **not** call store outbound-link resolution in `EvaluatePolicy` preprocess. Putting a related instance into the bag key named like the relationship can make exists true without `link_instances`; store links alone do not populate that bag key. Prefer path-prefix / quantifiers + store for product honesty until a store-aware exists residual ships.
+  - **Store + link (product path):** `create_instance` → `link_instances` → `evaluate_policy(…, instanceId=…)`. Resolves **singular path-prefix**, **Q3′ quantifiers**, and **`Rel exists` / `not Rel exists`** against store outbound links. **Fail closed:** missing store/domain metadata throws. Empty links: path-prefix throws; `Rel exists` → **false**; `not Rel exists` → **true**. Multi-link bare path-prefix throws (use `any`/`all`).
+  - **Standalone bag:** `evaluate_policy(age=…)` / `properties=…` — **local expressions only**. Non-relationship `Exists(PropertyAccess)` still bag-null-lowers; relationship-named `Rel exists` requires store (throws without it).
 
-  For agent workflows: always use the `instanceId` + store + link path when the policy uses path-prefix, owned, or quantifiers. Do not assume `Rel exists` proves store linkage.
+  For agent workflows: use `instanceId` + store + link for path-prefix, owned, quantifiers, and relationship `exists`.
 
 **Shipped in the current product surface:**
 - Arithmetic (`+`, `-`, `*`, `/`) in expressions
@@ -593,7 +592,6 @@ against the target entity; reverse-side / self-rel / ManyToMany / OneToOne rejec
 
 **Not yet shipped** (planned for future phases / residual gaps):
 - Date operations
-- **Store-aware `Rel exists` / link presence** — today `Exists(PropertyAccess)` + bag null-lower only; not fail-closed store outbound-link presence (sibling incomplete path vs path-prefix/quantifiers)
 - **Multi-hop nested owned** (e.g. `customer profile City` / owned-of-owned path-prefix runtime honesty)
 - **Product DSL for IR-only `OwnedAccess`** (nested value-doc shape) — path-prefix → `RelationshipNavigation` is the product authoring surface; do not treat bag `OwnedAccess` as a second policy product path
 - Dedicated many-owned policy demos beyond Q3′ quantifiers on plain `many` (ownership flag is unused at eval; use `any`/`all`/`none`/`count` on `many owned` the same way)
@@ -606,7 +604,7 @@ and lowering pipeline but are **not yet authorable in product DSL**:
 | Capability | IR exists | DSL status | Notes |
 |------------|-----------|------------|-------|
 | Relationship navigation | ✅ | ✅ **shipped** (path-prefix) | `customer Tier`, not `customer.Tier`; **store + link** at `evaluate_policy` |
-| Existence check | ✅ | ✅ **shipped authoring** (postfix `Rel exists`) | Parses to `Exists(PropertyAccess)`; **bag null-lower**, not store-link presence (see residual above) |
+| Existence check | ✅ | ✅ **shipped** (postfix `Rel exists`) | Store outbound-link presence for relationship names; fail-closed without store; empty → false |
 | Scoped filter (`where`) | ✅ | ✅ **shipped** (`rel where and-chain`) | `customer where Status is "Active"` |
 | Owned / related single-hop | ✅ | ✅ **shipped** (path-prefix) | `profile City is "Metropolis"` — same space-delimited syntax as to-one nav; **requires store + link** at `evaluate_policy` |
 | Nested multi-hop owned | 🟡 | ❌ **not shipped** | Multi-level composition (owned of owned) is not a product runtime claim |
@@ -614,7 +612,7 @@ and lowering pipeline but are **not yet authorable in product DSL**:
 | Arithmetic (`+`, `-`, `*`, `/`) | ✅ | ✅ **shipped** | `Total + 5 > 10`, `Total * 0.9` |
 | Action parameters | ✅ | ✅ **shipped** | `actionName: action (param: Text) { ... }` |
 
-**JSON policies** (`add_policy` / `simulate_policy`) support comparison + and/or/not + literal + **relationship navigation**: `{"relationship":"profile","inner":{…}}`. `add_policy` accepts the relationship form for later store-attached `evaluate_policy(instanceId=…)`. **`simulate_policy` is bag-only** — relationship/owned path-prefix expressions fail closed without a store (use create + link + `evaluate_policy`). For path-prefix and quantifiers use DSL + store; for `Rel exists` prefer path-prefix/quantifiers until store-aware exists ships (bag-null exists is not store honesty).
+**JSON policies** (`add_policy` / `simulate_policy`) support comparison + and/or/not + literal + **relationship navigation**: `{"relationship":"profile","inner":{…}}`. `add_policy` accepts the relationship form for later store-attached `evaluate_policy(instanceId=…)`. **`simulate_policy` is bag-only** — relationship/owned path-prefix and relationship `exists` fail closed without a store (use create + link + `evaluate_policy`).
 
 ## 9. Supported Effect Summary
 

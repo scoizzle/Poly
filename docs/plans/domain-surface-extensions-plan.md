@@ -38,7 +38,8 @@ Non-goals: date pack vs core; DSL link/unlink; actors; grammar rewrite; DAU/Bar 
 
 - Path-prefix owned/to-one evaluates under store+link; fail-closed without store/link.
 - MCP golden: `EvaluatePolicy_OwnedToOnePathPrefix_CreateLink_TrueAndFalse`.
-- Residual (documented in guide): bag-null `Rel exists` sibling path; multi-hop owned; OwnedAccess IR-only.
+- Residual (documented in guide): multi-hop owned; OwnedAccess IR-only.  
+- **`Rel exists`:** store-aware outbound-link presence (shipped with post-SPE full-send).
 
 ---
 

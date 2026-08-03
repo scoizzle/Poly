@@ -1158,8 +1158,19 @@ public sealed record DomainEntityInstance {
                     return DomainExpression.Literal(result);
                 }
             case OwnedAccess o: return o with { Inner = PreprocessQuantifiers(o.Inner) };
-            case Exists e: return e with { Target = PreprocessQuantifiers(e.Target) };
-            case NotExists ne: return ne with { Target = PreprocessQuantifiers(ne.Target) };
+            case Exists e: {
+                    // Rel exists: store outbound-link presence when Target is a relationship name.
+                    // Fail closed without store (GetOutboundRelatedInstances). Empty links → false.
+                    // Non-relationship targets keep bag-null lowering.
+                    if (TryEvaluateRelationshipPresence(e.Target, out var present))
+                        return DomainExpression.Literal(present);
+                    return e with { Target = PreprocessQuantifiers(e.Target) };
+                }
+            case NotExists ne: {
+                    if (TryEvaluateRelationshipPresence(ne.Target, out var present))
+                        return DomainExpression.Literal(!present);
+                    return ne with { Target = PreprocessQuantifiers(ne.Target) };
+                }
 
             // Leaf nodes — no possible quantifiers inside
             case PropertyAccess:
@@ -1170,6 +1181,30 @@ public sealed record DomainEntityInstance {
             default:
                 return expr;
         }
+    }
+
+    /// <summary>
+    /// When <paramref name="target"/> is a bare relationship name on this entity as source,
+    /// evaluates store-linked presence (count &gt; 0). Returns false from <c>out present</c>
+    /// with return false when the target is not an outbound relationship (caller uses bag path).
+    /// </summary>
+    private bool TryEvaluateRelationshipPresence(DomainExpression target, out bool present) {
+        present = false;
+        if (target is not PropertyAccess pa)
+            return false;
+        if (Domain is null)
+            return false;
+
+        var analysis = RuntimeAnalysisCache.GetOrAnalyze(Domain);
+        if (!analysis.TryGetRelationship(Domain, pa.Name, out var relationship) || relationship is null)
+            return false;
+        if (!string.Equals(relationship.Source.TypeName, Entity.Name, StringComparison.Ordinal))
+            return false;
+
+        // Outbound relationship: require store; empty links are false (not throw).
+        var targets = GetOutboundRelatedInstances(pa.Name);
+        present = targets.Count > 0;
+        return true;
     }
 
     private bool EvaluateAnyExpr(AnyExpr a) {

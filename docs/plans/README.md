@@ -7,40 +7,61 @@ Architectural rationale → **`docs/decisions/`**. Module maps → **`Poly/*/REA
 
 ---
 
-## Active (use these)
+## Admission control (2026-08-04)
+
+**One primary implementation workstream at a time.** Everything else is Done, Parked, or Pull — not “also open.”
+
+| Rule | Meaning |
+|------|---------|
+| **CURRENT** | Only what master-roadmap Agent pick says (or `(none)`). |
+| **Park before open** | Finish or park the live suite before admitting the next. |
+| **Proposals ≠ queues** | Research docs (e.g. DSL absorption) stay parked until one P* is admitted as a suite. |
+| **Pull ≠ CURRENT** | Dogfood, Q4, grammar, packs — available when admitted, not parallel debt. |
+
+**Agent pick source of truth:** [`v2-to-v3/master-roadmap.md`](v2-to-v3/master-roadmap.md) → “Agent pick (one line)”.
+
+---
+
+## Active (index + reference only)
 
 | Plan | Role |
 |------|------|
-| [**Master roadmap**](v2-to-v3/master-roadmap.md) | Milestone index + one-line agent pick |
-| [**Domain analysis unification**](domain-analysis-unification.md) | **Parked** — product bar met; codegen track paused · [`dau-*`](simple-agent-tasks/dau-README.md) |
-| [**Domain surface extensions (SPE)**](domain-surface-extensions-plan.md) | **Done** — export peer · entity-level when · owned policies · suite [`spe-*`](simple-agent-tasks/spe-README.md) |
-| [**MCP dogfood protocol**](v2-to-v3/mcp-dogfood-protocol.md) | Scenario dogfood → core concepts · [`dogfood-*`](v2-to-v3/simple-agent-tasks/dogfood-README.md) · **fixes:** [`dogfood-fix-*`](v2-to-v3/simple-agent-tasks/dogfood-fix-README.md) |
-| [**Platform velocity review**](platform-velocity-review.md) | Full-project pain points for planned/future features (2026-07-25) |
-| [**Analysis pipeline merge**](analysis-pipeline-merge.md) | **Complete** (registration only) — predecessor to DAU · [`apm-*`](simple-agent-tasks/apm-README.md) |
+| [**Master roadmap**](v2-to-v3/master-roadmap.md) | Milestone index + **one-line agent pick** (CURRENT) |
 | [**Capability inventory**](../domainmodeling-capability-inventory.md) | What ships (reference, not a queue) |
-| [**Effect surface completeness**](v2-to-v3/effect-surface-completeness.md) | Effects track — kernel shipped; dogfood / E5 / E6.1 pull |
-| [**DSL query surface**](v2-to-v3/dsl-query-surface.md) | **Complete** Q1′+Q3′+`link_instances` — design reference; pull Q4/dates |
-| [**MCP dogfood orchestrator**](v2-to-v3/mcp-dogfood-orchestrator.md) | Dogfood loop — [report 1](v2-to-v3/agent-summaries/dogfood/DOGFOOD-REPORT-20260718.md) · [report 2](v2-to-v3/agent-summaries/dogfood/DOGFOOD-REPORT-2-20260718.md) |
-| [**MCP tool-surface expansion**](v2-to-v3/mcp-tool-surface-expansion.md) | Backlog §0 — pull-only after dogfood |
-| [**Infrastructure pass — NEXT**](infrastructure-pass-NEXT.md) | **Complete** under bar; pull Bar B / RestApi — [archive](archive/infrastructure-pass/README.md) |
-| [**Post–V2-delete naming cleanup**](post-v2-delete-naming-cleanup.md) | Drop product `V3*` labels — idle green tree |
-| [**Post–system-review correctness hardening**](2026-07-11-review-fix-plan.md) | Mostly Done; optional residuals |
-| [**Grammar framework integration**](grammar-integration.md) | **Draft** — `Poly.Text.Grammar` prototype complete (54 tests); integrate into DSL pipeline |
-| [**Analysis-consuming lowering**](analysis-consuming-lowering.md) | **Draft** — wire 22 re-discovery operations in lowering to pre-existing analysis metadata |
-| [**DomainAuthoringContext removal**](domain-authoring-context-removal-plan.md) | **Draft** — converge to one analyzer system definition; remove context-driven analyzer branching |
-
-### Simple-agent queues
-
-| Queue | Role |
-|-------|------|
-| [**`spe-*` (surface extensions)**](simple-agent-tasks/spe-README.md) | **Complete** — export peer · entity-level when · owned policies (G1–G6) |
-| [**`dogfood-fix-*` (S1 findings)**](v2-to-v3/simple-agent-tasks/dogfood-fix-README.md) | Dogfood fixes — mostly done; optional G2 |
-| [**`dogfood-*` (MCP discovery)**](v2-to-v3/simple-agent-tasks/dogfood-README.md) | S1 done partial; S2→S3 after fixes or in parallel |
-| [**`dau-*` (domain analysis unification)**](simple-agent-tasks/dau-README.md) | **Parked** — product bar met; commit ops optional |
-| [**`apm-*` (analysis pipeline merge)**](simple-agent-tasks/apm-README.md) | **Complete** — registration predecessor; do not reopen |
-| [**`qe-*` (query/effect)**](v2-to-v3/simple-agent-tasks/qe-README.md) | **Complete** — do not reopen Q0–Q3′; optional hygiene only |
-| [**`vs-*` (vertical slice)**](v2-to-v3/simple-agent-tasks/vs-README.md) | Historical M2 — **done**; do not reopen |
 | [**`pr1` review gate**](v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md) | Always-on pre-ship process |
+
+---
+
+## Parked (do not execute until unparked)
+
+| Plan | Role | Unpark when |
+|------|------|-------------|
+| [**DSL absorption proposals**](domain-dsl-absorption-proposals.md) | Experiment → product styles (P1 temporal pack + seams, multi-hop, when any/all, …) | Admit **one** P* as sole suite |
+| [**MCP dogfood protocol**](v2-to-v3/mcp-dogfood-protocol.md) · [`dogfood-*`](v2-to-v3/simple-agent-tasks/dogfood-README.md) · [`dogfood-fix-*`](v2-to-v3/simple-agent-tasks/dogfood-fix-README.md) | Scenario discovery; fixes mostly done | Admit dogfood (e.g. SPE surface) as primary |
+| [**MCP dogfood orchestrator**](v2-to-v3/mcp-dogfood-orchestrator.md) | Dogfood loop tooling | With dogfood admission |
+| [**Domain analysis unification**](domain-analysis-unification.md) · [`dau-*`](simple-agent-tasks/dau-README.md) | Product bar met; codegen track paused | Explicit DAU reopen |
+| [**Grammar framework integration**](grammar-integration.md) | Draft — not a prerequisite for temporal/SPE | Product stability + explicit pick |
+| [**Analysis-consuming lowering**](analysis-consuming-lowering.md) | Draft | Explicit pick |
+| [**DomainAuthoringContext removal**](domain-authoring-context-removal-plan.md) | Draft | Explicit pick |
+| [**Post–V2-delete naming cleanup**](post-v2-delete-naming-cleanup.md) | Drop product `V3*` labels | Idle green tree + explicit pick |
+| [**Platform velocity review**](platform-velocity-review.md) | Pain inventory (2026-07-25) | Pull items only when admitted |
+| [**Effect surface completeness**](v2-to-v3/effect-surface-completeness.md) | Kernel shipped; E5 / E6.1 pull | Dogfood or explicit effect suite |
+| [**MCP tool-surface expansion**](v2-to-v3/mcp-tool-surface-expansion.md) | Backlog §0 | After dogfood admission |
+| [**Post–system-review correctness hardening**](2026-07-11-review-fix-plan.md) | Mostly done; optional residuals | Explicit residual pick |
+
+---
+
+## Complete (do not reopen)
+
+| Plan | Role |
+|------|------|
+| [**Domain surface extensions (SPE)**](domain-surface-extensions-plan.md) · [`spe-*`](simple-agent-tasks/spe-README.md) | Export peer · entity-level when · owned policies |
+| [**DSL query surface**](v2-to-v3/dsl-query-surface.md) · [`qe-*`](v2-to-v3/simple-agent-tasks/qe-README.md) | Q1′+Q3′+`link_instances`; design reference |
+| [**Analysis pipeline merge**](analysis-pipeline-merge.md) · [`apm-*`](simple-agent-tasks/apm-README.md) | Registration predecessor to DAU |
+| [**Infrastructure pass — NEXT**](infrastructure-pass-NEXT.md) | Under bar; archive [infra](archive/infrastructure-pass/README.md) |
+| [**`vs-*` (vertical slice)**](v2-to-v3/simple-agent-tasks/vs-README.md) | Historical M2 |
+
+Shipped recently (no open suite): DAS catalog · peer `when … as` · store-aware `Rel exists` — see master-roadmap DONE line.
 
 ---
 
@@ -48,7 +69,7 @@ Architectural rationale → **`docs/decisions/`**. Module maps → **`Poly/*/REA
 
 | Plan | Role |
 |------|------|
-| [**Domain plugin / multi-DBMS packs**](domain-plugin-extension-platform.md) | → [`dsl-plugin-pipeline-experiment.md`](dsl-plugin-pipeline-experiment.md) — P1-ready, not current pick |
+| [**Domain plugin / multi-DBMS packs**](domain-plugin-extension-platform.md) | → [`dsl-plugin-pipeline-experiment.md`](dsl-plugin-pipeline-experiment.md) — not current pick |
 | [**`Poly.Ast` + `Poly.Analysis` module split**](poly-ast-analysis-module-split.md) | After product stability |
 | [array-specialization-plan.md](array-specialization-plan.md) | Optional emitter work |
 | [analyzer-improvements.md](analyzer-improvements.md) | Optional analysis quality |
@@ -74,28 +95,3 @@ MCP guiding principles: [v2-to-v3/spikes/mcp-guiding-principles.md](v2-to-v3/spi
 | `docs/decisions/2026-06-08-domain-lowering-boundary.md` | Domain → generic AST only |
 
 **No open Interpretation mega-plan.**
-
----
-
-## Archived (do not execute)
-
-| Archive | Contents |
-|---------|----------|
-| [**archive/infrastructure-pass/**](archive/infrastructure-pass/README.md) | Groups 1–7 complete: design, ladder, `ip-*` tasks, review trail |
-| [**archive/interpretation/**](archive/interpretation/README.md) | µop/bytecode/tree-walker/primitive IR era |
-| [**archive/v2-to-v3-migration/**](archive/v2-to-v3-migration/README.md) | Completed migration micro-tasks / workstreams |
-| [**archive/vision-historical/**](archive/vision-historical/README.md) | Vision sketches that contradict shipped execution model |
-
-Also historical but left in place (reference only):  
-[`v2-to-v3/vertical-slice-finish-plan.md`](v2-to-v3/vertical-slice-finish-plan.md) · [`v2-to-v3/mcp-phase3-oracle-surface.md`](v2-to-v3/mcp-phase3-oracle-surface.md) · [`v2-to-v3/domainmodeling-next-phase.md`](v2-to-v3/domainmodeling-next-phase.md) · [`v2-to-v3/dsl-sync-toward-phase1.md`](v2-to-v3/dsl-sync-toward-phase1.md)
-
-Agents **must not** implement archive work without an explicit re-open validated against `docs/CORE.md` and current code.
-
----
-
-## Guidelines
-
-1. **What next?** → [`v2-to-v3/simple-agent-tasks/dogfood-README.md`](v2-to-v3/simple-agent-tasks/dogfood-README.md) · [`v2-to-v3/master-roadmap.md`](v2-to-v3/master-roadmap.md).  
-2. Consult `docs/decisions/` and `CORE.md` before significant work.  
-3. Do not invent a second product IR or reintroduce V2.  
-4. Prefer thin vertical slices; archive completed suites instead of leaving stale “CURRENT: commit…”.

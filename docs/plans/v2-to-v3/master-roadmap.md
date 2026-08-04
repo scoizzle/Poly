@@ -52,16 +52,16 @@ MCP / direct API as thin consumers
 ### Agent pick (one line)
 
 ```text
-DONE:    M1–M4; Q1′+Q3′+link; infra IR; DAS; SPE peer/entity/owned; store-aware Rel exists; dogfood-fix G1/G3/HOST; DAU product parked
-CURRENT: (none) — admission control; no parallel product queues
-ADMIT:   Prefer dogfood of shipped SPE / peer / exists (prove product path) — not temporal/dates first
-PARKED:  Absorption P1 dates/temporal pack (lower priority); P2–P5+; dogfood S* until admitted; grammar; DomainAuthoringContext; analysis-consuming lowering; naming V3*
+DONE:    M1–M4; Q1′+Q3′+link; infra IR; DAS; SPE peer/entity/owned; store-aware Rel exists; dogfood-fix G1/G3/HOST; SPE MCP dogfood suite (`SpeDogfoodTests`); DAU product parked
+CURRENT: (none) — SPE dogfood test expansion landed; admit next only when chosen
+ADMIT:   Further dogfood scenarios if gaps; not temporal/dates first
+PARKED:  Absorption P1 dates/temporal pack (lower priority); P2–P5+; dogfood S* discovery; grammar; DomainAuthoringContext; analysis-consuming lowering; naming V3*
 PULL:    Q4; unlink; E5; Bar B; DAU commit ops; multi-hop only if dogfood forces
 ```
 
-**Honest product claim today:** Path-prefix / exists / where **and** Q3′ quantifiers are authorable **and** evaluable (store-linked `EvaluatePolicy`). Peer binding: `when Rel Stage as name`. SPE: export peer handlers, entity-level `when`, owned policies. MCP: `create_instance` → `link_instances` → `evaluate_policy(instanceId=…)`. DSL has **no** `link` keyword (`create in Rel` for spawn-and-wire). JSON policies still local-only. Codegen DbContext/Program via Syntax IR; `.http` still string. **Temporal DSL authoring** (`Now - 12 days`) not yet product — **intentionally not the next bet**.
+**Honest product claim today:** Path-prefix / exists / where **and** Q3′ quantifiers are authorable **and** evaluable (store-linked `EvaluatePolicy`). Peer binding: `when Rel Stage as name`. SPE: export peer handlers, entity-level `when`, owned policies. MCP: `create_instance` → `link_instances` → `evaluate_policy(instanceId=…)`. DSL has **no** `link` keyword (`create in Rel` for spawn-and-wire). JSON policies still local-only. Codegen DbContext/Program via Syntax IR; `.http` still string. **Temporal DSL authoring** (`Now - 12 days`) not yet product — **intentionally not the next bet**. SPE agent path is covered by [`Poly.Tests/Mcp/SpeDogfoodTests.cs`](../../../Poly.Tests/Mcp/SpeDogfoodTests.cs).
 
-**Focus (2026-08-04):** Close unfinished-workstream thrash — **one primary only**. Highest-value next ship is likely **proving what already shipped** (dogfood SPE/peer/exists on real scenarios), not new date surface. Temporal pack / specialization seams stay parked until dogfood or a concrete domain forces them. Do **not** open grammar, multi-hop, when any/all, and packs in parallel. DAU remains parked.
+**Focus (2026-08-04):** Close unfinished-workstream thrash — **one primary only**. SPE surface dogfood tests shipped on MCP path; temporal pack stays parked. Do **not** open grammar, multi-hop, when any/all, and packs in parallel. DAU remains parked.
 
 ---
 

@@ -90,7 +90,7 @@ public class OracleToolTests {
 
     [Test]
     public async Task DescribeDomainElement_Unknown_Fails() {
-        var (sessionId, _) = SessionStore.Create("OracleTest");
+        var (sessionId, _) = McpSessionStore.Create("OracleTest");
 
         var desc = OracleTool.DescribeDomainElement(sessionId, "entity", "NonExistent");
         await Assert.That(desc.Success).IsFalse();
@@ -98,7 +98,7 @@ public class OracleToolTests {
 
     [Test]
     public async Task DescribeDomainElement_UnknownKind_Fails() {
-        var (sessionId, _) = SessionStore.Create("OracleTest");
+        var (sessionId, _) = McpSessionStore.Create("OracleTest");
 
         var desc = OracleTool.DescribeDomainElement(sessionId, "garbage", "something");
         await Assert.That(desc.Success).IsFalse();
@@ -124,7 +124,7 @@ public class OracleToolTests {
 
     [Test]
     public async Task DescribeDomainElement_Policy_IncludesExpressionEnglish() {
-        var (sessionId, _) = SessionStore.Create("OracleTest");
+        var (sessionId, _) = McpSessionStore.Create("OracleTest");
 
         // Add entity with a property and policy
         var r1 = EvolveTool.AddEntity(sessionId, "Person");
@@ -146,7 +146,7 @@ public class OracleToolTests {
 
     [Test]
     public async Task DescribeDomainElement_Stage_WithEntityName_Disambiguates() {
-        var (sessionId, _) = SessionStore.Create("OracleTest");
+        var (sessionId, _) = McpSessionStore.Create("OracleTest");
 
         // Create two entities with same-named stage
         EvolveTool.AddEntity(sessionId, "Order");
@@ -247,7 +247,7 @@ public class OracleToolTests {
     [Test]
     public async Task AddPolicy_RelationshipJson_ValidSyntax() {
         // Verify the JSON format is accepted via add_policy
-        var (sessionId, _) = SessionStore.Create("Owned2Test");
+        var (sessionId, _) = McpSessionStore.Create("Owned2Test");
         DslTool.ApplyDsl(sessionId, """
             domain Owned2Test
             Profile: entity { City: Text }
@@ -289,7 +289,7 @@ public class OracleToolTests {
 
     [Test]
     public async Task GetDomainSuggestions_EmptyDomain_HasNoSuggestions() {
-        var (sessionId, _) = SessionStore.Create("SuggestionTest");
+        var (sessionId, _) = McpSessionStore.Create("SuggestionTest");
 
         var response = QueryTool.GetDomainSuggestions(sessionId);
         await Assert.That(response.Success).IsTrue();
@@ -301,7 +301,7 @@ public class OracleToolTests {
 
     [Test]
     public async Task GetDomainSuggestions_EntityWithPropertiesNoStages_HasSuggestions() {
-        var (sessionId, _) = SessionStore.Create("SuggestionTest");
+        var (sessionId, _) = McpSessionStore.Create("SuggestionTest");
 
         var r1 = EvolveTool.AddEntity(sessionId, "Task");
         await Assert.That(r1.Success).IsTrue();

@@ -61,11 +61,11 @@ public class SurfaceExtensionDogfoodTests {
 
     [Test]
     public async Task ApplyDsl_SurfaceExtensions_AnalyzesClean() {
-        var (sessionId, _) = SessionStore.Create("SurfaceExtensionDogfood");
+        var (sessionId, _) = McpSessionStore.Create("SurfaceExtensionDogfood");
         var apply = DslTool.ApplyDsl(sessionId, SharedSurfaceExtensionDomain);
         await Assert.That(apply.Success).IsTrue();
 
-        SessionStore.TryGet(sessionId, out var state);
+        McpSessionStore.TryGet(sessionId, out var state);
         await Assert.That(state).IsNotNull();
         var analysis = DomainModelAnalyzer.Analyze(state!.Domain);
         await Assert.That(analysis.HasStructuralFailure).IsFalse();
@@ -82,7 +82,7 @@ public class SurfaceExtensionDogfoodTests {
 
     [Test]
     public async Task ExportDsl_SurfaceExtensions_RoundTripsPeerEntityWhenAndOwned() {
-        var (sessionId, _) = SessionStore.Create("SurfaceExtensionDogfood");
+        var (sessionId, _) = McpSessionStore.Create("SurfaceExtensionDogfood");
         await Assert.That(DslTool.ApplyDsl(sessionId, SharedSurfaceExtensionDomain).Success).IsTrue();
 
         var export = DslTool.ExportDsl(sessionId);
@@ -96,7 +96,7 @@ public class SurfaceExtensionDogfoodTests {
 
         var reapply = DslTool.ApplyDsl(sessionId, poly);
         await Assert.That(reapply.Success).IsTrue();
-        SessionStore.TryGet(sessionId, out var state);
+        McpSessionStore.TryGet(sessionId, out var state);
         var customer = state!.Domain.Types.OfType<Entity>().Single(e => e.Name == "Customer");
         await Assert.That(customer.Subscriptions[0].PeerBinding).IsEqualTo("order");
     }
@@ -106,7 +106,7 @@ public class SurfaceExtensionDogfoodTests {
     [Test]
     public async Task EntityLevel_PeerWhen_CopiesPeerCode_RegardlessOfSubscriberStage() {
         // Entity-level: entity-level when fires in Idle (not Pending); peer binder copies order Code.
-        var (sessionId, _) = SessionStore.Create("SurfaceExtensionDogfood");
+        var (sessionId, _) = McpSessionStore.Create("SurfaceExtensionDogfood");
         await Assert.That(DslTool.ApplyDsl(sessionId, SharedSurfaceExtensionDomain).Success).IsTrue();
 
         var custId = CreateAndId(sessionId, "Customer",
@@ -132,7 +132,7 @@ public class SurfaceExtensionDogfoodTests {
     [Test]
     public async Task StageScoped_When_FiresOnlyWhileSubscriberInPending() {
         // Contrast: move customer into Pending, then order Active → Status Notified + peer copy.
-        var (sessionId, _) = SessionStore.Create("StageScopedVsEntityLevel");
+        var (sessionId, _) = McpSessionStore.Create("StageScopedVsEntityLevel");
         var dsl = """
             domain StageScopedVsEntityLevel
             Customer: entity {
@@ -180,7 +180,7 @@ public class SurfaceExtensionDogfoodTests {
 
     [Test]
     public async Task StageScoped_PeerWhen_CopiesPeerCode_ViaMcp() {
-        var (sessionId, _) = SessionStore.Create("StageScopedPeerBinding");
+        var (sessionId, _) = McpSessionStore.Create("StageScopedPeerBinding");
         var dsl = """
             domain StageScopedPeerBinding
             Tracker: entity {
@@ -217,7 +217,7 @@ public class SurfaceExtensionDogfoodTests {
 
     [Test]
     public async Task OwnedPolicy_CreateLinkEvaluate_TrueAndFalse() {
-        var (sessionId, _) = SessionStore.Create("SurfaceExtensionDogfood");
+        var (sessionId, _) = McpSessionStore.Create("SurfaceExtensionDogfood");
         await Assert.That(DslTool.ApplyDsl(sessionId, SharedSurfaceExtensionDomain).Success).IsTrue();
 
         var aliceId = CreateAndId(sessionId, "Customer",
@@ -244,7 +244,7 @@ public class SurfaceExtensionDogfoodTests {
     [Test]
     public async Task OwnedPolicy_Unlinked_FailsClosed() {
         // No vacuous true when path-prefix has no outbound link.
-        var (sessionId, _) = SessionStore.Create("SurfaceExtensionDogfood");
+        var (sessionId, _) = McpSessionStore.Create("SurfaceExtensionDogfood");
         await Assert.That(DslTool.ApplyDsl(sessionId, SharedSurfaceExtensionDomain).Success).IsTrue();
 
         var custId = CreateAndId(sessionId, "Customer",
@@ -258,7 +258,7 @@ public class SurfaceExtensionDogfoodTests {
 
     [Test]
     public async Task RelExists_LinkedAndUnlinked_EvaluatesHonestly() {
-        var (sessionId, _) = SessionStore.Create("SurfaceExtensionDogfood");
+        var (sessionId, _) = McpSessionStore.Create("SurfaceExtensionDogfood");
         await Assert.That(DslTool.ApplyDsl(sessionId, SharedSurfaceExtensionDomain).Success).IsTrue();
 
         var withProfile = CreateAndId(sessionId, "Customer",
@@ -282,7 +282,7 @@ public class SurfaceExtensionDogfoodTests {
 
     [Test]
     public async Task RelExists_Many_OrdersLinked_True() {
-        var (sessionId, _) = SessionStore.Create("SurfaceExtensionDogfood");
+        var (sessionId, _) = McpSessionStore.Create("SurfaceExtensionDogfood");
         await Assert.That(DslTool.ApplyDsl(sessionId, SharedSurfaceExtensionDomain).Success).IsTrue();
 
         var custId = CreateAndId(sessionId, "Customer",
@@ -307,7 +307,7 @@ public class SurfaceExtensionDogfoodTests {
 
     [Test]
     public async Task ExportDomainToCSharp_PeerDependentWhen_EmitsPeerParamAndNotify() {
-        var (sessionId, _) = SessionStore.Create("PeerExport");
+        var (sessionId, _) = McpSessionStore.Create("PeerExport");
         var dsl = """
             domain PeerExport
             Tracker: entity {
@@ -341,7 +341,7 @@ public class SurfaceExtensionDogfoodTests {
 
     [Test]
     public async Task ExportDomainToCSharp_EntityLevelPeerWhen_EmitsHandler() {
-        var (sessionId, _) = SessionStore.Create("SurfaceExtensionDogfood");
+        var (sessionId, _) = McpSessionStore.Create("SurfaceExtensionDogfood");
         await Assert.That(DslTool.ApplyDsl(sessionId, SharedSurfaceExtensionDomain).Success).IsTrue();
 
         var export = OracleTool.ExportDomainToCSharp(sessionId);
@@ -356,7 +356,7 @@ public class SurfaceExtensionDogfoodTests {
     [Test]
     public async Task FullPath_CreateLinkActivate_PeerPolicyExistsExport() {
         // One session exercises L peer + O owned + exists + export honesty.
-        var (sessionId, _) = SessionStore.Create("SurfaceExtensionDogfood");
+        var (sessionId, _) = McpSessionStore.Create("SurfaceExtensionDogfood");
         await Assert.That(DslTool.ApplyDsl(sessionId, SharedSurfaceExtensionDomain).Success).IsTrue();
 
         var custId = CreateAndId(sessionId, "Customer",
@@ -394,7 +394,7 @@ public class SurfaceExtensionDogfoodTests {
 
     [Test]
     public async Task ApplyDsl_UnboundPeerPathPrefix_FailsAnalysis() {
-        var (sessionId, _) = SessionStore.Create("UnboundPeerPath");
+        var (sessionId, _) = McpSessionStore.Create("UnboundPeerPath");
         var bad = """
             domain UnboundPeerPath
             Tracker: entity {
@@ -416,7 +416,7 @@ public class SurfaceExtensionDogfoodTests {
         // Apply may succeed evolve but analysis should report errors — or apply fails.
         // Product: SubscriptionAnalyzer fails closed on unbound peer-like root.
         if (apply.Success) {
-            SessionStore.TryGet(sessionId, out var state);
+            McpSessionStore.TryGet(sessionId, out var state);
             var analysis = DomainModelAnalyzer.Analyze(state!.Domain);
             await Assert.That(analysis.HasErrors || analysis.HasStructuralFailure).IsTrue();
         }
@@ -429,7 +429,7 @@ public class SurfaceExtensionDogfoodTests {
 
     [Test]
     public async Task CreateIn_ThenActivate_EntityLevelPeer_CopiesCode_ViaMcp() {
-        var (sessionId, _) = SessionStore.Create("CreateInWithPeer");
+        var (sessionId, _) = McpSessionStore.Create("CreateInWithPeer");
         var dsl = """
             domain CreateInWithPeer
             Customer: entity {
@@ -458,7 +458,7 @@ public class SurfaceExtensionDogfoodTests {
         await Assert.That(RuntimeTool.InvokeAction(sessionId, custId, "PlaceOrder").Success)
             .IsTrue();
 
-        SessionStore.TryGet(sessionId, out var st);
+        McpSessionStore.TryGet(sessionId, out var st);
         var orderKvp = st!.InstanceMap.First(kvp => kvp.Value.Entity.Name == "Order");
         var orderId = orderKvp.Key;
 
@@ -471,7 +471,7 @@ public class SurfaceExtensionDogfoodTests {
 
     [Test]
     public async Task Unlink_StopsPeerWhen_AndExistsFalse_ViaMcp() {
-        var (sessionId, _) = SessionStore.Create("UnlinkStopsPeer");
+        var (sessionId, _) = McpSessionStore.Create("UnlinkStopsPeer");
         var dsl = """
             domain UnlinkStopsPeer
             Tracker: entity {
@@ -519,7 +519,7 @@ public class SurfaceExtensionDogfoodTests {
 
         await Assert.That(RuntimeTool.InvokeAction(sessionId, orderId, "Reset").Success).IsTrue();
         // Direct prop write via store instance for isolation
-        SessionStore.TryGet(sessionId, out var st);
+        McpSessionStore.TryGet(sessionId, out var st);
         st!.InstanceMap[trackerId].SetProperty("Status", "AFTER-UNLINK");
         await Assert.That(RuntimeTool.InvokeAction(sessionId, orderId, "Activate").Success)
             .IsTrue();
@@ -530,7 +530,7 @@ public class SurfaceExtensionDogfoodTests {
 
     [Test]
     public async Task TwoTrackers_OneOrderActive_BothPeersFire_ViaMcp() {
-        var (sessionId, _) = SessionStore.Create("TwoSubscribersOneOrder");
+        var (sessionId, _) = McpSessionStore.Create("TwoSubscribersOneOrder");
         var dsl = """
             domain TwoSubscribersOneOrder
             Tracker: entity {
@@ -569,7 +569,7 @@ public class SurfaceExtensionDogfoodTests {
 
     [Test]
     public async Task RelNotExists_BeforeAndAfterLink_ViaMcp() {
-        var (sessionId, _) = SessionStore.Create("RelationshipNotExists");
+        var (sessionId, _) = McpSessionStore.Create("RelationshipNotExists");
         var dsl = """
             domain RelationshipNotExists
             Customer: entity {
@@ -603,7 +603,7 @@ public class SurfaceExtensionDogfoodTests {
 
     [Test]
     public async Task PathPrefix_MultipleLinks_EvaluateFailsClosed_ViaMcp() {
-        var (sessionId, _) = SessionStore.Create("MultiLinkPathPrefix");
+        var (sessionId, _) = McpSessionStore.Create("MultiLinkPathPrefix");
         // Use OneToOne profile but force two links if store allows — or many path-prefix.
         var dsl = """
             domain MultiLinkPathPrefix
@@ -623,7 +623,7 @@ public class SurfaceExtensionDogfoodTests {
             return;
         }
 
-        SessionStore.TryGet(sessionId, out var state);
+        McpSessionStore.TryGet(sessionId, out var state);
         var analysis = DomainModelAnalyzer.Analyze(state!.Domain);
         if (analysis.HasErrors) {
             await Assert.That(analysis.HasErrors).IsTrue();
@@ -650,7 +650,7 @@ public class SurfaceExtensionDogfoodTests {
 
     [Test]
     public async Task Quantifiers_EmptyLinks_Honesty_ViaMcp() {
-        var (sessionId, _) = SessionStore.Create("EmptyQuantifiers");
+        var (sessionId, _) = McpSessionStore.Create("EmptyQuantifiers");
         var dsl = """
             domain EmptyQuantifiers
             Customer: entity {
@@ -690,7 +690,7 @@ public class SurfaceExtensionDogfoodTests {
 
     [Test]
     public async Task Require_HasOrders_BlocksThenPasses_ViaMcp() {
-        var (sessionId, _) = SessionStore.Create("RequireRelationshipExists");
+        var (sessionId, _) = McpSessionStore.Create("RequireRelationshipExists");
         var dsl = """
             domain RequireRelationshipExists
             Customer: entity {
@@ -728,7 +728,7 @@ public class SurfaceExtensionDogfoodTests {
 
     [Test]
     public async Task If_RelExists_Branches_ViaMcp() {
-        var (sessionId, _) = SessionStore.Create("IfRelationshipExists");
+        var (sessionId, _) = McpSessionStore.Create("IfRelationshipExists");
         var dsl = """
             domain IfRelationshipExists
             Customer: entity {
@@ -763,7 +763,7 @@ public class SurfaceExtensionDogfoodTests {
 
     [Test]
     public async Task MultiStageWhen_Peer_FiresOnCompleted_ViaMcp() {
-        var (sessionId, _) = SessionStore.Create("MultiStagePeerWhen");
+        var (sessionId, _) = McpSessionStore.Create("MultiStagePeerWhen");
         var dsl = """
             domain MultiStagePeerWhen
             Tracker: entity {
@@ -795,7 +795,7 @@ public class SurfaceExtensionDogfoodTests {
             .IsTrue();
         await Assert.That(GetProp(sessionId, trackerId, "Status")).IsEqualTo("A");
 
-        SessionStore.TryGet(sessionId, out var st);
+        McpSessionStore.TryGet(sessionId, out var st);
         st!.InstanceMap[orderId].SetProperty("Code", "B");
         st.InstanceMap[trackerId].SetProperty("Status", "CLEARED");
 
@@ -808,7 +808,7 @@ public class SurfaceExtensionDogfoodTests {
 
     [Test]
     public async Task ApplyDsl_UnknownWhenStage_FailsAnalysis() {
-        var (sessionId, _) = SessionStore.Create("UnknownWhenStage");
+        var (sessionId, _) = McpSessionStore.Create("UnknownWhenStage");
         var bad = """
             domain UnknownWhenStage
             Tracker: entity {
@@ -828,7 +828,7 @@ public class SurfaceExtensionDogfoodTests {
             """;
         var apply = DslTool.ApplyDsl(sessionId, bad);
         if (apply.Success) {
-            SessionStore.TryGet(sessionId, out var state);
+            McpSessionStore.TryGet(sessionId, out var state);
             var analysis = DomainModelAnalyzer.Analyze(state!.Domain);
             await Assert.That(analysis.HasErrors || analysis.HasStructuralFailure).IsTrue();
         }
@@ -839,7 +839,7 @@ public class SurfaceExtensionDogfoodTests {
 
     [Test]
     public async Task ExportDomainToCSharp_WithPeerAnalysisError_FailsClosed() {
-        var (sessionId, _) = SessionStore.Create("PeerExportWithBindingError");
+        var (sessionId, _) = McpSessionStore.Create("PeerExportWithBindingError");
         // Force a domain that applies but has subscription binding errors if possible.
         // If apply rejects, export of empty/prior state is N/A — skip via assert on apply.
         var bad = """
@@ -866,7 +866,7 @@ public class SurfaceExtensionDogfoodTests {
             return;
         }
 
-        SessionStore.TryGet(sessionId, out var state);
+        McpSessionStore.TryGet(sessionId, out var state);
         var analysis = DomainModelAnalyzer.Analyze(state!.Domain);
         await Assert.That(analysis.HasErrors).IsTrue();
 
@@ -904,13 +904,13 @@ public class SurfaceExtensionDogfoodTests {
     }
 
     private static string GetProp(string sessionId, string instanceId, string name) {
-        SessionStore.TryGet(sessionId, out var st);
+        McpSessionStore.TryGet(sessionId, out var st);
         var instance = st!.InstanceMap[instanceId];
         return instance.Snapshot().TryGetValue(name, out var v) ? v?.ToString() ?? "(null)" : "(missing)";
     }
 
     private static string? GetStage(string sessionId, string instanceId) {
-        SessionStore.TryGet(sessionId, out var st);
+        McpSessionStore.TryGet(sessionId, out var st);
         return st!.InstanceMap[instanceId].CurrentStage;
     }
 

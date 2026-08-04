@@ -15,8 +15,8 @@ namespace Poly.Mcp.Tools;
 /// Runtime MCP tools: instance creation, inspection, and action execution.
 /// These wrap existing <see cref="DomainEntityInstance"/> and
 /// <see cref="DomainInstanceStore"/> machinery — not new domain IR.
-/// Session-scoped instances live on <see cref="SessionState.InstanceMap"/>
-/// and are registered in <see cref="SessionState.InstanceStore"/> for
+/// Session-scoped instances live on <see cref="McpSessionState.InstanceMap"/>
+/// and are registered in <see cref="McpSessionState.InstanceStore"/> for
 /// relationship/subscription support.
 /// </summary>
 [McpServerToolType]
@@ -118,7 +118,7 @@ Thin wrapper around DomainEntityInstance.Create — no new runtime machinery.")]
         [Description("Optional JSON object of initial property values, " +
             "e.g. {\"Name\":\"Alice\",\"Age\":30,\"Status\":\"Active\"}")]
         string? propertiesJson = null) {
-        if (!SessionStore.TryGet(sessionId, out var state))
+        if (!McpSessionStore.TryGet(sessionId, out var state))
             return Failure_NotFound(sessionId);
 
         // Resolve entity
@@ -167,7 +167,7 @@ Thin wrapper around DomainEntityInstance.Create — no new runtime machinery.")]
         }
 
         // Register under lock
-        var registered = SessionStore.TryModifyInstances(sessionId, st => {
+        var registered = McpSessionStore.TryModifyInstances(sessionId, st => {
             st.InstanceStore ??= new DomainInstanceStore();
             st.InstanceStore.Add(instance);
             st.InstanceMap[instanceId] = instance;
@@ -221,7 +221,7 @@ Use case — Collection quantifiers:
         [Description("Instance ID of the source (owning) instance")] string sourceInstanceId,
         [Description("Relationship name as defined in the domain (e.g. 'orders', 'loans')")] string relationshipName,
         [Description("Instance ID of the target (owned) instance")] string targetInstanceId) {
-        if (!SessionStore.TryGet(sessionId, out var state))
+        if (!McpSessionStore.TryGet(sessionId, out var state))
             return Failure_NotFound(sessionId);
 
         if (!state.InstanceMap.TryGetValue(sourceInstanceId, out var source))
@@ -282,7 +282,7 @@ Use case — Collection quantifiers:
         }
 
         try {
-            if (!SessionStore.TryModifyInstances(sessionId, st => {
+            if (!McpSessionStore.TryModifyInstances(sessionId, st => {
                 st.InstanceStore!.Link(relationshipName, source, target);
             }))
                 return Failure_NotFound(sessionId);
@@ -327,7 +327,7 @@ Use case — reassign a child from one parent to another:
         [Description("Instance ID of the source (owning) instance")] string sourceInstanceId,
         [Description("Relationship name as defined in the domain (e.g. 'orders', 'loans')")] string relationshipName,
         [Description("Instance ID of the target (owned) instance")] string targetInstanceId) {
-        if (!SessionStore.TryGet(sessionId, out var state))
+        if (!McpSessionStore.TryGet(sessionId, out var state))
             return Failure_NotFound(sessionId);
 
         if (!state.InstanceMap.TryGetValue(sourceInstanceId, out var source))
@@ -396,7 +396,7 @@ Use case — reassign a child from one parent to another:
                 Affordances: ["link_instances", "get_relationships"]);
 
         try {
-            if (!SessionStore.TryModifyInstances(sessionId, st => {
+            if (!McpSessionStore.TryModifyInstances(sessionId, st => {
                 st.InstanceStore!.Unlink(relationshipName, source, target);
             }))
                 return Failure_NotFound(sessionId);
@@ -427,7 +427,7 @@ Use case — reassign a child from one parent to another:
     public static DomainToolResponse GetInstance(
         [Description("Session ID")] string sessionId,
         [Description("Instance ID returned by create_instance")] string instanceId) {
-        if (!SessionStore.TryGet(sessionId, out var state))
+        if (!McpSessionStore.TryGet(sessionId, out var state))
             return Failure_NotFound(sessionId);
 
         if (!state.InstanceMap.TryGetValue(instanceId, out var instance))
@@ -486,7 +486,7 @@ Use case — reassign a child from one parent to another:
     public static DomainToolResponse ListInstances(
         [Description("Session ID")] string sessionId,
         [Description("Optional entity name filter — only list instances of this entity type")] string? entityName = null) {
-        if (!SessionStore.TryGet(sessionId, out var state))
+        if (!McpSessionStore.TryGet(sessionId, out var state))
             return Failure_NotFound(sessionId);
 
         var summaries = new List<InstanceSummaryData>();
@@ -543,7 +543,7 @@ Returns the result including new stage and any guard failures.")]
         [Description("Optional JSON object of action parameter values, " +
             "e.g. {\"amount\":100,\"reason\":\"urgent\"}")]
         string? argsJson = null) {
-        if (!SessionStore.TryGet(sessionId, out var state))
+        if (!McpSessionStore.TryGet(sessionId, out var state))
             return Failure_NotFound(sessionId);
 
         if (!state.InstanceMap.TryGetValue(instanceId, out var instance))
@@ -606,7 +606,7 @@ Returns the result including new stage and any guard failures.")]
             }
 
             if (newChildren.Count > 0) {
-                SessionStore.TryModifyInstances(sessionId, st => {
+                McpSessionStore.TryModifyInstances(sessionId, st => {
                     foreach (var child in newChildren) {
                         var childId = NewInstanceId();
                         st.InstanceStore ??= new DomainInstanceStore();

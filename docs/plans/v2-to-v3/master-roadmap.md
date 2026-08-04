@@ -44,7 +44,7 @@ MCP / direct API as thin consumers
 | 17 | Infrastructure Groups 1–7 | [`infrastructure-pass-NEXT.md`](../infrastructure-pass-NEXT.md) | **Complete** under bar |
 | — | SPE (export peer · entity when · owned policies) · peer `as` · store-aware `Rel exists` | SPE suite · commits | **Complete** |
 | — | DAS catalog / monopath analysis | DAS | **Complete** |
-| 18 | Q4 aggregates / date ops | query · absorption P1 | **Parked** (admit one suite) |
+| 18 | Q4 aggregates / date ops | query · absorption P1 | **Parked / lower priority** — dates not the next ship bet |
 | 19 | Infra Bar B / RestApiSurface / StorageAccess | infra NEXT | **Pull** |
 | 20 | E5 micro-tools / dogfood | effect · dogfood | **Parked** until admitted |
 | 21 | E3 / L\* / events | effect · expansion | **Pull / post–P3 / never** |
@@ -54,14 +54,14 @@ MCP / direct API as thin consumers
 ```text
 DONE:    M1–M4; Q1′+Q3′+link; infra IR; DAS; SPE peer/entity/owned; store-aware Rel exists; dogfood-fix G1/G3/HOST; DAU product parked
 CURRENT: (none) — admission control; no parallel product queues
-ADMIT:   A) dogfood SPE surface  OR  B) absorption P1 only (built-in temporal pack + specialization seams)
-PARKED:  DSL absorption P2–P5+; dogfood S*; grammar re-base; DomainAuthoringContext; analysis-consuming lowering; naming V3*
-PULL:    Q4; unlink; E5; Bar B; DAU commit ops
+ADMIT:   Prefer dogfood of shipped SPE / peer / exists (prove product path) — not temporal/dates first
+PARKED:  Absorption P1 dates/temporal pack (lower priority); P2–P5+; dogfood S* until admitted; grammar; DomainAuthoringContext; analysis-consuming lowering; naming V3*
+PULL:    Q4; unlink; E5; Bar B; DAU commit ops; multi-hop only if dogfood forces
 ```
 
-**Honest product claim today:** Path-prefix / exists / where **and** Q3′ quantifiers are authorable **and** evaluable (store-linked `EvaluatePolicy`). Peer binding: `when Rel Stage as name`. SPE: export peer handlers, entity-level `when`, owned policies. MCP: `create_instance` → `link_instances` → `evaluate_policy(instanceId=…)`. DSL has **no** `link` keyword (`create in Rel` for spawn-and-wire). JSON policies still local-only. Codegen DbContext/Program via Syntax IR; `.http` still string. **Temporal DSL authoring** (`Now - 12 days`) not yet product.
+**Honest product claim today:** Path-prefix / exists / where **and** Q3′ quantifiers are authorable **and** evaluable (store-linked `EvaluatePolicy`). Peer binding: `when Rel Stage as name`. SPE: export peer handlers, entity-level `when`, owned policies. MCP: `create_instance` → `link_instances` → `evaluate_policy(instanceId=…)`. DSL has **no** `link` keyword (`create in Rel` for spawn-and-wire). JSON policies still local-only. Codegen DbContext/Program via Syntax IR; `.http` still string. **Temporal DSL authoring** (`Now - 12 days`) not yet product — **intentionally not the next bet**.
 
-**Focus (2026-08-04):** Close unfinished-workstream thrash — **one primary only**. Prefer dogfood of shipped SPE/exists **or** a single temporal-pack suite after explicit admit. Do **not** open grammar, multi-hop, when any/all, and packs in parallel. DAU remains parked.
+**Focus (2026-08-04):** Close unfinished-workstream thrash — **one primary only**. Highest-value next ship is likely **proving what already shipped** (dogfood SPE/peer/exists on real scenarios), not new date surface. Temporal pack / specialization seams stay parked until dogfood or a concrete domain forces them. Do **not** open grammar, multi-hop, when any/all, and packs in parallel. DAU remains parked.
 
 ---
 

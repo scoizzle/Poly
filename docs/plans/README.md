@@ -36,7 +36,7 @@ Architectural rationale → **`docs/decisions/`**. Module maps → **`Poly/*/REA
 
 | Plan | Role | Unpark when |
 |------|------|-------------|
-| [**DSL absorption proposals**](domain-dsl-absorption-proposals.md) | Experiment → product styles (P1 temporal pack + seams, multi-hop, when any/all, …) | Admit **one** P* as sole suite |
+| [**DSL absorption proposals**](domain-dsl-absorption-proposals.md) | Experiment → product styles (P1 temporal **lower priority**, multi-hop, when any/all, …) | Admit **one** P* as sole suite; **not** dates-first by default |
 | [**MCP dogfood protocol**](v2-to-v3/mcp-dogfood-protocol.md) · [`dogfood-*`](v2-to-v3/simple-agent-tasks/dogfood-README.md) · [`dogfood-fix-*`](v2-to-v3/simple-agent-tasks/dogfood-fix-README.md) | Scenario discovery; fixes mostly done | Admit dogfood (e.g. SPE surface) as primary |
 | [**MCP dogfood orchestrator**](v2-to-v3/mcp-dogfood-orchestrator.md) | Dogfood loop tooling | With dogfood admission |
 | [**Domain analysis unification**](domain-analysis-unification.md) · [`dau-*`](simple-agent-tasks/dau-README.md) | Product bar met; codegen track paused | Explicit DAU reopen |

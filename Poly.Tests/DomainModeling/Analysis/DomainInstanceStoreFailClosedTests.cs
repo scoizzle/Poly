@@ -193,7 +193,7 @@ public class DomainInstanceStoreFailClosedTests {
         var tracker = (Entity)domain.Types[1];
         var pending = tracker.Stages[0];
 
-        // Catalog owns action maps (DAS W1.4); stage plans + contracts remain separate.
+        // Catalog owns action maps; stage plans + contracts remain separate.
         var catalog = analysis.GetMetadata<DomainCatalogMetadata>(domain);
         await Assert.That(catalog).IsNotNull();
         await Assert.That(catalog!.ActionsByEntityName.TryGetValue("Tracker", out var arm)).IsTrue();

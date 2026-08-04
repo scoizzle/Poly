@@ -15,8 +15,8 @@ namespace Poly.Mcp.Tools;
 /// Runtime MCP tools: instance creation, inspection, and action execution.
 /// These wrap existing <see cref="DomainEntityInstance"/> and
 /// <see cref="DomainInstanceStore"/> machinery — not new domain IR.
-/// Session-scoped instances live on <see cref="McpSessionState.InstanceMap"/>
-/// and are registered in <see cref="McpSessionState.InstanceStore"/> for
+/// Session-scoped instances live on <see cref="SessionState.InstanceMap"/>
+/// and are registered in <see cref="SessionState.InstanceStore"/> for
 /// relationship/subscription support.
 /// </summary>
 [McpServerToolType]
@@ -118,7 +118,7 @@ Thin wrapper around DomainEntityInstance.Create — no new runtime machinery.")]
         [Description("Optional JSON object of initial property values, " +
             "e.g. {\"Name\":\"Alice\",\"Age\":30,\"Status\":\"Active\"}")]
         string? propertiesJson = null) {
-        if (!McpSessionStore.TryGet(sessionId, out var state))
+        if (!SessionStore.TryGet(sessionId, out var state))
             return Failure_NotFound(sessionId);
 
         // Resolve entity
@@ -167,7 +167,7 @@ Thin wrapper around DomainEntityInstance.Create — no new runtime machinery.")]
         }
 
         // Register under lock
-        var registered = McpSessionStore.TryModifyInstances(sessionId, st => {
+        var registered = SessionStore.TryModifyInstances(sessionId, st => {
             st.InstanceStore ??= new DomainInstanceStore();
             st.InstanceStore.Add(instance);
             st.InstanceMap[instanceId] = instance;
@@ -190,7 +190,7 @@ Thin wrapper around DomainEntityInstance.Create — no new runtime machinery.")]
     /// <summary>
     /// Links two runtime instances via a named relationship, creating an edge
     /// in the session's instance store. Enables cross-entity policy evaluation
-    /// (e.g. Q3′ quantifiers like <c>any orders where Total > 100</c>) and
+    /// (e.g. Collection quantifiers like <c>any orders where Total > 100</c>) and
     /// stage-subscription fan-out.
     ///
     /// Both instances must already exist (created via <c>create_instance</c>).
@@ -211,7 +211,7 @@ source instance's ID to evaluate_policy(instanceId=...).
 Idempotent: calling link_instances with the same arguments multiple times
 is safe and will not create duplicate edges.
 
-Use case — Q3′ quantifiers:
+Use case — Collection quantifiers:
   1. create_instance for source entity (e.g. Customer)
   2. create_instance for target entity (e.g. Order)
   3. link_instances with relationship name (e.g. ""orders"")
@@ -221,7 +221,7 @@ Use case — Q3′ quantifiers:
         [Description("Instance ID of the source (owning) instance")] string sourceInstanceId,
         [Description("Relationship name as defined in the domain (e.g. 'orders', 'loans')")] string relationshipName,
         [Description("Instance ID of the target (owned) instance")] string targetInstanceId) {
-        if (!McpSessionStore.TryGet(sessionId, out var state))
+        if (!SessionStore.TryGet(sessionId, out var state))
             return Failure_NotFound(sessionId);
 
         if (!state.InstanceMap.TryGetValue(sourceInstanceId, out var source))
@@ -282,7 +282,7 @@ Use case — Q3′ quantifiers:
         }
 
         try {
-            if (!McpSessionStore.TryModifyInstances(sessionId, st => {
+            if (!SessionStore.TryModifyInstances(sessionId, st => {
                 st.InstanceStore!.Link(relationshipName, source, target);
             }))
                 return Failure_NotFound(sessionId);
@@ -327,7 +327,7 @@ Use case — reassign a child from one parent to another:
         [Description("Instance ID of the source (owning) instance")] string sourceInstanceId,
         [Description("Relationship name as defined in the domain (e.g. 'orders', 'loans')")] string relationshipName,
         [Description("Instance ID of the target (owned) instance")] string targetInstanceId) {
-        if (!McpSessionStore.TryGet(sessionId, out var state))
+        if (!SessionStore.TryGet(sessionId, out var state))
             return Failure_NotFound(sessionId);
 
         if (!state.InstanceMap.TryGetValue(sourceInstanceId, out var source))
@@ -396,7 +396,7 @@ Use case — reassign a child from one parent to another:
                 Affordances: ["link_instances", "get_relationships"]);
 
         try {
-            if (!McpSessionStore.TryModifyInstances(sessionId, st => {
+            if (!SessionStore.TryModifyInstances(sessionId, st => {
                 st.InstanceStore!.Unlink(relationshipName, source, target);
             }))
                 return Failure_NotFound(sessionId);
@@ -427,7 +427,7 @@ Use case — reassign a child from one parent to another:
     public static DomainToolResponse GetInstance(
         [Description("Session ID")] string sessionId,
         [Description("Instance ID returned by create_instance")] string instanceId) {
-        if (!McpSessionStore.TryGet(sessionId, out var state))
+        if (!SessionStore.TryGet(sessionId, out var state))
             return Failure_NotFound(sessionId);
 
         if (!state.InstanceMap.TryGetValue(instanceId, out var instance))
@@ -486,7 +486,7 @@ Use case — reassign a child from one parent to another:
     public static DomainToolResponse ListInstances(
         [Description("Session ID")] string sessionId,
         [Description("Optional entity name filter — only list instances of this entity type")] string? entityName = null) {
-        if (!McpSessionStore.TryGet(sessionId, out var state))
+        if (!SessionStore.TryGet(sessionId, out var state))
             return Failure_NotFound(sessionId);
 
         var summaries = new List<InstanceSummaryData>();
@@ -543,7 +543,7 @@ Returns the result including new stage and any guard failures.")]
         [Description("Optional JSON object of action parameter values, " +
             "e.g. {\"amount\":100,\"reason\":\"urgent\"}")]
         string? argsJson = null) {
-        if (!McpSessionStore.TryGet(sessionId, out var state))
+        if (!SessionStore.TryGet(sessionId, out var state))
             return Failure_NotFound(sessionId);
 
         if (!state.InstanceMap.TryGetValue(instanceId, out var instance))
@@ -606,7 +606,7 @@ Returns the result including new stage and any guard failures.")]
             }
 
             if (newChildren.Count > 0) {
-                McpSessionStore.TryModifyInstances(sessionId, st => {
+                SessionStore.TryModifyInstances(sessionId, st => {
                     foreach (var child in newChildren) {
                         var childId = NewInstanceId();
                         st.InstanceStore ??= new DomainInstanceStore();

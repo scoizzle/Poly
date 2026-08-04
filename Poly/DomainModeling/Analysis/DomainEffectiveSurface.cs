@@ -1,7 +1,7 @@
 namespace Poly.DomainModeling.Analysis;
 
 /// <summary>
-/// Single composition algorithm for stage-effective policies and actions (DAS W2).
+/// Single composition algorithm for stage-effective policies and actions.
 /// <para>
 /// <b>Canonical surface:</b> <see cref="StageCapabilityMetadata"/> / <see cref="StageCapabilityView"/>
 /// published by <see cref="CapabilityAnalyzer"/>. Helpers and MCP describe routes read that

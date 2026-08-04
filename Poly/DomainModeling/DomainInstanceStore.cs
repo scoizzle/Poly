@@ -25,7 +25,7 @@ using Poly.DomainModeling.Analysis;
 ///         <see cref="StageSubscriptionQuantifier.All"/> (fires if all linked targets match).</item>
 ///     </list>
 ///   </item>
-///   <item><b>Order:</b> stage-scoped handlers first, then entity-level (SPE-L2).</item>
+///   <item><b>Order:</b> stage-scoped handlers first, then entity-level (entity-level dispatch order).</item>
 ///   <item>Subscription effects execute on the subscriber with <c>this</c>=subscriber,
 ///     peer bag when <c>PeerBinding</c> is set.</item>
 ///   <item>If a subscriber transitions as a side effect, notification recurses (depth-limited).</item>

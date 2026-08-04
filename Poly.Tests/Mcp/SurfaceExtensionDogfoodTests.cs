@@ -8,17 +8,17 @@ using Poly.Mcp.Tools;
 namespace Poly.Tests.Mcp;
 
 /// <summary>
-/// SPE dogfood — agent-facing MCP path for shipped surface extensions:
-/// export peer (E), entity-level when + peer binder (L), owned path-prefix (O),
+/// Surface-extension dogfood — agent-facing MCP path for shipped surface extensions:
+/// export peer, entity-level when and peer binder, owned path-prefix,
 /// store-aware Rel exists. Prefer these over unit goldens when proving product honesty.
 /// </summary>
-public class SpeDogfoodTests {
+public class SurfaceExtensionDogfoodTests {
     /// <summary>
-    /// Shared SpeDogfood domain: entity-level peer when, stage-scoped notification when,
+    /// Shared surface-extension domain: entity-level peer when, stage-scoped notification when,
     /// owned profile policies, Rel exists. Used by multiple goldens.
     /// </summary>
-    private const string SpeDogfoodDomain = """
-        domain SpeDogfood
+    private const string SharedSurfaceExtensionDomain = """
+        domain SurfaceExtensionDogfood
 
         Customer: entity {
           Name: Text
@@ -60,12 +60,12 @@ public class SpeDogfoodTests {
     // ── Apply / analysis ───────────────────────────────────────
 
     [Test]
-    public async Task ApplyDsl_SpeSurface_AnalyzesClean() {
-        var (sessionId, _) = McpSessionStore.Create("SpeDogfood");
-        var apply = DslTool.ApplyDsl(sessionId, SpeDogfoodDomain);
+    public async Task ApplyDsl_SurfaceExtensions_AnalyzesClean() {
+        var (sessionId, _) = SessionStore.Create("SurfaceExtensionDogfood");
+        var apply = DslTool.ApplyDsl(sessionId, SharedSurfaceExtensionDomain);
         await Assert.That(apply.Success).IsTrue();
 
-        McpSessionStore.TryGet(sessionId, out var state);
+        SessionStore.TryGet(sessionId, out var state);
         await Assert.That(state).IsNotNull();
         var analysis = DomainModelAnalyzer.Analyze(state!.Domain);
         await Assert.That(analysis.HasStructuralFailure).IsFalse();
@@ -81,9 +81,9 @@ public class SpeDogfoodTests {
     }
 
     [Test]
-    public async Task ExportDsl_SpeSurface_RoundTripsPeerEntityWhenAndOwned() {
-        var (sessionId, _) = McpSessionStore.Create("SpeDogfood");
-        await Assert.That(DslTool.ApplyDsl(sessionId, SpeDogfoodDomain).Success).IsTrue();
+    public async Task ExportDsl_SurfaceExtensions_RoundTripsPeerEntityWhenAndOwned() {
+        var (sessionId, _) = SessionStore.Create("SurfaceExtensionDogfood");
+        await Assert.That(DslTool.ApplyDsl(sessionId, SharedSurfaceExtensionDomain).Success).IsTrue();
 
         var export = DslTool.ExportDsl(sessionId);
         await Assert.That(export.Success).IsTrue();
@@ -96,7 +96,7 @@ public class SpeDogfoodTests {
 
         var reapply = DslTool.ApplyDsl(sessionId, poly);
         await Assert.That(reapply.Success).IsTrue();
-        McpSessionStore.TryGet(sessionId, out var state);
+        SessionStore.TryGet(sessionId, out var state);
         var customer = state!.Domain.Types.OfType<Entity>().Single(e => e.Name == "Customer");
         await Assert.That(customer.Subscriptions[0].PeerBinding).IsEqualTo("order");
     }
@@ -105,9 +105,9 @@ public class SpeDogfoodTests {
 
     [Test]
     public async Task EntityLevel_PeerWhen_CopiesPeerCode_RegardlessOfSubscriberStage() {
-        // SPE-L: entity-level when fires in Idle (not Pending); peer binder copies order Code.
-        var (sessionId, _) = McpSessionStore.Create("SpeDogfood");
-        await Assert.That(DslTool.ApplyDsl(sessionId, SpeDogfoodDomain).Success).IsTrue();
+        // Entity-level: entity-level when fires in Idle (not Pending); peer binder copies order Code.
+        var (sessionId, _) = SessionStore.Create("SurfaceExtensionDogfood");
+        await Assert.That(DslTool.ApplyDsl(sessionId, SharedSurfaceExtensionDomain).Success).IsTrue();
 
         var custId = CreateAndId(sessionId, "Customer",
             """{"Name":"Alice","Status":"Quiet","LastOrderCode":"NONE"}""");
@@ -132,9 +132,9 @@ public class SpeDogfoodTests {
     [Test]
     public async Task StageScoped_When_FiresOnlyWhileSubscriberInPending() {
         // Contrast: move customer into Pending, then order Active → Status Notified + peer copy.
-        var (sessionId, _) = McpSessionStore.Create("SpeStageContrast");
+        var (sessionId, _) = SessionStore.Create("StageScopedVsEntityLevel");
         var dsl = """
-            domain SpeStageContrast
+            domain StageScopedVsEntityLevel
             Customer: entity {
               Status: Text
               LastOrderCode: Text
@@ -180,9 +180,9 @@ public class SpeDogfoodTests {
 
     [Test]
     public async Task StageScoped_PeerWhen_CopiesPeerCode_ViaMcp() {
-        var (sessionId, _) = McpSessionStore.Create("SpeStagePeer");
+        var (sessionId, _) = SessionStore.Create("StageScopedPeerBinding");
         var dsl = """
-            domain SpeStagePeer
+            domain StageScopedPeerBinding
             Tracker: entity {
               Status: Text
               Tracks: Order
@@ -217,8 +217,8 @@ public class SpeDogfoodTests {
 
     [Test]
     public async Task OwnedPolicy_CreateLinkEvaluate_TrueAndFalse() {
-        var (sessionId, _) = McpSessionStore.Create("SpeDogfood");
-        await Assert.That(DslTool.ApplyDsl(sessionId, SpeDogfoodDomain).Success).IsTrue();
+        var (sessionId, _) = SessionStore.Create("SurfaceExtensionDogfood");
+        await Assert.That(DslTool.ApplyDsl(sessionId, SharedSurfaceExtensionDomain).Success).IsTrue();
 
         var aliceId = CreateAndId(sessionId, "Customer",
             """{"Name":"Alice","Status":"x","LastOrderCode":"n"}""");
@@ -244,8 +244,8 @@ public class SpeDogfoodTests {
     [Test]
     public async Task OwnedPolicy_Unlinked_FailsClosed() {
         // No vacuous true when path-prefix has no outbound link.
-        var (sessionId, _) = McpSessionStore.Create("SpeDogfood");
-        await Assert.That(DslTool.ApplyDsl(sessionId, SpeDogfoodDomain).Success).IsTrue();
+        var (sessionId, _) = SessionStore.Create("SurfaceExtensionDogfood");
+        await Assert.That(DslTool.ApplyDsl(sessionId, SharedSurfaceExtensionDomain).Success).IsTrue();
 
         var custId = CreateAndId(sessionId, "Customer",
             """{"Name":"Alone","Status":"x","LastOrderCode":"n"}""");
@@ -254,12 +254,12 @@ public class SpeDogfoodTests {
         await Assert.That(eval.Success).IsFalse();
     }
 
-    // ── Rel exists (post-SPE store-aware) ───────────────────────
+    // ── Relationship exists (store-aware) ───────────────────────
 
     [Test]
     public async Task RelExists_LinkedAndUnlinked_EvaluatesHonestly() {
-        var (sessionId, _) = McpSessionStore.Create("SpeDogfood");
-        await Assert.That(DslTool.ApplyDsl(sessionId, SpeDogfoodDomain).Success).IsTrue();
+        var (sessionId, _) = SessionStore.Create("SurfaceExtensionDogfood");
+        await Assert.That(DslTool.ApplyDsl(sessionId, SharedSurfaceExtensionDomain).Success).IsTrue();
 
         var withProfile = CreateAndId(sessionId, "Customer",
             """{"Name":"Has","Status":"x","LastOrderCode":"n"}""");
@@ -282,8 +282,8 @@ public class SpeDogfoodTests {
 
     [Test]
     public async Task RelExists_Many_OrdersLinked_True() {
-        var (sessionId, _) = McpSessionStore.Create("SpeDogfood");
-        await Assert.That(DslTool.ApplyDsl(sessionId, SpeDogfoodDomain).Success).IsTrue();
+        var (sessionId, _) = SessionStore.Create("SurfaceExtensionDogfood");
+        await Assert.That(DslTool.ApplyDsl(sessionId, SharedSurfaceExtensionDomain).Success).IsTrue();
 
         var custId = CreateAndId(sessionId, "Customer",
             """{"Name":"C","Status":"x","LastOrderCode":"n"}""");
@@ -307,9 +307,9 @@ public class SpeDogfoodTests {
 
     [Test]
     public async Task ExportDomainToCSharp_PeerDependentWhen_EmitsPeerParamAndNotify() {
-        var (sessionId, _) = McpSessionStore.Create("SpeExport");
+        var (sessionId, _) = SessionStore.Create("PeerExport");
         var dsl = """
-            domain SpeExport
+            domain PeerExport
             Tracker: entity {
               Status: Text
               Tracks: Order
@@ -341,8 +341,8 @@ public class SpeDogfoodTests {
 
     [Test]
     public async Task ExportDomainToCSharp_EntityLevelPeerWhen_EmitsHandler() {
-        var (sessionId, _) = McpSessionStore.Create("SpeDogfood");
-        await Assert.That(DslTool.ApplyDsl(sessionId, SpeDogfoodDomain).Success).IsTrue();
+        var (sessionId, _) = SessionStore.Create("SurfaceExtensionDogfood");
+        await Assert.That(DslTool.ApplyDsl(sessionId, SharedSurfaceExtensionDomain).Success).IsTrue();
 
         var export = OracleTool.ExportDomainToCSharp(sessionId);
         await Assert.That(export.Success).IsTrue();
@@ -356,8 +356,8 @@ public class SpeDogfoodTests {
     [Test]
     public async Task FullPath_CreateLinkActivate_PeerPolicyExistsExport() {
         // One session exercises L peer + O owned + exists + export honesty.
-        var (sessionId, _) = McpSessionStore.Create("SpeDogfood");
-        await Assert.That(DslTool.ApplyDsl(sessionId, SpeDogfoodDomain).Success).IsTrue();
+        var (sessionId, _) = SessionStore.Create("SurfaceExtensionDogfood");
+        await Assert.That(DslTool.ApplyDsl(sessionId, SharedSurfaceExtensionDomain).Success).IsTrue();
 
         var custId = CreateAndId(sessionId, "Customer",
             """{"Name":"Full","Status":"Quiet","LastOrderCode":"NONE"}""");
@@ -394,9 +394,9 @@ public class SpeDogfoodTests {
 
     [Test]
     public async Task ApplyDsl_UnboundPeerPathPrefix_FailsAnalysis() {
-        var (sessionId, _) = McpSessionStore.Create("SpeFailClosed");
+        var (sessionId, _) = SessionStore.Create("UnboundPeerPath");
         var bad = """
-            domain SpeFailClosed
+            domain UnboundPeerPath
             Tracker: entity {
               Status: Text
               Tracks: Order
@@ -416,7 +416,7 @@ public class SpeDogfoodTests {
         // Apply may succeed evolve but analysis should report errors — or apply fails.
         // Product: SubscriptionAnalyzer fails closed on unbound peer-like root.
         if (apply.Success) {
-            McpSessionStore.TryGet(sessionId, out var state);
+            SessionStore.TryGet(sessionId, out var state);
             var analysis = DomainModelAnalyzer.Analyze(state!.Domain);
             await Assert.That(analysis.HasErrors || analysis.HasStructuralFailure).IsTrue();
         }
@@ -429,9 +429,9 @@ public class SpeDogfoodTests {
 
     [Test]
     public async Task CreateIn_ThenActivate_EntityLevelPeer_CopiesCode_ViaMcp() {
-        var (sessionId, _) = McpSessionStore.Create("SpeCreateInPeer");
+        var (sessionId, _) = SessionStore.Create("CreateInWithPeer");
         var dsl = """
-            domain SpeCreateInPeer
+            domain CreateInWithPeer
             Customer: entity {
               LastOrderCode: Text
               Ready: stage {
@@ -458,7 +458,7 @@ public class SpeDogfoodTests {
         await Assert.That(RuntimeTool.InvokeAction(sessionId, custId, "PlaceOrder").Success)
             .IsTrue();
 
-        McpSessionStore.TryGet(sessionId, out var st);
+        SessionStore.TryGet(sessionId, out var st);
         var orderKvp = st!.InstanceMap.First(kvp => kvp.Value.Entity.Name == "Order");
         var orderId = orderKvp.Key;
 
@@ -471,9 +471,9 @@ public class SpeDogfoodTests {
 
     [Test]
     public async Task Unlink_StopsPeerWhen_AndExistsFalse_ViaMcp() {
-        var (sessionId, _) = McpSessionStore.Create("SpeUnlink");
+        var (sessionId, _) = SessionStore.Create("UnlinkStopsPeer");
         var dsl = """
-            domain SpeUnlink
+            domain UnlinkStopsPeer
             Tracker: entity {
               Status: Text
               Tracks: Order
@@ -519,7 +519,7 @@ public class SpeDogfoodTests {
 
         await Assert.That(RuntimeTool.InvokeAction(sessionId, orderId, "Reset").Success).IsTrue();
         // Direct prop write via store instance for isolation
-        McpSessionStore.TryGet(sessionId, out var st);
+        SessionStore.TryGet(sessionId, out var st);
         st!.InstanceMap[trackerId].SetProperty("Status", "AFTER-UNLINK");
         await Assert.That(RuntimeTool.InvokeAction(sessionId, orderId, "Activate").Success)
             .IsTrue();
@@ -530,9 +530,9 @@ public class SpeDogfoodTests {
 
     [Test]
     public async Task TwoTrackers_OneOrderActive_BothPeersFire_ViaMcp() {
-        var (sessionId, _) = McpSessionStore.Create("SpeTwoSubs");
+        var (sessionId, _) = SessionStore.Create("TwoSubscribersOneOrder");
         var dsl = """
-            domain SpeTwoSubs
+            domain TwoSubscribersOneOrder
             Tracker: entity {
               LastCode: Text
               Tracks: Order
@@ -569,9 +569,9 @@ public class SpeDogfoodTests {
 
     [Test]
     public async Task RelNotExists_BeforeAndAfterLink_ViaMcp() {
-        var (sessionId, _) = McpSessionStore.Create("SpeNotExists");
+        var (sessionId, _) = SessionStore.Create("RelationshipNotExists");
         var dsl = """
-            domain SpeNotExists
+            domain RelationshipNotExists
             Customer: entity {
               Name: Text
               profile: owned Profile
@@ -603,10 +603,10 @@ public class SpeDogfoodTests {
 
     [Test]
     public async Task PathPrefix_MultipleLinks_EvaluateFailsClosed_ViaMcp() {
-        var (sessionId, _) = McpSessionStore.Create("SpeMultiLink");
+        var (sessionId, _) = SessionStore.Create("MultiLinkPathPrefix");
         // Use OneToOne profile but force two links if store allows — or many path-prefix.
         var dsl = """
-            domain SpeMultiLink
+            domain MultiLinkPathPrefix
             Customer: entity {
               Name: Text
               orders: many Order
@@ -623,7 +623,7 @@ public class SpeDogfoodTests {
             return;
         }
 
-        McpSessionStore.TryGet(sessionId, out var state);
+        SessionStore.TryGet(sessionId, out var state);
         var analysis = DomainModelAnalyzer.Analyze(state!.Domain);
         if (analysis.HasErrors) {
             await Assert.That(analysis.HasErrors).IsTrue();
@@ -646,13 +646,13 @@ public class SpeDogfoodTests {
             || eval.Message.Contains("Evaluation failed", StringComparison.Ordinal)).IsTrue();
     }
 
-    // ── Q3 empty-set honesty via MCP ───────────────────────────
+    // ── Quantifier empty-set honesty via MCP ───────────────────────────
 
     [Test]
     public async Task Quantifiers_EmptyLinks_Honesty_ViaMcp() {
-        var (sessionId, _) = McpSessionStore.Create("SpeEmptyQ3");
+        var (sessionId, _) = SessionStore.Create("EmptyQuantifiers");
         var dsl = """
-            domain SpeEmptyQ3
+            domain EmptyQuantifiers
             Customer: entity {
               Name: Text
               orders: many Order
@@ -690,9 +690,9 @@ public class SpeDogfoodTests {
 
     [Test]
     public async Task Require_HasOrders_BlocksThenPasses_ViaMcp() {
-        var (sessionId, _) = McpSessionStore.Create("SpeRequire");
+        var (sessionId, _) = SessionStore.Create("RequireRelationshipExists");
         var dsl = """
-            domain SpeRequire
+            domain RequireRelationshipExists
             Customer: entity {
               Status: Text
               orders: many Order
@@ -728,9 +728,9 @@ public class SpeDogfoodTests {
 
     [Test]
     public async Task If_RelExists_Branches_ViaMcp() {
-        var (sessionId, _) = McpSessionStore.Create("SpeIfExists");
+        var (sessionId, _) = SessionStore.Create("IfRelationshipExists");
         var dsl = """
-            domain SpeIfExists
+            domain IfRelationshipExists
             Customer: entity {
               Status: Text
               orders: many Order
@@ -763,9 +763,9 @@ public class SpeDogfoodTests {
 
     [Test]
     public async Task MultiStageWhen_Peer_FiresOnCompleted_ViaMcp() {
-        var (sessionId, _) = McpSessionStore.Create("SpeMultiStage");
+        var (sessionId, _) = SessionStore.Create("MultiStagePeerWhen");
         var dsl = """
-            domain SpeMultiStage
+            domain MultiStagePeerWhen
             Tracker: entity {
               Status: Text
               Tracks: Order
@@ -795,7 +795,7 @@ public class SpeDogfoodTests {
             .IsTrue();
         await Assert.That(GetProp(sessionId, trackerId, "Status")).IsEqualTo("A");
 
-        McpSessionStore.TryGet(sessionId, out var st);
+        SessionStore.TryGet(sessionId, out var st);
         st!.InstanceMap[orderId].SetProperty("Code", "B");
         st.InstanceMap[trackerId].SetProperty("Status", "CLEARED");
 
@@ -808,9 +808,9 @@ public class SpeDogfoodTests {
 
     [Test]
     public async Task ApplyDsl_UnknownWhenStage_FailsAnalysis() {
-        var (sessionId, _) = McpSessionStore.Create("SpeBadStage");
+        var (sessionId, _) = SessionStore.Create("UnknownWhenStage");
         var bad = """
-            domain SpeBadStage
+            domain UnknownWhenStage
             Tracker: entity {
               Status: Text
               Tracks: Order
@@ -828,7 +828,7 @@ public class SpeDogfoodTests {
             """;
         var apply = DslTool.ApplyDsl(sessionId, bad);
         if (apply.Success) {
-            McpSessionStore.TryGet(sessionId, out var state);
+            SessionStore.TryGet(sessionId, out var state);
             var analysis = DomainModelAnalyzer.Analyze(state!.Domain);
             await Assert.That(analysis.HasErrors || analysis.HasStructuralFailure).IsTrue();
         }
@@ -839,11 +839,11 @@ public class SpeDogfoodTests {
 
     [Test]
     public async Task ExportDomainToCSharp_WithPeerAnalysisError_FailsClosed() {
-        var (sessionId, _) = McpSessionStore.Create("SpeExportBad");
+        var (sessionId, _) = SessionStore.Create("PeerExportWithBindingError");
         // Force a domain that applies but has subscription binding errors if possible.
         // If apply rejects, export of empty/prior state is N/A — skip via assert on apply.
         var bad = """
-            domain SpeExportBad
+            domain PeerExportBad
             Tracker: entity {
               Status: Text
               Tracks: Order
@@ -866,7 +866,7 @@ public class SpeDogfoodTests {
             return;
         }
 
-        McpSessionStore.TryGet(sessionId, out var state);
+        SessionStore.TryGet(sessionId, out var state);
         var analysis = DomainModelAnalyzer.Analyze(state!.Domain);
         await Assert.That(analysis.HasErrors).IsTrue();
 
@@ -904,13 +904,13 @@ public class SpeDogfoodTests {
     }
 
     private static string GetProp(string sessionId, string instanceId, string name) {
-        McpSessionStore.TryGet(sessionId, out var st);
+        SessionStore.TryGet(sessionId, out var st);
         var instance = st!.InstanceMap[instanceId];
         return instance.Snapshot().TryGetValue(name, out var v) ? v?.ToString() ?? "(null)" : "(missing)";
     }
 
     private static string? GetStage(string sessionId, string instanceId) {
-        McpSessionStore.TryGet(sessionId, out var st);
+        SessionStore.TryGet(sessionId, out var st);
         return st!.InstanceMap[instanceId].CurrentStage;
     }
 

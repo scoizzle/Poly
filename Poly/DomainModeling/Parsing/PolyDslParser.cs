@@ -1074,7 +1074,7 @@ public sealed class PolyDslParser {
             case TokenKind.Identifier:
                 var name = _current.Text;
                 Advance();
-                // Q3′: Collection quantifier keywords (any/all/none/count).
+                // Collection quantifier keywords (any/all/none/count).
                 // These must be followed by a relationship name, then 'where' + body.
                 // Check before Q1′ path-prefix since 'any', 'all', 'none', 'count'
                 // are not valid as relationship names in Q1′ (those are entity names).
@@ -1179,7 +1179,7 @@ public sealed class PolyDslParser {
     }
 
     /// <summary>
-    /// Parses a Q3′ quantified expression: any|all|none Rel where body or count Rel [where body].
+    /// Parses a collection quantified expression: any|all|none Rel where body or count Rel [where body].
     /// The quantifier keyword + relationship name have already been consumed.
     /// </summary>
     private DomainExpression ParseQuantifiedExpression(string quantifier) {

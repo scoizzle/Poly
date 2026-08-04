@@ -7,7 +7,7 @@ using Poly.DomainModeling.Parsing;
 namespace Poly.Tests.DomainModeling.Analysis;
 
 /// <summary>
-/// DAS W3.1 — known fact-consumer passes must declare real Dependencies;
+/// Known fact-consumer passes must declare real Dependencies;
 /// pipeline order must honor those edges (no silent undeclared catalog/structure/topology reads).
 /// </summary>
 public class PassDependencyDeclarationTests {

@@ -6,14 +6,14 @@ namespace Poly.DomainModeling.Analysis;
 /// Publishes runtime-oriented contracts that are not the domain name→member
 /// catalog: relationship contracts and subscription dispatch plans
 /// (stage-scoped on <see cref="Stage"/>; entity-level always-active on <see cref="Entity"/>).
-/// Action/policy/type indexes are owned by <see cref="DomainCatalogPass"/> (DAS W1.4).
+/// Action/policy/type indexes are owned by <see cref="DomainCatalogPass"/>.
 /// </summary>
 /// <remarks>
 /// <para>
-/// SPE-L1 design: entity-level <c>Entity.Subscriptions</c> use the same
+/// Entity-level design: entity-level <c>Entity.Subscriptions</c> use the same
 /// <see cref="SubscriptionDispatchPlanMetadata"/> / <see cref="SubscriptionDispatchPlanEntry"/>
 /// shape as stage plans, bagged on the <see cref="Entity"/> node (not a domain-scoped map).
-/// Runtime notify (SPE-L2) consults the entity bag in addition to the current stage plan;
+/// Runtime notify (entity-level dispatch order) consults the entity bag in addition to the current stage plan;
 /// this pass only publishes facts.
 /// </para>
 /// </remarks>

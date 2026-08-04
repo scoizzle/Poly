@@ -51,7 +51,7 @@ public class RuntimeContractMetadataTests {
         await Assert.That(metadata!.EntityActions.ContainsKey("Reset")).IsTrue();
         await Assert.That(metadata.StageActions.ContainsKey("Pending")).IsTrue();
         await Assert.That(metadata.StageActions["Pending"].ContainsKey("Escalate")).IsTrue();
-        // No entity-keyed ARM dual-write (DAS W1.4).
+        // No entity-keyed ARM dual-write.
         await Assert.That(analysis.GetMetadata<ActionResolutionMetadata>(tracker)).IsNull();
     }
 
@@ -201,7 +201,7 @@ public class RuntimeContractMetadataTests {
         await Assert.That(index.RelationshipsByName.ContainsKey("Tracks")).IsTrue();
         await Assert.That(index.StagesByEntity["Tracker"].ContainsKey("Pending")).IsTrue();
         await Assert.That(index.ActionsByEntity["Tracker"].ContainsKey("Reset")).IsTrue();
-        // No domain-keyed MTI dual-write (DAS W1.4).
+        // No domain-keyed MTI dual-write.
         await Assert.That(analysis.GetMetadata<MutationTargetIndexMetadata>(domain)).IsNull();
     }
 }

@@ -31,7 +31,7 @@ internal sealed class SubscriptionAnalyzer : INodeAnalyzer {
         if (lookup is null) return;
 
         foreach (var entity in lookup.Entities) {
-            // Entity-level when is always-active (SPE-L2 dispatch); same contract + binding
+            // Entity-level when is always-active (entity-level dispatch); same contract + binding
             // validation as stage-scoped (including optional peer binder).
             foreach (var entitySub in entity.Subscriptions) {
                 ValidateSubscription(context, entitySub, entity, domain, lookup);

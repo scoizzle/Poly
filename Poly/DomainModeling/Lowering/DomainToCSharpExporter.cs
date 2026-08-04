@@ -267,7 +267,7 @@ public sealed class DomainToCSharpExporter {
                 body = LowerExpressionToMethodBody(policy.Expression, entity, domain, analysis: metadata);
             }
             catch (NotSupportedException) {
-                // Q3′ quantifiers (any/all/none/count) and other store-dependent
+                // Collection quantifiers (any/all/none/count) and other store-dependent
                 // expressions cannot be lowered to standalone C# methods yet.
                 // Generate a runtime exception so calling code fails loud.
                 body = new Block([
@@ -1223,7 +1223,7 @@ public sealed class DomainToCSharpExporter {
     internal static bool TryResolveEnumType(Domain? domain, INodeMetadataProvider? analysis, string typeName, out EnumType? enumType) {
         enumType = null;
 
-        // Catalog primary when analysis present (DAS W1.3 / W4.2).
+        // Catalog primary when analysis present.
         if (analysis is not null) {
             var lookup = analysis.GetTypeLookup(domain);
             if (lookup is not null

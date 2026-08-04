@@ -390,7 +390,7 @@ public class DomainToCSharpExporterTests {
 
     [Test]
     public async Task Export_PeerDependentSubscription_HandlerHasPeerParameterAndNotifyPassesThis() {
-        // SPE-E1: peer-dependent when … as name → typed peer param + notify(this).
+        // Export peer: peer-dependent when … as name → typed peer param + notify(this).
         var tracker = new Entity("Tracker", [
             new Property("Status", new DomainTypeReference("Text"), [])
         ], [], [], [
@@ -446,7 +446,7 @@ public class DomainToCSharpExporterTests {
 
     [Test]
     public async Task Export_PeerDependentSubscription_LowersPeerPathPrefixToParameterMember() {
-        // SPE-E2: assign target this.Status, value order.Code (peer param, not this.order).
+        // Export peer assign: assign target this.Status, value order.Code (peer param, not this.order).
         var tracker = new Entity("Tracker", [
             new Property("Status", new DomainTypeReference("Text"), [])
         ], [], [], [
@@ -503,7 +503,7 @@ public class DomainToCSharpExporterTests {
 
     [Test]
     public async Task Export_PeerDependentSubscription_DslGolden_HandlerParamNotifyAndPeerMember() {
-        // SPE-E3: product DSL path — when Tracks Active as order { assign Status to order Code }
+        // Export peer product path: product DSL path — when Tracks Active as order { assign Status to order Code }
         // → export succeeds with peer param, notify(this), and order.Code member usage.
         var (domain, analysis) = ParseAndAnalyze("""
             domain Test
@@ -561,7 +561,7 @@ public class DomainToCSharpExporterTests {
 
     [Test]
     public async Task Export_NestedPeerPathPrefix_Throws() {
-        // SPE-E3: nested under binder reaches export → fail closed (defense in depth).
+        // Export peer product path: nested under binder reaches export → fail closed (defense in depth).
         var tracker = new Entity("Tracker", [
             new Property("Status", new DomainTypeReference("Text"), [])
         ], [], [], [

@@ -128,7 +128,7 @@ internal sealed class SemanticDomainAnalyzer : INodeAnalyzer {
         }
 
         foreach (var stage in entity.Stages) {
-            // Same algorithm as Capability / GetEffectivePolicies (DAS W2).
+            // Same algorithm as Capability / GetEffectivePolicies.
             var stagePolicies = DomainEffectiveSurface.ComposeStagePolicies(entityPolicies, stage);
             if (stagePolicies.Count > 0) {
                 context.SetMetadata(stage, new EffectivePoliciesMetadata(stagePolicies));

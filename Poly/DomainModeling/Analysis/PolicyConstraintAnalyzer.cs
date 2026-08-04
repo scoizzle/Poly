@@ -89,7 +89,7 @@ internal sealed class PolicyConstraintAnalyzer : INodeAnalyzer {
             case RelationshipNavigation rn:
                 // Validate that the relationship is not a 'many' cardinality
                 // from the source entity's perspective. Path-prefix on a 'many'
-                // relationship is invalid (use Q3′ quantifiers instead).
+                // relationship is invalid (use Collection quantifiers instead).
                 ValidateRelationshipCardinality(context, lookup, rn, entity);
                 return;
             case ParameterAccess:
@@ -120,7 +120,7 @@ internal sealed class PolicyConstraintAnalyzer : INodeAnalyzer {
     }
 
     /// <summary>
-    /// Validates a Q3′ quantified expression body property references against the
+    /// Validates a collection quantified expression body property references against the
     /// target entity. Rejects unknown relationship, non-collection cardinality,
     /// reverse-side, self-rel, and unknown body properties.
     /// </summary>
@@ -259,7 +259,7 @@ internal sealed class PolicyConstraintAnalyzer : INodeAnalyzer {
                 $"Path-prefix expression '{rn.RelationshipName}' references relationship with " +
                 $"cardinality {relationship.Cardinality} from entity '{entity.Name}'. " +
                 "Bare path-prefix on a 'many' relationship is invalid. Use a collection " +
-                "quantifier instead (e.g. 'any Rel where ...' — Q3′).",
+                "quantifier instead (e.g. 'any Rel where ...').",
                 DomainModelDiagnosticCodes.RelationshipNavigationCardinality);
             return;
         }

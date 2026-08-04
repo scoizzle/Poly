@@ -11,7 +11,7 @@ public sealed record ActionCapabilityView(
     IReadOnlyList<Stage> TransitionTargets);
 
 /// <summary>
-/// Canonical stage-effective surface (DAS W2). Composition rules live in
+/// Canonical stage-effective surface. Composition rules live in
 /// <see cref="DomainEffectiveSurface"/> — entity+stage policies; stage-local actions.
 /// </summary>
 public sealed record StageCapabilityView(
@@ -103,7 +103,7 @@ internal sealed class CapabilityAnalyzer : INodeAnalyzer {
         foreach (var effect in FlattenEffects(action.Effects)) {
             if (effect is not StageTransitionEffect ste)
                 continue;
-            // Real Stage refs from catalog only — no empty stub stages (DAS W2).
+            // Real Stage refs from catalog only — no empty stub stages.
             if (stagesByName is not null
                 && stagesByName.TryGetValue(ste.TargetStage.StageName, out var resolved))
                 transitionTargetStages.Add(resolved);

@@ -254,7 +254,7 @@ internal sealed class OracleTool {
         [Description("Entity name")] string entityName,
         [Description("Action name")] string actionName,
         [Description("Optional stage name for stage-scoped actions")] string? stageName = null) {
-        if (!McpSessionStore.TryGet(sessionId, out var state))
+        if (!SessionStore.TryGet(sessionId, out var state))
             return new DomainToolResponse(Success: false, Message: $"Session '{sessionId}' not found.", Affordances: ["create_domain_session", "list_sessions"]);
         if (state.LatestAnalysis is null)
             return new DomainToolResponse(Success: false, Message: $"Session '{sessionId}' has no analysis. Apply a domain first (apply_dsl or evolution).", SessionId: sessionId, Affordances: ["apply_dsl", "get_domain_overview"]);
@@ -349,7 +349,7 @@ internal sealed class OracleTool {
         [Description("Entity name")] string entityName,
         [Description("Action name")] string actionName,
         [Description("Optional stage name for stage-scoped actions")] string? stageName = null) {
-        if (!McpSessionStore.TryGet(sessionId, out var state))
+        if (!SessionStore.TryGet(sessionId, out var state))
             return new DomainToolResponse(Success: false, Message: $"Session '{sessionId}' not found.", Affordances: ["create_domain_session", "list_sessions"]);
         if (state.LatestAnalysis is null)
             return new DomainToolResponse(Success: false, Message: $"Session '{sessionId}' has no analysis. Apply a domain first (apply_dsl or evolution).", SessionId: sessionId, Affordances: ["apply_dsl", "get_domain_overview"]);
@@ -418,7 +418,7 @@ internal sealed class OracleTool {
     [McpServerTool(Name = "export_domain_to_csharp"), Description("Generates C# source code for an entire domain session as a set of record/class definitions. Each entity becomes a C# record with its properties, navigation properties (as collections for many, references for one), stages as enums or additional state, and actions as methods with their lowered effects as the method body. Useful for inspecting how a domain model maps to C#.")]
     public static DomainToolResponse ExportDomainToCSharp(
         [Description("Session ID")] string sessionId) {
-        if (!McpSessionStore.TryGet(sessionId, out var state))
+        if (!SessionStore.TryGet(sessionId, out var state))
             return new DomainToolResponse(Success: false, Message: $"Session '{sessionId}' not found.", Affordances: ["create_domain_session", "list_sessions"]);
         if (state.LatestAnalysis is null)
             return new DomainToolResponse(Success: false, Message: $"Session '{sessionId}' has no analysis. Apply a domain first (apply_dsl or evolution).", SessionId: sessionId, Affordances: ["apply_dsl", "get_domain_overview"]);
@@ -497,7 +497,7 @@ internal sealed class OracleTool {
         [Description("Element kind: 'entity', 'stage', 'action', 'policy', or 'relationship'")] string kind,
         [Description("Element name")] string name,
         [Description("Optional entity name to disambiguate stage/action/policy (recommended when multiple entities share the same element name)")] string? entityName = null) {
-        if (!McpSessionStore.TryGet(sessionId, out var state))
+        if (!SessionStore.TryGet(sessionId, out var state))
             return new DomainToolResponse(Success: false, Message: $"Session '{sessionId}' not found.", Affordances: ["create_domain_session", "list_sessions"]);
 
         try {
@@ -515,7 +515,7 @@ internal sealed class OracleTool {
         }
     }
 
-    private static DomainToolResponse DescribeEntity(string sessionId, McpSessionState state, string name) {
+    private static DomainToolResponse DescribeEntity(string sessionId, SessionState state, string name) {
         var detail = DomainQueries.GetEntity(state.Domain, name, state.LatestAnalysis);
         if (detail is null) return new DomainToolResponse(Success: false, Message: $"Entity '{name}' not found.", SessionId: sessionId, Affordances: ["get_domain_overview", "add_entity"]);
 
@@ -527,12 +527,12 @@ internal sealed class OracleTool {
         return new DomainToolResponse(Success: true, Message: sb.ToString(), SessionId: sessionId, Data: new DomainElementData("entity", name, null, sb.ToString(), sb.ToString()), Affordances: ["get_entity_detail", "get_domain_analysis"]);
     }
 
-    private static DomainToolResponse DescribeStage(string sessionId, McpSessionState state, string name, string? entityName = null) {
+    private static DomainToolResponse DescribeStage(string sessionId, SessionState state, string name, string? entityName = null) {
         if (state.LatestAnalysis is null)
             return new DomainToolResponse(Success: false, Message: $"Session '{sessionId}' has no analysis. Apply a domain first (apply_dsl or evolution).", SessionId: sessionId, Affordances: ["apply_dsl", "get_domain_overview"]);
 
         // Structural entity enumeration (projection) + ESM-backed stage resolution only.
-        // Missing EntityStructureMetadata ≠ not-found (DAS W4.2 / P3).
+        // Missing EntityStructureMetadata ≠ not-found.
         var analysis = state.LatestAnalysis;
         var entities = entityName is not null
             ? state.Domain.Types.OfType<Entity>().Where(e => string.Equals(e.Name, entityName, StringComparison.Ordinal))
@@ -564,11 +564,11 @@ internal sealed class OracleTool {
         return new DomainToolResponse(Success: false, Message: $"Stage '{name}' not found on any entity.", SessionId: sessionId, Affordances: ["get_domain_overview"]);
     }
 
-    private static DomainToolResponse DescribeAction(string sessionId, McpSessionState state, string name, string? entityName = null) {
+    private static DomainToolResponse DescribeAction(string sessionId, SessionState state, string name, string? entityName = null) {
         if (state.LatestAnalysis is null)
             return new DomainToolResponse(Success: false, Message: $"Session '{sessionId}' has no analysis. Apply a domain first (apply_dsl or evolution).", SessionId: sessionId, Affordances: ["apply_dsl", "get_domain_overview"]);
 
-        // Catalog action map only (DAS W1.4 / W4.2). Missing catalog ≠ not-found.
+        // Catalog action map only. Missing catalog ≠ not-found.
         var analysis = state.LatestAnalysis;
         if (analysis.GetCatalog(state.Domain) is null)
             return new DomainToolResponse(Success: false, Message: $"Session analysis is missing DomainCatalogMetadata required to describe action '{name}'.", SessionId: sessionId, Affordances: ["get_domain_analysis"]);
@@ -610,11 +610,11 @@ internal sealed class OracleTool {
         return new DomainToolResponse(Success: false, Message: $"Action '{name}' not found on any entity.", SessionId: sessionId, Affordances: ["get_entity_detail"]);
     }
 
-    private static DomainToolResponse DescribePolicy(string sessionId, McpSessionState state, string name, string? entityName = null) {
+    private static DomainToolResponse DescribePolicy(string sessionId, SessionState state, string name, string? entityName = null) {
         if (state.LatestAnalysis is null)
             return new DomainToolResponse(Success: false, Message: $"Session '{sessionId}' has no analysis. Apply a domain first (apply_dsl or evolution).", SessionId: sessionId, Affordances: ["apply_dsl", "get_domain_overview"]);
 
-        // Catalog mutation index only (DAS W1.4 / W4.2). Missing index ≠ not-found.
+        // Catalog mutation index only. Missing index ≠ not-found.
         var analysis = state.LatestAnalysis;
         var mti = analysis.GetMutationIndex(state.Domain);
         if (mti is null)
@@ -668,11 +668,11 @@ internal sealed class OracleTool {
         return new DomainToolResponse(Success: false, Message: $"Policy '{name}' not found on any entity.", SessionId: sessionId, Affordances: ["get_entity_detail"]);
     }
 
-    private static DomainToolResponse DescribeRelationship(string sessionId, McpSessionState state, string name) {
+    private static DomainToolResponse DescribeRelationship(string sessionId, SessionState state, string name) {
         if (state.LatestAnalysis is null)
             return new DomainToolResponse(Success: false, Message: $"Session '{sessionId}' has no analysis. Apply a domain first (apply_dsl or evolution).", SessionId: sessionId, Affordances: ["apply_dsl", "get_domain_overview"]);
 
-        // Catalog relationship lookup only (DAS W1.3 / W4.2). Missing catalog ≠ not-found.
+        // Catalog relationship lookup only. Missing catalog ≠ not-found.
         var analysis = state.LatestAnalysis;
         if (analysis.GetRelationshipLookup(state.Domain) is null)
             return new DomainToolResponse(Success: false, Message: $"Session analysis is missing DomainCatalogMetadata (relationship lookup) required to describe relationship '{name}'.", SessionId: sessionId, Affordances: ["get_domain_analysis"]);

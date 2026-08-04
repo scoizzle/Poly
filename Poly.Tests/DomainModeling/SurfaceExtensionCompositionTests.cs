@@ -7,11 +7,11 @@ using Poly.DomainModeling.Parsing;
 namespace Poly.Tests.DomainModeling;
 
 /// <summary>
-/// Composition / interaction goldens for SPE + graph honesty — create-in+peer,
+/// Composition and interaction goldens for surface extensions and graph honesty — create-in+peer,
 /// multi-subscriber fan-out, unlink, multi-stage when, stage+entity peer last-writer,
 /// require/if with store policies. Prefer DSL→evolve→runtime paths over pure IR.
 /// </summary>
-public class SpeCompositionTests {
+public class SurfaceExtensionCompositionTests {
     private static (Domain Domain, AnalysisResult Analysis) ParseAndAnalyze(string poly) {
         var changes = new PolyDslParser(poly).Parse();
         var result = new DomainEvolution(new Domain("_", [], [])).Apply(changes);
@@ -440,7 +440,7 @@ public class SpeCompositionTests {
             || messages.Contains("peer", StringComparison.OrdinalIgnoreCase)).IsTrue();
     }
 
-    // ── Q3 empty-set honesty (runtime) ─────────────────────────
+    // ── Quantifier empty-set honesty (runtime) ─────────────────────────
 
     [Test]
     public async Task Quantifiers_EmptyLinks_NoVacuousAll_NoneTrue_CountZero() {

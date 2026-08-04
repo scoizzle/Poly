@@ -8,7 +8,7 @@ using Poly.DomainModeling.Parsing;
 namespace Poly.Tests.DomainModeling.Analysis;
 
 /// <summary>
-/// DAS W3.2 — fact emitters vs validate packs: RequiredProperties / create-in facts
+/// fact emitters vs validate packs: RequiredProperties / create-in facts
 /// are published by dedicated passes; PolicyConstraint and Effect remain diagnostic packs.
 /// </summary>
 public class ValidationFactsSplitTests {

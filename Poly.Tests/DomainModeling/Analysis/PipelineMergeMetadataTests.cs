@@ -325,7 +325,7 @@ public class PipelineMergeMetadataTests {
         var analysis = DomainModelAnalyzer.Analyze(domain);
 
         // Telemetry — all passes must have run (count matches UseDomainModelAnalysisPipeline)
-        // 20 passes registered (includes RequiredPropertiesPass + EffectFactsPass, DAS W3.2)
+        // 20 passes registered (includes RequiredPropertiesPass + EffectFactsPass)
         await Assert.That(analysis.Telemetry.Passes.Count).IsGreaterThanOrEqualTo(20);
         await Assert.That(analysis.Telemetry.Passes.All(p => p.Elapsed > TimeSpan.Zero)).IsTrue();
 
@@ -393,7 +393,7 @@ public class PipelineMergeMetadataTests {
 
         // AuthoringSuggestionAnalyzer — diagnostics only (DMAS001 hints)
 
-        // DomainCatalogPass — sole name→member catalog (DAS W1.4)
+        // DomainCatalogPass — sole name→member catalog
         var catalog = analysis.GetMetadata<DomainCatalogMetadata>(domain);
         await Assert.That(catalog).IsNotNull();
         await Assert.That(catalog!.Index).IsNotNull();

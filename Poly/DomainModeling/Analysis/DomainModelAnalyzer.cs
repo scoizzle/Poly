@@ -59,7 +59,7 @@ public static class DomainModelAnalysisBuilderExtensions {
         public AnalyzerBuilder UseDomainModelAnalysisPipeline() {
             // Registration order must introduce each pass only after its declared
             // Dependencies are present (AnalyzerBuilder inserts after the last dep).
-            // Fact emitters vs validate packs (DAS W3.2):
+            // Fact emitters vs validate packs:
             //   RequiredPropertiesPass / EffectFactsPass publish bags;
             //   PolicyConstraintAnalyzer / EffectAnalyzer are diagnostic packs only.
             // Lint-only: Structural, PolicyConstraint, Effect, ConstraintQuality,
@@ -67,7 +67,7 @@ public static class DomainModelAnalysisBuilderExtensions {
             builder.AddAnalyzer(new StructuralDomainAnalyzer());
             builder.AddAnalyzer(new SemanticDomainAnalyzer());
             builder.AddAnalyzer(new RuntimeContractAnalyzer());
-            // Sole name→member catalog publisher (DAS W1.4)
+            // Sole name→member catalog publisher
             builder.AddAnalyzer(new DomainCatalogPass());
             builder.AddAnalyzer(new RequiredPropertiesPass());
             builder.AddAnalyzer(new PolicyConstraintAnalyzer());
@@ -88,7 +88,7 @@ public static class DomainModelAnalysisBuilderExtensions {
             builder.AddAnalyzer(new StoragePass());
             builder.AddAnalyzer(new TransportPass());
             builder.AddAnalyzer(new AuthoringSuggestionAnalyzer());
-            // Entity Syntax projection is export-time only (DAS W0) — not an analysis fact.
+            // Entity Syntax projection is export-time only — not an analysis fact.
             return builder;
         }
 

@@ -206,7 +206,7 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Node
             _ => throw new NotSupportedException($"DateOperation kind '{d.Kind}' is not supported."),
         };
 
-    // Q3′ quantifiers — authoring-only for now (need store-aware evaluation).
+    // Collection quantifiers — authoring-only for now (need store-aware evaluation).
     protected override Node AnyExpr(AnyExpr a) => throw Q3NotSupported("any", a.RelationshipName);
     protected override Node AllExpr(AllExpr a) => throw Q3NotSupported("all", a.RelationshipName);
     protected override Node NoneExpr(NoneExpr n) => throw Q3NotSupported("none", n.RelationshipName);
@@ -214,6 +214,6 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Node
 
     private static Exception Q3NotSupported(string quantifier, string relName) =>
         new NotSupportedException(
-            $"Q3′ quantifier '{quantifier} {relName} …' requires store-aware evaluation " +
+            $"Collection quantifier '{quantifier} {relName} …' requires store-aware evaluation " +
             "which is not yet implemented on the VM compilation path.");
 }

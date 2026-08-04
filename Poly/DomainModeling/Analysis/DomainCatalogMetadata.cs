@@ -4,7 +4,7 @@ namespace Poly.DomainModeling.Analysis;
 
 /// <summary>
 /// Single domain-scoped catalog of name→member maps for semantic lookup.
-/// Sole write site for action-resolution and mutation-target indexes (DAS W1.4).
+/// Sole write site for action-resolution and mutation-target indexes.
 /// Embeds intermediate Semantic type/relationship lookups; product consumers
 /// read this bag via <see cref="DomainSemanticLookupExtensions"/>.
 /// </summary>

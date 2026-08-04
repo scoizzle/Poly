@@ -482,7 +482,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     }
 
     private Entity? ResolveEntity(string typeName) {
-        // Catalog primary when domain + analysis present (DAS W1.3).
+        // Catalog primary when domain + analysis present.
         if (_analysis is not null) {
             var lookup = _analysis.GetTypeLookup(_domain);
             if (lookup is not null

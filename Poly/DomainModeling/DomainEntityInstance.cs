@@ -26,7 +26,7 @@ namespace Poly.DomainModeling;
 /// only valid instances. Structural validation (required properties exist,
 /// types are coercible) happens at creation time.</para>
 ///
-/// <para><b>Domain-bound vs standalone (DAS W4.1):</b></para>
+/// <para><b>Domain-bound vs standalone:</b></para>
 /// <list type="bullet">
 ///   <item><b>Domain non-null:</b> semantic dispatch uses analysis catalog/helpers only
 ///     (<see cref="RuntimeAnalysisCache"/> → catalog / structure / subscription plans).
@@ -156,7 +156,7 @@ public sealed record DomainEntityInstance {
     /// VM (direct AST lowering — canonical path). Returns <c>true</c> if the
     /// policy's guard expression is satisfied.
     ///
-    /// <para>Q3′ quantifiers (any/all/none/count) are preprocessed before
+    /// <para>Collection quantifiers (any/all/none/count) are preprocessed before
     /// lowering — evaluated against the current store's linked instances
     /// and replaced with literal results. This keeps the VM lowering path
     /// quantifier-free while enabling store-aware policy evaluation.</para>
@@ -1148,10 +1148,10 @@ public sealed record DomainEntityInstance {
         return result;
     }
 
-    // ── Q3′ quantifier preprocessing ──────────────────────────
+    // ── Collection quantifier preprocessing ──────────────────────────
 
     /// <summary>
-    /// Walks an expression tree and evaluates Q3′ quantifier nodes
+    /// Walks an expression tree and evaluates collection quantifier nodes
     /// (AnyExpr/AllExpr/NoneExpr/CountExpr) and to-one
     /// <see cref="RelationshipNavigation"/> against the current store,
     /// replacing them with literal results. Non-store nodes are

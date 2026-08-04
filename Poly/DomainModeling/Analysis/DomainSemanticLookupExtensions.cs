@@ -5,7 +5,7 @@ namespace Poly.DomainModeling.Analysis;
 /// <summary>
 /// Shared semantic lookup helpers over analysis metadata.
 /// Product paths with a domain key read <see cref="DomainCatalogMetadata"/> only
-/// (DAS W1.4 — dual-write of ARM/MTI retired). Domain-less helpers fall back to
+/// (dual-write of ARM/MTI retired). Domain-less helpers fall back to
 /// intermediate Semantic DTLM/RLM bags used mid-pipeline.
 /// Methods fail closed (false/empty) when required metadata is absent —
 /// they do not tree-scan the domain.
@@ -151,7 +151,7 @@ public static class DomainSemanticLookupExtensions {
     // ── Effective surface (stage policies / actions) ──────────
 
     /// <summary>
-    /// Effective policies at a stage (DAS W2). Prefer the canonical
+    /// Effective policies at a stage. Prefer the canonical
     /// <see cref="StageCapabilityMetadata"/> surface; else re-apply
     /// <see cref="DomainEffectiveSurface"/> over catalog Index maps
     /// (entity + stage policies only — not action policies).
@@ -180,7 +180,7 @@ public static class DomainSemanticLookupExtensions {
     }
 
     /// <summary>
-    /// Effective actions at a stage (DAS W2). Prefer the canonical
+    /// Effective actions at a stage. Prefer the canonical
     /// <see cref="StageCapabilityMetadata"/> surface; else stage-local actions
     /// via <see cref="DomainEffectiveSurface"/> (stage-local only).
     /// </summary>

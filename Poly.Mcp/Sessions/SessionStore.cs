@@ -9,21 +9,21 @@ using Poly.DomainModeling.Evolution;
 namespace Poly.Mcp.Sessions;
 
 /// <summary>
-/// Shared default parser/analyzer inputs for MCP sessions.
+/// Shared default parser/analyzer inputs for agent tool sessions.
 /// New sessions snapshot these defaults into session state.
 /// </summary>
-internal static class McpDefaults {
+internal static class SessionDefaults {
     public static DomainParserInputs ParserInputs { get; } = DomainInputDefaults.SqlParser;
 }
 
 /// <summary>
-/// V3 session state: holds the current V3 <see cref="Domain"/> root,
+/// Session state: holds the current <see cref="Domain"/> root,
 /// the latest analysis result, a monotonically increasing revision number,
 /// and a runtime instance store for exercising domain lifecycle.
 /// No V2 types, no revision snapshot history.
 /// Workspace/session management lives here in MCP — not in DomainModeling.
 /// </summary>
-internal sealed record McpSessionState(
+internal sealed record SessionState(
     Domain Domain,
     AnalysisResult? LatestAnalysis,
     long Revision,
@@ -49,23 +49,23 @@ internal sealed record McpSessionState(
 /// Sessions are identified by a string sessionId (typically a GUID).
 /// Bootstrap uses <see cref="DomainFactory.Create"/> from the DomainModeling API.
 /// </summary>
-internal static class McpSessionStore {
-    private static readonly ConcurrentDictionary<string, McpSessionState> Sessions = new(StringComparer.Ordinal);
+internal static class SessionStore {
+    private static readonly ConcurrentDictionary<string, SessionState> Sessions = new(StringComparer.Ordinal);
     private static readonly Lock StoreLock = new();
 
     /// <summary>
     /// Creates a new session with a bootstrapped domain.
     /// </summary>
-    public static (string SessionId, McpSessionState State) Create(string domainName, string? preferredSessionId = null) {
+    public static (string SessionId, SessionState State) Create(string domainName, string? preferredSessionId = null) {
         lock (StoreLock) {
             var sessionId = string.IsNullOrWhiteSpace(preferredSessionId)
                 ? Guid.NewGuid().ToString("N")
                 : preferredSessionId;
 
             var domain = DomainFactory.Create(domainName);
-            var parserInputs = McpDefaults.ParserInputs;
+            var parserInputs = SessionDefaults.ParserInputs;
             var analysis = DomainModelAnalyzer.Analyze(domain);
-            var state = new McpSessionState(domain, analysis, Revision: 0, parserInputs);
+            var state = new SessionState(domain, analysis, Revision: 0, parserInputs);
             Sessions[sessionId] = state;
             return (sessionId, state);
         }
@@ -74,7 +74,7 @@ internal static class McpSessionStore {
     /// <summary>
     /// Gets an existing session by ID. Returns false if not found.
     /// </summary>
-    public static bool TryGet(string sessionId, out McpSessionState session) {
+    public static bool TryGet(string sessionId, out SessionState session) {
         if (string.IsNullOrWhiteSpace(sessionId)) {
             session = null!;
             return false;
@@ -111,7 +111,7 @@ internal static class McpSessionStore {
             }
 
             // Fresh state: new domain root clears InstanceMap/InstanceStore (entity refs stale).
-            var next = new McpSessionState(
+            var next = new SessionState(
                 outcome.Root,
                 outcome.Analysis,
                 current.Revision + 1,
@@ -139,7 +139,7 @@ internal static class McpSessionStore {
     /// Atomically replaces a session's domain and analysis. The revision counter
     /// is set to the current revision + 1 (not reset to zero), so agents see
     /// monotonically increasing revisions across both evolve and replace cycles.
-    /// Runtime instances are cleared (new empty <see cref="McpSessionState.InstanceMap"/>)
+    /// Runtime instances are cleared (new empty <see cref="SessionState.InstanceMap"/>)
     /// because they hold entity/identity references from the previous domain root.
     /// Used by <c>apply_dsl</c> to replace the session with a freshly-parsed domain.
     /// </summary>
@@ -151,7 +151,7 @@ internal static class McpSessionStore {
             if (!Sessions.TryGetValue(sessionId, out var current))
                 return false;
             // Fresh state: domain + analysis only. InstanceMap/InstanceStore reset.
-            Sessions[sessionId] = new McpSessionState(
+            Sessions[sessionId] = new SessionState(
                 domain,
                 analysis,
                 current.Revision + 1,
@@ -162,11 +162,11 @@ internal static class McpSessionStore {
 
     /// <summary>
     /// Provides locked access to a session's state for runtime instance operations.
-    /// The callback receives the current <see cref="McpSessionState"/> and can
+    /// The callback receives the current <see cref="SessionState"/> and can
     /// modify <c>InstanceMap</c> and <c>InstanceStore</c> in place (they are mutable).
     /// Returns <c>true</c> if the session was found, <c>false</c> otherwise.
     /// </summary>
-    public static bool TryModifyInstances(string sessionId, Action<McpSessionState> action) {
+    public static bool TryModifyInstances(string sessionId, Action<SessionState> action) {
         if (string.IsNullOrWhiteSpace(sessionId))
             throw new ArgumentException("Session ID is required.", nameof(sessionId));
 

@@ -4,7 +4,7 @@ using Poly.DomainModeling.Constraints;
 namespace Poly.DomainModeling.Analysis;
 
 /// <summary>
-/// Thin pack DTO adapter (DAS W2): projects already-analyzed capability and
+/// Thin pack DTO adapter: projects already-analyzed capability and
 /// effective-policy facts into <see cref="BehaviorMetadata"/> for codegen.
 /// Does not re-compose stage-effective policies/actions or re-walk effects for
 /// transitions — those live on the Capability surface only.

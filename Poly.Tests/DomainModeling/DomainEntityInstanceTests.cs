@@ -1182,7 +1182,7 @@ public class DomainEntityInstanceTests {
 
     [Test]
     public async Task EntityLevelSubscription_AnalysisAccepts_WhenRelAndStagesValid() {
-        // SPE-L3: entity-level when is always-active; no dispatch warn / peer hard error.
+        // Entity-level: entity-level when is always-active; no dispatch warn / peer hard error.
         var entity = new Entity("Tracker", [
             new Property("Status", new DomainTypeReference("Text"), [])
         ], [], [], [
@@ -1212,7 +1212,7 @@ public class DomainEntityInstanceTests {
 
     [Test]
     public async Task EntityLevelSubscription_Fires_WhenSubscriberNotInStageWithWhen() {
-        // SPE-L2: entity-level when fires regardless of subscriber stage (Idle has no stage-local when).
+        // Entity-level dispatch: entity-level when fires regardless of subscriber stage (Idle has no stage-local when).
         var tracker = new Entity("Tracker", [
             new Property("Status", new DomainTypeReference("Text"), [])
         ], [], [], [
@@ -1262,7 +1262,7 @@ public class DomainEntityInstanceTests {
 
     [Test]
     public async Task EntityLevelAndStageSubscription_StageFirstThenEntityLevel() {
-        // SPE-L2 order lock: stage-scoped effects run before entity-level for the same notify.
+        // Dispatch order: stage-scoped effects run before entity-level for the same notify.
         var tracker = new Entity("Tracker", [
             new Property("Status", new DomainTypeReference("Text"), [])
         ], [], [], [
@@ -1367,7 +1367,7 @@ public class DomainEntityInstanceTests {
 
     [Test]
     public async Task EntityLevelSubscription_WithPeerBinding_AnalysisAccepts() {
-        // SPE-L3: as name on entity-level is allowed under the same rules as stage.
+        // Entity-level: as name on entity-level is allowed under the same rules as stage.
         var entity = new Entity("Tracker", [
             new Property("Status", new DomainTypeReference("Text"), [])
         ], [], [], [
@@ -1412,7 +1412,7 @@ public class DomainEntityInstanceTests {
 
     [Test]
     public async Task EntityLevelSubscription_PeerBinding_CopiesPeerProperty() {
-        // SPE-L3 golden: entity-level when Tracks Active as order { assign Status to order Code }
+        // Entity-level peer golden: entity-level when Tracks Active as order { assign Status to order Code }
         var tracker = new Entity("Tracker", [
             new Property("Status", new DomainTypeReference("Text"), [])
         ], [], [], [
@@ -2631,7 +2631,7 @@ public class DomainEntityInstanceTests {
     }
 
     // ═════════════════════════════════════════════════════════════
-    // Q3′ — Collection quantifier runtime evaluation
+    // Collection quantifier runtime evaluation
     // ═════════════════════════════════════════════════════════════
 
     [Test]

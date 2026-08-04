@@ -39,7 +39,7 @@ public abstract record DomainExpression : DomainObject {
     public static DomainExpression RelationshipNav(string relationshipName, DomainExpression targetProperty) =>
         new RelationshipNavigation(Guard.ThrowIfNullOrEmpty(relationshipName), targetProperty);
 
-    // --- Q3′ collection quantifiers ---
+    // --- Collection quantifiers ---
 
     /// <summary>
     /// ∃ related matching body (Any).
@@ -191,10 +191,10 @@ public sealed record RelationshipNavigation(
     public sealed override IEnumerable<Node?> Children => [TargetProperty];
 }
 
-// ── Q3′ collection quantifiers ─────────────────────────────
+// ── Collection quantifiers ─────────────────────────────
 
 /// <summary>
-/// Q3′ collection quantifier: true if <b>any</b> related entity matches <see cref="Body"/>.
+/// Collection quantifier: true if <b>any</b> related entity matches <see cref="Body"/>.
 /// </summary>
 public sealed record AnyExpr(
     string RelationshipName,
@@ -204,7 +204,7 @@ public sealed record AnyExpr(
 }
 
 /// <summary>
-/// Q3′ collection quantifier: true if <b>all</b> related entities match <see cref="Body"/>.
+/// Collection quantifier: true if <b>all</b> related entities match <see cref="Body"/>.
 /// </summary>
 public sealed record AllExpr(
     string RelationshipName,
@@ -214,7 +214,7 @@ public sealed record AllExpr(
 }
 
 /// <summary>
-/// Q3′ collection quantifier: true if <b>no</b> related entity matches <see cref="Body"/>.
+/// Collection quantifier: true if <b>no</b> related entity matches <see cref="Body"/>.
 /// </summary>
 public sealed record NoneExpr(
     string RelationshipName,
@@ -224,7 +224,7 @@ public sealed record NoneExpr(
 }
 
 /// <summary>
-/// Q3′ collection quantifier: count of related entities, optionally filtered by <see cref="Body"/>.
+/// Collection quantifier: count of related entities, optionally filtered by <see cref="Body"/>.
 /// Produces a numeric value usable in comparisons.
 /// </summary>
 public sealed record CountExpr(

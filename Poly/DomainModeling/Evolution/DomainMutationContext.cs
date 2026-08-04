@@ -8,7 +8,7 @@ namespace Poly.DomainModeling.Evolution;
 /// Collects errors when changes target missing entities, stages, or actions
 /// — these are surfaced as structural failures in the evolution result.
 /// <para>
-/// <b>Resolve contract (DAS W4.2):</b> product evolution always supplies
+/// <b>Resolve contract:</b> product evolution always supplies
 /// <see cref="MutationTargetIndexMetadata"/> from the catalog. Stage/action
 /// resolution is catalog-first; on index miss a single live-overlay scan of
 /// the mutable entity in this context covers targets added earlier in the

@@ -10,7 +10,7 @@ namespace Poly.Tests.DomainModeling.Analysis;
 
 /// <summary>
 /// Fail-closed coverage for the DACR semantic lookup surface (r4 follow-ups F5/F18)
-/// and DAS W4.2: exporter RLM throw, DomainSemanticLookupExtensions helper contracts
+/// and exporter RLM throw, DomainSemanticLookupExtensions helper contracts
 /// (including the SA fallthrough regression B-1), and MCP describe routes that
 /// distinguish not-found (catalog complete, name absent) from missing required
 /// metadata bags (catalog/ESM stripped).
@@ -338,7 +338,7 @@ public class DomainSemanticLookupFailClosedTests {
         await Assert.That(actions).IsEmpty();
     }
 
-    // ── DAS W2: unified effective surface ─────────────────────
+    // ── unified effective surface ─────────────────────
 
     [Test]
     public async Task GetEffectivePolicies_ExcludesActionPolicies_OnMultiPolicyFixture() {
@@ -405,9 +405,9 @@ public class DomainSemanticLookupFailClosedTests {
 
     [Test]
     public async Task DescribeStage_EffectiveCounts_MatchHelpers() {
-        var (sessionId, _) = McpSessionStore.Create("W2Effective");
+        var (sessionId, _) = SessionStore.Create("W2Effective");
 
-        var outcome = McpSessionStore.Evolve(sessionId, domain =>
+        var outcome = SessionStore.Evolve(sessionId, domain =>
             new DomainEvolution(domain).Evolve()
                 .AddEntity("Order")
                 .AddPropertyToEntity("Order", new Property("Age", new DomainTypeReference("Number"), []))
@@ -524,16 +524,16 @@ public class DomainSemanticLookupFailClosedTests {
         await Assert.That(entity!.Name).IsEqualTo("Order");
     }
 
-    // ── F4 / DAS W4.2: MCP describe not-found vs missing metadata ──
+    // ── F4 / MCP describe not-found vs missing metadata ──
 
-    private static McpSessionState? GetFreshState(string sessionId) {
-        McpSessionStore.TryGet(sessionId, out var state);
+    private static SessionState? GetFreshState(string sessionId) {
+        SessionStore.TryGet(sessionId, out var state);
         return state;
     }
 
     [Test]
     public async Task DescribeStage_ReturnsMissingMetadata_WhenEsmMissing() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
+        var (sessionId, _) = SessionStore.Create("Test");
 
         var r1 = EvolveTool.AddEntity(sessionId, "Order");
         await Assert.That(r1.Success).IsTrue();
@@ -553,7 +553,7 @@ public class DomainSemanticLookupFailClosedTests {
 
     [Test]
     public async Task DescribeStage_ReturnsNotFound_WhenStageAbsentAndEsmPresent() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
+        var (sessionId, _) = SessionStore.Create("Test");
 
         var r1 = EvolveTool.AddEntity(sessionId, "Order");
         await Assert.That(r1.Success).IsTrue();
@@ -568,7 +568,7 @@ public class DomainSemanticLookupFailClosedTests {
 
     [Test]
     public async Task DescribeAction_ReturnsMissingMetadata_WhenCatalogMissing() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
+        var (sessionId, _) = SessionStore.Create("Test");
 
         var r1 = EvolveTool.AddEntity(sessionId, "Order");
         await Assert.That(r1.Success).IsTrue();
@@ -586,7 +586,7 @@ public class DomainSemanticLookupFailClosedTests {
 
     [Test]
     public async Task DescribeAction_ReturnsNotFound_WhenActionAbsentAndCatalogPresent() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
+        var (sessionId, _) = SessionStore.Create("Test");
 
         var r1 = EvolveTool.AddEntity(sessionId, "Order");
         await Assert.That(r1.Success).IsTrue();
@@ -601,7 +601,7 @@ public class DomainSemanticLookupFailClosedTests {
 
     [Test]
     public async Task DescribeAction_UsesCatalog_WithoutEntityKeyedArm() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
+        var (sessionId, _) = SessionStore.Create("Test");
 
         var r1 = EvolveTool.AddEntity(sessionId, "Order");
         await Assert.That(r1.Success).IsTrue();
@@ -620,7 +620,7 @@ public class DomainSemanticLookupFailClosedTests {
 
     [Test]
     public async Task DescribePolicy_ReturnsMissingMetadata_WhenCatalogMissing() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
+        var (sessionId, _) = SessionStore.Create("Test");
 
         var r1 = EvolveTool.AddEntity(sessionId, "Order");
         await Assert.That(r1.Success).IsTrue();
@@ -641,7 +641,7 @@ public class DomainSemanticLookupFailClosedTests {
 
     [Test]
     public async Task DescribePolicy_ReturnsNotFound_WhenPolicyAbsentAndCatalogPresent() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
+        var (sessionId, _) = SessionStore.Create("Test");
 
         var r1 = EvolveTool.AddEntity(sessionId, "Order");
         await Assert.That(r1.Success).IsTrue();
@@ -659,7 +659,7 @@ public class DomainSemanticLookupFailClosedTests {
 
     [Test]
     public async Task DescribePolicy_UsesCatalog_WithoutDomainKeyedMti() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
+        var (sessionId, _) = SessionStore.Create("Test");
 
         var r1 = EvolveTool.AddEntity(sessionId, "Order");
         await Assert.That(r1.Success).IsTrue();
@@ -679,7 +679,7 @@ public class DomainSemanticLookupFailClosedTests {
 
     [Test]
     public async Task DescribeRelationship_ReturnsMissingMetadata_WhenCatalogMissing() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
+        var (sessionId, _) = SessionStore.Create("Test");
 
         var r1 = EvolveTool.AddEntity(sessionId, "Order");
         await Assert.That(r1.Success).IsTrue();
@@ -699,7 +699,7 @@ public class DomainSemanticLookupFailClosedTests {
 
     [Test]
     public async Task DescribeRelationship_ReturnsNotFound_WhenRelationshipAbsentAndCatalogPresent() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
+        var (sessionId, _) = SessionStore.Create("Test");
 
         var r1 = EvolveTool.AddEntity(sessionId, "Order");
         await Assert.That(r1.Success).IsTrue();
@@ -716,7 +716,7 @@ public class DomainSemanticLookupFailClosedTests {
 
     [Test]
     public async Task DescribeRelationship_UsesCatalog_WhenRawRlmStripped() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
+        var (sessionId, _) = SessionStore.Create("Test");
 
         var r1 = EvolveTool.AddEntity(sessionId, "Order");
         await Assert.That(r1.Success).IsTrue();
@@ -737,7 +737,7 @@ public class DomainSemanticLookupFailClosedTests {
 
     [Test]
     public async Task DescribeAction_ReturnsSuccess_WhenFound() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
+        var (sessionId, _) = SessionStore.Create("Test");
 
         var r1 = EvolveTool.AddEntity(sessionId, "Order");
         await Assert.That(r1.Success).IsTrue();
@@ -752,7 +752,7 @@ public class DomainSemanticLookupFailClosedTests {
 
     [Test]
     public async Task DescribeRelationship_ReturnsSuccess_WhenFound() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
+        var (sessionId, _) = SessionStore.Create("Test");
 
         var r1 = EvolveTool.AddEntity(sessionId, "Order");
         await Assert.That(r1.Success).IsTrue();

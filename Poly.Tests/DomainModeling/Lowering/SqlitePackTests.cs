@@ -116,7 +116,7 @@ public class SqlitePackTests {
 
     [Test]
     public async Task DslCompiler_EntitiesMode_EmitsEntityTypesFromProjection() {
-        // DAS W0.2: entity emit uses DomainProgramProjection.ToSyntax on finished AnalysisResult
+        // entity emit uses DomainProgramProjection.ToSyntax on finished AnalysisResult
         // (no mid-pipeline EntitySyntaxMetadata soft-skip).
         var compiler = new Compiler();
         var result = compiler.Compile(SampleDomain, CompileMode.Entities);

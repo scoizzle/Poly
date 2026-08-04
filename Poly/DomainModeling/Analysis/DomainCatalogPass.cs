@@ -3,7 +3,7 @@ using Poly.Analysis;
 namespace Poly.DomainModeling.Analysis;
 
 /// <summary>
-/// Sole publisher of the domain-scoped name→member catalog (DAS W1.4).
+/// Sole publisher of the domain-scoped name→member catalog.
 /// Builds action-resolution maps and the mutation-target index once, embeds
 /// Semantic DTLM/RLM, and attaches only <see cref="DomainCatalogMetadata"/>
 /// (no separate entity ARM or domain MTI dual-write).

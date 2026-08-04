@@ -175,7 +175,7 @@ public static class DomainQueries {
             .ToList();
 
         // Stages: use effective stages from metadata; stage-effective policies from
-        // the canonical StageCapability surface (DAS W2) when present.
+        // the canonical StageCapability surface when present.
         var stages = (effectiveMemberMeta?.EffectiveStages ?? entity.Stages)
             .Select(s => {
                 var stageCap = metadata?.GetMetadata<StageCapabilityMetadata>(s);

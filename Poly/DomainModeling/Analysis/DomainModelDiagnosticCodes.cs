@@ -32,7 +32,7 @@ internal static class DomainModelDiagnosticCodes {
     // Authoring suggestions (advisory hints)
     public const string AuthoringSuggestion = "DMAS001";
 
-    /// Path-prefix on 'many' cardinality relationship (use Q3′ quantifiers instead).
+    /// Path-prefix on 'many' cardinality relationship (use collection quantifiers instead).
     public const string RelationshipNavigationCardinality = "DMREL001";
 
     // Unsupported / silently-dropped effect diagnostics

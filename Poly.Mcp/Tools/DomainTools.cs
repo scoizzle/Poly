@@ -132,7 +132,7 @@ internal sealed class SessionTool {
     [McpServerTool(Name = "create_domain_session"), Description("Creates a new bootstrapped domain session with built-in primitive types.")]
     public static DomainToolResponse CreateDomainSession(
         [Description("Name for the new domain (e.g. 'Orders', 'Inventory')")] string domainName) {
-        var (sessionId, state) = McpSessionStore.Create(domainName);
+        var (sessionId, state) = SessionStore.Create(domainName);
         return new DomainToolResponse(
             Success: true,
             Message: $"Domain '{domainName}' created with built-in types.",
@@ -147,7 +147,7 @@ internal sealed class SessionTool {
     /// </summary>
     [McpServerTool(Name = "list_sessions"), Description("Lists all active domain sessions.")]
     public static DomainToolResponse ListSessions() {
-        var sessions = McpSessionStore.ListSessions();
+        var sessions = SessionStore.ListSessions();
         if (sessions.Count == 0)
             return new DomainToolResponse(Success: true, Message: "No active sessions.", Affordances: ["create_domain_session"]);
 
@@ -173,7 +173,7 @@ internal sealed class QueryTool {
     [McpServerTool(Name = "get_domain_overview"), Description("Returns a high-level overview of the domain model (entity/primitive/relationship counts and entity names).")]
     public static DomainToolResponse GetDomainOverview(
         [Description("Session ID returned by create_domain_session")] string sessionId) {
-        if (!McpSessionStore.TryGet(sessionId, out var state))
+        if (!SessionStore.TryGet(sessionId, out var state))
             return Failure_NotFound(sessionId);
 
         var overview = DomainQueries.Overview(state.Domain);
@@ -203,7 +203,7 @@ internal sealed class QueryTool {
     public static DomainToolResponse GetEntityDetail(
         [Description("Session ID")] string sessionId,
         [Description("Name of the entity to inspect")] string entityName) {
-        if (!McpSessionStore.TryGet(sessionId, out var state))
+        if (!SessionStore.TryGet(sessionId, out var state))
             return Failure_NotFound(sessionId);
 
         var detail = DomainQueries.GetEntity(state.Domain, entityName, state.LatestAnalysis);
@@ -245,7 +245,7 @@ internal sealed class QueryTool {
     [McpServerTool(Name = "get_domain_analysis"), Description("Returns analysis diagnostics and structured domain facts (entity structure, topology, actions) for the current domain state.")]
     public static DomainToolResponse GetDomainAnalysis(
         [Description("Session ID")] string sessionId) {
-        if (!McpSessionStore.TryGet(sessionId, out var state))
+        if (!SessionStore.TryGet(sessionId, out var state))
             return Failure_NotFound(sessionId);
 
         if (state.LatestAnalysis is null)
@@ -333,7 +333,7 @@ internal sealed class QueryTool {
     [McpServerTool(Name = "get_domain_suggestions"), Description("Returns authoring suggestions (advisory hints) for the current domain. Suggestions identify common gaps like missing stages, actions, or policies — they are advisory and do not block evolution.")]
     public static DomainToolResponse GetDomainSuggestions(
         [Description("Session ID")] string sessionId) {
-        if (!McpSessionStore.TryGet(sessionId, out var state))
+        if (!SessionStore.TryGet(sessionId, out var state))
             return Failure_NotFound(sessionId);
 
         if (state.LatestAnalysis is null)
@@ -374,7 +374,7 @@ internal sealed class QueryTool {
     [McpServerTool(Name = "get_domain_snapshot"), Description("Returns a complete snapshot of the domain model: all entities with full detail, relationships, and analysis diagnostics.")]
     public static DomainToolResponse GetDomainSnapshot(
         [Description("Session ID")] string sessionId) {
-        if (!McpSessionStore.TryGet(sessionId, out var state))
+        if (!SessionStore.TryGet(sessionId, out var state))
             return Failure_NotFound(sessionId);
 
         var entities = state.Domain.Types.OfType<Entity>().Select(e => {
@@ -421,7 +421,7 @@ internal sealed class QueryTool {
     public static DomainToolResponse GetRelationships(
         [Description("Session ID")] string sessionId,
         [Description("Optional entity name filter — only show relationships involving this entity")] string? entityName = null) {
-        if (!McpSessionStore.TryGet(sessionId, out var state))
+        if (!SessionStore.TryGet(sessionId, out var state))
             return Failure_NotFound(sessionId);
 
         var all = DomainQueries.ListRelationships(state.Domain);
@@ -819,8 +819,8 @@ This safety net prevents silent no-ops from empty stage copies.")]
         Func<EvolutionBuilder, EvolutionBuilder> mutate,
         IReadOnlyList<string>? successAffordances = null) {
         // Snapshot read for session-not-found check and fingerprint.
-        // The actual mutation happens atomically inside McpSessionStore.Evolve.
-        if (!McpSessionStore.TryGet(sessionId, out var snapshot))
+        // The actual mutation happens atomically inside SessionStore.Evolve.
+        if (!SessionStore.TryGet(sessionId, out var snapshot))
             return new DomainToolResponse(
                 Success: false,
                 Message: $"Session '{sessionId}' not found.",
@@ -829,7 +829,7 @@ This safety net prevents silent no-ops from empty stage copies.")]
         var before = GetFingerprint(snapshot.Domain);
         var preRevision = snapshot.Revision;
 
-        var outcome = McpSessionStore.Evolve(sessionId, domain => {
+        var outcome = SessionStore.Evolve(sessionId, domain => {
             var result = new DomainEvolution(domain).Evolve();
             result = mutate(result);
             return result.Apply();
@@ -876,7 +876,7 @@ This safety net prevents silent no-ops from empty stage copies.")]
             );
         }
 
-        // McpSessionStore.Evolve already committed the update atomically.
+        // SessionStore.Evolve already committed the update atomically.
         return new DomainToolResponse(
             Success: true,
             Message: "Change applied successfully.",
@@ -934,7 +934,7 @@ This safety net prevents silent no-ops from empty stage copies.")]
         [Description("Session ID")] string sessionId,
         [Description("Name of the entity")] string entityName,
         [Description("Optional property name filter")] string? propertyName = null) {
-        if (!McpSessionStore.TryGet(sessionId, out var state))
+        if (!SessionStore.TryGet(sessionId, out var state))
             return new DomainToolResponse(
                 Success: false,
                 Message: $"Session '{sessionId}' not found.",
@@ -1025,7 +1025,7 @@ internal sealed class PolicyTool {
         [Description("Session ID")] string sessionId,
         [Description("Name of the entity that has the policy")] string entityName,
         [Description("Name of the policy to inspect")] string policyName) {
-        if (!McpSessionStore.TryGet(sessionId, out var state))
+        if (!SessionStore.TryGet(sessionId, out var state))
             return new DomainToolResponse(
                 Success: false,
                 Message: $"Session '{sessionId}' not found.",
@@ -1082,14 +1082,14 @@ internal sealed class PolicyTool {
                 Affordances: ["get_entity_detail", "get_domain_overview"]);
         }
 
-        if (!McpSessionStore.TryGet(sessionId, out _))
+        if (!SessionStore.TryGet(sessionId, out _))
             return new DomainToolResponse(
                 Success: false,
                 Message: $"Session '{sessionId}' not found.",
                 Affordances: ["create_domain_session", "list_sessions"]);
 
-        // Atomic read-modify-write through McpSessionStore.Evolve.
-        var outcome = McpSessionStore.Evolve(sessionId, domain =>
+        // Atomic read-modify-write through SessionStore.Evolve.
+        var outcome = SessionStore.Evolve(sessionId, domain =>
             new DomainEvolution(domain).Evolve()
                 .AddPolicyToEntity(entityName, policyName, domainExpr)
                 .Apply());
@@ -1110,7 +1110,7 @@ internal sealed class PolicyTool {
 
         // Need the session to get the revision for the response.
         // We know it exists because outcome is non-null.
-        McpSessionStore.TryGet(sessionId, out var state);
+        SessionStore.TryGet(sessionId, out var state);
         return new DomainToolResponse(
             Success: true,
             Message: $"Policy '{policyName}' added to entity '{entityName}'.",
@@ -1133,7 +1133,7 @@ internal sealed class PolicyTool {
         [Description("Age value for the sample subject (convenience for Age-based policies)")] int? age = null,
         [Description("JSON object of property values, e.g. \"{\\\"Status\\\":\\\"Active\\\",\\\"Total\\\":200}\"")] string? properties = null,
         [Description("Optional instance ID from a previous create_instance call. When provided, evaluates against the store-attached instance (required for cross-entity expressions like Q3' quantifiers).")] string? instanceId = null) {
-        if (!McpSessionStore.TryGet(sessionId, out var state))
+        if (!SessionStore.TryGet(sessionId, out var state))
             return new DomainToolResponse(
                 Success: false,
                 Message: $"Session '{sessionId}' not found.",
@@ -1288,7 +1288,7 @@ for exploration and repair.")]
         [Description("Session ID returned by create_domain_session")] string sessionId,
         [Description("Phase 1a/1b .poly DSL text to parse and apply")] string polyText) {
         // ── 0. Fail fast on missing session or empty text ─────
-        if (!McpSessionStore.TryGet(sessionId, out _))
+        if (!SessionStore.TryGet(sessionId, out _))
             return Failure_NotFound(sessionId);
 
         if (string.IsNullOrWhiteSpace(polyText))
@@ -1301,7 +1301,7 @@ for exploration and repair.")]
         // ── 1. Parse ───────────────────────────────────────────
         List<DomainChange> changes;
         try {
-            if (!McpSessionStore.TryGet(sessionId, out var parseState))
+            if (!SessionStore.TryGet(sessionId, out var parseState))
                 return Failure_NotFound(sessionId);
 
             var parser = new PolyDslParser(polyText, parseState.ParserInputs);
@@ -1350,7 +1350,7 @@ for exploration and repair.")]
         }
 
         // ── 3. Atomically replace the session domain ─────────────
-        var replaced = McpSessionStore.Replace(sessionId, outcome.Root, outcome.Analysis);
+        var replaced = SessionStore.Replace(sessionId, outcome.Root, outcome.Analysis);
         if (!replaced) {
             return new DomainToolResponse(
                 Success: false,
@@ -1358,7 +1358,7 @@ for exploration and repair.")]
                 Affordances: ["create_domain_session", "list_sessions"]);
         }
 
-        if (!McpSessionStore.TryGet(sessionId, out var state))
+        if (!SessionStore.TryGet(sessionId, out var state))
             return Failure_NotFound(sessionId);
 
         var entityCount = outcome.Root.Types.OfType<Entity>().Count();
@@ -1385,7 +1385,7 @@ for exploration and repair.")]
     [McpServerTool(Name = "export_dsl"), Description("Exports the current session domain as .poly DSL text using the canonical Phase 1a printer.")]
     public static DomainToolResponse ExportDsl(
         [Description("Session ID")] string sessionId) {
-        if (!McpSessionStore.TryGet(sessionId, out var state))
+        if (!SessionStore.TryGet(sessionId, out var state))
             return Failure_NotFound(sessionId);
 
         var printer = new DomainDslPrinter(state.ParserInputs.Annotations);

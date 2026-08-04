@@ -10,12 +10,12 @@ public sealed class MatchResult<TKind> where TKind : struct {
     public string PatternName { get; }
 
     /// <summary>All tokens consumed by this match, in order.</summary>
-    public Token<TKind>[] Tokens { get; }
+    public IReadOnlyList<Token<TKind>> Tokens { get; }
 
     /// <summary>Number of tokens consumed.</summary>
-    public int Consumed => Tokens.Length;
+    public int Consumed => Tokens.Count;
 
-    public MatchResult(string patternName, Token<TKind>[] tokens) {
+    public MatchResult(string patternName, IReadOnlyList<Token<TKind>> tokens) {
         PatternName = patternName;
         Tokens = tokens;
     }

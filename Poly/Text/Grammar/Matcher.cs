@@ -38,7 +38,7 @@ public sealed class Matcher<TKind> where TKind : struct {
 
         foreach (var pattern in patterns) {
             if (TryMatchPattern(pattern, 0, out var tokens)) {
-                if (best == null || tokens.Length > best.Consumed)
+                if (best == null || tokens.Count > best.Consumed)
                     best = new MatchResult<TKind>(pattern.Name, tokens);
             }
         }
@@ -95,7 +95,7 @@ public sealed class Matcher<TKind> where TKind : struct {
     /// ahead of the current reader position. Returns <c>true</c> with the
     /// consumed tokens, or <c>false</c> if any element fails.
     /// </summary>
-    private bool TryMatchPattern(Pattern<TKind> pattern, int offset, out Token<TKind>[] consumed) {
+    private bool TryMatchPattern(Pattern<TKind> pattern, int offset, out IReadOnlyList<Token<TKind>> consumed) {
         var tokens = new List<Token<TKind>>();
         var pos = offset;
 
@@ -105,17 +105,17 @@ public sealed class Matcher<TKind> where TKind : struct {
                 return false;
             }
             tokens.AddRange(elementTokens);
-            pos += elementTokens.Length;
+            pos += elementTokens.Count;
         }
 
-        consumed = tokens.ToArray();
+        consumed = tokens;
         return true;
     }
 
     /// <summary>
     /// Dispatches a single <see cref="IPatternElement{TKind}"/> at the given offset.
     /// </summary>
-    private bool TryMatchElement(IPatternElement<TKind> element, int offset, out Token<TKind>[] consumed) {
+    private bool TryMatchElement(IPatternElement<TKind> element, int offset, out IReadOnlyList<Token<TKind>> consumed) {
         switch (element) {
             case MatchToken<TKind> mt:
             case MatchValue<TKind> mv: {
@@ -168,16 +168,16 @@ public sealed class Matcher<TKind> where TKind : struct {
                         var subPatterns = _grammar.GetPatterns(many.RuleName);
                         var matched = false;
                         foreach (var sub in subPatterns) {
-                            if (TryMatchPattern(sub, manyPos, out var subTokens) && subTokens.Length > 0) {
+                            if (TryMatchPattern(sub, manyPos, out var subTokens) && subTokens.Count > 0) {
                                 manyTokens.AddRange(subTokens);
-                                manyPos += subTokens.Length;
+                                manyPos += subTokens.Count;
                                 matched = true;
                                 break;
                             }
                         }
                         if (!matched) break;
                     }
-                    consumed = manyTokens.ToArray();
+                    consumed = manyTokens;
                     return true;
                 }
 
@@ -205,7 +205,7 @@ public sealed class Matcher<TKind> where TKind : struct {
                         else if (EqualityComparer<TKind>.Default.Equals(next.Kind, bal.Close))
                             depth--;
                     }
-                    consumed = balTokens.ToArray();
+                    consumed = balTokens;
                     return true;
                 }
 

@@ -51,7 +51,7 @@ public sealed class VariableScope(VariableScope? parentScope = null) {
     /// </remarks>
     public Variable SetVariable(string name, Node? value) {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
-        return Variables.GetOrAdd(name, static (name, value) => new Variable(name, value), value);
+        return Variables.GetOrAdd(name, value, static (name, value) => new Variable(name, value));
     }
 
     /// <summary>

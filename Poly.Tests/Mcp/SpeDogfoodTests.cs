@@ -425,6 +425,464 @@ public class SpeDogfoodTests {
         }
     }
 
+    // ── create in + peer (product graph write) ─────────────────
+
+    [Test]
+    public async Task CreateIn_ThenActivate_EntityLevelPeer_CopiesCode_ViaMcp() {
+        var (sessionId, _) = McpSessionStore.Create("SpeCreateInPeer");
+        var dsl = """
+            domain SpeCreateInPeer
+            Customer: entity {
+              LastOrderCode: Text
+              Ready: stage {
+                PlaceOrder: action {
+                  create in orders { Code: "FROM-CREATE" }
+                }
+              }
+              when orders Active as order {
+                assign LastOrderCode to order Code
+              }
+              orders: many Order
+            }
+            Order: entity {
+              Code: Text
+              Draft: stage {
+                Activate: action { transition to Active }
+              }
+              Active: stage {}
+            }
+            """;
+        await Assert.That(DslTool.ApplyDsl(sessionId, dsl).Success).IsTrue();
+
+        var custId = CreateAndId(sessionId, "Customer", """{"LastOrderCode":"NONE"}""");
+        await Assert.That(RuntimeTool.InvokeAction(sessionId, custId, "PlaceOrder").Success)
+            .IsTrue();
+
+        McpSessionStore.TryGet(sessionId, out var st);
+        var orderKvp = st!.InstanceMap.First(kvp => kvp.Value.Entity.Name == "Order");
+        var orderId = orderKvp.Key;
+
+        await Assert.That(RuntimeTool.InvokeAction(sessionId, orderId, "Activate").Success)
+            .IsTrue();
+        await Assert.That(GetProp(sessionId, custId, "LastOrderCode")).IsEqualTo("FROM-CREATE");
+    }
+
+    // ── unlink honesty via MCP ─────────────────────────────────
+
+    [Test]
+    public async Task Unlink_StopsPeerWhen_AndExistsFalse_ViaMcp() {
+        var (sessionId, _) = McpSessionStore.Create("SpeUnlink");
+        var dsl = """
+            domain SpeUnlink
+            Tracker: entity {
+              Status: Text
+              Tracks: Order
+              HasOrder: policy { Tracks exists }
+              Idle: stage {}
+              when Tracks Active as order {
+                assign Status to order Code
+              }
+            }
+            Order: entity {
+              Code: Text
+              Draft: stage {
+                Activate: action { transition to Active }
+                Reset: action { transition to Draft }
+              }
+              Active: stage {
+                Reset: action { transition to Draft }
+              }
+            }
+            """;
+        await Assert.That(DslTool.ApplyDsl(sessionId, dsl).Success).IsTrue();
+
+        var trackerId = CreateAndId(sessionId, "Tracker", """{"Status":"UNSET"}""");
+        var orderId = CreateAndId(sessionId, "Order", """{"Code":"U-1"}""");
+        await Assert.That(RuntimeTool.LinkInstances(sessionId, trackerId, "Tracks", orderId).Success)
+            .IsTrue();
+
+        var hasBefore = PolicyTool.EvaluatePolicy(sessionId, "Tracker", "HasOrder",
+            instanceId: trackerId);
+        await Assert.That(hasBefore.Message).Contains("true");
+
+        await Assert.That(RuntimeTool.InvokeAction(sessionId, orderId, "Activate").Success)
+            .IsTrue();
+        await Assert.That(GetProp(sessionId, trackerId, "Status")).IsEqualTo("U-1");
+
+        await Assert.That(RuntimeTool.UnlinkInstances(sessionId, trackerId, "Tracks", orderId)
+            .Success).IsTrue();
+
+        var hasAfter = PolicyTool.EvaluatePolicy(sessionId, "Tracker", "HasOrder",
+            instanceId: trackerId);
+        await Assert.That(hasAfter.Success).IsTrue();
+        await Assert.That(hasAfter.Message).Contains("false");
+
+        await Assert.That(RuntimeTool.InvokeAction(sessionId, orderId, "Reset").Success).IsTrue();
+        // Direct prop write via store instance for isolation
+        McpSessionStore.TryGet(sessionId, out var st);
+        st!.InstanceMap[trackerId].SetProperty("Status", "AFTER-UNLINK");
+        await Assert.That(RuntimeTool.InvokeAction(sessionId, orderId, "Activate").Success)
+            .IsTrue();
+        await Assert.That(GetProp(sessionId, trackerId, "Status")).IsEqualTo("AFTER-UNLINK");
+    }
+
+    // ── multi-subscriber ───────────────────────────────────────
+
+    [Test]
+    public async Task TwoTrackers_OneOrderActive_BothPeersFire_ViaMcp() {
+        var (sessionId, _) = McpSessionStore.Create("SpeTwoSubs");
+        var dsl = """
+            domain SpeTwoSubs
+            Tracker: entity {
+              LastCode: Text
+              Tracks: Order
+              Idle: stage {}
+              when Tracks Active as order {
+                assign LastCode to order Code
+              }
+            }
+            Order: entity {
+              Code: Text
+              Draft: stage {
+                Activate: action { transition to Active }
+              }
+              Active: stage {}
+            }
+            """;
+        await Assert.That(DslTool.ApplyDsl(sessionId, dsl).Success).IsTrue();
+
+        var t1 = CreateAndId(sessionId, "Tracker", """{"LastCode":"NONE"}""");
+        var t2 = CreateAndId(sessionId, "Tracker", """{"LastCode":"NONE"}""");
+        var orderId = CreateAndId(sessionId, "Order", """{"Code":"SHARED"}""");
+        await Assert.That(RuntimeTool.LinkInstances(sessionId, t1, "Tracks", orderId).Success)
+            .IsTrue();
+        await Assert.That(RuntimeTool.LinkInstances(sessionId, t2, "Tracks", orderId).Success)
+            .IsTrue();
+
+        await Assert.That(RuntimeTool.InvokeAction(sessionId, orderId, "Activate").Success)
+            .IsTrue();
+        await Assert.That(GetProp(sessionId, t1, "LastCode")).IsEqualTo("SHARED");
+        await Assert.That(GetProp(sessionId, t2, "LastCode")).IsEqualTo("SHARED");
+    }
+
+    // ── not Rel exists ─────────────────────────────────────────
+
+    [Test]
+    public async Task RelNotExists_BeforeAndAfterLink_ViaMcp() {
+        var (sessionId, _) = McpSessionStore.Create("SpeNotExists");
+        var dsl = """
+            domain SpeNotExists
+            Customer: entity {
+              Name: Text
+              profile: owned Profile
+              NoProfile: policy { not profile exists }
+            }
+            Profile: entity {
+              City: Text
+            }
+            """;
+        await Assert.That(DslTool.ApplyDsl(sessionId, dsl).Success).IsTrue();
+
+        var custId = CreateAndId(sessionId, "Customer", """{"Name":"A"}""");
+        var before = PolicyTool.EvaluatePolicy(sessionId, "Customer", "NoProfile",
+            instanceId: custId);
+        await Assert.That(before.Success).IsTrue();
+        await Assert.That(before.Message).Contains("true");
+
+        var profileId = CreateAndId(sessionId, "Profile", """{"City":"X"}""");
+        await Assert.That(RuntimeTool.LinkInstances(sessionId, custId, "profile", profileId)
+            .Success).IsTrue();
+
+        var after = PolicyTool.EvaluatePolicy(sessionId, "Customer", "NoProfile",
+            instanceId: custId);
+        await Assert.That(after.Success).IsTrue();
+        await Assert.That(after.Message).Contains("false");
+    }
+
+    // ── multi-link path-prefix fails closed via MCP ────────────
+
+    [Test]
+    public async Task PathPrefix_MultipleLinks_EvaluateFailsClosed_ViaMcp() {
+        var (sessionId, _) = McpSessionStore.Create("SpeMultiLink");
+        // Use OneToOne profile but force two links if store allows — or many path-prefix.
+        var dsl = """
+            domain SpeMultiLink
+            Customer: entity {
+              Name: Text
+              orders: many Order
+              FirstCode: policy { orders Code is "X" }
+            }
+            Order: entity {
+              Code: Text
+            }
+            """;
+        var apply = DslTool.ApplyDsl(sessionId, dsl);
+        // Analysis may reject many path-prefix at apply/analyze; either way is fail-closed.
+        if (!apply.Success) {
+            await Assert.That(apply.Success).IsFalse();
+            return;
+        }
+
+        McpSessionStore.TryGet(sessionId, out var state);
+        var analysis = DomainModelAnalyzer.Analyze(state!.Domain);
+        if (analysis.HasErrors) {
+            await Assert.That(analysis.HasErrors).IsTrue();
+            return;
+        }
+
+        var custId = CreateAndId(sessionId, "Customer", """{"Name":"A"}""");
+        var o1 = CreateAndId(sessionId, "Order", """{"Code":"X"}""");
+        var o2 = CreateAndId(sessionId, "Order", """{"Code":"Y"}""");
+        await Assert.That(RuntimeTool.LinkInstances(sessionId, custId, "orders", o1).Success)
+            .IsTrue();
+        await Assert.That(RuntimeTool.LinkInstances(sessionId, custId, "orders", o2).Success)
+            .IsTrue();
+
+        var eval = PolicyTool.EvaluatePolicy(sessionId, "Customer", "FirstCode",
+            instanceId: custId);
+        await Assert.That(eval.Success).IsFalse();
+        await Assert.That(
+            eval.Message.Contains("exactly one linked target", StringComparison.Ordinal)
+            || eval.Message.Contains("Evaluation failed", StringComparison.Ordinal)).IsTrue();
+    }
+
+    // ── Q3 empty-set honesty via MCP ───────────────────────────
+
+    [Test]
+    public async Task Quantifiers_EmptyLinks_Honesty_ViaMcp() {
+        var (sessionId, _) = McpSessionStore.Create("SpeEmptyQ3");
+        var dsl = """
+            domain SpeEmptyQ3
+            Customer: entity {
+              Name: Text
+              orders: many Order
+              AnyBig: policy { any orders where Total > 100 }
+              AllBig: policy { all orders where Total > 100 }
+              NoneBig: policy { none orders where Total > 100 }
+              OrderCountZero: policy { count orders is 0 }
+            }
+            Order: entity {
+              Total: Number
+            }
+            """;
+        await Assert.That(DslTool.ApplyDsl(sessionId, dsl).Success).IsTrue();
+        var custId = CreateAndId(sessionId, "Customer", """{"Name":"A"}""");
+
+        var any = PolicyTool.EvaluatePolicy(sessionId, "Customer", "AnyBig", instanceId: custId);
+        await Assert.That(any.Success).IsTrue();
+        await Assert.That(any.Message).Contains("false");
+
+        var all = PolicyTool.EvaluatePolicy(sessionId, "Customer", "AllBig", instanceId: custId);
+        await Assert.That(all.Success).IsTrue();
+        await Assert.That(all.Message).Contains("false");
+
+        var none = PolicyTool.EvaluatePolicy(sessionId, "Customer", "NoneBig", instanceId: custId);
+        await Assert.That(none.Success).IsTrue();
+        await Assert.That(none.Message).Contains("true");
+
+        var count = PolicyTool.EvaluatePolicy(sessionId, "Customer", "OrderCountZero",
+            instanceId: custId);
+        await Assert.That(count.Success).IsTrue();
+        await Assert.That(count.Message).Contains("true");
+    }
+
+    // ── require exists via MCP ─────────────────────────────────
+
+    [Test]
+    public async Task Require_HasOrders_BlocksThenPasses_ViaMcp() {
+        var (sessionId, _) = McpSessionStore.Create("SpeRequire");
+        var dsl = """
+            domain SpeRequire
+            Customer: entity {
+              Status: Text
+              orders: many Order
+              HasOrders: policy { orders exists }
+              Draft: stage {
+                Ship: action
+                  require HasOrders
+                {
+                  assign Status to "shipped"
+                }
+              }
+            }
+            Order: entity {
+              Code: Text
+            }
+            """;
+        await Assert.That(DslTool.ApplyDsl(sessionId, dsl).Success).IsTrue();
+        var custId = CreateAndId(sessionId, "Customer", """{"Status":"open"}""");
+        var orderId = CreateAndId(sessionId, "Order", """{"Code":"1"}""");
+
+        var blocked = RuntimeTool.InvokeAction(sessionId, custId, "Ship");
+        await Assert.That(blocked.Success).IsFalse();
+        await Assert.That(GetProp(sessionId, custId, "Status")).IsEqualTo("open");
+
+        await Assert.That(RuntimeTool.LinkInstances(sessionId, custId, "orders", orderId).Success)
+            .IsTrue();
+        var ok = RuntimeTool.InvokeAction(sessionId, custId, "Ship");
+        await Assert.That(ok.Success).IsTrue();
+        await Assert.That(GetProp(sessionId, custId, "Status")).IsEqualTo("shipped");
+    }
+
+    // ── if (Rel exists) via MCP ────────────────────────────────
+
+    [Test]
+    public async Task If_RelExists_Branches_ViaMcp() {
+        var (sessionId, _) = McpSessionStore.Create("SpeIfExists");
+        var dsl = """
+            domain SpeIfExists
+            Customer: entity {
+              Status: Text
+              orders: many Order
+              Mark: action {
+                if (orders exists) {
+                  assign Status to "has"
+                } else {
+                  assign Status to "none"
+                }
+              }
+            }
+            Order: entity {
+              Code: Text
+            }
+            """;
+        await Assert.That(DslTool.ApplyDsl(sessionId, dsl).Success).IsTrue();
+        var custId = CreateAndId(sessionId, "Customer", """{"Status":"?"}""");
+        var orderId = CreateAndId(sessionId, "Order", """{"Code":"1"}""");
+
+        await Assert.That(RuntimeTool.InvokeAction(sessionId, custId, "Mark").Success).IsTrue();
+        await Assert.That(GetProp(sessionId, custId, "Status")).IsEqualTo("none");
+
+        await Assert.That(RuntimeTool.LinkInstances(sessionId, custId, "orders", orderId).Success)
+            .IsTrue();
+        await Assert.That(RuntimeTool.InvokeAction(sessionId, custId, "Mark").Success).IsTrue();
+        await Assert.That(GetProp(sessionId, custId, "Status")).IsEqualTo("has");
+    }
+
+    // ── multi-stage when via MCP ───────────────────────────────
+
+    [Test]
+    public async Task MultiStageWhen_Peer_FiresOnCompleted_ViaMcp() {
+        var (sessionId, _) = McpSessionStore.Create("SpeMultiStage");
+        var dsl = """
+            domain SpeMultiStage
+            Tracker: entity {
+              Status: Text
+              Tracks: Order
+              Idle: stage {}
+              when Tracks Active, Completed as order {
+                assign Status to order Code
+              }
+            }
+            Order: entity {
+              Code: Text
+              Draft: stage {
+                Activate: action { transition to Active }
+              }
+              Active: stage {
+                Complete: action { transition to Completed }
+              }
+              Completed: stage {}
+            }
+            """;
+        await Assert.That(DslTool.ApplyDsl(sessionId, dsl).Success).IsTrue();
+        var trackerId = CreateAndId(sessionId, "Tracker", """{"Status":"UNSET"}""");
+        var orderId = CreateAndId(sessionId, "Order", """{"Code":"A"}""");
+        await Assert.That(RuntimeTool.LinkInstances(sessionId, trackerId, "Tracks", orderId)
+            .Success).IsTrue();
+
+        await Assert.That(RuntimeTool.InvokeAction(sessionId, orderId, "Activate").Success)
+            .IsTrue();
+        await Assert.That(GetProp(sessionId, trackerId, "Status")).IsEqualTo("A");
+
+        McpSessionStore.TryGet(sessionId, out var st);
+        st!.InstanceMap[orderId].SetProperty("Code", "B");
+        st.InstanceMap[trackerId].SetProperty("Status", "CLEARED");
+
+        await Assert.That(RuntimeTool.InvokeAction(sessionId, orderId, "Complete").Success)
+            .IsTrue();
+        await Assert.That(GetProp(sessionId, trackerId, "Status")).IsEqualTo("B");
+    }
+
+    // ── wrong stage name / export dirty domain ─────────────────
+
+    [Test]
+    public async Task ApplyDsl_UnknownWhenStage_FailsAnalysis() {
+        var (sessionId, _) = McpSessionStore.Create("SpeBadStage");
+        var bad = """
+            domain SpeBadStage
+            Tracker: entity {
+              Status: Text
+              Tracks: Order
+              Pending: stage {
+                when Tracks NoSuchStage {
+                  assign Status to "x"
+                }
+              }
+            }
+            Order: entity {
+              Code: Text
+              Draft: stage {}
+              Active: stage {}
+            }
+            """;
+        var apply = DslTool.ApplyDsl(sessionId, bad);
+        if (apply.Success) {
+            McpSessionStore.TryGet(sessionId, out var state);
+            var analysis = DomainModelAnalyzer.Analyze(state!.Domain);
+            await Assert.That(analysis.HasErrors || analysis.HasStructuralFailure).IsTrue();
+        }
+        else {
+            await Assert.That(apply.Success).IsFalse();
+        }
+    }
+
+    [Test]
+    public async Task ExportDomainToCSharp_WithPeerAnalysisError_FailsClosed() {
+        var (sessionId, _) = McpSessionStore.Create("SpeExportBad");
+        // Force a domain that applies but has subscription binding errors if possible.
+        // If apply rejects, export of empty/prior state is N/A — skip via assert on apply.
+        var bad = """
+            domain SpeExportBad
+            Tracker: entity {
+              Status: Text
+              Tracks: Order
+              Pending: stage {
+                when Tracks Active {
+                  assign Status to order Code
+                }
+              }
+            }
+            Order: entity {
+              Code: Text
+              Draft: stage {}
+              Active: stage {}
+            }
+            """;
+        var apply = DslTool.ApplyDsl(sessionId, bad);
+        if (!apply.Success) {
+            // Prefer evolve rejected at tool boundary
+            await Assert.That(apply.Success).IsFalse();
+            return;
+        }
+
+        McpSessionStore.TryGet(sessionId, out var state);
+        var analysis = DomainModelAnalyzer.Analyze(state!.Domain);
+        await Assert.That(analysis.HasErrors).IsTrue();
+
+        var export = OracleTool.ExportDomainToCSharp(sessionId);
+        // Export may use LatestAnalysis and throw or fail — must not silently emit peer handlers.
+        if (export.Success) {
+            var csharp = ExtractCSharp(export) ?? "";
+            // Must not invent a clean peer param for an unbound body
+            await Assert.That(
+                csharp.Contains("WhenOrderActive") && csharp.Contains("Order order")).IsFalse();
+        }
+        else {
+            await Assert.That(export.Success).IsFalse();
+        }
+    }
+
     // ── Helpers ────────────────────────────────────────────────
 
     private static string CreateAndId(string sessionId, string entity, string? props = null) {

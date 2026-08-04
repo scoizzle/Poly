@@ -371,7 +371,10 @@ public sealed record DomainEntityInstance {
         Effect effect,
         EffectLoweringPass effectPass,
         TypeDefinitionNodeAnalyzer typeProvider) {
-        var lowered = effectPass.TryLowerVmNode(effect);
+        // Store-aware quantifiers / path-prefix / Rel exists must resolve before
+        // Syntax lowering — same honesty as EvaluatePolicy (no bag pass-through).
+        var prepared = PreprocessEffectExpressions(effect);
+        var lowered = effectPass.TryLowerVmNode(prepared);
         if (lowered is not null) {
             var compiled = Interpreter.Compile(lowered, typeProvider);
             using var exec = Interpreter.Execute(compiled,
@@ -379,8 +382,47 @@ public sealed record DomainEntityInstance {
             return;
         }
 
-        EffectExecutor.Run(this, effectPass, typeProvider, effect);
+        EffectExecutor.Run(this, effectPass, typeProvider, prepared);
     }
+
+    /// <summary>
+    /// Rewrites effect expression trees so store-dependent forms become literals
+    /// (or fail closed) before VM lowering.
+    /// </summary>
+    private Effect PreprocessEffectExpressions(Effect effect) => effect switch {
+        AssignEffect a => a with { Value = PreprocessQuantifiers(a.Value) },
+        ConditionalEffect c => c with {
+            Condition = PreprocessQuantifiers(c.Condition),
+            ThenEffects = c.ThenEffects.Select(PreprocessEffectExpressions).ToList(),
+            ElseEffects = c.ElseEffects?.Select(PreprocessEffectExpressions).ToList()
+        },
+        CompositeEffect c => c with {
+            Effects = c.Effects.Select(PreprocessEffectExpressions).ToList()
+        },
+        CreateEntityInstance cei => cei with {
+            Initializers = cei.Initializers
+                .Select(i => i with { Expression = PreprocessQuantifiers(i.Expression) })
+                .ToList()
+        },
+        CreateEntityInRelationshipEffect cir => cir with {
+            Initializers = cir.Initializers
+                .Select(i => i with { Expression = PreprocessQuantifiers(i.Expression) })
+                .ToList()
+        },
+        InvokeActionEffect iae => iae with {
+            ParameterBindings = iae.ParameterBindings
+                .Select(b => b with { Expression = PreprocessQuantifiers(b.Expression) })
+                .ToList(),
+            Filter = iae.Filter is null ? null : PreprocessQuantifiers(iae.Filter)
+        },
+        LinkRelationshipEffect link => link with {
+            Target = PreprocessQuantifiers(link.Target)
+        },
+        UnlinkRelationshipEffect unlink => unlink with {
+            Target = PreprocessQuantifiers(unlink.Target)
+        },
+        _ => effect
+    };
 
     /// <summary>
     /// Dispatches direct-execution effects using <see cref="EffectDispatch{TResult}"/>.

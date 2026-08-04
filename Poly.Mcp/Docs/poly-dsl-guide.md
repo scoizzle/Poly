@@ -571,20 +571,20 @@ against the target entity; reverse-side / self-rel / ManyToMany / OneToOne rejec
 
 **Rules:**
 - `Rel Prop` on `many` relationships is invalid (use `any Rel where …` — Q3′ shipped). Cardinality validation is enforced at domain analysis time; the parser accepts the syntax but the analysis pipeline will reject it when relationship metadata is available.
-- `Rel exists` on `many` is allowed (authoring: non-empty intent). **Runtime today is not store-link presence** — see dual paths below.
-- Cross-entity reads (path-prefix, exists, where) are legal in policies, require, and assign RHS.
+- `Rel exists` on `many` is allowed (non-empty outbound-link intent). **Runtime is store-link presence** when domain-bound with a store — see dual paths below.
+- Cross-entity reads (path-prefix, exists, where) are legal in policies, require, assign RHS, and **`if` conditions** (same preprocess as policy eval).
 - Cross-entity writes (nav path as assign target) are banned.
-- **Path-prefix / owned / quantifier / Rel exists policy reads require a store + links** when the name is an outbound relationship. Ownership (`SourceOwnsTarget`) is a modeling flag; evaluation uses the same outbound links as path-prefix / many.
+- **Path-prefix / owned / quantifier / Rel exists** require a store + links when the name is an outbound relationship. Ownership (`SourceOwnsTarget`) is a modeling flag; evaluation uses the same outbound links as path-prefix / many.
 
   **Dual evaluation path (do not conflate):**
-  - **Store + link (product path):** `create_instance` → `link_instances` → `evaluate_policy(…, instanceId=…)`. Resolves **singular path-prefix**, **Q3′ quantifiers**, and **`Rel exists` / `not Rel exists`** against store outbound links. **Fail closed:** missing store/domain metadata throws. Empty links: path-prefix throws; `Rel exists` → **false**; `not Rel exists` → **true**. Multi-link bare path-prefix throws (use `any`/`all`).
+  - **Store + link (product path):** `create_instance` → `link_instances` → `evaluate_policy(…, instanceId=…)` **or** action/entry/exit/`if` bodies on store-attached instances. Resolves **singular path-prefix**, **Q3′ quantifiers**, and **`Rel exists` / `not Rel exists`** against store outbound links. **Fail closed:** missing store/domain metadata throws. Empty links: path-prefix throws; `Rel exists` → **false**; `not Rel exists` → **true**. Bare path-prefix on `many` is analysis-rejected (use `any`/`all`); multi-link to-one path-prefix throws at eval.
   - **Standalone bag:** `evaluate_policy(age=…)` / `properties=…` — **local expressions only**. Non-relationship `Exists(PropertyAccess)` still bag-null-lowers; relationship-named `Rel exists` requires store (throws without it).
 
   For agent workflows: use `instanceId` + store + link for path-prefix, owned, quantifiers, and relationship `exists`.
 
 **Shipped in the current product surface:**
 - Arithmetic (`+`, `-`, `*`, `/`) in expressions
-- Conditional effects (`if (expr) { effects } else { effects }`)
+- Conditional effects (`if (expr) { effects } else { effects }`) — store-aware conditions (exists / path-prefix / quantifiers) preprocess like policies
 - Invoke effect (`invoke ActionName` with optional arguments; cross-entity via `invoke RelName.ActionName`; quantifiers `any`/`all`; filter `where`)
 - Action parameters (`actionName: action (param: Type, ...)`)
 - `default` and `enum` constraints

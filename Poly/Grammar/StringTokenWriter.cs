@@ -1,6 +1,6 @@
 using System.Text;
 
-namespace Poly.Text.Grammar;
+namespace Poly.Grammar;
 
 /// <summary>
 /// A <see cref="TokenWriter{TKind}"/> backed by a <see cref="StringBuilder"/>.

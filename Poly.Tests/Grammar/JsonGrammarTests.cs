@@ -1,8 +1,8 @@
 using System.Text;
 
-using Poly.Text.Grammar;
+using Poly.Grammar;
 
-namespace Poly.Tests.Text.Grammar;
+namespace Poly.Tests.Grammar;
 
 // ─── JSON token kind ───────────────────────────────────────
 enum JsonKind {

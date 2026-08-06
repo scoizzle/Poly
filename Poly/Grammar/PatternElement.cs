@@ -1,4 +1,4 @@
-namespace Poly.Text.Grammar;
+namespace Poly.Grammar;
 
 /// <summary>
 /// A single element in a <see cref="Pattern{TKind}"/>. Each element describes

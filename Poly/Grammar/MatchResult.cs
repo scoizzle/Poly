@@ -1,4 +1,4 @@
-namespace Poly.Text.Grammar;
+namespace Poly.Grammar;
 
 /// <summary>
 /// The result of a successful pattern match. Carries the pattern name and

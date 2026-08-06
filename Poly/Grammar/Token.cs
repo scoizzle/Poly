@@ -1,4 +1,4 @@
-namespace Poly.Text.Grammar;
+namespace Poly.Grammar;
 
 /// <summary>
 /// A single token produced by a <see cref="TokenReader{TKind}"/>. Carries the

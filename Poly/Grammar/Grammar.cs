@@ -1,4 +1,4 @@
-namespace Poly.Text.Grammar;
+namespace Poly.Grammar;
 
 /// <summary>
 /// A grammar is a named collection of <see cref="Pattern{TKind}"/> grouped

@@ -1,4 +1,4 @@
-namespace Poly.Text.Grammar;
+namespace Poly.Grammar;
 
 /// <summary>
 /// Base class for string-backed token readers. Provides character-level

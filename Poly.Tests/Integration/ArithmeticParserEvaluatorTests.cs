@@ -1,10 +1,10 @@
 using System.Linq.Expressions;
 
 using Poly.Analysis;
+using Poly.Grammar;
 using Poly.Interpretation;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Tests.TestHelpers;
-using Poly.Text.Grammar;
 
 namespace Poly.Tests.Integration;
 

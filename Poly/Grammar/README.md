@@ -1,4 +1,4 @@
-# Poly.Text.Grammar
+# Poly.Grammar
 
 A pattern-table grammar engine. Grammars are defined as named collections of
 token sequences (patterns). A linear-scan matcher finds the longest matching

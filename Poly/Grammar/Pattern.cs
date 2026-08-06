@@ -1,4 +1,4 @@
-namespace Poly.Text.Grammar;
+namespace Poly.Grammar;
 
 /// <summary>
 /// A named pattern: a sequence of <see cref="IPatternElement{TKind}"/> that

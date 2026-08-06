@@ -1,4 +1,4 @@
-namespace Poly.Text.Grammar;
+namespace Poly.Grammar;
 
 /// <summary>
 /// The core scan engine. Given a <see cref="Grammar{TKind}"/> and a

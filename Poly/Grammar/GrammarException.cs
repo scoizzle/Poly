@@ -1,4 +1,4 @@
-namespace Poly.Text.Grammar;
+namespace Poly.Grammar;
 
 /// <summary>
 /// Thrown by <see cref="TokenReader{TKind}.Expect"/> and <see cref="Matcher{TKind}"/>

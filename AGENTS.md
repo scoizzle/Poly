@@ -122,6 +122,7 @@ The product guide is the single source of truth for MCP `apply_dsl`.
 | Type/member model + CLR host | `Poly/Introspection/` |
 | Domain model, evolution, DE→AST | `Poly/DomainModeling/` |
 | Validation rules | `Poly/Validation/Rules/` (register subtypes on `Rule.cs`) |
+| Pattern-table grammar engine (parse/print ports) | `Poly/Grammar/` (`Poly.Grammar`) |
 | MCP session + tools | `Poly.Mcp/` |
 | Shared helpers | `Poly/Extensions/` |
 

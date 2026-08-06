@@ -1,6 +1,6 @@
-using Poly.Text.Grammar;
+using Poly.Grammar;
 
-namespace Poly.Tests.Text.Grammar;
+namespace Poly.Tests.Grammar;
 
 // ─── Token writer with JSON-specific formatting ────────────
 sealed class JsonTokenWriter : StringTokenWriter<JsonKind> {

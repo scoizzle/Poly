@@ -12,6 +12,8 @@
 
 When a change alters a mechanism listed in CORE, update CORE in the same change. Significant cross-cutting choices get an ADR.
 
+> Note: This repo treats `Poly/AGENTS.md` as the authoritative workspace policy. User-wide agent defaults in `~/.agents/AGENTS.md` are respected as a baseline for all sessions, but repo-specific rules in this file take precedence inside this workspace.
+
 ---
 
 ## Core principles

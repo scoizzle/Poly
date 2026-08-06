@@ -198,6 +198,24 @@ if type_of(suite_key) == "string" {
         inventory = "docs/plans/v2-to-v3/mcp-dogfood-protocol.md";
         suite_gate = "";
         suite_label = "dogfood";
+    } else if sk == "amu" || sk.contains("amu-README") {
+        suite_readme = "docs/plans/simple-agent-tasks/amu-README.md";
+        parent_plan = "docs/plans/domainmodeling-cohesion-and-metadata-findings.md";
+        inventory = "docs/plans/simple-agent-tasks/SUITE-OF-SUITES.md";
+        suite_gate = "docs/plans/simple-agent-tasks/amu-gate.md";
+        suite_label = "amu";
+    } else if sk == "p4" || sk.contains("p4-README") {
+        suite_readme = "docs/plans/simple-agent-tasks/p4-README.md";
+        parent_plan = "docs/plans/domain-dsl-absorption-proposals.md";
+        inventory = "docs/plans/simple-agent-tasks/SUITE-OF-SUITES.md";
+        suite_gate = "docs/plans/simple-agent-tasks/p4-gate.md";
+        suite_label = "p4";
+    } else if sk == "coh" || sk.contains("coh-README") {
+        suite_readme = "docs/plans/simple-agent-tasks/coh-README.md";
+        parent_plan = "docs/plans/domainmodeling-decomposition-proposal.md";
+        inventory = "docs/plans/simple-agent-tasks/SUITE-OF-SUITES.md";
+        suite_gate = "docs/plans/simple-agent-tasks/coh-gate.md";
+        suite_label = "coh";
     } else if sk != "" {
         // Arbitrary suite README path: infer companion gate/plan from parent plan link later
         suite_readme = sk;

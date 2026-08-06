@@ -38,15 +38,26 @@ Architectural rationale → **`docs/decisions/`**. Module maps → **`Poly/*/REA
 
 ## Ready suites (not CURRENT — solidify complete)
 
-Pre-built queues for multi-agent execution. **Do not start until master-roadmap admits them.** Prefer after dogfood-wave-2.
+Pre-built queues for multi-agent execution. **Pipeline + Copilot CLI:** [`simple-agent-tasks/SUITE-OF-SUITES.md`](simple-agent-tasks/SUITE-OF-SUITES.md).
 
 | Suite | Queue | Parallelism | Admit after |
 |-------|--------|-------------|-------------|
-| **amu** | [`simple-agent-tasks/amu-README.md`](simple-agent-tasks/amu-README.md) | W1 and W3 chains may parallel by file ownership | Dogfood clear; platform spine |
-| **p4** | [`simple-agent-tasks/p4-README.md`](simple-agent-tasks/p4-README.md) | Sequential (parse → analysis → goldens → guide) | Dogfood clear; cheapest language win |
-| **coh** | [`simple-agent-tasks/coh-README.md`](simple-agent-tasks/coh-README.md) | R/D/E/V after COH-0; R before D if same files | Idle green tree or post-dogfood hygiene |
+| **dogfood w2** | [`v2-to-v3/simple-agent-tasks/dogfood-README.md`](v2-to-v3/simple-agent-tasks/dogfood-README.md) | S4–S6 discovery parallel | **CURRENT** |
+| **amu** | [`simple-agent-tasks/amu-README.md`](simple-agent-tasks/amu-README.md) | W1 and W3 by file ownership | After dogfood |
+| **p4** | [`simple-agent-tasks/p4-README.md`](simple-agent-tasks/p4-README.md) | Sequential | After amu (or alone if only language) |
+| **coh** | [`simple-agent-tasks/coh-README.md`](simple-agent-tasks/coh-README.md) | R/E/V parallel; R before D | After p4 (hygiene) |
 
-Suggested order when admitting: **amu → p4 → coh** (or **p4** first if only a thin language slice is wanted). Do **not** run amu + coh on overlapping DomainEntityInstance files without ownership.
+### Copilot CLI
+
+```bash
+# Full pipeline (dogfood → amu → p4 → coh)
+copilot --agent domainmodeling-backlog -p "Execute SUITE-OF-SUITES until all stages complete."
+
+# One suite
+copilot --agent plan-suite-until-done -p "Suite: amu. Mode: until-done."
+```
+
+Agents: `.github/agents/domainmodeling-backlog.agent.md`, `.github/agents/plan-suite-until-done.agent.md`.
 
 ---
 

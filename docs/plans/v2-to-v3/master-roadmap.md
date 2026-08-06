@@ -57,7 +57,8 @@ CURRENT: dogfood-wave-2 — MCP discovery S4 peer binder → S5 entity-level whe
          Queue: simple-agent-tasks/dogfood-README.md
 ADMIT:   (wave 2 only) — fix tasks from findings after reports; no parallel amu/P*/cohesion
 PARKED:  Absorption P1/P2/P3/P5+; grammar; analysis-consuming lowering residuals; naming V3*; DAU deepen
-READY:   amu · p4 · coh suites (docs/plans/simple-agent-tasks/*-README.md) — admit after wave-2; not parallel CURRENT
+READY:   pipeline docs/plans/simple-agent-tasks/SUITE-OF-SUITES.md (amu · p4 · coh)
+         Copilot: copilot --agent domainmodeling-backlog -p "Execute SUITE-OF-SUITES until complete"
 PULL:    Q4; link DSL; E5; Bar B; multi-hop / dates only if wave-2 forces
 ```
 

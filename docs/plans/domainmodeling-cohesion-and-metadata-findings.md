@@ -167,17 +167,10 @@ Analysis is too often a **fan-out of independent tree walks**, not a **pipeline 
 | `StorageMapping` / `Transport` | Storage/Transport passes | Codegen; MCP flags only |
 | Cross-reference / dependency graph | CrossReferencePass | Largely under-projected |
 
-### 5.4 Opportunity suite shape (if admitted)
+### 5.4 Opportunity suite (solidified)
 
-```text
-amu — analysis metadata utilization
-  W0  Live inventory: publish × consume × residual OfType/Relationships scans
-  W1  Effect/Policy/Subscription name resolve → catalog-only (fail closed)
-  W2  Honest Dependencies; StorageAnalyzer prefer EntityStructure
-  W3  Lowering residual lookups → metadata when analysis present
-  W4  MCP structured facts (aggregate, plans, capability) — no second store
-  Pull  Domain→AST metadata bridge only after W1–W3 green
-```
+**Queue:** [`simple-agent-tasks/amu-README.md`](simple-agent-tasks/amu-README.md) (W0–W4 + gate).  
+**Status:** Ready — not CURRENT until master-roadmap admits.
 
 **Anti-goal:** invent more metadata types without consumers. Prefer wire existing bags and delete dual scans.
 

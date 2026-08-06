@@ -56,7 +56,8 @@ DONE:    M1–M4; Q1′+Q3′+link; infra IR; domain catalog; peer/entity-level 
 CURRENT: dogfood-wave-2 — MCP discovery S4 peer binder → S5 entity-level when → S6 owned+exists+quantifiers
          Queue: simple-agent-tasks/dogfood-README.md
 ADMIT:   (wave 2 only) — fix tasks from findings after reports; no parallel amu/P*/cohesion
-PARKED:  Absorption P1–P5+; grammar; amu metadata utilization; decomposition; analysis-consuming lowering residuals; naming V3*; DAU deepen
+PARKED:  Absorption P1/P2/P3/P5+; grammar; analysis-consuming lowering residuals; naming V3*; DAU deepen
+READY:   amu · p4 · coh suites (docs/plans/simple-agent-tasks/*-README.md) — admit after wave-2; not parallel CURRENT
 PULL:    Q4; link DSL; E5; Bar B; multi-hop / dates only if wave-2 forces
 ```
 

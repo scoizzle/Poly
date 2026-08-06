@@ -36,11 +36,25 @@ Architectural rationale → **`docs/decisions/`**. Module maps → **`Poly/*/REA
 
 ---
 
+## Ready suites (not CURRENT — solidify complete)
+
+Pre-built queues for multi-agent execution. **Do not start until master-roadmap admits them.** Prefer after dogfood-wave-2.
+
+| Suite | Queue | Parallelism | Admit after |
+|-------|--------|-------------|-------------|
+| **amu** | [`simple-agent-tasks/amu-README.md`](simple-agent-tasks/amu-README.md) | W1 and W3 chains may parallel by file ownership | Dogfood clear; platform spine |
+| **p4** | [`simple-agent-tasks/p4-README.md`](simple-agent-tasks/p4-README.md) | Sequential (parse → analysis → goldens → guide) | Dogfood clear; cheapest language win |
+| **coh** | [`simple-agent-tasks/coh-README.md`](simple-agent-tasks/coh-README.md) | R/D/E/V after COH-0; R before D if same files | Idle green tree or post-dogfood hygiene |
+
+Suggested order when admitting: **amu → p4 → coh** (or **p4** first if only a thin language slice is wanted). Do **not** run amu + coh on overlapping DomainEntityInstance files without ownership.
+
+---
+
 ## Parked (do not execute until unparked)
 
 | Plan | Role | Unpark when |
 |------|------|-------------|
-| [**DSL absorption proposals**](domain-dsl-absorption-proposals.md) | Experiment → product styles (P1 temporal **lower priority**, multi-hop, when any/all, …) | Admit **one** P* as sole suite; **not** dates-first by default |
+| [**DSL absorption proposals**](domain-dsl-absorption-proposals.md) | Experiment → product styles; **P4 suite ready** under simple-agent-tasks | Admit **one** P* as sole suite; P1 temporal still design-first |
 | [**MCP dogfood protocol**](v2-to-v3/mcp-dogfood-protocol.md) · [`dogfood-*`](v2-to-v3/simple-agent-tasks/dogfood-README.md) · [`dogfood-fix-*`](v2-to-v3/simple-agent-tasks/dogfood-fix-README.md) | **Wave 2 CURRENT** (S4–S6); wave 1 historical | Wave 2 complete → clear or admit forced suite |
 | [**MCP dogfood orchestrator**](v2-to-v3/mcp-dogfood-orchestrator.md) | Dogfood loop tooling | With dogfood admission |
 | [**Grammar framework integration**](grammar-integration.md) | Draft — not a prerequisite for temporal/SPE | Product stability + explicit pick |

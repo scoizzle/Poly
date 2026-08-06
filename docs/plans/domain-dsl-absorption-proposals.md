@@ -182,7 +182,7 @@ Parse remains pack-agnostic for open forms:
 | **P1** | Dates / time arithmetic & compare | **Absorb as built-in temporal pack + core specialization seams** | D (pack) + C lower + B policies | P0 after dogfood |
 | **P2** | Multi-hop path-prefix | **Absorb** | B then C for assign RHS if needed | P0–P1 |
 | **P3** | Action return types honesty | **Harden existing** | A+C + analysis | P1 |
-| **P4** | `when any/all Rel Stage` | **Absorb** | A + existing store dispatch | P1 |
+| **P4** | `when any/all Rel Stage` | **Absorb** — suite ready: [`simple-agent-tasks/p4-README.md`](simple-agent-tasks/p4-README.md) | A + existing store dispatch | P1 |
 | **P5** | Comment round-trip | **Absorb (thin)** | A only | P2 cheap |
 | **P6** | Actor + `actor` in policies | **Defer** until host identity | E + thin A | P2+ |
 | **P7** | `policy external` | **Defer** until resolver consumer | E + A | P2+ |

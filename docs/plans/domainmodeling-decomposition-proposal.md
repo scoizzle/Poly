@@ -1,12 +1,14 @@
 # Proposal: Decompose `Poly.DomainModeling`
 
-**Status:** Draft — 2026-07-26  
+**Status:** Draft — 2026-07-26; **agent queue ready** 2026-08-06  
 **Author:** Agent (post-rewrite assessment)  
 **Type:** Structural decomposition (behavior-preserving)  
+**Execution queue (not CURRENT):** [`simple-agent-tasks/coh-README.md`](simple-agent-tasks/coh-README.md) — Runtime/ + dispatch + evolution helpers (no multi-assembly)  
 **Related:**
 - [`poly-ast-analysis-module-split.md`](poly-ast-analysis-module-split.md) (established pattern)
 - [`../CORE.md`](../CORE.md) — platform ownership table
 - [`../AGENTS.md`](../../AGENTS.md) — placement rules
+- [`domainmodeling-cohesion-and-metadata-findings.md`](domainmodeling-cohesion-and-metadata-findings.md)
 
 ---
 

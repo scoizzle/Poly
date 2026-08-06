@@ -156,6 +156,7 @@ Not required for product progress.
 DONE:    (see §1 — M1–M4, qe, vs, spe, das, dacr, apm, dar, infra bar, …)
 CURRENT: dogfood-wave-2 — S4 peer binder → S5 entity-level when → S6 owned+exists+quantifiers
 ADMIT:   fix tasks only from wave-2 reports
-PARKED:  absorption P*; amu; DAU; grammar; decomposition; naming V3*; E5; Q4
+READY:   amu · p4 · coh (simple-agent-tasks/*-README) — admit after wave-2
+PARKED:  absorption P1/P2/…; DAU; grammar; naming V3*; E5; Q4
 PULL:    multi-hop / dates only if dogfood forces
 ```

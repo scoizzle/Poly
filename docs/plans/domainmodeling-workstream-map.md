@@ -13,7 +13,7 @@
 | Lens | State |
 |------|--------|
 | Product vertical (M1–M4, spawn-and-wire, Q1′/Q3′, link, SPE, DAS catalog monopath) | **Done** |
-| CURRENT (agent pick) | **`(none)`** — intentionally idle after thrash-control 2026-08-04 |
+| CURRENT (agent pick) | **`dogfood-wave-2`** (S4→S5→S6) — admitted 2026-08-06 |
 | Feeling of “in the middle” | Many **parked / residual / structural** docs still look active; code is past most of them |
 
 If work feels multi-stream, the fix is **admission**, not more parallel suites.
@@ -150,12 +150,12 @@ Not required for product progress.
 
 ---
 
-## Agent pick (to fill after user choice)
+## Agent pick (live)
 
 ```text
 DONE:    (see §1 — M1–M4, qe, vs, spe, das, dacr, apm, dar, infra bar, …)
-CURRENT: (none)  ← set after decision §6
-ADMIT:   —
-PARKED:  absorption P*; DAU; grammar; analysis-consuming lowering; naming V3*; E5; Q4
-PULL:    dogfood scenarios; unlink; Bar B; multi-hop if forced
+CURRENT: dogfood-wave-2 — S4 peer binder → S5 entity-level when → S6 owned+exists+quantifiers
+ADMIT:   fix tasks only from wave-2 reports
+PARKED:  absorption P*; amu; DAU; grammar; decomposition; naming V3*; E5; Q4
+PULL:    multi-hop / dates only if dogfood forces
 ```

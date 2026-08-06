@@ -1,7 +1,7 @@
 # MCP Dogfood Protocol -- Domain Capability Discovery
 
-**Date:** 2026-07-25 (revised)  
-**Status:** Active -- Wave 1 (S1-S3) open  
+**Date:** 2026-07-25 (revised 2026-08-06)  
+**Status:** Active — **Wave 2** (S4–S6) admitted CURRENT  
 **Purpose:** Drive **direct domain modeling** product direction from structured MCP agent sessions -- not free-form thrash, not codegen.  
 **Queue:** [`simple-agent-tasks/dogfood-README.md`](simple-agent-tasks/dogfood-README.md)  
 **Report folder:** [`agent-summaries/dogfood/`](agent-summaries/dogfood/)  

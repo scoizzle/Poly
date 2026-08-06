@@ -28,7 +28,9 @@ Architectural rationale → **`docs/decisions/`**. Module maps → **`Poly/*/REA
 | Plan | Role |
 |------|------|
 | [**Master roadmap**](v2-to-v3/master-roadmap.md) | Milestone index + **one-line agent pick** (CURRENT) |
+| [**Dogfood wave 2**](v2-to-v3/simple-agent-tasks/dogfood-README.md) | **CURRENT** — S4→S5→S6 MCP discovery |
 | [**Workstream map**](domainmodeling-workstream-map.md) | Done / parked / pull inventory |
+| [**Cohesion & metadata findings**](domainmodeling-cohesion-and-metadata-findings.md) | Orientation (2026-08-06); not a queue |
 | [**Capability inventory**](../domainmodeling-capability-inventory.md) | What ships (reference, not a queue) |
 | [**`pr1` review gate**](v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md) | Always-on pre-ship process |
 
@@ -39,7 +41,7 @@ Architectural rationale → **`docs/decisions/`**. Module maps → **`Poly/*/REA
 | Plan | Role | Unpark when |
 |------|------|-------------|
 | [**DSL absorption proposals**](domain-dsl-absorption-proposals.md) | Experiment → product styles (P1 temporal **lower priority**, multi-hop, when any/all, …) | Admit **one** P* as sole suite; **not** dates-first by default |
-| [**MCP dogfood protocol**](v2-to-v3/mcp-dogfood-protocol.md) · [`dogfood-*`](v2-to-v3/simple-agent-tasks/dogfood-README.md) · [`dogfood-fix-*`](v2-to-v3/simple-agent-tasks/dogfood-fix-README.md) | Scenario discovery; fixes mostly done | Admit dogfood as primary |
+| [**MCP dogfood protocol**](v2-to-v3/mcp-dogfood-protocol.md) · [`dogfood-*`](v2-to-v3/simple-agent-tasks/dogfood-README.md) · [`dogfood-fix-*`](v2-to-v3/simple-agent-tasks/dogfood-fix-README.md) | **Wave 2 CURRENT** (S4–S6); wave 1 historical | Wave 2 complete → clear or admit forced suite |
 | [**MCP dogfood orchestrator**](v2-to-v3/mcp-dogfood-orchestrator.md) | Dogfood loop tooling | With dogfood admission |
 | [**Grammar framework integration**](grammar-integration.md) | Draft — not a prerequisite for temporal/SPE | Product stability + explicit pick |
 | [**Analysis-consuming lowering**](analysis-consuming-lowering.md) | Draft | Explicit pick |

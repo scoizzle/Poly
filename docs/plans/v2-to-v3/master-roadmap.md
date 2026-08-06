@@ -1,7 +1,7 @@
 # DomainModeling product roadmap (milestones)
 
 **Status:** Active (milestones index)  
-**Last Updated:** 2026-08-05  
+**Last Updated:** 2026-08-06  
 **Purpose:** High-level milestone status only.  
 **Day-to-day work:** **one admitted suite** (see Agent pick). Plans index admission rules: [`../README.md`](../README.md).  
 **Completed suites (archived):** [`domainmodeling-completed-2026-08`](../archive/domainmodeling-completed-2026-08/README.md) (`qe` · `vs` · `spe` · `das` · `dacr` · `apm` · `dar` · `dau`) · infra under bar [`infrastructure-pass-NEXT.md`](../infrastructure-pass-NEXT.md)
@@ -52,16 +52,17 @@ MCP / direct API as thin consumers
 ### Agent pick (one line)
 
 ```text
-DONE:    M1–M4; Q1′+Q3′+link; infra IR; domain catalog; peer/entity-level when/owned policies; store-aware Rel exists; dogfood-fix G1/G3/HOST; surface-extension dogfood suite (`SurfaceExtensionDogfoodTests`); domain analysis unification parked
-CURRENT: (none) — surface-extension dogfood test expansion landed; admit next only when chosen
-ADMIT:   Further dogfood scenarios if gaps; not temporal/dates first
-PARKED:  Absorption P1 dates/temporal pack (lower priority); P2–P5+; dogfood S* discovery; grammar; DomainAuthoringContext; analysis-consuming lowering; naming V3*
-PULL:    Q4; unlink; E5; Bar B; analysis unification commit ops; multi-hop only if dogfood forces
+DONE:    M1–M4; Q1′+Q3′+link; infra IR; domain catalog; peer/entity-level when/owned policies; store-aware Rel exists; dogfood wave-1 + fix G1/G3/HOST; SurfaceExtensionDogfoodTests
+CURRENT: dogfood-wave-2 — MCP discovery S4 peer binder → S5 entity-level when → S6 owned+exists+quantifiers
+         Queue: simple-agent-tasks/dogfood-README.md
+ADMIT:   (wave 2 only) — fix tasks from findings after reports; no parallel amu/P*/cohesion
+PARKED:  Absorption P1–P5+; grammar; amu metadata utilization; decomposition; analysis-consuming lowering residuals; naming V3*; DAU deepen
+PULL:    Q4; link DSL; E5; Bar B; multi-hop / dates only if wave-2 forces
 ```
 
-**Honest product claim today:** Path-prefix / exists / where **and** Q3′ quantifiers are authorable **and** evaluable (store-linked `EvaluatePolicy`). Peer binding: `when Rel Stage as name`. Surface extensions: export peer handlers, entity-level `when`, owned policies. MCP: `create_instance` → `link_instances` → `evaluate_policy(instanceId=…)`. DSL has **no** `link` keyword (`create in Rel` for spawn-and-wire). JSON policies still local-only. Codegen DbContext/Program via Syntax IR; `.http` still string. **Temporal DSL authoring** (`Now - 12 days`) not yet product — **intentionally not the next bet**. Surface-extension agent path is covered by [`Poly.Tests/Mcp/SurfaceExtensionDogfoodTests.cs`](../../../Poly.Tests/Mcp/SurfaceExtensionDogfoodTests.cs).
+**Honest product claim today:** Path-prefix / exists / where **and** Q3′ quantifiers are authorable **and** evaluable (store-linked `EvaluatePolicy`). Peer binding: `when Rel Stage as name`. Surface extensions: export peer handlers, entity-level `when`, owned policies. MCP: `create_instance` → `link_instances` → `evaluate_policy(instanceId=…)`. DSL has **no** `link` keyword (`create in Rel` for spawn-and-wire). JSON policies still local-only. Codegen DbContext/Program via Syntax IR; `.http` still string. **Temporal DSL authoring** not product. Automated SPE path: [`Poly.Tests/Mcp/SurfaceExtensionDogfoodTests.cs`](../../../Poly.Tests/Mcp/SurfaceExtensionDogfoodTests.cs).
 
-**Focus (2026-08-04):** Close unfinished-workstream thrash — **one primary only**. surface-extension dogfood tests shipped on MCP path; temporal pack stays parked. Do **not** open grammar, multi-hop, when any/all, and packs in parallel. DAU remains parked.
+**Focus (2026-08-06):** **Dogfood wave 2** — agent MCP path on peer binder, entity-level when, owned+exists+quantifiers. Report-first; fix second. Do **not** open grammar, temporal, amu, multi-hop, or cohesion in parallel.
 
 ---
 

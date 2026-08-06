@@ -1,8 +1,8 @@
-# Grammar Framework Integration — Poly.Text.Grammar → DSL Pipeline
+# Grammar Framework Integration — Poly.Grammar → DSL Pipeline
 
 **Date:** 2026-07-26  
 **Status:** Draft — core prototype proven, integration pending  
-**Prototype:** [`Poly/Text/Grammar/`](../../Poly/Text/Grammar/) — 13 files, 54 tests, 0 warnings  
+**Prototype:** [`Poly/Grammar/`](../../Poly/Grammar/) — 13 files, 54 tests, 0 warnings (`Poly.Grammar`; media-agnostic ports, string adapters included)  
 **Related:** [`docs/plans/domainmodeling-decomposition-proposal.md`](../domainmodeling-decomposition-proposal.md), [`docs/CORE.md`](../../docs/CORE.md), `Poly/DomainModeling/Parsing/`, `Poly/DomainModeling/IAnnotationSyntax.cs`
 
 ---
@@ -11,7 +11,7 @@
 
 The current DSL pipeline (`PolyDslTokenizer` + `PolyDslParser` + `DomainDslPrinter`) is ~2,360 lines of hand-rolled recursive descent — closed, non-extensible, and a barrier to pack-contributed syntax. Every new pack keyword requires editing `PolyDslParser.ParseAnnotation()`.
 
-The `Poly.Text.Grammar` prototype proves the alternative: a pattern-table engine where adding syntax is a registration operation, not a code change. 54 tests across three grammars (mini-DSL, JSON parse, JSON print) confirm the core works — longest-match, nesting, optionality, repetition, wildcards, EOF guards, and round-trip print→parse.
+The `Poly.Grammar` prototype proves the alternative: a pattern-table engine where adding syntax is a registration operation, not a code change. 54 tests across three grammars (mini-DSL, JSON parse, JSON print) confirm the core works — longest-match, nesting, optionality, repetition, wildcards, EOF guards, and round-trip print→parse.
 
 This plan closes the gap between "pattern-table engine works for toy grammars" and "the DSL pipeline is driven by it."
 
@@ -28,7 +28,7 @@ This plan closes the gap between "pattern-table engine works for toy grammars" a
 
 ## 2. Current state inventory
 
-### Already built (prototype — `Poly/Text/Grammar/`)
+### Already built (prototype — `Poly/Grammar/`)
 
 | Component | Status | Tests |
 |-----------|--------|-------|

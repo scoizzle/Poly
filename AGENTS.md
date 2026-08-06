@@ -171,7 +171,6 @@ This gate is **mandatory before `[x]`** on any task in the active suite. The ful
 ## Coding ops
 
 - Prefer **minimal diffs**; match existing fluent naming and chaining.
-- `Expression` is often aliased to `System.Linq.Expressions.Expression` (`Poly/GlobalUsings.cs` / test file-locals as `Expr`).
+- Use conventional commit-style wording in user-facing summaries and edit confirmations for repo agent instructions.
 - No inline comments unless the logic is genuinely non-obvious.
 - No `#region` / `#endregion` in new code.
-- Prefer `Interpreter.Analyze` / `Compile` / `Execute` over hand-rolling analyzer pipelines unless tests intentionally isolate a pass.

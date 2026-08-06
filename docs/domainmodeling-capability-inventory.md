@@ -2,7 +2,7 @@
 
 **Date:** 2026-07-24 (revised)  
 **Purpose:** Single reference for what DomainModeling can actually do — by capability, with code references. Answers “are we building this or does it already ship?”  
-**Not a task queue.** Open work: [`plans/analysis-pipeline-merge.md`](plans/analysis-pipeline-merge.md), [`plans/infrastructure-pass-NEXT.md`](plans/infrastructure-pass-NEXT.md) pull list, query/effect pull lists.
+**Not a task queue.** Agent pick: [`plans/v2-to-v3/master-roadmap.md`](plans/v2-to-v3/master-roadmap.md). Completed suites: [`plans/archive/domainmodeling-completed-2026-08/`](plans/archive/domainmodeling-completed-2026-08/README.md).
 
 ---
 
@@ -142,7 +142,7 @@ Registered in `UseDomainModelAnalysisPipeline()` (`DomainModelAnalyzer.cs`):
 | Authoring suggestions + C# entity IR | `AuthoringSuggestionAnalyzer`, `EntitySyntaxPass` | ✅ |
 | Cycle detection | `CrossReferencePass` — entity dependency graph | ✅ domain pipeline · pack/coupling surface — **do not delete as unused** |
 
-**Migration complete:** [`plans/domain-analysis-unification.md`](plans/domain-analysis-unification.md) (`dau-*`). Storage + Transport are now always-on domain pipeline passes. Pack refinement via `DomainAuthoringContext` conventions. Thin `*Pass` → `Lowering/*Analyzer` bridges eliminated.
+**Migration complete:** archived DAU (`dau-*`). Storage + Transport are always-on domain pipeline passes. Thin `*Pass` → `Lowering/*Analyzer` bridges eliminated.
 
 ### 5.2 Codegen pipeline — `DslCompiler.GenerateAllFiles` (today)
 
@@ -236,7 +236,7 @@ Shipped highlights: entities, properties, constraints, enums, navs, stages, acti
 | Capability | Notes | Status |
 |-----------|--------|--------|
 | **Analysis pipeline merge (APM)** | Registration of topo/agg/beh/crossref on domain pipeline | ✅ **Done** |
-| **Domain analysis unification (DAU)** | Storage/transport always-on, authoring context, emit-first | ✅ [`plans/domain-analysis-unification.md`](plans/domain-analysis-unification.md) · [`dau-*`](plans/simple-agent-tasks/dau-README.md) |
+| **Domain analysis unification (DAU)** | Storage/transport always-on, authoring context, emit-first | ✅ archived [`dau-*`](plans/archive/domainmodeling-completed-2026-08/simple-agent-tasks/dau-README.md) |
 | CrossReference / coupling surface | Cycle + graph facets | ✅ registered · pack-ready — don’t delete |
 | Transport in domain analysis | Exposable surface + packs | ⬜ DAU D3 (not “delete unused”) |
 | Bar B full string oracle | Anonymous-object Syntax needed | ⬜ Pull |
@@ -271,8 +271,8 @@ Shipped highlights: entities, properties, constraints, enums, navs, stages, acti
 ## 12. Suggested reading order
 
 1. This inventory (what ships)  
-2. [`plans/simple-agent-tasks/apm-README.md`](plans/simple-agent-tasks/apm-README.md) (**implement next**)  
-3. [`plans/analysis-pipeline-merge.md`](plans/analysis-pipeline-merge.md) (design depth)  
+2. [`plans/v2-to-v3/master-roadmap.md`](plans/v2-to-v3/master-roadmap.md) (product pick / CURRENT)  
+3. [`plans/domainmodeling-workstream-map.md`](plans/domainmodeling-workstream-map.md) (done vs parked)  
 4. [`plans/infrastructure-pass-NEXT.md`](plans/infrastructure-pass-NEXT.md) (codegen pull)  
-5. [`plans/v2-to-v3/master-roadmap.md`](plans/v2-to-v3/master-roadmap.md) (product pick)  
-6. [`CORE.md`](CORE.md) before changing pipeline seams  
+5. [`CORE.md`](CORE.md) before changing pipeline seams  
+6. Archived suite history: [`plans/archive/domainmodeling-completed-2026-08/`](plans/archive/domainmodeling-completed-2026-08/README.md)

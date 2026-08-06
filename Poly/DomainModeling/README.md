@@ -82,7 +82,7 @@ Validate  →  Catalog (DomainCatalogPass)  →  Derive (structure, capability, 
  Runtime      MCP        Evolution       Export
 ```
 
-Future-state detail: [`docs/plans/domain-analysis-future-state.md`](../../docs/plans/domain-analysis-future-state.md).
+Historical future-state (accepted, archived): [`docs/plans/archive/domainmodeling-completed-2026-08/domain-analysis-future-state.md`](../../docs/plans/archive/domainmodeling-completed-2026-08/domain-analysis-future-state.md).
 
 ## Architectural Decisions
 
@@ -122,4 +122,4 @@ InvokeAction → CreateEntityInRelationship → CreateChildInstance → Store.Li
 ```
 
 See the dogfood test `Dogfood_CreateInDSL_SubscriptionFires` in `DomainEntityInstanceTests`
-and the plan at [`docs/plans/v2-to-v3/domainmodeling-next-phase.md`](../../docs/plans/v2-to-v3/domainmodeling-next-phase.md).
+(Phase 2 plan archived: [`docs/plans/archive/domainmodeling-completed-2026-08/v2-to-v3/domainmodeling-next-phase.md`](../../docs/plans/archive/domainmodeling-completed-2026-08/v2-to-v3/domainmodeling-next-phase.md).)

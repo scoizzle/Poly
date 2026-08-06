@@ -6,7 +6,7 @@
 **Current pick:** Effect surface — [`effect-surface-completeness.md`](effect-surface-completeness.md) (E0→E1); SA′.1 snapshot remains pull  
 
 
-**Predecessor:** Phase 2 spawn-and-wire ([`domainmodeling-next-phase.md`](domainmodeling-next-phase.md)); MCP gap inventory ([`mcp-tool-surface-expansion.md`](mcp-tool-surface-expansion.md) §0)  
+**Predecessor:** Phase 2 spawn-and-wire ([archived](../archive/domainmodeling-completed-2026-08/v2-to-v3/domainmodeling-next-phase.md)); MCP gap inventory ([`mcp-tool-surface-expansion.md`](mcp-tool-surface-expansion.md) §0) 
 **Dogfood:** [Report 1](agent-summaries/dogfood/DOGFOOD-REPORT-20260718.md) (R→RT) · [Report 2](agent-summaries/dogfood/DOGFOOD-REPORT-2-20260718.md) (post-RT)  
 **Goal:** Close the **neurosymbolic feedback loop** for agents: propose → **see** pipeline → **simulate** → correct → commit → **exercise** instances.  
 **Principle:** Thin MCP adapters; no new domain IR; deterministic oracles only; honest tool descriptions.

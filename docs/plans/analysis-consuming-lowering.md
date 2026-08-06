@@ -15,7 +15,7 @@ stage/cleanup slices.
 
 **Cross-cutting follow-on:** For runtime, MCP, DslCompiler, and evolution
 consumer migration beyond lowering, see
-`docs/plans/downstream-analysis-consumption-remediation.md`.
+`docs/plans/archive/domainmodeling-completed-2026-08/downstream-analysis-consumption-remediation.md` (complete; do not re-execute).
 
 **Policy update (2026-07-28):** Analysis is mandatory for downstream semantic
 consumers. Lowering migration now targets AnalysisResult-required contracts;

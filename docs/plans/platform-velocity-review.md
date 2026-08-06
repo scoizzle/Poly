@@ -3,7 +3,7 @@
 **Date:** 2026-07-25  
 **Status:** Active reference (review, not a micro-task suite)  
 **Audience:** Agents/humans adding DAU D3, packs, RestApi/transport emit, Q4, MCP tools, dogfood  
-**Related:** [`domain-analysis-unification.md`](domain-analysis-unification.md) · [`CORE.md`](../CORE.md) · [`v2-to-v3/master-roadmap.md`](v2-to-v3/master-roadmap.md) · design-integration review §12 on DAU plan
+**Related:** [`archive/domainmodeling-completed-2026-08/domain-analysis-unification.md`](archive/domainmodeling-completed-2026-08/domain-analysis-unification.md) · [`CORE.md`](../CORE.md) · [`v2-to-v3/master-roadmap.md`](v2-to-v3/master-roadmap.md)
 
 ---
 

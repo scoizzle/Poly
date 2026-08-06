@@ -1,10 +1,10 @@
 # DomainModeling product roadmap (milestones)
 
 **Status:** Active (milestones index)  
-**Last Updated:** 2026-08-04  
+**Last Updated:** 2026-08-05  
 **Purpose:** High-level milestone status only.  
 **Day-to-day work:** **one admitted suite** (see Agent pick). Plans index admission rules: [`../README.md`](../README.md).  
-**Completed suites:** [`qe-*`](simple-agent-tasks/qe-README.md) · [`vs-*`](simple-agent-tasks/vs-README.md) · [`spe-*`](../simple-agent-tasks/spe-README.md) · [`../infrastructure-pass-NEXT.md`](../infrastructure-pass-NEXT.md) · DAS / peer-binding / store-aware exists (recent commits)
+**Completed suites (archived):** [`domainmodeling-completed-2026-08`](../archive/domainmodeling-completed-2026-08/README.md) (`qe` · `vs` · `spe` · `das` · `dacr` · `apm` · `dar` · `dau`) · infra under bar [`infrastructure-pass-NEXT.md`](../infrastructure-pass-NEXT.md)
 
 ---
 
@@ -69,6 +69,7 @@ PULL:    Q4; unlink; E5; Bar B; analysis unification commit ops; multi-hop only 
 
 | Archive | Contents |
 |---------|----------|
+| [`../archive/domainmodeling-completed-2026-08/`](../archive/domainmodeling-completed-2026-08/README.md) | Finished DM suites + parents (2026-08) |
 | [`../archive/infrastructure-pass/`](../archive/infrastructure-pass/README.md) | Infra suite design + `ip-*` tasks + review trail |
 | [`../archive/v2-to-v3-migration/`](../archive/v2-to-v3-migration/README.md) | Migration micro-tasks / workstreams |
 | [`../archive/interpretation/`](../archive/interpretation/README.md) | Superseded Interpretation plans |

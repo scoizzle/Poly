@@ -18,7 +18,8 @@ Architectural rationale → **`docs/decisions/`**. Module maps → **`Poly/*/REA
 | **Proposals ≠ queues** | Research docs (e.g. DSL absorption) stay parked until one P* is admitted as a suite. |
 | **Pull ≠ CURRENT** | Dogfood, Q4, grammar, packs — available when admitted, not parallel debt. |
 
-**Agent pick source of truth:** [`v2-to-v3/master-roadmap.md`](v2-to-v3/master-roadmap.md) → “Agent pick (one line)”.
+**Agent pick source of truth:** [`v2-to-v3/master-roadmap.md`](v2-to-v3/master-roadmap.md) → “Agent pick (one line)”.  
+**Orientation:** [`domainmodeling-workstream-map.md`](domainmodeling-workstream-map.md).
 
 ---
 
@@ -27,6 +28,7 @@ Architectural rationale → **`docs/decisions/`**. Module maps → **`Poly/*/REA
 | Plan | Role |
 |------|------|
 | [**Master roadmap**](v2-to-v3/master-roadmap.md) | Milestone index + **one-line agent pick** (CURRENT) |
+| [**Workstream map**](domainmodeling-workstream-map.md) | Done / parked / pull inventory |
 | [**Capability inventory**](../domainmodeling-capability-inventory.md) | What ships (reference, not a queue) |
 | [**`pr1` review gate**](v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md) | Always-on pre-ship process |
 
@@ -37,31 +39,27 @@ Architectural rationale → **`docs/decisions/`**. Module maps → **`Poly/*/REA
 | Plan | Role | Unpark when |
 |------|------|-------------|
 | [**DSL absorption proposals**](domain-dsl-absorption-proposals.md) | Experiment → product styles (P1 temporal **lower priority**, multi-hop, when any/all, …) | Admit **one** P* as sole suite; **not** dates-first by default |
-| [**MCP dogfood protocol**](v2-to-v3/mcp-dogfood-protocol.md) · [`dogfood-*`](v2-to-v3/simple-agent-tasks/dogfood-README.md) · [`dogfood-fix-*`](v2-to-v3/simple-agent-tasks/dogfood-fix-README.md) | Scenario discovery; fixes mostly done | Admit dogfood (e.g. SPE surface) as primary |
+| [**MCP dogfood protocol**](v2-to-v3/mcp-dogfood-protocol.md) · [`dogfood-*`](v2-to-v3/simple-agent-tasks/dogfood-README.md) · [`dogfood-fix-*`](v2-to-v3/simple-agent-tasks/dogfood-fix-README.md) | Scenario discovery; fixes mostly done | Admit dogfood as primary |
 | [**MCP dogfood orchestrator**](v2-to-v3/mcp-dogfood-orchestrator.md) | Dogfood loop tooling | With dogfood admission |
-| [**Domain analysis unification**](domain-analysis-unification.md) · [`dau-*`](simple-agent-tasks/dau-README.md) | Product bar met; codegen track paused | Explicit DAU reopen |
 | [**Grammar framework integration**](grammar-integration.md) | Draft — not a prerequisite for temporal/SPE | Product stability + explicit pick |
 | [**Analysis-consuming lowering**](analysis-consuming-lowering.md) | Draft | Explicit pick |
-| [**DomainAuthoringContext removal**](domain-authoring-context-removal-plan.md) | Draft | Explicit pick |
 | [**Post–V2-delete naming cleanup**](post-v2-delete-naming-cleanup.md) | Drop product `V3*` labels | Idle green tree + explicit pick |
 | [**Platform velocity review**](platform-velocity-review.md) | Pain inventory (2026-07-25) | Pull items only when admitted |
 | [**Effect surface completeness**](v2-to-v3/effect-surface-completeness.md) | Kernel shipped; E5 / E6.1 pull | Dogfood or explicit effect suite |
 | [**MCP tool-surface expansion**](v2-to-v3/mcp-tool-surface-expansion.md) | Backlog §0 | After dogfood admission |
 | [**Post–system-review correctness hardening**](2026-07-11-review-fix-plan.md) | Mostly done; optional residuals | Explicit residual pick |
+| [**DomainModeling decomposition**](domainmodeling-decomposition-proposal.md) | Folder/namespace tiers only | Idle + explicit pick |
 
 ---
 
-## Complete (do not reopen)
+## Complete (archived — do not reopen)
 
-| Plan | Role |
-|------|------|
-| [**Domain surface extensions (SPE)**](domain-surface-extensions-plan.md) · [`spe-*`](simple-agent-tasks/spe-README.md) | Export peer · entity-level when · owned policies |
-| [**DSL query surface**](v2-to-v3/dsl-query-surface.md) · [`qe-*`](v2-to-v3/simple-agent-tasks/qe-README.md) | Q1′+Q3′+`link_instances`; design reference |
-| [**Analysis pipeline merge**](analysis-pipeline-merge.md) · [`apm-*`](simple-agent-tasks/apm-README.md) | Registration predecessor to DAU |
-| [**Infrastructure pass — NEXT**](infrastructure-pass-NEXT.md) | Under bar; archive [infra](archive/infrastructure-pass/README.md) |
-| [**`vs-*` (vertical slice)**](v2-to-v3/simple-agent-tasks/vs-README.md) | Historical M2 |
+| Archive | Contents |
+|---------|----------|
+| [**domainmodeling-completed-2026-08**](archive/domainmodeling-completed-2026-08/README.md) | `apm` · `das` · `dacr` · `dar` · `dau` · `spe` · `qe` · `vs` + parent plans |
+| [**Infrastructure pass**](archive/infrastructure-pass/README.md) | Infra suite; live pull notes: [`infrastructure-pass-NEXT.md`](infrastructure-pass-NEXT.md) |
 
-Shipped recently (no open suite): DAS catalog · peer `when … as` · store-aware `Rel exists` — see master-roadmap DONE line.
+Shipped product (no open suite): DAS catalog · peer `when … as` · store-aware `Rel exists` — see master-roadmap DONE line.
 
 ---
 
@@ -94,4 +92,4 @@ MCP guiding principles: [v2-to-v3/spikes/mcp-guiding-principles.md](v2-to-v3/spi
 | `docs/decisions/2026-07-04-primitives-as-canonical-ir.md` | Historical title; body = **direct AST→ABI** |
 | `docs/decisions/2026-06-08-domain-lowering-boundary.md` | Domain → generic AST only |
 
-**No open Interpretation mega-plan.**
+**No open Interpretation mega-plan.** Archived Interpretation plans: [`archive/interpretation/`](archive/interpretation/README.md).

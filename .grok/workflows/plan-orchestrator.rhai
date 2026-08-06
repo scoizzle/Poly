@@ -167,10 +167,13 @@ if args != () {
 if max_tasks < 1 { max_tasks = 1; }
 if max_tasks > 32 { max_tasks = 32; }
 
-let suite_readme = "docs/plans/simple-agent-tasks/das-README.md";
-let parent_plan = "docs/plans/domain-analysis-future-state.md";
-let inventory = "docs/plans/domain-analysis-simplification.md";
-let suite_gate = "docs/plans/simple-agent-tasks/das-gate.md";
+// Completed suites live under archive/domainmodeling-completed-2026-08/ (2026-08-05).
+// Default is historical DAS paths for path resolution only — do not treat as CURRENT.
+// Live pick: docs/plans/v2-to-v3/master-roadmap.md
+let suite_readme = "docs/plans/archive/domainmodeling-completed-2026-08/simple-agent-tasks/das-README.md";
+let parent_plan = "docs/plans/archive/domainmodeling-completed-2026-08/domain-analysis-future-state.md";
+let inventory = "docs/plans/archive/domainmodeling-completed-2026-08/domain-analysis-simplification.md";
+let suite_gate = "docs/plans/archive/domainmodeling-completed-2026-08/simple-agent-tasks/das-gate.md";
 let suite_label = "DAS";
 
 if type_of(suite_key) == "string" {
@@ -178,17 +181,23 @@ if type_of(suite_key) == "string" {
     sk.trim();
     // Normalize bare keys and full paths
     if sk == "spe" || sk.contains("spe-README") || sk.contains("spe-readme") {
-        suite_readme = "docs/plans/simple-agent-tasks/spe-README.md";
-        parent_plan = "docs/plans/domain-surface-extensions-plan.md";
-        inventory = "docs/plans/domain-surface-extensions-plan.md";
-        suite_gate = "docs/plans/simple-agent-tasks/spe-gate.md";
+        suite_readme = "docs/plans/archive/domainmodeling-completed-2026-08/simple-agent-tasks/spe-README.md";
+        parent_plan = "docs/plans/archive/domainmodeling-completed-2026-08/domain-surface-extensions-plan.md";
+        inventory = "docs/plans/archive/domainmodeling-completed-2026-08/domain-surface-extensions-plan.md";
+        suite_gate = "docs/plans/archive/domainmodeling-completed-2026-08/simple-agent-tasks/spe-gate.md";
         suite_label = "SPE";
     } else if sk == "das" || sk.contains("das-README") || sk.contains("das-readme") {
-        suite_readme = "docs/plans/simple-agent-tasks/das-README.md";
-        parent_plan = "docs/plans/domain-analysis-future-state.md";
-        inventory = "docs/plans/domain-analysis-simplification.md";
-        suite_gate = "docs/plans/simple-agent-tasks/das-gate.md";
+        suite_readme = "docs/plans/archive/domainmodeling-completed-2026-08/simple-agent-tasks/das-README.md";
+        parent_plan = "docs/plans/archive/domainmodeling-completed-2026-08/domain-analysis-future-state.md";
+        inventory = "docs/plans/archive/domainmodeling-completed-2026-08/domain-analysis-simplification.md";
+        suite_gate = "docs/plans/archive/domainmodeling-completed-2026-08/simple-agent-tasks/das-gate.md";
         suite_label = "DAS";
+    } else if sk == "dogfood" || sk.contains("dogfood-README") {
+        suite_readme = "docs/plans/v2-to-v3/simple-agent-tasks/dogfood-README.md";
+        parent_plan = "docs/plans/v2-to-v3/mcp-dogfood-protocol.md";
+        inventory = "docs/plans/v2-to-v3/mcp-dogfood-protocol.md";
+        suite_gate = "";
+        suite_label = "dogfood";
     } else if sk != "" {
         // Arbitrary suite README path: infer companion gate/plan from parent plan link later
         suite_readme = sk;

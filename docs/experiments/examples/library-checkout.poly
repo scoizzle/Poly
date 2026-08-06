@@ -116,7 +116,7 @@ Patron: entity {
     assign CurrentBorrowCount to CurrentBorrowCount - 1
   }
 
-  when fines Paid {
+  when fines Resolved {
     assign OutstandingFines to OutstandingFines - 5
   }
 
@@ -197,7 +197,6 @@ Fine: entity {
     Pay: action {
       if (Amount <= 0) {
         assign Paid to true
-        delete
       } else {
         assign Paid to true
       }

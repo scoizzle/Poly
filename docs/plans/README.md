@@ -60,7 +60,9 @@ Agents still useful for residuals: `.github/agents/plan-suite-until-done.agent.m
 | [**DSL absorption proposals**](domain-dsl-absorption-proposals.md) | P1–P12 matrix; P3/P2 suites above | One P* at a time |
 | [**MCP dogfood protocol**](v2-to-v3/mcp-dogfood-protocol.md) · [`dogfood-*`](v2-to-v3/simple-agent-tasks/dogfood-README.md) | Wave 2 **complete** | Further waves if admitted |
 | [**MCP dogfood orchestrator**](v2-to-v3/mcp-dogfood-orchestrator.md) | Dogfood loop tooling | With dogfood admission |
-| [**Grammar framework integration**](grammar-integration.md) | **Ready draft** — product DSL on Poly.Grammar; **prefer before temporal pack**. **Preflight gate:** C99 Matcher dual-run (§3.4) before product `gi` | Run `gi-preflight` / GIP first; then admit `gi` as CURRENT; solidify `gi-*` |
+| [**Grammar framework integration**](grammar-integration.md) | Product DSL on Poly.Grammar; **prefer before temporal pack**. **GIP preflight DONE** (2026-08-07); GI-1…3 hybrid landed; next GI-4+ | Admit next GI slice as CURRENT; solidify `gi-*` |
+| [**Customer trust proof map**](customer-trust-proof-map.md) | Living claim → proof → T1/T2 index; not a suite | Update when claims change; drives priority of trust gaps |
+| [**Instance commit & outbox design lock**](instance-commit-and-outbox-design-lock.md) | Durability boundary + outbox intents vocabulary | Admit only when a host persists instances |
 | [**Analysis-consuming lowering**](analysis-consuming-lowering.md) | Draft | Explicit pick |
 | [**Post–V2-delete naming cleanup**](post-v2-delete-naming-cleanup.md) | Drop product `V3*` labels | Idle green tree + explicit pick |
 | [**Platform velocity review**](platform-velocity-review.md) | Pain inventory (2026-07-25) | Pull items only when admitted |

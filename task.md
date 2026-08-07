@@ -1,66 +1,53 @@
 # Task checklist — grammar-integration (GI) execution
 
-Source: `docs/plans/grammar-integration.md`  
-**Note:** Preflight (C99 Matcher dual-run, §3.4 / GIP) was skipped by prior agent; product GI WIP continued. Preflight still owed as high-value engine stress — do not treat “engine proven” as complete until GIP green or written waiver.
+Source: `docs/plans/grammar-integration.md`
 
 ## Pre-work
 
-- [x] Silent trace: full API surface of `Poly.Grammar`, DSL pipeline, annotation system, JSON parser, test grammars
-- [x] Repair pre-existing suite regressions (stage-action invoke resolution in `EffectAnalyzer` + test fixtures) — suite green before GI-1
+- [x] Silent trace + suite green before GI-1
 
-## GI-preflight (C99) — done (2026-08-07)
+## GI-preflight (C99) — **DONE** 2026-08-07
 
-- [x] GIP-0 inventory C99 subset surface — `docs/plans/gi-preflight-c99-notes.md`
-- [x] GIP-1 `C99Grammar` structure patterns (top + block-item); expr stays RD (E2 hybrid)
-- [x] GIP-2 dual-run: `useGrammarDispatch` vs hand RD — same execute results (`DualRun_*` tests)
-- [x] GIP-3 gaps → prefer hybrid for product cutover; E1 still needed before temporal pack
+- [x] GIP-0 inventory — `docs/plans/gi-preflight-c99-notes.md`
+- [x] GIP-1 `C99Grammar` structure patterns; expr RD (E2 hybrid)
+- [x] GIP-2 dual-run: full corpus dual-compiles; `DualRun_*` + throw dual-assert
+- [x] GIP-3 gaps → hybrid preferred for cutover; E1 for temporal later
 
-## GI-1 — DslTokenReader (tokenizer port)
+## GI-1 — DslTokenReader — **DONE**
 
-- [x] `CharSourceTokenReader` + `ICharSource` + `StringCharSource` extracted; `StringTokenReader` re-based; `Token.Payload` channel added
-- [x] `DslTokenKind` enum (mirror of legacy `TokenKind`)
-- [x] `DslTokenReader : StringTokenReader<DslTokenKind>` — token stream parity incl. `//` comments, two-char ops, string escapes, keyword map; `IsEndOfFile`; `GrammarException` errors
-- [x] Parity tests: `DslTokenReaderTests`
+- [x] CharSource + DslTokenReader + parity tests
+
+## GI-2 — DslGrammar table — **DONE**
+
+- [x] Structure patterns + dispatch tests + gap notes on type
+
+## GI-3 — GrammarDslParser dispatch — **DONE**
+
+- [x] Matcher structure dispatch + Unread + concurrent sort fix
 - [x] Suite green
 
-## GI-2 — DslGrammar table
+## GI-4 — Pack annotation grammar — **NEXT**
 
-- [x] `Grammar<DslTokenKind>` for Phase 1a structure (top enum/entity, entity-body, stage-body, annotation shapes)
-- [x] Element-set gaps documented on `DslGrammar` (expr / effect bodies / action params stay RD handlers)
-- [x] `DslGrammarTests` dispatch acceptance
-
-## GI-3 — GrammarDslParser dispatch
-
-- [x] Parser on `DslTokenReader` + matcher-driven dispatch (`top` / `entity-body` / `stage-body`)
-- [x] Dual-cursor fix: `TokenReader.Unread` + `MatchRule` so Matcher sees head token held in `_current`
-- [x] Concurrent-match fix: sort patterns on `AddPattern`, never mutate in `GetPatterns` (shared static table)
-- [x] Regression: `GrammarDslParserDispatchTests`
-- [x] Full suite green: **1881/1881**
-
-## GI-4 — Pack annotation grammar
-
-- [ ] Annotation rule + pack pattern registration API (extension point sketched in GI-2 tests)
-- [ ] SQL pack (column/table) round-trips still on handler path today
+- [ ] Annotation rule + pack pattern registration API
+- [ ] SQL pack (column/table) round-trips without core matcher edits
 
 ## GI-5 — DslPrinter port
 
-- [ ] DslTokenWriter + Printer skeleton
-- [ ] Round-trip corpus
+- [ ] Printer + TokenWriter skeleton; round-trip corpus
 
 ## GI-6 — JSON parser port (optional / pull)
 
-- [ ] Product-side JsonKind port when pulled
+- [ ] When pulled
 
 ## GI-7 — Cutover + docs
 
-- [ ] Legacy tokenizer removed; CORE + guide if needed
-- [ ] Dual path removed (today: single façade, matcher dispatch + RD handlers)
+- [ ] Legacy tokenizer non-product; CORE + guide if needed
 
 ## GI-8 — Non-text streams (defer)
 
-- [ ] Utf8CharSource etc. — foundation `ICharSource` already landed in GI-1
+- [ ] Foundation `ICharSource` already from GI-1
 
 ## Verify
 
-- [x] Build + full suite green (after GI-3 dual-cursor + sort fixes)
-- [ ] Pre-ship review gate before commit
+- [x] Build + full suite green after GIP wrap-up
+- [ ] Pre-ship review before further large GI slices merge if desired

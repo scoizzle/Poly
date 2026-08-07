@@ -876,7 +876,24 @@ public class C99ParserInterpreterTests {
     // Compiler
     // =========================================================================
 
-    private static TDelegate CompileC99<TDelegate>(string source, bool useGrammarDispatch = false)
+    /// <summary>
+    /// Compiles C99 source. By default (GIP-2 complete), <b>both</b> hand RD and
+    /// Matcher structure-dispatch paths must compile; the RD delegate is returned
+    /// for exercise. Pass <paramref name="useGrammarDispatch"/> only when a single
+    /// path is intentional (e.g. dual-run helpers).
+    /// </summary>
+    private static TDelegate CompileC99<TDelegate>(string source, bool? useGrammarDispatch = null)
+        where TDelegate : Delegate {
+        if (useGrammarDispatch is { } single)
+            return CompileC99Once<TDelegate>(source, single);
+
+        // GIP wrap-up: every corpus case dual-compiles (RD + grammar).
+        var rd = CompileC99Once<TDelegate>(source, useGrammarDispatch: false);
+        _ = CompileC99Once<TDelegate>(source, useGrammarDispatch: true);
+        return rd;
+    }
+
+    private static TDelegate CompileC99Once<TDelegate>(string source, bool useGrammarDispatch)
         where TDelegate : Delegate {
         var reader = new C99TokenReader(source);
         var fn = new C99Parser(reader, useGrammarDispatch).ParseFunction();
@@ -909,10 +926,21 @@ public class C99ParserInterpreterTests {
     /// <summary>GIP dual-run: hand RD dispatch vs Matcher structure dispatch; same execute results.</summary>
     private static async Task AssertDualRunEqualAsync<TDelegate>(string source, Func<TDelegate, Task> exercise)
         where TDelegate : Delegate {
-        var rd = CompileC99<TDelegate>(source, useGrammarDispatch: false);
-        var grammar = CompileC99<TDelegate>(source, useGrammarDispatch: true);
+        var rd = CompileC99Once<TDelegate>(source, useGrammarDispatch: false);
+        var grammar = CompileC99Once<TDelegate>(source, useGrammarDispatch: true);
         await exercise(rd);
         await exercise(grammar);
+    }
+
+    /// <summary>Both parse paths must throw the same message (fail-closed dual-run).</summary>
+    private static async Task AssertBothPathsThrowAsync<TDelegate>(string source, string message)
+        where TDelegate : Delegate {
+        await Assert.That(() => CompileC99Once<TDelegate>(source, useGrammarDispatch: false))
+            .Throws<InvalidOperationException>()
+            .WithMessage(message);
+        await Assert.That(() => CompileC99Once<TDelegate>(source, useGrammarDispatch: true))
+            .Throws<InvalidOperationException>()
+            .WithMessage(message);
     }
 
     /// <summary>Compile C99 source through the VM pipeline (VmCompiler) instead of LinqExpressionGenerator.</summary>
@@ -1055,19 +1083,13 @@ public class C99ParserInterpreterTests {
 
     [Test]
     public async Task DualRun_NamespaceReject_GrammarPath_SameMessage() {
-        const string source = """
+        await AssertBothPathsThrowAsync<Func<int, int, int>>("""
             namespace math {
                 int add(int a, int b) {
                     return a + b;
                 }
             }
-            """;
-        await Assert.That(() => CompileC99<Func<int, int, int>>(source, useGrammarDispatch: false))
-            .Throws<InvalidOperationException>()
-            .WithMessage("C99 does not support namespaces.");
-        await Assert.That(() => CompileC99<Func<int, int, int>>(source, useGrammarDispatch: true))
-            .Throws<InvalidOperationException>()
-            .WithMessage("C99 does not support namespaces.");
+            """, "C99 does not support namespaces.");
     }
 
     [Test]
@@ -1293,7 +1315,7 @@ public class C99ParserInterpreterTests {
 
     [Test]
     public async Task StructDesignatedInitializer_UnknownField_ThrowsException() {
-        await Assert.That(() => CompileC99<Func<int>>("""
+        await AssertBothPathsThrowAsync<Func<int>>("""
             struct C99Point {
                 int x;
                 int y;
@@ -1303,9 +1325,7 @@ public class C99ParserInterpreterTests {
                 struct C99Point p = { .z = 1 };
                 return p.x;
             }
-            """))
-            .Throws<InvalidOperationException>()
-                .WithMessage("Struct 'C99Point' does not contain field 'z'.");
+            """, "Struct 'C99Point' does not contain field 'z'.");
     }
 
     [Test]
@@ -1344,27 +1364,23 @@ public class C99ParserInterpreterTests {
 
     [Test]
     public async Task ArrayDesignatedInitializer_NonArrayType_ThrowsException() {
-        await Assert.That(() => CompileC99<Func<int>>("""
+        await AssertBothPathsThrowAsync<Func<int>>("""
             int eval() {
                 int x = { [0] = 1 };
                 return x;
             }
-            """))
-            .Throws<InvalidOperationException>()
-            .WithMessage("Designated initializers are only supported for struct types.");
+            """, "Designated initializers are only supported for struct types.");
     }
 
     [Test]
     public async Task NamespaceKeyword_IsRejected_WithClearMessage() {
-        await Assert.That(() => CompileC99<Func<int, int, int>>("""
+        await AssertBothPathsThrowAsync<Func<int, int, int>>("""
             namespace math {
                 int add(int a, int b) {
                     return a + b;
                 }
             }
-            """))
-            .Throws<InvalidOperationException>()
-            .WithMessage("C99 does not support namespaces.");
+            """, "C99 does not support namespaces.");
     }
 
     // =========================================================================

@@ -1,8 +1,8 @@
 # Grammar Framework Integration — Poly.Grammar → product DSL
 
 **Date:** 2026-07-26  
-**Revised:** 2026-08-06  
-**Status:** Draft — **GI-preflight (C99 Matcher dual-run) before product `gi`**; then solidify `gi-*` and admit as CURRENT **before** temporal pack implementation  
+**Revised:** 2026-08-07  
+**Status:** **GI-preflight DONE** (C99 dual-run, 2026-08-07). Product GI-1…3 landed (hybrid structure dispatch). Next: GI-4+ / solidify `gi-*` / admit CURRENT before temporal pack implement.  
 **Engine:** [`Poly/Grammar/`](../../Poly/Grammar/) + [`Poly/Grammar/README.md`](../../Poly/Grammar/README.md)  
 **Product DSL today:** [`Poly/DomainModeling/Parsing/`](../../Poly/DomainModeling/Parsing/) (~2.4k LOC hand RD)  
 **Product truth:** [`Poly.Mcp/Docs/poly-dsl-guide.md`](../../Poly.Mcp/Docs/poly-dsl-guide.md)  
@@ -31,7 +31,7 @@ This is **not** a redesign of domain semantics, evolution, or analysis. Output r
 | **Temporal pack (P1)** | Accepted direction: built-in temporal pack + specialization registries. Implementing units/`Now`/duration **in hand RD** then re-porting is waste. **GI before temporal pack implement.** |
 | **RD surface strain** | Product DSL has grown (path-prefix, multi-hop, quantifiers, peer binder, create-in, …) inside ~1.5k LOC parser + ~0.6k printer. Each feature is another special case. |
 | **Pack annotations** | `column(...)` still goes through core `ParseAnnotation` + `IAnnotationSyntax` — every facet keyword is a core edit. |
-| **Engine proven (partial)** | `Poly.Grammar` exists; **54** tests across matcher, edges, JSON grammar, JSON printer. **Not yet** stressed under expression-heavy recursive structure — see **§3.4 GI-preflight (C99)**. |
+| **Engine proven (structure)** | JSON unit tests + **GIP C99 dual-run** (structure Matcher + RD expr hybrid). See §3.4 (done) and [`gi-preflight-c99-notes.md`](gi-preflight-c99-notes.md). E1 pure expr grammar still open. |
 
 ### Named consumers (admit bar)
 
@@ -80,7 +80,9 @@ This is **not** a redesign of domain semantics, evolution, or analysis. Output r
 
 ### 3.4 GI-preflight — verify Grammar before product integration
 
-**User direction (2026-08-06):** high-value gate — **prove `Poly.Grammar` under a realistic non-JSON language** before admitting product GI (GI-0…GI-7). Product dual-path work should not be the first time Matcher handles expression precedence, nested blocks, and statement sequences at scale.
+**Status: DONE (2026-08-07).** Findings: [`gi-preflight-c99-notes.md`](gi-preflight-c99-notes.md). Product GI-1…3 already used the same hybrid pattern.
+
+**User direction (2026-08-06):** high-value gate — **prove `Poly.Grammar` under a realistic non-JSON language** before product GI. Shipped as C99 structure Matcher dual-run (expr remains RD = E2 hybrid).
 
 #### Why C99 (existing harness)
 
@@ -118,13 +120,10 @@ Use when solidifying: `gi-preflight` (or `gip-*`) — **before** `gi-0` product 
 #### Sequencing impact
 
 ```text
-DONE:     engine unit + JSON (~54 tests); C99 lexer on StringTokenReader
-GATE:     GIP-0…GIP-3  (C99 Matcher dual-run)   ← verify before product GI
-ADMIT:    GI-0 → … → GI-7   product DSL on Grammar
-THEN:     p1 temporal pack implement
+DONE:     engine unit + JSON; GIP-0…GIP-3 (C99 dual-run); product GI-1…3 hybrid
+NEXT:     GI-4 pack annotations → GI-5 printer → GI-7 cutover
+THEN:     p1 temporal pack implement (needs E1 or open-form registration)
 ```
-
-Research/design lock for temporal may still run in parallel (docs only). Product GI **implementation** waits on GIP green (or written waiver with residual risks accepted).
 
 ---
 
@@ -292,68 +291,46 @@ Binary token payloads / stream readers — only with a concrete consumer. **Not*
 
 ```text
 DONE:     product pipeline (dogfood, amu, p4, p3, p2, …)
-          Grammar unit + JSON; C99 harness (lexer Grammar, parser RD)
-GATE:     gi-preflight (GIP-0…GIP-3) — C99 Matcher dual-run  [prefer first]
-CURRENT:  (none) until admit
-ADMIT:    GI-0 → … → GI-7   as sole product CURRENT (after GIP green or waiver)
-THEN:     p1 temporal pack implement (after design lock + GI cutover / E1)
+          Grammar unit + JSON; GIP C99 dual-run; product GI-1…3 hybrid
+CURRENT:  (none) until admit next GI slice (GI-4+)
+THEN:     GI-4…GI-7 cutover; then p1 temporal pack (E1 or open-form path)
 PARK:     GI-8 JSON, GI-9 binary, ExpectedTokens polish
 ```
 
 | Rule | |
 |------|--|
-| **Verify Grammar (C99 dual-run) before product GI implementation** | §3.4 — default gate |
+| **GIP preflight complete** | §3.4 — no longer a gate |
 | Do not implement temporal **pack** keywords in hand RD while GI is planned | |
 | Research/design lock for temporal may proceed in parallel (docs only) | |
-| One CURRENT implementation suite at a time | preflight then product `gi`, not both + temporal |
+| One CURRENT implementation suite at a time | |
 
 ---
 
 ## 8. Agent pick
 
-### 8a. Preflight (before product `gi` admit)
+### 8a. Preflight — DONE
+
+GIP-0…GIP-3 complete. Evidence: `DualRun_*` + default `CompileC99` dual-compiles both paths; notes in [`gi-preflight-c99-notes.md`](gi-preflight-c99-notes.md).
+
+### 8b. Product suite (when admitted)
 
 ```text
-CURRENT: gi-preflight / GIP-0 inventory
-THEN:    GIP-1 C99 grammar table
-THEN:    GIP-2 Matcher handlers + dual-run vs C99Parser
-THEN:    GIP-3 gaps → feed GI expression strategy
-EXIT:    all C99ParserInterpreterTests green on Matcher path (dual-run)
-THEN:    admit product gi (GI-0…)
-```
-
-Harness to extend (do not rewrite blindly):  
-`Poly.Tests/Integration/C99ParserInterpreterTests.cs`
-
-### 8b. Product suite (when admitted after preflight)
-
-```text
-CURRENT: gi-0 design locks + corpus
-THEN:    gi-1 tokenizer
-THEN:    gi-2 structure grammar
-THEN:    gi-3 structure handlers
-THEN:    gi-4 expression hybrid or E1
-THEN:    gi-5 pack annotations
-THEN:    gi-6 printer
-THEN:    gi-7 cutover + docs
-PULL:    gi-8 JSON; gi-9 non-text
+DONE:    gi-1 tokenizer, gi-2 structure grammar, gi-3 structure handlers (hybrid)
+CURRENT: (none) until admit
+THEN:    gi-4 pack annotations  (or expression isolation / E1)
+THEN:    gi-5 printer
+THEN:    gi-6/7 cutover + docs  (optional gi-8 JSON)
+PULL:    gi-9 non-text
 BLOCK:   temporal pack product suite until GI-7 (or explicit hybrid waiver + E1 date)
 ```
 
 ### Copilot / orchestrator
 
 ```bash
-# Preflight first (after suite solidify):
-copilot --agent plan-suite-until-done -p "Suite: gi-preflight. Mode: until-done."
-
-# Then product GI:
 copilot --agent plan-suite-until-done -p "Suite: gi. Mode: until-done."
 ```
 
-Suite files when solidifying:
-
-- `docs/plans/simple-agent-tasks/gi-preflight-README.md` (or `gip-*.md`)  
-- `docs/plans/simple-agent-tasks/gi-README.md`
+Suite files when solidifying: `docs/plans/simple-agent-tasks/gi-README.md`
 
 ---
 
@@ -415,8 +392,8 @@ Suite files when solidifying:
 
 ## 13. Next actions (human / agent)
 
-1. **Prefer first:** solidify `gi-preflight` / `gip-*` from §3.4; run GIP until dual-run green (or waiver).  
-2. Solidify `gi-README` + `gi-0`…`gi-7` micro-tasks from this plan.  
-3. Admit **gi** on master-roadmap only after preflight (or explicit waiver).  
-4. Complete / land `p1-temporal-design-lock.md` with **GI before pack** explicit.  
+1. ~~GIP preflight~~ **done.**  
+2. Solidify `gi-README` + remaining `gi-4`…`gi-7` micro-tasks (gi-1…3 already in tree).  
+3. Admit next GI slice (prefer **gi-4** pack annotations or **gi-5** printer) as CURRENT.  
+4. Keep `p1-temporal-design-lock.md` parked until GI cutover / E1 path clear.  
 5. Do not start temporal product code until GI success definition met (or written waiver).  

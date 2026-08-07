@@ -52,18 +52,16 @@ MCP / direct API as thin consumers
 ### Agent pick (one line)
 
 ```text
-DONE:    M1–M4; Q1′+Q3′+link; infra IR; domain catalog; peer/entity-level when/owned policies; store-aware Rel exists; dogfood wave-1 + fix G1/G3/HOST; dogfood wave-2 S4/S5/S6 PASS + fix G-S6-1; amu W0–W4 + gate G1–G7 PASS; p4 when-any/all parse/print + analysis + goldens + guide + gate G1–G5 PASS; coh Runtime/ move + DE/Effect dispatch + evolution helpers + gate G1–G6 PASS; SurfaceExtensionDogfoodTests
-CURRENT: (none) — pipeline docs/plans/simple-agent-tasks/SUITE-OF-SUITES.md complete
-ADMIT:   (pipeline only) — amu → p4 → coh; no parallel product edits
-PARKED:  Absorption P1/P2/P3/P5+; grammar; analysis-consuming lowering residuals; naming V3*; DAU deepen
-READY:   (pipeline complete — see docs/plans/simple-agent-tasks/SUITE-OF-SUITES.md)
-         Copilot: copilot --agent domainmodeling-backlog -p "Execute SUITE-OF-SUITES until complete"
-PULL:    Q4; link DSL; E5; Bar B; multi-hop / dates only if wave-2 forces
+DONE:    M1–M4; Q1′+Q3′+link; infra IR; domain catalog; peer/entity-level when/owned; store-aware Rel exists; dogfood w1+w2; amu; p4 when any/all; coh Runtime/dispatch
+CURRENT: p3 — action return-type honesty (docs/plans/simple-agent-tasks/p3-README.md)
+THEN:    p2 — multi-hop path-prefix (p2-README.md) after p3 gate
+PARKED:  P1 temporal (research only: docs/plans/p1-temporal-research.md); P5+; grammar; actors/schedule; DAU deepen
+PULL:    Q4; link DSL; E5; Bar B
 ```
 
-**Honest product claim today:** Path-prefix / exists / where **and** Q3′ quantifiers are authorable **and** evaluable (store-linked `EvaluatePolicy`). Peer binding: `when Rel Stage as name`. Surface extensions: export peer handlers, entity-level `when`, owned policies. MCP: `create_instance` → `link_instances` → `evaluate_policy(instanceId=…)`. DSL has **no** `link` keyword (`create in Rel` for spawn-and-wire). JSON policies still local-only. Codegen DbContext/Program via Syntax IR; `.http` still string. **Temporal DSL authoring** not product. Automated SPE path: [`Poly.Tests/Mcp/SurfaceExtensionDogfoodTests.cs`](../../../Poly.Tests/Mcp/SurfaceExtensionDogfoodTests.cs).
+**Honest product claim today:** Path-prefix / exists / where **and** Q3′ quantifiers; `when any|all`; peer `as`; entity-level when; owned policies; catalog monopath. MCP create→link→evaluate_policy. **No** multi-hop path-prefix product claim yet (P2). **No** temporal DSL authoring (P1 research). **Return types** partially authorable — P3 hardens e2e honesty.
 
-**Focus (2026-08-06):** Pipeline complete — dogfood → amu → p4 → coh all done, gates passed, 1855/1855 green. Next product work requires a fresh admission against `docs/README.md`; do **not** open grammar, temporal, multi-hop, or parallel product edits.
+**Focus (2026-08-06):** Admit **P3 then P2**. Do **not** start P1 implementation; concept/spike only via `p1-temporal-research.md`.
 
 ---
 

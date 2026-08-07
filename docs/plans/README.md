@@ -36,28 +36,23 @@ Architectural rationale → **`docs/decisions/`**. Module maps → **`Poly/*/REA
 
 ---
 
-## Ready suites (not CURRENT — solidify complete)
+## Active product queue
 
-Pre-built queues for multi-agent execution. **Pipeline + Copilot CLI:** [`simple-agent-tasks/SUITE-OF-SUITES.md`](simple-agent-tasks/SUITE-OF-SUITES.md).
-
-| Suite | Queue | Parallelism | Admit after |
-|-------|--------|-------------|-------------|
-| **dogfood w2** | [`v2-to-v3/simple-agent-tasks/dogfood-README.md`](v2-to-v3/simple-agent-tasks/dogfood-README.md) | S4–S6 discovery parallel | **CURRENT** |
-| **amu** | [`simple-agent-tasks/amu-README.md`](simple-agent-tasks/amu-README.md) | W1 and W3 by file ownership | After dogfood |
-| **p4** | [`simple-agent-tasks/p4-README.md`](simple-agent-tasks/p4-README.md) | Sequential | After amu (or alone if only language) |
-| **coh** | [`simple-agent-tasks/coh-README.md`](simple-agent-tasks/coh-README.md) | R/E/V parallel; R before D | After p4 (hygiene) |
-
-### Copilot CLI
+| Suite | Queue | Status |
+|-------|--------|--------|
+| **p3** return types | [`simple-agent-tasks/p3-README.md`](simple-agent-tasks/p3-README.md) | **CURRENT** |
+| **p2** multi-hop | [`simple-agent-tasks/p2-README.md`](simple-agent-tasks/p2-README.md) | Ready after p3 gate |
 
 ```bash
-# Full pipeline (dogfood → amu → p4 → coh)
-copilot --agent domainmodeling-backlog -p "Execute SUITE-OF-SUITES until all stages complete."
-
-# One suite
-copilot --agent plan-suite-until-done -p "Suite: amu. Mode: until-done."
+copilot --agent plan-suite-until-done -p "Suite: p3. Mode: until-done."
+# after p3 gate:
+copilot --agent plan-suite-until-done -p "Suite: p2. Mode: until-done."
 ```
 
-Agents: `.github/agents/domainmodeling-backlog.agent.md`, `.github/agents/plan-suite-until-done.agent.md`.
+## Completed pipeline (historical)
+
+[`SUITE-OF-SUITES.md`](simple-agent-tasks/SUITE-OF-SUITES.md) — dogfood w2 · amu · p4 · coh **done**.  
+Agents still useful for residuals: `.github/agents/plan-suite-until-done.agent.md`.
 
 ---
 
@@ -65,8 +60,9 @@ Agents: `.github/agents/domainmodeling-backlog.agent.md`, `.github/agents/plan-s
 
 | Plan | Role | Unpark when |
 |------|------|-------------|
-| [**DSL absorption proposals**](domain-dsl-absorption-proposals.md) | Experiment → product styles; **P4 suite ready** under simple-agent-tasks | Admit **one** P* as sole suite; P1 temporal still design-first |
-| [**MCP dogfood protocol**](v2-to-v3/mcp-dogfood-protocol.md) · [`dogfood-*`](v2-to-v3/simple-agent-tasks/dogfood-README.md) · [`dogfood-fix-*`](v2-to-v3/simple-agent-tasks/dogfood-fix-README.md) | **Wave 2 CURRENT** (S4–S6); wave 1 historical | Wave 2 complete → clear or admit forced suite |
+| [**P1 temporal research**](p1-temporal-research.md) | Concept/spike only — **not** a product suite | Explicit admit after research locks |
+| [**DSL absorption proposals**](domain-dsl-absorption-proposals.md) | P1–P12 matrix; P3/P2 suites above | One P* at a time |
+| [**MCP dogfood protocol**](v2-to-v3/mcp-dogfood-protocol.md) · [`dogfood-*`](v2-to-v3/simple-agent-tasks/dogfood-README.md) | Wave 2 **complete** | Further waves if admitted |
 | [**MCP dogfood orchestrator**](v2-to-v3/mcp-dogfood-orchestrator.md) | Dogfood loop tooling | With dogfood admission |
 | [**Grammar framework integration**](grammar-integration.md) | Draft — not a prerequisite for temporal/SPE | Product stability + explicit pick |
 | [**Analysis-consuming lowering**](analysis-consuming-lowering.md) | Draft | Explicit pick |

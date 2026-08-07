@@ -216,6 +216,18 @@ if type_of(suite_key) == "string" {
         inventory = "docs/plans/simple-agent-tasks/SUITE-OF-SUITES.md";
         suite_gate = "docs/plans/simple-agent-tasks/coh-gate.md";
         suite_label = "coh";
+    } else if sk == "p3" || sk.contains("p3-README") {
+        suite_readme = "docs/plans/simple-agent-tasks/p3-README.md";
+        parent_plan = "docs/plans/domain-dsl-absorption-proposals.md";
+        inventory = "docs/plans/simple-agent-tasks/p3-README.md";
+        suite_gate = "docs/plans/simple-agent-tasks/p3-gate.md";
+        suite_label = "p3";
+    } else if sk == "p2" || sk.contains("p2-README") {
+        suite_readme = "docs/plans/simple-agent-tasks/p2-README.md";
+        parent_plan = "docs/plans/domain-dsl-absorption-proposals.md";
+        inventory = "docs/plans/simple-agent-tasks/p2-README.md";
+        suite_gate = "docs/plans/simple-agent-tasks/p2-gate.md";
+        suite_label = "p2";
     } else if sk != "" {
         // Arbitrary suite README path: infer companion gate/plan from parent plan link later
         suite_readme = sk;

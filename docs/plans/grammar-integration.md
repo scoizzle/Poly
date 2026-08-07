@@ -1,306 +1,338 @@
-# Grammar Framework Integration — Poly.Grammar → DSL Pipeline
+# Grammar Framework Integration — Poly.Grammar → product DSL
 
 **Date:** 2026-07-26  
-**Status:** Draft — core prototype proven, integration pending  
-**Prototype:** [`Poly/Grammar/`](../../Poly/Grammar/) — 13 files, 54 tests, 0 warnings (`Poly.Grammar`; media-agnostic ports, string adapters included)  
-**Related:** [`docs/plans/domainmodeling-decomposition-proposal.md`](../domainmodeling-decomposition-proposal.md), [`docs/CORE.md`](../../docs/CORE.md), `Poly/DomainModeling/Parsing/`, `Poly/DomainModeling/IAnnotationSyntax.cs`
+**Revised:** 2026-08-06  
+**Status:** Draft — ready to solidify as `gi-*` suite and admit as CURRENT **before** temporal pack implementation  
+**Engine:** [`Poly/Grammar/`](../../Poly/Grammar/) + [`Poly/Grammar/README.md`](../../Poly/Grammar/README.md)  
+**Product DSL today:** [`Poly/DomainModeling/Parsing/`](../../Poly/DomainModeling/Parsing/) (~2.4k LOC hand RD)  
+**Product truth:** [`Poly.Mcp/Docs/poly-dsl-guide.md`](../../Poly.Mcp/Docs/poly-dsl-guide.md)  
+**Platform:** [`docs/CORE.md`](../CORE.md) — Grammar owns pattern-table engine; DomainModeling owns domain DSL until this plan lands  
+**Related:** temporal research [`p1-temporal-research.md`](p1-temporal-research.md) · absorption [`domain-dsl-absorption-proposals.md`](domain-dsl-absorption-proposals.md) · decomposition [`domainmodeling-decomposition-proposal.md`](domainmodeling-decomposition-proposal.md)
 
 ---
 
-## 1. Why now
+## 1. Purpose
 
-The current DSL pipeline (`PolyDslTokenizer` + `PolyDslParser` + `DomainDslPrinter`) is ~2,360 lines of hand-rolled recursive descent — closed, non-extensible, and a barrier to pack-contributed syntax. Every new pack keyword requires editing `PolyDslParser.ParseAnnotation()`.
+Make the **product** `.poly` pipeline (tokenize → parse → `DomainChange[]` → evolve; print from `Domain`) driven by **`Poly.Grammar`** (pattern table + matcher + printer), so:
 
-The `Poly.Grammar` prototype proves the alternative: a pattern-table engine where adding syntax is a registration operation, not a code change. 54 tests across three grammars (mini-DSL, JSON parse, JSON print) confirm the core works — longest-match, nesting, optionality, repetition, wildcards, EOF guards, and round-trip print→parse.
+1. New **syntax** is registration, not forking `PolyDslParser`.  
+2. **Built-in and optional packs** (SQL facets, later temporal units/forms) share one parse/print seam.  
+3. Agents get position-aware errors and a path to `ExpectedTokens` / completion.  
+4. Hand recursive descent stops absorbing every new surface (multi-hop, any/all, peer `as`, …).
 
-This plan closes the gap between "pattern-table engine works for toy grammars" and "the DSL pipeline is driven by it."
-
-### Named consumers
-
-| Consumer | Why they need it |
-|----------|------------------|
-| **SQL pack** | `column("NAME","TYPE")` annotation parse currently wired into `PolyDslParser.ParseAnnotation()` — cannot add new syntax without editing core code |
-| **Future packs** | Same barrier — every pack keyword is a core edit today |
-| **DSL authoring agents** | Grammar-driven `ExpectedTokens()` enables better error recovery and completion suggestions |
-| **MCP `apply_dsl`** | Eventually: grammar-validated batch DSL with position-aware errors instead of runtime failures |
+This is **not** a redesign of domain semantics, evolution, or analysis. Output remains the same `DomainChange` / `Domain` types.
 
 ---
 
-## 2. Current state inventory
+## 2. Why now (2026-08)
 
-### Already built (prototype — `Poly/Grammar/`)
+| Driver | Detail |
+|--------|--------|
+| **Temporal pack (P1)** | Accepted direction: built-in temporal pack + specialization registries. Implementing units/`Now`/duration **in hand RD** then re-porting is waste. **GI before temporal pack implement.** |
+| **RD surface strain** | Product DSL has grown (path-prefix, multi-hop, quantifiers, peer binder, create-in, …) inside ~1.5k LOC parser + ~0.6k printer. Each feature is another special case. |
+| **Pack annotations** | `column(...)` still goes through core `ParseAnnotation` + `IAnnotationSyntax` — every facet keyword is a core edit. |
+| **Engine proven** | `Poly.Grammar` exists; **54** tests across matcher, edges, JSON grammar, JSON printer. Integration, not invention. |
 
-| Component | Status | Tests |
-|-----------|--------|-------|
-| `Token<TKind>` | Done | – |
-| `TokenReader<TKind>` (abstract + lookahead buffer) | Done | – |
-| `StringTokenReader<TKind>` (char nav, line/col) | Done | – |
-| `IsEndOfFile(TKind)` guard | Done | tested (Balanced + AnyToken) |
-| `Pattern<TKind>` + `IPatternElement<TKind>` | Done | – |
-| `Grammar<TKind>` + `RuleBuilder`/`PatternBuilder` | Done | – |
-| Pattern sorting (first-token kind, length desc) | Done | tested |
-| `Matcher<TKind>` — longest-match scan loop | Done | 30+ parse tests |
-| `MatchResult<TKind>` | Done | – |
-| `GrammarException` (line/col) | Done | – |
-| `TokenWriter<TKind>` (abstract formatter) | Done | – |
-| `StringTokenWriter<TKind>` (StringBuilder) | Done | – |
-| `Printer<TKind>` + `PrintContext<TKind>` | Done | 12 print tests, round-trip |
-| `MatchValue<TKind>` element | Done | tested (parse + print) |
+### Named consumers (admit bar)
 
-### Integration surface to replace
+| Consumer | Needs GI when… |
+|----------|----------------|
+| **Temporal pack** | Open units / `Now` / duration forms without core RD forks |
+| **SQL / facet packs** | Annotation patterns registered outside `PolyDslParser` |
+| **MCP `apply_dsl`** | Same product surface; better line/col errors over time |
+| **DSL agents** | Completions / recovery via grammar first-token sets |
 
-| Current file | Lines | Interface | Target |
-|-------------|-------|-----------|--------|
-| `PolyDslTokenizer.cs` | ~280 | `Next()`, `Peek()`, `Peek(int)` | Replace with `StringTokenReader<DslKind>` subclass |
-| `PolyDslParser.cs` | ~1,380 | `Parse()` → `List<DomainChange>` | Replace with `Matcher<DslKind>` + handler dispatch |
-| `DomainDslPrinter.cs` | ~700 | `Print(Domain)` → `string` | Replace with `Printer<DslKind>` + content callback |
-| `IAnnotationSyntax.cs` | ~20 | `Keyword`, `TryPrint(Facet, out string)` | Port to grammar registration (new element type or predicate) |
-| `AnnotationRegistry.cs` | ~50 | `Register(IAnnotationSyntax)`, `CanAccept(string)` | Port to grammar-level keyword registration |
-| `DomainAuthoringContext.cs` | ~45 | Annotations, TypeMaps, Passes, StorageConventions | Add grammar extension point |
-| `DomainExpressionJsonParser.cs` | ~200 | `ParseJson(string)` → `DomainExpression` | Phase 2 — port to `Grammar<JsonKind>` (separate track) |
+### Explicit non-consumers (do not block GI)
 
-## 2.1 Grammar Generalization Commitments
-
-This section owns token-model evolution decisions that were previously mixed into
-domain-analyzer planning.
-
-Decision:
-
-1. Non-text token payloads (including binary encodings): committed capability.
-- Text-first remains the initial delivery shape for the current DSL pipeline.
-- Binary/non-text streams are a planned follow-on capability through the same
-    grammar seams (`TokenReader`, `Matcher`, `Printer`), not a second parser
-    subsystem.
-
-2. Non-enum token identifiers: supported as an exception path.
-- Keep enum-first ergonomics for the primary DSL authoring path.
-- Maintain an incremental path for other token identifier forms when a consumer
-    justifies it.
-
-3. Facets/attributes-first policy for packs: default.
-- Most pack scenarios should extend via facets/attributes plus custom nodes and
-    analysis passes.
-- Token identity/payload generalization is for cases where facets cannot express
-    transport or encoding constraints.
-
-Sequencing:
-
-1. Keep DomainAuthoringContext removal and one-analyzer unification as the active critical path.
-2. Deliver dedicated grammar slices for non-text streams:
-     - token payload channel (typed/non-text value path)
-     - stream-backed reader path (non-string input)
-     - printer/writer compatibility contracts for non-text outputs
-3. Validate with one concrete pack/transport consumer before broad API expansion.
-
-Non-goals for this sequence:
-
-- No alternate analyzer system definition.
-- No pack-specific parser forks.
-- No broad token API expansion without a first concrete consumer.
+- VM / analysis / catalog monopath  
+- Temporal **runtime** IR (`DateOperation` already exists)  
+- Host `schedule at` (P9)  
 
 ---
 
-## 3. Tasks
+## 3. Current state inventory
 
-Slice IDs: **GI-N** (Grammar Integration — numbered).
+### 3.1 Engine (done)
 
-### GI-1: Migrate tokenizer — `DslTokenReader`
+| Piece | Location | Notes |
+|-------|----------|--------|
+| Pattern table, Matcher, Printer | `Poly/Grammar/` (~12 sources) | Media-agnostic `TokenReader` / `TokenWriter` |
+| Tests | `Poly.Tests/Grammar/` | Matcher 12 + edge 13 + JSON grammar 17 + JSON printer 12 ≈ **54** |
+| Docs | `Poly/Grammar/README.md` | Element set, usage |
 
-Replace `PolyDslTokenizer` with a `StringTokenReader<DslTokenKind>` subclass.
+### 3.2 Product DSL to re-home (live counts 2026-08)
 
-| Current | New |
-|---------|-----|
-| `sealed class PolyDslTokenizer` | `sealed class DslTokenReader : StringTokenReader<DslTokenKind>` |
-| `Token Next()` | `protected override Token<DslTokenKind> ScanNextToken()` |
-| `Token Peek()` / `Peek(int)` | Inherited from `TokenReader<DslTokenKind>` |
-| `enum TokenKind` (55 values) | `enum DslTokenKind` (same values, rename) |
-| `readonly record struct Token` | Replaced by `Token<DslTokenKind>` |
-| `Position` / `Line` / `Col` field management | Inherited from `StringTokenReader` |
+| File | ~LOC | Role after GI |
+|------|------|----------------|
+| `PolyDslTokenizer.cs` | ~300 | → `DslTokenReader : StringTokenReader<DslTokenKind>` |
+| `PolyDslParser.cs` | ~1,475 | → Matcher + **handlers** producing `DomainChange` (+ expression strategy §5) |
+| `DomainDslPrinter.cs` | ~620 | → Printer + domain walk callbacks |
+| `IAnnotationSyntax` / `AnnotationRegistry` | small | → pack grammar registration (facets) |
+| `DomainExpressionJsonParser.cs` | ~200 | **Parallel track** — JSON policies; not blocking text DSL cutover |
 
-**Acceptance:**
-- `DslTokenReader` produces identical token stream for 10 representative `.poly` inputs
-- `IsEndOfFile(DslTokenKind)` returns true for `EndOfFile` kind
-- All existing `PolyDslTokenizer` callers ported to new type
+### 3.3 Gone / stale (do not plan around these)
 
-**Risk:** Low — straightforward port. Tokenizer is pure scan logic with no parser coupling.
-
----
-
-### GI-2: Define DSL grammar table
-
-Build the `Grammar<DslTokenKind>` that describes all Phase 1a constructs.
-
-**Scope:** Cover the complete Phase 1a grammar (domain header, entity, property, stage, action, policy, constraints, navigation properties, annotations).
-
-**Registration pattern:**
-```csharp
-var dsl = new Grammar<DslTokenKind>();
-dsl.Define("entity-body")
-    .Pattern("property").Value(DslTokenKind.Identifier).Token(DslTokenKind.Colon)
-                        .Predicate(IsPrimitiveType, "type")
-                        .Many("constraints").Commit()
-    .Pattern("stage")   .Token(DslTokenKind.Stage).Value(DslTokenKind.Identifier)
-                        .Balanced(DslTokenKind.LBrace, DslTokenKind.RBrace).Commit()
-    .Pattern("action")  .Token(DslTokenKind.Action)
-                        .Value(DslTokenKind.Identifier)
-                        .Optional(DslTokenKind.LParen).Many("action-params")
-                        .Optional(DslTokenKind.RParen).Commit()
-    // ... etc
-```
-
-**Acceptance:**
-- All Phase 1a constructs have at least one pattern
-- Grammar compiles with zero warnings
-- `ExpectedTokens()` returns sensible first-token sets for each rule
-
-**Risk:** Medium — some constructs may not map cleanly to the pattern element set (e.g., `when StageName { enter on entry ActionName }` subscription blocks). May require extending the element set.
+| Old plan assumption | Reality |
+|---------------------|---------|
+| DomainAuthoringContext on critical path | **Removed** (dar suite) — use explicit inputs / session / packs as they exist today |
+| “31 round-trip tests” only | **Regression bar is the full product DSL suite** — at least `PolyDslRoundTripTests`, `N1NavigationTests`, `AnnotationRoundTripTests`, subscription/path-prefix/quantifier goldens, MCP DSL smokes. Count evolves; **do not hardcode 31**. |
+| Phase 1a-only grammar | Product surface is **guide-current** (see §4), not archived phase1a docs |
 
 ---
 
-### GI-3: Port parser — handler dispatch
+## 4. Product surface the grammar must cover
 
-Replace `PolyDslParser.Parse()` with a matcher-driven loop that maps each matched pattern to a `DomainChange` producer.
+Single source of **syntax** truth: **`poly-dsl-guide.md`**. At cutover, grammar + handlers must accept and print everything the guide claims is product, including at least:
 
-**Architecture:**
-```
-DslTokenReader ──► Matcher<DslTokenKind> ──► handler map
-                     (grammar + input)         (pattern name → Func<MatchResult, List<DomainChange>>)
-                                                    │
-                                                    ▼
-                                              List<DomainChange> (same as today)
-```
+| Area | Examples (not exhaustive) |
+|------|---------------------------|
+| Structure | `domain`, `entity`, properties, constraints, enums, stages, actions, params, `-> Type` |
+| Relationships | N1 nav, `many`, `owned` |
+| Effects | transition, assign, create / create in, delete, invoke (+ any/all), if/else, composite flatten |
+| Subscriptions | stage + entity-level `when`, `any`/`all`, peer `as name` |
+| Policies / require | expressions: path-prefix, multi-hop to-one, exists, quantifiers, comparisons, bool/arithmetic |
+| Facets | `column` / pack annotations as registered today |
 
-**Handler registration:**
-```csharp
-var handlers = new Dictionary<string, Func<MatchResult<DslTokenKind>, List<DomainChange>>>
-{
-    ["property"] = result => [new AddPropertyToEntityChange(...)],
-    ["stage"]    = result => [new AddStageChange(...)],
-    // ...
-};
-```
-
-**Acceptance:**
-- 31 existing DSL round-trip tests pass with new parser
-- Same `DomainChange` records produced as today
-- Position-aware errors (`GrammarException`) surface correct line/col
-
-**Risk:** Medium-high — the current parser is 1,380 lines with intertwined expression parsing, annotation dispatch, and constraint handling. The expression sub-grammar (comparisons, string literals, numbers for `range`/`length`/`pattern`) may need its own grammar + nested matcher or fallback to recursive descent.
+**Out of product grammar v1 (park):** experiment-only actors, schedule, for/parallel, temporal **until** pack registers forms post-GI.
 
 ---
 
-### GI-4: Pack annotation grammar — replace `IAnnotationSyntax`
+## 5. Architecture locks
 
-Current: `PolyDslParser.ParseAnnotation()` checks `AnnotationRegistry.CanAccept(keyword)`, then calls `IAnnotationSyntax.TryPrint()` for printing.
-
-**Target:** Packs register patterns into the DSL grammar directly. A new element type or registration API lets packs declare keyword+argument shapes. The main DSL grammar includes a catch-all or predicate for pack keywords.
-
-**Design sketch:**
-```csharp
-// Pack registers (no core edit)
-var packGrammar = new Grammar<DslTokenKind>();
-packGrammar.Define("annotations")
-    .Pattern("column").Token(DslTokenKind.Column)
-                      .Token(DslTokenKind.LParen)
-                      .Value(DslTokenKind.String).Optional(DslTokenKind.Comma)
-                      .Optional(DslTokenKind.Identifier)
-                      .Token(DslTokenKind.RParen).Commit();
-
-// Core grammar includes a hook for pack patterns
-dsl.Define("entity-body")
-    .Pattern("annotation").Many("pack-annotations").Commit();
-```
-
-**Acceptance:**
-- SQL pack `column("NAME")` round-trips through grammar parser + printer
-- No edits to core parser code
-- Existing `SqlAnnotationSyntax` either ports to grammar or continues as printer-only fallback
-
-**Risk:** Medium — the annotation model is simple (keyword + positional string args), so the mapping should be direct. The printer side needs equivalent `PrintContext` support.
-
----
-
-### GI-5: Port printer — `DslPrinter`
-
-Replace `DomainDslPrinter.Print(Domain)` with `Printer<DslTokenKind>` + content callbacks that walk the `Domain` object model.
-
-**Acceptance:**
-- All 31 existing round-trip tests pass (print → tokenize → parse → compare)
-- Output byte-for-byte identical for 10 representative domains
-- Annotation facets print via same grammar-driven path
-
-**Risk:** Medium — the printer is 700 lines with domain→structure logic interleaved with formatting. Porting requires separating "what to print" (domain traversal) from "how to format" (TokenWriter).
-
----
-
-### GI-6: Migrate `DomainExpressionJsonParser`
-
-Port the JSON expression parser from hand-written recursive descent to `Grammar<JsonKind>` (reuses `JsonTokenReader` from existing tests).
-
-**Acceptance:**
-- All expression parsing tests pass through grammar path
-- No behavioral change in `DomainExpressionJsonParser.ParseJson()`
-
-**Risk:** Low — the grammar already exists (proven in tests). The existing parser is only ~200 lines of straightforward comparison/composite/literal dispatch.
-
----
-
-### GI-7: Deprecation cleanup
-
-| Action | Files |
-|--------|-------|
-| Delete or `[Obsolete]` `PolyDslTokenizer` | `Poly/DomainModeling/Parsing/PolyDslTokenizer.cs` |
-| Delete or `[Obsolete]` `PolyDslParser` | `Poly/DomainModeling/Parsing/PolyDslParser.cs` |
-| Delete or `[Obsolete]` `DomainDslPrinter` | `Poly/DomainModeling/Parsing/DomainDslPrinter.cs` |
-| Remove or redirect `IAnnotationSyntax.TryParse` | `Poly/DomainModeling/IAnnotationSyntax.cs` |
-| Update `CORE.md` + `AGENTS.md` | Grammar placement rules, module map |
-| Update `poly-dsl-guide.md` if syntax changed | `Poly.Mcp/Docs/poly-dsl-guide.md` |
-
-**Acceptance:** No stale files. CORE.md references grammar engine. AGENTS.md has placement rules for new files.
-
----
-
-### GI-8: Non-text token streams (binary-capable path)
-
-Add a grammar-level non-text stream capability without replacing the existing
-text DSL path.
-
-Scope:
-- Add token payload abstraction (typed value channel in addition to display text).
-- Add stream-backed reader path for non-string inputs (binary-friendly).
-- Add printer/writer compatibility contracts for non-text outputs.
-- Keep current text DSL behavior unchanged.
-
-Acceptance:
-- Existing DSL round-trip suite remains green without behavior drift.
-- One binary/non-text consumer demonstrates parse + match + print path.
-- Errors remain position-aware or equivalently diagnosable for non-text streams.
-
-Risk:
-- Medium. Requires API shape care to avoid destabilizing text-first ergonomics.
-
----
-
-## 4. Agent pick
+### 5.1 Dual path until cutover
 
 ```text
-CURRENT: GI-1 (tokenizer migration)
-THEN:    GI-2 (grammar definition)
-THEN:    GI-3 (parser dispatch)
-THEN:    GI-4 (pack annotations)
-THEN:    GI-5 (printer port)
-THEN:    GI-6 (expression JSON port)
-THEN:    GI-7 (deprecation + docs)
-THEN:    GI-8 (non-text token streams)
-DEFER:   Expression sub-grammar improvements, ExpectedTokens completeness
+                    ┌─ hand RD (PolyDslParser) ──┐
+  .poly text ───────┤                           ├──► DomainChange[] ──► Evolution
+                    └─ Grammar Matcher+handlers ─┘
+                         (parity harness)
 ```
+
+- **One** product entry (`apply_dsl` / `PolyDslParser.Parse` façade) until GI gate.  
+- Internal dual implement **allowed** only with **shared golden corpus** (parse both → same change shape / domain round-trip).  
+- Cutover: façade calls grammar path only; delete hand RD in GI-cleanup.
+
+### 5.2 Expression strategy (critical)
+
+Policy/effect **expressions** are the hard part (precedence, multi-hop, quantifiers). Options:
+
+| Option | When |
+|--------|------|
+| **E1. Nested expression grammar** | Preferred end state — `Grammar` rule for expr with precedence via pattern layering or Pratt-in-handler |
+| **E2. Hybrid** | Structure + top-level members via Matcher; **expression body** still RD **behind a single interface** `IExpressionParser` until E1 |
+| **E3. Full RD forever for expr** | Reject for temporal pack — reintroduces the problem |
+
+**Lock for this plan:**
+
+1. GI product cutover **may** ship with **E2 hybrid** if structure+annotations+when headers are grammar-driven and all **existing** expression tests stay green.  
+2. **Temporal pack admit requires E1** (or proven registration of open duration/`Now` forms without core RD edits).  
+3. Document which option each GI task leaves behind.
+
+### 5.3 Facets vs open expression forms
+
+- **Facets-first** remains default for **declaration** metadata (`column(...)`).  
+- **Expression specialization** (temporal units, `Now`) is a **second** extension surface (registries) — grammar must not force every unit into `TokenKind` forever; prefer **identifier/unit registration** or open value + analysis resolve (see temporal design).
+
+### 5.4 Placement
+
+| Concern | Module |
+|---------|--------|
+| Pattern engine | `Poly/Grammar` |
+| DSL token kinds, product grammar table, handlers, DSL printer | `Poly/DomainModeling` (or `Poly/DomainModeling/Dsl/` under same assembly) until a second consumer forces `Poly.Dsl` |
+| Packs | Register into product grammar + annotation hooks; **no** pack-private full parser |
+
+### 5.5 Non-goals
+
+- Changing `DomainChange` / evolution / analysis contracts  
+- Intent-log mutation path  
+- Binary/non-text streams as gate for text DSL cutover (follow-on GI-X)  
+- Completing ExpectedTokens UX in v1 (nice-to-have after green cutover)  
+- Parallel CURRENT with temporal pack **implementation**
 
 ---
 
-## 5. Rules
+## 6. Work slices (GI)
 
-- **One task per turn.** Complete GI-1 fully before starting GI-2.
-- **Existing tests must pass.** All 31 round-trip tests are the regression bar.
-- **No API breaks in `DomainChange`** — the grammar produces the same change list types.
-- **Document gaps.** If a construct doesn't map to the element set, flag it in the task before implementing.
-- **Keep old parser until GI-7.** GI-1 through GI-4 build alongside the old parser for comparison testing.
+Slice IDs **GI-N**. Prefer one micro-task suite file per slice when admitted (`docs/plans/simple-agent-tasks/gi-*.md`).
+
+### GI-0 — Design locks + corpus (docs + harness skeleton)
+
+**Do first.**
+
+- Freeze dual-path + expression hybrid policy (§5).  
+- List **regression corpus**: all product DSL tests that must stay green (by path/class name).  
+- Note temporal: pack implement blocked until cutover + expr registration path.  
+
+**Exit:** Short `gi-0` notes in suite or this plan’s appendix; no product behavior change required.
+
+### GI-1 — Tokenizer → `DslTokenReader`
+
+Port `PolyDslTokenizer` to `StringTokenReader<DslTokenKind>`.
+
+**Exit:**
+
+- Golden token streams for ≥10 representative inputs (structure + expr + annotations).  
+- Existing callers compile (adapter OK).  
+- Risk: Low.
+
+### GI-2 — Product structure grammar table
+
+`Grammar<DslTokenKind>` for **domain structure** (domain, entity members, stages, actions headers, when **headers**, constraints, nav props) — not full expression trees if hybrid.
+
+**Exit:**
+
+- Patterns cover guide structure surface.  
+- First-token sets non-empty for major rules.  
+- Gaps vs element set listed (no silent skip).  
+- Risk: Medium (when/action headers, nested blocks).
+
+### GI-3 — Structure parse handlers → `DomainChange`
+
+Matcher loop + handlers for structure; expressions via hybrid interface.
+
+**Exit:**
+
+- Full **corpus green** on grammar structure path (or dual-run equality).  
+- Same `DomainChange` types.  
+- Line/col errors for structure failures.  
+- Risk: Medium-high.
+
+### GI-4 — Expression path (hybrid complete or E1)
+
+| Prefer | Work |
+|--------|------|
+| Hybrid v1 | Isolate RD expr behind `IDslExpressionParser`; all expr tests green |
+| E1 (needed before temporal pack) | Expression grammar + nested matcher / precedence; remove RD expr |
+
+**Exit:** Document which; all expression-related product tests green.  
+**Risk:** High for E1; Medium for hybrid isolation.
+
+### GI-5 — Facet / pack annotation registration
+
+Replace hard-wired annotation parse with grammar registration; SQL `column` round-trip without editing matcher core.
+
+**Exit:** Annotation round-trips green; pack registers patterns.  
+**Risk:** Medium.
+
+### GI-6 — Printer port
+
+Domain walk + `Printer`/`TokenWriter`; round-trip corpus green; stable-ish output (canonical rules as today).
+
+**Exit:** Print → parse → structural equality (or documented whitespace rules).  
+**Risk:** Medium.
+
+### GI-7 — Cutover + delete hand RD
+
+- Product façade uses grammar path only.  
+- Remove obsolete tokenizer/parser/printer (or thin obsolete shims one release).  
+- Update CORE, DomainModeling README, guide if error shapes change.  
+
+**Exit:** No dual product path; CI green; CORE placement accurate.  
+**Risk:** Medium (delete blast radius).
+
+### GI-8 — JSON expression parser (optional / pull)
+
+Port `DomainExpressionJsonParser` to grammar **after** text cutover. Does not block temporal pack if JSON stays bag-local.
+
+### GI-9 — Non-text streams (defer)
+
+Binary token payloads / stream readers — only with a concrete consumer. **Not** CURRENT for text DSL.
+
+---
+
+## 7. Sequencing vs temporal and roadmap
+
+```text
+DONE:     product pipeline (dogfood, amu, p4, p3, p2, …)
+CURRENT:  (none) until admit
+ADMIT:    GI-0 → … → GI-7   as sole product CURRENT
+THEN:     p1 temporal pack implement (after design lock + GI cutover / E1)
+PARK:     GI-8 JSON, GI-9 binary, ExpectedTokens polish
+```
+
+| Rule | |
+|------|--|
+| Do not implement temporal **pack** keywords in hand RD while GI is planned | |
+| Research/design lock for temporal may proceed in parallel (docs only) | |
+| One CURRENT implementation suite at a time | |
+
+---
+
+## 8. Agent pick (when admitted)
+
+```text
+CURRENT: gi-0 design locks + corpus
+THEN:    gi-1 tokenizer
+THEN:    gi-2 structure grammar
+THEN:    gi-3 structure handlers
+THEN:    gi-4 expression hybrid or E1
+THEN:    gi-5 pack annotations
+THEN:    gi-6 printer
+THEN:    gi-7 cutover + docs
+PULL:    gi-8 JSON; gi-9 non-text
+BLOCK:   temporal pack product suite until GI-7 (or explicit hybrid waiver + E1 date)
+```
+
+### Copilot / orchestrator
+
+```bash
+# After suite solidify:
+copilot --agent plan-suite-until-done -p "Suite: gi. Mode: until-done."
+```
+
+Suite files: `docs/plans/simple-agent-tasks/gi-README.md` (create when admitting).
+
+---
+
+## 9. Hard rules
+
+1. **Corpus green** every merge — no “fix later.”  
+2. **Same DomainChange types** — no parallel mutation IR.  
+3. **Guide honesty** — if errors or syntax change, update `poly-dsl-guide.md` same change.  
+4. **CORE** updated at cutover (Grammar owns engine; DomainModeling owns product grammar table).  
+5. **No pack-private full parsers.**  
+6. **Document gaps** in the task before inventing new pattern elements.  
+7. **Name types for what they are** (`DslTokenReader`, `DomainDslGrammar`) — not “Visitor.”  
+
+---
+
+## 10. Risks and mitigations
+
+| Risk | Mitigation |
+|------|------------|
+| Expression precedence hell | Hybrid first; E1 as dedicated GI-4 with goldens from existing policy tests |
+| Dual-path drift | Shared corpus; fail CI if hand vs grammar diverge on corpus |
+| Scope creep to “perfect grammar” | Cutover when guide-product surface green; polish later |
+| Temporal forced early | Roadmap block: pack implement after GI-7 |
+| Printer whitespace churn | Prefer structural equality tests; golden text only where already required |
+
+---
+
+## 11. Success definition (suite)
+
+- [ ] Product `.poly` parse/print path is grammar-driven (façade).  
+- [ ] Hand RD deleted or non-product.  
+- [ ] Facet packs can register annotation syntax without editing matcher core.  
+- [ ] Full DSL regression corpus green.  
+- [ ] CORE + README placement accurate.  
+- [ ] Temporal pack has a clear registration path (E1 or documented open-form grammar).  
+- [ ] Master-roadmap CURRENT cleared or moved to temporal research/implement.  
+
+---
+
+## 12. Appendix — stale content removed from prior draft
+
+- “CURRENT: GI-1” as if already admitted — replaced by admit control.  
+- DomainAuthoringContext as critical path — gone.  
+- Hardcoded “31 tests” — replaced by living corpus.  
+- Phase 1a-only scope — replaced by guide-current product surface.  
+- Obsolete subscription example (`enter on entry`) — ignored.  
+
+---
+
+## 13. Next actions (human / agent)
+
+1. Solidify `gi-README` + `gi-0`…`gi-7` micro-tasks from this plan.  
+2. Admit **gi** on master-roadmap.  
+3. Complete / land `p1-temporal-design-lock.md` with **GI before pack** explicit.  
+4. Do not start temporal product code until GI success definition met (or written waiver).  

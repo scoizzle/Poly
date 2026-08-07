@@ -6,7 +6,7 @@
 **Gate:** [`coh-gate.md`](./coh-gate.md)  
 **Pre-ship:** [`../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md`](../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md)  
 
-**Status:** Ready suite — **not CURRENT**. Structural only: **no behavior change** except safer dispatch exhaustiveness. Admit on idle green tree or after dogfood; **do not** parallel with amu on same files without ownership check.
+**Status:** `[x]` — DONE 2026-08-06 (gate G1–G6 passed, 1855/1855 green, pre-ship review clean). Structural only: **no behavior change** except safer dispatch exhaustiveness. Admit on idle green tree or after dog food; **do not** parallel with amu on same files without ownership check.
 
 ---
 
@@ -52,12 +52,12 @@ One agent per chain; do not start r1/d1/e1/v1 until COH-0 locks file ownership.
 
 | ID | File | Stream | Size | Status |
 |----|------|--------|------|--------|
-| **0** | [`coh-0-design-locks.md`](./coh-0-design-locks.md) | Shared | S | `[ ]` |
-| **R1** | [`coh-r1-runtime-folder.md`](./coh-r1-runtime-folder.md) | R | M | `[ ]` |
-| **D1** | [`coh-d1-de-dispatch.md`](./coh-d1-de-dispatch.md) | D | M | `[ ]` |
-| **E1** | [`coh-e1-effect-dispatch.md`](./coh-e1-effect-dispatch.md) | E | M | `[ ]` |
-| **V1** | [`coh-v1-evolution-helpers.md`](./coh-v1-evolution-helpers.md) | V | M | `[ ]` |
-| **G** | [`coh-gate.md`](./coh-gate.md) | Gate | S | `[ ]` |
+| **0** | [`coh-0-design-locks.md`](./coh-0-design-locks.md) | Shared | S | `[x]` |
+| **R1** | [`coh-r1-runtime-folder.md`](./coh-r1-runtime-folder.md) | R | M | `[x]` |
+| **D1** | [`coh-d1-de-dispatch.md`](./coh-d1-de-dispatch.md) | D | M | `[x]` |
+| **E1** | [`coh-e1-effect-dispatch.md`](./coh-e1-effect-dispatch.md) | E | M | `[x]` |
+| **V1** | [`coh-v1-evolution-helpers.md`](./coh-v1-evolution-helpers.md) | V | M | `[x]` |
+| **G** | [`coh-gate.md`](./coh-gate.md) | Gate | S | `[x]` |
 
 ---
 

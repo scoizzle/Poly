@@ -6,7 +6,7 @@
 **Gate:** [`p4-gate.md`](./p4-gate.md)  
 **Pre-ship:** [`../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md`](../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md)  
 
-**Status:** Ready suite — **not CURRENT**. Admit as sole product language slice after dogfood-wave-2 (or explicit pick). Prefer before large P1 temporal unless dogfood forces dates.
+**Status:** **DONE** — 2026-08-06 (p4-0 … p4-4 + gate; see [`p4-gate.md`](./p4-gate.md)).
 
 ---
 
@@ -54,12 +54,12 @@ suite=docs/plans/simple-agent-tasks/p4-README.md  mode=until-done
 
 | ID | File | Size | Status |
 |----|------|------|--------|
-| **0** | [`p4-0-design-lock.md`](./p4-0-design-lock.md) | S | `[ ]` |
-| **1** | [`p4-1-parse-print.md`](./p4-1-parse-print.md) | M | `[ ]` |
-| **2** | [`p4-2-analysis.md`](./p4-2-analysis.md) | S | `[ ]` |
-| **3** | [`p4-3-goldens.md`](./p4-3-goldens.md) | M | `[ ]` |
-| **4** | [`p4-4-guide.md`](./p4-4-guide.md) | S | `[ ]` |
-| **G** | [`p4-gate.md`](./p4-gate.md) | S | `[ ]` |
+| **0** | [`p4-0-design-lock.md`](./p4-0-design-lock.md) | S | `[x]` |
+| **1** | [`p4-1-parse-print.md`](./p4-1-parse-print.md) | M | `[x]` |
+| **2** | [`p4-2-analysis.md`](./p4-2-analysis.md) | S | `[x]` |
+| **3** | [`p4-3-goldens.md`](./p4-3-goldens.md) | M | `[x]` |
+| **4** | [`p4-4-guide.md`](./p4-4-guide.md) | S | `[x]` |
+| **G** | [`p4-gate.md`](./p4-gate.md) | S | `[x]` |
 
 ---
 

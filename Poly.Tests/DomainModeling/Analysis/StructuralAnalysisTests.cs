@@ -153,6 +153,28 @@ public class EffectBindingTests {
             d.Code == DomainModelDiagnosticCodes.EffectBinding)).IsTrue();
     }
 
+    [Test]
+    public async Task EffectBinding_InvokeActionUnknownRelationship_WithCatalog_ReportsError() {
+        // amu-w1-1: relationship resolve is catalog-only (no domain.Relationships scan).
+        // With analysis + catalog present, an unknown relationship name must be
+        // reported (fail closed), not silently passed.
+        var target = new Entity("Target", [], Actions: [
+            new Poly.DomainModeling.Action("Tag", InvocationResult.Void, [], [], [])
+        ], [], []);
+        var source = new Entity("Source", [], Actions: [
+            new Poly.DomainModeling.Action("Go", InvocationResult.Void, [], [
+                new InvokeActionEffect("Tag", [], TargetRelationship: "NoSuchRel")
+            ], [])
+        ], [], []);
+        var domain = new Domain("Test", [source, target], []);
+
+        var analysis = DomainModelAnalyzer.Analyze(domain);
+
+        await Assert.That(analysis.GetCatalog(domain)).IsNotNull();
+        await Assert.That(analysis.Diagnostics.Any(d =>
+            d.Code == DomainModelDiagnosticCodes.EffectBinding)).IsTrue();
+    }
+
 
 
     [Test]

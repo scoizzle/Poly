@@ -398,11 +398,50 @@ Submit: action
 ## 7. Stage Subscriptions
 
 ```
-"when" relationship-name stage-name ("," stage-name)* ["as" binder-name] "{" effect* "}"
+"when" ["any"|"all"] relationship-name stage-name ("," stage-name)* ["as" binder-name] "{" effect* "}"
 ```
 
 Subscriptions trigger when a related entity (reachable via the named relationship /
 navigation property on the **subscriber**) enters one of the listed stages.
+
+### Quantifier (optional: `any` / `all`)
+
+The quantifier controls how the related-entity **set** is evaluated when a linked
+target enters a matching stage. Omit it for the default **`Each`**:
+
+| Keyword | Semantics |
+|---------|-----------|
+| *(omitted)* = **`Each`** | Fires effects for **every** matching transition (per-element; the default and the pre-p4 behavior) |
+| `any` | Fires **once** when **at least one** linked related entity is in a matching stage |
+| `all` | Fires **once** when **every** linked related entity is in a matching stage |
+
+- `any`/`all` (and `Each`) all evaluate the **set state after the transition** —
+  they do not fire "every peer bag at once". `all` only fires once the whole linked
+  set is in a matching stage; until then transitions into the stage are ignored.
+- `any`/`all` on a **singular** relationship (OneToOne / ManyToOne) are
+  **rejected at analysis time** (error `DMSS003` — `SubscriptionContractMismatch`).
+  The quantifier is meaningless there; omit it (`Each`) or change cardinality.
+- **Reserved keywords:** `any` and `all` are parsed as quantifier keywords when
+  they immediately follow `when` — a relationship literally named `any` or `all`
+  cannot be used as the navigation in a `when` subscription (it is always consumed
+  as the quantifier). Rename such relationships (e.g. `anyOrders`). This is a
+  documented product limitation of the p4 quantifier grammar.
+- Peer binder (`as name`) remains valid with `any`/`all`; the peer is the
+  **transitioned** instance for that firing (same as `Each` today).
+
+```poly
+Pending: stage {
+  when any orders Active {      // once any linked order is Active
+    assign Status to "hasOrder"
+  }
+  when all orders Completed {   // once every linked order is Completed
+    assign Status to "allDone"
+  }
+  when orders Active {          // default Each — per matching transition
+    assign Status to "triggered"
+  }
+}
+```
 
 ### Placement (stage vs entity-level)
 

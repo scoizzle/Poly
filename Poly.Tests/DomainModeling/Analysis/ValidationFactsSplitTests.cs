@@ -92,6 +92,7 @@ public class ValidationFactsSplitTests {
         var builder = new AnalyzerBuilder()
             .AddAnalyzer(new StructuralDomainAnalyzer())
             .AddAnalyzer(new SemanticDomainAnalyzer())
+            .AddAnalyzer(new DomainCatalogPass())
             .AddAnalyzer(new RequiredPropertiesPass())
             .AddAnalyzer(new ConstraintPropagationAnalyzer())
             .AddAnalyzer(new EffectAnalyzer()); // lint only — no EffectFactsPass

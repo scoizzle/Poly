@@ -730,6 +730,10 @@ public sealed class PolyDslParser {
 
     private void ParseSubscription(string stageName, List<DomainChange> changes) {
         Advance(); // consume 'when'
+
+        // P4-1: optional subscription quantifier: when [any|all] Rel Stage…
+        var quantifier = ParseSubscriptionQuantifier();
+
         var relName = ExpectIdentifier(TokenKind.Identifier, "relationship name");
         // P2.5: Accept comma-separated stage names: "when Rel Active, Done"
         var targetStages = new List<string>();
@@ -752,8 +756,28 @@ public sealed class PolyDslParser {
         }
         Expect(TokenKind.RBrace);
 
-        var subscription = new StageSubscription(relName, targetStages, StageSubscriptionQuantifier.Each, effects, peerBinding);
+        var subscription = new StageSubscription(relName, targetStages, quantifier, effects, peerBinding);
         changes.Add(new AddStageSubscriptionChange(_currentEntityName, stageName, subscription));
+    }
+
+    /// <summary>
+    /// Parses an optional subscription quantifier (<c>any</c> / <c>all</c>)
+    /// following <c>when</c>. Omitted quantifier defaults to
+    /// <see cref="StageSubscriptionQuantifier.Each"/> (current product default).
+    /// Mirrors the <c>invoke any|all</c> pattern (identifier text match).
+    /// </summary>
+    private StageSubscriptionQuantifier ParseSubscriptionQuantifier() {
+        if (_current.Kind == TokenKind.Identifier &&
+            string.Equals(_current.Text, "any", StringComparison.OrdinalIgnoreCase)) {
+            Advance(); // consume 'any'
+            return StageSubscriptionQuantifier.Any;
+        }
+        if (_current.Kind == TokenKind.Identifier &&
+            string.Equals(_current.Text, "all", StringComparison.OrdinalIgnoreCase)) {
+            Advance(); // consume 'all'
+            return StageSubscriptionQuantifier.All;
+        }
+        return StageSubscriptionQuantifier.Each;
     }
 
     /// <summary>
@@ -762,6 +786,10 @@ public sealed class PolyDslParser {
     /// </summary>
     private void ParseEntitySubscription(List<DomainChange> changes) {
         Advance(); // consume 'when'
+
+        // P4-1: optional subscription quantifier: when [any|all] Rel Stage…
+        var quantifier = ParseSubscriptionQuantifier();
+
         var relName = ExpectIdentifier(TokenKind.Identifier, "relationship name");
         var targetStages = new List<string>();
         targetStages.Add(ExpectIdentifier(TokenKind.Identifier, "target stage name"));
@@ -782,7 +810,7 @@ public sealed class PolyDslParser {
         }
         Expect(TokenKind.RBrace);
 
-        var subscription = new StageSubscription(relName, targetStages, StageSubscriptionQuantifier.Each, effects, peerBinding);
+        var subscription = new StageSubscription(relName, targetStages, quantifier, effects, peerBinding);
         changes.Add(new AddEntitySubscriptionChange(_currentEntityName, subscription));
     }
 

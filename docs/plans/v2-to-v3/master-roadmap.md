@@ -52,19 +52,18 @@ MCP / direct API as thin consumers
 ### Agent pick (one line)
 
 ```text
-DONE:    M1–M4; Q1′+Q3′+link; infra IR; domain catalog; peer/entity-level when/owned policies; store-aware Rel exists; dogfood wave-1 + fix G1/G3/HOST; SurfaceExtensionDogfoodTests
-CURRENT: dogfood-wave-2 — MCP discovery S4 peer binder → S5 entity-level when → S6 owned+exists+quantifiers
-         Queue: simple-agent-tasks/dogfood-README.md
-ADMIT:   (wave 2 only) — fix tasks from findings after reports; no parallel amu/P*/cohesion
+DONE:    M1–M4; Q1′+Q3′+link; infra IR; domain catalog; peer/entity-level when/owned policies; store-aware Rel exists; dogfood wave-1 + fix G1/G3/HOST; dogfood wave-2 S4/S5/S6 PASS + fix G-S6-1; amu W0–W4 + gate G1–G7 PASS; p4 when-any/all parse/print + analysis + goldens + guide + gate G1–G5 PASS; coh Runtime/ move + DE/Effect dispatch + evolution helpers + gate G1–G6 PASS; SurfaceExtensionDogfoodTests
+CURRENT: (none) — pipeline docs/plans/simple-agent-tasks/SUITE-OF-SUITES.md complete
+ADMIT:   (pipeline only) — amu → p4 → coh; no parallel product edits
 PARKED:  Absorption P1/P2/P3/P5+; grammar; analysis-consuming lowering residuals; naming V3*; DAU deepen
-READY:   pipeline docs/plans/simple-agent-tasks/SUITE-OF-SUITES.md (amu · p4 · coh)
+READY:   (pipeline complete — see docs/plans/simple-agent-tasks/SUITE-OF-SUITES.md)
          Copilot: copilot --agent domainmodeling-backlog -p "Execute SUITE-OF-SUITES until complete"
 PULL:    Q4; link DSL; E5; Bar B; multi-hop / dates only if wave-2 forces
 ```
 
 **Honest product claim today:** Path-prefix / exists / where **and** Q3′ quantifiers are authorable **and** evaluable (store-linked `EvaluatePolicy`). Peer binding: `when Rel Stage as name`. Surface extensions: export peer handlers, entity-level `when`, owned policies. MCP: `create_instance` → `link_instances` → `evaluate_policy(instanceId=…)`. DSL has **no** `link` keyword (`create in Rel` for spawn-and-wire). JSON policies still local-only. Codegen DbContext/Program via Syntax IR; `.http` still string. **Temporal DSL authoring** not product. Automated SPE path: [`Poly.Tests/Mcp/SurfaceExtensionDogfoodTests.cs`](../../../Poly.Tests/Mcp/SurfaceExtensionDogfoodTests.cs).
 
-**Focus (2026-08-06):** **Dogfood wave 2** — agent MCP path on peer binder, entity-level when, owned+exists+quantifiers. Report-first; fix second. Do **not** open grammar, temporal, amu, multi-hop, or cohesion in parallel.
+**Focus (2026-08-06):** Pipeline complete — dogfood → amu → p4 → coh all done, gates passed, 1855/1855 green. Next product work requires a fresh admission against `docs/README.md`; do **not** open grammar, temporal, multi-hop, or parallel product edits.
 
 ---
 

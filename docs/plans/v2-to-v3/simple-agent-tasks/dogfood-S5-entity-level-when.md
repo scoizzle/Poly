@@ -3,7 +3,7 @@
 **Queue:** [`dogfood-README.md`](dogfood-README.md)  
 **Protocol:** [`../mcp-dogfood-protocol.md`](../mcp-dogfood-protocol.md)  
 **Wave:** 2 (shipped SPE entity-level when)  
-**Status:** `[ ]` Not Started  
+**Status:** `[x]` PASS — [report](../agent-summaries/dogfood/DOGFOOD-S5-20260806.md)  
 **Difficulty:** Medium  
 **Prereq:** Prefer S4 attempted; can run standalone  
 **Est. session time:** 40–60 min  
@@ -74,7 +74,7 @@ If product guide scopes entity-level when differently, document actual guide con
 
 ## Status tracking
 
-**Claimed by:**  
-**Started:**  
-**Report path:**  
-**Result:** PASS / FAIL / PARTIAL  
+**Claimed by:** Copilot pipeline supervisor  
+**Started:** 2026-08-06  
+**Report path:** `agent-summaries/dogfood/DOGFOOD-S5-20260806.md`  
+**Result:** PASS  

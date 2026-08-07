@@ -281,6 +281,56 @@ public class DomainToCSharpExporterTests {
     }
 
     [Test]
+    public async Task EffectLowering_StageTransition_UsesEntityStructureBagForEntryEffects() {
+        // amu-w3-2: with analysis present, StageTransition lowering must resolve the
+        // target stage's entry effects via TryGetStage (EntityStructureMetadata.StageByName)
+        // — no entity.Stages rescan.
+        var (domain, analysis) = ParseAndAnalyze("""
+            domain Demo
+
+            Person: entity {
+              MaxItems: Number
+              Name: Text
+              Active: stage {
+                Suspend: action { transition to Suspended }
+              }
+              Suspended: stage {
+                entry { assign MaxItems to 0 }
+              }
+            }
+            """);
+        var entity = domain.Types.OfType<Entity>().Single(e => e.Name == "Person");
+
+        // Analysis-present path: entry effects must come from the EntityStructure bag.
+        var effect = new StageTransitionEffect(new StageReference("Suspended"));
+        var context = new LoweringContext(
+            new Parameter("entity", new TypeReference(entity.Name)),
+            Analysis: analysis,
+            UseThisReference: true,
+            LowerStageTransitions: true,
+            Domain: domain,
+            SourceStageName: "Active");
+        var pass = new EffectLoweringPass(entity, context);
+
+        var lowered = pass.TryLowerVmNode(effect);
+
+        await Assert.That(lowered).IsNotNull();
+        await Assert.That(lowered).IsTypeOf<Block>();
+        var nodes = ((Block)lowered!).Nodes.ToList();
+        // Entry effect emitted: this.MaxItems = <0> (int or long constant — match numerically).
+        await Assert.That(nodes.Any(n =>
+            n is Assignment {
+                Destination: Member { Value: ThisReference, MemberName: "MaxItems" },
+                Value: Constant { Value: 0 or 0L }
+            })).IsTrue();
+        // CurrentStage assignment emitted after entry effects.
+        await Assert.That(nodes.Any(n =>
+            n is Assignment {
+                Destination: Member { Value: ThisReference, MemberName: "CurrentStage" }
+            })).IsTrue();
+    }
+
+    [Test]
     public async Task Export_BookEntity_HasExpectedProperties() {
         var (domain, analysis) = ParseAndAnalyze(LibraryCheckoutDsl);
         var exporter = new DomainToCSharpExporter();

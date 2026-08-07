@@ -207,6 +207,185 @@ public class PolyDslRoundTripTests {
     }
 
     [Test]
+    public async Task Parse_WhenAny_RoundTrips() {
+        // p4-1: when any Rel Stage [as name] parses to Any and prints back with 'any'.
+        var poly = """
+            domain Test
+
+            Tracker: entity {
+              Status: Text
+              Tracks: many Order
+
+              Pending: stage {
+                when any Tracks Active as order {
+                  assign Status to order Code
+                }
+              }
+            }
+
+            Order: entity {
+              Code: Text
+              Draft: stage { }
+              Active: stage { }
+            }
+            """;
+
+        var parser = new PolyDslParser(poly);
+        var changes = parser.Parse();
+        var emptyDomain = new Domain("_", [], []);
+        var result = new DomainEvolution(emptyDomain).Apply(changes);
+        await Assert.That(result.Succeeded).IsTrue();
+
+        var tracker = result.Root.Types.OfType<Entity>().Single(e => e.Name == "Tracker");
+        var pending = tracker.Stages.Single(s => s.Name == "Pending");
+        await Assert.That(pending.Subscriptions.Count).IsEqualTo(1);
+        await Assert.That(pending.Subscriptions[0].Quantifier).IsEqualTo(StageSubscriptionQuantifier.Any);
+        await Assert.That(pending.Subscriptions[0].PeerBinding).IsEqualTo("order");
+
+        var printed = new DomainDslPrinter().Print(result.Root);
+        await Assert.That(printed.Contains("when any Tracks Active as order", StringComparison.Ordinal)).IsTrue();
+
+        var reparsed = new DomainEvolution(new Domain("_", [], [])).Apply(new PolyDslParser(printed).Parse());
+        await Assert.That(reparsed.Succeeded).IsTrue();
+        var sub2 = reparsed.Root.Types.OfType<Entity>().Single(e => e.Name == "Tracker")
+            .Stages.Single(s => s.Name == "Pending").Subscriptions[0];
+        await Assert.That(sub2.Quantifier).IsEqualTo(StageSubscriptionQuantifier.Any);
+        await Assert.That(sub2.PeerBinding).IsEqualTo("order");
+    }
+
+    [Test]
+    public async Task Parse_WhenAll_MultiStage_RoundTrips() {
+        // p4-1: when all Rel Stage1, Stage2 parses to All and prints back with 'all'.
+        var poly = """
+            domain Test
+
+            Tracker: entity {
+              Status: Text
+              Tracks: many Order
+
+              Pending: stage {
+                when all Tracks Active, Done {
+                  assign Status to "Triggered"
+                }
+              }
+            }
+
+            Order: entity {
+              Draft: stage { }
+              Active: stage { }
+              Done: stage {}
+            }
+            """;
+
+        var parser = new PolyDslParser(poly);
+        var changes = parser.Parse();
+        var emptyDomain = new Domain("_", [], []);
+        var result = new DomainEvolution(emptyDomain).Apply(changes);
+        await Assert.That(result.Succeeded).IsTrue();
+
+        var tracker = result.Root.Types.OfType<Entity>().Single(e => e.Name == "Tracker");
+        var pending = tracker.Stages.Single(s => s.Name == "Pending");
+        await Assert.That(pending.Subscriptions.Count).IsEqualTo(1);
+        await Assert.That(pending.Subscriptions[0].Quantifier).IsEqualTo(StageSubscriptionQuantifier.All);
+        await Assert.That(pending.Subscriptions[0].StageNames.Count).IsEqualTo(2);
+
+        var printed = new DomainDslPrinter().Print(result.Root);
+        await Assert.That(printed.Contains("when all Tracks Active, Done", StringComparison.Ordinal)).IsTrue();
+
+        var reparsed = new DomainEvolution(new Domain("_", [], [])).Apply(new PolyDslParser(printed).Parse());
+        await Assert.That(reparsed.Succeeded).IsTrue();
+        var sub2 = reparsed.Root.Types.OfType<Entity>().Single(e => e.Name == "Tracker")
+            .Stages.Single(s => s.Name == "Pending").Subscriptions[0];
+        await Assert.That(sub2.Quantifier).IsEqualTo(StageSubscriptionQuantifier.All);
+        await Assert.That(sub2.StageNames.Count).IsEqualTo(2);
+    }
+
+    [Test]
+    public async Task Parse_When_OmittedQuantifier_IsEach_AndPrintOmitsKeyword() {
+        // p4-1: omitted quantifier stays Each (product default); printer must NOT emit any/all.
+        var poly = """
+            domain Test
+
+            Tracker: entity {
+              Status: Text
+              Tracks: Order
+
+              Pending: stage {
+                when Tracks Active {
+                  assign Status to "Triggered"
+                }
+              }
+            }
+
+            Order: entity {
+              Draft: stage { }
+              Active: stage { }
+            }
+            """;
+
+        var parser = new PolyDslParser(poly);
+        var changes = parser.Parse();
+        var emptyDomain = new Domain("_", [], []);
+        var result = new DomainEvolution(emptyDomain).Apply(changes);
+        await Assert.That(result.Succeeded).IsTrue();
+
+        var tracker = result.Root.Types.OfType<Entity>().Single(e => e.Name == "Tracker");
+        var pending = tracker.Stages.Single(s => s.Name == "Pending");
+        await Assert.That(pending.Subscriptions[0].Quantifier).IsEqualTo(StageSubscriptionQuantifier.Each);
+
+        var printed = new DomainDslPrinter().Print(result.Root);
+        await Assert.That(printed.Contains("when Tracks Active", StringComparison.Ordinal)).IsTrue();
+        await Assert.That(printed.Contains("when any ", StringComparison.Ordinal)).IsFalse();
+        await Assert.That(printed.Contains("when all ", StringComparison.Ordinal)).IsFalse();
+
+        var reparsed = new DomainEvolution(new Domain("_", [], [])).Apply(new PolyDslParser(printed).Parse());
+        await Assert.That(reparsed.Succeeded).IsTrue();
+        var sub2 = reparsed.Root.Types.OfType<Entity>().Single(e => e.Name == "Tracker")
+            .Stages.Single(s => s.Name == "Pending").Subscriptions[0];
+        await Assert.That(sub2.Quantifier).IsEqualTo(StageSubscriptionQuantifier.Each);
+    }
+
+    [Test]
+    public async Task Parse_EntityLevelWhenAny_RoundTrips() {
+        // p4-1: entity-level subscription also accepts the any/all quantifier.
+        var poly = """
+            domain Test
+
+            Patron: entity {
+              Name: Text
+              loans: many Loan
+
+              when any loans Overdue {
+                assign Name to "Flagged"
+              }
+            }
+
+            Loan: entity {
+              Draft: stage { }
+              Overdue: stage { }
+            }
+            """;
+
+        var parser = new PolyDslParser(poly);
+        var changes = parser.Parse();
+        var emptyDomain = new Domain("_", [], []);
+        var result = new DomainEvolution(emptyDomain).Apply(changes);
+        await Assert.That(result.Succeeded).IsTrue();
+
+        var patron = result.Root.Types.OfType<Entity>().Single(e => e.Name == "Patron");
+        await Assert.That(patron.Subscriptions.Count).IsEqualTo(1);
+        await Assert.That(patron.Subscriptions[0].Quantifier).IsEqualTo(StageSubscriptionQuantifier.Any);
+
+        var printed = new DomainDslPrinter().Print(result.Root);
+        await Assert.That(printed.Contains("when any loans Overdue", StringComparison.Ordinal)).IsTrue();
+
+        var reparsed = new DomainEvolution(new Domain("_", [], [])).Apply(new PolyDslParser(printed).Parse());
+        await Assert.That(reparsed.Succeeded).IsTrue();
+        var sub2 = reparsed.Root.Types.OfType<Entity>().Single(e => e.Name == "Patron").Subscriptions[0];
+        await Assert.That(sub2.Quantifier).IsEqualTo(StageSubscriptionQuantifier.Any);
+    }
+
+    [Test]
     public async Task Parse_StagePrev_Rejected() {
         // P2′′′′′.3: Using the removed 'prev' keyword should produce a clear error.
         var poly = """

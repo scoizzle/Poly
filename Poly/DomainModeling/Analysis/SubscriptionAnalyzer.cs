@@ -26,6 +26,15 @@ internal sealed class SubscriptionAnalyzer : INodeAnalyzer {
         this.AnalyzeChildren(context, node);
     }
 
+    /// <summary>
+    /// Relationship lookup for domain-bound name resolve (amu-w1-3). Prefers the
+    /// catalog relationship bag; falls back to the intermediate RLM bag published
+    /// by <see cref="SemanticDomainAnalyzer"/>. Null when neither is available
+    /// (stripped/failed trees) — callers skip validation rather than false-report.
+    /// </summary>
+    private static RelationshipLookupMetadata? ResolveRelationshipLookup(AnalysisContext context, Domain domain) =>
+        context.GetRelationshipLookup(domain) ?? context.GetMetadata<RelationshipLookupMetadata>(default);
+
     private static void ValidateDomain(AnalysisContext context, Domain domain) {
         var lookup = context.GetMetadata<DomainTypeLookupMetadata>(default);
         if (lookup is null) return;
@@ -72,14 +81,16 @@ internal sealed class SubscriptionAnalyzer : INodeAnalyzer {
         // ── Causality cycle detection (restored full version — D2′.2) ──
         // Build edge graph where E₁ → E₂ exists only when E₂ has at least one action
         // that transitions to a stage E₁'s subscription watches (avoids false positives).
+        // amu-w1-3: name resolve via catalog/RLM lookup (no per-subscription scan).
+        var relLookup = ResolveRelationshipLookup(context, domain);
         var edges = new List<(string FromEntity, string ToEntity, string StageName)>();
         foreach (var entity in lookup.Entities) {
             foreach (var stage in entity.Stages) {
                 foreach (var sub in stage.Subscriptions) {
-                    var relationship = domain.Relationships.FirstOrDefault(r =>
-                        string.Equals(r.Source.TypeName, entity.Name, StringComparison.Ordinal)
-                        && string.Equals(r.Name, sub.RelationshipName, StringComparison.Ordinal));
-                    if (relationship is null) continue;
+                    if (relLookup is null
+                        || !relLookup.Relationships.TryGetValue(sub.RelationshipName, out var relationship)
+                        || !string.Equals(relationship.Source.TypeName, entity.Name, StringComparison.Ordinal))
+                        continue;
                     var targetType = lookup.Types.GetValueOrDefault(relationship.Target.TypeName);
                     if (targetType is not Entity targetEntity) continue;
                     foreach (var sn in sub.StageNames) {
@@ -224,9 +235,13 @@ internal sealed class SubscriptionAnalyzer : INodeAnalyzer {
         }
 
         // ── Relationship resolution ──────────────────────────────
-        var relationship = domain.Relationships.FirstOrDefault(r =>
-            string.Equals(r.Name, subscription.RelationshipName, StringComparison.Ordinal) &&
-            string.Equals(r.Source.TypeName, entity.Name, StringComparison.Ordinal));
+        // amu-w1-3: catalog/RLM name resolve (no domain.Relationships scan).
+        var relLookup = ResolveRelationshipLookup(context, domain);
+        if (relLookup is null) return; // bag unavailable — skip (no false positive)
+        var relationship = relLookup.Relationships.TryGetValue(subscription.RelationshipName, out var rel)
+            && string.Equals(rel.Source.TypeName, entity.Name, StringComparison.Ordinal)
+            ? rel
+            : null;
 
         if (relationship is null) {
             context.ReportError(
@@ -259,15 +274,15 @@ internal sealed class SubscriptionAnalyzer : INodeAnalyzer {
             }
         }
 
-        // ── Quantifier vs cardinality ────────────────────────────
+        // ── Quantifier vs cardinality (fail-closed: reject, don't warn) ──
         bool isSingularFromSource = relationship.Cardinality is RelationshipCardinality.OneToOne
                                                          or RelationshipCardinality.ManyToOne;
         if (subscription.Quantifier != StageSubscriptionQuantifier.Each && isSingularFromSource) {
-            context.ReportWarning(
+            context.ReportError(
                 subscription,
                 $"Stage subscription uses quantifier '{subscription.Quantifier}' on one-to-one relationship " +
-                $"'{subscription.RelationshipName}'. '{subscription.Quantifier}' behaves identically to 'Each' " +
-                "on singular relationships. Use 'Each' or change relationship cardinality.",
+                $"'{subscription.RelationshipName}'. '{subscription.Quantifier}' is meaningless on singular " +
+                "relationships — omit it (Each) or change relationship cardinality.",
                 DomainModelDiagnosticCodes.SubscriptionContractMismatch);
         }
 

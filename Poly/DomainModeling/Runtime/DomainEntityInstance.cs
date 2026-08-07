@@ -51,6 +51,10 @@ public sealed record DomainEntityInstance {
     public const int MaxTransitionDepth = 16;
     internal DomainInstanceStore? Store { get; set; }
 
+    private QuantifierPreprocessRewrite? _quantifierRewrite;
+    private QuantifierPreprocessRewrite QuantifierRewrite =>
+        _quantifierRewrite ??= new(this);
+
     private DomainEntityInstance(
         Entity entity,
         Dictionary<string, object?> values,
@@ -796,72 +800,20 @@ public sealed record DomainEntityInstance {
     }
 
     private static DomainExpression BindPeerInExpression(
-        DomainExpression expr, string peerBinding, DomainEntityInstance peer) {
-        switch (expr) {
-            case RelationshipNavigation rn when string.Equals(rn.RelationshipName, peerBinding, StringComparison.Ordinal):
-                return DomainExpression.Literal(EvaluateExprOnPeer(rn.TargetProperty, peer));
-            case And a:
-                return a with {
-                    Left = BindPeerInExpression(a.Left, peerBinding, peer),
-                    Right = BindPeerInExpression(a.Right, peerBinding, peer)
-                };
-            case Or o:
-                return o with {
-                    Left = BindPeerInExpression(o.Left, peerBinding, peer),
-                    Right = BindPeerInExpression(o.Right, peerBinding, peer)
-                };
-            case Not n:
-                return n with { Operand = BindPeerInExpression(n.Operand, peerBinding, peer) };
-            case Comparison c:
-                return c with {
-                    Left = BindPeerInExpression(c.Left, peerBinding, peer),
-                    Right = BindPeerInExpression(c.Right, peerBinding, peer)
-                };
-            case Add a:
-                return a with {
-                    Left = BindPeerInExpression(a.Left, peerBinding, peer),
-                    Right = BindPeerInExpression(a.Right, peerBinding, peer)
-                };
-            case Subtract s:
-                return s with {
-                    Left = BindPeerInExpression(s.Left, peerBinding, peer),
-                    Right = BindPeerInExpression(s.Right, peerBinding, peer)
-                };
-            case Multiply m:
-                return m with {
-                    Left = BindPeerInExpression(m.Left, peerBinding, peer),
-                    Right = BindPeerInExpression(m.Right, peerBinding, peer)
-                };
-            case Divide d:
-                return d with {
-                    Left = BindPeerInExpression(d.Left, peerBinding, peer),
-                    Right = BindPeerInExpression(d.Right, peerBinding, peer)
-                };
-            case OwnedAccess o:
-                return o with { Inner = BindPeerInExpression(o.Inner, peerBinding, peer) };
-            case Exists e:
-                return e with { Target = BindPeerInExpression(e.Target, peerBinding, peer) };
-            case NotExists ne:
-                return ne with { Target = BindPeerInExpression(ne.Target, peerBinding, peer) };
-            case DateOperation d:
-                return d with {
-                    Date = BindPeerInExpression(d.Date, peerBinding, peer),
-                    Offset = BindPeerInExpression(d.Offset, peerBinding, peer)
-                };
-            case AnyExpr a:
-                return a with { Body = BindPeerInExpression(a.Body, peerBinding, peer) };
-            case AllExpr a:
-                return a with { Body = BindPeerInExpression(a.Body, peerBinding, peer) };
-            case NoneExpr n:
-                return n with { Body = BindPeerInExpression(n.Body, peerBinding, peer) };
-            case CountExpr c:
-                return c with {
-                    Body = c.Body is null ? null : BindPeerInExpression(c.Body, peerBinding, peer)
-                };
-            case RelationshipNavigation rn:
-                return rn with { TargetProperty = BindPeerInExpression(rn.TargetProperty, peerBinding, peer) };
-            default:
-                return expr;
+        DomainExpression expr, string peerBinding, DomainEntityInstance peer) =>
+        new PeerBindingRewrite(peerBinding, peer).Route(expr);
+
+    /// <summary>
+    /// Rewrites peer path-prefix roots (<c>name Prop</c>) into literals evaluated
+    /// against the transitioned peer bag (coh-d1 — leaf override on the shared
+    /// <see cref="DomainExpressionRewriteBase"/>; composites recurse in the base).
+    /// </summary>
+    private sealed class PeerBindingRewrite(string peerBinding, DomainEntityInstance peer)
+        : DomainExpressionRewriteBase {
+        protected override DomainExpression RelationshipNavigation(RelationshipNavigation e) {
+            if (string.Equals(e.RelationshipName, peerBinding, StringComparison.Ordinal))
+                return DomainExpression.Literal(EvaluateExprOnPeer(e.TargetProperty, peer));
+            return base.RelationshipNavigation(e);
         }
     }
 
@@ -1162,66 +1114,60 @@ public sealed record DomainEntityInstance {
     /// <see cref="InvalidOperationException"/> — no soft pass-through to bag
     /// <c>Member</c> chains (no vacuous true/false).</para>
     /// </summary>
-    private DomainExpression PreprocessQuantifiers(DomainExpression expr) {
-        switch (expr) {
-            case AnyExpr a:
-                return DomainExpression.Literal(EvaluateAnyExpr(a));
-            case AllExpr a:
-                return DomainExpression.Literal(EvaluateAllExpr(a));
-            case NoneExpr n:
-                return DomainExpression.Literal(EvaluateNoneExpr(n));
-            case CountExpr c:
-                return DomainExpression.Literal(EvaluateCountExpr(c));
+    private DomainExpression PreprocessQuantifiers(DomainExpression expr) =>
+        QuantifierRewrite.Route(expr);
 
-            // Composite expressions — recurse, then reconstruct via with
-            case And a: return a with { Left = PreprocessQuantifiers(a.Left), Right = PreprocessQuantifiers(a.Right) };
-            case Or o: return o with { Left = PreprocessQuantifiers(o.Left), Right = PreprocessQuantifiers(o.Right) };
-            case Not n: return n with { Operand = PreprocessQuantifiers(n.Operand) };
-            case Comparison c: return c with { Left = PreprocessQuantifiers(c.Left), Right = PreprocessQuantifiers(c.Right) };
-            case Add a: return a with { Left = PreprocessQuantifiers(a.Left), Right = PreprocessQuantifiers(a.Right) };
-            case Subtract s: return s with { Left = PreprocessQuantifiers(s.Left), Right = PreprocessQuantifiers(s.Right) };
-            case Multiply m: return m with { Left = PreprocessQuantifiers(m.Left), Right = PreprocessQuantifiers(m.Right) };
-            case Divide d: return d with { Left = PreprocessQuantifiers(d.Left), Right = PreprocessQuantifiers(d.Right) };
-            case DateOperation d: return d with { Date = PreprocessQuantifiers(d.Date), Offset = PreprocessQuantifiers(d.Offset) };
-            case RelationshipNavigation r: {
-                    // Singular path-prefix: exactly one linked target (to-one product shape).
-                    // Use quantifiers (any/all) for collections — never pick targets[0] silently.
-                    var targets = GetOutboundRelatedInstances(r.RelationshipName);
-                    if (targets.Count == 0)
-                        throw new InvalidOperationException(
-                            $"No linked instances found for relationship '{r.RelationshipName}' on entity '{Entity.Name}'.");
-                    if (targets.Count > 1)
-                        throw new InvalidOperationException(
-                            $"Path-prefix on relationship '{r.RelationshipName}' requires exactly one linked target " +
-                            $"(found {targets.Count} on entity '{Entity.Name}'). Use any/all quantifiers for collections.");
+    /// <summary>
+    /// Store-aware quantifier / path-prefix / Rel-exists preprocessing (coh-d1 —
+    /// leaf override on the shared <see cref="DomainExpressionRewriteBase"/>;
+    /// composites recurse in the base). Fail-closed: missing store/relationship
+    /// metadata or missing outbound links throw (no vacuous true/false).
+    /// </summary>
+    private sealed class QuantifierPreprocessRewrite(DomainEntityInstance instance)
+        : DomainExpressionRewriteBase {
+        private readonly DomainEntityInstance _instance = instance;
 
-                    var inner = PreprocessQuantifiers(r.TargetProperty);
-                    var result = EvaluateBodyOnTarget(inner, targets[0]);
-                    return DomainExpression.Literal(result);
-                }
-            case OwnedAccess o: return o with { Inner = PreprocessQuantifiers(o.Inner) };
-            case Exists e: {
-                    // Rel exists: store outbound-link presence when Target is a relationship name.
-                    // Fail closed without store (GetOutboundRelatedInstances). Empty links → false.
-                    // Non-relationship targets keep bag-null lowering.
-                    if (TryEvaluateRelationshipPresence(e.Target, out var present))
-                        return DomainExpression.Literal(present);
-                    return e with { Target = PreprocessQuantifiers(e.Target) };
-                }
-            case NotExists ne: {
-                    if (TryEvaluateRelationshipPresence(ne.Target, out var present))
-                        return DomainExpression.Literal(!present);
-                    return ne with { Target = PreprocessQuantifiers(ne.Target) };
-                }
+        protected override DomainExpression AnyExpr(AnyExpr e) =>
+            DomainExpression.Literal(_instance.EvaluateAnyExpr(e));
+        protected override DomainExpression AllExpr(AllExpr e) =>
+            DomainExpression.Literal(_instance.EvaluateAllExpr(e));
+        protected override DomainExpression NoneExpr(NoneExpr e) =>
+            DomainExpression.Literal(_instance.EvaluateNoneExpr(e));
+        protected override DomainExpression CountExpr(CountExpr e) =>
+            DomainExpression.Literal(_instance.EvaluateCountExpr(e));
 
-            // Leaf nodes — no possible quantifiers inside
-            case PropertyAccess:
-            case ParameterAccess:
-            case Literal:
-                return expr;
+        protected override DomainExpression RelationshipNavigation(RelationshipNavigation r) {
+            // Singular path-prefix: exactly one linked target (to-one product shape).
+            // Use quantifiers (any/all) for collections — never pick targets[0] silently.
+            var targets = _instance.GetOutboundRelatedInstances(r.RelationshipName);
+            if (targets.Count == 0)
+                throw new InvalidOperationException(
+                    $"No linked instances found for relationship '{r.RelationshipName}' on entity '{_instance.Entity.Name}'.");
+            if (targets.Count > 1)
+                throw new InvalidOperationException(
+                    $"Path-prefix on relationship '{r.RelationshipName}' requires exactly one linked target " +
+                    $"(found {targets.Count} on entity '{_instance.Entity.Name}'). Use any/all quantifiers for collections.");
 
-            default:
-                return expr;
+            // Recurse into the target property only (the original passed the
+            // preprocessed TargetProperty to EvaluateBodyOnTarget — not the nav).
+            var inner = Route(r.TargetProperty);
+            var result = EvaluateBodyOnTarget(inner, targets[0]);
+            return DomainExpression.Literal(result);
+        }
+
+        protected override DomainExpression Exists(Exists e) {
+            // Rel exists: store outbound-link presence when Target is a relationship name.
+            // Fail closed without store (GetOutboundRelatedInstances). Empty links → false.
+            // Non-relationship targets keep bag-null lowering.
+            if (_instance.TryEvaluateRelationshipPresence(e.Target, out var present))
+                return DomainExpression.Literal(present);
+            return base.Exists(e);
+        }
+
+        protected override DomainExpression NotExists(NotExists e) {
+            if (_instance.TryEvaluateRelationshipPresence(e.Target, out var present))
+                return DomainExpression.Literal(!present);
+            return base.NotExists(e);
         }
     }
 

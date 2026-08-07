@@ -1,11 +1,21 @@
 # P4-3 — Runtime goldens (Any/All + Each regression)
 
 **Difficulty:** M  
-**Status:** `[ ]`  
-**Prereq:** P4-1  
+**Status:** `[x]` — DONE 2026-08-06
 
-## Objective
+## Implementation notes
 
+- New `Poly.Tests/DomainModeling/P4SubscriptionQuantifierDslTests.cs` — DSL-authored
+  subscriptions driven through `DomainInstanceStore` + `DomainEntityInstance`:
+  - `WhenAny_FiresOnceWhenAnyLinkedLoanIsOverdue` — `when any loans Overdue`: fires
+    once per transition once ≥1 linked loan is Overdue (set-state after transition).
+  - `WhenAll_FiresOnlyWhenEveryLinkedLoanIsOverdue` — `when all loans Overdue`: does
+    **not** fire while only 1 of 2 loans matches; fires exactly once when both match.
+  - `WhenNoKeyword_Each_FiresPerTransitionWithPeer` — default Each regression with
+    `as loan` binder: fires per matching transition, peer = transitioned instance.
+- Zero production/runtime edits — confirms `DomainInstanceStore.NotifyTransition`
+  already implements Any/All for DSL-authored plans (p4 hard rule: no new runtime).
+- Verified: 1855/1855 green (3 new tests).
 Prove store notify still implements Any/All when subscriptions are authored via DSL (not only IR fixtures). Each regression remains green.
 
 ## Required reading

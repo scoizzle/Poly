@@ -2,9 +2,7 @@
 
 **Wave:** 0  
 **Difficulty:** M  
-**Status:** `[ ]`  
-**Prereq:** —
-
+**Status:** `[x]`
 ## Objective
 
 Produce a short live inventory of domain analysis metadata: who publishes, who consumes, and where residual `domain.Relationships` / `Types.OfType` / property scans remain. This is the suite map — no production behavior change required.
@@ -25,15 +23,10 @@ Produce a short live inventory of domain analysis metadata: who publishes, who c
 
 ## Verification
 
-- [ ] Inventory file committed  
-- [ ] Every W1–W4 task has at least one residual row assigned  
-- [ ] No production code required for Done  
-
-## File ownership
-
-- **Create:** inventory markdown under `docs/plans/`  
-- **Do not edit:** production `.cs` (unless trivial doc comment)  
+- [x] Inventory file committed — `docs/plans/amu-inventory-20260806.md` (workspace; git commit deferred to suite close unless requested)
+- [x] Every W1–W4 task has at least one residual row assigned (§4 map; W4 is a projection task, mapped explicitly)
+- [x] No production code required for Done
 
 ## Status
 
-**Status:** Not Started  
+**Status:** Done — 2026-08-06. Live inventory written: 24 metadata bags, consumers per bag, 24 residual scan rows (R01–R24), task ownership map. W1.1→R01–R06, W1.2→R07–R09, W1.3→R10–R11, W2.1→R12–R14 + Dependencies audit, W3.1→R15–R19, W3.2→R20–R22, W4→projection over existing bags.

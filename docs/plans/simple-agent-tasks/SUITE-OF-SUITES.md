@@ -2,8 +2,8 @@
 
 **Date:** 2026-08-06  
 **Audience:** GitHub **Copilot CLI** (primary), Grok plan-orchestrator (secondary)  
-**Status:** Ready to execute  
-**CURRENT today:** dogfood-wave-2 (master-roadmap) — this pipeline **admits** subsequent suites as each stage completes  
+**Status:** `[x]` — COMPLETE 2026-08-06 (dogfood wave-2 → amu → p4 → coh all done, gates passed, 1855/1855 tests green)  
+**CURRENT today:** (none — pipeline complete)  
 
 ---
 
@@ -121,4 +121,22 @@ Short keys (after plan-orchestrator update): `amu`, `p4`, `coh`, `dogfood`.
 - [ ] p4 gate G1–G5 `[x]`  
 - [ ] coh gate G1–G6 `[x]`  
 - [ ] Master-roadmap CURRENT = `(none)`  
-- [ ] Build + full test suite green  
+- [ ] Build + full test suite green
+
+## 8. Gate DoD (every suite gate — review P1)
+
+A suite gate may only mark a check `[x]` when the underlying behavior is real.
+In particular:
+
+- **“Fail-closed” may never be redefined as “skip validation.”** If a check
+  claims fail-closed semantics, the code must fail loud (diagnostic / throw /
+  structural failure) when required inputs are unavailable — not silently pass.
+- **Bag-unavailable behavior must be decided and tested.** For every pass that
+  reads analysis bags, note and test what happens when the bag is missing:
+  fail closed (diagnostic), skip with documented no-op, or throw — never
+  vacuous success on unvalidated input.
+- **Dependencies edge to publisher.** Any pass that reads a bag published by
+  another pass must declare that publisher in `Dependencies` (and the pipeline
+  builder must honor it). No accidental pipeline-order reliance.
+- Gate notes must state the actual contract (e.g. “no false unknown-rel on
+  stripped bags”), not hand-wave around it.  

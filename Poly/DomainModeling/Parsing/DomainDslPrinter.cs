@@ -248,6 +248,11 @@ public sealed class DomainDslPrinter {
     private void PrintSubscription(StageSubscription sub, string indent) {
         _sb.Append(indent);
         _sb.Append("when ");
+        // P4-1: emit quantifier keyword only when not the default (Each).
+        if (sub.Quantifier != StageSubscriptionQuantifier.Each) {
+            _sb.Append(sub.Quantifier.ToString().ToLowerInvariant());
+            _sb.Append(' ');
+        }
         _sb.Append(sub.RelationshipName);
         _sb.Append(' ');
         _sb.Append(string.Join(", ", sub.StageNames));

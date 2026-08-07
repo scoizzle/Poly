@@ -2,8 +2,24 @@
 
 **Stream:** E  
 **Difficulty:** M  
-**Status:** `[ ]`  
-**Prereq:** COH-0  
+**Status:** `[x]` — DONE 2026-08-06  
+**Prereq:** COH-0
+
+## Implementation notes
+
+- Migrated the **main per-effect validation walk** (`ValidateEffect`) in
+  `EffectAnalyzer` onto `EffectDispatch<object?>`: new private nested class
+  `EffectValidationDispatch` with methods named by effect type
+  (CreateEntityInstance, CreateEntityInRelationship, StageTransition,
+  InvokeAction, Assign, DeleteEntity, LinkRelationship, UnlinkRelationship,
+  TransitionRelationship, Conditional, Composite).
+- All 11 dispatch cases preserve the exact prior diagnostics (EffectBinding,
+  EffectNotExecutable, NestedDirectEffectDropped, plus per-effect validators);
+  Conditional/Composite recurse via `Route` → `ValidateEffects`.
+- New effect subtypes now fail loud in the base `EffectDispatch.Route` switch
+  (`_ => throw NotSupportedException`) instead of silently passing through an
+  analyzer switch.
+- Verified: build 0 errors, 1855/1855 tests green (behavior preserved).  
 
 ## Objective
 

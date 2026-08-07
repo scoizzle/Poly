@@ -6,7 +6,7 @@
 **Pre-ship:** [`../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md`](../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md)  
 **CORE:** [`../../CORE.md`](../../CORE.md)  
 
-**Status:** Ready suite — **not CURRENT**. Admit only after dogfood-wave-2 clears (or explicit master-roadmap pick).
+**Status:** **DONE** — 2026-08-06 (all waves + gate; see [`amu-gate.md`](./amu-gate.md)).
 
 ---
 
@@ -49,12 +49,12 @@ suite=docs/plans/simple-agent-tasks/amu-README.md  mode=next
 
 | Wave | Theme | Tasks | Status |
 |------|--------|-------|--------|
-| **W0** | Live inventory (publish × consume × residual scans) | `amu-w0-inventory` | `[ ]` |
-| **W1** | Catalog-only name resolve in semantic lints | `amu-w1-1`…`w1-3` | `[ ]` |
-| **W2** | Honest Dependencies; Storage←EntityStructure | `amu-w2-1` | `[ ]` |
-| **W3** | Lowering residual metadata lookups | `amu-w3-1`, `amu-w3-2` | `[ ]` |
-| **W4** | MCP structured facts expansion | `amu-w4-mcp-facts` | `[ ]` |
-| **Gate** | Suite close | `amu-gate` | `[ ]` |
+| **W0** | Live inventory (publish × consume × residual scans) | `amu-w0-inventory` | `[x]` |
+| **W1** | Catalog-only name resolve in semantic lints | `amu-w1-1`…`w1-3` | `[x]` |
+| **W2** | Honest Dependencies; Storage←EntityStructure | `amu-w2-1` | `[x]` |
+| **W3** | Lowering residual metadata lookups | `amu-w3-1`, `amu-w3-2` | `[x]` |
+| **W4** | MCP structured facts expansion | `amu-w4-mcp-facts` | `[x]` |
+| **Gate** | Suite close | `amu-gate` | `[x]` |
 
 ---
 
@@ -62,23 +62,23 @@ suite=docs/plans/simple-agent-tasks/amu-README.md  mode=next
 
 | ID | File | Size | Soft prereq | Status |
 |----|------|------|-------------|--------|
-| **W0** | [`amu-w0-inventory.md`](./amu-w0-inventory.md) | M | — | `[ ]` |
-| **W1.1** | [`amu-w1-1-effect-analyzer-catalog.md`](./amu-w1-1-effect-analyzer-catalog.md) | M | W0 | `[ ]` |
-| **W1.2** | [`amu-w1-2-policy-analyzer-catalog.md`](./amu-w1-2-policy-analyzer-catalog.md) | M | W0 | `[ ]` parallel W1.1 |
-| **W1.3** | [`amu-w1-3-subscription-catalog.md`](./amu-w1-3-subscription-catalog.md) | M | W0 | `[ ]` parallel W1.1 |
-| **W2.1** | [`amu-w2-1-deps-and-storage-structure.md`](./amu-w2-1-deps-and-storage-structure.md) | M | W1 | `[ ]` |
-| **W3.1** | [`amu-w3-1-exporter-residual.md`](./amu-w3-1-exporter-residual.md) | M | W1 | `[ ]` |
-| **W3.2** | [`amu-w3-2-effect-lowering-residual.md`](./amu-w3-2-effect-lowering-residual.md) | M | W1 | `[ ]` parallel W3.1 |
-| **W4** | [`amu-w4-mcp-facts.md`](./amu-w4-mcp-facts.md) | M | W2 soft | `[ ]` |
-| **G** | [`amu-gate.md`](./amu-gate.md) | S | W0–W4 | `[ ]` |
+| **W0** | [`amu-w0-inventory.md`](./amu-w0-inventory.md) | M | — | `[x]` |
+| **W1.1** | [`amu-w1-1-effect-analyzer-catalog.md`](./amu-w1-1-effect-analyzer-catalog.md) | M | W0 | `[x]` |
+| **W1.2** | [`amu-w1-2-policy-analyzer-catalog.md`](./amu-w1-2-policy-analyzer-catalog.md) | M | W0 | `[x]` |
+| **W1.3** | [`amu-w1-3-subscription-catalog.md`](./amu-w1-3-subscription-catalog.md) | M | W0 | `[x]` |
+| **W2.1** | [`amu-w2-1-deps-and-storage-structure.md`](./amu-w2-1-deps-and-storage-structure.md) | M | W1 | `[x]` |
+| **W3.1** | [`amu-w3-1-exporter-residual.md`](./amu-w3-1-exporter-residual.md) | M | W1 | `[x]` |
+| **W3.2** | [`amu-w3-2-effect-lowering-residual.md`](./amu-w3-2-effect-lowering-residual.md) | M | W1 | `[x]` |
+| **W4** | [`amu-w4-mcp-facts.md`](./amu-w4-mcp-facts.md) | M | W2 soft | `[x]` |
+| **G** | [`amu-gate.md`](./amu-gate.md) | S | W0–W4 | `[x]` |
 
 ---
 
 ## Agent pick (when CURRENT)
 
 ```text
-DONE:    (none on amu)
-CURRENT: first [ ] in table above
+DONE:    amu-w0-inventory, amu-w1-1, amu-w1-2, amu-w1-3, amu-w2-1, amu-w3-1, amu-w3-2, amu-w4, amu-gate (2026-08-06)
+SUITE:   amu complete — gate G1–G7 passed
 PARK:    domain→AST program bridge; new metadata types without consumers
 ```
 

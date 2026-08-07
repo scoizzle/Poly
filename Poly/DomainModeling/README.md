@@ -103,6 +103,7 @@ See the root `AGENTS.md` for guidance on when to consult these documents.
 | `Evolution/` | `DomainEvolution`, `EvolutionBuilder`, `DomainChange` types — single evolution engine |
 | `Analysis/` | V3 domain model analyzers on shared Syntax.Analysis substrate |
 | `Lowering/` | `DomainExpressionLoweringPass`, `PolicyEvaluator` — VM-integrated policy evaluation |
+| `Runtime/` | Instance/store runtime types — `DomainEntityInstance`, `DomainInstanceStore`, `InvocationResult` (namespace unchanged: `Poly.DomainModeling`) |
 | `Builders/` | Alternative fluent construction API (used for rich entity setup) |
 | `Constraints/` | Constraint types (Range, Length, Pattern, etc.) |
 | `Effects/` | Effect types (Create, Transition, Assign, Conditional, Composite, etc.) |

@@ -3,7 +3,7 @@
 **Queue:** [`dogfood-README.md`](dogfood-README.md)  
 **Protocol:** [`../mcp-dogfood-protocol.md`](../mcp-dogfood-protocol.md)  
 **Wave:** 2 (shipped SPE / peer surface)  
-**Status:** `[ ]` Not Started  
+**Status:** `[x]` PASS — [report](../agent-summaries/dogfood/DOGFOOD-S4-20260806.md)  
 **Difficulty:** Medium  
 **Prereq:** Wave 1 green enough; runtime tools enabled  
 **Est. session time:** 45–75 min  
@@ -82,7 +82,7 @@ Emphasize: **authorable?** **runtime fire?** **binder usable in body?** **guide 
 
 ## Status tracking
 
-**Claimed by:**  
-**Started:**  
-**Report path:**  
-**Result:** PASS / FAIL / PARTIAL  
+**Claimed by:** Copilot pipeline supervisor  
+**Started:** 2026-08-06  
+**Report path:** `agent-summaries/dogfood/DOGFOOD-S4-20260806.md`  
+**Result:** PASS  

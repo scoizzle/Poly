@@ -2,8 +2,28 @@
 
 **Stream:** D  
 **Difficulty:** M  
-**Status:** `[ ]`  
-**Prereq:** COH-0; **after R1 if both touch DomainEntityInstance**  
+**Status:** `[x]` — DONE 2026-08-06  
+**Prereq:** COH-0; after R1 (R moved DomainEntityInstance first — done)
+
+## Implementation notes
+
+- New `Poly/DomainModeling/Runtime/DomainExpressionRewriteBase.cs` — shared full-tree
+  rewrite: composite nodes recurse via `Route` (single switch ownership for the
+  hierarchy), leaves identity by default, `Default()` throws fail-loud on unhandled
+  new subtypes.
+- `BindPeerInExpression` → `PeerBindingRewrite` (private nested class): single leaf
+  override for `RelationshipNavigation` (peer-root match → literal via
+  `EvaluateExprOnPeer`); composites handled by the base.
+- `PreprocessQuantifiers` → `QuantifierPreprocessRewrite` (private nested class,
+  lazy `QuantifierRewrite` field): leaf overrides for Any/All/None/Count (→ literal),
+  `RelationshipNavigation` (store fail-closed to-one resolve — passes preprocessed
+  `TargetProperty` to `EvaluateBodyOnTarget`, matching original semantics), and
+  Exists/NotExists (relationship-presence → literal, else base recursion).
+- Caught during verification: passing `base.RelationshipNavigation(r)` (whole nav)
+  to `EvaluateBodyOnTarget` regressed 4 to-one path-prefix policy tests (nav node
+  re-lowered against target bag → false). Fixed by passing `Route(r.TargetProperty)`
+  only. Full suite green.
+- Verified: build 0 errors, 1855/1855 tests green (behavior preserved).  
 
 ## Objective
 

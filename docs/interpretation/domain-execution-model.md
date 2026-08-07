@@ -2,7 +2,7 @@
 
 **Audience:** Developers extending the DomainModeling module or adding new effect/expression types.  
 **Prerequisites:** [`Poly/Interpretation/README.md`](../../Poly/Interpretation/README.md), [`docs/CORE.md`](../CORE.md).  
-**Corpus:** Lowering passes live under `Poly/DomainModeling/Lowering/`. Runtime dispatch lives in `Poly/DomainModeling/DomainEntityInstance.cs`. Policy evaluation lives in `Poly/DomainModeling/Lowering/PolicyEvaluator.cs`.
+**Corpus:** Lowering passes live under `Poly/DomainModeling/Lowering/`. Runtime dispatch lives in `Poly/DomainModeling/Runtime/DomainEntityInstance.cs`. Policy evaluation lives in `Poly/DomainModeling/Lowering/PolicyEvaluator.cs`.
 
 This document describes the execution model that bridges **domain concepts** (effects, policies, expressions) to **executable results** through the Syntax AST and VM pipeline. It is the missing layer between `Poly.DomainModeling` and the Interpretation system documented in this directory.
 
@@ -469,7 +469,7 @@ This is the runtime counterpart of `StageSubscription` declarations in the DSL.
 | [`Poly/Interpretation/README.md`](../../Poly/Interpretation/README.md) | Interpretation system overview (below this layer) |
 | [`vm-abi-reference.md`](vm-abi-reference.md) | VM ABI, frame layout, register model (below this layer) |
 | [`docs/CORE.md`](../CORE.md) | Module boundaries and pipeline ownership |
-| `Poly/DomainModeling/DomainEntityInstance.cs` | Runtime dispatch, effect execution, quantifier preprocessing |
+| `Poly/DomainModeling/Runtime/DomainEntityInstance.cs` | Runtime dispatch, effect execution, quantifier preprocessing |
 | `Poly/DomainModeling/Lowering/DomainExpressionLoweringPass.cs` | Expression → Syntax AST lowering |
 | `Poly/DomainModeling/Lowering/EffectLoweringPass.cs` | Effect → Syntax AST lowering |
 | `Poly/DomainModeling/EffectDispatch.cs` | Effect dispatch base class |

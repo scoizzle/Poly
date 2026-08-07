@@ -22,6 +22,8 @@ public sealed class StorageAnalyzer {
     private readonly List<Entity> _entities;
     private readonly List<Relationship> _relationships;
     private readonly Dictionary<string, Entity> _entityLookup;
+    private readonly IReadOnlySet<string>? _enumTypeNames;
+    private readonly AnalysisContext? _context;
     private readonly AnalysisResult? _analysis;
     private readonly TypeMappingRegistry _typeMaps;
     private readonly IReadOnlyList<IStorageConvention> _conventions;
@@ -29,23 +31,37 @@ public sealed class StorageAnalyzer {
     public StorageAnalyzer(
         Domain domain,
         AnalysisResult? analysis = null,
+        AnalysisContext? context = null,
         TypeMappingRegistry? typeMaps = null,
         IReadOnlyList<IStorageConvention>? conventions = null) {
         _domain = domain;
         _analysis = analysis;
+        _context = context;
         _typeMaps = typeMaps ?? new TypeMappingRegistry();
         _conventions = conventions ?? [];
 
-        var lookup = analysis?.GetMetadata<DomainTypeLookupMetadata>(default);
+        // amu-w2-1: prefer the live pipeline bags (EntityStructureAnalyzer ran before
+        // StoragePass in the AnalyzerBuilder pipeline); fall back to priorAnalysis for
+        // standalone / codegen-pipeline usage where the context is fresh/invalidated.
+        var lookup = context?.GetMetadata<DomainTypeLookupMetadata>(default)
+            ?? analysis?.GetMetadata<DomainTypeLookupMetadata>(default);
         if (lookup is not null) {
             _entities = lookup.Entities.ToList();
             _entityLookup = lookup.Types
                 .Where(kvp => kvp.Value is Entity)
                 .ToDictionary(kvp => kvp.Key, kvp => (Entity)kvp.Value, StringComparer.Ordinal);
+            // amu-w2-1 / review F4: with analysis present the DTLM is the single
+            // source for enum classification too — no domain tree scan.
+            _enumTypeNames = lookup.Types
+                .Where(kvp => kvp.Value is EnumType)
+                .Select(kvp => kvp.Key)
+                .ToHashSet(StringComparer.Ordinal);
         }
         else {
             _entities = domain.Types.OfType<Entity>().ToList();
             _entityLookup = _entities.ToDictionary(e => e.Name, StringComparer.Ordinal);
+            // Analysis-absent residual (standalone / reduced contract only).
+            _enumTypeNames = null;
         }
 
         _relationships = domain.Relationships.ToList();
@@ -142,7 +158,9 @@ public sealed class StorageAnalyzer {
         Entity entity,
         Dictionary<string, AggregateEntity>? aggLookup,
         EffectTopology? topology) {
-        var meta = _analysis?.GetMetadata<EntityStructureMetadata>(entity);
+        // amu-w2-1: context bag first (full pipeline), priorAnalysis fallback (standalone).
+        var meta = _context?.GetMetadata<EntityStructureMetadata>(entity)
+            ?? _analysis?.GetMetadata<EntityStructureMetadata>(entity);
         var agg = aggLookup?.GetValueOrDefault(entity.Name);
 
         Property? keyProperty;
@@ -234,8 +252,11 @@ public sealed class StorageAnalyzer {
 
     private (List<StorageColumn> Columns, List<StorageNavigation> Collections, List<StorageNavigation> References)
         ClassifyProperties(Entity entity) {
-        var enumTypes = _domain.Types.OfType<EnumType>()
-            .ToDictionary(e => e.Name, StringComparer.Ordinal);
+        // amu-w2-1 / review F4: enum classification comes from the DTLM when
+        // analysis is present; the tree scan is analysis-absent residual only.
+        var enumTypes = _enumTypeNames ?? _domain.Types.OfType<EnumType>()
+            .Select(e => e.Name)
+            .ToHashSet(StringComparer.Ordinal);
         var columns = new List<StorageColumn>();
         var collections = new List<StorageNavigation>();
         var references = new List<StorageNavigation>();
@@ -244,7 +265,7 @@ public sealed class StorageAnalyzer {
             var isEntityRef = _entityLookup.ContainsKey(prop.Type.TypeName);
             if (isEntityRef) continue;
 
-            var isEnum = enumTypes.ContainsKey(prop.Type.TypeName);
+            var isEnum = enumTypes.Contains(prop.Type.TypeName);
 
             // P2: Default column type from registry, then apply column annotation override
             var baseColumnType = isEnum
@@ -301,7 +322,8 @@ public sealed class StorageAnalyzer {
         if (aggLookup is not null &&
             aggLookup.TryGetValue(agg.AggregateParentName, out _) &&
             _entityLookup.TryGetValue(agg.AggregateParentName, out var parentEntity)) {
-            var parentMeta = _analysis?.GetMetadata<EntityStructureMetadata>(parentEntity);
+            var parentMeta = _context?.GetMetadata<EntityStructureMetadata>(parentEntity)
+                ?? _analysis?.GetMetadata<EntityStructureMetadata>(parentEntity);
             if (parentMeta?.KeyPropertyName is not null)
                 parentKeyProperty = parentMeta.KeyPropertyName;
             else {

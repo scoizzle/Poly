@@ -51,7 +51,7 @@ internal sealed class EffectFactsPass : INodeAnalyzer {
 
         foreach (var effect in EffectHelpers.FlattenEffects(effects)) {
             if (effect is CreateEntityInRelationshipEffect createIn
-                && TryResolveCreateIn(createIn, entity, domain, lookup, out var relationship, out var targetEntity)) {
+                && TryResolveCreateIn(context, createIn, entity, domain, lookup, out var relationship, out var targetEntity)) {
                 context.SetMetadata(createIn, new ResolvedRelationshipTargetMetadata(relationship, targetEntity));
             }
         }
@@ -60,8 +60,12 @@ internal sealed class EffectFactsPass : INodeAnalyzer {
     /// <summary>
     /// Shared resolve for create-in facts (and validate pack when it wants the same answer).
     /// Succeeds only when relationship exists, source matches the effect owner, and target is an entity.
+    /// Resolves the relationship through the catalog/RLM bags (amu-w1-1 sibling; review F3) —
+    /// no <c>domain.Relationships</c> tree scan — so facts and the validate pack agree
+    /// under the same semantic source (ResolvedRelationshipTargetMetadata).
     /// </summary>
     internal static bool TryResolveCreateIn(
+        AnalysisContext context,
         CreateEntityInRelationshipEffect createIn,
         Entity sourceEntity,
         Domain domain,
@@ -72,9 +76,12 @@ internal sealed class EffectFactsPass : INodeAnalyzer {
         relationship = null!;
         targetEntity = null!;
 
-        var rel = domain.Relationships.FirstOrDefault(r =>
-            string.Equals(r.Name, createIn.RelationshipName, StringComparison.Ordinal));
-        if (rel is null)
+        var relLookup = context.GetRelationshipLookup(domain)
+            ?? context.GetMetadata<RelationshipLookupMetadata>(default);
+        if (relLookup is null)
+            return false;
+
+        if (!relLookup.Relationships.TryGetValue(createIn.RelationshipName, out var rel))
             return false;
 
         if (!string.Equals(rel.Source.TypeName, sourceEntity.Name, StringComparison.Ordinal))

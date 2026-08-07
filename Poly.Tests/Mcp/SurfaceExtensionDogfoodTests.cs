@@ -303,6 +303,62 @@ public class SurfaceExtensionDogfoodTests {
         await Assert.That(after.Message).Contains("true");
     }
 
+    // ── G-S6-1: bag-mode `Rel exists` fails closed ─────────────
+
+    [Test]
+    public async Task EvaluatePolicy_BagMode_RelExists_FailsClosedWithoutStore() {
+        // G-S6-1: bag evaluate_policy (no instanceId) on a relationship-named
+        // `Rel exists` must fail closed ("requires store") per guide §9, not
+        // fail open to true. Non-relationship Exists keeps bag-null lowering.
+        var (sessionId, _) = McpSessionStore.Create("BagRelExistsFailClosed");
+        var apply = DslTool.ApplyDsl(sessionId, """
+            domain BagRelExistsFailClosed
+
+            Customer: entity {
+              Name: Text
+              profile: owned Profile
+              orders: many Order
+              HasName: policy { Name exists }
+              HasProfile: policy { profile exists }
+              NoOrders: policy { not orders exists }
+            }
+
+            Profile: entity {
+              City: Text
+            }
+
+            Order: entity {
+              Code: Text
+            }
+            """);
+        await Assert.That(apply.Success).IsTrue();
+
+        // Relationship-named exists in bag mode → fail closed (requires store).
+        var hasProfile = PolicyTool.EvaluatePolicy(sessionId, "Customer", "HasProfile",
+            properties: """{"Name":"Alice"}""");
+        await Assert.That(hasProfile.Success).IsFalse();
+        await Assert.That(hasProfile.Message).Contains("store");
+
+        var noOrders = PolicyTool.EvaluatePolicy(sessionId, "Customer", "NoOrders",
+            properties: """{"Name":"Alice"}""");
+        await Assert.That(noOrders.Success).IsFalse();
+        await Assert.That(noOrders.Message).Contains("store");
+
+        // Non-relationship Exists in bag mode → unchanged: evaluates without a
+        // store (bag-null lowering; a declared Text property coerces null → ""
+        // so the result is true). The G-S6-1 contract is only that relationship
+        // names fail closed — primitive Exists must not start throwing.
+        var hasName = PolicyTool.EvaluatePolicy(sessionId, "Customer", "HasName",
+            properties: """{"Name":"Alice"}""");
+        await Assert.That(hasName.Success).IsTrue();
+        await Assert.That(hasName.Message).Contains("true");
+
+        var noName = PolicyTool.EvaluatePolicy(sessionId, "Customer", "HasName",
+            properties: """{}""");
+        await Assert.That(noName.Success).IsTrue();
+        await Assert.That(noName.Message).Contains("true");
+    }
+
     // ── E: C# export peer handlers via MCP ─────────────────────
 
     [Test]

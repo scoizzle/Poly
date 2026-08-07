@@ -2,8 +2,21 @@
 
 **Stream:** R  
 **Difficulty:** M  
-**Status:** `[ ]`  
-**Prereq:** COH-0  
+**Status:** `[x]` — DONE 2026-08-06  
+**Prereq:** COH-0
+
+## Implementation notes
+
+- `git mv` three files into `Poly/DomainModeling/Runtime/`: `DomainEntityInstance.cs`,
+  `DomainInstanceStore.cs`, `InvocationResult.cs` (history preserved).
+- **Namespace decision:** kept `Poly.DomainModeling` (folder-only move — coh-0 lock #2).
+  Zero usings fallout; build clean with no edits to consumers (MCP tools, tests, exporters).
+- Project includes are implicit (SDK-style globbing) — no csproj change needed.
+- Docs updated (path-based references): `docs/interpretation/domain-execution-model.md`
+  (2 refs) + `docs/PROJECT-SUMMARY-FOR-AGENTS.md` (1 ref). Archived review/agent docs left
+  as historical snapshots. `Poly/DomainModeling/README.md` directory table now lists `Runtime/`.
+  AGENTS.md placement table unchanged (coarse `Poly/DomainModeling/` row still holds).
+- Verified: build 0 errors, 1855/1855 tests green (no behavior change).  
 
 ## Objective
 

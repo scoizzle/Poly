@@ -118,6 +118,48 @@ internal sealed class DomainMutationContext {
     public bool UpdateContractBinding(string name, Func<ContractBinding, ContractBinding> transform) =>
         ReplaceInList(ContractBindings, b => string.Equals(b.Name, name, StringComparison.Ordinal), b => transform(b));
 
+    // ── Append-child helpers (coh-v1: dedupe near-identical Append shapes) ──
+
+    /// <summary>
+    /// Appends <paramref name="child"/> to an entity collection (e.g. Properties,
+    /// Stages, Actions, Policies, Subscriptions) via the getter/rebuilder pair.
+    /// Returns true when the entity was found and replaced (fail-loud via
+    /// <c>RequireUpdate</c> when false — same contract as <see cref="UpdateEntity"/>).
+    /// </summary>
+    public bool AppendChildToEntity<T>(
+        string entityName,
+        Func<Entity, IReadOnlyList<T>> getChildren,
+        Func<Entity, IReadOnlyList<T>, Entity> rebuild,
+        T child) =>
+        UpdateEntity(entityName, e => rebuild(e, getChildren(e).Append(child).ToList()));
+
+    /// <summary>
+    /// Appends <paramref name="child"/> to a stage collection (Policies, Effects,
+    /// Subscriptions) on an entity. Same fail-loud contract as
+    /// <see cref="UpdateStage"/>.
+    /// </summary>
+    public bool AppendChildToStage<T>(
+        string entityName,
+        string stageName,
+        Func<Stage, IReadOnlyList<T>> getChildren,
+        Func<Stage, IReadOnlyList<T>, Stage> rebuild,
+        T child) =>
+        UpdateStage(entityName, stageName, s => rebuild(s, getChildren(s).Append(child).ToList()));
+
+    /// <summary>
+    /// Appends <paramref name="child"/> to an action collection (Effects, Policies,
+    /// Parameters). Same fail-loud contract as <see cref="UpdateAction"/>.
+    /// </summary>
+    public bool AppendChildToAction<T>(
+        string entityName,
+        string actionName,
+        Func<Action, IReadOnlyList<T>> getChildren,
+        Func<Action, IReadOnlyList<T>, Action> rebuild,
+        T child,
+        bool searchStages = false) =>
+        UpdateAction(entityName, actionName,
+            a => rebuild(a, getChildren(a).Append(child).ToList()), searchStages);
+
     public bool UpdateAction(string entityName, string actionName, Func<Action, Action> transform, bool searchStages = false) {
         // Try entity-level actions first
         if (ReplaceInEntity(entityName,

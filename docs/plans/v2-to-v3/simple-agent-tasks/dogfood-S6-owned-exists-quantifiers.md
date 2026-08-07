@@ -3,7 +3,7 @@
 **Queue:** [`dogfood-README.md`](dogfood-README.md)  
 **Protocol:** [`../mcp-dogfood-protocol.md`](../mcp-dogfood-protocol.md)  
 **Wave:** 2 (query surface + owned)  
-**Status:** `[ ]` Not Started  
+**Status:** `[x]` Done — [report](../agent-summaries/dogfood/DOGFOOD-S6-20260806.md) (PASS store path; G-S6-1 bag exists fail-open filed)  
 **Difficulty:** Medium–Hard  
 **Prereq:** Prefer S4/S5 not blocking; link + evaluate_policy available  
 **Est. session time:** 45–75 min  

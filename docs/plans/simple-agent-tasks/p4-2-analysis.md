@@ -1,11 +1,21 @@
 # P4-2 — Analysis quantifier vs cardinality
 
 **Difficulty:** S  
-**Status:** `[ ]`  
-**Prereq:** P4-1  
+**Status:** `[x]` — DONE 2026-08-06
 
-## Objective
+## Implementation notes
 
+- Confirmed existing diagnostics in `SubscriptionAnalyzer`: undefined-quantifier check
+  (line ~230) and quantifier-vs-cardinality error `isSingularFromSource`
+  (OneToOne **and** ManyToOne) → `SubscriptionContractMismatch` (line ~277). No new
+  product analysis code needed — the DSL could simply not author `when any|all` before
+  p4-1, so these paths were IR-fixture-only.
+- Added DSL-level fail-closed tests (`SubscriptionAnalysisTests`):
+  - `Evolve_DslWhenAnyOnOneToOne_FailsClosed` — DSL `when any` on `one` nav → evolve **fails closed** with DMSS003 (review F5 promoted the previous warning; `ParseDomain` throws on errors).
+  - `Analyze_DslWhenAllOnOneToMany_NoWarning` — DSL `when all` on `many` nav → no warning.
+  - `Analyze_DslWhenAnyOnOneToMany_NoWarning` — DSL `when any` on `many` nav → no warning.
+  - `Analyze_AnyQuantifierOnOneToOne_ReportsError` — IR fixture; warning → error (F5).
+  - New `ParseDomain` helper (DSL → evolve → domain).
 Ensure analysis validates Any/All vs relationship cardinality (singular + Any/All fail closed / existing diagnostic). No new dual path.
 
 ## Required reading

@@ -72,7 +72,9 @@ internal sealed class PolicyConstraintAnalyzer : INodeAnalyzer {
                     // Q1''''''.1: Before reporting error, check if the name matches a
                     // relationship (N1 nav). `Rel exists` produces Exists(PropertyAccess(relName))
                     // where relName is a relationship, not an entity property.
-                    if (lookup is not null && !IsRelationshipOnEntity(lookup, pa.Name, entity)) {
+                    if (lookup is not null
+                        && !IsRelationshipOnEntity(context, lookup.Domain, pa.Name, entity, out var bagAvailable)
+                        && bagAvailable) {
                         context.ReportError(
                             expr,
                             $"Policy references property '{pa.Name}' which does not exist on entity '{entity.Name}'.",
@@ -160,8 +162,10 @@ internal sealed class PolicyConstraintAnalyzer : INodeAnalyzer {
                 : null);
         if (resolvedRelName is null) return (null, null);
 
-        var relationship = domain.Relationships.FirstOrDefault(r =>
-            string.Equals(r.Name, resolvedRelName, StringComparison.Ordinal));
+        // amu-w1-2: catalog/RLM name resolve (no domain.Relationships scan).
+        var relLookup = ResolveRelationshipLookup(context, lookup.Domain);
+        if (relLookup is null) return (null, null); // bag unavailable — skip
+        var relationship = relLookup.Relationships.TryGetValue(resolvedRelName, out var rel) ? rel : null;
 
         if (relationship is null) {
             context.ReportError(expr,
@@ -224,16 +228,22 @@ internal sealed class PolicyConstraintAnalyzer : INodeAnalyzer {
 
         var domain = lookup.Domain;
 
+        // amu-w1-2: catalog/RLM name resolve (no domain.Relationships scans).
+        var relLookup = ResolveRelationshipLookup(context, lookup.Domain);
+        if (relLookup is null) return; // bag unavailable — skip
+
         // Find the relationship from the source entity's perspective
-        var relationship = domain.Relationships.FirstOrDefault(r =>
-            string.Equals(r.Name, rn.RelationshipName, StringComparison.Ordinal) &&
-            string.Equals(r.Source.TypeName, entity.Name, StringComparison.Ordinal));
+        var relationship = relLookup.Relationships.TryGetValue(rn.RelationshipName, out var fromSource)
+            && string.Equals(fromSource.Source.TypeName, entity.Name, StringComparison.Ordinal)
+            ? fromSource
+            : null;
 
         // Q1'''''.3: Report error for unknown relationship name
         if (relationship is null) {
             // Check if relationship exists but from the target side (wrong direction)
-            var reverseRel = domain.Relationships.FirstOrDefault(r =>
-                string.Equals(r.Name, rn.RelationshipName, StringComparison.Ordinal));
+            var reverseRel = relLookup.Relationships.TryGetValue(rn.RelationshipName, out var anyRel)
+                ? anyRel
+                : null;
             if (reverseRel is not null) {
                 context.ReportError(rn,
                     $"Relationship '{rn.RelationshipName}' exists but the source is " +
@@ -324,12 +334,30 @@ internal sealed class PolicyConstraintAnalyzer : INodeAnalyzer {
     /// <summary>
     /// Returns true if <paramref name="name"/> is a relationship (N1 nav) on <paramref name="entity"/>,
     /// meaning the entity is the source of a relationship with that name.
+    /// amu-w1-2: catalog/RLM name resolve (no <c>domain.Relationships.Any</c> scan).
+    /// Returns false with <paramref name="bagAvailable"/> false when neither the catalog
+    /// nor RLM bag is available — caller must skip the error, not false-positive.
     /// </summary>
-    private static bool IsRelationshipOnEntity(DomainTypeLookupMetadata lookup, string name, Entity entity) {
-        return lookup.Domain.Relationships.Any(r =>
-            string.Equals(r.Name, name, StringComparison.Ordinal) &&
-            string.Equals(r.Source.TypeName, entity.Name, StringComparison.Ordinal));
+    private static bool IsRelationshipOnEntity(
+        AnalysisContext context, Domain domain, string name, Entity entity, out bool bagAvailable) {
+        var relLookup = ResolveRelationshipLookup(context, domain);
+        if (relLookup is null) {
+            bagAvailable = false;
+            return false;
+        }
+        bagAvailable = true;
+        return relLookup.Relationships.TryGetValue(name, out var rel)
+            && string.Equals(rel.Source.TypeName, entity.Name, StringComparison.Ordinal);
     }
+
+    /// <summary>
+    /// Relationship lookup for domain-bound name resolve (amu-w1-2). Prefers the
+    /// catalog relationship bag; falls back to the intermediate RLM bag published
+    /// by <see cref="SemanticDomainAnalyzer"/>. Null when neither is available
+    /// (stripped/failed trees) — callers skip validation rather than false-report.
+    /// </summary>
+    private static RelationshipLookupMetadata? ResolveRelationshipLookup(AnalysisContext context, Domain domain) =>
+        context.GetRelationshipLookup(domain) ?? context.GetMetadata<RelationshipLookupMetadata>(default);
 
     private static void ValidateOwnedAccessName(
         AnalysisContext context,

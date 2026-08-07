@@ -44,6 +44,7 @@ public class PassDependencyDeclarationTests {
         AssertDeclares(
             new EffectAnalyzer(), // lint pack
             SemanticDomainAnalyzer.Id,
+            DomainCatalogPass.Id,
             RequiredPropertiesPass.Id,
             ConstraintPropagationAnalyzer.Id);
         AssertDeclares(

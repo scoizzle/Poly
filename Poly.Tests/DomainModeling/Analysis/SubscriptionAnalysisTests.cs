@@ -2,6 +2,7 @@ using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Effects;
 using Poly.DomainModeling.Evolution;
+using Poly.DomainModeling.Parsing;
 using Poly.DomainModeling.Queries;
 
 namespace Poly.Tests.DomainModeling.Analysis;
@@ -15,6 +16,23 @@ public class SubscriptionAnalysisTests {
 
     private static Stage MakeStage(string name, params StageSubscription[] subs) =>
         new(name, [], [], [], []) { Subscriptions = subs };
+
+    /// <summary>
+    /// Parses a DSL snippet to a domain (p4-1/p4-2: DSL-authored quantifiers
+    /// must flow through the same analysis path as IR fixtures).
+    /// </summary>
+    private static Domain ParseDomain(string poly) {
+        var ctx = DomainInputBuilder.CreateWithSqlPack().Build();
+        var parser = new PolyDslParser(poly, ctx.Parser);
+        var changes = parser.Parse();
+        var emptyDomain = new Domain("_", [], []);
+        var result = new DomainEvolution(emptyDomain).Apply(changes);
+        if (!result.Succeeded)
+            throw new InvalidOperationException("Domain evolution failed: " +
+                string.Join("; ", result.Analysis.Diagnostics.Where(d =>
+                    d.Severity == DiagnosticSeverity.Error).Select(d => d.Message)));
+        return result.Root!;
+    }
 
     // ── A′.1 RemoveStageSubscription semantic key matching ─────
 
@@ -279,13 +297,13 @@ public class SubscriptionAnalysisTests {
     // ── A′′.4 Quantifier vs cardinality check ───────────────────
 
     [Test]
-    public async Task Analyze_AnyQuantifierOnOneToOne_ReportsWarning() {
+    public async Task Analyze_AnyQuantifierOnOneToOne_ReportsError() {
         var rel = new Relationship("Paired",
             new DomainTypeReference("Order"), new DomainTypeReference("Customer"),
             RelationshipCardinality.OneToOne, []);
         var targetStage = new Stage("Active", [], [], [], []);
         var target = MakeEntity("Customer", targetStage);
-        // "Any" quantifier on a singular relationship is meaningless
+        // "Any" quantifier on a singular relationship is meaningless — reject (fail-closed).
         var sub = new StageSubscription("Paired", ["Active"], StageSubscriptionQuantifier.Any, []);
         var stage = MakeStage("Pending", sub);
         var entity = MakeEntity("Order", stage);
@@ -294,7 +312,84 @@ public class SubscriptionAnalysisTests {
         var analysis = DomainModelAnalyzer.Analyze(domain);
 
         await Assert.That(analysis.Diagnostics.Any(d =>
-            d.Code == DomainModelDiagnosticCodes.SubscriptionContractMismatch)).IsTrue();
+            d.Code == DomainModelDiagnosticCodes.SubscriptionContractMismatch &&
+            d.Severity == DiagnosticSeverity.Error)).IsTrue();
+    }
+
+    // ── p4-2: DSL-authored quantifiers vs cardinality (fail closed) ──
+
+    [Test]
+    public async Task Evolve_DslWhenAnyOnOneToOne_FailsClosed() {
+        // p4-1 + review F5: `when any` on a OneToOne nav is meaningless — evolution
+        // must fail closed (DMSS003), not apply with a warning.
+        var ex = Assert.Throws<InvalidOperationException>(() => ParseDomain("""
+            domain Test
+
+            Tracker: entity {
+              Tracks: one Order
+              Pending: stage {
+                when any Tracks Active {
+                }
+              }
+            }
+
+            Order: entity {
+              Draft: stage { }
+              Active: stage { }
+            }
+            """));
+        await Assert.That(ex.Message).Contains("one-to-one");
+        await Assert.That(ex.Message).Contains("Any");
+    }
+
+    [Test]
+    public async Task Analyze_DslWhenAllOnOneToMany_NoWarning() {
+        // p4-1: `when all` on a OneToMany nav is legal — no quantifier warning.
+        var domain = ParseDomain("""
+            domain Test
+
+            Patron: entity {
+              loans: many Loan
+              when all loans Overdue {
+              }
+            }
+
+            Loan: entity {
+              Draft: stage { }
+              Overdue: stage { }
+            }
+            """);
+
+        var analysis = DomainModelAnalyzer.Analyze(domain);
+
+        await Assert.That(analysis.Diagnostics.Any(d =>
+            d.Code == DomainModelDiagnosticCodes.SubscriptionContractMismatch &&
+            d.Message.Contains("one-to-one", StringComparison.Ordinal))).IsFalse();
+    }
+
+    [Test]
+    public async Task Analyze_DslWhenAnyOnOneToMany_NoWarning() {
+        // p4-1: `when any` on a OneToMany nav is legal — no quantifier warning.
+        var domain = ParseDomain("""
+            domain Test
+
+            Patron: entity {
+              loans: many Loan
+              when any loans Overdue {
+              }
+            }
+
+            Loan: entity {
+              Draft: stage { }
+              Overdue: stage { }
+            }
+            """);
+
+        var analysis = DomainModelAnalyzer.Analyze(domain);
+
+        await Assert.That(analysis.Diagnostics.Any(d =>
+            d.Code == DomainModelDiagnosticCodes.SubscriptionContractMismatch &&
+            d.Message.Contains("one-to-one", StringComparison.Ordinal))).IsFalse();
     }
 
     // ── Slice B′: End-to-end subscription runtime loop ────────

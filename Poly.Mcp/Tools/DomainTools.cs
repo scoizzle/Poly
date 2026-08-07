@@ -107,7 +107,10 @@ internal sealed record AnalysisData(
     [property: JsonPropertyName("subscriptionCount")] int SubscriptionCount = 0,
     [property: JsonPropertyName("actionSummary")] IReadOnlyList<ActionFact>? ActionSummary = null,
     [property: JsonPropertyName("hasStorageMapping")] bool HasStorageMapping = false,
-    [property: JsonPropertyName("hasTransport")] bool HasTransport = false
+    [property: JsonPropertyName("hasTransport")] bool HasTransport = false,
+    [property: JsonPropertyName("aggregateRootCount")] int AggregateRootCount = 0,
+    [property: JsonPropertyName("aggregates")] IReadOnlyList<AggregateFact>? Aggregates = null,
+    [property: JsonPropertyName("subscriptionPlans")] IReadOnlyList<SubscriptionPlanFact>? SubscriptionPlans = null
 );
 
 internal sealed record ActionFact(
@@ -115,6 +118,24 @@ internal sealed record ActionFact(
     [property: JsonPropertyName("actionName")] string ActionName,
     [property: JsonPropertyName("stageName")] string? StageName,
     [property: JsonPropertyName("resultType")] string? ResultTypeName
+);
+
+/// <summary>Aggregate ownership fact: one root plus its transitive members.</summary>
+internal sealed record AggregateFact(
+    [property: JsonPropertyName("rootName")] string RootName,
+    [property: JsonPropertyName("memberNames")] IReadOnlyList<string> MemberNames
+);
+
+/// <summary>
+/// Stage (or entity-level, when <see cref="StageName"/> is null) subscription plan
+/// for a relationship — which target stages it watches and with which quantifiers.
+/// </summary>
+internal sealed record SubscriptionPlanFact(
+    [property: JsonPropertyName("entityName")] string EntityName,
+    [property: JsonPropertyName("stageName")] string? StageName,
+    [property: JsonPropertyName("relationshipName")] string RelationshipName,
+    [property: JsonPropertyName("targetStageNames")] IReadOnlyList<string> TargetStageNames,
+    [property: JsonPropertyName("quantifiers")] IReadOnlyList<string> Quantifiers
 );
 
 // ── Tool classes ───────────────────────────────────────────────
@@ -240,9 +261,10 @@ internal sealed class QueryTool {
 
     /// <summary>
     /// Returns analysis diagnostics and structured domain facts for the current domain state.
-    /// Structured facts (roots, topology, action names) are derived from LatestAnalysis metadata.
+    /// Structured facts (roots, aggregates, topology, action names, subscription plans) are
+    /// derived from LatestAnalysis metadata.
     /// </summary>
-    [McpServerTool(Name = "get_domain_analysis"), Description("Returns analysis diagnostics and structured domain facts (entity structure, topology, actions) for the current domain state.")]
+    [McpServerTool(Name = "get_domain_analysis"), Description("Returns analysis diagnostics and structured domain facts (entity structure, aggregates, topology, actions, subscription plans) for the current domain state.")]
     public static DomainToolResponse GetDomainAnalysis(
         [Description("Session ID")] string sessionId) {
         if (!McpSessionStore.TryGet(sessionId, out var state))
@@ -293,6 +315,55 @@ internal sealed class QueryTool {
         var hasStorage = state.LatestAnalysis.GetMetadata<StorageMappingMetadata>(state.Domain) is not null;
         var hasTransport = state.LatestAnalysis.GetMetadata<TransportMetadata>(state.Domain) is not null;
 
+        // Aggregate ownership from OwnershipAggregateMetadata (OwnershipAggregatePass)
+        var aggregate = state.LatestAnalysis.GetMetadata<OwnershipAggregateMetadata>(state.Domain)?.Aggregate;
+        var aggregates = new List<AggregateFact>();
+        if (aggregate is not null) {
+            var aggregateByName = aggregate.Entities.ToDictionary(e => e.Name, StringComparer.Ordinal);
+            foreach (var root in aggregate.Entities.Where(e => e.IsRoot).OrderBy(e => e.Name)) {
+                // Transitive members: entities whose parent chain leads to this root.
+                var members = new List<string>();
+                foreach (var candidate in aggregate.Entities.Where(e => !e.IsRoot)) {
+                    var cursor = candidate;
+                    while (cursor?.AggregateParentName is not null) {
+                        if (string.Equals(cursor.AggregateParentName, root.Name, StringComparison.Ordinal)) {
+                            members.Add(candidate.Name);
+                            break;
+                        }
+                        cursor = aggregateByName.GetValueOrDefault(cursor.AggregateParentName);
+                    }
+                }
+                members.Sort(StringComparer.Ordinal);
+                aggregates.Add(new AggregateFact(root.Name, members));
+            }
+        }
+
+        // Stages (and entity-level subscriptions) with non-empty dispatch plans —
+        // SubscriptionDispatchPlanMetadata published by RuntimeContractAnalyzer.
+        var subscriptionPlans = new List<SubscriptionPlanFact>();
+        foreach (var entity in state.Domain.Types.OfType<Entity>()) {
+            var entityPlan = state.LatestAnalysis.GetMetadata<SubscriptionDispatchPlanMetadata>(entity);
+            if (entityPlan is not null) {
+                foreach (var (relName, entries) in entityPlan.ByRelationshipName) {
+                    subscriptionPlans.Add(new SubscriptionPlanFact(
+                        entity.Name, null, relName,
+                        entries.SelectMany(e => e.StageNames).Distinct().OrderBy(s => s, StringComparer.Ordinal).ToList(),
+                        entries.Select(e => e.Quantifier.ToString()).Distinct().OrderBy(q => q, StringComparer.Ordinal).ToList()));
+                }
+            }
+            foreach (var stage in entity.Stages) {
+                var stagePlan = state.LatestAnalysis.GetMetadata<SubscriptionDispatchPlanMetadata>(stage);
+                if (stagePlan is not null) {
+                    foreach (var (relName, entries) in stagePlan.ByRelationshipName) {
+                        subscriptionPlans.Add(new SubscriptionPlanFact(
+                            entity.Name, stage.Name, relName,
+                            entries.SelectMany(e => e.StageNames).Distinct().OrderBy(s => s, StringComparer.Ordinal).ToList(),
+                            entries.Select(e => e.Quantifier.ToString()).Distinct().OrderBy(q => q, StringComparer.Ordinal).ToList()));
+                    }
+                }
+            }
+        }
+
         var data = new AnalysisData(
             summary.ErrorCount, summary.WarningCount, summary.InfoCount, hintCount,
             summary.HasStructuralFailure, summary.Messages,
@@ -303,7 +374,10 @@ internal sealed class QueryTool {
             SubscriptionCount: subscriptionCount,
             ActionSummary: actionSummary?.Count > 0 ? actionSummary : null,
             HasStorageMapping: hasStorage,
-            HasTransport: hasTransport
+            HasTransport: hasTransport,
+            AggregateRootCount: aggregates.Count,
+            Aggregates: aggregates.Count > 0 ? aggregates : null,
+            SubscriptionPlans: subscriptionPlans.Count > 0 ? subscriptionPlans : null
         );
 
         var message = summary.ErrorCount > 0
@@ -1200,7 +1274,13 @@ internal sealed class PolicyTool {
                 result = existingInstance.EvaluatePolicy(policy);
             }
             else {
-                var instance = DomainEntityInstance.Create(entity, subjectValues);
+                // Bag path (no instanceId): still domain-bound so that
+                // relationship-named `Rel exists` / `not Rel exists` fail closed
+                // ("requires store") per guide §9 instead of lowering to a bag
+                // member access that fail-opens to true. Non-relationship Exists
+                // keeps bag-null lowering (TryEvaluateRelationshipPresence returns
+                // false for non-relationship names).
+                var instance = DomainEntityInstance.Create(entity, subjectValues, state.Domain);
                 result = instance.EvaluatePolicy(policy);
             }
         }

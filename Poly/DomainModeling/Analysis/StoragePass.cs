@@ -7,9 +7,11 @@ namespace Poly.DomainModeling.Analysis;
 /// Analysis pass that produces <see cref="StorageMappingMetadata"/> —
 /// storage mapping structure: columns, navigations, FKs, keys, table names.
 ///
-/// Consumes <see cref="OwnershipAggregateMetadata"/> and <see cref="EffectTopologyMetadata"/>
-/// from prior passes.
-/// Depends on <see cref="OwnershipAggregatePass"/> and <see cref="EffectTopologyPass"/>.
+/// Consumes <see cref="OwnershipAggregateMetadata"/>, <see cref="EffectTopologyMetadata"/>,
+/// and <see cref="EntityStructureMetadata"/> from prior passes.
+/// Depends on <see cref="OwnershipAggregatePass"/>, <see cref="EffectTopologyPass"/>,
+/// and <see cref="EntityStructureAnalyzer"/> (amu-w2-1: storage prefers the precomputed
+/// entity-structure bag for key / soft-delete / stage facts over re-scanning).
 /// 
 /// Accepts optional <see cref="TypeMappingRegistry"/> and storage conventions
 /// from the authoring context (packs configure these).
@@ -17,7 +19,7 @@ namespace Poly.DomainModeling.Analysis;
 internal sealed class StoragePass : INodeAnalyzer {
     public const string Id = "StoragePass";
     public string PassName => Id;
-    public string[] Dependencies => [EffectTopologyPass.Id, OwnershipAggregatePass.Id];
+    public string[] Dependencies => [EffectTopologyPass.Id, OwnershipAggregatePass.Id, EntityStructureAnalyzer.Id];
     // Note: standalone usage (new StoragePass() + priorAnalysis) bypasses the
     // AnalyzerBuilder and thus avoids the Dependencies check. The runtime
     // fallback to _analysis handles that case.
@@ -57,7 +59,7 @@ internal sealed class StoragePass : INodeAnalyzer {
             return;
         }
 
-        var analyzer = new StorageAnalyzer(domain, _analysis, typeMaps: _typeMaps, conventions: _conventions);
+        var analyzer = new StorageAnalyzer(domain, context: context, analysis: _analysis, typeMaps: _typeMaps, conventions: _conventions);
         var storage = analyzer.Analyze(aggregate, topology);
         context.SetMetadata(domain, new StorageMappingMetadata(storage));
     }

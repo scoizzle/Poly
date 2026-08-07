@@ -125,7 +125,7 @@ public sealed record AddPropertyToEntityChange(
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
         context.RequireUpdate(
-            context.UpdateEntity(EntityName, e => e with { Properties = e.Properties.Append(Property).ToList() }),
+            context.AppendChildToEntity(EntityName, e => e.Properties, (e, props) => e with { Properties = props }, Property),
             $"Entity '{EntityName}' not found — cannot add property '{Property.Name}'");
     }
 
@@ -156,9 +156,8 @@ public sealed record AddStageChange(
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
         context.RequireUpdate(
-            context.UpdateEntity(EntityName, e => e with {
-                Stages = e.Stages.Append(new Stage(Name, [], [], [], [])).ToList()
-            }),
+            context.AppendChildToEntity(EntityName, e => e.Stages,
+                (e, stages) => e with { Stages = stages }, new Stage(Name, [], [], [], [])),
             $"Entity '{EntityName}' not found — cannot add stage '{Name}'");
     }
 
@@ -186,9 +185,8 @@ public sealed record AddActionChange(
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
         context.RequireUpdate(
-            context.UpdateEntity(EntityName, e => e with {
-                Actions = e.Actions.Append(new Action(Name, InvocationResult.Void, [], [], [])).ToList()
-            }),
+            context.AppendChildToEntity(EntityName, e => e.Actions,
+                (e, actions) => e with { Actions = actions }, new Action(Name, InvocationResult.Void, [], [], [])),
             $"Entity '{EntityName}' not found — cannot add action '{Name}'");
     }
 
@@ -220,9 +218,8 @@ public sealed record AddEffectToActionChange(
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
         context.RequireUpdate(
-            context.UpdateAction(EntityName, ActionName, a => a with {
-                Effects = a.Effects.Append(Effect).ToList()
-            }, searchStages: true),
+            context.AppendChildToAction(EntityName, ActionName, a => a.Effects,
+                (a, effects) => a with { Effects = effects }, Effect, searchStages: true),
             $"Action '{ActionName}' on Entity '{EntityName}' not found — cannot add effect");
     }
 
@@ -235,7 +232,8 @@ public sealed record AddPolicyToEntityChange(
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
         context.RequireUpdate(
-            context.UpdateEntity(EntityName, e => e with { Policies = e.Policies.Append(Policy).ToList() }),
+            context.AppendChildToEntity(EntityName, e => e.Policies,
+                (e, policies) => e with { Policies = policies }, Policy),
             $"Entity '{EntityName}' not found — cannot add policy '{Policy.Name}'");
     }
 
@@ -252,7 +250,8 @@ public sealed record AddPolicyToStageChange(
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
         context.RequireUpdate(
-            context.UpdateStage(EntityName, StageName, s => s with { Policies = s.Policies.Append(Policy).ToList() }),
+            context.AppendChildToStage(EntityName, StageName, s => s.Policies,
+                (s, policies) => s with { Policies = policies }, Policy),
             $"Stage '{StageName}' on Entity '{EntityName}' not found — cannot add policy '{Policy.Name}'");
     }
 
@@ -369,9 +368,8 @@ public sealed record AddParameterToActionChange(
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
         context.RequireUpdate(
-            context.UpdateAction(EntityName, ActionName, a => a with {
-                Parameters = a.Parameters.Append(Parameter).ToList()
-            }, searchStages: true),
+            context.AppendChildToAction(EntityName, ActionName, a => a.Parameters,
+                (a, parameters) => a with { Parameters = parameters }, Parameter, searchStages: true),
             $"Action '{ActionName}' on Entity '{EntityName}' not found — cannot add parameter '{Parameter.Name}'");
     }
 
@@ -385,9 +383,8 @@ public sealed record AddOnEntryEffectToStageChange(
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
         context.RequireUpdate(
-            context.UpdateStage(EntityName, StageName, s => s with {
-                OnEntryEffects = s.OnEntryEffects.Append(Effect).ToList()
-            }),
+            context.AppendChildToStage(EntityName, StageName, s => s.OnEntryEffects,
+                (s, effects) => s with { OnEntryEffects = effects }, Effect),
             $"Stage '{StageName}' on Entity '{EntityName}' not found — cannot add OnEntry effect");
     }
 
@@ -401,9 +398,8 @@ public sealed record AddOnExitEffectToStageChange(
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
         context.RequireUpdate(
-            context.UpdateStage(EntityName, StageName, s => s with {
-                OnExitEffects = s.OnExitEffects.Append(Effect).ToList()
-            }),
+            context.AppendChildToStage(EntityName, StageName, s => s.OnExitEffects,
+                (s, effects) => s with { OnExitEffects = effects }, Effect),
             $"Stage '{StageName}' on Entity '{EntityName}' not found — cannot add OnExit effect");
     }
 
@@ -1066,9 +1062,8 @@ public sealed record AddStageSubscriptionChange(
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
         context.RequireUpdate(
-            context.UpdateStage(EntityName, StageName, s => s with {
-                Subscriptions = s.Subscriptions.Append(Subscription).ToList()
-            }),
+            context.AppendChildToStage(EntityName, StageName, s => s.Subscriptions,
+                (s, subs) => s with { Subscriptions = subs }, Subscription),
             $"Stage '{StageName}' on Entity '{EntityName}' not found — cannot add stage subscription");
     }
 
@@ -1149,9 +1144,8 @@ public sealed record AddEntitySubscriptionChange(
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
         context.RequireUpdate(
-            context.UpdateEntity(EntityName, e => e with {
-                Subscriptions = e.Subscriptions.Append(Subscription).ToList()
-            }),
+            context.AppendChildToEntity(EntityName, e => e.Subscriptions,
+                (e, subs) => e with { Subscriptions = subs }, Subscription),
             $"Entity '{EntityName}' not found — cannot add entity subscription");
     }
 

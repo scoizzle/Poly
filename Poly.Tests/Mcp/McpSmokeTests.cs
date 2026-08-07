@@ -87,6 +87,58 @@ public class McpSmokeTests {
         await Assert.That(data.HasTransport).IsTrue();
         await Assert.That(data.RootEntityNames).IsNotNull();
         await Assert.That(data.RootEntityNames!.Count).IsGreaterThanOrEqualTo(1);
+        // amu-w4: aggregate ownership summary present when bags exist.
+        await Assert.That(data.AggregateRootCount).IsGreaterThanOrEqualTo(1);
+        await Assert.That(data.Aggregates).IsNotNull();
+    }
+
+    [Test]
+    public async Task GetDomainAnalysis_WithStageSubscriptions_IncludesSubscriptionPlans() {
+        // amu-w4: stages/entities with non-empty subscription dispatch plans surface as facts.
+        var (sessionId, _) = McpSessionStore.Create("Test");
+
+        var dsl = DslTool.ApplyDsl(sessionId, """
+            domain Demo
+
+            Patron: entity {
+              Name: Text
+              loans: many Loan
+              Active: stage {
+                CheckOut: action { create in loans { } }
+              }
+              when loans Overdue {
+                assign Name to "overdue"
+              }
+            }
+
+            Loan: entity {
+              Status: Text
+              Active: stage {}
+              Overdue: stage {}
+            }
+            """);
+        await Assert.That(dsl.Success).IsTrue();
+
+        var response = QueryTool.GetDomainAnalysis(sessionId);
+        await Assert.That(response.Success).IsTrue();
+        await Assert.That(response.Data).IsTypeOf<AnalysisData>();
+
+        var data = (AnalysisData)response.Data!;
+        await Assert.That(data.SubscriptionPlans).IsNotNull();
+        // Stage-level plan: Patron watches Loan via `loans` when it enters Overdue.
+        await Assert.That(data.SubscriptionPlans!.Any(p =>
+            p.EntityName == "Patron" && p.RelationshipName == "loans"
+            && p.TargetStageNames.Contains("Overdue"))).IsTrue();
+        // Entity-level (always-active) subscription plan has a null stage name.
+        await Assert.That(data.SubscriptionPlans.Any(p =>
+            p.EntityName == "Patron" && p.StageName is null)).IsTrue();
+        // F7: plan facts expose quantifier(s) for any/all honesty (Each here —
+        // the DSL subscription omits the keyword).
+        await Assert.That(data.SubscriptionPlans.Any(p =>
+            p.RelationshipName == "loans" && p.Quantifiers.Contains("Each"))).IsTrue();
+        // Aggregate ownership facts present when the aggregate bag exists.
+        await Assert.That(data.AggregateRootCount).IsGreaterThanOrEqualTo(1);
+        await Assert.That(data.Aggregates).IsNotNull();
     }
 
     [Test]

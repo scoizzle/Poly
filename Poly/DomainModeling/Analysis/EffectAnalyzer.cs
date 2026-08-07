@@ -11,10 +11,14 @@ namespace Poly.DomainModeling.Analysis;
 internal sealed class EffectAnalyzer : INodeAnalyzer {
     public const string Id = "DomainEffectAnalyzer";
     public string PassName => Id;
-    // Lint-only: reads DTLM/ResolvedType (Semantic), RequiredProperties (facts),
-    // DownstreamConstraints (ConstraintPropagation). No metadata publication.
+    // Lint-only: reads DTLM/ResolvedType (Semantic), catalog (DomainCatalogPass),
+    // RequiredProperties (facts), DownstreamConstraints (ConstraintPropagation).
+    // No metadata publication. Catalog dependency is declared (not accidental
+    // pipeline order) so a catalog-less pipeline cannot silently soft-skip
+    // domain-bound effect validation (review F1).
     public string[] Dependencies => [
         SemanticDomainAnalyzer.Id,
+        DomainCatalogPass.Id,
         RequiredPropertiesPass.Id,
         ConstraintPropagationAnalyzer.Id,
     ];
@@ -32,8 +36,15 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
     }
 
     private static void ValidateDomainEffects(AnalysisContext context, Domain domain) {
-        var lookup = context.GetMetadata<DomainTypeLookupMetadata>(default);
+        var lookup = ResolveTypeLookup(context, domain);
         if (lookup is null) {
+            // Fail closed (review F1): domain-bound validation without any type
+            // lookup bag would silently omit every effect check. Report loudly.
+            context.ReportStructuralFailure(
+                domain,
+                "Domain type lookup bag is unavailable; effect binding cannot be validated. " +
+                "Run a successful SemanticDomainAnalyzer before EffectAnalyzer.",
+                DomainModelDiagnosticCodes.SemanticReferenceResolution);
             return;
         }
 
@@ -164,62 +175,98 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
         Action? action,
         Entity entity,
         Domain domain,
-        DomainTypeLookupMetadata lookup) {
-        switch (effect) {
-            case CreateEntityInstance cei:
-                ValidateCreateEntityInstance(context, cei, entity, lookup, domain);
-                break;
-            case CreateEntityInRelationshipEffect createIn:
-                ValidateCreateEntityInRelationship(context, createIn, entity, domain, lookup);
-                break;
+        DomainTypeLookupMetadata lookup) =>
+        new EffectValidationDispatch(context, action, entity, domain, lookup).Route(effect);
 
-            case StageTransitionEffect ste:
-                ValidateStageTransition(context, ste, entity);
-                break;
-            case InvokeActionEffect iae:
-                ValidateInvokeAction(context, iae, entity, domain);
-                break;
-            case AssignEffect ae:
-                ValidateAssign(context, ae, action, entity);
-                break;
-            case DeleteEntityInstance dei:
-                ValidateDeleteEntityInstance(context, dei, lookup);
-                break;
-            case LinkRelationshipEffect lre:
-                ValidateRelationshipName(context, lre.RelationshipName, domain, lre);
-                break;
-            case UnlinkRelationshipEffect ure:
-                ValidateRelationshipName(context, ure.RelationshipName, domain, ure);
-                break;
-            case TransitionRelationshipEffect tre:
-                ValidateTransitionRelationship(context, tre, domain);
-                // DMEFF005: TransitionRelationshipEffect is analyzed but NOT executed at runtime.
-                // It is stored in the model for evolution/planning but has no case in
-                // DomainEntityInstance.ExecuteEffect — calls to it are silent no-ops.
-                context.ReportWarning(
-                    tre,
-                    $"TransitionRelationshipEffect ('{tre.RelationshipName}' → '{tre.TargetStage.StageName}') " +
-                    "is parsed and stored but is NOT executed at runtime. " +
-                    "Use StageTransitionEffect to transition the current instance's stage instead.",
-                    DomainModelDiagnosticCodes.EffectNotExecutable);
-                break;
-            case ConditionalEffect ce:
-                ValidateEffects(context, ce.ThenEffects, action, entity, domain, lookup);
-                if (ce.ElseEffects is not null) {
-                    ValidateEffects(context, ce.ElseEffects, action, entity, domain, lookup);
-                }
-                // DMEFF006: warn if the conditional contains direct-execution effects
-                // that would be silently dropped by EffectLoweringPass
-                WarnNestedDirectEffects(context, "ConditionalEffect (then)", ce.ThenEffects);
-                if (ce.ElseEffects is not null)
-                    WarnNestedDirectEffects(context, "ConditionalEffect (else)", ce.ElseEffects);
-                break;
-            case CompositeEffect ce:
-                ValidateEffects(context, ce.Effects, action, entity, domain, lookup);
-                // DMEFF006: warn if composite contains direct-execution effects
-                // that would be silently dropped by EffectLoweringPass
-                WarnNestedDirectEffects(context, "CompositeEffect", ce.Effects);
-                break;
+    /// <summary>
+    /// Per-effect validation routed through <see cref="EffectDispatch{TResult}"/>
+    /// (coh-e1). Methods are named by the effect type they validate; composite and
+    /// conditional effects recurse via <see cref="EffectDispatch{TResult}.Route"/>.
+    /// New effect subtypes fail loud in the base Route switch instead of silently
+    /// passing through an analyzer switch.
+    /// </summary>
+    private sealed class EffectValidationDispatch(
+        AnalysisContext context,
+        Action? action,
+        Entity entity,
+        Domain domain,
+        DomainTypeLookupMetadata lookup)
+        : EffectDispatch<object?> {
+        protected override object? Default() => null;
+
+        protected override object? CreateEntityInstance(CreateEntityInstance e) {
+            ValidateCreateEntityInstance(context, e, entity, lookup, domain);
+            return null;
+        }
+
+        protected override object? CreateEntityInRelationship(CreateEntityInRelationshipEffect e) {
+            ValidateCreateEntityInRelationship(context, e, entity, domain, lookup);
+            return null;
+        }
+
+        protected override object? StageTransition(StageTransitionEffect e) {
+            ValidateStageTransition(context, e, entity);
+            return null;
+        }
+
+        protected override object? InvokeAction(InvokeActionEffect e) {
+            ValidateInvokeAction(context, e, entity, domain);
+            return null;
+        }
+
+        protected override object? Assign(AssignEffect e) {
+            ValidateAssign(context, e, action, entity);
+            return null;
+        }
+
+        protected override object? DeleteEntity(DeleteEntityInstance e) {
+            ValidateDeleteEntityInstance(context, e, lookup);
+            return null;
+        }
+
+        protected override object? LinkRelationship(LinkRelationshipEffect e) {
+            ValidateRelationshipName(context, e.RelationshipName, domain, e);
+            return null;
+        }
+
+        protected override object? UnlinkRelationship(UnlinkRelationshipEffect e) {
+            ValidateRelationshipName(context, e.RelationshipName, domain, e);
+            return null;
+        }
+
+        protected override object? TransitionRelationship(TransitionRelationshipEffect e) {
+            ValidateTransitionRelationship(context, e, domain);
+            // DMEFF005: TransitionRelationshipEffect is analyzed but NOT executed at runtime.
+            // It is stored in the model for evolution/planning but has no case in
+            // DomainEntityInstance.ExecuteEffect — calls to it are silent no-ops.
+            context.ReportWarning(
+                e,
+                $"TransitionRelationshipEffect ('{e.RelationshipName}' → '{e.TargetStage.StageName}') " +
+                "is parsed and stored but is NOT executed at runtime. " +
+                "Use StageTransitionEffect to transition the current instance's stage instead.",
+                DomainModelDiagnosticCodes.EffectNotExecutable);
+            return null;
+        }
+
+        protected override object? Conditional(ConditionalEffect e) {
+            ValidateEffects(context, e.ThenEffects, action, entity, domain, lookup);
+            if (e.ElseEffects is not null) {
+                ValidateEffects(context, e.ElseEffects, action, entity, domain, lookup);
+            }
+            // DMEFF006: warn if the conditional contains direct-execution effects
+            // that would be silently dropped by EffectLoweringPass
+            WarnNestedDirectEffects(context, "ConditionalEffect (then)", e.ThenEffects);
+            if (e.ElseEffects is not null)
+                WarnNestedDirectEffects(context, "ConditionalEffect (else)", e.ElseEffects);
+            return null;
+        }
+
+        protected override object? Composite(CompositeEffect e) {
+            ValidateEffects(context, e.Effects, action, entity, domain, lookup);
+            // DMEFF006: warn if composite contains direct-execution effects
+            // that would be silently dropped by EffectLoweringPass
+            WarnNestedDirectEffects(context, "CompositeEffect", e.Effects);
+            return null;
         }
     }
 
@@ -305,9 +352,12 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
 
     private static void ValidateCreateWithRelationshipName(
         AnalysisContext context, CreateEntityInstance cei, Entity actionEntity, Domain domain, DomainTypeLookupMetadata lookup, Entity targetEntity) {
-        // Check the relationship exists
-        var relationship = domain.Relationships.FirstOrDefault(r =>
-            string.Equals(r.Name, cei.RelationshipName, StringComparison.Ordinal));
+        // amu-w1-1 / F1: catalog+RLM name resolve (no domain.Relationships scan);
+        // bag-missing reports a structural failure (fail-closed) before returning.
+        // cei.RelationshipName is non-null here (caller guards before invoking).
+        if (!TryResolveRelationship(context, domain, cei.RelationshipName!, cei, out var relationship)) {
+            return;
+        }
         if (relationship is null) {
             context.ReportError(
                 cei,
@@ -356,11 +406,88 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
         return isOwnedTarget && !isSource;
     }
 
+    /// <summary>
+    /// Catalog/RLM relationship name resolve (amu-w1-1; review F1). Replaces
+    /// linear <c>domain.Relationships.FirstOrDefault</c> scans on domain-bound
+    /// paths. Prefers the catalog relationship bag, falls back to the
+    /// intermediate RLM bag (parity with <see cref="PolicyConstraintAnalyzer"/>),
+    /// and <b>fails closed</b> with a structural diagnostic on
+    /// <paramref name="reportNode"/> when neither bag is available — domain-bound
+    /// validation never silently omits checks. Returns <c>true</c> with
+    /// <paramref name="relationship"/> set to null when the name is genuinely
+    /// not a relationship in the available bags.
+    /// </summary>
+    private static bool TryResolveRelationship(
+        AnalysisContext context, Domain domain, string relationshipName, Node reportNode, out Relationship? relationship) {
+        var relLookup = ResolveRelationshipLookup(context, domain);
+        if (relLookup is null) {
+            relationship = null;
+            ReportCatalogUnavailable(context, reportNode);
+            return false;
+        }
+        relationship = relLookup.Relationships.TryGetValue(relationshipName, out var rel) ? rel : null;
+        return true;
+    }
+
+    /// <summary>
+    /// Relationship lookup for domain-bound name resolve (amu-w1-1; review F1).
+    /// Catalog relationship bag first; intermediate RLM bag from
+    /// <see cref="SemanticDomainAnalyzer"/> as fallback (same contract as
+    /// <see cref="PolicyConstraintAnalyzer"/>). Null only when neither bag exists.
+    /// </summary>
+    private static RelationshipLookupMetadata? ResolveRelationshipLookup(AnalysisContext context, Domain domain) =>
+        context.GetRelationshipLookup(domain) ?? context.GetMetadata<RelationshipLookupMetadata>(default);
+
+    /// <summary>
+    /// Catalog/RLM entity type resolve (amu-w1-1; review F1). Replaces linear
+    /// <c>domain.Types.OfType&lt;Entity&gt;().FirstOrDefault</c> scans on
+    /// domain-bound paths. Same bag-availability + fail-closed contract as
+    /// <see cref="TryResolveRelationship"/>.
+    /// </summary>
+    private static bool TryResolveEntity(
+        AnalysisContext context, Domain domain, string typeName, Node reportNode, out Entity? entity) {
+        var typeLookup = ResolveTypeLookup(context, domain);
+        if (typeLookup is null) {
+            entity = null;
+            ReportCatalogUnavailable(context, reportNode);
+            return false;
+        }
+        if (typeLookup.Types.TryGetValue(typeName, out var domainType) && domainType is Entity e) {
+            entity = e;
+            return true;
+        }
+        entity = null;
+        return true;
+    }
+
+    /// <summary>
+    /// Type lookup for domain-bound name resolve (amu-w1-1; review F1).
+    /// Catalog type lookup first; intermediate DTLM from
+    /// <see cref="SemanticDomainAnalyzer"/> as fallback. Null only when neither
+    /// bag exists.
+    /// </summary>
+    private static DomainTypeLookupMetadata? ResolveTypeLookup(AnalysisContext context, Domain domain) =>
+        context.GetTypeLookup(domain) ?? context.GetMetadata<DomainTypeLookupMetadata>(default);
+
+    /// <summary>
+    /// Fail-closed: domain-bound validation cannot proceed without the semantic
+    /// lookup bags. Reports a structural failure instead of silently skipping
+    /// the check (review F1 — bag-skip is not fail-closed).
+    /// </summary>
+    private static void ReportCatalogUnavailable(AnalysisContext context, Node node) =>
+        context.ReportStructuralFailure(
+            node,
+            "Domain relationship/type lookup bags are unavailable; effect binding cannot be validated. " +
+            "Run DomainCatalogPass over a successful SemanticDomainAnalyzer result before EffectAnalyzer.",
+            DomainModelDiagnosticCodes.SemanticReferenceResolution);
+
     private static void ValidateCreateEntityInRelationship(
         AnalysisContext context, CreateEntityInRelationshipEffect createIn, Entity entity, Domain domain, DomainTypeLookupMetadata lookup) {
-        // Validate relationship name exists
-        var relationship = domain.Relationships.FirstOrDefault(r =>
-            string.Equals(r.Name, createIn.RelationshipName, StringComparison.Ordinal));
+        // amu-w1-1 / F1: catalog+RLM name resolve (no domain.Relationships scan);
+        // bag-missing reports a structural failure (fail-closed) before returning.
+        if (!TryResolveRelationship(context, domain, createIn.RelationshipName, createIn, out var relationship)) {
+            return;
+        }
         if (relationship is null) {
             context.ReportError(
                 createIn,
@@ -472,8 +599,11 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
         Entity targetEntity;
 
         if (hasRel) {
-            var relationship = domain.Relationships.FirstOrDefault(r =>
-                string.Equals(r.Name, iae.TargetRelationship, StringComparison.Ordinal));
+            // amu-w1-1 / F1: catalog+RLM name resolve (no domain.Relationships scan);
+            // bag-missing reports a structural failure (fail-closed) before returning.
+            if (!TryResolveRelationship(context, domain, iae.TargetRelationship!, iae, out var relationship)) {
+                return;
+            }
             if (relationship is null) {
                 context.ReportError(
                     iae,
@@ -519,8 +649,10 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
             var isCollectionFromSource = relationship.Cardinality is RelationshipCardinality.OneToMany;
 
             var targetTypeName = relationship.Target.TypeName;
-            var resolvedTarget = domain.Types.OfType<Entity>()
-                .FirstOrDefault(e => string.Equals(e.Name, targetTypeName, StringComparison.Ordinal));
+            // amu-w1-1 / F1: catalog+RLM entity resolve (no domain.Types.OfType scan);
+            // bag-missing reports a structural failure (fail-closed) before returning.
+            if (!TryResolveEntity(context, domain, targetTypeName, iae, out var resolvedTarget))
+                return;
             if (resolvedTarget is null) {
                 context.ReportError(
                     iae,
@@ -853,7 +985,10 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
 
     private static void ValidateRelationshipName(
         AnalysisContext context, string relationshipName, Domain domain, Effect effect) {
-        if (!domain.Relationships.Any(r => string.Equals(r.Name, relationshipName, StringComparison.Ordinal))) {
+        // amu-w1-1 / F1: catalog+RLM name resolve (no domain.Relationships scan);
+        // bag-missing reports a structural failure (fail-closed) before returning.
+        if (TryResolveRelationship(context, domain, relationshipName, effect, out var relationship)
+            && relationship is null) {
             context.ReportError(
                 effect,
                 $"Relationship effect references unknown relationship '{relationshipName}' in domain '{domain.Name}'.",
@@ -863,14 +998,18 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
 
     private static void ValidateTransitionRelationship(
         AnalysisContext context, TransitionRelationshipEffect tre, Domain domain) {
-        var relationship = domain.Relationships.FirstOrDefault(r => string.Equals(r.Name, tre.RelationshipName, StringComparison.Ordinal));
-        if (relationship is null) {
+        // amu-w1-1 / F1: catalog+RLM name resolve (no domain.Relationships scan);
+        // bag-missing reports a structural failure (fail-closed) before returning.
+        if (TryResolveRelationship(context, domain, tre.RelationshipName, tre, out var relationship)
+            && relationship is null) {
             context.ReportError(
                 tre,
                 $"TransitionRelationship effect references unknown relationship '{tre.RelationshipName}' in domain '{domain.Name}'.",
                 DomainModelDiagnosticCodes.EffectBinding);
             return;
         }
+
+        if (relationship is null) return; // unreachable after fail-closed resolve
 
         if (!relationship.Stages.Any(s => string.Equals(s.Name, tre.TargetStage.StageName, StringComparison.Ordinal))) {
             context.ReportError(

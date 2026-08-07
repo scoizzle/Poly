@@ -117,7 +117,7 @@ public sealed class DomainToCSharpExporter {
 
         // ── Entity properties (sorted for deterministic output) ──
         foreach (var prop in entity.Properties.OrderBy(p => p.Name)) {
-            var propRef = MapDomainTypeRef(prop.Type, domain);
+            var propRef = MapDomainTypeRef(prop.Type, domain, metadata);
             var isRequired = prop.Constraints.Any(c => c is RequiredConstraint);
             List<Node>? constraints = null;
             if (isRequired)
@@ -154,16 +154,14 @@ public sealed class DomainToCSharpExporter {
                     // Try to resolve as enum member: EnumType.MemberName
                     var enumProp = entity.Properties.FirstOrDefault(p =>
                         string.Equals(p.Name, prop.Name, StringComparison.Ordinal));
-                    if (enumProp is not null) {
-                        var enumTypes = domain.Types.OfType<EnumType>()
-                            .ToDictionary(e => e.Name, StringComparer.Ordinal);
-                        if (enumTypes.TryGetValue(enumProp.Type.TypeName, out var enumType)) {
-                            ctorAssignments.Add(new Assignment(
-                                new Member(new ThisReference(), prop.Name),
-                                new Member(
-                                    new NamedTypeReference(enumType.Name), pa.Name)));
-                            continue; // skip ctor param
-                        }
+                    if (enumProp is not null
+                        && TryResolveEnumType(domain, metadata, enumProp.Type.TypeName, out var enumType)
+                        && enumType is not null) {
+                        ctorAssignments.Add(new Assignment(
+                            new Member(new ThisReference(), prop.Name),
+                            new Member(
+                                new NamedTypeReference(enumType.Name), pa.Name)));
+                        continue; // skip ctor param
                     }
                 }
             }
@@ -674,7 +672,7 @@ public sealed class DomainToCSharpExporter {
             }
 
             var paramName = ToCamelCase(parameter.Name);
-            var propRef = MapDomainTypeRef(parameter.Type, domain);
+            var propRef = MapDomainTypeRef(parameter.Type, domain, metadata);
             methodParams.Add(new Parameter(paramName, propRef));
             createArgs.Add(new Parameter(paramName));
         }
@@ -754,24 +752,6 @@ public sealed class DomainToCSharpExporter {
 
         throw new InvalidOperationException(
             $"EntityStructureMetadata is required for constructor ordering on entity '{targetEntity.Name}'.");
-    }
-
-    /// <summary>Returns a default-value Syntax node for a property (null, 0, false, etc.).</summary>
-    private static Node DefaultValueForProp(Property prop, Domain domain) {
-        var defaultValue = prop.Constraints.OfType<DefaultValueConstraint>().FirstOrDefault();
-        if (defaultValue is not null) {
-            var runtimeExpr = EffectLoweringPass.LowerDefaultExpression(defaultValue.Expression);
-            if (runtimeExpr is not null) return runtimeExpr;
-            if (defaultValue.Expression is Literal lit)
-                return new Constant(lit.Value);
-            if (defaultValue.Expression is PropertyAccess pa) {
-                var enumTypes = domain.Types.OfType<EnumType>()
-                    .ToDictionary(e => e.Name, StringComparer.Ordinal);
-                if (enumTypes.TryGetValue(prop.Type.TypeName, out var enumType))
-                    return new Member(new NamedTypeReference(enumType.Name), pa.Name);
-            }
-        }
-        return new Constant(null);
     }
 
     /// <summary>
@@ -951,35 +931,6 @@ public sealed class DomainToCSharpExporter {
         _ => true, // entity reference types (Book, Patron, etc.) are nullable
     };
 
-    /// <summary>
-    /// Returns a CLR-appropriate default value Syntax node for a domain type
-    /// reference (e.g., <c>false</c> for <c>Boolean</c>, <c>0</c> for <c>Number</c>,
-    /// <c>null</c> for <c>Text</c>). For enum types, returns the first member.
-    /// Used by <see cref="BuildActionBodyWithGuards"/> for guard-clause default returns.
-    /// </summary>
-    private static Node DefaultValueForTypeRef(DomainTypeReference typeRef, Domain? domain) {
-        if (domain is not null) {
-            var enumType = domain.Types.OfType<EnumType>()
-                .FirstOrDefault(e => string.Equals(e.Name, typeRef.TypeName, StringComparison.Ordinal));
-            if (enumType is not null && enumType.MemberNames.Count > 0)
-                return new Member(
-                    new NamedTypeReference(enumType.Name), enumType.MemberNames[0]);
-        }
-        return typeRef.TypeName switch {
-            "Text" or "String" => new Constant(""),
-            "Number" or "Int" or "Int64" => new Constant(0L),
-            "Int32" => new Constant(0),
-            "Boolean" or "Bool" => new Constant(false),
-            "DateTime" or "Timestamp" => new Member(
-                new NamedTypeReference("DateTime"), "MinValue"),
-            "Date" or "DateOnly" => new Member(
-                new NamedTypeReference("DateOnly"), "MinValue"),
-            "Guid" or "Uuid" => new Member(
-                new NamedTypeReference("Guid"), "Empty"),
-            _ => new Constant(null),
-        };
-    }
-
     // ── Action method builder ───────────────────────────────────
 
     private static void AddActionMethod(Entity entity, Action action,
@@ -995,7 +946,7 @@ public sealed class DomainToCSharpExporter {
         // Build the full method body: require guards first, then effects
         var isVoid = action.Result is not { Members.Count: > 0 };
         var body = BuildActionBodyWithGuards(action, entity, effectsBody, domain,
-            sourceStageName, stageEnumTypeName, isVoid);
+            sourceStageName, stageEnumTypeName, isVoid, analysis);
 
         // All actions return DomainResult (void) or DomainResult<T> (typed).
         // This lets callers pattern-match on IsSuccess without exceptions.
@@ -1004,7 +955,7 @@ public sealed class DomainToCSharpExporter {
             returnType = new NamedTypeReference("DomainResult");
         }
         else {
-            var innerType = MapDomainTypeRef(action.Result.Members[0].Type, domain);
+            var innerType = MapDomainTypeRef(action.Result.Members[0].Type, domain, analysis);
             returnType = new NamedTypeReference("DomainResult",
                 TypeArguments: [innerType]);
         }
@@ -1013,7 +964,7 @@ public sealed class DomainToCSharpExporter {
             action.Name,
             returnType,
             Parameters: action.Parameters
-                .Select(p => new Parameter(p.Name, MapDomainTypeRef(p.Type, domain)))
+                .Select(p => new Parameter(p.Name, MapDomainTypeRef(p.Type, domain, analysis)))
                 .ToList(),
             Body: body,
             AccessModifier: AccessModifier.Public
@@ -1042,7 +993,7 @@ public sealed class DomainToCSharpExporter {
     private static Block BuildActionBodyWithGuards(
         Action action, Entity entity, Node? effectsBody,
         Domain? domain = null, string? sourceStageName = null, string? stageEnumTypeName = null,
-        bool isVoid = true) {
+        bool isVoid = true, INodeMetadataProvider? analysis = null) {
 
         // Build the DomainResult type reference for failure/success returns
         Node actionResultType;
@@ -1052,7 +1003,7 @@ public sealed class DomainToCSharpExporter {
             resultTypeRef = new NamedTypeReference("DomainResult");
         }
         else {
-            resultTypeRef = MapDomainTypeRef(action.Result!.Members[0].Type, domain);
+            resultTypeRef = MapDomainTypeRef(action.Result!.Members[0].Type, domain, analysis);
             actionResultType = new NamedTypeReference("DomainResult",
                 TypeArguments: [resultTypeRef]);
         }
@@ -1303,11 +1254,13 @@ public sealed class DomainToCSharpExporter {
     }
 
     internal static Node MapDomainTypeRef(DomainTypeReference domainType,
-        Domain? domain = null) {
+        Domain? domain = null, INodeMetadataProvider? analysis = null) {
         var typeName = domainType.TypeName;
 
-        // Check for enum types in the domain
-        if (domain is not null) {
+        // Enum types and entity references both emit NamedTypeReference(typeName),
+        // so with analysis present the catalog is the single source of truth and no
+        // tree scan is performed (amu-w3-1). Only null-analysis residuals rescan.
+        if (analysis is null && domain is not null) {
             var enumType = domain.Types.OfType<EnumType>()
                 .FirstOrDefault(e => string.Equals(e.Name, typeName, StringComparison.Ordinal));
             if (enumType is not null)

@@ -2,8 +2,27 @@
 
 **Stream:** V  
 **Difficulty:** M  
-**Status:** `[ ]`  
-**Prereq:** COH-0  
+**Status:** `[x]` — DONE 2026-08-06  
+**Prereq:** COH-0
+
+## Implementation notes
+
+- `DomainMutationContext` already routed all `Update*` wrappers through
+  `ReplaceInList<T>` (context-level dedup existed). The residual duplication was
+  the **append-child shapes** in `DomainChange.ApplyTo` (11 near-identical
+  `Xs = e.Xs.Append(item).ToList()` sites).
+- Added three generic append helpers to `DomainMutationContext`:
+  `AppendChildToEntity`, `AppendChildToStage`, `AppendChildToAction` (getter +
+  rebuilder pair; delegate to `UpdateEntity`/`UpdateStage`/`UpdateAction` so
+  fail-loud zero-match via `RequireUpdate` is preserved).
+- Routed 11 `ApplyTo` sites through the helpers: AddPropertyToEntity,
+  AddStage, AddAction, AddPolicyToEntity, AddPolicyToStage, AddEffectToAction,
+  AddParameterToAction, AddOnEntryEffectToStage, AddOnExitEffectToStage,
+  AddStageSubscription, AddEntitySubscription.
+- `Remove*` shapes already used `RemoveFromEntity` — untouched. No public fluent
+  API break (helpers additive; `Update*` wrappers still exist).
+- Verified: build 0 errors, 1855/1855 tests green (evolution/apply + fail-loud
+  zero-match tests cover all routed sites).  
 
 ## Objective
 

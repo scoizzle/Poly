@@ -2,7 +2,8 @@
 
 **Date:** 2026-07-12  
 **Revised:** 2026-07-18 (**SA′′** — all slices committed; suite **1359**)  
-**Status:** Phase 3 + RT + RT′/SA MVP **committed**; SA′ honesty **commit pending**; stale-snapshot **pull**  
+**Revised:** 2026-08-07 — **growth posture superseded** by [`../mcp-catalog-minify.md`](../mcp-catalog-minify.md) (DSL-first; drop micro-tools + JSON expr). Do not expand granular evolve tools without explicit admit.  
+**Status:** Historical expansion complete; **default direction = minify**, not expand.  
 
 **Shipped tools (approx.):** ~35+ in `Poly.Mcp/Tools/` (session, query, evolve, policy, constraint, DSL, oracle, suggestions, guide, runtime)  
 **Principle:** Thin adapters over `DomainEvolution` / DomainModeling / Interpretation — no new domain semantics; no V2 resurrection; **no event authoring tools** (stage-transition-as-observable).  

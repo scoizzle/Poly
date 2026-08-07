@@ -277,19 +277,10 @@ Domain walk + `Printer`/`TokenWriter`; round-trip corpus green; stable-ish outpu
 **Exit:** No dual product path; CI green; CORE placement accurate.  
 **Risk:** Medium (delete blast radius).
 
-### GI-8 — JSON expression parser (optional / pull)
+### GI-8 — JSON expression parser — **CANCELLED** (2026-08-07)
 
-Port `DomainExpressionJsonParser` onto Grammar **after** text cutover. Does **not** block temporal pack if JSON stays bag-local.
-
-#### Why GI-8 exists (and when it matters)
-
-| Fact | Implication |
-|------|-------------|
-| **Two authoring media for the same IR** | Text `.poly` uses `DslExpressionParser`. MCP/oracle tools also accept **JSON expression bags** via `DomainExpressionJsonParser` (`DomainTools`, `OracleTool`). |
-| **Same `DomainExpression` tree** | Policies/effects must mean the same thing whether written as `Age >= 18` or `{"property":"Age","op":">=","value":18}`. |
-| **Text path is now Grammar-hosted** | Open forms (E1 registry) land on the text cursor first. JSON remains a **hand-written shape detector** — packs that add `Now` / units to text do **not** automatically appear in JSON. |
-| **What GI-8 would do** | One pattern table (or shared form registry) driving **both** media so specialization stays single-source; fewer dual-oracle bugs. |
-| **Why not blocking now** | JSON surface is smaller (no full precedence string); product goldens and MCP JSON are green; temporal pack authoring is **text-first**. Pull GI-8 when JSON must carry the same open forms or dual-media drift hurts. |
+JSON expression bags were a stopgap for MCP `add_policy` / oracle tools. Product path is text DSL (E1).  
+**Do not port JSON to Grammar.** Retire JSON consumers via [`mcp-catalog-minify.md`](mcp-catalog-minify.md); delete `DomainExpressionJsonParser` when callers are gone.
 
 ### GI-9 — Non-text streams (defer)
 

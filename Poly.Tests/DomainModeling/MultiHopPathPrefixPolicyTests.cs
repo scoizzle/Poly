@@ -9,7 +9,7 @@ namespace Poly.Tests.DomainModeling;
 /// <summary>
 /// P2: multi-hop to-one path-prefix (loan book Title) via store-linked EvaluatePolicy.
 /// </summary>
-public class P2MultiHopPathPrefixTests {
+public class MultiHopPathPrefixPolicyTests {
     private static (Domain Domain, AnalysisResult Analysis) Evolve(string poly) {
         var changes = new PolyDslParser(poly).Parse();
         var result = new DomainEvolution(new Domain("_", [], [])).Apply(changes);

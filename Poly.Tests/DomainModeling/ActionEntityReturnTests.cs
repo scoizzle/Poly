@@ -13,7 +13,7 @@ namespace Poly.Tests.DomainModeling;
 /// <summary>
 /// P3: action <c>-&gt; Entity</c> requires create producer; runtime returns created instance.
 /// </summary>
-public class P3ActionReturnTypeTests {
+public class ActionEntityReturnTests {
     private static (Domain Domain, AnalysisResult Analysis) Evolve(string poly) {
         var changes = new PolyDslParser(poly).Parse();
         var result = new DomainEvolution(new Domain("_", [], [])).Apply(changes);

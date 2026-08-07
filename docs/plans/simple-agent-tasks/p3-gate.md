@@ -9,4 +9,4 @@
 | G2 | Analysis fail-closed: `-> T` without producer | `[x]` DMEFF009 + tests |
 | G3 | Runtime or MCP golden returns value for one declared return type | `[x]` ResultInstance + returnInstanceId |
 | G4 | Guide documents actual return semantics | `[x]` poly-dsl-guide §6 |
-| G5 | Build + tests green; pre-ship | `[x]` P3ActionReturnTypeTests 4/4 |
+| G5 | Build + tests green; pre-ship | `[x]` ActionEntityReturnTests 4/4 |

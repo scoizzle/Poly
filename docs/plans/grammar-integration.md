@@ -386,9 +386,9 @@ Suite files when solidifying:
 
 ### 11.1 Preflight (GIP) — before product suite
 
-- [ ] C99 subset covered by `Grammar<C99TokenKind>` + Matcher handlers.  
-- [ ] Dual-run: Matcher path matches hand `C99Parser` outcomes on existing integration corpus.  
-- [ ] Gaps / engine limits documented and either fixed or waived into GI-4 strategy.  
+- [x] C99 structure covered by `C99Grammar` + Matcher dispatch (expr hybrid RD).  
+- [x] Dual-run: Matcher path matches hand `C99Parser` **execute** outcomes on integration corpus (`DualRun_*`).  
+- [x] Gaps documented → [`gi-preflight-c99-notes.md`](gi-preflight-c99-notes.md); E2 hybrid confirmed under load.  
 
 ### 11.2 Product suite (GI)
 

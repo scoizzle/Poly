@@ -173,8 +173,75 @@ public class C99ParserInterpreterTests {
 #pragma warning restore CS0649
     }
 
+    /// <summary>
+    /// GIP: structure patterns for Matcher-driven statement/decl dispatch.
+    /// Expressions stay recursive-descent (E2 hybrid) — same strategy product GI locks.
+    /// </summary>
+    private static class C99Grammar {
+        private static readonly Grammar<C99TokenKind> Instance = Build();
+
+        public static Grammar<C99TokenKind> Get() => Instance;
+
+        private static Grammar<C99TokenKind> Build() {
+            var g = new Grammar<C99TokenKind>();
+
+            // Top-level before function body: struct defs, then function header start.
+            g.Define("top")
+                .Pattern("struct-def")
+                    .Token(C99TokenKind.KwStruct).Value(C99TokenKind.Identifier).Token(C99TokenKind.LBrace)
+                    .Commit()
+                .Pattern("namespace-reject")
+                    .Token(C99TokenKind.KwNamespace)
+                    .Commit()
+                .Pattern("function")
+                    .Predicate(IsTypeKeyword, "type").Value(C99TokenKind.Identifier).Token(C99TokenKind.LParen)
+                    .Commit()
+                .Pattern("function-struct")
+                    .Token(C99TokenKind.KwStruct).Value(C99TokenKind.Identifier).Value(C99TokenKind.Identifier).Token(C99TokenKind.LParen)
+                    .Commit();
+
+            g.Define("block-item")
+                .Pattern("decl")
+                    .Predicate(IsTypeKeyword, "type")
+                    .Commit()
+                .Pattern("decl-struct")
+                    .Token(C99TokenKind.KwStruct)
+                    .Commit()
+                .Pattern("return")
+                    .Token(C99TokenKind.KwReturn)
+                    .Commit()
+                .Pattern("if")
+                    .Token(C99TokenKind.KwIf)
+                    .Commit()
+                .Pattern("while")
+                    .Token(C99TokenKind.KwWhile)
+                    .Commit()
+                .Pattern("for")
+                    .Token(C99TokenKind.KwFor)
+                    .Commit()
+                .Pattern("block")
+                    .Token(C99TokenKind.LBrace)
+                    .Commit()
+                .Pattern("expr-stmt")
+                    .Predicate(IsExprStmtStart, "expr-start")
+                    .Commit();
+
+            return g;
+        }
+
+        private static bool IsTypeKeyword(C99TokenKind k) =>
+            k is C99TokenKind.KwInt or C99TokenKind.KwFloat or C99TokenKind.KwDouble;
+
+        private static bool IsExprStmtStart(C99TokenKind k) =>
+            k is C99TokenKind.Identifier
+                or C99TokenKind.IntLiteral or C99TokenKind.FloatLiteral or C99TokenKind.DoubleLiteral
+                or C99TokenKind.LParen or C99TokenKind.Minus or C99TokenKind.Bang;
+    }
+
     private sealed class C99Parser {
         private readonly TokenReader<C99TokenKind> _reader;
+        private readonly Matcher<C99TokenKind>? _matcher;
+        private readonly bool _useGrammarDispatch;
 
         // Shared symbol table: all in-scope identifiers (function params + local variables)
         private readonly Dictionary<string, (Parameter Param, Type ClrType)> _symbols = new();
@@ -187,9 +254,16 @@ public class C99ParserInterpreterTests {
         };
         private readonly Dictionary<string, Type> _structTypes = new(KnownStructTypes);
 
-        public C99Parser(TokenReader<C99TokenKind> reader) => _reader = reader;
+        public C99Parser(TokenReader<C99TokenKind> reader, bool useGrammarDispatch = false) {
+            _reader = reader;
+            _useGrammarDispatch = useGrammarDispatch;
+            _matcher = useGrammarDispatch ? new Matcher<C99TokenKind>(C99Grammar.Get(), reader) : null;
+        }
 
         public C99ParsedFunction ParseFunction() {
+            if (_useGrammarDispatch)
+                return ParseFunctionViaGrammar();
+
             if (Check(C99TokenKind.KwNamespace)) {
                 throw new InvalidOperationException("C99 does not support namespaces.");
             }
@@ -198,6 +272,30 @@ public class C99ParserInterpreterTests {
                 ParseStructDefinition();
             }
 
+            return ParseFunctionHeaderAndBody();
+        }
+
+        /// <summary>GIP hybrid: Matcher dispatches top-level / block items; handlers remain RD.</summary>
+        private C99ParsedFunction ParseFunctionViaGrammar() {
+            while (true) {
+                var match = _matcher!.TryMatch("top");
+                switch (match?.PatternName) {
+                    case "namespace-reject":
+                        throw new InvalidOperationException("C99 does not support namespaces.");
+                    case "struct-def":
+                        ParseStructDefinition();
+                        continue;
+                    case "function":
+                    case "function-struct":
+                        return ParseFunctionHeaderAndBody();
+                    default:
+                        throw new InvalidOperationException(
+                            $"Grammar dispatch: expected struct or function, got '{Peek().Text}' ({Peek().Kind})");
+                }
+            }
+        }
+
+        private C99ParsedFunction ParseFunctionHeaderAndBody() {
             var returnType = ParseTypeSpec();
             var name = Expect(C99TokenKind.Identifier).Text;
 
@@ -272,7 +370,10 @@ public class C99ParserInterpreterTests {
             var stmts = new List<Node>();
 
             while (!Check(C99TokenKind.RBrace) && !Check(C99TokenKind.Eof)) {
-                if (IsTypeSpec()) {
+                if (_useGrammarDispatch) {
+                    ParseBlockItemViaGrammar(blockVars, stmts);
+                }
+                else if (IsTypeSpec()) {
                     var (decl, init) = ParseDeclaration();
                     blockVars.Add(decl.Param);
                     _locals.Add(decl);
@@ -286,6 +387,44 @@ public class C99ParserInterpreterTests {
 
             // Block(expressions, variables): expressions first, then the declared variable nodes
             return new Block(stmts, blockVars);
+        }
+
+        private void ParseBlockItemViaGrammar(List<Node> blockVars, List<Node> stmts) {
+            var match = _matcher!.TryMatch("block-item");
+            switch (match?.PatternName) {
+                case "decl":
+                case "decl-struct": {
+                        var (decl, init) = ParseDeclaration();
+                        blockVars.Add(decl.Param);
+                        _locals.Add(decl);
+                        if (init != null) stmts.Add(init);
+                        break;
+                    }
+                case "return":
+                    stmts.Add(ParseReturn());
+                    break;
+                case "if":
+                    stmts.Add(ParseIf());
+                    break;
+                case "while":
+                    stmts.Add(ParseWhile());
+                    break;
+                case "for":
+                    stmts.Add(ParseFor());
+                    break;
+                case "block":
+                    stmts.Add(ParseBlock());
+                    break;
+                case "expr-stmt": {
+                        var expr = ParseAssignmentOrExpr();
+                        Expect(C99TokenKind.Semicolon);
+                        stmts.Add(expr);
+                        break;
+                    }
+                default:
+                    throw new InvalidOperationException(
+                        $"Grammar dispatch: unexpected block item '{Peek().Text}' ({Peek().Kind})");
+            }
         }
 
         private ((Parameter Param, Type ClrType) Decl, Node? Init) ParseDeclaration() {
@@ -737,9 +876,10 @@ public class C99ParserInterpreterTests {
     // Compiler
     // =========================================================================
 
-    private static TDelegate CompileC99<TDelegate>(string source) where TDelegate : Delegate {
+    private static TDelegate CompileC99<TDelegate>(string source, bool useGrammarDispatch = false)
+        where TDelegate : Delegate {
         var reader = new C99TokenReader(source);
-        var fn = new C99Parser(reader).ParseFunction();
+        var fn = new C99Parser(reader, useGrammarDispatch).ParseFunction();
         var invokeMethod = typeof(TDelegate).GetMethod("Invoke")
             ?? throw new InvalidOperationException($"Delegate type {typeof(TDelegate).Name} does not expose an Invoke method.");
 
@@ -766,6 +906,15 @@ public class C99ParserInterpreterTests {
         return linqDelegate;
     }
 
+    /// <summary>GIP dual-run: hand RD dispatch vs Matcher structure dispatch; same execute results.</summary>
+    private static async Task AssertDualRunEqualAsync<TDelegate>(string source, Func<TDelegate, Task> exercise)
+        where TDelegate : Delegate {
+        var rd = CompileC99<TDelegate>(source, useGrammarDispatch: false);
+        var grammar = CompileC99<TDelegate>(source, useGrammarDispatch: true);
+        await exercise(rd);
+        await exercise(grammar);
+    }
+
     /// <summary>Compile C99 source through the VM pipeline (VmCompiler) instead of LinqExpressionGenerator.</summary>
     // CompileC99ViaVm removed — VmCompiler was deleted during instruction consolidation.
     // The VM no longer uses separate compilation for C99; use LinqExpressionGenerator path.
@@ -773,6 +922,153 @@ public class C99ParserInterpreterTests {
     // =========================================================================
     // Tests
     // =========================================================================
+
+    // ── GIP dual-run (hand RD vs Matcher structure dispatch) ───────────────
+
+    [Test]
+    public async Task DualRun_Add_RdAndGrammar_SameResults() {
+        const string source = """
+            int add(int a, int b) {
+                return a + b;
+            }
+            """;
+        await AssertDualRunEqualAsync<Func<int, int, int>>(source, async add => {
+            await Assert.That(add(3, 7)).IsEqualTo(10);
+            await Assert.That(add(-5, 5)).IsEqualTo(0);
+        });
+    }
+
+    [Test]
+    public async Task DualRun_FactorialWhile_RdAndGrammar_SameResults() {
+        const string source = """
+            int factorial(int n) {
+                int result = 1;
+                int i = 2;
+                while (i <= n) {
+                    result = result * i;
+                    i = i + 1;
+                }
+                return result;
+            }
+            """;
+        await AssertDualRunEqualAsync<Func<int, int>>(source, async f => {
+            await Assert.That(f(0)).IsEqualTo(1);
+            await Assert.That(f(5)).IsEqualTo(120);
+            await Assert.That(f(10)).IsEqualTo(3628800);
+        });
+    }
+
+    [Test]
+    public async Task DualRun_FibonacciFor_RdAndGrammar_SameResults() {
+        const string source = """
+            int fib(int n) {
+                int a = 0;
+                int b = 1;
+                int i = 0;
+                int t = 0;
+                for (i = 0; i < n; i = i + 1) {
+                    t = b;
+                    b = a + b;
+                    a = t;
+                }
+                return a;
+            }
+            """;
+        await AssertDualRunEqualAsync<Func<int, int>>(source, async f => {
+            await Assert.That(f(0)).IsEqualTo(0);
+            await Assert.That(f(10)).IsEqualTo(55);
+        });
+    }
+
+    [Test]
+    public async Task DualRun_MaxIf_TernaryAbs_Logical_RdAndGrammar_SameResults() {
+        await AssertDualRunEqualAsync<Func<int, int, int>>("""
+            int max(int a, int b) {
+                int r = a;
+                if (b > a) {
+                    r = b;
+                }
+                return r;
+            }
+            """, async max => {
+            await Assert.That(max(3, 7)).IsEqualTo(7);
+            await Assert.That(max(7, 3)).IsEqualTo(7);
+        });
+        await AssertDualRunEqualAsync<Func<int, int>>("""
+            int abs(int x) {
+                return x < 0 ? -x : x;
+            }
+            """, async abs => {
+            await Assert.That(abs(-5)).IsEqualTo(5);
+            await Assert.That(abs(5)).IsEqualTo(5);
+        });
+        await AssertDualRunEqualAsync<Func<int, int>>("""
+            int isEven(int n) {
+                int r = 0;
+                if (n >= 0 && n % 2 == 0) {
+                    r = 1;
+                }
+                return r;
+            }
+            """, async isEven => {
+            await Assert.That(isEven(4)).IsEqualTo(1);
+            await Assert.That(isEven(3)).IsEqualTo(0);
+        });
+    }
+
+    [Test]
+    public async Task DualRun_StructAndDesignators_RdAndGrammar_SameResults() {
+        await AssertDualRunEqualAsync<Func<C99Point, int>>("""
+            struct C99Point {
+                int x;
+                int y;
+            };
+
+            int sum(struct C99Point p) {
+                return p.x + p.y;
+            }
+            """, async sum => {
+            await Assert.That(sum(new C99Point(3, 4))).IsEqualTo(7);
+        });
+        await AssertDualRunEqualAsync<Func<int>>("""
+            struct C99Point {
+                int x;
+                int y;
+            };
+
+            int eval() {
+                struct C99Point p = { .x = 7, .y = 9 };
+                return p.x * 10 + p.y;
+            }
+            """, async eval => {
+            await Assert.That(eval()).IsEqualTo(79);
+        });
+        await AssertDualRunEqualAsync<Func<int>>("""
+            int eval() {
+                int values[] = { [0] = 3, [2] = 5, [4] = 8 };
+                return values[0] + values[1] + values[2] + values[3] + values[4];
+            }
+            """, async eval => {
+            await Assert.That(eval()).IsEqualTo(16);
+        });
+    }
+
+    [Test]
+    public async Task DualRun_NamespaceReject_GrammarPath_SameMessage() {
+        const string source = """
+            namespace math {
+                int add(int a, int b) {
+                    return a + b;
+                }
+            }
+            """;
+        await Assert.That(() => CompileC99<Func<int, int, int>>(source, useGrammarDispatch: false))
+            .Throws<InvalidOperationException>()
+            .WithMessage("C99 does not support namespaces.");
+        await Assert.That(() => CompileC99<Func<int, int, int>>(source, useGrammarDispatch: true))
+            .Throws<InvalidOperationException>()
+            .WithMessage("C99 does not support namespaces.");
+    }
 
     [Test]
     public async Task Add_TwoIntParameters_ReturnsSum() {

@@ -8,12 +8,12 @@ Source: `docs/plans/grammar-integration.md`
 - [x] Silent trace: full API surface of `Poly.Grammar`, DSL pipeline, annotation system, JSON parser, test grammars
 - [x] Repair pre-existing suite regressions (stage-action invoke resolution in `EffectAnalyzer` + test fixtures) — suite green before GI-1
 
-## GI-preflight (C99) — still open
+## GI-preflight (C99) — done (2026-08-07)
 
-- [ ] GIP-0 inventory C99 subset surface
-- [ ] GIP-1 `Grammar<C99TokenKind>` for supported subset
-- [ ] GIP-2 Matcher handlers dual-run vs hand `C99Parser`
-- [ ] GIP-3 gaps doc → feed expression strategy
+- [x] GIP-0 inventory C99 subset surface — `docs/plans/gi-preflight-c99-notes.md`
+- [x] GIP-1 `C99Grammar` structure patterns (top + block-item); expr stays RD (E2 hybrid)
+- [x] GIP-2 dual-run: `useGrammarDispatch` vs hand RD — same execute results (`DualRun_*` tests)
+- [x] GIP-3 gaps → prefer hybrid for product cutover; E1 still needed before temporal pack
 
 ## GI-1 — DslTokenReader (tokenizer port)
 

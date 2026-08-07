@@ -1161,9 +1161,21 @@ public sealed class PolyDslParser {
             }
         }
 
-        // RelName PropName — consume the property name
+        // RelName PropName — consume the property name (or next hop for multi-hop path-prefix)
         Advance(); // consume the property name
         var propName = next;
+
+        // P2: multi-hop to-one path-prefix — `loan book Title is "X"` becomes
+        // RelationshipNav(loan, RelationshipNav(book, Comparison(Title, …))).
+        // When another identifier follows (not a comparison), treat propName as the
+        // next hop relationship and recurse.
+        if (_current.Kind == TokenKind.Identifier
+            && !string.Equals(_current.Text, "exists", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(_current.Text, "where", StringComparison.OrdinalIgnoreCase)
+            && !IsComparisonOp(_current.Kind)) {
+            return DomainExpression.RelationshipNav(relName, ParseRelatedAccess(propName));
+        }
+
         var propExpr = DomainExpression.Property(propName);
 
         // Check for comparison operator — RelName PropName op value

@@ -274,13 +274,15 @@ internal sealed class PolicyConstraintAnalyzer : INodeAnalyzer {
             return;
         }
 
-        // Q1'''''.4: Validate body property references against the target entity
+        // Q1'''''.4 + P2: Validate body against target; recurse nested path-prefix hops.
         ValidateRelatedBodyProperties(context, lookup, rn, relationship);
     }
 
     /// <summary>
     /// Validates that the TargetProperty of a RelationshipNavigation references
-    /// valid properties on the target entity type.
+    /// valid properties on the target entity type. Nested
+    /// <see cref="RelationshipNavigation"/> hops are validated as path-prefix
+    /// from the target entity (P2 multi-hop).
     /// </summary>
     private static void ValidateRelatedBodyProperties(
         AnalysisContext context,
@@ -292,6 +294,12 @@ internal sealed class PolicyConstraintAnalyzer : INodeAnalyzer {
             || targetType is not Entity targetEntity)
             return;
 
+        // Nested hop: validate as path-prefix from the related entity (P2).
+        if (rn.TargetProperty is RelationshipNavigation nested) {
+            ValidateRelationshipCardinality(context, lookup, nested, targetEntity);
+            return;
+        }
+
         // Build property map for target entity
         var targetPropMap = BuildPropertyMap(targetEntity);
 
@@ -301,8 +309,8 @@ internal sealed class PolicyConstraintAnalyzer : INodeAnalyzer {
 
     /// <summary>
     /// Recursively validates PropertyAccess nodes in the body expression against
-    /// the target entity's property map. Skips nested RelationshipNavigation
-    /// (those would be validated separately).
+    /// the target entity's property map. Nested RelationshipNavigation is handled
+    /// by <see cref="ValidateRelatedBodyProperties"/> (hop recursion).
     /// </summary>
     private static void ValidateRelatedPropertyAccess(
         AnalysisContext context,
@@ -319,7 +327,7 @@ internal sealed class PolicyConstraintAnalyzer : INodeAnalyzer {
                 }
                 return;
             case RelationshipNavigation:
-                // Nested navigation — skip (validated separately)
+                // Nested hop validated via ValidateRelatedBodyProperties.
                 return;
             case ParameterAccess:
                 return;

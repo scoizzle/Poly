@@ -334,11 +334,28 @@ public sealed record DomainEntityInstance {
             ? BuildActionScopedTypeDefAnalyzer(action)
             : _typeDefAnalyzer;
 
+        var createdBefore = _createdChildren.Count;
         foreach (var effect in action.Effects) {
             ExecuteEffect(effect, effectPass, effectTypeProvider);
         }
 
-        return ActionInvocationResult.Ok(actionName, CurrentStage);
+        // P3: declared -> Entity return = last child created this invoke of that type.
+        DomainEntityInstance? resultInstance = null;
+        string? resultTypeName = null;
+        if (action.Result.Members.Count > 0) {
+            resultTypeName = action.Result.Members[0].Type.TypeName;
+            for (var i = _createdChildren.Count - 1; i >= createdBefore; i--) {
+                if (string.Equals(_createdChildren[i].Entity.Name, resultTypeName, StringComparison.Ordinal)) {
+                    resultInstance = _createdChildren[i];
+                    break;
+                }
+            }
+            if (resultInstance is null) {
+                return ActionInvocationResult.MissingReturn(actionName, resultTypeName);
+            }
+        }
+
+        return ActionInvocationResult.Ok(actionName, CurrentStage, resultInstance, resultTypeName);
     }
 
     /// <summary>
@@ -529,7 +546,7 @@ public sealed record DomainEntityInstance {
                 }
             }
             else {
-                nestedResult = ActionInvocationResult.Ok(invoke.ActionName, CurrentStage);
+                nestedResult = ActionInvocationResult.Ok(invoke.ActionName, CurrentStage, null, null);
                 foreach (var t in targets) {
                     var r = t.InvokeAction(invoke.ActionName, chainedArgs);
                     if (!r.Succeeded) {
@@ -1137,22 +1154,39 @@ public sealed record DomainEntityInstance {
             DomainExpression.Literal(_instance.EvaluateCountExpr(e));
 
         protected override DomainExpression RelationshipNavigation(RelationshipNavigation r) {
-            // Singular path-prefix: exactly one linked target (to-one product shape).
+            // Singular path-prefix (to-one hops). Nested navs (loan book Title) hop
+            // on the linked target — not re-routed on the original instance (P2).
             // Use quantifiers (any/all) for collections — never pick targets[0] silently.
-            var targets = _instance.GetOutboundRelatedInstances(r.RelationshipName);
+            var result = EvaluatePathPrefixChain(r, _instance);
+            return DomainExpression.Literal(result);
+        }
+
+        /// <summary>
+        /// Walk to-one path-prefix hops; evaluate the leaf expression on the final bag.
+        /// </summary>
+        private static object? EvaluatePathPrefixChain(
+            RelationshipNavigation r, DomainEntityInstance source) {
+            var targets = source.GetOutboundRelatedInstances(r.RelationshipName);
             if (targets.Count == 0)
                 throw new InvalidOperationException(
-                    $"No linked instances found for relationship '{r.RelationshipName}' on entity '{_instance.Entity.Name}'.");
+                    $"No linked instances found for relationship '{r.RelationshipName}' on entity '{source.Entity.Name}'.");
             if (targets.Count > 1)
                 throw new InvalidOperationException(
                     $"Path-prefix on relationship '{r.RelationshipName}' requires exactly one linked target " +
-                    $"(found {targets.Count} on entity '{_instance.Entity.Name}'). Use any/all quantifiers for collections.");
+                    $"(found {targets.Count} on entity '{source.Entity.Name}'). Use any/all quantifiers for collections.");
 
-            // Recurse into the target property only (the original passed the
-            // preprocessed TargetProperty to EvaluateBodyOnTarget — not the nav).
-            var inner = Route(r.TargetProperty);
-            var result = EvaluateBodyOnTarget(inner, targets[0]);
-            return DomainExpression.Literal(result);
+            var hop = targets[0];
+            if (r.TargetProperty is RelationshipNavigation nested)
+                return EvaluatePathPrefixChain(nested, hop);
+
+            // Leaf (comparison, property, etc.) on the final hop instance.
+            var pass = new DomainExpressionLoweringPass();
+            var lowered = pass.Lower(r.TargetProperty,
+                new Parameter("entity", new TypeReference(hop.Entity.Name)));
+            var compiled = Interpreter.Compile(lowered, hop._typeDefAnalyzer);
+            using var exec = Interpreter.Execute(compiled,
+                s => s.SetArgs(new object?[] { hop._values }));
+            return exec.Result.GetValue<object>();
         }
 
         protected override DomainExpression Exists(Exists e) {
@@ -1296,10 +1330,34 @@ public sealed record ActionInvocationResult {
     /// <summary>Error message for not-found action.</summary>
     public string? ErrorMessage { get; private init; }
 
-    internal static ActionInvocationResult Ok(string actionName, string? newStage) => new() {
+    /// <summary>
+    /// When the action declared <c>-&gt; EntityType</c> and succeeded, the created
+    /// instance of that type from this invoke (product vertical). Null for void actions.
+    /// </summary>
+    public DomainEntityInstance? ResultInstance { get; private init; }
+
+    /// <summary>Declared return type name when a result instance is present (or missing-return error).</summary>
+    public string? ResultTypeName { get; private init; }
+
+    internal static ActionInvocationResult Ok(
+        string actionName,
+        string? newStage,
+        DomainEntityInstance? resultInstance = null,
+        string? resultTypeName = null) => new() {
+            ActionName = actionName,
+            Succeeded = true,
+            NewStage = newStage,
+            ResultInstance = resultInstance,
+            ResultTypeName = resultTypeName ?? resultInstance?.Entity.Name
+        };
+
+    internal static ActionInvocationResult MissingReturn(string actionName, string expectedType) => new() {
         ActionName = actionName,
-        Succeeded = true,
-        NewStage = newStage
+        Succeeded = false,
+        ResultTypeName = expectedType,
+        ErrorMessage =
+            $"Action '{actionName}' declared return type '{expectedType}' but no create/create-in " +
+            "produced an instance of that type during this invoke."
     };
 
     internal static ActionInvocationResult Blocked(string actionName, List<string> failures) => new() {

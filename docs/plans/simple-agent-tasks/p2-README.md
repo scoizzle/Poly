@@ -5,8 +5,7 @@
 **Gate:** [`p2-gate.md`](./p2-gate.md)  
 **Pre-ship:** [`../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md`](../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md)  
 
-**Status:** Ready — admit **after p3 gate** (user order: B then C).  
-**Not CURRENT until p3 Done.**
+**Status:** **DONE** 2026-08-06 — multi-hop to-one path-prefix parse + preprocess + analysis + goldens + guide.
 
 ---
 
@@ -57,12 +56,12 @@ suite=docs/plans/simple-agent-tasks/p2-README.md  mode=until-done
 
 | ID | File | Size | Status |
 |----|------|------|--------|
-| **0** | [`p2-0-design-lock.md`](./p2-0-design-lock.md) | S | `[ ]` |
-| **1** | [`p2-1-analysis-hops.md`](./p2-1-analysis-hops.md) | M | `[ ]` |
-| **2** | [`p2-2-preprocess-runtime.md`](./p2-2-preprocess-runtime.md) | M | `[ ]` |
-| **3** | [`p2-3-golden.md`](./p2-3-golden.md) | M | `[ ]` |
-| **4** | [`p2-4-guide.md`](./p2-4-guide.md) | S | `[ ]` |
-| **G** | [`p2-gate.md`](./p2-gate.md) | S | `[ ]` |
+| **0** | [`p2-0-design-lock.md`](./p2-0-design-lock.md) | S | `[x]` |
+| **1** | [`p2-1-analysis-hops.md`](./p2-1-analysis-hops.md) | M | `[x]` |
+| **2** | [`p2-2-preprocess-runtime.md`](./p2-2-preprocess-runtime.md) | M | `[x]` |
+| **3** | [`p2-3-golden.md`](./p2-3-golden.md) | M | `[x]` |
+| **4** | [`p2-4-guide.md`](./p2-4-guide.md) | S | `[x]` |
+| **G** | [`p2-gate.md`](./p2-gate.md) | S | `[x]` |
 
 ---
 

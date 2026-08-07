@@ -297,12 +297,26 @@ Tag: action (value: Text) {
 }
 ```
 
-Return type (optional) appears after parameters using `-> TypeName`:
+Return type (optional) appears after parameters using `-> TypeName`.
+
+**Product path (entity return):** `-> EntityType` is supported when the action body
+**creates** that type (`create Type {…}` or `create in Rel {…}`). Runtime
+`InvokeAction` returns the created instance; MCP `invoke_action` exposes
+`returnTypeName` and `returnInstanceId` for the registered child.
 
 ```poly
-ComputeDiscount: action (total: Number) -> Number {
-  assign Result to total * 0.1
+PlaceOrder: action -> Order {
+  create in orders { Total: 100 }
 }
+```
+
+Analysis **rejects** (DMEFF009) a declared `-> EntityType` when no create/create-in
+produces that entity. Primitive returns (`-> Number`) and “last assign is return”
+are **not** product — prefer entity create return or void.
+
+```poly
+// Not product: -> Number from assign alone (analysis error)
+// ComputeDiscount: action (total: Number) -> Number { assign Result to total * 0.1 }
 ```
 
 Effects in an action body:
@@ -616,7 +630,7 @@ against the target entity; reverse-side / self-rel / ManyToMany / OneToOne rejec
 - **Path-prefix / owned / quantifier / Rel exists** require a store + links when the name is an outbound relationship. Ownership (`SourceOwnsTarget`) is a modeling flag; evaluation uses the same outbound links as path-prefix / many.
 
   **Dual evaluation path (do not conflate):**
-  - **Store + link (product path):** `create_instance` → `link_instances` → `evaluate_policy(…, instanceId=…)` **or** action/entry/exit/`if` bodies on store-attached instances. Resolves **singular path-prefix**, **Q3′ quantifiers**, and **`Rel exists` / `not Rel exists`** against store outbound links. **Fail closed:** missing store/domain metadata throws. Empty links: path-prefix throws; `Rel exists` → **false**; `not Rel exists` → **true**. Bare path-prefix on `many` is analysis-rejected (use `any`/`all`); multi-link to-one path-prefix throws at eval.
+  - **Store + link (product path):** `create_instance` → `link_instances` → `evaluate_policy(…, instanceId=…)` **or** action/entry/exit/`if` bodies on store-attached instances. Resolves **singular path-prefix** (including **to-one multi-hop** e.g. `loan book Title is "Classic"`), **Q3′ quantifiers**, and **`Rel exists` / `not Rel exists`** against store outbound links. **Fail closed:** missing store/domain metadata throws. Empty links: path-prefix throws; `Rel exists` → **false**; `not Rel exists` → **true**. Bare path-prefix on `many` is analysis-rejected (use `any`/`all`); multi-link at any hop throws at eval.
   - **Standalone bag:** `evaluate_policy(age=…)` / `properties=…` — **local expressions only**. Non-relationship `Exists(PropertyAccess)` still bag-null-lowers; relationship-named `Rel exists` requires store (throws without it).
 
   For agent workflows: use `instanceId` + store + link for path-prefix, owned, quantifiers, and relationship `exists`.
@@ -627,11 +641,10 @@ against the target entity; reverse-side / self-rel / ManyToMany / OneToOne rejec
 - Invoke effect (`invoke ActionName` with optional arguments; cross-entity via `invoke RelName.ActionName`; quantifiers `any`/`all`; filter `where`)
 - Action parameters (`actionName: action (param: Type, ...)`)
 - `default` and `enum` constraints
-- Owned navigation declaration (`rel: owned Entity`) + **single-hop** path-prefix policy reads over owned/to-one links (store + `link_instances` required)
+- Owned navigation declaration (`rel: owned Entity`) + **to-one path-prefix** policy reads (single-hop and multi-hop chains; store + `link_instances` required)
 
 **Not yet shipped** (planned for future phases / residual gaps):
 - Date operations
-- **Multi-hop nested owned** (e.g. `customer profile City` / owned-of-owned path-prefix runtime honesty)
 - **Product DSL for IR-only `OwnedAccess`** (nested value-doc shape) — path-prefix → `RelationshipNavigation` is the product authoring surface; do not treat bag `OwnedAccess` as a second policy product path
 - Dedicated many-owned policy demos beyond Q3′ quantifiers on plain `many` (ownership flag is unused at eval; use `any`/`all`/`none`/`count` on `many owned` the same way)
 
@@ -642,11 +655,11 @@ and lowering pipeline but are **not yet authorable in product DSL**:
 
 | Capability | IR exists | DSL status | Notes |
 |------------|-----------|------------|-------|
-| Relationship navigation | ✅ | ✅ **shipped** (path-prefix) | `customer Tier`, not `customer.Tier`; **store + link** at `evaluate_policy` |
+| Relationship navigation | ✅ | ✅ **shipped** (path-prefix) | `customer Tier`, multi-hop `loan book Title is "X"` (to-one hops only); **store + link** at `evaluate_policy` |
 | Existence check | ✅ | ✅ **shipped** (postfix `Rel exists`) | Store outbound-link presence for relationship names; fail-closed without store; empty → false |
 | Scoped filter (`where`) | ✅ | ✅ **shipped** (`rel where and-chain`) | `customer where Status is "Active"` |
 | Owned / related single-hop | ✅ | ✅ **shipped** (path-prefix) | `profile City is "Metropolis"` — same space-delimited syntax as to-one nav; **requires store + link** at `evaluate_policy` |
-| Nested multi-hop owned | 🟡 | ❌ **not shipped** | Multi-level composition (owned of owned) is not a product runtime claim |
+| Nested multi-hop path-prefix | ✅ | ✅ **shipped** (to-one hops) | `loan book Title is "Classic"`; many-middle requires `any`/`all` quantifiers |
 | Collection quantifiers (`any`/`all`/`none`/`count`) | ✅ | ✅ **Q3′ shipped** | `any items where Status is "Open"`; store-aware runtime eval before VM lowering. |
 | Arithmetic (`+`, `-`, `*`, `/`) | ✅ | ✅ **shipped** | `Total + 5 > 10`, `Total * 0.9` |
 | Action parameters | ✅ | ✅ **shipped** | `actionName: action (param: Text) { ... }` |

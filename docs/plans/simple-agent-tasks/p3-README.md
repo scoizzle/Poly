@@ -6,7 +6,7 @@
 **Gate:** [`p3-gate.md`](./p3-gate.md)  
 **Pre-ship:** [`../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md`](../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md)  
 
-**Status:** Ready — **CURRENT first** after pipeline (admit before P2).  
+**Status:** **DONE** 2026-08-06 — entity `-> Type` create return + analysis DMEFF009 + MCP returnInstanceId.  
 **Not:** P1 temporal (parked research). **Not:** full type system / generics.
 
 ---
@@ -57,12 +57,12 @@ suite=docs/plans/simple-agent-tasks/p3-README.md  mode=until-done
 
 | ID | File | Size | Status |
 |----|------|------|--------|
-| **0** | [`p3-0-inventory.md`](./p3-0-inventory.md) | S | `[ ]` |
-| **1** | [`p3-1-analysis-require-producer.md`](./p3-1-analysis-require-producer.md) | M | `[ ]` |
-| **2** | [`p3-2-runtime-golden.md`](./p3-2-runtime-golden.md) | M | `[ ]` |
-| **3** | [`p3-3-mcp-honesty.md`](./p3-3-mcp-honesty.md) | S | `[ ]` |
-| **4** | [`p3-4-guide.md`](./p3-4-guide.md) | S | `[ ]` |
-| **G** | [`p3-gate.md`](./p3-gate.md) | S | `[ ]` |
+| **0** | [`p3-0-inventory.md`](./p3-0-inventory.md) | S | `[x]` |
+| **1** | [`p3-1-analysis-require-producer.md`](./p3-1-analysis-require-producer.md) | M | `[x]` |
+| **2** | [`p3-2-runtime-golden.md`](./p3-2-runtime-golden.md) | M | `[x]` |
+| **3** | [`p3-3-mcp-honesty.md`](./p3-3-mcp-honesty.md) | S | `[x]` |
+| **4** | [`p3-4-guide.md`](./p3-4-guide.md) | S | `[x]` |
+| **G** | [`p3-gate.md`](./p3-gate.md) | S | `[x]` |
 
 ---
 

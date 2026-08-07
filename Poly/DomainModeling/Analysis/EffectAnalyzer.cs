@@ -53,12 +53,79 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
                 ValidateEffects(context, action.Effects, action, entity, domain, lookup);
                 ValidateUnsatisfiedRequirements(context, action, entity, lookup);
                 ValidateActionParameterUsage(context, action);
+                ValidateActionReturnProducer(context, action, entity, domain, lookup);
             }
             foreach (var stage in entity.Stages) {
                 ValidateEffects(context, stage.OnEntryEffects, null, entity, domain, lookup);
                 ValidateEffects(context, stage.OnExitEffects, null, entity, domain, lookup);
+                foreach (var action in stage.Actions) {
+                    ValidateEffects(context, action.Effects, action, entity, domain, lookup);
+                    ValidateUnsatisfiedRequirements(context, action, entity, lookup);
+                    ValidateActionParameterUsage(context, action);
+                    ValidateActionReturnProducer(context, action, entity, domain, lookup);
+                }
             }
         });
+    }
+
+    /// <summary>
+    /// P3: non-void <c>-&gt; T</c> requires a create / create-in that produces entity type T
+    /// (product vertical — not primitive assign-as-return).
+    /// </summary>
+    private static void ValidateActionReturnProducer(
+        AnalysisContext context,
+        Action action,
+        Entity entity,
+        Domain domain,
+        DomainTypeLookupMetadata lookup) {
+        if (action.Result.Members.Count == 0) return;
+
+        var expectedType = action.Result.Members[0].Type.TypeName;
+        if (lookup.Types.TryGetValue(expectedType, out var dt) && dt is not Entity) {
+            context.ReportError(
+                action,
+                $"Action '{action.Name}' declares return type '{expectedType}', but only entity " +
+                "returns produced by create / create-in are supported on the product path.",
+                DomainModelDiagnosticCodes.EffectReturnWithoutProducer);
+            return;
+        }
+
+        if (ActionEffectsProduceEntityType(context, domain, entity, action.Effects, expectedType, lookup))
+            return;
+
+        context.ReportError(
+            action,
+            $"Action '{action.Name}' declares return type '{expectedType}' but no create or " +
+            $"create-in effect produces an instance of '{expectedType}'.",
+            DomainModelDiagnosticCodes.EffectReturnWithoutProducer);
+    }
+
+    private static bool ActionEffectsProduceEntityType(
+        AnalysisContext context,
+        Domain domain,
+        Entity sourceEntity,
+        IReadOnlyList<Effect> effects,
+        string expectedType,
+        DomainTypeLookupMetadata lookup) {
+        foreach (var effect in FlattenEffects(effects)) {
+            switch (effect) {
+                case CreateEntityInstance cei
+                    when string.Equals(cei.Type.TypeName, expectedType, StringComparison.Ordinal):
+                    return true;
+                case CreateEntityInRelationshipEffect createIn: {
+                        if (createIn.ResolvedTargetType is not null
+                            && string.Equals(createIn.ResolvedTargetType.TypeName, expectedType, StringComparison.Ordinal))
+                            return true;
+                        if (TryResolveRelationship(context, domain, createIn.RelationshipName, createIn, out var rel)
+                            && rel is not null
+                            && string.Equals(rel.Target.TypeName, expectedType, StringComparison.Ordinal)
+                            && string.Equals(rel.Source.TypeName, sourceEntity.Name, StringComparison.Ordinal))
+                            return true;
+                        break;
+                    }
+            }
+        }
+        return false;
     }
 
     /// <summary>

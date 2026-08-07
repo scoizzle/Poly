@@ -50,6 +50,9 @@ internal static class DomainModelDiagnosticCodes {
     /// Assigned value violates property constraints (range, length, pattern, enum, required).
     public const string EffectConstraintViolation = "DMEFF008";
 
+    /// Action declares <c>-&gt; T</c> but no create/create-in produces entity type T.
+    public const string EffectReturnWithoutProducer = "DMEFF009";
+
     // ── Aggregate / ownership diagnostics (APM Phase B) ────────
 
     /// Non-root entity has no aggregate parent — potentially orphaned.

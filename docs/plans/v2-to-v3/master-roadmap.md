@@ -52,16 +52,16 @@ MCP / direct API as thin consumers
 ### Agent pick (one line)
 
 ```text
-DONE:    M1–M4; Q1′+Q3′+link; infra IR; domain catalog; peer/entity-level when/owned; store-aware Rel exists; dogfood w1+w2; amu; p4 when any/all; coh Runtime/dispatch
-CURRENT: p3 — action return-type honesty (docs/plans/simple-agent-tasks/p3-README.md)
-THEN:    p2 — multi-hop path-prefix (p2-README.md) after p3 gate
-PARKED:  P1 temporal (research only: docs/plans/p1-temporal-research.md); P5+; grammar; actors/schedule; DAU deepen
+DONE:    M1–M4; Q1′+Q3′+link; infra IR; catalog; peer/entity when/owned; exists; dogfood w1+w2; amu; p4 any/all; coh; **p3 return entity**; **p2 multi-hop path-prefix**
+CURRENT: (none)
+THEN:    P1 temporal research only until explicit admit
+PARKED:  P1 temporal (docs/plans/p1-temporal-research.md); P5+; grammar; actors/schedule; DAU deepen
 PULL:    Q4; link DSL; E5; Bar B
 ```
 
-**Honest product claim today:** Path-prefix / exists / where **and** Q3′ quantifiers; `when any|all`; peer `as`; entity-level when; owned policies; catalog monopath. MCP create→link→evaluate_policy. **No** multi-hop path-prefix product claim yet (P2). **No** temporal DSL authoring (P1 research). **Return types** partially authorable — P3 hardens e2e honesty.
+**Honest product claim today:** Path-prefix (incl. **to-one multi-hop** e.g. `loan book Title is "X"`) / exists / where / Q3′; `when any|all`; peer `as`; entity-level when; owned policies; catalog monopath. Action `-> Entity` from create/create-in returns instance (MCP `returnInstanceId`). **No** temporal DSL authoring (P1 research). **No** primitive action returns.
 
-**Focus (2026-08-06):** Admit **P3 then P2**. Do **not** start P1 implementation; concept/spike only via `p1-temporal-research.md`.
+**Focus (2026-08-06):** P3+P2 product slices shipped. P1 stays research-only.
 
 ---
 

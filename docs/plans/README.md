@@ -40,14 +40,10 @@ Architectural rationale → **`docs/decisions/`**. Module maps → **`Poly/*/REA
 
 | Suite | Queue | Status |
 |-------|--------|--------|
-| **p3** return types | [`simple-agent-tasks/p3-README.md`](simple-agent-tasks/p3-README.md) | **CURRENT** |
-| **p2** multi-hop | [`simple-agent-tasks/p2-README.md`](simple-agent-tasks/p2-README.md) | Ready after p3 gate |
+| **p3** return types | [`simple-agent-tasks/p3-README.md`](simple-agent-tasks/p3-README.md) | **DONE** 2026-08-06 |
+| **p2** multi-hop | [`simple-agent-tasks/p2-README.md`](simple-agent-tasks/p2-README.md) | **DONE** 2026-08-06 |
 
-```bash
-copilot --agent plan-suite-until-done -p "Suite: p3. Mode: until-done."
-# after p3 gate:
-copilot --agent plan-suite-until-done -p "Suite: p2. Mode: until-done."
-```
+**CURRENT:** `(none)` — next admit is explicit (P1 research track only until locks).
 
 ## Completed pipeline (historical)
 

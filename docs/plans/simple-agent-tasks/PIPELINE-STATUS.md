@@ -1,17 +1,17 @@
 # Pipeline status
 
 **Updated:** 2026-08-06  
-**Current stage:** `p3` (return types)  
-**Last task:** _post-pipeline admit: P3 then P2; P1 research parked_  
+**Current stage:** `(none)`  
+**Last task:** _p3 + p2 orchestrated and gates closed_  
 **Blocker:** none
 
 ## Stages
 
 | Stage | Status |
 |-------|--------|
-| dogfood → amu → p4 → coh | `done` (historical SUITE-OF-SUITES) |
-| **p3** return types | `in_progress` / CURRENT — [`p3-README.md`](./p3-README.md) |
-| **p2** multi-hop | `pending` after p3 — [`p2-README.md`](./p2-README.md) |
+| dogfood → amu → p4 → coh | `done` |
+| **p3** return types | `done` — DMEFF009, ResultInstance, MCP returnInstanceId |
+| **p2** multi-hop | `done` — parse + preprocess hop chain + analysis + goldens |
 | **p1** temporal | `research only` — [`../p1-temporal-research.md`](../p1-temporal-research.md) |
 
 **Review:** [`../../agent/reviews/2026-08-06-pipeline-amu-p4-coh-dogfood.md`](../../agent/reviews/2026-08-06-pipeline-amu-p4-coh-dogfood.md)  

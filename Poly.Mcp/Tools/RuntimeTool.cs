@@ -91,7 +91,9 @@ internal sealed class RuntimeTool {
         [property: JsonPropertyName("succeeded")] bool Succeeded,
         [property: JsonPropertyName("newStage")] string? NewStage,
         [property: JsonPropertyName("failedGuards")] IReadOnlyList<string>? FailedGuards,
-        [property: JsonPropertyName("errorMessage")] string? ErrorMessage
+        [property: JsonPropertyName("errorMessage")] string? ErrorMessage,
+        [property: JsonPropertyName("returnTypeName")] string? ReturnTypeName = null,
+        [property: JsonPropertyName("returnInstanceId")] string? ReturnInstanceId = null
     );
 
     // ── RT.1: create_instance ──────────────────────────────────
@@ -535,7 +537,8 @@ The action pipeline:
 On stage transition, linked subscriber instances automatically fire their
 stage subscription effects (fan-out via DomainInstanceStore.NotifyTransition).
 
-Returns the result including new stage and any guard failures.")]
+Returns the result including new stage, any guard failures, and when the action
+declares -> EntityType and creates that type, returnTypeName + returnInstanceId.")]
     public static DomainToolResponse InvokeAction(
         [Description("Session ID")] string sessionId,
         [Description("Instance ID returned by create_instance")] string instanceId,
@@ -595,7 +598,8 @@ Returns the result including new stage and any guard failures.")]
         }
 
         // Register any newly created children in session InstanceMap so they
-        // appear in list_instances and get_instance.
+        // appear in list_instances and get_instance. Capture ids for P3 return.
+        string? returnInstanceId = null;
         if (result.Succeeded && instance.CreatedChildren.Count > 0) {
             var newChildren = new List<DomainEntityInstance>();
             foreach (var child in instance.CreatedChildren) {
@@ -612,8 +616,31 @@ Returns the result including new stage and any guard failures.")]
                         st.InstanceStore ??= new DomainInstanceStore();
                         st.InstanceStore.Add(child);
                         st.InstanceMap[childId] = child;
+                        if (result.ResultInstance is not null
+                            && ReferenceEquals(child, result.ResultInstance))
+                            returnInstanceId = childId;
                     }
                 });
+            }
+            else if (result.ResultInstance is not null) {
+                // Already registered earlier — find id by reference.
+                foreach (var (id, inst) in state.InstanceMap) {
+                    if (ReferenceEquals(inst, result.ResultInstance)) {
+                        returnInstanceId = id;
+                        break;
+                    }
+                }
+            }
+        }
+
+        // Re-read map if modify succeeded but local returnInstanceId missed (modify is sync).
+        if (returnInstanceId is null && result.ResultInstance is not null
+            && McpSessionStore.TryGet(sessionId, out var stateAfter)) {
+            foreach (var (id, inst) in stateAfter.InstanceMap) {
+                if (ReferenceEquals(inst, result.ResultInstance)) {
+                    returnInstanceId = id;
+                    break;
+                }
             }
         }
 
@@ -622,14 +649,20 @@ Returns the result including new stage and any guard failures.")]
             Succeeded: result.Succeeded,
             NewStage: result.NewStage,
             FailedGuards: result.FailedGuards.Count > 0 ? result.FailedGuards : null,
-            ErrorMessage: result.ErrorMessage
+            ErrorMessage: result.ErrorMessage,
+            ReturnTypeName: result.ResultTypeName,
+            ReturnInstanceId: returnInstanceId
         );
+
+        var successMessage = result.Succeeded
+            ? returnInstanceId is not null
+                ? $"Action '{actionName}' succeeded. Returned '{result.ResultTypeName}' as instance '{returnInstanceId}'. New stage: '{result.NewStage ?? "(unchanged)"}'."
+                : $"Action '{actionName}' succeeded. New stage: '{result.NewStage ?? "(unchanged)"}'."
+            : (result.ErrorMessage ?? $"Action '{actionName}' blocked by guards: {string.Join(", ", result.FailedGuards)}");
 
         return new DomainToolResponse(
             Success: result.Succeeded,
-            Message: result.Succeeded
-                ? $"Action '{actionName}' succeeded. New stage: '{result.NewStage ?? "(unchanged)"}'."
-                : (result.ErrorMessage ?? $"Action '{actionName}' blocked by guards: {string.Join(", ", result.FailedGuards)}"),
+            Message: successMessage,
             SessionId: sessionId,
             Data: new { invokeActionResult = resultData },
             Affordances: ["get_instance", "list_instances", "create_instance"]);

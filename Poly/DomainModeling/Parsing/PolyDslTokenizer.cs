@@ -2,7 +2,13 @@ using System.Globalization;
 
 namespace Poly.DomainModeling.Parsing;
 
-public enum TokenKind {
+using Token = Poly.DomainModeling.Parsing.LegacyToken;
+// GI-3: the parser now runs on DslTokenKind / DslTokenReader; the legacy names
+// are aliased so the scanner body reads unchanged. GI-7 removes both aliases
+// and this legacy scanner.
+using TokenKind = Poly.DomainModeling.Parsing.LegacyTokenKind;
+
+public enum LegacyTokenKind {
     EndOfFile,
     Identifier,
     Number,
@@ -72,7 +78,7 @@ public enum TokenKind {
     As,
 }
 
-public readonly record struct Token(TokenKind Kind, string Text, int Line, int Col);
+public readonly record struct LegacyToken(TokenKind Kind, string Text, int Line, int Col);
 
 /// <summary>
 /// Hand-written scanner for the Phase 1a Poly DSL.

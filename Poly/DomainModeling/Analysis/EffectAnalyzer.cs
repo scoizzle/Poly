@@ -760,6 +760,13 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
 
         var targetAction = targetEntity.Actions.FirstOrDefault(a =>
             string.Equals(a.Name, iae.ActionName, StringComparison.Ordinal));
+        // Stage actions are invokable targets too (self-invoke on a stage action,
+        // or cross-entity invoke of a stage action by name).
+        if (targetAction is null) {
+            targetAction = targetEntity.Stages
+                .SelectMany(s => s.Actions)
+                .FirstOrDefault(a => string.Equals(a.Name, iae.ActionName, StringComparison.Ordinal));
+        }
         if (targetAction is null) {
             context.ReportError(
                 iae,

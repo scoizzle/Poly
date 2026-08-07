@@ -3,18 +3,29 @@ using System.Globalization;
 using Poly.DomainModeling.Constraints;
 using Poly.DomainModeling.Effects;
 using Poly.DomainModeling.Evolution;
+using Poly.Grammar;
+
+using Token = Poly.Grammar.Token<Poly.DomainModeling.Parsing.DslTokenKind>;
+// GI-3: this file is ported onto the grammar engine. The legacy names are
+// aliased so the parse logic reads unchanged; GI-7 removes the legacy
+// enum/struct and these aliases.
+using TokenKind = Poly.DomainModeling.Parsing.DslTokenKind;
 
 namespace Poly.DomainModeling.Parsing;
 
 /// <summary>
-/// Recursive-descent parser for the Phase 1a Poly DSL.
+/// Grammar-table-driven parser for the Phase 1a Poly DSL.
 /// Produces <see cref="DomainChange"/> records for evolution application.
-/// Zero external dependencies — uses <see cref="PolyDslTokenizer"/>.
+/// Tokenization uses <see cref="DslTokenReader"/>; dispatch at each construct
+/// boundary is decided by the <see cref="Matcher{TKind}"/> over
+/// <see cref="DslGrammar"/>. Handlers remain strict validators (fail-closed).
 ///
 /// Expressions parse to existing <see cref="DomainExpression"/> nodes.
 /// </summary>
 public sealed class PolyDslParser {
-    private readonly PolyDslTokenizer _tokenizer;
+    private static readonly Grammar<DslTokenKind> _grammar = DslGrammar.Build();
+    private readonly DslTokenReader _tokenReader;
+    private readonly Matcher<DslTokenKind> _matcher;
     private Token _current;
     private string _domainName = "";
     private int _entityIndex;
@@ -62,8 +73,9 @@ public sealed class PolyDslParser {
         bool SourceOwnsTarget);
 
     public PolyDslParser(string text) {
-        _tokenizer = new PolyDslTokenizer(text);
-        _current = _tokenizer.Next();
+        _tokenReader = new DslTokenReader(text);
+        _matcher = new Matcher<DslTokenKind>(_grammar, _tokenReader);
+        _current = _tokenReader.Read();
     }
 
     /// <summary>
@@ -90,12 +102,18 @@ public sealed class PolyDslParser {
         // ── Enum type definitions + entity definitions ─────────
         // Parse entities and enum types in order; enum types must precede entities
         // that reference them for property type resolution.
+        // Dispatch is matcher-driven over the "top" rule; unmodeled shapes get
+        // the same targeted diagnostics ParseEntity would produce.
         while (_current.Kind == TokenKind.Identifier) {
-            if (IsNextTokenEnum()) {
-                ParseEnumType(changes);
-            }
-            else {
-                ParseEntity(changes);
+            switch (MatchRule("top")?.PatternName) {
+                case "enum":
+                    ParseEnumType(changes);
+                    break;
+                case "entity":
+                    ParseEntity(changes);
+                    break;
+                default:
+                    throw TopLevelRejection();
             }
         }
 
@@ -127,20 +145,8 @@ public sealed class PolyDslParser {
         _entityIndex++;
         Expect(TokenKind.Colon);
 
-        // Check for unsupported keyword before expecting 'entity'
-        if (_current.Kind == TokenKind.Identifier && _unsupportedKeywords.Contains(_current.Text)) {
-            throw new FormatException(
-                $"'{_current.Text}' is not supported in Phase 1a (use 'entity' instead)");
-        }
-
-        // Reject old inheritance syntax: Name: ParentName entity { ... }
-        if (_current.Kind == TokenKind.Identifier && PeekIs(TokenKind.Entity)) {
-            var parentName = _current.Text;
-            throw new FormatException(
-                $"Entity inheritance ('{entityName}: {parentName} entity') is no longer supported. " +
-                $"Define '{parentName}' properties directly on '{entityName}'.");
-        }
-
+        // The "top" rule guarantees this is 'entity'; unsupported-keyword and
+        // removed-inheritance shapes never reach this method (TopLevelRejection).
         Expect(TokenKind.Entity);
 
         _entityNames.Add(entityName);
@@ -173,75 +179,121 @@ public sealed class PolyDslParser {
             if (_current.Kind == TokenKind.Relationship) {
                 throw N2RelationshipNotSupported();
             }
-            else if (_current.Kind == TokenKind.When && PeekIs(TokenKind.Identifier)) {
-                // Entity-level subscription: when RelName TargetStage { effects }
-                ParseEntitySubscription(changes);
+
+            var match = MatchRule("entity-body");
+            if (match is not null) {
+                switch (match.PatternName) {
+                    case "entity-subscription":
+                        // Entity-level subscription: when RelName TargetStage { effects }
+                        ParseEntitySubscription(changes);
+                        continue;
+
+                    case "stage": {
+                            var name = ExpectIdentifier(TokenKind.Identifier, "stage name");
+                            Expect(TokenKind.Colon);
+                            ParseStage(name, changes);
+                            continue;
+                        }
+
+                    case "action": {
+                            var name = ExpectIdentifier(TokenKind.Identifier, "action name");
+                            Expect(TokenKind.Colon);
+                            ParseStandaloneAction(name, changes);
+                            continue;
+                        }
+
+                    case "policy": {
+                            var name = ExpectIdentifier(TokenKind.Identifier, "policy name");
+                            Expect(TokenKind.Colon);
+                            ParsePolicy(name, changes);
+                            continue;
+                        }
+
+                    case "legacy-action": {
+                            // Legacy: Name(params): action { … }
+                            var name = ExpectIdentifier(TokenKind.Identifier, "action name");
+                            var actionParams = ParseActionParameterList();
+                            Expect(TokenKind.Colon);
+                            if (_current.Kind is not (TokenKind.Action or TokenKind.LBrace or TokenKind.When or TokenKind.Require)) {
+                                throw Error($"Expected action after '{name}(...)', got '{_current.Text}'");
+                            }
+                            ParseActionBody(name, changes, stageName: null, actionParams);
+                            continue;
+                        }
+
+                    case "typed-line": {
+                            // Enum-typed property or bare (N1) navigation — resolved by
+                            // known enum names, mirroring the legacy IsNavLine dispatch.
+                            var name = ExpectIdentifier(TokenKind.Identifier, "property name");
+                            Expect(TokenKind.Colon);
+                            if (_enumTypeNames.Contains(_current.Text)) {
+                                // Typed property referencing an enum type, with optional constraints/facets
+                                var typeName = ExpectIdentifier(TokenKind.Identifier, "enum type name");
+                                TrackPropertyName(_currentEntityName, name);
+                                changes.Add(new AddPropertyToEntityChange(_currentEntityName,
+                                    new Property(name, new DomainTypeReference(typeName), [])));
+                                ParsePropertyTail(name, changes);
+                            }
+                            else if (IsNavLine()) {
+                                ParseNavLine(name);
+                            }
+                            else {
+                                CheckUnsupportedKeyword(name, _current.Text);
+                                throw Error($"Expected type, stage, action, policy, or navigation property after '{name}:'");
+                            }
+                            continue;
+                        }
+
+                    case "property": {
+                            var name = ExpectIdentifier(TokenKind.Identifier, "property name");
+                            Expect(TokenKind.Colon);
+                            ParseProperty(name, _current.Kind, changes);
+                            continue;
+                        }
+
+                    case "nav-many":
+                    case "nav-one":
+                    case "nav-owned": {
+                            var name = ExpectIdentifier(TokenKind.Identifier, "navigation property name");
+                            Expect(TokenKind.Colon);
+                            ParseNavLine(name);
+                            continue;
+                        }
+
+                    case "primitive-name": {
+                            // Primitive keyword used as property name (e.g. "Number: Text")
+                            var name = _current.Text;
+                            Advance(); // consume type keyword (e.g. 'Number')
+                            Expect(TokenKind.Colon);
+                            if (IsPrimitiveType(_current.Kind)) {
+                                ParseProperty(name, _current.Kind, changes);
+                            }
+                            else {
+                                throw Error($"Expected type after '{name}:', got '{_current.Text}'");
+                            }
+                            continue;
+                        }
+                }
             }
-            else if (_current.Kind == TokenKind.Identifier
-                     && (PeekIs(TokenKind.Colon) || PeekIs(TokenKind.LParen))) {
-                // Member form is Name: kind … (property/stage/action/policy/nav).
-                // Legacy Name(params): action is still accepted once; canonical is
-                // Name: action (params).
+
+            // Fallback: legacy action forms not modeled by the grammar table —
+            // 'Name: { … }', 'Name: when …', 'Name: require …' (the printer no
+            // longer emits these; kept for backward parse compatibility).
+            if (_current.Kind == TokenKind.Identifier && PeekIs(TokenKind.Colon)) {
                 var name = _current.Text;
                 Advance(); // consume identifier
-
-                if (_current.Kind == TokenKind.LParen) {
-                    // Legacy: Name(params): action { … }
-                    var actionParams = ParseActionParameterList();
-                    Expect(TokenKind.Colon);
-                    if (_current.Kind is not (TokenKind.Action or TokenKind.LBrace or TokenKind.When or TokenKind.Require)) {
-                        throw Error($"Expected action after '{name}(...)', got '{_current.Text}'");
-                    }
-                    ParseActionBody(name, changes, stageName: null, actionParams);
-                    continue;
-                }
-
                 Expect(TokenKind.Colon);
-
-                if (_current.Kind == TokenKind.Stage) {
-                    ParseStage(name, changes);
-                }
-                else if (_current.Kind == TokenKind.Action || _current.Kind == TokenKind.LBrace
-                         || _current.Kind == TokenKind.When || _current.Kind == TokenKind.Require) {
+                if (_current.Kind is TokenKind.LBrace or TokenKind.When or TokenKind.Require) {
                     ParseStandaloneAction(name, changes);
-                }
-                else if (_current.Kind == TokenKind.Policy) {
-                    ParsePolicy(name, changes);
-                }
-                else if (IsNavLine() && !_enumTypeNames.Contains(_current.Text)) {
-                    ParseNavLine(name);
-                }
-                else if (_current.Kind == TokenKind.Identifier && _enumTypeNames.Contains(_current.Text)) {
-                    // Typed property referencing an enum type, with optional constraints/facets
-                    var typeName = ExpectIdentifier(TokenKind.Identifier, "enum type name");
-                    TrackPropertyName(_currentEntityName, name);
-                    changes.Add(new AddPropertyToEntityChange(_currentEntityName,
-                        new Property(name, new DomainTypeReference(typeName), [])));
-                    ParsePropertyTail(name, changes);
-                }
-                else if (IsPrimitiveType(_current.Kind)) {
-                    ParseProperty(name, _current.Kind, changes);
                 }
                 else {
                     CheckUnsupportedKeyword(name, _current.Text);
                     throw Error($"Expected type, stage, action, policy, or navigation property after '{name}:'");
                 }
+                continue;
             }
-            else if (IsPrimitiveType(_current.Kind) && PeekIs(TokenKind.Colon)) {
-                // Primitive keyword used as property name (e.g. "Number: Text")
-                var name = _current.Text;
-                Advance(); // consume type keyword (e.g. 'Number')
-                Expect(TokenKind.Colon);
-                if (IsPrimitiveType(_current.Kind)) {
-                    ParseProperty(name, _current.Kind, changes);
-                }
-                else {
-                    throw Error($"Expected type after '{name}:', got '{_current.Text}'");
-                }
-            }
-            else {
-                throw Error($"Expected property, stage, action, or policy, got '{_current.Text}'");
-            }
+
+            throw Error($"Expected property, stage, action, or policy, got '{_current.Text}'");
         }
 
         Expect(TokenKind.RBrace);
@@ -352,10 +404,10 @@ public sealed class PolyDslParser {
     /// Current token must already be the keyword identifier.
     /// </summary>
     private bool LooksLikeAnnotationCall() {
-        if (_current.Kind != TokenKind.Identifier || _tokenizer.Peek(1).Kind != TokenKind.LParen)
+        if (_current.Kind != TokenKind.Identifier || _tokenReader.Peek(1).Kind != TokenKind.LParen)
             return false;
 
-        var firstArg = _tokenizer.Peek(2).Kind;
+        var firstArg = _tokenReader.Peek(2).Kind;
         return firstArg is TokenKind.StringLiteral
             or TokenKind.Number
             or TokenKind.True
@@ -381,43 +433,53 @@ public sealed class PolyDslParser {
         bool parsedExit = false;
 
         while (_current.Kind != TokenKind.RBrace) {
-            if (_current.Kind == TokenKind.Entry && !parsedEntry) {
-                parsedEntry = true;
-                Advance(); // consume 'entry'
-                Expect(TokenKind.LBrace);
-                while (_current.Kind != TokenKind.RBrace) {
-                    var effect = ParseEffect();
-                    changes.Add(new AddOnEntryEffectToStageChange(_currentEntityName, name, effect));
+            var match = MatchRule("stage-body");
+            if (match is not null) {
+                switch (match.PatternName) {
+                    case "entry":
+                        if (parsedEntry)
+                            throw Error($"'{_current.Text}' must appear at the beginning of the stage block, before actions and subscriptions.");
+                        parsedEntry = true;
+                        Advance(); // consume 'entry'
+                        Expect(TokenKind.LBrace);
+                        while (_current.Kind != TokenKind.RBrace) {
+                            var effect = ParseEffect();
+                            changes.Add(new AddOnEntryEffectToStageChange(_currentEntityName, name, effect));
+                        }
+                        Expect(TokenKind.RBrace);
+                        continue;
+
+                    case "exit":
+                        if (parsedExit)
+                            throw Error($"'{_current.Text}' must appear at the beginning of the stage block, before actions and subscriptions.");
+                        parsedExit = true;
+                        Advance(); // consume 'exit'
+                        Expect(TokenKind.LBrace);
+                        while (_current.Kind != TokenKind.RBrace) {
+                            var effect = ParseEffect();
+                            changes.Add(new AddOnExitEffectToStageChange(_currentEntityName, name, effect));
+                        }
+                        Expect(TokenKind.RBrace);
+                        continue;
+
+                    case "subscription":
+                        // Subscription: when RelName TargetStage { ... }
+                        ParseSubscription(name, changes);
+                        continue;
                 }
-                Expect(TokenKind.RBrace);
             }
-            else if (_current.Kind == TokenKind.Exit && !parsedExit) {
-                parsedExit = true;
-                Advance(); // consume 'exit'
-                Expect(TokenKind.LBrace);
-                while (_current.Kind != TokenKind.RBrace) {
-                    var effect = ParseEffect();
-                    changes.Add(new AddOnExitEffectToStageChange(_currentEntityName, name, effect));
-                }
-                Expect(TokenKind.RBrace);
+
+            // Stage-local action (or unmodeled token — fail closed).
+            if ((_current.Kind == TokenKind.Entry || _current.Kind == TokenKind.Exit) && _current.Kind != TokenKind.Identifier) {
+                throw Error($"'{_current.Text}' must appear at the beginning of the stage block, before actions and subscriptions.");
             }
-            else if (_current.Kind == TokenKind.When && PeekIs(TokenKind.Identifier)) {
-                // Subscription: when RelName TargetStage { ... }
-                ParseSubscription(name, changes);
-            }
-            else {
-                // Stage-local action (or entry/exit if they appear in wrong order)
-                if ((_current.Kind == TokenKind.Entry || _current.Kind == TokenKind.Exit) && _current.Kind != TokenKind.Identifier) {
-                    throw Error($"'{_current.Text}' must appear at the beginning of the stage block, before actions and subscriptions.");
-                }
-                var actionName = ExpectIdentifier(TokenKind.Identifier, "action name");
-                // Stage members also use Name: kind. Legacy Name(params): action accepted.
-                List<(string Name, string TypeName)>? stageActionParams = null;
-                if (_current.Kind == TokenKind.LParen)
-                    stageActionParams = ParseActionParameterList();
-                Expect(TokenKind.Colon);
-                ParseActionBody(actionName, changes, name, stageActionParams);
-            }
+            var actionName = ExpectIdentifier(TokenKind.Identifier, "action name");
+            // Stage members also use Name: kind. Legacy Name(params): action accepted.
+            List<(string Name, string TypeName)>? stageActionParams = null;
+            if (_current.Kind == TokenKind.LParen)
+                stageActionParams = ParseActionParameterList();
+            Expect(TokenKind.Colon);
+            ParseActionBody(actionName, changes, name, stageActionParams);
         }
 
         Expect(TokenKind.RBrace);
@@ -824,14 +886,27 @@ public sealed class PolyDslParser {
     /// Patterns: "many [owned] Type", "one [owned] Type", "owned Type", "Type" (bare entity name).
     /// </summary>
     /// <summary>
-    /// Looks ahead to check if the current identifier is followed by <c>: enum</c>,
-    /// indicating a top-level enum type declaration.
+    /// Fail-closed rejection for top-level shapes the grammar table does not
+    /// model: unsupported keywords (e.g. 'actor') and the removed inheritance
+    /// form ('Parent: Base entity'). Mirrors the diagnostics ParseEntity
+    /// previously produced at the same position.
     /// </summary>
-    private bool IsNextTokenEnum() {
-        var peek1 = _tokenizer.Peek();
-        if (peek1.Kind != TokenKind.Colon) return false;
-        var peek2 = _tokenizer.Peek(2);
-        return peek2.Kind == TokenKind.Enum;
+    private Exception TopLevelRejection() {
+        if (PeekIs(TokenKind.Colon)) {
+            var name = _current.Text;
+            var typeWord = _tokenReader.Peek(2);
+            if (typeWord.Kind == TokenKind.Identifier && _unsupportedKeywords.Contains(typeWord.Text)) {
+                return new FormatException(
+                    $"'{typeWord.Text}' is not supported in Phase 1a (use 'entity' instead)");
+            }
+            if (typeWord.Kind == TokenKind.Identifier
+                && _tokenReader.Peek(3).Kind == TokenKind.Entity) {
+                return new FormatException(
+                    $"Entity inheritance ('{name}: {typeWord.Text} entity') is no longer supported. " +
+                    $"Define '{typeWord.Text}' properties directly on '{name}'.");
+            }
+        }
+        return Error($"Expected 'entity' or 'enum' definition, got '{_current.Text}'");
     }
 
     /// <summary>
@@ -1401,8 +1476,19 @@ public sealed class PolyDslParser {
         throw Error($"Expected a type name, got '{_current.Text}'");
     }
 
+    /// <summary>
+    /// Matcher peeks the reader buffer; this parser holds the head token in
+    /// <see cref="_current"/>. Unread so Peek(1) is the head, then restore.
+    /// </summary>
+    private MatchResult<DslTokenKind>? MatchRule(string ruleName) {
+        _tokenReader.Unread(_current);
+        var match = _matcher.TryMatch(ruleName);
+        _current = _tokenReader.Read();
+        return match;
+    }
+
     private void Advance() {
-        _current = _tokenizer.Next();
+        _current = _tokenReader.Read();
     }
 
     private Token Expect(TokenKind kind) {
@@ -1422,7 +1508,7 @@ public sealed class PolyDslParser {
     }
 
     private bool PeekIs(TokenKind kind) {
-        return _tokenizer.Peek().Kind == kind;
+        return _tokenReader.Peek(1).Kind == kind;
     }
 
     private List<string> ParseIdentifierList() {
@@ -1469,8 +1555,6 @@ public sealed class PolyDslParser {
         }
     }
 
-    private Exception Error(string message) {
-        var tok = _current;
-        return new FormatException($"Poly DSL parse error at line {tok.Line}, col {tok.Col}: {message}");
-    }
+    private Exception Error(string message) =>
+        new GrammarException(message, _current.Line, _current.Col);
 }

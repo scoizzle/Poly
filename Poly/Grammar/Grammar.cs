@@ -15,7 +15,6 @@ namespace Poly.Grammar;
 /// </summary>
 public sealed class Grammar<TKind> where TKind : struct {
     private readonly Dictionary<string, List<Pattern<TKind>>> _rules = new();
-    private readonly HashSet<string> _sorted = new();
 
     /// <summary>
     /// Begins defining patterns in a named rule group.
@@ -27,14 +26,14 @@ public sealed class Grammar<TKind> where TKind : struct {
 
     /// <summary>
     /// Returns all patterns registered under <paramref name="ruleName"/>,
-    /// sorted by first-token kind then by element count descending.
+    /// sorted by first-token kind then by element count descending,
     /// or an empty list if the rule is unknown.
+    /// Read-only at match time (sorting happens on <see cref="AddPattern"/>)
+    /// so concurrent matchers may share one grammar safely.
     /// </summary>
     public IReadOnlyList<Pattern<TKind>> GetPatterns(string ruleName) {
         if (!_rules.TryGetValue(ruleName, out var list))
             return [];
-        if (_sorted.Add(ruleName))
-            SortPatterns(list);
         return list;
     }
 
@@ -45,7 +44,9 @@ public sealed class Grammar<TKind> where TKind : struct {
         if (!_rules.TryGetValue(ruleName, out var list))
             _rules[ruleName] = list = new();
         list.Add(pattern);
-        _sorted.Remove(ruleName);
+        // Keep lists sorted after every commit so GetPatterns never mutates
+        // under concurrent Matcher use (product parsers share a static table).
+        SortPatterns(list);
     }
 
     // ═══════════════════════════════════════════════════════

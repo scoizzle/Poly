@@ -221,9 +221,10 @@ public class DomainEvolutionApplicatorTests {
 
             // Demonstrate action defined directly on a stage (new MVP capability)
             .AddActionToStage("Person", "Alive", "Cancel")
-            // New action Register with its full definition
+            // New action Register with its full definition.
+            // P3 contract: -> T requires an entity type produced by create/create-in;
+            // primitive/ValueType returns are rejected, so Register stays void here.
             .AddAction("Person", "Register",
-                result: new InvocationResult([new InvocationResult.Member("BirthCertificateId", new DomainTypeReference("Text"), [])]),
                 parameters: [new Property("TimeOfBirth", new DomainTypeReference("Timestamp"), [])],
                 effects: [new CreateEntityInstance(new DomainTypeReference("BirthCertificate"), [
                     new PropertyBinding("Time", DomainExpression.Parameter("TimeOfBirth"))
@@ -233,8 +234,7 @@ public class DomainEvolutionApplicatorTests {
             // Enhance existing Dead stage (attach guard policy). Do not re-AddStage.
             .AddStageGuard("Person", "Dead", "HasDeathCert",
                 DomainExpression.Exists(DomainExpression.Owned("DeathCertificate", DomainExpression.Property("Time"))))
-            // Enhance the existing Die action (attach result + effects). Do not re-AddAction.
-            .SetActionResult("Person", "Die", new InvocationResult([new InvocationResult.Member("Success", new DomainTypeReference("Boolean"), [])]))
+            // Enhance the existing Die action (attach effects). Do not re-AddAction.
             .AddCreateEffect("Person", "Die", "DeathCertificate",
                 ("Time", DomainExpression.Parameter("TimeOfDeath")),
                 ("Cause", DomainExpression.Parameter("CauseOfDeath")))
@@ -264,12 +264,11 @@ public class DomainEvolutionApplicatorTests {
         await Assert.That(register.Policies.Count).IsEqualTo(1);
         await Assert.That(register.Parameters.Count).IsEqualTo(1);
         await Assert.That(register.Parameters[0].Name).IsEqualTo("TimeOfBirth");
-        await Assert.That(register.Result.Members.Count).IsEqualTo(1);
-        await Assert.That(register.Result.Members[0].Name).IsEqualTo("BirthCertificateId");
+        await Assert.That(register.Result.Members).IsEmpty(); // P3: void action (no primitive return)
 
         var die = finalPerson.Actions.Single(a => a.Name == "Die");
         await Assert.That(die.Effects.Count).IsEqualTo(2); // Create + Transition (no extra Publish in this sequence)
-        await Assert.That(die.Result.Members.Count).IsEqualTo(1);
+        await Assert.That(die.Result.Members).IsEmpty(); // P3: void action
 
         await Assert.That(result2.Root.Relationships.Count).IsEqualTo(1);
         await Assert.That(result2.Root.Relationships[0].Name).IsEqualTo("Friends");

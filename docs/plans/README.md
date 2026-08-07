@@ -60,7 +60,7 @@ Agents still useful for residuals: `.github/agents/plan-suite-until-done.agent.m
 | [**DSL absorption proposals**](domain-dsl-absorption-proposals.md) | P1–P12 matrix; P3/P2 suites above | One P* at a time |
 | [**MCP dogfood protocol**](v2-to-v3/mcp-dogfood-protocol.md) · [`dogfood-*`](v2-to-v3/simple-agent-tasks/dogfood-README.md) | Wave 2 **complete** | Further waves if admitted |
 | [**MCP dogfood orchestrator**](v2-to-v3/mcp-dogfood-orchestrator.md) | Dogfood loop tooling | With dogfood admission |
-| [**Grammar framework integration**](grammar-integration.md) | **Ready draft** — product DSL on Poly.Grammar; **prefer before temporal pack** | Explicit admit as CURRENT; solidify `gi-*` |
+| [**Grammar framework integration**](grammar-integration.md) | **Ready draft** — product DSL on Poly.Grammar; **prefer before temporal pack**. **Preflight gate:** C99 Matcher dual-run (§3.4) before product `gi` | Run `gi-preflight` / GIP first; then admit `gi` as CURRENT; solidify `gi-*` |
 | [**Analysis-consuming lowering**](analysis-consuming-lowering.md) | Draft | Explicit pick |
 | [**Post–V2-delete naming cleanup**](post-v2-delete-naming-cleanup.md) | Drop product `V3*` labels | Idle green tree + explicit pick |
 | [**Platform velocity review**](platform-velocity-review.md) | Pain inventory (2026-07-25) | Pull items only when admitted |

@@ -53,7 +53,10 @@ public class DomainToCSharpExporterTests {
               require not HasFines
             {
               assign CurrentBorrowCount to CurrentBorrowCount + 1
-              create in loans { book: book }
+              // CreateIn initializers set scalar properties only — to-one navs
+              // (like Loan.book) cannot be bound here (analyzer rejects; runtime
+              // would throw). The Loan/Book link is left for a future link effect.
+              create in loans { }
             }
             Suspend: action {
               assign Status to "Suspended"

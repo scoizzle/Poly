@@ -22,6 +22,16 @@ public abstract class TokenReader<TKind> where TKind : struct {
     }
 
     /// <summary>
+    /// Puts a previously-read token back so the next <see cref="Read"/> returns it
+    /// and <see cref="Peek"/>(1) observes it. Used when a consumer keeps a head
+    /// token outside the reader (e.g. recursive-descent <c>_current</c>) but still
+    /// needs <see cref="Matcher{TKind}"/> to see that head as position zero.
+    /// </summary>
+    public void Unread(Token<TKind> token) {
+        _buffer.Insert(0, token);
+    }
+
+    /// <summary>
     /// Peeks at the nth future token (1-based) without consuming it.
     /// Multiple calls with the same <paramref name="n"/> return the same token.
     /// </summary>

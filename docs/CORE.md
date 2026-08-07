@@ -52,7 +52,8 @@ TFM: `net10.0`, nullable on, zero external dependencies in core `Poly/`.
 | **Introspection** | Platform-agnostic type/member model so Interpretation can **simulate any reasonable type system on any reasonable platform**; CLR is the first provider | Depending on Interpretation; baking one host into the core contract |
 | **DomainModeling** | Immutable `Domain`, evolution, `DomainExpression`, lower-to-AST; **stage transitions are the authorable observable** (no event/publish/subscribe surface — see `docs/decisions/2026-07-17-stage-transition-as-observable.md`) | Domain VM opcodes; tree rewrites outside analysis + node replacement |
 | **Validation** | `Rule` / `RuleSet` evaluation surface | Owning the AST or VM |
-| **Grammar** | Pattern-table parse/print engine (`Poly/Grammar/`, `Poly.Grammar`); media-agnostic `TokenReader`/`TokenWriter` ports | Domain DSL ownership (stays DomainModeling until integrated); text primitives (`Poly.Text`) |
+| **Grammar** | Pattern-table engine (`Poly/Grammar/`); media-agnostic `TokenReader`/`TokenWriter`/`Matcher`/`Printer` | Product DSL table/handlers (owned by DomainModeling) |
+| **DomainModeling (DSL)** | Product `.poly` surface: `DslTokenReader`, `DslGrammar`, Matcher structure dispatch, RD hybrid expr/effects, `DomainDslPrinter` | Replacing Grammar engine; dual legacy tokenizer (removed GI-7) |
 | **MCP (`Poly.Mcp`)** | Session store, tools, tool honesty | Domain mutation semantics; claiming capabilities the core does not have |
 | **Synthesis** | Macros (VM validates) | Reverse deps from Interpretation |
 

@@ -2,7 +2,7 @@
 
 **Date:** 2026-07-26  
 **Revised:** 2026-08-07  
-**Status:** **GI-preflight DONE** (C99 dual-run, 2026-08-07). Product GI-1…3 landed (hybrid structure dispatch). Next: GI-4+ / solidify `gi-*` / admit CURRENT before temporal pack implement.  
+**Status:** **GI-1…7 hybrid cutover landed (2026-08-07).** Structure + annotations on Matcher; expr/effects RD (E2); legacy tokenizer deleted. Park: E1 expr grammar, GI-8 JSON, GI-9 binary. Temporal pack still after E1/open-form path.  
 **Engine:** [`Poly/Grammar/`](../../Poly/Grammar/) + [`Poly/Grammar/README.md`](../../Poly/Grammar/README.md)  
 **Product DSL today:** [`Poly/DomainModeling/Parsing/`](../../Poly/DomainModeling/Parsing/) (~2.4k LOC hand RD)  
 **Product truth:** [`Poly.Mcp/Docs/poly-dsl-guide.md`](../../Poly.Mcp/Docs/poly-dsl-guide.md)  
@@ -369,13 +369,14 @@ Suite files when solidifying: `docs/plans/simple-agent-tasks/gi-README.md`
 
 ### 11.2 Product suite (GI)
 
-- [ ] Product `.poly` parse/print path is grammar-driven (façade).  
-- [ ] Hand RD deleted or non-product.  
-- [ ] Facet packs can register annotation syntax without editing matcher core.  
-- [ ] Full DSL regression corpus green.  
-- [ ] CORE + README placement accurate.  
-- [ ] Temporal pack has a clear registration path (E1 or documented open-form grammar).  
-- [ ] Master-roadmap CURRENT cleared or moved to temporal research/implement.  
+- [x] Product `.poly` **structure + annotations** grammar-driven; façade `PolyDslParser` (hybrid expr/effects RD).  
+- [x] Legacy `PolyDslTokenizer` deleted (GI-7).  
+- [x] Facet packs: `CanAccept` + optional `ContributePatterns` without editing matcher core.  
+- [x] Domain walk printer remains product print façade; `DslTokenWriter` for Grammar Printer.  
+- [ ] Full hand-RD *handlers* deleted (expr/effects still RD — intentional E2).  
+- [x] CORE + DomainModeling README placement updated.  
+- [ ] Temporal pack registration path (E1 or open-form) — still open.  
+- [ ] Master-roadmap CURRENT — set when admitting next suite.  
 
 ---
 

@@ -7,7 +7,7 @@ namespace Poly.DomainModeling.Parsing;
 /// <summary>
 /// Token reader for the Poly DSL, hosted on the grammar engine's
 /// <see cref="Poly.Grammar.StringTokenReader{TKind}"/> base. Produces exactly the
-/// same token stream as the legacy <see cref="PolyDslTokenizer"/> — including
+/// product token stream for .poly text — including
 /// <c>//</c> line-comment skipping (which the base <c>SkipWhitespace</c> does
 /// not handle), two-character operators, string escapes (<c>\"</c>, <c>\\</c>),
 /// and the keyword map.

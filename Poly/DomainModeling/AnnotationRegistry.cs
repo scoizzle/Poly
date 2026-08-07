@@ -1,3 +1,6 @@
+using Poly.DomainModeling.Parsing;
+using Poly.Grammar;
+
 namespace Poly.DomainModeling;
 
 /// <summary>
@@ -7,6 +10,7 @@ namespace Poly.DomainModeling;
 /// </summary>
 public sealed class AnnotationRegistry {
     private readonly Dictionary<string, IAnnotationSyntax> _syntaxByKeyword = new(StringComparer.Ordinal);
+    private readonly List<Action<Grammar<DslTokenKind>>> _grammarContributors = [];
 
     public AnnotationRegistry() {
     }
@@ -16,6 +20,7 @@ public sealed class AnnotationRegistry {
         foreach (var pair in source._syntaxByKeyword) {
             _syntaxByKeyword[pair.Key] = pair.Value;
         }
+        _grammarContributors.AddRange(source._grammarContributors);
     }
 
     /// <summary>Registers a syntax handler. Throws on duplicate keyword.</summary>
@@ -27,6 +32,22 @@ public sealed class AnnotationRegistry {
         if (!_syntaxByKeyword.TryAdd(syntax.Keyword, syntax))
             throw new InvalidOperationException(
                 $"Annotation keyword '{syntax.Keyword}' is already registered.");
+    }
+
+    /// <summary>
+    /// GI-5: register extra grammar patterns (e.g. non-literal annotation args).
+    /// Invoked when building the product <see cref="DslGrammar"/> for a parse session.
+    /// </summary>
+    public void RegisterGrammarContributor(Action<Grammar<DslTokenKind>> contribute) {
+        ArgumentNullException.ThrowIfNull(contribute);
+        _grammarContributors.Add(contribute);
+    }
+
+    /// <summary>Applies all pack grammar contributors to <paramref name="grammar"/>.</summary>
+    public void ContributePatterns(Grammar<DslTokenKind> grammar) {
+        ArgumentNullException.ThrowIfNull(grammar);
+        foreach (var contribute in _grammarContributors)
+            contribute(grammar);
     }
 
     /// <summary>True when the given keyword has a registered handler.</summary>

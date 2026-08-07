@@ -28,7 +28,11 @@ public static class DslGrammar {
     /// <see cref="AnnotationRegistry.CanAccept"/> (grammar elements match kinds,
     /// and every annotation keyword tokenizes as <see cref="DslTokenKind.Identifier"/>).
     /// </summary>
-    public static Grammar<DslTokenKind> Build() {
+    /// <param name="configure">
+    /// Optional pack hook (GI-5): register extra annotation/shape patterns after
+    /// the product table is built. Generic <c>column(...)</c> needs no extra patterns.
+    /// </param>
+    public static Grammar<DslTokenKind> Build(Action<Grammar<DslTokenKind>>? configure = null) {
         var g = new Grammar<DslTokenKind>();
 
         // ── top: domain body declarations ──────────────────────
@@ -116,13 +120,16 @@ public static class DslGrammar {
             .Pattern("fal").Optional(DslTokenKind.Comma).Token(DslTokenKind.False).Commit()
             .Pattern("nul").Optional(DslTokenKind.Comma).Token(DslTokenKind.Null).Commit();
 
-        // GI-4 extension point: packs that declare argument shapes beyond the
+        // GI-5 extension: packs that declare argument shapes beyond the
         // generic quoted-literal form register additional patterns on the
-        // "annotation" rule through the public Grammar API (see DslGrammarTests
-        // Annotation_CustomShapeExtension_RegistersPattern). The handler map
-        // routes every matched pattern to ParseAnnotation, which remains the
-        // strict validator (fail-closed on shapes it cannot parse).
+        // "annotation" rule via <paramref name="configure"/> / AnnotationRegistry.ContributePatterns
+        // (see DslGrammarTests Annotation_CustomShapeExtension_RegistersPattern).
+        // ParseAnnotation remains the strict validator (fail-closed).
 
+        // GI-4 expression gap (intentional hybrid): no binary/quantifier/path patterns —
+        // PolyDslParser RD owns expression bodies until E1 (temporal pack admit).
+
+        configure?.Invoke(g);
         return g;
     }
 }

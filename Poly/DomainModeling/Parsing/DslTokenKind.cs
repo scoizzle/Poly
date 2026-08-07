@@ -1,9 +1,7 @@
 namespace Poly.DomainModeling.Parsing;
 
 /// <summary>
-/// Token kinds for the Poly DSL scanner. Mirrors the original
-/// <see cref="PolyDslTokenizer"/>'s <c>TokenKind</c> exactly — the DSL surface
-/// is unchanged; only the scanner host moved onto the grammar engine.
+/// Token kinds for the product Poly DSL scanner (<see cref="DslTokenReader"/>).
 /// </summary>
 public enum DslTokenKind {
     EndOfFile,

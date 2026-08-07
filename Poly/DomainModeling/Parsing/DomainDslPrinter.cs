@@ -7,7 +7,9 @@ using Poly.DomainModeling.Effects;
 namespace Poly.DomainModeling.Parsing;
 
 /// <summary>
-/// Canonical printer for the Phase 1a Poly DSL.
+/// Canonical printer for the product Poly DSL (domain-graph walk).
+/// GI-6: emit surface for fixed tokens is also available via <see cref="DslTokenWriter"/>
+/// + Grammar <c>Printer</c>; this type remains the product print façade.
 /// Converts a committed <see cref="Domain"/> to stable, deterministic .poly text.
 ///
 /// Output is idempotent: printing the same domain twice produces identical text.

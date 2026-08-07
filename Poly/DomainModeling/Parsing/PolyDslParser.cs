@@ -23,7 +23,7 @@ namespace Poly.DomainModeling.Parsing;
 /// Expressions parse to existing <see cref="DomainExpression"/> nodes.
 /// </summary>
 public sealed class PolyDslParser {
-    private static readonly Grammar<DslTokenKind> _grammar = DslGrammar.Build();
+    private readonly Grammar<DslTokenKind> _grammar;
     private readonly DslTokenReader _tokenReader;
     private readonly Matcher<DslTokenKind> _matcher;
     private Token _current;
@@ -72,19 +72,21 @@ public sealed class PolyDslParser {
         RelationshipCardinality Cardinality,
         bool SourceOwnsTarget);
 
-    public PolyDslParser(string text) {
-        _tokenReader = new DslTokenReader(text);
-        _matcher = new Matcher<DslTokenKind>(_grammar, _tokenReader);
-        _current = _tokenReader.Read();
+    public PolyDslParser(string text) : this(text, parserInputs: null) {
     }
 
     /// <summary>
     /// Creates a parser with optional parser inputs for pack-aware parsing.
     /// When a context is provided, its registered <see cref="IAnnotationSyntax"/> handlers
-    /// are consulted for property-tail and entity-header annotations.
+    /// are consulted for property-tail and entity-header annotations; pack grammar
+    /// contributors are applied when building the session pattern table (GI-5).
     /// </summary>
-    public PolyDslParser(string text, DomainParserInputs? parserInputs) : this(text) {
+    public PolyDslParser(string text, DomainParserInputs? parserInputs) {
         _parserInputs = parserInputs;
+        _grammar = DslGrammar.Build(g => parserInputs?.Annotations.ContributePatterns(g));
+        _tokenReader = new DslTokenReader(text);
+        _matcher = new Matcher<DslTokenKind>(_grammar, _tokenReader);
+        _current = _tokenReader.Read();
     }
 
     /// <summary>
@@ -153,22 +155,13 @@ public sealed class PolyDslParser {
         changes.Add(new AddEntityChange(entityName, []));
 
         // ── Entity header facets (pack-registered annotations) ──
-        while (_current.Kind == TokenKind.Identifier) {
-            var keyword = _current.Text;
-            if (_parserInputs?.Annotations.CanAccept(keyword) == true) {
-                Advance();
-                changes.Add(new AddFacetToDomainTypeChange(entityName, ParseAnnotation(keyword)));
-                continue;
-            }
-
-            // Fail closed: bare keyword(…) before '{' is an unregistered annotation, not a body.
-            if (PeekIs(TokenKind.LParen)) {
-                throw Error(
-                    $"Unknown or unregistered annotation '{keyword}'. " +
-                    "Enable a pack that registers this keyword, or remove the annotation.");
-            }
-
-            break;
+        while (TryParseRegisteredAnnotation(out var headerFacet)) {
+            changes.Add(new AddFacetToDomainTypeChange(entityName, headerFacet));
+        }
+        if (LooksLikeAnnotationCall()) {
+            throw Error(
+                $"Unknown or unregistered annotation '{_current.Text}'. " +
+                "Enable a pack that registers this keyword, or remove the annotation.");
         }
 
         Expect(TokenKind.LBrace);
@@ -377,20 +370,18 @@ public sealed class PolyDslParser {
                 continue;
             }
 
-            // Annotation-shaped identifier(…)
-            var keyword = _current.Text;
-            if (_parserInputs?.Annotations.CanAccept(keyword) == true) {
-                Advance();
+            // Annotation-shaped identifier(…) — grammar match or fail-closed RD (GI-5).
+            if (TryParseRegisteredAnnotation(out var facet)) {
                 changes.Add(new AddFacetToPropertyChange(
-                    _currentEntityName, propertyName, ParseAnnotation(keyword)));
+                    _currentEntityName, propertyName, facet));
                 continue;
             }
 
-            // Fail closed only for annotation-shaped args (literals), not
-            // legacy action heads like Checkout(days: Number): action { … }.
+            // Fail closed for annotation-shaped args (literals / empty / trailing comma),
+            // not legacy action heads like Checkout(days: Number): action { … }.
             if (LooksLikeAnnotationCall()) {
                 throw Error(
-                    $"Unknown or unregistered annotation '{keyword}'. " +
+                    $"Unknown or unregistered annotation '{_current.Text}'. " +
                     "Enable a pack that registers this keyword, or remove the annotation.");
             }
 
@@ -399,9 +390,31 @@ public sealed class PolyDslParser {
     }
 
     /// <summary>
+    /// Pack-registered annotation: Matcher recognizes valid shapes; invalid shapes
+    /// (e.g. trailing comma) still enter <see cref="ParseAnnotation"/> for fail-closed
+    /// diagnostics when the keyword is registered and the call is annotation-shaped.
+    /// </summary>
+    private bool TryParseRegisteredAnnotation(out Facet facet) {
+        facet = null!;
+        if (_current.Kind != TokenKind.Identifier)
+            return false;
+
+        var keyword = _current.Text;
+        if (_parserInputs?.Annotations.CanAccept(keyword) != true)
+            return false;
+
+        // Valid grammar shape or annotation-shaped call (including trailing comma).
+        if (MatchRule("annotation") is null && !LooksLikeAnnotationCall())
+            return false;
+
+        Advance();
+        facet = ParseAnnotation(keyword);
+        return true;
+    }
+
+    /// <summary>
     /// True when the current identifier is followed by <c>(</c> and an annotation
     /// argument list (literals / empty), not a legacy action parameter list.
-    /// Current token must already be the keyword identifier.
     /// </summary>
     private bool LooksLikeAnnotationCall() {
         if (_current.Kind != TokenKind.Identifier || _tokenReader.Peek(1).Kind != TokenKind.LParen)

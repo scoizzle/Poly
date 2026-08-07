@@ -63,10 +63,9 @@ Business days, fiscal calendars, time zones, alternate clocks — optional packs
 
 ## Grammar-integration ordering (user direction 2026-08-06)
 
-- **Preflight first:** C99 Matcher dual-run (`grammar-integration.md` §3.4 / GIP) verifies `Poly.Grammar` under expression-heavy load **before** product GI.
-- Then [`grammar-integration.md`](grammar-integration.md) GI-0..GI-7 lands **before** any `p1-*` suite.
-- Temporal pack is a **first real consumer** of **GI-4** (pack grammar registration — `column("NAME","TYPE")` model generalizes to `when`-independent pack patterns) and absorption §2.5–2.6 specialization registry, the way Sqlite dogfoods facets.
-- The research doc's "Do not: grammar re-base as prereq" line is **superseded**: grammar integration is a committed plan (Draft → integration pending), not a speculative re-base.
+- **Preflight + GI-1…7 + E1 done (2026-08-07):** product structure/annotations on Matcher; expressions in `DslExpressionParser` with **`ExpressionFormRegistry` / `IExpressionPrimaryForm`** for open forms (`Now`, `N days`) without core precedence edits.
+- Temporal pack is a **first real consumer** of that expression-form seam (+ analysis specialization registries, absorption §2.5–2.6), the way Sqlite dogfoods annotation facets.
+- Grammar re-base is no longer a prereq blocker — **admit `p1-*` when ready** (still explicit roadmap admit).
 
 ## Negative tests (documented; author in the `p1-*` suite at admit)
 

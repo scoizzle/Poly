@@ -2,7 +2,7 @@
 
 **Date:** 2026-07-26  
 **Revised:** 2026-08-07  
-**Status:** **GI-1…7 hybrid cutover landed (2026-08-07).** Structure + annotations on Matcher; expr/effects RD (E2); legacy tokenizer deleted. Park: E1 expr grammar, GI-8 JSON, GI-9 binary. Temporal pack still after E1/open-form path.  
+**Status:** **GI-1…7 + E1 landed (2026-08-07).** Structure/annotations Matcher; **E1** `DslExpressionParser` + `ExpressionFormRegistry` (open primaries for temporal); effects still structure RD. Park: GI-8 JSON expr, GI-9 binary. Temporal pack may admit on open-form seam.  
 **Engine:** [`Poly/Grammar/`](../../Poly/Grammar/) + [`Poly/Grammar/README.md`](../../Poly/Grammar/README.md)  
 **Product DSL today:** [`Poly/DomainModeling/Parsing/`](../../Poly/DomainModeling/Parsing/) (~2.4k LOC hand RD)  
 **Product truth:** [`Poly.Mcp/Docs/poly-dsl-guide.md`](../../Poly.Mcp/Docs/poly-dsl-guide.md)  
@@ -171,9 +171,9 @@ Policy/effect **expressions** are the hard part (precedence, multi-hop, quantifi
 
 **Lock for this plan:**
 
-1. GI product cutover **may** ship with **E2 hybrid** if structure+annotations+when headers are grammar-driven and all **existing** expression tests stay green.  
-2. **Temporal pack admit requires E1** (or proven registration of open duration/`Now` forms without core RD edits).  
-3. Document which option each GI task leaves behind.
+1. ~~E2 hybrid structure~~ **done** (GI-3…7).  
+2. ~~**E1**~~ **done (2026-08-07):** `DslExpressionParser` owns precedence layers; packs register open primaries via `ExpressionFormRegistry` / `IExpressionPrimaryForm` without core edits. Temporal units/`Now` register forms here.  
+3. Pure pattern-table left-assoc (no RD loops) is **not** required — Pratt/RD layers inside `DslExpressionParser` are the E1 end state for this engine.
 
 ### 5.3 Facets vs open expression forms
 
@@ -279,7 +279,17 @@ Domain walk + `Printer`/`TokenWriter`; round-trip corpus green; stable-ish outpu
 
 ### GI-8 — JSON expression parser (optional / pull)
 
-Port `DomainExpressionJsonParser` to grammar **after** text cutover. Does not block temporal pack if JSON stays bag-local.
+Port `DomainExpressionJsonParser` onto Grammar **after** text cutover. Does **not** block temporal pack if JSON stays bag-local.
+
+#### Why GI-8 exists (and when it matters)
+
+| Fact | Implication |
+|------|-------------|
+| **Two authoring media for the same IR** | Text `.poly` uses `DslExpressionParser`. MCP/oracle tools also accept **JSON expression bags** via `DomainExpressionJsonParser` (`DomainTools`, `OracleTool`). |
+| **Same `DomainExpression` tree** | Policies/effects must mean the same thing whether written as `Age >= 18` or `{"property":"Age","op":">=","value":18}`. |
+| **Text path is now Grammar-hosted** | Open forms (E1 registry) land on the text cursor first. JSON remains a **hand-written shape detector** — packs that add `Now` / units to text do **not** automatically appear in JSON. |
+| **What GI-8 would do** | One pattern table (or shared form registry) driving **both** media so specialization stays single-source; fewer dual-oracle bugs. |
+| **Why not blocking now** | JSON surface is smaller (no full precedence string); product goldens and MCP JSON are green; temporal pack authoring is **text-first**. Pull GI-8 when JSON must carry the same open forms or dual-media drift hurts. |
 
 ### GI-9 — Non-text streams (defer)
 
@@ -369,13 +379,14 @@ Suite files when solidifying: `docs/plans/simple-agent-tasks/gi-README.md`
 
 ### 11.2 Product suite (GI)
 
-- [x] Product `.poly` **structure + annotations** grammar-driven; façade `PolyDslParser` (hybrid expr/effects RD).  
+- [x] Product `.poly` **structure + annotations** grammar-driven; façade `PolyDslParser`.  
 - [x] Legacy `PolyDslTokenizer` deleted (GI-7).  
 - [x] Facet packs: `CanAccept` + optional `ContributePatterns` without editing matcher core.  
 - [x] Domain walk printer remains product print façade; `DslTokenWriter` for Grammar Printer.  
-- [ ] Full hand-RD *handlers* deleted (expr/effects still RD — intentional E2).  
+- [x] **E1** `DslExpressionParser` + `ExpressionFormRegistry` (open primaries; precedence layers).  
 - [x] CORE + DomainModeling README placement updated.  
-- [ ] Temporal pack registration path (E1 or open-form) — still open.  
+- [x] Temporal pack registration path = `IExpressionPrimaryForm` + grammar contributors.  
+- [ ] GI-8 JSON dual-media (pull).  
 - [ ] Master-roadmap CURRENT — set when admitting next suite.  
 
 ---

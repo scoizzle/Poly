@@ -126,8 +126,17 @@ public static class DslGrammar {
         // (see DslGrammarTests Annotation_CustomShapeExtension_RegistersPattern).
         // ParseAnnotation remains the strict validator (fail-closed).
 
-        // GI-4 expression gap (intentional hybrid): no binary/quantifier/path patterns —
-        // PolyDslParser RD owns expression bodies until E1 (temporal pack admit).
+        // E1: primary first-token surface (precedence stays in DslExpressionParser layers).
+        // Packs add open forms via ExpressionFormRegistry + configure (e.g. unit duration).
+        g.Define("expr-primary")
+            .Pattern("number").Token(DslTokenKind.Number).Commit()
+            .Pattern("string").Token(DslTokenKind.StringLiteral).Commit()
+            .Pattern("true").Token(DslTokenKind.True).Commit()
+            .Pattern("false").Token(DslTokenKind.False).Commit()
+            .Pattern("null").Token(DslTokenKind.Null).Commit()
+            .Pattern("group").Token(DslTokenKind.LParen).Commit()
+            .Pattern("not").Token(DslTokenKind.Not).Commit()
+            .Pattern("ident").Value(DslTokenKind.Identifier).Commit();
 
         configure?.Invoke(g);
         return g;

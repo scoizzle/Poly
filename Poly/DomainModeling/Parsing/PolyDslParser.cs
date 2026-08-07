@@ -14,18 +14,16 @@ using TokenKind = Poly.DomainModeling.Parsing.DslTokenKind;
 namespace Poly.DomainModeling.Parsing;
 
 /// <summary>
-/// Grammar-table-driven parser for the Phase 1a Poly DSL.
-/// Produces <see cref="DomainChange"/> records for evolution application.
-/// Tokenization uses <see cref="DslTokenReader"/>; dispatch at each construct
-/// boundary is decided by the <see cref="Matcher{TKind}"/> over
-/// <see cref="DslGrammar"/>. Handlers remain strict validators (fail-closed).
-///
-/// Expressions parse to existing <see cref="DomainExpression"/> nodes.
+/// Grammar-table-driven parser for the product Poly DSL.
+/// Structure/annotations: Matcher over <see cref="DslGrammar"/>.
+/// Expressions: <see cref="DslExpressionParser"/> (E1 — open forms via
+/// <see cref="ExpressionFormRegistry"/>; precedence Pratt/RD layers).
 /// </summary>
-public sealed class PolyDslParser {
+public sealed class PolyDslParser : IDslParseCursor {
     private readonly Grammar<DslTokenKind> _grammar;
     private readonly DslTokenReader _tokenReader;
     private readonly Matcher<DslTokenKind> _matcher;
+    private readonly DslExpressionParser _expressions;
     private Token _current;
     private string _domainName = "";
     private int _entityIndex;
@@ -83,11 +81,30 @@ public sealed class PolyDslParser {
     /// </summary>
     public PolyDslParser(string text, DomainParserInputs? parserInputs) {
         _parserInputs = parserInputs;
-        _grammar = DslGrammar.Build(g => parserInputs?.Annotations.ContributePatterns(g));
+        _grammar = DslGrammar.Build(g => {
+            parserInputs?.Annotations.ContributePatterns(g);
+            parserInputs?.ExpressionForms.ContributeGrammarPatterns(g);
+        });
         _tokenReader = new DslTokenReader(text);
         _matcher = new Matcher<DslTokenKind>(_grammar, _tokenReader);
         _current = _tokenReader.Read();
+        _expressions = new DslExpressionParser(this, parserInputs?.ExpressionForms);
     }
+
+    Token IDslParseCursor.Current => _current;
+    void IDslParseCursor.Advance() => Advance();
+    Token IDslParseCursor.Expect(DslTokenKind kind) => Expect(kind);
+    string IDslParseCursor.ExpectIdentifier(DslTokenKind kind, string context) => ExpectIdentifier(kind, context);
+    bool IDslParseCursor.PeekIs(DslTokenKind kind) => PeekIs(kind);
+    Token IDslParseCursor.Peek(int n) => _tokenReader.Peek(n);
+    MatchResult<DslTokenKind>? IDslParseCursor.MatchRule(string ruleName) => MatchRule(ruleName);
+    Exception IDslParseCursor.Error(string message) => Error(message);
+    bool IDslParseCursor.InWhereBody {
+        get => _inWhereBody;
+        set => _inWhereBody = value;
+    }
+
+    private DomainExpression ParseExpression() => _expressions.ParseExpression();
 
     /// <summary>
     /// Parses the complete .poly text and returns a list of <see cref="DomainChange"/>
@@ -1055,292 +1072,6 @@ public sealed class PolyDslParser {
         Expect(TokenKind.RBrace);
     }
 
-    // ── Expression parser ─────────────────────────────────────
-
-    private DomainExpression ParseExpression() {
-        return ParseOr();
-    }
-
-    private DomainExpression ParseOr() {
-        var left = ParseAnd();
-        while (_current.Kind == TokenKind.Or || (_current.Kind == TokenKind.Identifier && _current.Text == "or")) {
-            Advance();
-            var right = ParseAnd();
-            left = DomainExpression.Or(left, right);
-        }
-        return left;
-    }
-
-    private DomainExpression ParseAnd() {
-        var left = ParseNot();
-        while (_current.Kind == TokenKind.And || (_current.Kind == TokenKind.Identifier && _current.Text == "and")) {
-            Advance();
-            var right = ParseNot();
-            left = DomainExpression.And(left, right);
-        }
-        return left;
-    }
-
-    private DomainExpression ParseNot() {
-        if (_current.Kind == TokenKind.Not) {
-            Advance();
-            var operand = ParseAdd();
-            return DomainExpression.Not(operand);
-        }
-        return ParseComparison();
-    }
-
-    private DomainExpression ParseComparison() {
-        var left = ParseAdd();
-
-        if (IsComparisonOp(_current.Kind)) {
-            var op = _current.Kind;
-
-            // Special case: "is not" → NotEqual (consume both tokens)
-            if (op == TokenKind.Is && PeekIs(TokenKind.Not)) {
-                Advance(); // consume 'is'
-                Advance(); // consume 'not'
-                var rhs = ParseAdd();
-                return DomainExpression.NotEqual(left, rhs);
-            }
-
-            Advance(); // consume the operator
-
-            // Handle standalone "is" without following "not" → Equal
-            if (op == TokenKind.Is) {
-                var rhs = ParseAdd();
-                return DomainExpression.Equal(left, rhs);
-            }
-
-            // Standard operators: == != > >= < <=
-            var right = ParseAdd();
-
-            return op switch {
-                TokenKind.Eq => DomainExpression.Equal(left, right),
-                TokenKind.Neq => DomainExpression.NotEqual(left, right),
-                TokenKind.Gt => DomainExpression.GreaterThan(left, right),
-                TokenKind.Gte => DomainExpression.GreaterThanOrEqual(left, right),
-                TokenKind.Lt => DomainExpression.LessThan(left, right),
-                TokenKind.Lte => DomainExpression.LessThanOrEqual(left, right),
-                _ => throw Error($"Unknown comparison operator '{op}'"),
-            };
-        }
-
-        return left;
-    }
-
-    private DomainExpression ParseAdd() {
-        var left = ParseMultiply();
-        while (_current.Kind == TokenKind.Plus || _current.Kind == TokenKind.Minus) {
-            var op = _current.Kind;
-            Advance();
-            var right = ParseMultiply();
-            left = op == TokenKind.Plus
-                ? DomainExpression.Add(left, right)
-                : DomainExpression.Subtract(left, right);
-        }
-        return left;
-    }
-
-    private DomainExpression ParseMultiply() {
-        var left = ParsePrimary();
-        while (_current.Kind == TokenKind.Star || _current.Kind == TokenKind.Slash) {
-            var op = _current.Kind;
-            Advance();
-            var right = ParsePrimary();
-            left = op == TokenKind.Star
-                ? DomainExpression.Multiply(left, right)
-                : DomainExpression.Divide(left, right);
-        }
-        return left;
-    }
-
-    private DomainExpression ParsePrimary() {
-        switch (_current.Kind) {
-            case TokenKind.Number:
-                var numText = _current.Text;
-                Advance();
-                if (long.TryParse(numText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var longVal))
-                    return DomainExpression.Literal(longVal);
-                return DomainExpression.Literal(numText);
-
-            case TokenKind.StringLiteral:
-                var str = _current.Text;
-                Advance();
-                return DomainExpression.Literal(str);
-
-            case TokenKind.True:
-                Advance();
-                return DomainExpression.Literal(true);
-
-            case TokenKind.False:
-                Advance();
-                return DomainExpression.Literal(false);
-
-            case TokenKind.Null:
-                Advance();
-                return DomainExpression.Literal(null);
-
-            case TokenKind.LParen:
-                Advance();
-                var expr = ParseExpression();
-                Expect(TokenKind.RParen);
-                return expr;
-
-            case TokenKind.Identifier:
-                var name = _current.Text;
-                Advance();
-                // Collection quantifier keywords (any/all/none/count).
-                // These must be followed by a relationship name, then 'where' + body.
-                // Check before Q1′ path-prefix since 'any', 'all', 'none', 'count'
-                // are not valid as relationship names in Q1′ (those are entity names).
-                if (IsQuantifierKeyword(name) && _current.Kind == TokenKind.Identifier) {
-                    return ParseQuantifiedExpression(name);
-                }
-                // Q1′: Check for subject-first related expression patterns.
-                // After a bare identifier, peek ahead to detect:
-                //   RelName exists        → Exists(PropertyAccess(name))
-                //   RelName where body    → RelationshipNavigation(name, body)
-                //   RelName PropName ...  → RelationshipNavigation(name, propAccess + compare)
-                // Otherwise treat as a local property access.
-                if (_current.Kind == TokenKind.Identifier) {
-                    return ParseRelatedAccess(name);
-                }
-                return DomainExpression.Property(name);
-
-            case TokenKind.Not:
-                return ParseNot();
-
-            default:
-                throw Error($"Expected expression, got '{_current.Text}'");
-        }
-    }
-
-    /// <summary>
-    /// Parses a subject-first related expression that starts with a relationship name
-    /// (already consumed as <paramref name="relName"/>) followed by one of:
-    ///   - 'exists' → Exists(PropertyAccess(relName))
-    ///   - 'where'  → RelationshipNavigation(relName, and_expr)
-    ///   - PropName → RelationshipNavigation(relName, PropertyAccess(propName))
-    ///                optionally followed by a comparison operator and value.
-    /// </summary>
-    private DomainExpression ParseRelatedAccess(string relName) {
-        var next = _current.Text;
-
-        // RelName exists (postfix)
-        if (string.Equals(next, "exists", StringComparison.OrdinalIgnoreCase)) {
-            Advance(); // consume 'exists'
-            return DomainExpression.Exists(DomainExpression.Property(relName));
-        }
-
-        // RelName where and_expr (to-one multi-predicate)
-        // Q1'''''.2: Nested `where` is rejected to avoid ambiguous binding.
-        if (string.Equals(next, "where", StringComparison.OrdinalIgnoreCase)) {
-            if (_inWhereBody)
-                throw Error("Nested 'where' is not allowed. Use parentheses for grouped conditions instead.");
-            Advance(); // consume 'where'
-            _inWhereBody = true;
-            try {
-                var body = ParseAnd();
-                return DomainExpression.RelationshipNav(relName, body);
-            }
-            finally {
-                _inWhereBody = false;
-            }
-        }
-
-        // RelName PropName — consume the property name (or next hop for multi-hop path-prefix)
-        Advance(); // consume the property name
-        var propName = next;
-
-        // P2: multi-hop to-one path-prefix — `loan book Title is "X"` becomes
-        // RelationshipNav(loan, RelationshipNav(book, Comparison(Title, …))).
-        // When another identifier follows (not a comparison), treat propName as the
-        // next hop relationship and recurse.
-        if (_current.Kind == TokenKind.Identifier
-            && !string.Equals(_current.Text, "exists", StringComparison.OrdinalIgnoreCase)
-            && !string.Equals(_current.Text, "where", StringComparison.OrdinalIgnoreCase)
-            && !IsComparisonOp(_current.Kind)) {
-            return DomainExpression.RelationshipNav(relName, ParseRelatedAccess(propName));
-        }
-
-        var propExpr = DomainExpression.Property(propName);
-
-        // Check for comparison operator — RelName PropName op value
-        if (IsComparisonOp(_current.Kind)) {
-            var op = _current.Kind;
-
-            // Special case: "is not" → NotEqual
-            if (op == TokenKind.Is && PeekIs(TokenKind.Not)) {
-                Advance(); // consume 'is'
-                Advance(); // consume 'not'
-                var rhs = ParsePrimary();
-                var compare = DomainExpression.NotEqual(propExpr, rhs);
-                return DomainExpression.RelationshipNav(relName, compare);
-            }
-
-            Advance(); // consume the operator
-
-            // Handle standalone "is" → Equal
-            if (op == TokenKind.Is) {
-                var rhs = ParsePrimary();
-                var compare = DomainExpression.Equal(propExpr, rhs);
-                return DomainExpression.RelationshipNav(relName, compare);
-            }
-
-            // Standard operators: == != > >= < <=
-            var right = ParsePrimary();
-            var comparison = op switch {
-                TokenKind.Eq => DomainExpression.Equal(propExpr, right),
-                TokenKind.Neq => DomainExpression.NotEqual(propExpr, right),
-                TokenKind.Gt => DomainExpression.GreaterThan(propExpr, right),
-                TokenKind.Gte => DomainExpression.GreaterThanOrEqual(propExpr, right),
-                TokenKind.Lt => DomainExpression.LessThan(propExpr, right),
-                TokenKind.Lte => DomainExpression.LessThanOrEqual(propExpr, right),
-                _ => throw Error($"Unknown comparison operator '{op}'"),
-            };
-            return DomainExpression.RelationshipNav(relName, comparison);
-        }
-
-        // Bare Rel PropName (boolean property on related entity)
-        return DomainExpression.RelationshipNav(relName, propExpr);
-    }
-
-    /// <summary>
-    /// Parses a collection quantified expression: any|all|none Rel where body or count Rel [where body].
-    /// The quantifier keyword + relationship name have already been consumed.
-    /// </summary>
-    private DomainExpression ParseQuantifiedExpression(string quantifier) {
-        var relName = ExpectIdentifier(TokenKind.Identifier, "relationship name");
-
-        // count Rel (no where — cardinality only)
-        if (quantifier == "count" && !string.Equals(_current.Text, "where", StringComparison.OrdinalIgnoreCase)) {
-            return DomainExpression.Count(relName, null);
-        }
-
-        // any|all|none|count Rel where body
-        if (!string.Equals(_current.Text, "where", StringComparison.OrdinalIgnoreCase))
-            throw Error($"Expected 'where' after '{quantifier} {relName}', got '{_current.Text}'");
-        Advance(); // consume 'where'
-
-        // Body uses ParseAnd (matching Q1' `where` behavior — `or` body requires parens).
-        var body = ParseAnd();
-
-        return quantifier switch {
-            "any" => DomainExpression.Any(relName, body),
-            "all" => DomainExpression.All(relName, body),
-            "none" => DomainExpression.None(relName, body),
-            "count" => DomainExpression.Count(relName, body),
-            _ => throw Error($"Unknown quantifier '{quantifier}'"),
-        };
-    }
-
-    private static bool IsQuantifierKeyword(string text) =>
-        string.Equals(text, "any", StringComparison.OrdinalIgnoreCase)
-        || string.Equals(text, "all", StringComparison.OrdinalIgnoreCase)
-        || string.Equals(text, "none", StringComparison.OrdinalIgnoreCase)
-        || string.Equals(text, "count", StringComparison.OrdinalIgnoreCase);
-
     // ── Annotation parser ────────────────────────────────────
 
     /// <summary>
@@ -1544,12 +1275,6 @@ public sealed class PolyDslParser {
         TokenKind.Required or TokenKind.Unique or TokenKind.Range
             or TokenKind.Length or TokenKind.Pattern
             or TokenKind.Equals or TokenKind.Enum => true,
-        _ => false,
-    };
-
-    private static bool IsComparisonOp(TokenKind kind) => kind switch {
-        TokenKind.Is or TokenKind.Eq or TokenKind.Neq
-            or TokenKind.Gt or TokenKind.Gte or TokenKind.Lt or TokenKind.Lte => true,
         _ => false,
     };
 

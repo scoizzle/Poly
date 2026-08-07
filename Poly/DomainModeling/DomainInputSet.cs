@@ -1,5 +1,6 @@
 using Poly.Analysis;
 using Poly.DomainModeling.Lowering;
+using Poly.DomainModeling.Parsing;
 
 namespace Poly.DomainModeling;
 
@@ -40,9 +41,15 @@ public sealed class DomainParserInputs {
 
     public AnnotationRegistry Annotations { get; }
 
-    public DomainParserInputs(AnnotationRegistry annotations) {
+    /// <summary>E1 open expression forms (temporal units, <c>Now</c>, …).</summary>
+    public ExpressionFormRegistry ExpressionForms { get; }
+
+    public DomainParserInputs(AnnotationRegistry annotations, ExpressionFormRegistry? expressionForms = null) {
         ArgumentNullException.ThrowIfNull(annotations);
         Annotations = new AnnotationRegistry(annotations);
+        ExpressionForms = expressionForms is null
+            ? new ExpressionFormRegistry()
+            : new ExpressionFormRegistry(expressionForms);
     }
 }
 
@@ -89,6 +96,7 @@ public sealed class DomainInputBuilder {
     private readonly List<INodeAnalyzer> _analysisPasses = [];
 
     public AnnotationRegistry Annotations { get; } = new();
+    public ExpressionFormRegistry ExpressionForms { get; } = new();
     public TypeMappingRegistry TypeMaps { get; } = new();
 
     public static DomainInputBuilder Create() => new();
@@ -106,6 +114,12 @@ public sealed class DomainInputBuilder {
         return this;
     }
 
+    public DomainInputBuilder RegisterExpressionForm(IExpressionPrimaryForm form) {
+        ArgumentNullException.ThrowIfNull(form);
+        ExpressionForms.Register(form);
+        return this;
+    }
+
     public DomainInputBuilder AddStorageConvention(IStorageConvention convention) {
         ArgumentNullException.ThrowIfNull(convention);
         _storageConventions.Add(convention);
@@ -119,7 +133,7 @@ public sealed class DomainInputBuilder {
     }
 
     public DomainParserInputs BuildParserInputs() =>
-        new(Annotations);
+        new(Annotations, ExpressionForms);
 
     public DomainAnalysisInputs BuildAnalysisInputs() =>
         new(TypeMaps, _storageConventions, _analysisPasses);

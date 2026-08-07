@@ -60,7 +60,7 @@ Agents still useful for residuals: `.github/agents/plan-suite-until-done.agent.m
 | [**DSL absorption proposals**](domain-dsl-absorption-proposals.md) | P1–P12 matrix; P3/P2 suites above | One P* at a time |
 | [**MCP dogfood protocol**](v2-to-v3/mcp-dogfood-protocol.md) · [`dogfood-*`](v2-to-v3/simple-agent-tasks/dogfood-README.md) | Wave 2 **complete** | Further waves if admitted |
 | [**MCP dogfood orchestrator**](v2-to-v3/mcp-dogfood-orchestrator.md) | Dogfood loop tooling | With dogfood admission |
-| [**Grammar framework integration**](grammar-integration.md) | **Hybrid cutover landed** (GI-1…7, 2026-08-07): structure/annotations on Matcher; expr RD; legacy tokenizer gone. Park E1/GI-8/9 | Pull E1 before temporal pack; no open GI CURRENT |
+| [**Grammar framework integration**](grammar-integration.md) | **GI-1…7 + E1 done** (2026-08-07): structure Matcher; `DslExpressionParser` + open forms; legacy tokenizer gone. Park GI-8 JSON dual-media, GI-9 | Temporal pack may admit; pull GI-8 if JSON must share open forms |
 | [**Customer trust proof map**](customer-trust-proof-map.md) | Living claim → proof → T1/T2 index; not a suite | Update when claims change; drives priority of trust gaps |
 | [**Instance commit & outbox design lock**](instance-commit-and-outbox-design-lock.md) | Durability boundary + outbox intents vocabulary | Admit only when a host persists instances |
 | [**Analysis-consuming lowering**](analysis-consuming-lowering.md) | Draft | Explicit pick |

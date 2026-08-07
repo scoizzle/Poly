@@ -24,7 +24,7 @@ public sealed class StringCharSource : ICharSource {
         _text = text ?? throw new ArgumentNullException(nameof(text));
     }
 
-    public char Peek(int index) => index < _text.Length ? _text[index] : '\0';
+    public char Peek(int index) => (uint)index < (uint)_text.Length ? _text[index] : '\0';
 
     public int Length => _text.Length;
 }
@@ -66,7 +66,7 @@ public abstract class CharSourceTokenReader<TKind> : TokenReader<TKind> where TK
 
     /// <summary>Skips whitespace characters (space, tab, newline, carriage return).</summary>
     protected void SkipWhitespace() {
-        while (Position < _source.Length) {
+        while ((uint)Position < (uint)_source.Length) {
             var ch = _source.Peek(Position);
             if (ch is ' ' or '\t' or '\n' or '\r') { AdvanceChar(); }
             else { break; }

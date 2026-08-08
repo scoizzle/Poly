@@ -53,6 +53,8 @@ Matcher ──► MatchResult    Printer ──► text
 | `Optional(kind)` | `Optional<MatchToken>` | Zero or one of a token kind | Call content callback (may emit nothing) |
 | `Optional(element)` | `Optional<TKind>` | Zero or one of any element | Call content callback |
 | `Many(ruleName)` | `ManyOf<TKind>` | Zero+ matches from a named rule | Call content callback |
+| `Rule(ruleName)` | `RuleRef<TKind>` | Exactly one match from a named rule (longest-match; zero-width fails) | Call content callback |
+| `LeftAssoc(operandRule, opKinds…)` | `LeftAssoc<TKind>` | One operand, then zero+ `op operand` repeats (flat span; trailing op fails) | Call content callback |
 | `Balanced(open, close)` | `Balanced<TKind>` | Brace-balanced block (depth-tracked) | Emit open, indent, content callback, dedent, emit close |
 | `Any()` | `AnyToken<TKind>` | Wildcard — matches any single token | Call content callback |
 

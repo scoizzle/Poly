@@ -108,11 +108,11 @@ Defer mcp-minify / mut-safety / p1 until gpure gate (or human waive).
 
 ## 8. Success definition (pure done)
 
-- [ ] No recursive-descent **language** left in DomainModeling Parsing for product `.poly` (handlers only map matches → IR).  
-- [ ] New syntax = pattern registration (product or pack), not a new `ParseFoo` method tree.  
-- [ ] Packs extend expr/effects without editing Matcher core.  
-- [ ] CORE: Grammar owns engine; DomainModeling owns product/pack tables + handlers.  
-- [ ] Full suite green; guide unchanged except error-shape honesty.  
+- [x] No recursive-descent **language** left in DomainModeling Parsing for product `.poly` — construct **dispatch** (effects, operators) is table-selected via `MatchRule`; the expression **precedence ladder** is table-guided (Option A: each layer's operator loop runs on `MatchRule("expr-*-op")` spans). The `LeftAssoc` span tables are **not yet the live fold driver** — driving the fold from them is a planned successor step (gpure follow-ups S1/S5, 2026-08-08).  
+- [x] New syntax = pattern registration (product or pack), not a new `ParseFoo` method tree.  
+- [x] Packs extend expr/effects without editing Matcher core.  
+- [x] CORE: Grammar owns engine; DomainModeling owns product/pack tables + handlers.  
+- [x] Full suite green; guide unchanged except error-shape honesty.  
 
 ---
 

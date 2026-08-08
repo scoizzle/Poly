@@ -628,135 +628,90 @@ public sealed class PolyDslParser : IDslParseCursor {
     }
 
     private Effect ParseEffect() {
-        if (_current.Kind == TokenKind.Transition) {
-            Advance(); // consume 'transition'
-            Expect(TokenKind.To);
-            var target = ExpectIdentifier(TokenKind.Identifier, "stage name");
-            return new StageTransitionEffect(new StageReference(target));
-        }
-
-        if (_current.Kind == TokenKind.Assign) {
-            Advance(); // consume 'assign'
-            var propName = ExpectIdentifier(TokenKind.Identifier, "property name");
-            Expect(TokenKind.To);
-            var expr = ParseExpression();
-            return new AssignEffect(DomainExpression.Property(propName), expr);
-        }
-
-        if (_current.Kind == TokenKind.Create) {
-            return ParseCreateEffect();
-        }
-
-        if (_current.Kind == TokenKind.Delete) {
-            // E1: Soft-delete the current entity instance.
-            Advance(); // consume 'delete'
-            return new DeleteEntityInstance(new DomainTypeReference(_currentEntityName));
-        }
-
-        if (_current.Kind == TokenKind.When) {
-            // Subscription effect — this is handled differently
-            // (embedded in StageSubscription, not in a standalone action)
-            // If we reach here it's a parsing error
-            throw Error("Unexpected 'when' inside action body (subscriptions are stage-level)");
-        }
-
-        // E3a/E3b: invoke [any|all] [RelName.]ActionName(args) [where expr]
-        //   any/all   → collection quantifier (E3b only, requires RelName)
-        //   RelName.  → cross-entity invoke (E3b, resolve via relationship)
-        //   bare      → self-only invoke (E3a)
-        //   where …  → optional filter predicate on target instances
-        if (_current.Kind == TokenKind.Invoke) {
-            Advance(); // consume 'invoke'
-
-            // Optional quantifier: any / all (identifier text match)
-            StageSubscriptionQuantifier? quantifier = null;
-            if (_current.Kind == TokenKind.Identifier &&
-                string.Equals(_current.Text, "any", StringComparison.OrdinalIgnoreCase)) {
-                quantifier = StageSubscriptionQuantifier.Any;
-                Advance();
-            }
-            else if (_current.Kind == TokenKind.Identifier &&
-                     string.Equals(_current.Text, "all", StringComparison.OrdinalIgnoreCase)) {
-                quantifier = StageSubscriptionQuantifier.All;
-                Advance();
+        var match = MatchRule("effect");
+        if (match is null) {
+            // F7: 'when' must stay rejected inside effect bodies (subscriptions
+            // are stage-level; no 'when' pattern exists under "effect").
+            if (_current.Kind == TokenKind.When) {
+                throw Error("Unexpected 'when' inside action body (subscriptions are stage-level)");
             }
 
-            var firstId = ExpectIdentifier(TokenKind.Identifier, "action or relationship name");
-
-            string? targetRelationship = null;
-            string actionName;
-
-            if (_current.Kind == TokenKind.Dot) {
-                // E3b: invoke RelName.ActionName(args)
-                targetRelationship = firstId;
-                Advance(); // consume '.'
-                actionName = ExpectIdentifier(TokenKind.Identifier, "action name");
-            }
-            else {
-                // E3a: invoke ActionName(args) — self-only
-                actionName = firstId;
+            if (_current.Kind == TokenKind.Identifier && _unsupportedKeywords.Contains(_current.Text)) {
+                throw new FormatException(
+                    $"'{_current.Text}' is not supported in Phase 1a");
             }
 
-            // Optional parameter bindings: (name: expr, ...)
-            var bindings = new List<PropertyBinding>();
-            if (_current.Kind == TokenKind.LParen) {
-                Advance(); // consume '('
-                while (_current.Kind != TokenKind.RParen) {
-                    var paramName = ExpectIdentifier(TokenKind.Identifier, "parameter name");
-                    Expect(TokenKind.Colon);
-                    var paramExpr = ParseExpression();
-                    bindings.Add(new PropertyBinding(paramName, paramExpr));
-                    if (_current.Kind == TokenKind.Comma)
-                        Advance(); // consume ','
+            // N4 (DX only): the head keyword matched but its tail pattern
+            // failed — fold the tail expectation into the error.
+            var tailHint = _current.Kind switch {
+                TokenKind.Transition => " — expected 'to <stage>'",
+                TokenKind.Assign => " — expected '<property> to'",
+                TokenKind.Create => " — expected '<type> { … }' or 'in <relationship> { … }'",
+                TokenKind.If => " — expected '(condition)'",
+                _ => "",
+            };
+            throw Error($"Expected effect (transition, assign, create, delete, invoke, if){tailHint}, got '{_current.Text}'");
+        }
+
+        switch (match.PatternName) {
+            case "transition": {
+                    var target = match.Tokens[2].Text;
+                    Consume(match);
+                    return new StageTransitionEffect(new StageReference(target));
                 }
-                Expect(TokenKind.RParen);
-            }
 
-            // Optional filter: where expr — local shape only (domain cardinality is analyzer).
-            DomainExpression? filter = null;
-            if (_current.Kind == TokenKind.Identifier &&
-                string.Equals(_current.Text, "where", StringComparison.OrdinalIgnoreCase)) {
-                Advance(); // consume 'where'
-                filter = ParseExpression();
-            }
+            case "assign": {
+                    var propName = match.Tokens[1].Text;
+                    Consume(match);
+                    var expr = ParseExpression();
+                    return new AssignEffect(DomainExpression.Property(propName), expr);
+                }
 
-            // Fail-closed local syntax (DMEFF007 mirror): do not accept shapes we will always reject later.
-            if (quantifier is not null && targetRelationship is null)
-                throw Error(
-                    $"'invoke {quantifier.Value.ToString().ToLowerInvariant()}' requires RelName.ActionName " +
-                    "(collection cross-entity only; self-invoke cannot use any/all)");
-            if (filter is not null && quantifier is null)
-                throw Error(
-                    "'invoke ... where' requires 'any' or 'all' on a collection relationship " +
-                    "(e.g. invoke any Rel.Action where …)");
-            if (filter is not null && targetRelationship is null)
-                throw Error(
-                    "'invoke ... where' requires a relationship target (not self-invoke)");
+            case "create-in": {
+                    var relationshipName = match.Tokens[2].Text;
+                    Consume(match);
+                    Expect(TokenKind.LBrace);
+                    var initializers = ParsePropertyInitializers();
+                    return new CreateEntityInRelationshipEffect(relationshipName, initializers);
+                }
 
-            return new InvokeActionEffect(actionName, bindings, targetRelationship, quantifier, filter);
+            case "create": {
+                    var entityTypeName = match.Tokens[1].Text;
+                    Consume(match);
+                    Expect(TokenKind.LBrace);
+                    var initList = ParsePropertyInitializers();
+                    return new CreateEntityInstance(
+                        new DomainTypeReference(entityTypeName),
+                        initList,
+                        null);
+                }
+
+            case "delete":
+                Consume(match);
+                return new DeleteEntityInstance(new DomainTypeReference(_currentEntityName));
+
+            case "invoke":
+                Consume(match);
+                return ParseInvokeEffectTail();
+
+            case "if":
+                // Head is `if (` — the condition and then/else bodies are parsed
+                // by the handler (B1: the pattern never spans IR-bearing bodies).
+                Consume(match);
+                return ParseIfEffectCore();
+
+            default:
+                throw Error($"Unhandled effect pattern '{match.PatternName}'");
         }
-
-        // E4 / E6.4: if (expr) { effects } [else if (expr) { ... }]* [else { effects }]
-        if (_current.Kind == TokenKind.If) {
-            return ParseConditionalEffect();
-        }
-
-        // Check for unsupported effect keywords
-        if (_current.Kind == TokenKind.Identifier && _unsupportedKeywords.Contains(_current.Text)) {
-            throw new FormatException(
-                $"'{_current.Text}' is not supported in Phase 1a");
-        }
-
-        throw Error($"Expected effect (transition, assign, create, delete, invoke, if), got '{_current.Text}'");
     }
 
     /// <summary>
     /// Parses <c>if (cond) { … } [else if (cond) { … }]* [else { … }]</c>.
-    /// Chains of <c>else if</c> lower to nested <see cref="ConditionalEffect"/> nodes.
+    /// Called with the cursor at the condition (the <c>if (</c> head already
+    /// consumed). Chains of <c>else if</c> lower to nested
+    /// <see cref="ConditionalEffect"/> nodes.
     /// </summary>
-    private Effect ParseConditionalEffect() {
-        Advance(); // consume 'if'
-        Expect(TokenKind.LParen);
+    private Effect ParseIfEffectCore() {
         var condition = ParseExpression();
         Expect(TokenKind.RParen);
         Expect(TokenKind.LBrace);
@@ -770,7 +725,7 @@ public sealed class PolyDslParser : IDslParseCursor {
             Advance(); // consume 'else'
             if (_current.Kind == TokenKind.If) {
                 // else if → nest another ConditionalEffect as the sole else branch
-                elseEffects = [ParseConditionalEffect()];
+                elseEffects = [ParseEffect()];
             }
             else {
                 Expect(TokenKind.LBrace);
@@ -784,28 +739,77 @@ public sealed class PolyDslParser : IDslParseCursor {
         return new ConditionalEffect(condition, thenEffects, elseEffects);
     }
 
-    private Effect ParseCreateEffect() {
-        Advance(); // consume 'create'
-
-        string? relationshipName = null;
-
-        if (_current.Kind == TokenKind.In) {
-            // create in relName { ... }
-            Advance(); // consume 'in'
-            relationshipName = ExpectIdentifier(TokenKind.Identifier, "relationship name");
-            Expect(TokenKind.LBrace);
-            var initializers = ParsePropertyInitializers();
-            return new CreateEntityInRelationshipEffect(relationshipName, initializers);
+    /// <summary>
+    /// Parses the invoke tail after the <c>invoke</c> keyword:
+    /// <c>[any|all] [RelName.]ActionName(args) [where expr]</c> (E3a/E3b).
+    /// </summary>
+    private Effect ParseInvokeEffectTail() {
+        // Optional quantifier: any / all (identifier text match)
+        StageSubscriptionQuantifier? quantifier = null;
+        if (_current.Kind == TokenKind.Identifier &&
+            string.Equals(_current.Text, "any", StringComparison.OrdinalIgnoreCase)) {
+            quantifier = StageSubscriptionQuantifier.Any;
+            Advance();
+        }
+        else if (_current.Kind == TokenKind.Identifier &&
+                 string.Equals(_current.Text, "all", StringComparison.OrdinalIgnoreCase)) {
+            quantifier = StageSubscriptionQuantifier.All;
+            Advance();
         }
 
-        // create EntityName { ... }
-        var entityTypeName = ExpectIdentifier(TokenKind.Identifier, "entity type name");
-        Expect(TokenKind.LBrace);
-        var initList = ParsePropertyInitializers();
-        return new CreateEntityInstance(
-            new DomainTypeReference(entityTypeName),
-            initList,
-            null);
+        var firstId = ExpectIdentifier(TokenKind.Identifier, "action or relationship name");
+
+        string? targetRelationship = null;
+        string actionName;
+
+        if (_current.Kind == TokenKind.Dot) {
+            // E3b: invoke RelName.ActionName(args)
+            targetRelationship = firstId;
+            Advance(); // consume '.'
+            actionName = ExpectIdentifier(TokenKind.Identifier, "action name");
+        }
+        else {
+            // E3a: invoke ActionName(args) — self-only
+            actionName = firstId;
+        }
+
+        // Optional parameter bindings: (name: expr, ...)
+        var bindings = new List<PropertyBinding>();
+        if (_current.Kind == TokenKind.LParen) {
+            Advance(); // consume '('
+            while (_current.Kind != TokenKind.RParen) {
+                var paramName = ExpectIdentifier(TokenKind.Identifier, "parameter name");
+                Expect(TokenKind.Colon);
+                var paramExpr = ParseExpression();
+                bindings.Add(new PropertyBinding(paramName, paramExpr));
+                if (_current.Kind == TokenKind.Comma)
+                    Advance(); // consume ','
+            }
+            Expect(TokenKind.RParen);
+        }
+
+        // Optional filter: where expr — local shape only (domain cardinality is analyzer).
+        DomainExpression? filter = null;
+        if (_current.Kind == TokenKind.Identifier &&
+            string.Equals(_current.Text, "where", StringComparison.OrdinalIgnoreCase)) {
+            Advance(); // consume 'where'
+            filter = ParseExpression();
+        }
+
+        // Fail-closed local syntax (DMEFF007 mirror): do not accept shapes we will always reject later.
+        if (quantifier is not null && targetRelationship is null)
+            throw Error(
+                $"'invoke {quantifier.Value.ToString().ToLowerInvariant()}' requires RelName.ActionName " +
+                "(collection cross-entity only; self-invoke cannot use any/all)");
+        if (filter is not null && quantifier is null)
+            throw Error(
+                "'invoke ... where' requires 'any' or 'all' on a collection relationship " +
+                "(e.g. invoke any Rel.Action where …)");
+        if (filter is not null && targetRelationship is null)
+            throw Error(
+                "'invoke ... where' requires a relationship target (not self-invoke)");
+
+        return new InvokeActionEffect(actionName, bindings, targetRelationship, quantifier, filter);
     }
 
     private List<PropertyBinding> ParsePropertyInitializers() {
@@ -1222,13 +1226,22 @@ public sealed class PolyDslParser : IDslParseCursor {
 
     /// <summary>
     /// Matcher peeks the reader buffer; this parser holds the head token in
-    /// <see cref="_current"/>. Unread so Peek(1) is the head, then restore.
+    /// <see cref="_current"/>. Unread so Peek(1) is the head, then restore —
+    /// cursor stays at the match head (not past the span). Callers Consume when
+    /// they take the match. Returns null when no pattern matches; unknown rule
+    /// names throw from <see cref="Matcher{TKind}.TryMatch"/> (N3).
     /// </summary>
     private MatchResult<DslTokenKind>? MatchRule(string ruleName) {
         _tokenReader.Unread(_current);
         var match = _matcher.TryMatch(ruleName);
         _current = _tokenReader.Read();
         return match;
+    }
+
+    /// <summary>Advances past all tokens consumed by a match (head stays in sync).</summary>
+    private void Consume(MatchResult<DslTokenKind> match) {
+        for (var i = 0; i < match.Consumed; i++)
+            Advance();
     }
 
     private void Advance() {

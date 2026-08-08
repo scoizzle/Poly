@@ -1,7 +1,7 @@
 # gpure-0 — Inventory RD residual + Grammar gaps
 
 **Difficulty:** S  
-**Status:** `[ ]`  
+**Status:** `[x]`  
 **Prereq:** none  
 
 ## Objective
@@ -15,7 +15,7 @@ Document every product parse path that is still recursive-descent language, and 
 2. Fill section **A. RD residual** by grepping and reading:
 
 ```bash
-rg -n "private DomainExpression Parse|private Effect Parse|ParseOr|ParseAnd|ParsePrimary|ParseEffect" \
+rg -n "private DomainExpression Parse|private Effect Parse|ParseOr|ParseAnd|ParsePrimary|ParseComparison|ParseMultiply|ParseNot|ParseConditionalEffect|ParseCreateEffect|ParsePropertyInitializers|ParseEffect" \
   Poly/DomainModeling/Parsing --glob '*.cs'
 ```
 
@@ -31,17 +31,35 @@ rg -n "MatchRule\(|TryMatch\(" Poly/DomainModeling/Parsing --glob '*.cs'
 
 | Gap | Needed for pure? (Y/N) | Proposed engine feature name |
 |-----|------------------------|------------------------------|
-| Recursive single rule ref | | `Rule(ruleName)` |
-| Left-assoc binary chain | | `LeftAssoc` or similar |
+| Recursive single rule ref | Y | `RuleRef` / `PatternBuilder.Rule` |
+| Left-assoc binary chain | Y | `LeftAssoc` |
 | … | | |
+
+**C must also record these engine facts (review F4 — do not invent):**
+
+| Fact | Implication for RuleRef / pure port |
+|------|-------------------------------------|
+| `TryMatch(rule)` uses **longest** match among patterns in the rule | `RuleRef` **must** reuse longest-match selection (same as `TryMatch`), **not** the `ManyOf` loop which takes **first** successful sub-pattern |
+| `ManyOf` stops at first sub-pattern that matches with count > 0 | Do not copy ManyOf’s inner loop for RuleRef |
+| Zero-width match | If a sub-match consumes **0** tokens → **fail** (infinite recursion guard) |
+| Nested-span / dual-cursor | Product `MatchRule` Unreads head, TryMatches, then **Read restores head without Consume** — a pattern that fully spans nested Balanced body leaves the handler **without a cursor inside the body**. Record this for gpure-5 (B1). |
 
 5. Fill section **D. File ownership map** for later tasks (who owns Grammar vs DslGrammar vs PolyDslParser).
 
-6. Do **not** edit `Poly/**` code.
+6. Fill section **E. Product `not` precedence probe (B3)** — read `DslExpressionParser.ParseNot`:
+
+   - Today: after `not`, operand is **`ParseAdd()`**, not comparison.  
+   - So `not a > b` is **not** valid product parse today (compare binds outside / fails).  
+   - Record exact expected behavior with one probe example for the parity harness (gpure-3).  
+   - **Do not** “fix” `not` to bind tighter over `>` unless a failing product test forces it — parity wins.
+
+7. Do **not** edit `Poly/**` code.
 
 ## Verification
 
-- [ ] Notes file exists with A–D  
+- [ ] Notes file exists with A–E  
+- [ ] §C includes longest-vs-first-match + zero-width + nested-span facts  
+- [ ] §E pins `not` operand level  
 - [ ] `git diff --stat` shows only docs under `simple-agent-tasks/`  
 
 ## File ownership
@@ -52,4 +70,4 @@ rg -n "MatchRule\(|TryMatch\(" Poly/DomainModeling/Parsing --glob '*.cs'
 
 ## Status
 
-**Status:** Not Started  
+**Status:** Done 2026-08-07 — inventory notes at `gpure-inventory-notes.md` (A–E: RD residual, Matcher-driven, engine facts incl. longest-vs-first + zero-width + nested-span, ownership, `not` probe).  

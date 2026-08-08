@@ -1,7 +1,7 @@
 # gpure-3 — Product expression rules on DslGrammar
 
 **Difficulty:** L  
-**Status:** `[ ]`  
+**Status:** `[x]`  
 **Prereq:** tasks 1–2  
 
 ## Objective
@@ -26,25 +26,42 @@ expr-and          → LeftAssoc(expr-not-or-compare, And | "and")
 expr-primary      → already partial; extend: group uses Rule("expr"), literals, ident
 ```
 
-2. **Parity of precedence** with current `DslExpressionParser` (or/and/not/compare/add/mul). Document any intentional difference (there should be none).
+   **F8 — `ExpectedTokens` drift:** extending `expr-primary` (or any rule used by `ExpectedTokens(...)`) can change error messages. Note current callers of `ExpectedTokens("expr-primary")` in inventory notes; if messages change, update guide/tests in the same PR or track for gpure-8 step 6 — do not leave silent drift.
 
-3. Keyword ops `and`/`or`/`is`/`not`: today often `Identifier` text or dedicated kinds — match **existing tokenizer** (`DslTokenKind`). Do not change tokenizer keywords unless tests force it; prefer Predicate on Identifier text if needed.
+2. **Parity of precedence** with current `DslExpressionParser` (or/and/not/compare/add/mul). **Zero intentional differences** unless a product test already documents them.
 
-4. Comparison is **not** pure left-assoc chain in current product (single compare). Model as:  
-   `expr-compare → expr-add [compareOp expr-add]?`  
-   Use optional second half pattern or two patterns (with-op / bare).
+3. **B3 — pin `not` (mandatory):**  
+   Current product: `ParseNot` binds operand at **`ParseAdd`**, not comparison.  
+   - Grammar must mirror that (not-operand = add-layer).  
+   - Add parity probe (see §6): `not a > b` must **fail** (or match current product error) on **both** RD and Grammar paths — do **not** silently accept as `not (a > b)` unless product already does (it does not).
 
-5. Quantifiers / path-prefix / related-access remain **handlers** after matching `ident` primary for now if too hard — **allowed residual** if listed in notes under “still handler after primary match”. Goal of this task is binary layers + primaries on the table.
+4. Keyword ops `and`/`or`/`is`/`not`: match **existing tokenizer** (`DslTokenKind`). Prefer Predicate on Identifier text if needed.
 
-6. Tests `Poly.Tests/Grammar/DslExprGrammarTests.cs` (or DomainModeling test folder):
+5. Comparison is **not** pure left-assoc (single compare). Model:  
+   `expr-compare → expr-add [compareOp expr-add]?`
 
-| Test | Expect |
-|------|--------|
-| `ExprGrammar_AddMul_Precedence_TokenSpan` | Matcher on `expr` consumes `1 + 2 * 3` fully |
-| `ExprGrammar_AndOr_Consumes` | `a and b or c` full span (per product precedence) |
-| `ExprGrammar_Compare_Consumes` | `Age >= 18` |
+6. Quantifiers / path-prefix may remain handlers after `ident` primary if listed in inventory.
 
-7. Do **not** switch product `ParseExpression` yet.
+7. **B2 — start dedicated parity harness** (not “1–2 goldens”):
+
+   Create `Poly.Tests/DomainModeling/Parsing/DslExprParityTests.cs` (name fixed).  
+   Pattern: for each case, parse expression via **legacy RD entry still in tree** (or snapshot of current semantics) **and** via Grammar match + fold (once fold exists in gpure-4; for this task at minimum assert **token-span / accept-or-reject** parity).
+
+   **Minimum corpus in this task** (accept/reject + span; expand IR equality in gpure-4):
+
+| Case | Expect (product today) |
+|------|-------------------------|
+| `1 + 2 * 3` | accept full expr |
+| `a and b or c` | accept (or-layer above and) |
+| `Age >= 18` | accept |
+| `not x` | accept |
+| `not a > b` | **reject** / fail (B3 pin) |
+| `1 +` | reject |
+| `(1 + 2)` | accept |
+
+   Keep harness **growing** through gpure-4…7 — do not delete cases.
+
+8. Do **not** switch product `ParseExpression` yet (gpure-4).
 
 ## Verification
 
@@ -53,7 +70,7 @@ dotnet run --project Poly.Tests/Poly.Tests.csproj --no-build
 ```
 
 - [ ] Rules exist in `DslGrammar`  
-- [ ] New tests green  
+- [ ] `DslExprParityTests` exists with B3 + precedence cases  
 - [ ] Full suite green (no product wire yet)  
 
 ## File ownership
@@ -65,4 +82,4 @@ dotnet run --project Poly.Tests/Poly.Tests.csproj --no-build
 
 ## Status
 
-**Status:** Not Started  
+**Status:** Done 2026-08-07 — expr rules on DslGrammar (expr/or/and/not/compare/add/mul/primary + `-no-not` comparison LHS for B3); `DslExprParityTests.cs` with 10 accept/reject+span cases; E1 group assertion updated to full-span. Suite 1915 green.  

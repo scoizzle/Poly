@@ -20,6 +20,22 @@ public class DslExpressionE1Tests {
         }
     }
 
+    /// <summary>Pack form: <c>Number Identifier</c> → literal carrying the unit (live path).</summary>
+    private sealed class DurationLiteralForm : IExpressionPrimaryForm {
+        public bool TryParse(IDslParseCursor cursor, DslExpressionParser expressions, out DomainExpression expression) {
+            expression = null!;
+            if (cursor.Current.Kind != DslTokenKind.Number
+                || cursor.Peek(1).Kind != DslTokenKind.Identifier)
+                return false;
+            var num = cursor.Current.Text;
+            var unit = cursor.Peek(1).Text;
+            cursor.Advance();
+            cursor.Advance();
+            expression = DomainExpression.Literal($"{num} {unit}");
+            return true;
+        }
+    }
+
     [Test]
     public async Task OpenForm_MagicIdentifier_ParsesInPolicyWithoutCoreEdit() {
         var inputs = DomainInputBuilder.Create()
@@ -76,6 +92,52 @@ public class DslExpressionE1Tests {
         await AssertPattern("\"x\"", "string");
         await AssertPattern("true", "true");
         await AssertPattern("Name", "ident");
-        await AssertPattern("(", "group");
+        await AssertPattern("(1 + 2)", "group");
+    }
+
+    /// <summary>
+    /// gpure-6: product-shaped open-form example — a temporal-style pack registers
+    /// a <c>Number &lt;unit&gt;</c> pattern on the primary surface via
+    /// <c>ContributeGrammarPatterns</c> (the hook the registry already wires at
+    /// <c>DslGrammar.Build</c>). The comparison LHS uses <c>expr-primary-no-not</c>,
+    /// so packs must register on both primary rules to cover full expressions.
+    /// S4 (2026-08-08): pattern registration covers the Matcher/probe surface;
+    /// the LIVE product path is driven by the handler form — prove both below.
+    /// </summary>
+    [Test]
+    public async Task PackPattern_NumberUnit_ExtendsPrimarySurface() {
+        var g = DslGrammar.Build(grammar => {
+            foreach (var rule in new[] { "expr-primary", "expr-primary-no-not" }) {
+                grammar.Define(rule)
+                    .Pattern("duration").Token(DslTokenKind.Number).Value(DslTokenKind.Identifier).Commit();
+            }
+        });
+        var matcher = new Matcher<DslTokenKind>(g, new DslTokenReader("12 days"));
+        var primary = matcher.TryMatch("expr-primary");
+        await Assert.That(primary?.PatternName).IsEqualTo("duration");
+        await Assert.That(primary!.Consumed).IsEqualTo(2);
+        var full = matcher.TryMatch("expr");
+        await Assert.That(full).IsNotNull();
+        await Assert.That(full!.Consumed).IsEqualTo(2);
+
+        // Live path (S4): the same pack, driven by its IExpressionPrimaryForm,
+        // parses a full policy end to end — patterns alone do not extend parsing.
+        var inputs = DomainInputBuilder.Create()
+            .RegisterExpressionForm(new DurationLiteralForm())
+            .BuildParserInputs();
+        var poly = """
+            domain D
+            E: entity {
+              P: policy { 12 days == 12 days }
+            }
+            """;
+        var changes = new PolyDslParser(poly, inputs).Parse();
+        var result = new DomainEvolution(new Domain("_", [], [])).Apply(changes);
+        await Assert.That(result.Succeeded).IsTrue();
+        var policy = result.Root!.Types.OfType<Entity>().Single().Policies.Single();
+        var cmp = (Comparison)policy.Expression;
+        await Assert.That(cmp.Kind).IsEqualTo(ComparisonKind.Equal);
+        await Assert.That(((Literal)cmp.Left).Value).IsEqualTo("12 days");
+        await Assert.That(((Literal)cmp.Right).Value).IsEqualTo("12 days");
     }
 }

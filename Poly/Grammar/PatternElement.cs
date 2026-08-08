@@ -35,6 +35,30 @@ public sealed record ManyOf<TKind>(string RuleName) : IPatternElement<TKind>
     where TKind : struct;
 
 /// <summary>
+/// Matches exactly one occurrence of the named grammar rule (recursive /
+/// nested languages). Uses the same longest-match selection as
+/// <see cref="Matcher{TKind}.TryMatch"/> relative to the current offset;
+/// a sub-match that consumes zero tokens is treated as failure (infinite
+/// recursion guard).
+/// </summary>
+public sealed record RuleRef<TKind>(string RuleName) : IPatternElement<TKind>
+    where TKind : struct;
+
+/// <summary>
+/// Matches a left-associative chain: one <paramref name="OperandRule"/>
+/// match, then while an operator kind from <paramref name="OperatorKinds"/>
+/// matches, another operand. The full span (operands + operators) is
+/// accumulated flat for <see cref="MatchResult{TKind}"/>; folding the chain
+/// into IR is the handler's job (operator identity is recoverable from kinds).
+/// A trailing operator with no following operand fails the whole element.
+/// </summary>
+public sealed record LeftAssoc<TKind>(
+    string OperandRule,
+    IReadOnlyList<TKind> OperatorKinds
+) : IPatternElement<TKind>
+    where TKind : struct;
+
+/// <summary>
 /// Matches brace-balanced content: <paramref name="Open"/> ... <paramref name="Close"/>,
 /// tracking nesting depth so the first matching close at depth 0 terminates.
 /// </summary>

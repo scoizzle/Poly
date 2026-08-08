@@ -25,17 +25,23 @@ public sealed class Grammar<TKind> where TKind : struct {
     }
 
     /// <summary>
-    /// Returns all patterns registered under <paramref name="ruleName"/>,
+    /// Returns all patterns registered under <paramref name="ruleName"/>
     /// sorted by first-token kind then by element count descending,
     /// or an empty list if the rule is unknown.
     /// Read-only at match time (sorting happens on <see cref="AddPattern"/>)
     /// so concurrent matchers may share one grammar safely.
+    /// Lenient by design: <see cref="Matcher{TKind}.TryMatch"/> and RuleRef /
+    /// LeftAssoc operands validate the rule name first (N3 — fail loud on typos),
+    /// while ManyOf keeps its documented zero-many-on-unknown behavior.
     /// </summary>
     public IReadOnlyList<Pattern<TKind>> GetPatterns(string ruleName) {
         if (!_rules.TryGetValue(ruleName, out var list))
             return [];
         return list;
     }
+
+    /// <summary>True when a rule with this name is defined.</summary>
+    public bool HasRule(string ruleName) => _rules.ContainsKey(ruleName);
 
     /// <summary>Returns all known rule names.</summary>
     public IEnumerable<string> KnownRules => _rules.Keys;
@@ -165,6 +171,29 @@ public sealed class PatternBuilder<TKind> where TKind : struct {
     /// </summary>
     public PatternBuilder<TKind> Many(string ruleName) {
         _elements.Add(new ManyOf<TKind>(ruleName));
+        return this;
+    }
+
+    /// <summary>
+    /// Appends a reference to exactly one match of the named rule
+    /// (recursive / nested languages). Longest-match selection relative to
+    /// the current offset; zero-width sub-matches fail.
+    /// </summary>
+    public PatternBuilder<TKind> Rule(string ruleName) {
+        _elements.Add(new RuleRef<TKind>(ruleName));
+        return this;
+    }
+
+    /// <summary>
+    /// Appends a left-associative operator chain: one <paramref name="operandRule"/>
+    /// match, then zero or more <c>operator operand</c> repeats using the given
+    /// operator kinds. The whole span is consumed flat; a trailing operator
+    /// without an operand fails the element.
+    /// </summary>
+    public PatternBuilder<TKind> LeftAssoc(string operandRule, params TKind[] operatorKinds) {
+        ArgumentException.ThrowIfNullOrWhiteSpace(operandRule);
+        ArgumentNullException.ThrowIfNull(operatorKinds);
+        _elements.Add(new LeftAssoc<TKind>(operandRule, operatorKinds));
         return this;
     }
 

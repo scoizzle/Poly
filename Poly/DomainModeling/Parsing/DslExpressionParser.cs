@@ -8,8 +8,12 @@ using TokenKind = DslTokenKind;
 
 /// <summary>
 /// E1 expression parser for the product DSL.
-/// Precedence is Pratt/RD layering (or/and/not/compare/add/mul/primary);
-/// primary open forms are pack-registered via <see cref="ExpressionFormRegistry"/>.
+///
+/// Grammar-table-guided (gpure-4/7): operator chains fold via
+/// <c>MatchRule("expr-*-op")</c> pattern matches (spans come from the LeftAssoc
+/// rules on <see cref="DslGrammar"/>), not raw kind while-loops. The old
+/// recursive descent was deleted in gpure-7; the parity corpus in
+/// <c>DslExprParityTests</c> is now frozen-IR regression.
 /// Structure dispatch remains on <see cref="PolyDslParser"/> + Matcher.
 /// </summary>
 public sealed class DslExpressionParser {
@@ -27,11 +31,16 @@ public sealed class DslExpressionParser {
     /// <summary>Public for pack forms that need a nested expression (e.g. parenthesized).</summary>
     public DomainExpression ParseNestedExpression() => ParseExpression();
 
+    // ═══════════════════════════════════════════════════════════
+    //  Grammar-table-guided layers (live product path, gpure-4)
+    //  Operator loops run on MatchRule("expr-*-op") — the gate grep
+    //  must show no `while (Kind == Plus/Star/...)` here.
+    // ═══════════════════════════════════════════════════════════
+
     private DomainExpression ParseOr() {
         var left = ParseAnd();
-        while (_c.Current.Kind == TokenKind.Or
-               || (_c.Current.Kind == TokenKind.Identifier && _c.Current.Text == "or")) {
-            _c.Advance();
+        while (_c.MatchRule("expr-or-op") is { } op) {
+            Consume(op);
             var right = ParseAnd();
             left = DomainExpression.Or(left, right);
         }
@@ -40,9 +49,8 @@ public sealed class DslExpressionParser {
 
     private DomainExpression ParseAnd() {
         var left = ParseNot();
-        while (_c.Current.Kind == TokenKind.And
-               || (_c.Current.Kind == TokenKind.Identifier && _c.Current.Text == "and")) {
-            _c.Advance();
+        while (_c.MatchRule("expr-and-op") is { } op) {
+            Consume(op);
             var right = ParseNot();
             left = DomainExpression.And(left, right);
         }
@@ -50,8 +58,8 @@ public sealed class DslExpressionParser {
     }
 
     private DomainExpression ParseNot() {
-        if (_c.Current.Kind == TokenKind.Not) {
-            _c.Advance();
+        if (_c.MatchRule("expr-not-op") is { } m) {
+            Consume(m);
             var operand = ParseAdd();
             return DomainExpression.Not(operand);
         }
@@ -60,46 +68,40 @@ public sealed class DslExpressionParser {
 
     private DomainExpression ParseComparison() {
         var left = ParseAdd();
+        if (_c.MatchRule("expr-compare-op") is { } opMatch) {
+            var kind = opMatch.Tokens[0].Kind;
+            Consume(opMatch);
 
-        if (IsComparisonOp(_c.Current.Kind)) {
-            var op = _c.Current.Kind;
-
-            if (op == TokenKind.Is && _c.PeekIs(TokenKind.Not)) {
-                _c.Advance();
-                _c.Advance();
+            if (kind == TokenKind.Is && _c.MatchRule("expr-not-op") is { } notMatch) {
+                Consume(notMatch);
                 var rhs = ParseAdd();
                 return DomainExpression.NotEqual(left, rhs);
             }
 
-            _c.Advance();
-
-            if (op == TokenKind.Is) {
-                var rhs = ParseAdd();
-                return DomainExpression.Equal(left, rhs);
-            }
-
             var right = ParseAdd();
-            return op switch {
+            return kind switch {
+                TokenKind.Is => DomainExpression.Equal(left, right),
                 TokenKind.Eq => DomainExpression.Equal(left, right),
                 TokenKind.Neq => DomainExpression.NotEqual(left, right),
                 TokenKind.Gt => DomainExpression.GreaterThan(left, right),
                 TokenKind.Gte => DomainExpression.GreaterThanOrEqual(left, right),
                 TokenKind.Lt => DomainExpression.LessThan(left, right),
                 TokenKind.Lte => DomainExpression.LessThanOrEqual(left, right),
-                _ => throw _c.Error($"Unknown comparison operator '{op}'"),
+                _ => throw _c.Error($"Unknown comparison operator '{kind}'"),
             };
         }
-
         return left;
     }
 
     private DomainExpression ParseAdd() {
         var left = ParseMultiply();
-        while (_c.Current.Kind is TokenKind.Plus or TokenKind.Minus) {
-            var op = _c.Current.Kind;
-            _c.Advance();
+        while (_c.MatchRule("expr-add-op") is { } op) {
+            // S2: operator identity from the token kind, not the pattern name —
+            // survives pattern renames, matching ParseComparison below.
+            var isPlus = op.Tokens[0].Kind == TokenKind.Plus;
+            Consume(op);
             var right = ParseMultiply();
-            left = op == TokenKind.Plus
+            left = isPlus
                 ? DomainExpression.Add(left, right)
                 : DomainExpression.Subtract(left, right);
         }
@@ -108,11 +110,12 @@ public sealed class DslExpressionParser {
 
     private DomainExpression ParseMultiply() {
         var left = ParsePrimary();
-        while (_c.Current.Kind is TokenKind.Star or TokenKind.Slash) {
-            var op = _c.Current.Kind;
-            _c.Advance();
+        while (_c.MatchRule("expr-mul-op") is { } op) {
+            // S2: operator identity from the token kind, not the pattern name.
+            var isStar = op.Tokens[0].Kind == TokenKind.Star;
+            Consume(op);
             var right = ParsePrimary();
-            left = op == TokenKind.Star
+            left = isStar
                 ? DomainExpression.Multiply(left, right)
                 : DomainExpression.Divide(left, right);
         }
@@ -123,9 +126,6 @@ public sealed class DslExpressionParser {
         // E1 open forms (temporal Now / unit durations, etc.) before builtins.
         if (_forms.TryParsePrimary(_c, this, out var specialized))
             return specialized;
-
-        // Optional grammar first-token check (documents product primary surface).
-        _ = _c.MatchRule("expr-primary");
 
         switch (_c.Current.Kind) {
             case TokenKind.Number:
@@ -266,15 +266,18 @@ public sealed class DslExpressionParser {
         };
     }
 
+    private void Consume(MatchResult<DslTokenKind> match) {
+        for (var i = 0; i < match.Consumed; i++)
+            _c.Advance();
+    }
+
     private static bool IsQuantifierKeyword(string text) =>
         string.Equals(text, "any", StringComparison.OrdinalIgnoreCase)
         || string.Equals(text, "all", StringComparison.OrdinalIgnoreCase)
         || string.Equals(text, "none", StringComparison.OrdinalIgnoreCase)
         || string.Equals(text, "count", StringComparison.OrdinalIgnoreCase);
 
-    private static bool IsComparisonOp(TokenKind kind) => kind switch {
-        TokenKind.Is or TokenKind.Eq or TokenKind.Neq
-            or TokenKind.Gt or TokenKind.Gte or TokenKind.Lt or TokenKind.Lte => true,
-        _ => false,
-    };
+    // S3: single source of truth — the grammar's compare-op set is the
+    // authority; no sibling copy to drift against it.
+    private static bool IsComparisonOp(TokenKind kind) => DslGrammar.IsCompareOpKind(kind);
 }

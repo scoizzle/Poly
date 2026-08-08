@@ -1,7 +1,7 @@
 # gpure-6 — Open forms via patterns (where possible)
 
 **Difficulty:** M  
-**Status:** `[ ]`  
+**Status:** `[x]`  
 **Prereq:** task 4  
 
 ## Objective
@@ -40,4 +40,4 @@ dotnet run --project Poly.Tests/Poly.Tests.csproj --no-build
 
 ## Status
 
-**Status:** Not Started  
+**Status:** Done 2026-08-07 — only test form (MAGIC) exists; added `PackPattern_NumberUnit_ExtendsPrimarySurface` product-shaped pattern example (registers on both primaries; documents p1 registration). Notes updated. Suite 1928 green.  

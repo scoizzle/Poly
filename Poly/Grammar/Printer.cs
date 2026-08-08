@@ -83,6 +83,8 @@ public sealed class Printer<TKind> where TKind : struct {
                     break;
 
                 case ManyOf<TKind>:
+                case RuleRef<TKind>:
+                case LeftAssoc<TKind>:
                     InvokeContent(ctx, onContent);
                     break;
 

@@ -28,11 +28,15 @@ public sealed class Matcher<TKind> where TKind : struct {
     /// <summary>
     /// Attempts to match a pattern from the named rule at the current reader
     /// position. Returns the longest match, or <c>null</c> if no pattern matches.
+    /// Throws <see cref="ArgumentException"/> when <paramref name="ruleName"/>
+    /// is not defined (N3): a typo'd rule name must fail at the source, not
+    /// silently never-match.
     ///
     /// On success the reader is <b>not</b> advanced — call <see cref="Consume"/>
     /// to advance past the matched tokens.
     /// </summary>
     public MatchResult<TKind>? TryMatch(string ruleName) {
+        EnsureKnownRule(ruleName);
         var patterns = _grammar.GetPatterns(ruleName);
         MatchResult<TKind>? best = null;
 
@@ -44,6 +48,12 @@ public sealed class Matcher<TKind> where TKind : struct {
         }
 
         return best;
+    }
+
+    /// <summary>N3: fail loud on typo'd rule names (RuleRef / LeftAssoc / TryMatch).</summary>
+    private void EnsureKnownRule(string ruleName) {
+        if (!_grammar.HasRule(ruleName))
+            throw new ArgumentException($"Unknown grammar rule '{ruleName}'", nameof(ruleName));
     }
 
     /// <summary>Advances the reader past the tokens consumed by <paramref name="result"/>.</summary>
@@ -113,6 +123,31 @@ public sealed class Matcher<TKind> where TKind : struct {
     }
 
     /// <summary>
+    /// Matches the named rule relative to <paramref name="offset"/> using the
+    /// same longest-match selection as <see cref="TryMatch"/>. Zero-width
+    /// sub-matches fail (infinite recursion guard). Shared by
+    /// <see cref="RuleRef{TKind}"/> and <see cref="LeftAssoc{TKind}"/> operands.
+    /// Throws for unknown rule names (N3) — a RuleRef/LeftAssoc typo must fail
+    /// at the source, never silently never-match.
+    /// </summary>
+    private bool TryMatchRule(string ruleName, int offset, out IReadOnlyList<Token<TKind>> consumed) {
+        EnsureKnownRule(ruleName);
+        MatchResult<TKind>? best = null;
+        foreach (var sub in _grammar.GetPatterns(ruleName)) {
+            if (TryMatchPattern(sub, offset, out var subTokens)) {
+                if (best == null || subTokens.Count > best.Consumed)
+                    best = new MatchResult<TKind>(sub.Name, subTokens);
+            }
+        }
+        if (best is null || best.Consumed == 0) {
+            consumed = [];
+            return false;
+        }
+        consumed = best.Tokens;
+        return true;
+    }
+
+    /// <summary>
     /// Dispatches a single <see cref="IPatternElement{TKind}"/> at the given offset.
     /// </summary>
     private bool TryMatchElement(IPatternElement<TKind> element, int offset, out IReadOnlyList<Token<TKind>> consumed) {
@@ -178,6 +213,53 @@ public sealed class Matcher<TKind> where TKind : struct {
                         if (!matched) break;
                     }
                     consumed = manyTokens;
+                    return true;
+                }
+
+            case RuleRef<TKind> rr:
+                return TryMatchRule(rr.RuleName, offset, out consumed);
+
+            case LeftAssoc<TKind> la: {
+                    // First operand uses Rule(operandRule) semantics (zero-width fails).
+                    if (!TryMatchRule(la.OperandRule, offset, out var first)) {
+                        consumed = [];
+                        return false;
+                    }
+                    var tokens = new List<Token<TKind>>(first);
+                    var pos = offset + first.Count;
+                    for (var iter = 0; iter < 10_000; iter++) {
+                        var op = _reader.Peek(pos + 1);
+                        var opMatched = false;
+                        foreach (var kind in la.OperatorKinds) {
+                            if (EqualityComparer<TKind>.Default.Equals(op.Kind, kind)) {
+                                opMatched = true;
+                                break;
+                            }
+                        }
+                        if (!opMatched) break;
+
+                        // Trailing operator without an operand fails the whole chain.
+                        if (!TryMatchRule(la.OperandRule, pos + 1, out var next)) {
+                            consumed = [];
+                            return false;
+                        }
+                        tokens.Add(op);
+                        tokens.AddRange(next);
+                        pos += 1 + next.Count;
+                    }
+                    // N1: fail closed at the iteration cap — a chain still
+                    // operator-led after 10_000 pairs is a truncated match or a
+                    // trailing operator, both malformed. (ManyOf keeps a
+                    // fail-open cap; LeftAssoc's trailing-op rule makes failure
+                    // the only consistent choice.)
+                    var capOp = _reader.Peek(pos + 1);
+                    foreach (var kind in la.OperatorKinds) {
+                        if (EqualityComparer<TKind>.Default.Equals(capOp.Kind, kind)) {
+                            consumed = [];
+                            return false;
+                        }
+                    }
+                    consumed = tokens;
                     return true;
                 }
 

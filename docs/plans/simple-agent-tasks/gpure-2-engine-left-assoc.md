@@ -1,7 +1,7 @@
 # gpure-2 — Grammar engine: left-associative operator chains
 
 **Difficulty:** M  
-**Status:** `[ ]`  
+**Status:** `[x]`  
 **Prereq:** task 1  
 
 ## Objective
@@ -35,7 +35,7 @@ leftAssoc(nextRule, operatorRuleOrKinds)
    - Accumulate tokens (all operands + ops) for `MatchResult.Consumed`.  
    - **Do not** build DomainExpression here — only token consumption / match success. Folding IR is product handler responsibility **or** optional callback later; for pure match tests, success = full span matched.
 
-3. **Critical:** product will need op identity. Ensure `MatchResult` still exposes consumed tokens so handlers can rebuild the chain (existing MatchResult token list is enough).
+3. **Critical (F5):** product will need op identity. `MatchResult` keeps a **flat** token list (op identity recoverable from kinds) — no nested span tree. That is enough for folding **only if** product uses **layer-by-layer MatchRule** (gpure-4 Option A). A single outer match + re-split flat tokens (Option B) loses nested-group structure — same class of problem as B1; do not design LeftAssoc assuming Option B.
 
 4. README: document element.  
 
@@ -70,4 +70,4 @@ dotnet run --project Poly.Tests/Poly.Tests.csproj --no-build
 
 ## Status
 
-**Status:** Not Started  
+**Status:** Done 2026-08-07 — `LeftAssoc<TKind>` + `PatternBuilder.LeftAssoc(operandRule, params opKinds)`, flat token span incl. operators, trailing-op fails, zero-width-guarded operands; README row; 4 tests (`GrammarLeftAssocTests.cs` incl. nested operand rule). Suite 1905 green.  

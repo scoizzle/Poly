@@ -9,7 +9,7 @@
 
 | Priority | Plan | Suite | Why ready |
 |----------|------|--------|-----------|
-| **1** | [`../grammar-pure-end-state.md`](../grammar-pure-end-state.md) | [`gpure-README.md`](./gpure-README.md) | **Finish pure Grammar stream first** |
+| **1** | [`../grammar-pure-end-state.md`](../grammar-pure-end-state.md) | [`gpure-README.md`](./gpure-README.md) | **DONE 2026-08-07** — pure Grammar product path (see gate) |
 | **2** | [`../mcp-catalog-minify.md`](../mcp-catalog-minify.md) | [`mcp-minify-README.md`](./mcp-minify-README.md) | JSON drop + unified add/remove |
 | **3** | [`../mcp-mutation-safety.md`](../mcp-mutation-safety.md) | [`mut-safety-README.md`](./mut-safety-README.md) | Session lock + idempotency |
 | **4** | [`../p1-temporal-design-lock.md`](../p1-temporal-design-lock.md) | [`p1-README.md`](./p1-README.md) | Temporal pack (bridge OK during gpure) |

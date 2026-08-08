@@ -7,70 +7,69 @@ Architectural rationale → **`docs/decisions/`**. Module maps → **`Poly/*/REA
 
 ---
 
-## Admission control (2026-08-04)
+## Admission control
 
-**One primary implementation workstream at a time.** Everything else is Done, Parked, or Pull — not “also open.”
+**One primary implementation workstream at a time.**
 
 | Rule | Meaning |
 |------|---------|
 | **CURRENT** | Only what master-roadmap Agent pick says (or `(none)`). |
 | **Park before open** | Finish or park the live suite before admitting the next. |
-| **Proposals ≠ queues** | Research docs (e.g. DSL absorption) stay parked until one P* is admitted as a suite. |
-| **Pull ≠ CURRENT** | Dogfood, Q4, grammar, packs — available when admitted, not parallel debt. |
+| **Proposals ≠ queues** | Research / design locks stay parked until a suite is solidified and admitted. |
+| **Pull ≠ CURRENT** | Available when admitted, not parallel debt. |
 
-**Agent pick source of truth:** [`v2-to-v3/master-roadmap.md`](v2-to-v3/master-roadmap.md) → “Agent pick (one line)”.  
-**Orientation:** [`domainmodeling-workstream-map.md`](domainmodeling-workstream-map.md).
-
----
-
-## Active (index + reference only)
-
-| Plan | Role |
-|------|------|
-| [**Master roadmap**](v2-to-v3/master-roadmap.md) | Milestone index + **one-line agent pick** (CURRENT) |
-| [**Dogfood wave 2**](v2-to-v3/simple-agent-tasks/dogfood-README.md) | **CURRENT** — S4→S5→S6 MCP discovery |
-| [**Workstream map**](domainmodeling-workstream-map.md) | Done / parked / pull inventory |
-| [**Cohesion & metadata findings**](domainmodeling-cohesion-and-metadata-findings.md) | Orientation (2026-08-06); not a queue |
-| [**Capability inventory**](../domainmodeling-capability-inventory.md) | What ships (reference, not a queue) |
-| [**`pr1` review gate**](v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md) | Always-on pre-ship process |
+**Agent pick:** [`v2-to-v3/master-roadmap.md`](v2-to-v3/master-roadmap.md)  
+**Ready suites index:** [`simple-agent-tasks/READY-TO-TASK.md`](simple-agent-tasks/READY-TO-TASK.md)  
+**Pre-ship (always-on):** [`v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md`](v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md)
 
 ---
 
-## Active product queue
+## Live agent suites (solidified)
 
-| Suite | Queue | Status |
-|-------|--------|--------|
-| **p3** return types | [`simple-agent-tasks/p3-README.md`](simple-agent-tasks/p3-README.md) | **DONE** 2026-08-06 |
-| **p2** multi-hop | [`simple-agent-tasks/p2-README.md`](simple-agent-tasks/p2-README.md) | **DONE** 2026-08-06 |
+| Suite | README | Plan | Status |
+|-------|--------|------|--------|
+| **mcp-minify** | [`mcp-minify-README.md`](simple-agent-tasks/mcp-minify-README.md) | [`mcp-catalog-minify.md`](mcp-catalog-minify.md) | Ready — admit |
+| **mut-safety** | [`mut-safety-README.md`](simple-agent-tasks/mut-safety-README.md) | [`mcp-mutation-safety.md`](mcp-mutation-safety.md) | Ready — admit |
+| **p1** temporal | [`p1-README.md`](simple-agent-tasks/p1-README.md) | [`p1-temporal-design-lock.md`](p1-temporal-design-lock.md) | Ready — admit (after GI/E1) |
 
-**CURRENT:** `(none)` — next admit is explicit (P1 research track only until locks).
+**Suggested order:** mcp-minify → mut-safety → p1.
 
-## Completed pipeline (historical)
+```bash
+copilot --agent plan-suite-until-done -p "Suite: mcp-minify. Mode: until-done."
+```
 
-[`SUITE-OF-SUITES.md`](simple-agent-tasks/SUITE-OF-SUITES.md) — dogfood w2 · amu · p4 · coh **done**.  
-Agents still useful for residuals: `.github/agents/plan-suite-until-done.agent.md`.
+**CURRENT:** see master-roadmap (default none until admit).
 
 ---
 
-## Parked (do not execute until unparked)
+## Live design locks / research (not implement suites)
 
-| Plan | Role | Unpark when |
-|------|------|-------------|
-| [**P1 temporal research**](p1-temporal-research.md) | Concept/spike only — **not** a product suite | Explicit admit after research locks |
-| [**DSL absorption proposals**](domain-dsl-absorption-proposals.md) | P1–P12 matrix; P3/P2 suites above | One P* at a time |
-| [**MCP dogfood protocol**](v2-to-v3/mcp-dogfood-protocol.md) · [`dogfood-*`](v2-to-v3/simple-agent-tasks/dogfood-README.md) | Wave 2 **complete** | Further waves if admitted |
-| [**MCP dogfood orchestrator**](v2-to-v3/mcp-dogfood-orchestrator.md) | Dogfood loop tooling | With dogfood admission |
-| [**Grammar framework integration**](grammar-integration.md) | **GI-1…7 + E1 done** (2026-08-07): structure Matcher; `DslExpressionParser` + open forms; legacy tokenizer gone. **GI-8 cancelled** (JSON bags retired via mcp-catalog-minify) | Temporal pack may admit; GI-9 non-text only with consumer |
-| [**MCP catalog minify + drop JSON expr**](mcp-catalog-minify.md) | DSL-first; kill JSON expr bags; unify evolve into `add`/`remove` (kind + payload) | Explicit admit as CURRENT |
-| [**Customer trust proof map**](customer-trust-proof-map.md) | Living claim → proof → T1/T2 index; not a suite | Update when claims change; drives priority of trust gaps |
-| [**Instance commit & outbox design lock**](instance-commit-and-outbox-design-lock.md) | Durability boundary + outbox intents vocabulary | Admit only when a host persists instances |
-| [**Analysis-consuming lowering**](analysis-consuming-lowering.md) | Draft | Explicit pick |
-| [**Post–V2-delete naming cleanup**](post-v2-delete-naming-cleanup.md) | Drop product `V3*` labels | Idle green tree + explicit pick |
-| [**Platform velocity review**](platform-velocity-review.md) | Pain inventory (2026-07-25) | Pull items only when admitted |
-| [**Effect surface completeness**](v2-to-v3/effect-surface-completeness.md) | Kernel shipped; E5 / E6.1 pull | Dogfood or explicit effect suite |
-| [**MCP tool-surface expansion**](v2-to-v3/mcp-tool-surface-expansion.md) | Backlog §0 | After dogfood admission |
-| [**Post–system-review correctness hardening**](2026-07-11-review-fix-plan.md) | Mostly done; optional residuals | Explicit residual pick |
-| [**DomainModeling decomposition**](domainmodeling-decomposition-proposal.md) | Folder/namespace tiers only | Idle + explicit pick |
+| Doc | Role |
+|-----|------|
+| [`customer-trust-proof-map.md`](customer-trust-proof-map.md) | Trust claim → proof index |
+| [`instance-commit-and-outbox-design-lock.md`](instance-commit-and-outbox-design-lock.md) | Durability / outbox vocabulary |
+| [`p1-temporal-research.md`](p1-temporal-research.md) | Temporal research (suite is p1-*) |
+| [`domain-dsl-absorption-proposals.md`](domain-dsl-absorption-proposals.md) | P* matrix; pick one suite at a time |
+| [`domainmodeling-workstream-map.md`](domainmodeling-workstream-map.md) | Orientation inventory |
+
+---
+
+## Parked / pull (no suite yet)
+
+| Plan | Unpark when |
+|------|-------------|
+| [`ef-and-api-codegen.md`](ef-and-api-codegen.md) | Explicit generation suite admit |
+| [`analysis-consuming-lowering.md`](analysis-consuming-lowering.md) | Explicit pick |
+| [`post-v2-delete-naming-cleanup.md`](post-v2-delete-naming-cleanup.md) | Idle green tree |
+| [`v2-to-v3/effect-surface-completeness.md`](v2-to-v3/effect-surface-completeness.md) | E5/E6 pain |
+| [`mcp-batch-snapshot-efficiency.md`](mcp-batch-snapshot-efficiency.md) · [`mcp-domain-inspection-completeness.md`](mcp-domain-inspection-completeness.md) | MCP pain |
+| [`domain-migration-poc-plan.md`](domain-migration-poc-plan.md) | Migration consumer |
+| [`dsl-plugin-pipeline-experiment.md`](dsl-plugin-pipeline-experiment.md) · [`domain-plugin-extension-platform.md`](domain-plugin-extension-platform.md) | Pack host consumer |
+| [`poly-ast-analysis-module-split.md`](poly-ast-analysis-module-split.md) | After product stability |
+| [`array-specialization-plan.md`](array-specialization-plan.md) · [`analyzer-improvements.md`](analyzer-improvements.md) · [`ast-types-provider-instance-ergonomics.md`](ast-types-provider-instance-ergonomics.md) | Optional |
+| [`platform-velocity-review.md`](platform-velocity-review.md) · [`future-platform-capabilities.md`](future-platform-capabilities.md) | Idea / inventory |
+| [`infrastructure-pass-NEXT.md`](infrastructure-pass-NEXT.md) | Infra residual |
+| [`domain-modeling-abstraction-gaps.md`](domain-modeling-abstraction-gaps.md) | Gap catalog (coh historical) |
 
 ---
 
@@ -78,30 +77,19 @@ Agents still useful for residuals: `.github/agents/plan-suite-until-done.agent.m
 
 | Archive | Contents |
 |---------|----------|
-| [**domainmodeling-completed-2026-08**](archive/domainmodeling-completed-2026-08/README.md) | `apm` · `das` · `dacr` · `dar` · `dau` · `spe` · `qe` · `vs` + parent plans |
-| [**Infrastructure pass**](archive/infrastructure-pass/README.md) | Infra suite; live pull notes: [`infrastructure-pass-NEXT.md`](infrastructure-pass-NEXT.md) |
-
-Shipped product (no open suite): DAS catalog · peer `when … as` · store-aware `Rel exists` — see master-roadmap DONE line.
-
----
-
-## Deferred (do not execute yet)
-
-| Plan | Role |
-|------|------|
-| [**Domain plugin / multi-DBMS packs**](domain-plugin-extension-platform.md) | → [`dsl-plugin-pipeline-experiment.md`](dsl-plugin-pipeline-experiment.md) — not current pick |
-| [**`Poly.Ast` + `Poly.Analysis` module split**](poly-ast-analysis-module-split.md) | After product stability |
-| [array-specialization-plan.md](array-specialization-plan.md) | Optional emitter work |
-| [analyzer-improvements.md](analyzer-improvements.md) | Optional analysis quality |
-| [future-platform-capabilities.md](future-platform-capabilities.md) | Idea backlog |
+| [**completed-2026-08-mid**](archive/completed-2026-08-mid/README.md) | amu · coh · p2 · p3 · p4 · dogfood · grammar/GIP · MCP expansion/oracle/dogfood protocols |
+| [**domainmodeling-completed-2026-08**](archive/domainmodeling-completed-2026-08/README.md) | apm · das · dacr · dar · dau · spe · qe · vs |
+| [**Infrastructure pass**](archive/infrastructure-pass/README.md) | Infra suite |
+| [**v2-to-v3-migration**](archive/v2-to-v3-migration/README.md) | V2→V3 workstreams |
+| [**Interpretation**](archive/interpretation/README.md) | Historical IR/VM plans |
+| [**vision-historical**](archive/vision-historical/README.md) | Old vision docs |
 
 ---
 
 ## Guardrails (not task lists)
 
 Anti-patterns: [001](anti-pattern-001-duplicate-tree-walks.md), [003](anti-pattern-003-extension-point-accretion.md), [004](anti-pattern-004-interface-new-hiding.md), [005](anti-pattern-005-second-system-effect.md), [007](anti-pattern-007-single-point-dependency.md).  
-DomainModeling abstraction gaps: [domain-modeling-abstraction-gaps.md](domain-modeling-abstraction-gaps.md).  
-MCP guiding principles: [v2-to-v3/spikes/mcp-guiding-principles.md](v2-to-v3/spikes/mcp-guiding-principles.md).
+MCP guiding principles: [v2-to-v3/spikes/mcp-guiding-principles.md](v2-to-v3/spikes/mcp-guiding-principles.md) (if present).
 
 ---
 
@@ -111,7 +99,6 @@ MCP guiding principles: [v2-to-v3/spikes/mcp-guiding-principles.md](v2-to-v3/spi
 |-----------------|--------|
 | `Poly/Interpretation/README.md` | Pipeline, modules, pass order |
 | `docs/decisions/2026-06-08-vm-as-canonical-semantics.md` | VM sole engine |
-| `docs/decisions/2026-07-04-primitives-as-canonical-ir.md` | Historical title; body = **direct AST→ABI** |
 | `docs/decisions/2026-06-08-domain-lowering-boundary.md` | Domain → generic AST only |
 
-**No open Interpretation mega-plan.** Archived Interpretation plans: [`archive/interpretation/`](archive/interpretation/README.md).
+**No open Interpretation mega-plan.** Archived: [`archive/interpretation/`](archive/interpretation/README.md).

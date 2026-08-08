@@ -34,7 +34,7 @@ Capture how to model dates / `Now` / duration arithmetic **before** solidifying 
 ## Do not
 
 - Parallel P1 with P3/P2 CURRENT  
-- ~~Grammar re-base as prereq~~ — **superseded 2026-08-06 (user direction):** [`grammar-integration.md`](grammar-integration.md) (GI-1..GI-8) is a committed plan that lands **before** this work; P1 pack authoring rides on GI-4 registration, so this is no longer a speculative re-base
+- ~~Grammar re-base as prereq~~ — **superseded 2026-08-06 (user direction):** [`grammar-integration.md`](archive/completed-2026-08-mid/grammar-integration.md) (GI-1..GI-8) is a committed plan that lands **before** this work; P1 pack authoring rides on GI-4 registration, so this is no longer a speculative re-base
 - Ship incomplete `schedule at` as domain truth without host adapter  
 
 ## Related product next
@@ -43,5 +43,5 @@ Capture how to model dates / `Now` / duration arithmetic **before** solidifying 
 |-------|--------|
 | 1 | [`simple-agent-tasks/p3-README.md`](simple-agent-tasks/p3-README.md) — return types |
 | 2 | [`simple-agent-tasks/p2-README.md`](simple-agent-tasks/p2-README.md) — multi-hop |
-| 3 | [`grammar-integration.md`](grammar-integration.md) — GI-1..GI-8 (user direction: before P1) |
+| 3 | [`grammar-integration.md`](archive/completed-2026-08-mid/grammar-integration.md) — GI-1..GI-8 (user direction: before P1) |
 | later | P1 after this research + explicit admit |

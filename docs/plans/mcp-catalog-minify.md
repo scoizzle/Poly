@@ -2,11 +2,12 @@
 
 **Date:** 2026-08-07  
 **Status:** Draft plan — **not admitted** until explicit CURRENT pick  
+**Agent suite:** [`simple-agent-tasks/mcp-minify-README.md`](simple-agent-tasks/mcp-minify-README.md) (trivial-agent micro-tasks 0→G)  
 **Principle:** One product authoring surface (`.poly` DSL); thin MCP; fewer non-overlapping tools  
 **Related:**  
 - Trust: [`customer-trust-proof-map.md`](customer-trust-proof-map.md) · ADR [`2026-07-11-platform-trust-bar-and-dogfood.md`](../decisions/2026-07-11-platform-trust-bar-and-dogfood.md)  
-- Grammar: [`grammar-integration.md`](grammar-integration.md) (E1 done; **GI-8 cancelled** by this plan)  
-- Expansion history: [`v2-to-v3/mcp-tool-surface-expansion.md`](v2-to-v3/mcp-tool-surface-expansion.md) (supersede growth posture)  
+- Grammar (archived): [`archive/completed-2026-08-mid/grammar-integration.md`](archive/completed-2026-08-mid/grammar-integration.md) (E1 done; **GI-8 cancelled**)  
+- Expansion history (archived): [`archive/completed-2026-08-mid/v2-to-v3/mcp-tool-surface-expansion.md`](archive/completed-2026-08-mid/v2-to-v3/mcp-tool-surface-expansion.md)  
 - Mutation safety: [`mcp-mutation-safety.md`](mcp-mutation-safety.md) (easier with fewer writers)
 
 ---
@@ -304,8 +305,8 @@ BLOCK:   re-adding per-type add_*/remove_* tools without explicit admit
 copilot --agent plan-suite-until-done -p "Suite: mcp-minify. Mode: until-done."
 ```
 
-Suite files when solidifying:  
-`docs/plans/simple-agent-tasks/mcp-minify-README.md` + micro-tasks as needed.
+**Solidified:** [`simple-agent-tasks/mcp-minify-README.md`](simple-agent-tasks/mcp-minify-README.md)  
+Tasks: `mcp-minify-0` … `mcp-minify-7` + `mcp-minify-gate`.
 
 ---
 

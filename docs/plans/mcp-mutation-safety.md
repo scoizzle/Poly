@@ -2,6 +2,7 @@
 
 **Date:** 2026-07-13  
 **Status:** Proposal — research + implementation plan  
+**Agent suite:** [`simple-agent-tasks/mut-safety-README.md`](simple-agent-tasks/mut-safety-README.md) (solidified 2026-08-07)  
 **Source:** Agent feedback from ~150-call supply chain modeling session  
 **Related:** `mcp-tool-surface-expansion.md` (diff_state), `mcp-guiding-principles.md` (rollback safety)
 
@@ -160,4 +161,4 @@ Ensure `DomainEvolution` preserves insertion order of stages through rollback. I
 |------|-------------|
 | [`mcp-batch-snapshot-efficiency.md`](mcp-batch-snapshot-efficiency.md) | Batch operations reduce the frequency of parallel-call races; snapshot export reduces inspection calls after rollbacks |
 | [`mcp-domain-inspection-completeness.md`](mcp-domain-inspection-completeness.md) | Relationship/constraint tools benefit from the same idempotency and rollback safety guarantees |
-| [`mcp-tool-surface-expansion.md`](v2-to-v3/mcp-tool-surface-expansion.md) | `diff_state` tool proposed there is the observability side of what this plan fixes at the mutation layer |
+| [`mcp-tool-surface-expansion.md`](archive/completed-2026-08-mid/v2-to-v3/mcp-tool-surface-expansion.md) (archived) | Historical expansion notes; minify supersedes growth |

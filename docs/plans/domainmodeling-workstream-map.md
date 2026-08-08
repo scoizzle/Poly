@@ -66,8 +66,8 @@ Reference capability: [`docs/domainmodeling-capability-inventory.md`](../domainm
 
 | Stream | Doc | Status | Notes |
 |--------|-----|--------|-------|
-| **DomainModeling decomposition** | `domainmodeling-decomposition-proposal.md` | Draft | Folder/namespace tiers; no behavior change — **do not** mix with product |
-| **Grammar framework integration** | `grammar-integration.md` | Parked draft | Not a prereq for SPE/dates |
+| **DomainModeling decomposition** | archived `completed-2026-08-mid/` + coh suite | **Done** (coh) | Historical only |
+| **Grammar framework integration** | archived `completed-2026-08-mid/grammar-integration.md` | **Done** (GI+E1) | Code shipped; plan archived |
 | **Analysis-consuming lowering** | `analysis-consuming-lowering.md` | Parked draft | Explicit pick only |
 | **DomainAuthoringContext removal plan** | (parent of dar) | **Done via dar** | Plan file may look open; suite closed |
 | **Post-V2 naming (`V3*`)** | `post-v2-delete-naming-cleanup.md` | Parked | Idle green tree + explicit pick |

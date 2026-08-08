@@ -1,8 +1,8 @@
 # P1 temporal — design lock (research spike output)
 
 **Date:** 2026-08-06  
-**Status:** **Design lock — parked.** No `p1-*` implementation suite until an explicit master-roadmap admit.  
-**Prereq (user direction 2026-08-06):** [`grammar-integration.md`](grammar-integration.md) (GI-1..GI-8) lands **before** this work. P1 pack authoring rides on **GI-4** (pack grammar registration) — the grammar engine, not the hand-rolled parser, is the authoring substrate.  
+**Status:** **Design lock complete.** Implementation suite ready: [`simple-agent-tasks/p1-README.md`](simple-agent-tasks/p1-README.md) — admit explicitly (prefer after mcp-minify / mut-safety).  
+**Prereq:** Grammar GI + **E1** done (2026-08-07; plan archived under `archive/completed-2026-08-mid/grammar-integration.md`). Pack uses `ExpressionFormRegistry` / open forms.  
 **Source research:** [`p1-temporal-research.md`](p1-temporal-research.md) (Q1–Q5 answered 2026-08-06)  
 **Parent vision:** [`domain-dsl-absorption-proposals.md`](domain-dsl-absorption-proposals.md) § P1 · experiment [`docs/experiments/DOMAIN-DSL-SPEC.md`](../experiments/DOMAIN-DSL-SPEC.md)
 
@@ -76,7 +76,7 @@ Business days, fiscal calendars, time zones, alternate clocks — optional packs
 
 ## Decision
 
-**Defer `p1-*` suite.** Admit order: **P3 → P2 → GI-preflight (C99) → grammar-integration (GI) → explicit master-roadmap admit of P1.** This research produced the design lock + inventory; implementation waits for the admit. Do not start production temporal work before then.
+**Admit `p1-*` when ready** (P3/P2/GI/E1 already done). Suggested backlog: **mcp-minify → mut-safety → p1**. Do not start production temporal work without master-roadmap CURRENT = p1.
 
 ## Appendix — doc-only failing-test sketch (not for merge)
 

@@ -2,12 +2,14 @@
 
 **Date:** 2026-08-06  
 **Audience:** GitHub **Copilot CLI** (primary), Grok plan-orchestrator (secondary)  
-**Status:** `[x]` — COMPLETE 2026-08-06 (dogfood wave-2 → amu → p4 → coh all done, gates passed, 1855/1855 tests green)  
-**CURRENT today:** (none — pipeline complete)  
+**Status:** Historical pipeline **complete** 2026-08-06 (dogfood → amu → p4 → coh). Later: p3 · p2 · GI/E1 landed.  
+**Next ready suites:** [`READY-TO-TASK.md`](./READY-TO-TASK.md) — mcp-minify · mut-safety · p1  
+
+**CURRENT today:** see master-roadmap (likely none until admit).
 
 ---
 
-## 1. Pipeline (strict order)
+## 1. Pipeline (strict order) — historical
 
 | Stage | Suite | README | Mode | Parallelism |
 |-------|--------|--------|------|-------------|
@@ -43,16 +45,19 @@ Interactive:
 Execute the DomainModeling suite-of-suites from docs/plans/simple-agent-tasks/SUITE-OF-SUITES.md until all stages are Done.
 ```
 
-### Single suite
+### Single suite (ready next)
 
 ```bash
-copilot --agent plan-suite-until-done -p "Suite: docs/plans/simple-agent-tasks/amu-README.md. Mode: until-done."
+copilot --agent plan-suite-until-done -p "Suite: mcp-minify. Mode: until-done."
+copilot --agent plan-suite-until-done -p "Suite: mut-safety. Mode: until-done."
+copilot --agent plan-suite-until-done -p "Suite: p1. Mode: until-done."
 ```
 
+Historical:
+
 ```bash
-copilot --agent plan-suite-until-done -p "Suite: docs/plans/simple-agent-tasks/p4-README.md until-done"
-copilot --agent plan-suite-until-done -p "Suite: docs/plans/simple-agent-tasks/coh-README.md until-done"
-copilot --agent plan-suite-until-done -p "Suite: docs/plans/v2-to-v3/simple-agent-tasks/dogfood-README.md until-done discovery-only first"
+copilot --agent plan-suite-until-done -p "Suite: amu. Mode: until-done."
+copilot --agent plan-suite-until-done -p "Suite: p4. Mode: until-done."
 ```
 
 ---

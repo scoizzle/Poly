@@ -26,6 +26,9 @@ Parse the user message for:
 | `p4` | `docs/plans/simple-agent-tasks/p4-README.md` |
 | `coh` | `docs/plans/simple-agent-tasks/coh-README.md` |
 | `dogfood` | `docs/plans/v2-to-v3/simple-agent-tasks/dogfood-README.md` |
+| `mcp-minify` | `docs/plans/simple-agent-tasks/mcp-minify-README.md` |
+| `mut-safety` | `docs/plans/simple-agent-tasks/mut-safety-README.md` |
+| `p1` | `docs/plans/simple-agent-tasks/p1-README.md` |
 | other path | Use as given |
 
 Also read the suite’s gate file if linked from the README.

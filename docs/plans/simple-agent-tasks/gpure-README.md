@@ -62,8 +62,11 @@ Make product `.poly` **table-driven**: parse control flow lives in `Poly.Grammar
 
 ### Kickoff
 
+**Suite DONE** — do not re-admit. CURRENT: [`PIPELINE-STATUS.md`](./PIPELINE-STATUS.md). Historical:
+
 ```bash
-copilot --agent plan-suite-until-done -p "Suite: gpure. Mode: until-done."
+# completed — do not re-run as CURRENT
+# copilot --agent plan-suite-until-done -p "Suite: gpure. Mode: until-done."
 ```
 
 ---

@@ -92,9 +92,8 @@ gpure-8  CORE/docs
 gpure-gate
 ```
 
-**To finish one stream completely:** admit **gpure** as sole CURRENT until gate Done.  
-Defer mcp-minify / mut-safety / p1 until gpure gate (or human waive).
-
+**Suite status:** **gpure DONE 2026-08-07** (see [`simple-agent-tasks/PIPELINE-STATUS.md`](simple-agent-tasks/PIPELINE-STATUS.md)).  
+Successor (not CURRENT): drive live fold from `LeftAssoc` span tables when a consumer needs it.
 ---
 
 ## 7. Explicit non-goals (for first pure suite)

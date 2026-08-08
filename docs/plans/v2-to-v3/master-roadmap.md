@@ -1,9 +1,9 @@
 # DomainModeling product roadmap (milestones)
 
 **Status:** Active (milestones index)  
-**Last Updated:** 2026-08-06  
+**Last Updated:** 2026-08-08  
 **Purpose:** High-level milestone status only.  
-**Day-to-day work:** **one admitted suite** (see Agent pick). Plans index admission rules: [`../README.md`](../README.md).  
+**Day-to-day work:** **one admitted suite**. **CURRENT truth:** [`../simple-agent-tasks/PIPELINE-STATUS.md`](../simple-agent-tasks/PIPELINE-STATUS.md) (Agent pick below must match).  
 **Completed suites (archived):** [`domainmodeling-completed-2026-08`](../archive/domainmodeling-completed-2026-08/README.md) (`qe` · `vs` · `spe` · `das` · `dacr` · `apm` · `dar` · `dau`) · infra under bar [`infrastructure-pass-NEXT.md`](../infrastructure-pass-NEXT.md)
 
 ---
@@ -52,17 +52,17 @@ MCP / direct API as thin consumers
 ### Agent pick (one line)
 
 ```text
-DONE:    … p3/p2; GI hybrid cutover + E1 seam; archive completed-2026-08-mid
-CURRENT: (none) — admit **gpure** to finish pure Grammar stream
-THEN:    gpure → mcp-minify → mut-safety → p1 temporal
-PARKED:  outbox lock; multi-assembly DM; actors/schedule
-PULL:    E5; EF codegen; naming cleanup
+DONE:    … p3/p2; GI; E1; gpure (2026-08-07); mcp-minify (2026-08-08)
+CURRENT: (none)
+ADMIT:   mut-safety
+THEN:    mut-safety → p1 temporal
+PARKED:  outbox lock; multi-assembly DM; actors/schedule; LeftAssoc live-fold
+PULL:    E5; EF codegen; naming cleanup; Validation/Text delete (dead-dual inventory)
 ```
 
-**Honest product claim today:** Path-prefix multi-hop; exists/where/Q3′; peer/entity when; catalog; action `-> Entity` returns. **Grammar:** hybrid product path (structure Matcher; expr RD modules + open-form registry). **No** temporal DSL authoring until p1. **No** pure-Grammar product path until gpure gate.
+**Honest product claim today:** Path-prefix multi-hop; exists/where/Q3′; peer/entity when; catalog; action `-> Entity` returns. **Grammar:** product parse is Grammar-table-guided (Option A expr ladder + effect heads; printer deferred). **MCP:** DSL-only expressions; unified `add`/`remove` + `apply_dsl`. **No** temporal DSL authoring until p1.
 
-**Focus (2026-08-07):** Prefer **gpure** as sole CURRENT to finish one stream. Ready suites: `docs/plans/simple-agent-tasks/READY-TO-TASK.md`.
-
+**Focus (2026-08-08):** Status monopath + dead-dual inventory; admit **mut-safety** when ready. CURRENT: [`../simple-agent-tasks/PIPELINE-STATUS.md`](../simple-agent-tasks/PIPELINE-STATUS.md).
 ---
 
 ## Archived material

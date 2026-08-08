@@ -294,7 +294,7 @@ M6 gate
 ## 11. Agent pick (when admitted)
 
 ```text
-CURRENT: mcp-minify
+DONE: mcp-minify (2026-08-08) — CURRENT: see simple-agent-tasks/PIPELINE-STATUS.md
 THEN:    M0 → M1 → M2 → M3 → M4 → M5 → M6
 BLOCK:   re-adding per-type add_*/remove_* tools without explicit admit
 ```

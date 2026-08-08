@@ -1,24 +1,25 @@
 # Plans ready for agent micro-tasks
 
-**Date:** 2026-08-07  
-**Rule:** One CURRENT suite at a time (master-roadmap).
+**Date:** 2026-08-08  
+**Rule:** One CURRENT suite at a time.  
+**CURRENT truth:** [`PIPELINE-STATUS.md`](./PIPELINE-STATUS.md) (only).
 
 ---
 
-## Ready (solidified — admit to run)
+## Status snapshot (mirrors PIPELINE-STATUS)
 
-| Priority | Plan | Suite | Why ready |
-|----------|------|--------|-----------|
-| **1** | [`../grammar-pure-end-state.md`](../grammar-pure-end-state.md) | [`gpure-README.md`](./gpure-README.md) | **DONE 2026-08-07** — pure Grammar product path (see gate) |
-| **2** | [`../mcp-catalog-minify.md`](../mcp-catalog-minify.md) | [`mcp-minify-README.md`](./mcp-minify-README.md) | JSON drop + unified add/remove |
-| **3** | [`../mcp-mutation-safety.md`](../mcp-mutation-safety.md) | [`mut-safety-README.md`](./mut-safety-README.md) | Session lock + idempotency |
-| **4** | [`../p1-temporal-design-lock.md`](../p1-temporal-design-lock.md) | [`p1-README.md`](./p1-README.md) | Temporal pack (bridge OK during gpure) |
-
-**Suggested admit order:** **`gpure` → mcp-minify → mut-safety → p1`** (one stream at a time).
+| Priority | Suite | Status |
+|----------|--------|--------|
+| — | [`gpure-README.md`](./gpure-README.md) | ✅ DONE 2026-08-07 |
+| — | [`mcp-minify-README.md`](./mcp-minify-README.md) | ✅ DONE 2026-08-08 |
+| **1 admit** | [`mut-safety-README.md`](./mut-safety-README.md) | Ready — **admit next** |
+| **2** | [`p1-README.md`](./p1-README.md) | Ready after mut-safety |
 
 ```bash
-copilot --agent plan-suite-until-done -p "Suite: gpure. Mode: until-done."
+copilot --agent plan-suite-until-done -p "Suite: mut-safety. Mode: until-done."
 ```
+
+**Suggested admit order (historical):** gpure → mcp-minify → **mut-safety** → p1.
 
 ---
 
@@ -27,7 +28,7 @@ copilot --agent plan-suite-until-done -p "Suite: gpure. Mode: until-done."
 See [`../archive/completed-2026-08-mid/README.md`](../archive/completed-2026-08-mid/README.md)  
 and [`../archive/domainmodeling-completed-2026-08/README.md`](../archive/domainmodeling-completed-2026-08/README.md).
 
-Includes: dogfood, amu, p4, coh, p3, p2, grammar/GIP, older DAS/SPE/… suites.
+Includes: dogfood, amu, p4, coh, p3, p2, grammar/GIP, older DAS/SPE/… suites, plus live DONE gpure + mcp-minify (tasks remain under `simple-agent-tasks/` until a bulk archive pass).
 
 ---
 
@@ -35,10 +36,10 @@ Includes: dogfood, amu, p4, coh, p3, p2, grammar/GIP, older DAS/SPE/… suites.
 
 | Doc | Why |
 |-----|-----|
-| (gpure suite is live above) | Direction lock + tasks |
 | instance-commit-and-outbox | Needs durable host |
 | customer-trust-proof-map | Living index |
 | absorption matrix | Pick one P* → solidify suite first |
+| [`../dead-dual-inventory-2026-08-08.md`](../dead-dual-inventory-2026-08-08.md) | Kill list for Validation / Text — not CURRENT work |
 
 ---
 
@@ -49,3 +50,4 @@ Includes: dogfood, amu, p4, coh, p3, p2, grammar/GIP, older DAS/SPE/… suites.
 3. Gate + pr1.  
 4. Register key in `.github/agents/plan-suite-until-done.agent.md`.  
 5. Link here + [`../README.md`](../README.md).  
+6. On suite **DONE**: update **PIPELINE-STATUS** Agent pick in the **same** change.  

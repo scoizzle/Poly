@@ -7,8 +7,7 @@
 
 **Status:** ✅ **DONE 2026-08-08** — tasks 0–7 + gate all `[x]`; tool catalog **46 → 24**; zero `DomainExpressionJsonParser`; unified `add`/`remove` + `apply_dsl` only; suite **1927/1927 green**; pr1 reviewed (no 🔴🟠).
 
-**Open review follow-up queue (2026-08-08):** [`mcp-minify-followups-2026-08-08.md`](./mcp-minify-followups-2026-08-08.md) — **ALL CLOSED 2026-08-08** (B1–B5, S1–S6, N1–N5, P1; suite 1938 green).
-
+**Follow-ups:** [`mcp-minify-followups-2026-08-08.md`](./mcp-minify-followups-2026-08-08.md) — **ALL CLOSED 2026-08-08**. Do not re-admit. CURRENT: [`PIPELINE-STATUS.md`](./PIPELINE-STATUS.md).
 ---
 
 ## Objective

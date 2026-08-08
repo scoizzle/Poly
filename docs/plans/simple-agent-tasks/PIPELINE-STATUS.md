@@ -1,18 +1,51 @@
 # Pipeline status
 
-**Updated:** 2026-08-08
+**Updated:** 2026-08-08  
+**Authority:** this file is the **sole CURRENT/DONE truth** for agent suite admission.  
+Other indexes must **mirror** this file (or link here) — do not invent a second CURRENT line.
+
+---
+
+## Agent pick (one line)
+
+```text
+DONE:    gpure (2026-08-07 + follow-ups 08-08); mcp-minify (2026-08-08 + follow-ups)
+CURRENT: (none)
+ADMIT:   mut-safety
+THEN:    mut-safety → p1 temporal
+PARKED:  outbox lock; multi-assembly DM; actors/schedule; LeftAssoc live-fold (gpure S5)
+PULL:    E5; EF codegen; naming cleanup; Validation/Text delete (see dead-dual inventory)
+```
+
+```bash
+# When human admits next suite:
+copilot --agent plan-suite-until-done -p "Suite: mut-safety. Mode: until-done."
+```
+
+---
 
 ## Suites
 
 | Suite | Status | Notes |
 |-------|--------|-------|
-| **gpure** (pure Grammar product path) | ✅ **DONE 2026-08-07** (+ post-gate follow-ups 2026-08-08) | Tasks 0–8 + gate; S1–S5/N1–N4/P1 all `[x]`; suite 1930 green. **No open gpure follow-up queue.** |
-| **mcp-minify** | ✅ **DONE 2026-08-08** (follow-ups closed same day) | Catalog **46 → 24 tools**; zero `DomainExpressionJsonParser`; unified `add`/`remove` (kind+payload, policy remove supports stage/action scope) + `apply_dsl` only; DSL fragment API (`DslExpressionFragment.ParseExpressionFragment`); shared cursor base (`DslParseCursorBase`); oracle diet → one DSL expr oracle (`simulate_policy`); suite **1938 green**; review B1–B5/S1–S6/N1–N5/P1 all closed. [`mcp-minify-followups-2026-08-08.md`](./mcp-minify-followups-2026-08-08.md) |
-| mut-safety | **CURRENT next** | Session lock + idempotency |
-| p1 (temporal) | Ready (after mut-safety) | Temporal pack; register patterns on both `expr-primary` + `expr-primary-no-not` (gpure inventory) |
-| amu / p4 / coh / dogfood | Completed (earlier) | See archive |
+| **gpure** | ✅ **DONE** 2026-08-07 (+ follow-ups 2026-08-08) | Pure Grammar product path (Option A ladder + tables); S1–S5/N1–N4/P1 closed. |
+| **mcp-minify** | ✅ **DONE** 2026-08-08 (+ follow-ups same day) | Catalog 46→24; DSL-only expressions; unified `add`/`remove`; follow-ups closed. |
+| **mut-safety** | **Admit next** (not CURRENT until human admits) | Session lock + idempotent add + rollback DX |
+| **p1** temporal | Ready after mut-safety | Patterns on both `expr-primary` + `expr-primary-no-not` |
+| amu / p4 / coh / dogfood / GI / … | Archived | See `docs/plans/archive/` |
+
+---
+
+## Related
+
+| Doc | Role |
+|-----|------|
+| [`READY-TO-TASK.md`](./READY-TO-TASK.md) | Ready-suite index (mirrors this) |
+| [`../v2-to-v3/master-roadmap.md`](../v2-to-v3/master-roadmap.md) | Milestone index + Agent pick (mirrors this) |
+| [`../README.md`](../README.md) | Plans admission rules (points here for CURRENT) |
+| [`../dead-dual-inventory-2026-08-08.md`](../dead-dual-inventory-2026-08-08.md) | Validation / Text / second-evaluator kill list |
 
 ## Notes
 
-- gpure successor (not a suite task yet): drive live expr fold from `LeftAssoc` span tables (parent §8 / S5) — only when a consumer needs it.
-- Span-vs-fold `not`-in-chain pinned: `SpanVsFold_NotInChain_TableRejectsFoldAccepts` + inventory §A1.
+- gpure successor (not a suite): live fold from `LeftAssoc` span tables — only with a consumer.
+- Span-vs-fold `not`-in-chain pinned: `SpanVsFold_NotInChain_TableRejectsFoldAccepts`.

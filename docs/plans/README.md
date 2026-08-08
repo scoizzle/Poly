@@ -13,13 +13,15 @@ Architectural rationale → **`docs/decisions/`**. Module maps → **`Poly/*/REA
 
 | Rule | Meaning |
 |------|---------|
-| **CURRENT** | Only what master-roadmap Agent pick says (or `(none)`). |
+| **CURRENT** | Only the Agent pick in [`simple-agent-tasks/PIPELINE-STATUS.md`](simple-agent-tasks/PIPELINE-STATUS.md) (or `(none)`). |
 | **Park before open** | Finish or park the live suite before admitting the next. |
 | **Proposals ≠ queues** | Research / design locks stay parked until a suite is solidified and admitted. |
 | **Pull ≠ CURRENT** | Available when admitted, not parallel debt. |
+| **DONE same PR** | Suite gate Done → update PIPELINE-STATUS + READY-TO-TASK + master-roadmap Agent pick together. |
 
-**Agent pick:** [`v2-to-v3/master-roadmap.md`](v2-to-v3/master-roadmap.md)  
+**CURRENT truth:** [`simple-agent-tasks/PIPELINE-STATUS.md`](simple-agent-tasks/PIPELINE-STATUS.md)  
 **Ready suites index:** [`simple-agent-tasks/READY-TO-TASK.md`](simple-agent-tasks/READY-TO-TASK.md)  
+**Milestones:** [`v2-to-v3/master-roadmap.md`](v2-to-v3/master-roadmap.md) (mirrors Agent pick)  
 **Pre-ship (always-on):** [`v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md`](v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md)
 
 ---
@@ -28,19 +30,18 @@ Architectural rationale → **`docs/decisions/`**. Module maps → **`Poly/*/REA
 
 | Suite | README | Plan | Status |
 |-------|--------|------|--------|
-| **gpure** | [`gpure-README.md`](simple-agent-tasks/gpure-README.md) | [`grammar-pure-end-state.md`](grammar-pure-end-state.md) | Ready — **prefer CURRENT** (finish pure Grammar) |
-| **mcp-minify** | [`mcp-minify-README.md`](simple-agent-tasks/mcp-minify-README.md) | [`mcp-catalog-minify.md`](mcp-catalog-minify.md) | Ready — after gpure |
-| **mut-safety** | [`mut-safety-README.md`](simple-agent-tasks/mut-safety-README.md) | [`mcp-mutation-safety.md`](mcp-mutation-safety.md) | Ready — after minify |
-| **p1** temporal | [`p1-README.md`](simple-agent-tasks/p1-README.md) | [`p1-temporal-design-lock.md`](p1-temporal-design-lock.md) | Ready — after pure/minify as preferred |
+| **gpure** | [`gpure-README.md`](simple-agent-tasks/gpure-README.md) | [`grammar-pure-end-state.md`](grammar-pure-end-state.md) | ✅ DONE 2026-08-07 |
+| **mcp-minify** | [`mcp-minify-README.md`](simple-agent-tasks/mcp-minify-README.md) | [`mcp-catalog-minify.md`](mcp-catalog-minify.md) | ✅ DONE 2026-08-08 |
+| **mut-safety** | [`mut-safety-README.md`](simple-agent-tasks/mut-safety-README.md) | [`mcp-mutation-safety.md`](mcp-mutation-safety.md) | **Admit next** |
+| **p1** temporal | [`p1-README.md`](simple-agent-tasks/p1-README.md) | [`p1-temporal-design-lock.md`](p1-temporal-design-lock.md) | Ready after mut-safety |
 
-**Suggested order:** **gpure** → mcp-minify → mut-safety → p1.
+**Suggested order:** ~~gpure → mcp-minify →~~ **mut-safety → p1**.
 
 ```bash
-copilot --agent plan-suite-until-done -p "Suite: gpure. Mode: until-done."
+copilot --agent plan-suite-until-done -p "Suite: mut-safety. Mode: until-done."
 ```
 
-**CURRENT:** see master-roadmap (default none until admit).
-
+**CURRENT:** see [`PIPELINE-STATUS.md`](simple-agent-tasks/PIPELINE-STATUS.md).
 ---
 
 ## Live design locks / research (not implement suites)
@@ -60,6 +61,7 @@ copilot --agent plan-suite-until-done -p "Suite: gpure. Mode: until-done."
 
 | Plan | Unpark when |
 |------|-------------|
+| [`dead-dual-inventory-2026-08-08.md`](dead-dual-inventory-2026-08-08.md) | Idle green tree or explicit cleanup admit (after mut-safety preferred) — Validation + Text.Matching kill list |
 | [`ef-and-api-codegen.md`](ef-and-api-codegen.md) | Explicit generation suite admit |
 | [`analysis-consuming-lowering.md`](analysis-consuming-lowering.md) | Explicit pick |
 | [`post-v2-delete-naming-cleanup.md`](post-v2-delete-naming-cleanup.md) | Idle green tree |

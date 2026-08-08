@@ -535,9 +535,9 @@ public class DomainSemanticLookupFailClosedTests {
     public async Task DescribeStage_ReturnsMissingMetadata_WhenEsmMissing() {
         var (sessionId, _) = McpSessionStore.Create("Test");
 
-        var r1 = EvolveTool.AddEntity(sessionId, "Order");
+        var r1 = EvolveTool.Add(sessionId, "entity", """{"name":"Order"}""");
         await Assert.That(r1.Success).IsTrue();
-        var r2 = EvolveTool.AddStage(sessionId, "Order", "Draft");
+        var r2 = EvolveTool.Add(sessionId, "stage", """{"entityName":"Order","name":"Draft"}""");
         await Assert.That(r2.Success).IsTrue();
 
         var state = GetFreshState(sessionId)!;
@@ -555,9 +555,9 @@ public class DomainSemanticLookupFailClosedTests {
     public async Task DescribeStage_ReturnsNotFound_WhenStageAbsentAndEsmPresent() {
         var (sessionId, _) = McpSessionStore.Create("Test");
 
-        var r1 = EvolveTool.AddEntity(sessionId, "Order");
+        var r1 = EvolveTool.Add(sessionId, "entity", """{"name":"Order"}""");
         await Assert.That(r1.Success).IsTrue();
-        var r2 = EvolveTool.AddStage(sessionId, "Order", "Draft");
+        var r2 = EvolveTool.Add(sessionId, "stage", """{"entityName":"Order","name":"Draft"}""");
         await Assert.That(r2.Success).IsTrue();
 
         var desc = OracleTool.DescribeDomainElement(sessionId, "stage", "NoSuchStage", entityName: "Order");
@@ -570,9 +570,9 @@ public class DomainSemanticLookupFailClosedTests {
     public async Task DescribeAction_ReturnsMissingMetadata_WhenCatalogMissing() {
         var (sessionId, _) = McpSessionStore.Create("Test");
 
-        var r1 = EvolveTool.AddEntity(sessionId, "Order");
+        var r1 = EvolveTool.Add(sessionId, "entity", """{"name":"Order"}""");
         await Assert.That(r1.Success).IsTrue();
-        var r2 = EvolveTool.AddAction(sessionId, "Order", "Submit");
+        var r2 = EvolveTool.Add(sessionId, "action", """{"entityName":"Order","name":"Submit"}""");
         await Assert.That(r2.Success).IsTrue();
 
         var state = GetFreshState(sessionId)!;
@@ -588,9 +588,9 @@ public class DomainSemanticLookupFailClosedTests {
     public async Task DescribeAction_ReturnsNotFound_WhenActionAbsentAndCatalogPresent() {
         var (sessionId, _) = McpSessionStore.Create("Test");
 
-        var r1 = EvolveTool.AddEntity(sessionId, "Order");
+        var r1 = EvolveTool.Add(sessionId, "entity", """{"name":"Order"}""");
         await Assert.That(r1.Success).IsTrue();
-        var r2 = EvolveTool.AddAction(sessionId, "Order", "Submit");
+        var r2 = EvolveTool.Add(sessionId, "action", """{"entityName":"Order","name":"Submit"}""");
         await Assert.That(r2.Success).IsTrue();
 
         var desc = OracleTool.DescribeDomainElement(sessionId, "action", "NoSuchAction", entityName: "Order");
@@ -603,9 +603,9 @@ public class DomainSemanticLookupFailClosedTests {
     public async Task DescribeAction_UsesCatalog_WithoutEntityKeyedArm() {
         var (sessionId, _) = McpSessionStore.Create("Test");
 
-        var r1 = EvolveTool.AddEntity(sessionId, "Order");
+        var r1 = EvolveTool.Add(sessionId, "entity", """{"name":"Order"}""");
         await Assert.That(r1.Success).IsTrue();
-        var r2 = EvolveTool.AddAction(sessionId, "Order", "Submit");
+        var r2 = EvolveTool.Add(sessionId, "action", """{"entityName":"Order","name":"Submit"}""");
         await Assert.That(r2.Success).IsTrue();
 
         var state = GetFreshState(sessionId)!;
@@ -622,12 +622,11 @@ public class DomainSemanticLookupFailClosedTests {
     public async Task DescribePolicy_ReturnsMissingMetadata_WhenCatalogMissing() {
         var (sessionId, _) = McpSessionStore.Create("Test");
 
-        var r1 = EvolveTool.AddEntity(sessionId, "Order");
+        var r1 = EvolveTool.Add(sessionId, "entity", """{"name":"Order"}""");
         await Assert.That(r1.Success).IsTrue();
-        var r1b = EvolveTool.AddProperty(sessionId, "Order", "Age", "Number");
+        var r1b = EvolveTool.Add(sessionId, "property", """{"entityName":"Order","name":"Age","typeName":"Number"}""");
         await Assert.That(r1b.Success).IsTrue();
-        var r2 = PolicyTool.AddPolicy(sessionId, "Order", "Adult",
-            @"{""property"":""Age"",""op"":"">="",""value"":18}");
+        var r2 = EvolveTool.Add(sessionId, "policy", """{"entityName":"Order","name":"Adult","expression":"Age >= 18"}""");
         await Assert.That(r2.Success).IsTrue();
 
         var state = GetFreshState(sessionId)!;
@@ -643,12 +642,11 @@ public class DomainSemanticLookupFailClosedTests {
     public async Task DescribePolicy_ReturnsNotFound_WhenPolicyAbsentAndCatalogPresent() {
         var (sessionId, _) = McpSessionStore.Create("Test");
 
-        var r1 = EvolveTool.AddEntity(sessionId, "Order");
+        var r1 = EvolveTool.Add(sessionId, "entity", """{"name":"Order"}""");
         await Assert.That(r1.Success).IsTrue();
-        var r1b = EvolveTool.AddProperty(sessionId, "Order", "Age", "Number");
+        var r1b = EvolveTool.Add(sessionId, "property", """{"entityName":"Order","name":"Age","typeName":"Number"}""");
         await Assert.That(r1b.Success).IsTrue();
-        var r2 = PolicyTool.AddPolicy(sessionId, "Order", "Adult",
-            @"{""property"":""Age"",""op"":"">="",""value"":18}");
+        var r2 = EvolveTool.Add(sessionId, "policy", """{"entityName":"Order","name":"Adult","expression":"Age >= 18"}""");
         await Assert.That(r2.Success).IsTrue();
 
         var desc = OracleTool.DescribeDomainElement(sessionId, "policy", "NoSuchPolicy", entityName: "Order");
@@ -661,12 +659,11 @@ public class DomainSemanticLookupFailClosedTests {
     public async Task DescribePolicy_UsesCatalog_WithoutDomainKeyedMti() {
         var (sessionId, _) = McpSessionStore.Create("Test");
 
-        var r1 = EvolveTool.AddEntity(sessionId, "Order");
+        var r1 = EvolveTool.Add(sessionId, "entity", """{"name":"Order"}""");
         await Assert.That(r1.Success).IsTrue();
-        var r1b = EvolveTool.AddProperty(sessionId, "Order", "Age", "Number");
+        var r1b = EvolveTool.Add(sessionId, "property", """{"entityName":"Order","name":"Age","typeName":"Number"}""");
         await Assert.That(r1b.Success).IsTrue();
-        var r2 = PolicyTool.AddPolicy(sessionId, "Order", "Adult",
-            @"{""property"":""Age"",""op"":"">="",""value"":18}");
+        var r2 = EvolveTool.Add(sessionId, "policy", """{"entityName":"Order","name":"Adult","expression":"Age >= 18"}""");
         await Assert.That(r2.Success).IsTrue();
 
         var state = GetFreshState(sessionId)!;
@@ -681,11 +678,11 @@ public class DomainSemanticLookupFailClosedTests {
     public async Task DescribeRelationship_ReturnsMissingMetadata_WhenCatalogMissing() {
         var (sessionId, _) = McpSessionStore.Create("Test");
 
-        var r1 = EvolveTool.AddEntity(sessionId, "Order");
+        var r1 = EvolveTool.Add(sessionId, "entity", """{"name":"Order"}""");
         await Assert.That(r1.Success).IsTrue();
-        var r2 = EvolveTool.AddEntity(sessionId, "Line");
+        var r2 = EvolveTool.Add(sessionId, "entity", """{"name":"Line"}""");
         await Assert.That(r2.Success).IsTrue();
-        var r3 = EvolveTool.AddRelationship(sessionId, "Owns", "Order", "Line", "OneToMany");
+        var r3 = EvolveTool.Add(sessionId, "relationship", """{"name":"Owns","source":"Order","target":"Line","cardinality":"OneToMany"}""");
         await Assert.That(r3.Success).IsTrue();
 
         var state = GetFreshState(sessionId)!;
@@ -701,11 +698,11 @@ public class DomainSemanticLookupFailClosedTests {
     public async Task DescribeRelationship_ReturnsNotFound_WhenRelationshipAbsentAndCatalogPresent() {
         var (sessionId, _) = McpSessionStore.Create("Test");
 
-        var r1 = EvolveTool.AddEntity(sessionId, "Order");
+        var r1 = EvolveTool.Add(sessionId, "entity", """{"name":"Order"}""");
         await Assert.That(r1.Success).IsTrue();
-        var r2 = EvolveTool.AddEntity(sessionId, "Line");
+        var r2 = EvolveTool.Add(sessionId, "entity", """{"name":"Line"}""");
         await Assert.That(r2.Success).IsTrue();
-        var r3 = EvolveTool.AddRelationship(sessionId, "Owns", "Order", "Line", "OneToMany");
+        var r3 = EvolveTool.Add(sessionId, "relationship", """{"name":"Owns","source":"Order","target":"Line","cardinality":"OneToMany"}""");
         await Assert.That(r3.Success).IsTrue();
 
         var desc = OracleTool.DescribeDomainElement(sessionId, "relationship", "NoSuchRel");
@@ -718,11 +715,11 @@ public class DomainSemanticLookupFailClosedTests {
     public async Task DescribeRelationship_UsesCatalog_WhenRawRlmStripped() {
         var (sessionId, _) = McpSessionStore.Create("Test");
 
-        var r1 = EvolveTool.AddEntity(sessionId, "Order");
+        var r1 = EvolveTool.Add(sessionId, "entity", """{"name":"Order"}""");
         await Assert.That(r1.Success).IsTrue();
-        var r2 = EvolveTool.AddEntity(sessionId, "Line");
+        var r2 = EvolveTool.Add(sessionId, "entity", """{"name":"Line"}""");
         await Assert.That(r2.Success).IsTrue();
-        var r3 = EvolveTool.AddRelationship(sessionId, "Owns", "Order", "Line", "OneToMany");
+        var r3 = EvolveTool.Add(sessionId, "relationship", """{"name":"Owns","source":"Order","target":"Line","cardinality":"OneToMany"}""");
         await Assert.That(r3.Success).IsTrue();
 
         var state = GetFreshState(sessionId)!;
@@ -739,9 +736,9 @@ public class DomainSemanticLookupFailClosedTests {
     public async Task DescribeAction_ReturnsSuccess_WhenFound() {
         var (sessionId, _) = McpSessionStore.Create("Test");
 
-        var r1 = EvolveTool.AddEntity(sessionId, "Order");
+        var r1 = EvolveTool.Add(sessionId, "entity", """{"name":"Order"}""");
         await Assert.That(r1.Success).IsTrue();
-        var r2 = EvolveTool.AddAction(sessionId, "Order", "Submit");
+        var r2 = EvolveTool.Add(sessionId, "action", """{"entityName":"Order","name":"Submit"}""");
         await Assert.That(r2.Success).IsTrue();
 
         var desc = OracleTool.DescribeDomainElement(sessionId, "action", "Submit", entityName: "Order");
@@ -754,11 +751,11 @@ public class DomainSemanticLookupFailClosedTests {
     public async Task DescribeRelationship_ReturnsSuccess_WhenFound() {
         var (sessionId, _) = McpSessionStore.Create("Test");
 
-        var r1 = EvolveTool.AddEntity(sessionId, "Order");
+        var r1 = EvolveTool.Add(sessionId, "entity", """{"name":"Order"}""");
         await Assert.That(r1.Success).IsTrue();
-        var r2 = EvolveTool.AddEntity(sessionId, "Line");
+        var r2 = EvolveTool.Add(sessionId, "entity", """{"name":"Line"}""");
         await Assert.That(r2.Success).IsTrue();
-        var r3 = EvolveTool.AddRelationship(sessionId, "Owns", "Order", "Line", "OneToMany");
+        var r3 = EvolveTool.Add(sessionId, "relationship", """{"name":"Owns","source":"Order","target":"Line","cardinality":"OneToMany"}""");
         await Assert.That(r3.Success).IsTrue();
 
         var desc = OracleTool.DescribeDomainElement(sessionId, "relationship", "Owns");

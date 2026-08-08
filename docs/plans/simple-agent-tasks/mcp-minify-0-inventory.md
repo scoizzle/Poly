@@ -1,8 +1,10 @@
 # mcp-minify-0 — Inventory freeze (docs only)
 
 **Difficulty:** S  
-**Status:** `[ ]`  
-**Prereq:** none  
+**Status:** `[x]`  
+**Prereq:** none
+
+**Done 2026-08-08:** created `mcp-minify-inventory-notes.md` with §A–§D from live greps; M0 exit boxes ticked; no production files touched.  
 
 ## Objective
 
@@ -70,4 +72,4 @@ List file paths that M2/M6 must update.
 
 ## Status
 
-**Status:** Not Started  
+**Status:** Done  

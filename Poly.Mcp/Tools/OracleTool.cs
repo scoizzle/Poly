@@ -7,15 +7,11 @@ using ModelContextProtocol.Server;
 
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
-using Poly.DomainModeling.Constraints;
-using Poly.DomainModeling.Effects;
 using Poly.DomainModeling.Lowering;
+using Poly.DomainModeling.Parsing;
 using Poly.DomainModeling.Queries;
-using Poly.Interpretation;
 using Poly.Interpretation.CSharp;
 using Poly.Mcp.Sessions;
-
-using Syntactic = Poly.Ast.Nodes;
 
 namespace Poly.Mcp.Tools;
 
@@ -27,51 +23,18 @@ namespace Poly.Mcp.Tools;
 internal sealed class OracleTool {
     // ── Shared helpers ──────────────────────────────────────────
 
-    private static DomainToolResponse? TryParseExpression(string expressionJson, out DomainExpression expr) {
+    private static DomainToolResponse? TryParseDslExpression(string expressionDsl, out DomainExpression expr) {
         expr = null!;
-        if (string.IsNullOrWhiteSpace(expressionJson)) {
-            return new DomainToolResponse(Success: false, Message: "Expression JSON must not be empty.", Affordances: []);
-        }
         try {
-            expr = DomainExpressionJsonParser.ParseJson(expressionJson);
+            // Session-default parser inputs (same registry sessions snapshot) so
+            // simulate_policy and add(kind: policy) agree on open forms (S3).
+            expr = DslExpressionFragment.ParseExpressionFragment(expressionDsl, McpDefaults.ParserInputs);
             return null;
         }
         catch (Exception ex) {
-            return new DomainToolResponse(Success: false, Message: $"Invalid expression JSON: {ex.Message}", Data: new { parseError = ex.Message }, Affordances: []);
+            return new DomainToolResponse(Success: false, Message: $"Invalid expression: {ex.Message}", Data: new { parseError = ex.Message }, Affordances: []);
         }
     }
-
-    private static LoweredNodeData LowerToNodeData(DomainExpression expr) {
-        var pass = new DomainExpressionLoweringPass();
-        var lowered = pass.Lower(expr, new Syntactic.Parameter("entity"));
-        return BuildNodeData(lowered);
-    }
-
-    private static LoweredNodeData BuildNodeData(Ast.Node node) {
-        return node switch {
-            Syntactic.Parameter p => new LoweredNodeData("Parameter", p.Name, null),
-            Syntactic.Constant c => new LoweredNodeData("Constant", c.Value?.ToString() ?? "null", null),
-            Syntactic.Member m => new LoweredNodeData("Member", m.MemberName, null),
-            Syntactic.Equal e => new LoweredNodeData("Equal", null, [BuildNodeData(e.LeftHandValue), BuildNodeData(e.RightHandValue)]),
-            Syntactic.NotEqual ne => new LoweredNodeData("NotEqual", null, [BuildNodeData(ne.LeftHandValue), BuildNodeData(ne.RightHandValue)]),
-            Syntactic.LessThan lt => new LoweredNodeData("LessThan", null, [BuildNodeData(lt.LeftHandValue), BuildNodeData(lt.RightHandValue)]),
-            Syntactic.LessThanOrEqual le => new LoweredNodeData("LessThanOrEqual", null, [BuildNodeData(le.LeftHandValue), BuildNodeData(le.RightHandValue)]),
-            Syntactic.GreaterThan gt => new LoweredNodeData("GreaterThan", null, [BuildNodeData(gt.LeftHandValue), BuildNodeData(gt.RightHandValue)]),
-            Syntactic.GreaterThanOrEqual ge => new LoweredNodeData("GreaterThanOrEqual", null, [BuildNodeData(ge.LeftHandValue), BuildNodeData(ge.RightHandValue)]),
-            Syntactic.And a => new LoweredNodeData("And", null, [BuildNodeData(a.LeftHandValue), BuildNodeData(a.RightHandValue)]),
-            Syntactic.Or o => new LoweredNodeData("Or", null, [BuildNodeData(o.LeftHandValue), BuildNodeData(o.RightHandValue)]),
-            Syntactic.Not n => new LoweredNodeData("Not", null, [BuildNodeData(n.Value)]),
-            Syntactic.Add a => new LoweredNodeData("Add", null, [BuildNodeData(a.LeftHandValue), BuildNodeData(a.RightHandValue)]),
-            Syntactic.Subtract s => new LoweredNodeData("Subtract", null, [BuildNodeData(s.LeftHandValue), BuildNodeData(s.RightHandValue)]),
-            Syntactic.Multiply m => new LoweredNodeData("Multiply", null, [BuildNodeData(m.LeftHandValue), BuildNodeData(m.RightHandValue)]),
-            Syntactic.Divide d => new LoweredNodeData("Divide", null, [BuildNodeData(d.LeftHandValue), BuildNodeData(d.RightHandValue)]),
-            Syntactic.Invoke inv => new LoweredNodeData("Invoke", GetMemberName(inv.Delegate), [.. inv.Arguments.Select(BuildNodeData)]),
-            _ => new LoweredNodeData(node.GetType().Name, node.ToString(), null)
-        };
-    }
-
-    private static string? GetMemberName(Ast.Node node) =>
-        node is Syntactic.Member m ? m.MemberName : node.ToString();
 
     private static DescribeExpressionData DescribeExpression(DomainExpression expr) {
         var structured = DescribeStructured(expr, 0);
@@ -149,272 +112,7 @@ internal sealed class OracleTool {
         _ => value.ToString() ?? "null"
     };
 
-    /// <summary>
-    /// Runs the Interpreter's 13-pass Syntax AST analysis on a lowered node
-    /// and returns the <see cref="AnalysisResult"/>.
-    /// Returns null if analysis is not available (no regression).
-    /// <summary>
-    /// Runs the Interpreter's 13-pass Syntax AST analysis on a lowered node.
-    /// If analysis reports errors, a non-null <paramref name="error"/> is set.
-    /// On success, <paramref name="analysis"/> is set and <paramref name="error"/> is null.
-    /// </summary>
-    private static bool TryAnalyze(Ast.Node lowered,
-        out Poly.Analysis.AnalysisResult? analysis,
-        out DomainToolResponse? error) {
-        analysis = null;
-        error = null;
-        try {
-            analysis = Interpreter.Analyze(lowered);
-        }
-        catch (Exception ex) {
-            error = new DomainToolResponse(Success: false, Message: $"AST analysis failed: {ex.Message}",
-                Data: new { error = ex.Message }, Affordances: ["analyze_expression"]);
-            return false;
-        }
-
-        if (analysis.HasErrors) {
-            var errorDiags = analysis.Diagnostics
-                .Where(d => d.Severity == Poly.Analysis.DiagnosticSeverity.Error)
-                .ToList();
-            error = new DomainToolResponse(Success: false,
-                Message: $"C# generation blocked: analysis found {errorDiags.Count} error(s).",
-                Data: new {
-                    diagnostics = errorDiags.Select(d => new {
-                        severity = d.Severity.ToString(),
-                        code = d.Code,
-                        message = d.Message,
-                        nodeKind = d.Node?.GetType().Name
-                    }),
-                    hasErrors = true,
-                    hasStructuralFailure = analysis.HasStructuralFailure
-                },
-                Affordances: ["analyze_expression"]);
-            return false;
-        }
-
-        return true;
-    }
-
-    /// <summary>
-    /// Generates C# from a lowered node, running Interpreter analysis first.
-    /// Returns the C# text on success, or an error with diagnostics if analysis failed.
-    /// </summary>
-    private static DomainToolResponse CSharpWithAnalysis(Ast.Node lowered, string successMessage,
-        Func<string, object>? buildData = null, string[]? affordances = null) {
-        if (!TryAnalyze(lowered, out var analysis, out var error))
-            return error!;
-        var generator = new CSharpGenerator(analysis!);
-        var csharp = generator.Generate(lowered);
-        var data = buildData?.Invoke(csharp) ?? new { csharp };
-        return new DomainToolResponse(Success: true, Message: successMessage, Data: data, Affordances: affordances ?? ["analyze_expression", "describe_expression", "lower_expression"]);
-    }
-
-    // ── V0.3b: analyze_expression ──────────────────────────
-
-    [McpServerTool(Name = "analyze_expression"), Description("Parses a JSON policy expression, lowers it through the Syntax AST pipeline, and runs the Interpreter's 13-pass analysis pipeline. Returns diagnostics, side-effect classification, constant-folding results, and other analysis metadata. No session required.")]
-    public static DomainToolResponse AnalyzeExpression(
-        [Description("JSON expression string (same format as add_policy).")] string expressionJson) {
-        var failure = TryParseExpression(expressionJson, out var expr);
-        if (failure is not null) return failure;
-        try {
-            var lowered = LowerExpressionToNode(expr);
-            var analysis = Interpreter.Analyze(lowered);
-
-            var diagnostics = analysis.Diagnostics.Select(d => new {
-                severity = d.Severity.ToString(),
-                code = d.Code,
-                message = d.Message,
-                nodeKind = d.Node?.GetType().Name
-            }).ToList();
-
-            return new DomainToolResponse(Success: true, Message: $"Expression analyzed: {diagnostics.Count} diagnostics.", Data: new {
-                diagnostics,
-                hasErrors = analysis.HasErrors,
-                hasStructuralFailure = analysis.HasStructuralFailure,
-                wasTerminatedEarly = analysis.AnalysisWasTerminatedEarly,
-                ast = LowerToNodeData(expr),
-                telemetry = new {
-                    passCount = analysis.Telemetry.Passes.Count,
-                    passes = analysis.Telemetry.Passes.Select(p => new { name = p.PassName, elapsed = p.Elapsed.TotalMilliseconds }),
-                    totalWallClock = analysis.Telemetry.TotalElapsed.TotalMilliseconds,
-                    incremental = analysis.Telemetry.Incremental
-                }
-            }, Affordances: ["lower_expression", "describe_expression", "lower_expression_to_csharp"]);
-        }
-        catch (Exception ex) {
-            return new DomainToolResponse(Success: false, Message: $"Analysis failed: {ex.Message}", Data: new { error = ex.Message }, Affordances: []);
-        }
-    }
-
-    // ── V0.3c: analyze_effect ──────────────────────────────
-
-    [McpServerTool(Name = "analyze_effect"), Description("Lowers an action's effects through the Syntax AST pipeline and runs the Interpreter's analysis pipeline. Returns diagnostics, side-effect classification, and analysis metadata for the action's effects. Specify entityName and actionName. Optionally set stageName for stage-scoped actions.")]
-    public static DomainToolResponse AnalyzeEffect(
-        [Description("Session ID")] string sessionId,
-        [Description("Entity name")] string entityName,
-        [Description("Action name")] string actionName,
-        [Description("Optional stage name for stage-scoped actions")] string? stageName = null) {
-        if (!McpSessionStore.TryGet(sessionId, out var state))
-            return new DomainToolResponse(Success: false, Message: $"Session '{sessionId}' not found.", Affordances: ["create_domain_session", "list_sessions"]);
-        if (state.LatestAnalysis is null)
-            return new DomainToolResponse(Success: false, Message: $"Session '{sessionId}' has no analysis. Apply a domain first (apply_dsl or evolution).", SessionId: sessionId, Affordances: ["apply_dsl", "get_domain_overview"]);
-
-        var entity = state.Domain.Types.OfType<Entity>().FirstOrDefault(e =>
-            string.Equals(e.Name, entityName, StringComparison.Ordinal));
-        if (entity is null)
-            return new DomainToolResponse(Success: false, Message: $"Entity '{entityName}' not found.", SessionId: sessionId, Affordances: ["get_domain_overview", "add_entity"]);
-
-        DomainModeling.Action? action = null;
-        if (stageName is not null) {
-            var stage = entity.Stages.FirstOrDefault(s =>
-                string.Equals(s.Name, stageName, StringComparison.Ordinal));
-            if (stage is null)
-                return new DomainToolResponse(Success: false, Message: $"Stage '{stageName}' not found on Entity '{entityName}'.", SessionId: sessionId, Affordances: ["get_entity_detail"]);
-            action = stage.Actions.FirstOrDefault(a =>
-                string.Equals(a.Name, actionName, StringComparison.Ordinal));
-        }
-        else {
-            action = entity.Actions.FirstOrDefault(a =>
-                string.Equals(a.Name, actionName, StringComparison.Ordinal));
-        }
-
-        if (action is null)
-            return new DomainToolResponse(Success: false, Message: $"Action '{actionName}' not found{(stageName is not null ? $" on stage '{stageName}'" : "")} on Entity '{entityName}'.", SessionId: sessionId, Affordances: ["get_entity_detail"]);
-
-        try {
-            var paramNames = new HashSet<string>(action.Parameters.Select(p => p.Name), StringComparer.Ordinal);
-            var context = new LoweringContext(
-                new Syntactic.Parameter("entity", new Syntactic.TypeReference(entity.Name)),
-                Analysis: state.LatestAnalysis,
-                UseThisReference: true,
-                ActionParameterNames: paramNames,
-                LowerStageTransitions: true,
-                Domain: state.Domain
-            );
-            var effectPass = new EffectLoweringPass(entity, context);
-            var composite = new CompositeEffect(action.Effects);
-            var lowered = effectPass.TryLowerVmNode(composite);
-
-            if (lowered is null)
-                return new DomainToolResponse(Success: false, Message: $"Action '{actionName}' has no VM-compilable effects.", SessionId: sessionId, Affordances: []);
-
-            var analysis = Interpreter.Analyze(lowered);
-            var diagnostics = analysis.Diagnostics.Select(d => new {
-                severity = d.Severity.ToString(),
-                code = d.Code,
-                message = d.Message,
-                nodeKind = d.Node?.GetType().Name
-            }).ToList();
-
-            return new DomainToolResponse(Success: true, Message: $"Effect analyzed: {diagnostics.Count} diagnostics.", SessionId: sessionId, Data: new {
-                diagnostics,
-                hasErrors = analysis.HasErrors,
-                hasStructuralFailure = analysis.HasStructuralFailure,
-                effectCount = action.Effects.Count,
-                telemetry = new {
-                    passCount = analysis.Telemetry.Passes.Count,
-                    passes = analysis.Telemetry.Passes.Select(p => new { name = p.PassName, elapsedMs = p.Elapsed.TotalMilliseconds }),
-                    totalWallClockMs = analysis.Telemetry.TotalElapsed.TotalMilliseconds
-                }
-            }, Affordances: ["lower_effect_to_csharp", "get_entity_detail"]);
-        }
-        catch (Exception ex) {
-            return new DomainToolResponse(Success: false, Message: $"Effect analysis failed: {ex.Message}", SessionId: sessionId, Data: new { error = ex.Message }, Affordances: []);
-        }
-    }
-
-    // ── V0.4: lower_expression_to_csharp ─────────────────────────
-
-    [McpServerTool(Name = "lower_expression_to_csharp"), Description("Parses a JSON policy expression, lowers it through the Syntax AST pipeline, and generates C# source code. Returns analysis errors if the expression cannot compile. No session required.")]
-    public static DomainToolResponse LowerExpressionToCSharp(
-        [Description("JSON expression string (same format as add_policy). Example: {\"and\":[{\"property\":\"Age\",\"op\":\">=\",\"value\":18},{\"property\":\"Active\",\"op\":\"==\",\"value\":true}]}")] string expressionJson) {
-        var failure = TryParseExpression(expressionJson, out var expr);
-        if (failure is not null) return failure;
-        try {
-            var lowered = LowerExpressionToNode(expr);
-            return CSharpWithAnalysis(lowered, "Expression lowered to C# successfully.",
-                buildData: csharp => new { csharp, ast = LowerToNodeData(expr) },
-                affordances: ["lower_expression", "describe_expression", "analyze_expression"]);
-        }
-        catch (Exception ex) {
-            return new DomainToolResponse(Success: false, Message: $"C# lowering failed: {ex.Message}", Data: new { error = ex.Message }, Affordances: []);
-        }
-    }
-
-    // ── V0.5: lower_effect_to_csharp ─────────────────────────────
-
-    [McpServerTool(Name = "lower_effect_to_csharp"), Description("Generates C# source code for an action's lowered effects from the session domain. Specify entityName and actionName. Optionally set stageName for stage-scoped actions.")]
-    public static DomainToolResponse LowerEffectToCSharp(
-        [Description("Session ID")] string sessionId,
-        [Description("Entity name")] string entityName,
-        [Description("Action name")] string actionName,
-        [Description("Optional stage name for stage-scoped actions")] string? stageName = null) {
-        if (!McpSessionStore.TryGet(sessionId, out var state))
-            return new DomainToolResponse(Success: false, Message: $"Session '{sessionId}' not found.", Affordances: ["create_domain_session", "list_sessions"]);
-        if (state.LatestAnalysis is null)
-            return new DomainToolResponse(Success: false, Message: $"Session '{sessionId}' has no analysis. Apply a domain first (apply_dsl or evolution).", SessionId: sessionId, Affordances: ["apply_dsl", "get_domain_overview"]);
-
-        var entity = state.Domain.Types.OfType<Entity>().FirstOrDefault(e =>
-            string.Equals(e.Name, entityName, StringComparison.Ordinal));
-        if (entity is null)
-            return new DomainToolResponse(Success: false, Message: $"Entity '{entityName}' not found.", SessionId: sessionId, Affordances: ["get_domain_overview", "add_entity"]);
-
-        // Find the action
-        DomainModeling.Action? action = null;
-        if (stageName is not null) {
-            var stage = entity.Stages.FirstOrDefault(s =>
-                string.Equals(s.Name, stageName, StringComparison.Ordinal));
-            if (stage is null)
-                return new DomainToolResponse(Success: false, Message: $"Stage '{stageName}' not found on Entity '{entityName}'.", SessionId: sessionId, Affordances: ["get_entity_detail"]);
-            action = stage.Actions.FirstOrDefault(a =>
-                string.Equals(a.Name, actionName, StringComparison.Ordinal));
-        }
-        else {
-            action = entity.Actions.FirstOrDefault(a =>
-                string.Equals(a.Name, actionName, StringComparison.Ordinal));
-        }
-
-        if (action is null)
-            return new DomainToolResponse(Success: false, Message: $"Action '{actionName}' not found{(stageName is not null ? $" on stage '{stageName}'" : "")} on Entity '{entityName}'.", SessionId: sessionId, Affordances: ["get_entity_detail"]);
-
-        try {
-            var paramNames = new HashSet<string>(action.Parameters.Select(p => p.Name), StringComparer.Ordinal);
-            var context = new LoweringContext(
-                new Syntactic.Parameter("entity", new Syntactic.TypeReference(entity.Name)),
-                Analysis: state.LatestAnalysis,
-                UseThisReference: true,
-                ActionParameterNames: paramNames,
-                LowerStageTransitions: true,
-                Domain: state.Domain
-            );
-            var effectPass = new EffectLoweringPass(entity, context);
-            // Lower the action as a composite of all its effects
-            var composite = new CompositeEffect(action.Effects);
-            var lowered = effectPass.TryLowerVmNode(composite);
-
-            if (lowered is null)
-                return new DomainToolResponse(Success: false, Message: $"Action '{actionName}' has no VM-compilable effects. All its effects are direct-execution only (transition, create, invoke, delete, link).", SessionId: sessionId, Affordances: ["lower_expression_to_csharp"]);
-
-            var result = CSharpWithAnalysis(lowered, $"Action '{actionName}' lowered to C# successfully.",
-                buildData: csharp => new { csharp, effectCount = action.Effects.Count },
-                affordances: ["get_entity_detail", "lower_expression_to_csharp", "analyze_effect"]);
-            return result with { SessionId = sessionId };
-        }
-        catch (Exception ex) {
-            return new DomainToolResponse(Success: false, Message: $"C# lowering failed: {ex.Message}", SessionId: sessionId, Data: new { error = ex.Message }, Affordances: []);
-        }
-    }
-
-    /// <summary>
-    /// Parses and lowers a DomainExpression to a Syntax AST Node.
-    /// </summary>
-    private static Ast.Node LowerExpressionToNode(DomainExpression expr) {
-        var pass = new DomainExpressionLoweringPass();
-        return pass.Lower(expr, new Syntactic.Parameter("entity"));
-    }
-
     // ── V0.6: export_domain_to_csharp ────────────────────────────
-
     [McpServerTool(Name = "export_domain_to_csharp"), Description("Generates C# source code for an entire domain session as a set of record/class definitions. Each entity becomes a C# record with its properties, navigation properties (as collections for many, references for one), stages as enums or additional state, and actions as methods with their lowered effects as the method body. Useful for inspecting how a domain model maps to C#.")]
     public static DomainToolResponse ExportDomainToCSharp(
         [Description("Session ID")] string sessionId) {
@@ -437,12 +135,6 @@ internal sealed class OracleTool {
 
     // ── DTO types ───────────────────────────────────────────────
 
-    internal sealed record LoweredNodeData(
-        [property: JsonPropertyName("kind")] string Kind,
-        [property: JsonPropertyName("detail")] string? Detail,
-        [property: JsonPropertyName("children")] IReadOnlyList<LoweredNodeData>? Children
-    );
-
     internal sealed record DescribeExpressionData(
         [property: JsonPropertyName("structured")] string Structured,
         [property: JsonPropertyName("plainEnglish")] string PlainEnglish
@@ -456,38 +148,6 @@ internal sealed class OracleTool {
         [property: JsonPropertyName("description")] string Description,
         [property: JsonPropertyName("expression")] DescribeExpressionData? Expression = null
     );
-
-    // ── V0.1: lower_expression ──────────────────────────────────
-
-    [McpServerTool(Name = "lower_expression"), Description("Parses a JSON policy expression and lowers it through the Syntax AST pipeline. Returns the structured AST tree for inspection — no session required.")]
-    public static DomainToolResponse LowerExpression(
-        [Description("JSON expression string (same format as add_policy). Comparison: {\"property\":\"Age\",\"op\":\">=\",\"value\":18}. Composite: {\"and\":[{...},{...}]}, {\"or\":[...]}, {\"not\":{...}}. Literal: {\"literal\":true}.")] string expressionJson) {
-        var failure = TryParseExpression(expressionJson, out var expr);
-        if (failure is not null) return failure;
-        try {
-            var lowered = LowerToNodeData(expr);
-            return new DomainToolResponse(Success: true, Message: "Expression lowered successfully.", Data: new { ast = lowered }, Affordances: ["describe_expression", "add_policy", "analyze_expression"]);
-        }
-        catch (Exception ex) {
-            return new DomainToolResponse(Success: false, Message: $"Lowering failed: {ex.Message}", Data: new { error = ex.Message }, Affordances: []);
-        }
-    }
-
-    // ── V0.2: describe_expression ───────────────────────────────
-
-    [McpServerTool(Name = "describe_expression"), Description("Parses a JSON policy expression and returns a structured breakdown plus a plain-English description. No session required.")]
-    public static DomainToolResponse DescribeExpression(
-        [Description("JSON expression string (same format as add_policy).")] string expressionJson) {
-        var failure = TryParseExpression(expressionJson, out var expr);
-        if (failure is not null) return failure;
-        try {
-            var description = DescribeExpression(expr);
-            return new DomainToolResponse(Success: true, Message: "Expression described successfully.", Data: description, Affordances: ["lower_expression", "add_policy", "analyze_expression"]);
-        }
-        catch (Exception ex) {
-            return new DomainToolResponse(Success: false, Message: $"Description failed: {ex.Message}", Data: new { error = ex.Message }, Affordances: []);
-        }
-    }
 
     // ── V0.3: describe_domain_element ───────────────────────────
 
@@ -517,7 +177,7 @@ internal sealed class OracleTool {
 
     private static DomainToolResponse DescribeEntity(string sessionId, McpSessionState state, string name) {
         var detail = DomainQueries.GetEntity(state.Domain, name, state.LatestAnalysis);
-        if (detail is null) return new DomainToolResponse(Success: false, Message: $"Entity '{name}' not found.", SessionId: sessionId, Affordances: ["get_domain_overview", "add_entity"]);
+        if (detail is null) return new DomainToolResponse(Success: false, Message: $"Entity '{name}' not found.", SessionId: sessionId, Affordances: ["get_domain_overview", "add"]);
 
         var sb = new StringBuilder();
         sb.Append($"Entity '{name}' with {detail.Properties.Count} properties, {detail.Stages.Count} stages, {detail.Actions.Count} actions, {detail.Policies.Count} policies.");
@@ -678,7 +338,7 @@ internal sealed class OracleTool {
             return new DomainToolResponse(Success: false, Message: $"Session analysis is missing DomainCatalogMetadata (relationship lookup) required to describe relationship '{name}'.", SessionId: sessionId, Affordances: ["get_domain_analysis"]);
 
         if (!analysis.TryGetRelationship(state.Domain, name, out var rel) || rel is null)
-            return new DomainToolResponse(Success: false, Message: $"Relationship '{name}' not found.", SessionId: sessionId, Affordances: ["get_domain_overview", "add_relationship"]);
+            return new DomainToolResponse(Success: false, Message: $"Relationship '{name}' not found.", SessionId: sessionId, Affordances: ["get_domain_overview", "add"]);
 
         var cardinality = rel.Cardinality switch { RelationshipCardinality.OneToOne => "one-to-one", RelationshipCardinality.OneToMany => "one-to-many", RelationshipCardinality.ManyToMany => "many-to-many", _ => rel.Cardinality.ToString() };
         var sb = new StringBuilder();
@@ -690,12 +350,12 @@ internal sealed class OracleTool {
 
     // ── S0: simulate_policy ────────────────────────────────────
 
-    [McpServerTool(Name = "simulate_policy"), Description("Simulates a JSON policy expression against a sample subject properties bag — no session required. Returns {'result': true/false} from the VM evaluation path, matching the same engine used by add_policy + evaluate_policy.")]
+    [McpServerTool(Name = "simulate_policy"), Description("Simulates a DSL policy expression against a sample subject properties bag — no session required. Returns {'result': true/false} from the VM evaluation path, matching the same engine used by add(kind: policy) + evaluate_policy.")]
     public static DomainToolResponse SimulatePolicy(
-        [Description("JSON expression string (same format as add_policy).")] string expressionJson,
+        [Description("DSL expression fragment, e.g. `Age >= 18`.")] string expression,
         [Description("JSON object of property values, e.g. \"{\\\"Age\\\":25,\\\"Status\\\":\\\"Active\\\"}\"")] string propertiesJson) {
         // Parse expression
-        var parseFailure = TryParseExpression(expressionJson, out var expr);
+        var parseFailure = TryParseDslExpression(expression, out var expr);
         if (parseFailure is not null) return parseFailure;
 
         // Parse subject properties
@@ -722,7 +382,7 @@ internal sealed class OracleTool {
                 Success: false,
                 Message: $"Expression references properties not present in the subject properties bag: [{string.Join(", ", missingProperties)}]. " +
                          "Provide values for these properties in the propertiesJson parameter.",
-                Affordances: ["lower_expression", "describe_expression"]);
+                Affordances: ["add", "evaluate_policy", "get_entity_detail"]);
         }
 
         try {
@@ -738,7 +398,7 @@ internal sealed class OracleTool {
             var result = instance.EvaluatePolicy(policy);
 
             var data = new { result };
-            return new DomainToolResponse(Success: true, Message: result ? "Expression passed (true)." : "Expression failed (false).", Data: data, Affordances: ["lower_expression", "describe_expression", "add_policy"]);
+            return new DomainToolResponse(Success: true, Message: result ? "Expression passed (true)." : "Expression failed (false).", Data: data, Affordances: ["add", "evaluate_policy", "get_entity_detail"]);
         }
         catch (Exception ex) {
             return new DomainToolResponse(Success: false, Message: $"Simulation failed: {ex.Message}", Data: new { error = ex.Message }, Affordances: []);

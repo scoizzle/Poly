@@ -132,7 +132,7 @@ Thin wrapper around DomainEntityInstance.Create — no new runtime machinery.")]
                 Message: $"Entity '{entityName}' not found in domain '{state.Domain.Name}'. " +
                     $"Available: {string.Join(", ", state.Domain.Types.OfType<Entity>().Select(e => e.Name))}.",
                 SessionId: sessionId,
-                Affordances: ["get_domain_overview", "add_entity"]);
+                Affordances: ["get_domain_overview", "add"]);
 
         // Parse property values
         Dictionary<string, object?>? propertyValues = null;

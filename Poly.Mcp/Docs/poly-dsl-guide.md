@@ -531,16 +531,8 @@ IsAdult: policy { Age >= 18 }
 CanProcess: policy { isActive is true and role is "admin" }
 ```
 
-Expression JSON format (for `add_policy` / `simulate_policy`):
-
-| Shape | JSON |
-|-------|------|
-| Comparison | `{"property":"Age","op":">=","value":18}` |
-| AND | `{"and":[{...},{...}]}` |
-| OR | `{"or":[...]}` |
-| NOT | `{"not":{...}}` |
-| Literal | `{"literal":true}` |
-| Relationship (path-prefix) | `{"relationship":"profile","inner":{"property":"City","op":"==","value":"Metropolis"}}` |
+**Expressions are product DSL text only** — there is no JSON expression format. `add(kind: policy)`
+and `simulate_policy` take the same DSL fragment syntax as policy bodies here.
 
 ### Expression Grammar (Shipped in Phase 1a/1b)
 
@@ -664,7 +656,9 @@ and lowering pipeline but are **not yet authorable in product DSL**:
 | Arithmetic (`+`, `-`, `*`, `/`) | ✅ | ✅ **shipped** | `Total + 5 > 10`, `Total * 0.9` |
 | Action parameters | ✅ | ✅ **shipped** | `actionName: action (param: Text) { ... }` |
 
-**JSON policies** (`add_policy` / `simulate_policy`) support comparison + and/or/not + literal + **relationship navigation**: `{"relationship":"profile","inner":{…}}`. `add_policy` accepts the relationship form for later store-attached `evaluate_policy(instanceId=…)`. **`simulate_policy` is bag-only** — relationship/owned path-prefix and relationship `exists` fail closed without a store (use create + link + `evaluate_policy`).
+**Expression bodies are DSL text only** — JSON expression bags were retired with the catalog minify.
+`simulate_policy` is bag-only: relationship/owned path-prefix and relationship `exists` fail closed
+without a store (use create + link + `evaluate_policy`).
 
 ## 9. Supported Effect Summary
 
@@ -739,8 +733,9 @@ See §3 for the full syntax reference.
 **Batch** (`apply_dsl`): Write the full domain in `.poly` and apply in one shot.
 **Replaces** the entire session domain — not merged incrementally.
 
-**Incremental** (micro-tools): Use `add_entity`, `add_property`, `add_stage`,
-`add_action`, `add_policy`, etc. for step-by-step construction.
+**Incremental** (unified tools): Use `add(kind, payload)` to create one element
+(entity, property, stage, action, stage_action, relationship, constraint, policy) and
+`remove(kind, payload)` to delete one by identity.
 
 **Golden workflow:** `get_dsl_guide` → write `.poly` → `apply_dsl` → `get_domain_analysis` →
 oracle tools → iterate.

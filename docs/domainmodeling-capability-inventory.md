@@ -30,22 +30,26 @@ Codegen (optional host):
 
 ## 1. Domain authoring (definition surface)
 
+> MCP column reflects the **minified catalog (2026-08-08)**: incremental structure via unified
+> `add(kind, payload)` / `remove(kind, payload)`; bulk via `apply_dsl`. Per-type `add_entity` /
+> `add_property` / … tools were deleted by the mcp-minify suite — do not re-add them without explicit admit.
+
 | Capability | DSL | MCP Tool(s) | Core Code | Status |
 |-----------|-----|-------------|-----------|--------|
-| Entity definition | `Book: entity { }` | `add_entity` | `Entity.cs`, `Evolution/DomainChange.cs` | ✅ |
-| Property with type | `Title: Text` | `add_property`, `add_properties` | `Property.cs` | ✅ |
-| Constraint: Required | `Name: Text required` | `add_constraint` | `Constraints/RequiredConstraint.cs` | ✅ |
-| Constraint: Unique | `ISBN: Text unique` | `add_constraint` | `Constraints/UniqueConstraint.cs` | ✅ |
-| Constraint: Range | `Age: Number range(0, 150)` | `add_constraint` | `Constraints/RangeConstraint.cs` | ✅ |
-| Constraint: Length | `Code: Text length(1, 50)` | `add_constraint` | `Constraints/LengthConstraint.cs` | ✅ |
-| Constraint: Pattern | `Email: Text pattern("…")` | `add_constraint` | `Constraints/PatternConstraint.cs` | ✅ |
+| Entity definition | `Book: entity { }` | `add` kind=`entity` | `Entity.cs`, `Evolution/DomainChange.cs` | ✅ |
+| Property with type | `Title: Text` | `add` kind=`property` | `Property.cs` | ✅ |
+| Constraint: Required | `Name: Text required` | `add` kind=`constraint` (type=Required) | `Constraints/RequiredConstraint.cs` | ✅ |
+| Constraint: Unique | `ISBN: Text unique` | `add` kind=`constraint` (type=Unique) | `Constraints/UniqueConstraint.cs` | ✅ |
+| Constraint: Range | `Age: Number range(0, 150)` | `add` kind=`constraint` (type=Range, min/max) | `Constraints/RangeConstraint.cs` | ✅ |
+| Constraint: Length | `Code: Text length(1, 50)` | `add` kind=`constraint` (type=Length, min/max) | `Constraints/LengthConstraint.cs` | ✅ |
+| Constraint: Pattern | `Email: Text pattern("…")` | `add` kind=`constraint` (type=Pattern, pattern) | `Constraints/PatternConstraint.cs` | ✅ |
 | Constraint: Default | `Status: Text default(Active)` | — | `Constraints/DefaultValueConstraint.cs` | ✅ |
 | Constraint: Enum | `Status: PatronStatus` | — | `Constraints/EnumConstraint.cs` | ✅ |
 | Enum type | `Genre: enum { Fiction, … }` | — | `EnumType.cs` | ✅ |
-| Stage | `Active: stage { }` | `add_stage`, `add_stages` | `Stage.cs` | ✅ |
-| Action | `Submit: action { }` | `add_action`, stage variants | `Action.cs` | ✅ |
+| Stage | `Active: stage { }` | `add` kind=`stage` | `Stage.cs` | ✅ |
+| Action | `Submit: action { }` | `add` kind=`action` / `stage_action` | `Action.cs` | ✅ |
 | Action parameters | `CheckOut: action (book: Book) -> Loan` | — | `Action.cs` | ✅ |
-| Require gates | `require GoodStanding` | `add_policy` (entity-level tools) | `Policy.cs` | ✅ |
+| Require gates | `require GoodStanding` | `add` kind=`policy` (entity) / `apply_dsl` | `Policy.cs` | ✅ |
 | Stage entry/exit | `entry { }` / `exit { }` | — | `Stage.cs` | ✅ |
 | Stage subscription | `when loans Overdue { }` | — | `StageSubscription.cs` | ✅ |
 | DSL apply / export | — | `apply_dsl`, `export_dsl` | `Parsing/PolyDslParser.cs`, `DomainDslPrinter.cs` | ✅ |
@@ -212,12 +216,12 @@ Infra suite (Groups 1–7 under bar): **complete** — [`plans/infrastructure-pa
 
 | Area | Tools (representative) |
 |------|------------------------|
-| Session / domain | `create_domain_session`, overview/detail/snapshot/analysis/suggestions |
-| Evolve | add/remove entity, property, stage, action, relationship, constraint, policy; batch helpers |
+| Session / domain | `create_domain_session`, `list_sessions`, overview/detail/analysis/suggestions, `get_relationships`, `get_constraints` |
+| Unified evolve | `add` / `remove` (kind + payload — 8 kinds; policy remove supports stageName/actionName scope; constraint remove not implemented) |
 | DSL | `apply_dsl`, `export_dsl`, `get_dsl_guide` |
-| Policy | `add_policy`, `get_policy_expression`, `evaluate_policy` (+ `instanceId`) |
-| Runtime | `create_instance`, `link_instances`, `get_instance`, `list_instances`, `invoke_action` |
-| Oracle | `analyze_expression`, `analyze_effect`, lower/describe helpers, `export_domain_to_csharp` |
+| Policy | `add` kind=`policy`, `get_policy_expression`, `evaluate_policy` (+ `instanceId`) |
+| Runtime | `create_instance`, `link_instances`, `unlink_instances`, `get_instance`, `list_instances`, `invoke_action` |
+| Oracle | `simulate_policy` (DSL fragment), `describe_domain_element`, `export_domain_to_csharp` |
 
 Full names: `Poly.Mcp/Tools/DomainTools.cs`, `RuntimeTool.cs`, `OracleTool.cs`.
 

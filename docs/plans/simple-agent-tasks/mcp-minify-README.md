@@ -5,7 +5,9 @@
 **Pre-ship:** [`../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md`](../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md)  
 **Platform:** [`../../CORE.md`](../../CORE.md) · [`../../../AGENTS.md`](../../../AGENTS.md)  
 
-**Status:** Ready to admit — **not CURRENT** until human admits.
+**Status:** ✅ **DONE 2026-08-08** — tasks 0–7 + gate all `[x]`; tool catalog **46 → 24**; zero `DomainExpressionJsonParser`; unified `add`/`remove` + `apply_dsl` only; suite **1927/1927 green**; pr1 reviewed (no 🔴🟠).
+
+**Open review follow-up queue (2026-08-08):** [`mcp-minify-followups-2026-08-08.md`](./mcp-minify-followups-2026-08-08.md) — **ALL CLOSED 2026-08-08** (B1–B5, S1–S6, N1–N5, P1; suite 1938 green).
 
 ---
 
@@ -70,22 +72,22 @@ suite=docs/plans/simple-agent-tasks/mcp-minify-README.md  mode=until-done
 
 | ID | File | Size | Status |
 |----|------|------|--------|
-| **0** | [`mcp-minify-0-inventory.md`](./mcp-minify-0-inventory.md) | S | `[ ]` |
-| **1** | [`mcp-minify-1-fragment-api.md`](./mcp-minify-1-fragment-api.md) | M | `[ ]` |
-| **2** | [`mcp-minify-2-oracle-dsl.md`](./mcp-minify-2-oracle-dsl.md) | M | `[ ]` |
-| **3** | [`mcp-minify-3-add-core-kinds.md`](./mcp-minify-3-add-core-kinds.md) | M | `[ ]` |
-| **4** | [`mcp-minify-4-add-policy-constraint.md`](./mcp-minify-4-add-policy-constraint.md) | M | `[ ]` |
-| **5** | [`mcp-minify-5-remove-unified.md`](./mcp-minify-5-remove-unified.md) | M | `[ ]` |
-| **6** | [`mcp-minify-6-delete-micro-tools.md`](./mcp-minify-6-delete-micro-tools.md) | M | `[ ]` |
-| **7** | [`mcp-minify-7-catalog-diet-docs.md`](./mcp-minify-7-catalog-diet-docs.md) | S | `[ ]` |
-| **G** | [`mcp-minify-gate.md`](./mcp-minify-gate.md) | S | `[ ]` |
+| **0** | [`mcp-minify-0-inventory.md`](./mcp-minify-0-inventory.md) | S | `[x]` |
+| **1** | [`mcp-minify-1-fragment-api.md`](./mcp-minify-1-fragment-api.md) | M | `[x]` |
+| **2** | [`mcp-minify-2-oracle-dsl.md`](./mcp-minify-2-oracle-dsl.md) | M | `[x]` |
+| **3** | [`mcp-minify-3-add-core-kinds.md`](./mcp-minify-3-add-core-kinds.md) | M | `[x]` |
+| **4** | [`mcp-minify-4-add-policy-constraint.md`](./mcp-minify-4-add-policy-constraint.md) | M | `[x]` |
+| **5** | [`mcp-minify-5-remove-unified.md`](./mcp-minify-5-remove-unified.md) | M | `[x]` |
+| **6** | [`mcp-minify-6-delete-micro-tools.md`](./mcp-minify-6-delete-micro-tools.md) | M | `[x]` |
+| **7** | [`mcp-minify-7-catalog-diet-docs.md`](./mcp-minify-7-catalog-diet-docs.md) | S | `[x]` |
+| **G** | [`mcp-minify-gate.md`](./mcp-minify-gate.md) | S | `[x]` |
 
 ---
 
 ## Agent pick (when CURRENT)
 
 ```text
-NEXT: first [ ] above
+NEXT: none — suite DONE 2026-08-08
 ```
 
 ---

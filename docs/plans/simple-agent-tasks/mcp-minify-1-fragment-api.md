@@ -1,8 +1,10 @@
 # mcp-minify-1 — DSL expression fragment API
 
 **Difficulty:** M  
-**Status:** `[ ]`  
-**Prereq:** task 0 `[x]`  
+**Status:** `[x]`  
+**Prereq:** task 0 `[x]`
+
+**Done 2026-08-08:** `DslExpressionFragment.ParseExpressionFragment` (static, in `Poly/DomainModeling/Parsing/DslExpressionFragment.cs`) + `DslExpressionFragmentTests.cs` (5 cases). Empty/trailing fail closed with `GrammarException` (a `FormatException`); open-form registry honored via `inputs?.ExpressionForms`. Suite 1935 green.  
 
 ## Objective
 
@@ -70,4 +72,4 @@ dotnet run --project Poly.Tests/Poly.Tests.csproj --no-build
 
 ## Status
 
-**Status:** Not Started  
+**Status:** Done  

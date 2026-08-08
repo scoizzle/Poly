@@ -127,7 +127,7 @@ internal sealed class AuthoringSuggestionAnalyzer : INodeAnalyzer {
             entity,
             $"Entity '{entity.Name}' has properties suitable for policy guards " +
             "(boolean or range-constrained properties) but no policies defined. " +
-            "Policies enforce business rules. Use 'add_policy' to define guards.",
+            "Policies enforce business rules. Use `add(kind: policy)` or `apply_dsl` to define guards.",
             DomainModelDiagnosticCodes.AuthoringSuggestion);
     }
 }

@@ -53,8 +53,8 @@ public class McpSmokeTests {
         var (sessionId, _) = McpSessionStore.Create("Test");
 
         // Evolve a domain with valid structure
-        EvolveTool.AddEntity(sessionId, "Order");
-        EvolveTool.AddProperty(sessionId, "Order", "Status", "Text");
+        EvolveTool.Add(sessionId, "entity", """{"name":"Order"}""");
+        EvolveTool.Add(sessionId, "property", """{"entityName":"Order","name":"Status","typeName":"Text"}""");
 
         var response = QueryTool.GetDomainAnalysis(sessionId);
         await Assert.That(response.Success).IsTrue();
@@ -70,11 +70,11 @@ public class McpSmokeTests {
         var (sessionId, _) = McpSessionStore.Create("Test");
 
         // Create a parent entity, child entity, and relationship
-        EvolveTool.AddEntity(sessionId, "Patron");
-        EvolveTool.AddProperty(sessionId, "Patron", "Name", "Text");
-        EvolveTool.AddEntity(sessionId, "Loan");
-        EvolveTool.AddProperty(sessionId, "Loan", "Amount", "Number");
-        EvolveTool.AddRelationship(sessionId, "Loans", "Patron", "Loan", "OneToMany");
+        EvolveTool.Add(sessionId, "entity", """{"name":"Patron"}""");
+        EvolveTool.Add(sessionId, "property", """{"entityName":"Patron","name":"Name","typeName":"Text"}""");
+        EvolveTool.Add(sessionId, "entity", """{"name":"Loan"}""");
+        EvolveTool.Add(sessionId, "property", """{"entityName":"Loan","name":"Amount","typeName":"Number"}""");
+        EvolveTool.Add(sessionId, "relationship", """{"name":"Loans","source":"Patron","target":"Loan","cardinality":"OneToMany"}""");
 
         var response = QueryTool.GetDomainAnalysis(sessionId);
         await Assert.That(response.Success).IsTrue();
@@ -142,10 +142,10 @@ public class McpSmokeTests {
     }
 
     [Test]
-    public async Task AddEntityTool_CreatesEntity() {
+    public async Task Add_Entity_CreatesEntity() {
         var (sessionId, _) = McpSessionStore.Create("Test");
 
-        var response = EvolveTool.AddEntity(sessionId, "Order");
+        var response = EvolveTool.Add(sessionId, "entity", """{"name":"Order"}""");
         await Assert.That(response.Success).IsTrue();
         await Assert.That(response.Revision).IsEqualTo(1);
 
@@ -157,15 +157,15 @@ public class McpSmokeTests {
     }
 
     [Test]
-    public async Task AddEntityTool_DuplicateName_RollsBack() {
+    public async Task Add_Entity_DuplicateName_RollsBack() {
         var (sessionId, _) = McpSessionStore.Create("Test");
 
         // First add succeeds
-        var r1 = EvolveTool.AddEntity(sessionId, "Order");
+        var r1 = EvolveTool.Add(sessionId, "entity", """{"name":"Order"}""");
         await Assert.That(r1.Success).IsTrue();
 
         // Second add with same name rolls back
-        var r2 = EvolveTool.AddEntity(sessionId, "Order");
+        var r2 = EvolveTool.Add(sessionId, "entity", """{"name":"Order"}""");
         await Assert.That(r2.Success).IsFalse();
         await Assert.That(r2.Diagnostics).IsNotNull();
         await Assert.That(r2.Diagnostics!.Count).IsGreaterThan(0);
@@ -175,11 +175,11 @@ public class McpSmokeTests {
     }
 
     [Test]
-    public async Task AddPropertyTool_AddsPropertyToEntity() {
+    public async Task Add_Property_AddsPropertyToEntity() {
         var (sessionId, _) = McpSessionStore.Create("Test");
 
-        EvolveTool.AddEntity(sessionId, "Order");
-        var response = EvolveTool.AddProperty(sessionId, "Order", "Status", "Text");
+        EvolveTool.Add(sessionId, "entity", """{"name":"Order"}""");
+        var response = EvolveTool.Add(sessionId, "property", """{"entityName":"Order","name":"Status","typeName":"Text"}""");
 
         await Assert.That(response.Success).IsTrue();
 
@@ -198,30 +198,30 @@ public class McpSmokeTests {
         var (sessionId, _) = McpSessionStore.Create("Orders");
 
         // Add entity
-        var r1 = EvolveTool.AddEntity(sessionId, "Order");
+        var r1 = EvolveTool.Add(sessionId, "entity", """{"name":"Order"}""");
         await Assert.That(r1.Success).IsTrue();
 
         // Add properties
-        var r2 = EvolveTool.AddProperty(sessionId, "Order", "Status", "Text");
+        var r2 = EvolveTool.Add(sessionId, "property", """{"entityName":"Order","name":"Status","typeName":"Text"}""");
         await Assert.That(r2.Success).IsTrue();
         await Assert.That(r2.Revision).IsEqualTo(2);
 
-        var r3 = EvolveTool.AddProperty(sessionId, "Order", "Total", "Number");
+        var r3 = EvolveTool.Add(sessionId, "property", """{"entityName":"Order","name":"Total","typeName":"Number"}""");
         await Assert.That(r3.Success).IsTrue();
 
         // Add stages
-        var r4 = EvolveTool.AddStage(sessionId, "Order", "Draft");
+        var r4 = EvolveTool.Add(sessionId, "stage", """{"entityName":"Order","name":"Draft"}""");
         await Assert.That(r4.Success).IsTrue();
 
-        var r5 = EvolveTool.AddStage(sessionId, "Order", "Submitted");
+        var r5 = EvolveTool.Add(sessionId, "stage", """{"entityName":"Order","name":"Submitted"}""");
         await Assert.That(r5.Success).IsTrue();
 
         // Add action
-        var r6 = EvolveTool.AddAction(sessionId, "Order", "Submit");
+        var r6 = EvolveTool.Add(sessionId, "action", """{"entityName":"Order","name":"Submit"}""");
         await Assert.That(r6.Success).IsTrue();
         await Assert.That(r6.Revision).IsEqualTo(6);
 
-        var r7 = EvolveTool.AddActionToStage(sessionId, "Order", "Draft", "Submit");
+        var r7 = EvolveTool.Add(sessionId, "stage_action", """{"entityName":"Order","stageName":"Draft","name":"Submit"}""");
         await Assert.That(r7.Success).IsTrue();
 
         // Get entity detail
@@ -276,7 +276,7 @@ public class McpSmokeTests {
         var (sessionId, state) = McpSessionStore.Create("Test");
         var originalRevision = state.Revision;
 
-        var response = EvolveTool.AddProperty(sessionId, "NonExistent", "Status", "Text");
+        var response = EvolveTool.Add(sessionId, "property", """{"entityName":"NonExistent","name":"Status","typeName":"Text"}""");
         await Assert.That(response.Success).IsFalse();
         await Assert.That(response.Message).Contains("Evolution rolled back");
         await Assert.That(response.Revision).IsEqualTo(originalRevision); // not bumped
@@ -288,8 +288,8 @@ public class McpSmokeTests {
         var (sessionId, _) = McpSessionStore.Create("Test");
 
         // Add entity, then try adding a stage to a different entity that doesn't exist
-        EvolveTool.AddEntity(sessionId, "Order");
-        var response = EvolveTool.AddStage(sessionId, "NonExistent", "Draft");
+        EvolveTool.Add(sessionId, "entity", """{"name":"Order"}""");
+        var response = EvolveTool.Add(sessionId, "stage", """{"entityName":"NonExistent","name":"Draft"}""");
 
         await Assert.That(response.Success).IsFalse();
         await Assert.That(response.Message).Contains("Evolution rolled back");
@@ -299,8 +299,8 @@ public class McpSmokeTests {
     public async Task AddActionToMissingEntity_ReportsFailure() {
         var (sessionId, _) = McpSessionStore.Create("Test");
 
-        EvolveTool.AddEntity(sessionId, "Order");
-        var response = EvolveTool.AddAction(sessionId, "NonExistent", "Submit");
+        EvolveTool.Add(sessionId, "entity", """{"name":"Order"}""");
+        var response = EvolveTool.Add(sessionId, "action", """{"entityName":"NonExistent","name":"Submit"}""");
 
         await Assert.That(response.Success).IsFalse();
         await Assert.That(response.Message).Contains("Evolution rolled back");
@@ -311,9 +311,9 @@ public class McpSmokeTests {
         var (sessionId, _) = McpSessionStore.Create("Test");
 
         // Build a domain with a policy
-        EvolveTool.AddEntity(sessionId, "Person");
-        EvolveTool.AddProperty(sessionId, "Person", "Age", "Number");
-        EvolveTool.AddEntity(sessionId, "Person"); // no-op duplicate handled
+        EvolveTool.Add(sessionId, "entity", """{"name":"Person"}""");
+        EvolveTool.Add(sessionId, "property", """{"entityName":"Person","name":"Age","typeName":"Number"}""");
+        EvolveTool.Add(sessionId, "entity", """{"name":"Person"}"""); // no-op duplicate handled
 
         // Add policy via direct evolve — uses atomic Evolve for concurrency safety
         McpSessionStore.Evolve(sessionId, domain =>
@@ -332,7 +332,7 @@ public class McpSmokeTests {
     [Test]
     public async Task GetPolicyExpression_MissingPolicy_ReturnsNotFound() {
         var (sessionId, _) = McpSessionStore.Create("Test");
-        EvolveTool.AddEntity(sessionId, "Person");
+        EvolveTool.Add(sessionId, "entity", """{"name":"Person"}""");
 
         var response = PolicyTool.GetPolicyExpression(sessionId, "Person", "NonExistent");
         await Assert.That(response.Success).IsFalse();
@@ -348,16 +348,15 @@ public class McpSmokeTests {
         await Assert.That(response.Message).Contains("not found");
     }
 
-    // ── add_policy / evaluate_policy MCP tools (Slice 3) ────────────
+    // ── policy / evaluate_policy MCP tools (Slice 3) ────────────
 
     [Test]
     public async Task AddPolicy_SimplePropertyComparison_Succeeds() {
         var (sessionId, _) = McpSessionStore.Create("Test");
-        EvolveTool.AddEntity(sessionId, "Person");
-        EvolveTool.AddProperty(sessionId, "Person", "Age", "Number");
+        EvolveTool.Add(sessionId, "entity", """{"name":"Person"}""");
+        EvolveTool.Add(sessionId, "property", """{"entityName":"Person","name":"Age","typeName":"Number"}""");
 
-        var response = PolicyTool.AddPolicy(sessionId, "Person", "Adult",
-            expression: """{"property":"Age","op":">=","value":18}""");
+        var response = EvolveTool.Add(sessionId, "policy", """{"entityName":"Person","name":"Adult","expression":"Age >= 18"}""");
 
         await Assert.That(response.Success).IsTrue();
         await Assert.That(response.Message).Contains("Adult");
@@ -372,8 +371,7 @@ public class McpSmokeTests {
     public async Task AddPolicy_ToMissingEntity_Fails() {
         var (sessionId, _) = McpSessionStore.Create("Test");
 
-        var response = PolicyTool.AddPolicy(sessionId, "NonExistent", "Any",
-            expression: """{"property":"Age","op":">=","value":18}""");
+        var response = EvolveTool.Add(sessionId, "policy", """{"entityName":"NonExistent","name":"Any","expression":"Age >= 18"}""");
 
         await Assert.That(response.Success).IsFalse();
     }
@@ -381,10 +379,9 @@ public class McpSmokeTests {
     [Test]
     public async Task AddPolicy_InvalidExpression_Fails() {
         var (sessionId, _) = McpSessionStore.Create("Test");
-        EvolveTool.AddEntity(sessionId, "Person");
+        EvolveTool.Add(sessionId, "entity", """{"name":"Person"}""");
 
-        var response = PolicyTool.AddPolicy(sessionId, "Person", "Bad",
-            expression: """{"property":"","op":">=","value":18}""");
+        var response = EvolveTool.Add(sessionId, "policy", """{"entityName":"Person","name":"Bad","expression":"Age >="}""");
 
         await Assert.That(response.Success).IsFalse();
     }
@@ -392,11 +389,10 @@ public class McpSmokeTests {
     [Test]
     public async Task EvaluatePolicy_AgeGuard_ReturnsTrueForAdult() {
         var (sessionId, _) = McpSessionStore.Create("Test");
-        EvolveTool.AddEntity(sessionId, "Person");
-        EvolveTool.AddProperty(sessionId, "Person", "Age", "Number");
+        EvolveTool.Add(sessionId, "entity", """{"name":"Person"}""");
+        EvolveTool.Add(sessionId, "property", """{"entityName":"Person","name":"Age","typeName":"Number"}""");
 
-        PolicyTool.AddPolicy(sessionId, "Person", "Adult",
-            expression: """{"property":"Age","op":">=","value":18}""");
+        EvolveTool.Add(sessionId, "policy", """{"entityName":"Person","name":"Adult","expression":"Age >= 18"}""");
 
         var adult = PolicyTool.EvaluatePolicy(sessionId, "Person", "Adult",
             properties: "{\"Age\":25}");
@@ -412,7 +408,7 @@ public class McpSmokeTests {
     [Test]
     public async Task EvaluatePolicy_MissingPolicy_ReturnsNotFound() {
         var (sessionId, _) = McpSessionStore.Create("Test");
-        EvolveTool.AddEntity(sessionId, "Person");
+        EvolveTool.Add(sessionId, "entity", """{"name":"Person"}""");
 
         var response = PolicyTool.EvaluatePolicy(sessionId, "Person", "NonExistent", age: 25);
         await Assert.That(response.Success).IsFalse();
@@ -423,12 +419,11 @@ public class McpSmokeTests {
     public async Task EvaluatePolicy_MultiProperty_OrderTotalStatus_EvaluatesCorrectly() {
         // Proves evaluate_policy works with non-Age properties via JSON properties arg
         var (sessionId, _) = McpSessionStore.Create("Test");
-        EvolveTool.AddEntity(sessionId, "Order");
-        EvolveTool.AddProperty(sessionId, "Order", "Total", "Number");
-        EvolveTool.AddProperty(sessionId, "Order", "Status", "Text");
+        EvolveTool.Add(sessionId, "entity", """{"name":"Order"}""");
+        EvolveTool.Add(sessionId, "property", """{"entityName":"Order","name":"Total","typeName":"Number"}""");
+        EvolveTool.Add(sessionId, "property", """{"entityName":"Order","name":"Status","typeName":"Text"}""");
 
-        PolicyTool.AddPolicy(sessionId, "Order", "LargeActive",
-            expression: """{"and":[{"property":"Total","op":">","value":100},{"property":"Status","op":"==","value":"Active"}]}""");
+        EvolveTool.Add(sessionId, "policy", """{"entityName":"Order","name":"LargeActive","expression":"(Total > 100) and (Status == \"Active\")"}""");
 
         // Pass with Total > 100 and Status == "Active"
         var pass = PolicyTool.EvaluatePolicy(sessionId, "Order", "LargeActive",
@@ -452,11 +447,10 @@ public class McpSmokeTests {
     [Test]
     public async Task EvaluatePolicy_MultiProperty_ProductStock_EvaluatesCorrectly() {
         var (sessionId, _) = McpSessionStore.Create("Test");
-        EvolveTool.AddEntity(sessionId, "Product");
-        EvolveTool.AddProperty(sessionId, "Product", "Stock", "Number");
+        EvolveTool.Add(sessionId, "entity", """{"name":"Product"}""");
+        EvolveTool.Add(sessionId, "property", """{"entityName":"Product","name":"Stock","typeName":"Number"}""");
 
-        PolicyTool.AddPolicy(sessionId, "Product", "PositiveStock",
-            expression: """{"property":"Stock","op":">=","value":0}""");
+        EvolveTool.Add(sessionId, "policy", """{"entityName":"Product","name":"PositiveStock","expression":"Stock >= 0"}""");
 
         var pass = PolicyTool.EvaluatePolicy(sessionId, "Product", "PositiveStock",
             properties: "{\"Stock\":10}");
@@ -472,11 +466,10 @@ public class McpSmokeTests {
     [Test]
     public async Task EvaluatePolicy_InvalidProperty_ReturnsClearError() {
         var (sessionId, _) = McpSessionStore.Create("Test");
-        EvolveTool.AddEntity(sessionId, "Person");
-        EvolveTool.AddProperty(sessionId, "Person", "Age", "Number");
+        EvolveTool.Add(sessionId, "entity", """{"name":"Person"}""");
+        EvolveTool.Add(sessionId, "property", """{"entityName":"Person","name":"Age","typeName":"Number"}""");
 
-        PolicyTool.AddPolicy(sessionId, "Person", "Adult",
-            expression: """{"property":"Age","op":">=","value":18}""");
+        EvolveTool.Add(sessionId, "policy", """{"entityName":"Person","name":"Adult","expression":"Age >= 18"}""");
 
         // Providing a property that doesn't exist on the entity
         var response = PolicyTool.EvaluatePolicy(sessionId, "Person", "Adult",
@@ -490,11 +483,10 @@ public class McpSmokeTests {
     [Test]
     public async Task EvaluatePolicy_BooleanGuard_EqualsTrue_ReturnsTrue() {
         var (sessionId, _) = McpSessionStore.Create("Test");
-        EvolveTool.AddEntity(sessionId, "Flag");
-        EvolveTool.AddProperty(sessionId, "Flag", "Enabled", "Boolean");
+        EvolveTool.Add(sessionId, "entity", """{"name":"Flag"}""");
+        EvolveTool.Add(sessionId, "property", """{"entityName":"Flag","name":"Enabled","typeName":"Boolean"}""");
 
-        PolicyTool.AddPolicy(sessionId, "Flag", "IsEnabled",
-            expression: """{"property":"Enabled","op":"==","value":true}""");
+        EvolveTool.Add(sessionId, "policy", """{"entityName":"Flag","name":"IsEnabled","expression":"Enabled == true"}""");
 
         var pass = PolicyTool.EvaluatePolicy(sessionId, "Flag", "IsEnabled",
             properties: "{\"Enabled\":true}");
@@ -512,11 +504,10 @@ public class McpSmokeTests {
     [Test]
     public async Task EvaluatePolicy_GreaterThanOrEqual_MatchNumeric_ReturnsTrue() {
         var (sessionId, _) = McpSessionStore.Create("Test");
-        EvolveTool.AddEntity(sessionId, "Item");
-        EvolveTool.AddProperty(sessionId, "Item", "Score", "Number");
+        EvolveTool.Add(sessionId, "entity", """{"name":"Item"}""");
+        EvolveTool.Add(sessionId, "property", """{"entityName":"Item","name":"Score","typeName":"Number"}""");
 
-        PolicyTool.AddPolicy(sessionId, "Item", "HighScore",
-            expression: """{"property":"Score","op":">=","value":100}""");
+        EvolveTool.Add(sessionId, "policy", """{"entityName":"Item","name":"HighScore","expression":"Score >= 100"}""");
 
         var pass = PolicyTool.EvaluatePolicy(sessionId, "Item", "HighScore",
             properties: "{\"Score\":100}");
@@ -531,38 +522,33 @@ public class McpSmokeTests {
 
     /// <summary>
     /// Regression test: all expression shapes (comparison, composite and/or/not,
-    /// literal) parse and evaluate correctly through the unified JSON parser.
+    /// literal) parse and evaluate correctly through the product DSL fragment parser.
     /// </summary>
     [Test]
-    public async Task AddPolicy_AllJsonExpressionShapes_EvaluateCorrectly() {
+    public async Task AddPolicy_AllDslExpressionShapes_EvaluateCorrectly() {
         var (sessionId, _) = McpSessionStore.Create("Test");
-        EvolveTool.AddEntity(sessionId, "Person");
-        EvolveTool.AddProperty(sessionId, "Person", "Age", "Number");
-        EvolveTool.AddProperty(sessionId, "Person", "Active", "Boolean");
+        EvolveTool.Add(sessionId, "entity", """{"name":"Person"}""");
+        EvolveTool.Add(sessionId, "property", """{"entityName":"Person","name":"Age","typeName":"Number"}""");
+        EvolveTool.Add(sessionId, "property", """{"entityName":"Person","name":"Active","typeName":"Boolean"}""");
 
         // Comparison (>= operator)
-        var r1 = PolicyTool.AddPolicy(sessionId, "Person", "Adult",
-            expression: """{"property":"Age","op":">=","value":18}""");
+        var r1 = EvolveTool.Add(sessionId, "policy", """{"entityName":"Person","name":"Adult","expression":"Age >= 18"}""");
         await Assert.That(r1.Success).IsTrue();
 
         // Boolean equality
-        var r2 = PolicyTool.AddPolicy(sessionId, "Person", "IsActive",
-            expression: """{"property":"Active","op":"==","value":true}""");
+        var r2 = EvolveTool.Add(sessionId, "policy", """{"entityName":"Person","name":"IsActive","expression":"Active == true"}""");
         await Assert.That(r2.Success).IsTrue();
 
         // Composite AND
-        var r3 = PolicyTool.AddPolicy(sessionId, "Person", "ActiveAdult",
-            expression: """{"and":[{"property":"Age","op":">=","value":18},{"property":"Active","op":"==","value":true}]}""");
+        var r3 = EvolveTool.Add(sessionId, "policy", """{"entityName":"Person","name":"ActiveAdult","expression":"(Age >= 18) and (Active == true)"}""");
         await Assert.That(r3.Success).IsTrue();
 
         // Composite NOT
-        var r4 = PolicyTool.AddPolicy(sessionId, "Person", "NotAdult",
-            expression: """{"not":{"property":"Age","op":">=","value":18}}""");
+        var r4 = EvolveTool.Add(sessionId, "policy", """{"entityName":"Person","name":"NotAdult","expression":"not (Age >= 18)"}""");
         await Assert.That(r4.Success).IsTrue();
 
         // Literal
-        var r5 = PolicyTool.AddPolicy(sessionId, "Person", "Always",
-            expression: """{"literal":true}""");
+        var r5 = EvolveTool.Add(sessionId, "policy", """{"entityName":"Person","name":"Always","expression":"true"}""");
         await Assert.That(r5.Success).IsTrue();
 
         // Evaluate: Adult (Age >= 18)
@@ -619,14 +605,16 @@ public class McpSmokeTests {
     // ── Batch/plural evolve tools ─────────────────────────────────
 
     [Test]
-    public async Task AddProperties_Batch_Succeeds() {
+    public async Task AddProperties_MultipleAddCalls_Succeeds() {
         var (sessionId, _) = McpSessionStore.Create("Test");
-        EvolveTool.AddEntity(sessionId, "Product");
+        EvolveTool.Add(sessionId, "entity", """{"name":"Product"}""");
 
-        var response = EvolveTool.AddProperties(sessionId, "Product",
-            """[{"name":"SKU","typeName":"Text"},{"name":"Price","typeName":"Number"},{"name":"InStock","typeName":"Boolean"}]""");
-
-        await Assert.That(response.Success).IsTrue();
+        var r1 = EvolveTool.Add(sessionId, "property", """{"entityName":"Product","name":"SKU","typeName":"Text"}""");
+        var r2 = EvolveTool.Add(sessionId, "property", """{"entityName":"Product","name":"Price","typeName":"Number"}""");
+        var r3 = EvolveTool.Add(sessionId, "property", """{"entityName":"Product","name":"InStock","typeName":"Boolean"}""");
+        await Assert.That(r1.Success).IsTrue();
+        await Assert.That(r2.Success).IsTrue();
+        await Assert.That(r3.Success).IsTrue();
 
         var detail = QueryTool.GetEntityDetail(sessionId, "Product");
         await Assert.That(detail.Data).IsTypeOf<EntityDetailData>();
@@ -635,14 +623,18 @@ public class McpSmokeTests {
     }
 
     [Test]
-    public async Task AddStages_Batch_Succeeds() {
+    public async Task AddStages_MultipleAddCalls_Succeeds() {
         var (sessionId, _) = McpSessionStore.Create("Test");
-        EvolveTool.AddEntity(sessionId, "Order");
+        EvolveTool.Add(sessionId, "entity", """{"name":"Order"}""");
 
-        var response = EvolveTool.AddStages(sessionId, "Order",
-            """[{"name":"Draft"},{"name":"Confirmed"},{"name":"Shipped"},{"name":"Delivered"}]""");
-
-        await Assert.That(response.Success).IsTrue();
+        var r1 = EvolveTool.Add(sessionId, "stage", """{"entityName":"Order","name":"Draft"}""");
+        var r2 = EvolveTool.Add(sessionId, "stage", """{"entityName":"Order","name":"Confirmed"}""");
+        var r3 = EvolveTool.Add(sessionId, "stage", """{"entityName":"Order","name":"Shipped"}""");
+        var r4 = EvolveTool.Add(sessionId, "stage", """{"entityName":"Order","name":"Delivered"}""");
+        await Assert.That(r1.Success).IsTrue();
+        await Assert.That(r2.Success).IsTrue();
+        await Assert.That(r3.Success).IsTrue();
+        await Assert.That(r4.Success).IsTrue();
 
         var detail = QueryTool.GetEntityDetail(sessionId, "Order");
         var d = (EntityDetailData)detail.Data!;
@@ -651,17 +643,18 @@ public class McpSmokeTests {
     }
 
     [Test]
-    public async Task AddActionsToStages_Batch_Succeeds() {
+    public async Task AddActionsToStages_MultipleAddCalls_Succeeds() {
         var (sessionId, _) = McpSessionStore.Create("Test");
-        EvolveTool.AddEntity(sessionId, "Order");
-        EvolveTool.AddStages(sessionId, "Order", """[{"name":"Draft"},{"name":"Confirmed"}]""");
-        EvolveTool.AddAction(sessionId, "Order", "Submit");
-        EvolveTool.AddAction(sessionId, "Order", "Cancel");
+        EvolveTool.Add(sessionId, "entity", """{"name":"Order"}""");
+        EvolveTool.Add(sessionId, "stage", """{"entityName":"Order","name":"Draft"}""");
+        EvolveTool.Add(sessionId, "stage", """{"entityName":"Order","name":"Confirmed"}""");
+        EvolveTool.Add(sessionId, "action", """{"entityName":"Order","name":"Submit"}""");
+        EvolveTool.Add(sessionId, "action", """{"entityName":"Order","name":"Cancel"}""");
 
-        var response = EvolveTool.AddActionsToStages(sessionId, "Order",
-            """[{"stageName":"Draft","actionName":"Submit"},{"stageName":"Draft","actionName":"Cancel"}]""");
-
-        await Assert.That(response.Success).IsTrue();
+        var r1 = EvolveTool.Add(sessionId, "stage_action", """{"entityName":"Order","stageName":"Draft","name":"Submit"}""");
+        var r2 = EvolveTool.Add(sessionId, "stage_action", """{"entityName":"Order","stageName":"Draft","name":"Cancel"}""");
+        await Assert.That(r1.Success).IsTrue();
+        await Assert.That(r2.Success).IsTrue();
 
         var detail = QueryTool.GetEntityDetail(sessionId, "Order");
         var d = (EntityDetailData)detail.Data!;
@@ -670,31 +663,14 @@ public class McpSmokeTests {
         await Assert.That(draftStage.Actions).Contains("Cancel");
     }
 
-    // ── Domain snapshot ───────────────────────────────────────────
-
-    [Test]
-    public async Task GetDomainSnapshot_ReturnsAllEntitiesAndRelationships() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
-        EvolveTool.AddEntity(sessionId, "Order");
-        EvolveTool.AddProperties(sessionId, "Order",
-            """[{"name":"Total","typeName":"Number"}]""");
-        EvolveTool.AddStages(sessionId, "Order", """[{"name":"Draft"},{"name":"Confirmed"}]""");
-        EvolveTool.AddEntity(sessionId, "Customer");
-        EvolveTool.AddRelationship(sessionId, "OrderCustomer", "Order", "Customer", "ManyToOne");
-
-        var response = QueryTool.GetDomainSnapshot(sessionId);
-        await Assert.That(response.Success).IsTrue();
-        await Assert.That(response.Data).IsNotNull();
-    }
-
     // ── Relationships ─────────────────────────────────────────────
 
     [Test]
     public async Task GetRelationships_All_ReturnsAllEdges() {
         var (sessionId, _) = McpSessionStore.Create("Test");
-        EvolveTool.AddEntity(sessionId, "Order");
-        EvolveTool.AddEntity(sessionId, "Customer");
-        EvolveTool.AddRelationship(sessionId, "OrderCustomer", "Order", "Customer", "ManyToOne");
+        EvolveTool.Add(sessionId, "entity", """{"name":"Order"}""");
+        EvolveTool.Add(sessionId, "entity", """{"name":"Customer"}""");
+        EvolveTool.Add(sessionId, "relationship", """{"name":"OrderCustomer","source":"Order","target":"Customer","cardinality":"ManyToOne"}""");
 
         var response = QueryTool.GetRelationships(sessionId);
         await Assert.That(response.Success).IsTrue();
@@ -703,11 +679,11 @@ public class McpSmokeTests {
     [Test]
     public async Task GetRelationships_FilteredByEntity_ReturnsOnlyMatching() {
         var (sessionId, _) = McpSessionStore.Create("Test");
-        EvolveTool.AddEntity(sessionId, "Order");
-        EvolveTool.AddEntity(sessionId, "Customer");
-        EvolveTool.AddEntity(sessionId, "Product");
-        EvolveTool.AddRelationship(sessionId, "OrderCustomer", "Order", "Customer", "ManyToOne");
-        EvolveTool.AddRelationship(sessionId, "OrderProduct", "Order", "Product");
+        EvolveTool.Add(sessionId, "entity", """{"name":"Order"}""");
+        EvolveTool.Add(sessionId, "entity", """{"name":"Customer"}""");
+        EvolveTool.Add(sessionId, "entity", """{"name":"Product"}""");
+        EvolveTool.Add(sessionId, "relationship", """{"name":"OrderCustomer","source":"Order","target":"Customer","cardinality":"ManyToOne"}""");
+        EvolveTool.Add(sessionId, "relationship", """{"name":"OrderProduct","source":"Order","target":"Product"}""");
 
         var response = QueryTool.GetRelationships(sessionId, entityName: "Customer");
         await Assert.That(response.Success).IsTrue();
@@ -718,11 +694,11 @@ public class McpSmokeTests {
     [Test]
     public async Task AddConstraint_Range_Succeeds() {
         var (sessionId, _) = McpSessionStore.Create("Test");
-        EvolveTool.AddEntity(sessionId, "Product");
-        EvolveTool.AddProperty(sessionId, "Product", "Price", "Number");
+        EvolveTool.Add(sessionId, "entity", """{"name":"Product"}""");
+        EvolveTool.Add(sessionId, "property", """{"entityName":"Product","name":"Price","typeName":"Number"}""");
 
-        var response = EvolveTool.AddConstraint(sessionId, "Product", "Price", "Range",
-            """{"min":0}""");
+        var response = EvolveTool.Add(sessionId, "constraint",
+            """{"entityName":"Product","propertyName":"Price","type":"Range","min":0}""");
 
         await Assert.That(response.Success).IsTrue();
 
@@ -733,10 +709,11 @@ public class McpSmokeTests {
     [Test]
     public async Task AddConstraint_Required_Succeeds() {
         var (sessionId, _) = McpSessionStore.Create("Test");
-        EvolveTool.AddEntity(sessionId, "Customer");
-        EvolveTool.AddProperty(sessionId, "Customer", "Name", "Text");
+        EvolveTool.Add(sessionId, "entity", """{"name":"Customer"}""");
+        EvolveTool.Add(sessionId, "property", """{"entityName":"Customer","name":"Name","typeName":"Text"}""");
 
-        var response = EvolveTool.AddConstraint(sessionId, "Customer", "Name", "Required");
+        var response = EvolveTool.Add(sessionId, "constraint",
+            """{"entityName":"Customer","propertyName":"Name","type":"Required"}""");
 
         await Assert.That(response.Success).IsTrue();
 
@@ -747,11 +724,11 @@ public class McpSmokeTests {
     [Test]
     public async Task GetConstraints_FiltersByProperty() {
         var (sessionId, _) = McpSessionStore.Create("Test");
-        EvolveTool.AddEntity(sessionId, "Product");
-        EvolveTool.AddProperty(sessionId, "Product", "Price", "Number");
-        EvolveTool.AddProperty(sessionId, "Product", "SKU", "Text");
-        EvolveTool.AddConstraint(sessionId, "Product", "Price", "Range", """{"min":0}""");
-        EvolveTool.AddConstraint(sessionId, "Product", "SKU", "Required");
+        EvolveTool.Add(sessionId, "entity", """{"name":"Product"}""");
+        EvolveTool.Add(sessionId, "property", """{"entityName":"Product","name":"Price","typeName":"Number"}""");
+        EvolveTool.Add(sessionId, "property", """{"entityName":"Product","name":"SKU","typeName":"Text"}""");
+        EvolveTool.Add(sessionId, "constraint", """{"entityName":"Product","propertyName":"Price","type":"Range","min":0}""");
+        EvolveTool.Add(sessionId, "constraint", """{"entityName":"Product","propertyName":"SKU","type":"Required"}""");
 
         // All constraints
         var all = EvolveTool.GetConstraints(sessionId, "Product");
@@ -1021,11 +998,11 @@ public class McpSmokeTests {
         // Build domain via micro-tools, then export
         var (sessionId, _) = McpSessionStore.Create("Test");
 
-        EvolveTool.AddEntity(sessionId, "Order");
-        EvolveTool.AddProperty(sessionId, "Order", "Name", "Text");
-        EvolveTool.AddEntity(sessionId, "Tracker");
-        EvolveTool.AddProperty(sessionId, "Tracker", "Status", "Text");
-        EvolveTool.AddRelationship(sessionId, "Tracks", "Tracker", "Order", "OneToOne");
+        EvolveTool.Add(sessionId, "entity", """{"name":"Order"}""");
+        EvolveTool.Add(sessionId, "property", """{"entityName":"Order","name":"Name","typeName":"Text"}""");
+        EvolveTool.Add(sessionId, "entity", """{"name":"Tracker"}""");
+        EvolveTool.Add(sessionId, "property", """{"entityName":"Tracker","name":"Status","typeName":"Text"}""");
+        EvolveTool.Add(sessionId, "relationship", """{"name":"Tracks","source":"Tracker","target":"Order","cardinality":"OneToOne"}""");
 
         var response = DslTool.ExportDsl(sessionId);
         await Assert.That(response.Success).IsTrue();
@@ -1057,15 +1034,15 @@ public class McpSmokeTests {
         var (sessionId, _) = McpSessionStore.Create("Test");
 
         // Build: two entities + relationship
-        EvolveTool.AddEntity(sessionId, "Customer");
-        EvolveTool.AddEntity(sessionId, "Order");
-        EvolveTool.AddRelationship(sessionId, "Places", "Customer", "Order", "OneToMany");
+        EvolveTool.Add(sessionId, "entity", """{"name":"Customer"}""");
+        EvolveTool.Add(sessionId, "entity", """{"name":"Order"}""");
+        EvolveTool.Add(sessionId, "relationship", """{"name":"Places","source":"Customer","target":"Order","cardinality":"OneToMany"}""");
 
         var before = QueryTool.GetDomainOverview(sessionId);
         await Assert.That(before.Message).Contains("1 relationships");
 
         // Remove
-        var response = EvolveTool.RemoveRelationship(sessionId, "Places");
+        var response = EvolveTool.Remove(sessionId, "relationship", """{"name":"Places"}""");
         await Assert.That(response.Success).IsTrue();
 
         var after = QueryTool.GetDomainOverview(sessionId);
@@ -1076,17 +1053,17 @@ public class McpSmokeTests {
     public async Task RemoveRelationship_UnknownName_Fails() {
         var (sessionId, _) = McpSessionStore.Create("Test");
 
-        var response = EvolveTool.RemoveRelationship(sessionId, "NonExistent");
+        var response = EvolveTool.Remove(sessionId, "relationship", """{"name":"NonExistent"}""");
         await Assert.That(response.Success).IsFalse();
     }
 
     [Test]
     public async Task RemoveEntity_RemovesAndUpdatesOverview() {
         var (sessionId, _) = McpSessionStore.Create("Test");
-        EvolveTool.AddEntity(sessionId, "Product");
-        EvolveTool.AddProperty(sessionId, "Product", "Name", "Text");
+        EvolveTool.Add(sessionId, "entity", """{"name":"Product"}""");
+        EvolveTool.Add(sessionId, "property", """{"entityName":"Product","name":"Name","typeName":"Text"}""");
 
-        var response = EvolveTool.RemoveEntity(sessionId, "Product");
+        var response = EvolveTool.Remove(sessionId, "entity", """{"name":"Product"}""");
         await Assert.That(response.Success).IsTrue();
 
         var overview = QueryTool.GetDomainOverview(sessionId);
@@ -1096,22 +1073,22 @@ public class McpSmokeTests {
     [Test]
     public async Task RemoveEntity_WithRelationship_Fails() {
         var (sessionId, _) = McpSessionStore.Create("Test");
-        EvolveTool.AddEntity(sessionId, "Order");
-        EvolveTool.AddEntity(sessionId, "Customer");
-        EvolveTool.AddRelationship(sessionId, "Places", "Customer", "Order", "OneToMany");
+        EvolveTool.Add(sessionId, "entity", """{"name":"Order"}""");
+        EvolveTool.Add(sessionId, "entity", """{"name":"Customer"}""");
+        EvolveTool.Add(sessionId, "relationship", """{"name":"Places","source":"Customer","target":"Order","cardinality":"OneToMany"}""");
 
-        var response = EvolveTool.RemoveEntity(sessionId, "Order");
+        var response = EvolveTool.Remove(sessionId, "entity", """{"name":"Order"}""");
         await Assert.That(response.Success).IsFalse();
     }
 
     [Test]
     public async Task RemoveProperty_RemovesAndUpdatesDetail() {
         var (sessionId, _) = McpSessionStore.Create("Test");
-        EvolveTool.AddEntity(sessionId, "Item");
-        EvolveTool.AddProperty(sessionId, "Item", "Name", "Text");
-        EvolveTool.AddProperty(sessionId, "Item", "Price", "Number");
+        EvolveTool.Add(sessionId, "entity", """{"name":"Item"}""");
+        EvolveTool.Add(sessionId, "property", """{"entityName":"Item","name":"Name","typeName":"Text"}""");
+        EvolveTool.Add(sessionId, "property", """{"entityName":"Item","name":"Price","typeName":"Number"}""");
 
-        var response = EvolveTool.RemoveProperty(sessionId, "Item", "Price");
+        var response = EvolveTool.Remove(sessionId, "property", """{"entityName":"Item","name":"Price"}""");
         await Assert.That(response.Success).IsTrue();
 
         var detail = QueryTool.GetEntityDetail(sessionId, "Item");
@@ -1124,11 +1101,11 @@ public class McpSmokeTests {
     [Test]
     public async Task RemoveStage_RemovesAndUpdatesDetail() {
         var (sessionId, _) = McpSessionStore.Create("Test");
-        EvolveTool.AddEntity(sessionId, "Process");
-        EvolveTool.AddStage(sessionId, "Process", "Draft");
-        EvolveTool.AddStage(sessionId, "Process", "Active");
+        EvolveTool.Add(sessionId, "entity", """{"name":"Process"}""");
+        EvolveTool.Add(sessionId, "stage", """{"entityName":"Process","name":"Draft"}""");
+        EvolveTool.Add(sessionId, "stage", """{"entityName":"Process","name":"Active"}""");
 
-        var response = EvolveTool.RemoveStage(sessionId, "Process", "Draft");
+        var response = EvolveTool.Remove(sessionId, "stage", """{"entityName":"Process","name":"Draft"}""");
         await Assert.That(response.Success).IsTrue();
 
         var detail = QueryTool.GetEntityDetail(sessionId, "Process");
@@ -1141,11 +1118,11 @@ public class McpSmokeTests {
     [Test]
     public async Task RemoveAction_RemovesAndUpdatesDetail() {
         var (sessionId, _) = McpSessionStore.Create("Test");
-        EvolveTool.AddEntity(sessionId, "Task");
-        EvolveTool.AddAction(sessionId, "Task", "DoIt");
-        EvolveTool.AddAction(sessionId, "Task", "Undo");
+        EvolveTool.Add(sessionId, "entity", """{"name":"Task"}""");
+        EvolveTool.Add(sessionId, "action", """{"entityName":"Task","name":"DoIt"}""");
+        EvolveTool.Add(sessionId, "action", """{"entityName":"Task","name":"Undo"}""");
 
-        var response = EvolveTool.RemoveAction(sessionId, "Task", "Undo");
+        var response = EvolveTool.Remove(sessionId, "action", """{"entityName":"Task","name":"Undo"}""");
         await Assert.That(response.Success).IsTrue();
 
         var detail = QueryTool.GetEntityDetail(sessionId, "Task");
@@ -1158,44 +1135,22 @@ public class McpSmokeTests {
     [Test]
     public async Task RemovePolicy_EntityScope_Removes() {
         var (sessionId, _) = McpSessionStore.Create("Test");
-        EvolveTool.AddEntity(sessionId, "Item");
-        EvolveTool.AddProperty(sessionId, "Item", "Score", "Number");
-        PolicyTool.AddPolicy(sessionId, "Item", "HighScore",
-            expression: """{"property":"Score","op":">=","value":100}""");
+        EvolveTool.Add(sessionId, "entity", """{"name":"Item"}""");
+        EvolveTool.Add(sessionId, "property", """{"entityName":"Item","name":"Score","typeName":"Number"}""");
+        EvolveTool.Add(sessionId, "policy", """{"entityName":"Item","name":"HighScore","expression":"Score >= 100"}""");
 
-        var response = EvolveTool.RemovePolicy(sessionId, "Item", "HighScore");
-        await Assert.That(response.Success).IsTrue();
-    }
-
-    [Test]
-    public async Task RemovePolicy_StageScope_Removes() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
-        EvolveTool.AddEntity(sessionId, "Order");
-        EvolveTool.AddStage(sessionId, "Order", "Active");
-        EvolveTool.AddProperty(sessionId, "Order", "Score", "Number");
-
-        // Add a policy via evolution directly (MCP add_policy only supports entity scope)
-        McpSessionStore.Evolve(sessionId, domain =>
-            new DomainEvolution(domain).Evolve()
-                .AddPolicyToStage("Order", "Active", "Guard",
-                    DomainExpression.GreaterThanOrEqual(
-                        DomainExpression.Property("Score"),
-                        DomainExpression.Literal(0)))
-                .Apply());
-
-        var response = EvolveTool.RemovePolicy(sessionId, "Order", "Guard",
-            scope: "stage", stageName: "Active");
+        var response = EvolveTool.Remove(sessionId, "policy", """{"entityName":"Item","name":"HighScore"}""");
         await Assert.That(response.Success).IsTrue();
     }
 
     [Test]
     public async Task RemoveActionFromStage_Removes() {
         var (sessionId, _) = McpSessionStore.Create("Test");
-        EvolveTool.AddEntity(sessionId, "Process");
-        EvolveTool.AddStage(sessionId, "Process", "Active");
-        EvolveTool.AddActionToStage(sessionId, "Process", "Active", "DoIt");
+        EvolveTool.Add(sessionId, "entity", """{"name":"Process"}""");
+        EvolveTool.Add(sessionId, "stage", """{"entityName":"Process","name":"Active"}""");
+        EvolveTool.Add(sessionId, "stage_action", """{"entityName":"Process","stageName":"Active","name":"DoIt"}""");
 
-        var response = EvolveTool.RemoveActionFromStage(sessionId, "Process", "Active", "DoIt");
+        var response = EvolveTool.Remove(sessionId, "stage_action", """{"entityName":"Process","stageName":"Active","name":"DoIt"}""");
         await Assert.That(response.Success).IsTrue();
 
         var detail = QueryTool.GetEntityDetail(sessionId, "Process");
@@ -1203,28 +1158,6 @@ public class McpSmokeTests {
         var d = (EntityDetailData)detail.Data!;
         var activeStage = d.Stages.First(s => s.Name == "Active");
         await Assert.That(activeStage.Actions.Contains("DoIt")).IsFalse();
-    }
-
-    [Test]
-    public async Task RemovePolicy_InvalidScope_Rejected() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
-        EvolveTool.AddEntity(sessionId, "Item");
-
-        var response = EvolveTool.RemovePolicy(sessionId, "Item", "SomePolicy",
-            scope: "invalid");
-        await Assert.That(response.Success).IsFalse();
-        await Assert.That(response.Message.Contains("Invalid scope")).IsTrue();
-    }
-
-    [Test]
-    public async Task RemovePolicy_MissingStageName_Rejected() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
-        EvolveTool.AddEntity(sessionId, "Item");
-
-        var response = EvolveTool.RemovePolicy(sessionId, "Item", "SomePolicy",
-            scope: "stage");
-        await Assert.That(response.Success).IsFalse();
-        await Assert.That(response.Message.Contains("stageName is required")).IsTrue();
     }
 
     // ── P2.3: Dogfood golden path via MCP apply_dsl ─────────────
@@ -1381,9 +1314,9 @@ public class McpSmokeTests {
     [Test]
     public async Task CreateInstance_SimpleEntity_ReturnsSnapshot() {
         var (sessionId, _) = McpSessionStore.Create("Test");
-        EvolveTool.AddEntity(sessionId, "Widget");
-        EvolveTool.AddProperty(sessionId, "Widget", "Name", "Text");
-        EvolveTool.AddProperty(sessionId, "Widget", "Price", "Number");
+        EvolveTool.Add(sessionId, "entity", """{"name":"Widget"}""");
+        EvolveTool.Add(sessionId, "property", """{"entityName":"Widget","name":"Name","typeName":"Text"}""");
+        EvolveTool.Add(sessionId, "property", """{"entityName":"Widget","name":"Price","typeName":"Number"}""");
 
         var response = RuntimeTool.CreateInstance(sessionId, "Widget",
             """{"Name":"Gadget","Price":2999}""");
@@ -1409,8 +1342,8 @@ public class McpSmokeTests {
     [Test]
     public async Task GetInstance_AfterCreate_ReturnsFullSnapshot() {
         var (sessionId, _) = McpSessionStore.Create("Test");
-        EvolveTool.AddEntity(sessionId, "Item");
-        EvolveTool.AddProperty(sessionId, "Item", "Label", "Text");
+        EvolveTool.Add(sessionId, "entity", """{"name":"Item"}""");
+        EvolveTool.Add(sessionId, "property", """{"entityName":"Item","name":"Label","typeName":"Text"}""");
 
         var create = RuntimeTool.CreateInstance(sessionId, "Item",
             """{"Label":"Test Item"}""");
@@ -1438,8 +1371,8 @@ public class McpSmokeTests {
     [Test]
     public async Task ListInstances_AfterCreate_ReturnsCount() {
         var (sessionId, _) = McpSessionStore.Create("Test");
-        EvolveTool.AddEntity(sessionId, "Item");
-        EvolveTool.AddProperty(sessionId, "Item", "Label", "Text");
+        EvolveTool.Add(sessionId, "entity", """{"name":"Item"}""");
+        EvolveTool.Add(sessionId, "property", """{"entityName":"Item","name":"Label","typeName":"Text"}""");
 
         var r1 = RuntimeTool.CreateInstance(sessionId, "Item", """{"Label":"A"}""");
         await Assert.That(r1.Success).IsTrue();
@@ -1555,8 +1488,8 @@ public class McpSmokeTests {
     [Test]
     public async Task InvokeAction_ActionNotFound_Fails() {
         var (sessionId, _) = McpSessionStore.Create("Test");
-        EvolveTool.AddEntity(sessionId, "Task");
-        EvolveTool.AddStage(sessionId, "Task", "Draft");
+        EvolveTool.Add(sessionId, "entity", """{"name":"Task"}""");
+        EvolveTool.Add(sessionId, "stage", """{"entityName":"Task","name":"Draft"}""");
 
         var create = RuntimeTool.CreateInstance(sessionId, "Task");
         await Assert.That(create.Success).IsTrue();
@@ -1571,9 +1504,9 @@ public class McpSmokeTests {
     [Test]
     public async Task CreateInstance_WitStages_SetsInitialStage() {
         var (sessionId, _) = McpSessionStore.Create("Test");
-        EvolveTool.AddEntity(sessionId, "Process");
-        EvolveTool.AddStage(sessionId, "Process", "Draft");
-        EvolveTool.AddStage(sessionId, "Process", "Active");
+        EvolveTool.Add(sessionId, "entity", """{"name":"Process"}""");
+        EvolveTool.Add(sessionId, "stage", """{"entityName":"Process","name":"Draft"}""");
+        EvolveTool.Add(sessionId, "stage", """{"entityName":"Process","name":"Active"}""");
 
         var create = RuntimeTool.CreateInstance(sessionId, "Process");
         await Assert.That(create.Success).IsTrue();
@@ -1605,17 +1538,17 @@ public class McpSmokeTests {
         var (sessionId, _) = McpSessionStore.Create("Test");
 
         // Build: entity action with transition effect, then add to stage
-        var r1 = EvolveTool.AddEntity(sessionId, "Task");
+        var r1 = EvolveTool.Add(sessionId, "entity", """{"name":"Task"}""");
         await Assert.That(r1.Success).IsTrue();
-        var r2 = EvolveTool.AddProperty(sessionId, "Task", "Name", "Text");
+        var r2 = EvolveTool.Add(sessionId, "property", """{"entityName":"Task","name":"Name","typeName":"Text"}""");
         await Assert.That(r2.Success).IsTrue();
-        var r3 = EvolveTool.AddStage(sessionId, "Task", "Draft");
+        var r3 = EvolveTool.Add(sessionId, "stage", """{"entityName":"Task","name":"Draft"}""");
         await Assert.That(r3.Success).IsTrue();
-        var r4 = EvolveTool.AddStage(sessionId, "Task", "Active");
+        var r4 = EvolveTool.Add(sessionId, "stage", """{"entityName":"Task","name":"Active"}""");
         await Assert.That(r4.Success).IsTrue();
 
         // Add entity-level action with transition effect
-        var r5 = EvolveTool.AddAction(sessionId, "Task", "Start");
+        var r5 = EvolveTool.Add(sessionId, "action", """{"entityName":"Task","name":"Start"}""");
         await Assert.That(r5.Success).IsTrue();
 
         // Manually add stage transition effect via evolution
@@ -1629,7 +1562,7 @@ public class McpSmokeTests {
         await Assert.That(evolveResult!.Succeeded).IsTrue();
 
         // Now add action to stage — should copy the transition effect
-        var r6 = EvolveTool.AddActionToStage(sessionId, "Task", "Draft", "Start");
+        var r6 = EvolveTool.Add(sessionId, "stage_action", """{"entityName":"Task","stageName":"Draft","name":"Start"}""");
         await Assert.That(r6.Success).IsTrue();
 
         // Verify via MCP: create instance and call action from Draft stage
@@ -1655,12 +1588,12 @@ public class McpSmokeTests {
         // a fresh action (no effects, no policies) — same behavior as before.
         var (sessionId, _) = McpSessionStore.Create("Test");
 
-        EvolveTool.AddEntity(sessionId, "Task");
-        EvolveTool.AddStage(sessionId, "Task", "Draft");
-        EvolveTool.AddStage(sessionId, "Task", "Active");
+        EvolveTool.Add(sessionId, "entity", """{"name":"Task"}""");
+        EvolveTool.Add(sessionId, "stage", """{"entityName":"Task","name":"Draft"}""");
+        EvolveTool.Add(sessionId, "stage", """{"entityName":"Task","name":"Active"}""");
 
         // Add action only to stage — no entity-level action
-        var r1 = EvolveTool.AddActionToStage(sessionId, "Task", "Draft", "DoSomething");
+        var r1 = EvolveTool.Add(sessionId, "stage_action", """{"entityName":"Task","stageName":"Draft","name":"DoSomething"}""");
         await Assert.That(r1.Success).IsTrue();
 
         // Create instance and call the action — should succeed (no effects)
@@ -1684,9 +1617,9 @@ public class McpSmokeTests {
         // RT′.6: InvokeAction should refuse actions on deleted instances.
         // Use the core API directly since DeleteEntityInstance is not expressible in DSL.
         var (sessionId, _) = McpSessionStore.Create("Test");
-        EvolveTool.AddEntity(sessionId, "Item");
-        EvolveTool.AddProperty(sessionId, "Item", "Name", "Text");
-        EvolveTool.AddStage(sessionId, "Item", "Draft");
+        EvolveTool.Add(sessionId, "entity", """{"name":"Item"}""");
+        EvolveTool.Add(sessionId, "property", """{"entityName":"Item","name":"Name","typeName":"Text"}""");
+        EvolveTool.Add(sessionId, "stage", """{"entityName":"Item","name":"Draft"}""");
 
         // Add a Delete action with DeleteEntityInstance effect via evolution
         var evolveResult = McpSessionStore.Evolve(sessionId, domain =>
@@ -1762,9 +1695,9 @@ public class McpSmokeTests {
         var (sessionId, _) = McpSessionStore.Create("Test");
 
         // Create entity with properties but no stages — triggers DMAS001 hints
-        EvolveTool.AddEntity(sessionId, "Person");
-        EvolveTool.AddProperty(sessionId, "Person", "Name", "Text");
-        EvolveTool.AddProperty(sessionId, "Person", "Age", "Number");
+        EvolveTool.Add(sessionId, "entity", """{"name":"Person"}""");
+        EvolveTool.Add(sessionId, "property", """{"entityName":"Person","name":"Name","typeName":"Text"}""");
+        EvolveTool.Add(sessionId, "property", """{"entityName":"Person","name":"Age","typeName":"Number"}""");
 
         var response = QueryTool.GetDomainAnalysis(sessionId);
         await Assert.That(response.Success).IsTrue();
@@ -1787,17 +1720,17 @@ public class McpSmokeTests {
         // InvokeAction should still use the fallthrough path (empty stage + entity twin).
         var (sessionId, _) = McpSessionStore.Create("Test");
 
-        EvolveTool.AddEntity(sessionId, "Task");
-        EvolveTool.AddProperty(sessionId, "Task", "Name", "Text");
-        EvolveTool.AddStage(sessionId, "Task", "Draft");
-        EvolveTool.AddStage(sessionId, "Task", "Active");
+        EvolveTool.Add(sessionId, "entity", """{"name":"Task"}""");
+        EvolveTool.Add(sessionId, "property", """{"entityName":"Task","name":"Name","typeName":"Text"}""");
+        EvolveTool.Add(sessionId, "stage", """{"entityName":"Task","name":"Draft"}""");
+        EvolveTool.Add(sessionId, "stage", """{"entityName":"Task","name":"Active"}""");
 
         // Step 1: Add action to stage FIRST (before entity-level action exists)
-        var r1 = EvolveTool.AddActionToStage(sessionId, "Task", "Draft", "Go");
+        var r1 = EvolveTool.Add(sessionId, "stage_action", """{"entityName":"Task","stageName":"Draft","name":"Go"}""");
         await Assert.That(r1.Success).IsTrue();
 
         // Step 2: Now add entity-level action with transition effect
-        var r2 = EvolveTool.AddAction(sessionId, "Task", "Go");
+        var r2 = EvolveTool.Add(sessionId, "action", """{"entityName":"Task","name":"Go"}""");
         await Assert.That(r2.Success).IsTrue();
 
         // Step 3: Add stage transition effect to entity-level action
@@ -1834,13 +1767,13 @@ public class McpSmokeTests {
         // the entity action that carries the transition effect.
         var (sessionId, _) = McpSessionStore.Create("Test");
 
-        EvolveTool.AddEntity(sessionId, "Task");
-        EvolveTool.AddProperty(sessionId, "Task", "Name", "Text");
-        EvolveTool.AddStage(sessionId, "Task", "Draft");
-        EvolveTool.AddStage(sessionId, "Task", "Active");
+        EvolveTool.Add(sessionId, "entity", """{"name":"Task"}""");
+        EvolveTool.Add(sessionId, "property", """{"entityName":"Task","name":"Name","typeName":"Text"}""");
+        EvolveTool.Add(sessionId, "stage", """{"entityName":"Task","name":"Draft"}""");
+        EvolveTool.Add(sessionId, "stage", """{"entityName":"Task","name":"Active"}""");
 
         // Step 1: entity-level action (empty shell)
-        var r1 = EvolveTool.AddAction(sessionId, "Task", "Submit");
+        var r1 = EvolveTool.Add(sessionId, "action", """{"entityName":"Task","name":"Submit"}""");
         await Assert.That(r1.Success).IsTrue();
 
         // Step 2: add a parameter to the entity action (entity-first)
@@ -1854,7 +1787,7 @@ public class McpSmokeTests {
 
         // Step 3: add action to stage — the stage copy carries the parameter
         // but no effects (the entity action has none yet at copy time).
-        var r3 = EvolveTool.AddActionToStage(sessionId, "Task", "Draft", "Submit");
+        var r3 = EvolveTool.Add(sessionId, "stage_action", """{"entityName":"Task","stageName":"Draft","name":"Submit"}""");
         await Assert.That(r3.Success).IsTrue();
 
         // Step 4: add the transition effect entity-only — the stage copy stays effect-less.

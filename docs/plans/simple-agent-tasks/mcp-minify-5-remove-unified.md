@@ -1,8 +1,10 @@
 # mcp-minify-5 — Unified `remove`
 
 **Difficulty:** M  
-**Status:** `[ ]`  
-**Prereq:** task 3 `[x]` (task 4 recommended)  
+**Status:** `[x]`  
+**Prereq:** task 3 `[x]` (task 4 recommended)
+
+**Done 2026-08-08:** `EvolveTool.Remove` (Name = "remove") — same kind enum as `add` (entity/property/stage/action/stage_action/relationship/policy) with identity-only payloads, dispatching to the exact existing remove EvolutionBuilder methods. `constraint` fails closed (`constraint remove not supported` — no remove_constraint evolution path; task inventory confirms no old tool). Unknown kind / missing field / bad JSON / missing session all fail closed. 8 new tests in `Poly.Tests/Mcp/UnifiedRemoveTests.cs`. Old remove_* tools still registered (task 6). Suite 1937 green.  
 
 ## Objective
 
@@ -28,8 +30,8 @@ Register MCP tool **`remove`** with the same `kind` enum as `add`, payload = ide
 | `action` | `entityName`, `name` | `remove_action` |
 | `stage_action` | `entityName`, `stageName`, `name` | `remove_action_from_stage` |
 | `relationship` | `name` | `remove_relationship` |
-| `policy` | `entityName`, `name` (+ optional scope fields if old tool had them) | `remove_policy` |
-| `constraint` | **If no old remove_constraint exists:** fail closed with message `constraint remove not supported` **or** implement only if Evolution already supports it — do **not** invent evolution ops. Check inventory. |
+| `policy` | `entityName`, `name` (+ optional `stageName`/`actionName` scope, at most one) | `remove_policy` — scope wired 2026-08-08 follow-up B3 |
+| `constraint` | **Fail closed**: `constraint remove not implemented in unified remove` — core removal is instance-identity-based (`ReferenceEquals`); use `apply_dsl` (B2). | no old remove_constraint |
 
 3. Unknown kind / missing fields → Success false.  
 
@@ -64,4 +66,4 @@ dotnet run --project Poly.Tests/Poly.Tests.csproj --no-build
 
 ## Status
 
-**Status:** Not Started  
+**Status:** Done  

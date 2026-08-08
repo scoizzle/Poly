@@ -1,8 +1,10 @@
 # mcp-minify-4 — Unified `add` for constraint + policy
 
 **Difficulty:** M  
-**Status:** `[ ]`  
-**Prereq:** task 3 `[x]`, task 1 `[x]`  
+**Status:** `[x]`  
+**Prereq:** task 3 `[x]`, task 1 `[x]`
+
+**Done 2026-08-08:** `add` dispatch extended with `constraint` (entityName/propertyName/type + min/max/pattern via existing `BuildConstraint`) and `policy` (entityName/name/expression — DSL fragment via `DslExpressionFragment.ParseExpressionFragment`, entity-level only). `add_policy` now delegates to the same `EvolveTool.AddPolicyCore` helper (DSL only, no JsonParser) — success message preserved via `with`. **Deleted** `DomainExpressionJsonParser.cs` + `DomainExpressionJsonParserTests.cs` (zero callers). All `add_policy` test callers converted to DSL (McpSmokeTests, DomainSemanticLookupFailClosedTests, OracleToolTests — including relationship-nav DSL `profile City is "Metropolis"`). 4 new tests in `UnifiedAddTests` (constraint Required, policy DSL success, invalid DSL fails with no silent empty policy, JSON-bag expression fails closed). Suite 1929 green.  
 
 ## Objective
 
@@ -83,4 +85,4 @@ rg -n "DomainExpressionJsonParser" Poly.Mcp --glob '*.cs'
 
 ## Status
 
-**Status:** Not Started  
+**Status:** Done  

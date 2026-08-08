@@ -1,7 +1,7 @@
 # MCP Batch Operations & Snapshot Export
 
 **Date:** 2026-07-13  
-**Status:** Proposal — research + implementation plan  
+**Status:** Proposal — **SUPERSEDED 2026-08-08 by [`mcp-catalog-minify.md`](mcp-catalog-minify.md)** (minify suite: bulk via `apply_dsl`; incremental via unified `add`/`remove`; batch helpers `add_properties`/`add_stages`/`add_actions_to_stages` and `get_domain_snapshot` deleted). Do not re-admit per-type or batch tools without explicit suite admit.
 **Source:** Agent feedback from ~150-call supply chain modeling session  
 **Related:** `mcp-tool-surface-expansion.md` (DSL batch path), `mcp-guiding-principles.md` (token-efficient responses)
 

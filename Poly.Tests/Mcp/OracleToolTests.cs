@@ -8,62 +8,9 @@ using Poly.Mcp.Tools;
 namespace Poly.Tests.Mcp;
 
 /// <summary>
-/// Tests for OracleTool: lower_expression, describe_expression, and describe_domain_element.
+/// Tests for OracleTool: describe_domain_element and simulate_policy.
 /// </summary>
 public class OracleToolTests {
-    [Test]
-    public async Task LowerExpression_AgeGte_Succeeds() {
-        var response = OracleTool.LowerExpression(@"{""property"":""Age"",""op"":"">="",""value"":18}");
-
-        await Assert.That(response.Success).IsTrue();
-        await Assert.That(response.Message).Contains("lowered");
-        await Assert.That(response.Data).IsNotNull();
-
-        // Verify the AST mentions "GreaterThanOrEqual" or "Age" or "18"
-        var dataJson = System.Text.Json.JsonSerializer.Serialize(response.Data);
-        await Assert.That(dataJson).Contains("GreaterThanOrEqual");
-        await Assert.That(dataJson).Contains("Age");
-        await Assert.That(dataJson).Contains("18");
-    }
-
-    [Test]
-    public async Task LowerExpression_BadJson_Fails() {
-        var response = OracleTool.LowerExpression("not json");
-
-        await Assert.That(response.Success).IsFalse();
-    }
-
-    [Test]
-    public async Task LowerExpression_Empty_Fails() {
-        var response = OracleTool.LowerExpression("");
-
-        await Assert.That(response.Success).IsFalse();
-    }
-
-    [Test]
-    public async Task DescribeExpression_AgeGte_PlainEnglish() {
-        var response = OracleTool.DescribeExpression(@"{""property"":""Age"",""op"":"">="",""value"":18}");
-
-        await Assert.That(response.Success).IsTrue();
-        await Assert.That(response.Data).IsNotNull();
-
-        var dataJson = System.Text.Json.JsonSerializer.Serialize(response.Data);
-        await Assert.That(dataJson).Contains("Age");
-        await Assert.That(dataJson).Contains("18");
-        // Plain English should mention "at least" or "greater than"
-        await Assert.That(dataJson.ToLowerInvariant()).Contains("at least".ToLowerInvariant());
-    }
-
-    [Test]
-    public async Task DescribeExpression_Composite_Works() {
-        var response = OracleTool.DescribeExpression(
-            @"{""and"":[{""property"":""Age"",""op"":"">="",""value"":18},{""property"":""Active"",""op"":""=="",""value"":true}]}");
-
-        await Assert.That(response.Success).IsTrue();
-        var dataJson = System.Text.Json.JsonSerializer.Serialize(response.Data);
-        await Assert.That(dataJson).Contains("and");
-    }
-
     [Test]
     public async Task DescribeDomainElement_Entity_AfterAdd() {
         var response = SessionTool.CreateDomainSession("OracleTest");
@@ -71,11 +18,11 @@ public class OracleToolTests {
         var sessionId = response.SessionId!;
 
         // Add an entity with a property and stage
-        var r1 = EvolveTool.AddEntity(sessionId, "Widget");
+        var r1 = EvolveTool.Add(sessionId, "entity", """{"name":"Widget"}""");
         await Assert.That(r1.Success).IsTrue();
-        var r2 = EvolveTool.AddProperty(sessionId, "Widget", "Name", "Text");
+        var r2 = EvolveTool.Add(sessionId, "property", """{"entityName":"Widget","name":"Name","typeName":"Text"}""");
         await Assert.That(r2.Success).IsTrue();
-        var r3 = EvolveTool.AddStage(sessionId, "Widget", "Active");
+        var r3 = EvolveTool.Add(sessionId, "stage", """{"entityName":"Widget","name":"Active"}""");
         await Assert.That(r3.Success).IsTrue();
 
         // Now describe the entity
@@ -104,22 +51,6 @@ public class OracleToolTests {
         await Assert.That(desc.Success).IsFalse();
     }
 
-    [Test]
-    public async Task Chain_LowerThenDescribe_SameJson() {
-        // Chain smoke: lower → describe same JSON both succeed
-        var json = @"{""property"":""Status"",""op"":""=="",""value"":""Active""}";
-
-        var lower = OracleTool.LowerExpression(json);
-        await Assert.That(lower.Success).IsTrue();
-
-        var describe = OracleTool.DescribeExpression(json);
-        await Assert.That(describe.Success).IsTrue();
-
-        var describeData = System.Text.Json.JsonSerializer.Serialize(describe.Data);
-        await Assert.That(describeData).Contains("Status");
-        await Assert.That(describeData).Contains("Active");
-    }
-
     // ── V0′.2: Policy describe smoke test ──────────────────────
 
     [Test]
@@ -127,12 +58,11 @@ public class OracleToolTests {
         var (sessionId, _) = McpSessionStore.Create("OracleTest");
 
         // Add entity with a property and policy
-        var r1 = EvolveTool.AddEntity(sessionId, "Person");
+        var r1 = EvolveTool.Add(sessionId, "entity", """{"name":"Person"}""");
         await Assert.That(r1.Success).IsTrue();
-        var r1b = EvolveTool.AddProperty(sessionId, "Person", "Age", "Number");
+        var r1b = EvolveTool.Add(sessionId, "property", """{"entityName":"Person","name":"Age","typeName":"Number"}""");
         await Assert.That(r1b.Success).IsTrue();
-        var r2 = PolicyTool.AddPolicy(sessionId, "Person", "Adult",
-            @"{""property"":""Age"",""op"":"">="",""value"":18}");
+        var r2 = EvolveTool.Add(sessionId, "policy", """{"entityName":"Person","name":"Adult","expression":"Age >= 18"}""");
         await Assert.That(r2.Success).IsTrue();
 
         var desc = OracleTool.DescribeDomainElement(sessionId, "policy", "Adult");
@@ -149,10 +79,10 @@ public class OracleToolTests {
         var (sessionId, _) = McpSessionStore.Create("OracleTest");
 
         // Create two entities with same-named stage
-        EvolveTool.AddEntity(sessionId, "Order");
-        EvolveTool.AddStage(sessionId, "Order", "Active");
-        EvolveTool.AddEntity(sessionId, "Invoice");
-        EvolveTool.AddStage(sessionId, "Invoice", "Active");
+        EvolveTool.Add(sessionId, "entity", """{"name":"Order"}""");
+        EvolveTool.Add(sessionId, "stage", """{"entityName":"Order","name":"Active"}""");
+        EvolveTool.Add(sessionId, "entity", """{"name":"Invoice"}""");
+        EvolveTool.Add(sessionId, "stage", """{"entityName":"Invoice","name":"Active"}""");
 
         // Without entityName, should find first match
         var desc = OracleTool.DescribeDomainElement(sessionId, "stage", "Active");
@@ -170,7 +100,7 @@ public class OracleToolTests {
     [Test]
     public async Task SimulatePolicy_AgeGte_PassesForAdult() {
         var response = OracleTool.SimulatePolicy(
-            @"{""property"":""Age"",""op"":"">="",""value"":18}",
+            "Age >= 18",
             @"{""Age"":25}");
 
         await Assert.That(response.Success).IsTrue();
@@ -181,7 +111,7 @@ public class OracleToolTests {
     [Test]
     public async Task SimulatePolicy_AgeGte_FailsForMinor() {
         var response = OracleTool.SimulatePolicy(
-            @"{""property"":""Age"",""op"":"">="",""value"":18}",
+            "Age >= 18",
             @"{""Age"":10}");
 
         await Assert.That(response.Success).IsTrue();
@@ -192,7 +122,7 @@ public class OracleToolTests {
     [Test]
     public async Task SimulatePolicy_And_Works() {
         var response = OracleTool.SimulatePolicy(
-            @"{""and"":[{""property"":""Age"",""op"":"">="",""value"":18},{""property"":""Active"",""op"":""=="",""value"":true}]}",
+            "(Age >= 18) and (Active == true)",
             @"{""Age"":25,""Active"":true}");
 
         await Assert.That(response.Success).IsTrue();
@@ -202,7 +132,7 @@ public class OracleToolTests {
 
     [Test]
     public async Task SimulatePolicy_InvalidExpression_Fails() {
-        var response = OracleTool.SimulatePolicy("not json", @"{""Age"":25}");
+        var response = OracleTool.SimulatePolicy("Age >=", @"{""Age"":25}");
 
         await Assert.That(response.Success).IsFalse();
     }
@@ -210,7 +140,7 @@ public class OracleToolTests {
     [Test]
     public async Task SimulatePolicy_EmptyProperties_Fails() {
         var response = OracleTool.SimulatePolicy(
-            @"{""property"":""Age"",""op"":"">="",""value"":18}",
+            "Age >= 18",
             @"{}");
 
         await Assert.That(response.Success).IsFalse();
@@ -222,7 +152,7 @@ public class OracleToolTests {
     public async Task SimulatePolicy_UnknownProperty_FailsClosed() {
         // Expression references "NonExistent" which is not in the subject bag.
         var response = OracleTool.SimulatePolicy(
-            @"{""property"":""NonExistent"",""op"":""=="",""value"":1}",
+            "NonExistent == 1",
             @"{""Something"":5}");
 
         await Assert.That(response.Success).IsFalse();
@@ -230,14 +160,14 @@ public class OracleToolTests {
         await Assert.That(response.Message).Contains("not present");
     }
 
-    // ── owned-2: relationship navigation in JSON expressions ──
+    // ── owned-2: relationship navigation in DSL expressions ──
 
     [Test]
-    public async Task SimulatePolicy_RelationshipJson_WithoutStore_FailsClosed() {
-        // Owned path-prefix JSON: relationship path-prefix JSON parses, but evaluate without store
+    public async Task SimulatePolicy_RelationshipDsl_WithoutStore_FailsClosed() {
+        // Relationship-nav DSL fragment parses, but evaluate without a store
         // is fail-closed (no vacuous bag pass-through). Use create+link+evaluate_policy.
         var response = OracleTool.SimulatePolicy(
-            @"{""relationship"":""profile"",""inner"":{""property"":""City"",""op"":""=="",""value"":""Metropolis""}}",
+            "profile City is \"Metropolis\"",
             @"{""City"":""Metropolis""}");
 
         await Assert.That(response.Success).IsFalse();
@@ -245,8 +175,8 @@ public class OracleToolTests {
     }
 
     [Test]
-    public async Task AddPolicy_RelationshipJson_ValidSyntax() {
-        // Verify the JSON format is accepted via add_policy
+    public async Task AddPolicy_RelationshipDsl_ValidSyntax() {
+        // Verify the DSL nav fragment is accepted via add(kind: policy)
         var (sessionId, _) = McpSessionStore.Create("Owned2Test");
         DslTool.ApplyDsl(sessionId, """
             domain Owned2Test
@@ -257,32 +187,12 @@ public class OracleToolTests {
             }
             """);
 
-        // Add policy using the relationship JSON format
-        var response = PolicyTool.AddPolicy(sessionId, "Customer", "IsUrban",
-            @"{""relationship"":""profile"",""inner"":{""property"":""City"",""op"":""=="",""value"":""Metropolis""}}");
+        // Add policy using the DSL relationship-nav fragment
+        var response = EvolveTool.Add(sessionId, "policy",
+            """{"entityName":"Customer","name":"IsUrban","expression":"profile City is \"Metropolis\""}""");
 
         await Assert.That(response.Success).IsTrue();
         await Assert.That(response.Message).Contains("IsUrban");
-    }
-
-    [Test]
-    public async Task SimulatePolicy_Relationship_MissingInner_Fails() {
-        var response = OracleTool.SimulatePolicy(
-            @"{""relationship"":""profile""}",
-            @"{""City"":""Metropolis""}");
-
-        await Assert.That(response.Success).IsFalse();
-        await Assert.That(response.Message).Contains("inner");
-    }
-
-    [Test]
-    public async Task SimulatePolicy_Relationship_EmptyName_Fails() {
-        var response = OracleTool.SimulatePolicy(
-            @"{""relationship"":"""",""inner"":{""property"":""City"",""op"":""=="",""value"":""Metropolis""}}",
-            @"{""City"":""Metropolis""}");
-
-        await Assert.That(response.Success).IsFalse();
-        await Assert.That(response.Message).Contains("not be empty");
     }
 
     // ── A2.2: get_domain_suggestions smoke test ────────────────
@@ -303,15 +213,18 @@ public class OracleToolTests {
     public async Task GetDomainSuggestions_EntityWithPropertiesNoStages_HasSuggestions() {
         var (sessionId, _) = McpSessionStore.Create("SuggestionTest");
 
-        var r1 = EvolveTool.AddEntity(sessionId, "Task");
+        var r1 = EvolveTool.Add(sessionId, "entity", """{"name":"Task"}""");
         await Assert.That(r1.Success).IsTrue();
-        EvolveTool.AddProperty(sessionId, "Task", "Title", "Text");
-        EvolveTool.AddProperty(sessionId, "Task", "IsComplete", "Boolean");
+        EvolveTool.Add(sessionId, "property", """{"entityName":"Task","name":"Title","typeName":"Text"}""");
+        EvolveTool.Add(sessionId, "property", """{"entityName":"Task","name":"IsComplete","typeName":"Boolean"}""");
 
         var response = QueryTool.GetDomainSuggestions(sessionId);
         await Assert.That(response.Success).IsTrue();
         var dataJson = System.Text.Json.JsonSerializer.Serialize(response.Data);
         await Assert.That(dataJson.ToLowerInvariant()).Contains("stage");
+        // B4: the policy hint must teach the unified surface, not the deleted add_policy.
+        await Assert.That(dataJson).Contains("add(kind: policy)");
+        await Assert.That(dataJson).DoesNotContain("add_policy");
     }
 
     [Test]

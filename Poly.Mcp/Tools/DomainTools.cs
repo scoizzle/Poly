@@ -7,10 +7,8 @@ using ModelContextProtocol.Server;
 using Poly.Analysis;
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
-using Poly.DomainModeling.Bootstrap;
 using Poly.DomainModeling.Constraints;
 using Poly.DomainModeling.Evolution;
-using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Parsing;
 using Poly.DomainModeling.Queries;
 using Poly.Mcp.Sessions;
@@ -159,7 +157,7 @@ internal sealed class SessionTool {
             Message: $"Domain '{domainName}' created with built-in types.",
             SessionId: sessionId,
             Revision: state.Revision,
-            Affordances: ["add_entity", "add_relationship", "get_domain_overview"]
+            Affordances: ["add", "get_domain_overview"]
         );
     }
 
@@ -212,8 +210,8 @@ internal sealed class QueryTool {
             Revision: state.Revision,
             Data: data,
             Affordances: overview.EntityCount == 0
-                ? ["add_entity", "add_relationship"]
-                : ["get_entity_detail", "add_entity", "add_property", "add_stage", "add_action"]
+                ? ["add"]
+                : ["get_entity_detail", "add"]
         );
     }
 
@@ -233,7 +231,7 @@ internal sealed class QueryTool {
                 Success: false,
                 Message: $"Entity '{entityName}' not found.",
                 SessionId: sessionId,
-                Affordances: ["get_domain_overview", "add_entity"]
+                Affordances: ["get_domain_overview", "add"]
             );
 
         var data = new EntityDetailData(
@@ -255,7 +253,7 @@ internal sealed class QueryTool {
             SessionId: sessionId,
             Revision: state.Revision,
             Data: data,
-            Affordances: ["add_property", "add_stage", "add_action", "get_domain_overview"]
+            Affordances: ["add", "get_domain_overview"]
         );
     }
 
@@ -437,57 +435,11 @@ internal sealed class QueryTool {
             SessionId: sessionId,
             Revision: state.Revision,
             Data: new { suggestions = hints, count = hints.Count },
-            Affordances: ["get_entity_detail", "get_domain_analysis", "add_stage", "add_action_to_stage", "add_policy"]
+            Affordances: ["get_entity_detail", "get_domain_analysis", "add"]
         );
     }
 
     /// <summary>
-    /// Returns a complete snapshot of the domain: all entities with full detail
-    /// (properties, stages, actions, policies) plus relationships and analysis.
-    /// </summary>
-    [McpServerTool(Name = "get_domain_snapshot"), Description("Returns a complete snapshot of the domain model: all entities with full detail, relationships, and analysis diagnostics.")]
-    public static DomainToolResponse GetDomainSnapshot(
-        [Description("Session ID")] string sessionId) {
-        if (!McpSessionStore.TryGet(sessionId, out var state))
-            return Failure_NotFound(sessionId);
-
-        var entities = state.Domain.Types.OfType<Entity>().Select(e => {
-            var detail = DomainQueries.GetEntity(state.Domain, e.Name, state.LatestAnalysis)!;
-            return new {
-                name = e.Name,
-                properties = detail.Properties.Select(p => new { p.Name, p.TypeName, p.ConstraintCount }),
-                stages = detail.Stages.Select(s => new { s.Name, actions = s.ActionNames }),
-                actions = detail.Actions.Select(a => new { a.Name, a.ParameterNames, a.EffectCount }),
-                policies = detail.Policies.Select(p => p.Name)
-            };
-        }).ToList();
-
-        var relationships = DomainQueries.ListRelationships(state.Domain);
-
-        var data = new {
-            domainName = state.Domain.Name,
-            revision = state.Revision,
-            primitiveTypes = state.Domain.Types.OfType<PrimitiveType>().Select(p => p.Name).ToList(),
-            entities,
-            relationships,
-            analysis = state.LatestAnalysis is not null
-                ? new {
-                    errors = state.LatestAnalysis.Diagnostics.Count(d => d.Severity == DiagnosticSeverity.Error),
-                    warnings = state.LatestAnalysis.Diagnostics.Count(d => d.Severity == DiagnosticSeverity.Warning)
-                }
-                : null
-        };
-
-        return new DomainToolResponse(
-            Success: true,
-            Message: $"Snapshot of '{state.Domain.Name}': {entities.Count} entities, {relationships.Count} relationships.",
-            SessionId: sessionId,
-            Revision: state.Revision,
-            Data: data,
-            Affordances: ["get_entity_detail", "get_domain_analysis"]
-        );
-    }
-
     /// <summary>
     /// Lists all relationships in the domain, optionally filtered by entity name.
     /// </summary>
@@ -511,7 +463,7 @@ internal sealed class QueryTool {
             SessionId: sessionId,
             Revision: state.Revision,
             Data: filtered,
-            Affordances: ["add_relationship", "get_entity_detail"]
+            Affordances: ["add", "get_entity_detail"]
         );
     }
 
@@ -527,336 +479,346 @@ internal sealed class QueryTool {
 /// </summary>
 [McpServerToolType]
 internal sealed class EvolveTool {
-    /// <summary>
-    /// Adds a new entity type to the domain.
-    /// </summary>
-    [McpServerTool(Name = "add_entity"), Description("Adds a new entity type to the domain. The entity starts with no properties, stages, or actions.")]
-    public static DomainToolResponse AddEntity(
-        [Description("Session ID")] string sessionId,
-        [Description("Name of the new entity (e.g. 'Order', 'Customer')")] string entityName) {
-        return Evolve(sessionId, builder => builder.AddEntity(entityName),
-            successAffordances: ["add_property", "add_stage", "add_action", "add_relationship"]);
-    }
+
+    // ── Unified add (kind + payload) ────────────────────────────
 
     /// <summary>
-    /// Adds a property to an existing entity.
+    /// Creates one domain definition element, dispatched by <c>kind</c> + <c>payload</c>.
+    /// Incremental structure edits only — bulk structure, effects, and subscriptions go
+    /// through <c>apply_dsl</c>. Expression bodies are product DSL text, never JSON IR.
     /// </summary>
-    [McpServerTool(Name = "add_property"), Description("Adds a property to an existing entity. The type must be a built-in primitive (Text, Number, Boolean, DateTime, etc.) or another known type.")]
-    public static DomainToolResponse AddProperty(
-        [Description("Session ID")] string sessionId,
-        [Description("Name of the entity to add the property to")] string entityName,
-        [Description("Name of the new property")] string propertyName,
-        [Description("Type of the property (e.g. 'Text', 'Number', 'Boolean', 'DateTime')")] string typeName) {
+    [McpServerTool(Name = "add"), Description(@"Creates one domain definition element. kind is case-sensitive: entity, property, stage, action, stage_action, relationship, constraint, policy. payload is a JSON object of kind-specific fields:
+- entity: {""name"":""Order""}
+- property: {""entityName"":""Order"",""name"":""Total"",""typeName"":""Number""}
+- stage: {""entityName"":""Order"",""name"":""Active""}
+- action: {""entityName"":""Order"",""name"":""Submit""}
+- stage_action: {""entityName"":""Order"",""stageName"":""Draft"",""name"":""Submit""}
+- relationship: {""name"":""OrderLines"",""source"":""Order"",""target"":""Line"",""cardinality"":""OneToMany""} (cardinality: OneToOne, OneToMany, ManyToMany, ManyToOne; source/target may also be sourceEntityName/targetEntityName)
+- constraint: {""entityName"":""Order"",""propertyName"":""Total"",""type"":""Range"",""min"":0,""max"":100} (types: Required, Unique, Range, Length, Pattern; Pattern needs {""pattern"":""^[a-z]+$""})
+- policy: {""entityName"":""Order"",""name"":""Adult"",""expression"":""Age >= 18""} — expression is DSL text only, never JSON
+Unknown kind, missing required field, or invalid cardinality fails closed. For bulk structure, effects, or subscriptions use apply_dsl.")]
+    public static DomainToolResponse Add(
+        [Description("Session ID returned by create_domain_session")] string sessionId,
+        [Description("Domain element kind (case-sensitive): entity, property, stage, action, stage_action, relationship, constraint, policy")] string kind,
+        [Description("JSON object of kind-specific fields (see tool description for per-kind payloads)")] string payload) {
+        if (!McpSessionStore.TryGet(sessionId, out _))
+            return new DomainToolResponse(
+                Success: false,
+                Message: $"Session '{sessionId}' not found.",
+                Affordances: ["create_domain_session", "list_sessions"]);
+
+        JsonElement root;
+        try {
+            using var doc = JsonDocument.Parse(payload);
+            root = doc.RootElement.Clone();
+        }
+        catch (Exception ex) {
+            return new DomainToolResponse(
+                Success: false,
+                Message: $"Invalid payload JSON: {ex.Message}",
+                SessionId: sessionId,
+                Affordances: ["get_domain_overview", "apply_dsl"]);
+        }
+
+        switch (kind) {
+            case "entity": {
+                    var name = Field(root, "name");
+                    if (name is null) return MissingField(sessionId, kind, "name");
+                    return Evolve(sessionId, builder => builder.AddEntity(name),
+                        successAffordances: ["add", "apply_dsl", "get_entity_detail"]);
+                }
+            case "property": {
+                    var entityName = Field(root, "entityName");
+                    var name = Field(root, "name");
+                    var typeName = Field(root, "typeName");
+                    if (entityName is null) return MissingField(sessionId, kind, "entityName");
+                    if (name is null) return MissingField(sessionId, kind, "name");
+                    if (typeName is null) return MissingField(sessionId, kind, "typeName");
+                    return Evolve(sessionId, builder =>
+                            builder.AddPropertyToEntity(entityName, new Property(name, new DomainTypeReference(typeName), [])),
+                        successAffordances: ["add", "apply_dsl", "get_entity_detail"]);
+                }
+            case "stage": {
+                    var entityName = Field(root, "entityName");
+                    var name = Field(root, "name");
+                    if (entityName is null) return MissingField(sessionId, kind, "entityName");
+                    if (name is null) return MissingField(sessionId, kind, "name");
+                    return Evolve(sessionId, builder => builder.AddStage(entityName, name),
+                        successAffordances: ["add", "apply_dsl", "get_entity_detail"]);
+                }
+            case "action": {
+                    var entityName = Field(root, "entityName");
+                    var name = Field(root, "name");
+                    if (entityName is null) return MissingField(sessionId, kind, "entityName");
+                    if (name is null) return MissingField(sessionId, kind, "name");
+                    return Evolve(sessionId, builder => builder.AddAction(entityName, name),
+                        successAffordances: ["add", "apply_dsl", "get_entity_detail"]);
+                }
+            case "stage_action": {
+                    var entityName = Field(root, "entityName");
+                    var stageName = Field(root, "stageName");
+                    var name = Field(root, "name");
+                    if (entityName is null) return MissingField(sessionId, kind, "entityName");
+                    if (stageName is null) return MissingField(sessionId, kind, "stageName");
+                    if (name is null) return MissingField(sessionId, kind, "name");
+                    return Evolve(sessionId, builder => builder.AddActionToStage(entityName, stageName, name),
+                        successAffordances: ["add", "apply_dsl", "get_entity_detail"]);
+                }
+            case "relationship": {
+                    var name = Field(root, "name");
+                    var source = Field(root, "source", "sourceEntityName");
+                    var target = Field(root, "target", "targetEntityName");
+                    if (name is null) return MissingField(sessionId, kind, "name");
+                    if (source is null) return MissingField(sessionId, kind, "source");
+                    if (target is null) return MissingField(sessionId, kind, "target");
+                    var cardText = Field(root, "cardinality");
+                    if (!TryParseCardinality(cardText, out var card))
+                        return UnknownCardinality(sessionId, cardText ?? "");
+                    var owns = root.TryGetProperty("sourceOwnsTarget", out var ownProp)
+                        && ownProp.ValueKind == JsonValueKind.True;
+                    return Evolve(sessionId, builder =>
+                            builder.AddRelationship(name, source, target, card, owns),
+                        successAffordances: ["add", "apply_dsl", "get_entity_detail"]);
+                }
+            case "constraint": {
+                    var entityName = Field(root, "entityName");
+                    var propertyName = Field(root, "propertyName");
+                    var type = Field(root, "type");
+                    if (entityName is null) return MissingField(sessionId, kind, "entityName");
+                    if (propertyName is null) return MissingField(sessionId, kind, "propertyName");
+                    if (type is null) return MissingField(sessionId, kind, "type");
+                    return AddConstraintCore(sessionId, entityName, propertyName, type, payload);
+                }
+            case "policy": {
+                    var entityName = Field(root, "entityName");
+                    var name = Field(root, "name");
+                    var expression = Field(root, "expression");
+                    if (entityName is null) return MissingField(sessionId, kind, "entityName");
+                    if (name is null) return MissingField(sessionId, kind, "name");
+                    if (expression is null) return MissingField(sessionId, kind, "expression");
+                    return AddPolicyCore(sessionId, entityName, name, expression);
+                }
+            default:
+                return new DomainToolResponse(
+                    Success: false,
+                    Message: $"Unknown kind '{kind}'. Allowed kinds: entity, property, stage, action, stage_action, relationship, constraint, policy. Bulk structure/effects → apply_dsl.",
+                    SessionId: sessionId,
+                    Affordances: ["apply_dsl", "get_domain_overview"]);
+        }
+    }
+
+    private static DomainToolResponse AddConstraintCore(
+        string sessionId, string entityName, string propertyName, string type, string payloadJson) {
+        Constraint constraint;
+        try {
+            constraint = BuildConstraint(type, payloadJson);
+        }
+        catch (Exception ex) {
+            return new DomainToolResponse(
+                Success: false,
+                Message: $"Invalid constraint: {ex.Message}",
+                SessionId: sessionId,
+                Affordances: ["get_entity_detail"]);
+        }
         return Evolve(sessionId, builder =>
-                builder.AddPropertyToEntity(entityName, new Property(propertyName, new DomainTypeReference(typeName), [])),
-            successAffordances: ["add_property", "add_stage", "add_action", "get_entity_detail"]);
+                builder.AddConstraintToProperty(entityName, propertyName, constraint),
+            successAffordances: ["add", "apply_dsl", "get_entity_detail", "get_domain_analysis"]);
     }
 
-    /// <summary>
-    /// Adds a lifecycle stage to an entity.
-    /// </summary>
-    [McpServerTool(Name = "add_stage"), Description("Adds a lifecycle stage to an entity.")]
-    public static DomainToolResponse AddStage(
-        [Description("Session ID")] string sessionId,
-        [Description("Name of the entity")] string entityName,
-        [Description("Name of the new stage (e.g. 'Draft', 'Active', 'Archived')")] string stageName) {
-        return Evolve(sessionId, builder => {
-            return builder.AddStage(entityName, stageName);
-        },
-            successAffordances: ["add_action", "add_action_to_stage", "add_property", "get_entity_detail"]);
-    }
-
-    /// <summary>
-    /// Adds an action/operation to an entity.
-    /// </summary>
-    [McpServerTool(Name = "add_action"), Description("Adds an action/operation to an entity. Actions model behaviors like 'Submit', 'Approve', 'Cancel'.")]
-    public static DomainToolResponse AddAction(
-        [Description("Session ID")] string sessionId,
-        [Description("Name of the entity")] string entityName,
-        [Description("Name of the new action (e.g. 'Submit', 'Approve', 'Cancel')")] string actionName) {
-        return Evolve(sessionId, builder => builder.AddAction(entityName, actionName),
-            successAffordances: ["add_action_to_stage", "add_property", "get_entity_detail"]);
-    }
-
-    /// <summary>
-    /// Creates a new action on a stage. The action is placed directly on the stage
-    /// and available only within that stage's lifecycle.
-    /// </summary>
-    [McpServerTool(Name = "add_action_to_stage"), Description(@"Creates a new action on a stage. The action is available only within that stage's lifecycle.
-
-If an entity-level action with the same name already exists, its effects, policies,
-parameters, and result type are COPIED onto the stage action. Effects added to the
-entity-level action AFTER this call are NOT automatically copied — prefer adding
-effects to the entity action before placing it on the stage, or use DSL batch
-authoring (apply_dsl) to define actions with effects directly on stages.
-
-FALLTHROUGH: If the stage action has no effects and no policies, and an entity-level
-action with the same name exists, InvokeAction will use the entity-level action instead.
-This safety net prevents silent no-ops from empty stage copies.")]
-    public static DomainToolResponse AddActionToStage(
-        [Description("Session ID")] string sessionId,
-        [Description("Name of the entity")] string entityName,
-        [Description("Name of the stage")] string stageName,
-        [Description("Name of the action")] string actionName) {
-        return Evolve(sessionId, builder => builder.AddActionToStage(entityName, stageName, actionName),
-            successAffordances: ["add_action", "add_property", "add_stage", "get_entity_detail"]);
-    }
-
-    /// <summary>
-    /// Adds a relationship between two entity types.
-    /// </summary>
-    [McpServerTool(Name = "add_relationship"), Description("Adds a relationship between two entity types. Cardinality options: OneToOne, OneToMany, ManyToMany.")]
-    public static DomainToolResponse AddRelationship(
-        [Description("Session ID")] string sessionId,
-        [Description("Name of the relationship")] string relationshipName,
-        [Description("Source entity name")] string sourceEntityName,
-        [Description("Target entity name")] string targetEntityName,
-        [Description("Cardinality: OneToOne, OneToMany, ManyToMany")] string cardinality = "OneToMany",
-        [Description("Whether the source entity owns the target")] bool sourceOwnsTarget = false) {
-        var card = cardinality switch {
-            "OneToOne" => RelationshipCardinality.OneToOne,
-            "OneToMany" => RelationshipCardinality.OneToMany,
-            "ManyToMany" => RelationshipCardinality.ManyToMany,
-            _ => RelationshipCardinality.OneToMany
-        };
-
-        return Evolve(sessionId, builder =>
-                builder.AddRelationship(relationshipName, sourceEntityName, targetEntityName, card, sourceOwnsTarget),
-            successAffordances: ["add_relationship", "get_entity_detail", "get_domain_overview"]);
-    }
-
-    // ── Remove tools: agent evolutionary authoring ────────────────
-
-    /// <summary>
-    /// Removes a relationship by name. Analysis gate catches dangling references; missing name produces a clear diagnostic.
-    /// </summary>
-    [McpServerTool(Name = "remove_relationship"), Description("Removes a relationship by name. Analysis gate catches dangling references; missing name is reported clearly.")]
-    public static DomainToolResponse RemoveRelationship(
-        [Description("Session ID")] string sessionId,
-        [Description("Name of the relationship to remove")] string relationshipName) {
-        return Evolve(sessionId, builder => builder.RemoveRelationship(relationshipName),
-            successAffordances: ["get_entity_detail", "get_domain_overview", "get_relationships", "add_relationship"]);
-    }
-
-    /// <summary>
-    /// Removes an entity and all its properties, stages, and actions.
-    /// Fails if another entity depends on this one (e.g. via a relationship target).
-    /// </summary>
-    [McpServerTool(Name = "remove_entity"), Description("Removes an entity by name. Analysis gate rejects removal if other entities depend on this one (e.g. via relationships).")]
-    public static DomainToolResponse RemoveEntity(
-        [Description("Session ID")] string sessionId,
-        [Description("Name of the entity to remove")] string entityName) {
-        return Evolve(sessionId, builder => builder.RemoveEntity(entityName),
-            successAffordances: ["get_domain_overview", "get_domain_analysis", "add_entity"]);
-    }
-
-    /// <summary>
-    /// Removes a property from an entity.
-    /// </summary>
-    [McpServerTool(Name = "remove_property"), Description("Removes a property from an entity. Analysis gate catches dangling references.")]
-    public static DomainToolResponse RemoveProperty(
-        [Description("Session ID")] string sessionId,
-        [Description("Name of the entity")] string entityName,
-        [Description("Name of the property to remove")] string propertyName) {
-        return Evolve(sessionId, builder => builder.RemovePropertyFromEntity(entityName, propertyName),
-            successAffordances: ["get_entity_detail", "get_domain_overview", "add_property"]);
-    }
-
-    /// <summary>
-    /// Removes a lifecycle stage from an entity. Fails if the stage is referenced
-    /// by subscriptions or other dependents.
-    /// </summary>
-    [McpServerTool(Name = "remove_stage"), Description("Removes a stage from an entity. Stage children (actions, subscriptions, policies) are removed with the stage.")]
-    public static DomainToolResponse RemoveStage(
-        [Description("Session ID")] string sessionId,
-        [Description("Name of the entity")] string entityName,
-        [Description("Name of the stage to remove")] string stageName) {
-        return Evolve(sessionId, builder => builder.RemoveStage(entityName, stageName),
-            successAffordances: ["get_entity_detail", "get_domain_overview", "add_stage"]);
-    }
-
-    /// <summary>
-    /// Removes an action from an entity (entity-level). To remove a stage-scoped action,
-    /// use remove_action_from_stage.
-    /// </summary>
-    [McpServerTool(Name = "remove_action"), Description("Removes an entity-level action by name. Missing name is reported clearly. For stage-scoped actions, use remove_action_from_stage.")]
-    public static DomainToolResponse RemoveAction(
-        [Description("Session ID")] string sessionId,
-        [Description("Name of the entity")] string entityName,
-        [Description("Name of the action to remove")] string actionName) {
-        return Evolve(sessionId, builder => builder.RemoveAction(entityName, actionName),
-            successAffordances: ["get_entity_detail", "get_domain_overview", "add_action"]);
-    }
-
-    /// <summary>
-    /// Removes a stage-scoped action. Fails if the action or stage doesn't exist.
-    /// </summary>
-    [McpServerTool(Name = "remove_action_from_stage"), Description("Removes an action from a stage (stage-scoped action). Fails if the stage or action doesn't exist.")]
-    public static DomainToolResponse RemoveActionFromStage(
-        [Description("Session ID")] string sessionId,
-        [Description("Name of the entity")] string entityName,
-        [Description("Name of the stage")] string stageName,
-        [Description("Name of the action to remove")] string actionName) {
-        return Evolve(sessionId, builder => builder.RemoveActionFromStage(entityName, stageName, actionName),
-            successAffordances: ["get_entity_detail", "get_domain_overview", "add_action_to_stage"]);
-    }
-
-    /// <summary>
-    /// Removes a policy from an entity, stage, or action. The scope parameter
-    /// must be 'entity', 'stage', or 'action'. For stage and action scope, also
-    /// provide stageName/actionName as appropriate.
-    /// </summary>
-    [McpServerTool(Name = "remove_policy"), Description("Removes a policy by name. Scope: 'entity' (default), 'stage', or 'action'. For stage scope provide stageName; for action scope provide actionName.")]
-    public static DomainToolResponse RemovePolicy(
-        [Description("Session ID")] string sessionId,
-        [Description("Name of the entity")] string entityName,
-        [Description("Name of the policy to remove")] string policyName,
-        [Description("Scope: 'entity' (default), 'stage', or 'action'")] string scope = "entity",
-        [Description("Stage name (required when scope='stage')")] string? stageName = null,
-        [Description("Action name (required when scope='action')")] string? actionName = null) {
-        // Validate scope before any mutation
-        if (scope != "entity" && scope != "stage" && scope != "action")
+    internal static DomainToolResponse AddPolicyCore(
+        string sessionId, string entityName, string policyName, string expressionDsl) {
+        // Session-first (consistent with other tools); parse with the session's
+        // ParserInputs so pack open forms behave the same as apply_dsl (S3).
+        if (!McpSessionStore.TryGet(sessionId, out var state))
             return new DomainToolResponse(
                 Success: false,
-                Message: $"Invalid scope '{scope}'. Valid values are 'entity', 'stage', or 'action'.",
-                SessionId: sessionId,
-                Affordances: ["get_entity_detail"]);
+                Message: $"Session '{sessionId}' not found.",
+                Affordances: ["create_domain_session", "list_sessions"]);
 
-        if (scope == "stage" && string.IsNullOrWhiteSpace(stageName))
-            return new DomainToolResponse(
-                Success: false,
-                Message: "stageName is required when scope is 'stage'.",
-                SessionId: sessionId,
-                Affordances: ["get_entity_detail"]);
-
-        if (scope == "action" && string.IsNullOrWhiteSpace(actionName))
-            return new DomainToolResponse(
-                Success: false,
-                Message: "actionName is required when scope is 'action'.",
-                SessionId: sessionId,
-                Affordances: ["get_entity_detail"]);
-
-        return Evolve(sessionId, builder => {
-            return scope switch {
-                "stage" => builder.RemovePolicyFromStage(entityName, stageName!, policyName),
-                "action" => builder.RemovePolicyFromAction(entityName, actionName!, policyName),
-                _ => builder.RemovePolicyFromEntity(entityName, policyName),
-            };
-        }, successAffordances: ["get_entity_detail", "get_domain_analysis", "add_policy"]);
-    }
-
-    // ── Batch/plural tools ──────────────────────────────────────
-
-    /// <summary>
-    /// Adds multiple properties to an entity in a single atomic batch.
-    /// </summary>
-    [McpServerTool(Name = "add_properties"), Description("Adds multiple properties to an entity in a single atomic batch. Provide a JSON array of {name, typeName} objects.")]
-    public static DomainToolResponse AddProperties(
-        [Description("Session ID")] string sessionId,
-        [Description("Name of the entity")] string entityName,
-        [Description("JSON array of property objects: [{\"name\":\"Age\",\"typeName\":\"Number\"},...]")] string properties) {
-        PropertySpec[] specs;
+        DomainExpression expr;
         try {
-            specs = JsonSerializer.Deserialize<PropertySpec[]>(properties)
-                ?? throw new ArgumentException("Properties array must not be null.");
-            if (specs.Length == 0)
-                throw new ArgumentException("Properties array must not be empty.");
-        }
-        catch (Exception ex) when (ex is not ArgumentException) {
-            return new DomainToolResponse(
-                Success: false,
-                Message: $"Invalid properties JSON: {ex.Message}",
-                SessionId: sessionId,
-                Affordances: ["get_entity_detail"]);
+            expr = DslExpressionFragment.ParseExpressionFragment(expressionDsl, state.ParserInputs);
         }
         catch (Exception ex) {
             return new DomainToolResponse(
                 Success: false,
-                Message: ex.Message,
+                Message: $"Invalid policy expression: {ex.Message}",
                 SessionId: sessionId,
-                Affordances: ["get_entity_detail"]);
+                Affordances: ["get_entity_detail", "get_domain_overview"]);
         }
-
-        return Evolve(sessionId, builder => {
-            foreach (var s in specs)
-                builder = builder.AddPropertyToEntity(entityName,
-                    new Property(s.Name, new DomainTypeReference(s.TypeName), []));
-            return builder;
-        }, successAffordances: ["add_property", "add_stage", "get_entity_detail"]);
+        var result = Evolve(sessionId, builder => builder.AddPolicyToEntity(entityName, policyName, expr),
+            successAffordances: ["add", "apply_dsl", "get_entity_detail", "get_policy_expression", "evaluate_policy"]);
+        return result.Success
+            ? result with { Message = $"Policy '{policyName}' added to entity '{entityName}'." }
+            : result;
     }
 
-    /// <summary>
-    /// Adds multiple lifecycle stages to an entity in a single atomic batch.
-    /// </summary>
-    [McpServerTool(Name = "add_stages"), Description("Adds multiple lifecycle stages to an entity in a single atomic batch. Provide a JSON array of {name} objects.")]
-    public static DomainToolResponse AddStages(
-        [Description("Session ID")] string sessionId,
-        [Description("Name of the entity")] string entityName,
-        [Description("JSON array of stage objects: [{\"name\":\"Draft\"},{\"name\":\"Confirmed\"},...]")] string stages) {
-        StageSpec[] specs;
-        try {
-            specs = JsonSerializer.Deserialize<StageSpec[]>(stages)
-                ?? throw new ArgumentException("Stages array must not be null.");
-            if (specs.Length == 0)
-                throw new ArgumentException("Stages array must not be empty.");
+    private static DomainToolResponse UnknownCardinality(string sessionId, string cardinality) =>
+        new(Success: false,
+            Message: $"Unknown cardinality '{cardinality}'. Allowed: OneToOne, OneToMany, ManyToMany, ManyToOne.",
+            SessionId: sessionId,
+            Affordances: ["get_domain_overview", "add"]);
+
+    /// <summary>Maps a payload cardinality string to the enum. Null (omitted) defaults to OneToMany, matching the documented contract.</summary>
+    private static bool TryParseCardinality(string? text, out RelationshipCardinality card) {
+        switch (text) {
+            case null:
+                card = RelationshipCardinality.OneToMany;
+                return true;
+            case "OneToOne":
+                card = RelationshipCardinality.OneToOne;
+                return true;
+            case "OneToMany":
+                card = RelationshipCardinality.OneToMany;
+                return true;
+            case "ManyToMany":
+                card = RelationshipCardinality.ManyToMany;
+                return true;
+            case "ManyToOne":
+                card = RelationshipCardinality.ManyToOne;
+                return true;
+            default:
+                card = default;
+                return false;
         }
-        catch (Exception ex) when (ex is not ArgumentException) {
+    }
+
+    private static string? Field(JsonElement payload, params string[] names) {
+        foreach (var name in names) {
+            if (payload.TryGetProperty(name, out var prop) && prop.ValueKind == JsonValueKind.String) {
+                var value = prop.GetString();
+                if (!string.IsNullOrWhiteSpace(value)) return value;
+            }
+        }
+        return null;
+    }
+
+    private static DomainToolResponse MissingField(string sessionId, string kind, string field) =>
+        new(Success: false,
+            Message: $"Kind '{kind}' requires payload field '{field}'.",
+            SessionId: sessionId,
+            Affordances: ["apply_dsl", "get_domain_overview"]);
+
+    // ── Unified remove (kind + payload) ─────────────────────────
+
+    /// <summary>
+    /// Removes one domain definition element by identity, dispatched by
+    /// <c>kind</c> + <c>payload</c>. Identity fields only — no expression bodies.
+    /// </summary>
+    [McpServerTool(Name = "remove"), Description(@"Removes one domain definition element by identity. kind is case-sensitive: entity, property, stage, action, stage_action, relationship, policy. payload is a JSON object of identity fields:
+- entity: {""name"":""Order""}
+- property: {""entityName"":""Order"",""name"":""Total""}
+- stage: {""entityName"":""Order"",""name"":""Active""}
+- action: {""entityName"":""Order"",""name"":""Submit""}
+- stage_action: {""entityName"":""Order"",""stageName"":""Draft"",""name"":""Submit""}
+- relationship: {""name"":""OrderLines""}
+- policy: {""entityName"":""Order"",""name"":""Adult""} — optional scope: add ""stageName"" to remove a stage-scoped policy, ""actionName"" for an action-scoped policy (provide at most one)
+- constraint: not implemented in unified remove (core constraint removal is instance-identity-based, unusable from payload identity) — author via add(kind: constraint) or apply_dsl
+Unknown kind or missing required field fails closed.")]
+    public static DomainToolResponse Remove(
+        [Description("Session ID returned by create_domain_session")] string sessionId,
+        [Description("Domain element kind (case-sensitive): entity, property, stage, action, stage_action, relationship, policy")] string kind,
+        [Description("JSON object of identity fields (see tool description)")] string payload) {
+        if (!McpSessionStore.TryGet(sessionId, out _))
             return new DomainToolResponse(
                 Success: false,
-                Message: $"Invalid stages JSON: {ex.Message}",
-                SessionId: sessionId,
-                Affordances: ["get_entity_detail"]);
+                Message: $"Session '{sessionId}' not found.",
+                Affordances: ["create_domain_session", "list_sessions"]);
+
+        JsonElement root;
+        try {
+            using var doc = JsonDocument.Parse(payload);
+            root = doc.RootElement.Clone();
         }
         catch (Exception ex) {
             return new DomainToolResponse(
                 Success: false,
-                Message: ex.Message,
+                Message: $"Invalid payload JSON: {ex.Message}",
                 SessionId: sessionId,
-                Affordances: ["get_entity_detail"]);
+                Affordances: ["get_domain_overview", "apply_dsl"]);
         }
 
-        return Evolve(sessionId, builder => {
-            foreach (var s in specs)
-                builder = builder.AddStage(entityName, s.Name);
-            return builder;
-        }, successAffordances: ["add_action", "add_action_to_stage", "get_entity_detail"]);
-    }
-
-    /// <summary>
-    /// Places multiple actions onto stages in a single atomic batch.
-    /// </summary>
-    [McpServerTool(Name = "add_actions_to_stages"), Description("Places multiple actions onto stages in a single atomic batch. Provide a JSON array of {stageName, actionName} objects.")]
-    public static DomainToolResponse AddActionsToStages(
-        [Description("Session ID")] string sessionId,
-        [Description("Name of the entity")] string entityName,
-        [Description("JSON array of action-stage pairs: [{\"stageName\":\"Draft\",\"actionName\":\"Submit\"},...]")] string actions) {
-        ActionToStageSpec[] specs;
-        try {
-            specs = JsonSerializer.Deserialize<ActionToStageSpec[]>(actions)
-                ?? throw new ArgumentException("Actions array must not be null.");
-            if (specs.Length == 0)
-                throw new ArgumentException("Actions array must not be empty.");
+        switch (kind) {
+            case "entity": {
+                    var name = Field(root, "name");
+                    if (name is null) return MissingField(sessionId, kind, "name");
+                    return Evolve(sessionId, builder => builder.RemoveEntity(name),
+                        successAffordances: ["remove", "add", "apply_dsl", "get_domain_overview"]);
+                }
+            case "property": {
+                    var entityName = Field(root, "entityName");
+                    var name = Field(root, "name");
+                    if (entityName is null) return MissingField(sessionId, kind, "entityName");
+                    if (name is null) return MissingField(sessionId, kind, "name");
+                    return Evolve(sessionId, builder => builder.RemovePropertyFromEntity(entityName, name),
+                        successAffordances: ["remove", "add", "apply_dsl", "get_entity_detail"]);
+                }
+            case "stage": {
+                    var entityName = Field(root, "entityName");
+                    var name = Field(root, "name");
+                    if (entityName is null) return MissingField(sessionId, kind, "entityName");
+                    if (name is null) return MissingField(sessionId, kind, "name");
+                    return Evolve(sessionId, builder => builder.RemoveStage(entityName, name),
+                        successAffordances: ["remove", "add", "apply_dsl", "get_entity_detail"]);
+                }
+            case "action": {
+                    var entityName = Field(root, "entityName");
+                    var name = Field(root, "name");
+                    if (entityName is null) return MissingField(sessionId, kind, "entityName");
+                    if (name is null) return MissingField(sessionId, kind, "name");
+                    return Evolve(sessionId, builder => builder.RemoveAction(entityName, name),
+                        successAffordances: ["remove", "add", "apply_dsl", "get_entity_detail"]);
+                }
+            case "stage_action": {
+                    var entityName = Field(root, "entityName");
+                    var stageName = Field(root, "stageName");
+                    var name = Field(root, "name");
+                    if (entityName is null) return MissingField(sessionId, kind, "entityName");
+                    if (stageName is null) return MissingField(sessionId, kind, "stageName");
+                    if (name is null) return MissingField(sessionId, kind, "name");
+                    return Evolve(sessionId, builder => builder.RemoveActionFromStage(entityName, stageName, name),
+                        successAffordances: ["remove", "add", "apply_dsl", "get_entity_detail"]);
+                }
+            case "relationship": {
+                    var name = Field(root, "name");
+                    if (name is null) return MissingField(sessionId, kind, "name");
+                    return Evolve(sessionId, builder => builder.RemoveRelationship(name),
+                        successAffordances: ["remove", "add", "apply_dsl", "get_domain_overview"]);
+                }
+            case "policy": {
+                    var entityName = Field(root, "entityName");
+                    var name = Field(root, "name");
+                    var stageName = Field(root, "stageName");
+                    var actionName = Field(root, "actionName");
+                    if (entityName is null) return MissingField(sessionId, kind, "entityName");
+                    if (name is null) return MissingField(sessionId, kind, "name");
+                    if (stageName is not null && actionName is not null)
+                        return new DomainToolResponse(
+                            Success: false,
+                            Message: "Provide at most one of 'stageName' or 'actionName' for policy scope.",
+                            SessionId: sessionId,
+                            Affordances: ["get_entity_detail", "get_domain_analysis"]);
+                    return Evolve(sessionId, builder =>
+                            stageName is not null
+                                ? builder.RemovePolicyFromStage(entityName, stageName, name)
+                                : actionName is not null
+                                    ? builder.RemovePolicyFromAction(entityName, actionName, name)
+                                    : builder.RemovePolicyFromEntity(entityName, name),
+                        successAffordances: ["remove", "add", "apply_dsl", "get_entity_detail"]);
+                }
+            case "constraint":
+                return new DomainToolResponse(
+                    Success: false,
+                    Message: "constraint remove not implemented in unified remove — core constraint removal is instance-identity-based (RemoveConstraintFromPropertyChange removes by ReferenceEquals) so a payload-identity tool cannot target it; author constraints via add(kind: constraint) or apply_dsl.",
+                    SessionId: sessionId,
+                    Affordances: ["add", "apply_dsl", "get_entity_detail"]);
+            default:
+                return new DomainToolResponse(
+                    Success: false,
+                    Message: $"Unknown kind '{kind}'. Allowed kinds: entity, property, stage, action, stage_action, relationship, policy. Bulk structure/effects → apply_dsl.",
+                    SessionId: sessionId,
+                    Affordances: ["apply_dsl", "get_domain_overview"]);
         }
-        catch (Exception ex) when (ex is not ArgumentException) {
-            return new DomainToolResponse(
-                Success: false,
-                Message: $"Invalid actions JSON: {ex.Message}",
-                SessionId: sessionId,
-                Affordances: ["get_entity_detail"]);
-        }
-        catch (Exception ex) {
-            return new DomainToolResponse(
-                Success: false,
-                Message: ex.Message,
-                SessionId: sessionId,
-                Affordances: ["get_entity_detail"]);
-        }
-
-        return Evolve(sessionId, builder => {
-            foreach (var s in specs)
-                builder = builder.AddActionToStage(entityName, s.StageName, s.ActionName);
-            return builder;
-        }, successAffordances: ["add_action", "get_entity_detail"]);
     }
 
     // ── Shared helpers ──────────────────────────────────────────
@@ -878,7 +840,7 @@ This safety net prevents silent no-ops from empty stage copies.")]
                 var constraints = e.Properties.Sum(p => p.Constraints.Count);
                 var stages = string.Join(",", e.Stages.OrderBy(s => s.Name)
                     .Select(s => $"{s.Name}({s.Actions.Count}a,{s.Policies.Count}p)"));
-                var actions = $"A{e.Actions.Count}";
+                var actions = $"A{e.Actions.Count}({e.Actions.Sum(a => a.Policies.Count)}ap)";
                 var stageActions = e.Stages.Sum(s => s.Actions.Count);
                 var entityPolicies = e.Policies.Count;
                 return $"{e.Name}:{props}({constraints}c)E{entityPolicies}|[{stages}]|{actions}(+{stageActions}sa)";
@@ -960,45 +922,7 @@ This safety net prevents silent no-ops from empty stage copies.")]
         );
     }
 
-    // ── Batch tool spec types ───────────────────────────────────
-
-    private sealed record PropertySpec(
-        [property: JsonPropertyName("name")] string Name,
-        [property: JsonPropertyName("typeName")] string TypeName);
-    private sealed record StageSpec(
-        [property: JsonPropertyName("name")] string Name);
-    private sealed record ActionToStageSpec(
-        [property: JsonPropertyName("stageName")] string StageName,
-        [property: JsonPropertyName("actionName")] string ActionName);
-
     // ── Constraint tools ────────────────────────────────────────
-
-    /// <summary>
-    /// Adds a validation constraint to a property on an entity.
-    /// </summary>
-    [McpServerTool(Name = "add_constraint"), Description("Adds a validation constraint to a property. Supported types: Range (min/max), Required, Length (min/max), Pattern (regex), Unique.")]
-    public static DomainToolResponse AddConstraint(
-        [Description("Session ID")] string sessionId,
-        [Description("Name of the entity")] string entityName,
-        [Description("Name of the property")] string propertyName,
-        [Description("Constraint type: Range, Required, Length, Pattern, Unique")] string constraintType,
-        [Description("JSON config for the constraint, e.g. {\"min\":0,\"max\":100} for Range, {\"min\":5,\"max\":50} for Length, {\"regex\":\"^[a-z]+$\"} for Pattern")] string? config = null) {
-        Constraint constraint;
-        try {
-            constraint = BuildConstraint(constraintType, config);
-        }
-        catch (Exception ex) {
-            return new DomainToolResponse(
-                Success: false,
-                Message: $"Invalid constraint: {ex.Message}",
-                SessionId: sessionId,
-                Affordances: ["get_entity_detail"]);
-        }
-
-        return Evolve(sessionId, builder =>
-                builder.AddConstraintToProperty(entityName, propertyName, constraint),
-            successAffordances: ["get_entity_detail", "get_domain_analysis"]);
-    }
 
     /// <summary>
     /// Lists all constraints on an entity's properties.
@@ -1038,7 +962,7 @@ This safety net prevents silent no-ops from empty stage copies.")]
             SessionId: sessionId,
             Revision: state.Revision,
             Data: constraints,
-            Affordances: ["add_constraint", "get_entity_detail"]
+            Affordances: ["add", "get_entity_detail"]
         );
     }
 
@@ -1056,7 +980,9 @@ This safety net prevents silent no-ops from empty stage copies.")]
                 cfg?.TryGetValue("min", out var lmin) == true ? lmin.GetInt32() : 0,
                 cfg?.TryGetValue("max", out var lmax) == true ? lmax.GetInt32() : int.MaxValue),
             "Pattern" => new PatternConstraint(
-                cfg?.TryGetValue("regex", out var rx) == true ? rx.GetString()! : throw new ArgumentException("Pattern requires 'regex' config.")),
+                cfg is not null && (cfg.TryGetValue("pattern", out var p) || cfg.TryGetValue("regex", out p))
+                    ? p.GetString()!
+                    : throw new ArgumentException("Pattern requires 'pattern' config.")),
             "Unique" => new UniqueConstraint(),
             _ => throw new ArgumentException($"Unknown constraint type '{type}'. Supported: Range, Required, Length, Pattern, Unique.")
         };
@@ -1112,7 +1038,7 @@ internal sealed class PolicyTool {
                 Success: false,
                 Message: $"Entity '{entityName}' not found.",
                 SessionId: sessionId,
-                Affordances: ["get_domain_overview", "add_entity"]);
+                Affordances: ["get_domain_overview", "add"]);
 
         var policy = entity.Policies
             .FirstOrDefault(p => string.Equals(p.Name, policyName, StringComparison.Ordinal));
@@ -1131,66 +1057,6 @@ internal sealed class PolicyTool {
             Data: new { policyName = policy.Name, entityName = entity.Name, expression = policy.Expression.ToString() },
             Affordances: ["get_entity_detail", "get_domain_overview"]
         );
-    }
-
-    /// <summary>
-    /// Adds a policy with a guard expression to an entity. Accepts a single JSON
-    /// expression string supporting comparisons, composites, and literals.
-    /// </summary>
-    [McpServerTool(Name = "add_policy"), Description("Adds a policy with a guard expression to an entity. Provide 'expression' as a JSON string: {\"property\":\"Age\",\"op\":\">=\",\"value\":18} for comparisons, {\"and\":[...]}/{\"or\":[...]}/{\"not\":{...}} for composites, or {\"literal\":true} for always-true guards. IMPORTANT: Entity-level policies are UNIVERSAL guards - they gate ALL actions on the entity (including stage-scoped actions). Use 'require PolicyName' in DSL or AddPolicyToAction to scope to a specific action.")]
-    public static DomainToolResponse AddPolicy(
-        [Description("Session ID")] string sessionId,
-        [Description("Name of the entity")] string entityName,
-        [Description("Policy name (e.g. 'Adult', 'LargeActive')")] string policyName,
-        [Description("JSON expression string. Comparison: {\"property\":\"Age\",\"op\":\">=\",\"value\":18}. Composite: {\"and\":[{...},{...}]}, {\"or\":[...]}, {\"not\":{...}}. Literal: {\"literal\":true}.")] string expression) {
-        // Parse the expression eagerly — this is pure and doesn't depend on session state.
-        DomainExpression domainExpr;
-        try {
-            domainExpr = DomainExpressionJsonParser.ParseJson(expression);
-        }
-        catch (Exception ex) {
-            return new DomainToolResponse(
-                Success: false,
-                Message: $"Invalid policy expression: {ex.Message}",
-                SessionId: sessionId,
-                Affordances: ["get_entity_detail", "get_domain_overview"]);
-        }
-
-        if (!McpSessionStore.TryGet(sessionId, out _))
-            return new DomainToolResponse(
-                Success: false,
-                Message: $"Session '{sessionId}' not found.",
-                Affordances: ["create_domain_session", "list_sessions"]);
-
-        // Atomic read-modify-write through McpSessionStore.Evolve.
-        var outcome = McpSessionStore.Evolve(sessionId, domain =>
-            new DomainEvolution(domain).Evolve()
-                .AddPolicyToEntity(entityName, policyName, domainExpr)
-                .Apply());
-
-        if (outcome is null)
-            return new DomainToolResponse(
-                Success: false,
-                Message: $"Session '{sessionId}' not found.",
-                Affordances: ["create_domain_session", "list_sessions"]);
-
-        if (!outcome.Succeeded) {
-            return new DomainToolResponse(
-                Success: false,
-                Message: $"Evolution rolled back: {outcome.FailureSummary ?? "Analysis failed"}",
-                SessionId: sessionId,
-                Affordances: ["get_domain_analysis", "get_domain_overview"]);
-        }
-
-        // Need the session to get the revision for the response.
-        // We know it exists because outcome is non-null.
-        McpSessionStore.TryGet(sessionId, out var state);
-        return new DomainToolResponse(
-            Success: true,
-            Message: $"Policy '{policyName}' added to entity '{entityName}'.",
-            SessionId: sessionId,
-            Revision: state?.Revision ?? 0,
-            Affordances: ["get_entity_detail", "get_policy_expression", "evaluate_policy"]);
     }
 
     /// <summary>
@@ -1220,7 +1086,7 @@ internal sealed class PolicyTool {
                 Success: false,
                 Message: $"Entity '{entityName}' not found.",
                 SessionId: sessionId,
-                Affordances: ["get_domain_overview", "add_entity"]);
+                Affordances: ["get_domain_overview", "add"]);
 
         var policy = entity.Policies
             .FirstOrDefault(p => string.Equals(p.Name, policyName, StringComparison.Ordinal));
@@ -1322,7 +1188,7 @@ internal sealed class PolicyTool {
 
 /// <summary>
 /// Tools for batch DSL operations: apply_dsl (parse + evolve) and export_dsl (print).
-/// These provide the dual-path authoring model alongside micro-tools.
+/// These provide bulk authoring alongside the unified add/remove incremental tools.
 /// </summary>
 [McpServerToolType]
 internal sealed class DslTool {
@@ -1334,8 +1200,8 @@ internal sealed class DslTool {
     [McpServerTool(Name = "apply_dsl"), Description(@"Applies Phase 1a/1b .poly DSL text to the session, REPLACING the current domain.
 
 Parses the text, evolves a fresh domain, and — if analysis succeeds — replaces the
-session domain with the result. Use this for batch authoring; micro-tools (add_entity,
-add_property, etc.) remain for discovery and incremental edits.
+session domain with the result. Use this for bulk authoring; incremental single-element
+edits go through the unified `add` / `remove` tools (kind + payload).
 
 Supported constructs: entities, properties with constraints (required, unique, range,
 length, pattern), lifecycle stages, actions with require gates,
@@ -1362,8 +1228,8 @@ HONESTY NOTES — what this tool does NOT enforce:
  - The revision counter becomes the session's current revision + 1, not zero
    (apply_dsl replaces the domain but keeps the session alive).
 
-IMPORTANT: This tool REPLACES the session domain. Incremental micro-tools remain
-for exploration and repair.")]
+IMPORTANT: This tool REPLACES the session domain. Incremental single-element edits go
+through the unified `add` / `remove` tools (kind + payload).")]
     public static DomainToolResponse ApplyDsl(
         [Description("Session ID returned by create_domain_session")] string sessionId,
         [Description("Phase 1a/1b .poly DSL text to parse and apply")] string polyText) {
@@ -1456,7 +1322,7 @@ for exploration and repair.")]
             Data: snapshot,
             Affordances: entityCount > 0
                 ? ["get_entity_detail", "get_domain_overview", "get_domain_analysis", "export_dsl", "apply_dsl"]
-                : ["get_domain_overview", "add_entity"]);
+                : ["get_domain_overview", "add"]);
     }
 
     /// <summary>
@@ -1506,7 +1372,7 @@ for exploration and repair.")]
             Success: true,
             Message: "DSL syntax guide retrieved.",
             Data: new { guide = guideText },
-            Affordances: ["apply_dsl", "lower_expression", "describe_expression"]
+            Affordances: ["apply_dsl", "add", "simulate_policy"]
         );
     }
 

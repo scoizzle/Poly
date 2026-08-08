@@ -1,7 +1,7 @@
 # MCP catalog minify + drop JSON expression tools
 
 **Date:** 2026-08-07  
-**Status:** Draft plan — **not admitted** until explicit CURRENT pick  
+**Status:** **CURRENT** (admitted 2026-08-08) — suite M0–M6 executing; §10 boxes ticked as gate closes  
 **Agent suite:** [`simple-agent-tasks/mcp-minify-README.md`](simple-agent-tasks/mcp-minify-README.md) (trivial-agent micro-tasks 0→G)  
 **Principle:** One product authoring surface (`.poly` DSL); thin MCP; fewer non-overlapping tools  
 **Related:**  
@@ -123,8 +123,8 @@ remove(
 | `action` | `entityName`, `name` | `entityName`, `name` |
 | `stage_action` | `entityName`, `stageName`, `name` | `entityName`, `stageName`, `name` |
 | `relationship` | `name`, `source`, `target`, `cardinality` | `name` |
-| `constraint` | `entityName`, `propertyName`, `type`, type-specific args | `entityName`, `propertyName`, `type` (or constraint id if we add one) |
-| `policy` | `entityName`, `name`, `expression` (**DSL fragment**), optional scope | `entityName`, `name`, optional scope (`entity`/`stage`/`action` + names) |
+| `constraint` | `entityName`, `propertyName`, `type`, type-specific args | `entityName`, `propertyName`, `type` — **remove not implemented in unified `remove`** (core removal is instance-identity-based, `ReferenceEquals`; a payload-identity tool cannot target it) — use `apply_dsl` |
+| `policy` | `entityName`, `name`, `expression` (**DSL fragment**), optional scope | `entityName`, `name`, optional scope (`stageName`/`actionName`, at most one) |
 
 **Batch (optional v1):**  
 - `add` may accept `items: [payload, …]` for **same kind only** (replaces `add_properties` / `add_stages` / `add_actions_to_stages`).  
@@ -283,15 +283,13 @@ M6 gate
 
 ## 10. Success definition
 
-- [ ] Default catalog documents exact N at M6.  
-- [ ] Exactly **two** structure-increment tools: `add`, `remove` (plus `apply_dsl` for bulk).  
-- [ ] Zero JSON expression tools / zero `DomainExpressionJsonParser`.  
-- [ ] Zero per-type `add_entity` / `remove_stage` / … MCP registrations.  
-- [ ] Expression text = product DSL only.  
-- [ ] GI-8 cancelled.  
-- [ ] Suite green; dogfood path documented.  
-
----
+- [x] Default catalog documents exact N at M6 — **24 tools** (was 46).
+- [x] Exactly **two** structure-increment tools: `add`, `remove` (plus `apply_dsl` for bulk).
+- [x] Zero JSON expression tools / zero `DomainExpressionJsonParser`.
+- [x] Zero per-type `add_entity` / `remove_stage` / … MCP registrations.
+- [x] Expression text = product DSL only.
+- [x] GI-8 cancelled.
+- [x] Suite green; dogfood path documented (session → guide → apply_dsl/add → runtime invoke).
 
 ## 11. Agent pick (when admitted)
 

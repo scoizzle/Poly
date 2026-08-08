@@ -109,7 +109,7 @@ Per discussion 2026-07-26, Poly is ~2 days from an end-to-end demo alpha. The ga
 ## Key Recent Files Changed (last 48h)
 
 - `Poly/DomainModeling/Runtime/DomainEntityInstance.cs` — to-one RelationshipNavigation resolution, `require not` guard skip
-- `Poly/DomainModeling/Lowering/DomainExpressionJsonParser.cs` — `"relationship"` key support
+- `Poly/DomainModeling/Lowering/DomainExpressionJsonParser.cs` — **deleted 2026-08-08** (mcp-minify: zero JSON expression IR; policies are DSL text via `DslExpressionFragment.ParseExpressionFragment`; unified `add`/`remove` + `apply_dsl` only)
 - `Poly.Mcp/Tools/RuntimeTool.cs` — `unlink_instances`, create-in InstanceMap registration, `get_instance` nav links
 - `Poly.Mcp/Docs/poly-dsl-guide.md` — owned access promoted to shipped
 - `docs/plans/simple-agent-tasks/dogfood-fix-README.md` — micro-task queue for fixes

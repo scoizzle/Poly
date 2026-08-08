@@ -74,6 +74,7 @@ Status legend: **Green** = evidence in tree · **Yellow** = partial / known gap 
 | Session mutations do not silently lose concurrent writes | T1 | Revision / lock tests | [`mcp-mutation-safety.md`](mcp-mutation-safety.md) | **Red** — known race; fix before multi-agent design partners |
 | Rollback / conflict is diagnosable | T1 | Payload tests | Same plan | **Red** / proposal |
 | MCP does not claim unshipped domain capability | T1 | Honesty review | CORE: MCP must not claim core lacks | **Yellow** — process + tests |
+| MCP expressions are product DSL only (no JSON IR bags) | T1 | Grep + fragment tests | `mcp-minify` suite: zero `DomainExpressionJsonParser`; `DslExpressionFragmentTests` | **Green** (mcp-minify 2026-08-08) |
 
 ### 3.4 Durability & external effects (layer 1–2 for operated products)
 

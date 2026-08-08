@@ -4,6 +4,12 @@
 
 Draft
 
+> **MCP tool names in this document predate the 2026-08-08 catalog minify.** The
+> per-type tools (`add_entity`, `add_property`, `add_stage`, `add_action`,
+> `add_policy`, …) are deleted; the current surface is unified `add`/`remove`
+> (kind + payload) + `apply_dsl`, and expressions are DSL text only. See
+> [`../plans/mcp-catalog-minify.md`](../plans/mcp-catalog-minify.md).
+
 ## Problem
 
 - loosely typed discriminator/value pairs drift easily

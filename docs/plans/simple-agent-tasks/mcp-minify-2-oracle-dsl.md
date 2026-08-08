@@ -1,8 +1,10 @@
 # mcp-minify-2 — Oracle tools use DSL fragments only
 
 **Difficulty:** M  
-**Status:** `[ ]`  
-**Prereq:** task 1 `[x]`  
+**Status:** `[x]`  
+**Prereq:** task 1 `[x]`
+
+**Done 2026-08-08:** OracleTool expression tools now parse via `DslExpressionFragment.ParseExpressionFragment` (TryParseDslExpression). Params renamed `expressionJson` → `expression`; Descriptions document DSL fragments. **Deleted** unused `analyze_expression` + `lower_expression_to_csharp` (zero test references); kept `lower_expression`, `describe_expression`, `simulate_policy` (rewritten, tests updated to DSL). Affordance strings cleaned of deleted tool names; `LowerExpressionToNode` helper removed. `DomainExpressionJsonParser` retained — `add_policy` still calls it (task 4/6). Suite 1933 green.  
 
 ## Objective
 
@@ -68,4 +70,4 @@ dotnet run --project Poly.Tests/Poly.Tests.csproj --no-build
 
 ## Status
 
-**Status:** Not Started  
+**Status:** Done  

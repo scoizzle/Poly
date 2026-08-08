@@ -1,8 +1,10 @@
 # mcp-minify-3 — Unified `add` for core kinds
 
 **Difficulty:** M  
-**Status:** `[ ]`  
-**Prereq:** task 1 `[x]` (task 2 preferred but not hard-required)  
+**Status:** `[x]`  
+**Prereq:** task 1 `[x]` (task 2 preferred but not hard-required)
+
+**Done 2026-08-08:** `EvolveTool.Add` (Name = "add") in `DomainTools.cs` — kinds entity/property/stage/action/stage_action/relationship dispatch to the exact existing EvolutionBuilder methods (AddEntity / AddPropertyToEntity / AddStage / AddAction / AddActionToStage / AddRelationship). Payload parsed via JsonDocument; invalid JSON → fail closed with `payload` in message; unknown kind → fail closed listing allowed kinds; missing required field → fail closed naming the field. Relationship accepts `source`/`target` or `sourceEntityName`/`targetEntityName`. Description embeds the kind→payload table. 10 new tests in `Poly.Tests/Mcp/UnifiedAddTests.cs` (6 happy paths + unknown kind + missing field + bad JSON + missing session). Old micro-tools still registered (task 6). Suite 1943 green.  
 
 ## Objective
 
@@ -81,4 +83,4 @@ dotnet run --project Poly.Tests/Poly.Tests.csproj --no-build
 
 ## Status
 
-**Status:** Not Started  
+**Status:** Done  

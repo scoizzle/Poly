@@ -19,12 +19,8 @@ namespace Poly.DomainModeling.Parsing;
 /// Expressions: <see cref="DslExpressionParser"/> (E1 — open forms via
 /// <see cref="ExpressionFormRegistry"/>; precedence Pratt/RD layers).
 /// </summary>
-public sealed class PolyDslParser : IDslParseCursor {
-    private readonly Grammar<DslTokenKind> _grammar;
-    private readonly DslTokenReader _tokenReader;
-    private readonly Matcher<DslTokenKind> _matcher;
+public sealed class PolyDslParser : DslParseCursorBase {
     private readonly DslExpressionParser _expressions;
-    private Token _current;
     private string _domainName = "";
     private int _entityIndex;
     private bool _primitivesAdded;
@@ -52,7 +48,7 @@ public sealed class PolyDslParser : IDslParseCursor {
     private readonly HashSet<string> _relationshipNames = new(StringComparer.Ordinal);
 
     // Q1′′′.5 / Q1'''''.2: Prevents recursive `Rel where ...` parsing inside a where body.
-    private bool _inWhereBody;
+    // (Flag lives on DslParseCursorBase as _inWhereBody.)
 
     // Explicit parse inputs / annotation support
     private readonly DomainParserInputs? _parserInputs;
@@ -79,29 +75,13 @@ public sealed class PolyDslParser : IDslParseCursor {
     /// are consulted for property-tail and entity-header annotations; pack grammar
     /// contributors are applied when building the session pattern table (GI-5).
     /// </summary>
-    public PolyDslParser(string text, DomainParserInputs? parserInputs) {
-        _parserInputs = parserInputs;
-        _grammar = DslGrammar.Build(g => {
+    public PolyDslParser(string text, DomainParserInputs? parserInputs)
+        : base(new DslTokenReader(text), r => new Matcher<DslTokenKind>(DslGrammar.Build(g => {
             parserInputs?.Annotations.ContributePatterns(g);
             parserInputs?.ExpressionForms.ContributeGrammarPatterns(g);
-        });
-        _tokenReader = new DslTokenReader(text);
-        _matcher = new Matcher<DslTokenKind>(_grammar, _tokenReader);
-        _current = _tokenReader.Read();
+        }), r)) {
+        _parserInputs = parserInputs;
         _expressions = new DslExpressionParser(this, parserInputs?.ExpressionForms);
-    }
-
-    Token IDslParseCursor.Current => _current;
-    void IDslParseCursor.Advance() => Advance();
-    Token IDslParseCursor.Expect(DslTokenKind kind) => Expect(kind);
-    string IDslParseCursor.ExpectIdentifier(DslTokenKind kind, string context) => ExpectIdentifier(kind, context);
-    bool IDslParseCursor.PeekIs(DslTokenKind kind) => PeekIs(kind);
-    Token IDslParseCursor.Peek(int n) => _tokenReader.Peek(n);
-    MatchResult<DslTokenKind>? IDslParseCursor.MatchRule(string ruleName) => MatchRule(ruleName);
-    Exception IDslParseCursor.Error(string message) => Error(message);
-    bool IDslParseCursor.InWhereBody {
-        get => _inWhereBody;
-        set => _inWhereBody = value;
     }
 
     private DomainExpression ParseExpression() => _expressions.ParseExpression();
@@ -1224,50 +1204,6 @@ public sealed class PolyDslParser : IDslParseCursor {
         throw Error($"Expected a type name, got '{_current.Text}'");
     }
 
-    /// <summary>
-    /// Matcher peeks the reader buffer; this parser holds the head token in
-    /// <see cref="_current"/>. Unread so Peek(1) is the head, then restore —
-    /// cursor stays at the match head (not past the span). Callers Consume when
-    /// they take the match. Returns null when no pattern matches; unknown rule
-    /// names throw from <see cref="Matcher{TKind}.TryMatch"/> (N3).
-    /// </summary>
-    private MatchResult<DslTokenKind>? MatchRule(string ruleName) {
-        _tokenReader.Unread(_current);
-        var match = _matcher.TryMatch(ruleName);
-        _current = _tokenReader.Read();
-        return match;
-    }
-
-    /// <summary>Advances past all tokens consumed by a match (head stays in sync).</summary>
-    private void Consume(MatchResult<DslTokenKind> match) {
-        for (var i = 0; i < match.Consumed; i++)
-            Advance();
-    }
-
-    private void Advance() {
-        _current = _tokenReader.Read();
-    }
-
-    private Token Expect(TokenKind kind) {
-        if (_current.Kind != kind)
-            throw Error($"Expected {kind}, got '{_current.Text}' ({_current.Kind})");
-        var t = _current;
-        Advance();
-        return t;
-    }
-
-    private string ExpectIdentifier(TokenKind kind, string context) {
-        if (_current.Kind != kind)
-            throw Error($"Expected {context}, got '{_current.Text}'");
-        var t = _current.Text;
-        Advance();
-        return t;
-    }
-
-    private bool PeekIs(TokenKind kind) {
-        return _tokenReader.Peek(1).Kind == kind;
-    }
-
     private List<string> ParseIdentifierList() {
         var list = new List<string>();
         list.Add(ExpectIdentifier(TokenKind.Identifier, "identifier"));
@@ -1305,7 +1241,4 @@ public sealed class PolyDslParser : IDslParseCursor {
                 $"'{keyword}' is not supported in Phase 1a (used as type for '{name}')");
         }
     }
-
-    private Exception Error(string message) =>
-        new GrammarException(message, _current.Line, _current.Col);
 }

@@ -1,8 +1,10 @@
 # mcp-minify-6 — Delete per-type add_*/remove_* tools
 
 **Difficulty:** M  
-**Status:** `[ ]`  
-**Prereq:** tasks 3, 4, 5 all `[x]`  
+**Status:** `[x]`  
+**Prereq:** tasks 3, 4, 5 all `[x]`
+
+**Done 2026-08-08:** Deleted all 18 per-type tool methods (`add_entity` … `add_policy` + `remove_entity` … `remove_policy`) from `DomainTools.cs` via a brace-safe script; kept shared cores (`AddPolicyCore`, `AddConstraintCore`, `BuildConstraint`, `Evolve`, `Field`, `MissingField`). Affordance strings across `Poly.Mcp` renamed to `add`/`remove` (sed, deduped). Removed now-unused batch spec records (PropertySpec/StageSpec/ActionToStageSpec). **Tests converted** (Python regex + manual): ~200 call sites in `McpSmokeTests`, `OracleToolTests`, `DomainSemanticLookupFailClosedTests` → unified `add`/`remove` kind+payload. Batch tests (AddProperties/AddStages/AddActionsToStages) rewritten as multiple `add` calls. `AddConstraint` → `add(kind=constraint)` with merged config. `RemovePolicy` scope tests (stage/invalid/missing-stageName) deleted — unified remove is entity-scope only. `DomainExpressionJsonParser` already deleted (task 4). **Tool count: 46 → 29.** Suite 1934 green; proof greps empty.  
 
 ## Objective
 
@@ -63,4 +65,4 @@ dotnet run --project Poly.Tests/Poly.Tests.csproj --no-build
 
 ## Status
 
-**Status:** Not Started  
+**Status:** Done  

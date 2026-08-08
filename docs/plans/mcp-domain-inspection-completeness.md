@@ -1,7 +1,7 @@
 # MCP Domain Inspection Completeness
 
 **Date:** 2026-07-13  
-**Status:** Proposal — research + implementation plan  
+**Status:** Proposal — **SUPERSEDED 2026-08-08 by [`mcp-catalog-minify.md`](mcp-catalog-minify.md)** (inspection needs met by `get_relationships`/`get_constraints`/`get_entity_detail`; per-type creation tools deleted in favor of unified `add`/`remove` + `apply_dsl`). Do not re-admit without explicit suite admit.
 **Source:** Agent feedback from ~150-call supply chain modeling session  
 **Related:** `mcp-tool-surface-expansion.md` (relationship = deferred), `mcp-guiding-principles.md` (discoverable surface)
 

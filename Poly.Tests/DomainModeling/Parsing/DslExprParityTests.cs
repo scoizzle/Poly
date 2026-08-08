@@ -19,43 +19,11 @@ namespace Poly.Tests.DomainModeling.Parsing;
 // or reject loud. Never delete cases.
 public sealed class DslExprParityTests {
     // Minimal head-token cursor so the expression parser can run standalone.
-    private sealed class ExprCursor : IDslParseCursor {
-        private readonly DslTokenReader _reader;
-        private readonly Matcher<DslTokenKind> _matcher;
-        private Token<DslTokenKind> _current;
-
-        public ExprCursor(string text) {
-            _reader = new DslTokenReader(text);
-            _matcher = new Matcher<DslTokenKind>(DslGrammar.Build(), _reader);
-            _current = _reader.Read();
+    // Shared dual-cursor mechanics via DslParseCursorBase (mcp-minify N5).
+    private sealed class ExprCursor : DslParseCursorBase {
+        public ExprCursor(string text)
+            : base(new DslTokenReader(text), r => new Matcher<DslTokenKind>(DslGrammar.Build(), r)) {
         }
-
-        public Token<DslTokenKind> Current => _current;
-        public void Advance() => _current = _reader.Read();
-        public Token<DslTokenKind> Expect(DslTokenKind kind) {
-            if (_current.Kind != kind)
-                throw Error($"Expected {kind}, got '{_current.Text}' ({_current.Kind})");
-            var t = _current;
-            Advance();
-            return t;
-        }
-        public string ExpectIdentifier(DslTokenKind kind, string context) {
-            if (_current.Kind != kind)
-                throw Error($"Expected {context}, got '{_current.Text}'");
-            var t = _current;
-            Advance();
-            return t.Text;
-        }
-        public bool PeekIs(DslTokenKind kind) => _reader.Peek(1).Kind == kind;
-        public Token<DslTokenKind> Peek(int n = 1) => _reader.Peek(n);
-        public MatchResult<DslTokenKind>? MatchRule(string ruleName) {
-            _reader.Unread(_current);
-            var match = _matcher.TryMatch(ruleName);
-            _current = _reader.Read();
-            return match;
-        }
-        public Exception Error(string message) => new FormatException(message);
-        public bool InWhereBody { get; set; }
     }
 
     private static DomainExpression GrammarParse(string expr) {

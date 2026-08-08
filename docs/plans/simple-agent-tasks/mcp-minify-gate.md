@@ -1,8 +1,23 @@
 # mcp-minify — Suite gate
 
 **Difficulty:** S  
-**Status:** `[ ]`  
-**Prereq:** tasks 0–7 all `[x]`  
+**Status:** `[x]`  
+**Prereq:** tasks 0–7 all `[x]`
+
+**Done 2026-08-08.**
+
+## Gate results
+
+1. **Grep gates** — all clean:
+   - `DomainExpressionJsonParser`: zero matches (exit 1).
+   - Per-type `McpServerTool(Name = "add_*"/"remove_*")`: zero matches (exit 1).
+   - Unified `McpServerTool(Name = "add")` + `"remove"` present (DomainTools.cs).
+2. **Build + full suite:** `dotnet build Poly.Benchmarks` clean; full suite **1927/1927 green** (two consecutive runs; one transient failure matched the known VM-execution flake, see `/memories/repo/flaky-vm-execution-tests.md`, green on re-run).
+3. **Manual path checklist** (test-covered): create_domain_session → `CreateSession_ReturnsSessionIdAndBuiltins`; get_dsl_guide → `GetDslGuide_ReturnsProductSurface`; apply_dsl / add → `ApplyDsl_MinimalEntity_ReplacesSession` + `UnifiedAddTests.Add_Entity_Succeeds`/`Add_Property_Succeeds`; create_instance + invoke_action → `CreateInstance_SimpleEntity_ReturnsSnapshot` + `ApplyDsl_WithRequire_BlocksInvokeActionWhenPolicyFails`.
+4. **pr1 pre-ship review:** dirty-tree audit done — 24 tracked files (22 modified + 2 deleted) + 5 new; reviewed DslExpressionFragment cursor (dual-cursor parity), Add/Remove dispatch (parse-time reject: bad JSON/unknown kind/missing field; analyze-time: evolution analysis gate; fail-closed: invalid policy DSL leaves no empty policy, JSON-bag expression rejected, constraint remove explicit not-supported), affordance strings, docs. No 🔴/🟠 findings.
+5. Suite README status → **DONE** + date.
+6. Parent plan §10 success checkboxes all ticked.
+7. Nothing committed (human holds commit, per convention).  
 
 ## Objective
 
@@ -22,6 +37,21 @@ rg -n 'McpServerTool\(Name = "add_entity"|McpServerTool\(Name = "add_property"|M
 # Unified tools present
 rg -n 'McpServerTool\(Name = "add"|McpServerTool\(Name = "remove"' Poly.Mcp --glob '*.cs'
 ```
+
+> **P1 (2026-08-08, added after review):** tool-name deletions must ALSO grep the
+> non-code surfaces the `*.cs` gates cannot see — suggestion hint strings, agent
+> definitions, and active docs. Deleted-tool names in these surfaces fail the gate:
+>
+> ```bash
+> # Dead tool names in product output / agent defs / docs (expect only negation/retirement contexts)
+> rg -n "add_policy|add_entity|add_property|add_constraint|remove_policy|JSON expression" \
+>   Poly.Mcp Poly/DomainModeling docs .github/agents --glob '*.{cs,md}'
+> ```
+>
+> Every deletion must grep the **full tree including `.md` and `.agent.md`**, not just `*.cs`.
+> Failure mode this catches (2026-08-08): `get_domain_suggestions` hint text and the
+> `domain-modeling.agent.md` definition taught the deleted `add_policy`/JSON-bag surface while
+> the `*.cs` gates stayed clean.
 
 2. **Build + full suite:**
 
@@ -60,4 +90,4 @@ dotnet run --project Poly.Tests/Poly.Tests.csproj
 
 ## Status
 
-**Status:** Not Started  
+**Status:** Done  

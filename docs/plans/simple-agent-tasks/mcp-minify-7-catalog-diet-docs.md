@@ -1,8 +1,18 @@
 # mcp-minify-7 — Oracle/inspect diet + docs
 
 **Difficulty:** S–M  
-**Status:** `[ ]`  
-**Prereq:** task 6 `[x]`  
+**Status:** `[x]`  
+**Prereq:** task 6 `[x]`
+
+**Done 2026-08-08.**
+
+**A. Inspect diet (recorded):** deleted `get_domain_snapshot` (overview + entity_detail + analysis cover it; test removed). **Kept** `get_constraints` — entity_detail lists only constraint *counts*, not constraint details, so the default delete condition doesn't hold. **Kept** `get_relationships` (global edge list with source/target/cardinality not available elsewhere) and `get_policy_expression` (inspect-only).
+
+**B. Oracle diet:** kept exactly **one** DSL expression oracle = `simulate_policy`; deleted `lower_expression` + `describe_expression` (and their tests). Deleted `analyze_effect` + `lower_effect_to_csharp` (zero test references). **Kept** `describe_domain_element` — ~15 semantics fail-closed tests in `DomainSemanticLookupFailClosedTests` depend on it (missing-metadata/not-found honesty); noted per task rule. **Kept** `export_domain_to_csharp` — `SurfaceExtensionDogfoodTests` (dogfood generation path) use it; noted. Unused helpers removed (LowerToNodeData/BuildNodeData/GetMemberName/TryAnalyze/CSharpWithAnalysis/LoweredNodeData). **Tool count: 29 → 24.**
+
+**C. Docs:** `Poly.Mcp/README.md` catalog rewritten (24 tools, `add`/`remove` payload tables, bulk vs incremental); `poly-dsl-guide.md` + `poly-dsl-agent-guide.md` JSON-expression sections replaced with DSL-only statements; `apply_dsl`/`get_dsl_guide` descriptions fixed; parent plan §10 all ticked; `customer-trust-proof-map.md` §3.3 line added (MCP expressions = DSL only, Green).
+
+**D. Tests:** deleted 7 tests (6 oracle + 1 snapshot); suite 1927 green.  
 
 ## Objective
 
@@ -68,4 +78,4 @@ dotnet run --project Poly.Tests/Poly.Tests.csproj --no-build
 
 ## Status
 
-**Status:** Not Started  
+**Status:** Done  

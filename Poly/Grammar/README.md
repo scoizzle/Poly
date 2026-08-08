@@ -126,6 +126,11 @@ Override these methods on `TokenWriter<TKind>` to control formatting:
 
 - **The pattern table is the grammar.** Adding, removing, or inspecting
   patterns is a table operation, not a code change.
+- **Product end state is pure table-driven parse.** Hybrid recursive-descent
+  in product code is a bridge only. If a product surface cannot be expressed,
+  **evolve this engine** (precedence, recursive rules, pack open forms) rather
+  than normalizing permanent product RD. Direction:
+  `docs/plans/grammar-pure-end-state.md`.
 - **Longest match disambiguates.** When two patterns share a prefix, the one
   that consumes more tokens wins — no manual lookahead.
 - **Patterns are sorted.** Within each rule, patterns are ordered by first-token

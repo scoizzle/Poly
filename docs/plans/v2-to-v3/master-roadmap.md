@@ -52,16 +52,16 @@ MCP / direct API as thin consumers
 ### Agent pick (one line)
 
 ```text
-DONE:    M1–M4; Q1′+Q3′+link; infra IR; catalog; peer/entity when/owned; exists; dogfood w1+w2; amu; p4 any/all; coh; **p3 return entity**; **p2 multi-hop path-prefix**
-CURRENT: (none)
-THEN:    P1 temporal research only until explicit admit
-PARKED:  P1 temporal (docs/plans/p1-temporal-research.md); P5+; grammar; actors/schedule; DAU deepen
-PULL:    Q4; link DSL; E5; Bar B
+DONE:    … p3/p2; GI hybrid cutover + E1 seam; archive completed-2026-08-mid
+CURRENT: (none) — admit **gpure** to finish pure Grammar stream
+THEN:    gpure → mcp-minify → mut-safety → p1 temporal
+PARKED:  outbox lock; multi-assembly DM; actors/schedule
+PULL:    E5; EF codegen; naming cleanup
 ```
 
-**Honest product claim today:** Path-prefix (incl. **to-one multi-hop** e.g. `loan book Title is "X"`) / exists / where / Q3′; `when any|all`; peer `as`; entity-level when; owned policies; catalog monopath. Action `-> Entity` from create/create-in returns instance (MCP `returnInstanceId`). **No** temporal DSL authoring (P1 research). **No** primitive action returns.
+**Honest product claim today:** Path-prefix multi-hop; exists/where/Q3′; peer/entity when; catalog; action `-> Entity` returns. **Grammar:** hybrid product path (structure Matcher; expr RD modules + open-form registry). **No** temporal DSL authoring until p1. **No** pure-Grammar product path until gpure gate.
 
-**Focus (2026-08-06):** P3+P2 product slices shipped. P1 stays research-only.
+**Focus (2026-08-07):** Prefer **gpure** as sole CURRENT to finish one stream. Ready suites: `docs/plans/simple-agent-tasks/READY-TO-TASK.md`.
 
 ---
 
@@ -69,7 +69,8 @@ PULL:    Q4; link DSL; E5; Bar B
 
 | Archive | Contents |
 |---------|----------|
-| [`../archive/domainmodeling-completed-2026-08/`](../archive/domainmodeling-completed-2026-08/README.md) | Finished DM suites + parents (2026-08) |
+| [`../archive/completed-2026-08-mid/`](../archive/completed-2026-08-mid/README.md) | amu/coh/p2–p4/dogfood/grammar/MCP expansion (2026-08) |
+| [`../archive/domainmodeling-completed-2026-08/`](../archive/domainmodeling-completed-2026-08/README.md) | apm/das/dacr/dar/dau/spe/qe/vs |
 | [`../archive/infrastructure-pass/`](../archive/infrastructure-pass/README.md) | Infra suite design + `ip-*` tasks + review trail |
 | [`../archive/v2-to-v3-migration/`](../archive/v2-to-v3-migration/README.md) | Migration micro-tasks / workstreams |
 | [`../archive/interpretation/`](../archive/interpretation/README.md) | Superseded Interpretation plans |

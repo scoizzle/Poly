@@ -28,14 +28,15 @@ Architectural rationale → **`docs/decisions/`**. Module maps → **`Poly/*/REA
 
 | Suite | README | Plan | Status |
 |-------|--------|------|--------|
-| **mcp-minify** | [`mcp-minify-README.md`](simple-agent-tasks/mcp-minify-README.md) | [`mcp-catalog-minify.md`](mcp-catalog-minify.md) | Ready — admit |
-| **mut-safety** | [`mut-safety-README.md`](simple-agent-tasks/mut-safety-README.md) | [`mcp-mutation-safety.md`](mcp-mutation-safety.md) | Ready — admit |
-| **p1** temporal | [`p1-README.md`](simple-agent-tasks/p1-README.md) | [`p1-temporal-design-lock.md`](p1-temporal-design-lock.md) | Ready — admit (after GI/E1) |
+| **gpure** | [`gpure-README.md`](simple-agent-tasks/gpure-README.md) | [`grammar-pure-end-state.md`](grammar-pure-end-state.md) | Ready — **prefer CURRENT** (finish pure Grammar) |
+| **mcp-minify** | [`mcp-minify-README.md`](simple-agent-tasks/mcp-minify-README.md) | [`mcp-catalog-minify.md`](mcp-catalog-minify.md) | Ready — after gpure |
+| **mut-safety** | [`mut-safety-README.md`](simple-agent-tasks/mut-safety-README.md) | [`mcp-mutation-safety.md`](mcp-mutation-safety.md) | Ready — after minify |
+| **p1** temporal | [`p1-README.md`](simple-agent-tasks/p1-README.md) | [`p1-temporal-design-lock.md`](p1-temporal-design-lock.md) | Ready — after pure/minify as preferred |
 
-**Suggested order:** mcp-minify → mut-safety → p1.
+**Suggested order:** **gpure** → mcp-minify → mut-safety → p1.
 
 ```bash
-copilot --agent plan-suite-until-done -p "Suite: mcp-minify. Mode: until-done."
+copilot --agent plan-suite-until-done -p "Suite: gpure. Mode: until-done."
 ```
 
 **CURRENT:** see master-roadmap (default none until admit).
@@ -46,6 +47,7 @@ copilot --agent plan-suite-until-done -p "Suite: mcp-minify. Mode: until-done."
 
 | Doc | Role |
 |-----|------|
+| [`grammar-pure-end-state.md`](grammar-pure-end-state.md) · **[`gpure-*`](simple-agent-tasks/gpure-README.md)** | Pure Grammar target + suite |
 | [`customer-trust-proof-map.md`](customer-trust-proof-map.md) | Trust claim → proof index |
 | [`instance-commit-and-outbox-design-lock.md`](instance-commit-and-outbox-design-lock.md) | Durability / outbox vocabulary |
 | [`p1-temporal-research.md`](p1-temporal-research.md) | Temporal research (suite is p1-*) |

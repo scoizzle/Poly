@@ -13,7 +13,7 @@
 |---------------|-------------:|----------------------|--------------|----------------|
 | **`Poly/Validation/`** | ~501 | **None** outside itself | **None** (all test files fully commented out) | **Delete candidate** (or quarantine + un-place from AGENTS) |
 | **`Poly/Text/`** (all) | ~2993 | **None** in DomainModeling / Grammar / Interpretation / Mcp / Ast | **None** in Poly.Tests | **Split:** Matching ≈ dead dual of Grammar; StringView/Parsers need keep/move decision |
-| **`Poly/Text/Matching/`** | (subset of Text) | None | Benchmarks only | **Delete / extract** — superseded by `Poly/Grammar` for product media |
+| **`Poly/Text/Matching/`** | (subset of Text) | None | Benchmarks only | **Delete / extract** — superseded by `Poly/Grammar` for product media. **Not** required to rebuild in [`grammar-revision.md`](grammar-revision.md) tier A (rebuild optional later / greedy-only; `*abc` needs Capture) |
 | **LINQ path** (`LinqExpressionGenerator` + `PolicyEvaluator.CompileLinq*`) | large | Product path is **VM**; LINQ is oracle + Validation | Yes (parity / correctness) | **Keep** as secondary oracle until deliberate retirement |
 | **`DomainExpressionDispatch` / rewrite** | small | Live (printer, lower, runtime quantifier rewrite) | Yes | **Keep** — not a second evaluator |
 | **`CSharpGenerator` / Mermaid** | generators | Export / tooling / tests | Yes | **Keep** — not evaluators of domain policy |

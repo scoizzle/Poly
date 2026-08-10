@@ -1,18 +1,18 @@
 namespace Poly.Grammar;
 
 /// <summary>
-/// A named pattern: a sequence of <see cref="IPatternElement{TKind}"/> that
-/// describes a valid construct in the grammar. Patterns are registered under
-/// named rules in a <see cref="Grammar{TKind}"/> and matched by <see cref="Matcher{TKind}"/>.
+/// A named pattern: an ordered sequence of elements describing a valid construct.
+/// Registered under named rules in a <see cref="Grammar{TToken,TTokenKind}"/> and
+/// matched by <see cref="Matcher{TToken,TTokenKind}"/>.
 /// </summary>
-public sealed class Pattern<TKind> where TKind : struct {
-    /// <summary>Descriptive name used in match results and error messages.</summary>
+public sealed class Pattern<TToken, TTokenKind>
+    where TToken : struct, IToken<TTokenKind>
+    where TTokenKind : struct {
     public string Name { get; }
 
-    /// <summary>The ordered sequence of elements this pattern matches.</summary>
-    public IReadOnlyList<IPatternElement<TKind>> Elements { get; }
+    public IReadOnlyList<IPatternElement<TToken, TTokenKind>> Elements { get; }
 
-    public Pattern(string name, IReadOnlyList<IPatternElement<TKind>> elements) {
+    public Pattern(string name, IReadOnlyList<IPatternElement<TToken, TTokenKind>> elements) {
         Name = name ?? throw new ArgumentNullException(nameof(name));
         Elements = elements ?? throw new ArgumentNullException(nameof(elements));
     }

@@ -52,7 +52,7 @@ TFM: `net10.0`, nullable on, zero external dependencies in core `Poly/`.
 | **Introspection** | Platform-agnostic type/member model so Interpretation can **simulate any reasonable type system on any reasonable platform**; CLR is the first provider | Depending on Interpretation; baking one host into the core contract |
 | **DomainModeling** | Immutable `Domain`, evolution, `DomainExpression`, lower-to-AST; **stage transitions are the authorable observable** (no event/publish/subscribe surface — see `docs/decisions/2026-07-17-stage-transition-as-observable.md`) | Domain VM opcodes; tree rewrites outside analysis + node replacement |
 | **Validation** | **Dormant** `Rule` / `RuleSet` surface (no live product callers 2026-08-08 — see [`plans/dead-dual-inventory-2026-08-08.md`](plans/dead-dual-inventory-2026-08-08.md); delete candidate) | Owning the AST or VM; new product constraints (use DomainModeling constraints + domain analysis) |
-| **Grammar** | Pattern-table engine (`Poly/Grammar/`); media-agnostic `TokenReader`/`TokenWriter`/`Matcher`/`Printer` | Product DSL table/handlers (owned by DomainModeling); do not grow parallel pattern engines (`Poly.Text.Matching` is historical — see dead-dual inventory) |
+| **Grammar** | Pattern-table engine (`Poly/Grammar/`) — **language-shaped token streams**: the tokenizer owns decoding (`IToken<TTokenKind>` + `BufferedTokenReader.ScanNextToken`), the matcher owns recognition (`Matcher`, longest-match, `ITokenStreamReader` examine/consume), handlers own meaning; diagnostics positions are caller-owned | Product DSL table/handlers (owned by DomainModeling); do not grow parallel pattern engines (`Poly.Text.Matching` is historical — see dead-dual inventory) |
 | **DomainModeling (DSL)** | Product `.poly` surface: `DslTokenReader`, `DslGrammar` (+ product expr/effect **table + handlers** — parse control flow is Grammar-driven, gpure), `ExpressionFormRegistry` (E1 open forms), `DomainDslPrinter` (printer table-parity **deferred** — round-trip still walks the domain) | Replacing Grammar engine; dual legacy tokenizer (removed GI-7); re-introducing recursive-descent **language** in parsing |
 | **MCP (`Poly.Mcp`)** | Session store, tools, tool honesty | Domain mutation semantics; claiming capabilities the core does not have |
 | **Synthesis** | Macros (VM validates) | Reverse deps from Interpretation |
@@ -197,6 +197,7 @@ Module README: `Poly/Introspection/README.md`.
 
 | Need | Open |
 |------|------|
+| Facet map + complexity demons | [`docs/complexity-semantic-map.md`](complexity-semantic-map.md) |
 | Principles (values) | `AGENTS.md` + `docs/decisions/2026-core-engineering-principles.md` |
 | Trust bar + first-customer strategy (T1–T3; product via domain + modules) | [`docs/decisions/2026-07-11-platform-trust-bar-and-dogfood.md`](decisions/2026-07-11-platform-trust-bar-and-dogfood.md) |
 | Why of a major choice | `docs/decisions/README.md` |

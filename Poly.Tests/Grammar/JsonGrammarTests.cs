@@ -4,8 +4,8 @@ using Poly.Grammar;
 
 namespace Poly.Tests.Grammar;
 
-// ─── JSON token kind ───────────────────────────────────────
-enum JsonKind {
+// ─── JSON token kind + tokenizer ──
+public enum JsonKind {
     EndOfFile,
     String,
     Number,
@@ -20,119 +20,108 @@ enum JsonKind {
     Comma,
 }
 
-// ─── JSON tokenizer over StringTokenReader ─────────────────
-sealed class JsonTokenizer : StringTokenReader<JsonKind> {
+public readonly record struct JsonToken(JsonKind Kind, string Text) : IToken<JsonKind>;
+
+public sealed class JsonTokenizer : BufferedTokenReader<JsonToken, JsonKind> {
     private static readonly Dictionary<string, JsonKind> _keywords = new(StringComparer.Ordinal) {
         ["true"] = JsonKind.True,
         ["false"] = JsonKind.False,
         ["null"] = JsonKind.Null,
     };
 
-    public JsonTokenizer(string text) : base(text) { }
+    private readonly string _text;
+    private int _pos;
 
-    public override bool IsEndOfFile(JsonKind kind) => kind == JsonKind.EndOfFile;
+    public JsonTokenizer(string text) => _text = text;
 
-    protected override Token<JsonKind> ScanNextToken() {
+    public override bool EndOfStream(JsonKind kind) => kind == JsonKind.EndOfFile;
+
+    protected override JsonToken ScanNextToken() {
         SkipWhitespace();
-        if (Position >= Text.Length)
-            return MakeToken(JsonKind.EndOfFile, "");
+        if (_pos >= _text.Length)
+            return new JsonToken(JsonKind.EndOfFile, "");
 
-        var ch = Text[Position];
+        var ch = _text[_pos];
 
-        // Single-char tokens
         if (ch is '{' or '}' or '[' or ']' or ':' or ',') {
-            AdvanceChar();
+            _pos++;
             return ch switch {
-                '{' => MakeToken(JsonKind.LBrace, "{"),
-                '}' => MakeToken(JsonKind.RBrace, "}"),
-                '[' => MakeToken(JsonKind.LBracket, "["),
-                ']' => MakeToken(JsonKind.RBracket, "]"),
-                ':' => MakeToken(JsonKind.Colon, ":"),
-                ',' => MakeToken(JsonKind.Comma, ","),
-                _ => MakeToken(JsonKind.String, ch.ToString()),
+                '{' => new JsonToken(JsonKind.LBrace, "{"),
+                '}' => new JsonToken(JsonKind.RBrace, "}"),
+                '[' => new JsonToken(JsonKind.LBracket, "["),
+                ']' => new JsonToken(JsonKind.RBracket, "]"),
+                ':' => new JsonToken(JsonKind.Colon, ":"),
+                ',' => new JsonToken(JsonKind.Comma, ","),
+                _ => new JsonToken(JsonKind.String, ch.ToString()),
             };
         }
 
-        // String literals
         if (ch == '"') {
-            var startLine = Line;
-            var startCol = Column;
-            AdvanceChar(); // skip opening "
+            _pos++; // skip opening "
             var sb = new StringBuilder();
-            while (Position < Text.Length && Text[Position] != '"') {
-                if (Text[Position] == '\\' && Position + 1 < Text.Length) {
-                    sb.Append(AdvanceChar()); // backslash
-                    sb.Append(AdvanceChar()); // escaped char
+            while (_pos < _text.Length && _text[_pos] != '"') {
+                if (_text[_pos] == '\\' && _pos + 1 < _text.Length) {
+                    sb.Append(_text[_pos]);
+                    _pos++;
+                    sb.Append(_text[_pos]);
+                    _pos++;
                 }
                 else {
-                    sb.Append(AdvanceChar());
+                    sb.Append(_text[_pos]);
+                    _pos++;
                 }
             }
-            if (Position < Text.Length) AdvanceChar(); // skip closing "
-            return new Token<JsonKind>(JsonKind.String, sb.ToString(), startLine, startCol);
+            if (_pos < _text.Length) _pos++; // skip closing "
+            return new JsonToken(JsonKind.String, sb.ToString());
         }
 
-        // Numbers (integers and decimals)
         if (char.IsDigit(ch) || ch == '-') {
-            var startLine = Line;
-            var startCol = Column;
             var sb = new StringBuilder();
-            // optional minus
-            if (ch == '-') sb.Append(AdvanceChar());
-            // integer part
-            while (Position < Text.Length && char.IsDigit(Text[Position]))
-                sb.Append(AdvanceChar());
-            // optional fractional part
-            if (Position < Text.Length && Text[Position] == '.') {
-                sb.Append(AdvanceChar());
-                while (Position < Text.Length && char.IsDigit(Text[Position]))
-                    sb.Append(AdvanceChar());
+            if (ch == '-') { sb.Append(_text[_pos]); _pos++; }
+            while (_pos < _text.Length && char.IsDigit(_text[_pos])) { sb.Append(_text[_pos]); _pos++; }
+            if (_pos < _text.Length && _text[_pos] == '.') {
+                sb.Append(_text[_pos]); _pos++;
+                while (_pos < _text.Length && char.IsDigit(_text[_pos])) { sb.Append(_text[_pos]); _pos++; }
             }
-            return new Token<JsonKind>(JsonKind.Number, sb.ToString(), startLine, startCol);
+            return new JsonToken(JsonKind.Number, sb.ToString());
         }
 
-        // Identifiers / keywords
         if (char.IsLetter(ch) || ch == '_') {
-            var startLine = Line;
-            var startCol = Column;
             var sb = new StringBuilder();
-            while (Position < Text.Length && (char.IsLetterOrDigit(Text[Position]) || Text[Position] == '_'))
-                sb.Append(AdvanceChar());
+            while (_pos < _text.Length && (char.IsLetterOrDigit(_text[_pos]) || _text[_pos] == '_')) {
+                sb.Append(_text[_pos]);
+                _pos++;
+            }
             var word = sb.ToString();
-            var kind = _keywords.TryGetValue(word, out var k) ? k : JsonKind.String; // treat unknown as string
-            return new Token<JsonKind>(kind, word, startLine, startCol);
+            var kind = _keywords.TryGetValue(word, out var k) ? k : JsonKind.String;
+            return new JsonToken(kind, word);
         }
 
-        throw new GrammarException($"Unexpected character '{ch}' in JSON", Line, Column);
+        throw GrammarError.Error($"Unexpected character '{ch}' in JSON");
+    }
+
+    private void SkipWhitespace() {
+        while (_pos < _text.Length && char.IsWhiteSpace(_text[_pos])) _pos++;
     }
 }
 
-// ─── Tests ─────────────────────────────────────────────────
-
 public sealed class JsonGrammarTests {
-    private static Grammar<JsonKind> JsonValueGrammar() {
-        var g = new Grammar<JsonKind>();
+    private static Grammar<JsonToken, JsonKind> JsonValueGrammar() {
+        var g = new Grammar<JsonToken, JsonKind>();
         g.Define("value")
-            .Pattern("string").Token(JsonKind.String).Commit()
-            .Pattern("number").Token(JsonKind.Number).Commit()
-            .Pattern("true").Token(JsonKind.True).Commit()
-            .Pattern("false").Token(JsonKind.False).Commit()
-            .Pattern("null").Token(JsonKind.Null).Commit()
-            // Balanced already consumes both delimiters: no extra Token() calls needed
+            .Pattern("string").Kind(JsonKind.String).Commit()
+            .Pattern("number").Kind(JsonKind.Number).Commit()
+            .Pattern("true").Kind(JsonKind.True).Commit()
+            .Pattern("false").Kind(JsonKind.False).Commit()
+            .Pattern("null").Kind(JsonKind.Null).Commit()
             .Pattern("object").Balanced(JsonKind.LBrace, JsonKind.RBrace).Commit()
             .Pattern("array").Balanced(JsonKind.LBracket, JsonKind.RBracket).Commit();
         return g;
     }
 
-    // ═══════════════════════════════════════════════════════════
-    //  1. String value
-    // ═══════════════════════════════════════════════════════════
     [Test]
     public async Task StringValue() {
-        var g = JsonValueGrammar();
-        var reader = new JsonTokenizer(@"""hello world""");
-        var matcher = new Matcher<JsonKind>(g, reader);
-
+        var matcher = new Matcher<JsonToken, JsonKind>(JsonValueGrammar(), new JsonTokenizer(@"""hello world"""));
         var result = matcher.TryMatch("value");
         await Assert.That(result).IsNotNull();
         await Assert.That(result!.PatternName).IsEqualTo("string");
@@ -141,14 +130,9 @@ public sealed class JsonGrammarTests {
         await Assert.That(result.Tokens[0].Text).IsEqualTo("hello world");
     }
 
-    // ═══════════════════════════════════════════════════════════
-    //  2. Number value (integer and decimal)
-    // ═══════════════════════════════════════════════════════════
     [Test]
     public async Task NumberValue() {
-        var g = JsonValueGrammar();
-        var matcher = new Matcher<JsonKind>(g, new JsonTokenizer("42"));
-
+        var matcher = new Matcher<JsonToken, JsonKind>(JsonValueGrammar(), new JsonTokenizer("42"));
         var result = matcher.TryMatch("value");
         await Assert.That(result).IsNotNull();
         await Assert.That(result!.PatternName).IsEqualTo("number");
@@ -157,9 +141,7 @@ public sealed class JsonGrammarTests {
 
     [Test]
     public async Task DecimalValue() {
-        var g = JsonValueGrammar();
-        var matcher = new Matcher<JsonKind>(g, new JsonTokenizer("3.14"));
-
+        var matcher = new Matcher<JsonToken, JsonKind>(JsonValueGrammar(), new JsonTokenizer("3.14"));
         var result = matcher.TryMatch("value");
         await Assert.That(result).IsNotNull();
         await Assert.That(result!.PatternName).IsEqualTo("number");
@@ -168,18 +150,13 @@ public sealed class JsonGrammarTests {
 
     [Test]
     public async Task NegativeNumber() {
-        var g = JsonValueGrammar();
-        var matcher = new Matcher<JsonKind>(g, new JsonTokenizer("-7"));
-
+        var matcher = new Matcher<JsonToken, JsonKind>(JsonValueGrammar(), new JsonTokenizer("-7"));
         var result = matcher.TryMatch("value");
         await Assert.That(result).IsNotNull();
         await Assert.That(result!.PatternName).IsEqualTo("number");
         await Assert.That(result.Tokens[0].Text).IsEqualTo("-7");
     }
 
-    // ═══════════════════════════════════════════════════════════
-    //  3. Boolean and null keywords
-    // ═══════════════════════════════════════════════════════════
     [Test]
     public async Task BooleanAndNullValues() {
         var g = JsonValueGrammar();
@@ -188,7 +165,7 @@ public sealed class JsonGrammarTests {
             ("false", "false", JsonKind.False),
             ("null",  "null",  JsonKind.Null),
         }) {
-            var matcher = new Matcher<JsonKind>(g, new JsonTokenizer(input));
+            var matcher = new Matcher<JsonToken, JsonKind>(g, new JsonTokenizer(input));
             var result = matcher.TryMatch("value");
             await Assert.That(result).IsNotNull().Because($"Expected match for '{input}'");
             await Assert.That(result!.PatternName).IsEqualTo(expectedPattern);
@@ -196,63 +173,38 @@ public sealed class JsonGrammarTests {
         }
     }
 
-    // ═══════════════════════════════════════════════════════════
-    //  4. Empty object
-    // ═══════════════════════════════════════════════════════════
     [Test]
     public async Task EmptyObject() {
-        var g = JsonValueGrammar();
-        var matcher = new Matcher<JsonKind>(g, new JsonTokenizer("{}"));
-
+        var matcher = new Matcher<JsonToken, JsonKind>(JsonValueGrammar(), new JsonTokenizer("{}"));
         var result = matcher.TryMatch("value");
         await Assert.That(result).IsNotNull();
         await Assert.That(result!.PatternName).IsEqualTo("object");
-        // Balanced consumes { } = 2 tokens (open + close)
         await Assert.That(result.Consumed).IsEqualTo(2);
         await Assert.That(result.Tokens[0].Kind).IsEqualTo(JsonKind.LBrace);
         await Assert.That(result.Tokens[1].Kind).IsEqualTo(JsonKind.RBrace);
     }
 
-    // ═══════════════════════════════════════════════════════════
-    //  5. Object with content
-    // ═══════════════════════════════════════════════════════════
     [Test]
     public async Task ObjectWithContent() {
-        var g = JsonValueGrammar();
-        var reader = new JsonTokenizer(@"{""name"": ""hello""}");
-        var matcher = new Matcher<JsonKind>(g, reader);
-
+        var matcher = new Matcher<JsonToken, JsonKind>(JsonValueGrammar(), new JsonTokenizer(@"{""name"": ""hello""}"));
         var result = matcher.TryMatch("value");
         await Assert.That(result).IsNotNull();
         await Assert.That(result!.PatternName).IsEqualTo("object");
-        // Balanced consumes { "name" : "hello" } = 5 tokens (open + 3 content + close)
         await Assert.That(result.Consumed).IsEqualTo(5);
     }
 
-    // ═══════════════════════════════════════════════════════════
-    //  6. Nested structure: object containing array
-    // ═══════════════════════════════════════════════════════════
     [Test]
     public async Task NestedObjectWithArray() {
-        var g = JsonValueGrammar();
-        var reader = new JsonTokenizer(@"{""items"": [1, 2, 3]}");
-        var matcher = new Matcher<JsonKind>(g, reader);
-
+        var matcher = new Matcher<JsonToken, JsonKind>(JsonValueGrammar(), new JsonTokenizer(@"{""items"": [1, 2, 3]}"));
         var result = matcher.TryMatch("value");
         await Assert.That(result).IsNotNull();
         await Assert.That(result!.PatternName).IsEqualTo("object");
-        // Balanced consumes { "items" : [ 1 , 2 , 3 ] } = 11 tokens
         await Assert.That(result.Consumed).IsEqualTo(11);
     }
 
-    // ═══════════════════════════════════════════════════════════
-    //  7. Empty array
-    // ═══════════════════════════════════════════════════════════
     [Test]
     public async Task EmptyArray() {
-        var g = JsonValueGrammar();
-        var matcher = new Matcher<JsonKind>(g, new JsonTokenizer("[]"));
-
+        var matcher = new Matcher<JsonToken, JsonKind>(JsonValueGrammar(), new JsonTokenizer("[]"));
         var result = matcher.TryMatch("value");
         await Assert.That(result).IsNotNull();
         await Assert.That(result!.PatternName).IsEqualTo("array");
@@ -260,27 +212,15 @@ public sealed class JsonGrammarTests {
         await Assert.That(result.Tokens[0].Kind).IsEqualTo(JsonKind.LBracket);
     }
 
-    // ═══════════════════════════════════════════════════════════
-    //  8. Array with elements
-    // ═══════════════════════════════════════════════════════════
     [Test]
     public async Task ArrayWithElements() {
-        var g = JsonValueGrammar();
-        var reader = new JsonTokenizer(@"[1, ""two"", true]");
-        var matcher = new Matcher<JsonKind>(g, reader);
-
+        var matcher = new Matcher<JsonToken, JsonKind>(JsonValueGrammar(), new JsonTokenizer(@"[1, ""two"", true]"));
         var result = matcher.TryMatch("value");
         await Assert.That(result).IsNotNull();
         await Assert.That(result!.PatternName).IsEqualTo("array");
-        // Balanced [ 1 , "two" , true ] = 7 tokens
         await Assert.That(result.Consumed).IsEqualTo(7);
     }
 
-    // ═══════════════════════════════════════════════════════════
-    //  9. Longest match: object wins over empty object pattern…
-    //     Actually all value patterns have distinct first tokens, so
-    //     no ambiguity. But we verify the dispatch is correct.
-    // ═══════════════════════════════════════════════════════════
     [Test]
     public async Task DistinctFirstTokens_DispatchesCorrectly() {
         var g = JsonValueGrammar();
@@ -293,121 +233,62 @@ public sealed class JsonGrammarTests {
             ["{}"] = "object",
             ["[]"] = "array",
         };
-
         foreach (var (input, expected) in inputs) {
-            var matcher = new Matcher<JsonKind>(g, new JsonTokenizer(input));
+            var matcher = new Matcher<JsonToken, JsonKind>(g, new JsonTokenizer(input));
             var result = matcher.TryMatch("value");
             await Assert.That(result).IsNotNull();
             await Assert.That(result!.PatternName).IsEqualTo(expected);
         }
     }
 
-    // ═══════════════════════════════════════════════════════════
-    //  10. No match for invalid JSON
-    // ═══════════════════════════════════════════════════════════
     [Test]
     public async Task NoMatch_ForInvalidInput() {
-        var g = JsonValueGrammar();
-        // A bare keyword-like word that doesn't match any known token is
-        // tokenized as String (the fallback), which DOES match the string
-        // pattern. So instead test with an empty input meaning no value.
-        var matcher = new Matcher<JsonKind>(g, new JsonTokenizer(""));
+        var matcher = new Matcher<JsonToken, JsonKind>(JsonValueGrammar(), new JsonTokenizer(""));
         var result = matcher.TryMatch("value");
         await Assert.That(result).IsNull();
     }
 
-    // ═══════════════════════════════════════════════════════════
-    //  11. Expected tokens introspection
-    // ═══════════════════════════════════════════════════════════
-    [Test]
-    public async Task ExpectedTokens_ReturnsAllValueStarters() {
-        var g = JsonValueGrammar();
-        var matcher = new Matcher<JsonKind>(g, new JsonTokenizer(""));
-        var expected = matcher.ExpectedTokens("value").OrderBy(k => k.ToString()).ToList();
-
-        // Balanced and AnyToken elements don't contribute to ExpectedTokens
-        // (only MatchToken first-elements are reported). The object and array
-        // patterns start with Balanced, so they don't appear here.
-        await Assert.That(expected.Count).IsEqualTo(5);
-        await Assert.That(expected).Contains(JsonKind.String);
-        await Assert.That(expected).Contains(JsonKind.Number);
-        await Assert.That(expected).Contains(JsonKind.True);
-        await Assert.That(expected).Contains(JsonKind.False);
-        await Assert.That(expected).Contains(JsonKind.Null);
-    }
-
-    // ═══════════════════════════════════════════════════════════
-    //  12. Scan loop: top-level values
-    // ═══════════════════════════════════════════════════════════
     [Test]
     public async Task ScanLoop_TopLevelValues() {
         var g = JsonValueGrammar();
         var reader = new JsonTokenizer(@"""a"" 42 true null");
-        var matcher = new Matcher<JsonKind>(g, reader);
+        var matcher = new Matcher<JsonToken, JsonKind>(g, reader);
 
         var patterns = new List<string>();
         while (true) {
             var result = matcher.TryMatch("value");
             if (result == null) break;
             patterns.Add(result.PatternName);
-            matcher.Consume(result);
+            reader.Consume(result.Consumed);
         }
-
         await Assert.That(patterns).IsEquivalentTo(["string", "number", "true", "null"]);
     }
 
-    // ═══════════════════════════════════════════════════════════
-    //  13. Balanced tracks nesting depth — not a flat counter
-    // ═══════════════════════════════════════════════════════════
     [Test]
     public async Task Balanced_TracksNestingDepth() {
-        var g = JsonValueGrammar();
-        // Array nested inside object — Balanced(LBrace,RBrace) must not
-        // stop at the first RBrace (which closes the inner array's bracket).
-        // It tracks only matching delimiter pairs.
-        var reader = new JsonTokenizer(@"{""a"": [1, 2]}");
-        var matcher = new Matcher<JsonKind>(g, reader);
-
+        var matcher = new Matcher<JsonToken, JsonKind>(JsonValueGrammar(), new JsonTokenizer(@"{""a"": [1, 2]}"));
         var result = matcher.TryMatch("value");
         await Assert.That(result).IsNotNull();
         await Assert.That(result!.PatternName).IsEqualTo("object");
-        // Balanced consumes { "a" : [ 1 , 2 ] } = 9 tokens
-        // The inner RBracket (] ) does NOT decrement the { } depth counter.
         await Assert.That(result.Consumed).IsEqualTo(9);
         var braces = result.Tokens.Where(t => t.Kind is JsonKind.LBrace or JsonKind.RBrace).ToList();
-        await Assert.That(braces.Count).IsEqualTo(2); // only { }
+        await Assert.That(braces.Count).IsEqualTo(2);
     }
 
-    // ═══════════════════════════════════════════════════════════
-    //  14. Object in object — nested braces depth counting
-    // ═══════════════════════════════════════════════════════════
     [Test]
     public async Task Balanced_ObjectWithNestedBraces() {
-        var g = JsonValueGrammar();
-        var reader = new JsonTokenizer(@"{""a"": {""b"": 1}}");
-        var matcher = new Matcher<JsonKind>(g, reader);
-
+        var matcher = new Matcher<JsonToken, JsonKind>(JsonValueGrammar(), new JsonTokenizer(@"{""a"": {""b"": 1}}"));
         var result = matcher.TryMatch("value");
         await Assert.That(result).IsNotNull();
         await Assert.That(result!.PatternName).IsEqualTo("object");
-        // Balanced consumes from first { through the final } counting nesting
-        // = 9 tokens
         await Assert.That(result.Consumed).IsEqualTo(9);
-        // Verify both inner and outer braces were consumed
         var braces = result.Tokens.Where(t => t.Kind is JsonKind.LBrace or JsonKind.RBrace).ToList();
-        await Assert.That(braces.Count).IsEqualTo(4); // { { } }
+        await Assert.That(braces.Count).IsEqualTo(4);
     }
 
-    // ═══════════════════════════════════════════════════════════
-    //  15. Fail-closed: unmatched close brace
-    // ═══════════════════════════════════════════════════════════
     [Test]
     public async Task Balanced_UnmatchedClose_DoesNotMatch() {
-        var g = JsonValueGrammar();
-        // A bare } is not a valid object start
-        var reader = new JsonTokenizer("}");
-        var matcher = new Matcher<JsonKind>(g, reader);
-
+        var matcher = new Matcher<JsonToken, JsonKind>(JsonValueGrammar(), new JsonTokenizer("}"));
         var result = matcher.TryMatch("value");
         await Assert.That(result).IsNull();
     }

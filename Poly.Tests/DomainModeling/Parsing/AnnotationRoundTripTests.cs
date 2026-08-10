@@ -1,12 +1,19 @@
 using Poly.DomainModeling;
 using Poly.DomainModeling.Evolution;
-using Poly.DomainModeling.Parsing;
+using Poly.DomainModeling.Parsing;      // DomainDslPrinter (v1 domain-walk print)
+                                        // PolyDslParser
+
 
 namespace Poly.Tests.DomainModeling.Parsing;
 
 public class AnnotationRoundTripTests {
-    private static DomainInputSet CreateTestContext() =>
-        DomainInputBuilder.CreateWithSqlPack().Build();
+    private static DomainParserInputs CreateTestContext() =>
+        DomainInputBuilder.CreateWithSqlPack().BuildParserInputs();
+
+    // Print path is unchanged v1 machinery (DomainDslPrinter walks the domain);
+    // it needs the v1 annotation registry. Same SQL-pack handlers, v1 registry.
+    private static AnnotationRegistry PrintAnnotations =>
+        DomainInputSet.Sql.Parser.Annotations;
 
     [Test]
     public async Task ColumnAnnotation_ParsePrint_RoundTrips() {
@@ -20,7 +27,7 @@ public class AnnotationRoundTripTests {
             """;
 
         var ctx = CreateTestContext();
-        var parser = new PolyDslParser(poly, ctx.Parser);
+        var parser = new PolyDslParser(poly, ctx);
         var changes = parser.Parse();
         var result = new DomainEvolution(new Domain("_", [], [])).Apply(changes);
         await Assert.That(result.Succeeded).IsTrue();
@@ -33,12 +40,12 @@ public class AnnotationRoundTripTests {
         await Assert.That(ann.Name).IsEqualTo("column");
         await Assert.That(((AnnotationString)ann.Arguments["0"]).Value).IsEqualTo("CODE");
 
-        var printer = new DomainDslPrinter(ctx.Parser.Annotations);
+        var printer = new DomainDslPrinter(PrintAnnotations);
         var printed = printer.Print(result.Root);
         await Assert.That(printed.Contains("column(\"CODE\")")).IsTrue();
         await Assert.That(printed.Contains("column(\"NAME\", \"VARCHAR2(50)\")")).IsTrue();
 
-        var parser2 = new PolyDslParser(printed, ctx.Parser);
+        var parser2 = new PolyDslParser(printed, ctx);
         var changes2 = parser2.Parse();
         var result2 = new DomainEvolution(new Domain("_", [], [])).Apply(changes2);
         await Assert.That(result2.Succeeded).IsTrue();
@@ -57,7 +64,7 @@ public class AnnotationRoundTripTests {
             """;
 
         var ctx = CreateTestContext();
-        var parser = new PolyDslParser(poly, ctx.Parser);
+        var parser = new PolyDslParser(poly, ctx);
         var changes = parser.Parse();
         var result = new DomainEvolution(new Domain("_", [], [])).Apply(changes);
         await Assert.That(result.Succeeded).IsTrue();
@@ -68,11 +75,11 @@ public class AnnotationRoundTripTests {
         await Assert.That(ann.Name).IsEqualTo("table");
         await Assert.That(((AnnotationString)ann.Arguments["0"]).Value).IsEqualTo("ORDER_RECORDS");
 
-        var printer = new DomainDslPrinter(ctx.Parser.Annotations);
+        var printer = new DomainDslPrinter(PrintAnnotations);
         var printed = printer.Print(result.Root);
         await Assert.That(printed.Contains("table(\"ORDER_RECORDS\")")).IsTrue();
 
-        var parser2 = new PolyDslParser(printed, ctx.Parser);
+        var parser2 = new PolyDslParser(printed, ctx);
         var changes2 = parser2.Parse();
         var result2 = new DomainEvolution(new Domain("_", [], [])).Apply(changes2);
         await Assert.That(result2.Succeeded).IsTrue();
@@ -91,17 +98,17 @@ public class AnnotationRoundTripTests {
             """;
 
         var ctx = CreateTestContext();
-        var parser = new PolyDslParser(poly, ctx.Parser);
+        var parser = new PolyDslParser(poly, ctx);
         var changes = parser.Parse();
         var result = new DomainEvolution(new Domain("_", [], [])).Apply(changes);
         await Assert.That(result.Succeeded).IsTrue();
 
-        var printer = new DomainDslPrinter(ctx.Parser.Annotations);
+        var printer = new DomainDslPrinter(PrintAnnotations);
         var printed = printer.Print(result.Root);
         await Assert.That(printed.Contains("table(\"PATRON_MASTER\")")).IsTrue();
         await Assert.That(printed.Contains("column(\"CARD_NBR\", \"VARCHAR2(20)\")")).IsTrue();
 
-        var parser2 = new PolyDslParser(printed, ctx.Parser);
+        var parser2 = new PolyDslParser(printed, ctx);
         var changes2 = parser2.Parse();
         var result2 = new DomainEvolution(new Domain("_", [], [])).Apply(changes2);
         await Assert.That(result2.Succeeded).IsTrue();
@@ -133,7 +140,7 @@ public class AnnotationRoundTripTests {
             """;
 
         var ctx = CreateTestContext();
-        var parser = new PolyDslParser(poly, ctx.Parser);
+        var parser = new PolyDslParser(poly, ctx);
         var result = new DomainEvolution(new Domain("_", [], [])).Apply(parser.Parse());
         await Assert.That(result.Succeeded).IsTrue();
 
@@ -173,7 +180,7 @@ public class AnnotationRoundTripTests {
             """;
 
         var ctx = CreateTestContext();
-        var parser = new PolyDslParser(poly, ctx.Parser);
+        var parser = new PolyDslParser(poly, ctx);
         var result = new DomainEvolution(new Domain("_", [], [])).Apply(parser.Parse());
         await Assert.That(result.Succeeded).IsTrue();
 
@@ -182,7 +189,7 @@ public class AnnotationRoundTripTests {
         await Assert.That(state.Facets.Count).IsEqualTo(1);
         await Assert.That(((Annotation)state.Facets[0]).Name).IsEqualTo("column");
 
-        var printed = new DomainDslPrinter(ctx.Parser.Annotations).Print(result.Root);
+        var printed = new DomainDslPrinter(PrintAnnotations).Print(result.Root);
         await Assert.That(printed.Contains("State: Status column(\"STATE_CD\")")).IsTrue();
     }
 
@@ -197,7 +204,7 @@ public class AnnotationRoundTripTests {
             """;
 
         var ctx = CreateTestContext();
-        var parser = new PolyDslParser(poly, ctx.Parser);
+        var parser = new PolyDslParser(poly, ctx);
         var ex = Assert.Throws<FormatException>(() => parser.Parse());
         await Assert.That(ex!.Message).Contains("Trailing comma");
     }
@@ -213,7 +220,7 @@ public class AnnotationRoundTripTests {
             """;
 
         var ctx = CreateTestContext();
-        var parser = new PolyDslParser(poly, ctx.Parser);
+        var parser = new PolyDslParser(poly, ctx);
         var result = new DomainEvolution(new Domain("_", [], [])).Apply(parser.Parse());
         await Assert.That(result.Succeeded).IsTrue();
 
@@ -221,11 +228,11 @@ public class AnnotationRoundTripTests {
         var ann = (Annotation)note.Facets[0];
         await Assert.That(((AnnotationString)ann.Arguments["0"]).Value).IsEqualTo("COL_\"X\"");
 
-        var printed = new DomainDslPrinter(ctx.Parser.Annotations).Print(result.Root);
+        var printed = new DomainDslPrinter(PrintAnnotations).Print(result.Root);
         await Assert.That(printed.Contains("column(\"COL_\\\"X\\\"\")")).IsTrue();
 
         var result2 = new DomainEvolution(new Domain("_", [], []))
-            .Apply(new PolyDslParser(printed, ctx.Parser).Parse());
+            .Apply(new PolyDslParser(printed, ctx).Parse());
         await Assert.That(result2.Succeeded).IsTrue();
         var note2 = result2.Root!.Types.OfType<Entity>().Single().Properties.Single();
         await Assert.That(((AnnotationString)((Annotation)note2.Facets[0]).Arguments["0"]).Value)
@@ -286,7 +293,7 @@ public class AnnotationRoundTripTests {
         ], []);
 
         var ctx = CreateTestContext();
-        var ex = Assert.Throws<FormatException>(() => new DomainDslPrinter(ctx.Parser.Annotations).Print(domain));
+        var ex = Assert.Throws<FormatException>(() => new DomainDslPrinter(PrintAnnotations).Print(domain));
         await Assert.That(ex!.Message).Contains("no pack registered");
     }
 
@@ -296,7 +303,7 @@ public class AnnotationRoundTripTests {
         var parser = new PolyDslParser("""
             domain Test
             Item: entity { Code: Text }
-            """, ctx.Parser);
+            """, ctx);
         var result = new DomainEvolution(new Domain("_", [], [])).Apply(parser.Parse());
         await Assert.That(result.Succeeded).IsTrue();
 
@@ -317,7 +324,7 @@ public class AnnotationRoundTripTests {
         var parser = new PolyDslParser("""
             domain Test
             Order: entity { Total: Number }
-            """, ctx.Parser);
+            """, ctx);
         var result = new DomainEvolution(new Domain("_", [], [])).Apply(parser.Parse());
         await Assert.That(result.Succeeded).IsTrue();
 

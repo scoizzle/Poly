@@ -5,10 +5,6 @@ using Poly.DomainModeling.Effects;
 using Poly.DomainModeling.Evolution;
 using Poly.Grammar;
 
-using Token = Poly.Grammar.Token<Poly.DomainModeling.Parsing.DslTokenKind>;
-// GI-3: this file is ported onto the grammar engine. The legacy names are
-// aliased so the parse logic reads unchanged; GI-7 removes the legacy
-// enum/struct and these aliases.
 using TokenKind = Poly.DomainModeling.Parsing.DslTokenKind;
 
 namespace Poly.DomainModeling.Parsing;
@@ -16,10 +12,11 @@ namespace Poly.DomainModeling.Parsing;
 /// <summary>
 /// Grammar-table-driven parser for the product Poly DSL.
 /// Structure/annotations: Matcher over <see cref="DslGrammar"/>.
-/// Expressions: <see cref="DslExpressionParser"/> (E1 — open forms via
-/// <see cref="ExpressionFormRegistry"/>; precedence Pratt/RD layers).
+/// Expressions: <see cref="DslExpressionParser"/> (E1 open forms).
+/// Cursor mechanics (Current/Advance/Expect/MatchRule/Consume/Error) come from
+/// <see cref="DslCursor"/> — the reader owns the committed position.
 /// </summary>
-public sealed class PolyDslParser : DslParseCursorBase {
+public sealed class PolyDslParser : DslCursor {
     private readonly DslExpressionParser _expressions;
     private string _domainName = "";
     private int _entityIndex;
@@ -70,13 +67,11 @@ public sealed class PolyDslParser : DslParseCursorBase {
     }
 
     /// <summary>
-    /// Creates a parser with optional parser inputs for pack-aware parsing.
-    /// When a context is provided, its registered <see cref="IAnnotationSyntax"/> handlers
-    /// are consulted for property-tail and entity-header annotations; pack grammar
-    /// contributors are applied when building the session pattern table (GI-5).
+    /// Creates a parser with optional parser inputs (annotations + E1 forms).
+    /// Pack grammar contributors apply when building the table.
     /// </summary>
     public PolyDslParser(string text, DomainParserInputs? parserInputs)
-        : base(new DslTokenReader(text), r => new Matcher<DslTokenKind>(DslGrammar.Build(g => {
+        : base(new DslTokenReader(text), r => new Matcher<DslToken, DslTokenKind>(DslGrammar.Build(g => {
             parserInputs?.Annotations.ContributePatterns(g);
             parserInputs?.ExpressionForms.ContributeGrammarPatterns(g);
         }), r)) {
@@ -103,7 +98,7 @@ public sealed class PolyDslParser : DslParseCursorBase {
         // that reference them for property type resolution.
         // Dispatch is matcher-driven over the "top" rule; unmodeled shapes get
         // the same targeted diagnostics ParseEntity would produce.
-        while (_current.Kind == TokenKind.Identifier) {
+        while (Current.Kind == TokenKind.Identifier) {
             switch (MatchRule("top")?.PatternName) {
                 case "enum":
                     ParseEnumType(changes);
@@ -119,7 +114,7 @@ public sealed class PolyDslParser : DslParseCursorBase {
         // ── Resolve N1 navigation properties ───────────────────
         ResolvePendingNavs(changes);
 
-        if (_current.Kind == TokenKind.Relationship)
+        if (Current.Kind == TokenKind.Relationship)
             throw N2RelationshipNotSupported();
 
         Expect(TokenKind.EndOfFile);
@@ -157,7 +152,7 @@ public sealed class PolyDslParser : DslParseCursorBase {
         }
         if (LooksLikeAnnotationCall()) {
             throw Error(
-                $"Unknown or unregistered annotation '{_current.Text}'. " +
+                $"Unknown or unregistered annotation '{Current.Text}'. " +
                 "Enable a pack that registers this keyword, or remove the annotation.");
         }
 
@@ -165,8 +160,8 @@ public sealed class PolyDslParser : DslParseCursorBase {
 
         EnsurePrimitivesOnce(changes);
 
-        while (_current.Kind != TokenKind.RBrace) {
-            if (_current.Kind == TokenKind.Relationship) {
+        while (Current.Kind != TokenKind.RBrace) {
+            if (Current.Kind == TokenKind.Relationship) {
                 throw N2RelationshipNotSupported();
             }
 
@@ -204,8 +199,8 @@ public sealed class PolyDslParser : DslParseCursorBase {
                             var name = ExpectIdentifier(TokenKind.Identifier, "action name");
                             var actionParams = ParseActionParameterList();
                             Expect(TokenKind.Colon);
-                            if (_current.Kind is not (TokenKind.Action or TokenKind.LBrace or TokenKind.When or TokenKind.Require)) {
-                                throw Error($"Expected action after '{name}(...)', got '{_current.Text}'");
+                            if (Current.Kind is not (TokenKind.Action or TokenKind.LBrace or TokenKind.When or TokenKind.Require)) {
+                                throw Error($"Expected action after '{name}(...)', got '{Current.Text}'");
                             }
                             ParseActionBody(name, changes, stageName: null, actionParams);
                             continue;
@@ -216,7 +211,7 @@ public sealed class PolyDslParser : DslParseCursorBase {
                             // known enum names, mirroring the legacy IsNavLine dispatch.
                             var name = ExpectIdentifier(TokenKind.Identifier, "property name");
                             Expect(TokenKind.Colon);
-                            if (_enumTypeNames.Contains(_current.Text)) {
+                            if (_enumTypeNames.Contains(Current.Text)) {
                                 // Typed property referencing an enum type, with optional constraints/facets
                                 var typeName = ExpectIdentifier(TokenKind.Identifier, "enum type name");
                                 TrackPropertyName(_currentEntityName, name);
@@ -228,7 +223,7 @@ public sealed class PolyDslParser : DslParseCursorBase {
                                 ParseNavLine(name);
                             }
                             else {
-                                CheckUnsupportedKeyword(name, _current.Text);
+                                CheckUnsupportedKeyword(name, Current.Text);
                                 throw Error($"Expected type, stage, action, policy, or navigation property after '{name}:'");
                             }
                             continue;
@@ -237,7 +232,7 @@ public sealed class PolyDslParser : DslParseCursorBase {
                     case "property": {
                             var name = ExpectIdentifier(TokenKind.Identifier, "property name");
                             Expect(TokenKind.Colon);
-                            ParseProperty(name, _current.Kind, changes);
+                            ParseProperty(name, Current.Kind, changes);
                             continue;
                         }
 
@@ -252,14 +247,14 @@ public sealed class PolyDslParser : DslParseCursorBase {
 
                     case "primitive-name": {
                             // Primitive keyword used as property name (e.g. "Number: Text")
-                            var name = _current.Text;
+                            var name = Current.Text;
                             Advance(); // consume type keyword (e.g. 'Number')
                             Expect(TokenKind.Colon);
-                            if (IsPrimitiveType(_current.Kind)) {
-                                ParseProperty(name, _current.Kind, changes);
+                            if (IsPrimitiveType(Current.Kind)) {
+                                ParseProperty(name, Current.Kind, changes);
                             }
                             else {
-                                throw Error($"Expected type after '{name}:', got '{_current.Text}'");
+                                throw Error($"Expected type after '{name}:', got '{Current.Text}'");
                             }
                             continue;
                         }
@@ -269,21 +264,21 @@ public sealed class PolyDslParser : DslParseCursorBase {
             // Fallback: legacy action forms not modeled by the grammar table —
             // 'Name: { … }', 'Name: when …', 'Name: require …' (the printer no
             // longer emits these; kept for backward parse compatibility).
-            if (_current.Kind == TokenKind.Identifier && PeekIs(TokenKind.Colon)) {
-                var name = _current.Text;
+            if (Current.Kind == TokenKind.Identifier && PeekIs(TokenKind.Colon)) {
+                var name = Current.Text;
                 Advance(); // consume identifier
                 Expect(TokenKind.Colon);
-                if (_current.Kind is TokenKind.LBrace or TokenKind.When or TokenKind.Require) {
+                if (Current.Kind is TokenKind.LBrace or TokenKind.When or TokenKind.Require) {
                     ParseStandaloneAction(name, changes);
                 }
                 else {
-                    CheckUnsupportedKeyword(name, _current.Text);
+                    CheckUnsupportedKeyword(name, Current.Text);
                     throw Error($"Expected type, stage, action, policy, or navigation property after '{name}:'");
                 }
                 continue;
             }
 
-            throw Error($"Expected property, stage, action, or policy, got '{_current.Text}'");
+            throw Error($"Expected property, stage, action, or policy, got '{Current.Text}'");
         }
 
         Expect(TokenKind.RBrace);
@@ -356,9 +351,9 @@ public sealed class PolyDslParser : DslParseCursorBase {
     /// (identifier args / trailing <c>:</c>) is left for the entity body loop.
     /// </summary>
     private void ParsePropertyTail(string propertyName, List<DomainChange> changes) {
-        while (IsConstraint(_current.Kind)
-               || (_current.Kind == TokenKind.Identifier && PeekIs(TokenKind.LParen))) {
-            if (IsConstraint(_current.Kind)) {
+        while (IsConstraint(Current.Kind)
+               || (Current.Kind == TokenKind.Identifier && PeekIs(TokenKind.LParen))) {
+            if (IsConstraint(Current.Kind)) {
                 var constraint = ParseConstraint();
                 if (constraint is not null) {
                     changes.Add(new AddConstraintToPropertyChange(
@@ -378,7 +373,7 @@ public sealed class PolyDslParser : DslParseCursorBase {
             // not legacy action heads like Checkout(days: Number): action { … }.
             if (LooksLikeAnnotationCall()) {
                 throw Error(
-                    $"Unknown or unregistered annotation '{_current.Text}'. " +
+                    $"Unknown or unregistered annotation '{Current.Text}'. " +
                     "Enable a pack that registers this keyword, or remove the annotation.");
             }
 
@@ -393,10 +388,10 @@ public sealed class PolyDslParser : DslParseCursorBase {
     /// </summary>
     private bool TryParseRegisteredAnnotation(out Facet facet) {
         facet = null!;
-        if (_current.Kind != TokenKind.Identifier)
+        if (Current.Kind != TokenKind.Identifier)
             return false;
 
-        var keyword = _current.Text;
+        var keyword = Current.Text;
         if (_parserInputs?.Annotations.CanAccept(keyword) != true)
             return false;
 
@@ -414,10 +409,10 @@ public sealed class PolyDslParser : DslParseCursorBase {
     /// argument list (literals / empty), not a legacy action parameter list.
     /// </summary>
     private bool LooksLikeAnnotationCall() {
-        if (_current.Kind != TokenKind.Identifier || _tokenReader.Peek(1).Kind != TokenKind.LParen)
+        if (Current.Kind != TokenKind.Identifier || Peek(1).Kind != TokenKind.LParen)
             return false;
 
-        var firstArg = _tokenReader.Peek(2).Kind;
+        var firstArg = Peek(2).Kind;
         return firstArg is TokenKind.StringLiteral
             or TokenKind.Number
             or TokenKind.True
@@ -430,8 +425,8 @@ public sealed class PolyDslParser : DslParseCursorBase {
         Advance(); // consume 'stage'
 
         // P2′′′′.3: Clear error if someone tries the removed 'prev' keyword
-        if (_current.Kind == TokenKind.Identifier &&
-            string.Equals(_current.Text, "prev", StringComparison.Ordinal)) {
+        if (Current.Kind == TokenKind.Identifier &&
+            string.Equals(Current.Text, "prev", StringComparison.Ordinal)) {
             throw Error("'prev' is no longer supported. Stage hierarchy has been removed; all stages are flat.");
         }
 
@@ -442,17 +437,17 @@ public sealed class PolyDslParser : DslParseCursorBase {
         bool parsedEntry = false;
         bool parsedExit = false;
 
-        while (_current.Kind != TokenKind.RBrace) {
+        while (Current.Kind != TokenKind.RBrace) {
             var match = MatchRule("stage-body");
             if (match is not null) {
                 switch (match.PatternName) {
                     case "entry":
                         if (parsedEntry)
-                            throw Error($"'{_current.Text}' must appear at the beginning of the stage block, before actions and subscriptions.");
+                            throw Error($"'{Current.Text}' must appear at the beginning of the stage block, before actions and subscriptions.");
                         parsedEntry = true;
                         Advance(); // consume 'entry'
                         Expect(TokenKind.LBrace);
-                        while (_current.Kind != TokenKind.RBrace) {
+                        while (Current.Kind != TokenKind.RBrace) {
                             var effect = ParseEffect();
                             changes.Add(new AddOnEntryEffectToStageChange(_currentEntityName, name, effect));
                         }
@@ -461,11 +456,11 @@ public sealed class PolyDslParser : DslParseCursorBase {
 
                     case "exit":
                         if (parsedExit)
-                            throw Error($"'{_current.Text}' must appear at the beginning of the stage block, before actions and subscriptions.");
+                            throw Error($"'{Current.Text}' must appear at the beginning of the stage block, before actions and subscriptions.");
                         parsedExit = true;
                         Advance(); // consume 'exit'
                         Expect(TokenKind.LBrace);
-                        while (_current.Kind != TokenKind.RBrace) {
+                        while (Current.Kind != TokenKind.RBrace) {
                             var effect = ParseEffect();
                             changes.Add(new AddOnExitEffectToStageChange(_currentEntityName, name, effect));
                         }
@@ -480,13 +475,13 @@ public sealed class PolyDslParser : DslParseCursorBase {
             }
 
             // Stage-local action (or unmodeled token — fail closed).
-            if ((_current.Kind == TokenKind.Entry || _current.Kind == TokenKind.Exit) && _current.Kind != TokenKind.Identifier) {
-                throw Error($"'{_current.Text}' must appear at the beginning of the stage block, before actions and subscriptions.");
+            if ((Current.Kind == TokenKind.Entry || Current.Kind == TokenKind.Exit) && Current.Kind != TokenKind.Identifier) {
+                throw Error($"'{Current.Text}' must appear at the beginning of the stage block, before actions and subscriptions.");
             }
             var actionName = ExpectIdentifier(TokenKind.Identifier, "action name");
             // Stage members also use Name: kind. Legacy Name(params): action accepted.
             List<(string Name, string TypeName)>? stageActionParams = null;
-            if (_current.Kind == TokenKind.LParen)
+            if (Current.Kind == TokenKind.LParen)
                 stageActionParams = ParseActionParameterList();
             Expect(TokenKind.Colon);
             ParseActionBody(actionName, changes, name, stageActionParams);
@@ -497,7 +492,7 @@ public sealed class PolyDslParser : DslParseCursorBase {
 
     private void ParseStandaloneAction(string name, List<DomainChange> changes) {
         // standalone action declared at entity level
-        if (_current.Kind == TokenKind.Action)
+        if (Current.Kind == TokenKind.Action)
             Advance(); // consume optional 'action'
 
         ParseActionBody(name, changes, stageName: null, preParsedParams: null);
@@ -510,12 +505,12 @@ public sealed class PolyDslParser : DslParseCursorBase {
     private List<(string Name, string TypeName)> ParseActionParameterList() {
         Expect(TokenKind.LParen);
         var list = new List<(string, string)>();
-        while (_current.Kind != TokenKind.RParen) {
+        while (Current.Kind != TokenKind.RParen) {
             var paramName = ExpectIdentifier(TokenKind.Identifier, "parameter name");
             Expect(TokenKind.Colon);
             var paramType = ParseTypeName();
             list.Add((paramName, paramType));
-            if (_current.Kind == TokenKind.Comma)
+            if (Current.Kind == TokenKind.Comma)
                 Advance();
         }
         Expect(TokenKind.RParen);
@@ -528,18 +523,18 @@ public sealed class PolyDslParser : DslParseCursorBase {
         string? stageName,
         List<(string Name, string TypeName)>? preParsedParams) {
         // Optional 'action' keyword
-        if (_current.Kind == TokenKind.Action)
+        if (Current.Kind == TokenKind.Action)
             Advance();
 
         // Canonical: Name: action (params) -> RetType [require …] { … }
         // Params immediately after the kind keep Name: kind uniform.
         var paramList = preParsedParams;
-        if (paramList is null && _current.Kind == TokenKind.LParen)
+        if (paramList is null && Current.Kind == TokenKind.LParen)
             paramList = ParseActionParameterList();
 
         // Optional return type: -> TypeName
         InvocationResult? actionResult = null;
-        if (_current.Kind == TokenKind.Arrow) {
+        if (Current.Kind == TokenKind.Arrow) {
             Advance(); // consume ->
             var returnTypeName = ParseTypeName();
             actionResult = new InvocationResult([
@@ -549,8 +544,8 @@ public sealed class PolyDslParser : DslParseCursorBase {
         }
 
         // Stage gates and require policies (collected — resolved after entity body)
-        while (_current.Kind == TokenKind.When || _current.Kind == TokenKind.Require) {
-            if (_current.Kind == TokenKind.When) {
+        while (Current.Kind == TokenKind.When || Current.Kind == TokenKind.Require) {
+            if (Current.Kind == TokenKind.When) {
                 Advance(); // consume 'when'
                 // Stage gates are not runtime-enforced in Phase 1a (BR.3.2).
                 // Silently consume the gate names so the parser advances past them.
@@ -559,7 +554,7 @@ public sealed class PolyDslParser : DslParseCursorBase {
             else {
                 Advance(); // consume 'require'
                 bool negated = false;
-                if (_current.Kind == TokenKind.Not) {
+                if (Current.Kind == TokenKind.Not) {
                     negated = true;
                     Advance();
                 }
@@ -596,7 +591,7 @@ public sealed class PolyDslParser : DslParseCursorBase {
 
         // Parse effects
         var effects = new List<Effect>();
-        while (_current.Kind != TokenKind.RBrace) {
+        while (Current.Kind != TokenKind.RBrace) {
             effects.Add(ParseEffect());
         }
 
@@ -612,25 +607,25 @@ public sealed class PolyDslParser : DslParseCursorBase {
         if (match is null) {
             // F7: 'when' must stay rejected inside effect bodies (subscriptions
             // are stage-level; no 'when' pattern exists under "effect").
-            if (_current.Kind == TokenKind.When) {
+            if (Current.Kind == TokenKind.When) {
                 throw Error("Unexpected 'when' inside action body (subscriptions are stage-level)");
             }
 
-            if (_current.Kind == TokenKind.Identifier && _unsupportedKeywords.Contains(_current.Text)) {
+            if (Current.Kind == TokenKind.Identifier && _unsupportedKeywords.Contains(Current.Text)) {
                 throw new FormatException(
-                    $"'{_current.Text}' is not supported in Phase 1a");
+                    $"'{Current.Text}' is not supported in Phase 1a");
             }
 
             // N4 (DX only): the head keyword matched but its tail pattern
             // failed — fold the tail expectation into the error.
-            var tailHint = _current.Kind switch {
+            var tailHint = Current.Kind switch {
                 TokenKind.Transition => " — expected 'to <stage>'",
                 TokenKind.Assign => " — expected '<property> to'",
                 TokenKind.Create => " — expected '<type> { … }' or 'in <relationship> { … }'",
                 TokenKind.If => " — expected '(condition)'",
                 _ => "",
             };
-            throw Error($"Expected effect (transition, assign, create, delete, invoke, if){tailHint}, got '{_current.Text}'");
+            throw Error($"Expected effect (transition, assign, create, delete, invoke, if){tailHint}, got '{Current.Text}'");
         }
 
         switch (match.PatternName) {
@@ -696,21 +691,21 @@ public sealed class PolyDslParser : DslParseCursorBase {
         Expect(TokenKind.RParen);
         Expect(TokenKind.LBrace);
         var thenEffects = new List<Effect>();
-        while (_current.Kind != TokenKind.RBrace)
+        while (Current.Kind != TokenKind.RBrace)
             thenEffects.Add(ParseEffect());
         Expect(TokenKind.RBrace);
 
         List<Effect>? elseEffects = null;
-        if (_current.Kind == TokenKind.Else) {
+        if (Current.Kind == TokenKind.Else) {
             Advance(); // consume 'else'
-            if (_current.Kind == TokenKind.If) {
+            if (Current.Kind == TokenKind.If) {
                 // else if → nest another ConditionalEffect as the sole else branch
                 elseEffects = [ParseEffect()];
             }
             else {
                 Expect(TokenKind.LBrace);
                 elseEffects = new List<Effect>();
-                while (_current.Kind != TokenKind.RBrace)
+                while (Current.Kind != TokenKind.RBrace)
                     elseEffects.Add(ParseEffect());
                 Expect(TokenKind.RBrace);
             }
@@ -726,13 +721,13 @@ public sealed class PolyDslParser : DslParseCursorBase {
     private Effect ParseInvokeEffectTail() {
         // Optional quantifier: any / all (identifier text match)
         StageSubscriptionQuantifier? quantifier = null;
-        if (_current.Kind == TokenKind.Identifier &&
-            string.Equals(_current.Text, "any", StringComparison.OrdinalIgnoreCase)) {
+        if (Current.Kind == TokenKind.Identifier &&
+            string.Equals(Current.Text, "any", StringComparison.OrdinalIgnoreCase)) {
             quantifier = StageSubscriptionQuantifier.Any;
             Advance();
         }
-        else if (_current.Kind == TokenKind.Identifier &&
-                 string.Equals(_current.Text, "all", StringComparison.OrdinalIgnoreCase)) {
+        else if (Current.Kind == TokenKind.Identifier &&
+                 string.Equals(Current.Text, "all", StringComparison.OrdinalIgnoreCase)) {
             quantifier = StageSubscriptionQuantifier.All;
             Advance();
         }
@@ -742,7 +737,7 @@ public sealed class PolyDslParser : DslParseCursorBase {
         string? targetRelationship = null;
         string actionName;
 
-        if (_current.Kind == TokenKind.Dot) {
+        if (Current.Kind == TokenKind.Dot) {
             // E3b: invoke RelName.ActionName(args)
             targetRelationship = firstId;
             Advance(); // consume '.'
@@ -755,14 +750,14 @@ public sealed class PolyDslParser : DslParseCursorBase {
 
         // Optional parameter bindings: (name: expr, ...)
         var bindings = new List<PropertyBinding>();
-        if (_current.Kind == TokenKind.LParen) {
+        if (Current.Kind == TokenKind.LParen) {
             Advance(); // consume '('
-            while (_current.Kind != TokenKind.RParen) {
+            while (Current.Kind != TokenKind.RParen) {
                 var paramName = ExpectIdentifier(TokenKind.Identifier, "parameter name");
                 Expect(TokenKind.Colon);
                 var paramExpr = ParseExpression();
                 bindings.Add(new PropertyBinding(paramName, paramExpr));
-                if (_current.Kind == TokenKind.Comma)
+                if (Current.Kind == TokenKind.Comma)
                     Advance(); // consume ','
             }
             Expect(TokenKind.RParen);
@@ -770,8 +765,8 @@ public sealed class PolyDslParser : DslParseCursorBase {
 
         // Optional filter: where expr — local shape only (domain cardinality is analyzer).
         DomainExpression? filter = null;
-        if (_current.Kind == TokenKind.Identifier &&
-            string.Equals(_current.Text, "where", StringComparison.OrdinalIgnoreCase)) {
+        if (Current.Kind == TokenKind.Identifier &&
+            string.Equals(Current.Text, "where", StringComparison.OrdinalIgnoreCase)) {
             Advance(); // consume 'where'
             filter = ParseExpression();
         }
@@ -794,7 +789,7 @@ public sealed class PolyDslParser : DslParseCursorBase {
 
     private List<PropertyBinding> ParsePropertyInitializers() {
         var initializers = new List<PropertyBinding>();
-        while (_current.Kind != TokenKind.RBrace) {
+        while (Current.Kind != TokenKind.RBrace) {
             var propName = ExpectIdentifier(TokenKind.Identifier, "property name");
             Expect(TokenKind.Colon);
             var expr = ParseExpression();
@@ -814,20 +809,20 @@ public sealed class PolyDslParser : DslParseCursorBase {
         // P2.5: Accept comma-separated stage names: "when Rel Active, Done"
         var targetStages = new List<string>();
         targetStages.Add(ExpectIdentifier(TokenKind.Identifier, "target stage name"));
-        while (_current.Kind == TokenKind.Comma) {
+        while (Current.Kind == TokenKind.Comma) {
             Advance(); // consume ','
             targetStages.Add(ExpectIdentifier(TokenKind.Identifier, "target stage name"));
         }
         // Optional peer binder: when Rel Stage as name { … }
         string? peerBinding = null;
-        if (_current.Kind == TokenKind.As) {
+        if (Current.Kind == TokenKind.As) {
             Advance();
             peerBinding = ExpectIdentifier(TokenKind.Identifier, "peer binding name");
         }
         Expect(TokenKind.LBrace);
 
         var effects = new List<Effect>();
-        while (_current.Kind != TokenKind.RBrace) {
+        while (Current.Kind != TokenKind.RBrace) {
             effects.Add(ParseEffect());
         }
         Expect(TokenKind.RBrace);
@@ -843,13 +838,13 @@ public sealed class PolyDslParser : DslParseCursorBase {
     /// Mirrors the <c>invoke any|all</c> pattern (identifier text match).
     /// </summary>
     private StageSubscriptionQuantifier ParseSubscriptionQuantifier() {
-        if (_current.Kind == TokenKind.Identifier &&
-            string.Equals(_current.Text, "any", StringComparison.OrdinalIgnoreCase)) {
+        if (Current.Kind == TokenKind.Identifier &&
+            string.Equals(Current.Text, "any", StringComparison.OrdinalIgnoreCase)) {
             Advance(); // consume 'any'
             return StageSubscriptionQuantifier.Any;
         }
-        if (_current.Kind == TokenKind.Identifier &&
-            string.Equals(_current.Text, "all", StringComparison.OrdinalIgnoreCase)) {
+        if (Current.Kind == TokenKind.Identifier &&
+            string.Equals(Current.Text, "all", StringComparison.OrdinalIgnoreCase)) {
             Advance(); // consume 'all'
             return StageSubscriptionQuantifier.All;
         }
@@ -869,19 +864,19 @@ public sealed class PolyDslParser : DslParseCursorBase {
         var relName = ExpectIdentifier(TokenKind.Identifier, "relationship name");
         var targetStages = new List<string>();
         targetStages.Add(ExpectIdentifier(TokenKind.Identifier, "target stage name"));
-        while (_current.Kind == TokenKind.Comma) {
+        while (Current.Kind == TokenKind.Comma) {
             Advance(); // consume ','
             targetStages.Add(ExpectIdentifier(TokenKind.Identifier, "target stage name"));
         }
         string? peerBinding = null;
-        if (_current.Kind == TokenKind.As) {
+        if (Current.Kind == TokenKind.As) {
             Advance();
             peerBinding = ExpectIdentifier(TokenKind.Identifier, "peer binding name");
         }
         Expect(TokenKind.LBrace);
 
         var effects = new List<Effect>();
-        while (_current.Kind != TokenKind.RBrace) {
+        while (Current.Kind != TokenKind.RBrace) {
             effects.Add(ParseEffect());
         }
         Expect(TokenKind.RBrace);
@@ -907,20 +902,20 @@ public sealed class PolyDslParser : DslParseCursorBase {
     /// </summary>
     private Exception TopLevelRejection() {
         if (PeekIs(TokenKind.Colon)) {
-            var name = _current.Text;
-            var typeWord = _tokenReader.Peek(2);
+            var name = Current.Text;
+            var typeWord = Peek(2);
             if (typeWord.Kind == TokenKind.Identifier && _unsupportedKeywords.Contains(typeWord.Text)) {
                 return new FormatException(
                     $"'{typeWord.Text}' is not supported in Phase 1a (use 'entity' instead)");
             }
             if (typeWord.Kind == TokenKind.Identifier
-                && _tokenReader.Peek(3).Kind == TokenKind.Entity) {
+                && Peek(3).Kind == TokenKind.Entity) {
                 return new FormatException(
                     $"Entity inheritance ('{name}: {typeWord.Text} entity') is no longer supported. " +
                     $"Define '{typeWord.Text}' properties directly on '{name}'.");
             }
         }
-        return Error($"Expected 'entity' or 'enum' definition, got '{_current.Text}'");
+        return Error($"Expected 'entity' or 'enum' definition, got '{Current.Text}'");
     }
 
     /// <summary>
@@ -934,10 +929,10 @@ public sealed class PolyDslParser : DslParseCursorBase {
         Expect(TokenKind.LBrace);
 
         var members = new List<string>();
-        while (_current.Kind == TokenKind.Identifier) {
-            members.Add(_current.Text);
+        while (Current.Kind == TokenKind.Identifier) {
+            members.Add(Current.Text);
             Advance();
-            if (_current.Kind == TokenKind.Comma)
+            if (Current.Kind == TokenKind.Comma)
                 Advance();
         }
 
@@ -949,16 +944,16 @@ public sealed class PolyDslParser : DslParseCursorBase {
 
     private bool IsNavLine() {
         // TokenKind.Many and TokenKind.One are unambiguous nav starts
-        if (_current.Kind == TokenKind.Many || _current.Kind == TokenKind.One)
+        if (Current.Kind == TokenKind.Many || Current.Kind == TokenKind.One)
             return true;
 
         // "owned" as the first token after : → nav (must be followed by TypeName)
-        if (_current.Kind == TokenKind.Owned)
+        if (Current.Kind == TokenKind.Owned)
             return true;
 
         // Bare identifier that isn't a primitive type, keyword, or reserved construct
-        if (_current.Kind == TokenKind.Identifier && !IsPrimitiveType(_current.Kind)) {
-            var text = _current.Text;
+        if (Current.Kind == TokenKind.Identifier && !IsPrimitiveType(Current.Kind)) {
+            var text = Current.Text;
             // Exclude known keywords that aren't primitives but shouldn't be nav targets
             return !_unsupportedKeywords.Contains(text)
                 && text != "entity" && text != "stage" && text != "action"
@@ -982,26 +977,26 @@ public sealed class PolyDslParser : DslParseCursorBase {
         var owned = false;
 
         // Check for cardinality keyword
-        if (_current.Kind == TokenKind.Many) {
+        if (Current.Kind == TokenKind.Many) {
             cardinality = RelationshipCardinality.OneToMany;
             Advance();
         }
-        else if (_current.Kind == TokenKind.One) {
+        else if (Current.Kind == TokenKind.One) {
             Advance(); // consume 'one'
         }
 
         // Check for optional 'owned'
-        if (_current.Kind == TokenKind.Owned) {
+        if (Current.Kind == TokenKind.Owned) {
             owned = true;
             Advance();
         }
 
         // Remaining identifier is the target type name
         // Must be an identifier (not a primitive type keyword)
-        if (_current.Kind != TokenKind.Identifier) {
-            var hint = IsPrimitiveType(_current.Kind)
-                ? $" '{_current.Text}' is a primitive type, not an entity. Use a primitive property declaration instead."
-                : $" unexpected token '{_current.Text}'";
+        if (Current.Kind != TokenKind.Identifier) {
+            var hint = IsPrimitiveType(Current.Kind)
+                ? $" '{Current.Text}' is a primitive type, not an entity. Use a primitive property declaration instead."
+                : $" unexpected token '{Current.Text}'";
             throw Error($"Navigation property '{name}' requires an entity type as target:{hint}");
         }
         var targetType = ExpectIdentifier(TokenKind.Identifier, "target entity name");
@@ -1070,43 +1065,43 @@ public sealed class PolyDslParser : DslParseCursorBase {
         var args = new Dictionary<string, AnnotationValue>();
         int positionalIndex = 0;
 
-        while (_current.Kind != TokenKind.RParen) {
-            if (_current.Kind == TokenKind.StringLiteral) {
-                args[positionalIndex.ToString()] = new AnnotationString(_current.Text);
+        while (Current.Kind != TokenKind.RParen) {
+            if (Current.Kind == TokenKind.StringLiteral) {
+                args[positionalIndex.ToString()] = new AnnotationString(Current.Text);
                 Advance();
             }
-            else if (_current.Kind == TokenKind.Number) {
+            else if (Current.Kind == TokenKind.Number) {
                 args[positionalIndex.ToString()] = new AnnotationNumber(
-                    double.Parse(_current.Text, CultureInfo.InvariantCulture));
+                    double.Parse(Current.Text, CultureInfo.InvariantCulture));
                 Advance();
             }
-            else if (_current.Kind == TokenKind.True) {
+            else if (Current.Kind == TokenKind.True) {
                 args[positionalIndex.ToString()] = new AnnotationBool(true);
                 Advance();
             }
-            else if (_current.Kind == TokenKind.False) {
+            else if (Current.Kind == TokenKind.False) {
                 args[positionalIndex.ToString()] = new AnnotationBool(false);
                 Advance();
             }
-            else if (_current.Kind == TokenKind.Null) {
+            else if (Current.Kind == TokenKind.Null) {
                 args[positionalIndex.ToString()] = new AnnotationNull();
                 Advance();
             }
             else {
-                throw Error($"Expected annotation argument (string, number, bool, null), got '{_current.Text}'");
+                throw Error($"Expected annotation argument (string, number, bool, null), got '{Current.Text}'");
             }
 
             positionalIndex++;
 
-            if (_current.Kind == TokenKind.Comma) {
+            if (Current.Kind == TokenKind.Comma) {
                 Advance();
-                if (_current.Kind == TokenKind.RParen) {
+                if (Current.Kind == TokenKind.RParen) {
                     throw Error($"Trailing comma in annotation '{keyword}(...)' arguments");
                 }
             }
-            else if (_current.Kind != TokenKind.RParen) {
+            else if (Current.Kind != TokenKind.RParen) {
                 throw Error(
-                    $"Expected ',' or ')' in annotation '{keyword}(...)', got '{_current.Text}'");
+                    $"Expected ',' or ')' in annotation '{keyword}(...)', got '{Current.Text}'");
             }
         }
 
@@ -1117,7 +1112,7 @@ public sealed class PolyDslParser : DslParseCursorBase {
     // ── Constraint parser ─────────────────────────────────────
 
     private Constraint? ParseConstraint() {
-        switch (_current.Kind) {
+        switch (Current.Kind) {
             case TokenKind.Required:
                 Advance();
                 return new RequiredConstraint();
@@ -1141,15 +1136,15 @@ public sealed class PolyDslParser : DslParseCursorBase {
                 Advance();
                 Expect(TokenKind.LParen);
                 object? min = null, max = null;
-                if (_current.Kind == TokenKind.Number) {
-                    min = double.Parse(_current.Text, CultureInfo.InvariantCulture);
+                if (Current.Kind == TokenKind.Number) {
+                    min = double.Parse(Current.Text, CultureInfo.InvariantCulture);
                     Advance();
                 }
-                if (_current.Kind == TokenKind.Comma) {
+                if (Current.Kind == TokenKind.Comma) {
                     Advance();
                 }
-                if (_current.Kind == TokenKind.Number) {
-                    max = double.Parse(_current.Text, CultureInfo.InvariantCulture);
+                if (Current.Kind == TokenKind.Number) {
+                    max = double.Parse(Current.Text, CultureInfo.InvariantCulture);
                     Advance();
                 }
                 Expect(TokenKind.RParen);
@@ -1158,13 +1153,13 @@ public sealed class PolyDslParser : DslParseCursorBase {
             case TokenKind.Length:
                 Advance();
                 Expect(TokenKind.LParen);
-                var lenMin = int.Parse(_current.Text, CultureInfo.InvariantCulture);
+                var lenMin = int.Parse(Current.Text, CultureInfo.InvariantCulture);
                 Advance();
                 var lenMax = lenMin; // default to same value for single-arg form "length(3)"
-                if (_current.Kind == TokenKind.Comma) {
+                if (Current.Kind == TokenKind.Comma) {
                     Advance();
-                    if (_current.Kind == TokenKind.Number) {
-                        lenMax = int.Parse(_current.Text, CultureInfo.InvariantCulture);
+                    if (Current.Kind == TokenKind.Number) {
+                        lenMax = int.Parse(Current.Text, CultureInfo.InvariantCulture);
                         Advance();
                     }
                 }
@@ -1186,28 +1181,28 @@ public sealed class PolyDslParser : DslParseCursorBase {
     // ── Helpers ───────────────────────────────────────────────
 
     private string ParseTypeName() {
-        if (IsPrimitiveType(_current.Kind)) {
-            var typeName = _current.Kind switch {
+        if (IsPrimitiveType(Current.Kind)) {
+            var typeName = Current.Kind switch {
                 TokenKind.Text => "Text",
                 TokenKind.NumberType => "Number",
                 TokenKind.BooleanType => "Boolean",
                 TokenKind.DateTimeType => "DateTime",
                 TokenKind.DateType => "Date",
-                _ => throw Error($"Unknown type '{_current.Kind}'"),
+                _ => throw Error($"Unknown type '{Current.Kind}'"),
             };
             Advance();
             return typeName;
         }
-        if (_current.Kind == TokenKind.Identifier) {
+        if (Current.Kind == TokenKind.Identifier) {
             return ExpectIdentifier(TokenKind.Identifier, "type name");
         }
-        throw Error($"Expected a type name, got '{_current.Text}'");
+        throw Error($"Expected a type name, got '{Current.Text}'");
     }
 
     private List<string> ParseIdentifierList() {
         var list = new List<string>();
         list.Add(ExpectIdentifier(TokenKind.Identifier, "identifier"));
-        while (_current.Kind == TokenKind.Comma) {
+        while (Current.Kind == TokenKind.Comma) {
             Advance();
             list.Add(ExpectIdentifier(TokenKind.Identifier, "identifier"));
         }

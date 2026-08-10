@@ -7,7 +7,7 @@ namespace Poly.Tests.Grammar;
 
 /// <summary>E1: expression module + open form registry (temporal-ready seam).</summary>
 public class DslExpressionE1Tests {
-    /// <summary>Pack form: identifier <c>MAGIC</c> → literal 42 without core RD edits.</summary>
+    /// <summary>Pack form: identifier <c>MAGIC</c> → literal 42 without core edits.</summary>
     private sealed class MagicLiteralForm : IExpressionPrimaryForm {
         public bool TryParse(IDslParseCursor cursor, DslExpressionParser expressions, out DomainExpression expression) {
             expression = null!;
@@ -83,7 +83,7 @@ public class DslExpressionE1Tests {
         var g = DslGrammar.Build();
         async Task AssertPattern(string text, string pattern) {
             var reader = new DslTokenReader(text);
-            var matcher = new Matcher<DslTokenKind>(g, reader);
+            var matcher = new Matcher<DslToken, DslTokenKind>(g, reader);
             var match = matcher.TryMatch("expr-primary");
             await Assert.That(match?.PatternName).IsEqualTo(pattern);
         }
@@ -96,23 +96,20 @@ public class DslExpressionE1Tests {
     }
 
     /// <summary>
-    /// gpure-6: product-shaped open-form example — a temporal-style pack registers
-    /// a <c>Number &lt;unit&gt;</c> pattern on the primary surface via
-    /// <c>ContributeGrammarPatterns</c> (the hook the registry already wires at
-    /// <c>DslGrammar.Build</c>). The comparison LHS uses <c>expr-primary-no-not</c>,
-    /// so packs must register on both primary rules to cover full expressions.
-    /// S4 (2026-08-08): pattern registration covers the Matcher/probe surface;
-    /// the LIVE product path is driven by the handler form — prove both below.
+    /// gpure-6 parity: a temporal-style pack registers a Number &lt;unit&gt;
+    /// pattern on both primary rules + drives the live path via its form. Pattern
+    /// registration covers the Matcher/probe surface; the LIVE path is the handler
+    /// form — prove both, matching the v1 S4 test.
     /// </summary>
     [Test]
     public async Task PackPattern_NumberUnit_ExtendsPrimarySurface() {
         var g = DslGrammar.Build(grammar => {
             foreach (var rule in new[] { "expr-primary", "expr-primary-no-not" }) {
                 grammar.Define(rule)
-                    .Pattern("duration").Token(DslTokenKind.Number).Value(DslTokenKind.Identifier).Commit();
+                    .Pattern("duration").Kind(DslTokenKind.Number).Value(DslTokenKind.Identifier).Commit();
             }
         });
-        var matcher = new Matcher<DslTokenKind>(g, new DslTokenReader("12 days"));
+        var matcher = new Matcher<DslToken, DslTokenKind>(g, new DslTokenReader("12 days"));
         var primary = matcher.TryMatch("expr-primary");
         await Assert.That(primary?.PatternName).IsEqualTo("duration");
         await Assert.That(primary!.Consumed).IsEqualTo(2);
@@ -120,8 +117,7 @@ public class DslExpressionE1Tests {
         await Assert.That(full).IsNotNull();
         await Assert.That(full!.Consumed).IsEqualTo(2);
 
-        // Live path (S4): the same pack, driven by its IExpressionPrimaryForm,
-        // parses a full policy end to end — patterns alone do not extend parsing.
+        // Live path: the same pack, driven by its form, parses a full policy end to end.
         var inputs = DomainInputBuilder.Create()
             .RegisterExpressionForm(new DurationLiteralForm())
             .BuildParserInputs();

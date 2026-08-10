@@ -17,32 +17,37 @@ public class ArithmeticParserEvaluatorTests {
     private readonly record struct EvaluationOutcome<T>(bool IsSuccess, T? Value, Exception? Exception);
 
     /// <summary>
-    /// Token kinds for arithmetic expressions, used with the grammar engine's
-    /// <see cref="StringTokenReader{TKind}"/> and <see cref="Grammar{TKind}"/>.
+    /// Token kinds for arithmetic expressions, used with the engine's
+    /// <see cref="BufferedTokenReader{TToken,TTokenKind}"/>.
     /// </summary>
     private enum ArithKind {
         Number, Plus, Minus, Star, Slash, Percent, LParen, RParen, End
     }
 
+    private readonly record struct ArithToken(ArithKind Kind, string Text) : IToken<ArithKind>;
+
     /// <summary>
-    /// Token reader for arithmetic expressions, built on the grammar engine's
-    /// <see cref="StringTokenReader{TKind}"/> base class.
+    /// Token reader for arithmetic expressions, built on the buffered reader
+    /// base with local char state (the engine owns buffering + position).
     /// </summary>
-    private sealed class ArithTokenReader : StringTokenReader<ArithKind> {
-        public ArithTokenReader(string text) : base(text) { }
+    private sealed class ArithTokenReader : BufferedTokenReader<ArithToken, ArithKind> {
+        private readonly string _text;
+        private int _pos;
 
-        public override bool IsEndOfFile(ArithKind kind) => kind == ArithKind.End;
+        public ArithTokenReader(string text) => _text = text;
 
-        protected override Token<ArithKind> ScanNextToken() {
+        public override bool EndOfStream(ArithKind kind) => kind == ArithKind.End;
+
+        protected override ArithToken ScanNextToken() {
             SkipWhitespace();
-            if (Position >= Text.Length)
-                return MakeToken(ArithKind.End, "");
+            if (_pos >= _text.Length)
+                return new ArithToken(ArithKind.End, "");
 
-            var c = PeekChar();
+            var c = _text[_pos];
             if (char.IsDigit(c) || c == '.')
                 return ScanNumber();
 
-            AdvanceChar();
+            _pos++;
             var kind = c switch {
                 '+' => ArithKind.Plus,
                 '-' => ArithKind.Minus,
@@ -53,41 +58,25 @@ public class ArithmeticParserEvaluatorTests {
                 ')' => ArithKind.RParen,
                 _ => throw new InvalidOperationException($"Unexpected character '{c}'")
             };
-            return MakeToken(kind, c.ToString());
+            return new ArithToken(kind, c.ToString());
         }
 
-        private Token<ArithKind> ScanNumber() {
-            var start = Position;
-            while (Position < Text.Length && (char.IsDigit(PeekChar()) || PeekChar() == '.'))
-                AdvanceChar();
-            return MakeToken(ArithKind.Number, Text[start..Position]);
+        private ArithToken ScanNumber() {
+            var start = _pos;
+            while (_pos < _text.Length && (char.IsDigit(_text[_pos]) || _text[_pos] == '.'))
+                _pos++;
+            return new ArithToken(ArithKind.Number, _text[start.._pos]);
         }
-    }
 
-    /// <summary>
-    /// Grammar table for the arithmetic expression language.
-    /// Defined for documentation and structural validation via the grammar engine.
-    /// </summary>
-    private static readonly Grammar<ArithKind> _grammar = CreateGrammar();
-
-    private static Grammar<ArithKind> CreateGrammar() {
-        var g = new Grammar<ArithKind>();
-        g.Define("expr")
-            .Pattern("add-sub").Many("term").Any().Many("term").Commit()
-            .Pattern("single-term").Many("term").Commit();
-        g.Define("term")
-            .Pattern("mul-div-mod").Many("factor").Any().Many("factor").Commit()
-            .Pattern("single-factor").Many("factor").Commit();
-        g.Define("factor")
-            .Pattern("number").Value(ArithKind.Number).Commit()
-            .Pattern("paren").Token(ArithKind.LParen).Many("expr").Token(ArithKind.RParen).Commit()
-            .Pattern("negate").Token(ArithKind.Minus).Many("factor").Commit();
-        return g;
+        private void SkipWhitespace() {
+            while (_pos < _text.Length && char.IsWhiteSpace(_text[_pos]))
+                _pos++;
+        }
     }
 
     /// <summary>
     /// Recursive descent parser for arithmetic expressions, consuming tokens
-    /// from the grammar engine's <see cref="TokenReader{TKind}"/>.
+    /// from the reader (Peek(0) = head; Next() = consume one).
     /// 
     /// Grammar:
     /// expression := term (('+' | '-') term)*
@@ -95,16 +84,22 @@ public class ArithmeticParserEvaluatorTests {
     /// factor     := number | '(' expression ')' | '-' factor
     /// </summary>
     private sealed class ArithmeticParser {
-        private readonly TokenReader<ArithKind> _reader;
+        private readonly ArithTokenReader _reader;
 
-        public ArithmeticParser(TokenReader<ArithKind> reader) {
+        public ArithmeticParser(ArithTokenReader reader) {
             _reader = reader;
+        }
+
+        private ArithToken Next() {
+            var t = _reader.Peek(0);
+            _reader.Consume(1);
+            return t;
         }
 
         public Node Parse() {
             var result = ParseExpression();
 
-            var end = _reader.Peek();
+            var end = _reader.Peek(0);
             if (end.Kind != ArithKind.End)
                 throw new InvalidOperationException($"Unexpected token '{end.Text}'");
 
@@ -114,8 +109,8 @@ public class ArithmeticParserEvaluatorTests {
         private Node ParseExpression() {
             var left = ParseTerm();
 
-            while (_reader.Peek().Kind is ArithKind.Plus or ArithKind.Minus) {
-                var op = _reader.Read().Kind;
+            while (_reader.Peek(0).Kind is ArithKind.Plus or ArithKind.Minus) {
+                var op = Next().Kind;
                 var right = ParseTerm();
                 left = op == ArithKind.Plus
                     ? new Add(left, right)
@@ -128,8 +123,8 @@ public class ArithmeticParserEvaluatorTests {
         private Node ParseTerm() {
             var left = ParseFactor();
 
-            while (_reader.Peek().Kind is ArithKind.Star or ArithKind.Slash or ArithKind.Percent) {
-                var op = _reader.Read().Kind;
+            while (_reader.Peek(0).Kind is ArithKind.Star or ArithKind.Slash or ArithKind.Percent) {
+                var op = Next().Kind;
                 var right = ParseFactor();
                 left = op switch {
                     ArithKind.Star => new Multiply(left, right),
@@ -143,14 +138,14 @@ public class ArithmeticParserEvaluatorTests {
         }
 
         private Node ParseFactor() {
-            var token = _reader.Peek();
+            var token = _reader.Peek(0);
 
             // Handle parentheses
             if (token.Kind == ArithKind.LParen) {
-                _reader.Read(); // consume '('
+                Next(); // consume '('
                 var expr = ParseExpression();
 
-                var close = _reader.Read();
+                var close = Next();
                 if (close.Kind != ArithKind.RParen)
                     throw new InvalidOperationException($"Expected ')'");
 
@@ -159,7 +154,7 @@ public class ArithmeticParserEvaluatorTests {
 
             // Handle numbers
             if (token.Kind == ArithKind.Number) {
-                _reader.Read();
+                Next();
 
                 // Parse as double if it contains a decimal point, otherwise int
                 if (token.Text.Contains('.'))
@@ -169,7 +164,7 @@ public class ArithmeticParserEvaluatorTests {
 
             // Handle unary minus
             if (token.Kind == ArithKind.Minus) {
-                _reader.Read();
+                Next();
                 return new UnaryMinus(ParseFactor());
             }
 

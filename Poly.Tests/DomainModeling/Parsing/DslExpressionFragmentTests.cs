@@ -1,12 +1,13 @@
 using Poly.DomainModeling;
-using Poly.DomainModeling.Parsing;
-using Poly.Grammar;
+using Poly.DomainModeling.Parsing;      // DslTokenKind (language-owned kind enum)
+
+
 
 namespace Poly.Tests.DomainModeling.Parsing;
 
-/// <summary>mcp-minify-1: standalone DSL expression fragment API fail-closed cases.</summary>
+/// <summary>mcp-minify-1 parity: standalone DSL expression fragment API fail-closed cases.</summary>
 public class DslExpressionFragmentTests {
-    /// <summary>Pack form: identifier <c>MAGIC</c> → literal 42 (same shape as E1 tests).</summary>
+    /// <summary>Pack form: identifier <c>MAGIC</c> → literal 42.</summary>
     private sealed class MagicLiteralForm : IExpressionPrimaryForm {
         public bool TryParse(IDslParseCursor cursor, DslExpressionParser expressions, out DomainExpression expression) {
             expression = null!;

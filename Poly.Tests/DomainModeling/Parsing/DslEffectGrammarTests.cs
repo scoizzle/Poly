@@ -4,10 +4,12 @@ using Poly.DomainModeling.Parsing;
 
 namespace Poly.Tests.DomainModeling.Parsing;
 
-// ─── Effect statement grammar (gpure-5): head patterns + fail-closed ───
+// ─── Effect statement grammar through PolyDslParser (gpure-5 parity) ───
+// Proves the structure parser dispatches effect heads: head patterns +
+// create/create-in + fail-closed negatives, same IR types.
 public sealed class DslEffectGrammarTests {
     private static List<DomainChange> ParseEffects(string effectsText) {
-        // Wrap in an action body so ParseEffect runs against the product parser.
+        // Wrap in an action body so ParseEffect runs against the parser.
         var poly = $$"""
             domain D
             E: entity {

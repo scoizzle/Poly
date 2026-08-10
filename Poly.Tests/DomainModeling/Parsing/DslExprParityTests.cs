@@ -1,5 +1,6 @@
 using Poly.DomainModeling;
 using Poly.DomainModeling.Parsing;
+
 using Poly.Grammar;
 // Disambiguate from Poly.Ast.Nodes records imported via global usings.
 using Add = Poly.DomainModeling.Add;
@@ -12,31 +13,21 @@ using Subtract = Poly.DomainModeling.Subtract;
 
 namespace Poly.Tests.DomainModeling.Parsing;
 
-// ─── Expression regression corpus: Grammar path vs frozen oracles ───
-// gpure-3/4 ran accept/reject + span parity and IR equality against the Rd
-// dual. gpure-7 deleted the Rd dual; this suite is now a single-path regression
-// corpus: every case must parse to the exact frozen canonical IR (Id-agnostic)
-// or reject loud. Never delete cases.
-public sealed class DslExprParityTests {
-    // Minimal head-token cursor so the expression parser can run standalone.
-    // Shared dual-cursor mechanics via DslParseCursorBase (mcp-minify N5).
-    private sealed class ExprCursor : DslParseCursorBase {
-        public ExprCursor(string text)
-            : base(new DslTokenReader(text), r => new Matcher<DslTokenKind>(DslGrammar.Build(), r)) {
-        }
-    }
+// ─── Expression regression corpus ───
+// Same frozen canonical IR oracles:
+// DslExpressionFragment (standalone expr) + DslGrammar span checks.
+// Never delete cases; every case parses to the exact frozen IR or rejects loud.
 
-    private static DomainExpression GrammarParse(string expr) {
-        var p = new DslExpressionParser(new ExprCursor(expr));
-        return p.ParseExpression();
-    }
+public sealed class DslExprParityTests {
+    private static DomainExpression V2Parse(string expr) =>
+        DslExpressionFragment.ParseExpressionFragment(expr);
 
     private static async Task AssertCanonical(string expr, string expected) {
-        await Assert.That(Canonical(GrammarParse(expr))).IsEqualTo(expected);
+        await Assert.That(Canonical(V2Parse(expr))).IsEqualTo(expected);
     }
 
     private static async Task AssertRejects(string expr) {
-        await Assert.That(() => GrammarParse(expr)).Throws<FormatException>();
+        await Assert.That(() => V2Parse(expr)).Throws<FormatException>();
     }
 
     /// <summary>Normalized structural text for a DomainExpression (Id-agnostic).</summary>
@@ -61,12 +52,25 @@ public sealed class DslExprParityTests {
         And a => $"And({Canonical(a.Left)},{Canonical(a.Right)})",
         Or o => $"Or({Canonical(o.Left)},{Canonical(o.Right)})",
         Not n => $"Not({Canonical(n.Operand)})",
-        // N2: an unmapped subtype must fail the oracle, never pass vacuously.
         _ => throw new InvalidOperationException(
             $"Unmapped DomainExpression subtype '{e.GetType().Name}' in canonical oracle"),
     };
 
-    // RD side: full product parse of a policy whose body is the expression.
+    // Span side: TryMatch("expr") accepts only when the whole stream is consumed.
+    private static (bool Accepts, int Consumed) GrammarMatch(string expr) {
+        var reader = new DslTokenReader(expr);
+        var matcher = new Matcher<DslToken, DslTokenKind>(DslGrammar.Build(), reader);
+        var result = matcher.TryMatch("expr");
+        if (result is null) return (false, 0);
+        var total = 0;
+        while (true) {
+            total++;
+            if (reader.Peek(total - 1).Kind == DslTokenKind.EndOfFile) break;
+        }
+        return (result.Consumed == total - 1, result.Consumed);
+    }
+
+    // Product side: full .poly parse whose policy body is the expression.
     private static bool ProductAccepts(string expr) {
         var poly = $"domain D\nE: entity {{ P: policy {{ {expr} }} }}";
         try {
@@ -76,22 +80,6 @@ public sealed class DslExprParityTests {
         catch (FormatException) {
             return false;
         }
-    }
-
-    // Grammar side: TryMatch("expr"); accepts only when the match consumes the
-    // whole token stream (trailing unconsumed tokens => reject, mirroring how
-    // the product RD path fails on a leftover token).
-    private static (bool Accepts, int Consumed) GrammarMatch(string expr) {
-        var reader = new DslTokenReader(expr);
-        var matcher = new Matcher<DslTokenKind>(DslGrammar.Build(), reader);
-        var result = matcher.TryMatch("expr");
-        if (result is null) return (false, 0);
-        var total = 0;
-        while (true) {
-            total++;
-            if (reader.Read().Kind == DslTokenKind.EndOfFile) break;
-        }
-        return (result.Consumed == total - 1, result.Consumed);
     }
 
     [Test]
@@ -128,9 +116,6 @@ public sealed class DslExprParityTests {
 
     [Test]
     public async Task Parity_NotOverCompare_RejectsBoth() {
-        // B3 pin: product ParseNot binds its operand at the add layer, so
-        // `not a > b` leaves `> b` unconsumed and fails. The Grammar table must
-        // reject too — never silently accept `not (a > b)`.
         await Assert.That(ProductAccepts("not a > b")).IsFalse();
         await Assert.That(GrammarMatch("not a > b").Accepts).IsFalse();
     }
@@ -171,7 +156,7 @@ public sealed class DslExprParityTests {
         await Assert.That(GrammarMatch("(1 + 2").Accepts).IsFalse();
     }
 
-    // ─── gpure-4/7 frozen-IR regression corpus ─────────────────
+    // ─── Frozen-IR regression corpus ─────────────────────────────
 
     [Test]
     public async Task Ir_Arithmetic() {
@@ -184,12 +169,6 @@ public sealed class DslExprParityTests {
 
     [Test]
     public async Task SpanVsFold_NotInChain_TableRejectsFoldAccepts() {
-        // S1 pin (2026-08-08): the span table's comparison LHS chain is no-not
-        // END TO END, so `a + not b` / `a + not b > c` reject on the span side
-        // while the live fold accepts them via primary-Not re-entry. Both sides
-        // are pinned on purpose — changing one side without the other is the bug.
-        // Reconcile when the span tables gain a live consumer (printer/validator);
-        // tracking note in gpure-inventory-notes.md §A1.
         await Assert.That(GrammarMatch("a + not b").Accepts).IsFalse();
         await Assert.That(GrammarMatch("a + not b > c").Accepts).IsFalse();
         await AssertCanonical("a + not b", "Add(Prop(a),Not(Prop(b)))");
@@ -247,12 +226,9 @@ public sealed class DslExprParityTests {
 
     [Test]
     public async Task Ir_FailClosed_Negatives() {
-        // F6: fail loud — no vacuous success.
         await AssertRejects("1 +");
         await AssertRejects("(1 + 2");
         await AssertRejects("1 + + 2");
-        // These parse a valid prefix standalone and only fail in full-policy
-        // context (leftover tokens) — pin via the product path.
         await Assert.That(ProductAccepts("not a > b")).IsFalse();
         await Assert.That(ProductAccepts("a > b > c")).IsFalse();
     }

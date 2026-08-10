@@ -104,7 +104,7 @@ See the root `AGENTS.md` for guidance on when to consult these documents.
 | `Analysis/` | V3 domain model analyzers on shared Syntax.Analysis substrate |
 | `Lowering/` | `DomainExpressionLoweringPass`, `PolicyEvaluator` — VM-integrated policy evaluation |
 | `Runtime/` | Instance/store runtime types — `DomainEntityInstance`, `DomainInstanceStore`, `InvocationResult` (namespace unchanged: `Poly.DomainModeling`) |
-| `Parsing/` | Product `.poly`: `DslTokenReader`, `DslGrammar` — product expr/effect **tables + handlers** (parse control flow Grammar-driven; `DslExpressionParser` folds via `MatchRule` op patterns), `ExpressionFormRegistry` (E1 open forms), `DomainDslPrinter` / `DslTokenWriter` (printer table-parity deferred — round-trip walks the domain) |
+| `Parsing/` | Product `.poly`: `DslTokenReader`, `DslGrammar` — product expr/effect **tables + handlers** (parse control flow Grammar-driven; `DslExpressionParser` folds via `MatchRule` op patterns), `ExpressionFormRegistry` (E1 open forms), `DomainDslPrinter` (printer table-parity deferred — round-trip walks the domain) |
 | `Builders/` | Alternative fluent construction API (used for rich entity setup) |
 | `Constraints/` | Constraint types (Range, Length, Pattern, etc.) |
 | `Effects/` | Effect types (Create, Transition, Assign, Conditional, Composite, etc.) |

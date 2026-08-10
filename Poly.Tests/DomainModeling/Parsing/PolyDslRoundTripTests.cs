@@ -5,7 +5,8 @@ using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Constraints;
 using Poly.DomainModeling.Effects;
 using Poly.DomainModeling.Evolution;
-using Poly.DomainModeling.Parsing;
+using Poly.DomainModeling.Parsing;      // DomainDslPrinter (product print — v1 domain-walk, table-parity deferred)
+                                        // PolyDslParser
 using Poly.Introspection;
 
 namespace Poly.Tests.DomainModeling.Parsing;

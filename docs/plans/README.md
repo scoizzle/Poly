@@ -3,8 +3,8 @@
 Execution-oriented planning — roadmaps, phase breakdowns, task trackers.
 
 **Not plans:** platform mechanisms → **[`docs/CORE.md`](../CORE.md)**.  
-Architectural rationale → **`docs/decisions/`**. Module maps → **`Poly/*/README.md`**.
-
+Architectural rationale → **`docs/decisions/`**. Module maps → **`Poly/*/README.md`**.  
+**Semantic map / complexity demons** → **[`docs/complexity-semantic-map.md`](../complexity-semantic-map.md)** (facet inventory + duals).
 ---
 
 ## Admission control
@@ -62,6 +62,7 @@ copilot --agent plan-suite-until-done -p "Suite: mut-safety. Mode: until-done."
 | Plan | Unpark when |
 |------|-------------|
 | [`dead-dual-inventory-2026-08-08.md`](dead-dual-inventory-2026-08-08.md) | Idle green tree or explicit cleanup admit (after mut-safety preferred) — Validation + Text.Matching kill list |
+| ~~[`grammar-revision.md`](grammar-revision.md)~~ | ✅ **DONE 2026-08-09** — v2 engine + DSL cutover + printer + review fixes; see doc for final status |
 | [`ef-and-api-codegen.md`](ef-and-api-codegen.md) | Explicit generation suite admit |
 | [`analysis-consuming-lowering.md`](analysis-consuming-lowering.md) | Explicit pick |
 | [`post-v2-delete-naming-cleanup.md`](post-v2-delete-naming-cleanup.md) | Idle green tree |

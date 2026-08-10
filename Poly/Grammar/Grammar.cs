@@ -1,220 +1,158 @@
 namespace Poly.Grammar;
 
 /// <summary>
-/// A grammar is a named collection of <see cref="Pattern{TKind}"/> grouped
-/// into rules. Each rule represents a context in which a set of patterns are
-/// valid. The <see cref="Matcher{TKind}"/> uses the grammar to find the longest
-/// matching pattern at the current position in a token stream.
+/// A grammar is a named collection of <see cref="Pattern{TToken,TTokenKind}"/> grouped
+/// into rules. Each rule is a context in which a set of patterns are valid; the
+/// <see cref="Matcher{TToken,TTokenKind}"/> finds the longest matching pattern at the
+/// current position.
 ///
-/// <code>
-/// var g = new Grammar&lt;MyKind&gt;();
-/// g.Define("entity-body")
-///     .Pattern("property").Token(Identifier).Token(Colon).Predicate(IsType, "type").Commit()
-///     .Pattern("stage")   .Token(Identifier).Token(Colon).Token(Stage).Balanced(LBrace, RBrace).Commit();
-/// </code>
+/// Read-only at match time (patterns are sorted on registration), so concurrent
+/// matchers may share one grammar safely.
 /// </summary>
-public sealed class Grammar<TKind> where TKind : struct {
-    private readonly Dictionary<string, List<Pattern<TKind>>> _rules = new();
+public sealed class Grammar<TToken, TTokenKind>
+    where TToken : struct, IToken<TTokenKind>
+    where TTokenKind : struct {
+    private readonly Dictionary<string, List<Pattern<TToken, TTokenKind>>> _rules = new();
 
-    /// <summary>
-    /// Begins defining patterns in a named rule group.
-    /// </summary>
-    public RuleBuilder<TKind> Define(string ruleName) {
+    /// <summary>Begins defining patterns in a named rule group.</summary>
+    public RuleBuilder<TToken, TTokenKind> Define(string ruleName) {
         ArgumentException.ThrowIfNullOrWhiteSpace(ruleName);
-        return new RuleBuilder<TKind>(this, ruleName);
+        return new RuleBuilder<TToken, TTokenKind>(this, ruleName);
     }
 
     /// <summary>
-    /// Returns all patterns registered under <paramref name="ruleName"/>
-    /// sorted by first-token kind then by element count descending,
-    /// or an empty list if the rule is unknown.
-    /// Read-only at match time (sorting happens on <see cref="AddPattern"/>)
-    /// so concurrent matchers may share one grammar safely.
-    /// Lenient by design: <see cref="Matcher{TKind}.TryMatch"/> and RuleRef /
-    /// LeftAssoc operands validate the rule name first (N3 — fail loud on typos),
-    /// while ManyOf keeps its documented zero-many-on-unknown behavior.
+    /// Returns all patterns registered under <paramref name="ruleName"/>, sorted by
+    /// first-token kind then element count descending. Lenient for unknown rules
+    /// (empty list) — the matcher validates rule names before matching (N3) so
+    /// <see cref="Repeat{TToken,TTokenKind}"/> keeps zero-many-on-unknown semantics
+    /// while typo'd rule references fail at the source.
     /// </summary>
-    public IReadOnlyList<Pattern<TKind>> GetPatterns(string ruleName) {
-        if (!_rules.TryGetValue(ruleName, out var list))
-            return [];
-        return list;
-    }
+    public IReadOnlyList<Pattern<TToken, TTokenKind>> GetPatterns(string ruleName) =>
+        _rules.TryGetValue(ruleName, out var list) ? list : [];
 
     /// <summary>True when a rule with this name is defined.</summary>
     public bool HasRule(string ruleName) => _rules.ContainsKey(ruleName);
 
-    /// <summary>Returns all known rule names.</summary>
+    /// <summary>All known rule names.</summary>
     public IEnumerable<string> KnownRules => _rules.Keys;
 
-    internal void AddPattern(string ruleName, Pattern<TKind> pattern) {
+    internal void AddPattern(string ruleName, Pattern<TToken, TTokenKind> pattern) {
         if (!_rules.TryGetValue(ruleName, out var list))
-            _rules[ruleName] = list = new();
+            _rules[ruleName] = list = [];
         list.Add(pattern);
-        // Keep lists sorted after every commit so GetPatterns never mutates
-        // under concurrent Matcher use (product parsers share a static table).
         SortPatterns(list);
     }
 
-    // ═══════════════════════════════════════════════════════
-    //  Pattern sorting
-    // ═══════════════════════════════════════════════════════
-
     /// <summary>
-    /// Sorts patterns so that for each distinct first-token kind the longest
-    /// pattern appears first. Patterns without a <see cref="MatchToken{TKind}"/>
-    /// or <see cref="MatchValue{TKind}"/> first element sort after all token-led
-    /// patterns.
-    ///
-    /// This makes <c>ManyOf</c> safe — the first match within a token group
-    /// is always the longest potential match.
+    /// Sorts so that for each distinct first-token kind the longest pattern comes
+    /// first; non-kind-led patterns sort last. This makes Repeat safe — the first
+    /// match within a token group is always the longest potential match.
     /// </summary>
-    private void SortPatterns(List<Pattern<TKind>> patterns) {
+    private void SortPatterns(List<Pattern<TToken, TTokenKind>> patterns) {
         patterns.Sort((a, b) => {
-            var aIsMatch = a.Elements.Count > 0 && (a.Elements[0] is MatchToken<TKind> or MatchValue<TKind>);
-            var bIsMatch = b.Elements.Count > 0 && (b.Elements[0] is MatchToken<TKind> or MatchValue<TKind>);
+            var aIsKind = a.Elements.Count > 0 && a.Elements[0] is MatchKind<TToken, TTokenKind>;
+            var bIsKind = b.Elements.Count > 0 && b.Elements[0] is MatchKind<TToken, TTokenKind>;
 
-            // Non-MatchToken-led patterns sort last
-            if (aIsMatch != bIsMatch)
-                return bIsMatch.CompareTo(aIsMatch);
+            if (aIsKind != bIsKind)
+                return bIsKind.CompareTo(aIsKind);
 
-            // Within same first-token group, sort by element count descending
-            if (aIsMatch && bIsMatch) {
-                var aKind = FirstKind(a.Elements[0]);
-                var bKind = FirstKind(b.Elements[0]);
-                var cmp = Comparer<TKind>.Default.Compare(aKind, bKind);
+            // Within same first-kind group, sort by kind (Comparer works for enums,
+            // mirroring v1) then element count descending (longest first).
+            if (aIsKind && bIsKind) {
+                var aKind = ((MatchKind<TToken, TTokenKind>)a.Elements[0]).Kind;
+                var bKind = ((MatchKind<TToken, TTokenKind>)b.Elements[0]).Kind;
+                var cmp = Comparer<TTokenKind>.Default.Compare(aKind, bKind);
                 if (cmp != 0) return cmp;
             }
 
-            // Longer patterns first
             return b.Elements.Count.CompareTo(a.Elements.Count);
         });
     }
-
-    private static TKind FirstKind(IPatternElement<TKind> element) => element switch {
-        MatchToken<TKind> mt => mt.Kind,
-        MatchValue<TKind> mv => mv.Kind,
-        _ => default,
-    };
 }
 
-/// <summary>
-/// Fluent builder returned by <see cref="Grammar{TKind}.Define"/>.
-/// Accumulates patterns under a named rule.
-/// </summary>
-public sealed class RuleBuilder<TKind> where TKind : struct {
-    internal Grammar<TKind> Grammar => _grammar;
-    internal string RuleName => _ruleName;
-
-    private readonly Grammar<TKind> _grammar;
+/// <summary>Fluent rule group builder.</summary>
+public sealed class RuleBuilder<TToken, TTokenKind>
+    where TToken : struct, IToken<TTokenKind>
+    where TTokenKind : struct {
+    private readonly Grammar<TToken, TTokenKind> _grammar;
     private readonly string _ruleName;
 
-    internal RuleBuilder(Grammar<TKind> grammar, string ruleName) {
+    internal RuleBuilder(Grammar<TToken, TTokenKind> grammar, string ruleName) {
         _grammar = grammar;
         _ruleName = ruleName;
     }
 
-    /// <summary>Begins defining a new pattern under this rule.</summary>
-    public PatternBuilder<TKind> Pattern(string name) =>
-        new(this, _grammar, _ruleName, name);
+    public PatternBuilder<TToken, TTokenKind> Pattern(string name) =>
+        new(_grammar, _ruleName, name);
 }
 
-/// <summary>
-/// Fluent builder returned by <see cref="RuleBuilder{TKind}.Pattern"/>.
-/// Accumulates elements and commits the pattern to the grammar.
-/// </summary>
-public sealed class PatternBuilder<TKind> where TKind : struct {
-    private readonly RuleBuilder<TKind> _parent;
-    private readonly Grammar<TKind> _grammar;
+/// <summary>Fluent pattern builder — element-by-element, then Commit registers the pattern.</summary>
+public sealed class PatternBuilder<TToken, TTokenKind>
+    where TToken : struct, IToken<TTokenKind>
+    where TTokenKind : struct {
+    private readonly Grammar<TToken, TTokenKind> _grammar;
     private readonly string _ruleName;
     private readonly string _name;
-    private readonly List<IPatternElement<TKind>> _elements = new();
+    private readonly List<IPatternElement<TToken, TTokenKind>> _elements = [];
 
-    internal PatternBuilder(RuleBuilder<TKind> parent, Grammar<TKind> grammar, string ruleName, string name) {
-        _parent = parent;
+    internal PatternBuilder(Grammar<TToken, TTokenKind> grammar, string ruleName, string name) {
         _grammar = grammar;
         _ruleName = ruleName;
         _name = name;
     }
 
-    /// <summary>Appends a token of a specific kind (fixed syntax).</summary>
-    public PatternBuilder<TKind> Token(TKind kind) {
-        _elements.Add(new MatchToken<TKind>(kind));
+    public PatternBuilder<TToken, TTokenKind> Kind(TTokenKind kind) {
+        _elements.Add(new MatchKind<TToken, TTokenKind>(kind));
         return this;
     }
 
-    /// <summary>Appends a value-bearing token of a specific kind (runtime content supplied by printer callback).</summary>
-    public PatternBuilder<TKind> Value(TKind kind) {
-        _elements.Add(new MatchValue<TKind>(kind));
+    public PatternBuilder<TToken, TTokenKind> Value(TTokenKind kind) {
+        _elements.Add(new Value<TToken, TTokenKind>(kind));
         return this;
     }
 
-    /// <summary>Appends a predicate-based token match with a human-readable label.</summary>
-    public PatternBuilder<TKind> Predicate(Func<TKind, bool> predicate, string label) {
-        _elements.Add(new MatchPredicate<TKind>(predicate, label));
+    public PatternBuilder<TToken, TTokenKind> Predicate(Func<TToken, bool> predicate, string label) {
+        _elements.Add(new MatchPredicate<TToken, TTokenKind>(predicate, label));
         return this;
     }
 
-    /// <summary>Appends an optional token of a specific kind.</summary>
-    public PatternBuilder<TKind> Optional(TKind kind) {
-        _elements.Add(new Optional<TKind>(new MatchToken<TKind>(kind)));
+    public PatternBuilder<TToken, TTokenKind> Optional(IPatternElement<TToken, TTokenKind> inner) {
+        _elements.Add(new Optional<TToken, TTokenKind>(inner));
         return this;
     }
 
-    /// <summary>Appends an optional compound element (any <see cref="IPatternElement{TKind}"/>).</summary>
-    public PatternBuilder<TKind> Optional(IPatternElement<TKind> element) {
-        _elements.Add(new Optional<TKind>(element));
+    /// <summary>Convenience: optional single token of a kind (wraps <see cref="MatchKind{TToken,TTokenKind}"/>).</summary>
+    public PatternBuilder<TToken, TTokenKind> Optional(TTokenKind kind) =>
+        Optional(new MatchKind<TToken, TTokenKind>(kind));
+
+    public PatternBuilder<TToken, TTokenKind> Repeat(string ruleName, int min = 0, int max = int.MaxValue) {
+        _elements.Add(new Repeat<TToken, TTokenKind>(ruleName, min, max));
         return this;
     }
 
-    /// <summary>
-    /// Appends a repeat: zero or more matches of patterns from the named rule.
-    /// </summary>
-    public PatternBuilder<TKind> Many(string ruleName) {
-        _elements.Add(new ManyOf<TKind>(ruleName));
+    public PatternBuilder<TToken, TTokenKind> Ref(string ruleName) {
+        _elements.Add(new Ref<TToken, TTokenKind>(ruleName));
         return this;
     }
 
-    /// <summary>
-    /// Appends a reference to exactly one match of the named rule
-    /// (recursive / nested languages). Longest-match selection relative to
-    /// the current offset; zero-width sub-matches fail.
-    /// </summary>
-    public PatternBuilder<TKind> Rule(string ruleName) {
-        _elements.Add(new RuleRef<TKind>(ruleName));
+    public PatternBuilder<TToken, TTokenKind> LeftAssoc(string operandRule, params TTokenKind[] operatorKinds) {
+        _elements.Add(new LeftAssoc<TToken, TTokenKind>(operandRule, operatorKinds));
         return this;
     }
 
-    /// <summary>
-    /// Appends a left-associative operator chain: one <paramref name="operandRule"/>
-    /// match, then zero or more <c>operator operand</c> repeats using the given
-    /// operator kinds. The whole span is consumed flat; a trailing operator
-    /// without an operand fails the element.
-    /// </summary>
-    public PatternBuilder<TKind> LeftAssoc(string operandRule, params TKind[] operatorKinds) {
-        ArgumentException.ThrowIfNullOrWhiteSpace(operandRule);
-        ArgumentNullException.ThrowIfNull(operatorKinds);
-        _elements.Add(new LeftAssoc<TKind>(operandRule, operatorKinds));
+    public PatternBuilder<TToken, TTokenKind> Balanced(TTokenKind open, TTokenKind close) {
+        _elements.Add(new Balanced<TToken, TTokenKind>(open, close));
         return this;
     }
 
-    /// <summary>
-    /// Appends a brace-balanced block: <paramref name="open"/> ... <paramref name="close"/>,
-    /// tracking nesting to find the matching close.
-    /// </summary>
-    public PatternBuilder<TKind> Balanced(TKind open, TKind close) {
-        _elements.Add(new Balanced<TKind>(open, close));
+    public PatternBuilder<TToken, TTokenKind> Any() {
+        _elements.Add(new Any<TToken, TTokenKind>());
         return this;
     }
 
-    /// <summary>Appends a wildcard that matches any single token.</summary>
-    public PatternBuilder<TKind> Any() {
-        _elements.Add(new AnyToken<TKind>());
-        return this;
-    }
-
-    /// <summary>Commits the pattern to the grammar and returns the parent rule builder.</summary>
-    public RuleBuilder<TKind> Commit() {
-        _grammar.AddPattern(_ruleName, new Pattern<TKind>(_name, _elements.ToArray()));
-        return _parent;
+    /// <summary>Commits this pattern and returns the rule builder for the next pattern in the rule.</summary>
+    public RuleBuilder<TToken, TTokenKind> Commit() {
+        _grammar.AddPattern(_ruleName, new Pattern<TToken, TTokenKind>(_name, _elements));
+        return new RuleBuilder<TToken, TTokenKind>(_grammar, _ruleName);
     }
 }

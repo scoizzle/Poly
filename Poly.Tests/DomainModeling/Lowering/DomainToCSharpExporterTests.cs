@@ -929,4 +929,36 @@ public class DomainToCSharpExporterTests {
         await Assert.That(cs).Contains("this.Color = Color.Red");
         await Assert.That(cs).DoesNotContain("this.Color = Red");
     }
+
+    [Test]
+    public async Task Export_DefaultedPropOverride_EmitsPostCreateAssignment() {
+        // Regression (review F#4): a create-in initializer that binds a prop WITH a
+        // DefaultValueConstraint (e.g. `Severity: Hint` on `default(Warning)`) must
+        // override the default — emitted as a post-create assignment, NOT silently
+        // dropped (the runtime's values bag honors it; the export must too).
+        var (domain, analysis) = ParseAndAnalyze("""
+            domain Demo
+            Severity: enum { Hint, Warning, Error }
+            Diagnostic: entity {
+              Code: Text required
+              Severity: Severity default(Warning)
+            }
+            Compilation: entity {
+              diagnostics: many Diagnostic
+              Log: action {
+                create in diagnostics { Code: "P000" Severity: Hint }
+              }
+            }
+            """);
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var unit = new CompilationUnitNode([], null, types, null);
+        var cs = new CSharpGenerator().Generate(unit);
+
+        // The override must appear after the factory call, qualified enum member.
+        await Assert.That(cs).Contains("diagnostic.Severity = Severity.Hint");
+        // Severity is NOT a CreateDiagnostics ctor param (it has a default) — the
+        // factory takes only Code; the override is a separate post-create assignment.
+        await Assert.That(cs).Contains("CreateDiagnostics(string code)");
+        await Assert.That(cs).DoesNotContain("CreateDiagnostics(string code, Severity");
+    }
 }

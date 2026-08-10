@@ -936,6 +936,17 @@ public sealed class PolyDslParser : DslCursor {
                 Advance();
         }
 
+        // Enum members must be identifiers — a member named after a primitive
+        // type keyword (e.g. `Number`, `Text`, `Boolean`) lexes as that keyword
+        // token and would otherwise fail cryptically on the RBrace expect below.
+        if (Current.Kind is TokenKind.Text or TokenKind.NumberType
+            or TokenKind.BooleanType or TokenKind.DateTimeType or TokenKind.DateType) {
+            var word = Current.Text;
+            throw Error(
+                $"Enum member '{word}' is a reserved type keyword and cannot be used as an enum member. " +
+                "Rename it (e.g. 'Number' → 'Numeric').");
+        }
+
         Expect(TokenKind.RBrace);
 
         _enumTypeNames.Add(name);

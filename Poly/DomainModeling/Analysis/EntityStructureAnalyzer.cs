@@ -1,5 +1,6 @@
 using Poly.Analysis;
 using Poly.DomainModeling.Constraints;
+using Poly.DomainModeling.Effects;
 using Poly.DomainModeling.Lowering;
 
 namespace Poly.DomainModeling.Analysis;
@@ -97,8 +98,22 @@ internal sealed class EntityStructureAnalyzer : INodeAnalyzer {
         Entity entity, Domain domain, DomainTypeLookupMetadata lookup) {
         var parameters = new List<ConstructorParameterOrder>();
 
+        // Props assigned by the FIRST stage's entry effects are body-initialized in
+        // the exported ctor (which runs those effects after setting CurrentStage) —
+        // they are NOT ctor params (a param would be dead + written twice, e.g.
+        // StartedAt). Must match the exporter's ctor-emission rule exactly so the
+        // Create(...) signature (declaration) and its callers stay in sync.
+        var entryAssignedProps = new HashSet<string>(StringComparer.Ordinal);
+        if (entity.Stages.Count > 0) {
+            foreach (var effect in entity.Stages[0].OnEntryEffects) {
+                if (effect is AssignEffect ae && ae.Target is PropertyAccess pa)
+                    entryAssignedProps.Add(pa.Name);
+            }
+        }
+
         foreach (var prop in entity.Properties.OrderBy(p => p.Name)) {
             if (prop.Constraints.Any(c => c is DefaultValueConstraint)) continue;
+            if (entryAssignedProps.Contains(prop.Name)) continue;
             parameters.Add(new ConstructorParameterOrder(prop.Name, prop.Type, IsNavigation: false, IsBackReference: false));
         }
 

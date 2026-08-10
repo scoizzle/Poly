@@ -1295,8 +1295,14 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
             s => string.Equals(s.Name, ste.TargetStage.StageName, StringComparison.Ordinal));
         if (targetStage is null) return;
 
-        var requiredMeta = context.GetMetadata<RequiredPropertiesMetadata>(targetStage)
-            ?? context.GetMetadata<RequiredPropertiesMetadata>(entity);
+        // STAGE-scoped required metadata only. Entity-level required properties are
+        // creation invariants — satisfied by create initializers and enforced by the
+        // Create factory (DMEFF011) / ValidateCreateEntityRequirements — NOT by
+        // transition-time assigns. Falling back to entity metadata here produced
+        // false positives: every transition into a stage warned that an
+        // entity-required prop (e.g. EntryPath) had no AssignEffect, even though it
+        // was set at construction.
+        var requiredMeta = context.GetMetadata<RequiredPropertiesMetadata>(targetStage);
         if (requiredMeta is null) return;
 
         foreach (var required in requiredMeta.RequiredProperties) {

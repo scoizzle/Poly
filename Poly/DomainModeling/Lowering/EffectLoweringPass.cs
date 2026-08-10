@@ -330,6 +330,22 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         nds.Add(new Variable(targetName,
             new Member(new Variable(resultVar), "Value")));
 
+        // Defaulted-property overrides (props with DefaultValueConstraint are not
+        // ctor params — the factory body sets the default). Apply bound values as
+        // post-create assignments so `create Fine { Severity: Hint }` overrides the
+        // default instead of being silently dropped (matches the runtime values bag).
+        var parameterNames = GetConstructorParameterOrder(targetEntity)
+            .Select(p => p.Name).ToHashSet(StringComparer.Ordinal);
+        foreach (var init in cei.Initializers) {
+            if (parameterNames.Contains(init.PropertyName)) continue;
+            var targetProp = targetEntity.Properties.FirstOrDefault(p =>
+                string.Equals(p.Name, init.PropertyName, StringComparison.Ordinal));
+            if (targetProp is null) continue;
+            nds.Add(new Assignment(
+                new Member(new Variable(targetName), targetProp.Name),
+                LowerEnumAwareValue(init.Expression, targetProp.Type, Subject)));
+        }
+
         return new Block(nds);
     }
 
@@ -383,12 +399,29 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
                 args.Add(DefaultForDomainType(parameter.Type, _domain, _analysis));
         }
 
-        // Capture the return value in a local variable, matching CreateEntityInstance lowering
+        // Defaulted-property overrides: props with a DefaultValueConstraint are NOT
+        // ctor params (the factory body sets the default), so a binding like
+        // `create in diagnostics { Severity: Hint }` would be silently dropped.
+        // The runtime honors it (values bag); the export must too — apply as a
+        // post-create assignment (props get `internal set` so same-assembly code
+        // can override after construction).
         var localName = DomainToCSharpExporter.ToCamelCase(targetEntity.Name);
-        return new Block([
+        var blockNodes = new List<Node> {
             new Variable(localName,
                 new Invoke(new Member(Subject, methodName), [.. args]))
-        ]);
+        };
+        var parameterNames = parameterMetadata.Select(p => p.Name).ToHashSet(StringComparer.Ordinal);
+        foreach (var init in cr.Initializers) {
+            if (parameterNames.Contains(init.PropertyName)) continue; // already a ctor arg
+            var targetProp = targetEntity.Properties.FirstOrDefault(p =>
+                string.Equals(p.Name, init.PropertyName, StringComparison.Ordinal));
+            if (targetProp is null) continue; // unknown/collection — analyzer already reported
+            blockNodes.Add(new Assignment(
+                new Member(new Variable(localName), targetProp.Name),
+                LowerEnumAwareValue(init.Expression, targetProp.Type, Subject)));
+        }
+
+        return new Block(blockNodes);
     }
 
     /// <summary>

@@ -740,7 +740,9 @@ public class UnsatisfiedRequirementTests {
     public async Task EffectUnsatisfiedRequirement_StageTransitionSatisfied_DoesNotReport() {
         var text = new Poly.DomainModeling.PrimitiveType("Text", TypeCategory.Text, []);
         var title = new Property("Title", new DomainTypeReference("Text"), [new RequiredConstraint()]);
-        var stage = new Stage("Open", [], [], [], []);
+        var stage = new Stage("Open", [],
+            [new Policy("RequiresTitle", DomainExpression.Exists(new PropertyAccess("Title")))],
+            [], []);
         var action = new Poly.DomainModeling.Action("OpenTicket", InvocationResult.Void, [
             new Property("incomingTitle", new DomainTypeReference("Text"), [])
         ], [
@@ -759,8 +761,12 @@ public class UnsatisfiedRequirementTests {
     [Test]
     public async Task EffectUnsatisfiedRequirement_StageTransitionMissingAssignment_ReportsWarning() {
         var text = new Poly.DomainModeling.PrimitiveType("Text", TypeCategory.Text, []);
-        var title = new Property("Title", new DomainTypeReference("Text"), [new RequiredConstraint()]);
-        var stage = new Stage("Open", [], [], [], []);
+        var title = new Property("Title", new DomainTypeReference("Text"), []);
+        // Stage-scoped requirement: a stage policy requires Title to exist while in
+        // the stage — entering without assigning it is a genuine gap.
+        var stage = new Stage("Open", [],
+            [new Policy("RequiresTitle", DomainExpression.Exists(new PropertyAccess("Title")))],
+            [], []);
         var action = new Poly.DomainModeling.Action("OpenTicket", InvocationResult.Void, [], [
             new StageTransitionEffect(new StageReference("Open"))
         ], []);
@@ -771,6 +777,28 @@ public class UnsatisfiedRequirementTests {
 
         await Assert.That(analysis.Diagnostics.Any(d =>
             d.Code == DomainModelDiagnosticCodes.EffectUnsatisfiedRequirement)).IsTrue();
+    }
+
+    [Test]
+    public async Task EffectUnsatisfiedRequirement_EntityRequiredProp_DoesNotWarnOnTransition() {
+        // A property with a `required` constraint is a CREATION invariant — set at
+        // create time and enforced by the Create factory. It is NOT a stage-entry
+        // requirement, so transitioning into a stage must not warn (false positive:
+        // TinyCompiler's EntryPath warned on every transition despite being set at
+        // `create in builds { EntryPath: ... }`).
+        var text = new Poly.DomainModeling.PrimitiveType("Text", TypeCategory.Text, []);
+        var entryPath = new Property("EntryPath", new DomainTypeReference("Text"), [new RequiredConstraint()]);
+        var stage = new Stage("Lexing", [], [], [], []);
+        var action = new Poly.DomainModeling.Action("Begin", InvocationResult.Void, [], [
+            new StageTransitionEffect(new StageReference("Lexing"))
+        ], []);
+        var entity = new Entity("Compilation", [entryPath], [action], [], [stage]);
+        var domain = new Domain("Test", [text, entity], []);
+
+        var analysis = DomainModelAnalyzer.Analyze(domain);
+
+        await Assert.That(analysis.Diagnostics.Any(d =>
+            d.Code == DomainModelDiagnosticCodes.EffectUnsatisfiedRequirement)).IsFalse();
     }
 
     [Test]

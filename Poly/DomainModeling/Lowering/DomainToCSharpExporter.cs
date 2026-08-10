@@ -121,6 +121,18 @@ public sealed class DomainToCSharpExporter {
                 AccessModifier: AccessModifier.Private)
         ));
 
+        // Properties assigned by the initial stage's entry effects are body-initialized
+        // (the ctor already runs those effects after setting CurrentStage) — they must
+        // NOT also be ctor params, or the value is written twice (param then effect)
+        // and the param is dead (e.g. StartedAt: param, then entry `assign StartedAt to now`).
+        var entryAssignedProps = new HashSet<string>(StringComparer.Ordinal);
+        if (entity.Stages.Count > 0) {
+            foreach (var effect in entity.Stages[0].OnEntryEffects) {
+                if (effect is AssignEffect ae && ae.Target is PropertyAccess pa)
+                    entryAssignedProps.Add(pa.Name);
+            }
+        }
+
         // ── Entity properties (sorted for deterministic output) ──
         foreach (var prop in entity.Properties.OrderBy(p => p.Name)) {
             var propRef = MapDomainTypeRef(prop.Type, domain, metadata);
@@ -132,8 +144,11 @@ public sealed class DomainToCSharpExporter {
             props.Add(new PropertyDefinitionNode(
                 prop.Name, propRef,
                 Getter: new PropertyGetterDefinitionNode(),
+                // internal set — lets same-assembly factory/nav code apply
+                // defaulted-property overrides after construction (post-create
+                // assignment); still encapsulated from external callers.
                 Setter: new PropertySetterDefinitionNode(
-                    AccessModifier: AccessModifier.Private),
+                    AccessModifier: AccessModifier.Internal),
                 Constraints: constraints
             ));
 
@@ -171,6 +186,12 @@ public sealed class DomainToCSharpExporter {
                     }
                 }
             }
+
+            // Prop assigned by the initial stage's entry effect: the ctor body already
+            // runs those effects (after setting CurrentStage), so it is body-initialized
+            // — NOT a ctor param (a param would be dead and written twice, e.g. StartedAt).
+            if (entryAssignedProps.Contains(prop.Name))
+                continue;
 
             // No default expression — full constructor param + assignment
             var paramName = ToCamelCase(prop.Name);
@@ -219,9 +240,12 @@ public sealed class DomainToCSharpExporter {
                 AddCreateNavMethod(entity, rel, domain!, subscriberSubs, fieldName, methods, metadata);
             }
             else {
-                // Singular nav: property with private setter (constructor param)
+                // Singular nav: property with private setter (constructor param).
+                // Navs are optional references (set at link/create time, may be null
+                // at EF materialization) — emit nullable so the generated code has
+                // no non-nullable-uninitialized warnings (CS8618).
                 props.Add(new PropertyDefinitionNode(
-                    pascalName, targetType,
+                    pascalName, new OptionalTypeReference(targetType),
                     Getter: new PropertyGetterDefinitionNode(),
                     Setter: new PropertySetterDefinitionNode(
                         AccessModifier: AccessModifier.Private)
@@ -249,8 +273,10 @@ public sealed class DomainToCSharpExporter {
             }
             else {
                 // Singular nav (incl. back-reference): param + property assign.
+                // Nullable to match the property (navs may be unlinked at creation).
                 var pascalName = ToPascalCase(navParam.Name);
-                var propRef = MapDomainTypeRef(navParam.Type, domain, metadata);
+                var propRef = new OptionalTypeReference(
+                    MapDomainTypeRef(navParam.Type, domain, metadata));
                 ctorParams.Add(new Parameter(paramName, propRef));
                 ctorAssignments.Add(new Assignment(
                     new Member(new ThisReference(), pascalName),
@@ -832,7 +858,7 @@ public sealed class DomainToCSharpExporter {
                                 new Block([Failure(
                                     $"'{prop.Name}' is required.")])));
                         }
-                        else if (IsNullableDomainType(prop.Type.TypeName)) {
+                        else if (IsNullableDomainType(prop.Type.TypeName, domain)) {
                             checks.Add(new IfStatement(
                                 new Equal(paramRef, new Constant(null)),
                                 new Block([Failure(
@@ -946,19 +972,25 @@ public sealed class DomainToCSharpExporter {
     /// Value types (Number, Boolean, DateTime, etc.) always have a value
     /// and cannot be null at runtime.
     /// </summary>
-    private static bool IsNullableDomainType(string typeName) => typeName switch {
-        "Text" or "String" => true,  // handled separately via IsNullOrEmpty
-        "Number" or "Int" or "Int64" or "Int32" => false,
-        "Boolean" or "Bool" => false,
-        "DateTime" or "Timestamp" => false,
-        "Date" or "DateOnly" => false,
-        "Time" or "TimeOnly" => false,
-        "Duration" or "TimeSpan" => false,
-        "Decimal" => false,
-        "Float" or "Double" => false,
-        "Guid" or "Uuid" => false,
-        _ => true, // entity reference types (Book, Patron, etc.) are nullable
-    };
+    private static bool IsNullableDomainType(string typeName, Domain? domain = null) {
+        // Enum types are C# value types — never null at runtime.
+        if (domain is not null
+            && domain.Types.OfType<EnumType>().Any(e => string.Equals(e.Name, typeName, StringComparison.Ordinal)))
+            return false;
+        return typeName switch {
+            "Text" or "String" => true,  // handled separately via IsNullOrEmpty
+            "Number" or "Int" or "Int64" or "Int32" => false,
+            "Boolean" or "Bool" => false,
+            "DateTime" or "Timestamp" => false,
+            "Date" or "DateOnly" => false,
+            "Time" or "TimeOnly" => false,
+            "Duration" or "TimeSpan" => false,
+            "Decimal" => false,
+            "Float" or "Double" => false,
+            "Guid" or "Uuid" => false,
+            _ => true, // entity reference types (Book, Patron, etc.) are nullable
+        };
+    }
 
     // ── Action method builder ───────────────────────────────────
 

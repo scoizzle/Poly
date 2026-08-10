@@ -47,18 +47,25 @@ internal sealed class RequiredPropertiesPass : INodeAnalyzer {
         if (requiredByPolicy.Count > 0) {
             context.SetMetadata(entity, new RequiredPropertiesMetadata(requiredByPolicy));
         }
+
+        // Stage-scoped required metadata — computed here (the entity visit has the
+        // property map). The standalone Stage visit below cannot resolve property
+        // names without it, so this is the only path that actually publishes.
+        foreach (var stage in entity.Stages) {
+            var stageRequired = new List<Property>();
+            foreach (var policy in stage.Policies) {
+                CollectRequiredFromExpression(policy.Expression, entityPropMap, stageRequired);
+            }
+            if (stageRequired.Count > 0) {
+                context.SetMetadata(stage, new RequiredPropertiesMetadata(stageRequired));
+            }
+        }
     }
 
     private static void PublishStage(AnalysisContext context, Stage stage) {
-        // Preserve historical stage walk (entity map not available on Stage visit).
-        var required = new List<Property>();
-        foreach (var policy in stage.Policies) {
-            CollectRequiredFromExpression(policy.Expression, entityPropMap: null, required);
-        }
-
-        if (required.Count > 0) {
-            context.SetMetadata(stage, new RequiredPropertiesMetadata(required));
-        }
+        // Historical standalone walk — without the owning entity's property map,
+        // Exists targets cannot resolve to Property objects, so nothing is
+        // collected here. Real stage metadata is published from PublishEntity.
     }
 
     private static void CollectRequiredFromExpression(

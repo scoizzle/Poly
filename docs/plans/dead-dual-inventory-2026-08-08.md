@@ -2,8 +2,7 @@
 
 **Date:** 2026-08-08  
 **Kind:** Inventory only (no deletes in this change).  
-**Method:** repo-wide `rg` for product/test/benchmark callers; SDK-style include (all `Poly/**/*.cs` compile into `Poly.dll`).  
-**Status truth:** [`simple-agent-tasks/PIPELINE-STATUS.md`](simple-agent-tasks/PIPELINE-STATUS.md) — this is **PULL**, not CURRENT.
+**Status:** ✅ **EXECUTED 2026-08-09** — `Poly/Validation/**`, `Poly.Tests/Validation/**`, `Poly/Text/Matching/**` (incl. the 2 Matching benchmarks) deleted; commented Validation samples stripped from `Poly.Benchmarks/Program.cs`; AGENTS/CORE/Text-README updated. StringView / Parsers / Extensions retained as dormant utility. LINQ oracle + rewrite visitors kept per §3.
 
 ---
 

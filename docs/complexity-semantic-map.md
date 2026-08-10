@@ -55,7 +55,6 @@ Everything else is either a **facet of that spine** or a **satellite** (export, 
 | DslCompiler + packs | 2 100 | Codegen host |
 | Analysis framework | 1 200 | Pass substrate |
 | Grammar | 1 100 | Pattern-table engine |
-| Validation | 500 | **Dormant** |
 | Docs (markdown) | ~535 files | Process + history (plans alone ~455) |
 
 **Largest single files (heat):** `DirectVmAbiEmitter` ~3k · `DomainToCSharpExporter` ~1.5k · `DomainEntityInstance` ~1.4k.
@@ -76,7 +75,7 @@ Everything else is either a **facet of that spine** or a **satellite** (export, 
 | **Interpreter façade** | *Analyze / Compile / Execute is one entry surface for programs.* | Yes | 1 |
 | **DirectVmAbiEmitter** | *Ast (+ analysis) becomes a VM program without a primitive IR middle layer.* | Yes | 3 — size/complexity of one file |
 | **VmState / VmProgram** | *Canonical execution is a stateful VM (stack, heap, suspend/debug hooks).* | Yes | 2 |
-| **LinqExpressionGenerator** | *A second backend compiles Ast to CLR delegates for oracle/parity.* | Yes (tests + Validation) | **4 — dual evaluator** |
+| **LinqExpressionGenerator** | *A second backend compiles Ast to CLR delegates for oracle/parity.* | Yes (tests / oracle) | **4 — dual evaluator** |
 | **CSharpGenerator** | *Ast (and domain export) can be printed as C# source.* | Yes (export / DslCompiler) | 1 |
 | **MermaidAstGenerator** | *Ast can be visualized as Mermaid.* | Tests / tooling | 1 |
 | **Introspection** | *Type/member identity is host-neutral; CLR is the first provider.* | Yes | 2 — multi-host ambition vs single host |
@@ -148,9 +147,9 @@ Everything else is either a **facet of that spine** or a **satellite** (export, 
 | Facet | Semantic statement | Live | Demon |
 |-------|-------------------|------|------:|
 | **Grammar Matcher** | *At each position, longest-match among patterns in a named rule.* | Yes | 1 |
-| **Pattern elements** (Token, Value, Predicate, Optional, Many, Rule, LeftAssoc, Balanced, Any) | *Composable recognition units; IR fold is not the engine’s job.* | Yes | 2 |
-| **Grammar Printer / TokenWriter** | *Walk pattern tables to emit text (kind-centric).* | Partial (tests / non-product) | 2 |
-| **Engine Token&lt;TKind&gt;** | *Engine-owned kind+text+line/col+payload (text-biased).* | Yes | **4 — design lie; see grammar-revision** |
+| **Pattern elements** (MatchKind, Value, Predicate, Optional, Repeat, Ref, LeftAssoc, Balanced, Any) | *Composable recognition units; IR fold is not the engine’s job.* | Yes | 2 |
+| **Grammar Printer** | *Walk pattern tables to emit text via a canonical-kind map + content callbacks.* | Built (product print deferred — `DomainDslPrinter` walks the domain) | 2 |
+| **Engine Token&lt;TKind&gt;** | *Engine-owned kind+text+line/col+payload (text-biased).* | **Deleted** — language-owned `IToken<TTokenKind>` (grammar-revision cutover) | — |
 | **DslTokenReader / DslTokenKind** (~60+ kinds) | *`.poly` text becomes a kind stream.* | Yes | 1 |
 | **DslGrammar tables** | *Product structural + expr span + effect heads + ops as patterns.* | Yes | **3 — span tables vs live fold** |
 | **DslExpressionParser Option A ladder** | *Live expr IR fold is a precedence ladder guided by MatchRule ops.* | Yes | **4 — pure claim vs ladder reality** |
@@ -205,8 +204,8 @@ Everything else is either a **facet of that spine** or a **satellite** (export, 
 
 | Facet | Semantic statement | Live | Demon |
 |-------|-------------------|------|------:|
-| **Poly.Validation Rule/RuleSet** | *Compose rules → Ast → LINQ predicate.* | **No product callers**; tests commented | **5 — dead dual of domain constraints + policies** |
-| **Poly.Text.Matching** | *String pattern mini-language (linked automaton).* | Benchmarks only | **5 — dead dual of Grammar** |
+| **Poly.Validation Rule/RuleSet** | *Compose rules → Ast → LINQ predicate.* | **Deleted 2026-08-09** (dead-dual cleanup) | 0 |
+| **Poly.Text.Matching** | *String pattern mini-language (linked automaton).* | **Deleted 2026-08-09** (dead-dual cleanup) | 0 |
 | **Poly.Text StringView/Parsers** | *Low-level text utilities.* | Not used by product | **3 — unused substrate bulk** |
 | **Primitive IR / ToPrimitives** | *Former canonical middle IR.* | **Deleted** | 0 (historical ADR only) |
 | **Tree-walker interpreter** | *Former “canonical” evaluator.* | **Deleted** | 0 |
@@ -259,8 +258,8 @@ Everything else is either a **facet of that spine** or a **satellite** (export, 
 
 | # | Demon | Evidence | Recommendation |
 |---|--------|----------|----------------|
-| **D8** | **Validation module** | ~500 LOC; zero product callers; tests commented | **Delete** (dead-dual inventory) |
-| **D9** | **Text.Matching** | ~unused; dual of Grammar | **Delete** (not rebuild in grammar-revision tier A) |
+| **D8** | **Validation module** | ~500 LOC; zero product callers; tests commented | ✅ **Deleted 2026-08-09** (dead-dual cleanup) |
+| **D9** | **Text.Matching** | ~unused; dual of Grammar | ✅ **Deleted 2026-08-09** (dead-dual cleanup) |
 | **D10** | **Text bulk** | ~3k LOC mostly unreferenced by product | Inventory StringView/Parsers; delete or extract |
 | **D11** | **Archive/plan search fog** | ~455 plan md files | Front-door + ignore archive in agent search |
 
@@ -296,7 +295,6 @@ Everything else is either a **facet of that spine** or a **satellite** (export, 
 ```text
                     High dual / dead weight
                               ▲
-                    Validation · Text.Matching
                     Plan archive fog
                               │
          Expr ladder↔span     │     DE↔Ast (accepted)
@@ -313,7 +311,7 @@ Everything else is either a **facet of that spine** or a **satellite** (export, 
                     High concentration, still live
 ```
 
-**Sweet spot to attack first (high demon, low product risk):** D8, D9, D11.  
+**Sweet spot to attack first (high demon, low product risk):** D11 (Validation/Text.Matching D8/D9 already deleted).  
 **Sweet spot for product honesty:** D4, D5, D7.  
 **Do not “simplify” without a design:** D1, D2, D3.
 
@@ -330,8 +328,8 @@ Use this as a kill/keep board:
 | Domain analysis catalog/capability/subscriptions | ✓ | bags↓ | | |
 | DomainExpression (domain IR) | ✓ | | | |
 | LINQ backend | oracle | | later | |
-| Validation | | | ✓ | |
-| Text.Matching | | | ✓ | |
+| Validation | | | ✅ | |
+| Text.Matching | | | ✅ | |
 | Text StringView/Parsers | ? | extract | ? | |
 | Grammar engine | ✓ | revision | | |
 | Option A ladder vs LeftAssoc span | wrap-up | | | |
@@ -349,8 +347,8 @@ Use this as a kill/keep board:
 1. **Before starting a feature:** find its facet row — if Demon ≥ 4, state how you avoid a new dual.  
 2. **Before admitting a suite:** map it to D1–D20; prefer closing a demon over opening a parallel one.  
 3. **Simplification order (suggested):**  
-   - Status monopath (done)  
-   - Delete Validation + Text.Matching (dead-dual)  
+   - Status monopath (done)
+   - Delete Validation + Text.Matching (dead-dual) — ✅ **done 2026-08-09**
    - **grammar-revision tier A (D17)** — **before** wrap-up: the LeftAssoc fold (D4) touches the same engine files the migration rewrites; revision-first avoids folding twice (see [`plans/grammar-revision.md`](plans/grammar-revision.md) §Status P1)  
    - Grammar wrap-up (D4) on the revised stack  
    - Instance/effect split only when invoke path hurts  

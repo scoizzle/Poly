@@ -9,12 +9,12 @@ Other indexes must **mirror** this file (or link here) — do not invent a secon
 ## Agent pick (one line)
 
 ```text
-DONE:    gpure (2026-08-07 + follow-ups 08-08); mcp-minify (2026-08-08 + follow-ups); grammar-revision (2026-08-09: v2 engine + DSL cutover + printer + review fixes)
+DONE:    gpure (2026-08-07 + follow-ups 08-08); mcp-minify (2026-08-08 + follow-ups); grammar-revision (2026-08-09: v2 engine + DSL cutover + printer + review fixes); dead-dual cleanup (2026-08-09: Validation + Text.Matching deleted)
 CURRENT: (none)
 ADMIT:   grammar wrap-up — LeftAssoc live-fold + S1 reconciliation (gpure S5 successor, 2026-08-08 decision)
 THEN:    grammar wrap-up → mut-safety → p1 temporal
 PARKED:  outbox lock; multi-assembly DM; actors/schedule
-PULL:    E5; EF codegen; naming cleanup; Validation/Text delete (dead-dual)
+PULL:    E5; EF codegen; naming cleanup
 ```
 
 ```bash

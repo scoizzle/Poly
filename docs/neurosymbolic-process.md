@@ -174,22 +174,6 @@ graph TB
       FusedUops --> MacroLibFuture
     end
 
-    %% ---- Validation -------------------------------------------------------
-    subgraph ValidationLayer["Poly.Validation — Declarative Rules"]
-      direction TB
-
-      Rules["Rule[]<br/>(ComparisonRule, AndRule, OrRule, ...)"]
-      RuleSet["RuleSet&lt;T&gt;.BuildInterpretationTree(ctx)<br/>→ recursively builds Syntax.Node tree"]
-      ValAnalyzer["AnalyzerBuilder.Analyze(nodeTree)<br/>→ same analysis pipeline as Tier 2"]
-      LinqComp["LinqExpressionGenerator.Compile(node, analysis)<br/>→ System.Linq.Expressions.Expression tree"]
-      Predicate["Predicate&lt;T&gt; delegate<br/>(zero runtime overhead after compile)"]
-
-      Rules --> RuleSet
-      RuleSet --> ValAnalyzer
-      ValAnalyzer --> LinqComp
-      LinqComp --> Predicate
-    end
-
     %% ---- Introspection ----------------------------------------------------
     subgraph IntrospectionLayer["Poly.Introspection — Type Provider Abstraction"]
       direction TB
@@ -224,13 +208,11 @@ graph TB
 
       Dep0["Layer 0: Syntax ←── all other modules<br/>(Syntax is base — no deps on anything)"]
       Dep1a["Layer 1: Interpretation ──→ Introspection"]
-      Dep1b["Layer 1: Validation ──→ Interpretation"]
       Dep2["Layer 2: Synthesis ──→ Syntax, Interpretation<br/>(VM for macro validation)"]
       Dep3["Layer 3: DomainModeling ──→ Syntax, Interpretation, Synthesis<br/>(evolution loop)"]
 
       Dep0 --- Dep1a
-      Dep1a --- Dep1b
-      Dep1b --- Dep2
+      Dep1a --- Dep2
       Dep2 --- Dep3
 
       Notes0["Key Rules:<br/>• No module depends on Synthesis except DomainModeling<br/>• Introspection must NOT depend on Interpretation<br/>• Domain concepts → generic VM opcodes only<br/>• Zero external dependencies in core (net10.0, BCL only)"]
@@ -240,7 +222,6 @@ graph TB
   %% ---- Tier 2 ↔ Tier 3 connections ---------------------------------------
   VMLayer -.->|"Bytecode.MicroOps fed to<br/>pattern discovery"| SynthesisLayer
   AnalysisLayer -.->|"uses for type/member<br/>resolution"| IntrospectionLayer
-  Loop -.->|"declarative rules"| ValidationLayer
   SyntaxLayer --- AltLayer
 
   %% ---- Key architectural properties (as annotations) ---------------------

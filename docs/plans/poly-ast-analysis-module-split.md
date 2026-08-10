@@ -88,7 +88,7 @@ Poly.Interpretation ────┴───────► Poly.Ast, Poly.Intro
    ▲
 Poly.DomainModeling ────────────► Poly.Ast
    │                              (+ Interpretation only for PolicyEvaluator bridge — unchanged policy)
-Poly.Validation / Poly.Mcp      ► Ast / Analysis as needed today
+Poly.Mcp                          ► Ast / Analysis as needed today
 ```
 
 ### 2.3 Assembly strategy (choose at resume time)
@@ -162,7 +162,7 @@ Execute in order. Each phase should leave **build + tests green**.
 
 - [ ] `Poly/Interpretation/**` usings and fully-qualified names.  
 - [ ] `Poly/DomainModeling/**` (esp. lowering, any analysis bridge).  
-- [ ] `Poly/Validation/**`, `Poly.Mcp/**`, `Poly.Tests/**`, `Poly.Benchmarks/**`.  
+- [ ] `Poly.Mcp/**`, `Poly.Tests/**`, `Poly.Benchmarks/**`.  
 - [ ] `using SN = …` aliases and file-local aliases in tests.  
 - [ ] Any `nameof` / diagnostic strings that embed old namespace (rare).
 

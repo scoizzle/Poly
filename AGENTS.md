@@ -123,7 +123,7 @@ The product guide is the single source of truth for MCP `apply_dsl`.
 | VM + direct AST→VM compile | `Poly/Interpretation/Vm/` (`DirectVmAbiEmitter`, `Interpreter` façade) |
 | Type/member model + CLR host | `Poly/Introspection/` |
 | Domain model, evolution, DE→AST | `Poly/DomainModeling/` |
-| Validation rules | **Do not add** — `Poly/Validation/` is dormant (no product callers); domain constraints live under `DomainModeling/Constraints` + domain analysis. Kill list: [`docs/plans/dead-dual-inventory-2026-08-08.md`](docs/plans/dead-dual-inventory-2026-08-08.md) |
+| Validation rules | **Deleted 2026-08-09** (dead-dual cleanup) — no product callers ever existed; domain constraints live under `DomainModeling/Constraints` + domain analysis. Kill list: [`docs/plans/dead-dual-inventory-2026-08-08.md`](docs/plans/dead-dual-inventory-2026-08-08.md) |
 | Pattern-table grammar engine (parse/print ports) | `Poly/Grammar/` (`Poly.Grammar`) — product media; not `Poly.Text.Matching` |
 | MCP session + tools | `Poly.Mcp/` |
 | Shared helpers | `Poly/Extensions/` |

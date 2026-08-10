@@ -384,7 +384,7 @@ public sealed class CSharpGenerator {
     private void WriteTryCatchFinally(StringBuilder sb, TryCatchFinally tryCatch, int indent) {
         Indent(sb, indent);
         sb.AppendLine("try");
-        WriteStatement(sb, tryCatch.TryBlock, indent);
+        WriteBracedBody(sb, tryCatch.TryBlock, indent);
 
         if (tryCatch.CatchClauses != null) {
             foreach (var clause in tryCatch.CatchClauses) {
@@ -402,15 +402,32 @@ public sealed class CSharpGenerator {
                     sb.Append(clause.VariableName);
                 }
                 sb.AppendLine(")");
-                WriteStatement(sb, clause.Body, indent);
+                WriteBracedBody(sb, clause.Body, indent);
             }
         }
 
         if (tryCatch.FinallyBlock != null) {
             Indent(sb, indent);
             sb.AppendLine("finally");
-            WriteStatement(sb, tryCatch.FinallyBlock, indent);
+            WriteBracedBody(sb, tryCatch.FinallyBlock, indent);
         }
+    }
+
+    /// <summary>
+    /// C# requires compound statements ({ … }) for try/catch/finally bodies — a bare
+    /// statement (e.g. <c>catch … return x;</c>) is a syntax error. Emit braces
+    /// around any non-Block body.
+    /// </summary>
+    private void WriteBracedBody(StringBuilder sb, Node body, int indent) {
+        if (body is Block) {
+            WriteStatement(sb, body, indent);
+            return;
+        }
+        Indent(sb, indent);
+        sb.AppendLine("{");
+        WriteStatement(sb, body, indent + 1);
+        Indent(sb, indent);
+        sb.AppendLine("}");
     }
 
     private void WriteUsingStatement(StringBuilder sb, UsingStatement usingStmt, int indent) {

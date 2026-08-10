@@ -26,15 +26,18 @@ public sealed class MinimalApiGenerator {
     private readonly Dictionary<string, EntityStructureMetadata> _entityStructureLookup;
 
     private readonly IStorageSyntaxEmitter? _emitter;
+    private readonly DbmsPack _dbms;
 
     public MinimalApiGenerator(Domain domain,
         AnalysisResult analysis,
         StorageModel storageModel,
         BehaviorModel behaviorModel,
         AggregateModel aggregateModel,
-        IStorageSyntaxEmitter? emitter = null) {
+        IStorageSyntaxEmitter? emitter = null,
+        DbmsPack dbms = DbmsPack.Generic) {
         ArgumentNullException.ThrowIfNull(analysis);
         _emitter = emitter;
+        _dbms = dbms;
         _domain = domain;
         _entities = domain.Types.OfType<Entity>().ToList();
         _domainName = domain.Name;
@@ -50,6 +53,27 @@ public sealed class MinimalApiGenerator {
 
     private IReadOnlyList<BehaviorAction> GetBehaviorActions(Entity entity) =>
         _behaviorLookup.TryGetValue(entity.Name, out var beh) ? beh.Actions : [];
+
+    /// <summary>
+    /// Builds the <c>options =&gt; …</c> body for the EF Core DbContext registration,
+    /// driven by the DBMS pack: sqlite → <c>UseSqlite("Data Source=library.db")</c>
+    /// (matches the shipped demo), sqlserver → <c>UseSqlServer(...)</c>, generic →
+    /// <c>UseInMemoryDatabase(domain)</c> (no provider package required).
+    /// </summary>
+    private Node BuildProviderRegistration(Parameter optionsParam) {
+        var dbName = _domainName.ToLowerInvariant();
+        switch (_dbms) {
+            case DbmsPack.Sqlite:
+                return new Invoke(new Member(optionsParam, "UseSqlite"),
+                    new Constant($"Data Source={dbName}.db"));
+            case DbmsPack.SqlServer:
+                return new Invoke(new Member(optionsParam, "UseSqlServer"),
+                    new Constant($"Server=(localdb)\\mssqllocaldb;Database={_domainName};Trusted_Connection=True"));
+            default:
+                return new Invoke(new Member(optionsParam, "UseInMemoryDatabase"),
+                    new Constant(_domainName));
+        }
+    }
 
     private StorageEntity GetStorageEntity(Entity entity) => _storageLookup[entity.Name];
 
@@ -115,15 +139,14 @@ public sealed class MinimalApiGenerator {
                         "Add"),
                     new New(new TypeReference("JsonStringEnumConverter")))))));
 
-        // ── EF Core InMemory ──
+        // ── EF Core provider (pack-driven; InMemory fallback for generic) ──
         var dbOptionsParam = new Parameter("options");
         topLevelStatements.Add(new Invoke(
             new Member(
                 new Member(new TypeReference(BuilderVar), "Services"),
                 "AddDbContext"),
             new Lambda([dbOptionsParam],
-                new Invoke(new Member(dbOptionsParam, "UseInMemoryDatabase"),
-                    new Constant(_domainName)))) {
+                BuildProviderRegistration(dbOptionsParam))) {
             TypeArguments = [new TypeReference(dbContextName)]
         });
 
@@ -143,9 +166,19 @@ public sealed class MinimalApiGenerator {
                     "GetRequiredService")) {
                 TypeArguments = [new TypeReference(dbContextName)]
             });
-        var seedCall = new Await(new Invoke(new Variable("SeedAsync"), new Variable("db")));
+
+        // SQLite needs the schema created before seeding (matches demo).
+        var scopeBody = new List<Node> { dbVar };
+        if (_dbms == DbmsPack.Sqlite) {
+            scopeBody.Add(new Await(
+                new Invoke(
+                    new Member(
+                        new Member(new Variable("db"), "Database"),
+                        "EnsureCreatedAsync"))));
+        }
+        scopeBody.Add(new Await(new Invoke(new Variable("SeedAsync"), new Variable("db"))));
         topLevelStatements.Add(new UsingStatement(scopeVar,
-            new Block(new Node[] { dbVar, seedCall }, Array.Empty<Node>())));
+            new Block(scopeBody, Array.Empty<Node>())));
 
         // ── Endpoints ──
         foreach (var entity in _entities.Where(e => GetStorageEntity(e).IsRoot))
@@ -261,8 +294,18 @@ public sealed class MinimalApiGenerator {
         }
 
         var createArgs = new List<Node>();
+        // Scalar constructor params (ESM order) come from the DTO; collection navs
+        // are ctor params (IEnumerable<T>) that start empty. ESM now carries the
+        // COMPLETE signature — no re-scan of domain.Relationships here.
         foreach (var parameter in GetConstructorOrder(entity)) {
+            if (parameter.IsCollection) {
+                createArgs.Add(new Invoke(new Member(new TypeReference("Enumerable"), "Empty")) {
+                    TypeArguments = [new TypeReference(parameter.Type.TypeName)]
+                });
+                continue;
+            }
             if (parameter.IsNavigation) {
+                if (parameter.IsBackReference) continue; // auto-wired, not from DTO
                 createArgs.Add(new Invoke(new Member(new TypeReference("Enumerable"), "Empty")) {
                     TypeArguments = [new TypeReference(parameter.Type.TypeName)]
                 });
@@ -570,18 +613,20 @@ public sealed class MinimalApiGenerator {
 
     /// <summary>Builds Syntax IR for a DTO type definition.</summary>
     private void BuildDtoTypes(List<TypeDefinitionNode> dtoTypes, Entity entity) {
-        var scalarProps = entity.Properties
-            .Where(p => !p.Constraints.Any(c => c is DefaultValueConstraint))
-            .Where(p => !_entities.Any(e => string.Equals(e.Name, p.Type.TypeName, StringComparison.Ordinal)))
-            .OrderBy(p => p.Name)
+        // The DTO mirrors the entity's CREATE signature (the POST endpoint passes
+        // the DTO members straight into Entity.Create(...)). Use the complete
+        // constructor metadata — the SAME source the endpoint reads — rather than
+        // re-deriving "scalar non-default props" here (drift = CS7036-class bug).
+        var scalarParams = GetConstructorOrder(entity)
+            .Where(p => !p.IsNavigation)
             .ToList();
 
-        if (scalarProps.Count == 0) return;
+        if (scalarParams.Count == 0) return;
         if (!GetStorageEntity(entity).IsRoot) return;
 
         // Emit as positional record (primary constructor params), matching string path — uses PascalCase
-        var primaryParams = scalarProps.Select(prop =>
-            new Parameter(prop.Name, new TypeReference(GetClrTypeName(prop.Type.TypeName)))
+        var primaryParams = scalarParams.Select(param =>
+            new Parameter(param.Name, new TypeReference(GetClrTypeName(param.Type.TypeName)))
         ).ToList();
 
         dtoTypes.Add(new TypeDefinitionNode(
@@ -618,9 +663,14 @@ public sealed class MinimalApiGenerator {
 
             foreach (var entity in seedableEntities) {
                 var createArgs = new List<Node>();
+
+                // Complete constructor signature from ESM (now includes collection
+                // navs) — scalar props get sample values, navs start empty.
                 foreach (var parameter in GetConstructorOrder(entity)) {
                     if (parameter.IsNavigation) {
-                        createArgs.Add(new Invoke(new Member(new TypeReference("Enumerable"), "Empty")) {
+                        if (parameter.IsBackReference) continue; // auto-wired
+                        createArgs.Add(new Invoke(
+                            new Member(new TypeReference("Enumerable"), "Empty")) {
                             TypeArguments = [new TypeReference(parameter.Type.TypeName)]
                         });
                         continue;
@@ -632,7 +682,6 @@ public sealed class MinimalApiGenerator {
                         throw new InvalidOperationException(
                             $"Constructor parameter '{parameter.Name}' on entity '{entity.Name}' does not match a property.");
                     }
-
                     createArgs.Add(MakeSampleValue(prop));
                 }
 

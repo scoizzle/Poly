@@ -53,6 +53,15 @@ internal static class DomainModelDiagnosticCodes {
     /// Action declares <c>-&gt; T</c> but no create/create-in produces entity type T.
     public const string EffectReturnWithoutProducer = "DMEFF009";
 
+    /// Action declares <c>-&gt; T</c> but its final statement does not produce T —
+    /// the create/create-in yielding the return value must be the last statement
+    /// (or every branch of a final conditional must produce it).
+    public const string EffectReturnNotProducedByFinalStatement = "DMEFF010";
+
+    /// A create / create-in does not provide a value for every <c>required</c>
+    /// property of the created entity (auto-wired back-reference nav excluded).
+    public const string CreateMissingRequiredProperty = "DMEFF011";
+
     // ── Aggregate / ownership diagnostics (APM Phase B) ────────
 
     /// Non-root entity has no aggregate parent — potentially orphaned.

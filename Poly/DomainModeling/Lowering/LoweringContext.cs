@@ -60,6 +60,14 @@ namespace Poly.DomainModeling.Lowering;
 /// comparisons against enum-typed properties emit qualified member access
 /// (e.g. <c>PatronStatus.Active</c>) instead of string literals.
 /// </param>
+/// <param name="NavigationNameResolver">
+/// Optional mapper from a DSL relationship/navigation name to the generated C#
+/// member name. The exporter emits pascal-cased nav properties
+/// (<c>compilations</c> → <c>Compilations</c>) while DSL expressions use the
+/// camelCase name; this resolver is the single source of truth so expression
+/// lowering (property reads, <c>Rel exists</c>, path-prefix) and the exporter
+/// agree on the member name. Falls back to identity when null.
+/// </param>
 public sealed record LoweringContext(
     Node Subject,
     IReadOnlyDictionary<string, Node>? Parameters = null,
@@ -71,5 +79,6 @@ public sealed record LoweringContext(
     string? StageEnumTypeName = null,
     IReadOnlyDictionary<string, IReadOnlyList<Node>>? PostTransitionNodes = null,
     string? SourceStageName = null,
-    IReadOnlyDictionary<string, string>? EnumPropertyNames = null
+    IReadOnlyDictionary<string, string>? EnumPropertyNames = null,
+    Func<string, string>? NavigationNameResolver = null
 );

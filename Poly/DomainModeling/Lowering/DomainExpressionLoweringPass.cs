@@ -19,6 +19,7 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Node
     private readonly HashSet<string>? _actionParameterNames;
     private readonly bool _useThisReference;
     private readonly IReadOnlyDictionary<string, string>? _enumPropertyNames;
+    private readonly Func<string, string>? _navigationNameResolver;
     private Node _currentSubject = null!;
 
     /// <param name="parameters">
@@ -35,12 +36,15 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Node
     /// tree uses <see cref="ThisReference"/> instead of <see cref="Parameter"/>
     /// for the instance root, and names in <see cref="LoweringContext.ActionParameterNames"/>
     /// render as bare parameters instead of <c>this.name</c>.
+    /// <see cref="LoweringContext.NavigationNameResolver"/> maps DSL relationship
+    /// names to generated member names (pascal-cased navs).
     /// </summary>
     public DomainExpressionLoweringPass(LoweringContext context) {
         _parameters = context.Parameters ?? new Dictionary<string, Node>();
         _actionParameterNames = context.ActionParameterNames;
         _useThisReference = context.UseThisReference;
         _enumPropertyNames = context.EnumPropertyNames;
+        _navigationNameResolver = context.NavigationNameResolver;
     }
 
     /// <summary>
@@ -72,8 +76,11 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Node
         // When UseThisReference is set, action parameters render as bare names
         if (_useThisReference && _actionParameterNames?.Contains(p.Name) == true)
             return new Parameter(p.Name);
-        return new Member(_currentSubject, p.Name);
+        return new Member(_currentSubject, ResolveName(p.Name));
     }
+
+    /// <summary>Applies the navigation name resolver (DSL nav → generated member name).</summary>
+    private string ResolveName(string name) => _navigationNameResolver?.Invoke(name) ?? name;
 
     protected override Node ParameterAccess(ParameterAccess p)
         => _parameters.TryGetValue(p.Name, out var param) ? param : new Parameter(p.Name);
@@ -82,7 +89,7 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Node
         => new Constant(l.Value);
 
     protected override Node OwnedAccess(OwnedAccess oa)
-        => Route(oa.Inner, new Member(_currentSubject, oa.OwnedName));
+        => Route(oa.Inner, new Member(_currentSubject, ResolveName(oa.OwnedName)));
 
     protected override Node RelationshipNavigation(RelationshipNavigation rn) {
         // Peer binder / other parameter-backed path-prefix roots: subject is the
@@ -97,7 +104,7 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Node
             return Route(rn.TargetProperty, parameterSubject);
         }
 
-        return Route(rn.TargetProperty, new Member(_currentSubject, rn.RelationshipName));
+        return Route(rn.TargetProperty, new Member(_currentSubject, ResolveName(rn.RelationshipName)));
     }
 
     private static bool ContainsRelationshipNavigation(DomainExpression expr) =>

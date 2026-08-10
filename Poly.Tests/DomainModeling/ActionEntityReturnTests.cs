@@ -25,6 +25,18 @@ public class ActionEntityReturnTests {
         return (result.Root!, analysis);
     }
 
+    /// <summary>Evolves a domain that is EXPECTED to fail analysis; returns the
+    /// concatenated error messages (fail-closed: evolution must reject it).</summary>
+    private static string EvolveExpectingError(string poly) {
+        var changes = new PolyDslParser(poly).Parse();
+        var result = new DomainEvolution(new Domain("_", [], [])).Apply(changes);
+        if (result.Succeeded)
+            throw new InvalidOperationException("Expected evolution to fail, but it succeeded.");
+        return string.Join("; ",
+            result.Analysis.Diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error)
+                .Select(d => d.Message));
+    }
+
     [Test]
     public async Task Analyze_ReturnTypeWithoutCreate_ReportsDMEFF009() {
         var draft = new Stage("Draft", [], [], [], []);
@@ -116,5 +128,249 @@ public class ActionEntityReturnTests {
         await Assert.That(analysis.Diagnostics.Any(d =>
             d.Severity == DiagnosticSeverity.Error
             && d.Message.Contains("declares return type", StringComparison.Ordinal))).IsFalse();
+    }
+
+    [Test]
+    public async Task Analyze_ReturnTypeWithCreateNotLast_ReportsDMEFF010() {
+        // DMEFF010: the create yielding the return value must be the FINAL statement.
+        // `create in tokens { }; transition to Parsing` — create is not last → error.
+        var message = EvolveExpectingError("""
+            domain RetLast
+            Token: entity { Kind: Text }
+            Box: entity {
+              tokens: many Token
+              Lex: action -> Token {
+                create in tokens { Kind: "let" }
+                transition to Done
+              }
+              Done: stage { }
+            }
+            """);
+        await Assert.That(message).Contains("declares return type 'Token'");
+        await Assert.That(message).Contains("final statement");
+    }
+
+    [Test]
+    public async Task Analyze_ReturnTypeWithAssignAfterCreate_ReportsDMEFF010() {
+        // Even a harmless assign after the create is not a producer → error.
+        var message = EvolveExpectingError("""
+            domain RetLastAssign
+            Order: entity { Code: Text }
+            Customer: entity {
+              Name: Text
+              orders: many Order
+              Place: action -> Order {
+                create in orders { Code: "O1" }
+                assign Name to "last"
+              }
+            }
+            """);
+        await Assert.That(message).Contains("final statement");
+    }
+
+    [Test]
+    public async Task Analyze_ReturnTypeConditionalBothBranchesCreate_NoError() {
+        // Final statement is a conditional; every branch ends in a producer → OK.
+        var (_, analysis) = Evolve("""
+            domain RetCond
+            Order: entity { Code: Text }
+            Customer: entity {
+              Rush: Boolean
+              orders: many Order
+              Place: action -> Order {
+                if (Rush is true) {
+                  create in orders { Code: "rush" }
+                } else {
+                  create in orders { Code: "normal" }
+                }
+              }
+            }
+            """);
+        await Assert.That(analysis.Diagnostics.Any(d =>
+            d.Severity == DiagnosticSeverity.Error
+            && d.Message.Contains("declares return type", StringComparison.Ordinal))).IsFalse();
+    }
+
+    [Test]
+    public async Task Analyze_ReturnTypeConditionalWithoutElse_ReportsDMEFF010() {
+        // Final conditional without an else can produce nothing when the condition
+        // is false → fail closed.
+        var message = EvolveExpectingError("""
+            domain RetCondNoElse
+            Order: entity { Code: Text }
+            Customer: entity {
+              Rush: Boolean
+              orders: many Order
+              Place: action -> Order {
+                if (Rush is true) {
+                  create in orders { Code: "rush" }
+                }
+              }
+            }
+            """);
+        await Assert.That(message).Contains("final statement");
+    }
+
+    [Test]
+    public async Task Analyze_ReturnTypeConditionalBranchEndsInNonProducer_ReportsDMEFF010() {
+        // One branch of the final conditional ends in a non-producer → error.
+        var message = EvolveExpectingError("""
+            domain RetCondBadBranch
+            Order: entity { Code: Text }
+            Customer: entity {
+              Name: Text
+              Rush: Boolean
+              orders: many Order
+              Place: action -> Order {
+                if (Rush is true) {
+                  create in orders { Code: "rush" }
+                } else {
+                  assign Name to "none"
+                }
+              }
+            }
+            """);
+        await Assert.That(message).Contains("final statement");
+    }
+
+    [Test]
+    public async Task Analyze_CreateMissingRequiredProperty_ReportsDMEFF011() {
+        // DMEFF011: `create in tokens { }` must provide every `required` property
+        // (Token.Lexeme) — otherwise the generated Create factory throws at runtime.
+        var message = EvolveExpectingError("""
+            domain CreateReq
+            Token: entity { Lexeme: Text required }
+            Box: entity {
+              tokens: many Token
+              Make: action -> Token {
+                create in tokens { }
+              }
+            }
+            """);
+        await Assert.That(message).Contains("required property 'Lexeme'");
+    }
+
+    [Test]
+    public async Task Analyze_CreateWithAllRequiredProvided_NoError() {
+        // Providing every required property → no DMEFF011.
+        var (_, analysis) = Evolve("""
+            domain CreateOk
+            Token: entity { Lexeme: Text required }
+            Box: entity {
+              tokens: many Token
+              Make: action -> Token {
+                create in tokens { Lexeme: "let" }
+              }
+            }
+            """);
+        await Assert.That(analysis.Diagnostics.Any(d =>
+            d.Severity == DiagnosticSeverity.Error
+            && d.Message.Contains("required property", StringComparison.Ordinal))).IsFalse();
+    }
+
+    [Test]
+    public async Task Analyze_CreateIn_BackRefNavPresent_NoError() {
+        // The back-reference nav (typed as the source entity) is auto-wired by
+        // create-in (guide §0.3) — it is not a required property to provide.
+        // (Navs cannot carry `required` in the DSL; this pins the skip path.)
+        var (_, analysis) = Evolve("""
+            domain CreateBackRef
+            Pet: entity {
+              Name: Text required
+              owner: Owner
+            }
+            Owner: entity {
+              pets: many Pet
+              Adopt: action {
+                create in pets { Name: "Rex" }
+              }
+            }
+            """);
+        await Assert.That(analysis.Diagnostics.Any(d =>
+            d.Severity == DiagnosticSeverity.Error
+            && d.Message.Contains("required property", StringComparison.Ordinal))).IsFalse();
+    }
+
+    [Test]
+    public async Task Analyze_CreateIn_NonBackRefRequiredMissing_ReportsDMEFF011() {
+        // A required property (Name) must be provided even with a back-ref present.
+        var message = EvolveExpectingError("""
+            domain CreateNonBackRef
+            Pet: entity {
+              Name: Text required
+              owner: Owner
+            }
+            Owner: entity {
+              pets: many Pet
+              Adopt: action {
+                create in pets { }
+              }
+            }
+            """);
+        await Assert.That(message).Contains("required property 'Name'");
+    }
+
+    [Test]
+    public async Task Analyze_CreateRequiredWithDefault_NoError() {
+        // A required property WITH a default does not need an explicit initializer.
+        var (_, analysis) = Evolve("""
+            domain CreateDefault
+            Token: entity { Lexeme: Text required default("let") }
+            Box: entity {
+              tokens: many Token
+              Make: action -> Token {
+                create in tokens { }
+              }
+            }
+            """);
+        await Assert.That(analysis.Diagnostics.Any(d =>
+            d.Severity == DiagnosticSeverity.Error
+            && d.Message.Contains("required property", StringComparison.Ordinal))).IsFalse();
+    }
+
+    [Test]
+    public async Task Analyze_CreateInWithSingularNavBinding_NoError() {
+        // A create-in initializer may bind a SINGULAR navigation property of the
+        // target (e.g. `create in loans { book: book }`) — the runtime evaluates it
+        // into the child's value bag and the exporter wires it as a Create(...) nav
+        // parameter. The analyzer must not reject it (it previously reported
+        // "unknown property 'book'" — the shipped library demo relies on this).
+        var (_, analysis) = Evolve("""
+            domain CreateNavBinding
+            Book: entity { Title: Text }
+            Patron: entity {
+              loans: many Loan
+              CheckOut: action (book: Book) -> Loan {
+                create in loans { book: book }
+              }
+            }
+            Loan: entity {
+              book: Book
+              borrower: Patron
+            }
+            """);
+        await Assert.That(analysis.Diagnostics.Any(d =>
+            d.Severity == DiagnosticSeverity.Error
+            && d.Message.Contains("unknown property 'book'", StringComparison.Ordinal))).IsFalse();
+    }
+
+    [Test]
+    public async Task Analyze_CreateInWithCollectionNavBinding_ReportsUnknownProperty() {
+        // A `many` collection nav is NOT a bindable initializer target (the exporter
+        // emits empty collections for those) — binding it must still fail closed.
+        var message = EvolveExpectingError("""
+            domain CreateNavCollection
+            Token: entity {
+              Kind: Text
+              links: many Token
+            }
+            Box: entity {
+              tokens: many Token
+              Make: action {
+                create in tokens { Kind: "k" links: Box }
+              }
+            }
+            """);
+        await Assert.That(message).Contains("unknown property 'links'");
     }
 }

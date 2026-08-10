@@ -77,9 +77,19 @@ internal sealed class EntityStructureAnalyzer : INodeAnalyzer {
 
         var constructorParameters = ComputeConstructorParameterOrder(entity, domain, lookup);
 
+        // ── Enum-typed property map (property name → enum type name) ──
+        Dictionary<string, string>? enumPropertyNames = null;
+        foreach (var prop in entity.Properties) {
+            if (lookup.Types.TryGetValue(prop.Type.TypeName, out var resolved)
+                && resolved is EnumType) {
+                (enumPropertyNames ??= new Dictionary<string, string>(StringComparer.Ordinal))[prop.Name] = prop.Type.TypeName;
+            }
+        }
+
         return new EntityStructureMetadata(
             isRoot, hasNaturalKey, keyPropName, keyClrType,
-            hasSoftDelete, hasStages, stageEnumTypeName, stageByName, constructorParameters
+            hasSoftDelete, hasStages, stageEnumTypeName, stageByName, constructorParameters,
+            enumPropertyNames
         );
     }
 
@@ -93,14 +103,15 @@ internal sealed class EntityStructureAnalyzer : INodeAnalyzer {
         }
 
         foreach (var rel in domain.Relationships.Where(r =>
-                string.Equals(r.Source.TypeName, entity.Name, StringComparison.Ordinal)
-                && r.Cardinality is not (RelationshipCardinality.OneToMany or RelationshipCardinality.ManyToMany))) {
+                string.Equals(r.Source.TypeName, entity.Name, StringComparison.Ordinal))) {
+            var isMany = rel.Cardinality is RelationshipCardinality.OneToMany
+                         or RelationshipCardinality.ManyToMany;
             if (string.Equals(rel.Target.TypeName, entity.Name, StringComparison.Ordinal)) {
-                parameters.Add(new ConstructorParameterOrder(rel.Name, rel.Target, IsNavigation: true, IsBackReference: true));
+                parameters.Add(new ConstructorParameterOrder(rel.Name, rel.Target, IsNavigation: true, IsBackReference: true, IsCollection: isMany));
                 continue;
             }
 
-            parameters.Add(new ConstructorParameterOrder(rel.Name, rel.Target, IsNavigation: true, IsBackReference: false));
+            parameters.Add(new ConstructorParameterOrder(rel.Name, rel.Target, IsNavigation: true, IsBackReference: false, IsCollection: isMany));
         }
 
         return parameters;

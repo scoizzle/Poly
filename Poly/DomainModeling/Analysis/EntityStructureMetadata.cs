@@ -40,12 +40,21 @@ public sealed record EntityStructureMetadata(
     IReadOnlyDictionary<string, Stage>? StageByName,
 
     /// <summary>Constructor parameter order for entity creation lowering.</summary>
-    IReadOnlyList<ConstructorParameterOrder> ConstructorParameters
+    IReadOnlyList<ConstructorParameterOrder> ConstructorParameters,
+
+    /// <summary>
+    /// Map of entity property name → enum type name for properties whose type is
+    /// an enum. Published so lowering consumers (exporter, expression pass) resolve
+    /// enum-typed literals to qualified members without re-scanning the catalog.
+    /// Null when the entity has no enum-typed properties.
+    /// </summary>
+    IReadOnlyDictionary<string, string>? EnumPropertyNames = null
 ) : IAnalysisMetadata;
 
 public sealed record ConstructorParameterOrder(
     string Name,
     DomainTypeReference Type,
     bool IsNavigation,
-    bool IsBackReference
+    bool IsBackReference,
+    bool IsCollection = false
 );

@@ -82,6 +82,25 @@ Patron: entity {
 The generated C# sets `borrower` to `this` automatically. Do not set it explicitly
 in the initializer — it would conflict with the auto-wire.
 
+**Required coverage (DMEFF011):** every `required` property of the created entity
+must be provided in the `create` / `create in` initializers, unless it has a
+`default`. The auto-wired back-reference nav is exempt (it is set by `create in`).
+Analysis rejects a create that omits a required property — the generated `Create`
+factory would otherwise throw at runtime.
+
+```poly
+// ✅ Correct — both required props provided
+Token: entity { Lexeme: Text required Kind: Text required }
+Lex: action {
+  create in tokens { Lexeme: "let" Kind: Keyword }
+}
+
+// ❌ Wrong — DMEFF011: 'Lexeme' is required but not provided
+// Lex: action {
+//   create in tokens { Kind: Keyword }
+// }
+```
+
 ### 0.4 Cross-Entity Side Effects Use Subscriptions, Not Action Coupling
 
 If entity A changing stage should produce an effect on entity B, use a stage
@@ -311,8 +330,36 @@ PlaceOrder: action -> Order {
 ```
 
 Analysis **rejects** (DMEFF009) a declared `-> EntityType` when no create/create-in
-produces that entity. Primitive returns (`-> Number`) and “last assign is return”
-are **not** product — prefer entity create return or void.
+produces that entity. Analysis also rejects (**DMEFF010**) when the create is **not the
+final statement** — the create/create-in yielding the return value must be the last
+statement of the action body (or every branch of a final `if … else` must produce it).
+This pins the contract the C# export relies on (return value = last statement's created
+instance) and the runtime return (`InvokeAction` returns the created instance):
+
+```poly
+// ✅ Correct — create is the final statement
+PlaceOrder: action -> Order {
+  assign Status to "processing"
+  create in orders { Total: 100 }
+}
+
+// ✅ Correct — final conditional, every branch produces
+Place: action -> Order {
+  if (Rush is true) {
+    create in orders { Code: "rush" }
+  } else {
+    create in orders { Code: "normal" }
+  }
+}
+
+// ❌ Wrong — DMEFF010: create is not the last statement (transition after it)
+// Lex: action -> Token {
+//   create in tokens { Kind: Keyword }
+//   transition to Parsing
+// }
+```
+
+Primitive returns (`-> Number`) and “last assign is return” are **not** product — prefer entity create return or void.
 
 ```poly
 // Not product: -> Number from assign alone (analysis error)

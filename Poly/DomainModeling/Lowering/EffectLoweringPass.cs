@@ -48,10 +48,42 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         _stageEnumTypeName = context.StageEnumTypeName;
         _postTransitionNodes = context.PostTransitionNodes;
         _sourceStageName = context.SourceStageName;
-        _expressionPass = new DomainExpressionLoweringPass(context);
+        _expressionPass = new DomainExpressionLoweringPass(context with {
+            NavigationNameResolver = context.NavigationNameResolver ?? BuildNavigationNameResolver(entity, _domain, _analysis)
+        });
         Subject = context.UseThisReference && context.Subject is Parameter { Name: "entity" }
             ? new ThisReference()
             : context.Subject;
+    }
+
+    /// <summary>
+    /// Builds the default DSL-nav-name → generated-member-name resolver for the
+    /// entity: relationship navigation names (source-side) pascal-case to the
+    /// exporter's property naming (<c>compilations</c> → <c>Compilations</c>);
+    /// plain properties keep their DSL name. Analysis metadata is primary;
+    /// falls back to the domain relationship list. Identity when no context.
+    /// </summary>
+    internal static Func<string, string> BuildNavigationNameResolver(
+        Entity entity, Domain? domain, INodeMetadataProvider? analysis) {
+        if (analysis is not null) {
+            var rlm = analysis.GetMetadata<RelationshipLookupMetadata>(default);
+            if (rlm is not null) {
+                return name => rlm.Relationships.TryGetValue(name, out var rel)
+                    && string.Equals(rel.Source.TypeName, entity.Name, StringComparison.Ordinal)
+                        ? DomainToCSharpExporter.ToPascalCase(name)
+                        : name;
+            }
+        }
+        if (domain is not null) {
+            var sourceNavs = domain.Relationships
+                .Where(r => string.Equals(r.Source.TypeName, entity.Name, StringComparison.Ordinal))
+                .Select(r => r.Name)
+                .ToHashSet(StringComparer.Ordinal);
+            return name => sourceNavs.Contains(name)
+                ? DomainToCSharpExporter.ToPascalCase(name)
+                : name;
+        }
+        return name => name;
     }
 
     /// <summary>The Syntax AST node representing the current entity instance.</summary>
@@ -70,18 +102,24 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         var target = _expressionPass.Lower(a.Target, Subject);
         var value = _expressionPass.Lower(a.Value, Subject);
 
-        // Convert string literals to qualified enum member access when the
+        // Convert enum-valued RHS to qualified enum member access when the
         // target property is enum-typed:  assign Status to "Suspended"
-        // on PatronStatus-typed property →  this.Status = PatronStatus.Suspended
+        // on PatronStatus-typed property →  this.Status = PatronStatus.Suspended;
+        // and a bare identifier member (assign Status to Suspended) → same.
         if (a.Target is PropertyAccess propAccess) {
             var entityProp = _entity.Properties.FirstOrDefault(p =>
                 string.Equals(p.Name, propAccess.Name, StringComparison.Ordinal));
             if (entityProp is not null
                 && DomainToCSharpExporter.TryResolveEnumType(_domain, _analysis, entityProp.Type.TypeName, out var enumType)
-                && enumType is not null
-                && a.Value is Literal { Value: string strVal }
-                && !string.IsNullOrEmpty(strVal)) {
-                value = new Member(new NamedTypeReference(enumType.Name), strVal);
+                && enumType is not null) {
+                if (a.Value is Literal { Value: string strVal }
+                    && !string.IsNullOrEmpty(strVal)) {
+                    value = new Member(new NamedTypeReference(enumType.Name), strVal);
+                }
+                else if (a.Value is PropertyAccess pa
+                    && enumType.MemberNames.Contains(pa.Name, StringComparer.Ordinal)) {
+                    value = new Member(new NamedTypeReference(enumType.Name), pa.Name);
+                }
             }
 
             // Date/DateTime arithmetic: DueDate + 14 → DueDate.AddDays(14)
@@ -340,7 +378,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         foreach (var parameter in parameterMetadata) {
             if (parameter.IsBackReference) continue;
             if (initMap.TryGetValue(parameter.Name, out var expr))
-                args.Add(_expressionPass.Lower(expr, Subject));
+                args.Add(LowerEnumAwareValue(expr, parameter.Type, Subject));
             else
                 args.Add(DefaultForDomainType(parameter.Type, _domain, _analysis));
         }
@@ -416,13 +454,43 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
                 continue;
             }
 
+            if (parameter.IsCollection) {
+                // Collection nav: starts empty unless an initializer binds it.
+                if (initMap.TryGetValue(parameter.Name, out var collectionInit))
+                    args.Add(LowerEnumAwareValue(collectionInit, parameter.Type, Subject));
+                else
+                    args.Add(new New(
+                        new NamedTypeReference("List",
+                            TypeArguments: [new NamedTypeReference(parameter.Type.TypeName)])));
+                continue;
+            }
+
             if (initMap.TryGetValue(parameter.Name, out var expr))
-                args.Add(_expressionPass.Lower(expr, Subject));
+                args.Add(LowerEnumAwareValue(expr, parameter.Type, Subject));
             else
                 args.Add(DefaultForDomainType(parameter.Type, _domain, _analysis));
         }
 
         return args;
+    }
+
+    /// <summary>
+    /// Lowers an initializer/assignment VALUE whose target is
+    /// <paramref name="targetType"/>. A bare identifier that names a member of the
+    /// target enum type resolves to qualified member access
+    /// (<c>create in tokens { Kind: Numeric }</c> → <c>TokenKind.Numeric</c>),
+    /// mirroring how string literals already lower to qualified enum members on
+    /// assign (<c>"Suspended"</c> → <c>PatronStatus.Suspended</c>). Any other
+    /// expression (parameter, subject property, literal) lowers normally.
+    /// </summary>
+    private Node LowerEnumAwareValue(DomainExpression expr, DomainTypeReference targetType, Node subject) {
+        if (DomainToCSharpExporter.TryResolveEnumType(_domain, _analysis, targetType.TypeName, out var enumType)
+            && enumType is not null
+            && expr is PropertyAccess pa
+            && enumType.MemberNames.Contains(pa.Name, StringComparer.Ordinal)) {
+            return new Member(new NamedTypeReference(enumType.Name), pa.Name);
+        }
+        return _expressionPass.Lower(expr, subject);
     }
 
     private IReadOnlyList<ConstructorParameterOrder> GetConstructorParameterOrder(Entity targetEntity) {

@@ -97,6 +97,10 @@ public sealed class DomainToCSharpExporter {
 
         ArgumentNullException.ThrowIfNull(metadata);
 
+        var esm = metadata.GetMetadata<EntityStructureMetadata>(entity)
+            ?? throw new InvalidOperationException(
+                $"EntityStructureMetadata is required for entity '{entity.Name}'.");
+
         var typeDefs = new List<TypeDefinitionNode>();
         var props = new List<PropertyDefinitionNode>();
         var methods = new List<MethodDefinitionNode>();
@@ -104,7 +108,9 @@ public sealed class DomainToCSharpExporter {
         var ctorParams = new List<Parameter>();
         var ctorAssignments = new List<Node>();
 
-        var stageEnumTypeName = $"{entity.Name}Stage";
+        // Stage enum name — the published fact (EntityStructureMetadata.StageEnumTypeName)
+        // is the single source; fall back to the derivation only for the null-analysis path.
+        var stageEnumTypeName = esm.StageEnumTypeName ?? $"{entity.Name}Stage";
 
         // ── Common property: IsDeleted (always emitted) ────────────
         props.Add(new PropertyDefinitionNode(
@@ -209,13 +215,6 @@ public sealed class DomainToCSharpExporter {
                     IsReadOnly: true
                 ));
 
-                // Constructor param: IEnumerable<T> items → _field = new List<T>(items)
-                var param = new Parameter(paramName, enumerableType);
-                ctorParams.Add(param);
-                ctorAssignments.Add(new Assignment(
-                    new Member(new ThisReference(), fieldName),
-                    new New(listType, [new Parameter(paramName)])));
-
                 // Generate CreateNavName(args) factory method on the source entity
                 AddCreateNavMethod(entity, rel, domain!, subscriberSubs, fieldName, methods, metadata);
             }
@@ -227,9 +226,32 @@ public sealed class DomainToCSharpExporter {
                     Setter: new PropertySetterDefinitionNode(
                         AccessModifier: AccessModifier.Private)
                 ));
+            }
+        }
 
-                var param = new Parameter(paramName, targetType);
-                ctorParams.Add(param);
+        // ── Constructor params for navs — from the COMPLETE signature (ESM) ──
+        // EntityStructureMetadata.ConstructorParameters now includes collection navs
+        // (IsCollection). This is the single source of truth for the emitted Create(...)
+        // signature — no per-consumer re-derivation of cardinality/order here (the
+        // callers already read the same bag). Order matches the nav loop above
+        // (relationship order), so output is unchanged.
+        foreach (var navParam in esm.ConstructorParameters.Where(p => p.IsNavigation)) {
+            var paramName = ToCamelCase(navParam.Name);
+            if (navParam.IsCollection) {
+                var fieldName = $"_{paramName}";
+                var targetType = new NamedTypeReference(navParam.Type.TypeName);
+                var listType = new NamedTypeReference("List", TypeArguments: [targetType]);
+                var enumerableType = new NamedTypeReference("IEnumerable", TypeArguments: [targetType]);
+                ctorParams.Add(new Parameter(paramName, enumerableType));
+                ctorAssignments.Add(new Assignment(
+                    new Member(new ThisReference(), fieldName),
+                    new New(listType, [new Parameter(paramName)])));
+            }
+            else {
+                // Singular nav (incl. back-reference): param + property assign.
+                var pascalName = ToPascalCase(navParam.Name);
+                var propRef = MapDomainTypeRef(navParam.Type, domain, metadata);
+                ctorParams.Add(new Parameter(paramName, propRef));
                 ctorAssignments.Add(new Assignment(
                     new Member(new ThisReference(), pascalName),
                     new Parameter(paramName)));
@@ -394,9 +416,7 @@ public sealed class DomainToCSharpExporter {
                         UseThisReference: true,
                         LowerStageTransitions: true,
                         Domain: domain,
-                        EnumPropertyNames: domain is not null
-                            ? BuildEnumPropertyNames(entity, domain, metadata)
-                            : null
+                        EnumPropertyNames: esm.EnumPropertyNames
                     );
                     var effectPass = new EffectLoweringPass(entity, context);
                     var composite = new CompositeEffect(subscriptionEffects);
@@ -419,7 +439,7 @@ public sealed class DomainToCSharpExporter {
 
         // ── Stage enum + CurrentStage property ────────────────────
         if (entity.Stages.Count > 0) {
-            var enumTypeName = $"{entity.Name}Stage";
+            var enumTypeName = stageEnumTypeName;
             var stageEnumFields = new List<FieldDefinitionNode>();
             for (int si = 0; si < entity.Stages.Count; si++) {
                 stageEnumFields.Add(new FieldDefinitionNode(
@@ -455,7 +475,7 @@ public sealed class DomainToCSharpExporter {
                 bodyNodes.Add(new Assignment(
                     new Member(new ThisReference(), "CurrentStage"),
                     new Member(
-                        new NamedTypeReference($"{entity.Name}Stage"),
+                        new NamedTypeReference(stageEnumTypeName),
                         firstStage.Name)));
 
                 // Apply the initial stage's entry effects in the constructor.
@@ -470,9 +490,7 @@ public sealed class DomainToCSharpExporter {
                         UseThisReference: true,
                         LowerStageTransitions: false,
                         Domain: domain,
-                        EnumPropertyNames: domain is not null
-                            ? BuildEnumPropertyNames(entity, domain, metadata)
-                            : null
+                        EnumPropertyNames: esm.EnumPropertyNames
                     );
                     var entryPass = new EffectLoweringPass(entity, entryCtx);
                     foreach (var entryEffect in firstStage.OnEntryEffects) {
@@ -658,16 +676,27 @@ public sealed class DomainToCSharpExporter {
 
         var methodName = $"Create{pascalName}";
 
-        // Collect all target entity constructor-level properties:
-        // regular entity properties (minus those with DefaultValueConstraint)
-        // plus singular nav properties (one-to-one relationships to other entities)
+        // Collect all target entity constructor-level parameters from the COMPLETE
+        // signature (EntityStructureMetadata now includes collection navs):
+        // regular entity properties (minus defaults) + navs (singular + collection)
+        // in relationship order. One source of truth — no per-consumer re-scan of
+        // domain.Relationships (the CS7036 class of bugs).
         var methodParams = new List<Parameter>();
         var createArgs = new List<Node>();
         var parameterMetadata = GetConstructorParameters(targetEntity, metadata);
 
         foreach (var parameter in parameterMetadata) {
-            if (parameter.IsBackReference) {
+            if (parameter.IsNavigation && parameter.IsBackReference) {
                 createArgs.Add(new ThisReference());
+                continue;
+            }
+
+            if (parameter.IsCollection) {
+                // Collection nav: ctor param is IEnumerable<T>; the CreateNav factory
+                // starts every child with an empty collection.
+                createArgs.Add(new New(
+                    new NamedTypeReference("List",
+                        TypeArguments: [new NamedTypeReference(parameter.Type.TypeName)])));
                 continue;
             }
 
@@ -1136,7 +1165,7 @@ public sealed class DomainToCSharpExporter {
         string? sourceStageName = null, Domain? domain = null,
         INodeMetadataProvider? analysis = null) {
         if (action.Effects.Count == 0) return null;
-        var enumProps = domain is not null ? BuildEnumPropertyNames(entity, domain, analysis) : null;
+        var enumProps = GetEnumPropertyNames(entity, domain, analysis);
         var context = new LoweringContext(
             new Parameter("entity", new TypeReference(entity.Name)),
             Analysis: analysis,
@@ -1157,12 +1186,13 @@ public sealed class DomainToCSharpExporter {
     internal static Node? LowerExpressionToMethodBody(
         DomainExpression expr, Entity entity, Domain? domain = null,
         INodeMetadataProvider? analysis = null) {
-        var enumProps = domain is not null ? BuildEnumPropertyNames(entity, domain, analysis) : null;
+        var enumProps = GetEnumPropertyNames(entity, domain, analysis);
         var context = new LoweringContext(
             new Parameter("entity", new TypeReference(entity.Name)),
             Analysis: analysis,
             UseThisReference: true,
-            EnumPropertyNames: enumProps
+            EnumPropertyNames: enumProps,
+            NavigationNameResolver: EffectLoweringPass.BuildNavigationNameResolver(entity, domain, analysis)
         );
         var pass = new DomainExpressionLoweringPass(context);
         var lowered = pass.Lower(expr, new Parameter("entity"));
@@ -1203,6 +1233,19 @@ public sealed class DomainToCSharpExporter {
     /// Used by the expression lowering pass to emit qualified enum member access.
     /// Catalog-only when <paramref name="analysis"/> is present.
     /// </summary>
+    /// <summary>
+    /// Returns the entity's enum-typed property map (property name → enum type name),
+    /// preferring the published <see cref="EntityStructureMetadata.EnumPropertyNames"/>
+    /// bag and falling back to a catalog re-scan only for the null-analysis path.
+    /// </summary>
+    internal static IReadOnlyDictionary<string, string>? GetEnumPropertyNames(
+        Entity entity, Domain? domain, INodeMetadataProvider? analysis) {
+        if (analysis is not null
+            && analysis.GetMetadata<EntityStructureMetadata>(entity) is { EnumPropertyNames: not null } esm)
+            return esm.EnumPropertyNames;
+        return domain is not null ? BuildEnumPropertyNames(entity, domain, analysis) : null;
+    }
+
     internal static Dictionary<string, string>? BuildEnumPropertyNames(
         Entity entity, Domain domain, INodeMetadataProvider? analysis = null) {
         Dictionary<string, string>? map = null;

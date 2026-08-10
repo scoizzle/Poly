@@ -20,6 +20,7 @@ public sealed class HttpFileGenerator {
     private readonly Dictionary<string, BehaviorEntity> _behaviorLookup;
     private readonly Dictionary<string, AggregateEntity> _aggregateLookup;
     private readonly Dictionary<string, EnumType> _enumLookup;
+    private readonly AnalysisResult _analysis;
 
     public HttpFileGenerator(Domain domain,
         AnalysisResult analysis,
@@ -31,10 +32,21 @@ public sealed class HttpFileGenerator {
         _domain = domain;
         _entities = domain.Types.OfType<Entity>().ToList();
         _baseUrl = baseUrl;
+        _analysis = analysis;
         _storageLookup = storageModel.Entities.ToDictionary(e => e.Name, StringComparer.Ordinal);
         _behaviorLookup = behaviorModel.Entities.ToDictionary(e => e.Name, StringComparer.Ordinal);
         _aggregateLookup = aggregateModel.Entities.ToDictionary(e => e.Name, StringComparer.Ordinal);
         _enumLookup = domain.Types.OfType<EnumType>().ToDictionary(e => e.Name, StringComparer.Ordinal);
+    }
+
+    /// <summary>
+    /// The entity's CREATE-signature scalar params (the complete constructor
+    /// metadata, non-nav) — the DTO/JSON body mirrors what Entity.Create(...) takes.
+    /// </summary>
+    private IReadOnlyList<ConstructorParameterOrder> GetCreateScalarParams(Entity entity) {
+        if (_analysis.GetMetadata<EntityStructureMetadata>(entity) is { } esm)
+            return esm.ConstructorParameters.Where(p => !p.IsNavigation).ToList();
+        return [];
     }
 
     private StorageEntity GetStorageEntity(Entity entity) => _storageLookup[entity.Name];
@@ -92,10 +104,8 @@ public sealed class HttpFileGenerator {
             sb.AppendLine("Content-Type: application/json");
             sb.AppendLine();
             sb.AppendLine("{");
-            var scalarProps = entity.Properties
-                .Where(p => !p.Constraints.Any(c => c is DefaultValueConstraint))
-                .Where(p => !_entities.Any(e => string.Equals(e.Name, p.Type.TypeName, StringComparison.Ordinal)))
-                .OrderBy(p => p.Name)
+            var scalarProps = GetCreateScalarParams(entity)
+                .Select(p => entity.Properties.First(x => string.Equals(x.Name, p.Name, StringComparison.Ordinal)))
                 .ToList();
             for (int i = 0; i < scalarProps.Count; i++) {
                 var comma = i < scalarProps.Count - 1 ? "," : "";

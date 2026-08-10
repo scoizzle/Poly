@@ -6,6 +6,7 @@ using Poly.DomainModeling.Effects;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Parsing;
+using Poly.Interpretation.CSharp;
 
 namespace Poly.Tests.DomainModeling.Lowering;
 
@@ -717,5 +718,215 @@ public class DomainToCSharpExporterTests {
             if (found is not null) return found;
         }
         return null;
+    }
+
+    [Test]
+    public async Task Export_EnumMemberInCreateInInitializer_EmitsQualifiedMemberAccess() {
+        // Regression: `create in tokens { Kind: Numeric }` (bare enum member) must
+        // lower to `TokenKind.Numeric`, NOT `this.Numeric` (which doesn't exist on
+        // the entity — CS1061). Mirrors the string-literal enum path
+        // (`"Suspended"` → `PatronStatus.Suspended`).
+        var (domain, analysis) = ParseAndAnalyze("""
+            domain Demo
+
+            TokenKind: enum { Identifier, Numeric, Keyword }
+
+            Token: entity {
+              Kind: TokenKind required
+            }
+
+            Box: entity {
+              tokens: many Token
+              Make: action -> Token {
+                create in tokens { Kind: Numeric }
+              }
+              Done: stage { }
+            }
+            """);
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var unit = new CompilationUnitNode([], null, types, null);
+        var cs = new CSharpGenerator().Generate(unit);
+
+        await Assert.That(cs).Contains("TokenKind.Numeric");
+        await Assert.That(cs).DoesNotContain("this.Numeric");
+    }
+
+    [Test]
+    public async Task Export_EnumMemberInAssignRhs_EmitsQualifiedMemberAccess() {
+        // Regression: `assign Kind to Numeric` (bare identifier) must also lower to
+        // `this.Kind = TokenKind.Numeric` — same qualified rule as create-initializers.
+        var (domain, analysis) = ParseAndAnalyze("""
+            domain Demo
+
+            TokenKind: enum { Identifier, Numeric, Keyword }
+
+            Token: entity {
+              Kind: TokenKind
+              Make: action {
+                assign Kind to Numeric
+              }
+            }
+            """);
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var unit = new CompilationUnitNode([], null, types, null);
+        var cs = new CSharpGenerator().Generate(unit);
+
+        await Assert.That(cs).Contains("this.Kind = TokenKind.Numeric");
+        await Assert.That(cs).DoesNotContain("this.Kind = this.Numeric");
+    }
+
+    [Test]
+    public async Task Export_RelExistsPolicy_UsesPascalNavName() {
+        // Regression (review C): policy `Rel exists` must lower to the generated
+        // pascal-cased nav property (`source` → `this.Source`), not the camelCase
+        // DSL name (`this.source` — CS1061). The exporter emits `Source`; the
+        // expression lowering must agree via the shared NavigationNameResolver.
+        var (domain, analysis) = ParseAndAnalyze("""
+            domain Demo
+
+            SourceFile: entity { Path: Text }
+            Compilation: entity {
+              source: SourceFile
+              HasSource: policy { source exists }
+            }
+            """);
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var unit = new CompilationUnitNode([], null, types, null);
+        var cs = new CSharpGenerator().Generate(unit);
+
+        await Assert.That(cs).Contains("this.Source != null");
+        await Assert.That(cs).DoesNotContain("this.source");
+    }
+
+    [Test]
+    public async Task Export_PathPrefixRead_UsesPascalNavName() {
+        // Regression (review C): path-prefix read `source Path` must lower to
+        // `this.Source.Path` (pascal nav), not `this.source.Path`.
+        var (domain, analysis) = ParseAndAnalyze("""
+            domain Demo
+
+            SourceFile: entity { Path: Text }
+            Compilation: entity {
+              source: SourceFile
+              HasPath: policy { source Path is "main.tiny" }
+            }
+            """);
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var unit = new CompilationUnitNode([], null, types, null);
+        var cs = new CSharpGenerator().Generate(unit);
+
+        await Assert.That(cs).Contains("this.Source.Path");
+        await Assert.That(cs).DoesNotContain("this.source.Path");
+    }
+
+    [Test]
+    public async Task Export_CreateNavMethod_EmitsEmptyCollectionArgsForCtorArity() {
+        // Regression (review D): the nav factory (create in Rel) calls the target
+        // entity's Create(...) with the SAME arity as its generated constructor.
+        // Collection navs are ctor params (IEnumerable<T>) but omitted from ESM —
+        // the factory must append empty List<T> args or the call is CS7036.
+        var (domain, analysis) = ParseAndAnalyze("""
+            domain Demo
+
+            Token: entity { Kind: Text }
+            Compilation: entity {
+              Name: Text required
+              tokens: many Token
+              Build: action -> Token {
+                create in tokens { Kind: "k" }
+              }
+            }
+            SourceFile: entity {
+              compilations: many Compilation
+              Go: action {
+                create in compilations { Name: "c1" }
+              }
+            }
+            """);
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var unit = new CompilationUnitNode([], null, types, null);
+        var cs = new CSharpGenerator().Generate(unit);
+
+        // SourceFile.CreateCompilations must pass Compilation.Create both ctor
+        // args: Name + the empty tokens collection.
+        await Assert.That(cs).Contains("Compilation.Create(name");
+        await Assert.That(cs).Contains("new List<Token>()");
+        // The Compilation.CreateTokens factory (create in tokens) is unaffected.
+        await Assert.That(cs).Contains("Token.Create(");
+    }
+
+    [Test]
+    public async Task EsmConstructorSignature_IncludesCollectionNavs() {
+        // The shared constructor metadata (EntityStructureMetadata.ConstructorParameters)
+        // is now the COMPLETE create signature — collection navs included with
+        // IsCollection=true. Consumers read this instead of re-scanning
+        // domain.Relationships (the CS7036 bug class).
+        var (domain, analysis) = ParseAndAnalyze("""
+            domain Demo
+            Token: entity { Kind: Text }
+            Compilation: entity {
+              Name: Text
+              tokens: many Token
+              source: SourceFile
+            }
+            SourceFile: entity { Path: Text }
+            """);
+        var compilation = domain.Types.OfType<Entity>().Single(e => e.Name == "Compilation");
+        var esm = analysis.GetMetadata<EntityStructureMetadata>(compilation);
+        await Assert.That(esm).IsNotNull();
+
+        var tokens = esm!.ConstructorParameters.Single(p => p.Name == "tokens");
+        await Assert.That(tokens.IsNavigation).IsTrue();
+        await Assert.That(tokens.IsCollection).IsTrue();
+        await Assert.That(tokens.IsBackReference).IsFalse();
+
+        var source = esm.ConstructorParameters.Single(p => p.Name == "source");
+        await Assert.That(source.IsNavigation).IsTrue();
+        await Assert.That(source.IsCollection).IsFalse();
+    }
+
+    [Test]
+    public async Task Esm_EnumPropertyNames_PublishedForEnumTypedProps() {
+        // Enum-typed property map is published on EntityStructureMetadata so
+        // lowering consumers resolve enum literals without re-scanning the catalog.
+        var (domain, analysis) = ParseAndAnalyze("""
+            domain Demo
+            Color: enum { Red, Green }
+            Item: entity {
+              Name: Text
+              Color: Color
+              Qty: Number
+            }
+            """);
+        var item = domain.Types.OfType<Entity>().Single(e => e.Name == "Item");
+        var esm = analysis.GetMetadata<EntityStructureMetadata>(item);
+        await Assert.That(esm).IsNotNull();
+
+        await Assert.That(esm!.EnumPropertyNames).IsNotNull();
+        await Assert.That(esm.EnumPropertyNames!["Color"]).IsEqualTo("Color");
+        await Assert.That(esm.EnumPropertyNames!.ContainsKey("Name")).IsFalse();
+        await Assert.That(esm.EnumPropertyNames.ContainsKey("Qty")).IsFalse();
+    }
+
+    [Test]
+    public async Task Export_EntityWithEnumProp_EmitsQualifiedEnumMemberAccess() {
+        // Enum-typed assign RHS (`assign Color to Red`) must lower to qualified
+        // `Color.Red` — driven by the published enum-property map.
+        var (domain, analysis) = ParseAndAnalyze("""
+            domain Demo
+            Color: enum { Red, Green }
+            Item: entity {
+              Color: Color
+              Paint: action {
+                assign Color to Red
+              }
+            }
+            """);
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var unit = new CompilationUnitNode([], null, types, null);
+        var cs = new CSharpGenerator().Generate(unit);
+
+        await Assert.That(cs).Contains("this.Color = Color.Red");
+        await Assert.That(cs).DoesNotContain("this.Color = Red");
     }
 }

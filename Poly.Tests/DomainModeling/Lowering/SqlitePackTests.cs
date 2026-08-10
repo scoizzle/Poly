@@ -230,4 +230,104 @@ public class SqlitePackTests {
         await Assert.That(progFile.Source).Contains("MapGet");
         await Assert.That(progFile.Source).Contains("MapPost");
     }
+
+    [Test]
+    public async Task DslCompiler_EmitsScaffoldingFile_WithEnumsAndDomainResult() {
+        // The entity files reference enums + DomainResult<T> — the compiler must
+        // emit a scaffolding file or the output does not compile standalone.
+        var compiler = new Compiler();
+        var result = compiler.Compile("""
+            domain Demo
+            Color: enum { Red, Green }
+            Item: entity { Name: Text Color: Color }
+            """, CompileMode.Entities);
+        await Assert.That(result.Success).IsTrue();
+
+        var scaffolding = result.Files!.Single(f => f.FileName == "Poly.Types.cs").Source;
+        await Assert.That(scaffolding).Contains("enum Color");
+        await Assert.That(scaffolding).Contains("record DomainResult");
+        await Assert.That(scaffolding).Contains("record DomainResult<T>");
+
+        // Entity file references them without defining them.
+        var item = result.Files!.Single(f => f.FileName == "Item.cs").Source;
+        await Assert.That(item).Contains("DomainResult<Item>");
+    }
+
+    [Test]
+    public async Task DslCompiler_AllMode_Sqlite_EmitsUseSqliteAndEnsureCreated() {
+        // --mode all --dbms sqlite must emit UseSqlite + EnsureCreatedAsync
+        // (matches the shipped demo Program.cs), not the generic InMemory fallback.
+        var compiler = new Compiler();
+        var sqlite = compiler.Compile(SampleDomain, CompileMode.All, DbmsPack.Sqlite);
+        await Assert.That(sqlite.Success).IsTrue();
+        var sqliteProg = sqlite.Files!.Single(f => f.FileName == "Program.cs").Source;
+        await Assert.That(sqliteProg).Contains("UseSqlite");
+        await Assert.That(sqliteProg).Contains("EnsureCreatedAsync");
+        await Assert.That(sqliteProg).DoesNotContain("UseInMemoryDatabase");
+
+        var generic = compiler.Compile(SampleDomain, CompileMode.All, DbmsPack.Generic);
+        await Assert.That(generic.Success).IsTrue();
+        var genericProg = generic.Files!.Single(f => f.FileName == "Program.cs").Source;
+        await Assert.That(genericProg).Contains("UseInMemoryDatabase");
+        await Assert.That(genericProg).DoesNotContain("UseSqlite");
+    }
+
+    [Test]
+    public async Task DslCompiler_AllMode_EntityWithCollections_EmitsEmptyCollectionArgs() {
+        // The POST endpoint + seed code construct root entities via Entity.Create(...)
+        // — collection navs are ctor params (IEnumerable<T>) but omitted from ESM;
+        // the generators must append Enumerable.Empty<T>() or the call is CS7036.
+        var compiler = new Compiler();
+        var result = compiler.Compile("""
+            domain Demo
+            Token: entity { Kind: Text }
+            Box: entity {
+              Name: Text
+              tokens: many Token
+            }
+            """, CompileMode.All, DbmsPack.Generic);
+        await Assert.That(result.Success).IsTrue();
+
+        var prog = result.Files!.Single(f => f.FileName == "Program.cs").Source;
+        await Assert.That(prog).Contains("Box.Create(");
+        await Assert.That(prog).Contains("Enumerable.Empty<Token>()");
+    }
+
+    [Test]
+    public async Task DslCompiler_Dto_IncludesEnumTypedScalarFromConstructorMetadata() {
+        // The DTO mirrors the entity's CREATE signature (from ESM.ConstructorParameters).
+        // A scalar enum-typed prop (Genre) is part of that signature — the old
+        // `_entities.Any(...)` filter would have EXCLUDED it (Genre is not an entity).
+        var compiler = new Compiler();
+        var result = compiler.Compile("""
+            domain Demo
+            Genre: enum { Fiction, NonFiction }
+            Book: entity {
+              Title: Text
+              Genre: Genre
+            }
+            """, CompileMode.All, DbmsPack.Generic);
+        await Assert.That(result.Success).IsTrue();
+
+        var prog = result.Files!.Single(f => f.FileName == "Program.cs").Source;
+        // Enum type maps to its own CLR name (Genre), not excluded by entity-ness.
+        await Assert.That(prog).Contains("record BookDto(Genre Genre, string Title)");
+        // POST endpoint passes the DTO members into Book.Create in the same order.
+        await Assert.That(prog).Contains("Book.Create(dto.Genre, dto.Title)");
+    }
+
+    [Test]
+    public async Task DslCompiler_DemoHttp_BodyMatchesDtoFromConstructorMetadata() {
+        var compiler = new Compiler();
+        var result = compiler.Compile("""
+            domain Demo
+            Item: entity { Name: Text Qty: Number }
+            """, CompileMode.All, DbmsPack.Generic);
+        await Assert.That(result.Success).IsTrue();
+
+        var http = result.Files!.Single(f => f.FileName == "demo.http").Source;
+        // POST body lists the create-scalar props (Name, Qty), mirroring the DTO.
+        await Assert.That(http).Contains("\"Name\": \"sample\"");
+        await Assert.That(http).Contains("\"Qty\": 0");
+    }
 }

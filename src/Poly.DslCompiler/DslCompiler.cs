@@ -69,16 +69,36 @@ public sealed class DslCompiler {
     /// Compiles .poly DSL text with the given mode and DBMS pack selection.
     /// </summary>
     public CompileResult Compile(string polyText, CompileMode mode, DbmsPack dbms) =>
-        Compile(polyText, mode, CreateInputs(dbms));
+        Compile(polyText, mode, CreateInputs(dbms), dbms);
 
     /// <summary>
-    /// Compiles .poly DSL text with explicit parse and analyze inputs.
+    /// Compiles .poly DSL text with explicit parse/analyze inputs.
     /// </summary>
     public CompileResult Compile(
         string polyText,
         CompileMode mode,
         DomainParserInputs parserInputs,
-        DomainAnalysisInputs analysisInputs) {
+        DomainAnalysisInputs analysisInputs) =>
+        Compile(polyText, mode, parserInputs, analysisInputs, DbmsPack.Generic);
+
+    /// <summary>
+    /// Compiles .poly DSL text from an upstream convenience parse/analyze bundle
+    /// and a DBMS pack (the pack drives Program.cs provider selection in
+    /// <c>--mode all</c>).
+    /// </summary>
+    public CompileResult Compile(string polyText, CompileMode mode, DomainInputSet inputs, DbmsPack dbms) =>
+        Compile(polyText, mode, inputs.Parser, inputs.Analysis, dbms);
+
+    /// <summary>
+    /// Compiles .poly DSL text with explicit parse/analyze inputs and a DBMS pack
+    /// (the pack drives Program.cs provider selection in <c>--mode all</c>).
+    /// </summary>
+    private CompileResult Compile(
+        string polyText,
+        CompileMode mode,
+        DomainParserInputs parserInputs,
+        DomainAnalysisInputs analysisInputs,
+        DbmsPack dbms) {
         ArgumentNullException.ThrowIfNull(parserInputs);
         ArgumentNullException.ThrowIfNull(analysisInputs);
 
@@ -130,7 +150,7 @@ public sealed class DslCompiler {
         // ── 3. Generate C# ───────────────────────────────────────
         var domain = outcome.Root;
         try {
-            var files = GenerateAllFiles(domain, outcome.Analysis, mode, analysisInputs);
+            var files = GenerateAllFiles(domain, outcome.Analysis, mode, analysisInputs, dbms);
             return new CompileResult(Success: true, Files: files, Errors: null);
         }
         catch (Exception ex) {
@@ -183,7 +203,8 @@ public sealed class DslCompiler {
     private static IReadOnlyList<(string FileName, string Source)> GenerateAllFiles(
         Domain domain, AnalysisResult analysis,
         CompileMode mode = CompileMode.Entities,
-        DomainAnalysisInputs? analysisInputs = null) {
+        DomainAnalysisInputs? analysisInputs = null,
+        DbmsPack dbms = DbmsPack.Generic) {
 
         var files = new List<(string FileName, string Source)>();
 
@@ -204,6 +225,19 @@ public sealed class DslCompiler {
                     $"DomainProgramProjection produced no type definitions for entity '{entity.Name}'.");
             var csharp = new CSharpGenerator().Generate(entityDefs);
             files.Add(($"{entity.Name}.cs", csharp));
+        }
+
+        // Scaffolding (enums + DomainResult infrastructure) — the entity files
+        // reference these (Genre, DomainResult<T>); without them the output does
+        // not compile. One shared file, emitted before the entity files' content
+        // is referenced by the rest of the project.
+        var scaffoldingDefs = types
+            .Where(d => !entities.Any(e =>
+                d.Name == e.Name || d.Name == $"{e.Name}Stage"))
+            .ToList();
+        if (scaffoldingDefs.Count > 0) {
+            var scaffolding = new CSharpGenerator().Generate(scaffoldingDefs);
+            files.Add(("Poly.Types.cs", scaffolding));
         }
 
         // Infrastructure metadata — prefer domain analysis result (which already ran
@@ -257,7 +291,8 @@ public sealed class DslCompiler {
                     analysis: analysis,
                     storageModel: storageModel!,
                     behaviorModel: behaviorModel!,
-                    aggregateModel: aggregateModel!);
+                    aggregateModel: aggregateModel!,
+                    dbms: dbms);
                 files.Add(("Program.cs",
                     new CSharpGenerator().Generate(apiGen.GenerateCompilationUnit(dbContextName))));
 

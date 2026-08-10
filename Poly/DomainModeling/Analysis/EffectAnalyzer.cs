@@ -54,6 +54,7 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
                 ValidateUnsatisfiedRequirements(context, action, entity, lookup);
                 ValidateActionParameterUsage(context, action);
                 ValidateActionReturnProducer(context, action, entity, domain, lookup);
+                ValidateActionReturnFinalStatement(context, action, entity, domain, lookup);
             }
             foreach (var stage in entity.Stages) {
                 ValidateEffects(context, stage.OnEntryEffects, null, entity, domain, lookup);
@@ -63,6 +64,7 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
                     ValidateUnsatisfiedRequirements(context, action, entity, lookup);
                     ValidateActionParameterUsage(context, action);
                     ValidateActionReturnProducer(context, action, entity, domain, lookup);
+                    ValidateActionReturnFinalStatement(context, action, entity, domain, lookup);
                 }
             }
         });
@@ -70,7 +72,10 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
 
     /// <summary>
     /// P3: non-void <c>-&gt; T</c> requires a create / create-in that produces entity type T
-    /// (product vertical — not primitive assign-as-return).
+    /// (product vertical — not primitive assign-as-return), and the FINAL statement
+    /// must actually produce that value (DMEFF010) so the runtime/export return is
+    /// deterministic — the exporter lowers the last statement's created instance as
+    /// the return value.
     /// </summary>
     private static void ValidateActionReturnProducer(
         AnalysisContext context,
@@ -100,6 +105,94 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
             DomainModelDiagnosticCodes.EffectReturnWithoutProducer);
     }
 
+    /// <summary>
+    /// DMEFF010: when an action declares <c>-&gt; T</c>, the FINAL statement must
+    /// produce a T — a <c>create</c> / <c>create in</c> of T, or a conditional whose
+    /// every branch ends in such a producer (a conditional without a final
+    /// <c>else</c> can produce nothing and is rejected — fail closed). This pins the
+    /// contract the exporter relies on (return value = last statement's created
+    /// instance) and rejects bodies like <c>create X; transition to Done</c> where
+    /// the create is not the terminal statement.
+    /// </summary>
+    internal static bool ValidateActionReturnFinalStatement(
+        AnalysisContext context,
+        Action action,
+        Entity entity,
+        Domain domain,
+        DomainTypeLookupMetadata lookup) {
+        if (action.Result.Members.Count == 0) return true;
+
+        var expectedType = action.Result.Members[0].Type.TypeName;
+        if (lookup.Types.TryGetValue(expectedType, out var dt) && dt is not Entity)
+            return true; // non-entity return already reported (DMEFF009)
+        if (action.Effects.Count == 0)
+            return true; // no-producer case already reported (DMEFF009)
+        if (!ActionEffectsProduceEntityType(context, domain, entity, action.Effects, expectedType, lookup))
+            return true; // no producer anywhere — DMEFF009 already reported; final-statement adds nothing
+
+        if (LastStatementProducesEntityType(context, domain, entity, action.Effects, expectedType, lookup))
+            return true;
+
+        context.ReportError(
+            action,
+            $"Action '{action.Name}' declares return type '{expectedType}', but its final statement " +
+            $"does not produce a '{expectedType}'. The create/create-in yielding the return value must " +
+            "be the last statement (or every branch of a final conditional must produce it).",
+            DomainModelDiagnosticCodes.EffectReturnNotProducedByFinalStatement);
+        return false;
+    }
+
+    /// <summary>True when the last effect in <paramref name="effects"/> produces
+    /// <paramref name="expectedType"/> (create / create-in / conditional with all
+    /// branches ending in a producer).</summary>
+    private static bool LastStatementProducesEntityType(
+        AnalysisContext context,
+        Domain domain,
+        Entity sourceEntity,
+        IReadOnlyList<Effect> effects,
+        string expectedType,
+        DomainTypeLookupMetadata lookup) {
+        var last = effects[^1];
+        switch (last) {
+            case CreateEntityInstance cei:
+                return string.Equals(cei.Type.TypeName, expectedType, StringComparison.Ordinal);
+
+            case CreateEntityInRelationshipEffect createIn:
+                return CreateInProducesEntityType(context, domain, sourceEntity, createIn, expectedType, lookup);
+
+            case ConditionalEffect cond:
+                // Every branch must terminate in a producer, and there must be a
+                // final else — otherwise a false condition produces no value.
+                return cond.ElseEffects is not null
+                    && LastStatementProducesEntityType(context, domain, sourceEntity, cond.ThenEffects, expectedType, lookup)
+                    && LastStatementProducesEntityType(context, domain, sourceEntity, cond.ElseEffects, expectedType, lookup);
+
+            default:
+                // transition / assign / invoke / delete / composite: not a producer.
+                return false;
+        }
+    }
+
+    /// <summary>True when the create-in's resolved target entity type is
+    /// <paramref name="expectedType"/>.</summary>
+    private static bool CreateInProducesEntityType(
+        AnalysisContext context,
+        Domain domain,
+        Entity sourceEntity,
+        CreateEntityInRelationshipEffect createIn,
+        string expectedType,
+        DomainTypeLookupMetadata lookup) {
+        if (createIn.ResolvedTargetType is not null
+            && string.Equals(createIn.ResolvedTargetType.TypeName, expectedType, StringComparison.Ordinal))
+            return true;
+        if (TryResolveRelationship(context, domain, createIn.RelationshipName, createIn, out var rel)
+            && rel is not null
+            && string.Equals(rel.Target.TypeName, expectedType, StringComparison.Ordinal)
+            && string.Equals(rel.Source.TypeName, sourceEntity.Name, StringComparison.Ordinal))
+            return true;
+        return false;
+    }
+
     private static bool ActionEffectsProduceEntityType(
         AnalysisContext context,
         Domain domain,
@@ -112,17 +205,10 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
                 case CreateEntityInstance cei
                     when string.Equals(cei.Type.TypeName, expectedType, StringComparison.Ordinal):
                     return true;
-                case CreateEntityInRelationshipEffect createIn: {
-                        if (createIn.ResolvedTargetType is not null
-                            && string.Equals(createIn.ResolvedTargetType.TypeName, expectedType, StringComparison.Ordinal))
-                            return true;
-                        if (TryResolveRelationship(context, domain, createIn.RelationshipName, createIn, out var rel)
-                            && rel is not null
-                            && string.Equals(rel.Target.TypeName, expectedType, StringComparison.Ordinal)
-                            && string.Equals(rel.Source.TypeName, sourceEntity.Name, StringComparison.Ordinal))
-                            return true;
-                        break;
-                    }
+                case CreateEntityInRelationshipEffect createIn:
+                    if (CreateInProducesEntityType(context, domain, sourceEntity, createIn, expectedType, lookup))
+                        return true;
+                    break;
             }
         }
         return false;
@@ -383,13 +469,20 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
                 var targetProp = targetEntity.Properties
                     .FirstOrDefault(p => string.Equals(p.Name, initializer.PropertyName, StringComparison.Ordinal));
 
-                if (targetProp is null) {
+                // Initializers may also bind a singular navigation property of the
+                // target entity (e.g. `create in loans { book: book }`) — the runtime
+                // evaluates the binding into the child's value bag and the exporter
+                // wires it as a Create(...) nav parameter. Rejecting it here would
+                // contradict both (and the shipped demo).
+                if (targetProp is null && !IsSingularTargetNavigation(domain, targetEntity.Name, initializer.PropertyName)) {
                     context.ReportError(
                         initializer,
                         $"CreateEntityInstance initializer references unknown property '{initializer.PropertyName}' on entity '{targetEntity.Name}'.",
                         DomainModelDiagnosticCodes.EffectBinding);
                     continue;
                 }
+
+                if (targetProp is null) continue; // nav binding — no property constraints to check
 
                 // Validate literal initializer values against property constraints
                 if (initializer.Expression is Literal lit && targetProp.Constraints.Count > 0) {
@@ -407,6 +500,10 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
                     $"Use 'create in' on a relationship that has '{targetEntity.Name}' as the target.",
                     DomainModelDiagnosticCodes.EffectBinding);
             }
+
+            // D: every required property must be provided (auto-wire only in create-in).
+            ValidateRequiredInitializerCoverage(context, cei, targetEntity,
+                autoWireSourceEntity: null, cei.Initializers);
 
             // P2′.3 / P2′′.2: When RelationshipName is set, validate relationship exists,
             // that the action entity is the relationship source, and that the created
@@ -591,7 +688,9 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
             var targetProp = targetEntity.Properties
                 .FirstOrDefault(p => string.Equals(p.Name, initializer.PropertyName, StringComparison.Ordinal));
 
-            if (targetProp is null) {
+            // Singular nav bindings are legal (see ValidateCreateEntityInstance) —
+            // the demo's `create in loans { book: book }` relies on this.
+            if (targetProp is null && !IsSingularTargetNavigation(domain, targetEntity.Name, initializer.PropertyName)) {
                 context.ReportError(
                     initializer,
                     $"CreateIn initializer references unknown property '{initializer.PropertyName}' on entity '{targetEntity.Name}'.",
@@ -599,10 +698,61 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
                 continue;
             }
 
+            if (targetProp is null) continue; // nav binding — no property constraints to check
+
             // Validate literal initializer values against property constraints
             if (initializer.Expression is Literal lit && targetProp.Constraints.Count > 0) {
                 ValidateLiteralAgainstConstraints(context, initializer, lit.Value, targetProp);
             }
+        }
+
+        // D: every required property must be provided — the back-reference nav
+        // (typed as the source entity) is auto-wired and may be omitted.
+        ValidateRequiredInitializerCoverage(context, createIn, targetEntity,
+            autoWireSourceEntity: entity, createIn.Initializers);
+    }
+
+    /// <summary>
+    /// True when <paramref name="name"/> is a SINGULAR navigation property declared
+    /// on <paramref name="targetEntityName"/> (a one-to-one relationship sourced from
+    /// that entity). Collection navs are not bindable initializer targets — the
+    /// exporter emits empty collections for those.
+    /// </summary>
+    private static bool IsSingularTargetNavigation(Domain domain, string targetEntityName, string name) =>
+        domain.Relationships.Any(r =>
+            string.Equals(r.Source.TypeName, targetEntityName, StringComparison.Ordinal)
+            && string.Equals(r.Name, name, StringComparison.Ordinal)
+            && r.Cardinality == RelationshipCardinality.OneToOne);
+
+    /// <summary>
+    /// DMEFF011: a <c>create</c> / <c>create in</c> must provide a value for every
+    /// <c>required</c> property of the created entity, unless the property has a
+    /// <c>default</c> or is the auto-wired back-reference navigation (the target's
+    /// nav typed as the create-in source entity). Without this, the generated
+    /// <c>Create</c> factory would fail at runtime on a missing required value —
+    /// analysis catches the bad authoring shape before the export/runtime path.
+    /// </summary>
+    private static void ValidateRequiredInitializerCoverage(
+        AnalysisContext context,
+        Effect effect,
+        Entity targetEntity,
+        Entity? autoWireSourceEntity,
+        IReadOnlyList<PropertyBinding> initializers) {
+        var provided = new HashSet<string>(
+            initializers.Select(i => i.PropertyName), StringComparer.Ordinal);
+        foreach (var prop in targetEntity.Properties) {
+            if (!prop.Constraints.Any(static c => c is RequiredConstraint)) continue;
+            if (prop.Constraints.Any(static c => c is DefaultValueConstraint)) continue;
+            if (autoWireSourceEntity is not null
+                && string.Equals(prop.Type.TypeName, autoWireSourceEntity.Name, StringComparison.Ordinal))
+                continue; // auto-wired back-reference
+            if (provided.Contains(prop.Name)) continue;
+
+            context.ReportError(
+                effect,
+                $"Create effect on '{targetEntity.Name}' does not provide required property '{prop.Name}'. " +
+                $"Every 'required' property must be set in the create / create in initializers (or have a default).",
+                DomainModelDiagnosticCodes.CreateMissingRequiredProperty);
         }
     }
 

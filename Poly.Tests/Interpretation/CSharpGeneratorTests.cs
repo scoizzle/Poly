@@ -417,6 +417,28 @@ public class CSharpGeneratorTests {
     }
 
     [Test]
+    public async Task Generate_CatchWithBareStatement_EmitsBraces() {
+        // C# requires a compound statement for catch bodies — a bare statement
+        // (`catch (Exception ex) return x;`) is a syntax error. The generator must
+        // wrap non-Block bodies in braces (regression: MinimalApiGenerator emitted
+        // `catch (Exception ex)\nreturn Results.StatusCode(500);\n});` which failed
+        // to compile).
+        var node = new TryCatchFinally(
+            new Block(new Constant(1)),
+            [new CatchClause(TypeReference.To<Exception>(), "ex", new Return(new Constant(2)))]);
+        var result = new CSharpGenerator().Generate(node);
+        var expected = "try" + Environment.NewLine +
+                       "{" + Environment.NewLine +
+                       "    1;" + Environment.NewLine +
+                       "}" + Environment.NewLine +
+                       "catch (System.Exception ex)" + Environment.NewLine +
+                       "{" + Environment.NewLine +
+                       "    return 2;" + Environment.NewLine +
+                       "}";
+        await Assert.That(result).IsEqualTo(expected);
+    }
+
+    [Test]
     public async Task Generate_UsingStatement_ProducesUsing() {
         var node = new UsingStatement(
             new Variable("resource"),

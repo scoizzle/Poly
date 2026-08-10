@@ -77,6 +77,7 @@ internal sealed class EntityStructureAnalyzer : INodeAnalyzer {
         }
 
         var constructorParameters = ComputeConstructorParameterOrder(entity, domain, lookup);
+        var entryAssignedPropertyNames = ComputeEntryAssignedPropertyNames(entity);
 
         // ── Enum-typed property map (property name → enum type name) ──
         Dictionary<string, string>? enumPropertyNames = null;
@@ -90,8 +91,26 @@ internal sealed class EntityStructureAnalyzer : INodeAnalyzer {
         return new EntityStructureMetadata(
             isRoot, hasNaturalKey, keyPropName, keyClrType,
             hasSoftDelete, hasStages, stageEnumTypeName, stageByName, constructorParameters,
-            enumPropertyNames
+            enumPropertyNames, entryAssignedPropertyNames
         );
+    }
+
+    /// <summary>
+    /// Names of entity properties assigned by the FIRST stage's entry effects. The
+    /// exported constructor runs those effects after setting CurrentStage, so these
+    /// props are body-initialized — never ctor params (a param would be dead + written
+    /// twice, e.g. StartedAt). Published on <see cref="EntityStructureMetadata.EntryAssignedPropertyNames"/>
+    /// so the exporter's ctor emission and this signature stay in lockstep.
+    /// </summary>
+    internal static IReadOnlySet<string> ComputeEntryAssignedPropertyNames(Entity entity) {
+        var names = new HashSet<string>(StringComparer.Ordinal);
+        if (entity.Stages.Count > 0) {
+            foreach (var effect in entity.Stages[0].OnEntryEffects) {
+                if (effect is AssignEffect ae && ae.Target is PropertyAccess pa)
+                    names.Add(pa.Name);
+            }
+        }
+        return names;
     }
 
     private static IReadOnlyList<ConstructorParameterOrder> ComputeConstructorParameterOrder(
@@ -100,16 +119,9 @@ internal sealed class EntityStructureAnalyzer : INodeAnalyzer {
 
         // Props assigned by the FIRST stage's entry effects are body-initialized in
         // the exported ctor (which runs those effects after setting CurrentStage) —
-        // they are NOT ctor params (a param would be dead + written twice, e.g.
-        // StartedAt). Must match the exporter's ctor-emission rule exactly so the
-        // Create(...) signature (declaration) and its callers stay in sync.
-        var entryAssignedProps = new HashSet<string>(StringComparer.Ordinal);
-        if (entity.Stages.Count > 0) {
-            foreach (var effect in entity.Stages[0].OnEntryEffects) {
-                if (effect is AssignEffect ae && ae.Target is PropertyAccess pa)
-                    entryAssignedProps.Add(pa.Name);
-            }
-        }
+        // they are NOT ctor params. Shared rule published as
+        // EntityStructureMetadata.EntryAssignedPropertyNames (single source of truth).
+        var entryAssignedProps = ComputeEntryAssignedPropertyNames(entity);
 
         foreach (var prop in entity.Properties.OrderBy(p => p.Name)) {
             if (prop.Constraints.Any(c => c is DefaultValueConstraint)) continue;

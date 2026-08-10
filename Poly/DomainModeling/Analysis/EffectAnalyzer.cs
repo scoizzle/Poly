@@ -1295,13 +1295,20 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
             s => string.Equals(s.Name, ste.TargetStage.StageName, StringComparison.Ordinal));
         if (targetStage is null) return;
 
-        // STAGE-scoped required metadata only. Entity-level required properties are
-        // creation invariants — satisfied by create initializers and enforced by the
-        // Create factory (DMEFF011) / ValidateCreateEntityRequirements — NOT by
-        // transition-time assigns. Falling back to entity metadata here produced
-        // false positives: every transition into a stage warned that an
-        // entity-required prop (e.g. EntryPath) had no AssignEffect, even though it
-        // was set at construction.
+        // STAGE-scoped required metadata only. Entity-level required metadata is NOT
+        // a transition concern — it conflates two invariants that transitions cannot
+        // (and should not) establish by assignment:
+        //   (1) `required`-constraint props are CREATION invariants — set by create
+        //       initializers, enforced by the Create factory (DMEFF011) /
+        //       ValidateCreateEntityRequirements;
+        //   (2) entity-policy `Exists` targets (e.g. `HasSource: policy { source exists }`)
+        //       are LINK-TIME invariants — established by create-in / link_instances,
+        //       not by transition assigns.
+        // Falling back to entity metadata here produced false positives: every
+        // transition warned that an entity-required prop (e.g. EntryPath) or a linked
+        // nav (source) had no AssignEffect, even though both were set at construction /
+        // link time. Genuine transition requirements are STAGE-scoped: stage-policy
+        // Exists targets that entering the stage should establish via entry effects.
         var requiredMeta = context.GetMetadata<RequiredPropertiesMetadata>(targetStage);
         if (requiredMeta is null) return;
 

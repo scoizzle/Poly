@@ -936,14 +936,18 @@ public sealed class PolyDslParser : DslCursor {
                 Advance();
         }
 
-        // Enum members must be identifiers — a member named after a primitive
-        // type keyword (e.g. `Number`, `Text`, `Boolean`) lexes as that keyword
-        // token and would otherwise fail cryptically on the RBrace expect below.
-        if (Current.Kind is TokenKind.Text or TokenKind.NumberType
-            or TokenKind.BooleanType or TokenKind.DateTimeType or TokenKind.DateType) {
+        // Enum members must be identifiers — a member named after a DSL keyword
+        // (e.g. `Number`, `Text`, `Create`, `In`, `Stage`, `Entry`) lexes as that
+        // keyword token and would otherwise fail cryptically on the RBrace expect
+        // below. A letter-led token here that is not a valid member terminator is
+        // necessarily a reserved word (symbols like `,`/`:` fall through to the
+        // normal RBrace error; EndOfFile has no text).
+        if (Current.Kind is not (TokenKind.RBrace or TokenKind.Comma or TokenKind.EndOfFile)
+            && Current.Text.Length > 0
+            && char.IsLetter(Current.Text[0])) {
             var word = Current.Text;
             throw Error(
-                $"Enum member '{word}' is a reserved type keyword and cannot be used as an enum member. " +
+                $"Enum member '{word}' is a reserved keyword and cannot be used as an enum member. " +
                 "Rename it (e.g. 'Number' → 'Numeric').");
         }
 

@@ -125,13 +125,9 @@ public sealed class DomainToCSharpExporter {
         // (the ctor already runs those effects after setting CurrentStage) — they must
         // NOT also be ctor params, or the value is written twice (param then effect)
         // and the param is dead (e.g. StartedAt: param, then entry `assign StartedAt to now`).
-        var entryAssignedProps = new HashSet<string>(StringComparer.Ordinal);
-        if (entity.Stages.Count > 0) {
-            foreach (var effect in entity.Stages[0].OnEntryEffects) {
-                if (effect is AssignEffect ae && ae.Target is PropertyAccess pa)
-                    entryAssignedProps.Add(pa.Name);
-            }
-        }
+        // The set is a published analysis fact (EntityStructureMetadata) — shared with
+        // the constructor-signature computation so both stay in lockstep.
+        var entryAssignedProps = esm.EntryAssignedPropertyNames;
 
         // ── Entity properties (sorted for deterministic output) ──
         foreach (var prop in entity.Properties.OrderBy(p => p.Name)) {

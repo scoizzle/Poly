@@ -802,6 +802,30 @@ public class UnsatisfiedRequirementTests {
     }
 
     [Test]
+    public async Task EffectUnsatisfiedRequirement_EntityPolicyExists_DoesNotWarnOnTransition() {
+        // An ENTITY-level policy `source exists` is a LINK-TIME invariant — the nav is
+        // established by create-in / link_instances, not by a transition-time assign.
+        // Transition warnings use STAGE-scoped requirements only; entity-level policy
+        // Exists targets are not transition-entry concerns (same class as the
+        // creation-required false positives). Pins the intentional semantic so a
+        // future "restore the entity fallback" cannot silently reintroduce the noise.
+        var text = new Poly.DomainModeling.PrimitiveType("Text", TypeCategory.Text, []);
+        var source = new Property("source", new DomainTypeReference("SourceFile"), []);
+        var policy = new Policy("HasSource", DomainExpression.Exists(new PropertyAccess("source")));
+        var stage = new Stage("Lexing", [], [], [], []);
+        var action = new Poly.DomainModeling.Action("Begin", InvocationResult.Void, [], [
+            new StageTransitionEffect(new StageReference("Lexing"))
+        ], []);
+        var entity = new Entity("Compilation", [source], [action], [policy], [stage]);
+        var domain = new Domain("Test", [text, entity], []);
+
+        var analysis = DomainModelAnalyzer.Analyze(domain);
+
+        await Assert.That(analysis.Diagnostics.Any(d =>
+            d.Code == DomainModelDiagnosticCodes.EffectUnsatisfiedRequirement)).IsFalse();
+    }
+
+    [Test]
     public async Task EffectUnsatisfiedRequirement_CreateEntityMissingRequiredProperty_ReportsWarning() {
         var text = new Poly.DomainModeling.PrimitiveType("Text", TypeCategory.Text, []);
         var title = new Property("Title", new DomainTypeReference("Text"), [new RequiredConstraint()]);

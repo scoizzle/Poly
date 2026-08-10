@@ -4,8 +4,10 @@ using Poly.DomainModeling.Constraints;
 namespace Poly.DomainModeling.Analysis;
 
 /// <summary>
-/// Fact emitter: publishes <see cref="RequiredPropertiesMetadata"/> on entities
-/// (and stages when collectable) from policy Exists targets and RequiredConstraint.
+/// Fact emitter: publishes <see cref="RequiredPropertiesMetadata"/> on entities and
+/// stages from policy Exists targets and RequiredConstraint.
+/// Stage metadata is published from the entity visit (the only path with the property
+/// map needed to resolve Exists targets to Property objects).
 /// Diagnostics for policy expressions live in <see cref="PolicyConstraintAnalyzer"/>.
 /// </summary>
 internal sealed class RequiredPropertiesPass : INodeAnalyzer {
@@ -17,14 +19,8 @@ internal sealed class RequiredPropertiesPass : INodeAnalyzer {
         if (!context.ShouldAnalyze(node))
             return;
 
-        switch (node) {
-            case Entity entity:
-                PublishEntity(context, entity);
-                break;
-            case Stage stage:
-                PublishStage(context, stage);
-                break;
-        }
+        if (node is Entity entity)
+            PublishEntity(context, entity);
 
         this.AnalyzeChildren(context, node);
     }
@@ -60,12 +56,6 @@ internal sealed class RequiredPropertiesPass : INodeAnalyzer {
                 context.SetMetadata(stage, new RequiredPropertiesMetadata(stageRequired));
             }
         }
-    }
-
-    private static void PublishStage(AnalysisContext context, Stage stage) {
-        // Historical standalone walk — without the owning entity's property map,
-        // Exists targets cannot resolve to Property objects, so nothing is
-        // collected here. Real stage metadata is published from PublishEntity.
     }
 
     private static void CollectRequiredFromExpression(

@@ -48,7 +48,16 @@ public sealed record EntityStructureMetadata(
     /// enum-typed literals to qualified members without re-scanning the catalog.
     /// Null when the entity has no enum-typed properties.
     /// </summary>
-    IReadOnlyDictionary<string, string>? EnumPropertyNames = null
+    IReadOnlyDictionary<string, string>? EnumPropertyNames = null,
+
+    /// <summary>
+    /// Names of entity properties assigned by the FIRST stage's entry effects.
+    /// The exported constructor runs those effects after setting CurrentStage, so
+    /// these props are body-initialized — never ctor params (a param would be dead
+    /// and written twice, e.g. StartedAt). Published so the exporter's ctor emission
+    /// and this signature stay in lockstep without re-deriving the rule.
+    /// </summary>
+    IReadOnlySet<string> EntryAssignedPropertyNames = null!
 ) : IAnalysisMetadata;
 
 public sealed record ConstructorParameterOrder(

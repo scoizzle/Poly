@@ -441,8 +441,9 @@ public class N1NavigationTests {
     }
 
     [Test]
-    public async Task Parse_DuplicateNavName_ThrowsError() {
-        // Two navs with the same relationship name (from same or different entities)
+    public async Task Parse_SameNavNameOnDifferentEntities_Succeeds() {
+        // Relationship identity is (source entity, name): the same nav name may be
+        // declared on different source entities (e.g. back-references both named 'customer').
         var poly = """
             domain Test
 
@@ -457,12 +458,30 @@ public class N1NavigationTests {
             """;
 
         var parser = new PolyDslParser(poly);
+        var result = parser.Parse();
+        await Assert.That(result.OfType<AddRelationshipChange>().Count()).IsEqualTo(3);
+    }
+
+    [Test]
+    public async Task Parse_DuplicateNavNameOnSameEntity_ThrowsError() {
+        var poly = """
+            domain Test
+
+            Order: entity {
+              customer: many Customer
+              customer: many Customer
+            }
+
+            Customer: entity { }
+            """;
+
+        var parser = new PolyDslParser(poly);
         var threw = false;
         try {
             parser.Parse();
         }
         catch (FormatException ex) {
-            await Assert.That(ex.Message.Contains("defined more than once")).IsTrue();
+            await Assert.That(ex.Message.Contains("defined more than once on entity 'Order'")).IsTrue();
             threw = true;
         }
         await Assert.That(threw).IsTrue();

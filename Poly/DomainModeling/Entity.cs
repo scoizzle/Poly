@@ -25,6 +25,13 @@ public sealed record Entity(
     /// </summary>
     public IReadOnlyList<StageSubscription> Subscriptions { get; init; } = [];
 
+    /// <summary>
+    /// The navigation properties declared on this entity. A relationship is a
+    /// source-entity-owned navigation; the domain-global relationship list
+    /// (<c>Domain.Relationships</c>) is a derived flatten of these.
+    /// </summary>
+    public IReadOnlyList<Relationship> Navigations { get; init; } = [];
+
     public sealed override IEnumerable<Node?> Children =>
-        [.. Properties, .. Constraints, .. Facets, .. Actions, .. Policies, .. Stages, .. Subscriptions];
+        [.. Properties, .. Constraints, .. Facets, .. Actions, .. Policies, .. Stages, .. Subscriptions, .. Navigations];
 }

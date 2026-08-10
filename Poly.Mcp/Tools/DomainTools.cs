@@ -711,7 +711,7 @@ Unknown kind, missing required field, or invalid cardinality fails closed. For b
 - stage: {""entityName"":""Order"",""name"":""Active""}
 - action: {""entityName"":""Order"",""name"":""Submit""}
 - stage_action: {""entityName"":""Order"",""stageName"":""Draft"",""name"":""Submit""}
-- relationship: {""name"":""OrderLines""}
+- relationship: {""name"":""OrderLines""} — optional ""source"": {""name"":""OrderLines"",""source"":""Order""} to disambiguate when the same name is declared on multiple source entities
 - policy: {""entityName"":""Order"",""name"":""Adult""} — optional scope: add ""stageName"" to remove a stage-scoped policy, ""actionName"" for an action-scoped policy (provide at most one)
 - constraint: not implemented in unified remove (core constraint removal is instance-identity-based, unusable from payload identity) — author via add(kind: constraint) or apply_dsl
 Unknown kind or missing required field fails closed.")]
@@ -782,7 +782,27 @@ Unknown kind or missing required field fails closed.")]
             case "relationship": {
                     var name = Field(root, "name");
                     if (name is null) return MissingField(sessionId, kind, "name");
-                    return Evolve(sessionId, builder => builder.RemoveRelationship(name),
+                    // Relationship identity is (source entity, name). Optional 'source'
+                    // disambiguates when the name is declared on multiple entities.
+                    var source = Field(root, "source", "sourceEntityName");
+                    if (source is null && McpSessionStore.TryGet(sessionId, out var state) && state.Domain is not null) {
+                        var sources = state.Domain.Relationships
+                            .Where(r => string.Equals(r.Name, name, StringComparison.Ordinal))
+                            .Select(r => r.Source.TypeName)
+                            .Distinct(StringComparer.Ordinal)
+                            .ToList();
+                        if (sources.Count > 1)
+                            return new DomainToolResponse(Success: false,
+                                Message: $"Relationship '{name}' exists on multiple source entities ({string.Join(", ", sources)}). Provide 'source' to disambiguate.",
+                                SessionId: sessionId, Affordances: ["remove", "get_relationships", "get_domain_analysis"]);
+                        if (sources.Count == 1)
+                            source = sources[0];
+                    }
+                    if (source is null)
+                        return new DomainToolResponse(Success: false,
+                            Message: $"Relationship '{name}' not found — nothing to remove.",
+                            SessionId: sessionId, Affordances: ["remove", "get_domain_overview"]);
+                    return Evolve(sessionId, builder => builder.RemoveRelationship(source, name),
                         successAffordances: ["remove", "add", "apply_dsl", "get_domain_overview"]);
                 }
             case "policy": {

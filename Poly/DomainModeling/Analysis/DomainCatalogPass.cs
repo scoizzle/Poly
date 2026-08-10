@@ -69,9 +69,15 @@ internal sealed class DomainCatalogPass : INodeAnalyzer {
             .GroupBy(e => e.Name, StringComparer.Ordinal)
             .ToDictionary(g => g.Key, g => g.Last(), StringComparer.Ordinal);
 
-        var relationshipsByName = domain.Relationships
-            .GroupBy(r => r.Name, StringComparer.Ordinal)
-            .ToDictionary(g => g.Key, g => g.Last(), StringComparer.Ordinal);
+        var relationshipsByName = domain.Types.OfType<Entity>()
+            .SelectMany(e => e.Navigations)
+            .GroupBy(r => r.Source.TypeName, StringComparer.Ordinal)
+            .ToDictionary(
+                g => g.Key,
+                g => (IReadOnlyDictionary<string, Relationship>)g
+                    .GroupBy(r => r.Name, StringComparer.Ordinal)
+                    .ToDictionary(x => x.Key, x => x.Last(), StringComparer.Ordinal),
+                StringComparer.Ordinal);
 
         var stagesByEntity = new Dictionary<string, IReadOnlyDictionary<string, Stage>>(StringComparer.Ordinal);
         var actionsByEntity = new Dictionary<string, IReadOnlyDictionary<string, IReadOnlyList<Action>>>(StringComparer.Ordinal);

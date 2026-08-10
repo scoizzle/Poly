@@ -418,7 +418,11 @@ public sealed record AddRelationshipChange(
         var newRel = new Relationship(Name, Source, Target, Cardinality, Properties) {
             SourceOwnsTarget = SourceOwnsTarget
         };
-        context.Relationships.Add(newRel);
+        var added = context.ReplaceInEntity(Source.TypeName,
+            _ => true,
+            e => e with { Navigations = [.. e.Navigations, newRel] });
+        if (!added)
+            context.RequireTarget(false, $"Relationship '{Name}' cannot be added — source entity '{Source.TypeName}' not found");
         context.ModifiedNodes.Add(newRel);
     }
 
@@ -426,15 +430,20 @@ public sealed record AddRelationshipChange(
 }
 
 public sealed record RemoveRelationshipChange(
+    string SourceEntityName,
     string Name
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
-        RemoveAllWithGuard(context, context.Relationships,
-            r => string.Equals(r.Name, Name, StringComparison.Ordinal),
-            $"Relationship '{Name}' not found — nothing to remove");
+        var removed = context.ReplaceInEntity(SourceEntityName,
+            e => e.Navigations.Any(r => string.Equals(r.Name, Name, StringComparison.Ordinal)),
+            e => e with {
+                Navigations = e.Navigations.Where(r => !string.Equals(r.Name, Name, StringComparison.Ordinal)).ToList()
+            });
+        if (!removed)
+            context.RequireTarget(false, $"Relationship '{Name}' on entity '{SourceEntityName}' not found — nothing to remove");
     }
 
-    internal override string GetDescription() => $"RemoveRelationship({Name})";
+    internal override string GetDescription() => $"RemoveRelationship({SourceEntityName}.{Name})";
 }
 
 public sealed record RemoveParameterFromActionChange(
@@ -648,39 +657,41 @@ public sealed record SetDomainNameChange(
 /// Adds a Property to a Relationship.
 /// </summary>
 public sealed record AddPropertyToRelationshipChange(
+    string SourceEntityName,
     string RelationshipName,
     Property Property
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
         context.RequireUpdate(
-            context.UpdateRelationship(RelationshipName, r => r with {
+            context.UpdateRelationship(SourceEntityName, RelationshipName, r => r with {
                 Properties = r.Properties.Append(Property).ToList()
             }),
-            $"Relationship '{RelationshipName}' not found — cannot add property '{Property.Name}'");
+            $"Relationship '{RelationshipName}' on entity '{SourceEntityName}' not found — cannot add property '{Property.Name}'");
     }
 
-    internal override string GetDescription() => $"Add property '{Property.Name}' to Relationship '{RelationshipName}'";
+    internal override string GetDescription() => $"Add property '{Property.Name}' to Relationship '{SourceEntityName}.{RelationshipName}'";
 }
 
 public sealed record RemovePropertyFromRelationshipChange(
+    string SourceEntityName,
     string RelationshipName,
     string PropertyName
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
-        var rel = context.FindRelationship(RelationshipName);
+        var rel = context.FindRelationship(SourceEntityName, RelationshipName);
         if (rel is not null && !rel.Properties.Any(p => string.Equals(p.Name, PropertyName, StringComparison.Ordinal))) {
             context.RequireTarget(false,
                 $"Property '{PropertyName}' not found on Relationship '{RelationshipName}' — nothing to remove");
             return;
         }
         context.RequireUpdate(
-            context.UpdateRelationship(RelationshipName, r => r with {
+            context.UpdateRelationship(SourceEntityName, RelationshipName, r => r with {
                 Properties = r.Properties.Where(p => !string.Equals(p.Name, PropertyName, StringComparison.Ordinal)).ToList()
             }),
-            $"Relationship '{RelationshipName}' not found — cannot remove property '{PropertyName}'");
+            $"Relationship '{RelationshipName}' on entity '{SourceEntityName}' not found — cannot remove property '{PropertyName}'");
     }
 
-    internal override string GetDescription() => $"Remove property '{PropertyName}' from Relationship '{RelationshipName}'";
+    internal override string GetDescription() => $"Remove property '{PropertyName}' from Relationship '{SourceEntityName}.{RelationshipName}'";
 }
 
 /// <summary>
@@ -799,6 +810,7 @@ public sealed record ChangePropertyTypeChange(
 }
 
 public sealed record SetRelationshipShapeChange(
+    string SourceEntityName,
     string RelationshipName,
     DomainTypeReference? NewSource = null,
     DomainTypeReference? NewTarget = null,
@@ -807,16 +819,16 @@ public sealed record SetRelationshipShapeChange(
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
         context.RequireUpdate(
-            context.UpdateRelationship(RelationshipName, r => r with {
+            context.UpdateRelationship(SourceEntityName, RelationshipName, r => r with {
                 Source = NewSource ?? r.Source,
                 Target = NewTarget ?? r.Target,
                 Cardinality = NewCardinality ?? r.Cardinality,
                 SourceOwnsTarget = NewSourceOwnsTarget ?? r.SourceOwnsTarget
             }),
-            $"Relationship '{RelationshipName}' not found — cannot update shape");
+            $"Relationship '{RelationshipName}' on entity '{SourceEntityName}' not found — cannot update shape");
     }
 
-    internal override string GetDescription() => $"Update relationship shape for '{RelationshipName}'";
+    internal override string GetDescription() => $"Update relationship shape for '{SourceEntityName}.{RelationshipName}'";
 }
 
 /// <summary>
@@ -838,52 +850,55 @@ public sealed record SetPrimitiveTypeCategoryChange(
 }
 
 public sealed record AddStageToRelationshipChange(
+    string SourceEntityName,
     string RelationshipName,
     Stage Stage
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
         context.RequireUpdate(
-            context.UpdateRelationship(RelationshipName, r => r with {
+            context.UpdateRelationship(SourceEntityName, RelationshipName, r => r with {
                 Stages = r.Stages.Append(Stage).ToList()
             }),
-            $"Relationship '{RelationshipName}' not found — cannot add stage '{Stage.Name}'");
+            $"Relationship '{RelationshipName}' on entity '{SourceEntityName}' not found — cannot add stage '{Stage.Name}'");
     }
 
-    internal override string GetDescription() => $"Add stage '{Stage.Name}' to relationship '{RelationshipName}'";
+    internal override string GetDescription() => $"Add stage '{Stage.Name}' to relationship '{SourceEntityName}.{RelationshipName}'";
 }
 
 public sealed record RemoveStageFromRelationshipChange(
+    string SourceEntityName,
     string RelationshipName,
     string StageName
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
-        var rel = context.FindRelationship(RelationshipName);
+        var rel = context.FindRelationship(SourceEntityName, RelationshipName);
         if (rel is not null && !rel.Stages.Any(s => string.Equals(s.Name, StageName, StringComparison.Ordinal))) {
             context.RequireTarget(false,
                 $"Stage '{StageName}' not found on Relationship '{RelationshipName}' — nothing to remove");
             return;
         }
         context.RequireUpdate(
-            context.UpdateRelationship(RelationshipName, r => r with {
+            context.UpdateRelationship(SourceEntityName, RelationshipName, r => r with {
                 Stages = r.Stages.Where(s => !string.Equals(s.Name, StageName, StringComparison.Ordinal)).ToList()
             }),
-            $"Relationship '{RelationshipName}' not found — cannot remove stage '{StageName}'");
+            $"Relationship '{RelationshipName}' on entity '{SourceEntityName}' not found — cannot remove stage '{StageName}'");
     }
 
-    internal override string GetDescription() => $"Remove stage '{StageName}' from relationship '{RelationshipName}'";
+    internal override string GetDescription() => $"Remove stage '{StageName}' from relationship '{SourceEntityName}.{RelationshipName}'";
 }
 
 public sealed record AddPolicyToRelationshipChange(
+    string SourceEntityName,
     string RelationshipName,
     Policy Policy
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
         context.RequireUpdate(
-            context.AddPolicyToRelationship(RelationshipName, Policy),
-            $"Relationship '{RelationshipName}' not found — cannot add policy '{Policy.Name}'");
+            context.AddPolicyToRelationship(SourceEntityName, RelationshipName, Policy),
+            $"Relationship '{RelationshipName}' on entity '{SourceEntityName}' not found — cannot add policy '{Policy.Name}'");
     }
 
-    internal override string GetDescription() => $"Add policy '{Policy.Name}' to relationship '{RelationshipName}'";
+    internal override string GetDescription() => $"Add policy '{Policy.Name}' to relationship '{SourceEntityName}.{RelationshipName}'";
 }
 
 // ── Enum type changes ─────────────────────────────────
@@ -901,22 +916,23 @@ public sealed record AddEnumTypeChange(
 }
 
 public sealed record RemovePolicyFromRelationshipChange(
+    string SourceEntityName,
     string RelationshipName,
     string PolicyName
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
-        var rel = context.FindRelationship(RelationshipName);
+        var rel = context.FindRelationship(SourceEntityName, RelationshipName);
         if (rel is not null && !rel.Policies.Any(p => string.Equals(p.Name, PolicyName, StringComparison.Ordinal))) {
             context.RequireTarget(false,
                 $"Policy '{PolicyName}' not found on Relationship '{RelationshipName}' — nothing to remove");
             return;
         }
         context.RequireUpdate(
-            context.RemovePolicyFromRelationship(RelationshipName, PolicyName),
-            $"Relationship '{RelationshipName}' not found — cannot remove policy '{PolicyName}'");
+            context.RemovePolicyFromRelationship(SourceEntityName, RelationshipName, PolicyName),
+            $"Relationship '{RelationshipName}' on entity '{SourceEntityName}' not found — cannot remove policy '{PolicyName}'");
     }
 
-    internal override string GetDescription() => $"Remove policy '{PolicyName}' from relationship '{RelationshipName}'";
+    internal override string GetDescription() => $"Remove policy '{PolicyName}' from relationship '{SourceEntityName}.{RelationshipName}'";
 }
 
 // --- Contract integration changes ---

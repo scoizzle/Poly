@@ -1184,7 +1184,7 @@ public class DomainEvolutionApplicatorTests {
             new DomainTypeReference("Person"), new DomainTypeReference("Person"),
             RelationshipCardinality.ManyToMany, []);
         var start = new Domain("Test", [entity], [rel]);
-        var result = new DomainEvolution(start).Apply([new AddStageToRelationshipChange("Friends", new Stage("Active", [], [], [], []))]);
+        var result = new DomainEvolution(start).Apply([new AddStageToRelationshipChange("Person", "Friends", new Stage("Active", [], [], [], []))]);
         await Assert.That(result.Succeeded).IsTrue();
         var updatedRel = result.Root.Relationships.Single(r => r.Name == "Friends");
         await Assert.That(updatedRel.Stages.Count).IsEqualTo(1);
@@ -1199,7 +1199,7 @@ public class DomainEvolutionApplicatorTests {
             new DomainTypeReference("Person"), new DomainTypeReference("Person"),
             RelationshipCardinality.ManyToMany, []) { Stages = [stage] };
         var start = new Domain("Test", [entity], [rel]);
-        var result = new DomainEvolution(start).Apply([new RemoveStageFromRelationshipChange("Friends", "Active")]);
+        var result = new DomainEvolution(start).Apply([new RemoveStageFromRelationshipChange("Person", "Friends", "Active")]);
         await Assert.That(result.Succeeded).IsTrue();
         var updatedRel = result.Root.Relationships.Single(r => r.Name == "Friends");
         await Assert.That(updatedRel.Stages).IsEmpty();
@@ -1212,7 +1212,7 @@ public class DomainEvolutionApplicatorTests {
             new DomainTypeReference("Person"), new DomainTypeReference("Person"),
             RelationshipCardinality.ManyToMany, []);
         var start = new Domain("Test", [entity], [rel]);
-        var result = new DomainEvolution(start).Apply([new AddPolicyToRelationshipChange("Friends", new Policy("MaxFriends", DomainExpression.Literal(10)))]);
+        var result = new DomainEvolution(start).Apply([new AddPolicyToRelationshipChange("Person", "Friends", new Policy("MaxFriends", DomainExpression.Literal(10)))]);
         await Assert.That(result.Succeeded).IsTrue();
         var updatedRel = result.Root.Relationships.Single(r => r.Name == "Friends");
         await Assert.That(updatedRel.Policies.Count).IsEqualTo(1);
@@ -1227,7 +1227,7 @@ public class DomainEvolutionApplicatorTests {
             new DomainTypeReference("Person"), new DomainTypeReference("Person"),
             RelationshipCardinality.ManyToMany, []) { Policies = [policy] };
         var start = new Domain("Test", [entity], [rel]);
-        var result = new DomainEvolution(start).Apply([new RemovePolicyFromRelationshipChange("Friends", "MaxFriends")]);
+        var result = new DomainEvolution(start).Apply([new RemovePolicyFromRelationshipChange("Person", "Friends", "MaxFriends")]);
         await Assert.That(result.Succeeded).IsTrue();
         var updatedRel = result.Root.Relationships.Single(r => r.Name == "Friends");
         await Assert.That(updatedRel.Policies).IsEmpty();
@@ -1409,8 +1409,8 @@ public class DomainEvolutionApplicatorTests {
         var start = new Domain("Test", [entity], [rel]);
         var result = new DomainEvolution(start)
             .Evolve()
-            .AddStageToRelationship("Friends", "Active")
-            .AddPolicyToRelationship("Friends", "Limit", DomainExpression.Literal(5))
+            .AddStageToRelationship("Person", "Friends", "Active")
+            .AddPolicyToRelationship("Person", "Friends", "Limit", DomainExpression.Literal(5))
             .Apply();
         await Assert.That(result.Succeeded).IsTrue();
         var updatedRel = result.Root.Relationships.Single(r => r.Name == "Friends");
@@ -1447,7 +1447,7 @@ public class DomainEvolutionApplicatorTests {
             RelationshipCardinality.ManyToMany, []);
         var start = new Domain("Test", [entity, textPrimitive], [rel]);
         var prop = new Property("Since", new DomainTypeReference("Text"), []);
-        var result = new DomainEvolution(start).Apply([new AddPropertyToRelationshipChange("Friends", prop)]);
+        var result = new DomainEvolution(start).Apply([new AddPropertyToRelationshipChange("Person", "Friends", prop)]);
         await Assert.That(result.Succeeded).IsTrue();
         var updatedRel = result.Root.Relationships.Single(r => r.Name == "Friends");
         await Assert.That(updatedRel.Properties.Count).IsEqualTo(1);
@@ -1463,7 +1463,7 @@ public class DomainEvolutionApplicatorTests {
             new DomainTypeReference("Person"), new DomainTypeReference("Person"),
             RelationshipCardinality.ManyToMany, [prop]);
         var start = new Domain("Test", [entity, textPrimitive], [rel]);
-        var result = new DomainEvolution(start).Apply([new RemovePropertyFromRelationshipChange("Friends", "Since")]);
+        var result = new DomainEvolution(start).Apply([new RemovePropertyFromRelationshipChange("Person", "Friends", "Since")]);
         await Assert.That(result.Succeeded).IsTrue();
         var updatedRel = result.Root.Relationships.Single(r => r.Name == "Friends");
         await Assert.That(updatedRel.Properties).IsEmpty();
@@ -1544,7 +1544,7 @@ public class DomainEvolutionApplicatorTests {
             new DomainTypeReference("Person"), new DomainTypeReference("Person"),
             RelationshipCardinality.ManyToMany, []);
         var start = new Domain("Test", [entity], [rel]);
-        var result = new DomainEvolution(start).Apply([new SetRelationshipShapeChange("Friends",
+        var result = new DomainEvolution(start).Apply([new SetRelationshipShapeChange("Person", "Friends",
             NewCardinality: RelationshipCardinality.OneToOne)]);
         await Assert.That(result.Succeeded).IsTrue();
         var updatedRel = result.Root.Relationships.Single(r => r.Name == "Friends");

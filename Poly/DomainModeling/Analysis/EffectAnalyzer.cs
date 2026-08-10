@@ -185,7 +185,7 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
         if (createIn.ResolvedTargetType is not null
             && string.Equals(createIn.ResolvedTargetType.TypeName, expectedType, StringComparison.Ordinal))
             return true;
-        if (TryResolveRelationship(context, domain, createIn.RelationshipName, createIn, out var rel)
+        if (TryResolveRelationship(context, domain, sourceEntity.Name, createIn.RelationshipName, createIn, out var rel)
             && rel is not null
             && string.Equals(rel.Target.TypeName, expectedType, StringComparison.Ordinal)
             && string.Equals(rel.Source.TypeName, sourceEntity.Name, StringComparison.Ordinal))
@@ -378,17 +378,17 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
         }
 
         protected override object? LinkRelationship(LinkRelationshipEffect e) {
-            ValidateRelationshipName(context, e.RelationshipName, domain, e);
+            ValidateRelationshipName(context, e.RelationshipName, domain, entity, e);
             return null;
         }
 
         protected override object? UnlinkRelationship(UnlinkRelationshipEffect e) {
-            ValidateRelationshipName(context, e.RelationshipName, domain, e);
+            ValidateRelationshipName(context, e.RelationshipName, domain, entity, e);
             return null;
         }
 
         protected override object? TransitionRelationship(TransitionRelationshipEffect e) {
-            ValidateTransitionRelationship(context, e, domain);
+            ValidateTransitionRelationship(context, e, domain, entity);
             // DMEFF005: TransitionRelationshipEffect is analyzed but NOT executed at runtime.
             // It is stored in the model for evolution/planning but has no case in
             // DomainEntityInstance.ExecuteEffect — calls to it are silent no-ops.
@@ -519,7 +519,7 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
         // amu-w1-1 / F1: catalog+RLM name resolve (no domain.Relationships scan);
         // bag-missing reports a structural failure (fail-closed) before returning.
         // cei.RelationshipName is non-null here (caller guards before invoking).
-        if (!TryResolveRelationship(context, domain, cei.RelationshipName!, cei, out var relationship)) {
+        if (!TryResolveRelationship(context, domain, actionEntity.Name, cei.RelationshipName!, cei, out var relationship)) {
             return;
         }
         if (relationship is null) {
@@ -582,14 +582,14 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
     /// not a relationship in the available bags.
     /// </summary>
     private static bool TryResolveRelationship(
-        AnalysisContext context, Domain domain, string relationshipName, Node reportNode, out Relationship? relationship) {
+        AnalysisContext context, Domain domain, string sourceEntityName, string relationshipName, Node reportNode, out Relationship? relationship) {
         var relLookup = ResolveRelationshipLookup(context, domain);
         if (relLookup is null) {
             relationship = null;
             ReportCatalogUnavailable(context, reportNode);
             return false;
         }
-        relationship = relLookup.Relationships.TryGetValue(relationshipName, out var rel) ? rel : null;
+        relationship = relLookup.TryGetRelationship(sourceEntityName, relationshipName, out var rel) ? rel : null;
         return true;
     }
 
@@ -649,7 +649,7 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
         AnalysisContext context, CreateEntityInRelationshipEffect createIn, Entity entity, Domain domain, DomainTypeLookupMetadata lookup) {
         // amu-w1-1 / F1: catalog+RLM name resolve (no domain.Relationships scan);
         // bag-missing reports a structural failure (fail-closed) before returning.
-        if (!TryResolveRelationship(context, domain, createIn.RelationshipName, createIn, out var relationship)) {
+        if (!TryResolveRelationship(context, domain, entity.Name, createIn.RelationshipName, createIn, out var relationship)) {
             return;
         }
         if (relationship is null) {
@@ -818,10 +818,25 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
         if (hasRel) {
             // amu-w1-1 / F1: catalog+RLM name resolve (no domain.Relationships scan);
             // bag-missing reports a structural failure (fail-closed) before returning.
-            if (!TryResolveRelationship(context, domain, iae.TargetRelationship!, iae, out var relationship)) {
+            if (!TryResolveRelationship(context, domain, entity.Name, iae.TargetRelationship!, iae, out var relationship)) {
                 return;
             }
             if (relationship is null) {
+                // Reverse-side detection: the name exists on a different source entity,
+                // so this is a wrong-direction invoke, not an unknown relationship.
+                var relLookup = ResolveRelationshipLookup(context, domain);
+                if (relLookup is not null) {
+                    var elsewhere = relLookup.FindByNameAcrossSources(iae.TargetRelationship!).FirstOrDefault();
+                    if (elsewhere is not null) {
+                        context.ReportError(
+                            iae,
+                            $"InvokeAction relationship '{iae.TargetRelationship}' may only be used from source entity " +
+                            $"'{elsewhere.Source.TypeName}' (caller is '{entity.Name}'). " +
+                            "Reverse-side cross-entity invoke is not supported yet.",
+                            DomainModelDiagnosticCodes.EffectInvokeShape);
+                        return;
+                    }
+                }
                 context.ReportError(
                     iae,
                     $"InvokeAction effect references relationship '{iae.TargetRelationship}' which does not exist on domain.",
@@ -1208,10 +1223,10 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
     }
 
     private static void ValidateRelationshipName(
-        AnalysisContext context, string relationshipName, Domain domain, Effect effect) {
+        AnalysisContext context, string relationshipName, Domain domain, Entity entity, Effect effect) {
         // amu-w1-1 / F1: catalog+RLM name resolve (no domain.Relationships scan);
         // bag-missing reports a structural failure (fail-closed) before returning.
-        if (TryResolveRelationship(context, domain, relationshipName, effect, out var relationship)
+        if (TryResolveRelationship(context, domain, entity.Name, relationshipName, effect, out var relationship)
             && relationship is null) {
             context.ReportError(
                 effect,
@@ -1221,10 +1236,10 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
     }
 
     private static void ValidateTransitionRelationship(
-        AnalysisContext context, TransitionRelationshipEffect tre, Domain domain) {
+        AnalysisContext context, TransitionRelationshipEffect tre, Domain domain, Entity entity) {
         // amu-w1-1 / F1: catalog+RLM name resolve (no domain.Relationships scan);
         // bag-missing reports a structural failure (fail-closed) before returning.
-        if (TryResolveRelationship(context, domain, tre.RelationshipName, tre, out var relationship)
+        if (TryResolveRelationship(context, domain, entity.Name, tre.RelationshipName, tre, out var relationship)
             && relationship is null) {
             context.ReportError(
                 tre,

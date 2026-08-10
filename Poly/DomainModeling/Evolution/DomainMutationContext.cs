@@ -33,8 +33,6 @@ internal sealed class DomainMutationContext {
 
     public List<DomainType> Types { get; }
 
-    public List<Relationship> Relationships { get; }
-
     public List<ImportedContract> ImportedContracts { get; }
 
     public List<ContractBinding> ContractBindings { get; }
@@ -54,13 +52,12 @@ internal sealed class DomainMutationContext {
     public DomainMutationContext(Domain source, MutationTargetIndexMetadata? mutationIndex = null) {
         DomainName = source.Name;
         Types = new List<DomainType>(source.Types);
-        Relationships = new List<Relationship>(source.Relationships);
         ImportedContracts = new List<ImportedContract>(source.ImportedContracts);
         ContractBindings = new List<ContractBinding>(source.ContractBindings);
         _mutationIndex = mutationIndex;
     }
 
-    public Domain ToDomain() => new Domain(DomainName, Types, Relationships) {
+    public Domain ToDomain() => new Domain(DomainName, Types) {
         ImportedContracts = ImportedContracts,
         ContractBindings = ContractBindings
     };
@@ -109,8 +106,13 @@ internal sealed class DomainMutationContext {
     public bool UpdateType(string name, Func<DomainType, DomainType> transform) =>
         ReplaceInList(Types, t => string.Equals(t.Name, name, StringComparison.Ordinal), t => transform(t));
 
-    public bool UpdateRelationship(string name, Func<Relationship, Relationship> transform) =>
-        ReplaceInList(Relationships, r => string.Equals(r.Name, name, StringComparison.Ordinal), r => transform(r));
+    public bool UpdateRelationship(string sourceEntityName, string name, Func<Relationship, Relationship> transform) =>
+        ReplaceInEntity(sourceEntityName,
+            e => e.Navigations.Any(r => string.Equals(r.Name, name, StringComparison.Ordinal)),
+            e => e with {
+                Navigations = e.Navigations.Select(r =>
+                    string.Equals(r.Name, name, StringComparison.Ordinal) ? transform(r) : r).ToList()
+            });
 
     public bool UpdateImportedContract(string name, Func<ImportedContract, ImportedContract> transform) =>
         ReplaceInList(ImportedContracts, c => string.Equals(c.Name, name, StringComparison.Ordinal), c => transform(c));
@@ -207,37 +209,42 @@ internal sealed class DomainMutationContext {
                 string.Equals(p.Name, propertyName, StringComparison.Ordinal) ? transform(p) : p).ToList()
             });
 
-    public bool UpdateRelationshipStage(string relationshipName, string stageName, Func<Stage, Stage> transform) {
-        var idx = Relationships.FindIndex(r => string.Equals(r.Name, relationshipName, StringComparison.Ordinal));
-        if (idx < 0) return false;
-        var r = Relationships[idx];
-        if (!r.Stages.Any(s => string.Equals(s.Name, stageName, StringComparison.Ordinal)))
-            return false;
-        Relationships[idx] = r with {
-            Stages = r.Stages.Select(s =>
-            string.Equals(s.Name, stageName, StringComparison.Ordinal) ? transform(s) : s).ToList()
-        };
-        ModifiedNodes.Add(Relationships[idx]);
-        return true;
-    }
+    public bool UpdateRelationshipStage(string sourceEntityName, string relationshipName, string stageName, Func<Stage, Stage> transform) =>
+        ReplaceInEntity(sourceEntityName,
+            e => e.Navigations.Any(r =>
+                string.Equals(r.Name, relationshipName, StringComparison.Ordinal)
+                && r.Stages.Any(s => string.Equals(s.Name, stageName, StringComparison.Ordinal))),
+            e => e with {
+                Navigations = e.Navigations.Select(r =>
+                    string.Equals(r.Name, relationshipName, StringComparison.Ordinal)
+                        ? r with {
+                            Stages = r.Stages.Select(s =>
+                            string.Equals(s.Name, stageName, StringComparison.Ordinal) ? transform(s) : s).ToList()
+                        }
+                        : r).ToList()
+            });
 
-    public bool AddPolicyToRelationship(string name, Policy policy) {
-        var idx = Relationships.FindIndex(r => string.Equals(r.Name, name, StringComparison.Ordinal));
-        if (idx < 0) return false;
-        var r = Relationships[idx];
-        Relationships[idx] = r with { Policies = r.Policies.Append(policy).ToList() };
-        ModifiedNodes.Add(Relationships[idx]);
-        return true;
-    }
+    public bool AddPolicyToRelationship(string sourceEntityName, string name, Policy policy) =>
+        ReplaceInEntity(sourceEntityName,
+            e => e.Navigations.Any(r => string.Equals(r.Name, name, StringComparison.Ordinal)),
+            e => e with {
+                Navigations = e.Navigations.Select(r =>
+                    string.Equals(r.Name, name, StringComparison.Ordinal)
+                        ? r with { Policies = r.Policies.Append(policy).ToList() }
+                        : r).ToList()
+            });
 
-    public bool RemovePolicyFromRelationship(string name, string policyName) {
-        var idx = Relationships.FindIndex(r => string.Equals(r.Name, name, StringComparison.Ordinal));
-        if (idx < 0) return false;
-        var r = Relationships[idx];
-        Relationships[idx] = r with { Policies = r.Policies.Where(p => !string.Equals(p.Name, policyName, StringComparison.Ordinal)).ToList() };
-        ModifiedNodes.Add(Relationships[idx]);
-        return true;
-    }
+    public bool RemovePolicyFromRelationship(string sourceEntityName, string name, string policyName) =>
+        ReplaceInEntity(sourceEntityName,
+            e => e.Navigations.Any(r =>
+                string.Equals(r.Name, name, StringComparison.Ordinal)
+                && r.Policies.Any(p => string.Equals(p.Name, policyName, StringComparison.Ordinal))),
+            e => e with {
+                Navigations = e.Navigations.Select(r =>
+                    string.Equals(r.Name, name, StringComparison.Ordinal)
+                        ? r with { Policies = r.Policies.Where(p => !string.Equals(p.Name, policyName, StringComparison.Ordinal)).ToList() }
+                        : r).ToList()
+            });
 
     public void AddType(DomainType type) {
         Types.Add(type);
@@ -247,8 +254,11 @@ internal sealed class DomainMutationContext {
     public Entity? FindEntity(string name) =>
         (Entity?)Types.Find(t => t is Entity e && string.Equals(e.Name, name, StringComparison.Ordinal));
 
-    public Relationship? FindRelationship(string name) =>
-        Relationships.Find(r => string.Equals(r.Name, name, StringComparison.Ordinal));
+    public Relationship? FindRelationship(string sourceEntityName, string name) =>
+        Types.OfType<Entity>()
+            .Where(e => string.Equals(e.Name, sourceEntityName, StringComparison.Ordinal))
+            .SelectMany(e => e.Navigations)
+            .FirstOrDefault(r => string.Equals(r.Name, name, StringComparison.Ordinal));
 
     public DomainType? FindType(string name) =>
         Types.Find(t => string.Equals(t.Name, name, StringComparison.Ordinal));

@@ -64,27 +64,34 @@ Book: entity {
 }
 ```
 
-### 0.3 `create in Relationship` Auto-Wires the Source
+### 0.3 `create in Relationship` Links the Source at Runtime
 
-When you create an entity in a navigation property, the source entity reference
-is automatically set. You only specify the *other* property initializers.
+When you create an entity in a navigation property, the runtime store links the new
+instance to the source — the child becomes reachable from the source through the
+relationship. You only specify the *other* property initializers.
 
 ```poly
 Patron: entity {
   loans: many Loan
 
   CheckOut: action (book: Book) {
-    create in loans { book: book }   // borrower: this is implicit
+    create in loans { book: book }   // the store link to this Patron is implicit
   }
 }
 ```
 
-The generated C# sets `borrower` to `this` automatically. Do not set it explicitly
-in the initializer — it would conflict with the auto-wire.
+**Note (back-reference materialization):** the runtime link is a store edge — it
+drives path-prefix reads, quantifiers, and subscriptions from the source. The **C#
+export does not yet auto-populate the child's back-reference property** (e.g.
+`borrower` stays a constructor parameter passed as `null`). To-one navigation
+bindings are also rejected in `create in` initializers today (analyzer fail-closed).
+Derived back-reference materialization is planned; until then, a back-reference that
+must hold a property value has no `create in` authoring surface.
 
 **Required coverage (DMEFF011):** every `required` property of the created entity
 must be provided in the `create` / `create in` initializers, unless it has a
-`default`. The auto-wired back-reference nav is exempt (it is set by `create in`).
+`default`. The back-reference navigation is exempt from this check because the
+runtime store link satisfies the reference (not a create-initializer property).
 Analysis rejects a create that omits a required property — the generated `Create`
 factory would otherwise throw at runtime.
 
@@ -271,6 +278,23 @@ Customer: entity {
 
 Cardinality: `one` (default, can be omitted), `many`.
 Ownership: `owned` marks `SourceOwnsTarget = true`.
+
+**Relationship names are scoped to their source entity.** The same navigation name may
+be declared on different source entities — e.g. two children each back-reference their
+parent with a nav named `order` — but never twice on the same entity, and never
+colliding with a property of the same name on that entity. Relationship references in
+policies, subscriptions, `create in`, and `invoke` always resolve relative to the
+entity they are authored on.
+
+```poly
+OrderLine: entity {
+  order: Order
+}
+
+Note: entity {
+  order: Order        // allowed — different source entity
+}
+```
 
 ## 5. Lifecycle Stages
 

@@ -203,10 +203,15 @@ public static class DomainSemanticLookupExtensions {
 
     // ── Relationship resolution ───────────────────────────────
 
-    public static bool TryGetRelationship(this AnalysisResult analysis, string relationshipName, out Relationship? relationship) {
+    /// <summary>
+    /// Resolves a relationship by its owning (source) entity name and nav name.
+    /// Relationship identity is (source entity, name) — the same nav name may be
+    /// declared on multiple source entities.
+    /// </summary>
+    public static bool TryGetRelationship(this AnalysisResult analysis, string sourceEntityName, string relationshipName, out Relationship? relationship) {
         var rlm = analysis.GetRelationshipLookup();
-        if (rlm is not null && rlm.Relationships.TryGetValue(relationshipName, out relationship))
-            return true;
+        if (rlm is not null)
+            return rlm.TryGetRelationship(sourceEntityName, relationshipName, out relationship);
         relationship = null;
         return false;
     }
@@ -217,11 +222,12 @@ public static class DomainSemanticLookupExtensions {
     public static bool TryGetRelationship(
         this AnalysisResult analysis,
         Domain domain,
+        string sourceEntityName,
         string relationshipName,
         out Relationship? relationship) {
         var rlm = analysis.GetRelationshipLookup(domain);
-        if (rlm is not null && rlm.Relationships.TryGetValue(relationshipName, out relationship))
-            return true;
+        if (rlm is not null)
+            return rlm.TryGetRelationship(sourceEntityName, relationshipName, out relationship);
         relationship = null;
         return false;
     }
@@ -232,7 +238,7 @@ public static class DomainSemanticLookupExtensions {
             return rcm.Contracts
                 .Where(c => string.Equals(c.SourceEntityName, entityName, StringComparison.Ordinal))
                 .Select(c => {
-                    analysis.TryGetRelationship(c.Name, out var rel);
+                    analysis.TryGetRelationship(c.SourceEntityName, c.Name, out var rel);
                     return rel;
                 })
                 .OfType<Relationship>()
@@ -247,7 +253,7 @@ public static class DomainSemanticLookupExtensions {
             return rcm.Contracts
                 .Where(c => string.Equals(c.TargetEntityName, entityName, StringComparison.Ordinal))
                 .Select(c => {
-                    analysis.TryGetRelationship(c.Name, out var rel);
+                    analysis.TryGetRelationship(c.SourceEntityName, c.Name, out var rel);
                     return rel;
                 })
                 .OfType<Relationship>()

@@ -55,12 +55,36 @@ internal sealed class SemanticDomainAnalyzer : INodeAnalyzer {
             types,
             new HashSet<Entity>(domain.Types.OfType<Entity>(), ReferenceEqualityComparer.Instance));
 
-        var relationships = domain.Relationships
-            .GroupBy(static relationship => relationship.Name, StringComparer.Ordinal)
-            .ToDictionary(static group => group.Key, static group => group.Last(), StringComparer.Ordinal);
+        var relationships = BuildRelationshipLookup(context, domain);
 
         context.SetMetadata(default, lookup);
         context.SetMetadata(default, new RelationshipLookupMetadata(relationships));
+    }
+
+    /// <summary>
+    /// Builds the source-scoped relationship index: (source entity name → nav name → relationship).
+    /// Relationship identity is (source entity, name); a relationship is an entity-owned
+    /// navigation. Same-source duplicates are a model error and fail closed.
+    /// </summary>
+    private static IReadOnlyDictionary<string, IReadOnlyDictionary<string, Relationship>> BuildRelationshipLookup(
+        AnalysisContext context, Domain domain) {
+        var bySource = new Dictionary<string, IReadOnlyDictionary<string, Relationship>>(StringComparer.Ordinal);
+        foreach (var entity in domain.Types.OfType<Entity>()) {
+            var byNav = new Dictionary<string, Relationship>(StringComparer.Ordinal);
+            foreach (var rel in entity.Navigations) {
+                if (byNav.ContainsKey(rel.Name)) {
+                    context.ReportError(
+                        rel,
+                        $"Relationship '{rel.Name}' is declared more than once on source entity " +
+                        $"'{entity.Name}'. Relationship names must be unique within their source entity.",
+                        DomainModelDiagnosticCodes.SemanticReferenceResolution);
+                    continue;
+                }
+                byNav[rel.Name] = rel;
+            }
+            bySource[entity.Name] = byNav;
+        }
+        return bySource;
     }
 
     private static void AnalyzePrimitiveType(AnalysisContext context, PrimitiveType primitiveType) {

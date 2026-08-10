@@ -247,9 +247,13 @@ Use case — Collection quantifiers:
                 SessionId: sessionId,
                 Affordances: ["create_instance"]);
 
-        // Validate relationship exists in domain model and entity ends match
+        // Validate relationship exists in domain model and entity ends match.
+        // Relationship identity is (source entity, name); the instances disambiguate
+        // a name declared on multiple source entities.
         var relationship = state.Domain.Relationships
-            .FirstOrDefault(r => string.Equals(r.Name, relationshipName, StringComparison.Ordinal));
+            .FirstOrDefault(r => string.Equals(r.Name, relationshipName, StringComparison.Ordinal)
+                && (string.Equals(r.Source.TypeName, source.Entity.Name, StringComparison.Ordinal)
+                    || string.Equals(r.Target.TypeName, source.Entity.Name, StringComparison.Ordinal)));
         if (relationship is null)
             return new DomainToolResponse(
                 Success: false,
@@ -353,9 +357,13 @@ Use case — reassign a child from one parent to another:
                 SessionId: sessionId,
                 Affordances: ["create_instance"]);
 
-        // Validate relationship exists in domain model and entity ends match
+        // Validate relationship exists in domain model and entity ends match.
+        // Relationship identity is (source entity, name); the instances disambiguate
+        // a name declared on multiple source entities.
         var relationship = state.Domain.Relationships
-            .FirstOrDefault(r => string.Equals(r.Name, relationshipName, StringComparison.Ordinal));
+            .FirstOrDefault(r => string.Equals(r.Name, relationshipName, StringComparison.Ordinal)
+                && (string.Equals(r.Source.TypeName, source.Entity.Name, StringComparison.Ordinal)
+                    || string.Equals(r.Target.TypeName, source.Entity.Name, StringComparison.Ordinal)));
         if (relationship is null)
             return new DomainToolResponse(
                 Success: false,

@@ -102,6 +102,18 @@ public sealed record DomainEntityInstance {
         Domain? domain = null) {
         ArgumentNullException.ThrowIfNull(entity);
 
+        // Relationships are entity-owned navigations. When a domain is provided, resolve
+        // the canonical entity instance from the domain so the instance always carries the
+        // same node identity analysis ran on (the legacy 3-arg Domain ctor redistributes
+        // relationships onto entity copies). Falls back to the passed entity when the name
+        // is not present — preserves standalone semantics.
+        if (domain is not null) {
+            var canonical = domain.Types.OfType<Entity>().FirstOrDefault(e =>
+                string.Equals(e.Name, entity.Name, StringComparison.Ordinal));
+            if (canonical is not null)
+                entity = canonical;
+        }
+
         var entityPropNames = new HashSet<string>(
             entity.Properties.Select(p => p.Name),
             StringComparer.Ordinal);
@@ -898,17 +910,8 @@ public sealed record DomainEntityInstance {
         if (createEffect.RelationshipName is not null && Store is not null) {
             if (analysis is not null) {
                 // Catalog/RLM miss with analysis present is a genuine not-found — fail closed.
-                if (!analysis.TryGetRelationship(Domain!, createEffect.RelationshipName, out var relationship)
-                    || relationship is null) {
-                    throw new InvalidOperationException(
-                        $"Relationship '{createEffect.RelationshipName}' not found in domain '{Domain!.Name}'.");
-                }
-                // Verify source entity matches (defense-in-depth after analysis)
-                if (!string.Equals(relationship.Source.TypeName, Entity.Name, StringComparison.Ordinal)) {
-                    throw new InvalidOperationException(
-                        $"Entity '{Entity.Name}' is not the source of relationship '{createEffect.RelationshipName}'. " +
-                        $"Source is '{relationship.Source.TypeName}'. Create with RelationshipName must run on the source entity.");
-                }
+                var relationship = ResolveSourceRelationshipOrThrow(createEffect.RelationshipName,
+                    $"Relationship '{createEffect.RelationshipName}' not found in domain '{Domain!.Name}'.");
                 // Verify created type matches relationship target
                 if (!string.Equals(targetEntity.Name, relationship.Target.TypeName, StringComparison.Ordinal)) {
                     throw new InvalidOperationException(
@@ -935,17 +938,10 @@ public sealed record DomainEntityInstance {
 
         var analysis = RuntimeAnalysisCache.GetOrAnalyze(Domain);
         // Catalog/RLM miss with analysis present is a genuine not-found — fail closed.
-        if (!analysis.TryGetRelationship(Domain, effect.RelationshipName, out var relationship)
-            || relationship is null)
-            throw new InvalidOperationException(
-                $"Relationship '{effect.RelationshipName}' not found in domain '{Domain.Name}'.");
-
-        // P2′′.3: Defense-in-depth — verify source entity matches at runtime
-        if (!string.Equals(relationship.Source.TypeName, Entity.Name, StringComparison.Ordinal)) {
-            throw new InvalidOperationException(
-                $"Entity '{Entity.Name}' is not the source of relationship '{effect.RelationshipName}'. " +
-                $"Source is '{relationship.Source.TypeName}'. 'Create in' must run on the source entity.");
-        }
+        // ResolveSourceRelationshipOrThrow also reports the precise cause when the
+        // relationship exists on a different source entity.
+        var relationship = ResolveSourceRelationshipOrThrow(effect.RelationshipName,
+            $"Relationship '{effect.RelationshipName}' not found in domain '{Domain.Name}'.");
 
         // Catalog/DTLM miss with analysis present is a genuine not-found — fail closed.
         if (!analysis.TryGetEntity(Domain, relationship.Target.TypeName, out var targetEntity)
@@ -1040,6 +1036,32 @@ public sealed record DomainEntityInstance {
         BuildTypeDefAnalyzer(Entity.Name, Entity.Properties, action.Parameters);
 
     /// <summary>
+    /// Resolves an outbound relationship by (this entity, name). Relationship identity
+    /// is (source entity, name). Defense-in-depth for a source-scoped miss: when the
+    /// name exists on a different source entity, report the precise cause instead of
+    /// a generic not-found.
+    /// </summary>
+    private Relationship ResolveSourceRelationshipOrThrow(string relationshipName, string notFoundMessage) {
+        if (Domain is null)
+            throw new InvalidOperationException(notFoundMessage);
+
+        var analysis = RuntimeAnalysisCache.GetOrAnalyze(Domain);
+        var rlm = analysis.GetRelationshipLookup(Domain);
+        if (rlm is null)
+            throw new InvalidOperationException(notFoundMessage);
+
+        if (rlm.TryGetRelationship(Entity.Name, relationshipName, out var relationship))
+            return relationship;
+
+        var elsewhere = rlm.FindByNameAcrossSources(relationshipName).ToList();
+        if (elsewhere.Count > 0)
+            throw new InvalidOperationException(
+                $"Entity '{Entity.Name}' is not the source of relationship '{relationshipName}'. " +
+                $"Declared on: {string.Join(", ", elsewhere.Select(r => r.Source.TypeName))}.");
+        throw new InvalidOperationException(notFoundMessage);
+    }
+
+    /// <summary>
     /// Resolves the singular target for a cross-entity invoke (E3b).
     /// Fail-closed: caller must be relationship source; exactly one outbound link.
     /// </summary>
@@ -1068,15 +1090,10 @@ public sealed record DomainEntityInstance {
 
         var analysis = RuntimeAnalysisCache.GetOrAnalyze(Domain);
         // Catalog/RLM miss with analysis present is a genuine not-found — fail closed.
-        if (!analysis.TryGetRelationship(Domain, relationshipName, out var relationship)
-            || relationship is null)
-            throw new InvalidOperationException(
-                $"Relationship '{relationshipName}' not found in domain '{Domain.Name}'.");
-
-        if (!string.Equals(relationship.Source.TypeName, Entity.Name, StringComparison.Ordinal))
-            throw new InvalidOperationException(
-                $"Cross-entity invoke on '{relationshipName}' is only allowed from source " +
-                $"'{relationship.Source.TypeName}' (caller is '{Entity.Name}').");
+        // ResolveSourceRelationshipOrThrow also reports the precise cause when the
+        // relationship exists on a different source entity (reverse-side invoke).
+        var relationship = ResolveSourceRelationshipOrThrow(relationshipName,
+            $"Relationship '{relationshipName}' not found in domain '{Domain.Name}'.");
 
         if (relationship.Cardinality is not (RelationshipCardinality.OneToOne or RelationshipCardinality.OneToMany))
             throw new InvalidOperationException(
@@ -1218,7 +1235,7 @@ public sealed record DomainEntityInstance {
             return false;
 
         var analysis = RuntimeAnalysisCache.GetOrAnalyze(Domain);
-        if (!analysis.TryGetRelationship(Domain, pa.Name, out var relationship) || relationship is null)
+        if (!analysis.TryGetRelationship(Domain, Entity.Name, pa.Name, out var relationship) || relationship is null)
             return false;
         if (!string.Equals(relationship.Source.TypeName, Entity.Name, StringComparison.Ordinal))
             return false;

@@ -352,14 +352,14 @@ public sealed class EvolutionBuilder {
             [],
             sourceOwnsTarget));
 
-    public EvolutionBuilder RemoveRelationship(string name) =>
-        Apply(new RemoveRelationshipChange(name));
+    public EvolutionBuilder RemoveRelationship(string sourceEntityName, string name) =>
+        Apply(new RemoveRelationshipChange(sourceEntityName, name));
 
-    public EvolutionBuilder AddPropertyToRelationship(string relationshipName, Property property) =>
-        Apply(new AddPropertyToRelationshipChange(relationshipName, property));
+    public EvolutionBuilder AddPropertyToRelationship(string sourceEntityName, string relationshipName, Property property) =>
+        Apply(new AddPropertyToRelationshipChange(sourceEntityName, relationshipName, property));
 
-    public EvolutionBuilder RemovePropertyFromRelationship(string relationshipName, string propertyName) =>
-        Apply(new RemovePropertyFromRelationshipChange(relationshipName, propertyName));
+    public EvolutionBuilder RemovePropertyFromRelationship(string sourceEntityName, string relationshipName, string propertyName) =>
+        Apply(new RemovePropertyFromRelationshipChange(sourceEntityName, relationshipName, propertyName));
 
     public EvolutionBuilder AddConstraintToProperty(string entityName, string propertyName, Constraint constraint) =>
         Apply(new AddConstraintToPropertyChange(entityName, propertyName, constraint));
@@ -389,11 +389,11 @@ public sealed class EvolutionBuilder {
     public EvolutionBuilder ChangePropertyType(string entityName, string propertyName, DomainTypeReference newType) =>
         Apply(new ChangePropertyTypeChange(entityName, propertyName, newType));
 
-    public EvolutionBuilder SetRelationshipShape(string relationshipName,
+    public EvolutionBuilder SetRelationshipShape(string sourceEntityName, string relationshipName,
         DomainTypeReference? newSource = null,
         DomainTypeReference? newTarget = null,
         RelationshipCardinality? newCardinality = null) =>
-        Apply(new SetRelationshipShapeChange(relationshipName, newSource, newTarget, newCardinality));
+        Apply(new SetRelationshipShapeChange(sourceEntityName, relationshipName, newSource, newTarget, newCardinality));
 
     public EvolutionBuilder SetPrimitiveTypeCategory(string typeName, TypeCategory category) =>
         Apply(new SetPrimitiveTypeCategoryChange(typeName, category));
@@ -501,21 +501,21 @@ public sealed class EvolutionBuilder {
 
     // --- Relationship stage/policy builder methods ---
 
-    public EvolutionBuilder AddStageToRelationship(string relationshipName, string stageName) {
-        return Apply(new AddStageToRelationshipChange(relationshipName, new Stage(stageName, [], [], [], [])));
+    public EvolutionBuilder AddStageToRelationship(string sourceEntityName, string relationshipName, string stageName) {
+        return Apply(new AddStageToRelationshipChange(sourceEntityName, relationshipName, new Stage(stageName, [], [], [], [])));
     }
 
-    public EvolutionBuilder RemoveStageFromRelationship(string relationshipName, string stageName) =>
-        Apply(new RemoveStageFromRelationshipChange(relationshipName, stageName));
+    public EvolutionBuilder RemoveStageFromRelationship(string sourceEntityName, string relationshipName, string stageName) =>
+        Apply(new RemoveStageFromRelationshipChange(sourceEntityName, relationshipName, stageName));
 
-    public EvolutionBuilder AddPolicyToRelationship(string relationshipName, Policy policy) =>
-        Apply(new AddPolicyToRelationshipChange(relationshipName, policy));
+    public EvolutionBuilder AddPolicyToRelationship(string sourceEntityName, string relationshipName, Policy policy) =>
+        Apply(new AddPolicyToRelationshipChange(sourceEntityName, relationshipName, policy));
 
-    public EvolutionBuilder AddPolicyToRelationship(string relationshipName, string policyName, DomainExpression expression) =>
-        AddPolicyToRelationship(relationshipName, new Policy(policyName, expression));
+    public EvolutionBuilder AddPolicyToRelationship(string sourceEntityName, string relationshipName, string policyName, DomainExpression expression) =>
+        AddPolicyToRelationship(sourceEntityName, relationshipName, new Policy(policyName, expression));
 
-    public EvolutionBuilder RemovePolicyFromRelationship(string relationshipName, string policyName) =>
-        Apply(new RemovePolicyFromRelationshipChange(relationshipName, policyName));
+    public EvolutionBuilder RemovePolicyFromRelationship(string sourceEntityName, string relationshipName, string policyName) =>
+        Apply(new RemovePolicyFromRelationshipChange(sourceEntityName, relationshipName, policyName));
 
     /// <summary>
     /// Executes the accumulated changes through the analysis gate.

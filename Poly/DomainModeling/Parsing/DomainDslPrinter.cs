@@ -20,7 +20,6 @@ namespace Poly.DomainModeling.Parsing;
 /// </summary>
 public sealed class DomainDslPrinter {
     private readonly StringBuilder _sb = new();
-    private IReadOnlyList<Relationship> _relationships = [];
     private readonly AnnotationRegistry? _annotations;
 
     /// <summary>Creates a printer with an optional annotation registry for facet printing.</summary>
@@ -34,7 +33,6 @@ public sealed class DomainDslPrinter {
     public string Print(Domain domain) {
         ArgumentNullException.ThrowIfNull(domain);
         _sb.Clear();
-        _relationships = domain.Relationships;
 
         // Domain header
         _sb.AppendLine($"domain {domain.Name}");
@@ -101,8 +99,7 @@ public sealed class DomainDslPrinter {
         }
 
         // Navigation properties (N1 source-side only)
-        foreach (var rel in _relationships
-            .Where(r => string.Equals(r.Source.TypeName, entity.Name, StringComparison.Ordinal))
+        foreach (var rel in entity.Navigations
             .OrderBy(r => r.Name, StringComparer.Ordinal)) {
             _sb.Append("  ");
             _sb.Append(rel.Name);

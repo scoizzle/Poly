@@ -1,3 +1,5 @@
+using System.Diagnostics.CodeAnalysis;
+
 using Poly.Analysis;
 
 namespace Poly.DomainModeling.Analysis;
@@ -19,8 +21,35 @@ public sealed record EffectiveMemberMetadata(
 ) : IAnalysisMetadata;
 
 public sealed record RelationshipLookupMetadata(
-    IReadOnlyDictionary<string, Relationship> Relationships
-) : IAnalysisMetadata;
+    IReadOnlyDictionary<string, IReadOnlyDictionary<string, Relationship>> BySourceEntity
+) : IAnalysisMetadata {
+    /// <summary>
+    /// Resolves a relationship by its owning (source) entity name and nav name.
+    /// Relationship identity is (source entity, name) — two entities may each
+    /// declare a navigation property with the same name.
+    /// </summary>
+    public bool TryGetRelationship(string sourceEntityName, string relationshipName, [NotNullWhen(true)] out Relationship? relationship) {
+        if (BySourceEntity.TryGetValue(sourceEntityName, out var byNav)
+            && byNav.TryGetValue(relationshipName, out var rel)) {
+            relationship = rel;
+            return true;
+        }
+        relationship = null;
+        return false;
+    }
+
+    /// <summary>
+    /// Relationships with the given name declared on any source entity. Used by
+    /// diagnostics that must distinguish "exists but wrong direction/source"
+    /// from "name unknown" after a source-scoped lookup misses.
+    /// </summary>
+    public IEnumerable<Relationship> FindByNameAcrossSources(string relationshipName) {
+        foreach (var byNav in BySourceEntity.Values) {
+            if (byNav.TryGetValue(relationshipName, out var rel))
+                yield return rel;
+        }
+    }
+}
 
 public sealed record ResolvedRelationshipTargetMetadata(
     Relationship Relationship,
@@ -67,7 +96,7 @@ public sealed record SubscriptionDispatchPlanEntry(
 public sealed record MutationTargetIndexMetadata(
     IReadOnlyDictionary<string, DomainType> TypesByName,
     IReadOnlyDictionary<string, Entity> EntitiesByName,
-    IReadOnlyDictionary<string, Relationship> RelationshipsByName,
+    IReadOnlyDictionary<string, IReadOnlyDictionary<string, Relationship>> RelationshipsByName,
     IReadOnlyDictionary<string, IReadOnlyDictionary<string, Stage>> StagesByEntity,
     IReadOnlyDictionary<string, IReadOnlyDictionary<string, IReadOnlyList<Action>>> ActionsByEntity,
     IReadOnlyDictionary<string, IReadOnlyDictionary<string, Policy>> EntityPoliciesByEntity,

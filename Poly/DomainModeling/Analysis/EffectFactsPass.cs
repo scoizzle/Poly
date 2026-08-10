@@ -81,10 +81,7 @@ internal sealed class EffectFactsPass : INodeAnalyzer {
         if (relLookup is null)
             return false;
 
-        if (!relLookup.Relationships.TryGetValue(createIn.RelationshipName, out var rel))
-            return false;
-
-        if (!string.Equals(rel.Source.TypeName, sourceEntity.Name, StringComparison.Ordinal))
+        if (!relLookup.TryGetRelationship(sourceEntity.Name, createIn.RelationshipName, out var rel))
             return false;
 
         if (!lookup.Types.TryGetValue(rel.Target.TypeName, out var targetType)

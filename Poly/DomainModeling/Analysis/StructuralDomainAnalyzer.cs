@@ -38,7 +38,22 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
     }
 
     private static void AnalyzeDomain(AnalysisContext context, Domain domain) {
-        ReportDuplicateNames(context, domain.Types.Cast<DomainMember>().Concat(domain.Relationships), "domain", domain.Name);
+        // Type names remain domain-global (entities, enums, primitives).
+        ReportDuplicateNames(context, domain.Types.Cast<DomainMember>(), "domain", domain.Name);
+
+        // Relationship names must not collide with type names (DSL/export ambiguity).
+        var typeNames = domain.Types.Cast<DomainMember>()
+            .GroupBy(static t => t.Name, StringComparer.Ordinal)
+            .Select(static g => g.Key)
+            .ToHashSet(StringComparer.Ordinal);
+        foreach (var nav in domain.Types.OfType<Entity>().SelectMany(e => e.Navigations)) {
+            if (typeNames.Contains(nav.Name)) {
+                context.ReportStructuralFailure(
+                    nav,
+                    $"Relationship name '{nav.Name}' collides with a type of the same name.",
+                    DomainModelDiagnosticCodes.StructuralDuplicate);
+            }
+        }
     }
 
     private static void AnalyzeEntity(AnalysisContext context, Entity entity) {
@@ -46,6 +61,7 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
         ReportDuplicateNames(context, entity.Actions, "entity", entity.Name);
         ReportDuplicateNames(context, entity.Policies, "entity", entity.Name);
         ReportDuplicateNames(context, entity.Stages, "entity", entity.Name);
+        ReportDuplicateNames(context, entity.Navigations, "entity", entity.Name);
     }
 
     private static void AnalyzeStage(AnalysisContext context, Stage stage) {

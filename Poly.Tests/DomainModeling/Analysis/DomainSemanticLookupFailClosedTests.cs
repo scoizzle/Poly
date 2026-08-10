@@ -459,7 +459,7 @@ public class DomainSemanticLookupFailClosedTests {
         var domain = BuildRelationshipDomain();
         var analysis = RuntimeAnalysisCache.GetOrAnalyze(domain);
 
-        await Assert.That(analysis.TryGetRelationship("Owns", out var rel)).IsTrue();
+        await Assert.That(analysis.TryGetRelationship("Order", "Owns", out var rel)).IsTrue();
         await Assert.That(rel).IsNotNull();
         await Assert.That(rel!.Name).IsEqualTo("Owns");
     }
@@ -470,7 +470,7 @@ public class DomainSemanticLookupFailClosedTests {
         var analysis = RuntimeAnalysisCache.GetOrAnalyze(domain);
         analysis.GetMetadataStore().Remove<DomainCatalogMetadata>(domain);
 
-        await Assert.That(analysis.TryGetRelationship(domain, "Owns", out _)).IsFalse();
+        await Assert.That(analysis.TryGetRelationship(domain, "Order", "Owns", out _)).IsFalse();
     }
 
     [Test]
@@ -480,7 +480,7 @@ public class DomainSemanticLookupFailClosedTests {
         // Intermediate Semantic RLM still published; domain-keyed path uses catalog only.
         analysis.GetMetadataStore().Remove<RelationshipLookupMetadata>(null);
 
-        await Assert.That(analysis.TryGetRelationship(domain, "Owns", out var rel)).IsTrue();
+        await Assert.That(analysis.TryGetRelationship(domain, "Order", "Owns", out var rel)).IsTrue();
         await Assert.That(rel!.Name).IsEqualTo("Owns");
     }
 

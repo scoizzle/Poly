@@ -166,7 +166,7 @@ internal sealed class OracleTool {
                 "stage" => DescribeStage(sessionId, state, name, entityName),
                 "action" => DescribeAction(sessionId, state, name, entityName),
                 "policy" => DescribePolicy(sessionId, state, name, entityName),
-                "relationship" => DescribeRelationship(sessionId, state, name),
+                "relationship" => DescribeRelationship(sessionId, state, name, entityName),
                 _ => new DomainToolResponse(Success: false, Message: $"Unknown element kind '{kind}'. Use: entity, stage, action, policy, or relationship.", SessionId: sessionId, Affordances: ["get_entity_detail", "get_domain_overview"])
             };
         }
@@ -328,16 +328,34 @@ internal sealed class OracleTool {
         return new DomainToolResponse(Success: false, Message: $"Policy '{name}' not found on any entity.", SessionId: sessionId, Affordances: ["get_entity_detail"]);
     }
 
-    private static DomainToolResponse DescribeRelationship(string sessionId, McpSessionState state, string name) {
+    private static DomainToolResponse DescribeRelationship(string sessionId, McpSessionState state, string name, string? sourceEntityName = null) {
         if (state.LatestAnalysis is null)
             return new DomainToolResponse(Success: false, Message: $"Session '{sessionId}' has no analysis. Apply a domain first (apply_dsl or evolution).", SessionId: sessionId, Affordances: ["apply_dsl", "get_domain_overview"]);
 
         // Catalog relationship lookup only. Missing catalog ≠ not-found.
         var analysis = state.LatestAnalysis;
-        if (analysis.GetRelationshipLookup(state.Domain) is null)
+        var relLookup = analysis.GetRelationshipLookup(state.Domain);
+        if (relLookup is null)
             return new DomainToolResponse(Success: false, Message: $"Session analysis is missing DomainCatalogMetadata (relationship lookup) required to describe relationship '{name}'.", SessionId: sessionId, Affordances: ["get_domain_analysis"]);
 
-        if (!analysis.TryGetRelationship(state.Domain, name, out var rel) || rel is null)
+        // Relationship identity is (source entity, name). entityName disambiguates a
+        // name declared on multiple source entities; otherwise the name must be unique.
+        Relationship? rel = null;
+        if (sourceEntityName is not null) {
+            relLookup.TryGetRelationship(sourceEntityName, name, out rel);
+        }
+        else {
+            var sources = relLookup.BySourceEntity
+                .Where(kv => kv.Value.ContainsKey(name))
+                .Select(kv => kv.Key)
+                .ToList();
+            if (sources.Count > 1)
+                return new DomainToolResponse(Success: false, Message: $"Relationship '{name}' exists on multiple source entities ({string.Join(", ", sources)}). Provide entityName to disambiguate.", SessionId: sessionId, Affordances: ["get_relationships", "get_domain_analysis"]);
+            if (sources.Count == 1)
+                relLookup.TryGetRelationship(sources[0], name, out rel);
+        }
+
+        if (rel is null)
             return new DomainToolResponse(Success: false, Message: $"Relationship '{name}' not found.", SessionId: sessionId, Affordances: ["get_domain_overview", "add"]);
 
         var cardinality = rel.Cardinality switch { RelationshipCardinality.OneToOne => "one-to-one", RelationshipCardinality.OneToMany => "one-to-many", RelationshipCardinality.ManyToMany => "many-to-many", _ => rel.Cardinality.ToString() };

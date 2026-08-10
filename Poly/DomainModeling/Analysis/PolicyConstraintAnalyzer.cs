@@ -165,7 +165,7 @@ internal sealed class PolicyConstraintAnalyzer : INodeAnalyzer {
         // amu-w1-2: catalog/RLM name resolve (no domain.Relationships scan).
         var relLookup = ResolveRelationshipLookup(context, lookup.Domain);
         if (relLookup is null) return (null, null); // bag unavailable — skip
-        var relationship = relLookup.Relationships.TryGetValue(resolvedRelName, out var rel) ? rel : null;
+        var relationship = relLookup.TryGetRelationship(entity.Name, resolvedRelName, out var rel) ? rel : null;
 
         if (relationship is null) {
             context.ReportError(expr,
@@ -233,17 +233,14 @@ internal sealed class PolicyConstraintAnalyzer : INodeAnalyzer {
         if (relLookup is null) return; // bag unavailable — skip
 
         // Find the relationship from the source entity's perspective
-        var relationship = relLookup.Relationships.TryGetValue(rn.RelationshipName, out var fromSource)
-            && string.Equals(fromSource.Source.TypeName, entity.Name, StringComparison.Ordinal)
+        var relationship = relLookup.TryGetRelationship(entity.Name, rn.RelationshipName, out var fromSource)
             ? fromSource
             : null;
 
         // Q1'''''.3: Report error for unknown relationship name
         if (relationship is null) {
             // Check if relationship exists but from the target side (wrong direction)
-            var reverseRel = relLookup.Relationships.TryGetValue(rn.RelationshipName, out var anyRel)
-                ? anyRel
-                : null;
+            var reverseRel = relLookup.FindByNameAcrossSources(rn.RelationshipName).FirstOrDefault();
             if (reverseRel is not null) {
                 context.ReportError(rn,
                     $"Relationship '{rn.RelationshipName}' exists but the source is " +
@@ -354,8 +351,7 @@ internal sealed class PolicyConstraintAnalyzer : INodeAnalyzer {
             return false;
         }
         bagAvailable = true;
-        return relLookup.Relationships.TryGetValue(name, out var rel)
-            && string.Equals(rel.Source.TypeName, entity.Name, StringComparison.Ordinal);
+        return relLookup.TryGetRelationship(entity.Name, name, out _);
     }
 
     /// <summary>

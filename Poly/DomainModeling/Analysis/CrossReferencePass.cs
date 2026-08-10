@@ -23,7 +23,12 @@ internal sealed class CrossReferencePass : INodeAnalyzer {
         var relationships = domain.Relationships.ToList();
         var entities = domain.Types.OfType<Entity>().ToList();
         var entityNames = entities.Select(e => e.Name).ToHashSet(StringComparer.Ordinal);
-        var relLookup = relationships.ToDictionary(r => r.Name, StringComparer.Ordinal);
+        var relLookup = relationships
+            .GroupBy(r => r.Source.TypeName, StringComparer.Ordinal)
+            .ToDictionary(
+                g => g.Key,
+                g => g.ToDictionary(r => r.Name, StringComparer.Ordinal),
+                StringComparer.Ordinal);
 
         var edges = new List<EntityDependencyEdge>();
         var relationshipPairs = new HashSet<(string From, string To)>();
@@ -40,13 +45,16 @@ internal sealed class CrossReferencePass : INodeAnalyzer {
         var subscriptionInvokeEdges = new List<(string From, string To)>();
         if (topology != null) {
             foreach (var sub in topology.Subscriptions) {
-                if (relLookup.TryGetValue(sub.RelationshipName, out var rel)) {
+                if (relLookup.TryGetValue(sub.SubscriberEntity, out var byNav)
+                    && byNav.TryGetValue(sub.RelationshipName, out var rel)) {
                     edges.Add(new EntityDependencyEdge(sub.SubscriberEntity, rel.Target.TypeName, "Subscription"));
                     subscriptionInvokeEdges.Add((sub.SubscriberEntity, rel.Target.TypeName));
                 }
             }
             foreach (var invoke in topology.CrossEntityInvokes) {
-                if (invoke.TargetRelationship != null && relLookup.TryGetValue(invoke.TargetRelationship, out var rel2)) {
+                if (invoke.TargetRelationship != null
+                    && relLookup.TryGetValue(invoke.SourceEntity, out var byNav2)
+                    && byNav2.TryGetValue(invoke.TargetRelationship, out var rel2)) {
                     edges.Add(new EntityDependencyEdge(invoke.SourceEntity, rel2.Target.TypeName, "Invoke"));
                     subscriptionInvokeEdges.Add((invoke.SourceEntity, rel2.Target.TypeName));
                 }

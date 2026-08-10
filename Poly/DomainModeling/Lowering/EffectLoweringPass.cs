@@ -68,15 +68,13 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         if (analysis is not null) {
             var rlm = analysis.GetMetadata<RelationshipLookupMetadata>(default);
             if (rlm is not null) {
-                return name => rlm.Relationships.TryGetValue(name, out var rel)
-                    && string.Equals(rel.Source.TypeName, entity.Name, StringComparison.Ordinal)
+                return name => rlm.TryGetRelationship(entity.Name, name, out var rel)
                         ? DomainToCSharpExporter.ToPascalCase(name)
                         : name;
             }
         }
         if (domain is not null) {
-            var sourceNavs = domain.Relationships
-                .Where(r => string.Equals(r.Source.TypeName, entity.Name, StringComparison.Ordinal))
+            var sourceNavs = entity.Navigations
                 .Select(r => r.Name)
                 .ToHashSet(StringComparer.Ordinal);
             return name => sourceNavs.Contains(name)
@@ -391,8 +389,14 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         var args = new List<Node>();
         var parameterMetadata = GetConstructorParameterOrder(targetEntity);
 
+        // The CreateNav factory signature (DomainToCSharpExporter.AddCreateNavMethod)
+        // omits back-references and collection navs: back-refs are auto-wired with
+        // `this`, collections start as empty lists in the factory body. The call site
+        // must emit exactly the factory's parameters or the export won't compile
+        // (CS1501 arity drift). Skip both here to stay in lockstep.
         foreach (var parameter in parameterMetadata) {
             if (parameter.IsBackReference) continue;
+            if (parameter.IsCollection) continue;
             if (initMap.TryGetValue(parameter.Name, out var expr))
                 args.Add(LowerEnumAwareValue(expr, parameter.Type, Subject));
             else
@@ -543,9 +547,8 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
             .ToList();
 
         if (_domain is not null) {
-            foreach (var rel in _domain.Relationships.Where(r =>
-                         string.Equals(r.Source.TypeName, targetEntity.Name, StringComparison.Ordinal)
-                         && r.Cardinality is not (RelationshipCardinality.OneToMany or RelationshipCardinality.ManyToMany))) {
+            foreach (var rel in targetEntity.Navigations.Where(r =>
+                         r.Cardinality is not (RelationshipCardinality.OneToMany or RelationshipCardinality.ManyToMany))) {
                 if (string.Equals(rel.Target.TypeName, _entity.Name, StringComparison.Ordinal)) {
                     parameters.Add(new ConstructorParameterOrder(rel.Name, rel.Target, true, true));
                     continue;
@@ -607,14 +610,14 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         if (_analysis is not null) {
             var lookup = _analysis.GetRelationshipLookup(_domain);
             if (lookup is not null
-                && lookup.Relationships.TryGetValue(relationshipName, out var relationship))
+                && lookup.TryGetRelationship(_entity.Name, relationshipName, out var relationship))
                 return relationship;
 
             return null;
         }
 
         if (_domain is not null) {
-            return _domain.Relationships.FirstOrDefault(r =>
+            return _entity.Navigations.FirstOrDefault(r =>
                 string.Equals(r.Name, relationshipName, StringComparison.Ordinal));
         }
 

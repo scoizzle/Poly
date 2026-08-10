@@ -76,7 +76,7 @@ internal sealed class EntityStructureAnalyzer : INodeAnalyzer {
             stageByName = entity.Stages.ToDictionary(s => s.Name, StringComparer.Ordinal);
         }
 
-        var constructorParameters = ComputeConstructorParameterOrder(entity, domain, lookup);
+        var constructorParameters = ComputeConstructorParameterOrder(entity, lookup);
         var entryAssignedPropertyNames = ComputeEntryAssignedPropertyNames(entity);
 
         // ── Enum-typed property map (property name → enum type name) ──
@@ -114,7 +114,7 @@ internal sealed class EntityStructureAnalyzer : INodeAnalyzer {
     }
 
     private static IReadOnlyList<ConstructorParameterOrder> ComputeConstructorParameterOrder(
-        Entity entity, Domain domain, DomainTypeLookupMetadata lookup) {
+        Entity entity, DomainTypeLookupMetadata lookup) {
         var parameters = new List<ConstructorParameterOrder>();
 
         // Props assigned by the FIRST stage's entry effects are body-initialized in
@@ -129,8 +129,7 @@ internal sealed class EntityStructureAnalyzer : INodeAnalyzer {
             parameters.Add(new ConstructorParameterOrder(prop.Name, prop.Type, IsNavigation: false, IsBackReference: false));
         }
 
-        foreach (var rel in domain.Relationships.Where(r =>
-                string.Equals(r.Source.TypeName, entity.Name, StringComparison.Ordinal))) {
+        foreach (var rel in entity.Navigations) {
             var isMany = rel.Cardinality is RelationshipCardinality.OneToMany
                          or RelationshipCardinality.ManyToMany;
             if (string.Equals(rel.Target.TypeName, entity.Name, StringComparison.Ordinal)) {

@@ -88,8 +88,7 @@ internal sealed class SubscriptionAnalyzer : INodeAnalyzer {
             foreach (var stage in entity.Stages) {
                 foreach (var sub in stage.Subscriptions) {
                     if (relLookup is null
-                        || !relLookup.Relationships.TryGetValue(sub.RelationshipName, out var relationship)
-                        || !string.Equals(relationship.Source.TypeName, entity.Name, StringComparison.Ordinal))
+                        || !relLookup.TryGetRelationship(entity.Name, sub.RelationshipName, out var relationship))
                         continue;
                     var targetType = lookup.Types.GetValueOrDefault(relationship.Target.TypeName);
                     if (targetType is not Entity targetEntity) continue;
@@ -238,8 +237,7 @@ internal sealed class SubscriptionAnalyzer : INodeAnalyzer {
         // amu-w1-3: catalog/RLM name resolve (no domain.Relationships scan).
         var relLookup = ResolveRelationshipLookup(context, domain);
         if (relLookup is null) return; // bag unavailable — skip (no false positive)
-        var relationship = relLookup.Relationships.TryGetValue(subscription.RelationshipName, out var rel)
-            && string.Equals(rel.Source.TypeName, entity.Name, StringComparison.Ordinal)
+        var relationship = relLookup.TryGetRelationship(entity.Name, subscription.RelationshipName, out var rel)
             ? rel
             : null;
 

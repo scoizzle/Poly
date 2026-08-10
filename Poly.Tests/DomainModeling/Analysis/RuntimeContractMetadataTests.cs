@@ -198,7 +198,8 @@ public class RuntimeContractMetadataTests {
         await Assert.That(index).IsNotNull();
         await Assert.That(index!.TypesByName.ContainsKey("Order")).IsTrue();
         await Assert.That(index.EntitiesByName.ContainsKey("Tracker")).IsTrue();
-        await Assert.That(index.RelationshipsByName.ContainsKey("Tracks")).IsTrue();
+        await Assert.That(index.RelationshipsByName.ContainsKey("Tracker")).IsTrue();
+        await Assert.That(index.RelationshipsByName["Tracker"].ContainsKey("Tracks")).IsTrue();
         await Assert.That(index.StagesByEntity["Tracker"].ContainsKey("Pending")).IsTrue();
         await Assert.That(index.ActionsByEntity["Tracker"].ContainsKey("Reset")).IsTrue();
         // No domain-keyed MTI dual-write.

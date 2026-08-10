@@ -42,7 +42,7 @@ public sealed class PolyDslParser : DslCursor {
     private readonly Dictionary<string, HashSet<string>> _entityPropertyNames = new(StringComparer.Ordinal);
 
     // Relationship names from N1 nav lines, for duplicate detection
-    private readonly HashSet<string> _relationshipNames = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, HashSet<string>> _relationshipNamesByEntity = new(StringComparer.Ordinal);
 
     // Q1′′′.5 / Q1'''''.2: Prevents recursive `Rel where ...` parsing inside a where body.
     // (Flag lives on DslParseCursorBase as _inWhereBody.)
@@ -1038,9 +1038,15 @@ public sealed class PolyDslParser : DslCursor {
                 throw Error($"Navigation property '{nav.PropertyName}' on '{nav.SourceEntityName}' conflicts with an existing property of the same name.");
             }
 
-            // Check duplicate relationship name (among navs or with N2 lines already emitted)
-            if (!_relationshipNames.Add(nav.PropertyName)) {
-                throw Error($"Relationship '{nav.PropertyName}' is defined more than once. Relationship names must be unique within a domain.");
+            // Check duplicate relationship name within the same source entity.
+            // Relationship identity is (source entity, name) — the same nav name may
+            // be declared on different source entities (e.g. back-references both
+            // named 'order').
+            if (!_relationshipNamesByEntity.TryGetValue(nav.SourceEntityName, out var names)) {
+                _relationshipNamesByEntity[nav.SourceEntityName] = names = new HashSet<string>(StringComparer.Ordinal);
+            }
+            if (!names.Add(nav.PropertyName)) {
+                throw Error($"Relationship '{nav.PropertyName}' is defined more than once on entity '{nav.SourceEntityName}'. Relationship names must be unique within their source entity.");
             }
 
             changes.Add(new AddRelationshipChange(

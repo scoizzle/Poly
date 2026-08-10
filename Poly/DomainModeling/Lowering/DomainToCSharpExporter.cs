@@ -1310,10 +1310,8 @@ public sealed class DomainToCSharpExporter {
             if (rlm is null)
                 throw new InvalidOperationException(
                     "Domain catalog relationship lookup is required for subscription resolution when analysis is present.");
-            if (rlm.Relationships.TryGetValue(relationshipName, out var relationship)
-                && string.Equals(relationship.Source.TypeName, sourceEntityName, StringComparison.Ordinal)) {
+            if (rlm.TryGetRelationship(sourceEntityName, relationshipName, out var relationship))
                 return relationship;
-            }
             // Metadata-backed lookup complete — relationship not found.
             return null;
         }

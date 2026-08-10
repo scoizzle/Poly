@@ -429,6 +429,59 @@ public class DomainToCSharpExporterTests {
     }
 
     [Test]
+    public async Task Export_CreateInTargetWithCollectionNavs_SignatureMatchesCallArity() {
+        // Regression (CS1501): `create in Rel` where the created entity has its own
+        // `many` navs. The CreateNav factory omits collection navs (empty list in body);
+        // the action's call site must pass the same arity or the export doesn't compile.
+        const string dsl = """
+            domain Test
+
+            Customer: entity {
+              orders: many Order
+
+              CheckOut: action {
+                create in orders { Title: "t" }
+              }
+            }
+
+            Order: entity {
+              Title: Text required
+              Total: Number range(0, )
+              customer: Customer
+              lines: many OrderLine
+              notes: many owned Note
+            }
+
+            OrderLine: entity {
+              Sku: Text required
+            }
+
+            Note: entity {
+              Body: Text
+            }
+            """;
+
+        var (domain, analysis) = ParseAndAnalyze(dsl);
+        await Assert.That(analysis.HasErrors).IsFalse();
+
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var customer = types.First(t => t.Name == "Customer");
+        var createOrders = customer.Methods?.FirstOrDefault(m => m.Name == "CreateOrders");
+        await Assert.That(createOrders).IsNotNull();
+        var paramCount = createOrders!.Parameters?.Count ?? 0;
+
+        // Collection navs (lines, notes) are not CreateNav params; the back-ref
+        // (customer) is a param. Repro shape: title, total, customer → 3.
+        await Assert.That(paramCount).IsEqualTo(3);
+
+        var checkOut = customer.Methods?.FirstOrDefault(m => m.Name == "CheckOut");
+        await Assert.That(checkOut).IsNotNull();
+        var call = FindFirstInvoke(checkOut!.Body);
+        await Assert.That(call).IsNotNull();
+        await Assert.That(call!.Arguments.Length).IsEqualTo(paramCount);
+    }
+
+    [Test]
     public async Task ToSyntax_ViaProvider_DoesNotRequireAnalysisResultCast() {
         var (domain, analysis) = ParseAndAnalyze(LibraryCheckoutDsl);
         INodeMetadataProvider metadata = analysis;

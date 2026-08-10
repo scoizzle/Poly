@@ -382,8 +382,7 @@ public class PipelineMergeMetadataTests {
         // BehaviorPass — BehaviorMetadata
         await Assert.That(analysis.GetMetadata<BehaviorMetadata>(domain)).IsNotNull();
 
-        // CrossReferencePass — EntityDependencyGraphMetadata
-        await Assert.That(analysis.GetMetadata<EntityDependencyGraphMetadata>(domain)).IsNotNull();
+        // CrossReferencePass — cycle diagnostic only (no published metadata)
 
         // StoragePass — StorageMappingMetadata
         await Assert.That(analysis.GetMetadata<StorageMappingMetadata>(domain)).IsNotNull();

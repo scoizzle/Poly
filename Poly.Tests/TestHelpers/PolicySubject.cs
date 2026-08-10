@@ -32,7 +32,7 @@ public static class PolicySubject {
     /// </summary>
     public static void ValidateType<T>() {
         var type = typeof(T);
-        if (typeof(IDictionary).IsAssignableFrom(type) ||
+        if (typeof(System.Collections.IDictionary).IsAssignableFrom(type) ||
             typeof(IDictionary<string, object?>).IsAssignableFrom(type) ||
             type == typeof(System.Dynamic.ExpandoObject)) {
             throw new ArgumentException(

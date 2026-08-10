@@ -256,7 +256,7 @@ Before the emitter runs, domain-level expressions (policies, rules, conditions) 
 DomainExpression ──→ Ast nodes ──→ Analysis ──→ DirectVmAbiEmitter ──→ VM
 ```
 
-Policy compilation (`PolicyEvaluator`) also uses this path, with the VM as the primary execution engine and LINQ expressions as a dual-oracle reference.
+Policy compilation/eval (`DomainEntityInstance.EvaluatePolicy` → `DomainExpressionLoweringPass` → `Interpreter`) uses this path, with the VM as the primary execution engine and LINQ expressions as a dual-oracle reference (`PolicyEvaluator` is the test-only CLR-subject wrapper in `Poly.Tests/TestHelpers/`).
 
 ---
 

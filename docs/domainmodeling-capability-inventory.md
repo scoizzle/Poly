@@ -167,7 +167,7 @@ Fail-closed: missing storage (db/all); missing behavior/aggregate (all) → `Inv
 | Analyzer builder / context / result | `Poly/Syntax/Analysis/` |
 | Node replacement | `NodeReplacementMetadata` |
 | Interpretation semantic passes | `Poly/Interpretation/Analysis/` |
-| Policy VM path | `PolicyEvaluator` → `Interpreter` |
+| Policy VM path | `DomainEntityInstance.EvaluatePolicy` → `DomainExpressionLoweringPass` → `Interpreter` |
 
 ---
 
@@ -262,7 +262,7 @@ Shipped highlights: entities, properties, constraints, enums, navs, stages, acti
 
 | Boundary | Enforcement |
 |----------|-------------|
-| DomainModeling ↛ Interpretation (except intentional bridges) | Lowering + `PolicyEvaluator` |
+| DomainModeling ↛ Interpretation (except intentional bridges) | `DomainEntityInstance.EvaluatePolicy` → `DomainExpressionLoweringPass` → `Interpreter` |
 | Interpretation → Syntax, Introspection | One-way |
 | MCP thin | No domain mutation semantics in tools |
 | Immutable domain | `DomainEvolution.Apply` + analysis gate |

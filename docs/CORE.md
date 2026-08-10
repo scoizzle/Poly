@@ -61,7 +61,7 @@ TFM: `net10.0`, nullable on, zero external dependencies in core `Poly/`.
 
 - `Interpretation` → `Syntax`, `Introspection`
 - `DomainModeling` → `Syntax` for pure lowering (`DomainExpressionLoweringPass`). Execution model: [`docs/interpretation/domain-execution-model.md`](interpretation/domain-execution-model.md).
-- `PolicyEvaluator` (under DomainModeling) **bridges** to Interpretation/VM for evaluate/compile — that is intentional consumption of the platform, not a license to fork the ABI
+- Policy evaluation (domain-bound) bridges to Interpretation/VM via `DomainEntityInstance.EvaluatePolicy` → `DomainExpressionLoweringPass` → `Interpreter` — intentional consumption of the platform, not a license to fork the ABI. The CLR-subject wrapper `PolicyEvaluator` is **test-only** (`Poly.Tests/TestHelpers/`).
 - `Introspection` ↛ `Interpretation`
 - V2 `Poly/Data/Modeling` is **deleted** — only **DomainModeling** remains (legacy “V3” label = current stack; rename plan: [`plans/post-v2-delete-naming-cleanup.md`](plans/post-v2-delete-naming-cleanup.md))
 
@@ -134,7 +134,7 @@ No intermediate primitive flattening step. Inputs are the AST plus analysis meta
 | Piece | Location |
 |-------|----------|
 | Lower DE → Syntax AST | `Poly/DomainModeling/Lowering/DomainExpressionLoweringPass.cs` |
-| Policy compile/eval | `Poly/DomainModeling/Lowering/PolicyEvaluator.cs` — **VM-primary**; LINQ via dual-oracle tests |
+| Policy compile/eval | `DomainEntityInstance.EvaluatePolicy` → `DomainExpressionLoweringPass` → `Interpreter` — **VM-primary**; LINQ dual-oracle + CLR-subject wrapper `PolicyEvaluator` are test-only (`Poly.Tests/TestHelpers/`) |
 | Domain change | `DomainEvolution`…`Apply()` with analysis gate + rollback |
 
 Domain concepts expand to **generic** Syntax nodes, not new opcodes. ADR: `docs/decisions/2026-06-08-domain-lowering-boundary.md`.
@@ -185,7 +185,7 @@ Module README: `Poly/Introspection/README.md`.
 | Facts about a node | `IAnalysisMetadata` on `AnalysisContext` | Parallel side tables outside the metadata store |
 | Resolve types / members | `ITypeDefinitionProvider` + `AnalysisContext.TypeDefinitions` | Ad-hoc reflection; second type registry; emitter method-lookup fallbacks |
 | Stack host + custom types | `TypeDefinitionProviderCollection` | Hard-coding a single runtime into product modules |
-| Run a program / policy | `Interpreter` / `PolicyEvaluator` after analyze | Second evaluator framework |
+| Run a program / policy | `Interpreter` after `DomainEntityInstance.EvaluatePolicy` | Second evaluator framework |
 | Domain mutation | `DomainEvolution`…`Apply` | In-place graph edits; resurrecting V2 |
 | Domain feature at runtime | Lower to existing Syntax ops (+ analyze/replace) | Domain opcodes; ABI special cases for one feature |
 | Cross-cutting “why” | `docs/decisions/` | Re-litigating in drive-by comments |

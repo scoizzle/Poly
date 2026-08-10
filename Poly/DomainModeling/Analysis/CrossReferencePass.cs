@@ -4,11 +4,12 @@ using Poly.DomainModeling.Lowering;
 namespace Poly.DomainModeling.Analysis;
 
 /// <summary>
-/// Analysis pass that produces <see cref="EntityDependencyGraphMetadata"/> —
-/// a directed graph from entity navigations and subscriptions, with cycle detection.
+/// Cross-entity dependency cycle detection. Builds a directed entity graph from
+/// navigations, subscriptions, and cross-entity invokes, then reports a warning
+/// when a cycle exists. The graph itself is not published — only the cycle
+/// diagnostic is consumed (the metadata had zero consumers).
 ///
 /// Depends on <see cref="EffectTopologyPass"/> (subscription/invoke edges).
-/// Ownership aggregate metadata is not required for the graph.
 /// </summary>
 internal sealed class CrossReferencePass : INodeAnalyzer {
     public const string Id = "CrossReferencePass";
@@ -30,15 +31,10 @@ internal sealed class CrossReferencePass : INodeAnalyzer {
                 g => g.ToDictionary(r => r.Name, StringComparer.Ordinal),
                 StringComparer.Ordinal);
 
-        var edges = new List<EntityDependencyEdge>();
         var relationshipPairs = new HashSet<(string From, string To)>();
-
-        // Full edge list (including pure inverse navigations) for metadata consumers
         foreach (var rel in relationships) {
             if (!entityNames.Contains(rel.Source.TypeName) || !entityNames.Contains(rel.Target.TypeName))
                 continue;
-
-            edges.Add(new EntityDependencyEdge(rel.Source.TypeName, rel.Target.TypeName, "Relationship"));
             relationshipPairs.Add((rel.Source.TypeName, rel.Target.TypeName));
         }
 
@@ -47,7 +43,6 @@ internal sealed class CrossReferencePass : INodeAnalyzer {
             foreach (var sub in topology.Subscriptions) {
                 if (relLookup.TryGetValue(sub.SubscriberEntity, out var byNav)
                     && byNav.TryGetValue(sub.RelationshipName, out var rel)) {
-                    edges.Add(new EntityDependencyEdge(sub.SubscriberEntity, rel.Target.TypeName, "Subscription"));
                     subscriptionInvokeEdges.Add((sub.SubscriberEntity, rel.Target.TypeName));
                 }
             }
@@ -55,7 +50,6 @@ internal sealed class CrossReferencePass : INodeAnalyzer {
                 if (invoke.TargetRelationship != null
                     && relLookup.TryGetValue(invoke.SourceEntity, out var byNav2)
                     && byNav2.TryGetValue(invoke.TargetRelationship, out var rel2)) {
-                    edges.Add(new EntityDependencyEdge(invoke.SourceEntity, rel2.Target.TypeName, "Invoke"));
                     subscriptionInvokeEdges.Add((invoke.SourceEntity, rel2.Target.TypeName));
                 }
             }
@@ -74,8 +68,6 @@ internal sealed class CrossReferencePass : INodeAnalyzer {
             AddEdge(adjacency, from, to);
 
         var cycleEntityNames = DetectCycles(adjacency, entityNames);
-
-        context.SetMetadata(domain, new EntityDependencyGraphMetadata(edges, cycleEntityNames));
 
         if (cycleEntityNames.Count > 0) {
             context.ReportDiagnostic(domain,

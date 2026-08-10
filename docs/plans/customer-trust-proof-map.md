@@ -59,7 +59,7 @@ Status legend: **Green** = evidence in tree · **Yellow** = partial / known gap 
 | Claim | Gate | Proof instrument | Where (pointer) | Status |
 |-------|------|------------------|-----------------|--------|
 | Author → evolve → query works | T1 | Vertical suite | Dogfood waves; MCP apply_dsl smokes | **Green** shipped slices |
-| Policies evaluate on VM path as claimed | T1 | Policy tests + VM-primary | `PolicyEvaluator` / domain expression VM tests | **Yellow** — keep dual-oracle where LINQ remains |
+| Policies evaluate on VM path as claimed | T1 | Policy tests + VM-primary | `DomainEntityInstance.EvaluatePolicy` → `DomainExpressionLoweringPass` → `Interpreter`; test-only CLR-subject wrapper `PolicyEvaluator` in `Poly.Tests/TestHelpers/` | **Yellow** — keep dual-oracle where LINQ remains |
 | Effects run (assign, create, invoke, transition) | T1 | Runtime goldens | Action/effect integration tests; p3 returns; p4 subscriptions | **Green** for shipped kernel |
 | Multi-hop path-prefix / quantifiers | T1 | Golden + analysis fail-closed | p2 suite tests | **Green** (suite done) |
 | Entity returns on create/create-in | T1 | Analysis + runtime goldens | p3 suite | **Green** (suite done) |

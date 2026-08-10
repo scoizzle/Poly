@@ -2,7 +2,7 @@
 
 **Audience:** Developers extending the DomainModeling module or adding new effect/expression types.  
 **Prerequisites:** [`Poly/Interpretation/README.md`](../../Poly/Interpretation/README.md), [`docs/CORE.md`](../CORE.md).  
-**Corpus:** Lowering passes live under `Poly/DomainModeling/Lowering/`. Runtime dispatch lives in `Poly/DomainModeling/Runtime/DomainEntityInstance.cs`. Policy evaluation lives in `Poly/DomainModeling/Lowering/PolicyEvaluator.cs`.
+**Corpus:** Lowering passes live under `Poly/DomainModeling/Lowering/`. Runtime dispatch lives in `Poly/DomainModeling/Runtime/DomainEntityInstance.cs`. Policy evaluation runs through `DomainEntityInstance.EvaluatePolicy` → `DomainExpressionLoweringPass` → `Interpreter`; the CLR-subject wrapper `PolicyEvaluator` is test-only (`Poly.Tests/TestHelpers/`).
 
 This document describes the execution model that bridges **domain concepts** (effects, policies, expressions) to **executable results** through the Syntax AST and VM pipeline. It is the missing layer between `Poly.DomainModeling` and the Interpretation system documented in this directory.
 

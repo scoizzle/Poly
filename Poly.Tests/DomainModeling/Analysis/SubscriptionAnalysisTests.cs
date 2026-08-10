@@ -154,13 +154,13 @@ public class SubscriptionAnalysisTests {
             d.Message.Contains("NonExistent"))).IsTrue();
     }
 
-    // ── A′.3 StageBuilder subscribe + happy-path ───────────────
+    // ── A′.3 stage subscription happy-path ─────────────────────
 
     [Test]
-    public async Task StageBuilder_Subscribe_WiresSubscriptions() {
-        var stage = new StageBuilder("Pending")
-            .Subscribe("Notifies", "Active")
-            .Build();
+    public async Task Stage_WithSubscription_WiresSubscriptions() {
+        var stage = new Stage("Pending", [], [], [], []) {
+            Subscriptions = [new StageSubscription("Notifies", ["Active"], StageSubscriptionQuantifier.Each, [])]
+        };
 
         await Assert.That(stage.Subscriptions.Count).IsEqualTo(1);
         await Assert.That(stage.Subscriptions[0].RelationshipName).IsEqualTo("Notifies");
@@ -168,13 +168,13 @@ public class SubscriptionAnalysisTests {
     }
 
     [Test]
-    public async Task StageBuilder_Subscribe_WithEffects_WiresEffects() {
+    public async Task Stage_WithSubscription_WithEffects_WiresEffects() {
         var effect = new AssignEffect(
             DomainExpression.Property("Status"),
             DomainExpression.Literal("Triggered"));
-        var stage = new StageBuilder("Pending")
-            .Subscribe("Notifies", "Active", StageSubscriptionQuantifier.Each, effect)
-            .Build();
+        var stage = new Stage("Pending", [], [], [], []) {
+            Subscriptions = [new StageSubscription("Notifies", ["Active"], StageSubscriptionQuantifier.Each, [effect])]
+        };
 
         await Assert.That(stage.Subscriptions.Count).IsEqualTo(1);
         await Assert.That(stage.Subscriptions[0].Effects.Count).IsEqualTo(1);

@@ -4,6 +4,8 @@ using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Constraints;
 using Poly.DomainModeling.Effects;
 
+using Prim = Poly.Introspection.PrimitiveType;
+
 namespace Poly.DomainModeling.Lowering;
 
 /// <summary>
@@ -32,6 +34,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     private readonly string? _stageEnumTypeName;
     private readonly IReadOnlyDictionary<string, IReadOnlyList<Node>>? _postTransitionNodes;
     private readonly string? _sourceStageName;
+    private readonly IReadOnlyDictionary<string, string>? _enumPropertyNames;
 
     /// <summary>Pre-computed analysis metadata provider, when available.</summary>
     public INodeMetadataProvider? Analysis => _analysis;
@@ -48,6 +51,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         _stageEnumTypeName = context.StageEnumTypeName;
         _postTransitionNodes = context.PostTransitionNodes;
         _sourceStageName = context.SourceStageName;
+        _enumPropertyNames = context.EnumPropertyNames;
         _expressionPass = new DomainExpressionLoweringPass(context with {
             NavigationNameResolver = context.NavigationNameResolver ?? BuildNavigationNameResolver(entity, _domain, _analysis)
         });
@@ -104,29 +108,45 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         // target property is enum-typed:  assign Status to "Suspended"
         // on PatronStatus-typed property →  this.Status = PatronStatus.Suspended;
         // and a bare identifier member (assign Status to Suspended) → same.
+        // Only in C# export mode (EnumPropertyNames present) — the generated C#
+        // must reference the enum type. On the runtime path enum values are stored
+        // as strings, so a bare enum member identifier lowers to its name string
+        // and a string literal is already a string constant (no qualification).
         if (a.Target is PropertyAccess propAccess) {
             var entityProp = _entity.Properties.FirstOrDefault(p =>
                 string.Equals(p.Name, propAccess.Name, StringComparison.Ordinal));
             if (entityProp is not null
                 && DomainToCSharpExporter.TryResolveEnumType(_domain, _analysis, entityProp.Type.TypeName, out var enumType)
                 && enumType is not null) {
-                if (a.Value is Literal { Value: string strVal }
-                    && !string.IsNullOrEmpty(strVal)) {
-                    value = new Member(new NamedTypeReference(enumType.Name), strVal);
+                if (_enumPropertyNames is not null) {
+                    if (a.Value is Literal { Value: string strVal }
+                        && !string.IsNullOrEmpty(strVal)) {
+                        value = new Member(new NamedTypeReference(enumType.Name), strVal);
+                    }
+                    else if (a.Value is PropertyAccess pa
+                        && enumType.MemberNames.Contains(pa.Name, StringComparer.Ordinal)) {
+                        value = new Member(new NamedTypeReference(enumType.Name), pa.Name);
+                    }
                 }
                 else if (a.Value is PropertyAccess pa
                     && enumType.MemberNames.Contains(pa.Name, StringComparer.Ordinal)) {
-                    value = new Member(new NamedTypeReference(enumType.Name), pa.Name);
+                    value = new Constant(pa.Name);
                 }
             }
 
             // Date/DateTime arithmetic: DueDate + 14 → DueDate.AddDays(14)
             // The domain type names "DateTime", "Timestamp", "Date", "DateOnly"
             // map to CLR types where + long is invalid — use AddDays instead.
+            // DateTime.AddDays(double) accepts the long RHS via widening; but
+            // DateOnly.AddDays(int) requires an explicit cast or the generated
+            // code fails CS1503 (long → int).
             if (entityProp is not null
                 && value is Ast.Nodes.Add { LeftHandValue: Node lhs, RightHandValue: Node rhs }
                 && IsDateTimeDomainType(entityProp.Type.TypeName)) {
-                value = new Invoke(new Member(lhs, "AddDays"), [rhs]);
+                Node arg = entityProp.Type.TypeName is "Date" or "DateOnly"
+                    ? new TypeCast(rhs, new PrimitiveTypeReference(Prim.Int32))
+                    : rhs;
+                value = new Invoke(new Member(lhs, "AddDays"), [arg]);
             }
         }
 
@@ -210,12 +230,23 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     /// Lowers invoke effects for C# codegen mode. Self-invoke (no TargetRelationship)
     /// becomes <c>this.ActionName(args)</c>. Cross-entity invoke becomes
     /// <c>this.TargetRelationship.ActionName(args)</c>. Quantified/collection invoke
-    /// still returns null (no C# lowering yet).
+    /// cannot be compiled to standalone C# (it needs the store's linked set) — it
+    /// fails loud with <c>NotSupportedException</c>, matching quantifier policies,
+    /// instead of being silently dropped as a no-op.
     /// </summary>
     protected override Node? InvokeAction(InvokeActionEffect i) {
         if (!_lowerStageTransitions) return null;
-        // Quantified/collection invoke not yet lowerable
-        if (i.Quantifier is not null) return null;
+        // Quantified/collection invoke cannot be lowered — fail loud (no silent no-op).
+        if (i.Quantifier is not null) {
+            var quantifier = i.Quantifier.ToString()!.ToLowerInvariant();
+            var rel = i.TargetRelationship ?? "";
+            return new ThrowStatement(
+                new New(
+                    new NamedTypeReference("NotSupportedException"),
+                    new Constant(
+                        $"invoke {quantifier} {rel}.{i.ActionName} requires store-aware evaluation " +
+                        "and cannot be compiled to standalone C#.")));
+        }
 
         var args = new List<Node>();
         foreach (var binding in i.ParameterBindings) {
@@ -223,10 +254,11 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         }
 
         var target = i.TargetRelationship is not null
-            ? (Node)new Member(Subject, i.TargetRelationship)
-            : Subject;
+            ? (Node)new Member(new NullForgiving(
+                new Member(Subject, DomainToCSharpExporter.ToPascalCase(i.TargetRelationship))), i.ActionName)
+            : new Member(Subject, i.ActionName);
 
-        return new Invoke(new Member(target, i.ActionName), [.. args]);
+        return new Invoke(target, [.. args]);
     }
 
     /// <summary>

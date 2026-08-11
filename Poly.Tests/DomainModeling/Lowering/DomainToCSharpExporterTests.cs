@@ -1156,4 +1156,192 @@ public class DomainToCSharpExporterTests {
         // No post-create assignment (the ctor's own `this.Severity = severity;` is fine).
         await Assert.That(cs).DoesNotContain("diagnostic.Severity = ");
     }
+
+    [Test]
+    public async Task Export_StageScopedSubscription_HandlerIsStageGated() {
+        // Code-review fix: a stage-scoped `when` must fire only while the subscriber is
+        // in that stage (matches the runtime store), so the exported handler is gated.
+        var (domain, analysis) = ParseAndAnalyze("""
+            domain Test
+            Order: entity {
+              Total: Number
+              lines: many OrderLine
+              Done: stage {
+                when lines Complete as line {
+                  assign Total to line Price + Total
+                }
+              }
+            }
+            OrderLine: entity {
+              Price: Number
+              order: Order
+              Draft: stage { Complete: action { transition to Complete } }
+              Complete: stage { }
+            }
+            """);
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var unit = new CompilationUnitNode([], null, types, null);
+        var cs = new CSharpGenerator().Generate(unit);
+
+        await Assert.That(cs).Contains("if (this.CurrentStage != OrderStage.Done)");
+        await Assert.That(cs).Contains("WhenOrderLineComplete(OrderLine line)");
+    }
+
+    [Test]
+    public async Task Export_EntityLevelSubscription_HandlerNotStageGated() {
+        // Always-active subscriptions (on the entity, outside any stage) must NOT be gated —
+        // the handler body runs the effects directly (no `if (this.CurrentStage ...` guard).
+        var (domain, analysis) = ParseAndAnalyze("""
+            domain Test
+            Order: entity {
+              Total: Number
+              lines: many OrderLine
+              when lines Complete as line {
+                assign Total to line Price + Total
+              }
+            }
+            OrderLine: entity {
+              Price: Number
+              order: Order
+              Draft: stage { Complete: action { transition to Complete } }
+              Complete: stage { }
+            }
+            """);
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var unit = new CompilationUnitNode([], null, types, null);
+        var cs = new CSharpGenerator().Generate(unit);
+
+        await Assert.That(cs).Contains("internal void WhenOrderLineComplete(OrderLine line)\n    {\n        this.Total = line.Price + this.Total;");
+        await Assert.That(cs).DoesNotContain("WhenOrderLineComplete(OrderLine line)\n    {\n        if (this.CurrentStage");
+    }
+
+    [Test]
+    public async Task Export_DefaultedPropRange_ValidatedInCreate() {
+        // Code-review fix: a range on a defaulted (optional) ctor param must be enforced
+        // when the caller overrides it.
+        var (domain, analysis) = ParseAndAnalyze("""
+            domain Test
+            Item: entity {
+              Qty: Number range(1, 999) default(1)
+            }
+            """);
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var unit = new CompilationUnitNode([], null, types, null);
+        var cs = new CSharpGenerator().Generate(unit);
+
+        await Assert.That(cs).Contains("qty < 1L");
+        await Assert.That(cs).Contains("qty > 999L");
+    }
+
+    [Test]
+    public async Task Export_CrossEntityInvoke_UsesPascalCasePropertyWithNullForgiving() {
+        // Code-review fix: `invoke assignee.Notify` must lower to the PascalCase
+        // nav property (`this.Assignee`), null-forgiving (the runtime requires an
+        // outbound link and fails loud otherwise) — the raw nav name did not compile.
+        var (domain, analysis) = ParseAndAnalyze("""
+            domain Test
+            User: entity {
+              Last: Text
+              Notify: action { assign Last to "x" }
+            }
+            Issue: entity {
+              assignee: User
+              InProgress: stage {
+                Go: action { invoke assignee.Notify }
+              }
+            }
+            """);
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var unit = new CompilationUnitNode([], null, types, null);
+        var cs = new CSharpGenerator().Generate(unit);
+
+        await Assert.That(cs).Contains("this.Assignee!.Notify()");
+        await Assert.That(cs).DoesNotContain("this.assignee.Notify");
+    }
+
+    [Test]
+    public async Task Export_EntityLevelPolicy_GatesEveryAction_ExceptRequireNot() {
+        // Code-review fix: the runtime treats every entity-level policy as an always-on
+        // guard on every action invocation (DomainEntityInstance.InvokeAction). The export
+        // previously emitted such policies as inert bool methods and ran actions unchecked
+        // — a contract divergence (actions the runtime would block succeeded). Now every
+        // action is gated, and policies inverted by `require not` are skipped (both match
+        // the runtime).
+        var (domain, analysis) = ParseAndAnalyze("""
+            domain Test
+            Device: entity {
+              Active: Boolean
+              IsActive: policy { Active is true }
+              Draft: stage {
+                Boot: action { transition to Active }
+                Skip: action require not IsActive { transition to Active }
+              }
+              Active: stage { }
+            }
+            """);
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var unit = new CompilationUnitNode([], null, types, null);
+        var cs = new CSharpGenerator().Generate(unit);
+
+        // Boot: positive entity-level gate — fail when the policy is false.
+        await Assert.That(cs).Contains("if (!this.IsActive())");
+        await Assert.That(cs).Contains("return DomainResult.Failure(\"'Boot' blocked by policy 'IsActive'.\")");
+
+        // Skip: `require not IsActive` is emitted as its own guard (fail when the policy
+        // is true) and the entity-level gate is skipped — no redundant positive gate.
+        await Assert.That(cs).Contains("if (this.IsActive())\n        {\n            return DomainResult.Failure(\"'Skip' blocked by policy 'IsActive'.\")");
+        await Assert.That(cs).DoesNotContain("if (!this.IsActive())\n        {\n            return DomainResult.Failure(\"'Skip' blocked by policy 'IsActive'.\")");
+    }
+
+    [Test]
+    public async Task Export_QuantifiedInvoke_FailsLoudNotSilentlyDropped() {
+        // Code-review fix: `invoke all lines.Touch` (any/all collection invoke) was silently
+        // dropped from the export — the DSL author's effect became a no-op comment while the
+        // runtime ran it. It now throws NotSupportedException in the generated code, matching
+        // the store-dependent quantifier policies (no silent behavior gap).
+        var (domain, analysis) = ParseAndAnalyze("""
+            domain Test
+            Order: entity {
+              lines: many OrderLine
+              Draft: stage {
+                Go: action {
+                  invoke all lines.Touch(tag: "x") where Qty > 1
+                }
+              }
+            }
+            OrderLine: entity {
+              Qty: Number
+              order: Order
+              Touch: action (tag: Text) { }
+            }
+            """);
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var unit = new CompilationUnitNode([], null, types, null);
+        var cs = new CSharpGenerator().Generate(unit);
+
+        await Assert.That(cs).Contains("throw new NotSupportedException(\"invoke all lines.Touch requires store-aware evaluation");
+        await Assert.That(cs).DoesNotContain("Cannot lower: invoke Touch");
+    }
+
+    [Test]
+    public async Task Export_DateArithmetic_CastsToIntForDateOnly() {
+        // Code-review fix: `DueDate + 14` on a Date (DateOnly) property emitted
+        // `AddDays(14L)`, but DateOnly.AddDays takes int — CS1503 (long→int). The
+        // RHS must be cast. DateTime.AddDays(double) accepts the long via widening,
+        // so no cast is emitted there.
+        var (domain, analysis) = ParseAndAnalyze("""
+            domain Test
+            Order: entity {
+              DueDate: Date
+              Draft: stage {
+                Extend: action { assign DueDate to DueDate + 14 }
+              }
+            }
+            """);
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var unit = new CompilationUnitNode([], null, types, null);
+        var cs = new CSharpGenerator().Generate(unit);
+
+        await Assert.That(cs).Contains("AddDays((int)14L)");
+    }
 }

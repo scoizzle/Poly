@@ -33,7 +33,8 @@ public sealed class DomainToCSharpExporter {
         StageSubscription Subscription,
         Entity SourceEntity,
         Entity TargetEntity,
-        Relationship Relationship
+        Relationship Relationship,
+        string? SubscriberStageName = null
     );
 
     /// <summary>
@@ -73,7 +74,7 @@ public sealed class DomainToCSharpExporter {
             return;
 
         foreach (var sName in sub.StageNames) {
-            var info = new SubscriptionInfo(sName, sub, entity, targetEntity, rel);
+            var info = new SubscriptionInfo(sName, sub, entity, targetEntity, rel, stageName);
             subList.Add(info);
 
             if (!subscriptionsByTarget.TryGetValue(targetEntity.Name, out var targetList))
@@ -443,6 +444,19 @@ public sealed class DomainToCSharpExporter {
                     handlerBody = new Block([new Comment("no-op")]);
                 }
 
+                // Stage-scoped subscriptions (`when` inside a subscriber stage) fire only
+                // while the subscriber is in that stage — gate the handler to match the
+                // runtime store (NotifyTransition resolves the plan from CurrentStage).
+                // Entity-level subscriptions (SubscriberStageName == null) are always active.
+                if (info.SubscriberStageName is { Length: > 0 }) {
+                    var stageGate = new IfStatement(
+                        new NotEqual(
+                            new Member(new ThisReference(), "CurrentStage"),
+                            new Member(new NamedTypeReference(stageEnumTypeName), info.SubscriberStageName)),
+                        new Block([new Return()]));
+                    handlerBody = new Block([stageGate, handlerBody]);
+                }
+
                 methods.Add(new MethodDefinitionNode(
                     handlerName,
                     new TypeReference("void"),
@@ -557,7 +571,7 @@ public sealed class DomainToCSharpExporter {
             // Build constraint validation checks before the constructor call.
             // Only entity properties (not navigations) are validated — navs
             // don't carry constraints in the current model.
-            var constraintChecks = BuildCreateConstraintChecks(entity, domain);
+            var constraintChecks = BuildCreateConstraintChecks(entity, domain, esm.EntryAssignedPropertyNames);
 
             // return DomainResult<EntityName>.Success(new EntityName(args...));
             var createSuccessNodes = new List<Node>();
@@ -843,10 +857,12 @@ public sealed class DomainToCSharpExporter {
     /// guard: <c>if (violation) return DomainResult&lt;T&gt;.Failure("'Prop' ...");</c>
     ///
     /// Only entity properties (not navigation properties) are validated — navs do not
-    /// carry constraints in the current domain model.
+    /// carry constraints in the current domain model. Defaulted props ARE constructor
+    /// params (optional overrides), so their constraints are validated too; only
+    /// entry-assigned props (body-initialized, never ctor params) are skipped.
     /// </summary>
     private static List<Node> BuildCreateConstraintChecks(
-        Entity entity, Domain? domain) {
+        Entity entity, Domain? domain, IReadOnlySet<string> entryAssignedProps) {
 
         var checks = new List<Node>();
         var entityTypeRef = new NamedTypeReference(entity.Name);
@@ -854,8 +870,9 @@ public sealed class DomainToCSharpExporter {
             TypeArguments: [entityTypeRef]);
 
         foreach (var prop in entity.Properties.OrderBy(p => p.Name)) {
-            // Only properties without DefaultValueConstraint are constructor params
-            if (prop.Constraints.Any(c => c is DefaultValueConstraint)) continue;
+            // Entry-assigned props are body-initialized by the ctor's stage-entry effects
+            // — not constructor params, so no guard to attach.
+            if (entryAssignedProps.Contains(prop.Name)) continue;
 
             var paramName = ToCamelCase(prop.Name);
             var paramRef = new Parameter(paramName);
@@ -1141,6 +1158,19 @@ public sealed class DomainToCSharpExporter {
                     new Block([FailureReturn(
                         $"'{action.Name}' blocked by policy '{policy.Name}'.")])));
             }
+        }
+
+        // Emit entity-level policy guards — the runtime treats every entity policy as an
+        // always-on guard on every action invocation (DomainEntityInstance.InvokeAction),
+        // skipping any policy the action inverts via `require not PolicyName`. Without
+        // this the export silently ran actions the runtime would block (contract parity).
+        foreach (var policy in entity.Policies) {
+            if (action.Policies.Any(p => string.Equals(p.Name, $"not_{policy.Name}", StringComparison.Ordinal)))
+                continue;
+            nodes.Add(new IfStatement(
+                new Syntactic.Not(new Invoke(new Member(new ThisReference(), policy.Name))),
+                new Block([FailureReturn(
+                    $"'{action.Name}' blocked by policy '{policy.Name}'.")])));
         }
 
         // Append the effects body

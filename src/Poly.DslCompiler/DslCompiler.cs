@@ -122,7 +122,7 @@ public sealed class DslCompiler {
         var nameChange = changes.OfType<SetDomainNameChange>().FirstOrDefault();
         var domainName = nameChange?.Name ?? "PolyDomain";
 
-        var emptyDomain = new Domain(domainName, [], []);
+        var emptyDomain = new Domain(domainName, []);
         EvolutionResult outcome;
         try {
             outcome = new DomainEvolution(emptyDomain).Apply(changes);
@@ -241,7 +241,7 @@ public sealed class DslCompiler {
         }
 
         // Infrastructure metadata — prefer domain analysis result (which already ran
-        // StoragePass + TransportPass via UseDomainModelAnalysisPipeline). Fall back
+        // StoragePass via UseDomainModelAnalysisPipeline). Fall back
         // to a narrow StoragePass re-run only when pack-specific type maps or
         // conventions require refinement (e.g., Sqlite type mappings).
         var storageModel = analysis.GetMetadata<StorageMappingMetadata>(domain)?.Storage;

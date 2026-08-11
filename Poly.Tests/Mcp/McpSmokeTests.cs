@@ -84,7 +84,6 @@ public class McpSmokeTests {
         await Assert.That(data.EntityCount).IsGreaterThanOrEqualTo(2);
         await Assert.That(data.RelationshipCount).IsGreaterThanOrEqualTo(1);
         await Assert.That(data.HasStorageMapping).IsTrue();
-        await Assert.That(data.HasTransport).IsTrue();
         await Assert.That(data.RootEntityNames).IsNotNull();
         await Assert.That(data.RootEntityNames!.Count).IsGreaterThanOrEqualTo(1);
         // amu-w4: aggregate ownership summary present when bags exist.
@@ -1020,7 +1019,7 @@ public class McpSmokeTests {
         // Re-parse the exported N1 poly and verify one relationship
         var parser = new PolyDslParser(poly);
         var changes = parser.Parse();
-        var emptyDomain = new Domain("_", [], []);
+        var emptyDomain = DomainTestFactory.Create("_", [], []);
         var result = new DomainEvolution(emptyDomain).Apply(changes);
         await Assert.That(result.Succeeded).IsTrue();
         await Assert.That(result.Root!.Relationships.Count).IsEqualTo(1);
@@ -1824,7 +1823,7 @@ public class McpSmokeTests {
     public async Task Parser_PathPrefix_RelBoolProp_CreatesRelationshipNav() {
         // Q1.2: `Rel BoolProp` should parse to RelationshipNavigation
         var poly = "domain Test\nItem: entity {\n  Flag: Boolean\n}\n";
-        var domain = new DomainEvolution(new Domain("_", [], [])).Apply(
+        var domain = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(
             new PolyDslParser(poly).Parse()).Root;
         // Build a policy expression via DSL that uses a hypothetical relationship
         // We test parser directly via PolyDslParser on a policy expression

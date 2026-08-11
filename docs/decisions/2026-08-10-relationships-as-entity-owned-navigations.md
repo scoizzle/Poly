@@ -3,7 +3,9 @@
 **Date:** 2026-08-10
 **Status:** Accepted (implemented 2026-08-10)
 **Deciders:** Architecture team
-**References:** [`relationship-name-source-scoping-2026-08-10.md`](../plans/relationship-name-source-scoping-2026-08-10.md), [`csharp-export-createin-bugs-2026-08-10.md`](../plans/csharp-export-createin-bugs-2026-08-10.md), [`relationship-domain-model-synthesis-2026-08-10.md`](../plans/relationship-domain-model-synthesis-2026-08-10.md)
+**References:** [`relationship-name-source-scoping-2026-08-10.md`](../plans/relationship-name-source-scoping-2026-08-10.md), [`csharp-export-createin-bugs-2026-08-10.md`](../plans/csharp-export-createin-bugs-2026-08-10.md), [`relationship-domain-model-synthesis-2026-08-10.md`](../plans/relationship-domain-model-synthesis-2026-08-10.md), [`domainmodeling-metadata-simplification-2026-08-10.md`](../plans/domainmodeling-metadata-simplification-2026-08-10.md)
+
+> **Follow-up implemented 2026-08-10:** the derived back-reference now backs the `create in Rel` auto-wire (`DomainToCSharpExporter.FindAutoWireBackReference`, used by both the CreateNav factory and the call-site arg list) — the exported C# wires an unambiguous singular back-ref with `this`. See the metadata-simplification plan, Part 3 D1.
 
 ---
 

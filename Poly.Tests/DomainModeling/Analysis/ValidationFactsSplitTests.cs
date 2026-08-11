@@ -16,7 +16,7 @@ public class ValidationFactsSplitTests {
         var ctx = DomainInputBuilder.CreateWithSqlPack().Build();
         var parser = new PolyDslParser(poly, ctx.Parser);
         var changes = parser.Parse();
-        var emptyDomain = new Domain("_", [], []);
+        var emptyDomain = DomainTestFactory.Create("_", [], []);
         var result = new DomainEvolution(emptyDomain).Apply(changes);
         if (!result.Succeeded)
             throw new InvalidOperationException("Domain evolution failed: " +

@@ -27,7 +27,7 @@ public class N1NavigationTests {
 
         var parser = new PolyDslParser(poly);
         var changes = parser.Parse();
-        var emptyDomain = new Domain("_", [], []);
+        var emptyDomain = DomainTestFactory.Create("_", [], []);
         var result = new DomainEvolution(emptyDomain).Apply(changes);
         await Assert.That(result.Succeeded).IsTrue();
 
@@ -57,7 +57,7 @@ public class N1NavigationTests {
 
         var parser = new PolyDslParser(poly);
         var changes = parser.Parse();
-        var emptyDomain = new Domain("_", [], []);
+        var emptyDomain = DomainTestFactory.Create("_", [], []);
         var result = new DomainEvolution(emptyDomain).Apply(changes);
         await Assert.That(result.Succeeded).IsTrue();
 
@@ -91,7 +91,7 @@ public class N1NavigationTests {
 
         var parser = new PolyDslParser(poly);
         var changes = parser.Parse();
-        var emptyDomain = new Domain("_", [], []);
+        var emptyDomain = DomainTestFactory.Create("_", [], []);
         var result = new DomainEvolution(emptyDomain).Apply(changes);
         await Assert.That(result.Succeeded).IsTrue();
 
@@ -121,7 +121,7 @@ public class N1NavigationTests {
 
         var parser = new PolyDslParser(poly);
         var changes = parser.Parse();
-        var emptyDomain = new Domain("_", [], []);
+        var emptyDomain = DomainTestFactory.Create("_", [], []);
         var result = new DomainEvolution(emptyDomain).Apply(changes);
         await Assert.That(result.Succeeded).IsTrue();
 
@@ -150,7 +150,7 @@ public class N1NavigationTests {
 
         var parser = new PolyDslParser(poly);
         var changes = parser.Parse();
-        var emptyDomain = new Domain("_", [], []);
+        var emptyDomain = DomainTestFactory.Create("_", [], []);
         var result = new DomainEvolution(emptyDomain).Apply(changes);
         await Assert.That(result.Succeeded).IsTrue();
 
@@ -179,7 +179,7 @@ public class N1NavigationTests {
 
         var parser = new PolyDslParser(poly);
         var changes = parser.Parse();
-        var emptyDomain = new Domain("_", [], []);
+        var emptyDomain = DomainTestFactory.Create("_", [], []);
         var result = new DomainEvolution(emptyDomain).Apply(changes);
         await Assert.That(result.Succeeded).IsTrue();
 
@@ -313,7 +313,7 @@ public class N1NavigationTests {
         // First parse: N1 input
         var parser = new PolyDslParser(poly);
         var changes = parser.Parse();
-        var emptyDomain = new Domain("_", [], []);
+        var emptyDomain = DomainTestFactory.Create("_", [], []);
         var result = new DomainEvolution(emptyDomain).Apply(changes);
         await Assert.That(result.Succeeded).IsTrue();
         await Assert.That(result.Root!.Relationships.Count).IsEqualTo(2);
@@ -325,7 +325,7 @@ public class N1NavigationTests {
         // Second parse: re-parse N1 output
         var parser2 = new PolyDslParser(printed);
         var changes2 = parser2.Parse();
-        var emptyDomain2 = new Domain("_", [], []);
+        var emptyDomain2 = DomainTestFactory.Create("_", [], []);
         var result2 = new DomainEvolution(emptyDomain2).Apply(changes2);
         await Assert.That(result2.Succeeded).IsTrue();
 
@@ -376,7 +376,7 @@ public class N1NavigationTests {
 
         var parser = new PolyDslParser(poly);
         var changes = parser.Parse();
-        var emptyDomain = new Domain("_", [], []);
+        var emptyDomain = DomainTestFactory.Create("_", [], []);
         var result = new DomainEvolution(emptyDomain).Apply(changes);
         await Assert.That(result.Succeeded).IsTrue();
 
@@ -509,7 +509,7 @@ public class N1NavigationTests {
 
         var parser = new PolyDslParser(poly);
         var changes = parser.Parse();
-        var emptyDomain = new Domain("_", [], []);
+        var emptyDomain = DomainTestFactory.Create("_", [], []);
         var result = new DomainEvolution(emptyDomain).Apply(changes);
         await Assert.That(result.Succeeded).IsTrue();
 
@@ -535,7 +535,7 @@ public class N1NavigationTests {
 
         var parser = new PolyDslParser(poly);
         var changes = parser.Parse();
-        var emptyDomain = new Domain("_", [], []);
+        var emptyDomain = DomainTestFactory.Create("_", [], []);
         var result = new DomainEvolution(emptyDomain).Apply(changes);
         await Assert.That(result.Succeeded).IsTrue();
 
@@ -579,7 +579,7 @@ public class N1NavigationTests {
 
         var parser = new PolyDslParser(poly);
         var changes = parser.Parse();
-        var emptyDomain = new Domain("_", [], []);
+        var emptyDomain = DomainTestFactory.Create("_", [], []);
         var result = new DomainEvolution(emptyDomain).Apply(changes);
         await Assert.That(result.Succeeded).IsTrue();
         await Assert.That(result.Root!.Relationships.Count).IsEqualTo(1);
@@ -592,7 +592,7 @@ public class N1NavigationTests {
 
         var parser2 = new PolyDslParser(printed);
         var changes2 = parser2.Parse();
-        var emptyDomain2 = new Domain("_", [], []);
+        var emptyDomain2 = DomainTestFactory.Create("_", [], []);
         var result2 = new DomainEvolution(emptyDomain2).Apply(changes2);
         await Assert.That(result2.Succeeded).IsTrue();
         await Assert.That(result2.Root!.Relationships.Count).IsEqualTo(1);
@@ -634,7 +634,7 @@ public class N1NavigationTests {
 
         var parser = new PolyDslParser(poly);
         var changes = parser.Parse();
-        var emptyDomain = new Domain("_", [], []);
+        var emptyDomain = DomainTestFactory.Create("_", [], []);
         var result = new DomainEvolution(emptyDomain).Apply(changes);
         await Assert.That(result.Succeeded).IsTrue();
         await Assert.That(result.Root!.Relationships.Count).IsEqualTo(1);
@@ -648,7 +648,7 @@ public class N1NavigationTests {
 
         var parser2 = new PolyDslParser(printed);
         var changes2 = parser2.Parse();
-        var emptyDomain2 = new Domain("_", [], []);
+        var emptyDomain2 = DomainTestFactory.Create("_", [], []);
         var result2 = new DomainEvolution(emptyDomain2).Apply(changes2);
         await Assert.That(result2.Succeeded).IsTrue();
         await Assert.That(result2.Root!.Relationships.Count).IsEqualTo(1);

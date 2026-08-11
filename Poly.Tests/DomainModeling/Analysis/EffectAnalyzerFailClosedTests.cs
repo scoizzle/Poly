@@ -22,7 +22,7 @@ public class EffectAnalyzerFailClosedTests {
         var rel = new Relationship("rel",
             new DomainTypeReference("Customer"), new DomainTypeReference("Order"),
             RelationshipCardinality.OneToMany, []);
-        return new Domain("Test", [customer, order], [rel]);
+        return DomainTestFactory.Create("Test", [customer, order], [rel]);
     }
 
     /// <summary>Intermediate Semantic bags (DTLM/RLM) only — no DomainCatalogPass.</summary>

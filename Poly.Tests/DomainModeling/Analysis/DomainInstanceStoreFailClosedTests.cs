@@ -36,7 +36,7 @@ public class DomainInstanceStoreFailClosedTests {
             RelationshipCardinality.OneToMany,
             []);
 
-        return new Domain("FailClosedTest", [order, tracker], [relationship]);
+        return DomainTestFactory.Create("FailClosedTest", [order, tracker], [relationship]);
     }
 
     [Test]

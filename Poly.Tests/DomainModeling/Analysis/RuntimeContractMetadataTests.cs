@@ -35,7 +35,7 @@ public class RuntimeContractMetadataTests {
             RelationshipCardinality.OneToMany,
             []);
 
-        return new Domain("RuntimeContracts", [order, tracker], [relationship]);
+        return DomainTestFactory.Create("RuntimeContracts", [order, tracker], [relationship]);
     }
 
     [Test]
@@ -125,7 +125,7 @@ public class RuntimeContractMetadataTests {
             RelationshipCardinality.OneToMany,
             []);
 
-        var domain = new Domain("EntityLevelDispatch", [order, tracker], [relationship]);
+        var domain = DomainTestFactory.Create("EntityLevelDispatch", [order, tracker], [relationship]);
         var analysis = DomainModelAnalyzer.Analyze(domain);
 
         var entityPlan = analysis.GetMetadata<SubscriptionDispatchPlanMetadata>(tracker);
@@ -167,7 +167,7 @@ public class RuntimeContractMetadataTests {
             new Stage("Active", [], [], [], [])
         ]);
         // Two contracts same name+source is impossible via domain graph; zero match fails unique resolve.
-        var domain = new Domain("AmbiguousEntitySub", [tracker, order], [
+        var domain = DomainTestFactory.Create("AmbiguousEntitySub", [tracker, order], [
             new Relationship(
                 "Other",
                 new DomainTypeReference("Tracker"),

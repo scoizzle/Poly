@@ -15,7 +15,7 @@ namespace Poly.Tests.DomainModeling;
 public class P4SubscriptionQuantifierDslTests {
     private static (Domain Domain, AnalysisResult Analysis) ParseAndAnalyze(string poly) {
         var changes = new PolyDslParser(poly).Parse();
-        var result = new DomainEvolution(new Domain("_", [], [])).Apply(changes);
+        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(changes);
         if (!result.Succeeded) {
             var errors = string.Join("; ", result.Analysis.Diagnostics
                 .Where(d => d.Severity == DiagnosticSeverity.Error)

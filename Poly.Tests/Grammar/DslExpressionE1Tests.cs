@@ -50,7 +50,7 @@ public class DslExpressionE1Tests {
             """;
 
         var changes = new PolyDslParser(poly, inputs).Parse();
-        var result = new DomainEvolution(new Domain("_", [], [])).Apply(changes);
+        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(changes);
         await Assert.That(result.Succeeded).IsTrue();
 
         var policy = result.Root!.Types.OfType<Entity>().Single().Policies.Single();
@@ -128,7 +128,7 @@ public class DslExpressionE1Tests {
             }
             """;
         var changes = new PolyDslParser(poly, inputs).Parse();
-        var result = new DomainEvolution(new Domain("_", [], [])).Apply(changes);
+        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(changes);
         await Assert.That(result.Succeeded).IsTrue();
         var policy = result.Root!.Types.OfType<Entity>().Single().Policies.Single();
         var cmp = (Comparison)policy.Expression;

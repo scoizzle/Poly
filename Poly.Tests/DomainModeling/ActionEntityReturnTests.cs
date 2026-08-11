@@ -16,7 +16,7 @@ namespace Poly.Tests.DomainModeling;
 public class ActionEntityReturnTests {
     private static (Domain Domain, AnalysisResult Analysis) Evolve(string poly) {
         var changes = new PolyDslParser(poly).Parse();
-        var result = new DomainEvolution(new Domain("_", [], [])).Apply(changes);
+        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(changes);
         if (!result.Succeeded)
             throw new InvalidOperationException(string.Join("; ",
                 result.Analysis.Diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error)
@@ -29,7 +29,7 @@ public class ActionEntityReturnTests {
     /// concatenated error messages (fail-closed: evolution must reject it).</summary>
     private static string EvolveExpectingError(string poly) {
         var changes = new PolyDslParser(poly).Parse();
-        var result = new DomainEvolution(new Domain("_", [], [])).Apply(changes);
+        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(changes);
         if (result.Succeeded)
             throw new InvalidOperationException("Expected evolution to fail, but it succeeded.");
         return string.Join("; ",
@@ -48,7 +48,7 @@ public class ActionEntityReturnTests {
             [new StageTransitionEffect(new StageReference("Done"))],
             []);
         var order = new Entity("Order", [], [place], [], [draft, done]);
-        var domain = new Domain("RetNoCreate", [order], []);
+        var domain = DomainTestFactory.Create("RetNoCreate", [order], []);
         var analysis = DomainModelAnalyzer.Analyze(domain);
         var errors = analysis.Diagnostics
             .Where(d => d.Severity == DiagnosticSeverity.Error)

@@ -4,12 +4,12 @@ using Poly.DomainModeling.Constraints;
 namespace Poly.DomainModeling.Analysis;
 
 /// <summary>
-/// Thin pack DTO adapter: projects already-analyzed capability and
-/// effective-policy facts into <see cref="BehaviorMetadata"/> for codegen.
-/// Does not re-compose stage-effective policies/actions or re-walk effects for
-/// transitions — those live on the Capability surface only.
-/// Depends on <see cref="SemanticDomainAnalyzer"/> (action-level EPM) and
-/// <see cref="CapabilityAnalyzer"/> (transition targets).
+/// Thin pack DTO adapter: projects already-analyzed capability facts into
+/// <see cref="BehaviorMetadata"/> for codegen. Does not re-compose stage-effective
+/// policies/actions or re-walk effects for transitions — those live on the
+/// Capability surface only (action effective policies + transition targets).
+/// Depends on <see cref="SemanticDomainAnalyzer"/> (type resolution) and
+/// <see cref="CapabilityAnalyzer"/> (the capability surface).
 /// </summary>
 internal sealed class BehaviorPass : INodeAnalyzer {
     public const string Id = "BehaviorPass";
@@ -52,18 +52,12 @@ internal sealed class BehaviorPass : INodeAnalyzer {
         var isVoid = action.Result.Members.Count == 0;
         var resultTypeName = isVoid ? null : action.Result.Members[0].Type.TypeName;
 
-        // Action-level effective policy names (entity/stage + action) from Semantic EPM —
-        // not stage-effective composition (that is Capability / GetEffectivePolicies).
-        var policies = new List<string>();
-        var effectivePolicies = context.GetMetadata<EffectivePoliciesMetadata>(action);
-        if (effectivePolicies is not null) {
-            foreach (var p in effectivePolicies.Policies)
-                policies.Add(p.Name);
-        }
-        else {
-            foreach (var p in action.Policies)
-                policies.Add(p.Name);
-        }
+        // Action-level effective policy names (entity/stage + action) from the
+        // canonical capability surface — one producer, no dual composition path.
+        // The capability is always present in the pipeline (CapabilityAnalyzer
+        // dependency); the previous action.Policies fallback was unreachable.
+        var capability = context.GetMetadata<ActionCapabilityMetadata>(action);
+        var policies = capability?.View.EffectivePolicies.Select(p => p.Name).ToList() ?? [];
 
         var parameters = action.Parameters.Select(p => {
             var isEntityRef = IsEntityRefParam(context, p, entityLookup);
@@ -73,7 +67,6 @@ internal sealed class BehaviorPass : INodeAnalyzer {
 
         // Transitions from ActionCapability only — no effect-walk dual path.
         var transitions = new List<StageTransitionTarget>();
-        var capability = context.GetMetadata<ActionCapabilityMetadata>(action);
         if (capability is not null) {
             foreach (var stage in capability.View.TransitionTargets)
                 transitions.Add(new StageTransitionTarget(stage.Name));

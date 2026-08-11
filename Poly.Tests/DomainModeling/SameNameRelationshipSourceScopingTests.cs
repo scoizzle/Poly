@@ -38,7 +38,7 @@ public class SameNameRelationshipSourceScopingTests {
 
     private static Domain ParseAndBuild() {
         var changes = new PolyDslParser(Dsl).Parse();
-        var result = new DomainEvolution(new Domain("_", [], [])).Apply(changes);
+        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(changes);
         if (!result.Succeeded || result.Root is null)
             throw new InvalidOperationException($"Evolution failed: {result.FailureSummary}");
         return result.Root;
@@ -143,7 +143,7 @@ public class SameNameRelationshipSourceScopingTests {
             """;
 
         var changes = new PolyDslParser(poly).Parse();
-        var result = new DomainEvolution(new Domain("_", [], [])).Apply(changes);
+        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(changes);
         await Assert.That(result.Succeeded).IsTrue();
         await Assert.That(result.Root.Relationships.Count).IsEqualTo(4);
         await Assert.That(result.Root.Relationships.Count(r => r.Name == "order")).IsEqualTo(2);
@@ -151,7 +151,7 @@ public class SameNameRelationshipSourceScopingTests {
 
         // Round-trips: the printer emits the same-name navs per source entity.
         var printed = new DomainDslPrinter().Print(result.Root);
-        var reparsed = new DomainEvolution(new Domain("_", [], [])).Apply(new PolyDslParser(printed).Parse());
+        var reparsed = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(new PolyDslParser(printed).Parse());
         await Assert.That(reparsed.Succeeded).IsTrue();
         await Assert.That(reparsed.Root.Relationships.Count(r => r.Name == "order")).IsEqualTo(2);
     }
@@ -164,7 +164,7 @@ public class SameNameRelationshipSourceScopingTests {
         var rel = new Relationship("orders",
             new DomainTypeReference("Customer"), new DomainTypeReference("Order"),
             RelationshipCardinality.OneToMany, []);
-        var domain = new Domain("Test", [customer with { Navigations = [rel] }, order]);
+        var domain = DomainTestFactory.Create("Test", [customer with { Navigations = [rel] }, order]);
 
         await Assert.That(domain.Relationships.Count).IsEqualTo(1);
         await Assert.That(ReferenceEquals(domain.Relationships[0], rel)).IsTrue();
@@ -181,13 +181,26 @@ public class SameNameRelationshipSourceScopingTests {
         var rel = new Relationship("orders",
             new DomainTypeReference("Customer"), new DomainTypeReference("Order"),
             RelationshipCardinality.OneToMany, []);
-        var domain = new Domain("Test", [customer, order], [rel]);
+        var domain = DomainTestFactory.Create("Test", [customer, order], [rel]);
 
         await Assert.That(domain.Relationships.Count).IsEqualTo(1);
         await Assert.That(ReferenceEquals(domain.Relationships[0], rel)).IsTrue();
         var customerInDomain = domain.Types.OfType<Entity>().Single(e => e.Name == "Customer");
         await Assert.That(customerInDomain.Navigations.Count).IsEqualTo(1);
         await Assert.That(ReferenceEquals(customerInDomain.Navigations[0], rel)).IsTrue();
+    }
+
+    [Test]
+    public async Task Model_ThreeArgCtor_WithOrphanRelationship_FailsClosed() {
+        // G1: a relationship whose source entity is not in the domain must not be
+        // silently dropped by the redistribution bridge — fail loud.
+        var order = new Entity("Order", [], [], [], []);
+        var ghost = new Relationship("orders",
+            new DomainTypeReference("Ghost"), new DomainTypeReference("Order"),
+            RelationshipCardinality.OneToMany, []);
+
+        await Assert.That(() => DomainTestFactory.Create("Test", [order], [ghost]))
+            .Throws<ArgumentException>();
     }
 
     [Test]

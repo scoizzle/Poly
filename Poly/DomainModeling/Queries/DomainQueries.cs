@@ -142,8 +142,7 @@ public static class DomainQueries {
     /// <summary>
     /// Returns a detailed projection of an entity by name, or null if not found.
     /// When <paramref name="metadata"/> is provided, enriches the result with
-    /// analysis metadata: inheritance-aware members from <see cref="EffectiveMemberMetadata"/>
-    /// and stage capabilities from <see cref="StageCapabilityMetadata"/>.
+    /// stage capabilities from <see cref="StageCapabilityMetadata"/>.
     /// </summary>
     public static EntityDetail? GetEntity(Domain domain, string entityName, INodeMetadataProvider? metadata = null) {
         ArgumentNullException.ThrowIfNull(domain);
@@ -155,14 +154,11 @@ public static class DomainQueries {
         if (entity is null)
             return null;
 
-        // Read inheritance-aware members from analysis metadata when available
-        var effectiveMemberMeta = metadata?.GetMetadata<EffectiveMemberMetadata>(entity);
-
-        var properties = (effectiveMemberMeta?.EffectiveProperties ?? entity.Properties)
+        var properties = entity.Properties
             .Select(p => new PropertyDetail(p.Name, p.Type.TypeName, p.Constraints.Count))
             .ToList();
 
-        var actions = (effectiveMemberMeta?.EffectiveActions ?? entity.Actions)
+        var actions = entity.Actions
             .Select(a => new ActionDetail(
                 a.Name,
                 a.Parameters.Select(p => p.Name).ToList(),
@@ -170,13 +166,13 @@ public static class DomainQueries {
                 a.Effects.Count))
             .ToList();
 
-        var policies = (effectiveMemberMeta?.EffectivePolicies ?? entity.Policies)
+        var policies = entity.Policies
             .Select(p => new PolicyDetail(p.Name))
             .ToList();
 
-        // Stages: use effective stages from metadata; stage-effective policies from
-        // the canonical StageCapability surface when present.
-        var stages = (effectiveMemberMeta?.EffectiveStages ?? entity.Stages)
+        // Stages: stage-effective policies/actions from the canonical capability surface
+        // when present (analysis-bound); otherwise the raw stage lists.
+        var stages = entity.Stages
             .Select(s => {
                 var stageCap = metadata?.GetMetadata<StageCapabilityMetadata>(s);
                 var effectivePolicyNames = stageCap is not null

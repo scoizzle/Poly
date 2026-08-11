@@ -30,7 +30,7 @@ public class SqlitePackTests {
     private static Domain ParseDomain(string poly) {
         var ctx = DomainInputBuilder.CreateWithSqlPack().Build();
         var changes = new PolyDslParser(poly, ctx.Parser).Parse();
-        var result = new DomainEvolution(new Domain("_", [], [])).Apply(changes);
+        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(changes);
         if (!result.Succeeded)
             throw new InvalidOperationException("Domain evolution failed");
         return result.Root!;

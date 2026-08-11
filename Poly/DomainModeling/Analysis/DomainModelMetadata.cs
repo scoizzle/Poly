@@ -11,14 +11,13 @@ internal sealed record DomainTypeLookupMetadata(
 
 public sealed record ResolvedTypeReferenceMetadata(DomainType Type) : IAnalysisMetadata;
 
-public sealed record EffectivePoliciesMetadata(IReadOnlyList<Policy> Policies) : IAnalysisMetadata;
-
-public sealed record EffectiveMemberMetadata(
-    IReadOnlyList<Property> EffectiveProperties,
-    IReadOnlyList<Action> EffectiveActions,
-    IReadOnlyList<Policy> EffectivePolicies,
-    IReadOnlyList<Stage> EffectiveStages
-) : IAnalysisMetadata;
+/// <summary>
+/// Reverse membership index: the entity that owns an <see cref="Action"/> or
+/// <see cref="Stage"/> node. Published once (SemanticDomainAnalyzer) so passes
+/// that need "which entity does this action/stage belong to" don't re-scan
+/// every entity's members.
+/// </summary>
+public sealed record OwnerEntityMetadata(Entity Owner) : IAnalysisMetadata;
 
 public sealed record RelationshipLookupMetadata(
     IReadOnlyDictionary<string, IReadOnlyDictionary<string, Relationship>> BySourceEntity

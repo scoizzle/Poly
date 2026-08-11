@@ -31,7 +31,7 @@ public class PolyDslRoundTripTests {
 
         var parser = new PolyDslParser(poly);
         var changes = parser.Parse();
-        var emptyDomain = new Domain("_", [], []);
+        var emptyDomain = DomainTestFactory.Create("_", [], []);
         var applyResult = new DomainEvolution(emptyDomain).Apply(changes);
         await Assert.That(applyResult.Succeeded).IsTrue();
 
@@ -40,7 +40,7 @@ public class PolyDslRoundTripTests {
 
         var parser2 = new PolyDslParser(printedPoly);
         var changes2 = parser2.Parse();
-        var emptyDomain2 = new Domain("_", [], []);
+        var emptyDomain2 = DomainTestFactory.Create("_", [], []);
         var applyResult2 = new DomainEvolution(emptyDomain2).Apply(changes2);
         await Assert.That(applyResult2.Succeeded).IsTrue();
 
@@ -80,7 +80,7 @@ public class PolyDslRoundTripTests {
 
         var parser = new PolyDslParser(poly);
         var changes = parser.Parse();
-        var emptyDomain = new Domain("_", [], []);
+        var emptyDomain = DomainTestFactory.Create("_", [], []);
         var result = new DomainEvolution(emptyDomain).Apply(changes);
         await Assert.That(result.Succeeded).IsTrue();
 
@@ -95,7 +95,7 @@ public class PolyDslRoundTripTests {
 
         var parser2 = new PolyDslParser(printed);
         var changes2 = parser2.Parse();
-        var emptyDomain2 = new Domain("_", [], []);
+        var emptyDomain2 = DomainTestFactory.Create("_", [], []);
         var result2 = new DomainEvolution(emptyDomain2).Apply(changes2);
         await Assert.That(result2.Succeeded).IsTrue();
 
@@ -130,7 +130,7 @@ public class PolyDslRoundTripTests {
 
         var parser = new PolyDslParser(poly);
         var changes = parser.Parse();
-        var emptyDomain = new Domain("_", [], []);
+        var emptyDomain = DomainTestFactory.Create("_", [], []);
         var result = new DomainEvolution(emptyDomain).Apply(changes);
         await Assert.That(result.Succeeded).IsTrue();
 
@@ -146,7 +146,7 @@ public class PolyDslRoundTripTests {
         var printed = new DomainDslPrinter().Print(result.Root);
         await Assert.That(printed.Contains("as order", StringComparison.Ordinal)).IsTrue();
 
-        var reparsed = new DomainEvolution(new Domain("_", [], [])).Apply(new PolyDslParser(printed).Parse());
+        var reparsed = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(new PolyDslParser(printed).Parse());
         await Assert.That(reparsed.Succeeded).IsTrue();
         var sub2 = reparsed.Root.Types.OfType<Entity>().Single(e => e.Name == "Tracker")
             .Stages.Single(s => s.Name == "Pending").Subscriptions[0];
@@ -179,7 +179,7 @@ public class PolyDslRoundTripTests {
 
         var parser = new PolyDslParser(poly);
         var changes = parser.Parse();
-        var emptyDomain = new Domain("_", [], []);
+        var emptyDomain = DomainTestFactory.Create("_", [], []);
         var result = new DomainEvolution(emptyDomain).Apply(changes);
         await Assert.That(result.Succeeded).IsTrue();
 
@@ -197,7 +197,7 @@ public class PolyDslRoundTripTests {
 
         var parser2 = new PolyDslParser(printed);
         var changes2 = parser2.Parse();
-        var emptyDomain2 = new Domain("_", [], []);
+        var emptyDomain2 = DomainTestFactory.Create("_", [], []);
         var result2 = new DomainEvolution(emptyDomain2).Apply(changes2);
         await Assert.That(result2.Succeeded).IsTrue();
 
@@ -233,7 +233,7 @@ public class PolyDslRoundTripTests {
 
         var parser = new PolyDslParser(poly);
         var changes = parser.Parse();
-        var emptyDomain = new Domain("_", [], []);
+        var emptyDomain = DomainTestFactory.Create("_", [], []);
         var result = new DomainEvolution(emptyDomain).Apply(changes);
         await Assert.That(result.Succeeded).IsTrue();
 
@@ -246,7 +246,7 @@ public class PolyDslRoundTripTests {
         var printed = new DomainDslPrinter().Print(result.Root);
         await Assert.That(printed.Contains("when any Tracks Active as order", StringComparison.Ordinal)).IsTrue();
 
-        var reparsed = new DomainEvolution(new Domain("_", [], [])).Apply(new PolyDslParser(printed).Parse());
+        var reparsed = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(new PolyDslParser(printed).Parse());
         await Assert.That(reparsed.Succeeded).IsTrue();
         var sub2 = reparsed.Root.Types.OfType<Entity>().Single(e => e.Name == "Tracker")
             .Stages.Single(s => s.Name == "Pending").Subscriptions[0];
@@ -280,7 +280,7 @@ public class PolyDslRoundTripTests {
 
         var parser = new PolyDslParser(poly);
         var changes = parser.Parse();
-        var emptyDomain = new Domain("_", [], []);
+        var emptyDomain = DomainTestFactory.Create("_", [], []);
         var result = new DomainEvolution(emptyDomain).Apply(changes);
         await Assert.That(result.Succeeded).IsTrue();
 
@@ -293,7 +293,7 @@ public class PolyDslRoundTripTests {
         var printed = new DomainDslPrinter().Print(result.Root);
         await Assert.That(printed.Contains("when all Tracks Active, Done", StringComparison.Ordinal)).IsTrue();
 
-        var reparsed = new DomainEvolution(new Domain("_", [], [])).Apply(new PolyDslParser(printed).Parse());
+        var reparsed = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(new PolyDslParser(printed).Parse());
         await Assert.That(reparsed.Succeeded).IsTrue();
         var sub2 = reparsed.Root.Types.OfType<Entity>().Single(e => e.Name == "Tracker")
             .Stages.Single(s => s.Name == "Pending").Subscriptions[0];
@@ -326,7 +326,7 @@ public class PolyDslRoundTripTests {
 
         var parser = new PolyDslParser(poly);
         var changes = parser.Parse();
-        var emptyDomain = new Domain("_", [], []);
+        var emptyDomain = DomainTestFactory.Create("_", [], []);
         var result = new DomainEvolution(emptyDomain).Apply(changes);
         await Assert.That(result.Succeeded).IsTrue();
 
@@ -339,7 +339,7 @@ public class PolyDslRoundTripTests {
         await Assert.That(printed.Contains("when any ", StringComparison.Ordinal)).IsFalse();
         await Assert.That(printed.Contains("when all ", StringComparison.Ordinal)).IsFalse();
 
-        var reparsed = new DomainEvolution(new Domain("_", [], [])).Apply(new PolyDslParser(printed).Parse());
+        var reparsed = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(new PolyDslParser(printed).Parse());
         await Assert.That(reparsed.Succeeded).IsTrue();
         var sub2 = reparsed.Root.Types.OfType<Entity>().Single(e => e.Name == "Tracker")
             .Stages.Single(s => s.Name == "Pending").Subscriptions[0];
@@ -369,7 +369,7 @@ public class PolyDslRoundTripTests {
 
         var parser = new PolyDslParser(poly);
         var changes = parser.Parse();
-        var emptyDomain = new Domain("_", [], []);
+        var emptyDomain = DomainTestFactory.Create("_", [], []);
         var result = new DomainEvolution(emptyDomain).Apply(changes);
         await Assert.That(result.Succeeded).IsTrue();
 
@@ -380,7 +380,7 @@ public class PolyDslRoundTripTests {
         var printed = new DomainDslPrinter().Print(result.Root);
         await Assert.That(printed.Contains("when any loans Overdue", StringComparison.Ordinal)).IsTrue();
 
-        var reparsed = new DomainEvolution(new Domain("_", [], [])).Apply(new PolyDslParser(printed).Parse());
+        var reparsed = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(new PolyDslParser(printed).Parse());
         await Assert.That(reparsed.Succeeded).IsTrue();
         var sub2 = reparsed.Root.Types.OfType<Entity>().Single(e => e.Name == "Patron").Subscriptions[0];
         await Assert.That(sub2.Quantifier).IsEqualTo(StageSubscriptionQuantifier.Any);
@@ -417,7 +417,7 @@ public class PolyDslRoundTripTests {
 
         var parser = new PolyDslParser(poly);
         var changes = parser.Parse();
-        var emptyDomain = new Domain("_", [], []);
+        var emptyDomain = DomainTestFactory.Create("_", [], []);
         var result = new DomainEvolution(emptyDomain).Apply(changes);
         await Assert.That(result.Succeeded).IsTrue();
 
@@ -437,7 +437,7 @@ public class PolyDslRoundTripTests {
 
         var parser = new PolyDslParser(poly);
         var changes = parser.Parse();
-        var emptyDomain = new Domain("_", [], []);
+        var emptyDomain = DomainTestFactory.Create("_", [], []);
         var result = new DomainEvolution(emptyDomain).Apply(changes);
         await Assert.That(result.Succeeded).IsTrue();
 
@@ -446,7 +446,7 @@ public class PolyDslRoundTripTests {
 
         var parser2 = new PolyDslParser(printed);
         var changes2 = parser2.Parse();
-        var emptyDomain2 = new Domain("_", [], []);
+        var emptyDomain2 = DomainTestFactory.Create("_", [], []);
         var result2 = new DomainEvolution(emptyDomain2).Apply(changes2);
         await Assert.That(result2.Succeeded).IsTrue();
     }
@@ -484,7 +484,7 @@ public class PolyDslRoundTripTests {
 
         var parser = new PolyDslParser(poly);
         var changes = parser.Parse();
-        var emptyDomain = new Domain("_", [], []);
+        var emptyDomain = DomainTestFactory.Create("_", [], []);
         var result = new DomainEvolution(emptyDomain).Apply(changes);
         await Assert.That(result.Succeeded).IsTrue();
 
@@ -509,7 +509,7 @@ public class PolyDslRoundTripTests {
         var parser = new PolyDslParser(poly);
         var changes = parser.Parse();
 
-        var emptyDomain = new Domain("_", [], []);
+        var emptyDomain = DomainTestFactory.Create("_", [], []);
         var result = new DomainEvolution(emptyDomain).Apply(changes);
         await Assert.That(result.Succeeded).IsTrue();
 
@@ -547,7 +547,7 @@ public class PolyDslRoundTripTests {
 
         var parser = new PolyDslParser(poly);
         var changes = parser.Parse();
-        var emptyDomain = new Domain("_", [], []);
+        var emptyDomain = DomainTestFactory.Create("_", [], []);
         var result = new DomainEvolution(emptyDomain).Apply(changes);
         await Assert.That(result.Succeeded).IsTrue();
 
@@ -566,7 +566,7 @@ public class PolyDslRoundTripTests {
         var printed = printer.Print(result.Root);
         var parser2 = new PolyDslParser(printed);
         var changes2 = parser2.Parse();
-        var emptyDomain2 = new Domain("_", [], []);
+        var emptyDomain2 = DomainTestFactory.Create("_", [], []);
         var result2 = new DomainEvolution(emptyDomain2).Apply(changes2);
         await Assert.That(result2.Succeeded).IsTrue();
         await Assert.That(result2.Root!.Relationships.Count).IsEqualTo(1);
@@ -588,7 +588,7 @@ public class PolyDslRoundTripTests {
 
         var parser = new PolyDslParser(poly);
         var changes = parser.Parse();
-        var emptyDomain = new Domain("_", [], []);
+        var emptyDomain = DomainTestFactory.Create("_", [], []);
         var result = new DomainEvolution(emptyDomain).Apply(changes);
         await Assert.That(result.Succeeded).IsTrue();
 
@@ -601,7 +601,7 @@ public class PolyDslRoundTripTests {
         var printed = printer.Print(result.Root);
         var parser2 = new PolyDslParser(printed);
         var changes2 = parser2.Parse();
-        var emptyDomain2 = new Domain("_", [], []);
+        var emptyDomain2 = DomainTestFactory.Create("_", [], []);
         var result2 = new DomainEvolution(emptyDomain2).Apply(changes2);
         await Assert.That(result2.Succeeded).IsTrue();
     }
@@ -628,7 +628,7 @@ public class PolyDslRoundTripTests {
 
         var parser = new PolyDslParser(poly);
         var changes = parser.Parse();
-        var emptyDomain = new Domain("_", [], []);
+        var emptyDomain = DomainTestFactory.Create("_", [], []);
         var result = new DomainEvolution(emptyDomain).Apply(changes);
         await Assert.That(result.Succeeded).IsTrue();
 
@@ -693,7 +693,7 @@ public class PolyDslRoundTripTests {
 
         var parser = new PolyDslParser(poly);
         var changes = parser.Parse();
-        var emptyDomain = new Domain("_", [], []);
+        var emptyDomain = DomainTestFactory.Create("_", [], []);
         var result = new DomainEvolution(emptyDomain).Apply(changes);
         await Assert.That(result.Succeeded).IsTrue();
 
@@ -726,7 +726,7 @@ public class PolyDslRoundTripTests {
 
         var parser = new PolyDslParser(poly);
         var changes = parser.Parse();
-        var emptyDomain = new Domain("_", [], []);
+        var emptyDomain = DomainTestFactory.Create("_", [], []);
         var result = new DomainEvolution(emptyDomain).Apply(changes);
         await Assert.That(result.Succeeded).IsTrue();
 
@@ -794,7 +794,7 @@ public class PolyDslRoundTripTests {
 
         var parser = new PolyDslParser(poly);
         var changes = parser.Parse();
-        var emptyDomain = new Domain("_", [], []);
+        var emptyDomain = DomainTestFactory.Create("_", [], []);
         var result = new DomainEvolution(emptyDomain).Apply(changes);
         await Assert.That(result.Succeeded).IsTrue();
 
@@ -804,7 +804,7 @@ public class PolyDslRoundTripTests {
         // Re-parse and verify structural identity
         var parser2 = new PolyDslParser(printed);
         var changes2 = parser2.Parse();
-        var emptyDomain2 = new Domain("_", [], []);
+        var emptyDomain2 = DomainTestFactory.Create("_", [], []);
         var result2 = new DomainEvolution(emptyDomain2).Apply(changes2);
         await Assert.That(result2.Succeeded).IsTrue();
 
@@ -836,7 +836,7 @@ public class PolyDslRoundTripTests {
 
         var parser = new PolyDslParser(poly);
         var changes = parser.Parse();
-        var emptyDomain = new Domain("_", [], []);
+        var emptyDomain = DomainTestFactory.Create("_", [], []);
         var result = new DomainEvolution(emptyDomain).Apply(changes);
         await Assert.That(result.Succeeded).IsTrue();
 
@@ -855,7 +855,7 @@ public class PolyDslRoundTripTests {
         // Re-parse and verify structural identity
         var parser2 = new PolyDslParser(printed);
         var changes2 = parser2.Parse();
-        var emptyDomain2 = new Domain("_", [], []);
+        var emptyDomain2 = DomainTestFactory.Create("_", [], []);
         var result2 = new DomainEvolution(emptyDomain2).Apply(changes2);
         await Assert.That(result2.Succeeded).IsTrue();
 
@@ -903,7 +903,7 @@ public class PolyDslRoundTripTests {
 
         var parser = new PolyDslParser(poly);
         var changes = parser.Parse();
-        var emptyDomain = new Domain("_", [], []);
+        var emptyDomain = DomainTestFactory.Create("_", [], []);
         var result = new DomainEvolution(emptyDomain).Apply(changes);
         await Assert.That(result.Succeeded).IsTrue();
 
@@ -926,7 +926,7 @@ public class PolyDslRoundTripTests {
             """;
         var parser = new PolyDslParser(poly);
         var changes = parser.Parse();
-        var emptyDomain = new Domain("_", [], []);
+        var emptyDomain = DomainTestFactory.Create("_", [], []);
         var result = new DomainEvolution(emptyDomain).Apply(changes);
         await Assert.That(result.Succeeded).IsTrue();
         var item = result.Root!.Types.OfType<Entity>().Single();
@@ -951,7 +951,7 @@ public class PolyDslRoundTripTests {
             """;
         var parser = new PolyDslParser(poly);
         var changes = parser.Parse();
-        var emptyDomain = new Domain("_", [], []);
+        var emptyDomain = DomainTestFactory.Create("_", [], []);
         var result = new DomainEvolution(emptyDomain).Apply(changes);
         await Assert.That(result.Succeeded).IsTrue();
         var enumType = result.Root!.Types.OfType<EnumType>().Single();
@@ -977,7 +977,7 @@ public class PolyDslRoundTripTests {
             """;
         var parser = new PolyDslParser(poly);
         var changes = parser.Parse();
-        var emptyDomain = new Domain("_", [], []);
+        var emptyDomain = DomainTestFactory.Create("_", [], []);
         var result = new DomainEvolution(emptyDomain).Apply(changes);
         await Assert.That(result.Succeeded).IsTrue();
         // Verify printer includes arithmetic
@@ -1005,7 +1005,7 @@ public class PolyDslRoundTripTests {
             """;
         var parser = new PolyDslParser(poly);
         var changes = parser.Parse();
-        var emptyDomain = new Domain("_", [], []);
+        var emptyDomain = DomainTestFactory.Create("_", [], []);
         var result = new DomainEvolution(emptyDomain).Apply(changes);
         await Assert.That(result.Succeeded).IsTrue();
         var printer = new DomainDslPrinter();
@@ -1036,7 +1036,7 @@ public class PolyDslRoundTripTests {
             """;
         var parser = new PolyDslParser(poly);
         var changes = parser.Parse();
-        var emptyDomain = new Domain("_", [], []);
+        var emptyDomain = DomainTestFactory.Create("_", [], []);
         var result = new DomainEvolution(emptyDomain).Apply(changes);
         await Assert.That(result.Succeeded).IsTrue();
         var printer = new DomainDslPrinter();
@@ -1077,7 +1077,7 @@ public class PolyDslRoundTripTests {
             """;
         var parser = new PolyDslParser(poly);
         var changes = parser.Parse();
-        var emptyDomain = new Domain("_", [], []);
+        var emptyDomain = DomainTestFactory.Create("_", [], []);
         var result = new DomainEvolution(emptyDomain).Apply(changes);
         await Assert.That(result.Succeeded).IsTrue();
         // Verify the relationship exists and has SourceOwnsTarget=true
@@ -1123,7 +1123,7 @@ public class PolyDslRoundTripTests {
 
         var parser = new PolyDslParser(poly);
         var changes = parser.Parse();
-        var emptyDomain = new Domain("_", [], []);
+        var emptyDomain = DomainTestFactory.Create("_", [], []);
         var result = new DomainEvolution(emptyDomain).Apply(changes);
         await Assert.That(result.Succeeded).IsTrue();
 
@@ -1151,7 +1151,7 @@ public class PolyDslRoundTripTests {
 
         var parser2 = new PolyDslParser(printed);
         var changes2 = parser2.Parse();
-        var empty2 = new Domain("_", [], []);
+        var empty2 = DomainTestFactory.Create("_", [], []);
         var result2 = new DomainEvolution(empty2).Apply(changes2);
         await Assert.That(result2.Succeeded).IsTrue();
 
@@ -1187,7 +1187,7 @@ public class PolyDslRoundTripTests {
             """;
         var parser = new PolyDslParser(poly);
         var changes = parser.Parse();
-        var emptyDomain = new Domain("_", [], []);
+        var emptyDomain = DomainTestFactory.Create("_", [], []);
         var result = new DomainEvolution(emptyDomain).Apply(changes);
         await Assert.That(result.Succeeded).IsTrue();
 
@@ -1200,7 +1200,7 @@ public class PolyDslRoundTripTests {
         var printed = new DomainDslPrinter().Print(result.Root);
         await Assert.That(printed.Contains("else if")).IsTrue();
 
-        var result2 = new DomainEvolution(new Domain("_", [], []))
+        var result2 = new DomainEvolution(DomainTestFactory.Create("_", [], []))
             .Apply(new PolyDslParser(printed).Parse());
         await Assert.That(result2.Succeeded).IsTrue();
         var printed2 = new DomainDslPrinter().Print(result2.Root!);
@@ -1218,7 +1218,7 @@ public class PolyDslRoundTripTests {
             """;
         var parser = new PolyDslParser(poly);
         var changes = parser.Parse();
-        var emptyDomain = new Domain("_", [], []);
+        var emptyDomain = DomainTestFactory.Create("_", [], []);
         var result = new DomainEvolution(emptyDomain).Apply(changes);
         await Assert.That(result.Succeeded).IsTrue();
 
@@ -1230,7 +1230,7 @@ public class PolyDslRoundTripTests {
         var printed = new DomainDslPrinter().Print(result.Root);
         await Assert.That(printed.Contains("\\\"")).IsTrue();
 
-        var result2 = new DomainEvolution(new Domain("_", [], []))
+        var result2 = new DomainEvolution(DomainTestFactory.Create("_", [], []))
             .Apply(new PolyDslParser(printed).Parse());
         await Assert.That(result2.Succeeded).IsTrue();
         var dv2 = result2.Root!.Types.OfType<Entity>().Single().Properties.Single()

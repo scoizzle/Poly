@@ -36,7 +36,7 @@ public class AssignConstraintAnalysisTests {
                 [])],
             [],
             []);
-        var domain = new Domain("Test", [Text, Number, entity], []);
+        var domain = DomainTestFactory.Create("Test", [Text, Number, entity], []);
 
         var analysis = DomainModelAnalyzer.Analyze(domain);
 
@@ -55,7 +55,7 @@ public class AssignConstraintAnalysisTests {
                 [])],
             [],
             []);
-        var domain = new Domain("Test", [Text, Number, entity], []);
+        var domain = DomainTestFactory.Create("Test", [Text, Number, entity], []);
 
         var analysis = DomainModelAnalyzer.Analyze(domain);
 
@@ -73,7 +73,7 @@ public class AssignConstraintAnalysisTests {
                 [])],
             [],
             []);
-        var domain = new Domain("Test", [Text, Number, entity], []);
+        var domain = DomainTestFactory.Create("Test", [Text, Number, entity], []);
 
         var analysis = DomainModelAnalyzer.Analyze(domain);
 
@@ -92,7 +92,7 @@ public class AssignConstraintAnalysisTests {
                 [])],
             [],
             []);
-        var domain = new Domain("Test", [Text, Number, entity], []);
+        var domain = DomainTestFactory.Create("Test", [Text, Number, entity], []);
 
         var analysis = DomainModelAnalyzer.Analyze(domain);
 
@@ -111,7 +111,7 @@ public class AssignConstraintAnalysisTests {
                 [])],
             [],
             []);
-        var domain = new Domain("Test", [Text, Number, entity], []);
+        var domain = DomainTestFactory.Create("Test", [Text, Number, entity], []);
 
         var analysis = DomainModelAnalyzer.Analyze(domain);
 
@@ -130,7 +130,7 @@ public class AssignConstraintAnalysisTests {
                 [])],
             [],
             []);
-        var domain = new Domain("Test", [Text, Number, entity], []);
+        var domain = DomainTestFactory.Create("Test", [Text, Number, entity], []);
 
         var analysis = DomainModelAnalyzer.Analyze(domain);
 
@@ -149,7 +149,7 @@ public class AssignConstraintAnalysisTests {
                 [])],
             [],
             []);
-        var domain = new Domain("Test", [Text, Number, entity], []);
+        var domain = DomainTestFactory.Create("Test", [Text, Number, entity], []);
 
         var analysis = DomainModelAnalyzer.Analyze(domain);
 
@@ -170,7 +170,7 @@ public class AssignConstraintAnalysisTests {
                 [])],
             [],
             []);
-        var domain = new Domain("Test", [Text, Number, entity], []);
+        var domain = DomainTestFactory.Create("Test", [Text, Number, entity], []);
 
         var analysis = DomainModelAnalyzer.Analyze(domain);
 
@@ -191,7 +191,7 @@ public class AssignConstraintAnalysisTests {
                 [])],
             [],
             []);
-        var domain = new Domain("Test", [Text, Number, entity], []);
+        var domain = DomainTestFactory.Create("Test", [Text, Number, entity], []);
 
         var analysis = DomainModelAnalyzer.Analyze(domain);
 
@@ -209,7 +209,7 @@ public class AssignConstraintAnalysisTests {
                 [])],
             [],
             []);
-        var domain = new Domain("Test", [Text, Number, entity], []);
+        var domain = DomainTestFactory.Create("Test", [Text, Number, entity], []);
 
         var analysis = DomainModelAnalyzer.Analyze(domain);
 
@@ -228,7 +228,7 @@ public class AssignConstraintAnalysisTests {
                 [])],
             [],
             []);
-        var domain = new Domain("Test", [Text, Number, entity], []);
+        var domain = DomainTestFactory.Create("Test", [Text, Number, entity], []);
 
         var analysis = DomainModelAnalyzer.Analyze(domain);
 
@@ -246,7 +246,7 @@ public class AssignConstraintAnalysisTests {
                 [])],
             [],
             []);
-        var domain = new Domain("Test", [Text, Number, entity], []);
+        var domain = DomainTestFactory.Create("Test", [Text, Number, entity], []);
 
         var analysis = DomainModelAnalyzer.Analyze(domain);
 
@@ -272,7 +272,7 @@ public class AssignConstraintAnalysisTests {
                 [])],
             [],
             []);
-        var domain = new Domain("Test", [Text, Number, source, target], []);
+        var domain = DomainTestFactory.Create("Test", [Text, Number, source, target], []);
 
         var analysis = DomainModelAnalyzer.Analyze(domain);
 
@@ -294,7 +294,7 @@ public class AssignConstraintAnalysisTests {
                 [])],
             [],
             []);
-        var domain = new Domain("Test", [Text, Number, source, target], []);
+        var domain = DomainTestFactory.Create("Test", [Text, Number, source, target], []);
 
         var analysis = DomainModelAnalyzer.Analyze(domain);
 
@@ -317,7 +317,7 @@ public class AssignConstraintAnalysisTests {
                 [])],
             [],
             []);
-        var domain = new Domain("Test", [Text, Number, entity], []);
+        var domain = DomainTestFactory.Create("Test", [Text, Number, entity], []);
 
         var analysis = DomainModelAnalyzer.Analyze(domain);
 
@@ -336,7 +336,7 @@ public class AssignConstraintAnalysisTests {
                 [])],
             [],
             []);
-        var domain = new Domain("Test", [Text, Number, entity], []);
+        var domain = DomainTestFactory.Create("Test", [Text, Number, entity], []);
 
         var analysis = DomainModelAnalyzer.Analyze(domain);
 
@@ -355,7 +355,7 @@ public class AssignConstraintAnalysisTests {
                 [])],
             [],
             []);
-        var domain = new Domain("Test", [Text, Number, entity], []);
+        var domain = DomainTestFactory.Create("Test", [Text, Number, entity], []);
 
         var analysis = DomainModelAnalyzer.Analyze(domain);
 
@@ -382,7 +382,7 @@ public class AssignConstraintAnalysisTests {
                 [])],
             [],
             []);
-        var domain = new Domain("Test", [Text, Number, entity], []);
+        var domain = DomainTestFactory.Create("Test", [Text, Number, entity], []);
 
         var analysis = DomainModelAnalyzer.Analyze(domain);
 
@@ -404,7 +404,7 @@ public class AssignConstraintAnalysisTests {
                 [])],
             [],
             []);
-        var domain = new Domain("Test", [Text, Number, entity], []);
+        var domain = DomainTestFactory.Create("Test", [Text, Number, entity], []);
 
         var analysis = DomainModelAnalyzer.Analyze(domain);
 
@@ -425,7 +425,7 @@ public class AssignConstraintAnalysisTests {
                 [])],
             [],
             []);
-        var domain = new Domain("Test", [Text, Number, entity], []);
+        var domain = DomainTestFactory.Create("Test", [Text, Number, entity], []);
 
         var analysis = DomainModelAnalyzer.Analyze(domain);
 
@@ -451,7 +451,7 @@ public class AssignConstraintAnalysisTests {
                 [])],
             [],
             []);
-        var domain = new Domain("Test", [Text, Number, entity], []);
+        var domain = DomainTestFactory.Create("Test", [Text, Number, entity], []);
 
         var analysis = DomainModelAnalyzer.Analyze(domain);
 
@@ -477,7 +477,7 @@ public class AssignConstraintAnalysisTests {
                 [])],
             [],
             []);
-        var domain = new Domain("Test", [Text, Number, entity], []);
+        var domain = DomainTestFactory.Create("Test", [Text, Number, entity], []);
 
         var analysis = DomainModelAnalyzer.Analyze(domain);
 

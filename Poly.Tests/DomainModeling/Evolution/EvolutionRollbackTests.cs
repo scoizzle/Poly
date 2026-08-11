@@ -231,7 +231,7 @@ public class EvolutionRollbackTests {
 
     [Test]
     public async Task Apply_AddPropertyToMissingEntity_FailsLoudAndRollsBack() {
-        var domain = new Domain("Test", [], []);
+        var domain = DomainTestFactory.Create("Test", [], []);
         var result = new DomainEvolution(domain).Evolve()
             .AddPropertyToEntity("NonExistent",
                 new Property("X", new DomainTypeReference("Text"), []))

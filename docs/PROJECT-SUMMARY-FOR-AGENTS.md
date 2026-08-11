@@ -50,7 +50,7 @@ From [`AGENTS.md`](../AGENTS.md) — always read before non-trivial changes:
 ```
 .poly DSL → PolyDslParser → DomainEvolution (apply changes, gate by analysis)
   → DomainModelAnalyzer.Analyze (18-pass analysis pipeline)
-    → metadata: topology, aggregate, behavior, storage, transport, ...
+    → metadata: topology, aggregate, behavior, storage, ...
   → DslCompiler.Compile (emits _all.cs, DbContext.cs, Program.cs, demo.http)
 ```
 
@@ -64,7 +64,7 @@ apply_dsl → create_instance → link_instances → invoke_action → evaluate_
 ### Domain Modeling
 - DSL parsing (entities, enums, properties with constraints, navigation properties, stages, actions, policies, effects, `create in`, subscriptions)
 - Evolution with analysis rollback gating
-- 18-pass domain analysis pipeline (structural, semantic, effect, capability, ownership, storage, transport, etc.)
+- 18-pass domain analysis pipeline (structural, semantic, effect, capability, ownership, storage, etc.)
 - `export_dsl` round-trip fidelity
 
 ### Runtime
@@ -85,7 +85,7 @@ apply_dsl → create_instance → link_instances → invoke_action → evaluate_
 - Session management, DSL apply/export, evolve micro-tools
 - Oracle tools: `simulate_policy`, `describe_expression`, `lower_expression`
 - Runtime tools: `create_instance`, `link_instances`, `unlink_instances`, `invoke_action`, `get_instance`, `list_instances`, `evaluate_policy`
-- `get_domain_analysis` with structured facts (root entities, action summary, storage/transport booleans)
+- `get_domain_analysis` with structured facts (root entities, action summary, storage boolean, aggregates, subscription plans)
 
 ## Current State (end of dogfood Wave 1)
 

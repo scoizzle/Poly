@@ -1,7 +1,7 @@
 # C# export bugs in `create in Rel` lowering
 
 **Date:** 2026-08-10  
-**Status:** Findings + fixes. **Finding 1 (CS1501 arity) FIXED 2026-08-10** — call site now skips collection navs to match the CreateNav signature (guard test `Export_CreateInTargetWithCollectionNavs_SignatureMatchesCallArity`; verified by compiling the exact repro). **Finding 2 (auto-wire) remains open** — DSL guide §0.3 corrected to stop overclaiming; derived back-ref materialization is planned (ADR 2026-08-10). Finding 3 (CS8618) hygiene debt.  
+**Status:** Findings + fixes. **Finding 1 (CS1501 arity) FIXED 2026-08-10** — call site now skips collection navs to match the CreateNav signature (guard test `Export_CreateInTargetWithCollectionNavs_SignatureMatchesCallArity`; verified by compiling the exact repro). **Finding 2 (auto-wire) FIXED 2026-08-10** — derived back-ref + `create in Rel` auto-wire implemented (shared `FindAutoWireBackReference`; unambiguous singular back-refs wired with `this`; verified compiling the repro; DSL guide §0.3 updated). **Finding 3 (CS8618) hygiene debt.** **R6 compile oracle ADDED 2026-08-10** — in-suite Roslyn compile smoke (`Export_Compiles_*`).  
 **Origin:** Dogfood pass — modeled a realistic domain (`domain Orders`) via `apply_dsl`, exported via `export_domain_to_csharp`, and compiled the export. The export does **not** compile.
 
 ---

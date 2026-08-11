@@ -27,12 +27,17 @@ public sealed record EffectTopology(
     IReadOnlyList<SubscriptionRelation> Subscriptions
 );
 
-/// <summary>A <c>create in RelName { ... }</c> effect within an action body.</summary>
+/// <summary>
+/// A <c>create in RelName { ... }</c> effect within an action body.
+/// <paramref name="StageName"/> is the owning stage when the action is
+/// stage-scoped, otherwise <c>null</c> (entity-level action).
+/// </summary>
 public sealed record CreateInRelation(
     string CreatorEntity,
     string ActionName,
     string RelationshipName,
-    string CreatedEntity
+    string CreatedEntity,
+    string? StageName = null
 );
 
 /// <summary>An <c>invoke Rel.Action</c> effect from one entity to another.</summary>

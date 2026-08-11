@@ -86,7 +86,6 @@ public static class DomainModelAnalysisBuilderExtensions {
             builder.AddAnalyzer(new BehaviorPass());
             builder.AddAnalyzer(new CrossReferencePass());
             builder.AddAnalyzer(new StoragePass());
-            builder.AddAnalyzer(new TransportPass());
             builder.AddAnalyzer(new AuthoringSuggestionAnalyzer());
             // Entity Syntax projection is export-time only — not an analysis fact.
             return builder;

@@ -38,13 +38,11 @@ public sealed class DomainToCSharpExporter {
 
     /// <summary>
     /// Builds Syntax AST type definitions for all entities and their stage enums
-    /// in the given domain. The exporter uses <see cref="EffectiveMemberMetadata"/>
-    /// from the pre-computed analysis for inheritance-aware member resolution.
+    /// in the given domain. Reads entity members directly from the domain model.
     /// </summary>
     /// <param name="domain">The domain model to export.</param>
     /// <param name="analysis">
-    /// The analysis result (required). Must include <see cref="EffectiveMemberMetadata"/>
-    /// for each entity (produced by <see cref="SemanticDomainAnalyzer"/>).
+    /// The analysis result (required).
     /// </param>
     public IReadOnlyList<TypeDefinitionNode> Export(Domain domain,
         AnalysisResult analysis) {
@@ -707,8 +705,19 @@ public sealed class DomainToCSharpExporter {
         var createArgs = new List<Node>();
         var parameterMetadata = GetConstructorParameters(targetEntity, metadata);
 
+        // Cross-entity auto-wire back-ref: exactly one singular nav on the target
+        // pointing back to the source → wired with `this`, excluded from the factory
+        // signature. (Self-relationship back-refs are already excluded via IsBackReference.)
+        var autoWireBackRef = FindAutoWireBackReference(targetEntity, entity.Name);
+
         foreach (var parameter in parameterMetadata) {
             if (parameter.IsNavigation && parameter.IsBackReference) {
+                createArgs.Add(new ThisReference());
+                continue;
+            }
+
+            if (autoWireBackRef is not null
+                && string.Equals(parameter.Name, autoWireBackRef.Name, StringComparison.Ordinal)) {
                 createArgs.Add(new ThisReference());
                 continue;
             }
@@ -1553,4 +1562,31 @@ public sealed class DomainToCSharpExporter {
     internal static string ToCamelCase(string name) => DomainTypeMapping.ToCamelCase(name);
 
     internal static string ToPascalCase(string name) => DomainTypeMapping.ToPascalCase(name);
+
+    /// <summary>
+    /// The auto-wire back-reference for a <c>create in Rel</c> export: the single
+    /// singular navigation on <paramref name="targetEntity"/> whose target is
+    /// <paramref name="sourceEntityName"/>. Returns null when ambiguous (multiple
+    /// singular back-refs), when the back-ref is a collection, or for
+    /// self-relationships (which use the existing <c>IsBackReference</c> path).
+    /// Single source of truth for both <see cref="AddCreateNavMethod"/> (factory
+    /// signature + <c>this</c> wiring) and the call-site arg list
+    /// (<c>EffectLoweringPass.CreateEntityInRelationship</c>).
+    /// </summary>
+    internal static Relationship? FindAutoWireBackReference(Entity targetEntity, string sourceEntityName) {
+        if (string.Equals(sourceEntityName, targetEntity.Name, StringComparison.Ordinal))
+            return null; // self-relationships use the existing IsBackReference path
+
+        Relationship? found = null;
+        var count = 0;
+        foreach (var nav in targetEntity.Navigations) {
+            if (nav.Cardinality is RelationshipCardinality.OneToMany or RelationshipCardinality.ManyToMany)
+                continue;
+            if (string.Equals(nav.Target.TypeName, sourceEntityName, StringComparison.Ordinal)) {
+                found = nav;
+                count++;
+            }
+        }
+        return count == 1 ? found : null;
+    }
 }

@@ -18,7 +18,7 @@ public class PipelineMergeMetadataTests {
         var ctx = DomainInputBuilder.CreateWithSqlPack().Build();
         var parser = new PolyDslParser(poly, ctx.Parser);
         var changes = parser.Parse();
-        var emptyDomain = new Domain("_", [], []);
+        var emptyDomain = DomainTestFactory.Create("_", [], []);
         var result = new DomainEvolution(emptyDomain).Apply(changes);
         if (!result.Succeeded)
             throw new InvalidOperationException("Domain evolution failed: " +
@@ -281,7 +281,7 @@ public class PipelineMergeMetadataTests {
         // G3: When a structural failure exists (e.g. duplicate entity name),
         // StoragePass must NOT emit its "requires EffectTopology and OwnershipAggregate"
         // error — it should short-circuit via HasStructuralFailure guard.
-        var analysis = DomainModelAnalyzer.Analyze(new Domain("Test", [
+        var analysis = DomainModelAnalyzer.Analyze(DomainTestFactory.Create("Test", [
             new Entity("Item", [], [], [], []),
             new Entity("Item", [], [], [], []),
         ], []));
@@ -386,9 +386,6 @@ public class PipelineMergeMetadataTests {
 
         // StoragePass — StorageMappingMetadata
         await Assert.That(analysis.GetMetadata<StorageMappingMetadata>(domain)).IsNotNull();
-
-        // TransportPass — TransportMetadata
-        await Assert.That(analysis.GetMetadata<TransportMetadata>(domain)).IsNotNull();
 
         // AuthoringSuggestionAnalyzer — diagnostics only (DMAS001 hints)
 

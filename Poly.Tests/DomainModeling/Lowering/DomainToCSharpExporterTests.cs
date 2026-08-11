@@ -1,3 +1,6 @@
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
+
 using Poly.Analysis;
 using Poly.Ast.Nodes;
 using Poly.DomainModeling;
@@ -153,10 +156,10 @@ public class DomainToCSharpExporterTests {
     private static (Domain Domain, AnalysisResult Analysis) ParseAndAnalyze(string poly) {
         var parser = new PolyDslParser(poly);
         var changes = parser.Parse();
-        var result = new DomainEvolution(new Domain("_", [], [])).Apply(changes);
+        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(changes);
         if (!result.Succeeded) {
             var errors = string.Join("; ", result.Analysis.Diagnostics
-                .Where(d => d.Severity == DiagnosticSeverity.Error)
+                .Where(d => d.Severity == Poly.Analysis.DiagnosticSeverity.Error)
                 .Select(d => d.Message));
             throw new InvalidOperationException($"Evolution failed: {errors}");
         }
@@ -421,8 +424,11 @@ public class DomainToCSharpExporterTests {
         await Assert.That(createLoans).IsNotNull();
 
         var createParams = createLoans!.Parameters?.Select(p => p.Name).ToArray() ?? [];
+        var autoWireBackRef = DomainToCSharpExporter.FindAutoWireBackReference(loan, "Patron");
         var expected = esm.ConstructorParameters
             .Where(p => !p.IsBackReference)
+            .Where(p => autoWireBackRef is null
+                || !string.Equals(p.Name, autoWireBackRef.Name, StringComparison.Ordinal))
             .Select(p => DomainToCSharpExporter.ToCamelCase(p.Name))
             .ToArray();
         await Assert.That(createParams).IsEquivalentTo(expected);
@@ -471,14 +477,80 @@ public class DomainToCSharpExporterTests {
         var paramCount = createOrders!.Parameters?.Count ?? 0;
 
         // Collection navs (lines, notes) are not CreateNav params; the back-ref
-        // (customer) is a param. Repro shape: title, total, customer → 3.
-        await Assert.That(paramCount).IsEqualTo(3);
+        // (customer) is auto-wired with `this`. Repro shape: title, total → 2.
+        await Assert.That(paramCount).IsEqualTo(2);
 
         var checkOut = customer.Methods?.FirstOrDefault(m => m.Name == "CheckOut");
         await Assert.That(checkOut).IsNotNull();
         var call = FindFirstInvoke(checkOut!.Body);
         await Assert.That(call).IsNotNull();
         await Assert.That(call!.Arguments.Length).IsEqualTo(paramCount);
+    }
+
+    [Test]
+    public async Task Export_CreateIn_AutoWiresUnambiguousSingularBackRef() {
+        // D1/R2: `create in Rel` with exactly one singular back-ref nav on the target
+        // pointing to the source must wire it with `this` (not a null ctor param).
+        const string dsl = """
+            domain Test
+
+            Customer: entity {
+              orders: many Order
+              CheckOut: action {
+                create in orders { Title: "t" }
+              }
+            }
+
+            Order: entity {
+              Title: Text required
+              customer: Customer
+            }
+            """;
+
+        var (domain, analysis) = ParseAndAnalyze(dsl);
+        await Assert.That(analysis.HasErrors).IsFalse();
+
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var customer = types.First(t => t.Name == "Customer");
+        var createOrders = customer.Methods?.FirstOrDefault(m => m.Name == "CreateOrders");
+        await Assert.That(createOrders).IsNotNull();
+        await Assert.That(createOrders!.Parameters?.Select(p => p.Name)).IsEquivalentTo(["title"]);
+
+        // The factory body wires `Order.Create(..., this, ...)` for the back-ref.
+        var factoryCall = FindFirstInvoke(createOrders.Body);
+        await Assert.That(factoryCall).IsNotNull();
+        await Assert.That(factoryCall!.Arguments.Any(a => a is ThisReference)).IsTrue();
+    }
+
+    [Test]
+    public async Task Export_CreateIn_AmbiguousBackRefs_NotAutoWired() {
+        // Two singular back-refs to the source → ambiguous → keep as ctor params (null).
+        const string dsl = """
+            domain Test
+
+            Customer: entity {
+              orders: many Order
+              CheckOut: action {
+                create in orders { Title: "t" }
+              }
+            }
+
+            Order: entity {
+              Title: Text required
+              customer: Customer
+              primaryContact: Customer
+            }
+            """;
+
+        var (domain, analysis) = ParseAndAnalyze(dsl);
+        await Assert.That(analysis.HasErrors).IsFalse();
+
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var customer = types.First(t => t.Name == "Customer");
+        var createOrders = customer.Methods?.FirstOrDefault(m => m.Name == "CreateOrders");
+        await Assert.That(createOrders).IsNotNull();
+        await Assert.That(createOrders!.Parameters?.Select(p => p.Name))
+            .IsEquivalentTo(["title", "customer", "primaryContact"]);
     }
 
     [Test]
@@ -523,7 +595,7 @@ public class DomainToCSharpExporterTests {
             new Stage("Draft", [], [], [], []),
             new Stage("Active", [], [], [], [])
         ]);
-        var domain = new Domain("Test", [tracker, order], [
+        var domain = DomainTestFactory.Create("Test", [tracker, order], [
             new Relationship("Tracks",
                 new DomainTypeReference("Tracker"), new DomainTypeReference("Order"),
                 RelationshipCardinality.OneToOne, [])
@@ -579,7 +651,7 @@ public class DomainToCSharpExporterTests {
             new Stage("Draft", [], [], [], []),
             new Stage("Active", [], [], [], [])
         ]);
-        var domain = new Domain("Test", [tracker, order], [
+        var domain = DomainTestFactory.Create("Test", [tracker, order], [
             new Relationship("Tracks",
                 new DomainTypeReference("Tracker"), new DomainTypeReference("Order"),
                 RelationshipCardinality.OneToOne, [])
@@ -695,7 +767,7 @@ public class DomainToCSharpExporterTests {
             new Stage("Draft", [], [], [], []),
             new Stage("Active", [], [], [], [])
         ]);
-        var domain = new Domain("Test", [tracker, order], [
+        var domain = DomainTestFactory.Create("Test", [tracker, order], [
             new Relationship("Tracks",
                 new DomainTypeReference("Tracker"), new DomainTypeReference("Order"),
                 RelationshipCardinality.OneToOne, [])
@@ -732,7 +804,7 @@ public class DomainToCSharpExporterTests {
             new Stage("Draft", [], [], [], []),
             new Stage("Active", [], [], [], [])
         ]);
-        var domain = new Domain("Test", [tracker, order], [
+        var domain = DomainTestFactory.Create("Test", [tracker, order], [
             new Relationship("Tracks",
                 new DomainTypeReference("Tracker"), new DomainTypeReference("Order"),
                 RelationshipCardinality.OneToOne, [])
@@ -761,6 +833,71 @@ public class DomainToCSharpExporterTests {
             if (found is not null) return found;
         }
         return null;
+    }
+
+    // ── R6: in-suite compile oracle (Roslyn) ─────────────────────
+
+    private static async Task AssertExportCompiles(Domain domain, AnalysisResult analysis) {
+        var typeDefs = new DomainToCSharpExporter().Export(domain, analysis);
+        var csharp = new CSharpGenerator().Generate(typeDefs);
+        var tree = CSharpSyntaxTree.ParseText("#nullable enable\n" + csharp);
+
+        var references = ((string?)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES"))
+            ?.Split(Path.PathSeparator)
+            .Select(p => (MetadataReference)MetadataReference.CreateFromFile(p))
+            .ToArray() ?? [];
+        var compilation = CSharpCompilation.Create(
+            "ExportCompileSmoke",
+            [tree],
+            references,
+            new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+
+        var errors = compilation.GetDiagnostics()
+            .Where(d => d.Severity == Microsoft.CodeAnalysis.DiagnosticSeverity.Error)
+            .Select(d => d.ToString())
+            .ToArray();
+        await Assert.That(errors).IsEmpty();
+    }
+
+    [Test]
+    public async Task Export_Compiles_LibraryDomain() {
+        // R6: the CS7036/CS1501 export class must fail in-suite, not at a consumer.
+        var (domain, analysis) = ParseAndAnalyze(LibraryCheckoutDsl);
+        await AssertExportCompiles(domain, analysis);
+    }
+
+    [Test]
+    public async Task Export_Compiles_CreateInTargetWithCollectionNavs() {
+        // The exact csharp-export-createin-bugs repro (create-in with collection navs + auto-wire).
+        const string dsl = """
+            domain Test
+
+            Customer: entity {
+              orders: many Order
+              CheckOut: action {
+                create in orders { Title: "t" }
+              }
+            }
+
+            Order: entity {
+              Title: Text required
+              Total: Number range(0, )
+              customer: Customer
+              lines: many OrderLine
+              notes: many owned Note
+            }
+
+            OrderLine: entity {
+              Sku: Text required
+            }
+
+            Note: entity {
+              Body: Text
+            }
+            """;
+        var (domain, analysis) = ParseAndAnalyze(dsl);
+        await Assert.That(analysis.HasErrors).IsFalse();
+        await AssertExportCompiles(domain, analysis);
     }
 
     private static Assignment? FindFirstAssignment(Node? node) {

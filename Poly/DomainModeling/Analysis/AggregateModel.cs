@@ -18,7 +18,7 @@ namespace Poly.DomainModeling.Analysis;
 /// Cross-entity aggregate ownership — which entities own which.
 ///
 /// This is a derived domain fact, not a storage or transport
-/// convention. Both StorageModel and TransportSurface consume it.
+/// convention. StorageModel consumes it.
 /// </summary>
 public sealed record AggregateModel(
     string DomainName,

@@ -15,7 +15,7 @@ public class DomainCatalogPassFailClosedTests {
             [new Property("Name", new DomainTypeReference("Text"), [])],
             Actions: [], Policies: [],
             Stages: [new Stage("Draft", [], [], [], [])]);
-        var domain = new Domain("NoSemantic", [order], []);
+        var domain = DomainTestFactory.Create("NoSemantic", [order], []);
 
         // Direct pass host: AnalyzerBuilder refuses CatalogPass without Semantic registered.
         // SUT is CatalogPass itself when DTLM/RLM are absent.

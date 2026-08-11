@@ -15,7 +15,7 @@ public class PassDependencyDeclarationTests {
         var ctx = DomainInputBuilder.CreateWithSqlPack().Build();
         var parser = new PolyDslParser(poly, ctx.Parser);
         var changes = parser.Parse();
-        var emptyDomain = new Domain("_", [], []);
+        var emptyDomain = DomainTestFactory.Create("_", [], []);
         var result = new DomainEvolution(emptyDomain).Apply(changes);
         if (!result.Succeeded)
             throw new InvalidOperationException("Domain evolution failed: " +
@@ -66,10 +66,6 @@ public class PassDependencyDeclarationTests {
             new StoragePass(),
             EffectTopologyPass.Id,
             OwnershipAggregatePass.Id);
-        AssertDeclares(
-            new TransportPass(),
-            EffectTopologyPass.Id,
-            OwnershipAggregatePass.Id);
 
         // Lint consumers that still read analysis bags
         AssertDeclares(new RuleCoverageAnalyzer(), RequiredPropertiesPass.Id);
@@ -116,7 +112,6 @@ public class PassDependencyDeclarationTests {
         await Assert.That(Index(EffectTopologyPass.Id)).IsLessThan(Index(OwnershipAggregatePass.Id));
         await Assert.That(Index(EntityStructureAnalyzer.Id)).IsLessThan(Index(OwnershipAggregatePass.Id));
         await Assert.That(Index(OwnershipAggregatePass.Id)).IsLessThan(Index(StoragePass.Id));
-        await Assert.That(Index(OwnershipAggregatePass.Id)).IsLessThan(Index(TransportPass.Id));
         await Assert.That(Index(EffectTopologyPass.Id)).IsLessThan(Index(CrossReferencePass.Id));
         await Assert.That(Index(CapabilityAnalyzer.Id)).IsLessThan(Index(BehaviorPass.Id));
         await Assert.That(Index(ConstraintPropagationAnalyzer.Id)).IsLessThan(Index(EffectAnalyzer.Id));

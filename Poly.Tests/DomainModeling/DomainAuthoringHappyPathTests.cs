@@ -157,7 +157,7 @@ public class DomainAuthoringHappyPathTests {
     public async Task Query_AnalysisSummary_ReportsErrors_ForInvalidDomain() {
         // Duplicate entity names should produce structural errors
         var text = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
-        var domain = new Domain("Test",
+        var domain = DomainTestFactory.Create("Test",
         [
             new Entity("Duplicate", [], [], [], []),
             new Entity("Duplicate", [], [], [], []),

@@ -30,7 +30,7 @@ public class DomainSemanticLookupFailClosedTests {
             Actions: [entityAction],
             Policies: [],
             Stages: [draft, active]);
-        return new Domain("OrderDomain", [order], []);
+        return DomainTestFactory.Create("OrderDomain", [order], []);
     }
 
     private static Domain BuildParamStageCopyDomain() {
@@ -50,7 +50,7 @@ public class DomainSemanticLookupFailClosedTests {
             Actions: [entityAction],
             Policies: [],
             Stages: [draft, active]);
-        return new Domain("OrderDomain", [order], []);
+        return DomainTestFactory.Create("OrderDomain", [order], []);
     }
 
     private static Domain BuildPolicyDomain() {
@@ -67,7 +67,7 @@ public class DomainSemanticLookupFailClosedTests {
             Actions: [],
             Policies: [adult],
             Stages: [stage]);
-        return new Domain("PolicyDomain", [order], []);
+        return DomainTestFactory.Create("PolicyDomain", [order], []);
     }
 
     /// <summary>
@@ -100,7 +100,7 @@ public class DomainSemanticLookupFailClosedTests {
             Actions: [],
             Policies: [adult],
             Stages: [draft, activeStage]);
-        return new Domain("MultiPolicyDomain", [order], []);
+        return DomainTestFactory.Create("MultiPolicyDomain", [order], []);
     }
 
     private static Domain BuildRelationshipDomain() {
@@ -109,7 +109,7 @@ public class DomainSemanticLookupFailClosedTests {
         var rel = new Relationship("Owns",
             new DomainTypeReference("Order"), new DomainTypeReference("Line"),
             RelationshipCardinality.OneToMany, []);
-        return new Domain("RelDomain", [order, line], [rel]);
+        return DomainTestFactory.Create("RelDomain", [order, line], [rel]);
     }
 
     // ── F5: exporter ResolveRelationship RLM throw ────────────
@@ -187,7 +187,7 @@ public class DomainSemanticLookupFailClosedTests {
             [new StageTransitionEffect(new StageReference("Active"))], []);
         var draft = new Stage("Draft", [stageAction], [], [], []);
         var active = new Stage("Active", [], [], [], []);
-        var dom = new Domain("D", [
+        var dom = DomainTestFactory.Create("D", [
             new Entity("Order",
                 [new Property("Name", new DomainTypeReference("Text"), [])],
                 Actions: [entityAction], Policies: [], Stages: [draft, active])

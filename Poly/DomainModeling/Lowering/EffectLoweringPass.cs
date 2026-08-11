@@ -393,10 +393,14 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         // omits back-references and collection navs: back-refs are auto-wired with
         // `this`, collections start as empty lists in the factory body. The call site
         // must emit exactly the factory's parameters or the export won't compile
-        // (CS1501 arity drift). Skip both here to stay in lockstep.
+        // (CS1501 arity drift). Skip back-refs, the auto-wire back-ref, and
+        // collections here to stay in lockstep.
+        var autoWireBackRef = DomainToCSharpExporter.FindAutoWireBackReference(targetEntity, _entity.Name);
         foreach (var parameter in parameterMetadata) {
             if (parameter.IsBackReference) continue;
             if (parameter.IsCollection) continue;
+            if (autoWireBackRef is not null
+                && string.Equals(parameter.Name, autoWireBackRef.Name, StringComparison.Ordinal)) continue;
             if (initMap.TryGetValue(parameter.Name, out var expr))
                 args.Add(LowerEnumAwareValue(expr, parameter.Type, Subject));
             else

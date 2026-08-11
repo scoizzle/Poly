@@ -11,7 +11,7 @@ public class StructuralAnalysisTests {
     public async Task StructuralDuplicate_DuplicateEntityNames_ReportsError() {
         var first = new Entity("Ticket", [], [], [], []);
         var second = new Entity("Ticket", [], [], [], []);
-        var domain = new Domain("Test", [first, second], []);
+        var domain = DomainTestFactory.Create("Test", [first, second], []);
 
         var analysis = DomainModelAnalyzer.Analyze(domain);
 
@@ -29,7 +29,7 @@ public class StructuralAnalysisTests {
         var rel = new Relationship("OwnsMany",
             new DomainTypeReference("Source"), new DomainTypeReference("Target"),
             RelationshipCardinality.ManyToMany, []) { SourceOwnsTarget = true };
-        var domain = new Domain("Test", [text, source, target], [rel]);
+        var domain = DomainTestFactory.Create("Test", [text, source, target], [rel]);
 
         var analysis = DomainModelAnalyzer.Analyze(domain);
 
@@ -45,7 +45,7 @@ public class StructuralAnalysisTests {
         var rel = new Relationship("OwnedByMany",
             new DomainTypeReference("Source"), new DomainTypeReference("Target"),
             RelationshipCardinality.ManyToOne, []) { SourceOwnsTarget = true };
-        var domain = new Domain("Test", [text, source, target], [rel]);
+        var domain = DomainTestFactory.Create("Test", [text, source, target], [rel]);
 
         var analysis = DomainModelAnalyzer.Analyze(domain);
 
@@ -61,7 +61,7 @@ public class StructuralAnalysisTests {
         var rel = new Relationship("OwnsOne",
             new DomainTypeReference("Source"), new DomainTypeReference("Target"),
             RelationshipCardinality.OneToOne, []) { SourceOwnsTarget = true };
-        var domain = new Domain("Test", [text, source, target], [rel]);
+        var domain = DomainTestFactory.Create("Test", [text, source, target], [rel]);
 
         var analysis = DomainModelAnalyzer.Analyze(domain);
 
@@ -74,7 +74,7 @@ public class SemanticAnalysisTests {
     [Test]
     public async Task SemanticTypeCompatibility_DisallowedNullableCategory_ReportsError() {
         var nullable = new Poly.DomainModeling.PrimitiveType("NullableInt", TypeCategory.Nullable, []);
-        var domain = new Domain("Test", [nullable], []);
+        var domain = DomainTestFactory.Create("Test", [nullable], []);
 
         var analysis = DomainModelAnalyzer.Analyze(domain);
 
@@ -85,7 +85,7 @@ public class SemanticAnalysisTests {
     [Test]
     public async Task SemanticTypeCompatibility_DisallowedCollectionCategory_ReportsError() {
         var collection = new Poly.DomainModeling.PrimitiveType("CollectionInt", TypeCategory.Collection, []);
-        var domain = new Domain("Test", [collection], []);
+        var domain = DomainTestFactory.Create("Test", [collection], []);
 
         var analysis = DomainModelAnalyzer.Analyze(domain);
 
@@ -113,7 +113,7 @@ public class SemanticAnalysisTests {
         var parent = new Entity("BaseTicket", [parentProp], [], [], []);
         var child = new Entity("Ticket", [childProp], [], [], []);
         var text = new Poly.DomainModeling.PrimitiveType("Text", TypeCategory.Text, []);
-        var domain = new Domain("Test", [text, parent, child], []);
+        var domain = DomainTestFactory.Create("Test", [text, parent, child], []);
 
         var analysis = DomainModelAnalyzer.Analyze(domain);
 
@@ -125,7 +125,7 @@ public class SemanticAnalysisTests {
     [Test]
     public async Task SemanticReferenceResolution_UndefinedTypeReference_ReportsError() {
         var entity = new Entity("Ticket", [new Property("Title", new DomainTypeReference("UndefinedType"), [])], [], [], []);
-        var domain = new Domain("Test", [entity], []);
+        var domain = DomainTestFactory.Create("Test", [entity], []);
 
         var analysis = DomainModelAnalyzer.Analyze(domain);
 
@@ -145,7 +145,7 @@ public class EffectBindingTests {
             new CreateEntityInstance(new DomainTypeReference("NonExistent"))
         ], []);
         var entity = new Entity("Maker", [], [action], [], []);
-        var domain = new Domain("Test", [entity], []);
+        var domain = DomainTestFactory.Create("Test", [entity], []);
 
         var analysis = DomainModelAnalyzer.Analyze(domain);
 
@@ -166,7 +166,7 @@ public class EffectBindingTests {
                 new InvokeActionEffect("Tag", [], TargetRelationship: "NoSuchRel")
             ], [])
         ], [], []);
-        var domain = new Domain("Test", [source, target], []);
+        var domain = DomainTestFactory.Create("Test", [source, target], []);
 
         var analysis = DomainModelAnalyzer.Analyze(domain);
 
@@ -183,7 +183,7 @@ public class EffectBindingTests {
             new InvokeActionEffect("NonExistentAction", [])
         ], []);
         var entity = new Entity("Worker", [], [action], [], []);
-        var domain = new Domain("Test", [entity], []);
+        var domain = DomainTestFactory.Create("Test", [entity], []);
 
         var analysis = DomainModelAnalyzer.Analyze(domain);
 
@@ -198,7 +198,7 @@ public class EffectBindingTests {
             new AssignEffect(new PropertyAccess("NonExistent"), new Literal("value"))
         ], []);
         var entity = new Entity("Ticket", [], [action], [], []);
-        var domain = new Domain("Test", [text, entity], []);
+        var domain = DomainTestFactory.Create("Test", [text, entity], []);
 
         var analysis = DomainModelAnalyzer.Analyze(domain);
 
@@ -212,7 +212,7 @@ public class EffectBindingTests {
             new StageTransitionEffect(new StageReference("NonExistentStage"))
         ], []);
         var entity = new Entity("Ticket", [], [action], [], []);
-        var domain = new Domain("Test", [entity], []);
+        var domain = DomainTestFactory.Create("Test", [entity], []);
 
         var analysis = DomainModelAnalyzer.Analyze(domain);
 
@@ -227,7 +227,7 @@ public class EffectBindingTests {
             new LinkRelationshipEffect("NonExistentRel", new PropertyAccess("Target"))
         ], []);
         var entity = new Entity("Source", [], [action], [], []);
-        var domain = new Domain("Test", [text, entity], []);
+        var domain = DomainTestFactory.Create("Test", [text, entity], []);
 
         var analysis = DomainModelAnalyzer.Analyze(domain);
 
@@ -242,7 +242,7 @@ public class EffectBindingTests {
             new CreateEntityInRelationshipEffect("NonExistentRel", [])
         ], []);
         var entity = new Entity("Maker", [], [action], [], []);
-        var domain = new Domain("Test", [entity], []);
+        var domain = DomainTestFactory.Create("Test", [entity], []);
 
         var analysis = DomainModelAnalyzer.Analyze(domain);
 
@@ -259,10 +259,11 @@ public class EffectBindingTests {
         ], []);
         // "Maker" is NOT the source of "rel" (Customer is)
         var maker = new Entity("Maker", [], [action], [], []);
+        var customer = new Entity("Customer", [], [], [], []);
         var rel = new Relationship("rel",
             new DomainTypeReference("Customer"), new DomainTypeReference("Order"),
             RelationshipCardinality.OneToMany, []);
-        var domain = new Domain("Test", [maker, order], [rel]);
+        var domain = DomainTestFactory.Create("Test", [maker, order, customer], [rel]);
 
         var analysis = DomainModelAnalyzer.Analyze(domain);
 
@@ -281,7 +282,7 @@ public class EffectBindingTests {
         var rel = new Relationship("rel",
             new DomainTypeReference("Customer"), new DomainTypeReference("Order"),
             RelationshipCardinality.OneToMany, []);
-        var domain = new Domain("Test", [customer, order], [rel]);
+        var domain = DomainTestFactory.Create("Test", [customer, order], [rel]);
 
         var analysis = DomainModelAnalyzer.Analyze(domain);
 
@@ -304,7 +305,7 @@ public class EffectBindingTests {
         var rel = new Relationship("rel",
             new DomainTypeReference("Customer"), new DomainTypeReference("Order"),
             RelationshipCardinality.OneToMany, []);
-        var domain = new Domain("Test", [customer, order], [rel]);
+        var domain = DomainTestFactory.Create("Test", [customer, order], [rel]);
 
         var analysis = DomainModelAnalyzer.Analyze(domain);
 
@@ -323,7 +324,7 @@ public class EffectBindingTests {
         var rel = new Relationship("owns",
             new DomainTypeReference("Parent"), new DomainTypeReference("Child"),
             RelationshipCardinality.OneToOne, []) { SourceOwnsTarget = true };
-        var domain = new Domain("Test", [source, target], [rel]);
+        var domain = DomainTestFactory.Create("Test", [source, target], [rel]);
 
         var analysis = DomainModelAnalyzer.Analyze(domain);
 
@@ -347,7 +348,7 @@ public class EffectBindingTests {
             new DomainTypeReference("Child"), new DomainTypeReference("Something"),
             RelationshipCardinality.OneToMany, []);
         var something = new Entity("Something", [], [], [], []);
-        var domain = new Domain("Test", [source, target, something], [rel, otherRel]);
+        var domain = DomainTestFactory.Create("Test", [source, target, something], [rel, otherRel]);
 
         var analysis = DomainModelAnalyzer.Analyze(domain);
 
@@ -368,7 +369,7 @@ public class EffectBindingTests {
         var rel = new Relationship("rel",
             new DomainTypeReference("Customer"), new DomainTypeReference("Order"),
             RelationshipCardinality.OneToMany, []);
-        var domain = new Domain("Test", [maker, customer, order], [rel]);
+        var domain = DomainTestFactory.Create("Test", [maker, customer, order], [rel]);
 
         var analysis = DomainModelAnalyzer.Analyze(domain);
 
@@ -388,7 +389,7 @@ public class EffectBindingTests {
         var rel = new Relationship("rel",
             new DomainTypeReference("Customer"), new DomainTypeReference("Order"),
             RelationshipCardinality.OneToMany, []);
-        var domain = new Domain("Test", [customer, order, invoice], [rel]);
+        var domain = DomainTestFactory.Create("Test", [customer, order, invoice], [rel]);
 
         var analysis = DomainModelAnalyzer.Analyze(domain);
 
@@ -407,7 +408,7 @@ public class EffectBindingTests {
         var rel = new Relationship("rel",
             new DomainTypeReference("Customer"), new DomainTypeReference("Order"),
             RelationshipCardinality.OneToMany, []);
-        var domain = new Domain("Test", [customer, order], [rel]);
+        var domain = DomainTestFactory.Create("Test", [customer, order], [rel]);
 
         var analysis = DomainModelAnalyzer.Analyze(domain);
 
@@ -423,7 +424,7 @@ public class EffectBindingTests {
             new InvokeActionEffect("Run", [], Quantifier: StageSubscriptionQuantifier.Any)
         ], []);
         var entity = new Entity("Worker", [], [action], [], []);
-        var domain = new Domain("Test", [entity], []);
+        var domain = DomainTestFactory.Create("Test", [entity], []);
 
         var analysis = DomainModelAnalyzer.Analyze(domain);
 
@@ -438,7 +439,7 @@ public class EffectBindingTests {
                 Filter: DomainExpression.Literal(true))
         ], []);
         var entity = new Entity("Worker", [], [action], [], []);
-        var domain = new Domain("Test", [entity], []);
+        var domain = DomainTestFactory.Create("Test", [entity], []);
 
         var analysis = DomainModelAnalyzer.Analyze(domain);
 
@@ -465,7 +466,7 @@ public class EffectBindingTests {
         var rel = new Relationship("link",
             new DomainTypeReference("Source"), new DomainTypeReference("Target"),
             RelationshipCardinality.OneToOne, []);
-        var domain = new Domain("Test", [source, target], [rel]);
+        var domain = DomainTestFactory.Create("Test", [source, target], [rel]);
 
         var analysis = DomainModelAnalyzer.Analyze(domain);
 
@@ -488,7 +489,7 @@ public class EffectBindingTests {
         var rel = new Relationship("link",
             new DomainTypeReference("Source"), new DomainTypeReference("Target"),
             RelationshipCardinality.OneToOne, []);
-        var domain = new Domain("Test", [source, target], [rel]);
+        var domain = DomainTestFactory.Create("Test", [source, target], [rel]);
 
         var analysis = DomainModelAnalyzer.Analyze(domain);
 
@@ -509,7 +510,7 @@ public class EffectBindingTests {
         var rel = new Relationship("items",
             new DomainTypeReference("Source"), new DomainTypeReference("Target"),
             RelationshipCardinality.OneToMany, []);
-        var domain = new Domain("Test", [source, target], [rel]);
+        var domain = DomainTestFactory.Create("Test", [source, target], [rel]);
 
         var analysis = DomainModelAnalyzer.Analyze(domain);
 
@@ -537,7 +538,7 @@ public class EffectBindingTests {
         var rel = new Relationship("items",
             new DomainTypeReference("Source"), new DomainTypeReference("Target"),
             RelationshipCardinality.OneToMany, []);
-        var domain = new Domain("Test", [source, target], [rel]);
+        var domain = DomainTestFactory.Create("Test", [source, target], [rel]);
 
         var analysis = DomainModelAnalyzer.Analyze(domain);
 
@@ -560,7 +561,7 @@ public class EffectBindingTests {
         var rel = new Relationship("link",
             new DomainTypeReference("Source"), new DomainTypeReference("Target"),
             RelationshipCardinality.OneToOne, []);
-        var domain = new Domain("Test", [source, target], [rel]);
+        var domain = DomainTestFactory.Create("Test", [source, target], [rel]);
 
         var analysis = DomainModelAnalyzer.Analyze(domain);
 
@@ -587,7 +588,7 @@ public class EffectBindingTests {
         var rel = new Relationship("items",
             new DomainTypeReference("Source"), new DomainTypeReference("Target"),
             RelationshipCardinality.OneToMany, []);
-        var domain = new Domain("Test", [source, target], [rel]);
+        var domain = DomainTestFactory.Create("Test", [source, target], [rel]);
 
         var analysis = DomainModelAnalyzer.Analyze(domain);
 
@@ -610,7 +611,7 @@ public class EffectBindingTests {
         var rel = new Relationship("items",
             new DomainTypeReference("Source"), new DomainTypeReference("Target"),
             RelationshipCardinality.OneToMany, []);
-        var domain = new Domain("Test", [source, target], [rel]);
+        var domain = DomainTestFactory.Create("Test", [source, target], [rel]);
 
         var analysis = DomainModelAnalyzer.Analyze(domain);
 
@@ -632,7 +633,7 @@ public class EffectBindingTests {
         var rel = new Relationship("link",
             new DomainTypeReference("Source"), new DomainTypeReference("Target"),
             RelationshipCardinality.OneToOne, []);
-        var domain = new Domain("Test", [source, target], [rel]);
+        var domain = DomainTestFactory.Create("Test", [source, target], [rel]);
 
         var analysis = DomainModelAnalyzer.Analyze(domain);
 
@@ -655,7 +656,7 @@ public class EffectBindingTests {
         var rel = new Relationship("peers",
             new DomainTypeReference("Source"), new DomainTypeReference("Target"),
             RelationshipCardinality.ManyToMany, []);
-        var domain = new Domain("Test", [source, target], [rel]);
+        var domain = DomainTestFactory.Create("Test", [source, target], [rel]);
 
         var analysis = DomainModelAnalyzer.Analyze(domain);
 
@@ -673,7 +674,7 @@ public class EffectBindingTests {
         var rel = new Relationship("next",
             new DomainTypeReference("Node"), new DomainTypeReference("Node"),
             RelationshipCardinality.OneToOne, []);
-        var domain = new Domain("Test", [node], [rel]);
+        var domain = DomainTestFactory.Create("Test", [node], [rel]);
 
         var analysis = DomainModelAnalyzer.Analyze(domain);
 
@@ -696,7 +697,7 @@ public class EffectBindingTests {
         var rel = new Relationship("link",
             new DomainTypeReference("Source"), new DomainTypeReference("Target"),
             RelationshipCardinality.OneToOne, []);
-        var domain = new Domain("Test", [source, target], [rel]);
+        var domain = DomainTestFactory.Create("Test", [source, target], [rel]);
 
         var analysis = DomainModelAnalyzer.Analyze(domain);
 
@@ -726,7 +727,7 @@ public class EffectBindingTests {
         var rel = new Relationship("items",
             new DomainTypeReference("Source"), new DomainTypeReference("Target"),
             RelationshipCardinality.OneToMany, []);
-        var domain = new Domain("Test", [sourceEntity, target], [rel]);
+        var domain = DomainTestFactory.Create("Test", [sourceEntity, target], [rel]);
 
         var analysis = DomainModelAnalyzer.Analyze(domain);
 
@@ -750,7 +751,7 @@ public class UnsatisfiedRequirementTests {
             new StageTransitionEffect(new StageReference("Open"))
         ], []);
         var entity = new Entity("Ticket", [title], [action], [], [stage]);
-        var domain = new Domain("Test", [text, entity], []);
+        var domain = DomainTestFactory.Create("Test", [text, entity], []);
 
         var analysis = DomainModelAnalyzer.Analyze(domain);
 
@@ -771,7 +772,7 @@ public class UnsatisfiedRequirementTests {
             new StageTransitionEffect(new StageReference("Open"))
         ], []);
         var entity = new Entity("Ticket", [title], [action], [], [stage]);
-        var domain = new Domain("Test", [text, entity], []);
+        var domain = DomainTestFactory.Create("Test", [text, entity], []);
 
         var analysis = DomainModelAnalyzer.Analyze(domain);
 
@@ -793,7 +794,7 @@ public class UnsatisfiedRequirementTests {
             new StageTransitionEffect(new StageReference("Lexing"))
         ], []);
         var entity = new Entity("Compilation", [entryPath], [action], [], [stage]);
-        var domain = new Domain("Test", [text, entity], []);
+        var domain = DomainTestFactory.Create("Test", [text, entity], []);
 
         var analysis = DomainModelAnalyzer.Analyze(domain);
 
@@ -817,7 +818,7 @@ public class UnsatisfiedRequirementTests {
             new StageTransitionEffect(new StageReference("Lexing"))
         ], []);
         var entity = new Entity("Compilation", [source], [action], [policy], [stage]);
-        var domain = new Domain("Test", [text, entity], []);
+        var domain = DomainTestFactory.Create("Test", [text, entity], []);
 
         var analysis = DomainModelAnalyzer.Analyze(domain);
 
@@ -834,7 +835,7 @@ public class UnsatisfiedRequirementTests {
             new CreateEntityInstance(new DomainTypeReference("Order"))
         ], []);
         var entity = new Entity("Factory", [], [action], [], []);
-        var domain = new Domain("Test", [text, target, entity], []);
+        var domain = DomainTestFactory.Create("Test", [text, target, entity], []);
 
         var analysis = DomainModelAnalyzer.Analyze(domain);
 

@@ -20,15 +20,14 @@ public class InfrastructureAnalyzerTests {
         StorageModel Storage,
         EffectTopology Topology,
         BehaviorModel Behavior,
-        AggregateModel Aggregate,
-        TransportSurface Transport
+        AggregateModel Aggregate
     );
     // ── Helpers ───────────────────────────────────────────────
 
     private static (Domain Domain, AnalysisResult Analysis) ParseDomainWithAnalysis(string poly) {
         var parser = new PolyDslParser(poly);
         var changes = parser.Parse();
-        var emptyDomain = new Domain("_", [], []);
+        var emptyDomain = DomainTestFactory.Create("_", [], []);
         var result = new DomainEvolution(emptyDomain).Apply(changes);
         if (!result.Succeeded) {
             var errors = string.Join("; ", result.Analysis.Diagnostics
@@ -47,8 +46,7 @@ public class InfrastructureAnalyzerTests {
         var aggregate = Poly.DomainModeling.Analysis.OwnershipAggregatePass.BuildAggregate(domain, null, topology);
         var storage = new StorageAnalyzer(domain).Analyze(aggregate, topology);
         var behavior = Poly.DomainModeling.Analysis.BehaviorPass.BuildBehavior(domain);
-        var transport = Poly.DomainModeling.Analysis.TransportPass.BuildTransport(domain, aggregate, topology);
-        return new TestInfra(storage, topology, behavior, aggregate, transport);
+        return new TestInfra(storage, topology, behavior, aggregate);
     }
 
     private static TestInfra AnalyzeWithAnalysis(string poly) {
@@ -59,8 +57,7 @@ public class InfrastructureAnalyzerTests {
         var aggregate = Poly.DomainModeling.Analysis.OwnershipAggregatePass.BuildAggregate(domain, null, topology);
         var storage = new StorageAnalyzer(domain, analysis).Analyze(aggregate, topology);
         var behavior = Poly.DomainModeling.Analysis.BehaviorPass.BuildBehavior(domain);
-        var transport = Poly.DomainModeling.Analysis.TransportPass.BuildTransport(domain, aggregate, topology);
-        return new TestInfra(storage, topology, behavior, aggregate, transport);
+        return new TestInfra(storage, topology, behavior, aggregate);
     }
 
     // ── Root/child detection ──────────────────────────────────
@@ -81,7 +78,6 @@ public class InfrastructureAnalyzerTests {
         await Assert.That(model.Entities[0].KeyName).IsEqualTo("isbn");
         await Assert.That(model.Entities[0].KeyClrType).IsEqualTo("string");
         await Assert.That(infra.Aggregate.Entities[0].IsRoot).IsTrue();
-        await Assert.That(infra.Transport.Entities[0].IsExposable).IsTrue();
     }
 
     [Test]
@@ -132,10 +128,6 @@ public class InfrastructureAnalyzerTests {
         await Assert.That(storageLoan.ForeignKeys[0].ParentEntityName).IsEqualTo("Patron");
         await Assert.That(storageLoan.ForeignKeys[0].ParentKeyProperty).IsEqualTo("Email");
         await Assert.That(storageLoan.ForeignKeys[0].ChildPropertyName).IsEqualTo("BorrowerId");
-
-        var transportLoan = infra.Transport.Entities.First(e => e.Name == "Loan");
-        await Assert.That(transportLoan.ParentName).IsEqualTo("Patron");
-        await Assert.That(transportLoan.IsExposable).IsFalse();
     }
 
     // ── Column classification ─────────────────────────────────
@@ -286,6 +278,31 @@ public class InfrastructureAnalyzerTests {
         await Assert.That(suspend.StageTransitions[0].TargetStageName).IsEqualTo("Suspended");
     }
 
+    [Test]
+    public async Task Behavior_StageActionEffectivePolicies_EntityStageActionParity() {
+        // M3: the consolidated composition (entity + stage + action) that BehaviorPass
+        // reads from the capability surface must equal the canonical composition.
+        var entityPolicy = new Policy("EntityPolicy", DomainExpression.Property("Status"));
+        var stagePolicy = new Policy("StagePolicy", DomainExpression.Property("Status"));
+        var actionPolicy = new Policy("ActionPolicy", DomainExpression.Property("Status"));
+        var goAction = new Poly.DomainModeling.Action("Go", InvocationResult.Void, [],
+            [new StageTransitionEffect(new StageReference("Done"))], [actionPolicy]);
+        var activeStage = new Stage("Active", [goAction], [stagePolicy], [], []);
+        var doneStage = new Stage("Done", [], [], [], []);
+        var patron = new Entity("Patron",
+            [new Property("Status", new DomainTypeReference("Text"), [])],
+            [], [entityPolicy], [activeStage, doneStage]);
+        var domain = DomainTestFactory.Create("Test", [new Poly.DomainModeling.PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []), patron]);
+
+        var behavior = DomainModelAnalyzer.Analyze(domain)
+            .GetMetadata<BehaviorMetadata>(domain)?.Behavior;
+        await Assert.That(behavior).IsNotNull();
+
+        var go = behavior!.Entities.First(e => e.Name == "Patron").Actions.First(a => a.Name == "Go");
+        await Assert.That(go.StageName).IsEqualTo("Active");
+        await Assert.That(go.Policies).IsEquivalentTo(["EntityPolicy", "StagePolicy", "ActionPolicy"]);
+    }
+
     // ── Topology ──────────────────────────────────────────────
 
     [Test]
@@ -336,10 +353,6 @@ public class InfrastructureAnalyzerTests {
         await Assert.That(sub.RelationshipName).IsEqualTo("loans");
         await Assert.That(sub.TargetStage).IsEqualTo("Returned");
 
-        // Topology is also available via Transport for consumers of that view only.
-        await Assert.That(infra.Transport.Effects.CreateInRelations.Count)
-            .IsEqualTo(infra.Topology.CreateInRelations.Count);
-
         var loan = infra.Aggregate.Entities.First(e => e.Name == "Loan");
         await Assert.That(loan.AggregateParentName).IsEqualTo("Patron");
         await Assert.That(loan.ParentRelationshipName).IsEqualTo("loans");
@@ -386,16 +399,6 @@ public class InfrastructureAnalyzerTests {
         }
     }
 
-    [Test]
-    public async Task Topology_ScannedOnce_SameInstanceOnModelAndTransport() {
-        var infra = AnalyzeFull("""
-            domain Test
-            Book: entity { Title: Text }
-            """);
-        // Same scan result is shared — Transport reuses coordinator topology.
-        await Assert.That(ReferenceEquals(infra.Topology, infra.Transport.Effects)).IsTrue();
-    }
-
     // ═══════════════════════════════════════════════════════════╗
     // P2 — Annotation-driven storage overrides                 ║
     // ╚══════════════════════════════════════════════════════════╝
@@ -404,7 +407,7 @@ public class InfrastructureAnalyzerTests {
         var ctx = DomainInputBuilder.CreateWithSqlPack().Build();
         var parser = new PolyDslParser(poly, ctx.Parser);
         var changes = parser.Parse();
-        var emptyDomain = new Domain("_", [], []);
+        var emptyDomain = DomainTestFactory.Create("_", [], []);
         var result = new DomainEvolution(emptyDomain).Apply(changes);
         if (!result.Succeeded) {
             var errors = string.Join("; ", result.Analysis.Diagnostics
@@ -417,8 +420,7 @@ public class InfrastructureAnalyzerTests {
         var aggregate = Poly.DomainModeling.Analysis.OwnershipAggregatePass.BuildAggregate(domain, null, topology);
         var storage = new StorageAnalyzer(domain, typeMaps: ctx.Analysis.TypeMaps, conventions: ctx.Analysis.StorageConventions).Analyze(aggregate, topology);
         var behavior = Poly.DomainModeling.Analysis.BehaviorPass.BuildBehavior(domain);
-        var transport = Poly.DomainModeling.Analysis.TransportPass.BuildTransport(domain, aggregate, topology);
-        return new TestInfra(storage, topology, behavior, aggregate, transport);
+        return new TestInfra(storage, topology, behavior, aggregate);
     }
 
     [Test]
@@ -695,7 +697,7 @@ public class InfrastructurePipelineTests {
     private static Domain ParseDomain(string poly) {
         var parser = new PolyDslParser(poly);
         var changes = parser.Parse();
-        var result = new DomainEvolution(new Domain("_", [], [])).Apply(changes);
+        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(changes);
         if (!result.Succeeded) throw new InvalidOperationException("Domain evolution failed");
         return result.Root!;
     }
@@ -703,7 +705,7 @@ public class InfrastructurePipelineTests {
     [Test]
     public async Task DomainAnalysis_HasInfraMetadata_CodegenProducesStorage() {
         // After APM merge: domain pipeline produces topology/aggregate/behavior;
-        // codegen pipeline is StoragePass only (TransportPass has no production consumer).
+        // codegen consumes Storage only (Transport was retired — no production consumer).
         var domain = ParseDomain("""
             domain Test
             Item: entity { Name: Text }

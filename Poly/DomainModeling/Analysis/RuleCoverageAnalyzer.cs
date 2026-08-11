@@ -34,6 +34,11 @@ internal sealed class RuleCoverageAnalyzer : INodeAnalyzer {
     }
 
     private static void ValidateAction(AnalysisContext context, Action action, IReadOnlyList<Property> requiredProperties) {
+        // Transition PRESENCE is a raw effect-walk check, not the capability's
+        // TransitionTargets: that view only holds targets that resolved via the
+        // catalog, so a transition to a nonexistent stage would be silently skipped.
+        // (Invalid targets are EffectAnalyzer's error domain; we just don't drop
+        // the coverage check for them.)
         var hasStageTransition = FlattenEffects(action.Effects).Any(static e => e is StageTransitionEffect);
         if (!hasStageTransition) return;
 

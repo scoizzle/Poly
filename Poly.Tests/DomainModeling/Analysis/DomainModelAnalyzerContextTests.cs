@@ -11,7 +11,7 @@ public class DomainModelAnalyzerContextTests {
         var ctx = DomainInputBuilder.CreateWithSqlPack().Build();
         var parser = new PolyDslParser(poly, ctx.Parser);
         var changes = parser.Parse();
-        var result = new DomainEvolution(new Domain("_", [], [])).Apply(changes);
+        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(changes);
         if (!result.Succeeded)
             throw new InvalidOperationException("Domain evolution failed: " +
                 string.Join("; ", result.Analysis.Diagnostics.Where(d =>
@@ -25,7 +25,7 @@ public class DomainModelAnalyzerContextTests {
     [Test]
     public async Task Analyze_WithDomainTree_DoesNotThrow() {
         var entity = new Entity("Widget", [NameProp], [], [], []);
-        var domain = new Domain("Test", [entity], []);
+        var domain = DomainTestFactory.Create("Test", [entity], []);
 
         var result = DomainModelAnalyzer.Analyze(domain);
 
@@ -35,11 +35,11 @@ public class DomainModelAnalyzerContextTests {
     [Test]
     public async Task Analyze_Incremental_WithDomainTree_DoesNotThrow() {
         var entity = new Entity("Widget", [NameProp], [], [], []);
-        var domain = new Domain("Test", [entity], []);
+        var domain = DomainTestFactory.Create("Test", [entity], []);
 
         var priorAnalysis = DomainModelAnalyzer.Analyze(domain);
 
-        var updatedDomain = new Domain("Test", [entity], []);
+        var updatedDomain = DomainTestFactory.Create("Test", [entity], []);
         var result = DomainModelAnalyzer.Analyze(updatedDomain, priorAnalysis, [updatedDomain]);
 
         await Assert.That(result).IsNotNull();
@@ -57,20 +57,6 @@ public class DomainModelAnalyzerContextTests {
 
         await Assert.That(storage).IsNotNull();
         await Assert.That(storage!.Storage.Entities.Count).IsGreaterThan(0);
-    }
-
-    [Test]
-    public async Task Analyze_ProducesTransportMetadata() {
-        var domain = ParseDomain("""
-            domain Test
-            Item: entity { Name: Text }
-            """);
-
-        var analysis = DomainModelAnalyzer.Analyze(domain);
-        var transport = analysis.GetMetadata<TransportMetadata>(domain);
-
-        await Assert.That(transport).IsNotNull();
-        await Assert.That(transport!.Transport.Entities.Count).IsGreaterThan(0);
     }
 
     [Test]

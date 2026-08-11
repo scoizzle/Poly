@@ -155,11 +155,6 @@ internal sealed class RuntimeContractAnalyzer : INodeAnalyzer {
         return entries;
     }
 
-    private static Entity? FindOwnerEntity(AnalysisContext context, Stage stage) {
-        if (context.GetMetadata<DomainTypeLookupMetadata>(default) is not DomainTypeLookupMetadata lookup) {
-            return null;
-        }
-
-        return lookup.Entities.FirstOrDefault(entity => entity.Stages.Contains(stage));
-    }
+    private static Entity? FindOwnerEntity(AnalysisContext context, Stage stage) =>
+        context.GetMetadata<OwnerEntityMetadata>(stage)?.Owner;
 }

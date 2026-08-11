@@ -20,7 +20,7 @@ public static class DomainFactory {
     /// <returns>A bootstrapped domain with built-in types and clean analysis.</returns>
     public static Domain Create(string name) {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
-        return ApplyBuiltins(new Domain(name, [], []));
+        return ApplyBuiltins(new Domain(name, []));
     }
 
     /// <summary>
@@ -33,7 +33,7 @@ public static class DomainFactory {
     public static Domain Create(string name, params DomainChange[] additionalChanges) {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
 
-        var withBuiltins = ApplyBuiltins(new Domain(name, [], []));
+        var withBuiltins = ApplyBuiltins(new Domain(name, []));
 
         if (additionalChanges.Length == 0)
             return withBuiltins;
@@ -57,7 +57,7 @@ public static class DomainFactory {
     public static Domain Create(string name, Func<EvolutionBuilder, EvolutionBuilder> configure) {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
 
-        var withBuiltins = ApplyBuiltins(new Domain(name, [], []));
+        var withBuiltins = ApplyBuiltins(new Domain(name, []));
 
         var evo = new DomainEvolution(withBuiltins);
         var builder = evo.Evolve();

@@ -37,10 +37,10 @@ internal sealed class EffectTopologyPass : INodeAnalyzer {
 
         foreach (var entity in entities) {
             foreach (var action in entity.Actions)
-                ScanActionEffects(entity, action, relationships, createInRels, crossInvokes);
+                ScanActionEffects(entity, action, stageName: null, relationships, createInRels, crossInvokes);
             foreach (var stage in entity.Stages)
                 foreach (var action in stage.Actions)
-                    ScanActionEffects(entity, action, relationships, createInRels, crossInvokes);
+                    ScanActionEffects(entity, action, stage.Name, relationships, createInRels, crossInvokes);
         }
 
         foreach (var entity in entities) {
@@ -66,6 +66,7 @@ internal sealed class EffectTopologyPass : INodeAnalyzer {
     private static void ScanActionEffects(
         Entity entity,
         Action action,
+        string? stageName,
         List<Relationship> relationships,
         List<CreateInRelation> createInRels,
         List<CrossEntityInvoke> crossInvokes) {
@@ -78,13 +79,13 @@ internal sealed class EffectTopologyPass : INodeAnalyzer {
                             if (createdRel is not null)
                                 createInRels.Add(new CreateInRelation(
                                     entity.Name, action.Name,
-                                    cir.RelationshipName, createdRel.Target.TypeName));
+                                    cir.RelationshipName, createdRel.Target.TypeName, stageName));
                             break;
                         }
                     case CreateEntityInstance cei when cei.RelationshipName is not null:
                         createInRels.Add(new CreateInRelation(
                             entity.Name, action.Name,
-                            cei.RelationshipName, cei.Type.TypeName));
+                            cei.RelationshipName, cei.Type.TypeName, stageName));
                         break;
                     case InvokeActionEffect iae when iae.TargetRelationship is not null:
                         crossInvokes.Add(new CrossEntityInvoke(

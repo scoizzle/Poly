@@ -8,7 +8,8 @@ public sealed record ActionCapabilityView(
     IReadOnlyList<Property> Parameters,
     IReadOnlyList<Effect> Effects,
     IReadOnlyList<Type> EffectTypes,
-    IReadOnlyList<Stage> TransitionTargets);
+    IReadOnlyList<Stage> TransitionTargets,
+    IReadOnlyList<Policy> EffectivePolicies);
 
 /// <summary>
 /// Canonical stage-effective surface. Composition rules live in
@@ -21,18 +22,8 @@ public sealed record StageCapabilityView(
     IReadOnlyList<Policy> LocalPolicies,
     IReadOnlyList<Policy> EffectivePolicies);
 
-public sealed record RelationshipCapabilityView(
-    string RelationshipName,
-    DomainTypeReference Source,
-    DomainTypeReference Target,
-    RelationshipCardinality Cardinality,
-    IReadOnlyList<Property> Properties,
-    IReadOnlyList<Stage> Stages,
-    IReadOnlyList<Policy> Policies);
-
 internal sealed record ActionCapabilityMetadata(ActionCapabilityView View) : IAnalysisMetadata;
 internal sealed record StageCapabilityMetadata(StageCapabilityView View) : IAnalysisMetadata;
-internal sealed record RelationshipCapabilityMetadata(RelationshipCapabilityView View) : IAnalysisMetadata;
 
 /// <summary>
 /// Publishes the canonical capability surface: per-action transition targets
@@ -59,9 +50,6 @@ internal sealed class CapabilityAnalyzer : INodeAnalyzer {
             case Stage stage:
                 AnalyzeStage(context, stage);
                 break;
-            case Relationship relationship:
-                AnalyzeRelationship(context, relationship);
-                break;
         }
 
         this.AnalyzeChildren(context, node);
@@ -70,33 +58,30 @@ internal sealed class CapabilityAnalyzer : INodeAnalyzer {
     private static void AnalyzeDomain(AnalysisContext context, Domain domain) {
         DomainAnalysis.ForEachEntity(domain, entity => {
             foreach (var action in entity.Actions) {
-                AnalyzeAction(context, action, domain, entity);
+                AnalyzeAction(context, action, domain, entity, entity.Policies);
             }
             foreach (var stage in entity.Stages) {
+                var stagePolicies = DomainEffectiveSurface.ComposeStagePolicies(entity.Policies, stage);
                 foreach (var action in stage.Actions) {
-                    AnalyzeAction(context, action, domain, entity);
+                    AnalyzeAction(context, action, domain, entity, stagePolicies);
                 }
                 AnalyzeStage(context, stage, entity);
             }
         });
-
-        foreach (var relationship in domain.Relationships) {
-            AnalyzeRelationship(context, relationship);
-        }
     }
 
     private static void AnalyzeAction(AnalysisContext context, Action action) {
-        var lookup = context.GetMetadata<DomainTypeLookupMetadata>(default);
-        var ownerEntity = FindOwnerEntity(lookup, action);
-        Domain? domain = lookup?.Domain;
-        AnalyzeAction(context, action, domain, ownerEntity);
+        var ownerEntity = context.GetMetadata<OwnerEntityMetadata>(action)?.Owner;
+        Domain? domain = context.GetMetadata<DomainTypeLookupMetadata>(default)?.Domain;
+        AnalyzeAction(context, action, domain, ownerEntity, ownerEntity?.Policies ?? Array.Empty<Policy>());
     }
 
     private static void AnalyzeAction(
         AnalysisContext context,
         Action action,
         Domain? domain,
-        Entity? ownerEntity) {
+        Entity? ownerEntity,
+        IReadOnlyList<Policy> inheritedPolicies) {
         var stagesByName = ResolveOwnerStages(context, domain, ownerEntity);
 
         var transitionTargetStages = new List<Stage>();
@@ -109,12 +94,17 @@ internal sealed class CapabilityAnalyzer : INodeAnalyzer {
                 transitionTargetStages.Add(resolved);
         }
 
+        var effectivePolicies = inheritedPolicies.Count == 0
+            ? action.Policies
+            : [.. inheritedPolicies, .. action.Policies];
+
         var view = new ActionCapabilityView(
             ActionName: action.Name,
             Parameters: action.Parameters,
             Effects: action.Effects,
             EffectTypes: action.Effects.Select(static e => e.GetType()).Distinct().ToArray(),
-            TransitionTargets: transitionTargetStages);
+            TransitionTargets: transitionTargetStages,
+            EffectivePolicies: effectivePolicies);
 
         context.SetMetadata(action, new ActionCapabilityMetadata(view));
     }
@@ -139,28 +129,8 @@ internal sealed class CapabilityAnalyzer : INodeAnalyzer {
             .ToDictionary(g => g.Key, g => g.Last(), StringComparer.Ordinal);
     }
 
-    private static Entity? FindOwnerEntity(DomainTypeLookupMetadata? lookup, Action action) {
-        if (lookup is null) return null;
-        foreach (var entity in lookup.Entities) {
-            if (entity.Actions.Contains(action)) return entity;
-            foreach (var stage in entity.Stages) {
-                if (stage.Actions.Contains(action)) return entity;
-            }
-        }
-        return null;
-    }
-
-    private static Entity? FindOwnerEntityForStage(DomainTypeLookupMetadata? lookup, Stage stage) {
-        if (lookup is null) return null;
-        foreach (var entity in lookup.Entities) {
-            if (entity.Stages.Contains(stage)) return entity;
-        }
-        return null;
-    }
-
     private static void AnalyzeStage(AnalysisContext context, Stage stage) {
-        var lookup = context.GetMetadata<DomainTypeLookupMetadata>(default);
-        var owner = FindOwnerEntityForStage(lookup, stage);
+        var owner = context.GetMetadata<OwnerEntityMetadata>(stage)?.Owner;
         AnalyzeStage(context, stage, owner);
     }
 
@@ -182,19 +152,6 @@ internal sealed class CapabilityAnalyzer : INodeAnalyzer {
             EffectivePolicies: effectivePolicies);
 
         context.SetMetadata(stage, new StageCapabilityMetadata(view));
-    }
-
-    private static void AnalyzeRelationship(AnalysisContext context, Relationship relationship) {
-        var view = new RelationshipCapabilityView(
-            RelationshipName: relationship.Name,
-            Source: relationship.Source,
-            Target: relationship.Target,
-            Cardinality: relationship.Cardinality,
-            Properties: relationship.Properties,
-            Stages: relationship.Stages,
-            Policies: relationship.Policies);
-
-        context.SetMetadata(relationship, new RelationshipCapabilityMetadata(view));
     }
 
     private static IEnumerable<Effect> FlattenEffects(IEnumerable<Effect> effects) =>

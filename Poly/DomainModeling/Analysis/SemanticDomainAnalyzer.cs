@@ -127,8 +127,7 @@ internal sealed class SemanticDomainAnalyzer : INodeAnalyzer {
 
     private static void ValidateEntity(AnalysisContext context, Entity entity) {
         ValidateStages(context, entity);
-        PublishEffectivePolicies(context, entity);
-        PublishEffectiveMemberMetadata(context, entity);
+        PublishOwnerIndex(context, entity);
     }
 
     private static void ValidateStages(AnalysisContext context, Entity entity) {
@@ -138,42 +137,19 @@ internal sealed class SemanticDomainAnalyzer : INodeAnalyzer {
         // All stages are flat — no parent/child hierarchy in the current DSL surface.
     }
 
-    private static void PublishEffectivePolicies(AnalysisContext context, Entity entity) {
-        var entityPolicies = entity.Policies.ToArray();
-        if (entityPolicies.Length > 0) {
-            context.SetMetadata(entity, new EffectivePoliciesMetadata(entityPolicies));
-        }
-
-        foreach (var action in entity.Actions) {
-            var actionPolicies = entityPolicies.Concat(action.Policies).ToArray();
-            if (actionPolicies.Length > 0) {
-                context.SetMetadata(action, new EffectivePoliciesMetadata(actionPolicies));
-            }
-        }
-
+    /// <summary>
+    /// Publishes <see cref="OwnerEntityMetadata"/> on every action and stage node so
+    /// downstream passes resolve "which entity owns this action/stage" in O(1) instead
+    /// of scanning every entity's members.
+    /// </summary>
+    private static void PublishOwnerIndex(AnalysisContext context, Entity entity) {
+        foreach (var action in entity.Actions)
+            context.SetMetadata(action, new OwnerEntityMetadata(entity));
         foreach (var stage in entity.Stages) {
-            // Same algorithm as Capability / GetEffectivePolicies.
-            var stagePolicies = DomainEffectiveSurface.ComposeStagePolicies(entityPolicies, stage);
-            if (stagePolicies.Count > 0) {
-                context.SetMetadata(stage, new EffectivePoliciesMetadata(stagePolicies));
-            }
-
-            foreach (var action in stage.Actions) {
-                var actionPolicies = stagePolicies.Concat(action.Policies).ToArray();
-                if (actionPolicies.Length > 0) {
-                    context.SetMetadata(action, new EffectivePoliciesMetadata(actionPolicies));
-                }
-            }
+            context.SetMetadata(stage, new OwnerEntityMetadata(entity));
+            foreach (var action in stage.Actions)
+                context.SetMetadata(action, new OwnerEntityMetadata(entity));
         }
-    }
-
-    private static void PublishEffectiveMemberMetadata(AnalysisContext context, Entity entity) {
-        // Without entity inheritance, effective members are just the entity's own members.
-        context.SetMetadata(entity, new EffectiveMemberMetadata(
-            entity.Properties,
-            entity.Actions,
-            entity.Policies,
-            entity.Stages));
     }
 
     private static void ValidateRelationship(AnalysisContext context, Relationship relationship) {

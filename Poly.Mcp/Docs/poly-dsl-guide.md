@@ -81,17 +81,19 @@ Patron: entity {
 ```
 
 **Note (back-reference materialization):** the runtime link is a store edge — it
-drives path-prefix reads, quantifiers, and subscriptions from the source. The **C#
-export does not yet auto-populate the child's back-reference property** (e.g.
-`borrower` stays a constructor parameter passed as `null`). To-one navigation
-bindings are also rejected in `create in` initializers today (analyzer fail-closed).
-Derived back-reference materialization is planned; until then, a back-reference that
-must hold a property value has no `create in` authoring surface.
+drives path-prefix reads, quantifiers, and subscriptions from the source. The
+**C# export auto-wires the child's back-reference** when the target entity has
+exactly one singular navigation pointing back to the source (e.g. `borrower`
+on `Loan` → `Patron`): the generated `Create{Nav}` factory passes `this` and the
+back-ref is not a constructor parameter. When the back-ref is ambiguous (multiple
+singular navs to the source) or a collection, it stays an unset constructor
+parameter. To-one navigation bindings in `create in` initializers remain rejected
+(analyzer fail-closed).
 
 **Required coverage (DMEFF011):** every `required` property of the created entity
 must be provided in the `create` / `create in` initializers, unless it has a
 `default`. The back-reference navigation is exempt from this check because the
-runtime store link satisfies the reference (not a create-initializer property).
+runtime store link (and the exported auto-wire) satisfies the reference.
 Analysis rejects a create that omits a required property — the generated `Create`
 factory would otherwise throw at runtime.
 

@@ -105,7 +105,6 @@ internal sealed record AnalysisData(
     [property: JsonPropertyName("subscriptionCount")] int SubscriptionCount = 0,
     [property: JsonPropertyName("actionSummary")] IReadOnlyList<ActionFact>? ActionSummary = null,
     [property: JsonPropertyName("hasStorageMapping")] bool HasStorageMapping = false,
-    [property: JsonPropertyName("hasTransport")] bool HasTransport = false,
     [property: JsonPropertyName("aggregateRootCount")] int AggregateRootCount = 0,
     [property: JsonPropertyName("aggregates")] IReadOnlyList<AggregateFact>? Aggregates = null,
     [property: JsonPropertyName("subscriptionPlans")] IReadOnlyList<SubscriptionPlanFact>? SubscriptionPlans = null
@@ -309,9 +308,8 @@ internal sealed class QueryTool {
                 ResultTypeName: a.ResultTypeName)))
             .ToList();
 
-        // Infrastructure booleans
+        // Infrastructure boolean
         var hasStorage = state.LatestAnalysis.GetMetadata<StorageMappingMetadata>(state.Domain) is not null;
-        var hasTransport = state.LatestAnalysis.GetMetadata<TransportMetadata>(state.Domain) is not null;
 
         // Aggregate ownership from OwnershipAggregateMetadata (OwnershipAggregatePass)
         var aggregate = state.LatestAnalysis.GetMetadata<OwnershipAggregateMetadata>(state.Domain)?.Aggregate;
@@ -372,7 +370,6 @@ internal sealed class QueryTool {
             SubscriptionCount: subscriptionCount,
             ActionSummary: actionSummary?.Count > 0 ? actionSummary : null,
             HasStorageMapping: hasStorage,
-            HasTransport: hasTransport,
             AggregateRootCount: aggregates.Count,
             Aggregates: aggregates.Count > 0 ? aggregates : null,
             SubscriptionPlans: subscriptionPlans.Count > 0 ? subscriptionPlans : null
@@ -1286,7 +1283,7 @@ through the unified `add` / `remove` tools (kind + payload).")]
         var nameChange = changes.OfType<SetDomainNameChange>().FirstOrDefault();
         var domainName = nameChange?.Name ?? "Imported";
 
-        var emptyDomain = new Domain(domainName, [], []);
+        var emptyDomain = new Domain(domainName, []);
 
         EvolutionResult outcome;
         try {

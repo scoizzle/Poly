@@ -100,7 +100,7 @@ public class DomainFactoryTests {
 
     [Test]
     public async Task CanonicalBuiltInTypeCatalog_ApplyTo_SeedsDomain() {
-        var empty = new Domain("Test", [], []);
+        var empty = DomainTestFactory.Create("Test", [], []);
         var seeded = CanonicalBuiltInTypeCatalog.ApplyTo(empty);
 
         await Assert.That(seeded).IsNotSameReferenceAs(empty);

@@ -68,6 +68,12 @@ namespace Poly.DomainModeling.Lowering;
 /// lowering (property reads, <c>Rel exists</c>, path-prefix) and the exporter
 /// agree on the member name. Falls back to identity when null.
 /// </param>
+/// <param name="IsCollectionNavigation">
+/// Optional predicate answering whether a DSL relationship/navigation name is a
+/// collection (<c>many</c>) on the current subject entity. The C# export uses it
+/// to lower <c>Rel exists</c> to a <c>.Count != 0</c> check (runtime store-link
+/// presence) instead of a never-null <c>collection != null</c>.
+/// </param>
 public sealed record LoweringContext(
     Node Subject,
     IReadOnlyDictionary<string, Node>? Parameters = null,
@@ -80,5 +86,6 @@ public sealed record LoweringContext(
     IReadOnlyDictionary<string, IReadOnlyList<Node>>? PostTransitionNodes = null,
     string? SourceStageName = null,
     IReadOnlyDictionary<string, string>? EnumPropertyNames = null,
-    Func<string, string>? NavigationNameResolver = null
+    Func<string, string>? NavigationNameResolver = null,
+    Func<string, bool>? IsCollectionNavigation = null
 );

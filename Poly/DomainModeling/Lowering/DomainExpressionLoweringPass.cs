@@ -20,6 +20,7 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Node
     private readonly bool _useThisReference;
     private readonly IReadOnlyDictionary<string, string>? _enumPropertyNames;
     private readonly Func<string, string>? _navigationNameResolver;
+    private readonly Func<string, bool>? _isCollectionNavigation;
     private Node _currentSubject = null!;
 
     /// <param name="parameters">
@@ -45,6 +46,7 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Node
         _useThisReference = context.UseThisReference;
         _enumPropertyNames = context.EnumPropertyNames;
         _navigationNameResolver = context.NavigationNameResolver;
+        _isCollectionNavigation = context.IsCollectionNavigation;
     }
 
     /// <summary>
@@ -104,7 +106,22 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Node
             return Route(rn.TargetProperty, parameterSubject);
         }
 
-        return Route(rn.TargetProperty, new Member(_currentSubject, ResolveName(rn.RelationshipName)));
+        // Every hop in a path-prefix is a relationship navigation. The exporter
+        // always pascal-cases nav properties, so a hop the entity-scoped resolver
+        // does not map (nested navs on target entities) still pascal-cases.
+        // The hop is null-forgiving: to-one navs are nullable, and without `!` a
+        // `this.Book.Title` leaf trips CS8602 (the runtime throws when unlinked,
+        // so the export's null-forgiving mirrors that fail-loud intent).
+        Node hop = new NullForgiving(
+            new Member(_currentSubject, ResolveNavName(rn.RelationshipName)));
+        return Route(rn.TargetProperty, hop);
+    }
+
+    /// <summary>Pascal-cases a relationship hop name the resolver did not map
+    /// (nested navs on target entities); uses the resolver's mapping when present.</summary>
+    private string ResolveNavName(string name) {
+        var resolved = _navigationNameResolver?.Invoke(name) ?? name;
+        return resolved == name ? DomainToCSharpExporter.ToPascalCase(name) : resolved;
     }
 
     private static bool ContainsRelationshipNavigation(DomainExpression expr) =>
@@ -119,11 +136,29 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Node
         finally { _currentSubject = saved; }
     }
 
-    protected override Node Exists(Exists e)
-        => new NotEqual(Lower(e.Target, _currentSubject), new Constant(null));
+    protected override Node Exists(Exists e) {
+        // Collection (`many`) relationship: the export's `collection != null` is
+        // always true (ctor-initialized) while the runtime answers store-link
+        // presence (false on empty) — lower to a real non-empty check instead.
+        if (e.Target is PropertyAccess pa && IsCollectionNav(pa.Name)) {
+            return new NotEqual(
+                new Member(Lower(e.Target, _currentSubject), "Count"),
+                new Constant(0));
+        }
+        return new NotEqual(Lower(e.Target, _currentSubject), new Constant(null));
+    }
 
-    protected override Node NotExists(NotExists ne)
-        => new Equal(Lower(ne.Target, _currentSubject), new Constant(null));
+    protected override Node NotExists(NotExists ne) {
+        if (ne.Target is PropertyAccess pa && IsCollectionNav(pa.Name)) {
+            return new Equal(
+                new Member(Lower(ne.Target, _currentSubject), "Count"),
+                new Constant(0));
+        }
+        return new Equal(Lower(ne.Target, _currentSubject), new Constant(null));
+    }
+
+    private bool IsCollectionNav(string name) =>
+        _isCollectionNavigation?.Invoke(name) == true;
 
     protected override Node Add(Add a)
         => new SN.Add(Lower(a.Left, _currentSubject), Lower(a.Right, _currentSubject));

@@ -89,8 +89,12 @@ public class DomainExpressionLoweringPassTests {
         var outer = (Member)result;
         await Assert.That(outer.MemberName).IsEqualTo("AvailableCopies");
 
-        await Assert.That(outer.Value).IsTypeOf<Member>();
-        var nav = (Member)outer.Value;
+        // The nav hop is null-forgiving (to-one navs are nullable in the export,
+        // so the leaf must not trip CS8602).
+        await Assert.That(outer.Value).IsTypeOf<NullForgiving>();
+        var nf = (NullForgiving)outer.Value;
+        await Assert.That(nf.Operand).IsTypeOf<Member>();
+        var nav = (Member)nf.Operand;
         await Assert.That(nav.MemberName).IsEqualTo("Book");
         await Assert.That(nav.Value).IsSameReferenceAs(Subject);
     }

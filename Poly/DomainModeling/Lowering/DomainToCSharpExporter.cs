@@ -1182,11 +1182,15 @@ public sealed class DomainToCSharpExporter {
         }
 
         if (isVoid) {
-            // Void actions end with return DomainResult.Success();
-            nodes.Add(new Return(
-                new Invoke(
-                    new Member(
-                        new NamedTypeReference("DomainResult"), "Success"))));
+            // Void actions end with return DomainResult.Success(); — but not when the
+            // body already ended in a throw (quantified-invoke fail-loud), which would
+            // make the return unreachable (CS0162).
+            if (nodes.Count == 0 || nodes[^1] is not ThrowStatement) {
+                nodes.Add(new Return(
+                    new Invoke(
+                        new Member(
+                            new NamedTypeReference("DomainResult"), "Success"))));
+            }
         }
         else {
             // Non-void actions: wrap the last effect node in DomainResult<T>.Success(value).
@@ -1282,7 +1286,8 @@ public sealed class DomainToCSharpExporter {
             Analysis: analysis,
             UseThisReference: true,
             EnumPropertyNames: enumProps,
-            NavigationNameResolver: EffectLoweringPass.BuildNavigationNameResolver(entity, domain, analysis)
+            NavigationNameResolver: EffectLoweringPass.BuildNavigationNameResolver(entity, domain, analysis),
+            IsCollectionNavigation: EffectLoweringPass.BuildIsCollectionNavigation(entity, domain, analysis)
         );
         var pass = new DomainExpressionLoweringPass(context);
         var lowered = pass.Lower(expr, new Parameter("entity"));
@@ -1632,11 +1637,22 @@ public sealed class DomainToCSharpExporter {
         INodeMetadataProvider? metadata) {
         if (defaultValue.Expression is Literal lit)
             return new Constant(lit.Value);
-        if (defaultValue.Expression is PropertyAccess pa
-            && domain is not null
-            && TryResolveEnumType(domain, metadata, prop.Type.TypeName, out var enumType)
-            && enumType is not null)
-            return new Member(new NamedTypeReference(enumType.Name), pa.Name);
+        if (defaultValue.Expression is PropertyAccess pa) {
+            if (domain is not null
+                && TryResolveEnumType(domain, metadata, prop.Type.TypeName, out var enumType)
+                && enumType is not null
+                && enumType.MemberNames.Contains(pa.Name, StringComparer.Ordinal)) {
+                return new Member(new NamedTypeReference(enumType.Name), pa.Name);
+            }
+            // Non-keyword, non-enum-member PropertyAccess default cannot be lowered —
+            // fail loud instead of silently dropping the constraint (which would turn
+            // the property into a required Create parameter).
+            if (domain is not null) {
+                throw new NotSupportedException(
+                    $"default({pa.Name}) on property '{prop.Name}' (type '{prop.Type.TypeName}') cannot be lowered: " +
+                    $"'{pa.Name}' is not a member of an enum that '{prop.Name}' is typed with.");
+            }
+        }
         return null;
     }
 

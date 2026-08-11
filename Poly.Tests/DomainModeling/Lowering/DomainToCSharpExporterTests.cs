@@ -1010,7 +1010,7 @@ public class DomainToCSharpExporterTests {
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
-        await Assert.That(cs).Contains("this.Source.Path");
+        await Assert.That(cs).Contains("this.Source!.Path");
         await Assert.That(cs).DoesNotContain("this.source.Path");
     }
 
@@ -1343,5 +1343,143 @@ public class DomainToCSharpExporterTests {
         var cs = new CSharpGenerator().Generate(unit);
 
         await Assert.That(cs).Contains("AddDays((int)14L)");
+    }
+
+    [Test]
+    public async Task Export_PathPrefixMultiHop_PascalCasesNestedNavAndNullForgives() {
+        // Discovery pilot A-F1/A-F4: `reporter team TeamName` (multi-hop to-one
+        // path-prefix) must emit `this.Reporter!.Team!.TeamName` — the nested nav
+        // `team` (on Engineer, not the policy's own entity) was left raw (CS1061)
+        // and the nullable navs were not null-forgiven (CS8602).
+        var (domain, analysis) = ParseAndAnalyze("""
+            domain Test
+            Engineer: entity { team: Team }
+            Team: entity { TeamName: Text }
+            Issue: entity {
+              reporter: Engineer
+              FromBlueTeam: policy { reporter team TeamName is "Blue" }
+            }
+            """);
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var unit = new CompilationUnitNode([], null, types, null);
+        var cs = new CSharpGenerator().Generate(unit);
+
+        await Assert.That(cs).Contains("this.Reporter!.Team!.TeamName == \"Blue\"");
+        await Assert.That(cs).DoesNotContain("this.Reporter.team.TeamName");
+    }
+
+    [Test]
+    public async Task Export_RelExistsOnMany_LowersToCountCheck() {
+        // Discovery pilot A-F2: `lines exists` on a many nav emitted `this.Lines != null`
+        // (ctor-initialized → always true) while the runtime answers store-link presence
+        // (false on empty). Must lower to a real non-empty check; to-one keeps the null check.
+        var (domain, analysis) = ParseAndAnalyze("""
+            domain Test
+            Order: entity {
+              lines: many OrderLine
+              owner: Customer
+              HasLines: policy { lines exists }
+              HasOwner: policy { owner exists }
+            }
+            OrderLine: entity { order: Order }
+            Customer: entity { orders: many Order }
+            """);
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var unit = new CompilationUnitNode([], null, types, null);
+        var cs = new CSharpGenerator().Generate(unit);
+
+        await Assert.That(cs).Contains("public bool HasLines() => this.Lines.Count != 0;");
+        await Assert.That(cs).Contains("public bool HasOwner() => this.Owner != null;");
+        await Assert.That(cs).DoesNotContain("this.Lines != null");
+    }
+
+    [Test]
+    public async Task Export_QuantifiedInvoke_NoUnreachableReturnAfterThrow() {
+        // Discovery pilot A-F3: the quantified-invoke fail-loud throw must be the last
+        // statement — the appended `return DomainResult.Success()` was unreachable (CS0162).
+        var (domain, analysis) = ParseAndAnalyze("""
+            domain Test
+            Order: entity {
+              lines: many OrderLine
+              Draft: stage {
+                Go: action {
+                  invoke all lines.Touch
+                }
+              }
+            }
+            OrderLine: entity {
+              order: Order
+              Touch: action { }
+            }
+            """);
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var unit = new CompilationUnitNode([], null, types, null);
+        var cs = new CSharpGenerator().Generate(unit);
+
+        await Assert.That(cs).Contains("throw new NotSupportedException(\"invoke all lines.Touch requires store-aware evaluation");
+        await Assert.That(cs).DoesNotContain(
+            "and cannot be compiled to standalone C#.\");\n        return DomainResult.Success();");
+    }
+
+    [Test]
+    public async Task Export_CreateType_DefaultedPropOverrideFlowsThroughCtor() {
+        // Discovery pilot C-F1: `create Product { SKU: "P1" Tier: Plus }` on a defaulted
+        // `Tier` emitted a post-create `product.Tier = Tier.Plus;` against a private setter
+        // (CS0272). The override must flow through Create(...) like create-in does.
+        var (domain, analysis) = ParseAndAnalyze("""
+            domain Test
+            Tier: enum { Basic, Plus }
+            Product: entity {
+              SKU: Text required
+              Tier: Tier default(Basic)
+              make: action { create Product { SKU: "P1" Tier: Plus } }
+            }
+            """);
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var unit = new CompilationUnitNode([], null, types, null);
+        var cs = new CSharpGenerator().Generate(unit);
+
+        await Assert.That(cs).Contains("Product.Create(\"P1\", Tier.Plus)");
+        await Assert.That(cs).DoesNotContain("product.Tier =");
+    }
+
+    [Test]
+    public async Task Export_CreateInitializer_StringLiteralEnumMember_Qualifies() {
+        // Discovery pilot C-F2: `Kind: "Keyword"` in a create/create-in initializer passed
+        // the string literal through as `string` (CS1503) — the assign path qualifies it.
+        var (domain, analysis) = ParseAndAnalyze("""
+            domain Test
+            TokenKind: enum { Keyword, Identifier }
+            Token: entity {
+              Lexeme: Text required
+              Kind: TokenKind
+            }
+            Compilation: entity {
+              tokens: many Token
+              Make: action {
+                create in tokens { Lexeme: "let" Kind: "Keyword" }
+              }
+            }
+            """);
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var unit = new CompilationUnitNode([], null, types, null);
+        var cs = new CSharpGenerator().Generate(unit);
+
+        await Assert.That(cs).Contains("CreateTokens(TokenKind.Keyword, \"let\")");
+    }
+
+    [Test]
+    public async Task Export_EnumMemberDefault_OnNonEnumProperty_FailsLoud() {
+        // Discovery pilot B-F6: `default(Draft)` on a Date prop was silently dropped in the
+        // export (the property became a required Create param) while the runtime stored the
+        // string. Must fail loud at export instead of silently changing the signature.
+        var (domain, analysis) = ParseAndAnalyze("""
+            domain Test
+            Status: enum { Draft, Open }
+            Task: entity { DueDate: Date default(Draft) }
+            """);
+
+        await Assert.That(() => new DomainToCSharpExporter().Export(domain, analysis))
+            .Throws<NotSupportedException>();
     }
 }

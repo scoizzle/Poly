@@ -53,7 +53,9 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         _sourceStageName = context.SourceStageName;
         _enumPropertyNames = context.EnumPropertyNames;
         _expressionPass = new DomainExpressionLoweringPass(context with {
-            NavigationNameResolver = context.NavigationNameResolver ?? BuildNavigationNameResolver(entity, _domain, _analysis)
+            NavigationNameResolver = context.NavigationNameResolver ?? BuildNavigationNameResolver(entity, _domain, _analysis),
+            IsCollectionNavigation = context.IsCollectionNavigation
+                ?? BuildIsCollectionNavigation(entity, _domain, _analysis)
         });
         Subject = context.UseThisReference && context.Subject is Parameter { Name: "entity" }
             ? new ThisReference()
@@ -86,6 +88,32 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
                 : name;
         }
         return name => name;
+    }
+
+    /// <summary>
+    /// Builds the default "is this DSL nav name a collection relationship on the
+    /// current entity" predicate, mirroring <see cref="BuildNavigationNameResolver"/>
+    /// (analysis metadata primary; domain relationship list fallback; false when
+    /// unknown). Used to lower <c>Rel exists</c> on <c>many</c> navs to a
+    /// <c>.Count != 0</c> check in the export.
+    /// </summary>
+    internal static Func<string, bool> BuildIsCollectionNavigation(
+        Entity entity, Domain? domain, INodeMetadataProvider? analysis) {
+        if (analysis is not null) {
+            var rlm = analysis.GetMetadata<RelationshipLookupMetadata>(default);
+            if (rlm is not null) {
+                return name => rlm.TryGetRelationship(entity.Name, name, out var rel)
+                    && rel.Cardinality is RelationshipCardinality.OneToMany or RelationshipCardinality.ManyToMany;
+            }
+        }
+        if (domain is not null) {
+            var navCardinalities = entity.Navigations
+                .GroupBy(r => r.Name)
+                .ToDictionary(g => g.Key, g => g.First().Cardinality, StringComparer.Ordinal);
+            return name => navCardinalities.TryGetValue(name, out var card)
+                && card is RelationshipCardinality.OneToMany or RelationshipCardinality.ManyToMany;
+        }
+        return _ => false;
     }
 
     /// <summary>The Syntax AST node representing the current entity instance.</summary>
@@ -360,10 +388,10 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         nds.Add(new Variable(targetName,
             new Member(new Variable(resultVar), "Value")));
 
-        // Defaulted-property overrides (props with DefaultValueConstraint are not
-        // ctor params — the factory body sets the default). Apply bound values as
-        // post-create assignments so `create Fine { Severity: Hint }` overrides the
-        // default instead of being silently dropped (matches the runtime values bag).
+        // Bound initializers for non-constructor props are applied as post-create
+        // assignments. Defaulted props are NOT ctor params here, but their overrides
+        // were already forwarded as trailing optional args by BuildConstructorArgs
+        // (same as create-in) — re-assigning them would hit the private setter (CS0272).
         var parameterNames = GetConstructorParameterOrder(targetEntity)
             .Select(p => p.Name).ToHashSet(StringComparer.Ordinal);
         foreach (var init in cei.Initializers) {
@@ -371,6 +399,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
             var targetProp = targetEntity.Properties.FirstOrDefault(p =>
                 string.Equals(p.Name, init.PropertyName, StringComparison.Ordinal));
             if (targetProp is null) continue;
+            if (targetProp.Constraints.Any(c => c is DefaultValueConstraint)) continue;
             nds.Add(new Assignment(
                 new Member(new Variable(targetName), targetProp.Name),
                 LowerEnumAwareValue(init.Expression, targetProp.Type, Subject)));
@@ -443,25 +472,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         // default is the C# default). When a create-in binds one, emit args for ALL
         // defaulted props in the same sorted order — bound value or the DSL default —
         // so positional order matches the signature. When none are bound, omit (C# default).
-        var defaultedProps = targetEntity.Properties
-            .Where(p => p.Constraints.Any(c => c is DefaultValueConstraint))
-            .OrderBy(p => p.Name)
-            .ToList();
-        if (defaultedProps.Any(p => initMap.ContainsKey(p.Name))) {
-            foreach (var prop in defaultedProps) {
-                if (initMap.TryGetValue(prop.Name, out var expr)) {
-                    args.Add(LowerEnumAwareValue(expr, prop.Type, Subject));
-                }
-                else {
-                    var defaultConstraint = prop.Constraints.OfType<DefaultValueConstraint>().First();
-                    var runtimeExpr = EffectLoweringPass.LowerDefaultExpression(defaultConstraint.Expression);
-                    var defaultNode = DomainToCSharpExporter.LowerDefaultConstantNode(defaultConstraint, prop, _domain, _analysis);
-                    args.Add(runtimeExpr is not null
-                        ? new Constant(null) // sentinel — ctor applies the runtime default
-                        : defaultNode ?? DefaultForDomainType(prop.Type, _domain, _analysis));
-                }
-            }
-        }
+        AppendDefaultedPropArgs(args, initMap, targetEntity);
 
         var localName = DomainToCSharpExporter.ToCamelCase(targetEntity.Name);
         var blockNodes = new List<Node> {
@@ -544,7 +555,45 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
                 args.Add(DefaultForDomainType(parameter.Type, _domain, _analysis));
         }
 
+        // Defaulted props are TRAILING optional params (the DSL default is the C#
+        // default). When any is bound, emit args for ALL defaulted props in sorted
+        // order — bound value or the DSL default — so positional order matches the
+        // Create/CreateNav signature. When none are bound, omit (C# default).
+        AppendDefaultedPropArgs(args, initMap, targetEntity);
+
         return args;
+    }
+
+    /// <summary>
+    /// Appends trailing optional-parameter args for defaulted props of the target
+    /// entity. Shared by the standalone <c>create Type</c> and <c>create in Rel</c>
+    /// call sites so a bound defaulted-prop override flows through construction
+    /// instead of a (private-setter) post-create assignment.
+    /// </summary>
+    private void AppendDefaultedPropArgs(
+        List<Node> args,
+        IReadOnlyDictionary<string, DomainExpression> initMap,
+        Entity targetEntity) {
+        var defaultedProps = targetEntity.Properties
+            .Where(p => p.Constraints.Any(c => c is DefaultValueConstraint))
+            .OrderBy(p => p.Name)
+            .ToList();
+        if (!defaultedProps.Any(p => initMap.ContainsKey(p.Name)))
+            return;
+
+        foreach (var prop in defaultedProps) {
+            if (initMap.TryGetValue(prop.Name, out var expr)) {
+                args.Add(LowerEnumAwareValue(expr, prop.Type, Subject));
+            }
+            else {
+                var defaultConstraint = prop.Constraints.OfType<DefaultValueConstraint>().First();
+                var runtimeExpr = EffectLoweringPass.LowerDefaultExpression(defaultConstraint.Expression);
+                var defaultNode = DomainToCSharpExporter.LowerDefaultConstantNode(defaultConstraint, prop, _domain, _analysis);
+                args.Add(runtimeExpr is not null
+                    ? new Constant(null) // sentinel — ctor applies the runtime default
+                    : defaultNode ?? DefaultForDomainType(prop.Type, _domain, _analysis));
+            }
+        }
     }
 
     /// <summary>
@@ -558,10 +607,16 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     /// </summary>
     private Node LowerEnumAwareValue(DomainExpression expr, DomainTypeReference targetType, Node subject) {
         if (DomainToCSharpExporter.TryResolveEnumType(_domain, _analysis, targetType.TypeName, out var enumType)
-            && enumType is not null
-            && expr is PropertyAccess pa
-            && enumType.MemberNames.Contains(pa.Name, StringComparer.Ordinal)) {
-            return new Member(new NamedTypeReference(enumType.Name), pa.Name);
+            && enumType is not null) {
+            // Bare identifier member: Tier: Pro
+            if (expr is PropertyAccess pa && enumType.MemberNames.Contains(pa.Name, StringComparer.Ordinal)) {
+                return new Member(new NamedTypeReference(enumType.Name), pa.Name);
+            }
+            // String-literal member: Kind: "Keyword" — same qualification as assign.
+            if (expr is Literal { Value: string s }
+                && enumType.MemberNames.Contains(s, StringComparer.Ordinal)) {
+                return new Member(new NamedTypeReference(enumType.Name), s);
+            }
         }
         return _expressionPass.Lower(expr, subject);
     }

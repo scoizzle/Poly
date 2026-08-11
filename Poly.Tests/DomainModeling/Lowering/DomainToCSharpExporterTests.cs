@@ -854,9 +854,16 @@ public class DomainToCSharpExporterTests {
 
         var errors = compilation.GetDiagnostics()
             .Where(d => d.Severity == Microsoft.CodeAnalysis.DiagnosticSeverity.Error)
-            .Select(d => d.ToString())
+            .Select(d => $"{d.Location.SourceTree?.FilePath}: {d}")
             .ToArray();
         await Assert.That(errors).IsEmpty();
+
+        // Generated code must also be warning-free (a host with TreatWarningsAsErrors).
+        var warnings = compilation.GetDiagnostics()
+            .Where(d => d.Severity == Microsoft.CodeAnalysis.DiagnosticSeverity.Warning)
+            .Select(d => $"{d.Location.SourceTree?.FilePath}: {d}")
+            .ToArray();
+        await Assert.That(warnings).IsEmpty();
     }
 
     [Test]

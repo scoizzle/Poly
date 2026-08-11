@@ -17,7 +17,7 @@ namespace Poly.Tests.DomainModeling.Lowering;
 /// or changing the lowering pass.
 /// </summary>
 public class PolicySampleSubjectSpikeTests {
-    private static readonly DomainExpressionLoweringPass Pass = new();
+    private readonly DomainExpressionLoweringPass Pass = new();
 
     private sealed record PersonRecord(string Name, int Age);
 

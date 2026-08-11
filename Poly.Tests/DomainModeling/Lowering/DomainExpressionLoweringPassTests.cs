@@ -7,9 +7,9 @@ using SN = Poly.Ast.Nodes;
 namespace Poly.Tests.DomainModeling.Lowering;
 
 public class DomainExpressionLoweringPassTests {
-    private static readonly DomainExpressionLoweringPass Pass = new();
+    private readonly DomainExpressionLoweringPass Pass = new();
 
-    private static readonly ParameterReference Subject = new();
+    private readonly ParameterReference Subject = new();
 
     [Test]
     public async Task PropertyAccess_LowersToMember() {

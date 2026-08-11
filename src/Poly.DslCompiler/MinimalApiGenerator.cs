@@ -572,14 +572,15 @@ public sealed class MinimalApiGenerator {
                     new Block(new Return(new Invoke(new Member(new TypeReference("Results"), "Conflict"), new Member(new Variable("result"), "ErrorMessage"))))));
             }
 
-            // Catch: returns Results.StatusCode(500)
+            // Catch: returns Results.StatusCode(500). No variable — the exception is
+            // swallowed (avoids CS0168 unused-variable warnings).
             var catchBody = new Return(
                 new Invoke(new Member(new TypeReference("Results"), "StatusCode"), new Constant(500)));
 
             var bodyNodes = new List<Node>(preActionNodes);
             bodyNodes.Add(new TryCatchFinally(
                 new Block(expressions: tryBody, variables: Array.Empty<Node>()),
-                CatchClauses: [new CatchClause(new NamedTypeReference("Exception"), "ex", catchBody)]));
+                CatchClauses: [new CatchClause(new NamedTypeReference("Exception"), null, catchBody)]));
 
             statements.Add(new Invoke(
                 new Member(new TypeReference(AppVar), "MapPost"),

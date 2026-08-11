@@ -313,7 +313,7 @@ public class VmCorrectnessTests {
     //  B. VM matches LINQ on shared DomainExpression trees
     // ═══════════════════════════════════════════════════════════════
 
-    private static readonly DomainExpressionLoweringPass LowerPass = new();
+    private readonly DomainExpressionLoweringPass LowerPass = new();
     private static readonly ParameterReference Subject = new();
 
     private static async Task AssertVmMatchesLinq(DomainExpression expr) {
@@ -329,7 +329,10 @@ public class VmCorrectnessTests {
     }
 
     private static async Task AssertVmMatchesLinqImpl(DomainExpression expr, Node subject, object?[] args) {
-        var lowered = LowerPass.Lower(expr, subject);
+        // Fresh pass per call — DomainExpressionLoweringPass carries mutable
+        // _currentSubject state and must not be shared across parallel tests.
+        var pass = new DomainExpressionLoweringPass();
+        var lowered = pass.Lower(expr, subject);
         var analysis = LinqAnalyze(lowered);
 
         // LINQ path

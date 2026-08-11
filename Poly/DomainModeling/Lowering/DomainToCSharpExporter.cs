@@ -143,6 +143,13 @@ public sealed class DomainToCSharpExporter {
                 // assignment); still encapsulated from external callers.
                 Setter: new PropertySetterDefinitionNode(
                     AccessModifier: AccessModifier.Internal),
+                // CS8618 hygiene: non-nullable reference-typed scalars (Text → string)
+                // are left unset by the EF-materialization parameterless ctor — emit
+                // `= default!;` so the generated code compiles warning-free.
+                Initializer: IsNonNullableReferenceScalar(propRef)
+                    ? new Syntactic.PropertyInitializerDefinitionNode(
+                        new Syntactic.NullForgiving(new Syntactic.Default()))
+                    : null,
                 Constraints: constraints
             ));
 
@@ -732,7 +739,12 @@ public sealed class DomainToCSharpExporter {
             }
 
             var paramName = ToCamelCase(parameter.Name);
-            var propRef = MapDomainTypeRef(parameter.Type, domain, metadata);
+            var mapped = MapDomainTypeRef(parameter.Type, domain, metadata);
+            // Nav params are optional references (unbound initializers pass null) —
+            // emit nullable to match the property/ctor and avoid CS8625.
+            var propRef = parameter.IsNavigation
+                ? (Node)new OptionalTypeReference(mapped)
+                : mapped;
             methodParams.Add(new Parameter(paramName, propRef));
             createArgs.Add(new Parameter(paramName));
         }
@@ -1556,6 +1568,14 @@ public sealed class DomainToCSharpExporter {
             Semantics: Syntactic.TypeDefinitionSemantics.ImmutableValue
         );
     }
+
+    /// <summary>
+    /// True when the mapped CLR type is a non-nullable reference type (currently the
+    /// only one is <c>Text → string</c>), which the parameterless EF-materialization
+    /// ctor leaves unset and would otherwise raise CS8618.
+    /// </summary>
+    private static bool IsNonNullableReferenceScalar(Node propRef) =>
+        propRef is PrimitiveTypeReference { PrimitiveId: PrimType.String };
 
     // ── String helpers ──────────────────────────────────────────
 

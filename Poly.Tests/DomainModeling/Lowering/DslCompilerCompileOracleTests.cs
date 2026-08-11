@@ -114,6 +114,13 @@ public class DslCompilerCompileOracleTests {
             .Select(d => $"{d.Location.SourceTree?.FilePath}: {d}")
             .ToArray();
         await Assert.That(errors).IsEmpty();
+
+        // Generated solution must also be warning-free (hosts use TreatWarningsAsErrors).
+        var warnings = compilation.GetDiagnostics()
+            .Where(d => d.Severity == Microsoft.CodeAnalysis.DiagnosticSeverity.Warning)
+            .Select(d => $"{d.Location.SourceTree?.FilePath}: {d}")
+            .ToArray();
+        await Assert.That(warnings).IsEmpty();
     }
 
     [Test]

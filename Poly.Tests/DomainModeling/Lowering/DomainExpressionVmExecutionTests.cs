@@ -21,8 +21,11 @@ public record PersonRecord(string Name, int Age);
 /// → VM analysis pipeline → µops → Interpreter.Execute.
 /// </summary>
 public class DomainExpressionVmExecutionTests {
-    private static readonly DomainExpressionLoweringPass Pass = new();
-    private static readonly ParameterReference Subject = new();
+    // Instance fields: TUnit creates a fresh class instance per test, and
+    // DomainExpressionLoweringPass carries mutable _currentSubject state — a shared
+    // static instance raced under parallel execution (Exists_NonNullValue_ReturnsTrue flake).
+    private readonly DomainExpressionLoweringPass Pass = new();
+    private readonly ParameterReference Subject = new();
 
     private static AnalysisResult Analyze(Node node) =>
         Interpreter.Analyzer.Analyze(node);

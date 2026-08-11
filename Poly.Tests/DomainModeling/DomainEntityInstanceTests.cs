@@ -3149,4 +3149,67 @@ public class DomainEntityInstanceTests {
         await Assert.That(ex!.Message).Contains("exactly one linked target");
         await Assert.That(ex.Message).Contains("quantifiers");
     }
+
+    // ── Product-surface audit: entry/exit + cross-entity invoke args ──
+
+    [Test]
+    public async Task InvokeAction_StageTransition_RunsExitThenEntryEffects() {
+        // Entry/exit effects are documented as shipped (§5); lock the runtime execution.
+        var go = new Poly.DomainModeling.Action("Go", InvocationResult.Void, [],
+            [new StageTransitionEffect(new StageReference("Active"))], []);
+        var finish = new Poly.DomainModeling.Action("Finish", InvocationResult.Void, [],
+            [new StageTransitionEffect(new StageReference("Done"))], []);
+        var draft = new Stage("Draft", [go], [], [],
+            [new AssignEffect(DomainExpression.Property("Trace"), DomainExpression.Literal("left_draft"))]);
+        var active = new Stage("Active", [finish], [],
+            [new AssignEffect(DomainExpression.Property("Trace"), DomainExpression.Literal("entered_active"))],
+            [new AssignEffect(DomainExpression.Property("Trace"), DomainExpression.Literal("left_active"))]);
+        var done = new Stage("Done", [], [], [], []);
+        var entity = new Entity("Item",
+            [new Property("Trace", new DomainTypeReference("Text"), [])], [], [], [draft, active, done]);
+        var domain = new Domain("Test", [entity]);
+        var store = new DomainInstanceStore();
+        var instance = DomainEntityInstance.Create(entity, domain: domain);
+        store.Add(instance);
+
+        instance.InvokeAction("Go");
+        await Assert.That(instance.GetProperty<string>("Trace")).IsEqualTo("entered_active");
+
+        instance.InvokeAction("Finish");
+        await Assert.That(instance.GetProperty<string>("Trace")).IsEqualTo("left_active");
+    }
+
+    [Test]
+    public async Task InvokeAction_CrossEntity_WithParameterBinding_PassesArgs() {
+        // Cross-entity invoke with a param binding (guide: invoke Rel.Action(param: expr)).
+        // Source invokes Process on the linked Target via `service`, passing "hi".
+        var process = new Poly.DomainModeling.Action("Process", InvocationResult.Void, [
+            new Property("message", new DomainTypeReference("Text"), [])
+        ], [
+            // Action args are injected into the instance bag — params read as property access.
+            new AssignEffect(DomainExpression.Property("LastMessage"), DomainExpression.Property("message"))
+        ], []);
+        var call = new Poly.DomainModeling.Action("Call", InvocationResult.Void, [], [
+            new InvokeActionEffect("Process",
+                [new PropertyBinding("message", DomainExpression.Literal("hi"))],
+                TargetRelationship: "service")
+        ], []);
+        var source = new Entity("Source", [], [call], [], []);
+        var target = new Entity("Target", [
+            new Property("LastMessage", new DomainTypeReference("Text"), [])
+        ], [process], [], []);
+        var rel = new Relationship("service",
+            new DomainTypeReference("Source"), new DomainTypeReference("Target"),
+            RelationshipCardinality.OneToOne, []);
+        var domain = DomainTestFactory.Create("Test", [source, target], [rel]);
+        var store = new DomainInstanceStore();
+        var sourceInst = DomainEntityInstance.Create(source, domain: domain);
+        var targetInst = DomainEntityInstance.Create(target, domain: domain);
+        store.Add(sourceInst); store.Add(targetInst);
+        store.Link("service", sourceInst, targetInst);
+
+        sourceInst.InvokeAction("Call");
+
+        await Assert.That(targetInst.GetProperty<string>("LastMessage")).IsEqualTo("hi");
+    }
 }

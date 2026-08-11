@@ -2361,6 +2361,77 @@ E: entity {{
         await Assert.That(dsl.Success).IsTrue();
     }
 
+    [Test]
+    public async Task ApplyDsl_EnumAssign_RuntimeInvoke_SetsEnumValue() {
+        // Code-review fix: `assign Status to On` (bare enum member) and `assign Status to "On"`
+        // (string literal) crashed the runtime VM (DirectVmAbiEmitter: unsupported node type
+        // NamedTypeReference) — the enum RHS was lowered to `Status.On`, which is valid C#
+        // for the exporter but not a compilable VM node. The runtime stores enum values as
+        // strings, so the lowered RHS must be a string constant (export keeps Status.On).
+        var (sessionId, _) = McpSessionStore.Create("Test");
+        var dsl = DslTool.ApplyDsl(sessionId, """
+            domain Test
+            Status: enum { Off, On }
+            Item: entity {
+              Status: Status
+              Draft: stage {
+                Bare: action { assign Status to On }
+                Literal: action { assign Status to "On" }
+              }
+            }
+            """);
+        await Assert.That(dsl.Success).IsTrue();
+
+        var create = RuntimeTool.CreateInstance(sessionId, "Item",
+            """{"Status":"Off"}""");
+        await Assert.That(create.Success).IsTrue();
+        var instanceId = ExtractInstanceId(
+            System.Text.Json.JsonSerializer.Serialize(create.Data));
+
+        var bare = RuntimeTool.InvokeAction(sessionId, instanceId!, "Bare");
+        await Assert.That(bare.Success).IsTrue();
+        var get1 = System.Text.Json.JsonSerializer.Serialize(
+            RuntimeTool.GetInstance(sessionId, instanceId!).Data);
+        await Assert.That(get1).Contains("\"On\"");
+
+        var literal = RuntimeTool.InvokeAction(sessionId, instanceId!, "Literal");
+        await Assert.That(literal.Success).IsTrue();
+        var get2 = System.Text.Json.JsonSerializer.Serialize(
+            RuntimeTool.GetInstance(sessionId, instanceId!).Data);
+        await Assert.That(get2).Contains("\"On\"");
+    }
+
+    [Test]
+    public async Task CreateInstance_AppliesPropertyDefaults() {
+        // Code-review fix: the runtime stored null for unspecified properties instead of
+        // applying DefaultValueConstraint — the C# export applied them as optional ctor
+        // params (runtime/export divergence: Rack.LastPing was null at runtime, "none" in
+        // the export). Literal, enum-member, and number defaults must all land on the instance.
+        var (sessionId, _) = McpSessionStore.Create("Test");
+        var dsl = DslTool.ApplyDsl(sessionId, """
+            domain Test
+            Status: enum { Off, On }
+            Rack: entity {
+              Name: Text required
+              LastPing: Text default("none")
+              Power: Number default(10)
+              Status: Status default(On)
+            }
+            """);
+        await Assert.That(dsl.Success).IsTrue();
+
+        var create = RuntimeTool.CreateInstance(sessionId, "Rack", """{"Name":"rack1"}""");
+        await Assert.That(create.Success).IsTrue();
+        var instanceId = ExtractInstanceId(
+            System.Text.Json.JsonSerializer.Serialize(create.Data));
+        var get = System.Text.Json.JsonSerializer.Serialize(
+            RuntimeTool.GetInstance(sessionId, instanceId!).Data);
+
+        await Assert.That(get).Contains("\"none\"");
+        await Assert.That(get).Contains("\"10\"");
+        await Assert.That(get).Contains("\"On\"");
+    }
+
     // Entity inheritance was removed — no inheritance test.
 
     // ── E6.1 RT goldens: authoring → create → invoke → assert ──

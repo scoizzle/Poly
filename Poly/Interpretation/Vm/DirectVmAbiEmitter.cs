@@ -888,6 +888,13 @@ public static class DirectVmAbiEmitter {
             if (leftRep == ValueRepresentationKind.HeapRef
                 || rightRep == ValueRepresentationKind.HeapRef)
                 return true;
+            // Both representations known and neither is a heap ref (StackScalar/Bool) →
+            // the comparison is scalar. Do NOT fall through to the Member heuristic:
+            // a value-typed (e.g. long) member read produces a scalar, and treating it
+            // as a heap handle reads garbage heap slots (broken `== 0` in quantifiers).
+            if (leftRep != ValueRepresentationKind.Unknown
+                && rightRep != ValueRepresentationKind.Unknown)
+                return false;
         }
         if (left is Constant cl && cl.Value is string) return true;
         if (right is Constant cr && cr.Value is string) return true;
@@ -1022,11 +1029,12 @@ public static class DirectVmAbiEmitter {
 
         if (resolved is not null) {
             var declaringTypeDef = resolved.DeclaringTypeDefinition;
-            bool isValueType = declaringTypeDef is ClrTypeDefinition clrDef
-                && clrDef.RuntimeType.IsValueType;
+            bool isInlineValueType = declaringTypeDef is ClrTypeDefinition clrDef
+                && clrDef.RuntimeType.IsValueType
+                && AbiValueTypes.IsLongRepresentable(clrDef.RuntimeType);
 
             Expression instanceObj;
-            if (isValueType) {
+            if (isInlineValueType) {
                 instanceObj = Convert(ctx.RingVar(instanceSlot), typeof(object));
             }
             else {
@@ -1083,18 +1091,20 @@ public static class DirectVmAbiEmitter {
     }
 
     /// <summary>Convert a member access result (object?) to the ring ABI (long).
-    /// Value types are unboxed to long; reference types are heap-allocated.</summary>
+    /// Long-representable value types are unboxed to long; everything else
+    /// (reference types and non-numeric value types like DateTime/DateOnly/Guid)
+    /// is boxed and allocated on the heap, returning a heap handle.</summary>
     private static Expression ConvertMemberResult(Expression readCall, ITypeMember resolved, AbiCtx ctx) {
         // Try to determine if the member type is a value type via CLR metadata.
         var memberTypeDef = resolved.MemberTypeDefinition;
         if (memberTypeDef is ClrTypeDefinition clrDef) {
             var clrType = clrDef.RuntimeType;
-            if (clrType.IsValueType) {
+            if (clrType.IsValueType && AbiValueTypes.IsLongRepresentable(clrType)) {
                 // Unbox: (long)(T)(object?)readCall
                 return Convert(Convert(readCall, clrType), typeof(long));
             }
         }
-        // Reference type: allocate on heap and return handle
+        // Reference type (or non-long value type): box/allocate on heap and return handle
         var handle = Call(ctx.HeapLocal,
             typeof(Heap).GetMethod(nameof(Heap.Allocate))!,
             readCall);
@@ -1497,7 +1507,9 @@ public static class DirectVmAbiEmitter {
             var memberTypeDef = resolved.MemberTypeDefinition;
             var clrMemberType = memberTypeDef.GetRuntimeType();
             Expression writeValue;
-            if (clrMemberType is not null && clrMemberType.IsValueType) {
+            if (clrMemberType is not null
+                && clrMemberType.IsValueType
+                && AbiValueTypes.IsLongRepresentable(clrMemberType)) {
                 if (clrMemberType == typeof(bool))
                     writeValue = Condition(Equal(ctx.RingVar(valueSlot), Constant(0L)),
                         Constant(false, typeof(object)),
@@ -1506,6 +1518,8 @@ public static class DirectVmAbiEmitter {
                     writeValue = Convert(Convert(ctx.RingVar(valueSlot), clrMemberType), typeof(object));
             }
             else {
+                // Reference type or non-long value type: the ring slot holds a heap
+                // handle — deref the boxed object and write it through.
                 writeValue = Call(ctx.HeapLocal,
                     typeof(Heap).GetMethod(nameof(Heap.UnsafeGet))!,
                     Convert(ctx.RingVar(valueSlot), typeof(int)));
@@ -2010,7 +2024,12 @@ public static class DirectVmAbiEmitter {
                         var ringVal = ctx.RingVar(slotIdx);
                         var paramType = methodParams[i].ParameterType;
                         if (paramType.IsValueType) {
-                            methodArgs[i] = Convert(ringVal, paramType);
+                            methodArgs[i] = AbiValueTypes.IsLongRepresentable(paramType)
+                                ? Convert(ringVal, paramType)
+                                : Convert(
+                                    Call(ctx.HeapLocal, typeof(Heap).GetMethod(nameof(Heap.UnsafeGet))!,
+                                        Convert(ringVal, typeof(int))),
+                                    paramType);
                         }
                         else if (paramType == typeof(string)) {
                             methodArgs[i] = Convert(
@@ -2050,14 +2069,22 @@ public static class DirectVmAbiEmitter {
                         fullBody.Add(instanceExpr);
                     fullBody.AddRange(argExprs);
 
-                    // Convert result to ABI (value types unboxed, ref types heap-allocated)
+                    // Convert result to ABI (long-representable value types unboxed,
+                    // reference + non-long value types heap-allocated)
                     var resultType = methodInfo.ReturnType;
                     if (resultType == typeof(void)) {
                         fullBody.Add(callExpr);
                         return Block(fullBody);
                     }
                     if (resultType.IsValueType) {
-                        fullBody.Add(Assign(ctx.RingVar(slot), Convert(callExpr, typeof(long))));
+                        if (AbiValueTypes.IsLongRepresentable(resultType)) {
+                            fullBody.Add(Assign(ctx.RingVar(slot), Convert(callExpr, typeof(long))));
+                        }
+                        else {
+                            fullBody.Add(Assign(ctx.RingVar(slot),
+                                Convert(Call(ctx.HeapLocal, typeof(Heap).GetMethod(nameof(Heap.Allocate))!,
+                                    Convert(callExpr, typeof(object))), typeof(long))));
+                        }
                         return Block(fullBody);
                     }
                     // Reference type return: allocate on heap

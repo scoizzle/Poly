@@ -159,8 +159,13 @@ internal sealed class ValueRepresentationAnalyzer : INodeAnalyzer {
             return (ValueRepresentationKind.Bool, typeof(bool));
         if (c.Value is string)
             return (ValueRepresentationKind.HeapRef, typeof(string));
-        if (c.Value.GetType().IsValueType)
-            return (ValueRepresentationKind.StackScalar, c.Value.GetType());
+        if (c.Value.GetType().IsValueType) {
+            var vt = c.Value.GetType();
+            // Non-long value types (DateTime, DateOnly, Guid, ...) are heap handles.
+            return AbiValueTypes.IsLongRepresentable(vt)
+                ? (ValueRepresentationKind.StackScalar, vt)
+                : (ValueRepresentationKind.HeapRef, vt);
+        }
 
         // All other reference types (arrays, objects) go on the heap
         return (ValueRepresentationKind.HeapRef, c.Value.GetType());
@@ -218,8 +223,14 @@ internal sealed class ValueRepresentationAnalyzer : INodeAnalyzer {
             var rt = clrType.RuntimeType;
             if (rt == typeof(bool))
                 return (ValueRepresentationKind.Bool, rt);
-            if (rt.IsValueType || rt.IsPrimitive)
-                return (ValueRepresentationKind.StackScalar, rt);
+            if (rt.IsValueType || rt.IsPrimitive) {
+                // Non-numeric value types (DateTime, DateOnly, Guid, TimeSpan, ...)
+                // cannot be inlined into the long-based VM ring — their values live
+                // on the heap as boxed handles (AbiValueTypes.IsLongRepresentable).
+                return AbiValueTypes.IsLongRepresentable(rt)
+                    ? (ValueRepresentationKind.StackScalar, rt)
+                    : (ValueRepresentationKind.HeapRef, rt);
+            }
             return (ValueRepresentationKind.HeapRef, rt);
         }
 

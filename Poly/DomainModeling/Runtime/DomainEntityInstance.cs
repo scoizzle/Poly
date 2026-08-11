@@ -1,6 +1,7 @@
 using Poly.Analysis;
 using Poly.Ast.Nodes;
 using Poly.DomainModeling.Analysis;
+using Poly.DomainModeling.Constraints;
 using Poly.DomainModeling.Effects;
 using Poly.DomainModeling.Lowering;
 using Poly.Interpretation;
@@ -131,6 +132,9 @@ public sealed record DomainEntityInstance {
             if (propertyValues is not null && propertyValues.TryGetValue(prop.Name, out var v)) {
                 values[prop.Name] = v;
             }
+            else if (prop.Constraints.OfType<DefaultValueConstraint>().FirstOrDefault() is { } defaultValue) {
+                values[prop.Name] = EvaluateDefaultValue(defaultValue.Expression);
+            }
             else {
                 values[prop.Name] = null; // default for unspecified properties
             }
@@ -143,6 +147,23 @@ public sealed record DomainEntityInstance {
 
         return new DomainEntityInstance(entity, values, typeDefAnalyzer, currentStage, domain);
     }
+
+    /// <summary>
+    /// Evaluates a DSL default expression to a concrete runtime value. The runtime
+    /// stores enum-typed properties as strings, so an enum member name (e.g.
+    /// <c>default(Active)</c>) lowers to its name string; <c>now</c>/<c>today</c>/<c>guid</c>
+    /// evaluate at creation time. Matches the C# export's defaulted optional ctor params.
+    /// </summary>
+    private static object? EvaluateDefaultValue(DomainExpression expr) => expr switch {
+        Literal lit => lit.Value,
+        PropertyAccess pa => pa.Name switch {
+            "now" or "utcnow" => DateTime.UtcNow,
+            "today" => DateOnly.FromDateTime(DateTime.UtcNow),
+            "guid" => Guid.NewGuid(),
+            _ => pa.Name // enum member name — runtime stores enum values as strings
+        },
+        _ => null
+    };
 
     /// <summary>
     /// Reads a property value, coercing to <typeparamref name="T"/>.

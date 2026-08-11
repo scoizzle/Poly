@@ -3045,6 +3045,99 @@ public class DomainEntityInstanceTests {
     }
 
     [Test]
+    public async Task EvaluatePolicy_QuantifierBody_EqualityAgainstZero_IsCorrect() {
+        // Code-review fix: `any lines where Qty == 0` in a quantifier body returned true
+        // for non-zero Qty values — AreHeapValues forced the heap comparison path for a
+        // value-typed (long) member read, misreading the scalar as a heap handle and
+        // reading garbage heap slots. Equality against any numeric constant must compare
+        // scalars; `none ... == 0` therefore must be true when no line has Qty 0.
+        var line = new Entity("OrderLine", [
+            new Property("Qty", new DomainTypeReference("Number"), [])
+        ], [], [], []);
+        var order = new Entity("Order", [], [], [
+            new Policy("AnyZero", DomainExpression.Any("lines",
+                DomainExpression.Equal(
+                    DomainExpression.Property("Qty"), DomainExpression.Literal(0)))),
+            new Policy("AnyTen", DomainExpression.Any("lines",
+                DomainExpression.Equal(
+                    DomainExpression.Property("Qty"), DomainExpression.Literal(10)))),
+            new Policy("NoZero", DomainExpression.None("lines",
+                DomainExpression.Equal(
+                    DomainExpression.Property("Qty"), DomainExpression.Literal(0))))
+        ], []);
+        var rel = new Relationship("lines",
+            new DomainTypeReference("Order"), new DomainTypeReference("OrderLine"),
+            RelationshipCardinality.OneToMany, []);
+        var domain = DomainTestFactory.Create("Test", [order, line], [rel]);
+        var store = new DomainInstanceStore();
+        var orderInst = DomainEntityInstance.Create(order,
+            new Dictionary<string, object?>(), domain: domain);
+        var l1 = DomainEntityInstance.Create(line,
+            new Dictionary<string, object?> { ["Qty"] = 10L }, domain: domain);
+        var l2 = DomainEntityInstance.Create(line,
+            new Dictionary<string, object?> { ["Qty"] = 1L }, domain: domain);
+        store.Add(orderInst);
+        store.Add(l1);
+        store.Add(l2);
+        store.Link("lines", orderInst, l1);
+        store.Link("lines", orderInst, l2);
+
+        var anyZero = order.Policies.First(p => p.Name == "AnyZero");
+        var anyTen = order.Policies.First(p => p.Name == "AnyTen");
+        var noZero = order.Policies.First(p => p.Name == "NoZero");
+        await Assert.That(orderInst.EvaluatePolicy(anyZero)).IsFalse();
+        await Assert.That(orderInst.EvaluatePolicy(anyTen)).IsTrue();
+        await Assert.That(orderInst.EvaluatePolicy(noZero)).IsTrue();
+    }
+
+    [Test]
+    public async Task InvokeAction_DateArithmetic_AddDays_AppliesDateOnly() {
+        // ABI fix: non-numeric value types (DateOnly, DateTime, Guid, ...) are boxed
+        // into the VM heap; the ring holds a heap handle. `DueDate + 14` lowers to
+        // DateOnly.AddDays((int)14) — the read, invoke, and write all round-trip the
+        // heap handle so the action applies the shifted date.
+        var dueDate = new Property("DueDate", new DomainTypeReference("Date"), []);
+        var extend = new Poly.DomainModeling.Action("Extend", InvocationResult.Void, [], [
+            new AssignEffect(
+                DomainExpression.Property("DueDate"),
+                DomainExpression.Add(
+                    DomainExpression.Property("DueDate"),
+                    DomainExpression.Literal(14L)))
+        ], []);
+        var draft = new Stage("Draft", Actions: [extend], Policies: [], OnEntryEffects: [], OnExitEffects: []);
+        var entity = new Entity("Order", [dueDate], [extend], [], [draft]);
+
+        var instance = DomainEntityInstance.Create(entity,
+            new Dictionary<string, object?> { ["DueDate"] = new DateOnly(2026, 1, 1) });
+
+        var result = instance.InvokeAction("Extend");
+        await Assert.That(result.Succeeded).IsTrue();
+        await Assert.That(instance.GetProperty<DateOnly>("DueDate")).IsEqualTo(new DateOnly(2026, 1, 15));
+    }
+
+    [Test]
+    public async Task InvokeAction_DateArithmetic_AddDays_AppliesDateTime() {
+        // Same heap round-trip for DateTime (AddDays takes double — no int cast).
+        var dueDate = new Property("DueDate", new DomainTypeReference("DateTime"), []);
+        var extend = new Poly.DomainModeling.Action("Extend", InvocationResult.Void, [], [
+            new AssignEffect(
+                DomainExpression.Property("DueDate"),
+                DomainExpression.Add(
+                    DomainExpression.Property("DueDate"),
+                    DomainExpression.Literal(14L)))
+        ], []);
+        var draft = new Stage("Draft", Actions: [extend], Policies: [], OnEntryEffects: [], OnExitEffects: []);
+        var entity = new Entity("Order", [dueDate], [extend], [], [draft]);
+
+        var instance = DomainEntityInstance.Create(entity,
+            new Dictionary<string, object?> { ["DueDate"] = new DateTime(2026, 1, 1) });
+
+        var result = instance.InvokeAction("Extend");
+        await Assert.That(result.Succeeded).IsTrue();
+        await Assert.That(instance.GetProperty<DateTime>("DueDate")).IsEqualTo(new DateTime(2026, 1, 15));
+    }
+
+    [Test]
     public async Task EvaluatePolicy_PathPrefix_MultipleLinkedTargets_Throws() {
         // Pre-ship: bare path-prefix must not silently pick targets[0] on many-links.
         var item = new Entity("Item", [

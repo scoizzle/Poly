@@ -50,7 +50,6 @@ internal sealed class RuntimeTool {
             EntityName: instance.Entity.Name,
             CurrentStage: instance.CurrentStage,
             Properties: props,
-            IsDeleted: instance.IsDeleted,
             CreatedChildCount: instance.CreatedChildren.Count,
             NavigationLinks: []
         );
@@ -68,7 +67,6 @@ internal sealed class RuntimeTool {
         [property: JsonPropertyName("entityName")] string EntityName,
         [property: JsonPropertyName("currentStage")] string? CurrentStage,
         [property: JsonPropertyName("properties")] IReadOnlyList<PropertyValueData> Properties,
-        [property: JsonPropertyName("isDeleted")] bool IsDeleted,
         [property: JsonPropertyName("createdChildCount")] int CreatedChildCount,
         [property: JsonPropertyName("navigationLinks")] IReadOnlyList<NavigationLinkData> NavigationLinks
     );
@@ -501,7 +499,6 @@ Use case — reassign a child from one parent to another:
 
         var summaries = new List<InstanceSummaryData>();
         foreach (var (id, instance) in state.InstanceMap) {
-            if (instance.IsDeleted) continue;
             if (entityName is not null &&
                 !string.Equals(instance.Entity.Name, entityName, StringComparison.Ordinal))
                 continue;
@@ -563,13 +560,6 @@ declares -> EntityType and creates that type, returnTypeName + returnInstanceId.
                 Message: $"Instance '{instanceId}' not found.",
                 SessionId: sessionId,
                 Affordances: ["create_instance", "list_instances"]);
-
-        if (instance.IsDeleted)
-            return new DomainToolResponse(
-                Success: false,
-                Message: $"Instance '{instanceId}' has been deleted.",
-                SessionId: sessionId,
-                Affordances: ["create_instance"]);
 
         // Parse action args JSON
         Dictionary<string, object?>? args = null;

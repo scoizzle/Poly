@@ -440,14 +440,6 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         return new Block(blockNodes);
     }
 
-    /// <summary>
-    /// Lowers DeleteEntityInstance for C# mode. Emits <c>this.IsDeleted = true;</c>.
-    /// </summary>
-    protected override Node? DeleteEntity(DeleteEntityInstance _) {
-        if (!_lowerStageTransitions) return null;
-        return new Assignment(new Member(Subject, "IsDeleted"), new Constant(true));
-    }
-
     // ── Runtime default expression helpers ───────────────────────
 
     /// <summary>
@@ -647,10 +639,6 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         StageTransitionEffect s => $"transition to {s.TargetStage.StageName} (StageTransitionEffect)",
         CreateEntityInstance cei => $"create {cei.Type.TypeName}",
         CreateEntityInRelationshipEffect cr => $"create in {cr.RelationshipName}",
-        DeleteEntityInstance => $"delete",
-        LinkRelationshipEffect l => $"Cannot lower: link {l.RelationshipName} (LinkRelationshipEffect)",
-        UnlinkRelationshipEffect u => $"Cannot lower: unlink {u.RelationshipName} (UnlinkRelationshipEffect)",
-        TransitionRelationshipEffect tre => $"Cannot lower: transition {tre.RelationshipName} to {tre.TargetStage.StageName} (TransitionRelationshipEffect)",
         _ => $"Cannot lower: {effect.GetType().Name}"
     };
 }

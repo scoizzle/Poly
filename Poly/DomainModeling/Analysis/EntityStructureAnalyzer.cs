@@ -58,12 +58,6 @@ internal sealed class EntityStructureAnalyzer : INodeAnalyzer {
         // ── Root detection ────────────────────────────────────
         var isRoot = !HasRequiredEntityRef(entity, lookup);
 
-        // ── Soft delete ───────────────────────────────────────
-        var hasSoftDelete = entity.Properties.Any(p =>
-            string.Equals(p.Name, "IsDeleted", StringComparison.Ordinal) &&
-            string.Equals(p.Type.TypeName, "Boolean", StringComparison.Ordinal) &&
-            p.Constraints.Any(c => c is DefaultValueConstraint));
-
         // ── Stage tracking ────────────────────────────────────
         var hasStages = entity.Stages.Count > 0;
         string? stageEnumTypeName = null;
@@ -90,7 +84,7 @@ internal sealed class EntityStructureAnalyzer : INodeAnalyzer {
 
         return new EntityStructureMetadata(
             isRoot, hasNaturalKey, keyPropName, keyClrType,
-            hasSoftDelete, hasStages, stageEnumTypeName, stageByName, constructorParameters,
+            hasStages, stageEnumTypeName, stageByName, constructorParameters,
             enumPropertyNames, entryAssignedPropertyNames
         );
     }

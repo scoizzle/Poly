@@ -83,16 +83,15 @@ public class DomainModelAnalyzerContextTests {
     }
 
     [Test]
-    public async Task Analyze_StorageMapping_PrefersEntityStructureBagForKeyDeleteAndStages() {
+    public async Task Analyze_StorageMapping_PrefersEntityStructureBagForKeyAndStages() {
         // amu-w2-1: through the full pipeline (no priorAnalysis), StoragePass must consume
         // the EntityStructureMetadata bag published by EntityStructureAnalyzer — natural
-        // key, soft-delete, and stage facts surface on the storage model.
+        // key and stage facts surface on the storage model.
         var domain = ParseDomain("""
             domain Test
             Item: entity {
                 Sku: Text unique
                 Name: Text
-                IsDeleted: Boolean default(false)
                 Draft: stage {}
                 Active: stage {}
             }
@@ -107,12 +106,10 @@ public class DomainModelAnalyzerContextTests {
             domain.Types.OfType<Entity>().Single());
         await Assert.That(entityStructure).IsNotNull();
         await Assert.That(entityStructure!.HasNaturalKey).IsTrue();
-        await Assert.That(entityStructure.HasSoftDelete).IsTrue();
         await Assert.That(entityStructure.HasStages).IsTrue();
 
         var storageEntity = storage!.Storage.Entities.Single(e => e.Source.Name == "Item");
         await Assert.That(storageEntity.KeyName).IsEqualTo("sku");
-        await Assert.That(storageEntity.HasSoftDelete).IsTrue();
         await Assert.That(storageEntity.HasStages).IsTrue();
         await Assert.That(storageEntity.StageEnumTypeName).IsEqualTo("ItemStage");
     }

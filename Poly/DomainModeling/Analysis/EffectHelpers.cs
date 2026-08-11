@@ -46,10 +46,6 @@ internal static class EffectHelpers {
         CreateEntityInstance => true,
         CreateEntityInRelationshipEffect => true,
         InvokeActionEffect => true,
-        DeleteEntityInstance => true,
-        LinkRelationshipEffect => true,
-        UnlinkRelationshipEffect => true,
-        TransitionRelationshipEffect => true,
         _ => false
     };
 }

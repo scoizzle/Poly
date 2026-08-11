@@ -37,9 +37,6 @@ internal static class DomainModelDiagnosticCodes {
 
     // Unsupported / silently-dropped effect diagnostics
 
-    /// TransitionRelationshipEffect is parsed and stored but NOT executed at runtime.
-    public const string EffectNotExecutable = "DMEFF005";
-
     /// Composite/Conditional effect contains direct-execution children that are silently dropped.
     public const string NestedDirectEffectDropped = "DMEFF006";
 

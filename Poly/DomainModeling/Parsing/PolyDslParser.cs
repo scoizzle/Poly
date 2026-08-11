@@ -625,7 +625,7 @@ public sealed class PolyDslParser : DslCursor {
                 TokenKind.If => " — expected '(condition)'",
                 _ => "",
             };
-            throw Error($"Expected effect (transition, assign, create, delete, invoke, if){tailHint}, got '{Current.Text}'");
+            throw Error($"Expected effect (transition, assign, create, invoke, if){tailHint}, got '{Current.Text}'");
         }
 
         switch (match.PatternName) {
@@ -660,10 +660,6 @@ public sealed class PolyDslParser : DslCursor {
                         initList,
                         null);
                 }
-
-            case "delete":
-                Consume(match);
-                return new DeleteEntityInstance(new DomainTypeReference(_currentEntityName));
 
             case "invoke":
                 Consume(match);

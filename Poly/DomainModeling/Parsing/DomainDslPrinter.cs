@@ -417,11 +417,6 @@ public sealed class DomainDslPrinter {
             _sb.AppendLine();
             return null;
         }
-
-        protected override object? DeleteEntity(DeleteEntityInstance _) {
-            _sb.AppendLine("delete");
-            return null;
-        }
     }
 
     private void PrintConditionalEffect(ConditionalEffect ce, string indent) {

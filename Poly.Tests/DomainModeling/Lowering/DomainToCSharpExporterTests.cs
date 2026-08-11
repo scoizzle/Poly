@@ -125,7 +125,6 @@ public class DomainToCSharpExporterTests {
             Pay: action {
               if (Amount <= 0) {
                 assign Paid to true
-                delete
               }
               else { assign Paid to true }
               transition to Resolved
@@ -346,7 +345,6 @@ public class DomainToCSharpExporterTests {
         var book = types.First(t => t.Name == "Book");
         var propNames = book.Properties?.Select(p => p.Name).ToArray() ?? [];
 
-        await Assert.That(propNames.Contains("IsDeleted")).IsTrue();
         await Assert.That(propNames.Contains("Title")).IsTrue();
         await Assert.That(propNames.Contains("Author")).IsTrue();
         await Assert.That(propNames.Contains("ISBN")).IsTrue();

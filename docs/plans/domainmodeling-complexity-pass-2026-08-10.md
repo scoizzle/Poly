@@ -8,7 +8,7 @@
 
 ## Status
 
-**Survey 2026-08-10.** **Cuts #1 + #7 EXECUTED 2026-08-10** (safe deletions): `Builders/` (8 files, 585 LOC), `Examples/` (4 files, 443 LOC), `PassRegistry.cs`, `EvolutionTransaction.cs`, `EntityDependencyGraphMetadata.cs` + the dead graph publishing in `CrossReferencePass` (cycle detection + warning kept). Two `StageBuilder` tests rewritten onto the product `Stage`+`Subscriptions` path. All projects build; full suite green (1971). **Placement fix (#4) EXECUTED 2026-08-10:** `PolicyEvaluator`, `PolicySubject`, `ClrTypeEntityMapping` moved to `Poly.Tests/TestHelpers/`; `DomainInputSet` re-verified as product-path (DslCompiler + packs) and left in place. Remaining: #3 (contract integration retirement), #5/#6 (decide), #8–#10 (defer).
+**Survey 2026-08-10.** **Cuts #1 + #7 EXECUTED 2026-08-10** (safe deletions): `Builders/` (8 files, 585 LOC), `Examples/` (4 files, 443 LOC), `PassRegistry.cs`, `EvolutionTransaction.cs`, `EntityDependencyGraphMetadata.cs` + the dead graph publishing in `CrossReferencePass` (cycle detection + warning kept). Two `StageBuilder` tests rewritten onto the product `Stage`+`Subscriptions` path. All projects build; full suite green (1971). **Placement fix (#4) EXECUTED 2026-08-10:** `PolicyEvaluator`, `PolicySubject`, `ClrTypeEntityMapping` moved to `Poly.Tests/TestHelpers/`; `DomainInputSet` re-verified as product-path (DslCompiler + packs) and left in place. **Roadmap correction (2026-08-10):** contract integration (#3) and `ValueType` (#6) are **planned product surface — kept**, not removal candidates; the missing piece is their DSL/MCP authoring path. **Dormant effects (#5) DELETED 2026-08-10** (agent-added `Link`/`Unlink`/`TransitionRelationship`). **Soft-delete pruned 2026-08-10:** the automatic `IsDeleted` flag (emitted on every entity), the `delete` effect, and the runtime deleted-instance refusal were removed from the core — no implicit tombstone; if soft-delete is ever needed it is a pack concern, not a universal baked-in. Remaining: #8–#10 (defer).
 
 ## Summary
 
@@ -18,10 +18,10 @@
 |---|---------|------|----------|
 | 1 | Builders/ subsystem — zero product callers | 585 | 🔴 delete |
 | 2 | Examples/ cluster — no live call sites | 443 | 🔴 delete/move |
-| 3 | Contract integration — dormant, no authoring | ~330 | 🔴 retire/quarantine |
+| 3 | Contract integration — no authoring surface **yet** | ~330 | ✅ roadmap (kept) |
 | 4 | Test-only helpers shipped in product (`PolicyEvaluator`, `PolicySubject`, `ClrTypeEntityMapping`, `DomainInputSet`) | 590 | 🟠 placement |
-| 5 | Dormant effects (`Link`/`Unlink`/`TransitionRelationship`) | ~60 | 🟠 remove |
-| 6 | `ValueType` — model/evolution/count, no authoring | ~60 | 🟠 retire |
+| 5 | Dormant effects (`Link`/`Unlink`/`TransitionRelationship`) | ~60 | ✅ deleted |
+| 6 | `ValueType` — model/evolution/count, no DSL authoring **yet** | ~60 | ✅ roadmap (kept) |
 | 7 | Dead singles: `PassRegistry`, `EvolutionTransaction` (`[Obsolete]`), `EntityDependencyGraphMetadata` (published, never read) | ~95 | 🟠 delete |
 | 8 | Lint-only passes with ~zero test coverage | ~500 | 🟡 decide |
 | 9 | `DomainChange` 59 records / 1169 lines — kitchen sink | — | 🟡 consolidate |
@@ -47,14 +47,14 @@ The product authoring path is `DomainEvolution` (`DomainFactory.Create`, used by
 
 **Delete, or move the two `Demos/*` that tests mirror into `Poly.Tests/` as fixtures.**
 
-## 🔴 3. Contract integration — dormant, no authoring surface
+## ✅ 3. Contract integration — roadmap feature (kept)
 
 `ImportedContract`, `ContractBinding`, `ContractEndpoint`, `ContractFieldMap`, `ContractEndpointKind` + `Domain.ImportedContracts/ContractBindings` + 8 change records (`AddImportedContractChange` … `RemoveContractFieldMapChange`) + `ContractIntegrationAnalyzer` (~192).
 
-- **No DSL or MCP tool authors contracts.** Parser emits none; MCP `add`/`remove` kinds are entity/property/stage/action/stage_action/relationship/constraint/policy. The DSL guide documents no contract syntax.
-- Only consumers are the model container and the evolution/lint passes.
+- **No DSL or MCP tool authors contracts today.** Parser emits none; MCP `add`/`remove` kinds are entity/property/stage/action/stage_action/relationship/constraint/policy. The DSL guide documents no contract syntax.
+- Only consumers today are the model container and the evolution/lint passes.
 
-**§3: retire or quarantine** — either delete the surface or move it behind a documented extension point with a real consumer. This is the largest single dormant subsystem.
+**Roadmap (2026-08-10):** contract integration is **planned product surface** — the missing piece is the authoring path (DSL + MCP) that the model, evolution, and `ContractIntegrationAnalyzer` already anticipate. Not a removal candidate; the work is to build the authoring surface, not delete the substrate.
 
 ## 🟠 4. Test-only helpers shipped in product assembly
 
@@ -69,18 +69,17 @@ The product authoring path is `DomainEvolution` (`DomainFactory.Create`, used by
 
 **FIXED 2026-08-10:** `PolicyEvaluator`, `PolicySubject`, `ClrTypeEntityMapping` moved to `Poly.Tests/TestHelpers/` (namespaces preserved, so no consumer churn; the types are now unreachable from product by construction). One `IDictionary` qualification fix for the test project's implicit usings.
 
-## 🟠 5. Dormant effects — never authorable, partly never executed
+## ✅ 5. Dormant effects — DELETED 2026-08-10
 
-`LinkRelationshipEffect`, `UnlinkRelationshipEffect` (no DSL syntax per guide §9), `TransitionRelationshipEffect` (guide: "IR exists but **not executed at runtime**").
+`LinkRelationshipEffect`, `UnlinkRelationshipEffect` (no DSL syntax per guide §9), `TransitionRelationshipEffect` (guide: "IR exists but **not executed at runtime**") — agent-added effects with no authoring surface and (for transition-relationship) no execution path.
 
-- Runtime `ExecuteEffect` still routes them; `EffectExecutor` handles them; `PreprocessEffectExpressions` (`DomainEntityInstance.cs:451-456`) rewrites them; lowering/printer describe them.
-- The DSL cannot produce them (no `link`/`unlink`/transition-relationship keyword).
+**Deleted:** the three effect records, their `EffectDispatch` methods, runtime routing (`ExecuteLink`/`ExecuteUnlink`/`ResolveLinkedInstance`), analyzer validation (`ValidateRelationshipName`/`ValidateTransitionRelationship` + the DMEFF005 `EffectNotExecutable` code), lowering/printer describe arms, and the subscription effect-classification arms. 5 tests removed. Linking existing instances remains available via MCP `link_instances` → `DomainInstanceStore.Link` (documented in the DSL guide §9).
 
-**Remove the effect types + their dispatch/preprocess/printer arms (~60 LOC) once confirmed unreachable from any test.**
+## ✅ 6. `ValueType` — roadmap feature (kept)
 
-## 🟠 6. `ValueType` — model + evolution + count, no authoring
+`ValueType` (10), `AddValueTypeChange`/`RemoveValueTypeChange` (`DomainEvolution.AddValueType`), `DomainOverview.ValueTypeCount`. The DSL guide currently says `value { }` is not supported.
 
-`ValueType` (10), `AddValueTypeChange`/`RemoveValueTypeChange` (`DomainEvolution.AddValueType`), `DomainOverview.ValueTypeCount`. The DSL guide: `value { }` not supported. Only authoring is the dead `PersonLifecycleExample`. **Retire** (remove the type, change records, count surface) unless value types are on the roadmap.
+**Roadmap (2026-08-10):** value types are **planned product surface** — the missing piece is the DSL `value { }` authoring path (parse → model → analyze → export) that the model + evolution + count surface already anticipate. Not a removal candidate; the work is the authoring surface.
 
 ## 🟠 7. Dead singles
 
@@ -96,11 +95,11 @@ The product authoring path is `DomainEvolution` (`DomainFactory.Create`, used by
 - `AuthoringSuggestion` — consumed by MCP suggestions; **keep**, add a smoke test.
 - `ConstraintQuality` — genuinely useful checks (unsatisfiable `range(min>max)`, incompatible type override); **keep + test** the min>max check.
 - `RuleCoverage` — may duplicate the newer required-props machinery (`RequiredPropertiesPass`/`EffectAnalyzer`); verify overlap, then cut one.
-- `ContractIntegration` — retire with #3.
+- `ContractIntegration` — kept (#3 is roadmap); the analyzer is the lint side of the coming authoring surface.
 
 ## 🟡 9. `DomainChange` — 59 records / 1169 lines
 
-The evolution layer's kitchen sink. ~15 records are for dormant subsystems (#3: 8 contract records; #5: `SetRelationshipShape` + relationship-content records; #6: `AddValueType`). Once those are removed the file roughly halves. `DomainEvolution` (526) shrinks with it. Consolidate the remaining property/stage/action/policy records with the `AppendChildToEntity` helpers already in `DomainMutationContext`.
+The evolution layer's kitchen sink. The contract (#3) and value-type (#6) records are **roadmap surface — keep**. The dormant-effect records are gone (effects pruned, #5). Dormant relationship-content records (`SetRelationshipShape`, rel-level property/stage/policy changes) remain consolidation candidates once confirmed unreachable. Consolidate the remaining property/stage/action/policy records with the `AppendChildToEntity` helpers already in `DomainMutationContext`.
 
 ## 🟡 10. Live-path monoliths (defer; structural)
 
@@ -113,7 +112,7 @@ The evolution layer's kitchen sink. ~15 records are for dormant subsystems (#3: 
 
 1. ~~Delete `Builders/`, `Examples/`, `PassRegistry`, `EvolutionTransaction`; drop `EntityDependencyGraphMetadata` publishing. (🔴 #1, #2, #7)~~ — **DONE 2026-08-10**, ~1.1k LOC removed.
 2. **Move** `PolicyEvaluator`/`PolicySubject`/`ClrTypeEntityMapping`/`DomainInputSet` to `Poly.Tests/TestHelpers/` or delete. (#4)
-3. **Retire** contract integration (#3), `ValueType` (#6), dormant effects (#5). Largest surface; needs the "is this on a roadmap?" decision.
+3. ~~**Retire dormant effects** (#5)~~ — **DONE 2026-08-10** (agent-added; no authoring surface). Contract integration (#3) and `ValueType` (#6) are **roadmap features, kept**.
 4. **Decide + test** the four lint passes (#8).
 5. **Consolidate** `DomainChange`/`DomainEvolution` after the dormant records go (#9). Split `EffectExecutor` out of `DomainEntityInstance` (#10, optional).
 
@@ -127,4 +126,4 @@ This pass found **no compile oracle** for the exported C# (R6 from the relations
 - `LinqExpressionGenerator` (LINQ evaluator) — intentionally kept as oracle (documented in `dead-dual-inventory-2026-08-08.md`).
 - `DomainFactory` — live (MCP bootstrap).
 - Annotations/`Facet`/`AnnotationRegistry` — live (guide documents `column`/`table`).
-- `EqualityConstraint` — legacy, un-authorable but handled in printer/export/validation; fold into the #5/#3 cleanup.
+- `EqualityConstraint` — legacy, un-authorable but handled in printer/export/validation; fold into a future constraint-surface cleanup.

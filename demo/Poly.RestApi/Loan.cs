@@ -24,7 +24,6 @@ public class Loan {
         this.CurrentStage = LoanStage.Active;
         this.CheckedOutAt = DateTime.UtcNow;
     }
-    public bool IsDeleted { get; private set; }
     public DateTime CheckedOutAt { get; private set; }
     public DateTime DueDate { get; private set; }
     public DateTime ReturnedAt { get; private set; }

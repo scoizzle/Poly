@@ -113,15 +113,6 @@ public sealed class DomainToCSharpExporter {
         // is the single source; fall back to the derivation only for the null-analysis path.
         var stageEnumTypeName = esm.StageEnumTypeName ?? $"{entity.Name}Stage";
 
-        // ── Common property: IsDeleted (always emitted) ────────────
-        props.Add(new PropertyDefinitionNode(
-            "IsDeleted",
-            new PrimitiveTypeReference(PrimType.Boolean),
-            Getter: new PropertyGetterDefinitionNode(),
-            Setter: new PropertySetterDefinitionNode(
-                AccessModifier: AccessModifier.Private)
-        ));
-
         // Properties assigned by the initial stage's entry effects are body-initialized
         // (the ctor already runs those effects after setting CurrentStage) — they must
         // NOT also be ctor params, or the value is written twice (param then effect)

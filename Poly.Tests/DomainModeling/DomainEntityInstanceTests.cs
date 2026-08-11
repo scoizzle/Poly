@@ -579,23 +579,6 @@ public class DomainEntityInstanceTests {
     }
 
     [Test]
-    public async Task DeleteEntityInstance_SetsIsDeleted() {
-        var entity = new Entity("Temp", [], Actions: [
-            new Poly.DomainModeling.Action("Dispose", InvocationResult.Void, [],
-                Effects: [new DeleteEntityInstance(new DomainTypeReference("Temp"))],
-                Policies: [])
-        ], [], []);
-
-        var instance = DomainEntityInstance.Create(entity);
-        await Assert.That(instance.IsDeleted).IsFalse();
-
-        instance.InvokeAction("Dispose");
-        await Assert.That(instance.IsDeleted).IsTrue();
-    }
-
-
-
-    [Test]
     public async Task InvokeActionEffect_ChainsToAnotherAction() {
         var count = new Property("Count", new DomainTypeReference("Number"), []);
         var entity = new Entity("Counter", [count], Actions: [
@@ -2424,58 +2407,6 @@ public class DomainEntityInstanceTests {
 
         orderInstance.InvokeAction("Activate");
         await Assert.That(trackerInstance.GetProperty<string>("Status")).IsEqualTo("Idle");
-    }
-
-    [Test]
-    public async Task InvokeAction_LinkRelationshipEffect_LinksViaPropertyBag() {
-        // LinkRelationshipEffect target is a PropertyAccess whose value is a DomainEntityInstance.
-        var tracker = new Entity("Tracker", [
-            new Property("OrderRef", new DomainTypeReference("Text"), [])
-        ], [
-            new Poly.DomainModeling.Action("Attach", InvocationResult.Void, [], [
-                new LinkRelationshipEffect("Tracks", DomainExpression.Property("OrderRef"))
-            ], [])
-        ], [], [
-            new Stage("Pending", [], [], [], []) {
-                Subscriptions = [
-                    new StageSubscription("Tracks", ["Active"], StageSubscriptionQuantifier.Each, [
-                        new AssignEffect(
-                            DomainExpression.Property("OrderRef"),
-                            DomainExpression.Literal("linked-ok"))
-                    ])
-                ]
-            }
-        ]);
-
-        // OrderRef holds a DomainEntityInstance at runtime (property type Text is only schema)
-        var order = new Entity("Order", [], [
-            new Poly.DomainModeling.Action("Activate", InvocationResult.Void, [], [
-                new StageTransitionEffect(new StageReference("Active"))
-            ], [])
-        ], [], [
-            new Stage("Draft", [], [], [], []),
-            new Stage("Active", [], [], [], [])
-        ]);
-
-        var rel = new Relationship("Tracks",
-            new DomainTypeReference("Tracker"), new DomainTypeReference("Order"),
-            RelationshipCardinality.OneToOne, []);
-
-        var domain = DomainTestFactory.Create("Test", [tracker, order], [rel]);
-        var store = new DomainInstanceStore();
-        var orderInstance = DomainEntityInstance.Create(order, domain: domain);
-        var trackerInstance = DomainEntityInstance.Create(tracker, domain: domain);
-        store.Add(orderInstance);
-        store.Add(trackerInstance);
-
-        // Seed property bag with instance reference, then Link via InvokeAction effect
-        trackerInstance.SetProperty("OrderRef", orderInstance);
-        var attach = trackerInstance.InvokeAction("Attach");
-        await Assert.That(attach.Succeeded).IsTrue();
-        await Assert.That(store.IsLinked("Tracks", trackerInstance, orderInstance)).IsTrue();
-
-        orderInstance.InvokeAction("Activate");
-        await Assert.That(trackerInstance.GetProperty<string>("OrderRef")).IsEqualTo("linked-ok");
     }
 
     // ── P2′: Honesty residuals ──────────────────────────────────

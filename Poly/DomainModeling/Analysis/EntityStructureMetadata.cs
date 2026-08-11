@@ -24,9 +24,6 @@ public sealed record EntityStructureMetadata(
     /// <summary>CLR type string: "string" for natural keys, "int" for shadow keys.</summary>
     string KeyClrType,
 
-    /// <summary>True if this entity has an IsDeleted boolean property.</summary>
-    bool HasSoftDelete,
-
     /// <summary>True if this entity has lifecycle stages or a matching stage enum.</summary>
     bool HasStages,
 

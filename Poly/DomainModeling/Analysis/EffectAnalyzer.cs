@@ -268,10 +268,6 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
                     CollectFromExpression(binding.Expression, referenced, paramNames);
                 break;
             case StageTransitionEffect:
-            case DeleteEntityInstance:
-            case LinkRelationshipEffect:
-            case UnlinkRelationshipEffect:
-            case TransitionRelationshipEffect:
             case CreateEntityInRelationshipEffect:
                 break;
         }
@@ -302,25 +298,7 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
         foreach (var effect in effects) {
             ValidateEffect(context, effect, action, entity, domain, lookup);
         }
-
-        // ── Cross-effect ordering (folded from EffectOrderingAnalyzer — D2.4) ──
-        var flattened = EffectHelpers.FlattenEffects(effects).ToArray();
-        var deleteIndex = Array.FindIndex(flattened, static e => e is DeleteEntityInstance);
-        if (deleteIndex >= 0 && flattened.Skip(deleteIndex + 1).Any(IsMutatingEffect)) {
-            context.ReportWarning(
-                flattened[deleteIndex],
-                "Mutating effect executes after DeleteEntityInstance, which is a no-op on a deleted instance.",
-                DomainModelDiagnosticCodes.EffectPrePostCondition);
-        }
     }
-
-    private static bool IsMutatingEffect(Effect effect) =>
-        effect is AssignEffect
-            or CreateEntityInstance
-            or StageTransitionEffect
-            or LinkRelationshipEffect
-            or UnlinkRelationshipEffect
-            or TransitionRelationshipEffect;
 
     private static void ValidateEffect(
         AnalysisContext context,
@@ -369,35 +347,6 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
 
         protected override object? Assign(AssignEffect e) {
             ValidateAssign(context, e, action, entity);
-            return null;
-        }
-
-        protected override object? DeleteEntity(DeleteEntityInstance e) {
-            ValidateDeleteEntityInstance(context, e, lookup);
-            return null;
-        }
-
-        protected override object? LinkRelationship(LinkRelationshipEffect e) {
-            ValidateRelationshipName(context, e.RelationshipName, domain, entity, e);
-            return null;
-        }
-
-        protected override object? UnlinkRelationship(UnlinkRelationshipEffect e) {
-            ValidateRelationshipName(context, e.RelationshipName, domain, entity, e);
-            return null;
-        }
-
-        protected override object? TransitionRelationship(TransitionRelationshipEffect e) {
-            ValidateTransitionRelationship(context, e, domain, entity);
-            // DMEFF005: TransitionRelationshipEffect is analyzed but NOT executed at runtime.
-            // It is stored in the model for evolution/planning but has no case in
-            // DomainEntityInstance.ExecuteEffect — calls to it are silent no-ops.
-            context.ReportWarning(
-                e,
-                $"TransitionRelationshipEffect ('{e.RelationshipName}' → '{e.TargetStage.StageName}') " +
-                "is parsed and stored but is NOT executed at runtime. " +
-                "Use StageTransitionEffect to transition the current instance's stage instead.",
-                DomainModelDiagnosticCodes.EffectNotExecutable);
             return null;
         }
 
@@ -1208,55 +1157,6 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
         catch { return null; }
     }
 
-    private static void ValidateDeleteEntityInstance(
-        AnalysisContext context, DeleteEntityInstance dei, DomainTypeLookupMetadata lookup) {
-        if (!TryResolveDomainType(context, dei.EntityType, lookup, dei, out var resolvedType)) {
-            return;
-        }
-
-        if (resolvedType is not Entity) {
-            context.ReportError(
-                dei,
-                $"DeleteEntityInstance type '{dei.EntityType.TypeName}' must resolve to an Entity.",
-                DomainModelDiagnosticCodes.EffectBinding);
-        }
-    }
-
-    private static void ValidateRelationshipName(
-        AnalysisContext context, string relationshipName, Domain domain, Entity entity, Effect effect) {
-        // amu-w1-1 / F1: catalog+RLM name resolve (no domain.Relationships scan);
-        // bag-missing reports a structural failure (fail-closed) before returning.
-        if (TryResolveRelationship(context, domain, entity.Name, relationshipName, effect, out var relationship)
-            && relationship is null) {
-            context.ReportError(
-                effect,
-                $"Relationship effect references unknown relationship '{relationshipName}' in domain '{domain.Name}'.",
-                DomainModelDiagnosticCodes.EffectBinding);
-        }
-    }
-
-    private static void ValidateTransitionRelationship(
-        AnalysisContext context, TransitionRelationshipEffect tre, Domain domain, Entity entity) {
-        // amu-w1-1 / F1: catalog+RLM name resolve (no domain.Relationships scan);
-        // bag-missing reports a structural failure (fail-closed) before returning.
-        if (TryResolveRelationship(context, domain, entity.Name, tre.RelationshipName, tre, out var relationship)
-            && relationship is null) {
-            context.ReportError(
-                tre,
-                $"TransitionRelationship effect references unknown relationship '{tre.RelationshipName}' in domain '{domain.Name}'.",
-                DomainModelDiagnosticCodes.EffectBinding);
-            return;
-        }
-
-        if (relationship is null) return; // unreachable after fail-closed resolve
-
-        if (!relationship.Stages.Any(s => string.Equals(s.Name, tre.TargetStage.StageName, StringComparison.Ordinal))) {
-            context.ReportError(
-                tre,
-                $"TransitionRelationship effect targets stage '{tre.TargetStage.StageName}' which does not exist on relationship '{tre.RelationshipName}'.",
-                DomainModelDiagnosticCodes.EffectBinding);
-        }
-    }
 
     private static bool TryResolveDomainType(
         AnalysisContext context,

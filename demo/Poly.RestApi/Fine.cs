@@ -20,7 +20,6 @@ public class Fine {
         this.Patron = patron;
         this.CurrentStage = FineStage.Unpaid;
     }
-    public bool IsDeleted { get; private set; }
     public long Amount { get; private set; }
     public DateTime DateIssued { get; private set; }
     public bool Paid { get; private set; }

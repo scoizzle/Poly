@@ -167,7 +167,6 @@ public sealed class StorageAnalyzer {
         string keyName;
         string keyClrType;
         bool isRoot;
-        bool hasSoftDelete;
         bool hasStages;
         string? stagePropertyName = null;
         string? stageEnumTypeName = null;
@@ -182,7 +181,6 @@ public sealed class StorageAnalyzer {
             keyClrType = meta.KeyClrType;
             // Aggregate owns hierarchy; prefer it when present.
             isRoot = agg?.IsRoot ?? meta.IsRoot;
-            hasSoftDelete = meta.HasSoftDelete;
             hasStages = meta.HasStages;
             if (hasStages) {
                 stagePropertyName = "CurrentStage";
@@ -198,10 +196,6 @@ public sealed class StorageAnalyzer {
             keyClrType = uniqueProp is not null
                 ? DomainTypeMapping.ToClrTypeName(uniqueProp.Type.TypeName) : "int";
             isRoot = agg?.IsRoot ?? !HasRequiredEntityRef(entity);
-            hasSoftDelete = entity.Properties.Any(p =>
-                string.Equals(p.Name, "IsDeleted", StringComparison.Ordinal) &&
-                string.Equals(p.Type.TypeName, "Boolean", StringComparison.Ordinal) &&
-                p.Constraints.Any(c => c is DefaultValueConstraint));
             var stageEnumType = _domain.Types.OfType<EnumType>()
                 .FirstOrDefault(e => e.Name == $"{entity.Name}Stage");
             if (stageEnumType is not null || entity.Stages.Count > 0) {
@@ -229,7 +223,6 @@ public sealed class StorageAnalyzer {
             keyProperty,
             isRoot,
             aggregateParentName,
-            hasSoftDelete,
             hasStages,
             stagePropertyName,
             stageEnumTypeName,

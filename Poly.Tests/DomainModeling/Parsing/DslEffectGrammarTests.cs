@@ -30,17 +30,15 @@ public sealed class DslEffectGrammarTests {
         var changes = ParseEffects("""
             assign Status to "x"
             transition to Done
-            delete
             invoke Approve()
             if (Active) { transition to Done }
             """);
         var effects = changes.OfType<AddEffectToActionChange>().Select(c => c.Effect).ToList();
-        await Assert.That(effects.Count()).IsEqualTo(5);
+        await Assert.That(effects.Count()).IsEqualTo(4);
         await Assert.That(effects[0]).IsTypeOf<AssignEffect>();
         await Assert.That(effects[1]).IsTypeOf<StageTransitionEffect>();
-        await Assert.That(effects[2]).IsTypeOf<DeleteEntityInstance>();
-        await Assert.That(effects[3]).IsTypeOf<InvokeActionEffect>();
-        await Assert.That(effects[4]).IsTypeOf<ConditionalEffect>();
+        await Assert.That(effects[2]).IsTypeOf<InvokeActionEffect>();
+        await Assert.That(effects[3]).IsTypeOf<ConditionalEffect>();
     }
 
     [Test]

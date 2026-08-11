@@ -32,7 +32,6 @@ public sealed class StorageEntity {
         Property? keyProperty,
         bool isRoot,
         string? aggregateParentName,
-        bool hasSoftDelete,
         bool hasStages,
         string? stagePropertyName,
         string? stageEnumTypeName,
@@ -48,7 +47,6 @@ public sealed class StorageEntity {
         KeyProperty = keyProperty;
         IsRoot = isRoot;
         AggregateParentName = aggregateParentName;
-        HasSoftDelete = hasSoftDelete;
         HasStages = hasStages;
         StagePropertyName = stagePropertyName;
         StageEnumTypeName = stageEnumTypeName;
@@ -100,9 +98,6 @@ public sealed class StorageEntity {
 
     /// <summary>Foreign keys where this entity's table references a parent.</summary>
     public IReadOnlyList<StorageForeignKey> ForeignKeys { get; }
-
-    /// <summary>True if this entity has an IsDeleted property (soft-delete).</summary>
-    public bool HasSoftDelete { get; }
 
     /// <summary>True if this entity has lifecycle stages.</summary>
     public bool HasStages { get; }

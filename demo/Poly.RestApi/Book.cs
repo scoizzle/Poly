@@ -13,7 +13,6 @@ public class Book {
         this.Pages = pages;
         this.Title = title;
     }
-    public bool IsDeleted { get; private set; }
     public string Author { get; private set; } = default!;
     public Genre Genre { get; private set; }
     public string ISBN { get; private set; } = default!;

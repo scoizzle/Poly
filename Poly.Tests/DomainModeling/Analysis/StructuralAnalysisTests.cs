@@ -221,21 +221,6 @@ public class EffectBindingTests {
     }
 
     [Test]
-    public async Task EffectBinding_UnknownRelationshipInLink_ReportsError() {
-        var text = new Poly.DomainModeling.PrimitiveType("Text", TypeCategory.Text, []);
-        var action = new Poly.DomainModeling.Action("Link", InvocationResult.Void, [], [
-            new LinkRelationshipEffect("NonExistentRel", new PropertyAccess("Target"))
-        ], []);
-        var entity = new Entity("Source", [], [action], [], []);
-        var domain = DomainTestFactory.Create("Test", [text, entity], []);
-
-        var analysis = DomainModelAnalyzer.Analyze(domain);
-
-        await Assert.That(analysis.Diagnostics.Any(d =>
-            d.Code == DomainModelDiagnosticCodes.EffectBinding)).IsTrue();
-    }
-
-    [Test]
     public async Task EffectBinding_CreateInUnknownRelationship_ReportsError() {
         // P2′.1: CreateIn effect with unknown relationship name.
         var action = new Poly.DomainModeling.Action("DoIt", InvocationResult.Void, [], [

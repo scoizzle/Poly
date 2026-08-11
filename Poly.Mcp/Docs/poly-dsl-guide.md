@@ -400,7 +400,6 @@ Effects in an action body:
 | Property assignment | `assign PropertyName to expression` |
 | Create entity | `create EntityType { prop: value }` |
 | Create in relationship | `create in RelationshipName { prop: value }` |
-| Soft-delete self | `delete` |
 | Self-invoke | `invoke ActionName` / `invoke ActionName(param: expr, ...)` |
 | Cross-entity invoke | `invoke [any\|all] RelName.ActionName` / `invoke [any\|all] RelName.ActionName(param: expr, ...) [where expr]` |
 | Conditional | `if (expr) { effects } [else if (expr) { effects }]* [else { effects }]` |
@@ -741,15 +740,10 @@ without a store (use create + link + `evaluate_policy`).
 | `assign Prop to expr` | action, entry, exit |
 | `create Type { ... }` | action |
 | `create in Rel { ... }` | action |
-| `delete` | action, entry, exit (soft-deletes the current instance) |
 | `invoke Action` / `invoke [any\|all] Rel.Action [where …]` | action (self; OneToOne / OneToMany source-only; fail-closed DMEFF007; depth-limited) |
 | `if (expr) { … } else if … else { … }` | action, entry, exit |
 
-The following effects exist in the runtime library but have **no DSL syntax** yet:
-- **link / unlink**: Connect existing instances. The MCP `link_instances` tool provides public access to `DomainInstanceStore.Link` with relationship + entity-type validation at the tool boundary. **DSL has no `link` keyword** — the product graph-write path for spawn-and-wire remains `create in Rel { … }` (or `create` with `RelationshipName`). `unlink_instances` deferred. Library API (`DomainInstanceStore.Link`/`Unlink`) remains available for test code.
-- **TransitionRelationship**: IR exists but **not executed at runtime** — do not use.
-
-> **Note:** `delete` performs a **soft-delete** — it sets the `IsDeleted` flag on the current instance. Any subsequent `invoke_action` on a deleted instance is refused. This is not a typed mass-delete.
+**Linking existing instances:** graph wiring happens through `create in Rel { … }` (or `create` with `RelationshipName`), which the runtime auto-links in the store. To connect already-existing instances, the MCP `link_instances` tool exposes `DomainInstanceStore.Link` with relationship + entity-type validation at the tool boundary; `unlink_instances` is deferred.
 
 ## 10. Do NOT Use (Unsupported in Phase 1a/1b)
 

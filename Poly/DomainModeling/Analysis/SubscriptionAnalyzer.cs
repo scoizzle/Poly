@@ -65,8 +65,7 @@ internal sealed class SubscriptionAnalyzer : INodeAnalyzer {
                     ValidateSubscription(context, subscription, entity, domain, lookup);
                     // ── Replay-safety check (folded from SubscriptionReplaySafetyAnalyzer — D2.5) ──
                     var hasNonIdempotent = EffectHelpers.FlattenEffects(subscription.Effects).Any(static e =>
-                        e is CreateEntityInstance or StageTransitionEffect
-                        or LinkRelationshipEffect or UnlinkRelationshipEffect);
+                        e is CreateEntityInstance or StageTransitionEffect);
                     if (hasNonIdempotent) {
                         context.ReportHint(
                             subscription,
@@ -399,7 +398,6 @@ internal sealed class SubscriptionAnalyzer : INodeAnalyzer {
                 CollectFromExpression(ae.Value, peerBinding, subscriberRelNames, flags, isAssignTarget: false);
                 break;
             case StageTransitionEffect:
-            case DeleteEntityInstance:
                 break;
             case CreateEntityInstance cei:
                 foreach (var init in cei.Initializers)
@@ -426,14 +424,6 @@ internal sealed class SubscriptionAnalyzer : INodeAnalyzer {
             case CompositeEffect ce:
                 foreach (var e in ce.Effects)
                     CollectPropertyAccesses(e, peerBinding, subscriberRelNames, flags, isAssignTarget: false);
-                break;
-            case LinkRelationshipEffect link:
-                CollectFromExpression(link.Target, peerBinding, subscriberRelNames, flags, isAssignTarget: false);
-                break;
-            case UnlinkRelationshipEffect unlink:
-                CollectFromExpression(unlink.Target, peerBinding, subscriberRelNames, flags, isAssignTarget: false);
-                break;
-            case TransitionRelationshipEffect:
                 break;
         }
     }

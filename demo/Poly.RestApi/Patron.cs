@@ -28,7 +28,6 @@ public class Patron {
         this.CurrentStage = PatronStage.Active;
         this.InitializeSubscriptions();
     }
-    public bool IsDeleted { get; private set; }
     public long CurrentBorrowCount { get; private set; }
     public string Email { get; private set; } = default!;
     public long MaxItems { get; private set; }

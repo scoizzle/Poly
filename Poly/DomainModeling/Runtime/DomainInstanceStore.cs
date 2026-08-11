@@ -151,7 +151,6 @@ public sealed class DomainInstanceStore {
 
         // For each subscriber: stage-scoped plan first, then always-active entity-level plan.
         foreach (var subscriber in _instances) {
-            if (subscriber.IsDeleted) continue;
 
             // --- Stage-scoped (requires resolvable current stage) ---
             if (subscriber.CurrentStage is not null) {

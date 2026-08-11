@@ -77,9 +77,6 @@ public sealed record DomainEntityInstance {
     /// <summary>The current lifecycle stage, if the entity defines stages.</summary>
     public string? CurrentStage { get; private set; }
 
-    /// <summary>Whether this instance has been deleted by a <see cref="DeleteEntityInstance"/> effect.</summary>
-    public bool IsDeleted { get; private set; }
-
     /// <summary>Child instances created by <see cref="CreateEntityInstance"/> effects.</summary>
     public IReadOnlyList<DomainEntityInstance> CreatedChildren => _createdChildren;
 
@@ -206,7 +203,7 @@ public sealed record DomainEntityInstance {
     ///   <item>Execute each effect in declaration order:
     ///     <list type="bullet">
     ///       <item><b>VM-compiled</b> (<see cref="AssignEffect"/>, <see cref="CompositeEffect"/>, <see cref="ConditionalEffect"/>) → lowered to Syntax AST → compiled via <see cref="Interpreter.Compile"/> → executed via VM.</item>
-    ///       <item><b>Direct-execution</b> (<see cref="StageTransitionEffect"/>, <see cref="CreateEntityInstance"/>, <see cref="InvokeActionEffect"/>, <see cref="DeleteEntityInstance"/>) → mutates instance state directly.</item>
+    ///       <item><b>Direct-execution</b> (<see cref="StageTransitionEffect"/>, <see cref="CreateEntityInstance"/>, <see cref="InvokeActionEffect"/>) → mutates instance state directly.</item>
     ///     </list>
     ///   </item>
     ///   <item>On <see cref="StageTransitionEffect"/>: set stage → if <c>notifyStore</c>, fire stage-scoped <see cref="StageSubscription"/> effects (see <see cref="DomainInstanceStore.NotifyTransition"/>).</item>
@@ -227,10 +224,6 @@ public sealed record DomainEntityInstance {
     /// after the action completes.</param>
     public ActionInvocationResult InvokeAction(string actionName,
         IReadOnlyDictionary<string, object?>? args = null) {
-        // RT′.6: Refuse actions on deleted instances.
-        if (IsDeleted)
-            return ActionInvocationResult.Deleted(Entity.Name, actionName);
-
         // E6.2: Depth-limited re-entrancy for nested invoke (self-call / OnEntry cycles).
         if (_invokeDepth >= MaxInvokeDepth)
             return ActionInvocationResult.InvokeDepthExceeded(actionName, MaxInvokeDepth);
@@ -448,12 +441,6 @@ public sealed record DomainEntityInstance {
                 .ToList(),
             Filter = iae.Filter is null ? null : PreprocessQuantifiers(iae.Filter)
         },
-        LinkRelationshipEffect link => link with {
-            Target = PreprocessQuantifiers(link.Target)
-        },
-        UnlinkRelationshipEffect unlink => unlink with {
-            Target = PreprocessQuantifiers(unlink.Target)
-        },
         _ => effect
     };
 
@@ -496,21 +483,6 @@ public sealed record DomainEntityInstance {
 
         protected override object? InvokeAction(InvokeActionEffect invoke) {
             _instance.ExecuteInvokeEffect(invoke);
-            return null;
-        }
-
-        protected override object? DeleteEntity(DeleteEntityInstance _) {
-            _instance.IsDeleted = true;
-            return null;
-        }
-
-        protected override object? LinkRelationship(LinkRelationshipEffect link) {
-            _instance.ExecuteLink(link.RelationshipName, link.Target);
-            return null;
-        }
-
-        protected override object? UnlinkRelationship(UnlinkRelationshipEffect unlink) {
-            _instance.ExecuteUnlink(unlink.RelationshipName, unlink.Target);
             return null;
         }
     }
@@ -582,34 +554,6 @@ public sealed record DomainEntityInstance {
                     ? $"invoke '{invoke.ActionName}' blocked by guards: {string.Join(", ", nestedResult.FailedGuards)}"
                     : $"invoke '{invoke.ActionName}' failed."));
         }
-    }
-
-    private void ExecuteLink(string relationshipName, DomainExpression targetExpr) {
-        if (Store is null)
-            throw new InvalidOperationException(
-                "Cannot link relationship without a DomainInstanceStore. Call store.Add(instance) first.");
-        var target = ResolveLinkedInstance(targetExpr, "Link");
-        Store.Link(relationshipName, this, target);
-    }
-
-    private void ExecuteUnlink(string relationshipName, DomainExpression targetExpr) {
-        if (Store is null)
-            throw new InvalidOperationException(
-                "Cannot unlink relationship without a DomainInstanceStore. Call store.Add(instance) first.");
-        var target = ResolveLinkedInstance(targetExpr, "Unlink");
-        Store.Unlink(relationshipName, this, target);
-    }
-
-    private DomainEntityInstance ResolveLinkedInstance(DomainExpression targetExpr, string effectName) {
-        if (targetExpr is PropertyAccess pa
-            && _values.TryGetValue(pa.Name, out var value)
-            && value is DomainEntityInstance instance)
-            return instance;
-
-        throw new InvalidOperationException(
-            $"{effectName} target must be a PropertyAccess whose value is a DomainEntityInstance. " +
-            "Use DomainInstanceStore.Link/Unlink for direct API linking, or store the target instance " +
-            "in a property bag entry first.");
     }
 
     /// <summary>
@@ -807,12 +751,6 @@ public sealed record DomainEntityInstance {
                     .Select(b => b with { Expression = BindPeerInExpression(b.Expression, peerBinding, peer) })
                     .ToList(),
                 Filter = iae.Filter is null ? null : BindPeerInExpression(iae.Filter, peerBinding, peer)
-            },
-            LinkRelationshipEffect link => link with {
-                Target = BindPeerInExpression(link.Target, peerBinding, peer)
-            },
-            UnlinkRelationshipEffect unlink => unlink with {
-                Target = BindPeerInExpression(unlink.Target, peerBinding, peer)
             },
             _ => effect
         };
@@ -1387,12 +1325,6 @@ public sealed record ActionInvocationResult {
         ActionName = actionName,
         Succeeded = false,
         ErrorMessage = $"Action '{actionName}' not found on entity '{entityName}'."
-    };
-
-    internal static ActionInvocationResult Deleted(string entityName, string actionName) => new() {
-        ActionName = actionName,
-        Succeeded = false,
-        ErrorMessage = $"Instance of entity '{entityName}' has been deleted — no actions can be called."
     };
 
     internal static ActionInvocationResult InvokeDepthExceeded(string actionName, int maxDepth) => new() {

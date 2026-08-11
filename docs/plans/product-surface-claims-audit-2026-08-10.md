@@ -16,7 +16,7 @@
 | **Entry/exit effects** | ✅ | ✅ | ✅ *(was untested)* | ✅ | — |
 | Actions: params, require gates | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Action return `-> Entity` | ✅ | ✅ | ✅ | ✅ | — |
-| Effects: assign / transition / create / create in (auto-wire) / delete | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Effects: assign / transition / create / create in (auto-wire) | ✅ | ✅ | ✅ | ✅ | ✅ |
 | **Invoke: cross-entity with param binding** | ✅ | ✅ | ✅ *(was untested)* | ✅ | — |
 | Invoke: any/all/where | ✅ | ✅ | ✅ | ✅ | — |
 | Conditional `if / else if / else` | ✅ | ✅ | ✅ | ✅ | — |

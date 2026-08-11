@@ -13,7 +13,6 @@ public class PremiumPatron {
         this.RewardPoints = rewardPoints;
         this.Tier = tier;
     }
-    public bool IsDeleted { get; private set; }
     public string Email { get; private set; } = default!;
     public string Name { get; private set; } = default!;
     public bool PriorityAccess { get; private set; }

@@ -1,0 +1,5 @@
+domain smoke
+
+Placeholder: entity {
+  Name: Text required
+}

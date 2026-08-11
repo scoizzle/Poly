@@ -1,0 +1,77 @@
+domain Commerce
+
+Customer: entity {
+  Name: Text
+  Tier: Text
+  orders: many Order
+  shippingAddress: ShippingAddress
+
+  IsVip: policy { any orders where Total >= 500 }
+  AllPaid: policy { all orders where Status is "Paid" }
+  NoRefunds: policy { none orders where Status is "Refunded" }
+  TotalOrders: policy { count orders > 0 }
+  ZeroOpen: policy { count orders where Status is "Open" == 0 }
+  HasAddress: policy { shippingAddress exists }
+  NoAddress: policy { not shippingAddress exists }
+
+  CancelAll: action {
+    invoke all orders.Cancel
+  }
+  ExpediteRush: action {
+    invoke any orders.Expedite() where Rush is true
+  }
+  ChargeAll: action (amount: Number) {
+    invoke all orders.Charge(amount: amount)
+  }
+}
+
+Order: entity {
+  Total: Number
+  Status: Text
+  Rush: Text
+  customer: Customer
+  lines: many Line
+  invoice: Invoice
+
+  HasLines: policy { lines exists }
+  AnyShipped: policy { any lines where Status is "Shipped" }
+  AllShipped: policy { all lines where Status is "Shipped" }
+  LineCount: policy { count lines > 0 }
+  LineTotal: policy { count lines where Total > 100 > 0 }
+
+  Draft: stage {
+    Cancel: action {
+      transition to Cancelled
+    }
+    Expedite: action {
+      assign Rush to "true"
+      transition to Active
+    }
+    Charge: action (amount: Number) {
+      assign Total to amount
+      transition to Paid
+    }
+  }
+  Active: stage {}
+  Paid: stage {}
+  Cancelled: stage {}
+}
+
+Line: entity {
+  Status: Text
+  Total: Number
+  order: Order
+}
+
+Invoice: entity {
+  Status: Text
+  order: Order
+
+  Submit: action {
+    assign Status to "submitted"
+  }
+}
+
+ShippingAddress: entity {
+  City: Text
+}

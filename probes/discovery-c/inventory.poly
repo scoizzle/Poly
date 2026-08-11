@@ -1,0 +1,42 @@
+domain Inventory
+
+StockLevel: enum {
+  InStock,
+  Low,
+  Out,
+}
+
+Tag: entity {
+  Label: Text required
+}
+
+StockReceipt: entity {
+  Reference: Text required
+  Qty: Number range(1, 100000)
+  item: Item
+}
+
+Item: entity {
+  SKU: Text required
+  Name: Text length(2, 50) required
+  Category: Text pattern("^[A-Z][0-9]{3}$")
+  UnitPrice: Number range(1, 9999)
+  Qty: Number range(0, )
+  ReorderPoint: Number range(, 100)
+  Status: StockLevel default(InStock)
+  stockReceipts: many StockReceipt
+  IsLow: policy { Status is "Low" }
+  NeedsRestock: policy { Qty <= ReorderPoint }
+  markLow: action {
+    assign Status to Low
+  }
+  markOut: action {
+    assign Status to "Out"
+  }
+  receive: action (qty: Number) -> StockReceipt {
+    create in stockReceipts { Reference: "R-1" Qty: qty }
+  }
+  addTag: action (label: Text) -> Tag {
+    create Tag { Label: label }
+  }
+}

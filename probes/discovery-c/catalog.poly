@@ -1,0 +1,29 @@
+domain Catalog
+
+Tier: enum { Basic, Plus, Pro }
+
+Product: entity {
+  SKU: Text required
+  Tier: Tier default(Basic)
+  Price: Number range(0, 10000)
+}
+
+Catalog: entity {
+  products: many Product
+  enrollRush: action (rush: Boolean) -> Product {
+    if (rush is true) {
+      create in products { SKU: "RUSH" Tier: Pro }
+    } else {
+      create in products { SKU: "STD" Tier: Basic }
+    }
+  }
+  createPremium: action (sku: Text) -> Product {
+    create Product { SKU: sku }
+  }
+  makePlus: action {
+    create Product { SKU: "P1" Tier: Plus }
+  }
+  restock: action (qty: Number) {
+    create in products { SKU: "BULK" }
+  }
+}

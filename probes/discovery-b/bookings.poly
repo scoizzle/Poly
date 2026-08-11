@@ -1,0 +1,37 @@
+domain DiscoveryBookings
+
+Booking: entity {
+  CheckIn: Date
+  CheckOut: Date
+  BookedAt: DateTime default(now)
+  ConfirmationCode: Text default(guid)
+  Deposit: Number default(0)
+  guest: Guest
+
+  HasValidWindow: policy { CheckOut > CheckIn }
+
+  Draft: stage {
+    entry { assign BookedAt to now }
+    Confirm: action {
+      assign CheckIn to today
+      transition to Confirmed
+    }
+  }
+  Confirmed: stage {
+    Extend: action (extraDays: Number) {
+      assign CheckOut to CheckOut + extraDays
+    }
+    CheckOutEarly: action (daysEarly: Number) {
+      assign CheckOut to CheckOut - daysEarly
+    }
+  }
+  Completed: stage {
+    exit { assign CheckOut to today }
+  }
+}
+
+Guest: entity {
+  Name: Text
+  bookings: many Booking
+  createdAt: DateTime default(now)
+}

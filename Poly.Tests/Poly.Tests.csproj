@@ -9,6 +9,7 @@
 	<ItemGroup>
 		<PackageReference Include="TUnit" Version="1.53.0" />
 		<PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.12.0" />
+		<PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.0" />
 	</ItemGroup>
 	<ItemGroup>
 		<ProjectReference Include="..\Poly\Poly.csproj" />

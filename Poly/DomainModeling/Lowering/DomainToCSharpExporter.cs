@@ -105,6 +105,9 @@ public sealed class DomainToCSharpExporter {
         var fields = new List<FieldDefinitionNode>();
         var ctorParams = new List<Parameter>();
         var ctorAssignments = new List<Node>();
+        // Defaulted props become TRAILING optional ctor params (C# requires optional
+        // params after all required ones); collected here, appended after nav params.
+        var defaultedCtorParams = new List<Parameter>();
 
         // Stage enum name — the published fact (EntityStructureMetadata.StageEnumTypeName)
         // is the single source; fall back to the derivation only for the null-analysis path.
@@ -138,11 +141,10 @@ public sealed class DomainToCSharpExporter {
             props.Add(new PropertyDefinitionNode(
                 prop.Name, propRef,
                 Getter: new PropertyGetterDefinitionNode(),
-                // internal set — lets same-assembly factory/nav code apply
-                // defaulted-property overrides after construction (post-create
-                // assignment); still encapsulated from external callers.
+                // private set — domain state changes only through the Create factory /
+                // action effects (no same-assembly backdoor mutability).
                 Setter: new PropertySetterDefinitionNode(
-                    AccessModifier: AccessModifier.Internal),
+                    AccessModifier: AccessModifier.Private),
                 // CS8618 hygiene: non-nullable reference-typed scalars (Text → string)
                 // are left unset by the EF-materialization parameterless ctor — emit
                 // `= default!;` so the generated code compiles warning-free.
@@ -153,39 +155,31 @@ public sealed class DomainToCSharpExporter {
                 Constraints: constraints
             ));
 
-            // Check for default value expression (runtime default or constant)
+            // Defaulted props become OPTIONAL ctor params (the DSL default is the C#
+            // default) so `create in { DefaultedProp: value }` overrides flow through
+            // construction — no setters, no post-create assignment.
             var defaultValue = prop.Constraints.OfType<DefaultValueConstraint>().FirstOrDefault();
+            var paramName = ToCamelCase(prop.Name);
             if (defaultValue is not null) {
-                // Try to lower as a runtime default (now, today, guid)
                 var runtimeExpr = EffectLoweringPass.LowerDefaultExpression(defaultValue.Expression);
                 if (runtimeExpr is not null) {
+                    // Runtime default (now/today/guid) can't be a compile-time default —
+                    // T? = null sentinel; body applies the runtime default when null.
+                    defaultedCtorParams.Add(new Parameter(paramName,
+                        new OptionalTypeReference(propRef),
+                        DefaultValue: new Constant(null)));
                     ctorAssignments.Add(new Assignment(
                         new Member(new ThisReference(), prop.Name),
-                        runtimeExpr));
-                    continue; // skip ctor param — runtime value set in body
+                        new Syntactic.Coalesce(new Parameter(paramName), runtimeExpr)));
                 }
-                // If it's a literal, emit directly in body as default
-                if (defaultValue.Expression is Literal lit) {
+                else {
+                    var defaultNode = LowerDefaultConstantNode(defaultValue, prop, domain, metadata);
+                    defaultedCtorParams.Add(new Parameter(paramName, propRef, DefaultValue: defaultNode));
                     ctorAssignments.Add(new Assignment(
                         new Member(new ThisReference(), prop.Name),
-                        new Constant(lit.Value)));
-                    continue; // skip ctor param — constant default in body
+                        new Parameter(paramName)));
                 }
-                // If it's an enum member (PropertyAccess), also emit directly
-                if (defaultValue.Expression is PropertyAccess pa && domain is not null) {
-                    // Try to resolve as enum member: EnumType.MemberName
-                    var enumProp = entity.Properties.FirstOrDefault(p =>
-                        string.Equals(p.Name, prop.Name, StringComparison.Ordinal));
-                    if (enumProp is not null
-                        && TryResolveEnumType(domain, metadata, enumProp.Type.TypeName, out var enumType)
-                        && enumType is not null) {
-                        ctorAssignments.Add(new Assignment(
-                            new Member(new ThisReference(), prop.Name),
-                            new Member(
-                                new NamedTypeReference(enumType.Name), pa.Name)));
-                        continue; // skip ctor param
-                    }
-                }
+                continue; // skip ctor param — handled as a trailing optional param
             }
 
             // Prop assigned by the initial stage's entry effect: the ctor body already
@@ -195,7 +189,6 @@ public sealed class DomainToCSharpExporter {
                 continue;
 
             // No default expression — full constructor param + assignment
-            var paramName = ToCamelCase(prop.Name);
             ctorParams.Add(new Parameter(paramName, propRef));
             ctorAssignments.Add(new Assignment(
                 new Member(new ThisReference(), prop.Name),
@@ -284,6 +277,11 @@ public sealed class DomainToCSharpExporter {
                     new Parameter(paramName)));
             }
         }
+
+        // Defaulted props trail the required scalar + nav params (optional params must
+        // come last). Appended here so the Create/ctor signatures carry them as overridable
+        // defaults — `create in { DefaultedProp: value }` flows through construction.
+        ctorParams.AddRange(defaultedCtorParams);
 
         // ── Build post-transition notification nodes ──────────────
         Dictionary<string, IReadOnlyList<Node>>? postTransitionNodes = null;
@@ -753,6 +751,28 @@ public sealed class DomainToCSharpExporter {
         // the Target.Create() parameter list — they are set directly in the
         // constructor body from their default expression. Do NOT append them
         // to createArgs here; the Create factory already handles them.
+
+        // Defaulted props of the target become TRAILING optional method params (C#
+        // optional params must be last) and are forwarded to Target.Create — so a
+        // `create in { DefaultedProp: value }` override flows through construction.
+        foreach (var prop in targetEntity.Properties.OrderBy(p => p.Name)) {
+            var defaultConstraint = prop.Constraints.OfType<DefaultValueConstraint>().FirstOrDefault();
+            if (defaultConstraint is null) continue;
+
+            var paramName = ToCamelCase(prop.Name);
+            var mapped = MapDomainTypeRef(prop.Type, domain, metadata);
+            var runtimeExpr = EffectLoweringPass.LowerDefaultExpression(defaultConstraint.Expression);
+            if (runtimeExpr is not null) {
+                methodParams.Add(new Parameter(paramName,
+                    new OptionalTypeReference(mapped),
+                    DefaultValue: new Constant(null)));
+            }
+            else {
+                methodParams.Add(new Parameter(paramName, mapped,
+                    DefaultValue: LowerDefaultConstantNode(defaultConstraint, prop, domain, metadata)));
+            }
+            createArgs.Add(new Parameter(paramName));
+        }
 
         var bodyNodes = new List<Node>();
         var localResultName = $"{ToCamelCase(targetTypeName)}Result";
@@ -1576,6 +1596,28 @@ public sealed class DomainToCSharpExporter {
     /// </summary>
     private static bool IsNonNullableReferenceScalar(Node propRef) =>
         propRef is PrimitiveTypeReference { PrimitiveId: PrimType.String };
+
+    /// <summary>
+    /// Lowers a <see cref="DefaultValueConstraint"/> to its C# constant/enum node,
+    /// used as an optional-parameter default on the Create/CreateNav/ctor signatures.
+    /// Returns null for runtime defaults (now/today/guid) — those use a
+    /// <c>T? = null</c> sentinel and a <c>?? &lt;runtime&gt;</c> coalesce in the ctor
+    /// body. Shared with the create-in call site so signature and call stay in lockstep.
+    /// </summary>
+    internal static Node? LowerDefaultConstantNode(
+        DefaultValueConstraint defaultValue,
+        Property prop,
+        Domain? domain,
+        INodeMetadataProvider? metadata) {
+        if (defaultValue.Expression is Literal lit)
+            return new Constant(lit.Value);
+        if (defaultValue.Expression is PropertyAccess pa
+            && domain is not null
+            && TryResolveEnumType(domain, metadata, prop.Type.TypeName, out var enumType)
+            && enumType is not null)
+            return new Member(new NamedTypeReference(enumType.Name), pa.Name);
+        return null;
+    }
 
     // ── String helpers ──────────────────────────────────────────
 

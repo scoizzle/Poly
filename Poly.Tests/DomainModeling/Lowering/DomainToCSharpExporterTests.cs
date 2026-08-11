@@ -1128,11 +1128,11 @@ public class DomainToCSharpExporterTests {
     }
 
     [Test]
-    public async Task Export_DefaultedPropOverride_EmitsPostCreateAssignment() {
+    public async Task Export_DefaultedPropOverride_FlowsThroughConstructor() {
         // Regression (review F#4): a create-in initializer that binds a prop WITH a
         // DefaultValueConstraint (e.g. `Severity: Hint` on `default(Warning)`) must
-        // override the default — emitted as a post-create assignment, NOT silently
-        // dropped (the runtime's values bag honors it; the export must too).
+        // override the default. Now the override flows through the factory's optional
+        // ctor param — no post-create assignment, no setters.
         var (domain, analysis) = ParseAndAnalyze("""
             domain Demo
             Severity: enum { Hint, Warning, Error }
@@ -1151,11 +1151,11 @@ public class DomainToCSharpExporterTests {
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
-        // The override must appear after the factory call, qualified enum member.
-        await Assert.That(cs).Contains("diagnostic.Severity = Severity.Hint");
-        // Severity is NOT a CreateDiagnostics ctor param (it has a default) — the
-        // factory takes only Code; the override is a separate post-create assignment.
-        await Assert.That(cs).Contains("CreateDiagnostics(string code)");
-        await Assert.That(cs).DoesNotContain("CreateDiagnostics(string code, Severity");
+        // Severity is a trailing optional CreateDiagnostics param defaulting to the DSL default.
+        await Assert.That(cs).Contains("CreateDiagnostics(string code, Severity severity = Severity.Warning)");
+        // The call site passes the bound override positionally.
+        await Assert.That(cs).Contains("CreateDiagnostics(\"P000\", Severity.Hint)");
+        // No post-create assignment (the ctor's own `this.Severity = severity;` is fine).
+        await Assert.That(cs).DoesNotContain("diagnostic.Severity = ");
     }
 }

@@ -407,27 +407,35 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
                 args.Add(DefaultForDomainType(parameter.Type, _domain, _analysis));
         }
 
-        // Defaulted-property overrides: props with a DefaultValueConstraint are NOT
-        // ctor params (the factory body sets the default), so a binding like
-        // `create in diagnostics { Severity: Hint }` would be silently dropped.
-        // The runtime honors it (values bag); the export must too — apply as a
-        // post-create assignment (props get `internal set` so same-assembly code
-        // can override after construction).
+        // Defaulted props are TRAILING optional params on the CreateNav factory (the DSL
+        // default is the C# default). When a create-in binds one, emit args for ALL
+        // defaulted props in the same sorted order — bound value or the DSL default —
+        // so positional order matches the signature. When none are bound, omit (C# default).
+        var defaultedProps = targetEntity.Properties
+            .Where(p => p.Constraints.Any(c => c is DefaultValueConstraint))
+            .OrderBy(p => p.Name)
+            .ToList();
+        if (defaultedProps.Any(p => initMap.ContainsKey(p.Name))) {
+            foreach (var prop in defaultedProps) {
+                if (initMap.TryGetValue(prop.Name, out var expr)) {
+                    args.Add(LowerEnumAwareValue(expr, prop.Type, Subject));
+                }
+                else {
+                    var defaultConstraint = prop.Constraints.OfType<DefaultValueConstraint>().First();
+                    var runtimeExpr = EffectLoweringPass.LowerDefaultExpression(defaultConstraint.Expression);
+                    var defaultNode = DomainToCSharpExporter.LowerDefaultConstantNode(defaultConstraint, prop, _domain, _analysis);
+                    args.Add(runtimeExpr is not null
+                        ? new Constant(null) // sentinel — ctor applies the runtime default
+                        : defaultNode ?? DefaultForDomainType(prop.Type, _domain, _analysis));
+                }
+            }
+        }
+
         var localName = DomainToCSharpExporter.ToCamelCase(targetEntity.Name);
         var blockNodes = new List<Node> {
             new Variable(localName,
                 new Invoke(new Member(Subject, methodName), [.. args]))
         };
-        var parameterNames = parameterMetadata.Select(p => p.Name).ToHashSet(StringComparer.Ordinal);
-        foreach (var init in cr.Initializers) {
-            if (parameterNames.Contains(init.PropertyName)) continue; // already a ctor arg
-            var targetProp = targetEntity.Properties.FirstOrDefault(p =>
-                string.Equals(p.Name, init.PropertyName, StringComparison.Ordinal));
-            if (targetProp is null) continue; // unknown/collection — analyzer already reported
-            blockNodes.Add(new Assignment(
-                new Member(new Variable(localName), targetProp.Name),
-                LowerEnumAwareValue(init.Expression, targetProp.Type, Subject)));
-        }
 
         return new Block(blockNodes);
     }

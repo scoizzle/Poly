@@ -1,19 +1,27 @@
 #nullable enable
+
 using Microsoft.EntityFrameworkCore;
 
 namespace Poly.Generated;
 
 public class LibraryDbContext : DbContext {
     public LibraryDbContext(DbContextOptions<LibraryDbContext> options) : base(options) { }
-
-    public DbSet<Book> Books => Set<Book>();
-    public DbSet<Patron> Patrons => Set<Patron>();
-    public DbSet<Loan> Loans => Set<Loan>();
-    public DbSet<Fine> Fines => Set<Fine>();
-    public DbSet<PremiumPatron> PremiumPatrons => Set<PremiumPatron>();
-
+    public DbSet<Book> Books {
+        get => Set<Book>();
+    }
+    public DbSet<Patron> Patrons {
+        get => Set<Patron>();
+    }
+    public DbSet<Loan> Loans {
+        get => Set<Loan>();
+    }
+    public DbSet<Fine> Fines {
+        get => Set<Fine>();
+    }
+    public DbSet<PremiumPatron> PremiumPatrons {
+        get => Set<PremiumPatron>();
+    }
     protected override void OnModelCreating(ModelBuilder modelBuilder) {
-        // ── Book ─────────────────────────────────────────────────
         modelBuilder.Entity<Book>(b => {
             b.ToTable("Books");
             b.HasKey(x => x.ISBN);
@@ -23,8 +31,6 @@ public class LibraryDbContext : DbContext {
             b.Property(x => x.Pages).HasColumnName("pages").HasColumnType("INTEGER");
             b.Property(x => x.Genre).HasColumnName("genre").HasColumnType("Genre");
         });
-
-        // ── Patron ─────────────────────────────────────────────────
         modelBuilder.Entity<Patron>(b => {
             b.ToTable("Patrons");
             b.HasKey(x => x.Email);
@@ -35,13 +41,9 @@ public class LibraryDbContext : DbContext {
             b.Property(x => x.MaxItems).HasColumnName("maxItems").HasColumnType("INTEGER");
             b.Property(x => x.CurrentBorrowCount).HasColumnName("currentBorrowCount").HasColumnType("INTEGER");
             b.Property(x => x.OutstandingFines).HasColumnName("outstandingFines").HasColumnType("INTEGER");
-            b.Metadata.FindNavigation(nameof(Patron.Loans))!
-                .SetPropertyAccessMode(PropertyAccessMode.Field);
-            b.Metadata.FindNavigation(nameof(Patron.Fines))!
-                .SetPropertyAccessMode(PropertyAccessMode.Field);
+            b.Metadata.FindNavigation(nameof(Patron.Loans))!.SetPropertyAccessMode(PropertyAccessMode.Field);
+            b.Metadata.FindNavigation(nameof(Patron.Fines))!.SetPropertyAccessMode(PropertyAccessMode.Field);
         });
-
-        // ── Loan ─────────────────────────────────────────────────
         modelBuilder.Entity<Loan>(b => {
             b.ToTable("Loans");
             b.Property<int>("Id");
@@ -52,8 +54,6 @@ public class LibraryDbContext : DbContext {
             b.Property(x => x.ReturnedAt).HasColumnName("returnedAt").HasColumnType("TEXT");
             b.Property(x => x.TimesRenewed).HasColumnName("timesRenewed").HasColumnType("INTEGER");
         });
-
-        // ── Fine ─────────────────────────────────────────────────
         modelBuilder.Entity<Fine>(b => {
             b.ToTable("Fines");
             b.Property<int>("Id");
@@ -63,8 +63,6 @@ public class LibraryDbContext : DbContext {
             b.Property(x => x.DateIssued).HasColumnName("dateIssued").HasColumnType("TEXT");
             b.Property(x => x.Paid).HasColumnName("paid").HasColumnType("INTEGER");
         });
-
-        // ── PremiumPatron ─────────────────────────────────────────────────
         modelBuilder.Entity<PremiumPatron>(b => {
             b.ToTable("PremiumPatrons");
             b.HasKey(x => x.Email);
@@ -74,6 +72,5 @@ public class LibraryDbContext : DbContext {
             b.Property(x => x.Tier).HasColumnName("tier").HasColumnType("PremiumTier");
             b.Property(x => x.PriorityAccess).HasColumnName("priorityAccess").HasColumnType("INTEGER");
         });
-
     }
 }

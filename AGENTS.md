@@ -139,6 +139,7 @@ Layout sketch: `Poly/` (core library), `Poly.Tests/` (TUnit), `Poly.Benchmarks/`
 - **TFM:** `net10.0`, nullable enabled.
 - **Build:** `dotnet build Poly.Benchmarks/Poly.Benchmarks.csproj`
 - **Test:** `dotnet run --project Poly.Tests/Poly.Tests.csproj`
+- **Restart MCP after code changes:** `scripts/restart-poly-mcp.sh` (rebuild + kill the running `poly-local` server so opencode relaunches it with the new build). Required to serve exporter/runtime fixes through the MCP tools.
 - Work is **not complete** while the build is failing (unless the user explicitly blocks).
 - Add tests with feature changes.
 - **Test style:** TUnit — `async [Test]`, `await Assert.That(result).IsEqualTo(expected)`, names `Method_Condition_ExpectedResult`.

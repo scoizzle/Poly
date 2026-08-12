@@ -733,6 +733,55 @@ diverging:
   arithmetic, and defaults (e.g. `Name >= 18` on a `Text` property, `default(today)` on
   a `Number` property) are rejected at authoring time — the export and runtime no longer
   receive type-confused expressions.
+- **Property constraints propagate onto effects.** An effect that assigns a value to a
+  constrained property is checked against the property's constraints at analysis:
+  a literal value (or a derived expression whose inferred value range is entirely
+  outside, e.g. `assign Age to Age + 200` on `Age: Number range(0, 150)`) is an
+  **error**; a derived expression that *can* fall outside (e.g. `assign Qty to Qty - 100`
+  on `Qty: Number range(0, 100)`) is a **warning**. This covers `assign`, entry/exit
+  effects, and `create`/`create in` initializers. The action's guard policies are
+  considered **additively**: a `require` gate (or always-on entity-level policy) that
+  narrows a property's value range is combined with the property's own constraints before
+  judging the downstream violation — e.g. `assign Qty to Qty + 10` under
+  `require Qty <= 80` on `Qty: Number range(0, 90)` is provably within range and produces
+  no diagnostic.
+- **Invariant verification is per-stage-context and combinatory.** An action valid in
+  multiple stages is analyzed once per stage: each stage's policies (plus the action's
+  require gates and entity policies) combine to a **net constraint per constraint type**
+  (range, length, enum, … merged by intersection — the smaller maximum and the larger
+  minimum win), and a downstream violation in **any** state the action can run is
+  reported. Action **parameters** carry their own constraints into the effects that use
+  them: the postcondition for `assign Total to amount` is the intersection of the
+  property's and the parameter's constraints. Stage-scoped policies are a model-level
+  surface; the DSL does not yet author them, but programmatically-populated stage
+  policies participate in the per-stage narrowing.
+- **Constraints must be jointly satisfiable.** A property whose constraints contradict
+  each other is a structural error at analysis: disjoint ranges or lengths, differing
+  patterns, contradictory equality constraints, an equality value or literal default that
+  violates a sibling constraint. An action whose guard policies narrow a property to an
+  **empty range** (the preconditions + property constraint can never hold) is reported as
+  unsatisfiable — the action is un-runnable.
+- **`if` conditions are implicit branch preconditions.** A conditional effect's
+  then-branch is analyzed with the condition's bounds applied (e.g.
+  `if (Qty >= 10) { assign Qty to Qty - 5 }` runs with Qty ∈ [10, …], so the assignment is
+  judged against that narrower range); the else-branch uses the negated condition where it
+  is a single comparison. This removes false-positive downstream warnings on guarded
+  branches and is part of the same additive invariant model as guard policies.
+- **Call-chain propagation.** `invoke B` runs B's effects under the caller's context: the
+  caller's guard/if-condition narrowing is intersected with B's own preconditions, and the
+  invoke argument bindings flow the bound expressions' value ranges into B's parameters.
+  B's postconditions are recorded as effects the caller can trigger, with the
+  call-chain-narrowed ranges (distinct from B's direct postconditions when B is invoked
+  on its own). Those **call-chain postconditions are validated**: a callee assignment that
+  can violate its target under the caller's context is reported as a diagnostic naming the
+  chain (e.g. `A → B`), including cases the callee's own analysis cannot see (a parameter
+  bound by the caller's argument whose range is only known at the call site).
+- **Cross-entity invoke and `where`-filters propagate the same way.** `invoke Rel.Action`
+  builds the related entity's abstract environment (its declared constraints + its own
+  preconditions) and applies the `where`-filter as a refinement on the target-local
+  properties before stepping the callee's effects — so `invoke all lines.Mark where
+  Qty <= 40` analyzes `Mark`'s `assign Qty to Qty + 10` with Qty ∈ [0, 40] (range(0, 100)
+  ∩ filter), giving a [10, 50] postcondition instead of the unfiltered [10, 110].
 
 ### Expression Gaps — IR vs DSL
 

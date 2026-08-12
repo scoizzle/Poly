@@ -37,9 +37,99 @@ internal sealed class ConstraintQualityAnalyzer : INodeAnalyzer {
         var constraints = property.Constraints;
         ValidateRangeSatisfiability(context, property, constraints);
         ValidateLengthSatisfiability(context, property, constraints);
+        ValidateEqualitySatisfiability(context, property, constraints);
+        ValidateJointConstraintSatisfiability(context, property, constraints);
         ValidateEnumCombination(context, property, constraints);
         ValidateConstraintTypeCompatibility(context, property, constraints);
         ValidateDefaultWithinConstraints(context, property, constraints);
+    }
+
+    /// <summary>
+    /// Joint satisfiability — the deeper suite. A property's constraints must be satisfiable
+    /// together, not just individually:
+    ///  - duplicate constraints of the same type must merge (intersect) without becoming empty
+    ///    (two disjoint ranges, two incompatible lengths, two differing patterns);
+    ///  - an EqualityConstraint's value must satisfy the length/pattern constraints;
+    ///  - a literal default must satisfy the pattern/equality constraints (range/length are
+    ///    covered by <see cref="ValidateDefaultWithinConstraints"/>).
+    /// </summary>
+    private static void ValidateJointConstraintSatisfiability(
+        AnalysisContext context, Property property, IReadOnlyList<Constraint> constraints) {
+        foreach (var group in constraints
+                     .Where(c => c is not EqualityConstraint)
+                     .GroupBy(c => c.GetType())) {
+            if (group.Count() < 2) continue;
+            Constraint? net = null;
+            foreach (var c in group) {
+                net = net is null ? c : net.Merge(c);
+                if (net is null) {
+                    context.ReportError(
+                        property,
+                        $"Property '{property.Name}' has contradictory {ConstraintValidation.Describe(group.First())} constraints — unsatisfiable.",
+                        DomainModelDiagnosticCodes.ConstraintSatisfiability);
+                    break;
+                }
+            }
+        }
+
+        var equality = constraints.OfType<EqualityConstraint>().FirstOrDefault();
+        if (equality is not null) {
+            foreach (var c in constraints) {
+                if (c is EqualityConstraint or RangeConstraint) continue; // range covered elsewhere
+                if (!ConstraintValidation.IsSatisfiedBy(c, equality.ExpectedValue)) {
+                    context.ReportError(
+                        property,
+                        $"Property '{property.Name}' EqualityConstraint value '{equality.ExpectedValue}' " +
+                        $"violates {ConstraintValidation.Describe(c)}.",
+                        DomainModelDiagnosticCodes.ConstraintSatisfiability);
+                }
+            }
+        }
+
+        if (constraints.OfType<DefaultValueConstraint>().FirstOrDefault()?.Expression is Literal lit) {
+            foreach (var c in constraints) {
+                if (c is DefaultValueConstraint or RangeConstraint or LengthConstraint) continue; // covered elsewhere
+                if (!ConstraintValidation.IsSatisfiedBy(c, lit.Value)) {
+                    context.ReportError(
+                        property,
+                        $"Property '{property.Name}' default value '{lit.Value}' violates {ConstraintValidation.Describe(c)}.",
+                        DomainModelDiagnosticCodes.ConstraintSatisfiability);
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Multiple equality constraints that disagree (must equal 'a' and 'b') make a property
+    /// unsatisfiable — a structural contradiction, reported at authoring. An equality value
+    /// outside the declared range is the same satisfiability class.
+    /// </summary>
+    private static void ValidateEqualitySatisfiability(
+        AnalysisContext context, Property property, IReadOnlyList<Constraint> constraints) {
+        var equalities = constraints.OfType<EqualityConstraint>().ToList();
+        if (equalities.Count > 1) {
+            var first = equalities[0].ExpectedValue;
+            var conflicting = equalities.Skip(1)
+                .FirstOrDefault(e => !Equals(e.ExpectedValue, first));
+            if (conflicting is not null) {
+                context.ReportError(
+                    property,
+                    $"Property '{property.Name}' has contradictory EqualityConstraints " +
+                    $"(must equal both '{first}' and '{conflicting.ExpectedValue}') — unsatisfiable.",
+                    DomainModelDiagnosticCodes.ConstraintSatisfiability);
+            }
+        }
+
+        var equality = equalities.FirstOrDefault();
+        var range = constraints.OfType<RangeConstraint>().FirstOrDefault();
+        if (equality is not null && range is not null
+            && !ConstraintValidation.IsSatisfiedBy(range, equality.ExpectedValue)) {
+            context.ReportError(
+                property,
+                $"Property '{property.Name}' EqualityConstraint ({equality.ExpectedValue}) is outside its " +
+                $"RangeConstraint {ConstraintValidation.Describe(range)} — unsatisfiable.",
+                DomainModelDiagnosticCodes.ConstraintSatisfiability);
+        }
     }
 
     /// <summary>

@@ -55,6 +55,7 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
                 ValidateActionParameterUsage(context, action);
                 ValidateActionReturnProducer(context, action, entity, domain, lookup);
                 ValidateActionReturnFinalStatement(context, action, entity, domain, lookup);
+                ValidateCallChainPostconditions(context, action, entity);
             }
             foreach (var stage in entity.Stages) {
                 ValidateEffects(context, stage.OnEntryEffects, null, entity, domain, lookup);
@@ -437,6 +438,11 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
                 if (initializer.Expression is Literal lit && targetProp.Constraints.Count > 0) {
                     ValidateLiteralAgainstConstraints(context, initializer, lit.Value, targetProp);
                 }
+
+                // Propagate the target's range onto derived (arithmetic) initializer values
+                if (initializer.Expression is Add or Subtract or Multiply && targetProp.Constraints.Count > 0) {
+                    ValidateDerivedValueRange(context, initializer, initializer.Expression, actionEntity, action: null, targetProp);
+                }
             }
 
             // P2′.2: Reject bare create of exclusively-owned entity types
@@ -652,6 +658,11 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
             // Validate literal initializer values against property constraints
             if (initializer.Expression is Literal lit && targetProp.Constraints.Count > 0) {
                 ValidateLiteralAgainstConstraints(context, initializer, lit.Value, targetProp);
+            }
+
+            // Propagate the target's range onto derived (arithmetic) initializer values
+            if (initializer.Expression is Add or Subtract or Multiply && targetProp.Constraints.Count > 0) {
+                ValidateDerivedValueRange(context, initializer, initializer.Expression, entity, action: null, targetProp);
             }
         }
 
@@ -1031,6 +1042,11 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
             return;
         }
 
+        // ── Propagate the target's range onto derived (arithmetic) values ────
+        if (ae.Value is Add or Subtract or Multiply) {
+            ValidateDerivedValueRange(context, ae, ae.Value, entity, action, targetProp);
+        }
+
         // ── Validate parameter-to-property constraint compatibility ─────────
         if (ae.Value is ParameterAccess pa && action is not null) {
             var sourceParam = action.Parameters
@@ -1060,6 +1076,127 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
             }
         }
     }
+
+    /// <summary>
+    /// Constraint propagation onto derived (arithmetic) values: infer the value range the
+    /// RHS expression can produce (from literals, property/param ranges, and arithmetic
+    /// composition) and check it against the target property's RangeConstraint. A range
+    /// entirely outside the constraint is a definite violation (error); a range that can
+    /// extend outside is a possible violation (warning).
+    /// </summary>
+    private static void ValidateDerivedValueRange(
+        AnalysisContext context,
+        Node errorNode,
+        DomainExpression value,
+        Entity entity,
+        Action? action,
+        Property targetProp) {
+        var range = targetProp.Constraints.OfType<RangeConstraint>().FirstOrDefault();
+        if (range is null) return;
+
+        var meta = action is null ? null : context.GetMetadata<ActionInvariantMetadata>(action);
+        if (meta is null) {
+            // No action context (create-initializer): infer against declared ranges only.
+            var (lo, hi) = EffectInvariantAnalyzer.InferNumericRange(value, entity, null, null);
+            CheckDerivedRange(context, errorNode, lo, hi, range, targetProp);
+            return;
+        }
+
+        // The effect is valid in one or more stage contexts (entity states); check the
+        // postcondition in each — a violation in ANY state the action can run is reported.
+        foreach (var ctx in meta.StageContexts) {
+            var post = ctx.Postconditions.FirstOrDefault(p => ReferenceEquals(p.Effect, errorNode));
+            if (post?.ValueRange is { } vr)
+                CheckDerivedRange(context, errorNode, vr.Min, vr.Max, range, targetProp);
+        }
+    }
+
+    private static void CheckDerivedRange(
+        AnalysisContext context,
+        Node errorNode,
+        double? loNullable,
+        double? hiNullable,
+        RangeConstraint range,
+        Property targetProp) {
+        if (loNullable is null || hiNullable is null) return;
+        double lo = loNullable.Value, hi = hiNullable.Value;
+
+        var tmin = ToDouble(range.Minimum);
+        var tmax = ToDouble(range.Maximum);
+
+        bool fullyBelow = tmin is not null && hi < tmin.Value;
+        bool fullyAbove = tmax is not null && lo > tmax.Value;
+        if (fullyBelow || fullyAbove) {
+            context.ReportError(
+                errorNode,
+                $"Assigned expression value range [{FormatRangeValue(lo)}, {FormatRangeValue(hi)}] is entirely outside " +
+                $"constraint {ConstraintValidation.Describe(range)} on property '{targetProp.Name}'.",
+                DomainModelDiagnosticCodes.EffectConstraintViolation);
+            return;
+        }
+
+        bool canViolate = (tmin is not null && lo < tmin.Value)
+                          || (tmax is not null && hi > tmax.Value);
+        if (canViolate) {
+            context.ReportWarning(
+                errorNode,
+                $"Assigned expression value range [{FormatRangeValue(lo)}, {FormatRangeValue(hi)}] can fall outside " +
+                $"constraint {ConstraintValidation.Describe(range)} on property '{targetProp.Name}'.",
+                DomainModelDiagnosticCodes.EffectConstraintViolation);
+        }
+    }
+
+    /// <summary>
+    /// Validates the call-chain postconditions: effects of actions this action invokes
+    /// (transitively), whose value ranges were computed under the caller's narrowed context.
+    /// A callee assignment that can violate its target's constraint while running under this
+    /// caller is reported on the callee effect with the caller chain named.
+    /// </summary>
+    private static void ValidateCallChainPostconditions(
+        AnalysisContext context, Action action, Entity entity) {
+        var meta = context.GetMetadata<ActionInvariantMetadata>(action);
+        if (meta is null) return;
+
+        foreach (var stageCtx in meta.StageContexts()) {
+            foreach (var post in stageCtx.Postconditions) {
+                if (post.DeclaringAction == action) continue; // direct effects — validated per-effect
+                if (post.ValueRange is not { } vr) continue;
+                var range = post.Constraints.OfType<RangeConstraint>().FirstOrDefault();
+                if (range is null) continue;
+                var targetProp = entity.Properties.FirstOrDefault(p =>
+                    string.Equals(p.Name, post.TargetProperty, StringComparison.Ordinal));
+                if (targetProp is null) continue;
+
+                var tmin = ToDouble(range.Minimum);
+                var tmax = ToDouble(range.Maximum);
+                double lo = vr.Min!.Value, hi = vr.Max!.Value;
+                bool fullyBelow = tmin is not null && hi < tmin.Value;
+                bool fullyAbove = tmax is not null && lo > tmax.Value;
+                if (fullyBelow || fullyAbove) {
+                    context.ReportError(
+                        post.Effect,
+                        $"Call-chain postcondition ({action.Name} → {post.DeclaringAction.Name}): assigned value range " +
+                        $"[{FormatRangeValue(lo)}, {FormatRangeValue(hi)}] is entirely outside constraint " +
+                        $"{ConstraintValidation.Describe(range)} on property '{post.TargetProperty}'.",
+                        DomainModelDiagnosticCodes.EffectConstraintViolation);
+                    continue;
+                }
+                bool canViolate = (tmin is not null && lo < tmin.Value)
+                                  || (tmax is not null && hi > tmax.Value);
+                if (canViolate) {
+                    context.ReportWarning(
+                        post.Effect,
+                        $"Call-chain postcondition ({action.Name} → {post.DeclaringAction.Name}): assigned value range " +
+                        $"[{FormatRangeValue(lo)}, {FormatRangeValue(hi)}] can fall outside constraint " +
+                        $"{ConstraintValidation.Describe(range)} on property '{post.TargetProperty}'.",
+                        DomainModelDiagnosticCodes.EffectConstraintViolation);
+                }
+            }
+        }
+    }
+
+    private static string FormatRangeValue(double d) =>
+        d == Math.Floor(d) ? d.ToString("F0", System.Globalization.CultureInfo.InvariantCulture) : d.ToString("G", System.Globalization.CultureInfo.InvariantCulture);
 
     private static void ValidateParameterConstraintCompatibility(
         AnalysisContext context, Node errorNode, Property sourceParam, Property targetProp) {

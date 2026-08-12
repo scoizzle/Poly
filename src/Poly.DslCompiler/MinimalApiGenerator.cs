@@ -113,6 +113,11 @@ public sealed class MinimalApiGenerator {
     private static string Pascalize(string name) => DomainTypeMapping.ToPascalCase(name);
     private static string GetClrTypeName(string domainType) => DomainTypeMapping.ToClrTypeName(domainType);
 
+    private static bool IsNumericClrType(string clrType) => clrType switch {
+        "long" or "int" or "short" or "byte" or "double" or "float" or "decimal" => true,
+        _ => false,
+    };
+
     /// <summary>Generates the Minimal API Program.cs as a Syntax IR compilation unit.</summary>
     public CompilationUnitNode GenerateCompilationUnit(string dbContextName) {
         var dtoTypes = new List<TypeDefinitionNode>();
@@ -210,7 +215,7 @@ public sealed class MinimalApiGenerator {
         topLevelStatements.Add(new Invoke(new Member(new TypeReference(AppVar), "Run")));
 
         var unit = new CompilationUnitNode(
-            Usings: ["System.Text.Json", "System.Text.Json.Serialization", "Microsoft.EntityFrameworkCore", "Poly.Generated"],
+            Usings: ["System.Text.Json", "System.Text.Json.Serialization", "Microsoft.EntityFrameworkCore", "System.ComponentModel.DataAnnotations", "Poly.Generated"],
             Namespace: null,
             Types: dtoTypes,
             TopLevelStatements: topLevelStatements
@@ -625,16 +630,43 @@ public sealed class MinimalApiGenerator {
         if (scalarParams.Count == 0) return;
         if (!GetStorageEntity(entity).IsRoot) return;
 
-        // Emit as positional record (primary constructor params), matching string path — uses PascalCase
-        var primaryParams = scalarParams.Select(param =>
-            new Parameter(param.Name, new TypeReference(GetClrTypeName(param.Type.TypeName)))
-        ).ToList();
+        // Emit as a class with get/set properties so transport validation attributes
+        // ([Range(min, max)]) attach to properties and are enforced by ASP.NET model
+        // binding. For properties the invariant analysis VERIFIED (no effect can produce
+        // an out-of-range value), the declared range is the proven envelope.
+        var props = scalarParams.Select(param => {
+            var clrType = GetClrTypeName(param.Type.TypeName);
+            var prop = new PropertyDefinitionNode(
+                param.Name,
+                new TypeReference(clrType),
+                Getter: new PropertyGetterDefinitionNode(),
+                Setter: new PropertySetterDefinitionNode(),
+                Initializer: clrType == "string"
+                    ? new PropertyInitializerDefinitionNode(new NullForgiving(new Default()))
+                    : null);
+            if (!IsNumericClrType(clrType)) return prop;
+
+            var column = GetStorageEntity(entity).Columns.FirstOrDefault(c =>
+                string.Equals(c.Name, param.Name, StringComparison.Ordinal));
+            var range = column?.VerifiedRange is { } verified && column.IsRangeVerified
+                ? new RangeConstraint(verified.Min, verified.Max)
+                : entity.Properties.FirstOrDefault(p =>
+                      string.Equals(p.Name, param.Name, StringComparison.Ordinal))
+                      ?.Constraints.OfType<RangeConstraint>().FirstOrDefault();
+            if (range is null) return prop;
+
+            var args = new List<Expression> {
+                new Constant(range.Minimum is not null ? Convert.ToDouble(range.Minimum) : double.MinValue),
+                new Constant(range.Maximum is not null ? Convert.ToDouble(range.Maximum) : double.MaxValue)
+            };
+            return prop with { Attributes = [new AttributeNode("Range", args)] };
+        }).ToList();
 
         dtoTypes.Add(new TypeDefinitionNode(
             $"{entity.Name}Dto",
-            PrimaryConstructorParameters: primaryParams,
+            Properties: props,
             Semantics: new TypeDefinitionSemantics(
-                TypeDefinitionMutability.Immutable,
+                TypeDefinitionMutability.Mutable,
                 TypeDefinitionEqualitySemantics.Value
             )
         ));

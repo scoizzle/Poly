@@ -311,7 +311,8 @@ public class SqlitePackTests {
 
         var prog = result.Files!.Single(f => f.FileName == "Program.cs").Source;
         // Enum type maps to its own CLR name (Genre), not excluded by entity-ness.
-        await Assert.That(prog).Contains("record BookDto(Genre Genre, string Title)");
+        await Assert.That(prog).Contains("public record BookDto\n{\n    public Genre Genre { get; set; }");
+        await Assert.That(prog).Contains("public string Title { get; set; }");
         // POST endpoint passes the DTO members into Book.Create in the same order.
         await Assert.That(prog).Contains("Book.Create(dto.Genre, dto.Title)");
     }

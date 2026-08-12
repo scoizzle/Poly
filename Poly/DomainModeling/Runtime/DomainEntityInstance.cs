@@ -646,11 +646,10 @@ public sealed record DomainEntityInstance {
                 .Select(b => b with { Expression = PreprocessQuantifiers(b.Expression) })
                 .ToList()
         },
-        ForEachInvokeEffect efe => efe with {
-            ParameterBindings = efe.ParameterBindings
-                .Select(b => b with { Expression = PreprocessQuantifiers(b.Expression) })
-                .ToList()
-        },
+        // `for` arguments are binder-rooted (item Qty) — PreprocessQuantifiers would treat
+        // the binder root as a relationship and fail. The binder is bound per-target in
+        // ExecuteForEachInvoke; args carry no store quantifiers (analysis restricts roots).
+        ForEachInvokeEffect efe => efe,
         _ => effect
     };
 

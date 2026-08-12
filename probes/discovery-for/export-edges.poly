@@ -1,0 +1,25 @@
+domain DiscoveryForExport
+
+Line: entity {
+  Qty: Number
+  IsPaid: policy { Qty > 0 }
+  Active: stage { }
+  Mark: action (amount: Number) { assign Qty to amount }
+}
+
+Order: entity {
+  lines: many Line
+  Total: Number default(0)
+  Open: stage { }
+
+  Go: action (flag: Number) {
+    for lines as line where line IsPaid invoke line.Mark(amount: line Qty)
+    for lines as line where line in Active invoke line.Mark(amount: 5)
+    if (flag == 1) {
+      for lines as line invoke line.Mark(amount: 10)
+    }
+    assign Total to Total + 1
+    transition to Done
+  }
+  Done: stage { }
+}

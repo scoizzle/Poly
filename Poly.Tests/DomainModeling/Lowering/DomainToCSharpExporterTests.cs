@@ -932,6 +932,36 @@ public class DomainToCSharpExporterTests {
             d.Message.Contains("predicate policy 'IsPaid' does not exist on entity 'Line'"))).IsTrue();
     }
 
+    [Test]
+    public async Task Analysis_ForEachInvoke_StoreDependentPredicatePolicy_Rejected() {
+        // A `for` predicate referencing a store-dependent policy (any/all/path-prefix/
+        // exists) would lower to a NotSupportedException-throwing method and dead-end the
+        // action — reject at authoring instead.
+        var poly = """
+            domain Test
+            Tag: entity { Label: Text }
+            Line: entity {
+              Qty: Number
+              tags: many Tag
+              HasTag: policy { any tags where Label is "x" }
+              Mark: action (amount: Number) { assign Qty to amount }
+            }
+            Order: entity {
+              lines: many Line
+              Go: action {
+                for lines as line where line HasTag invoke line.Mark(amount: 1)
+              }
+            }
+            """;
+        var changes = new PolyDslParser(poly).Parse();
+        var evolved = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(changes);
+        var diagnostics = evolved.Analysis?.Diagnostics
+            ?? DomainModelAnalyzer.Analyze(evolved.Root!).Diagnostics;
+
+        await Assert.That(diagnostics.Any(d =>
+            d.Message.Contains("store-dependent"))).IsTrue();
+    }
+
     private static IEnumerable<Invoke> FindAllInvokes(Node node) {
         if (node is Invoke inv) yield return inv;
         foreach (var child in node.Children) {

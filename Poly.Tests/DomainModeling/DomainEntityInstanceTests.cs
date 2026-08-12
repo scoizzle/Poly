@@ -800,6 +800,99 @@ public class DomainEntityInstanceTests {
     }
 
     [Test]
+    public async Task ForEachInvoke_FailFast_FailingTargetStopsAndPriorRemainMutated() {
+        // Fail-fast: the first record whose invoke fails fails the whole `for` (throws).
+        // Rollback is a documented gap — records invoked before the failure keep their
+        // mutations (no undo).
+        var qty = new Property("Qty", new DomainTypeReference("Number"), []);
+        var isPositive = new Policy("IsPositive",
+            DomainExpression.GreaterThan(DomainExpression.Property("Qty"), DomainExpression.Literal(0L)));
+        var mark = new Poly.DomainModeling.Action("Mark", InvocationResult.Void,
+            Parameters: [new Property("amount", new DomainTypeReference("Number"), [])],
+            Effects: [
+                new AssignEffect(DomainExpression.Property("Qty"), DomainExpression.Property("amount"))
+            ],
+            Policies: [isPositive]);
+
+        var target = new Entity("Target", [qty], [mark], [isPositive], []);
+        var source = new Entity("Source", [], Actions: [
+            new Poly.DomainModeling.Action("Run", InvocationResult.Void, [], [
+                new ForEachInvokeEffect("Items", "item", null, "Mark",
+                    [new PropertyBinding("amount", DomainExpression.Literal(100L))])
+            ], [])
+        ], [], []);
+
+        var rel = new Relationship("Items",
+            new DomainTypeReference("Source"), new DomainTypeReference("Target"),
+            RelationshipCardinality.OneToMany, []);
+        var domain = DomainTestFactory.Create("Test", [source, target], [rel]);
+
+        var store = new DomainInstanceStore();
+        var good = DomainEntityInstance.Create(target,
+            new Dictionary<string, object?> { ["Qty"] = 5L }, domain: domain);
+        var bad = DomainEntityInstance.Create(target,
+            new Dictionary<string, object?> { ["Qty"] = 0L }, domain: domain);
+        var src = DomainEntityInstance.Create(source, domain: domain);
+        store.Add(good); store.Add(bad); store.Add(src);
+        store.Link("Items", src, good);
+        store.Link("Items", src, bad);
+
+        // Fixture: good.Qty=5, bad.Qty=0.
+        await Assert.That(good.GetProperty<long>("Qty")).IsEqualTo(5L);
+        await Assert.That(bad.GetProperty<long>("Qty")).IsEqualTo(0L);
+
+        await Assert.That(() => src.InvokeAction("Run")).Throws<InvalidOperationException>();
+        // Fail-fast: the failing record (bad, Qty=0) was never mutated — its Mark guard
+        // failed before the assign. Rollback is a documented gap: a record invoked BEFORE
+        // the failure keeps its mutation.
+        await Assert.That(bad.GetProperty<long>("Qty")).IsEqualTo(0L);
+        await Assert.That(good.GetProperty<long>("Qty")).IsEqualTo(100L);
+    }
+
+    [Test]
+    public async Task ForEachInvoke_MixedBinderAndCallerArgs_ResolvesBoth() {
+        // `for items as item invoke item.Mark(amount: item Qty + Bonus)` — the binder root
+        // resolves against the current target, the caller's property against the source.
+        var qty = new Property("Qty", new DomainTypeReference("Number"), []);
+        var mark = new Poly.DomainModeling.Action("Mark", InvocationResult.Void,
+            Parameters: [new Property("amount", new DomainTypeReference("Number"), [])],
+            Effects: [
+                new AssignEffect(DomainExpression.Property("Qty"), DomainExpression.Property("amount"))
+            ],
+            Policies: []);
+        var target = new Entity("Target", [qty], [mark], [], []);
+        var bonus = new Property("Bonus", new DomainTypeReference("Number"), []);
+        var source = new Entity("Source", [bonus], Actions: [
+            new Poly.DomainModeling.Action("Run", InvocationResult.Void, [], [
+                new ForEachInvokeEffect("Items", "item", null, "Mark", [
+                    new PropertyBinding("amount",
+                        DomainExpression.Add(
+                            DomainExpression.RelationshipNav("item", DomainExpression.Property("Qty")),
+                            DomainExpression.Property("Bonus")))
+                ])
+            ], [])
+        ], [], []);
+
+        var rel = new Relationship("Items",
+            new DomainTypeReference("Source"), new DomainTypeReference("Target"),
+            RelationshipCardinality.OneToMany, []);
+        var domain = DomainTestFactory.Create("Test", [source, target], [rel]);
+
+        var store = new DomainInstanceStore();
+        var tgt = DomainEntityInstance.Create(target,
+            new Dictionary<string, object?> { ["Qty"] = 5L }, domain: domain);
+        var src = DomainEntityInstance.Create(source,
+            new Dictionary<string, object?> { ["Bonus"] = 10L }, domain: domain);
+        store.Add(tgt); store.Add(src);
+        store.Link("Items", src, tgt);
+
+        var result = src.InvokeAction("Run");
+        await Assert.That(result.Succeeded).IsTrue();
+        // amount = item.Qty (5) + Bonus (10) = 15.
+        await Assert.That(tgt.GetProperty<long>("Qty")).IsEqualTo(15L);
+    }
+
+    [Test]
     public async Task ActionWithMultipleEffects_ExecutesAllTypes() {
         var status = new Property("Status", new DomainTypeReference("Text"), []);
         var count = new Property("Count", new DomainTypeReference("Number"), []);

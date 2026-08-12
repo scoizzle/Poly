@@ -796,11 +796,23 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
         // Predicate: named policy or stage membership on the TARGET entity.
         switch (efe.Predicate) {
             case ForEachNamedPolicy { PolicyName: var policyName }:
-                if (!targetEntity.Policies.Any(p => string.Equals(p.Name, policyName, StringComparison.Ordinal))) {
+                var predicatePolicy = targetEntity.Policies.FirstOrDefault(p =>
+                    string.Equals(p.Name, policyName, StringComparison.Ordinal));
+                if (predicatePolicy is null) {
                     context.ReportError(
                         efe,
                         $"ForEachInvoke predicate policy '{policyName}' does not exist on entity '{targetEntity.Name}'.",
                         DomainModelDiagnosticCodes.EffectBinding);
+                }
+                else if (ContainsStoreDependentExpression(predicatePolicy.Expression)) {
+                    // The export lowers such policies to a NotSupportedException-throwing
+                    // method — a `for` predicate calling it would dead-end the whole action.
+                    context.ReportError(
+                        efe,
+                        $"ForEachInvoke predicate policy '{policyName}' is store-dependent " +
+                        "(quantifiers / path-prefix / exists) and cannot be compiled to standalone C#. " +
+                        "Use a local policy over the record's own properties.",
+                        DomainModelDiagnosticCodes.EffectInvokeShape);
                 }
                 break;
             case ForEachStageMembership { StageName: var stageName }:
@@ -854,6 +866,14 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
             foreach (var nested in EnumerateRelationshipNavigations(child))
                 yield return nested;
     }
+
+    /// <summary>True when an expression contains a construct the standalone export cannot
+    /// lower (collection quantifiers, path-prefix, exists) — such policies lower to a
+    /// NotSupportedException-throwing method.</summary>
+    private static bool ContainsStoreDependentExpression(DomainExpression expr) => expr switch {
+        AnyExpr or AllExpr or NoneExpr or CountExpr or Exists or NotExists or RelationshipNavigation => true,
+        _ => expr.Children.OfType<DomainExpression>().Any(ContainsStoreDependentExpression),
+    };
 
     private static void ValidateInvokeAction(
         AnalysisContext context, InvokeActionEffect iae, Entity entity, Domain domain) {

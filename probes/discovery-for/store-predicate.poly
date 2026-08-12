@@ -1,0 +1,23 @@
+domain DiscoveryForStore
+
+Tag: entity { Label: Text }
+
+Line: entity {
+  Qty: Number
+  IsPaid: policy { Qty > 0 }
+  tags: many Tag
+  HasTag: policy { any tags where Label is "x" }
+  Mark: action (amount: Number) { assign Qty to amount }
+}
+
+Order: entity {
+  lines: many Line
+
+  Go: action {
+    for lines as line where line IsPaid invoke line.Mark(amount: 1)
+  }
+
+  Bad: action {
+    for lines as line where line HasTag invoke line.Mark(amount: 1)
+  }
+}

@@ -390,6 +390,63 @@ public class ConstraintPropagationEffectTests {
     }
 
     [Test]
+    public async Task CrossEntityInvoke_ViolatingPostcondition_IsReported() {
+        // `invoke all lines.Mark where Qty >= 90` runs Mark (assign Qty to Qty + 10) with
+        // Qty ∈ [90, 100] → [100, 110] can exceed range(0, 100). The cross-entity call-chain
+        // postcondition must be reported (target prop lives on OrderLine, not Order).
+        var result = Parse("""
+            domain Test
+            Order: entity {
+              lines: many OrderLine
+              Ship: action { invoke all lines.Mark where Qty >= 90 }
+            }
+            OrderLine: entity {
+              Qty: Number range(0, 100)
+              order: Order
+              Mark: action { assign Qty to Qty + 10 }
+            }
+            """);
+        await Assert.That(result.Succeeded).IsTrue();
+        await Assert.That(Messages(result, errors: false).Any(m =>
+            m.Contains("Call-chain postcondition (Ship → Mark)")
+            && m.Contains("can fall outside constraint range(0, 100)"))).IsTrue();
+    }
+
+    [Test]
+    public async Task CrossEntityInvoke_ArgumentBinding_FlowsRangeIntoCallee() {
+        // `invoke all lines.Add(amount: amt)` with amt range(0, 30): the callee's param
+        // `amount` carries [0, 30], so `assign Qty to Qty + amount` ∈ [0, 130] → can exceed
+        // range(0, 100) → reported on the cross-entity chain.
+        var qty = new Property("Qty", new DomainTypeReference("Number"),
+            [new RangeConstraint(0d, 100d)]);
+        var add = new Poly.DomainModeling.Action("Add", InvocationResult.Void,
+            [new Property("amount", new DomainTypeReference("Number"), [])],
+            [new AssignEffect(DomainExpression.Property("Qty"),
+                DomainExpression.Add(DomainExpression.Property("Qty"), DomainExpression.Parameter("amount")))],
+            []);
+        var order = new Entity("Order", [], [], [], []);
+        var line = new Entity("OrderLine", [qty], [add], [], []);
+        var rel = new Relationship("lines",
+            new DomainTypeReference("Order"), new DomainTypeReference("OrderLine"),
+            RelationshipCardinality.OneToMany, []);
+        var addToAll = new Poly.DomainModeling.Action("AddToAll", InvocationResult.Void,
+            [new Property("amt", new DomainTypeReference("Number"),
+                [new RangeConstraint(0d, 30d)])],
+            [new InvokeActionEffect("Add",
+                [new PropertyBinding("amount", DomainExpression.Parameter("amt"))],
+                TargetRelationship: "lines")],
+            []);
+        var orderWithAction = new Entity("Order", [], [addToAll], [], []);
+        var domain = DomainTestFactory.Create("Test", [orderWithAction, line], [rel]);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
+
+        await Assert.That(analysis.Diagnostics.Any(d =>
+            d.Severity == DiagnosticSeverity.Warning
+            && d.Message.Contains("Call-chain postcondition (AddToAll → Add)")
+            && d.Message.Contains("can fall outside constraint range(0, 100)"))).IsTrue();
+    }
+
+    [Test]
     public async Task UnsatisfiablePreconditions_AreError() {
         // `require LowQty (Qty <= 80)` on `Qty range(90, 100)`: the guards narrow Qty to an
         // empty range — the action can never run.

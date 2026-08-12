@@ -1161,11 +1161,11 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
             foreach (var post in stageCtx.Postconditions) {
                 if (post.DeclaringAction == action) continue; // direct effects — validated per-effect
                 if (post.ValueRange is not { } vr) continue;
+                // The postcondition's Constraints are the target's net constraint (declared +
+                // param/binder merges), valid for cross-entity callees whose target property
+                // lives on a different entity than the caller.
                 var range = post.Constraints.OfType<RangeConstraint>().FirstOrDefault();
                 if (range is null) continue;
-                var targetProp = entity.Properties.FirstOrDefault(p =>
-                    string.Equals(p.Name, post.TargetProperty, StringComparison.Ordinal));
-                if (targetProp is null) continue;
 
                 var tmin = ToDouble(range.Minimum);
                 var tmax = ToDouble(range.Maximum);

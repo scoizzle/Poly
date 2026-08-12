@@ -168,8 +168,9 @@ internal sealed class ConstraintQualityAnalyzer : INodeAnalyzer {
         AnalysisContext context, Property property, IReadOnlyList<Constraint> constraints) {
         var hasRange = constraints.OfType<RangeConstraint>().Any();
         var hasLength = constraints.OfType<LengthConstraint>().Any();
+        var hasPattern = constraints.OfType<PatternConstraint>().Any();
 
-        if (!hasRange && !hasLength) return;
+        if (!hasRange && !hasLength && !hasPattern) return;
 
         var resolved = context.GetMetadata<ResolvedTypeReferenceMetadata>(property.Type);
         if (resolved?.Type is not PrimitiveType primitiveType) return;
@@ -187,6 +188,13 @@ internal sealed class ConstraintQualityAnalyzer : INodeAnalyzer {
             context.ReportError(
                 property,
                 $"Property '{property.Name}' has a LengthConstraint but its type '{property.Type.TypeName}' does not resolve to a text type.",
+                DomainModelDiagnosticCodes.SemanticTypeCompatibility);
+        }
+
+        if (hasPattern && !category.Is(TypeCategory.Text)) {
+            context.ReportError(
+                property,
+                $"Property '{property.Name}' has a PatternConstraint but its type '{property.Type.TypeName}' does not resolve to a text type.",
                 DomainModelDiagnosticCodes.SemanticTypeCompatibility);
         }
     }

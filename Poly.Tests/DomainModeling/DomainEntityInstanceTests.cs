@@ -3236,4 +3236,95 @@ public class DomainEntityInstanceTests {
 
         await Assert.That(targetInst.GetProperty<string>("LastMessage")).IsEqualTo("hi");
     }
+
+    [Test]
+    public async Task Create_AppliesFirstStageEntryEffects() {
+        // Round-2 C-F3: the export ctor applies the first stage's entry effects; the
+        // runtime Create must too (status stamps, IsOpen flags, timestamps) — divergent
+        // initial state otherwise.
+        var status = new Property("Status", new DomainTypeReference("Text"), []);
+        var entry = new Stage("Loaned",
+            Actions: [],
+            Policies: [],
+            OnEntryEffects: [
+                new AssignEffect(DomainExpression.Property("Status"), DomainExpression.Literal("loaned"))
+            ],
+            OnExitEffects: []);
+        var entity = new Entity("Loan", [status], [], [], [entry]);
+
+        var instance = DomainEntityInstance.Create(entity);
+
+        await Assert.That(instance.GetProperty<string>("Status")).IsEqualTo("loaned");
+    }
+
+    [Test]
+    public async Task InvokeAction_StringConcat_Assign_Concatenates() {
+        // Round-2 C-F1: `"S" + Status` in the runtime VM silently stored null (no
+        // string-concat arm). Must produce the concatenated text like the export.
+        var status = new Property("Status", new DomainTypeReference("Text"), []);
+        var code = new Property("Code", new DomainTypeReference("Text"), []);
+        var tag = new Poly.DomainModeling.Action("Tag", InvocationResult.Void, [], [
+            new AssignEffect(
+                DomainExpression.Property("Code"),
+                DomainExpression.Add(
+                    DomainExpression.Literal("S"),
+                    DomainExpression.Property("Status")))
+        ], []);
+        var entity = new Entity("Item", [status, code], [tag], [], []);
+
+        var instance = DomainEntityInstance.Create(entity,
+            new Dictionary<string, object?> { ["Status"] = "paid", ["Code"] = "" });
+
+        var result = instance.InvokeAction("Tag");
+        await Assert.That(result.Succeeded).IsTrue();
+        await Assert.That(instance.GetProperty<string>("Code")).IsEqualTo("Spaid");
+    }
+
+    [Test]
+    public async Task InvokeAction_StageScopedFromWrongStage_ReportsRequiredStage() {
+        // Round-2 C-F4: invoking a stage-scoped action from another stage said "not
+        // found on entity" — the action exists but is stage-scoped. Must report the stage.
+        var ship = new Poly.DomainModeling.Action("Ship", InvocationResult.Void, [], [], []);
+        var pending = new Stage("Pending", Actions: [], Policies: [], OnEntryEffects: [], OnExitEffects: []);
+        var paid = new Stage("Paid", Actions: [ship], Policies: [], OnEntryEffects: [], OnExitEffects: []);
+        var entity = new Entity("Order", [], [], [], [pending, paid]);
+        var domain = DomainTestFactory.Create("Test", [entity], []);
+
+        var instance = DomainEntityInstance.Create(entity, domain: domain);
+
+        var result = instance.InvokeAction("Ship");
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(result.ErrorMessage).IsNotNull();
+        await Assert.That(result.ErrorMessage!).Contains("only available in stage 'Paid'");
+        await Assert.That(result.ErrorMessage!).DoesNotContain("not found on entity");
+    }
+
+    [Test]
+    public async Task InvokeAction_CreateIn_ActionParamInitializer_BindsValue() {
+        // Round-2 B-F2: `create in bins { Capacity: qty }` compiled initializers with
+        // the instance-level analyzer (no action params) → garbage value. Must resolve
+        // the action parameter through the action-scoped type provider.
+        var capacity = new Property("Capacity", new DomainTypeReference("Number"), []);
+        var bin = new Entity("Bin", [capacity], [], [], []);
+        var rel = new Relationship("bins",
+            new DomainTypeReference("Warehouse"), new DomainTypeReference("Bin"),
+            RelationshipCardinality.OneToMany, []);
+        var make = new Poly.DomainModeling.Action("Make", InvocationResult.Void,
+            Parameters: [new Property("qty", new DomainTypeReference("Number"), [])],
+            Effects: [new CreateEntityInRelationshipEffect("bins", [
+                new PropertyBinding("Capacity", DomainExpression.Property("qty"))
+            ])],
+            Policies: []);
+        var warehouse = new Entity("Warehouse", [], [make], [], []);
+        var domain = DomainTestFactory.Create("Test", [warehouse, bin], [rel]);
+        var store = new DomainInstanceStore();
+        var wh = DomainEntityInstance.Create(warehouse, domain: domain);
+        store.Add(wh);
+
+        var result = wh.InvokeAction("Make", new Dictionary<string, object?> { ["qty"] = 42L });
+        await Assert.That(result.Succeeded).IsTrue();
+
+        var child = wh.CreatedChildren.Single();
+        await Assert.That(child.GetProperty<object>("Capacity")).IsEqualTo(42L);
+    }
 }

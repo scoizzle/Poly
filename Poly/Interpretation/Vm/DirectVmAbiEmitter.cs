@@ -624,6 +624,12 @@ public static class DirectVmAbiEmitter {
         AbiCtx ctx) {
         var leftVal = CompileValue(left, ctx);
         var rightVal = CompileValue(right, ctx);
+        // String concatenation: `"S" + Status` — the long ring holds heap handles for
+        // strings, so raw numeric Add would corrupt them. Emit string.Concat and
+        // heap-allocate the result. (The LinqExpressions path already handled this;
+        // the VM silently stored null without it.)
+        if (TryEmitStringConcat(left, right, leftVal, rightVal, factory, ctx) is { } concat)
+            return concat;
         if (IsDoubleValue(ctx, left) || IsDoubleValue(ctx, right))
             return Call(BitConverterDoubleToInt64Bits,
                 factory(Call(BitConverterInt64BitsToDouble, leftVal),
@@ -631,6 +637,30 @@ public static class DirectVmAbiEmitter {
         var rhs = rightVal;
         if (factory == LeftShift || factory == RightShift) rhs = Convert(rhs, typeof(int));
         return factory(leftVal, rhs);
+    }
+
+    /// <summary>Shared string-concat arm for <c>+</c> on text operands. Returns null
+    /// when the operands are not string-typed (numeric arithmetic proceeds).</summary>
+    private static Expression? TryEmitStringConcat(
+        Node left, Node right, Expression leftVal, Expression rightVal,
+        Func<Expression, Expression, BinaryExpression> factory, AbiCtx ctx) {
+        if (factory != Add || !(IsStringValue(ctx, left) || IsStringValue(ctx, right)))
+            return null;
+        var lo = HeapValueToObject(leftVal, ctx);
+        var ro = HeapValueToObject(rightVal, ctx);
+        var concat = Call(
+            typeof(string).GetMethod("Concat", [typeof(object), typeof(object)])!,
+            lo, ro);
+        var handle = Call(ctx.HeapLocal,
+            typeof(Heap).GetMethod(nameof(Heap.Allocate))!,
+            Convert(concat, typeof(object)));
+        return Convert(handle, typeof(long));
+    }
+
+    private static bool IsStringValue(AbiCtx ctx, Node node) {
+        var meta = ctx.Analysis?.GetMetadata<ValueRepresentationMetadata>(node);
+        if (meta?.ClrType == typeof(string)) return true;
+        return node is Constant { Value: string };
     }
 
     private static Expression EmitNotValue(Not n, AbiCtx ctx) =>
@@ -806,6 +836,8 @@ public static class DirectVmAbiEmitter {
         AbiCtx ctx) {
         var leftVal = CompileValue(left, ctx);
         var rightVal = CompileValue(right, ctx);
+        if (TryEmitStringConcat(left, right, leftVal, rightVal, factory, ctx) is { } concat)
+            return SpillToRing(concat, ctx);
         if (IsDoubleValue(ctx, left) || IsDoubleValue(ctx, right))
             return SpillToRing(Call(BitConverterDoubleToInt64Bits,
                 factory(Call(BitConverterInt64BitsToDouble, leftVal),

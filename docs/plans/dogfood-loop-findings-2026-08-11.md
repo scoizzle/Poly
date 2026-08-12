@@ -40,6 +40,32 @@ compile-check).
 - C-F6 negative/fractional range bounds unparseable.
 - C-F7 multi-initializer create with a non-final bare-identifier value misparses.
 
+## Pilot round 2 — 2026-08-11
+
+Second orchestrated round (round2) via `scripts/discovery-round.sh round2` + 3 parallel
+agents (findings in `probes/findings/round2/`, probes in `probes/agent-*/`).
+
+**Fixed in round 2 (all with regression tests):**
+- C-F4 wrong-stage stage-scoped action now reports "only available in stage 'X'" instead
+  of the misleading "not found on entity" (runtime message parity with the export guard).
+- C-F3 runtime `Create` applies the first stage's entry effects (export ctor parity) —
+  transitions in initial entry effects are skipped, matching the export ctor.
+- C-F1 VM string-concat arm for `"S" + Status` (runtime silently stored null; the
+  LinqExpressions path already concat'd).
+- B-F2 action parameters now resolve in create/create-in initializers at runtime (were
+  garbage values compiled without the action-scoped analyzer).
+- B-F9 `length(3, )` open upper bound no longer collapses to `length(3, 3)`; `length(, N)`
+  open lower supported (mirrors range open bounds).
+- B-F10 `pattern` on a non-Text property is now rejected at analysis (was a silent no-op).
+
+**Deferred (filed in `probes/findings/round2/`):** date arithmetic hoist + subtraction
+(🔴, high value), runtime-default type adaptation (🔴), date-literal defaults (🔴),
+cross-type date ops analysis (🔴), `assign DateProp to now` (🔴), policy `now`/`today`
+(🟠), create-Type runtime-keyword default crash (🟡), `now`/`today`/`guid` as non-final
+initializer values (🟡), non-member enum initializer analysis (🔴), unbound no-default
+prop divergence (🟠), conditional create (🟠), `unique` (🟠), signed/fractional ranges
+(🟡), multi-initializer parse (🟡), nested `transition to` in entry effects (🟠).
+
 ## Export / runtime parity notes
 
 - **🟡 Stage-scoped action not-found message is misleading.** Invoking a stage-scoped

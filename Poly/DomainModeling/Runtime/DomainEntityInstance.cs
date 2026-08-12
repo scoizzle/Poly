@@ -145,7 +145,38 @@ public sealed record DomainEntityInstance {
         // Initial stage: first declared stage name (factory shape; not a semantic rediscovery).
         var currentStage = entity.Stages.FirstOrDefault()?.Name;
 
-        return new DomainEntityInstance(entity, values, typeDefAnalyzer, currentStage, domain);
+        var instance = new DomainEntityInstance(entity, values, typeDefAnalyzer, currentStage, domain);
+        ApplyInitialStageEntryEffects(instance);
+        return instance;
+    }
+
+    /// <summary>
+    /// Applies the first stage's entry effects at creation time, matching the export's
+    /// constructor (DomainToCSharpExporter applies the initial stage's entry effects in
+    /// the ctor). Without this, a property initialized by the first stage's <c>entry</c>
+    /// block (status stamps, IsOpen flags, timestamps) is null at runtime but set in the
+    /// export — divergent initial state.
+    /// </summary>
+    private static void ApplyInitialStageEntryEffects(DomainEntityInstance instance) {
+        var firstStage = instance.Entity.Stages.FirstOrDefault();
+        if (firstStage?.OnEntryEffects is not { Count: > 0 })
+            return;
+
+        var analysis = instance.Domain is not null
+            ? RuntimeAnalysisCache.GetOrAnalyze(instance.Domain)
+            : null;
+        var loweringContext = new LoweringContext(
+            new Parameter("entity", new TypeReference(instance.Entity.Name)),
+            Analysis: analysis,
+            Domain: instance.Domain);
+        var entryPass = new EffectLoweringPass(instance.Entity, loweringContext);
+        foreach (var effect in firstStage.OnEntryEffects) {
+            // The export ctor lowers first-stage entry effects with transitions disabled —
+            // mirror that: run assign/create effects but skip stage transitions (a nested
+            // transition in the initial entry would otherwise recurse at Create).
+            if (effect is StageTransitionEffect) continue;
+            instance.ExecuteEffect(effect, entryPass, instance._typeDefAnalyzer);
+        }
     }
 
     /// <summary>
@@ -164,6 +195,36 @@ public sealed record DomainEntityInstance {
         },
         _ => null
     };
+
+    /// <summary>
+    /// Action resolution missed. Distinguish a genuinely-unknown action from one
+    /// that exists but is stage-scoped to a different stage than the current one —
+    /// the latter is reported precisely ("only available in stage 'X'") instead of
+    /// the misleading "not found on entity", matching the export's guard message.
+    /// </summary>
+    private ActionInvocationResult ReportUnresolvedAction(string actionName, AnalysisResult? runtimeAnalysis) {
+        string? stageName = null;
+        if (Domain is not null && runtimeAnalysis is not null) {
+            var arm = runtimeAnalysis.GetActionResolution(Domain, Entity);
+            if (arm is not null) {
+                foreach (var (stage, actions) in arm.StageActions) {
+                    if (actions.ContainsKey(actionName)) {
+                        stageName = stage;
+                        break;
+                    }
+                }
+            }
+        }
+        else {
+            stageName = Entity.Stages
+                .FirstOrDefault(s => s.Actions.Any(a =>
+                    string.Equals(a.Name, actionName, StringComparison.Ordinal)))
+                ?.Name;
+        }
+        return stageName is not null
+            ? ActionInvocationResult.StageRequired(Entity.Name, actionName, stageName)
+            : ActionInvocationResult.Missing(Entity.Name, actionName);
+    }
 
     /// <summary>
     /// Reads a property value, coercing to <typeparamref name="T"/>.
@@ -293,7 +354,7 @@ public sealed record DomainEntityInstance {
         }
 
         if (action is null)
-            return ActionInvocationResult.Missing(Entity.Name, actionName);
+            return ReportUnresolvedAction(actionName, runtimeAnalysis);
 
         // ── Evaluate all guard policies ─────────────────────────
         var failures = new List<string>();
@@ -495,11 +556,11 @@ public sealed record DomainEntityInstance {
         }
 
         protected override object? CreateEntityInstance(CreateEntityInstance create) {
-            return _instance.CreateChildInstance(create);
+            return _instance.CreateChildInstance(create, _typeProvider);
         }
 
         protected override object? CreateEntityInRelationship(CreateEntityInRelationshipEffect createIn) {
-            return _instance.ExecuteCreateInRelationship(createIn);
+            return _instance.ExecuteCreateInRelationship(createIn, _typeProvider);
         }
 
         protected override object? InvokeAction(InvokeActionEffect invoke) {
@@ -825,7 +886,9 @@ public sealed record DomainEntityInstance {
     /// entity (same-type creation). Initializer expressions are evaluated
     /// against the <em>parent</em> instance and bound to the child's properties.
     /// </summary>
-    private DomainEntityInstance CreateChildInstance(CreateEntityInstance createEffect) {
+    private DomainEntityInstance CreateChildInstance(
+        CreateEntityInstance createEffect,
+        TypeDefinitionNodeAnalyzer? parentTypeProvider = null) {
         var targetTypeName = createEffect.Type.TypeName;
 
         // Resolve analysis once for the whole creation (F21).
@@ -844,13 +907,17 @@ public sealed record DomainEntityInstance {
             targetEntity = Entity; // same-type creation when no domain reference
         }
 
-        // Evaluate initializers against the parent instance
+        // Evaluate initializers against the parent instance. Use the action-scoped type
+        // provider (entity props + action parameters) when available — the instance-level
+        // analyzer lacks action params, so `Capacity: qty` compiled with it would resolve
+        // the parameter as an unresolved member passthrough (garbage value).
+        var initializerTypeProvider = parentTypeProvider ?? _typeDefAnalyzer;
         var initialValues = new Dictionary<string, object?>(StringComparer.Ordinal);
         foreach (var binding in createEffect.Initializers) {
             var lowered = new DomainExpressionLoweringPass().Lower(
                 binding.Expression,
                 new Parameter("entity", new TypeReference(Entity.Name)));
-            var compiled = Interpreter.Compile(lowered, _typeDefAnalyzer);
+            var compiled = Interpreter.Compile(lowered, initializerTypeProvider);
             using var exec = Interpreter.Execute(compiled,
                 s => s.SetArgs(new object?[] { _values }));
             initialValues[binding.PropertyName] = exec.Result.GetValue<object>();
@@ -890,7 +957,9 @@ public sealed record DomainEntityInstance {
     /// auto-registers it, and links it via the named relationship.
     /// Returns the created <see cref="DomainEntityInstance"/>.
     /// </summary>
-    private DomainEntityInstance ExecuteCreateInRelationship(CreateEntityInRelationshipEffect effect) {
+    private DomainEntityInstance ExecuteCreateInRelationship(
+        CreateEntityInRelationshipEffect effect,
+        TypeDefinitionNodeAnalyzer? parentTypeProvider = null) {
         if (Domain is null)
             throw new InvalidOperationException(
                 "Cannot execute 'create in' effect without a domain to resolve relationship targets.");
@@ -914,7 +983,7 @@ public sealed record DomainEntityInstance {
             effect.Initializers,
             effect.RelationshipName);
 
-        return CreateChildInstance(createEffect);
+        return CreateChildInstance(createEffect, parentTypeProvider);
     }
 
     /// <summary>
@@ -1346,6 +1415,12 @@ public sealed record ActionInvocationResult {
         ActionName = actionName,
         Succeeded = false,
         ErrorMessage = $"Action '{actionName}' not found on entity '{entityName}'."
+    };
+
+    internal static ActionInvocationResult StageRequired(string entityName, string actionName, string stageName) => new() {
+        ActionName = actionName,
+        Succeeded = false,
+        ErrorMessage = $"Action '{actionName}' exists on entity '{entityName}' but is only available in stage '{stageName}'."
     };
 
     internal static ActionInvocationResult InvokeDepthExceeded(string actionName, int maxDepth) => new() {

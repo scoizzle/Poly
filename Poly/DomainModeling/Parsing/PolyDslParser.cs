@@ -1170,15 +1170,24 @@ public sealed class PolyDslParser : DslCursor {
             case TokenKind.Length:
                 Advance();
                 Expect(TokenKind.LParen);
-                var lenMin = int.Parse(Current.Text, CultureInfo.InvariantCulture);
-                Advance();
-                var lenMax = lenMin; // default to same value for single-arg form "length(3)"
+                // Open bounds mirror range: `length(3, )` is open upper (int.MaxValue),
+                // `length(, 5)` is open lower (0), `length(3)` is exact. A `length(3, )`
+                // that collapsed to `length(3, 3)` silently rejected 4-char values.
+                int lenMin = 0;
+                int lenMax = int.MaxValue;
+                if (Current.Kind == TokenKind.Number) {
+                    lenMin = int.Parse(Current.Text, CultureInfo.InvariantCulture);
+                    Advance();
+                }
                 if (Current.Kind == TokenKind.Comma) {
                     Advance();
                     if (Current.Kind == TokenKind.Number) {
                         lenMax = int.Parse(Current.Text, CultureInfo.InvariantCulture);
                         Advance();
                     }
+                }
+                else {
+                    lenMax = lenMin; // single-arg form "length(3)" — exact length
                 }
                 Expect(TokenKind.RParen);
                 return new LengthConstraint(lenMin, lenMax);

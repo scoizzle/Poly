@@ -90,3 +90,44 @@ the same findings in your final report. One block per finding:
 - Edit `Poly/`, `Poly.Mcp/`, or `Poly.Tests/` source. Propose patches only.
 - Commit, stage, or run `git` write commands.
 - Restart the MCP. Author lab/experiment syntax not in the guide.
+
+---
+
+# Round coordinator (the agent that launches and triages a round)
+
+One command starts a round and produces ground truth:
+
+```bash
+scripts/discovery-round.sh <round-name>            # e.g. round2
+```
+
+It scaffolds `probes/findings/<round>/` and writes `baseline.md` — a sweep of every
+probe through `run-probe.sh` (which probes compile 0/0, which fail). The failing
+probes are the round's compile-fail targets.
+
+## Round lifecycle
+
+1. **Baseline:** `scripts/discovery-round.sh <round>`. Read `baseline.md`.
+2. **Slices:** pick disjoint slices so agents never collide (cross-entity/quantifiers,
+   dates/defaults, constraints/create/enums, subscriptions/entry-exit/stage-scoping).
+3. **Launch agents:** one `general` subagent per slice, in parallel (Task tool), using
+   the template below with `<ROUND>`, `<SLICE>`, and the slice's probe target filled in.
+4. **Triage:** merge the per-agent `probes/findings/<round>/<agent>.md`. Dedupe, rank
+   🔴 compile → 🟠 divergence/silent → 🟡 sharp. Spot-verify each with `run-probe.sh`.
+5. **Fix:** per finding, write one regression test → smallest fix → green (agents only
+   propose patches; the coordinator applies them with the test-first loop).
+6. **Re-sweep:** re-run `scripts/discovery-round.sh <round>` and confirm the compile-fail
+   baseline is cleared and nothing new regressed.
+7. **Ship:** full suite + build, present a changelog, commit on the user's OK. File any
+   deferred findings (with repros) in the plans doc.
+
+## Launch prompt template (one per slice)
+
+> You are a Poly discovery agent. Read docs/agent/poly-discovery-loop.md FIRST and
+> follow it exactly, then Poly.Mcp/Docs/poly-dsl-guide.md. Round: `<ROUND>` (findings
+> to probes/findings/<ROUND>/<agent>.md). Your slice: `<SLICE>`.
+> Create probes/<agent>/ and author 2–3 probes exercising `<SLICE>`; run
+> scripts/run-probe.sh on each; statically review the export for compile-fail /
+> export-runtime divergence / silent gaps / guide drift; optionally verify runtime
+> via a throwaway TUnit test (delete it after). Return your ranked findings report.
+> Do NOT edit repo source, commit, or restart the MCP.

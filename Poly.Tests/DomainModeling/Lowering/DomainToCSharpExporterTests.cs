@@ -1482,4 +1482,31 @@ public class DomainToCSharpExporterTests {
         await Assert.That(() => new DomainToCSharpExporter().Export(domain, analysis))
             .Throws<NotSupportedException>();
     }
+
+    [Test]
+    public async Task Export_LengthOpenUpperBound_EmitsOnlyMinGuard() {
+        // Round-2 B-F9: `length(3, )` collapsed to `length(3, 3)`, silently rejecting
+        // 4-char values. Open upper (int.MaxValue) must emit only the min guard.
+        var (domain, analysis) = ParseAndAnalyze("""
+            domain Test
+            Item: entity { Code: Text length(3, ) }
+            """);
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var unit = new CompilationUnitNode([], null, types, null);
+        var cs = new CSharpGenerator().Generate(unit);
+
+        await Assert.That(cs).Contains("code.Length < 3L");
+        await Assert.That(cs).DoesNotContain("code.Length > 3L");
+    }
+
+    [Test]
+    public async Task Analyze_PatternOnNonText_ReportsError() {
+        // Round-2 B-F10: `pattern` on a Number prop was a silent no-op (asymmetric with
+        // range/length which are analysis-rejected). It is now rejected at authoring time.
+        var ex = Assert.Throws<InvalidOperationException>(() => ParseAndAnalyze("""
+            domain Test
+            Item: entity { Qty: Number pattern("^[0-9]+$") }
+            """));
+        await Assert.That(ex!.Message).Contains("does not resolve to a text type");
+    }
 }

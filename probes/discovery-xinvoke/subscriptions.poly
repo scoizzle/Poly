@@ -1,0 +1,44 @@
+domain DiscoverySubs
+
+Payment: entity {
+  Amount: Number default(0)
+  Refunded: Number default(0)
+
+  Pending: stage {
+    Capture: action {
+      transition to Captured
+    }
+  }
+  Captured: stage {
+    Refund: action (amount: Number) {
+      assign Refunded to amount
+      transition to Refunded
+    }
+  }
+  Refunded: stage { }
+}
+
+Order: entity {
+  Status: Text default("open")
+  Total: Number default(0)
+  payments: many Payment
+
+  Open: stage {
+    AddPayment: action (amount: Number) {
+      create in payments { Amount: amount }
+    }
+
+    when any payments Captured {
+      assign Status to "partiallyFunded"
+    }
+
+    when all payments Captured {
+      assign Status to "fullyFunded"
+    }
+
+    when payments Captured as p {
+      assign Total to Total + p Amount
+    }
+  }
+  Closed: stage { }
+}

@@ -1,0 +1,39 @@
+domain DiscoveryInvokeEdges
+
+Account: entity {
+  Balance: Number default(0)
+  orders: many Order
+  profile: one Profile
+
+  NotifyLevel: action (threshold: Number) {
+    assign Balance to threshold
+  }
+  FlagHigh: action {
+    invoke all orders.Place()
+    invoke all orders.Place() where Balance > 500
+  }
+
+  // Entity-level subscription — always active regardless of stage
+  when any orders Completed {
+    assign Balance to Balance + 1
+  }
+}
+
+Order: entity {
+  Balance: Number default(0)
+
+  Open: stage {
+    Place: action {
+      transition to Completed
+    }
+  }
+  Completed: stage { }
+}
+
+Profile: entity {
+  Rank: Text default("bronze")
+
+  Promote: action {
+    assign Rank to "gold"
+  }
+}

@@ -620,16 +620,10 @@ public sealed class MinimalApiGenerator {
                     Initializer: clrType == "string"
                         ? new PropertyInitializerDefinitionNode(new NullForgiving(new Default()))
                         : new PropertyInitializerDefinitionNode());
-                if (IsNumericClrType(clrType) && domainAction is not null) {
-                    var implicitRange = GetActionParamImplicitRange(entity, domainAction, param.Name);
-                    if (implicitRange is not null) {
-                        prop = prop with {
-                            Attributes = [new AttributeNode("Range", new List<Expression> {
-                                new Constant(implicitRange.Minimum is not null ? Convert.ToDouble(implicitRange.Minimum) : double.MinValue),
-                                new Constant(implicitRange.Maximum is not null ? Convert.ToDouble(implicitRange.Maximum) : double.MaxValue)
-                            })]
-                        };
-                    }
+                if (domainAction is not null) {
+                    var attrs = BuildConstraintAttributes(
+                        clrType, GetActionParamImplicitConstraints(entity, domainAction, param.Name));
+                    if (attrs.Count > 0) prop = prop with { Attributes = attrs };
                 }
                 props.Add(prop);
             }
@@ -660,13 +654,15 @@ public sealed class MinimalApiGenerator {
     }
 
     /// <summary>
-    /// Derives the implicit range an action parameter must satisfy: the intersection of
-    /// the ranges of the properties the parameter is directly assigned into
-    /// (<c>assign Prop to param</c>). Not declared in the DSL — proven by the action's
-    /// own effects, so the action DTO enforces the same envelope at the API boundary.
+    /// Derives the implicit constraints an action parameter must satisfy: for each
+    /// property the parameter is directly assigned into (<c>assign Prop to param</c>),
+    /// its effective constraints are merged by intersection (<see cref="ConstraintMerge"/>).
+    /// Not declared in the DSL — proven by the action's own effects, so the action DTO
+    /// enforces the same envelope at the API boundary. Conflicting constraints (e.g. two
+    /// targets with different patterns) merge to nothing and are dropped.
     /// </summary>
-    private RangeConstraint? GetActionParamImplicitRange(Entity entity, Poly.DomainModeling.Action action, string paramName) {
-        RangeConstraint? acc = null;
+    private IReadOnlyList<Constraint> GetActionParamImplicitConstraints(Entity entity, Poly.DomainModeling.Action action, string paramName) {
+        var merged = new List<Constraint>();
         foreach (var assign in FlattenEffects(action.Effects).OfType<AssignEffect>()) {
             // In the domain model a parameter reference in an effect value is still a
             // PropertyAccess/ParameterAccess whose name equals the action parameter
@@ -680,11 +676,55 @@ public sealed class MinimalApiGenerator {
                 !string.Equals(valueName, paramName, StringComparison.Ordinal))
                 continue;
             if (assign.Target is not PropertyAccess target) continue;
-            var targetRange = GetPropertyRange(entity, target.Name);
-            if (targetRange is null) continue;
-            acc = acc is null ? targetRange : IntersectRanges(acc, targetRange);
+            var targetProp = entity.Properties.FirstOrDefault(p =>
+                string.Equals(p.Name, target.Name, StringComparison.Ordinal));
+            if (targetProp is null) continue;
+
+            var targetConstraints = new List<Constraint>();
+            var range = GetPropertyRange(entity, target.Name);
+            if (range is not null) targetConstraints.Add(range);
+            targetConstraints.AddRange(targetProp.Constraints.Where(c =>
+                c is LengthConstraint or PatternConstraint or RequiredConstraint));
+
+            foreach (var constraint in targetConstraints) {
+                var existingIndex = merged.FindIndex(m => m.GetType() == constraint.GetType());
+                if (existingIndex < 0) {
+                    merged.Add(constraint);
+                    continue;
+                }
+                var net = merged[existingIndex].Merge(constraint);
+                if (net is null) merged.RemoveAt(existingIndex);
+                else merged[existingIndex] = net;
+            }
         }
-        return acc;
+        return merged;
+    }
+
+    /// <summary>Maps effective constraints to DataAnnotations validation attributes, when
+    /// the CLR type can express them.</summary>
+    private static IReadOnlyList<AttributeNode> BuildConstraintAttributes(string clrType, IEnumerable<Constraint> constraints) {
+        var attrs = new List<AttributeNode>();
+        foreach (var constraint in constraints) {
+            switch (constraint) {
+                case RangeConstraint r when IsNumericClrType(clrType):
+                    attrs.Add(new AttributeNode("Range", new List<Expression> {
+                        new Constant(r.Minimum is not null ? Convert.ToDouble(r.Minimum) : double.MinValue),
+                        new Constant(r.Maximum is not null ? Convert.ToDouble(r.Maximum) : double.MaxValue)
+                    }));
+                    break;
+                case LengthConstraint l when clrType == "string":
+                    attrs.Add(new AttributeNode("MinLength", [new Constant(l.MinLength)]));
+                    attrs.Add(new AttributeNode("MaxLength", [new Constant(l.MaxLength)]));
+                    break;
+                case PatternConstraint p when clrType == "string":
+                    attrs.Add(new AttributeNode("RegularExpression", [new Constant(p.Pattern)]));
+                    break;
+                case RequiredConstraint when clrType == "string":
+                    attrs.Add(new AttributeNode("Required", []));
+                    break;
+            }
+        }
+        return attrs;
     }
 
     private static IEnumerable<Effect> FlattenEffects(IEnumerable<Effect> effects) {
@@ -702,17 +742,6 @@ public sealed class MinimalApiGenerator {
         }
     }
 
-    private static RangeConstraint? IntersectRanges(RangeConstraint a, RangeConstraint b) {
-        double? aMin = a.Minimum is null ? null : Convert.ToDouble(a.Minimum);
-        double? bMin = b.Minimum is null ? null : Convert.ToDouble(b.Minimum);
-        double? aMax = a.Maximum is null ? null : Convert.ToDouble(a.Maximum);
-        double? bMax = b.Maximum is null ? null : Convert.ToDouble(b.Maximum);
-        double? min = aMin is null ? bMin : bMin is null ? aMin : Math.Max(aMin.Value, bMin.Value);
-        double? max = aMax is null ? bMax : bMax is null ? aMax : Math.Min(aMax.Value, bMax.Value);
-        if (min is not null && max is not null && min.Value > max.Value) return null;
-        return new RangeConstraint(min, max);
-    }
-
     /// <summary>Builds Syntax IR for a DTO type definition.</summary>
     private void BuildDtoTypes(List<TypeDefinitionNode> dtoTypes, Entity entity) {
         // The DTO mirrors the entity's CREATE signature (the POST endpoint passes
@@ -727,12 +756,12 @@ public sealed class MinimalApiGenerator {
         if (!GetStorageEntity(entity).IsRoot) return;
 
         // Emit as a record with get/init properties so transport validation attributes
-        // ([Range(min, max)]) attach to properties and are enforced by ASP.NET model
-        // binding, and the contract stays immutable. An init-only accessor is a property
-        // with no setter but an initializer present; non-nullable reference scalars get
-        // `= default!;` for CS8618 hygiene. For properties the invariant analysis VERIFIED
-        // (no effect can produce an out-of-range value), the declared range is the proven
-        // envelope.
+        // attach to properties and are enforced by ASP.NET model binding, and the
+        // contract stays immutable. An init-only accessor is a property with no setter
+        // but an initializer present; non-nullable reference scalars get `= default!;`
+        // for CS8618 hygiene. Declared constraints map to validation attributes: range →
+        // [Range] (using the analysis-VERIFIED envelope when proven, else declared),
+        // length → [MinLength]/[MaxLength], pattern → [RegularExpression], required → [Required].
         var props = scalarParams.Select(param => {
             var clrType = GetClrTypeName(param.Type.TypeName);
             var prop = new PropertyDefinitionNode(
@@ -742,16 +771,17 @@ public sealed class MinimalApiGenerator {
                 Initializer: clrType == "string"
                     ? new PropertyInitializerDefinitionNode(new NullForgiving(new Default()))
                     : new PropertyInitializerDefinitionNode());
-            if (!IsNumericClrType(clrType)) return prop;
 
+            var effective = new List<Constraint>();
             var range = GetPropertyRange(entity, param.Name);
-            if (range is null) return prop;
+            if (range is not null) effective.Add(range);
+            var declared = entity.Properties.FirstOrDefault(p =>
+                string.Equals(p.Name, param.Name, StringComparison.Ordinal))?.Constraints ?? [];
+            effective.AddRange(declared.Where(c =>
+                c is LengthConstraint or PatternConstraint or RequiredConstraint));
 
-            var args = new List<Expression> {
-                new Constant(range.Minimum is not null ? Convert.ToDouble(range.Minimum) : double.MinValue),
-                new Constant(range.Maximum is not null ? Convert.ToDouble(range.Maximum) : double.MaxValue)
-            };
-            return prop with { Attributes = [new AttributeNode("Range", args)] };
+            var attrs = BuildConstraintAttributes(clrType, effective);
+            return attrs.Count == 0 ? prop : prop with { Attributes = attrs };
         }).ToList();
 
         dtoTypes.Add(new TypeDefinitionNode(

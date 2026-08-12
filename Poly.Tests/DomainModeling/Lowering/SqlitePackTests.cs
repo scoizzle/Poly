@@ -358,6 +358,42 @@ public class SqlitePackTests {
     }
 
     [Test]
+    public async Task DslCompiler_Dtos_PropagateStringConstraints() {
+        // Transport: length/pattern/required propagate onto DTO contracts like range.
+        // Entity create DTOs carry the property's DECLARED constraints; action DTOs
+        // derive them IMPLICITLY from the effects (a param assigned into a constrained
+        // property inherits that property's envelope, merged by intersection).
+        var compiler = new Compiler();
+        var result = compiler.Compile("""
+            domain Demo
+            Book: entity {
+              Title: Text required length(2, 50)
+              Code: Text pattern("^[A-Z]{2}-[0-9]{3}$")
+              Pages: Number range(1, 10000)
+
+              Rename: action (value: Text) {
+                assign Title to value
+              }
+
+              SetCode: action (value: Text) {
+                assign Code to value
+              }
+            }
+            """, CompileMode.All, DbmsPack.Generic);
+        await Assert.That(result.Success).IsTrue();
+
+        var prog = result.Files!.Single(f => f.FileName == "Program.cs").Source;
+        // Entity DTO: declared required + length.
+        await Assert.That(prog).Contains("[Required]\n    [MinLength(2)]\n    [MaxLength(50)]\n    public string Title { get; init; }");
+        // Entity DTO: declared pattern.
+        await Assert.That(prog).Contains("[RegularExpression(\"^[A-Z]{2}-[0-9]{3}$\")]\n    public string Code { get; init; }");
+        // Action DTO: required + length inherited from `assign Title to value`.
+        await Assert.That(prog).Contains("[Required]\n    [MinLength(2)]\n    [MaxLength(50)]\n    public string value { get; init; }");
+        // Action DTO: pattern inherited from `assign Code to value`.
+        await Assert.That(prog).Contains("[RegularExpression(\"^[A-Z]{2}-[0-9]{3}$\")]\n    public string value { get; init; }");
+    }
+
+    [Test]
     public async Task DslCompiler_DemoHttp_BodyMatchesDtoFromConstructorMetadata() {
         var compiler = new Compiler();
         var result = compiler.Compile("""

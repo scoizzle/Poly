@@ -866,6 +866,26 @@ See §3 for the full syntax reference.
 | `column` | Property tail | `Name: Text column("PROD_NAME")` |
 | `table` | Entity header | `Item: entity table("INVENTORY") { … }` |
 
+### Constraint propagation into transport contracts
+
+Where the storage pack projects constraints into the DB (`CHECK` constraints), the
+Minimal API transport projects them onto DTO validation attributes, so the API boundary
+enforces the same envelopes the domain declares:
+
+- `range(min, max)` on a `Number` property → `[Range(min, max)]` on the create DTO and on
+  any **action DTO parameter** the value is directly assigned into
+  (`assign Stock to amount` ⇒ `[Range(0, 1000)]` on `amount`). The numeric range uses the
+  analysis-**verified** envelope when the invariant analysis proved no effect can exceed
+  it; otherwise the declared range.
+- `length(min, max)` → `[MinLength(min)]` + `[MaxLength(max)]`.
+- `pattern(regex)` → `[RegularExpression(regex)]`.
+- `required` → `[Required]` (reference-typed properties).
+
+Action DTO bounds are **implicit**: not declared on the parameter, but derived from the
+action's own effects — a parameter assigned into a constrained property inherits that
+property's constraints, merged by intersection across all such targets. Conflicting
+targets (e.g. different patterns) merge to nothing and emit no attribute.
+
 ## 12. Dual Authoring Path
 
 **Batch** (`apply_dsl`): Write the full domain in `.poly` and apply in one shot.

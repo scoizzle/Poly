@@ -1,6 +1,8 @@
 using Poly.Ast.Nodes;
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
+using Poly.DomainModeling.Constraints;
+using Poly.DomainModeling.Effects;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Parsing;
@@ -217,5 +219,37 @@ public class MinimalApiGeneratorTests {
 
         var ex = Assert.Throws<InvalidOperationException>(() => gen.GenerateCompilationUnit("TDbCtx"));
         await Assert.That(ex!.Message).Contains("EntityStructureMetadata is required");
+    }
+
+    [Test]
+    public async Task ValueSetUnion_PropagatesAllowedValuesToDtos() {
+        // Transport: enum(...)/equals(value-set) constraints propagate as [AllowedValues]
+        // — the member must be one of the union. On the entity create DTO from the declared
+        // constraint; on the action DTO implicitly from `assign Status to value`.
+        var d = ParseDomain("""
+            domain T
+            Item: entity {
+              Status: Text
+              SetStatus: action (value: Text) {
+                assign Status to value
+              }
+            }
+            """);
+        // The DSL rejects inline enum(...) value-set constraints, so inject the model-level
+        // EnumConstraint directly — the transport must still propagate the union.
+        var item = d.Types.OfType<Entity>().First();
+        item = item with {
+            Properties = item.Properties.Select(p => p.Name == "Status"
+                ? new Property("Status", p.Type, [new EnumConstraint([
+                    new EnumConstraint.Member("Red"),
+                    new EnumConstraint.Member("Green"),
+                ])])
+                : p).ToList()
+        };
+        var types = d.Types.Select(t => ReferenceEquals(t, d.Types.OfType<Entity>().First()) ? item : t).ToList();
+        var rendered = Render(new Domain(d.Name, types));
+
+        await Assert.That(rendered).Contains("[AllowedValues(\"Red\", \"Green\")]\n    public string Status { get; init; }");
+        await Assert.That(rendered).Contains("[AllowedValues(\"Red\", \"Green\")]\n    public string value { get; init; }");
     }
 }

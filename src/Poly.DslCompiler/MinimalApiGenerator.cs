@@ -623,6 +623,8 @@ public sealed class MinimalApiGenerator {
                 if (domainAction is not null) {
                     var attrs = BuildConstraintAttributes(
                         clrType, GetActionParamImplicitConstraints(entity, domainAction, param.Name));
+                    if (IsEnumTypeName(param.DomainType))
+                        attrs = [EnumDataTypeAttribute(param.DomainType), .. attrs];
                     if (attrs.Count > 0) prop = prop with { Attributes = attrs };
                 }
                 props.Add(prop);
@@ -684,7 +686,8 @@ public sealed class MinimalApiGenerator {
             var range = GetPropertyRange(entity, target.Name);
             if (range is not null) targetConstraints.Add(range);
             targetConstraints.AddRange(targetProp.Constraints.Where(c =>
-                c is LengthConstraint or PatternConstraint or RequiredConstraint));
+                c is LengthConstraint or PatternConstraint or RequiredConstraint
+                    or EnumConstraint or EqualityConstraint));
 
             foreach (var constraint in targetConstraints) {
                 var existingIndex = merged.FindIndex(m => m.GetType() == constraint.GetType());
@@ -722,10 +725,28 @@ public sealed class MinimalApiGenerator {
                 case RequiredConstraint when clrType == "string":
                     attrs.Add(new AttributeNode("Required", []));
                     break;
+                // Value-set union: enum(...)/equals(v) → [AllowedValues(...)] — the member
+                // must be one of the allowed values. (Enum-typed members are enforced by the
+                // CLR enum type instead; see the enum [EnumDataType] propagation.)
+                case EnumConstraint e when clrType == "string" || IsNumericClrType(clrType):
+                    attrs.Add(new AttributeNode("AllowedValues",
+                        e.Members.Select(m => (Expression)new Constant(m.EffectiveCanonicalValue)).ToList()));
+                    break;
+                case EqualityConstraint eq:
+                    attrs.Add(new AttributeNode("AllowedValues", [new Constant(eq.ExpectedValue)]));
+                    break;
             }
         }
         return attrs;
     }
+
+    /// <summary>The <c>[EnumDataType(typeof(EnumName))]</c> attribute declaring an enum-typed
+    /// member's allowed-value union on the transport contract.</summary>
+    private static AttributeNode EnumDataTypeAttribute(string enumName) =>
+        new("EnumDataType", [new TypeOf(new TypeReference(enumName))]);
+
+    private bool IsEnumTypeName(string domainTypeName) =>
+        _enumLookup.ContainsKey(domainTypeName);
 
     private static IEnumerable<Effect> FlattenEffects(IEnumerable<Effect> effects) {
         foreach (var effect in effects) {
@@ -778,9 +799,15 @@ public sealed class MinimalApiGenerator {
             var declared = entity.Properties.FirstOrDefault(p =>
                 string.Equals(p.Name, param.Name, StringComparison.Ordinal))?.Constraints ?? [];
             effective.AddRange(declared.Where(c =>
-                c is LengthConstraint or PatternConstraint or RequiredConstraint));
+                c is LengthConstraint or PatternConstraint or RequiredConstraint
+                    or EnumConstraint or EqualityConstraint));
 
             var attrs = BuildConstraintAttributes(clrType, effective);
+            // Enum-typed members: the CLR enum type enforces membership at binding; the
+            // [EnumDataType] attribute additionally declares the allowed-value union on the
+            // contract and fails loud at validation if binding ever bypasses the type.
+            if (IsEnumTypeName(param.Type.TypeName))
+                attrs = [EnumDataTypeAttribute(param.Type.TypeName), .. attrs];
             return attrs.Count == 0 ? prop : prop with { Attributes = attrs };
         }).ToList();
 

@@ -853,6 +853,11 @@ public sealed class CSharpGenerator {
             case ThisReference:
                 sb.Append("this");
                 return;
+            case TypeOf typeOf:
+                sb.Append("typeof(");
+                WriteExpression(sb, typeOf.Type);
+                sb.Append(')');
+                return;
             case TypeReference typeRef:
                 sb.Append(typeRef.TypeName);
                 return;

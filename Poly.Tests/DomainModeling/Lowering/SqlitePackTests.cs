@@ -310,8 +310,9 @@ public class SqlitePackTests {
         await Assert.That(result.Success).IsTrue();
 
         var prog = result.Files!.Single(f => f.FileName == "Program.cs").Source;
-        // Enum type maps to its own CLR name (Genre), not excluded by entity-ness.
-        await Assert.That(prog).Contains("public record BookDto\n{\n    public Genre Genre { get; init; }");
+        // Enum type maps to its own CLR name (Genre) with the allowed-value union declared
+        // via [EnumDataType] — not excluded by entity-ness.
+        await Assert.That(prog).Contains("public record BookDto\n{\n    [EnumDataType(typeof(Genre))]\n    public Genre Genre { get; init; }");
         await Assert.That(prog).Contains("public string Title { get; init; } = default!;");
         // POST endpoint passes the DTO members into Book.Create in the same order.
         await Assert.That(prog).Contains("Book.Create(dto.Genre, dto.Title)");
@@ -391,6 +392,28 @@ public class SqlitePackTests {
         await Assert.That(prog).Contains("[Required]\n    [MinLength(2)]\n    [MaxLength(50)]\n    public string value { get; init; }");
         // Action DTO: pattern inherited from `assign Code to value`.
         await Assert.That(prog).Contains("[RegularExpression(\"^[A-Z]{2}-[0-9]{3}$\")]\n    public string value { get; init; }");
+    }
+
+    [Test]
+    public async Task DslCompiler_ActionDto_EnumTypedParamDeclaresAllowedUnion() {
+        // Transport: an enum-typed action parameter's DTO member declares the enum union
+        // via [EnumDataType(typeof(EnumName))] — the same propagation as the create DTO.
+        var compiler = new Compiler();
+        var result = compiler.Compile("""
+            domain Demo
+            Genre: enum { Fiction, NonFiction }
+            Book: entity {
+              Genre: Genre
+
+              Categorize: action (genre: Genre) {
+                assign Genre to genre
+              }
+            }
+            """, CompileMode.All, DbmsPack.Generic);
+        await Assert.That(result.Success).IsTrue();
+
+        var prog = result.Files!.Single(f => f.FileName == "Program.cs").Source;
+        await Assert.That(prog).Contains("public record CategorizeDto\n{\n    [EnumDataType(typeof(Genre))]\n    public Genre genre { get; init; }");
     }
 
     [Test]

@@ -880,11 +880,16 @@ enforces the same envelopes the domain declares:
 - `length(min, max)` → `[MinLength(min)]` + `[MaxLength(max)]`.
 - `pattern(regex)` → `[RegularExpression(regex)]`.
 - `required` → `[Required]` (reference-typed properties).
+- Enum-typed properties and parameters (`Genre: Genre`) → `[EnumDataType(typeof(Genre))]`
+  declares the member union on the contract (the CLR enum type already enforces
+  membership at binding).
 
 Action DTO bounds are **implicit**: not declared on the parameter, but derived from the
 action's own effects — a parameter assigned into a constrained property inherits that
 property's constraints, merged by intersection across all such targets. Conflicting
-targets (e.g. different patterns) merge to nothing and emit no attribute.
+targets (e.g. different patterns) merge to nothing and emit no attribute. Value-set
+constraints (`enum(...)`, `equals(v)` in the model) propagate as `[AllowedValues(...)]` —
+the member must be one of the union.
 
 ## 12. Dual Authoring Path
 

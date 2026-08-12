@@ -64,6 +64,12 @@ public class DslCursor : IDslParseCursor {
         get => _inWhereBody;
         set => _inWhereBody = value;
     }
+
+    private bool _inPropertyInitializerValue;
+    public bool InPropertyInitializerValue {
+        get => _inPropertyInitializerValue;
+        set => _inPropertyInitializerValue = value;
+    }
 }
 
 /// <summary>
@@ -81,4 +87,5 @@ public interface IDslParseCursor {
     void Consume(MatchResult<DslToken, DslTokenKind> match);
     Exception Error(string message);
     bool InWhereBody { get; set; }
+    bool InPropertyInitializerValue { get; set; }
 }

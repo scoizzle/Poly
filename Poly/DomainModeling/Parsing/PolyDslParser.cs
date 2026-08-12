@@ -788,7 +788,17 @@ public sealed class PolyDslParser : DslCursor {
         while (Current.Kind != TokenKind.RBrace) {
             var propName = ExpectIdentifier(TokenKind.Identifier, "property name");
             Expect(TokenKind.Colon);
-            var expr = ParseExpression();
+            // A bare-identifier value followed by the next initializer (`Name: newName
+            // Content: ...`) must not be consumed as a path-prefix — the expression
+            // parser stops path continuation at an `Identifier :` boundary in this mode.
+            InPropertyInitializerValue = true;
+            DomainExpression expr;
+            try {
+                expr = ParseExpression();
+            }
+            finally {
+                InPropertyInitializerValue = false;
+            }
             initializers.Add(new PropertyBinding(propName, expr));
         }
         Expect(TokenKind.RBrace);

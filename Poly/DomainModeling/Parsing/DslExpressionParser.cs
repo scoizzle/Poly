@@ -144,7 +144,11 @@ public sealed class DslExpressionParser {
                 if (IsQuantifierKeyword(name) && _c.Current.Kind == DslTokenKind.Identifier) {
                     return ParseQuantifiedExpression(name);
                 }
-                if (_c.Current.Kind == DslTokenKind.Identifier) {
+                // In an initializer value, a second identifier followed by a colon is the
+                // NEXT initializer's property name, not a path-prefix continuation:
+                // `create in fs { Name: newName Content: b }` — `newName` stands alone.
+                if (_c.Current.Kind == DslTokenKind.Identifier
+                    && !(_c.InPropertyInitializerValue && _c.Peek(1).Kind == DslTokenKind.Colon)) {
                     return ParseRelatedAccess(name);
                 }
                 return DomainExpression.Property(name);

@@ -1583,4 +1583,31 @@ public class DomainToCSharpExporterTests {
         await Assert.That(cs).Contains("'Price' must be >= 0.01.");
         await Assert.That(cs).Contains("'Price' must be <= 1.");
     }
+
+    [Test]
+    public async Task Export_CreateIn_MultiInitializerBareIdentifierValues_Parse() {
+        // Round-4: `create in files { Name: newName Content: srcContent Mode: srcMode }`
+        // — bare-identifier (action-param) values followed by another initializer were
+        // misparsed as path-prefix (`newName.Content` → "Expected property name, got ':'").
+        var (domain, analysis) = ParseAndAnalyze("""
+            domain Test
+            File: entity {
+              Name: Text required
+              Content: Text
+              Mode: Number
+            }
+            Workspace: entity {
+              files: many File
+              CopyFrom: action (newName: Text, srcContent: Text, srcMode: Number) {
+                create in files { Name: newName Content: srcContent Mode: srcMode }
+              }
+            }
+            """);
+        await Assert.That(analysis.HasErrors).IsFalse();
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var unit = new CompilationUnitNode([], null, types, null);
+        var cs = new CSharpGenerator().Generate(unit);
+
+        await Assert.That(cs).Contains("this.CreateFiles(srcContent, srcMode, newName)");
+    }
 }

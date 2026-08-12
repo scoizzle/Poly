@@ -305,14 +305,17 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
                 case InvokeActionEffect invoke:
                     ApplyInvoke(invoke, entity, action, env, paramEnv, visited, result, domain);
                     break;
+                case ForEachInvokeEffect efe:
+                    ApplyForEachInvoke(efe, entity, action, env, paramEnv, visited, result, domain);
+                    break;
             }
         }
     }
 
     /// <summary>Call-chain propagation. Self-invoke threads the current environment into the
     /// callee (refined by its own preconditions) with argument bindings mapped to its params.
-    /// Cross-entity invoke (Rel.Action) builds the related entity's environment and applies the
-    /// where-filter as a refinement on it.</summary>
+    /// Cross-entity invoke (Rel.Action) builds the related entity's environment and steps
+    /// the callee on it.</summary>
     private static void ApplyInvoke(
         InvokeActionEffect invoke, Entity entity, Action action,
         Dictionary<string, AbstractValue> env,
@@ -342,7 +345,7 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
     }
 
     /// <summary>Cross-entity invoke: build the related entity's environment (declared
-    /// constraints), refine it by the where-filter, and step the target action on it.</summary>
+    /// constraints refined by its own preconditions) and step the target action on it.</summary>
     private static void ApplyCrossEntityInvoke(
         InvokeActionEffect invoke, Entity entity, Action action,
         Dictionary<string, AbstractValue> env,
@@ -360,19 +363,60 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
         if (targetAction is null || !visited.Add(targetAction)) return;
 
         // The target entity's environment: declared constraints, refined by its own
-        // preconditions and by the invoke's where-filter (target-local props).
+        // preconditions.
         var targetEnv = new Dictionary<string, AbstractValue>(StringComparer.Ordinal);
         foreach (var prop in targetEntity.Properties)
             targetEnv[prop.Name] = AbstractValue.From(prop.Constraints);
         foreach (var policy in CollectPreconditions(targetAction, targetEntity, null))
             Refine(targetEnv, policy.Expression);
-        if (invoke.Filter is not null)
-            Refine(targetEnv, invoke.Filter);
 
         Dictionary<string, AbstractValue>? targetParams = null;
         if (invoke.ParameterBindings.Count > 0) {
             targetParams = new(StringComparer.Ordinal);
             foreach (var binding in invoke.ParameterBindings)
+                targetParams[binding.PropertyName] = Eval(binding.Expression, entity, action, env, paramEnv);
+        }
+
+        ApplyEffects(targetAction.Effects, targetEntity, targetAction, targetEnv, targetParams, visited, result, domain);
+    }
+
+    /// <summary>Fan-out invoke (<c>for Rel as x [where x.Policy] invoke x.Action</c>): build
+    /// the target entity's environment refined by the predicate's NAMED policy (the same
+    /// reasoning as a require gate) and step the callee on it.</summary>
+    private static void ApplyForEachInvoke(
+        ForEachInvokeEffect efe, Entity entity, Action action,
+        Dictionary<string, AbstractValue> env,
+        IReadOnlyDictionary<string, AbstractValue>? paramEnv,
+        HashSet<Action> visited, List<EffectPostcondition> result, Domain domain) {
+        var relationship = entity.Navigations.FirstOrDefault(r =>
+            string.Equals(r.Name, efe.RelationshipName, StringComparison.Ordinal));
+        if (relationship is null) return;
+        var targetEntity = domain.Types.OfType<Entity>().FirstOrDefault(e =>
+            string.Equals(e.Name, relationship.Target.TypeName, StringComparison.Ordinal));
+        if (targetEntity is null) return;
+
+        var targetAction = targetEntity.Actions.FirstOrDefault(a =>
+            string.Equals(a.Name, efe.ActionName, StringComparison.Ordinal));
+        if (targetAction is null || !visited.Add(targetAction)) return;
+
+        // Target environment: declared constraints refined by its own preconditions and by
+        // the predicate's named policy (a require-gate-style refinement).
+        var targetEnv = new Dictionary<string, AbstractValue>(StringComparer.Ordinal);
+        foreach (var prop in targetEntity.Properties)
+            targetEnv[prop.Name] = AbstractValue.From(prop.Constraints);
+        foreach (var policy in CollectPreconditions(targetAction, targetEntity, null))
+            Refine(targetEnv, policy.Expression);
+        if (efe.Predicate is ForEachNamedPolicy { PolicyName: var policyName }) {
+            var predicatePolicy = targetEntity.Policies.FirstOrDefault(p =>
+                string.Equals(p.Name, policyName, StringComparison.Ordinal));
+            if (predicatePolicy is not null)
+                Refine(targetEnv, predicatePolicy.Expression);
+        }
+
+        Dictionary<string, AbstractValue>? targetParams = null;
+        if (efe.ParameterBindings.Count > 0) {
+            targetParams = new(StringComparer.Ordinal);
+            foreach (var binding in efe.ParameterBindings)
                 targetParams[binding.PropertyName] = Eval(binding.Expression, entity, action, env, paramEnv);
         }
 

@@ -10,22 +10,12 @@ namespace Poly.DomainModeling.Effects;
 /// When <c>null</c>, invoke is self-only (E3a).
 /// When non-null, outbound navigate from the relationship <b>source</b> only
 /// (fail-closed; reverse-side / ManyToMany / self-rel rejected until analyzable).
-/// </param>
-/// <param name="Quantifier">
-/// <c>null</c> → singular OneToOne outbound invoke.
-/// <c>Any</c> / <c>All</c> → OneToMany outbound; empty match set fails (no vacuous success).
-/// <c>Each</c> is invalid on invoke.
-/// </param>
-/// <param name="Filter">
-/// Optional target-local predicate. Allowed only with <c>Any</c>/<c>All</c> on OneToMany.
-/// Restricted expression surface (local props/literals/comparisons/bool/arithmetic only).
+/// Singular (OneToOne) only — OneToMany fan-out uses <see cref="ForEachInvokeEffect"/>.
 /// </param>
 public sealed record InvokeActionEffect(
     string ActionName,
     IReadOnlyList<PropertyBinding> ParameterBindings,
-    string? TargetRelationship = null,
-    StageSubscriptionQuantifier? Quantifier = null,
-    DomainExpression? Filter = null
+    string? TargetRelationship = null
 ) : Effect {
-    public sealed override IEnumerable<Node?> Children => [.. ParameterBindings, Filter];
+    public override IEnumerable<Node?> Children => [.. ParameterBindings];
 }

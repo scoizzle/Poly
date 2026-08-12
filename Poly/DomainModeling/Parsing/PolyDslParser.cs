@@ -725,22 +725,10 @@ public sealed class PolyDslParser : DslCursor {
 
     /// <summary>
     /// Parses the invoke tail after the <c>invoke</c> keyword:
-    /// <c>[any|all] [RelName.]ActionName(args) [where expr]</c> (E3a/E3b).
+    /// <c>[RelName.]ActionName(args)</c> (E3a/E3b). Singular cross-entity (OneToOne)
+    /// only; OneToMany fan-out uses the <c>for</c> effect.
     /// </summary>
     private Effect ParseInvokeEffectTail() {
-        // Optional quantifier: any / all (identifier text match)
-        StageSubscriptionQuantifier? quantifier = null;
-        if (Current.Kind == TokenKind.Identifier &&
-            string.Equals(Current.Text, "any", StringComparison.OrdinalIgnoreCase)) {
-            quantifier = StageSubscriptionQuantifier.Any;
-            Advance();
-        }
-        else if (Current.Kind == TokenKind.Identifier &&
-                 string.Equals(Current.Text, "all", StringComparison.OrdinalIgnoreCase)) {
-            quantifier = StageSubscriptionQuantifier.All;
-            Advance();
-        }
-
         var firstId = ExpectIdentifier(TokenKind.Identifier, "action or relationship name");
 
         string? targetRelationship = null;
@@ -772,28 +760,7 @@ public sealed class PolyDslParser : DslCursor {
             Expect(TokenKind.RParen);
         }
 
-        // Optional filter: where expr — local shape only (domain cardinality is analyzer).
-        DomainExpression? filter = null;
-        if (Current.Kind == TokenKind.Identifier &&
-            string.Equals(Current.Text, "where", StringComparison.OrdinalIgnoreCase)) {
-            Advance(); // consume 'where'
-            filter = ParseExpression();
-        }
-
-        // Fail-closed local syntax (DMEFF007 mirror): do not accept shapes we will always reject later.
-        if (quantifier is not null && targetRelationship is null)
-            throw Error(
-                $"'invoke {quantifier.Value.ToString().ToLowerInvariant()}' requires RelName.ActionName " +
-                "(collection cross-entity only; self-invoke cannot use any/all)");
-        if (filter is not null && quantifier is null)
-            throw Error(
-                "'invoke ... where' requires 'any' or 'all' on a collection relationship " +
-                "(e.g. invoke any Rel.Action where …)");
-        if (filter is not null && targetRelationship is null)
-            throw Error(
-                "'invoke ... where' requires a relationship target (not self-invoke)");
-
-        return new InvokeActionEffect(actionName, bindings, targetRelationship, quantifier, filter);
+        return new InvokeActionEffect(actionName, bindings, targetRelationship);
     }
 
     /// <summary>

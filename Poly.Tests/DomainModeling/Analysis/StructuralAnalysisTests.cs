@@ -395,85 +395,8 @@ public class EffectBindingTests {
     }
 
     // ── E3b invoke shape (DMEFF007) ────────────────────────────
-
-    [Test]
-    public async Task EffectInvokeShape_AnyWithoutRelationship_ReportsError() {
-        var action = new Poly.DomainModeling.Action("Run", InvocationResult.Void, [], [
-            new InvokeActionEffect("Run", [], Quantifier: StageSubscriptionQuantifier.Any)
-        ], []);
-        var entity = new Entity("Worker", [], [action], [], []);
-        var domain = DomainTestFactory.Create("Test", [entity], []);
-
-        var analysis = DomainModelAnalyzer.Analyze(domain);
-
-        await Assert.That(analysis.Diagnostics.Any(d =>
-            d.Code == DomainModelDiagnosticCodes.EffectInvokeShape)).IsTrue();
-    }
-
-    [Test]
-    public async Task EffectInvokeShape_WhereWithoutRelationship_ReportsError() {
-        var action = new Poly.DomainModeling.Action("Run", InvocationResult.Void, [], [
-            new InvokeActionEffect("Run", [],
-                Filter: DomainExpression.Literal(true))
-        ], []);
-        var entity = new Entity("Worker", [], [action], [], []);
-        var domain = DomainTestFactory.Create("Test", [entity], []);
-
-        var analysis = DomainModelAnalyzer.Analyze(domain);
-
-        await Assert.That(analysis.Diagnostics.Any(d =>
-            d.Code == DomainModelDiagnosticCodes.EffectInvokeShape)).IsTrue();
-    }
-
-    [Test]
-    public async Task EffectInvokeShape_WhereWithoutQuantifier_ReportsError() {
-        var target = new Entity("Target", [
-            new Property("Status", new DomainTypeReference("Text"), [])
-        ], Actions: [
-            new Poly.DomainModeling.Action("Tag", InvocationResult.Void, [], [], [])
-        ], [], []);
-        var source = new Entity("Source", [], Actions: [
-            new Poly.DomainModeling.Action("Go", InvocationResult.Void, [], [
-                new InvokeActionEffect("Tag", [],
-                    TargetRelationship: "link",
-                    Filter: DomainExpression.Equal(
-                        DomainExpression.Property("Status"),
-                        DomainExpression.Literal("x")))
-            ], [])
-        ], [], []);
-        var rel = new Relationship("link",
-            new DomainTypeReference("Source"), new DomainTypeReference("Target"),
-            RelationshipCardinality.OneToOne, []);
-        var domain = DomainTestFactory.Create("Test", [source, target], [rel]);
-
-        var analysis = DomainModelAnalyzer.Analyze(domain);
-
-        await Assert.That(analysis.Diagnostics.Any(d =>
-            d.Code == DomainModelDiagnosticCodes.EffectInvokeShape)).IsTrue();
-    }
-
-    [Test]
-    public async Task EffectInvokeShape_AnyOnSingularRelationship_ReportsError() {
-        var target = new Entity("Target", [], Actions: [
-            new Poly.DomainModeling.Action("Tag", InvocationResult.Void, [], [], [])
-        ], [], []);
-        var source = new Entity("Source", [], Actions: [
-            new Poly.DomainModeling.Action("Go", InvocationResult.Void, [], [
-                new InvokeActionEffect("Tag", [],
-                    TargetRelationship: "link",
-                    Quantifier: StageSubscriptionQuantifier.Any)
-            ], [])
-        ], [], []);
-        var rel = new Relationship("link",
-            new DomainTypeReference("Source"), new DomainTypeReference("Target"),
-            RelationshipCardinality.OneToOne, []);
-        var domain = DomainTestFactory.Create("Test", [source, target], [rel]);
-
-        var analysis = DomainModelAnalyzer.Analyze(domain);
-
-        await Assert.That(analysis.Diagnostics.Any(d =>
-            d.Code == DomainModelDiagnosticCodes.EffectInvokeShape)).IsTrue();
-    }
+    // The quantified `invoke [any|all] Rel.Action [where …]` surface was replaced by
+    // `for Rel as name …` (fan-out); the any/all/where shape tests are removed.
 
     [Test]
     public async Task EffectInvokeShape_BareInvokeOnMany_ReportsError() {
@@ -492,38 +415,9 @@ public class EffectBindingTests {
 
         var analysis = DomainModelAnalyzer.Analyze(domain);
 
+        // Bare invoke on OneToMany is rejected — fan-out must use `for Rel as name …`.
         await Assert.That(analysis.Diagnostics.Any(d =>
             d.Code == DomainModelDiagnosticCodes.EffectInvokeShape)).IsTrue();
-    }
-
-    [Test]
-    public async Task EffectInvokeShape_AllOnManyWithWhere_NoShapeError() {
-        var target = new Entity("Target", [
-            new Property("Size", new DomainTypeReference("Number"), [])
-        ], Actions: [
-            new Poly.DomainModeling.Action("Tag", InvocationResult.Void, [], [], [])
-        ], [], []);
-        var source = new Entity("Source", [], Actions: [
-            new Poly.DomainModeling.Action("Go", InvocationResult.Void, [], [
-                new InvokeActionEffect("Tag", [],
-                    TargetRelationship: "items",
-                    Quantifier: StageSubscriptionQuantifier.All,
-                    Filter: DomainExpression.GreaterThan(
-                        DomainExpression.Property("Size"),
-                        DomainExpression.Literal(10L)))
-            ], [])
-        ], [], []);
-        var rel = new Relationship("items",
-            new DomainTypeReference("Source"), new DomainTypeReference("Target"),
-            RelationshipCardinality.OneToMany, []);
-        var domain = DomainTestFactory.Create("Test", [source, target], [rel]);
-
-        var analysis = DomainModelAnalyzer.Analyze(domain);
-
-        await Assert.That(analysis.Diagnostics.Any(d =>
-            d.Code == DomainModelDiagnosticCodes.EffectInvokeShape)).IsFalse();
-        await Assert.That(analysis.Diagnostics.Any(d =>
-            d.Code == DomainModelDiagnosticCodes.EffectBinding)).IsFalse();
     }
 
     [Test]
@@ -546,55 +440,6 @@ public class EffectBindingTests {
         await Assert.That(analysis.Diagnostics.Any(d =>
             d.Code is DomainModelDiagnosticCodes.EffectInvokeShape
                 or DomainModelDiagnosticCodes.EffectBinding)).IsFalse();
-    }
-
-    [Test]
-    public async Task EffectInvokeShape_WhereUnknownTargetProperty_ReportsBindingError() {
-        var target = new Entity("Target", [
-            new Property("Size", new DomainTypeReference("Number"), [])
-        ], Actions: [
-            new Poly.DomainModeling.Action("Tag", InvocationResult.Void, [], [], [])
-        ], [], []);
-        var source = new Entity("Source", [], Actions: [
-            new Poly.DomainModeling.Action("Go", InvocationResult.Void, [], [
-                new InvokeActionEffect("Tag", [],
-                    TargetRelationship: "items",
-                    Quantifier: StageSubscriptionQuantifier.Any,
-                    Filter: DomainExpression.Property("MissingProp"))
-            ], [])
-        ], [], []);
-        var rel = new Relationship("items",
-            new DomainTypeReference("Source"), new DomainTypeReference("Target"),
-            RelationshipCardinality.OneToMany, []);
-        var domain = DomainTestFactory.Create("Test", [source, target], [rel]);
-
-        var analysis = DomainModelAnalyzer.Analyze(domain);
-
-        await Assert.That(analysis.Diagnostics.Any(d =>
-            d.Code == DomainModelDiagnosticCodes.EffectBinding)).IsTrue();
-    }
-
-    [Test]
-    public async Task EffectInvokeShape_EachQuantifier_ReportsError() {
-        var target = new Entity("Target", [], Actions: [
-            new Poly.DomainModeling.Action("Tag", InvocationResult.Void, [], [], [])
-        ], [], []);
-        var source = new Entity("Source", [], Actions: [
-            new Poly.DomainModeling.Action("Go", InvocationResult.Void, [], [
-                new InvokeActionEffect("Tag", [],
-                    TargetRelationship: "items",
-                    Quantifier: StageSubscriptionQuantifier.Each)
-            ], [])
-        ], [], []);
-        var rel = new Relationship("items",
-            new DomainTypeReference("Source"), new DomainTypeReference("Target"),
-            RelationshipCardinality.OneToMany, []);
-        var domain = DomainTestFactory.Create("Test", [source, target], [rel]);
-
-        var analysis = DomainModelAnalyzer.Analyze(domain);
-
-        await Assert.That(analysis.Diagnostics.Any(d =>
-            d.Code == DomainModelDiagnosticCodes.EffectInvokeShape)).IsTrue();
     }
 
     [Test]
@@ -626,9 +471,7 @@ public class EffectBindingTests {
         ], [], []);
         var source = new Entity("Source", [], Actions: [
             new Poly.DomainModeling.Action("Go", InvocationResult.Void, [], [
-                new InvokeActionEffect("Tag", [],
-                    TargetRelationship: "peers",
-                    Quantifier: StageSubscriptionQuantifier.All)
+                new InvokeActionEffect("Tag", [], TargetRelationship: "peers")
             ], [])
         ], [], []);
         var rel = new Relationship("peers",
@@ -681,36 +524,6 @@ public class EffectBindingTests {
 
         await Assert.That(analysis.Diagnostics.Any(d =>
             d.Code == DomainModelDiagnosticCodes.EffectBinding)).IsTrue();
-    }
-
-    [Test]
-    public async Task EffectInvokeShape_FilterParameterAccess_ReportsError() {
-        var target = new Entity("Target", [
-            new Property("Size", new DomainTypeReference("Number"), [])
-        ], Actions: [
-            new Poly.DomainModeling.Action("Tag", InvocationResult.Void, [], [], [])
-        ], [], []);
-        var source = new Poly.DomainModeling.Action("Go", InvocationResult.Void,
-            Parameters: [new Property("threshold", new DomainTypeReference("Number"), [])],
-            Effects: [
-                new InvokeActionEffect("Tag", [],
-                    TargetRelationship: "items",
-                    Quantifier: StageSubscriptionQuantifier.Any,
-                    Filter: DomainExpression.GreaterThan(
-                        DomainExpression.Property("Size"),
-                        DomainExpression.Parameter("threshold")))
-            ],
-            Policies: []);
-        var sourceEntity = new Entity("Source", [], [source], [], []);
-        var rel = new Relationship("items",
-            new DomainTypeReference("Source"), new DomainTypeReference("Target"),
-            RelationshipCardinality.OneToMany, []);
-        var domain = DomainTestFactory.Create("Test", [sourceEntity, target], [rel]);
-
-        var analysis = DomainModelAnalyzer.Analyze(domain);
-
-        await Assert.That(analysis.Diagnostics.Any(d =>
-            d.Code == DomainModelDiagnosticCodes.EffectInvokeShape)).IsTrue();
     }
 }
 

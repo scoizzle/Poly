@@ -860,46 +860,6 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
         // Fail-closed policy: reject ambiguous/unanalyzed shapes now; relax only when
         // analyzers can prove the edge case is safe (see guide + effect-surface plan).
         var hasRel = iae.TargetRelationship is not null;
-        var hasFilter = iae.Filter is not null;
-        var quantifier = iae.Quantifier;
-        var hasCollectionQuantifier = quantifier is StageSubscriptionQuantifier.Any
-            or StageSubscriptionQuantifier.All;
-
-        // ── Local shape gates (no domain resolution required) ──
-        if (quantifier is not null && !hasCollectionQuantifier) {
-            context.ReportError(
-                iae,
-                quantifier is StageSubscriptionQuantifier.Each
-                    ? "InvokeAction does not support quantifier 'Each'. Use 'any' or 'all' for collection invoke, " +
-                      "or omit the quantifier for singular/self invoke."
-                    : $"InvokeAction has unsupported quantifier '{quantifier}'.",
-                DomainModelDiagnosticCodes.EffectInvokeShape);
-        }
-
-        if (hasCollectionQuantifier && !hasRel) {
-            context.ReportError(
-                iae,
-                $"InvokeAction quantifier '{quantifier}' requires a relationship target " +
-                $"(e.g. 'invoke {quantifier!.Value.ToString().ToLowerInvariant()} RelName.{iae.ActionName}'). " +
-                "Self-invoke cannot use any/all.",
-                DomainModelDiagnosticCodes.EffectInvokeShape);
-        }
-
-        if (hasFilter && !hasRel) {
-            context.ReportError(
-                iae,
-                "InvokeAction 'where' filter requires a relationship target on a collection relationship " +
-                "(e.g. 'invoke any RelName.Action where …'). Self-invoke cannot use where.",
-                DomainModelDiagnosticCodes.EffectInvokeShape);
-        }
-
-        if (hasFilter && !hasCollectionQuantifier) {
-            context.ReportError(
-                iae,
-                "InvokeAction 'where' filter requires a collection quantifier ('any' or 'all'). " +
-                "Singular cross-entity invoke cannot filter.",
-                DomainModelDiagnosticCodes.EffectInvokeShape);
-        }
 
         // ── Resolve target entity (self or relationship target; source-side only) ──
         Entity targetEntity;
@@ -983,28 +943,12 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
             }
             targetEntity = resolvedTarget;
 
-            if (hasCollectionQuantifier && !isCollectionFromSource) {
-                context.ReportError(
-                    iae,
-                    $"InvokeAction quantifier '{quantifier}' requires OneToMany from source " +
-                    $"'{entity.Name}', but '{iae.TargetRelationship}' is {relationship.Cardinality}. " +
-                    "Omit any/all for singular cross-entity invoke.",
-                    DomainModelDiagnosticCodes.EffectInvokeShape);
-            }
-
-            if (!hasCollectionQuantifier && isCollectionFromSource) {
+            // Singular cross-entity invoke is OneToOne only. OneToMany fan-out uses `for`.
+            if (isCollectionFromSource) {
                 context.ReportError(
                     iae,
                     $"InvokeAction on OneToMany relationship '{iae.TargetRelationship}' from '{entity.Name}' " +
-                    "requires a quantifier ('any' or 'all'). Bare 'invoke Rel.Action' is only valid for OneToOne.",
-                    DomainModelDiagnosticCodes.EffectInvokeShape);
-            }
-
-            if (hasFilter && !isCollectionFromSource) {
-                context.ReportError(
-                    iae,
-                    $"InvokeAction 'where' filter requires OneToMany from '{entity.Name}', " +
-                    $"but '{iae.TargetRelationship}' is {relationship.Cardinality}.",
+                    "is not supported — use 'for Rel as name invoke name.Action' for fan-out.",
                     DomainModelDiagnosticCodes.EffectInvokeShape);
             }
         }
@@ -1060,91 +1004,6 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
                     $"InvokeAction effect has duplicate parameter binding '{binding.PropertyName}'.",
                     DomainModelDiagnosticCodes.EffectBinding);
             }
-        }
-
-        // Filter: target-local predicate only (restricted expression surface).
-        if (iae.Filter is not null) {
-            ValidateInvokeFilterExpression(context, iae.Filter, targetEntity);
-        }
-    }
-
-    /// <summary>
-    /// Fail-closed filter surface: local target properties, literals, comparisons,
-    /// boolean compose, and arithmetic only. Reject path-prefix / params / owned / exists / dates
-    /// until those cases are analyzable end-to-end.
-    /// </summary>
-    private static void ValidateInvokeFilterExpression(
-        AnalysisContext context, DomainExpression expr, Entity targetEntity) {
-        switch (expr) {
-            case PropertyAccess pa:
-                if (!targetEntity.Properties.Any(p =>
-                    string.Equals(p.Name, pa.Name, StringComparison.Ordinal))) {
-                    context.ReportError(
-                        expr,
-                        $"InvokeAction filter references property '{pa.Name}' which does not exist on target entity '{targetEntity.Name}'.",
-                        DomainModelDiagnosticCodes.EffectBinding);
-                }
-                return;
-
-            case Literal:
-                return;
-
-            case Comparison:
-            case And:
-            case Or:
-            case Not:
-            case Add:
-            case Subtract:
-            case Multiply:
-            case Divide:
-                foreach (var child in expr.Children.OfType<DomainExpression>())
-                    ValidateInvokeFilterExpression(context, child, targetEntity);
-                return;
-
-            case ParameterAccess pa:
-                context.ReportError(
-                    expr,
-                    $"InvokeAction filter cannot reference action parameter '{pa.Name}'. " +
-                    "Filters are target-scoped only (no caller args).",
-                    DomainModelDiagnosticCodes.EffectInvokeShape);
-                return;
-
-            case RelationshipNavigation rn:
-                context.ReportError(
-                    expr,
-                    $"InvokeAction filter cannot navigate relationship '{rn.RelationshipName}'. " +
-                    "Only local target properties are allowed until related-filter analysis ships.",
-                    DomainModelDiagnosticCodes.EffectInvokeShape);
-                return;
-
-            case OwnedAccess oa:
-                context.ReportError(
-                    expr,
-                    $"InvokeAction filter cannot use owned access '{oa.OwnedName}' yet.",
-                    DomainModelDiagnosticCodes.EffectInvokeShape);
-                return;
-
-            case Exists:
-            case NotExists:
-                context.ReportError(
-                    expr,
-                    "InvokeAction filter cannot use exists/not-exists yet.",
-                    DomainModelDiagnosticCodes.EffectInvokeShape);
-                return;
-
-            case DateOperation:
-                context.ReportError(
-                    expr,
-                    "InvokeAction filter cannot use date operations yet.",
-                    DomainModelDiagnosticCodes.EffectInvokeShape);
-                return;
-
-            default:
-                context.ReportError(
-                    expr,
-                    $"InvokeAction filter expression '{expr.GetType().Name}' is not supported yet.",
-                    DomainModelDiagnosticCodes.EffectInvokeShape);
-                return;
         }
     }
 

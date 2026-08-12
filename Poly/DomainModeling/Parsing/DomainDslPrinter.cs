@@ -391,10 +391,6 @@ public sealed class DomainDslPrinter {
 
         protected override object? InvokeAction(InvokeActionEffect invoke) {
             _sb.Append("invoke ");
-            if (invoke.Quantifier == StageSubscriptionQuantifier.Any)
-                _sb.Append("any ");
-            else if (invoke.Quantifier == StageSubscriptionQuantifier.All)
-                _sb.Append("all ");
             if (invoke.TargetRelationship is not null) {
                 _sb.Append(invoke.TargetRelationship);
                 _sb.Append('.');
@@ -412,8 +408,6 @@ public sealed class DomainDslPrinter {
                 }
                 _sb.Append(')');
             }
-            if (invoke.Quantifier is not null && invoke.TargetRelationship is not null)
-                _printer.PrintFilter(invoke);
             _sb.AppendLine();
             return null;
         }
@@ -478,11 +472,6 @@ public sealed class DomainDslPrinter {
         }
 
         _sb.AppendLine();
-    }
-
-    private void PrintFilter(InvokeActionEffect invoke) {
-        _sb.Append(" where ");
-        _sb.Append(PrintExpression(invoke.Filter!));
     }
 
     private string PrintExpression(DomainExpression expr) {

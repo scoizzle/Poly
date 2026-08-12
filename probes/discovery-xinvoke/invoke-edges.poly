@@ -9,8 +9,7 @@ Account: entity {
     assign Balance to threshold
   }
   FlagHigh: action {
-    invoke all orders.Place()
-    invoke all orders.Place() where Balance > 500
+    for orders as order where order IsPaid invoke order.Place()
   }
 
   // Entity-level subscription — always active regardless of stage
@@ -21,6 +20,7 @@ Account: entity {
 
 Order: entity {
   Balance: Number default(0)
+  IsPaid: policy { Balance > 0 }
 
   Open: stage {
     Place: action {

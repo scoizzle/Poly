@@ -357,19 +357,21 @@ public class ConstraintPropagationEffectTests {
     }
 
     [Test]
-    public async Task CrossEntityInvoke_WhereFilter_NarrowsCalleeContext() {
-        // `invoke all lines.Mark where Qty <= 40` runs OrderLine.Mark (assign Qty to Qty + 10)
-        // with Qty ∈ [0, 40] (declared range(0,100) ∩ filter ≤ 40), so the callee's postcondition
-        // is [10, 50]. Order's invariants must carry the cross-entity call-chain postcondition
-        // with the filtered range (not the unfiltered [10, 110]).
+    public async Task ForEachInvoke_PolicyPredicate_NarrowsCalleeContext() {
+        // `for lines as line where line IsHighQty invoke line.Mark()` runs OrderLine.Mark
+        // (assign Qty to Qty + 10) with Qty ∈ [0, 40] (declared range(0,100) ∩ the named
+        // policy IsHighQty { Qty <= 40 }), so the callee's postcondition is [10, 50]. Order's
+        // invariants must carry the cross-entity call-chain postcondition with the refined
+        // range (not the unfiltered [10, 110]).
         var result = Parse("""
             domain Test
             Order: entity {
               lines: many OrderLine
-              Ship: action { invoke all lines.Mark where Qty <= 40 }
+              Ship: action { for lines as line where line IsHighQty invoke line.Mark() }
             }
             OrderLine: entity {
               Qty: Number range(0, 100)
+              IsHighQty: policy { Qty <= 40 }
               order: Order
               Mark: action { assign Qty to Qty + 10 }
             }
@@ -390,18 +392,20 @@ public class ConstraintPropagationEffectTests {
     }
 
     [Test]
-    public async Task CrossEntityInvoke_ViolatingPostcondition_IsReported() {
-        // `invoke all lines.Mark where Qty >= 90` runs Mark (assign Qty to Qty + 10) with
-        // Qty ∈ [90, 100] → [100, 110] can exceed range(0, 100). The cross-entity call-chain
-        // postcondition must be reported (target prop lives on OrderLine, not Order).
+    public async Task ForEachInvoke_PolicyPredicate_ViolatingPostcondition_IsReported() {
+        // `for lines as line where line IsHighQty invoke line.Mark()` with
+        // IsHighQty { Qty >= 90 } runs Mark (assign Qty to Qty + 10) with Qty ∈ [90, 100]
+        // → [100, 110] can exceed range(0, 100). The cross-entity call-chain postcondition
+        // must be reported (target prop lives on OrderLine, not Order).
         var result = Parse("""
             domain Test
             Order: entity {
               lines: many OrderLine
-              Ship: action { invoke all lines.Mark where Qty >= 90 }
+              Ship: action { for lines as line where line IsHighQty invoke line.Mark() }
             }
             OrderLine: entity {
               Qty: Number range(0, 100)
+              IsHighQty: policy { Qty >= 90 }
               order: Order
               Mark: action { assign Qty to Qty + 10 }
             }

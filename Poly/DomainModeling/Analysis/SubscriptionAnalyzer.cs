@@ -410,8 +410,6 @@ internal sealed class SubscriptionAnalyzer : INodeAnalyzer {
             case InvokeActionEffect iae:
                 foreach (var binding in iae.ParameterBindings)
                     CollectFromExpression(binding.Expression, peerBinding, subscriberRelNames, flags, isAssignTarget: false);
-                if (iae.Filter is not null)
-                    CollectFromExpression(iae.Filter, peerBinding, subscriberRelNames, flags, isAssignTarget: false);
                 break;
             case ConditionalEffect ce:
                 CollectFromExpression(ce.Condition, peerBinding, subscriberRelNames, flags, isAssignTarget: false);

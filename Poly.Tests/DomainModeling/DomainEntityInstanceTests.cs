@@ -690,7 +690,7 @@ public class DomainEntityInstanceTests {
     // ── E3b quantifier + filter tests ──────────────────────────
 
     [Test]
-    public async Task InvokeActionEffect_CrossEntity_All_InvokesOnEveryTarget() {
+    public async Task ForEachInvoke_InvokesOnEveryTarget() {
         var status = new Property("Status", new DomainTypeReference("Text"), []);
         var target = new Entity("Target", [status], Actions: [
             new Poly.DomainModeling.Action("Process", InvocationResult.Void, [], [
@@ -701,9 +701,7 @@ public class DomainEntityInstanceTests {
 
         var source = new Entity("Source", [], Actions: [
             new Poly.DomainModeling.Action("RunAll", InvocationResult.Void, [], [
-                new InvokeActionEffect("Process", [],
-                    TargetRelationship: "Items",
-                    Quantifier: StageSubscriptionQuantifier.All)
+                new ForEachInvokeEffect("Items", "item", null, "Process", [])
             ], [])
         ], [], []);
 
@@ -729,25 +727,21 @@ public class DomainEntityInstanceTests {
     }
 
     [Test]
-    public async Task InvokeActionEffect_CrossEntity_Any_WithFilter() {
+    public async Task ForEachInvoke_PolicyPredicate_FiltersTargets() {
         var status = new Property("Status", new DomainTypeReference("Text"), []);
         var count = new Property("Count", new DomainTypeReference("Number"), []);
+        var isSelected = new Policy("IsSelected",
+            DomainExpression.Equal(DomainExpression.Property("Count"), DomainExpression.Literal(42L)));
+        var process = new Poly.DomainModeling.Action("Process", InvocationResult.Void, [], [
+            new AssignEffect(DomainExpression.Property("Status"), DomainExpression.Literal("done"))
+        ], []);
 
-        var target = new Entity("Target", [status, count], Actions: [
-            new Poly.DomainModeling.Action("Process", InvocationResult.Void, [], [
-                new AssignEffect(DomainExpression.Property("Status"),
-                    DomainExpression.Literal("processed"))
-            ], [])
-        ], [], []);
+        var target = new Entity("Target", [status, count], [process], [isSelected], []);
 
         var source = new Entity("Source", [], Actions: [
-            new Poly.DomainModeling.Action("RunAny", InvocationResult.Void, [], [
-                new InvokeActionEffect("Process", [],
-                    TargetRelationship: "Items",
-                    Quantifier: StageSubscriptionQuantifier.Any,
-                    Filter: DomainExpression.Equal(
-                        DomainExpression.Property("Count"),
-                        DomainExpression.Literal(42L)))
+            new Poly.DomainModeling.Action("RunSelected", InvocationResult.Void, [], [
+                new ForEachInvokeEffect("Items", "item",
+                    new ForEachNamedPolicy("IsSelected"), "Process", [])
             ], [])
         ], [], []);
 
@@ -769,17 +763,17 @@ public class DomainEntityInstanceTests {
         store.Link("Items", src, tgt2);
         store.Link("Items", src, tgt3);
 
-        var result = src.InvokeAction("RunAny");
+        var result = src.InvokeAction("RunSelected");
         await Assert.That(result.Succeeded).IsTrue();
-        // Only tgt2 (Count=42) should have been processed; tgt1 and tgt3 unchanged
-        await Assert.That(tgt2.GetProperty<object>("Status")).IsEqualTo("processed");
+        // Only tgt2 (Count=42) matches the named policy predicate.
+        await Assert.That(tgt2.GetProperty<object>("Status")).IsEqualTo("done");
         await Assert.That(tgt1.GetProperty<object>("Status")).IsEqualTo("a");
         await Assert.That(tgt3.GetProperty<object>("Status")).IsEqualTo("c");
     }
 
     [Test]
-    public async Task InvokeActionEffect_CrossEntity_All_EmptyTargets_Throws() {
-        // Fail-closed: vacuous all is not success.
+    public async Task ForEachInvoke_ZeroTargets_Throws() {
+        // Fail-closed: vacuous success is not allowed.
         var status = new Property("Status", new DomainTypeReference("Text"), []);
         var target = new Entity("Target", [status], Actions: [
             new Poly.DomainModeling.Action("Process", InvocationResult.Void, [], [
@@ -790,9 +784,7 @@ public class DomainEntityInstanceTests {
 
         var source = new Entity("Source", [], Actions: [
             new Poly.DomainModeling.Action("RunAll", InvocationResult.Void, [], [
-                new InvokeActionEffect("Process", [],
-                    TargetRelationship: "Items",
-                    Quantifier: StageSubscriptionQuantifier.All)
+                new ForEachInvokeEffect("Items", "item", null, "Process", [])
             ], [])
         ], [], []);
 

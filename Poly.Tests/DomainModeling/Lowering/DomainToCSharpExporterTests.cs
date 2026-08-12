@@ -1441,36 +1441,6 @@ public class DomainToCSharpExporterTests {
     }
 
     [Test]
-    public async Task Export_QuantifiedInvoke_FailsLoudNotSilentlyDropped() {
-        // Code-review fix: `invoke all lines.Touch` (any/all collection invoke) was silently
-        // dropped from the export — the DSL author's effect became a no-op comment while the
-        // runtime ran it. It now throws NotSupportedException in the generated code, matching
-        // the store-dependent quantifier policies (no silent behavior gap).
-        var (domain, analysis) = ParseAndAnalyze("""
-            domain Test
-            Order: entity {
-              lines: many OrderLine
-              Draft: stage {
-                Go: action {
-                  invoke all lines.Touch(tag: "x") where Qty > 1
-                }
-              }
-            }
-            OrderLine: entity {
-              Qty: Number
-              order: Order
-              Touch: action (tag: Text) { }
-            }
-            """);
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
-        var unit = new CompilationUnitNode([], null, types, null);
-        var cs = new CSharpGenerator().Generate(unit);
-
-        await Assert.That(cs).Contains("throw new NotSupportedException(\"invoke all lines.Touch requires store-aware evaluation");
-        await Assert.That(cs).DoesNotContain("Cannot lower: invoke Touch");
-    }
-
-    [Test]
     public async Task Export_DateArithmetic_CastsToIntForDateOnly() {
         // Code-review fix: `DueDate + 14` on a Date (DateOnly) property emitted
         // `AddDays(14L)`, but DateOnly.AddDays takes int — CS1503 (long→int). The
@@ -1543,34 +1513,6 @@ public class DomainToCSharpExporterTests {
         await Assert.That(cs).Contains("public bool HasLines() => this.Lines.Count != 0;");
         await Assert.That(cs).Contains("public bool HasOwner() => this.Owner != null;");
         await Assert.That(cs).DoesNotContain("this.Lines != null");
-    }
-
-    [Test]
-    public async Task Export_QuantifiedInvoke_NoUnreachableReturnAfterThrow() {
-        // Discovery pilot A-F3: the quantified-invoke fail-loud throw must be the last
-        // statement — the appended `return DomainResult.Success()` was unreachable (CS0162).
-        var (domain, analysis) = ParseAndAnalyze("""
-            domain Test
-            Order: entity {
-              lines: many OrderLine
-              Draft: stage {
-                Go: action {
-                  invoke all lines.Touch
-                }
-              }
-            }
-            OrderLine: entity {
-              order: Order
-              Touch: action { }
-            }
-            """);
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
-        var unit = new CompilationUnitNode([], null, types, null);
-        var cs = new CSharpGenerator().Generate(unit);
-
-        await Assert.That(cs).Contains("throw new NotSupportedException(\"invoke all lines.Touch requires store-aware evaluation");
-        await Assert.That(cs).DoesNotContain(
-            "and cannot be compiled to standalone C#.\");\n        return DomainResult.Success();");
     }
 
     [Test]

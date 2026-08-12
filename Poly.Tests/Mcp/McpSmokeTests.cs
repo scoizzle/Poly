@@ -2704,7 +2704,7 @@ E: entity {{
     // ── E3b quantifier RT goldens ──────────────────────────────
 
     [Test]
-    public async Task ApplyDsl_CrossEntityAll_InvokesEveryTarget() {
+    public async Task ApplyDsl_ForEachInvoke_InvokesEveryTarget() {
         var (sessionId, _) = McpSessionStore.Create("Test");
         var dsl = DslTool.ApplyDsl(sessionId, """
             domain Test
@@ -2717,7 +2717,7 @@ E: entity {{
             Source: entity {
               items: many Target
               RunAll: action {
-                invoke all items.Process
+                for items as item invoke item.Process()
               }
             }
             """);
@@ -2757,13 +2757,14 @@ E: entity {{
     }
 
     [Test]
-    public async Task ApplyDsl_CrossEntityAny_WithFilter_OnlyMatchesTarget() {
+    public async Task ApplyDsl_ForEachInvoke_PolicyPredicate_OnlyMatchesTarget() {
         var (sessionId, _) = McpSessionStore.Create("Test");
         var dsl = DslTool.ApplyDsl(sessionId, """
             domain Test
             Target: entity {
               Status: Text
               Size: Number
+              IsBig: policy { Size > 10 }
               Tag: action {
                 assign Status to "tagged"
               }
@@ -2771,7 +2772,7 @@ E: entity {{
             Source: entity {
               items: many Target
               RunTag: action {
-                invoke any items.Tag where Size > 10
+                for items as item where item IsBig invoke item.Tag()
               }
             }
             """);
@@ -2801,12 +2802,12 @@ E: entity {{
         var call = RuntimeTool.InvokeAction(sessionId, sid!, "RunTag");
         await Assert.That(call.Success).IsTrue();
 
-        // t1 (Size=5) should NOT have been tagged — Status must not be "tagged"
+        // t1 (Size=5) does NOT match IsBig — Status must not be "tagged"
         var g1 = RuntimeTool.GetInstance(sessionId, t1id!);
         var g1s = System.Text.Json.JsonSerializer.Serialize(g1.Data);
         await Assert.That(g1s.Contains("tagged")).IsFalse();
 
-        // t2 (Size=20) SHOULD have been tagged
+        // t2 (Size=20) matches IsBig — should be tagged
         var g2 = RuntimeTool.GetInstance(sessionId, t2id!);
         var g2s = System.Text.Json.JsonSerializer.Serialize(g2.Data);
         await Assert.That(g2s.Contains("tagged")).IsTrue();

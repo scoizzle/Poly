@@ -796,12 +796,13 @@ diverging:
   can violate its target under the caller's context is reported as a diagnostic naming the
   chain (e.g. `A → B`), including cases the callee's own analysis cannot see (a parameter
   bound by the caller's argument whose range is only known at the call site).
-- **Cross-entity invoke and `where`-filters propagate the same way.** `invoke Rel.Action`
-  builds the related entity's abstract environment (its declared constraints + its own
-  preconditions) and applies the `where`-filter as a refinement on the target-local
-  properties before stepping the callee's effects — so `invoke all lines.Mark where
-  Qty <= 40` analyzes `Mark`'s `assign Qty to Qty + 10` with Qty ∈ [0, 40] (range(0, 100)
-  ∩ filter), giving a [10, 50] postcondition instead of the unfiltered [10, 110].
+- **Cross-entity fan-out and the predicate policy propagate the same way.** `for Rel as x
+  [where x.Policy] invoke x.Action` builds the related entity's abstract environment (its
+  declared constraints + its own preconditions) refined by the predicate's **named policy**
+  (a require-gate-style refinement) before stepping the callee's effects — so `for lines as
+  line where line IsHighQty invoke line.Mark()` with `IsHighQty: policy { Qty <= 40 }`
+  analyzes `Mark`'s `assign Qty to Qty + 10` with Qty ∈ [0, 40] (range(0, 100) ∩ policy),
+  giving a [10, 50] postcondition instead of the unfiltered [10, 110].
 
 ### Expression Gaps — IR vs DSL
 

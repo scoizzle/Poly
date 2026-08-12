@@ -262,25 +262,12 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
 
     /// <summary>
     /// Lowers invoke effects for C# codegen mode. Self-invoke (no TargetRelationship)
-    /// becomes <c>this.ActionName(args)</c>. Cross-entity invoke becomes
-    /// <c>this.TargetRelationship.ActionName(args)</c>. Quantified/collection invoke
-    /// cannot be compiled to standalone C# (it needs the store's linked set) — it
-    /// fails loud with <c>NotSupportedException</c>, matching quantifier policies,
-    /// instead of being silently dropped as a no-op.
+    /// becomes <c>this.ActionName(args)</c>. Singular cross-entity invoke becomes
+    /// <c>this.TargetRelationship.ActionName(args)</c> with a linked-target guard.
+    /// OneToMany fan-out uses the <see cref="ForEachInvoke"/> lowering (fail-fast loop).
     /// </summary>
     protected override Node? InvokeAction(InvokeActionEffect i) {
         if (!_lowerStageTransitions) return null;
-        // Quantified/collection invoke cannot be lowered — fail loud (no silent no-op).
-        if (i.Quantifier is not null) {
-            var quantifier = i.Quantifier.ToString()!.ToLowerInvariant();
-            var rel = i.TargetRelationship ?? "";
-            return new ThrowStatement(
-                new New(
-                    new NamedTypeReference("NotSupportedException"),
-                    new Constant(
-                        $"invoke {quantifier} {rel}.{i.ActionName} requires store-aware evaluation " +
-                        "and cannot be compiled to standalone C#.")));
-        }
 
         var args = new List<Node>();
         foreach (var binding in i.ParameterBindings) {
@@ -822,8 +809,8 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     /// </summary>
     private static string DescribeEffect(Effect effect) => effect switch {
         InvokeActionEffect i when i.TargetRelationship is null => $"invoke {i.ActionName}",
-        InvokeActionEffect i when i.TargetRelationship is not null && i.Quantifier is null => $"invoke {i.TargetRelationship}.{i.ActionName}",
-        InvokeActionEffect i => $"Cannot lower: invoke {i.ActionName} (InvokeActionEffect)",
+        InvokeActionEffect i => $"invoke {i.TargetRelationship}.{i.ActionName}",
+        ForEachInvokeEffect efe => $"for {efe.RelationshipName}.{efe.ActionName}",
         StageTransitionEffect s => $"transition to {s.TargetStage.StageName} (StageTransitionEffect)",
         CreateEntityInstance cei => $"create {cei.Type.TypeName}",
         CreateEntityInRelationshipEffect cr => $"create in {cr.RelationshipName}",

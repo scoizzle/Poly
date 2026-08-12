@@ -644,8 +644,7 @@ public sealed record DomainEntityInstance {
         InvokeActionEffect iae => iae with {
             ParameterBindings = iae.ParameterBindings
                 .Select(b => b with { Expression = PreprocessQuantifiers(b.Expression) })
-                .ToList(),
-            Filter = iae.Filter is null ? null : PreprocessQuantifiers(iae.Filter)
+                .ToList()
         },
         ForEachInvokeEffect efe => efe with {
             ParameterBindings = efe.ParameterBindings
@@ -712,51 +711,9 @@ public sealed record DomainEntityInstance {
     /// </summary>
     private void ExecuteInvokeEffect(InvokeActionEffect invoke) {
         var chainedArgs = EvaluateParameterBindings(invoke.ParameterBindings);
-        var hasCollectionQuantifier = invoke.Quantifier is StageSubscriptionQuantifier.Any
-            or StageSubscriptionQuantifier.All;
-        if (invoke.Quantifier is not null && !hasCollectionQuantifier) {
-            throw new InvalidOperationException(
-                "invoke does not support quantifier 'Each' (or unknown). Use any/all or omit.");
-        }
-        if (hasCollectionQuantifier && invoke.TargetRelationship is null) {
-            throw new InvalidOperationException(
-                $"invoke '{invoke.Quantifier}' requires a relationship target " +
-                $"(e.g. invoke {invoke.Quantifier.ToString()!.ToLowerInvariant()} Rel.{invoke.ActionName}).");
-        }
-        if (invoke.Filter is not null &&
-            (invoke.TargetRelationship is null || !hasCollectionQuantifier)) {
-            throw new InvalidOperationException(
-                "invoke 'where' requires any/all on a OneToMany relationship from the source.");
-        }
 
         ActionInvocationResult nestedResult;
-        if (invoke.TargetRelationship is not null && hasCollectionQuantifier) {
-            var targets = GetRelatedTargets(invoke.TargetRelationship, invoke.Filter);
-            if (targets.Count == 0) {
-                throw new InvalidOperationException(
-                    $"invoke {invoke.Quantifier.ToString()!.ToLowerInvariant()} " +
-                    $"'{invoke.TargetRelationship}.{invoke.ActionName}' matched zero targets" +
-                    (invoke.Filter is not null ? " after where filter" : "") + ".");
-            }
-            if (invoke.Quantifier == StageSubscriptionQuantifier.Any) {
-                nestedResult = ActionInvocationResult.Missing(Entity.Name, invoke.ActionName);
-                foreach (var t in targets) {
-                    var r = t.InvokeAction(invoke.ActionName, chainedArgs);
-                    if (r.Succeeded) { nestedResult = r; break; }
-                }
-            }
-            else {
-                nestedResult = ActionInvocationResult.Ok(invoke.ActionName, CurrentStage, null, null);
-                foreach (var t in targets) {
-                    var r = t.InvokeAction(invoke.ActionName, chainedArgs);
-                    if (!r.Succeeded) {
-                        nestedResult = r;
-                        break;
-                    }
-                }
-            }
-        }
-        else if (invoke.TargetRelationship is not null) {
+        if (invoke.TargetRelationship is not null) {
             var target = ResolveRelationshipTarget(invoke.TargetRelationship);
             nestedResult = target.InvokeAction(invoke.ActionName, chainedArgs);
         }
@@ -1019,8 +976,7 @@ public sealed record DomainEntityInstance {
             InvokeActionEffect iae => iae with {
                 ParameterBindings = iae.ParameterBindings
                     .Select(b => b with { Expression = BindPeerInExpression(b.Expression, peerBinding, peer) })
-                    .ToList(),
-                Filter = iae.Filter is null ? null : BindPeerInExpression(iae.Filter, peerBinding, peer)
+                    .ToList()
             },
             _ => effect
         };

@@ -13,8 +13,8 @@ Order: entity {
       transition to Paid
     }
     Ship: action {
-      invoke all items.Mark()
-      invoke any items.MarkUrgent(level: 5)
+      for items as item invoke item.Mark()
+      for items as item where item IsUrgent invoke item.MarkUrgent(level: 5)
       transition to Shipped
     }
     Cancel: action {
@@ -37,6 +37,7 @@ Invoice: entity {
 Item: entity {
   Marked: Number default(0)
   Urgent: Number default(0)
+  IsUrgent: policy { Urgent > 0 }
 
   Mark: action {
     assign Marked to Marked + 1

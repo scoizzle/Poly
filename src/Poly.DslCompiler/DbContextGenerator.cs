@@ -132,11 +132,31 @@ public sealed class DbContextGenerator {
         // Build statements inside the lambda body
         var bodyNodes = new List<Node>();
 
-        // b.ToTable("TableName")
-        bodyNodes.Add(new Invoke(
-            new Member(bParam, "ToTable"),
-            new Constant(tableName)
-        ));
+        // b.ToTable("TableName") — or with verified-range CHECK constraints via the modern
+        // ToTable(tableBuilder => …) API (HasCheckConstraint on EntityTypeBuilder is obsolete).
+        // Checks are emitted only when the invariant analysis PROVED no effect can produce an
+        // out-of-range value, so the DB constraints are sound.
+        var checks = store.Columns
+            .Where(c => c.IsRangeVerified && c.VerifiedRange is { } vr && (vr.Min is not null || vr.Max is not null))
+            .Select(c => (Name: $"CK_{c.ColumnName}", Sql: CheckSql(c.ColumnName, c.VerifiedRange!)))
+            .ToList();
+        if (checks.Count == 0) {
+            bodyNodes.Add(new Invoke(
+                new Member(bParam, "ToTable"),
+                new Constant(tableName)
+            ));
+        }
+        else {
+            var tParam = new Parameter("t");
+            var tBody = checks.Select(check => (Node)new Invoke(
+                new Member(tParam, "HasCheckConstraint"),
+                new Constant(check.Name), new Constant(check.Sql))).ToList();
+            bodyNodes.Add(new Invoke(
+                new Member(bParam, "ToTable"),
+                new Constant(tableName),
+                new Lambda([tParam], new Block(tBody))
+            ));
+        }
 
         // Key configuration
         if (!store.HasShadowKey && store.KeyProperty is not null) {
@@ -246,6 +266,18 @@ public sealed class DbContextGenerator {
     }
 
     /// <summary>Builds Syntax IR for a collection navigation's property access mode config.</summary>
+    /// <summary>Formats a numeric bound for a SQL CHECK constraint.</summary>
+    private static string FormatBound(double d) =>
+        d == Math.Floor(d) ? d.ToString("F0", System.Globalization.CultureInfo.InvariantCulture) : d.ToString("G", System.Globalization.CultureInfo.InvariantCulture);
+
+    /// <summary>Builds the SQL predicate for a verified column's CHECK constraint.</summary>
+    private static string CheckSql(string columnName, ValueRange verified) {
+        var parts = new List<string>();
+        if (verified.Min is not null) parts.Add($"{columnName} >= {FormatBound(verified.Min.Value)}");
+        if (verified.Max is not null) parts.Add($"{columnName} <= {FormatBound(verified.Max.Value)}");
+        return string.Join(" AND ", parts);
+    }
+
     private static Node BuildNavigationConfigNode(Parameter bParam, StorageNavigation nav, string entityName) {
         // b.Metadata.FindNavigation(nameof(Entity.NavProp))!.SetPropertyAccessMode(PropertyAccessMode.Field)
         // Issue 8: nameof must receive a Member expression, not a string Constant

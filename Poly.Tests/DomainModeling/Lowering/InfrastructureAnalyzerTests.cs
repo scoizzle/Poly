@@ -157,6 +157,59 @@ public class InfrastructureAnalyzerTests {
     }
 
     [Test]
+    public async Task VerifiedRange_UnmodifiedProperty_IsVerified() {
+        // No action modifies Qty → the invariant analysis verifies every writer stays within
+        // the declared range → storage may emit a sound CHECK from the declared range.
+        var infra = AnalyzeWithAnalysis("""
+            domain Test
+            Item: entity {
+              Qty: Number range(0, 100)
+            }
+            """);
+        var qty = infra.Storage.Entities[0].Columns.Single(c => c.Name == "Qty");
+        await Assert.That(qty.IsRangeVerified).IsTrue();
+        await Assert.That(qty.VerifiedRange!.Min).IsEqualTo(0d);
+        await Assert.That(qty.VerifiedRange!.Max).IsEqualTo(100d);
+    }
+
+    [Test]
+    public async Task VerifiedRange_PolicyNarrowing_ProvesRange() {
+        // `require LowQty (Qty <= 80)` narrows Qty to [0, 80], so Qty + 10 ∈ [10, 90] stays
+        // within range(0, 100) — verified, and a CHECK can be emitted.
+        var infra = AnalyzeWithAnalysis("""
+            domain Test
+            Item: entity {
+              Qty: Number range(0, 100)
+              LowQty: policy { Qty <= 80 }
+              Active: stage {
+                Inc: action require LowQty { assign Qty to Qty + 10 }
+              }
+            }
+            """);
+        var qty = infra.Storage.Entities[0].Columns.Single(c => c.Name == "Qty");
+        await Assert.That(qty.IsRangeVerified).IsTrue();
+        await Assert.That(qty.VerifiedRange!.Max).IsEqualTo(100d);
+    }
+
+    [Test]
+    public async Task VerifiedRange_CanViolateRange_NotVerified() {
+        // Qty + 100 from [0, 100] → [100, 200] can exceed the range — the analysis will not
+        // certify it, so no CHECK should be emitted (it would false-positive).
+        var infra = AnalyzeWithAnalysis("""
+            domain Test
+            Item: entity {
+              Qty: Number range(0, 100)
+              Active: stage {
+                Inc: action { assign Qty to Qty + 100 }
+              }
+            }
+            """);
+        var qty = infra.Storage.Entities[0].Columns.Single(c => c.Name == "Qty");
+        await Assert.That(qty.IsRangeVerified).IsFalse();
+        await Assert.That(qty.VerifiedRange).IsNull();
+    }
+
+    [Test]
     public async Task NavigationProperties_NotInColumns() {
         var infra = AnalyzeFull("""
             domain Test

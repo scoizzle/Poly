@@ -125,7 +125,9 @@ public sealed class StorageColumn {
         bool hasDefault,
         bool isUnique,
         int? maxLength,
-        string? columnName = null) {
+        string? columnName = null,
+        ValueRange? verifiedRange = null,
+        bool isRangeVerified = false) {
         ArgumentNullException.ThrowIfNull(source);
         ArgumentException.ThrowIfNullOrWhiteSpace(columnType);
         ArgumentException.ThrowIfNullOrWhiteSpace(clrTypeName);
@@ -141,6 +143,8 @@ public sealed class StorageColumn {
         HasDefault = hasDefault;
         IsUnique = isUnique;
         MaxLength = maxLength;
+        VerifiedRange = verifiedRange;
+        IsRangeVerified = isRangeVerified;
     }
 
     public Property Source { get; }
@@ -155,6 +159,15 @@ public sealed class StorageColumn {
     public string ClrTypeName { get; init; }
     public string ColumnType { get; init; }
     public int? MaxLength { get; init; }
+
+    /// <summary>The analysis-verified value envelope for the column: non-null only when the
+    /// invariant analysis proved no effect can produce a value outside the property's declared
+    /// range. Emitting a DB CHECK from this is sound (no false-positive constraint).</summary>
+    public ValueRange? VerifiedRange { get; init; }
+
+    /// <summary>True when the invariant analysis verified all writers stay within the declared
+    /// range for this property (no postcondition violation was found).</summary>
+    public bool IsRangeVerified { get; init; }
     public bool IsRequired { get; init; }
     public bool IsEnum { get; init; }
     public bool HasDefault { get; init; }

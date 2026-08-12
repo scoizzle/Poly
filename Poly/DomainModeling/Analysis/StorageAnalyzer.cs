@@ -209,7 +209,8 @@ public sealed class StorageAnalyzer {
         }
 
         var aggregateParentName = agg?.AggregateParentName;
-        var (columns, collectionNavs, referenceNavs) = ClassifyProperties(entity);
+        var verifiedRanges = ComputeVerifiedRanges(entity);
+        var (columns, collectionNavs, referenceNavs) = ClassifyProperties(entity, verifiedRanges);
         var foreignKeys = BuildForeignKeys(entity, agg, aggLookup);
         var subscriptionLists = DetectSubscriptionLists(entity.Name, collectionNavs, topology);
 
@@ -244,7 +245,7 @@ public sealed class StorageAnalyzer {
     }
 
     private (List<StorageColumn> Columns, List<StorageNavigation> Collections, List<StorageNavigation> References)
-        ClassifyProperties(Entity entity) {
+        ClassifyProperties(Entity entity, IReadOnlyDictionary<string, (ValueRange? Range, bool Verified)>? verifiedRanges = null) {
         // amu-w2-1 / review F4: enum classification comes from the DTLM when
         // analysis is present; the tree scan is analysis-absent residual only.
         var enumTypes = _enumTypeNames ?? _domain.Types.OfType<EnumType>()
@@ -271,6 +272,9 @@ public sealed class StorageAnalyzer {
             var (colName, colType) = ResolveColumnAnnotation(prop);
             var columnType = colType ?? baseColumnType;
 
+            var (verifiedRange, verified) = verifiedRanges is not null && verifiedRanges.TryGetValue(prop.Name, out var vr)
+                ? vr
+                : (null, false);
             var column = new StorageColumn(
                 prop,
                 columnType,
@@ -280,7 +284,9 @@ public sealed class StorageAnalyzer {
                 prop.Constraints.Any(c => c is DefaultValueConstraint),
                 prop.Constraints.Any(c => c is UniqueConstraint),
                 prop.Constraints.OfType<LengthConstraint>().FirstOrDefault()?.MaxLength,
-                columnName: colName);
+                columnName: colName,
+                verifiedRange: verifiedRange,
+                isRangeVerified: verified);
 
             // P2: Apply convention chain
             foreach (var conv in _conventions) {
@@ -303,8 +309,67 @@ public sealed class StorageAnalyzer {
         return (columns, collections, references);
     }
 
-    private List<StorageForeignKey> BuildForeignKeys(
-        Entity entity,
+    /// <summary>
+    /// Computes the analysis-verified value envelope per property: for each writer (every
+    /// action's postconditions, across all stage contexts), checks that the postcondition
+    /// range stays within the property's declared RangeConstraint. A property is
+    /// <b>verified</b> when no writer can produce an out-of-range value — storage may then
+    /// emit a CHECK constraint from the declared range soundly. A property with any
+    /// violating writer is <b>not</b> verified (a CHECK would false-positive).
+    /// </summary>
+    private Dictionary<string, (ValueRange? Range, bool Verified)> ComputeVerifiedRanges(Entity entity) {
+        var violated = new HashSet<string>(StringComparer.Ordinal);
+
+        void Scan(Action action) {
+            var meta = _context?.GetMetadata<ActionInvariantMetadata>(action)
+                       ?? _analysis?.GetMetadata<ActionInvariantMetadata>(action);
+            if (meta is null) return;
+            foreach (var stageCtx in meta.StageContexts) {
+                foreach (var post in stageCtx.Postconditions) {
+                    if (post.ValueRange is not { } vr) continue;
+                    var declared = entity.Properties
+                        .FirstOrDefault(p => string.Equals(p.Name, post.TargetProperty, StringComparison.Ordinal))
+                        ?.Constraints.OfType<RangeConstraint>().FirstOrDefault();
+                    if (declared is not null && !RangeWithin(vr, declared))
+                        violated.Add(post.TargetProperty);
+                }
+            }
+        }
+
+        foreach (var action in entity.Actions) Scan(action);
+        foreach (var stage in entity.Stages)
+            foreach (var action in stage.Actions) Scan(action);
+
+        var result = new Dictionary<string, (ValueRange?, bool)>(StringComparer.Ordinal);
+        foreach (var prop in entity.Properties) {
+            if (violated.Contains(prop.Name)) continue;
+            var declared = prop.Constraints.OfType<RangeConstraint>().FirstOrDefault();
+            if (declared is null) continue;
+            result[prop.Name] = (ToValueRange(declared), true);
+        }
+        return result;
+    }
+
+    private static bool RangeWithin(ValueRange inner, RangeConstraint outer) {
+        var lo = ToDoubleOrNull(inner.Min);
+        var hi = ToDoubleOrNull(inner.Max);
+        if (lo is null && hi is null) return true;
+        var dmin = ToDoubleOrNull(outer.Minimum);
+        var dmax = ToDoubleOrNull(outer.Maximum);
+        if (lo is not null && dmin is not null && lo < dmin) return false;
+        if (hi is not null && dmax is not null && hi > dmax) return false;
+        return true;
+    }
+
+    private static ValueRange ToValueRange(RangeConstraint r) =>
+        new(ToDoubleOrNull(r.Minimum), ToDoubleOrNull(r.Maximum));
+
+    private static double? ToDoubleOrNull(object? v) {
+        try { return Convert.ToDouble(v); }
+        catch { return null; }
+    }
+
+    private List<StorageForeignKey> BuildForeignKeys(Entity entity,
         AggregateEntity? agg,
         Dictionary<string, AggregateEntity>? aggLookup) {
         var fks = new List<StorageForeignKey>();

@@ -83,8 +83,10 @@ public sealed record PropertyDefinitionNode : MemberDefinitionNode {
         var readonlyPrefix = (IsReadOnly && !IsConst && Setter is not null) ? "readonly " : "";
         var volatilePrefix = IsVolatile ? "volatile " : "";
         var getterText = Getter is null ? string.Empty : $" {Getter}";
-        var setterText = Setter is null ? string.Empty : $" {Setter}";
-        var initializerText = DefaultValue is null ? string.Empty : $" = {DefaultValue}";
-        return $"{staticPrefix}{constPrefix}{readonlyPrefix}{volatilePrefix}{MemberType} {Name}{getterText}{setterText}{initializerText}".TrimEnd();
+        var accessorText = Setter is not null ? $" {Setter}"
+            : Initializer is not null ? " init;"
+            : string.Empty;
+        var initializerText = Initializer?.Value is null ? string.Empty : $" = {Initializer.Value}";
+        return $"{staticPrefix}{constPrefix}{readonlyPrefix}{volatilePrefix}{MemberType} {Name}{getterText}{accessorText}{initializerText}".TrimEnd();
     }
 }

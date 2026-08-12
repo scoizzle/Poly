@@ -4,6 +4,7 @@ using Poly.Ast.Nodes;
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Constraints;
+using Poly.DomainModeling.Effects;
 using Poly.DomainModeling.Lowering;
 using Poly.Interpretation.CSharp;
 
@@ -599,22 +600,117 @@ public sealed class MinimalApiGenerator {
     private void BuildActionDtoTypes(List<TypeDefinitionNode> dtoTypes, Entity entity) {
         foreach (var ia in GetBehaviorActions(entity)) {
             if (ia.Parameters.Count == 0) continue;
-            var fields = new List<Parameter>();
+            var domainAction = entity.Actions.FirstOrDefault(a =>
+                string.Equals(a.Name, ia.Name, StringComparison.Ordinal));
+            var props = new List<PropertyDefinitionNode>();
             foreach (var param in ia.Parameters) {
-                if (param.IsEntityRef)
-                    fields.Add(new Parameter($"{param.Name}Id", new TypeReference("string")));
-                else
-                    fields.Add(new Parameter(param.Name, new TypeReference(GetClrTypeName(param.DomainType))));
+                if (param.IsEntityRef) {
+                    props.Add(new PropertyDefinitionNode(
+                        $"{param.Name}Id",
+                        new TypeReference("string"),
+                        Getter: new PropertyGetterDefinitionNode(),
+                        Initializer: new PropertyInitializerDefinitionNode(new NullForgiving(new Default()))));
+                    continue;
+                }
+                var clrType = GetClrTypeName(param.DomainType);
+                var prop = new PropertyDefinitionNode(
+                    param.Name,
+                    new TypeReference(clrType),
+                    Getter: new PropertyGetterDefinitionNode(),
+                    Initializer: clrType == "string"
+                        ? new PropertyInitializerDefinitionNode(new NullForgiving(new Default()))
+                        : new PropertyInitializerDefinitionNode());
+                if (IsNumericClrType(clrType) && domainAction is not null) {
+                    var implicitRange = GetActionParamImplicitRange(entity, domainAction, param.Name);
+                    if (implicitRange is not null) {
+                        prop = prop with {
+                            Attributes = [new AttributeNode("Range", new List<Expression> {
+                                new Constant(implicitRange.Minimum is not null ? Convert.ToDouble(implicitRange.Minimum) : double.MinValue),
+                                new Constant(implicitRange.Maximum is not null ? Convert.ToDouble(implicitRange.Maximum) : double.MaxValue)
+                            })]
+                        };
+                    }
+                }
+                props.Add(prop);
             }
             dtoTypes.Add(new TypeDefinitionNode(
                 $"{Pascalize(ia.Name)}Dto",
-                PrimaryConstructorParameters: fields,
+                Properties: props,
                 Semantics: new TypeDefinitionSemantics(
                     TypeDefinitionMutability.Immutable,
                     TypeDefinitionEqualitySemantics.Value
                 )
             ));
         }
+    }
+
+    /// <summary>
+    /// Resolves the effective range for a property: the analysis-verified envelope when
+    /// the invariant analysis proved no effect can produce an out-of-range value, else
+    /// the declared constraint.
+    /// </summary>
+    private RangeConstraint? GetPropertyRange(Entity entity, string propertyName) {
+        var column = GetStorageEntity(entity).Columns.FirstOrDefault(c =>
+            string.Equals(c.Name, propertyName, StringComparison.Ordinal));
+        if (column?.VerifiedRange is { } verified && column.IsRangeVerified)
+            return new RangeConstraint(verified.Min, verified.Max);
+        return entity.Properties.FirstOrDefault(p =>
+            string.Equals(p.Name, propertyName, StringComparison.Ordinal))
+            ?.Constraints.OfType<RangeConstraint>().FirstOrDefault();
+    }
+
+    /// <summary>
+    /// Derives the implicit range an action parameter must satisfy: the intersection of
+    /// the ranges of the properties the parameter is directly assigned into
+    /// (<c>assign Prop to param</c>). Not declared in the DSL — proven by the action's
+    /// own effects, so the action DTO enforces the same envelope at the API boundary.
+    /// </summary>
+    private RangeConstraint? GetActionParamImplicitRange(Entity entity, Poly.DomainModeling.Action action, string paramName) {
+        RangeConstraint? acc = null;
+        foreach (var assign in FlattenEffects(action.Effects).OfType<AssignEffect>()) {
+            // In the domain model a parameter reference in an effect value is still a
+            // PropertyAccess/ParameterAccess whose name equals the action parameter
+            // (the param→bare-identifier rewrite happens later, at C# lowering).
+            var valueName = assign.Value switch {
+                PropertyAccess pa => pa.Name,
+                ParameterAccess pa => pa.Name,
+                _ => null,
+            };
+            if (valueName is null ||
+                !string.Equals(valueName, paramName, StringComparison.Ordinal))
+                continue;
+            if (assign.Target is not PropertyAccess target) continue;
+            var targetRange = GetPropertyRange(entity, target.Name);
+            if (targetRange is null) continue;
+            acc = acc is null ? targetRange : IntersectRanges(acc, targetRange);
+        }
+        return acc;
+    }
+
+    private static IEnumerable<Effect> FlattenEffects(IEnumerable<Effect> effects) {
+        foreach (var effect in effects) {
+            yield return effect;
+            switch (effect) {
+                case CompositeEffect composite:
+                    foreach (var nested in FlattenEffects(composite.Effects)) yield return nested;
+                    break;
+                case ConditionalEffect conditional:
+                    foreach (var nested in FlattenEffects(conditional.ThenEffects)) yield return nested;
+                    foreach (var nested in FlattenEffects(conditional.ElseEffects ?? [])) yield return nested;
+                    break;
+            }
+        }
+    }
+
+    private static RangeConstraint? IntersectRanges(RangeConstraint a, RangeConstraint b) {
+        double? aMin = a.Minimum is null ? null : Convert.ToDouble(a.Minimum);
+        double? bMin = b.Minimum is null ? null : Convert.ToDouble(b.Minimum);
+        double? aMax = a.Maximum is null ? null : Convert.ToDouble(a.Maximum);
+        double? bMax = b.Maximum is null ? null : Convert.ToDouble(b.Maximum);
+        double? min = aMin is null ? bMin : bMin is null ? aMin : Math.Max(aMin.Value, bMin.Value);
+        double? max = aMax is null ? bMax : bMax is null ? aMax : Math.Min(aMax.Value, bMax.Value);
+        if (min is not null && max is not null && min.Value > max.Value) return null;
+        return new RangeConstraint(min, max);
     }
 
     /// <summary>Builds Syntax IR for a DTO type definition.</summary>
@@ -630,29 +726,25 @@ public sealed class MinimalApiGenerator {
         if (scalarParams.Count == 0) return;
         if (!GetStorageEntity(entity).IsRoot) return;
 
-        // Emit as a class with get/set properties so transport validation attributes
+        // Emit as a record with get/init properties so transport validation attributes
         // ([Range(min, max)]) attach to properties and are enforced by ASP.NET model
-        // binding. For properties the invariant analysis VERIFIED (no effect can produce
-        // an out-of-range value), the declared range is the proven envelope.
+        // binding, and the contract stays immutable. An init-only accessor is a property
+        // with no setter but an initializer present; non-nullable reference scalars get
+        // `= default!;` for CS8618 hygiene. For properties the invariant analysis VERIFIED
+        // (no effect can produce an out-of-range value), the declared range is the proven
+        // envelope.
         var props = scalarParams.Select(param => {
             var clrType = GetClrTypeName(param.Type.TypeName);
             var prop = new PropertyDefinitionNode(
                 param.Name,
                 new TypeReference(clrType),
                 Getter: new PropertyGetterDefinitionNode(),
-                Setter: new PropertySetterDefinitionNode(),
                 Initializer: clrType == "string"
                     ? new PropertyInitializerDefinitionNode(new NullForgiving(new Default()))
-                    : null);
+                    : new PropertyInitializerDefinitionNode());
             if (!IsNumericClrType(clrType)) return prop;
 
-            var column = GetStorageEntity(entity).Columns.FirstOrDefault(c =>
-                string.Equals(c.Name, param.Name, StringComparison.Ordinal));
-            var range = column?.VerifiedRange is { } verified && column.IsRangeVerified
-                ? new RangeConstraint(verified.Min, verified.Max)
-                : entity.Properties.FirstOrDefault(p =>
-                      string.Equals(p.Name, param.Name, StringComparison.Ordinal))
-                      ?.Constraints.OfType<RangeConstraint>().FirstOrDefault();
+            var range = GetPropertyRange(entity, param.Name);
             if (range is null) return prop;
 
             var args = new List<Expression> {

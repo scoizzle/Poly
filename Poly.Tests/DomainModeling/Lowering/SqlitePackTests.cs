@@ -311,10 +311,50 @@ public class SqlitePackTests {
 
         var prog = result.Files!.Single(f => f.FileName == "Program.cs").Source;
         // Enum type maps to its own CLR name (Genre), not excluded by entity-ness.
-        await Assert.That(prog).Contains("public record BookDto\n{\n    public Genre Genre { get; set; }");
-        await Assert.That(prog).Contains("public string Title { get; set; }");
+        await Assert.That(prog).Contains("public record BookDto\n{\n    public Genre Genre { get; init; }");
+        await Assert.That(prog).Contains("public string Title { get; init; } = default!;");
         // POST endpoint passes the DTO members into Book.Create in the same order.
         await Assert.That(prog).Contains("Book.Create(dto.Genre, dto.Title)");
+    }
+
+    [Test]
+    public async Task DslCompiler_ActionDto_EmitsImplicitRangeFromAssignTarget() {
+        // Transport: an action parameter that flows directly into a range-constrained
+        // property (assign Stock to amount) carries an IMPLICIT [Range] on its action DTO —
+        // not declared in the DSL, but proven by the action's own effects. The endpoint
+        // enforces the target's envelope at the API boundary.
+        var compiler = new Compiler();
+        var result = compiler.Compile("""
+            domain Demo
+            Book: entity {
+              Stock: Number range(0, 1000)
+
+              Restock: action (amount: Number) {
+                assign Stock to amount
+              }
+            }
+            """, CompileMode.All, DbmsPack.Generic);
+        await Assert.That(result.Success).IsTrue();
+
+        var prog = result.Files!.Single(f => f.FileName == "Program.cs").Source;
+        await Assert.That(prog).Contains("public record RestockDto");
+        await Assert.That(prog).Contains("[Range(0, 1000)]\n    public long amount { get; init; }");
+        // An action with no constrained target emits no [Range] on its params.
+        var compiler2 = new Compiler();
+        var result2 = compiler2.Compile("""
+            domain Demo
+            Book: entity {
+              Title: Text
+
+              Rename: action (value: Text) {
+                assign Title to value
+              }
+            }
+            """, CompileMode.All, DbmsPack.Generic);
+        await Assert.That(result2.Success).IsTrue();
+        var prog2 = result2.Files!.Single(f => f.FileName == "Program.cs").Source;
+        await Assert.That(prog2).Contains("public record RenameDto");
+        await Assert.That(prog2).DoesNotContain("[Range");
     }
 
     [Test]

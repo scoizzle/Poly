@@ -596,7 +596,7 @@ public class CSharpGeneratorTests {
 
         await Assert.That(result).Contains("public record Widget(string name)");
         await Assert.That(result).Contains("private readonly string _name = name;");
-        await Assert.That(result).Contains("public string DisplayName { get; } = name;");
+        await Assert.That(result).Contains("public string DisplayName { get; init; } = name;");
     }
 
     [Test]

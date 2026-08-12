@@ -718,10 +718,13 @@ public sealed class CSharpGenerator {
                 }
                 sb.Append("set; ");
             }
+            else if (prop.Initializer != null) {
+                sb.Append("init; ");
+            }
             sb.Append('}');
-            if (prop.Initializer != null) {
+            if (prop.Initializer?.Value is { } initializerValue) {
                 sb.Append(" = ");
-                WriteExpression(sb, prop.Initializer.Value);
+                WriteExpression(sb, initializerValue);
                 sb.AppendLine(";");
             }
             else {
@@ -761,18 +764,18 @@ public sealed class CSharpGenerator {
             }
             Indent(sb, indent);
             sb.Append("}");
-            if (prop.Initializer != null) {
+            if (prop.Initializer?.Value is { } initializerValue) {
                 sb.Append(" = ");
-                WriteExpression(sb, prop.Initializer.Value);
+                WriteExpression(sb, initializerValue);
                 sb.AppendLine(";");
             }
             else {
                 sb.AppendLine();
             }
         }
-        else if (prop.Initializer != null) {
+        else if (prop.Initializer?.Value is { } initializerValue) {
             sb.Append(" = ");
-            WriteExpression(sb, prop.Initializer.Value);
+            WriteExpression(sb, initializerValue);
             sb.AppendLine(";");
         }
         else {

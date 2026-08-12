@@ -487,7 +487,8 @@ public sealed class MermaidAstGenerator {
             PropertySetterDefinitionNode setter => new[] { ((Node)setter.ValueParameter!, "value") }
                 .Where(static pair => pair.Item1 is not null)
                 .Concat(setter.Body is null ? Array.Empty<(Node, string)>() : [(setter.Body, "body")]),
-            PropertyInitializerDefinitionNode initializer => [(initializer.Value, "value")],
+            PropertyInitializerDefinitionNode initializer =>
+                initializer.Value is null ? [] : [(initializer.Value, "value")],
 
             // Block
             Block block => block.Nodes.Select((n, i) => (n, $"{i}")),

@@ -190,6 +190,7 @@ public sealed class DslTokenReader : BufferedTokenReader<DslToken, DslTokenKind>
         "create" => DslTokenKind.Create,
         "in" => DslTokenKind.In,
         "invoke" => DslTokenKind.Invoke,
+        "for" => DslTokenKind.For,
         "if" => DslTokenKind.If,
         "else" => DslTokenKind.Else,
         "entry" => DslTokenKind.Entry,

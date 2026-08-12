@@ -401,7 +401,8 @@ Effects in an action body:
 | Create entity | `create EntityType { prop: value }` |
 | Create in relationship | `create in RelationshipName { prop: value }` |
 | Self-invoke | `invoke ActionName` / `invoke ActionName(param: expr, ...)` |
-| Cross-entity invoke | `invoke [any\|all] RelName.ActionName` / `invoke [any\|all] RelName.ActionName(param: expr, ...) [where expr]` |
+| Cross-entity invoke | `invoke RelName.ActionName` / `invoke RelName.ActionName(param: expr, ...)` — OneToOne source only |
+| Fan-out invoke | `for Rel as name [where name.PolicyName \| where name in StageName] invoke name.ActionName(param: expr, ...)` — OneToMany source only |
 | Conditional | `if (expr) { effects } [else if (expr) { effects }]* [else { effects }]` |
 
 ```poly
@@ -444,24 +445,40 @@ Parser + analyzer (`DMEFF007`) + runtime all enforce the same contract.
 |------|----------------|
 | `invoke Action` | Self only |
 | `invoke Rel.Action` | Source of **OneToOne** `Rel` — exactly one outbound link |
-| `invoke any Rel.Action` / `invoke all Rel.Action` | Source of **OneToMany** `Rel`; **zero matches fail** (no vacuous `all`) |
-| `… where expr` | Only with `any`/`all` on OneToMany; `expr` is **target-local** only |
+| `for Rel as name [where …] invoke name.Action` | Source of **OneToMany** `Rel` — fan-out over every matching record |
 
 **Rejected (`DMEFF007` / parse / runtime):**
-- `any`/`all` without `Rel.`; `where` without `any`/`all`; `where` on self/singular
-- bare `Rel.Action` on OneToMany; `any`/`all` on OneToOne
+- `invoke Rel.Action` on OneToMany (fan-out requires `for`); `for` on OneToOne (iterating a known singular makes no sense)
 - reverse-side invoke (caller is relationship target, not source)
 - ManyToOne / ManyToMany; self-relationship (same type both ends)
-- filter with params, path-prefix, owned, exists, dates (local props/literals/comparisons/bool/arithmetic only)
-- missing/duplicate action parameter bindings
+- `for` predicate that is not a **named policy or stage membership** on the target entity
+- `for` binder colliding with a caller member; missing/duplicate action parameter bindings
+
+### Fan-out invoke (`for`)
+
+`for Rel as name [where name.PolicyName | where name in StageName] invoke name.ActionName(args)`
+iterates **every record** reachable via a OneToMany relationship (fetch-all from storage)
+and invokes the action on each. One fan-out mode, no `any`/`all`/`each` quantifier.
+
+- **Binder (`as name`)** names the current record; it is in scope for the predicate and the
+  invoke arguments (`invoke line.Mark(amount: line Qty)`).
+- **Predicate** must be a **named policy** (`where line IsPaid`) or a **stage membership**
+  (`where line in Active`) on the **target entity** (the iterated record) — never an inline
+  expression. The invariant analysis reasons about the policy like a `require` gate.
+- **Fail-fast:** the first record whose invoke fails fails the whole `for` (the action
+  returns `Failure`) — no silent swallow.
+- **Zero matches fail** (no vacuous success).
+- Rollback of already-invoked records is a documented gap (fail-fast guarantees the caller
+  always sees the failure; atomic undo is not shipped).
 
 ```poly
 invoke Validate                              # self-only
 invoke Validate(status: "ready")             # self-only with args (all params required)
 invoke service.Process                       # OneToOne source → target
-invoke any services.Process                  # OneToMany first success
-invoke all items.Process                     # OneToMany every target (fails if none)
-invoke all items.Tag() where Size > 10       # filtered (target-local Size)
+for items as item where item IsEligible
+    invoke item.Mark(amount: item.Qty)       # fan-out, policy-filtered
+for items as item where item in Active
+    invoke item.Mark()                       # fan-out, stage-filtered
 ```
 
 Nested invoke depth is limited (max 16); recursive cycles fail loud.
@@ -814,7 +831,8 @@ without a store (use create + link + `evaluate_policy`).
 | `assign Prop to expr` | action, entry, exit |
 | `create Type { ... }` | action |
 | `create in Rel { ... }` | action |
-| `invoke Action` / `invoke [any\|all] Rel.Action [where …]` | action (self; OneToOne / OneToMany source-only; fail-closed DMEFF007; depth-limited) |
+| `invoke Action` / `invoke Rel.Action` | action (self; OneToOne source-only; fail-closed DMEFF007; depth-limited) |
+| `for Rel as name [where policy \| where in stage] invoke name.Action` | action (OneToMany source-only fan-out; fail-fast; zero matches fail) |
 | `if (expr) { … } else if … else { … }` | action, entry, exit |
 
 **Linking existing instances:** graph wiring happens through `create in Rel { … }` (or `create` with `RelationshipName`), which the runtime auto-links in the store. To connect already-existing instances, the MCP `link_instances` tool exposes `DomainInstanceStore.Link` with relationship + entity-type validation at the tool boundary; `unlink_instances` is deferred.

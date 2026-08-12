@@ -89,6 +89,7 @@ public static class DslGrammar {
         DslTokenKind.In => "in",
         DslTokenKind.Delete => "delete",
         DslTokenKind.Invoke => "invoke",
+        DslTokenKind.For => "for",
         DslTokenKind.Entry => "entry",
         DslTokenKind.Exit => "exit",
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, $"No canonical text for DSL token kind '{kind}'"),
@@ -247,6 +248,8 @@ public static class DslGrammar {
                 .Kind(DslTokenKind.Delete).Commit()
             .Pattern("invoke")
                 .Kind(DslTokenKind.Invoke).Commit()
+            .Pattern("for")
+                .Kind(DslTokenKind.For).Commit()
             .Pattern("if")
                 .Kind(DslTokenKind.If).Kind(DslTokenKind.LParen).Commit();
 

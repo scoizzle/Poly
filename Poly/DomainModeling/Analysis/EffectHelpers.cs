@@ -46,6 +46,7 @@ internal static class EffectHelpers {
         CreateEntityInstance => true,
         CreateEntityInRelationshipEffect => true,
         InvokeActionEffect => true,
+        ForEachInvokeEffect => true,
         _ => false
     };
 }

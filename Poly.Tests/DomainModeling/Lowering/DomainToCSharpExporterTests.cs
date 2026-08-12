@@ -869,6 +869,69 @@ public class DomainToCSharpExporterTests {
         await Assert.That(register).IsEqualTo(1);
     }
 
+    [Test]
+    public async Task Export_ForEachInvoke_FailFastLoopWithPredicates() {
+        // `for Rel as x [where x.Policy | where x in Stage] invoke x.Action(args)` lowers
+        // to a fail-fast loop over the nav: continue-guard predicate, binder-scoped args,
+        // first failure returns, zero matches fail. No NotSupportedException / unreachable code.
+        var (domain, analysis) = ParseAndAnalyze("""
+            domain Test
+            Line: entity {
+              Qty: Number
+              IsPaid: policy { Qty > 0 }
+              Active: stage { }
+              Mark: action (amount: Number) { assign Qty to amount }
+            }
+            Order: entity {
+              lines: many Line
+              Go: action {
+                for lines as line where line IsPaid invoke line.Mark(amount: line Qty)
+                for lines as line where line in Active invoke line.Mark(amount: 5)
+              }
+            }
+            """);
+        await Assert.That(analysis.HasErrors).IsFalse();
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var unit = new CompilationUnitNode([], null, types, null);
+        var cs = new CSharpGenerator().Generate(unit);
+
+        await Assert.That(cs).Contains("foreach (var target0 in this.Lines)");
+        await Assert.That(cs).Contains("if (!target0.IsPaid())");
+        await Assert.That(cs).Contains("target0.Mark(target0.Qty)");
+        await Assert.That(cs).Contains("target1.CurrentStage == LineStage.Active");
+        await Assert.That(cs).Contains("return result0;");
+        await Assert.That(cs).Contains("matched zero targets");
+        await Assert.That(cs).DoesNotContain("NotSupportedException");
+    }
+
+    [Test]
+    public async Task Analysis_ForEachInvoke_PredicateMustBeOnTargetEntity() {
+        // The predicate (policy/stage) must resolve on the TARGET entity (the iterated
+        // record). A policy/stage on the caller is rejected fail-loud.
+        var poly = """
+            domain Test
+            Line: entity {
+              Qty: Number
+              Mark: action (amount: Number) { assign Qty to amount }
+            }
+            Order: entity {
+              lines: many Line
+              Total: Number
+              IsPaid: policy { Total > 0 }
+              Go: action {
+                for lines as line where line IsPaid invoke line.Mark(amount: 1)
+              }
+            }
+            """;
+        var changes = new PolyDslParser(poly).Parse();
+        var evolved = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(changes);
+        var diagnostics = evolved.Analysis?.Diagnostics
+            ?? DomainModelAnalyzer.Analyze(evolved.Root!).Diagnostics;
+
+        await Assert.That(diagnostics.Any(d =>
+            d.Message.Contains("predicate policy 'IsPaid' does not exist on entity 'Line'"))).IsTrue();
+    }
+
     private static IEnumerable<Invoke> FindAllInvokes(Node node) {
         if (node is Invoke inv) yield return inv;
         foreach (var child in node.Children) {

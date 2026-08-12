@@ -268,6 +268,10 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
                 foreach (var binding in iae.ParameterBindings)
                     CollectFromExpression(binding.Expression, referenced, paramNames);
                 break;
+            case ForEachInvokeEffect efe:
+                foreach (var binding in efe.ParameterBindings)
+                    CollectFromExpression(binding.Expression, referenced, paramNames);
+                break;
             case StageTransitionEffect:
             case CreateEntityInRelationshipEffect:
                 break;
@@ -343,6 +347,11 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
 
         protected override object? InvokeAction(InvokeActionEffect e) {
             ValidateInvokeAction(context, e, entity, domain);
+            return null;
+        }
+
+        protected override object? ForEachInvoke(ForEachInvokeEffect e) {
+            ValidateForEachInvoke(context, e, entity, domain);
             return null;
         }
 
@@ -724,6 +733,126 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
                 $"StageTransition effect targets stage '{ste.TargetStage.StageName}' which does not exist on entity '{entity.Name}'.",
                 DomainModelDiagnosticCodes.EffectBinding);
         }
+    }
+
+    private static void ValidateForEachInvoke(
+        AnalysisContext context, ForEachInvokeEffect efe, Entity entity, Domain domain) {
+        // `for` requires a relationship, source-side, OneToMany (iterating a known singular
+        // makes no sense), non-self.
+        if (!TryResolveRelationship(context, domain, entity.Name, efe.RelationshipName, efe, out var relationship))
+            return;
+        if (relationship is null) {
+            context.ReportError(
+                efe,
+                $"ForEachInvoke references relationship '{efe.RelationshipName}' which does not exist on domain.",
+                DomainModelDiagnosticCodes.EffectBinding);
+            return;
+        }
+        if (!string.Equals(relationship.Source.TypeName, entity.Name, StringComparison.Ordinal)) {
+            context.ReportError(
+                efe,
+                $"ForEachInvoke relationship '{efe.RelationshipName}' may only be used from source entity " +
+                $"'{relationship.Source.TypeName}' (caller is '{entity.Name}').",
+                DomainModelDiagnosticCodes.EffectInvokeShape);
+            return;
+        }
+        if (relationship.Cardinality is not RelationshipCardinality.OneToMany) {
+            context.ReportError(
+                efe,
+                $"ForEachInvoke requires OneToMany relationship '{efe.RelationshipName}', " +
+                $"got {relationship.Cardinality}. Iterating a singular relationship is not supported.",
+                DomainModelDiagnosticCodes.EffectInvokeShape);
+            return;
+        }
+        if (string.Equals(relationship.Source.TypeName, relationship.Target.TypeName, StringComparison.Ordinal)) {
+            context.ReportError(
+                efe,
+                $"ForEachInvoke on self-relationship '{efe.RelationshipName}' is not supported.",
+                DomainModelDiagnosticCodes.EffectInvokeShape);
+            return;
+        }
+
+        if (!TryResolveEntity(context, domain, relationship.Target.TypeName, efe, out var targetEntity))
+            return;
+        if (targetEntity is null) {
+            context.ReportError(
+                efe,
+                $"Target entity type '{relationship.Target.TypeName}' for relationship '{efe.RelationshipName}' not found.",
+                DomainModelDiagnosticCodes.EffectBinding);
+            return;
+        }
+
+        // Binder must not collide with the caller's own members (property/stage/policy/action).
+        if (entity.Properties.Any(p => string.Equals(p.Name, efe.BinderName, StringComparison.Ordinal))
+            || entity.Stages.Any(s => string.Equals(s.Name, efe.BinderName, StringComparison.Ordinal))
+            || entity.Policies.Any(p => string.Equals(p.Name, efe.BinderName, StringComparison.Ordinal))
+            || entity.Actions.Any(a => string.Equals(a.Name, efe.BinderName, StringComparison.Ordinal))) {
+            context.ReportError(
+                efe,
+                $"ForEachInvoke binder '{efe.BinderName}' collides with a member on entity '{entity.Name}'.",
+                DomainModelDiagnosticCodes.EffectInvokeShape);
+        }
+
+        // Predicate: named policy or stage membership on the TARGET entity.
+        switch (efe.Predicate) {
+            case ForEachNamedPolicy { PolicyName: var policyName }:
+                if (!targetEntity.Policies.Any(p => string.Equals(p.Name, policyName, StringComparison.Ordinal))) {
+                    context.ReportError(
+                        efe,
+                        $"ForEachInvoke predicate policy '{policyName}' does not exist on entity '{targetEntity.Name}'.",
+                        DomainModelDiagnosticCodes.EffectBinding);
+                }
+                break;
+            case ForEachStageMembership { StageName: var stageName }:
+                if (!targetEntity.Stages.Any(s => string.Equals(s.Name, stageName, StringComparison.Ordinal))) {
+                    context.ReportError(
+                        efe,
+                        $"ForEachInvoke predicate stage '{stageName}' does not exist on entity '{targetEntity.Name}'.",
+                        DomainModelDiagnosticCodes.EffectBinding);
+                }
+                break;
+        }
+
+        // Action must exist on the target (entity or stage actions).
+        var targetAction = targetEntity.Actions.FirstOrDefault(a =>
+                string.Equals(a.Name, efe.ActionName, StringComparison.Ordinal))
+            ?? targetEntity.Stages.SelectMany(s => s.Actions)
+                .FirstOrDefault(a => string.Equals(a.Name, efe.ActionName, StringComparison.Ordinal));
+        if (targetAction is null) {
+            context.ReportError(
+                efe,
+                $"ForEachInvoke references action '{efe.ActionName}' which does not exist on entity '{targetEntity.Name}'.",
+                DomainModelDiagnosticCodes.EffectBinding);
+            return;
+        }
+
+        foreach (var binding in efe.ParameterBindings) {
+            if (!targetAction.Parameters.Any(p => string.Equals(p.Name, binding.PropertyName, StringComparison.Ordinal))) {
+                context.ReportError(
+                    binding,
+                    $"ForEachInvoke binding references unknown parameter '{binding.PropertyName}' on action '{targetAction.Name}'.",
+                    DomainModelDiagnosticCodes.EffectBinding);
+            }
+            // Arg expressions may reference the binder root (line Qty); anything else that
+            // looks like a relationship-navigation root is rejected (binder is the only root).
+            foreach (var nav in EnumerateRelationshipNavigations(binding.Expression)) {
+                if (!string.Equals(nav.RelationshipName, efe.BinderName, StringComparison.Ordinal)) {
+                    context.ReportError(
+                        binding,
+                        $"ForEachInvoke argument path-prefix root '{nav.RelationshipName}' is not the binder " +
+                        $"'{efe.BinderName}'. Only the binder may be dereferenced.",
+                        DomainModelDiagnosticCodes.EffectInvokeShape);
+                }
+            }
+        }
+    }
+
+    private static IEnumerable<RelationshipNavigation> EnumerateRelationshipNavigations(DomainExpression expr) {
+        if (expr is RelationshipNavigation rn)
+            yield return rn;
+        foreach (var child in expr.Children.OfType<DomainExpression>())
+            foreach (var nested in EnumerateRelationshipNavigations(child))
+                yield return nested;
     }
 
     private static void ValidateInvokeAction(

@@ -35,6 +35,8 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     private readonly IReadOnlyDictionary<string, IReadOnlyList<Node>>? _postTransitionNodes;
     private readonly string? _sourceStageName;
     private readonly IReadOnlyDictionary<string, string>? _enumPropertyNames;
+    private readonly LoweringContext _context;
+    private int _forEachInvokeSequence;
 
     /// <summary>Pre-computed analysis metadata provider, when available.</summary>
     public INodeMetadataProvider? Analysis => _analysis;
@@ -44,6 +46,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
 
     public EffectLoweringPass(Entity entity, LoweringContext context) {
         _entity = entity;
+        _context = context;
         _domain = context.Domain;
         _analysis = context.Analysis;
         _useThisReference = context.UseThisReference;
@@ -300,6 +303,91 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         }
 
         return new Invoke(new Member(Subject, i.ActionName), [.. args]);
+    }
+
+    /// <summary>
+    /// Lowers a <see cref="ForEachInvokeEffect"/> (the <c>for Rel as x [where x.Policy |
+    /// where x in Stage] invoke x.Action(args)</c> fan-out) to a fail-fast loop over the
+    /// source's collection navigation — "fetch all from storage, invoke on every record".
+    /// The first failing record fails the whole <c>for</c>; zero matches fail (no vacuous
+    /// success). The predicate is a named policy (bool method) or stage membership
+    /// (<c>x.CurrentStage == TargetStage.X</c>) on the target entity.
+    /// </summary>
+    protected override Node? ForEachInvoke(ForEachInvokeEffect e) {
+        if (!_lowerStageTransitions) return null;
+
+        var relName = e.RelationshipName;
+        var navMember = new Member(Subject, DomainToCSharpExporter.ToPascalCase(relName));
+
+        // Predicate → a `continue` guard inside the loop (no LINQ dependency in the
+        // standalone export): named policy → target's bool method; stage membership →
+        // target.CurrentStage == TargetStage.X. Uses the same target{seq} name as the loop.
+        Node? predicateGuard = null;
+        if (e.Predicate is not null) {
+            var targetVar = new Variable($"target{_forEachInvokeSequence}");
+            Node predicateExpr = e.Predicate switch {
+                ForEachNamedPolicy p => (Node)new Invoke(
+                    new Member(new Variable(targetVar.Name), p.PolicyName)),
+                ForEachStageMembership s => new Equal(
+                    new Member(new Variable(targetVar.Name), "CurrentStage"),
+                    new Member(new NamedTypeReference(TargetStageEnumTypeName(relName)), s.StageName)),
+                _ => throw new NotSupportedException($"Unsupported ForEachInvoke predicate '{e.Predicate.GetType().Name}'."),
+            };
+            predicateGuard = new IfStatement(
+                new Poly.Ast.Nodes.Not(predicateExpr),
+                new Block([new ContinueStatement()]));
+        }
+
+        // Lower the invoke arguments with the binder mapped to the loop variable, so
+        // `invoke x.Mark(amount: x Qty)` references the current record.
+        var seq = _forEachInvokeSequence++;
+        var loopVar = new Variable($"target{seq}");
+        var mergedParams = new Dictionary<string, Node>(StringComparer.Ordinal);
+        if (_context.Parameters is not null)
+            foreach (var kv in _context.Parameters)
+                mergedParams[kv.Key] = kv.Value;
+        mergedParams[e.BinderName] = loopVar;
+        var argPass = new DomainExpressionLoweringPass(_context with { Parameters = mergedParams });
+        var args = new List<Node>();
+        foreach (var binding in e.ParameterBindings)
+            args.Add(argPass.Lower(binding.Expression, Subject));
+
+        var invokeCall = new Invoke(new Member(loopVar, e.ActionName), [.. args]);
+
+        // Fail-fast + zero-matches-fail, with or without a predicate.
+        var matchedVar = new Variable($"matched{seq}", new Constant(false));
+        var resultVar = new Variable($"result{seq}");
+        var loopBody = new List<Node>();
+        if (predicateGuard is not null) loopBody.Add(predicateGuard);
+        loopBody.Add(new Assignment(matchedVar, new Constant(true)));
+        loopBody.Add(new Variable(resultVar.Name, invokeCall));
+        loopBody.Add(new IfStatement(new Poly.Ast.Nodes.Not(new Member(resultVar, "IsSuccess")),
+            new Block([new Return(resultVar)])));
+        var loop = new ForEachLoop(loopVar, navMember, new Block(loopBody));
+        var zeroCheck = new IfStatement(
+            new Poly.Ast.Nodes.Not(matchedVar),
+            new Block([new Return(new Invoke(
+                new Member(new TypeReference("DomainResult"), "Failure"),
+                new Constant($"for {relName}.{e.ActionName} matched zero targets.")))]));
+        return new Block([matchedVar, loop, zeroCheck]);
+    }
+
+    /// <summary>Resolves the stage enum CLR name for a target entity of a relationship
+    /// (e.g. <c>LineStage</c>), from analysis when present, else the default convention.</summary>
+    private string TargetStageEnumTypeName(string relationshipName) {
+        var targetName = _entity.Navigations.FirstOrDefault(n =>
+            string.Equals(n.Name, relationshipName, StringComparison.Ordinal))?.Target.TypeName;
+        if (targetName is not null && _domain is not null) {
+            var targetEntity = _domain.Types.OfType<Entity>()
+                .FirstOrDefault(t => string.Equals(t.Name, targetName, StringComparison.Ordinal));
+            if (targetEntity is not null && _analysis is not null) {
+                var esm = _analysis.GetMetadata<EntityStructureMetadata>(targetEntity);
+                if (esm?.StageEnumTypeName is { } custom) return custom;
+            }
+            if (targetEntity is not null && targetEntity.Stages.Count > 0)
+                return $"{targetName}Stage";
+        }
+        return $"{targetName ?? relationshipName}Stage";
     }
 
     /// <summary>

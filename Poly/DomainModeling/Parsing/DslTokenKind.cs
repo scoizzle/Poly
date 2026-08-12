@@ -67,6 +67,7 @@ public enum DslTokenKind {
     Create,
     In,
     Invoke,
+    For,
     Entry,
     Exit,
     Delete,

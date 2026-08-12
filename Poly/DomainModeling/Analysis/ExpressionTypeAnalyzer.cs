@@ -141,6 +141,10 @@ internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
                 if (invoke.Filter is not null)
                     WalkExpression(context, invoke.Filter, props, parameters, enumTypes);
                 break;
+            case ForEachInvokeEffect efe:
+                foreach (var binding in efe.ParameterBindings)
+                    WalkExpression(context, binding.Expression, props, parameters, enumTypes);
+                break;
         }
     }
 

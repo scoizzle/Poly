@@ -21,6 +21,7 @@ public abstract class EffectDispatch<TResult> {
     protected virtual TResult CreateEntityInstance(CreateEntityInstance e) => Default();
     protected virtual TResult CreateEntityInRelationship(CreateEntityInRelationshipEffect e) => Default();
     protected virtual TResult InvokeAction(InvokeActionEffect e) => Default();
+    protected virtual TResult ForEachInvoke(ForEachInvokeEffect e) => Default();
     protected virtual TResult Composite(CompositeEffect e) => Default();
     protected virtual TResult Conditional(ConditionalEffect e) => Default();
 
@@ -34,6 +35,7 @@ public abstract class EffectDispatch<TResult> {
         CreateEntityInstance e => CreateEntityInstance(e),
         CreateEntityInRelationshipEffect e => CreateEntityInRelationship(e),
         InvokeActionEffect e => InvokeAction(e),
+        ForEachInvokeEffect e => ForEachInvoke(e),
         CompositeEffect e => Composite(e),
         ConditionalEffect e => Conditional(e),
         _ => throw new NotSupportedException(

@@ -634,7 +634,7 @@ public sealed class PolyDslParser : DslCursor {
                 TokenKind.If => " — expected '(condition)'",
                 _ => "",
             };
-            throw Error($"Expected effect (transition, assign, create, invoke, if){tailHint}, got '{Current.Text}'");
+            throw Error($"Expected effect (transition, assign, create, invoke, for, if){tailHint}, got '{Current.Text}'");
         }
 
         switch (match.PatternName) {
@@ -673,6 +673,10 @@ public sealed class PolyDslParser : DslCursor {
             case "invoke":
                 Consume(match);
                 return ParseInvokeEffectTail();
+
+            case "for":
+                Consume(match);
+                return ParseForEffect();
 
             case "if":
                 // Head is `if (` — the condition and then/else bodies are parsed
@@ -790,6 +794,66 @@ public sealed class PolyDslParser : DslCursor {
                 "'invoke ... where' requires a relationship target (not self-invoke)");
 
         return new InvokeActionEffect(actionName, bindings, targetRelationship, quantifier, filter);
+    }
+
+    /// <summary>
+    /// Parses the <c>for</c> effect:
+    /// <c>for Rel as name [where name.Policy | where name in Stage] invoke name.Action(args)</c>.
+    /// Iterates every record reachable via the OneToMany relationship and invokes the action
+    /// on each (fail-fast, zero-matches fail). The predicate is a named policy or stage
+    /// membership on the target entity — never an inline expression.
+    /// </summary>
+    private Effect ParseForEffect() {
+        var relName = ExpectIdentifier(TokenKind.Identifier, "relationship name");
+        Expect(TokenKind.As);
+        var binderName = ExpectIdentifier(TokenKind.Identifier, "binder name (as name)");
+
+        ForEachPredicate? predicate = null;
+        if (Current.Kind == TokenKind.Identifier &&
+            string.Equals(Current.Text, "where", StringComparison.OrdinalIgnoreCase)) {
+            Advance(); // consume 'where'
+            var subject = ExpectIdentifier(TokenKind.Identifier, "binder name in predicate");
+            if (!string.Equals(subject, binderName, StringComparison.Ordinal))
+                throw Error($"'for' predicate subject must be the binder '{binderName}', got '{subject}'");
+            // Space-separated path-prefix convention (like `order Code`): `line IsPaid`
+            // = named policy on the target; `line in Active` = stage membership.
+            if (Current.Kind == TokenKind.In) {
+                Advance();
+                var stageName = ExpectIdentifier(TokenKind.Identifier, "stage name");
+                predicate = new ForEachStageMembership(stageName);
+            }
+            else if (Current.Kind == TokenKind.Identifier) {
+                var policyName = Current.Text;
+                Advance();
+                predicate = new ForEachNamedPolicy(policyName);
+            }
+            else {
+                throw Error("'where' in a 'for' must be a named policy (name Policy) or stage membership (name in Stage)");
+            }
+        }
+
+        Expect(TokenKind.Invoke);
+        var target = ExpectIdentifier(TokenKind.Identifier, "binder name");
+        if (!string.Equals(target, binderName, StringComparison.Ordinal))
+            throw Error($"'for' invoke target must be the binder '{binderName}', got '{target}'");
+        Expect(TokenKind.Dot);
+        var actionName = ExpectIdentifier(TokenKind.Identifier, "action name");
+
+        var bindings = new List<PropertyBinding>();
+        if (Current.Kind == TokenKind.LParen) {
+            Advance(); // consume '('
+            while (Current.Kind != TokenKind.RParen) {
+                var paramName = ExpectIdentifier(TokenKind.Identifier, "parameter name");
+                Expect(TokenKind.Colon);
+                var paramExpr = ParseExpression();
+                bindings.Add(new PropertyBinding(paramName, paramExpr));
+                if (Current.Kind == TokenKind.Comma)
+                    Advance(); // consume ','
+            }
+            Expect(TokenKind.RParen);
+        }
+
+        return new ForEachInvokeEffect(relName, binderName, predicate, actionName, bindings);
     }
 
     private List<PropertyBinding> ParsePropertyInitializers() {

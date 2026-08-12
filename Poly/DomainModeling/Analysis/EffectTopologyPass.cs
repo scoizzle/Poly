@@ -92,6 +92,11 @@ internal sealed class EffectTopologyPass : INodeAnalyzer {
                             entity.Name, action.Name,
                             iae.TargetRelationship, iae.ActionName));
                         break;
+                    case ForEachInvokeEffect efe:
+                        crossInvokes.Add(new CrossEntityInvoke(
+                            entity.Name, action.Name,
+                            efe.RelationshipName, efe.ActionName));
+                        break;
                 }
             });
         }

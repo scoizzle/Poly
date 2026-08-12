@@ -417,6 +417,33 @@ public sealed class DomainDslPrinter {
             _sb.AppendLine();
             return null;
         }
+
+        protected override object? ForEachInvoke(ForEachInvokeEffect efe) {
+            _sb.Append($"for {efe.RelationshipName} as {efe.BinderName}");
+            switch (efe.Predicate) {
+                case ForEachNamedPolicy { PolicyName: var policyName }:
+                    _sb.Append($" where {efe.BinderName} {policyName}");
+                    break;
+                case ForEachStageMembership { StageName: var stageName }:
+                    _sb.Append($" where {efe.BinderName} in {stageName}");
+                    break;
+            }
+            _sb.Append($" invoke {efe.BinderName}.{efe.ActionName}");
+            if (efe.ParameterBindings.Count > 0) {
+                _sb.Append('(');
+                var firstBinding = true;
+                foreach (var binding in efe.ParameterBindings) {
+                    if (!firstBinding) _sb.Append(", ");
+                    _sb.Append(binding.PropertyName);
+                    _sb.Append(": ");
+                    _sb.Append(_printer.PrintExpression(binding.Expression));
+                    firstBinding = false;
+                }
+                _sb.Append(')');
+            }
+            _sb.AppendLine();
+            return null;
+        }
     }
 
     private void PrintConditionalEffect(ConditionalEffect ce, string indent) {

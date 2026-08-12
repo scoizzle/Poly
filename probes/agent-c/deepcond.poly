@@ -1,0 +1,49 @@
+domain DeepConditionals
+
+Item: entity {
+  Status: Text
+  Score: Number default(0)
+
+  A: stage {
+    grade: action {
+      if (Score >= 90) {
+        assign Status to "A"
+      } else if (Score >= 80) {
+        assign Status to "B"
+      } else if (Score >= 70) {
+        assign Status to "C"
+      } else if (Score >= 60) {
+        assign Status to "D"
+      } else if (Score >= 50) {
+        assign Status to "E"
+      } else if (Score >= 40) {
+        assign Status to "F"
+      } else if (Score >= 30) {
+        assign Status to "G"
+      } else if (Score >= 20) {
+        assign Status to "H"
+      } else if (Score >= 10) {
+        assign Status to "I"
+      } else if (Score >= 0) {
+        assign Status to "J"
+      } else {
+        assign Status to "Z"
+      }
+    }
+    empty: action {
+      if (Status is "x") {
+      } else {
+      }
+      assign Status to "after_empty"
+    }
+    ifonlytrans: action {
+      if (Score > 50) {
+        transition to B
+      } else {
+        transition to C
+      }
+    }
+  }
+  B: stage { entry { assign Status to "in_b" } }
+  C: stage { entry { assign Status to "in_c" } }
+}

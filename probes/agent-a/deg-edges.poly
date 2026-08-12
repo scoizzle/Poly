@@ -1,0 +1,13 @@
+domain DegenerateEdges
+
+NoStages: entity {
+  Val: Text
+  JustAssign: action { assign Val to "x" }
+  TryTransition: action { transition to Missing }
+}
+
+HasStage: entity {
+  Draft: stage {
+    Go: action { transition to Missing }
+  }
+}

@@ -1,0 +1,15 @@
+domain IfInvoke
+Item: entity {
+  Status: Text
+  Flag: Boolean
+  A: stage {
+    mark: action { assign Status to "marked" }
+    go: action {
+      if (Flag is true) {
+        invoke mark
+      }
+      transition to B
+    }
+  }
+  B: stage { }
+}

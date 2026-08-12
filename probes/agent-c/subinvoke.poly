@@ -1,0 +1,22 @@
+domain SubInvoke
+
+Hub: entity {
+  Status: Text
+  followers: many Follower
+
+  when followers Active {
+    invoke poke
+    assign Status to "poked"
+  }
+  poke: action {
+    assign Status to "poke_called"
+  }
+  Active: stage { }
+}
+
+Follower: entity {
+  Name: Text
+  hub: Hub
+  Active: stage { }
+  Done: stage { }
+}

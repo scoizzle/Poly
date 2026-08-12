@@ -1,0 +1,20 @@
+domain DegenerateEmptyTypes
+
+Host: entity {
+  One: one Child
+  Many: many Child
+
+  CreateOne: action {
+    create Child { }
+  }
+
+  CreateMany: action {
+    create in Many { }
+  }
+}
+
+Child: entity {
+  Code: Text
+  Num: Number
+  Flag: Boolean
+}

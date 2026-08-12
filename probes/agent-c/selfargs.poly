@@ -1,0 +1,14 @@
+domain SelfInvokeArgs
+
+Item: entity {
+  Status: Text
+
+  A: stage {
+    selfArgs: action (m: Text) {
+      assign Status to m
+      invoke selfArgs(m: "again")
+      transition to B
+    }
+  }
+  B: stage { entry { assign Status to "in_b" } }
+}

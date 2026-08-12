@@ -1,0 +1,37 @@
+domain CreatePaths
+
+Parent: entity {
+  Status: Text
+  children: many Child
+
+  A: stage {
+    createInIf: action {
+      if (Status is "go") {
+        create in children { Name: "if_child" }
+      } else {
+        create in children { Name: "else_child" }
+      }
+    }
+    createInEntry: action {
+      transition to B
+    }
+  }
+  B: stage {
+    entry {
+      create in children { Name: "entry_child" }
+    }
+    exit {
+      create in children { Name: "exit_child" }
+    }
+  }
+  when children Active {
+    create in children { Name: "sub_child" }
+  }
+}
+
+Child: entity {
+  Name: Text
+  parent: Parent
+  Active: stage { }
+  Done: stage { }
+}

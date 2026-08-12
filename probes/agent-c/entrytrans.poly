@@ -1,0 +1,18 @@
+domain EntryTrans
+
+Item: entity {
+  Status: Text
+
+  A: stage {
+    entry {
+      transition to B
+    }
+    go: action {
+      transition to A
+    }
+  }
+  B: stage {
+    entry { assign Status to "in_b" }
+  }
+  C: stage { }
+}

@@ -1,0 +1,36 @@
+domain DegenerateDuplicates
+
+Order: entity {
+  Total: Number
+
+  DupPolicy: policy { Total > 0 }
+
+  DupAction: action { assign Total to 1 }
+
+  Draft: stage {
+    Submit: action { transition to Active }
+  }
+  Active: stage {
+    Submit: action { assign Total to 2 }
+  }
+  Done: stage {
+    Submit: action { assign Total to 3 }
+  }
+}
+
+Note: entity {
+  order: Order
+}
+
+Comment: entity {
+  order: Order
+}
+
+SelfRef: entity {
+  parent: SelfRef
+  kids: many SelfRef
+  Start: stage {}
+  Loop: action {
+    invoke Loop
+  }
+}

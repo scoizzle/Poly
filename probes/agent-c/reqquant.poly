@@ -1,0 +1,13 @@
+domain RequireQuant
+Parent: entity {
+  Status: Text
+  children: many Child
+  AtLimit: policy { count children > 1 }
+  A: stage {
+    gate: action require AtLimit { assign Status to "gated_ok" }
+  }
+}
+Child: entity {
+  Name: Text
+  parent: Parent
+}

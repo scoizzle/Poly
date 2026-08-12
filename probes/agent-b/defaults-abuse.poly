@@ -1,0 +1,24 @@
+domain TypeAbuseDefaults
+
+Color: enum { Red, Green, Blue }
+
+Thing: entity {
+  TNow: Text default(now)
+  TToday: Text default(today)
+  TGuid: Text default(guid)
+  NNow: Number default(now)
+  NToday: Number default(today)
+  NGuid: Number default(guid)
+  DNow: Date default(now)
+  DToday: Date default(today)
+  DGuid: Date default(guid)
+  DTNow: DateTime default(now)
+  DTToday: DateTime default(today)
+  DTGuid: DateTime default(guid)
+  BNow: Boolean default(now)
+  BToday: Boolean default(today)
+  BGuid: Boolean default(guid)
+  CNow: Color default(now)
+  CToday: Color default(today)
+  CGuid: Color default(guid)
+}

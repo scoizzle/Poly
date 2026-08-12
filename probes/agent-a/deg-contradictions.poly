@@ -1,0 +1,12 @@
+domain DegenerateContradictions
+
+Item: entity {
+  Age: Number range(10, 20) default(5)
+  Rev: Number range(10, 0)
+  Zero: Number range(0, 0)
+  TextLen: Text length(5, 1)
+  ZeroLen: Text length(0, 0)
+  SelfDefault: Text required default("x")
+  MinGtMax: Text length(3, 2)
+  GtDefault: Number range(0, 10) default(50)
+}

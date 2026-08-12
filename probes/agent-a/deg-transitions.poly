@@ -1,0 +1,23 @@
+domain DegenerateTransitions
+
+Order: entity {
+  Status: Text
+  Count: Number
+
+  Draft: stage {
+    Submit: action {
+      assign Status to "submitted"
+      transition to Active
+    }
+  }
+  Active: stage {
+    entry { assign Status to "active_entered" }
+    exit  { assign Count to 99 }
+  }
+  Done: stage {
+    entry { assign Status to "done_entered" }
+  }
+  Reopen: action {
+    transition to Done
+  }
+}

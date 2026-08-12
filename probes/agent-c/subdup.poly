@@ -1,0 +1,22 @@
+domain SubDup
+
+Subscriber: entity {
+  Status: Text
+  count: Number default(0)
+  targets: many Target
+
+  when targets Active {
+    assign count to count + 1
+  }
+  when targets Active {
+    assign Status to "dup_active"
+  }
+  when targets Active as t {
+    assign count to count + 1
+  }
+}
+
+Target: entity {
+  Active: stage { }
+  Completed: stage { }
+}

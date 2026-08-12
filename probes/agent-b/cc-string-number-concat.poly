@@ -1,0 +1,9 @@
+domain ConcatDivergence
+
+T: entity {
+  Name: Text
+  Draft: stage {
+    GoA: action { assign Name to Name + 5 }
+    GoB: action { assign Name to 5 + Name }
+  }
+}

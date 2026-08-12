@@ -1,0 +1,16 @@
+domain SubQuantifier
+
+Subscriber: entity {
+  Status: Text
+  first: Target
+  targets: many Target
+
+  when any first Active {
+    assign Status to "any_first"
+  }
+}
+
+Target: entity {
+  Active: stage { }
+  Completed: stage { }
+}

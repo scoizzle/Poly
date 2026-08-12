@@ -83,6 +83,38 @@ public sealed class DomainToCSharpExporter {
         }
     }
 
+    /// <summary>
+    /// Assigns each subscription its generated handler method name. The name is
+    /// quantifier-aware (<c>WhenAny/WhenAll/WhenEach{Target}{Stage}</c>) and
+    /// disambiguated with a <c>_{n}</c> suffix when multiple subscriptions share the
+    /// same method signature (same quantifier + peer-binding shape) on the same
+    /// relationship+stage — two <c>when Rel Stage</c> (Each) blocks must each fire.
+    /// Keyed by reference so even structurally-identical subscriptions get distinct names.
+    /// </summary>
+    internal static Dictionary<SubscriptionInfo, string> BuildHandlerNames(
+        IEnumerable<KeyValuePair<string, List<SubscriptionInfo>>> subscriptionsBySubscriber) {
+        var map = new Dictionary<SubscriptionInfo, string>(ReferenceEqualityComparer.Instance);
+        foreach (var (_, subList) in subscriptionsBySubscriber) {
+            var counts = new Dictionary<(string Stage, string Target, string Quantifier, bool HasPeer), int>();
+            foreach (var info in subList) {
+                var hasPeer = info.Subscription.PeerBinding is { Length: > 0 };
+                var quantifier = QuantifierName(info.Subscription.Quantifier);
+                var key = (info.StageName, info.TargetEntity.Name, quantifier, hasPeer);
+                counts.TryGetValue(key, out var occurrence);
+                counts[key] = occurrence + 1;
+                var suffix = occurrence == 0 ? "" : $"_{occurrence + 1}";
+                map[info] = $"When{quantifier}{info.TargetEntity.Name}{info.StageName}{suffix}";
+            }
+        }
+        return map;
+    }
+
+    private static string QuantifierName(StageSubscriptionQuantifier quantifier) => quantifier switch {
+        StageSubscriptionQuantifier.Any => "Any",
+        StageSubscriptionQuantifier.All => "All",
+        _ => "Each",
+    };
+
     // ── Per-entity builder ──────────────────────────────────────
 
     internal static IReadOnlyList<TypeDefinitionNode> BuildTypeDefsForEntity(
@@ -92,7 +124,8 @@ public sealed class DomainToCSharpExporter {
         IReadOnlyDictionary<string, Entity> entityLookup,
         INodeMetadataProvider metadata,
         List<SubscriptionInfo>? targetSubs = null,
-        List<SubscriptionInfo>? subscriberSubs = null) {
+        List<SubscriptionInfo>? subscriberSubs = null,
+        IReadOnlyDictionary<SubscriptionInfo, string>? handlerNames = null) {
 
         ArgumentNullException.ThrowIfNull(metadata);
 
@@ -280,13 +313,13 @@ public sealed class DomainToCSharpExporter {
         if (targetSubs is { Count: > 0 }) {
             postTransitionNodes = new Dictionary<string, IReadOnlyList<Node>>(
                 StringComparer.Ordinal);
-            foreach (var group in targetSubs.GroupBy(s => s.StageName)) {
-                var nodes = new List<Node>();
-                foreach (var info in group)
-                    nodes.Add(new Invoke(
+            foreach (var stageGroup in targetSubs.GroupBy(s => s.StageName)) {
+                var nodes = new List<Node> {
+                    new Invoke(
                         new Member(new ThisReference(),
-                            $"Notify{info.StageName}Subscribers")));
-                postTransitionNodes[group.Key] = nodes;
+                            $"Notify{stageGroup.Key}Subscribers"))
+                };
+                postTransitionNodes[stageGroup.Key] = nodes;
             }
         }
 
@@ -324,15 +357,15 @@ public sealed class DomainToCSharpExporter {
         }
 
         // ── Target entity: subscription registry ──────────────────
-        // Fields, register methods, and notify methods for each stage/subscriber pair.
+        // One registry field + register method per (stage, subscriber) pair; the notify
+        // method calls EVERY subscription's handler for that pair — a subscriber may
+        // declare any/all/Each (or multiple Each) reactions on the same relation+stage,
+        // each with a quantifier-disambiguated handler name.
         if (targetSubs is { Count: > 0 }) {
-            var emitted = new HashSet<(string Stage, string SourceType)>();
-            foreach (var info in targetSubs) {
-                var key = (info.StageName, info.SourceEntity.Name);
-                if (!emitted.Add(key)) continue;
-
-                var srcType = new NamedTypeReference(info.SourceEntity.Name);
-                var fieldName = $"_{ToCamelCase(info.StageName)}Subscribers";
+            foreach (var group in targetSubs.GroupBy(i => (i.StageName, i.SourceEntity.Name))) {
+                var infos = group.ToList();
+                var srcType = new NamedTypeReference(infos[0].SourceEntity.Name);
+                var fieldName = $"_{ToCamelCase(infos[0].StageName)}Subscribers";
                 var paramName = "subscriber";
 
                 // private List<TA>? _DamagedSubscribers;
@@ -344,11 +377,7 @@ public sealed class DomainToCSharpExporter {
                     AccessModifier: AccessModifier.Private
                 ));
 
-                // internal void RegisterDamagedSubscriber(TA sub) {
-                //     if (_damagedSubscribers == null)
-                //         _damagedSubscribers = new List<TA>();
-                //     _damagedSubscribers.Add(sub);
-                // }
+                // internal void RegisterDamagedSubscriber(TA sub) { … }
                 var fieldAcc = new Member(new ThisReference(), fieldName);
                 var registerBody = new Block([
                     new IfStatement(
@@ -364,7 +393,7 @@ public sealed class DomainToCSharpExporter {
                         [new Parameter(paramName)])
                 ]);
                 methods.Add(new MethodDefinitionNode(
-                    $"Register{info.SourceEntity.Name}{info.StageName}Subscriber",
+                    $"Register{infos[0].SourceEntity.Name}{infos[0].StageName}Subscriber",
                     new TypeReference("void"),
                     Parameters: [new Parameter(paramName, srcType)],
                     Body: registerBody,
@@ -373,30 +402,28 @@ public sealed class DomainToCSharpExporter {
 
                 // internal void NotifyDamagedSubscribers() {
                 //     if (_damagedSubscribers != null)
-                //         foreach (var sub in _damagedSubscribers)
-                //             sub.WhenBookDamaged();      // notification-only
-                //             // or sub.WhenBookDamaged(this);  // peer-dependent
+                //         foreach (var sub in _damagedSubscribers) {
+                //             sub.WhenAnyPaymentCaptured();
+                //             sub.WhenAllPaymentCaptured();
+                //             sub.WhenEachPaymentCaptured(this);
+                //         }
                 // }
-                var handlerName = $"When{info.TargetEntity.Name}{info.StageName}";
-                var subVar = "sub";
-                Node[] invokeArgs = info.Subscription.PeerBinding is { Length: > 0 }
-                    ? [new ThisReference()]
-                    : [];
-                var foreachBody = new Block([
-                    new Invoke(
-                        new Member(new Variable(subVar), handlerName),
-                        invokeArgs)
-                ]);
+                var notifyCalls = infos.Select(info => (Node)new Invoke(
+                    new Member(new Variable("sub"), handlerNames![info]),
+                    info.Subscription.PeerBinding is { Length: > 0 }
+                        ? [new ThisReference()]
+                        : [])).ToList();
+                var foreachBody = new Block(notifyCalls);
                 var notifyBody = new IfStatement(
                     new NotEqual(
                         new Member(new ThisReference(), fieldName),
                         new Constant(null)),
                     new ForEachLoop(
-                        new Variable(subVar),
+                        new Variable("sub"),
                         new Member(new ThisReference(), fieldName),
                         foreachBody));
                 methods.Add(new MethodDefinitionNode(
-                    $"Notify{info.StageName}Subscribers",
+                    $"Notify{infos[0].StageName}Subscribers",
                     new TypeReference("void"),
                     Body: new Block([notifyBody]),
                     AccessModifier: AccessModifier.Internal
@@ -407,7 +434,7 @@ public sealed class DomainToCSharpExporter {
         // ── Subscriber entity: subscription handler methods ──────
         if (subscriberSubs is { Count: > 0 }) {
             foreach (var info in subscriberSubs) {
-                var handlerName = $"When{info.TargetEntity.Name}{info.StageName}";
+                var handlerName = handlerNames![info];
                 var peerBinding = info.Subscription.PeerBinding;
                 IReadOnlyList<Parameter>? handlerParams = peerBinding is { Length: > 0 }
                     ? [new Parameter(peerBinding, new NamedTypeReference(info.TargetEntity.Name))]
@@ -634,8 +661,13 @@ public sealed class DomainToCSharpExporter {
                 var isMany = rel.Cardinality is RelationshipCardinality.OneToMany
                              or RelationshipCardinality.ManyToMany;
 
+                // Multiple subscriptions on the same relation+stage (any/all/Each) share
+                // ONE registry list on the target — register once per stage, or the
+                // subscriber is added N times and each handler fires N times.
+                var perStage = group.GroupBy(s => s.StageName).Select(g => g.First());
+
                 if (isMany) {
-                    foreach (var info in group) {
+                    foreach (var info in perStage) {
                         var subVarName = "target";
                         bodyNodes.Add(new ForEachLoop(
                             new Variable(subVarName),
@@ -651,7 +683,7 @@ public sealed class DomainToCSharpExporter {
                     }
                 }
                 else {
-                    foreach (var info in group) {
+                    foreach (var info in perStage) {
                         bodyNodes.Add(new Invoke(
                             new Member(
                                 new Member(new ThisReference(), pascalNavName),
@@ -817,15 +849,18 @@ public sealed class DomainToCSharpExporter {
             [new Variable(localName)]));
 
         // Subscription registration: loan.RegisterPatronOverdueSubscriber(this)
+        // One registration per stage — multiple subscriptions on the same relation+stage
+        // (any/all/Each) share the target's single registry list.
         if (subscriberSubs is { Count: > 0 }) {
-            foreach (var info in subscriberSubs) {
-                if (string.Equals(info.Relationship.Name, rel.Name, StringComparison.Ordinal)) {
-                    bodyNodes.Add(new Invoke(
-                        new Member(
-                            new Variable(localName),
-                            $"Register{info.SourceEntity.Name}{info.StageName}Subscriber"),
-                        [new ThisReference()]));
-                }
+            foreach (var info in subscriberSubs
+                .Where(i => string.Equals(i.Relationship.Name, rel.Name, StringComparison.Ordinal))
+                .GroupBy(s => s.StageName)
+                .Select(g => g.First())) {
+                bodyNodes.Add(new Invoke(
+                    new Member(
+                        new Variable(localName),
+                        $"Register{info.SourceEntity.Name}{info.StageName}Subscriber"),
+                    [new ThisReference()]));
             }
         }
 

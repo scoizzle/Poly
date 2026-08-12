@@ -389,10 +389,10 @@ public class SurfaceExtensionDogfoodTests {
         await Assert.That(csharp).IsNotNull().And.IsNotEmpty();
 
         // Peer handler shape: typed param + binder name; notify uses this.
-        await Assert.That(csharp!).Contains("WhenOrderActive");
+        await Assert.That(csharp!).Contains("WhenEachOrderActive");
         await Assert.That(csharp).Contains("Order order");
         await Assert.That(csharp.Contains("NotifyActiveSubscribers")
-            || csharp.Contains("WhenOrderActive(")).IsTrue();
+            || csharp.Contains("WhenEachOrderActive(")).IsTrue();
     }
 
     [Test]
@@ -403,7 +403,7 @@ public class SurfaceExtensionDogfoodTests {
         var export = OracleTool.ExportDomainToCSharp(sessionId);
         await Assert.That(export.Success).IsTrue();
         var csharp = ExtractCSharp(export);
-        await Assert.That(csharp!).Contains("WhenOrderActive");
+        await Assert.That(csharp!).Contains("WhenEachOrderActive");
         await Assert.That(csharp).Contains("Order order");
     }
 
@@ -439,7 +439,7 @@ public class SurfaceExtensionDogfoodTests {
 
         var exportCs = OracleTool.ExportDomainToCSharp(sessionId);
         await Assert.That(exportCs.Success).IsTrue();
-        await Assert.That(ExtractCSharp(exportCs)!).Contains("WhenOrderActive");
+        await Assert.That(ExtractCSharp(exportCs)!).Contains("WhenEachOrderActive");
 
         var exportDsl = DslTool.ExportDsl(sessionId);
         await Assert.That(exportDsl.Success).IsTrue();
@@ -932,7 +932,7 @@ public class SurfaceExtensionDogfoodTests {
             var csharp = ExtractCSharp(export) ?? "";
             // Must not invent a clean peer param for an unbound body
             await Assert.That(
-                csharp.Contains("WhenOrderActive") && csharp.Contains("Order order")).IsFalse();
+                csharp.Contains("WhenEachOrderActive") && csharp.Contains("Order order")).IsFalse();
         }
         else {
             await Assert.That(export.Success).IsFalse();

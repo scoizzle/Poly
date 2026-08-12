@@ -79,6 +79,10 @@ semantics — confirmed working, matching the guide).
 - **Proposed patch:** include the quantifier (and/or a sequence index) in the generated
   subscriber method name, e.g. `WhenAnyPaymentCaptured` / `WhenAllPaymentCaptured` /
   `WhenEachPaymentCaptured`.
+- **FIXED:** handler names are now quantifier-aware (`WhenAny/WhenAll/WhenEach{Target}{Stage}`,
+  with a `_{n}` suffix for same-signature duplicates), the notify calls every handler for
+  the (stage, subscriber) pair, registration happens once per stage, and post-transition
+  notify fires once. `subscriptions.poly` compiles 0/0 (commit follows).
 
 ## F4 — action/property name collision accepted by analysis, breaks the export
 - **Signal:** compile-fail (silent — no analysis rejection)

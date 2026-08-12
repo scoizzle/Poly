@@ -401,8 +401,8 @@ public class DomainToCSharpExporterTests {
         var patronMethods = patron.Methods?.Select(m => m.Name).ToHashSet(StringComparer.Ordinal) ?? [];
         var loanMethods = loan.Methods?.Select(m => m.Name).ToHashSet(StringComparer.Ordinal) ?? [];
 
-        await Assert.That(patronMethods.Contains("WhenLoanOverdue")).IsTrue();
-        await Assert.That(patronMethods.Contains("WhenLoanReturned")).IsTrue();
+        await Assert.That(patronMethods.Contains("WhenEachLoanOverdue")).IsTrue();
+        await Assert.That(patronMethods.Contains("WhenEachLoanReturned")).IsTrue();
         await Assert.That(patronMethods.Contains("InitializeSubscriptions")).IsTrue();
         await Assert.That(loanMethods.Contains("NotifyOverdueSubscribers")).IsTrue();
         await Assert.That(loanMethods.Contains("NotifyReturnedSubscribers")).IsTrue();
@@ -562,7 +562,7 @@ public class DomainToCSharpExporterTests {
         await Assert.That(types.Any(t => t.Name == "Loan")).IsTrue();
         var patronMethods = types.First(t => t.Name == "Patron").Methods?
             .Select(m => m.Name).ToHashSet(StringComparer.Ordinal) ?? [];
-        await Assert.That(patronMethods.Contains("WhenLoanOverdue")).IsTrue();
+        await Assert.That(patronMethods.Contains("WhenEachLoanOverdue")).IsTrue();
     }
 
     [Test]
@@ -604,7 +604,7 @@ public class DomainToCSharpExporterTests {
         var trackerType = types.First(t => t.Name == "Tracker");
         var orderType = types.First(t => t.Name == "Order");
 
-        var handler = trackerType.Methods?.FirstOrDefault(m => m.Name == "WhenOrderActive");
+        var handler = trackerType.Methods?.FirstOrDefault(m => m.Name == "WhenEachOrderActive");
         await Assert.That(handler).IsNotNull();
         await Assert.That(handler!.Parameters).IsNotNull();
         await Assert.That(handler.Parameters!).Count().IsEqualTo(1);
@@ -658,7 +658,7 @@ public class DomainToCSharpExporterTests {
 
         var types = new DomainToCSharpExporter().Export(domain, analysis);
         var handler = types.First(t => t.Name == "Tracker").Methods?
-            .FirstOrDefault(m => m.Name == "WhenOrderActive");
+            .FirstOrDefault(m => m.Name == "WhenEachOrderActive");
         await Assert.That(handler).IsNotNull();
 
         var assignment = FindFirstAssignment(handler!.Body);
@@ -707,7 +707,7 @@ public class DomainToCSharpExporterTests {
         var trackerType = types.First(t => t.Name == "Tracker");
         var orderType = types.First(t => t.Name == "Order");
 
-        var handler = trackerType.Methods?.FirstOrDefault(m => m.Name == "WhenOrderActive");
+        var handler = trackerType.Methods?.FirstOrDefault(m => m.Name == "WhenEachOrderActive");
         await Assert.That(handler).IsNotNull();
         await Assert.That(handler!.Parameters).IsNotNull();
         await Assert.That(handler.Parameters!).Count().IsEqualTo(1);
@@ -811,7 +811,7 @@ public class DomainToCSharpExporterTests {
 
         var types = new DomainToCSharpExporter().Export(domain, analysis);
         var handler = types.First(t => t.Name == "Tracker").Methods?
-            .FirstOrDefault(m => m.Name == "WhenOrderActive");
+            .FirstOrDefault(m => m.Name == "WhenEachOrderActive");
         await Assert.That(handler).IsNotNull();
         await Assert.That(handler!.Parameters is null || handler.Parameters.Count == 0).IsTrue();
 
@@ -821,6 +821,60 @@ public class DomainToCSharpExporterTests {
         var invoke = FindFirstInvoke(notify!.Body);
         await Assert.That(invoke).IsNotNull();
         await Assert.That(invoke!.Arguments.Length).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task Export_SameRelationStageDifferentQuantifiers_EmitsDistinctHandlers() {
+        // Discovery F3: any/all/Each subscriptions on the same relation+stage collided
+        // to one generated handler name (CS0111/CS0121). Handler names must be
+        // quantifier-aware; the notify calls EVERY handler; registration happens once
+        // (the three share one registry list).
+        var (domain, analysis) = ParseAndAnalyze("""
+            domain Test
+            Payment: entity {
+              Pending: stage {
+                Capture: action { transition to Captured }
+              }
+              Captured: stage { }
+            }
+            Order: entity {
+              Status: Text
+              payments: many Payment
+              Open: stage {
+                when any payments Captured { assign Status to "partiallyFunded" }
+                when all payments Captured { assign Status to "fullyFunded" }
+                when payments Captured as p { assign Status to p Amount }
+              }
+            }
+            """);
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+
+        var order = types.First(t => t.Name == "Order");
+        var handlerNames = order.Methods!.Select(m => m.Name).ToHashSet(StringComparer.Ordinal);
+        await Assert.That(handlerNames.Contains("WhenAnyPaymentCaptured")).IsTrue();
+        await Assert.That(handlerNames.Contains("WhenAllPaymentCaptured")).IsTrue();
+        await Assert.That(handlerNames.Contains("WhenEachPaymentCaptured")).IsTrue();
+
+        // The target notify invokes all three handlers; single registry field.
+        var payment = types.First(t => t.Name == "Payment");
+        var notify = payment.Methods!.Single(m => m.Name == "NotifyCapturedSubscribers");
+        var invokes = notify.Body is null ? [] : FindAllInvokes(notify.Body);
+        var called = invokes.Select(i => i.Delegate is Member m ? m.MemberName : null)
+            .Where(n => n is not null).ToArray();
+        await Assert.That(called).Contains("WhenAnyPaymentCaptured");
+        await Assert.That(called).Contains("WhenAllPaymentCaptured");
+        await Assert.That(called).Contains("WhenEachPaymentCaptured");
+
+        var register = payment.Methods!.Count(m => m.Name == "RegisterOrderCapturedSubscriber");
+        await Assert.That(register).IsEqualTo(1);
+    }
+
+    private static IEnumerable<Invoke> FindAllInvokes(Node node) {
+        if (node is Invoke inv) yield return inv;
+        foreach (var child in node.Children) {
+            if (child is null) continue;
+            foreach (var nested in FindAllInvokes(child)) yield return nested;
+        }
     }
 
     private static Invoke? FindFirstInvoke(Node? node) {
@@ -1185,7 +1239,7 @@ public class DomainToCSharpExporterTests {
         var cs = new CSharpGenerator().Generate(unit);
 
         await Assert.That(cs).Contains("if (this.CurrentStage != OrderStage.Done)");
-        await Assert.That(cs).Contains("WhenOrderLineComplete(OrderLine line)");
+        await Assert.That(cs).Contains("WhenEachOrderLineComplete(OrderLine line)");
     }
 
     [Test]
@@ -1212,8 +1266,8 @@ public class DomainToCSharpExporterTests {
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
-        await Assert.That(cs).Contains("internal void WhenOrderLineComplete(OrderLine line)\n    {\n        this.Total = line.Price + this.Total;");
-        await Assert.That(cs).DoesNotContain("WhenOrderLineComplete(OrderLine line)\n    {\n        if (this.CurrentStage");
+        await Assert.That(cs).Contains("internal void WhenEachOrderLineComplete(OrderLine line)\n    {\n        this.Total = line.Price + this.Total;");
+        await Assert.That(cs).DoesNotContain("WhenEachOrderLineComplete(OrderLine line)\n    {\n        if (this.CurrentStage");
     }
 
     [Test]

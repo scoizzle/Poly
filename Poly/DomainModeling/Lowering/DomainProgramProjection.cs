@@ -85,13 +85,14 @@ public static class DomainProgramProjection {
         result.Add(DomainToCSharpExporter.BuildDomainResultGenericTypeDef());
 
         // ── Build entity type definitions ─────────────────────────
+        var handlerNames = DomainToCSharpExporter.BuildHandlerNames(subscriptionsBySubscriber);
         foreach (var entity in entities) {
             var targetSubs = subscriptionsByTarget.GetValueOrDefault(entity.Name);
             var subscriberSubs = subscriptionsBySubscriber.GetValueOrDefault(entity.Name);
 
             result.AddRange(DomainToCSharpExporter.BuildTypeDefsForEntity(
                 entity, domain, domainRelationships, entityLookup, metadata,
-                targetSubs, subscriberSubs));
+                targetSubs, subscriberSubs, handlerNames));
         }
 
         return result;

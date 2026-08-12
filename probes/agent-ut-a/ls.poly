@@ -1,0 +1,47 @@
+domain Listing
+
+FileType: enum {
+  Regular,
+  Directory,
+  Symlink,
+}
+
+SortOrder: enum {
+  Name,
+  Mtime,
+  Size,
+}
+
+Format: enum {
+  Short,
+  Long,
+}
+
+Directory: entity {
+  Name: Text required
+  files: many File
+  LastListedCount: Number default(0)
+  LastListedHidden: Number default(0)
+  LastListedSize: Number default(0)
+
+  HasFiles: policy { count files > 0 }
+  HasHiddenFiles: policy { count files where Size > 0 > 0 }
+
+  List: action (format: Format, sort: SortOrder, reverse: Boolean, showHidden: Boolean, human: Boolean) {
+    assign LastListedCount to 1
+  }
+}
+
+File: entity {
+  Name: Text required
+  Size: Number range(0, ) default(0)
+  IsHidden: Boolean default(false)
+  FileType: FileType default(Regular)
+  LastModifiedSeq: Number default(0)
+  LastListing: Number default(0)
+  dir: Directory
+
+  Stat: action (format: Format, human: Boolean) {
+    assign LastListing to Size
+  }
+}

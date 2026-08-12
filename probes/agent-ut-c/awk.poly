@@ -1,0 +1,39 @@
+domain Awk
+
+LineStatus: enum {
+  Parsed,
+  Output,
+}
+
+Record: entity {
+  Input: Text required
+  Field1: Text
+  Field2: Text
+  Field3: Text
+  FieldCount: Number range(0, )
+  Sum: Number range(0, ) default(0)
+  Status: LineStatus default(Parsed)
+  stream: InputStream
+
+  Parse: action {
+    assign FieldCount to FieldCount
+  }
+  Accumulate: action (delta: Number) {
+    assign Sum to Sum + delta
+  }
+  Emit: action {
+    assign Status to Output
+  }
+}
+
+InputStream: entity {
+  Name: Text required
+  records: many Record
+  Total: Number range(0, ) default(0)
+
+  SumAll: action {
+    invoke all records.Parse
+    invoke all records.Accumulate(delta: 1)
+  }
+}
+

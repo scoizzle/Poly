@@ -1,0 +1,61 @@
+domain FileOps
+
+Workspace: entity {
+  Name: Text required
+  files: many File
+  folders: many Folder
+  FileCount: Number default(0)
+
+  when files Deleted {
+    assign FileCount to FileCount - 1
+  }
+
+  CopyFrom: action (srcName: Text, srcContent: Text, srcMode: Number, newName: Text) {
+    create in files { Name: newName Content: srcContent Mode: srcMode }
+  }
+  Touch: action (fileName: Text) {
+    create in files { Name: fileName }
+  }
+
+  Mkdir: action (folderName: Text, folderMode: Number) {
+    create in folders { Name: folderName Mode: folderMode }
+  }
+}
+
+Folder: entity {
+  Name: Text required
+  Mode: Number range(0, 511) default(493)
+  ws: Workspace
+}
+
+File: entity {
+  Name: Text required
+  Content: Text
+  Mode: Number range(0, 511) default(420)
+  Size: Number range(0, ) default(0)
+  Protected: Boolean default(false)
+  ws: Workspace
+
+  IsProtected: policy { Protected is true }
+  HasContent: policy { Content is not "" }
+
+  Created: stage {
+    Touch: action {
+      transition to Modified
+    }
+  }
+  Modified: stage {
+    Write: action (content: Text) {
+      assign Content to content
+    }
+    Truncate: action {
+      assign Content to ""
+    }
+    Delete: action
+      require not IsProtected
+    {
+      transition to Deleted
+    }
+  }
+  Deleted: stage { }
+}

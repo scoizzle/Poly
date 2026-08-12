@@ -1,0 +1,16 @@
+domain ParamDefaults
+
+Color: enum { Red, Green, Blue }
+
+Item: entity {
+  Status: Text
+  Color: Color default(Red)
+
+  Paint: action (c: Color default(Green)) {
+    assign Status to "painted"
+  }
+
+  Touch: action (count: Number default(3)) {
+    assign Status to "touched"
+  }
+}

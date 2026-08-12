@@ -144,6 +144,37 @@ ordering, recursive-invoke export depth guard, `Name == null` (G-S6-1 null→"" 
 `now`/`today`/`guid` in policy bodies and as non-final initializer values, `unique`,
 date-literal defaults, cross-type date ops.
 
+## Round 4 (uutils-style utilities) — 2026-08-11
+
+Fourth round via `scripts/discovery-round.sh round4`: agents modeled real-world common
+utilities (coreutils / textutils / findutils). Findings in `probes/findings/round4/`,
+probes in `probes/agent-ut-*/`. Note: agents A and B returned empty reports (context
+exhaustion) — their findings were recovered from the probes they left.
+
+**Fixed:**
+- `create in { Prop: param … }` with multiple bare-identifier (action-param) values
+  misparsed as a path-prefix (`newName.Content` → "Expected property name, got ':'") —
+  the common shape for copying args into a created child. Fixed via an
+  `InPropertyInitializerValue` cursor mode that stops path continuation at an
+  `Identifier :` boundary. `minicopy.poly` now compiles 0/0.
+
+**New findings filed:**
+- 🟠 property names that camelCase to a C# reserved keyword (`Protected` → `protected`)
+  break the export with a CS1001 cascade and no analysis rejection — needs escape-or-
+  reject decision.
+- 🟡 action parameters cannot have defaults (`default` reserved) — modeling friction.
+- 🟠 self-relationship `invoke` (find's recursive traversal) is rejected — surface gap
+  for recursion (fail-loud, but find can't express `-exec` traversal naturally).
+
+**Re-confirmed (already filed):** self-many nav CS1503, entity-policy gating (guide
+documents `require` only), quantified-invoke export dead-end + CS0162 tail, `pattern`
+write-time-only (grep read-filter shift), no glob/regex operator (find `-name '*.c'`),
+no-op-on-empty semantics.
+
+**Verified-clean:** ls (sort options as enums), chmod (mode as Number range 0-511 with
+default), touch/mkdir/cp encode cleanly — utilities with option enums + constrained
+scalars + lifecycle stages map naturally.
+
 ## Export / runtime parity notes
 
 - **🟡 Stage-scoped action not-found message is misleading.** Invoking a stage-scoped

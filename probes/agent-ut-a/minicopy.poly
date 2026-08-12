@@ -1,0 +1,14 @@
+domain MiniCopy
+
+D: entity {
+  fs: many F
+  Copy: action (a: Text, b: Text, c: Number, d: Text) {
+    create in fs { Name: d Content: b Mode: c }
+  }
+}
+
+F: entity {
+  Name: Text required
+  Content: Text
+  Mode: Number range(0, 511) default(420)
+}

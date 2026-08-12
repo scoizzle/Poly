@@ -1,0 +1,6 @@
+domain SelfNav
+
+Node: entity {
+  Name: Text required
+  kids: many Node
+}

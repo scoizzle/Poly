@@ -51,12 +51,30 @@ public static class DomainProgramProjection {
         foreach (var entity in entities) {
             var subList = new List<DomainToCSharpExporter.SubscriptionInfo>();
 
-            foreach (var sub in entity.Subscriptions)
-                DomainToCSharpExporter.CollectSubscriptionInfo(sub, entity, null, domainRelationships, entityLookup, subList, subscriptionsByTarget, metadata, domain);
+            // Read the analysis-published dispatch plans — the SAME metadata the runtime
+            // consumes — instead of re-walking StageSubscription (no per-site derivation).
+            // Fail-closed: an entity with subscriptions whose plan is absent means the
+            // contract analyzer did not publish (missing relationship contracts) — throw,
+            // never silently drop the subscriptions.
+            var entityPlan = metadata.GetMetadata<SubscriptionDispatchPlanMetadata>(entity);
+            if (entityPlan is null && (entity.Subscriptions.Count > 0
+                || entity.Stages.Any(s => s.Subscriptions.Count > 0))) {
+                throw new InvalidOperationException(
+                    $"Subscription dispatch plan metadata is missing for entity '{entity.Name}'.");
+            }
 
-            foreach (var stage in entity.Stages)
-                foreach (var sub in stage.Subscriptions)
-                    DomainToCSharpExporter.CollectSubscriptionInfo(sub, entity, stage.Name, domainRelationships, entityLookup, subList, subscriptionsByTarget, metadata, domain);
+            if (entityPlan is not null)
+                DomainToCSharpExporter.CollectSubscriptionInfo(entityPlan, entity, null, entityLookup, subList, subscriptionsByTarget);
+
+            foreach (var stage in entity.Stages) {
+                var stagePlan = metadata.GetMetadata<SubscriptionDispatchPlanMetadata>(stage);
+                if (stagePlan is null && stage.Subscriptions.Count > 0) {
+                    throw new InvalidOperationException(
+                        $"Subscription dispatch plan metadata is missing for stage '{stage.Name}' on entity '{entity.Name}'.");
+                }
+                if (stagePlan is not null)
+                    DomainToCSharpExporter.CollectSubscriptionInfo(stagePlan, entity, stage.Name, entityLookup, subList, subscriptionsByTarget);
+            }
 
             if (subList.Count > 0)
                 subscriptionsBySubscriber[entity.Name] = subList;

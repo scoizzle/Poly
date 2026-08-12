@@ -112,42 +112,6 @@ public class DomainSemanticLookupFailClosedTests {
         return DomainTestFactory.Create("RelDomain", [order, line], [rel]);
     }
 
-    // ── F5: exporter ResolveRelationship RLM throw ────────────
-
-    [Test]
-    public async Task ResolveRelationship_Throws_WhenAnalysisPresent_ButRlmMissing() {
-        var domain = BuildRelationshipDomain();
-        var analysis = RuntimeAnalysisCache.GetOrAnalyze(domain);
-        // Domain-keyed lookup is catalog-only; strip catalog for fail-closed.
-        analysis.GetMetadataStore().Remove<DomainCatalogMetadata>(domain);
-
-        await Assert.That(() =>
-            DomainToCSharpExporter.ResolveRelationship(domain.Relationships, "Owns", "Order", analysis, domain))
-            .Throws<InvalidOperationException>();
-    }
-
-    [Test]
-    public async Task ResolveRelationship_ReturnsRelationship_WhenRlmPresent_AndFound() {
-        var domain = BuildRelationshipDomain();
-        var analysis = RuntimeAnalysisCache.GetOrAnalyze(domain);
-
-        var rel = DomainToCSharpExporter.ResolveRelationship(domain.Relationships, "Owns", "Order", analysis, domain);
-
-        await Assert.That(rel).IsNotNull();
-        await Assert.That(rel!.Name).IsEqualTo("Owns");
-    }
-
-    [Test]
-    public async Task ResolveRelationship_ReturnsNull_WhenAnalysisLookup_Completes_WithoutMatch() {
-        var domain = BuildRelationshipDomain();
-        var analysis = RuntimeAnalysisCache.GetOrAnalyze(domain);
-
-        // Catalog/RLM present, but the relationship name is not in it — not-found, not throw.
-        var rel = DomainToCSharpExporter.ResolveRelationship(domain.Relationships, "Missing", "Order", analysis, domain);
-
-        await Assert.That(rel).IsNull();
-    }
-
     // ── DomainSemanticLookupExtensions: TryGetStage ───────────
 
     [Test]

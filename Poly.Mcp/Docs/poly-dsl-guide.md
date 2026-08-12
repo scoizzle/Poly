@@ -564,10 +564,13 @@ entity-level `when`.
   assign target.
 - Multi-stage lists use the same binder for every listed stage:
   `when Tracks Active, Completed as order { … }`.
-- **C# export:** peer-dependent `when … as name` emits a handler parameter typed as the
-  target entity and named as the binder; notify calls `handler(this)`. Binder path-prefix
-  (e.g. `order Code`) lowers to that parameter (`order.Code`). Notification-only `when`
-  stays zero-arg. Nested path-prefix under the binder is rejected (analysis + export).
+- **C# export:** the export consumes the analysis-published subscription dispatch plan
+  (the same metadata the runtime uses) and emits a handler per subscription, named by
+  quantifier: `WhenAny`/`WhenAll`/`WhenEach{Target}{Stage}`. Peer-dependent
+  `when … as name` adds a parameter typed as the target entity and named as the binder;
+  notify calls `handler(this)`. Binder path-prefix (e.g. `order Code`) lowers to that
+  parameter (`order.Code`). Notification-only `when` stays zero-arg. Nested path-prefix
+  under the binder is rejected (analysis + export).
 
 ```poly
 // Notification-only — peer values not needed

@@ -27,10 +27,12 @@ namespace Poly.DomainModeling.Lowering;
 /// (<c>sub.When…()</c> or <c>sub.When…(this)</c>).
 /// </summary>
 public sealed class DomainToCSharpExporter {
-    /// <summary>Collected subscription data for cross-entity notification.</summary>
+    /// <summary>Collected subscription data for cross-entity notification — populated from the
+    /// analysis-published <see cref="SubscriptionDispatchPlanMetadata"/> (the SAME dispatch
+    /// plan the runtime consumes), one info per watched target stage.</summary>
     internal sealed record SubscriptionInfo(
         string StageName,
-        StageSubscription Subscription,
+        SubscriptionDispatchPlanEntry Subscription,
         Entity SourceEntity,
         Entity TargetEntity,
         Relationship Relationship,
@@ -52,34 +54,35 @@ public sealed class DomainToCSharpExporter {
     }
 
     /// <summary>
-    /// Collects subscription info for a single <see cref="StageSubscription"/> and
-    /// populates the target/subscriber maps used for code generation.
-    /// Fail-closed: <see cref="ResolveRelationship"/> throws if
-    /// <see cref="RelationshipLookupMetadata"/> is absent (F5).
+    /// Collects the subscription facts for one node's dispatch plan (an entity for
+    /// entity-level subscriptions, or a stage for stage-scoped ones) into the target/
+    /// subscriber maps used for code generation. The exporter consumes the analysis-
+    /// published <see cref="SubscriptionDispatchPlanMetadata"/> rather than re-walking
+    /// <see cref="StageSubscription"/> — one description of what fires, shared with the
+    /// runtime (no per-site re-derivation drift).
     /// </summary>
     internal static void CollectSubscriptionInfo(
-        StageSubscription sub, Entity entity, string? stageName,
-        IReadOnlyList<Relationship> domainRelationships,
+        SubscriptionDispatchPlanMetadata plan,
+        Entity subscriber,
+        string? subscriberStageName,
         IReadOnlyDictionary<string, Entity> entityLookup,
         List<SubscriptionInfo> subList,
-        Dictionary<string, List<SubscriptionInfo>> subscriptionsByTarget,
-        INodeMetadataProvider metadata,
-        Domain? domain = null) {
-        ArgumentNullException.ThrowIfNull(metadata);
+        Dictionary<string, List<SubscriptionInfo>> subscriptionsByTarget) {
+        foreach (var entry in plan.ByRelationshipName.Values.SelectMany(e => e)) {
+            var rel = subscriber.Navigations.FirstOrDefault(n =>
+                string.Equals(n.Name, entry.RelationshipName, StringComparison.Ordinal));
+            if (rel is null) continue;
+            if (!entityLookup.TryGetValue(entry.TargetEntityName, out var targetEntity))
+                continue;
 
-        var rel = ResolveRelationship(domainRelationships, sub.RelationshipName, entity.Name, metadata, domain);
-        if (rel is null) return;
+            foreach (var sName in entry.StageNames) {
+                var info = new SubscriptionInfo(sName, entry, subscriber, targetEntity, rel, subscriberStageName);
+                subList.Add(info);
 
-        if (!entityLookup.TryGetValue(rel.Target.TypeName, out var targetEntity))
-            return;
-
-        foreach (var sName in sub.StageNames) {
-            var info = new SubscriptionInfo(sName, sub, entity, targetEntity, rel, stageName);
-            subList.Add(info);
-
-            if (!subscriptionsByTarget.TryGetValue(targetEntity.Name, out var targetList))
-                subscriptionsByTarget[targetEntity.Name] = targetList = new();
-            targetList.Add(info);
+                if (!subscriptionsByTarget.TryGetValue(targetEntity.Name, out var targetList))
+                    subscriptionsByTarget[targetEntity.Name] = targetList = new();
+                targetList.Add(info);
+            }
         }
     }
 
@@ -1400,29 +1403,6 @@ public sealed class DomainToCSharpExporter {
     }
 
     // ── Type mapping ────────────────────────────────────────────
-
-    internal static Relationship? ResolveRelationship(
-        IReadOnlyList<Relationship> domainRelationships,
-        string relationshipName,
-        string sourceEntityName,
-        INodeMetadataProvider? analysis = null,
-        Domain? domain = null) {
-        if (analysis is not null) {
-            var rlm = analysis.GetRelationshipLookup(domain);
-            if (rlm is null)
-                throw new InvalidOperationException(
-                    "Domain catalog relationship lookup is required for subscription resolution when analysis is present.");
-            if (rlm.TryGetRelationship(sourceEntityName, relationshipName, out var relationship))
-                return relationship;
-            // Metadata-backed lookup complete — relationship not found.
-            return null;
-        }
-
-        // Null-analysis residual for non-product/test callers only.
-        return domainRelationships.FirstOrDefault(r =>
-            string.Equals(r.Name, relationshipName, StringComparison.Ordinal) &&
-            string.Equals(r.Source.TypeName, sourceEntityName, StringComparison.Ordinal));
-    }
 
     internal static Node MapDomainTypeRef(DomainTypeReference domainType,
         Domain? domain = null, INodeMetadataProvider? analysis = null) {

@@ -1697,4 +1697,27 @@ public class DomainToCSharpExporterTests {
 
         await Assert.That(cs).Contains("this.CreateFiles(srcContent, srcMode, newName)");
     }
+
+    [Test]
+    public async Task Export_MissingSubscriptionDispatchPlan_ThrowsFailClosed() {
+        // The exporter consumes SubscriptionDispatchPlanMetadata (same facts as the
+        // runtime). A subscription whose plan is absent means the contract analyzer did
+        // not publish (missing relationship contracts) — fail loud, never silently drop.
+        var (domain, analysis) = ParseAndAnalyze("""
+            domain Test
+            Payment: entity {
+              Captured: stage { }
+            }
+            Order: entity {
+              payments: many Payment
+              when any payments Captured { }
+            }
+            """);
+        var order = domain.Types.OfType<Entity>().First(e => e.Name == "Order");
+        analysis.GetMetadataStore().Remove<SubscriptionDispatchPlanMetadata>(order);
+
+        var ex = Assert.Throws<InvalidOperationException>(
+            () => new DomainToCSharpExporter().Export(domain, analysis));
+        await Assert.That(ex!.Message).Contains("Subscription dispatch plan metadata is missing");
+    }
 }

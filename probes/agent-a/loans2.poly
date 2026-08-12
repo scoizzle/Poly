@@ -1,0 +1,53 @@
+domain DiscoveryLoans2
+
+Loan: entity {
+  DueDate: Date
+  ReferenceDate: Date
+  CheckedOutAt: DateTime
+  ReturnedAt: DateTime
+  Extensions: Number default(0)
+  IsDueSoon: policy { DueDate - 7 <= ReferenceDate }
+  IsDueNext: policy { DueDate + 14 > ReferenceDate }
+  CrossTypeCompare: policy { CheckedOutAt < DueDate }
+
+  Active: stage {
+    entry {
+      assign CheckedOutAt to now
+    }
+    Renew: action {
+      assign DueDate to DueDate + 14
+      assign Extensions to Extensions + 1
+    }
+    RenewShort: action {
+      assign DueDate to DueDate - 14
+    }
+    RenewEntryArith: action {
+      assign DueDate to ReferenceDate + 7
+    }
+    RenewExitArith: action {
+      assign DueDate to ReferenceDate - 7
+    }
+    IfArith: action {
+      if (DueDate + 7 < ReferenceDate) {
+        assign DueDate to ReferenceDate
+      }
+    }
+    IfCompareToday: action {
+      if (DueDate < today) {
+        assign DueDate to today
+      }
+    }
+    CrossTypeAssign: action {
+      assign CheckedOutAt to DueDate
+    }
+    Return: action {
+      assign ReturnedAt to now
+      transition to Returned
+    }
+  }
+  Returned: stage {
+    exit {
+      assign ReturnedAt to now
+    }
+  }
+}

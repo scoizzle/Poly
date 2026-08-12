@@ -1,0 +1,70 @@
+domain DiscoveryLibrary
+
+Patron: entity {
+  Name: Text required
+  MaxItems: Number default(5)
+  CurrentBorrowCount: Number default(0)
+  LastCode: Text
+  FinesTotal: Number default(0)
+  loans: many Loan
+
+  // entity-level (always-active) subscription, notification-only
+  when loans Loaned {
+    assign CurrentBorrowCount to CurrentBorrowCount + 1
+  }
+  when loans Returned {
+    assign CurrentBorrowCount to CurrentBorrowCount - 1
+  }
+
+  // entity-level subscription with peer binder
+  when loans Overdue as loan {
+    assign LastCode to loan Code
+    assign FinesTotal to FinesTotal + 5
+  }
+
+  Active: stage {
+    CheckOut: action (book: Book) {
+      create in loans { Status: "loaned" book: book }
+    }
+    PayFine: action (amount: Number) {
+      assign FinesTotal to FinesTotal - amount
+    }
+  }
+  Suspended: stage {
+    entry {
+      assign MaxItems to 0
+    }
+    exit {
+      assign MaxItems to 5
+    }
+    Reinstate: action {
+      transition to Active
+    }
+  }
+}
+
+Loan: entity {
+  book: Book
+  Status: Text
+  Code: Text
+  borrower: Patron
+
+  Loaned: stage {
+    entry { assign Status to "loaned" }
+    exit { assign Status to "exited" }
+  }
+  Overdue: stage {
+    entry { assign Status to "overdue" }
+    MarkReturned: action {
+      transition to Returned
+    }
+  }
+  Returned: stage {
+    exit { assign Status to "returned" }
+  }
+}
+
+Book: entity {
+  Title: Text required
+  ISBN: Text
+}

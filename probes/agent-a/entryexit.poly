@@ -1,0 +1,17 @@
+domain DiscoveryEntryExit
+
+Loan: entity {
+  DueDate: Date
+  ReferenceDate: Date
+
+  Draft: stage {
+    entry { assign DueDate to ReferenceDate + 7 }
+    exit { assign DueDate to ReferenceDate - 7 }
+    Submit: action {
+      transition to Active
+    }
+  }
+  Active: stage {
+    entry { assign DueDate to ReferenceDate - 7 }
+  }
+}

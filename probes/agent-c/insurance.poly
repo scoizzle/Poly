@@ -1,0 +1,68 @@
+domain DiscoveryInsurance
+
+Insurer: entity {
+  Name: Text required
+  capacity: Number default(1000)
+  claims: many Claim
+
+  // entity-level subscription: always active, with peer binder
+  when claims Settled as c {
+    assign paidOut to paidOut + c Amount
+  }
+  paidOut: Number default(0)
+
+  Active: stage {
+    entry {
+      assign IsOpen to true
+    }
+    exit {
+      assign IsOpen to false
+    }
+    assignCapacity: action (newCap: Number) {
+      assign capacity to newCap
+    }
+    recordSettlement: action (amt: Number) {
+      assign paidOut to paidOut + amt
+    }
+  }
+  IsOpen: Boolean
+}
+
+Claim: entity {
+  Amount: Number range(0, )
+  Status: Text
+  assessor: Text
+  insurer: Insurer
+
+  HasAmount: policy { Amount > 0 }
+
+  Draft: stage {
+    entry {
+      assign Status to "draft"
+    }
+    submit: action
+      require HasAmount
+    {
+      assign Status to "submitted"
+      transition to UnderReview
+    }
+  }
+  UnderReview: stage {
+    assess: action (assessorName: Text) {
+      assign assessor to assessorName
+      assign Status to "assessed"
+    }
+    settle: action
+      require not HasAmount
+    {
+      assign Status to "settled"
+      transition to Settled
+    }
+  }
+  Settled: stage {
+    entry {
+      assign Status to "settled"
+    }
+  }
+  Rejected: stage { }
+}

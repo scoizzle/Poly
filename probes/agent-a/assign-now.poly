@@ -1,0 +1,15 @@
+domain DiscoveryAssignNow
+
+Booking: entity {
+  CheckIn: Date
+  CheckOut: Date
+  CheckedOutAt: DateTime
+  Draft: stage {
+    entry { assign CheckIn to now }
+    Confirm: action {
+      assign CheckIn to now
+      assign CheckOut to now
+      assign CheckedOutAt to now
+    }
+  }
+}

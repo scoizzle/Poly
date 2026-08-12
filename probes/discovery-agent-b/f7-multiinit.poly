@@ -1,0 +1,8 @@
+domain F7
+Member: entity {
+  Email: Text required
+  Status: Text
+  createMid: action (email: Text, status: Text) {
+    create Member { Email: email Status: status }
+  }
+}

@@ -1,0 +1,2 @@
+domain LOpen
+Bin: entity { Code: Text length(3, ) }

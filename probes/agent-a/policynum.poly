@@ -1,0 +1,7 @@
+domain DiscoveryPolicyNum
+
+Booking: entity {
+  CheckIn: Date
+  PolicyDateNum: policy { CheckIn > 5 }
+  PolicyDateStr: policy { CheckIn > "2024-01-01" }
+}

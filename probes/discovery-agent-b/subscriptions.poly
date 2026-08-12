@@ -1,0 +1,36 @@
+domain Subscriptions
+
+Plan: enum { Free, Pro }
+
+Member: entity {
+  Email: Text required
+  Plan: Plan default(Free)
+  orders: many Order
+  tryOrder: action (rush: Boolean) -> Order {
+    if (rush is true) {
+      create in orders { Total: 100 }
+    } else {
+      create in orders { Total: 50 }
+    }
+  }
+  maybeTag: action (rush: Boolean) {
+    if (rush is true) {
+      create in orders { Total: 1 }
+    }
+  }
+  makeOrder: action -> Order {
+    create in orders { Total: 200 }
+  }
+}
+
+Order: entity {
+  Total: Number range(0, 1000)
+  Code: Text
+  Draft: stage {
+    Submit: action {
+      transition to Active
+    }
+  }
+  Active: stage {
+  }
+}

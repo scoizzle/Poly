@@ -1,0 +1,9 @@
+domain R11
+StockLevel: enum { InStock, Low, Out }
+Bin: entity { Status: StockLevel }
+Box: entity {
+  bins: many Bin
+  seed: action {
+    create in bins { Status: "Bogus" }
+  }
+}

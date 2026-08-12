@@ -1,0 +1,9 @@
+domain DiscoveryNumDefault
+
+AuditEvent: entity {
+  NumToday: Number default(today)
+  NumNow: Number default(now)
+  NumGuid: Number default(guid)
+  TextNow: Text default(now)
+  TextToday: Text default(today)
+}

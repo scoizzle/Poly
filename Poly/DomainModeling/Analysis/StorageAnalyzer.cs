@@ -365,6 +365,7 @@ public sealed class StorageAnalyzer {
         new(ToDoubleOrNull(r.Minimum), ToDoubleOrNull(r.Maximum));
 
     private static double? ToDoubleOrNull(object? v) {
+        if (v is null) return null;
         try { return Convert.ToDouble(v); }
         catch { return null; }
     }

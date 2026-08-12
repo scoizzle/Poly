@@ -885,11 +885,21 @@ enforces the same envelopes the domain declares:
   membership at binding).
 
 Action DTO bounds are **implicit**: not declared on the parameter, but derived from the
-action's own effects — a parameter assigned into a constrained property inherits that
-property's constraints, merged by intersection across all such targets. Conflicting
-targets (e.g. different patterns) merge to nothing and emit no attribute. Value-set
-constraints (`enum(...)`, `equals(v)` in the model) propagate as `[AllowedValues(...)]` —
-the member must be one of the union.
+action's own effects — a parameter that flows into a constrained property inherits that
+property's constraints, merged by intersection across all such targets. This covers
+`assign Prop to param` on the action's entity and `create`/`create in` initializer
+bindings (`Prop: param`) on related entities. Conflicting targets (e.g. different
+patterns) merge to nothing and emit no attribute. Value-set constraints (`equals(v)` in
+the model) propagate as `[AllowedValues(...)]` — the member must be one of the union.
+
+**Soundness rules for implicit derivation:**
+- Only **unconditional** flows contribute. A parameter that reaches a target only inside
+  an `if` branch has no universally-provable envelope — intersecting the branch ranges
+  would falsely reject valid inputs, so conditional assigns emit nothing (fail-closed).
+- Open range bounds (`range(0, )`) keep their open side; the emitted `[Range]` caps it at
+  the CLR type's representable bound rather than collapsing it.
+- **Known gap:** a parameter passed through `invoke Rel.Action(param: expr)` does **not**
+  yet inherit the callee's transitive envelopes (the callee's own DTO does).
 
 ## 12. Dual Authoring Path
 

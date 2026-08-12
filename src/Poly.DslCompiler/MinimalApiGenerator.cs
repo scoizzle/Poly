@@ -119,6 +119,18 @@ public sealed class MinimalApiGenerator {
         _ => false,
     };
 
+    /// <summary>CLR-representable numeric bounds for a DTO member type — used to cap open
+    /// range constraints so <c>[Range(min, max)]</c> never emits a raw double.MaxValue.</summary>
+    private static (double Min, double Max) ClrNumericBounds(string clrType) => clrType switch {
+        "byte" => (byte.MinValue, byte.MaxValue),
+        "short" => (short.MinValue, short.MaxValue),
+        "int" => (int.MinValue, int.MaxValue),
+        "long" => (long.MinValue, long.MaxValue),
+        "float" => (float.MinValue, float.MaxValue),
+        "decimal" => (double.MinValue, double.MaxValue),
+        _ => (double.MinValue, double.MaxValue),
+    };
+
     /// <summary>Generates the Minimal API Program.cs as a Syntax IR compilation unit.</summary>
     public CompilationUnitNode GenerateCompilationUnit(string dbContextName) {
         var dtoTypes = new List<TypeDefinitionNode>();
@@ -657,50 +669,106 @@ public sealed class MinimalApiGenerator {
 
     /// <summary>
     /// Derives the implicit constraints an action parameter must satisfy: for each
-    /// property the parameter is directly assigned into (<c>assign Prop to param</c>),
+    /// property the parameter flows into — <c>assign Prop to param</c> on this entity, or a
+    /// <c>create</c>/<c>create in</c> initializer <c>Prop: param</c> on a related entity —
     /// its effective constraints are merged by intersection (<see cref="ConstraintMerge"/>).
     /// Not declared in the DSL — proven by the action's own effects, so the action DTO
     /// enforces the same envelope at the API boundary. Conflicting constraints (e.g. two
     /// targets with different patterns) merge to nothing and are dropped.
+    /// Only UNCONDITIONAL flows contribute: a parameter that reaches a target only inside
+    /// an <c>if</c> branch has no universally-provable envelope, and intersecting the
+    /// branches' ranges would falsely reject valid inputs.
     /// </summary>
     private IReadOnlyList<Constraint> GetActionParamImplicitConstraints(Entity entity, Poly.DomainModeling.Action action, string paramName) {
         var merged = new List<Constraint>();
-        foreach (var assign in FlattenEffects(action.Effects).OfType<AssignEffect>()) {
+        var unconditional = FlattenUnconditionalEffects(action.Effects).ToList();
+
+        foreach (var assign in unconditional.OfType<AssignEffect>()) {
             // In the domain model a parameter reference in an effect value is still a
             // PropertyAccess/ParameterAccess whose name equals the action parameter
             // (the param→bare-identifier rewrite happens later, at C# lowering).
-            var valueName = assign.Value switch {
-                PropertyAccess pa => pa.Name,
-                ParameterAccess pa => pa.Name,
-                _ => null,
-            };
+            var valueName = ValueNameOf(assign.Value);
             if (valueName is null ||
                 !string.Equals(valueName, paramName, StringComparison.Ordinal))
                 continue;
             if (assign.Target is not PropertyAccess target) continue;
-            var targetProp = entity.Properties.FirstOrDefault(p =>
-                string.Equals(p.Name, target.Name, StringComparison.Ordinal));
-            if (targetProp is null) continue;
+            MergeTargetConstraints(merged, entity, target.Name);
+        }
 
-            var targetConstraints = new List<Constraint>();
-            var range = GetPropertyRange(entity, target.Name);
-            if (range is not null) targetConstraints.Add(range);
-            targetConstraints.AddRange(targetProp.Constraints.Where(c =>
-                c is LengthConstraint or PatternConstraint or RequiredConstraint
-                    or EqualityConstraint));
-
-            foreach (var constraint in targetConstraints) {
-                var existingIndex = merged.FindIndex(m => m.GetType() == constraint.GetType());
-                if (existingIndex < 0) {
-                    merged.Add(constraint);
+        foreach (var create in unconditional.OfType<Effect>()
+            .Where(e => e is CreateEntityInstance or CreateEntityInRelationshipEffect)) {
+            var (targetEntityName, initializers) = create switch {
+                CreateEntityInstance cei => (cei.Type.TypeName, cei.Initializers),
+                CreateEntityInRelationshipEffect cer => (
+                    cer.ResolvedTargetType?.TypeName ?? ResolveRelationshipTarget(entity, cer.RelationshipName),
+                    cer.Initializers),
+                _ => (null, null!),
+            };
+            if (targetEntityName is null) continue;
+            var targetEntity = _entities.FirstOrDefault(e =>
+                string.Equals(e.Name, targetEntityName, StringComparison.Ordinal));
+            if (targetEntity is null) continue;
+            foreach (var binding in initializers) {
+                var valueName = ValueNameOf(binding.Expression);
+                if (valueName is null ||
+                    !string.Equals(valueName, paramName, StringComparison.Ordinal))
                     continue;
-                }
-                var net = merged[existingIndex].Merge(constraint);
-                if (net is null) merged.RemoveAt(existingIndex);
-                else merged[existingIndex] = net;
+                MergeTargetConstraints(merged, targetEntity, binding.PropertyName);
             }
         }
+
         return merged;
+    }
+
+    private static string? ValueNameOf(DomainExpression expression) => expression switch {
+        PropertyAccess pa => pa.Name,
+        ParameterAccess pa => pa.Name,
+        _ => null,
+    };
+
+    private void MergeTargetConstraints(List<Constraint> merged, Entity owner, string propertyName) {
+        foreach (var constraint in EffectivePropertyConstraints(owner, propertyName)) {
+            var existingIndex = merged.FindIndex(m => m.GetType() == constraint.GetType());
+            if (existingIndex < 0) {
+                merged.Add(constraint);
+                continue;
+            }
+            var net = merged[existingIndex].Merge(constraint);
+            if (net is null) merged.RemoveAt(existingIndex);
+            else merged[existingIndex] = net;
+        }
+    }
+
+    /// <summary>The effective constraints for a property: its analysis-verified-or-declared
+    /// range plus the declared length/pattern/required/equality constraints.</summary>
+    private IReadOnlyList<Constraint> EffectivePropertyConstraints(Entity owner, string propertyName) {
+        var result = new List<Constraint>();
+        var range = GetPropertyRange(owner, propertyName);
+        if (range is not null) result.Add(range);
+        var prop = owner.Properties.FirstOrDefault(p =>
+            string.Equals(p.Name, propertyName, StringComparison.Ordinal));
+        if (prop is not null)
+            result.AddRange(prop.Constraints.Where(c =>
+                c is LengthConstraint or PatternConstraint or RequiredConstraint
+                    or EqualityConstraint));
+        return result;
+    }
+
+    private string? ResolveRelationshipTarget(Entity source, string relationshipName) {
+        var rel = source.Navigations.FirstOrDefault(n =>
+            string.Equals(n.Name, relationshipName, StringComparison.Ordinal));
+        return rel?.Target.TypeName;
+    }
+
+    /// <summary>Flattens a composite (sequential) effect tree WITHOUT descending into
+    /// conditional branches — only flows that execute on every path.</summary>
+    private static IEnumerable<Effect> FlattenUnconditionalEffects(IEnumerable<Effect> effects) {
+        foreach (var effect in effects) {
+            yield return effect;
+            if (effect is CompositeEffect composite) {
+                foreach (var nested in FlattenUnconditionalEffects(composite.Effects)) yield return nested;
+            }
+        }
     }
 
     /// <summary>Maps effective constraints to DataAnnotations validation attributes, when
@@ -710,9 +778,13 @@ public sealed class MinimalApiGenerator {
         foreach (var constraint in constraints) {
             switch (constraint) {
                 case RangeConstraint r when IsNumericClrType(clrType):
+                    // Open bounds (range(0, ) / range(, 100)) cap at the CLR type's
+                    // representable range — the DTO member can never exceed it — instead
+                    // of emitting a raw double.MaxValue literal.
+                    var (minBound, maxBound) = ClrNumericBounds(clrType);
                     attrs.Add(new AttributeNode("Range", new List<Expression> {
-                        new Constant(r.Minimum is not null ? Convert.ToDouble(r.Minimum) : double.MinValue),
-                        new Constant(r.Maximum is not null ? Convert.ToDouble(r.Maximum) : double.MaxValue)
+                        new Constant(r.Minimum is not null ? Convert.ToDouble(r.Minimum) : minBound),
+                        new Constant(r.Maximum is not null ? Convert.ToDouble(r.Maximum) : maxBound)
                     }));
                     break;
                 case LengthConstraint l when clrType == "string":
@@ -743,21 +815,6 @@ public sealed class MinimalApiGenerator {
 
     private bool IsEnumTypeName(string domainTypeName) =>
         _enumLookup.ContainsKey(domainTypeName);
-
-    private static IEnumerable<Effect> FlattenEffects(IEnumerable<Effect> effects) {
-        foreach (var effect in effects) {
-            yield return effect;
-            switch (effect) {
-                case CompositeEffect composite:
-                    foreach (var nested in FlattenEffects(composite.Effects)) yield return nested;
-                    break;
-                case ConditionalEffect conditional:
-                    foreach (var nested in FlattenEffects(conditional.ThenEffects)) yield return nested;
-                    foreach (var nested in FlattenEffects(conditional.ElseEffects ?? [])) yield return nested;
-                    break;
-            }
-        }
-    }
 
     /// <summary>Builds Syntax IR for a DTO type definition.</summary>
     private void BuildDtoTypes(List<TypeDefinitionNode> dtoTypes, Entity entity) {

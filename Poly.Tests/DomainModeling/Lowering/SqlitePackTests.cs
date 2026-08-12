@@ -430,4 +430,78 @@ public class SqlitePackTests {
         await Assert.That(http).Contains("\"Name\": \"sample\"");
         await Assert.That(http).Contains("\"Qty\": 0");
     }
+
+    [Test]
+    public async Task OpenRange_VerifiedEnvelope_KeepsBoundOpen() {
+        // Hardening: an open range bound (range(0, )) must stay open through the verified
+        // envelope. Convert.ToDouble(null) returns 0 (not null), which previously collapsed
+        // the max to 0 — emitting a bogus CHECK `qty <= 0` and [Range(0, 0)].
+        var compiler = new Compiler();
+        var result = compiler.Compile("""
+            domain Demo
+            Item: entity { Qty: Number range(0, ) }
+            """, CompileMode.All, DbmsPack.Generic);
+        await Assert.That(result.Success).IsTrue();
+
+        var db = result.Files!.Single(f => f.FileName == "DemoDbContext.cs").Source;
+        await Assert.That(db).Contains("qty >= 0");
+        await Assert.That(db).DoesNotContain("qty <= 0");
+
+        var prog = result.Files!.Single(f => f.FileName == "Program.cs").Source;
+        // Open max caps at the CLR type bound (long.MaxValue as double), never 0.
+        await Assert.That(prog).Contains("[Range(0, 9.223372036854776E+18)]");
+        await Assert.That(prog).DoesNotContain("[Range(0, 0)]");
+    }
+
+    [Test]
+    public async Task ActionDto_ConditionalAssigns_EmitNoFalseRejectRange() {
+        // Hardening: a param that flows into DIFFERENT targets on DIFFERENT branches has
+        // no single provable envelope. The old code intersected the branch ranges — amount
+        // would get [Range(0, 10)] (Bonus ∩ Stock) and falsely reject amount=100 which is
+        // valid via the vip==2 branch (Stock accepts up to 1000). Fail-closed: no [Range].
+        var compiler = new Compiler();
+        var result = compiler.Compile("""
+            domain Demo
+            Book: entity {
+              Stock: Number range(0, 1000)
+              Bonus: Number range(0, 10)
+
+              Adjust: action (amount: Number, vip: Number) {
+                if (vip == 1) {
+                  assign Bonus to amount
+                }
+                if (vip == 2) {
+                  assign Stock to amount
+                }
+              }
+            }
+            """, CompileMode.All, DbmsPack.Generic);
+        await Assert.That(result.Success).IsTrue();
+
+        var prog = result.Files!.Single(f => f.FileName == "Program.cs").Source;
+        await Assert.That(prog).Contains("public record AdjustDto");
+        await Assert.That(prog).DoesNotContain("[Range(0, 10)]\n    public long amount");
+    }
+
+    [Test]
+    public async Task ActionDto_CreateInInitializer_PropagatesTargetRange() {
+        // Hardening: a param that flows into a created related entity's constrained property
+        // (create in lines { Qty: qty }) inherits the target's range on the action DTO.
+        var compiler = new Compiler();
+        var result = compiler.Compile("""
+            domain Demo
+            Order: entity {
+              lines: many Line
+
+              AddLine: action (qty: Number) {
+                create in lines { Qty: qty }
+              }
+            }
+            Line: entity { Qty: Number range(1, 50) }
+            """, CompileMode.All, DbmsPack.Generic);
+        await Assert.That(result.Success).IsTrue();
+
+        var prog = result.Files!.Single(f => f.FileName == "Program.cs").Source;
+        await Assert.That(prog).Contains("[Range(1, 50)]\n    public long qty { get; init; }");
+    }
 }

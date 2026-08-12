@@ -712,6 +712,28 @@ against the target entity; reverse-side / self-rel / ManyToMany / OneToOne rejec
 - **Product DSL for IR-only `OwnedAccess`** (nested value-doc shape) — path-prefix → `RelationshipNavigation` is the product authoring surface; do not treat bag `OwnedAccess` as a second policy product path
 - Dedicated many-owned policy demos beyond Q3′ quantifiers on plain `many` (ownership flag is unused at eval; use `any`/`all`/`none`/`count` on `many owned` the same way)
 
+### Shipped-surface boundaries
+
+Decisions that narrow the shipped claim so authoring fails loud instead of silently
+diverging:
+
+- **`unique` is storage-projection metadata, not a runtime invariant.** It is not
+  enforced by the C# export's `Create` factory nor by the runtime instance store.
+  Author `unique` for storage shape only; do not rely on it to reject duplicates.
+- **`now`/`today`/`guid` are authorable in `default(...)` and in assign RHS**, but **not
+  in policy bodies** — a policy comparing a date property to `today`/`now` is rejected at
+  analysis ("property does not exist"). Date-comparing policies must compare two real
+  properties (e.g. `DueDate < ReferenceDate`).
+- **`pattern(regex)` validates stored values at write time** (create/assign) — it is a
+  constraint, not a query/read filter. Grep-style read-time matching against stored text
+  is not expressible.
+- **Relative date ordering is not supported** (e.g. comparing a date property to
+  `now`/`today`); only comparisons between two date properties are authorable.
+- **Expressions are type-checked at analysis.** Wrong-typed comparisons, assigns,
+  arithmetic, and defaults (e.g. `Name >= 18` on a `Text` property, `default(today)` on
+  a `Number` property) are rejected at authoring time — the export and runtime no longer
+  receive type-confused expressions.
+
 ### Expression Gaps — IR vs DSL
 
 The following expression capabilities exist in the runtime expression IR (`DomainExpression`)

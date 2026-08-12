@@ -71,6 +71,7 @@ public static class DomainModelAnalysisBuilderExtensions {
             builder.AddAnalyzer(new DomainCatalogPass());
             builder.AddAnalyzer(new RequiredPropertiesPass());
             builder.AddAnalyzer(new PolicyConstraintAnalyzer());
+            builder.AddAnalyzer(new ExpressionTypeAnalyzer());
             // DownstreamConstraintsMetadata consumed by EffectAnalyzer — register first
             builder.AddAnalyzer(new ConstraintPropagationAnalyzer());
             builder.AddAnalyzer(new EffectFactsPass());

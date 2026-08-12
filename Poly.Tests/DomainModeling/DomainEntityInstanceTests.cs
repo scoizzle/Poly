@@ -3360,6 +3360,31 @@ public class DomainEntityInstanceTests {
     }
 
     [Test]
+    public async Task Read_WrongTypedBagValue_FailsLoud() {
+        // Move-2 runtime fail-loud: a bool stored for a Number prop (or a number for a
+        // Text prop) previously coerced silently (Convert.ToInt64(true) → 1). The VM
+        // member read now fails loud instead of returning a corrupted value.
+        var qty = new Property("Qty", new DomainTypeReference("Number"), []);
+        var isPositive = new Policy("IsPositive",
+            DomainExpression.GreaterThan(DomainExpression.Property("Qty"), DomainExpression.Literal(0)));
+        var entity = new Entity("Item", [qty], [], [isPositive], []);
+
+        var boolInNumber = DomainEntityInstance.Create(entity,
+            new Dictionary<string, object?> { ["Qty"] = true });
+        var ex1 = Assert.Throws<InvalidOperationException>(() => boolInNumber.EvaluatePolicy(isPositive));
+        await Assert.That(ex1!.Message).Contains("Cannot store a Boolean value in a numeric property");
+
+        var name = new Property("Name", new DomainTypeReference("Text"), []);
+        var hasName = new Policy("HasName",
+            DomainExpression.NotEqual(DomainExpression.Property("Name"), DomainExpression.Literal("")));
+        var text = new Entity("T", [name], [], [hasName], []);
+        var numInText = DomainEntityInstance.Create(text,
+            new Dictionary<string, object?> { ["Name"] = 5L });
+        var ex2 = Assert.Throws<InvalidOperationException>(() => numInText.EvaluatePolicy(hasName));
+        await Assert.That(ex2!.Message).Contains("Cannot store a value of type 'Int64' in a Text property");
+    }
+
+    [Test]
     public async Task Create_AppliesFirstStageEntryEffects() {
         // Round-2 C-F3: the export ctor applies the first stage's entry effects; the
         // runtime Create must too (status stamps, IsOpen flags, timestamps) — divergent

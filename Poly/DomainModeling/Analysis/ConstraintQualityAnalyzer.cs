@@ -39,6 +39,44 @@ internal sealed class ConstraintQualityAnalyzer : INodeAnalyzer {
         ValidateLengthSatisfiability(context, property, constraints);
         ValidateEnumCombination(context, property, constraints);
         ValidateConstraintTypeCompatibility(context, property, constraints);
+        ValidateDefaultWithinConstraints(context, property, constraints);
+    }
+
+    /// <summary>
+    /// A literal <c>default(...)</c> that violates the property's own range/length is a
+    /// contradiction: the export's Create factory fails on every unoverridden create, and
+    /// the runtime silently stores the out-of-range value. Reject at authoring.
+    /// </summary>
+    private static void ValidateDefaultWithinConstraints(
+        AnalysisContext context, Property property, IReadOnlyList<Constraint> constraints) {
+        var defaultConstraint = constraints.OfType<DefaultValueConstraint>().FirstOrDefault();
+        if (defaultConstraint?.Expression is not Literal { Value: long l }) return;
+
+        var range = constraints.OfType<RangeConstraint>().FirstOrDefault();
+        if (range is not null) {
+            if (range.Minimum is not null && l < Convert.ToInt64(range.Minimum)) {
+                context.ReportError(
+                    property,
+                    $"Property '{property.Name}' default value {l} is below its range minimum {range.Minimum}.",
+                    DomainModelDiagnosticCodes.SemanticTypeCompatibility);
+            }
+            else if (range.Maximum is not null && l > Convert.ToInt64(range.Maximum)) {
+                context.ReportError(
+                    property,
+                    $"Property '{property.Name}' default value {l} exceeds its range maximum {range.Maximum}.",
+                    DomainModelDiagnosticCodes.SemanticTypeCompatibility);
+            }
+        }
+
+        var length = constraints.OfType<LengthConstraint>().FirstOrDefault();
+        if (length is not null && defaultConstraint.Expression is Literal { Value: string s }) {
+            if (s.Length < length.MinLength || s.Length > length.MaxLength) {
+                context.ReportError(
+                    property,
+                    $"Property '{property.Name}' default value length {s.Length} is outside its length bounds ({length.MinLength}, {length.MaxLength}).",
+                    DomainModelDiagnosticCodes.SemanticTypeCompatibility);
+            }
+        }
     }
 
     private static void ValidateEntityFixedPoint(AnalysisContext context, Entity entity, Entity parentEntity) {

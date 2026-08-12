@@ -62,6 +62,24 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
         ReportDuplicateNames(context, entity.Policies, "entity", entity.Name);
         ReportDuplicateNames(context, entity.Stages, "entity", entity.Name);
         ReportDuplicateNames(context, entity.Navigations, "entity", entity.Name);
+
+        // Same-name actions across stages are supported (resolved by current stage) —
+        // do not reject. Only an action/policy name collision is ambiguous.
+        ReportActionPolicyCollisions(context, entity);
+    }
+
+    private static void ReportActionPolicyCollisions(AnalysisContext context, Entity entity) {
+        var actionNames = new HashSet<string>(
+            entity.Actions.Select(a => a.Name)
+                .Concat(entity.Stages.SelectMany(s => s.Actions.Select(a => a.Name))),
+            StringComparer.Ordinal);
+        foreach (var policy in entity.Policies) {
+            if (!actionNames.Contains(policy.Name)) continue;
+            context.ReportStructuralFailure(
+                policy,
+                $"Name collision: an action and a policy are both named '{policy.Name}' on entity '{entity.Name}'.",
+                DomainModelDiagnosticCodes.StructuralDuplicate);
+        }
     }
 
     private static void AnalyzeStage(AnalysisContext context, Stage stage) {

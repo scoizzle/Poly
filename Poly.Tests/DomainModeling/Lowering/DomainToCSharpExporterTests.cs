@@ -1469,18 +1469,16 @@ public class DomainToCSharpExporterTests {
     }
 
     [Test]
-    public async Task Export_EnumMemberDefault_OnNonEnumProperty_FailsLoud() {
+    public async Task Analyze_EnumMemberDefault_OnNonEnumProperty_Rejected() {
         // Discovery pilot B-F6: `default(Draft)` on a Date prop was silently dropped in the
         // export (the property became a required Create param) while the runtime stored the
-        // string. Must fail loud at export instead of silently changing the signature.
-        var (domain, analysis) = ParseAndAnalyze("""
+        // string. Now rejected at analysis by the type-compatibility pass.
+        var ex = Assert.Throws<InvalidOperationException>(() => ParseAndAnalyze("""
             domain Test
             Status: enum { Draft, Open }
             Task: entity { DueDate: Date default(Draft) }
-            """);
-
-        await Assert.That(() => new DomainToCSharpExporter().Export(domain, analysis))
-            .Throws<NotSupportedException>();
+            """));
+        await Assert.That(ex!.Message).Contains("not an enum member");
     }
 
     [Test]

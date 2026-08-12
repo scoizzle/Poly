@@ -40,6 +40,7 @@ public sealed class PolyDslParser : DslCursor {
 
     // Property names per entity, for collision detection with navs
     private readonly Dictionary<string, HashSet<string>> _entityPropertyNames = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, HashSet<string>> _entityStageNames = new(StringComparer.Ordinal);
 
     // Relationship names from N1 nav lines, for duplicate detection
     private readonly Dictionary<string, HashSet<string>> _relationshipNamesByEntity = new(StringComparer.Ordinal);
@@ -431,6 +432,14 @@ public sealed class PolyDslParser : DslCursor {
         }
 
         changes.Add(new AddStageChange(_currentEntityName, name));
+        // Duplicate stage names previously surfaced as an opaque catalog
+        // ArgumentException ("same key already added") — fail loud at parse instead.
+        if (!_entityStageNames.TryGetValue(_currentEntityName, out var stages)) {
+            stages = new HashSet<string>(StringComparer.Ordinal);
+            _entityStageNames[_currentEntityName] = stages;
+        }
+        if (!stages.Add(name))
+            throw Error($"Duplicate stage name '{name}' on entity '{_currentEntityName}'.");
         Expect(TokenKind.LBrace);
 
         // P2.4: Parse entry/exit effect blocks before actions and subscriptions

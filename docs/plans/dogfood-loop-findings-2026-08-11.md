@@ -175,6 +175,47 @@ no-op-on-empty semantics.
 default), touch/mkdir/cp encode cleanly — utilities with option enums + constrained
 scalars + lifecycle stages map naturally.
 
+## Fail-closed retrofit (moves 1–4) — 2026-08-11
+
+Four strategic moves to satisfy the majority of open findings at once, per the
+"fail-closed by default" analysis:
+
+**Move 1 — type-compatibility analysis (`ExpressionTypeAnalyzer`).** The DSL previously
+had no type check in parse or analysis; wrong-typed comparisons/assigns/arithmetic/
+defaults passed analysis, the export compile-failed, and the runtime silently coerced.
+The new pass rejects the agent-B class at authoring time: incompatible comparison
+operands, `not`/`and`/`or` on non-Boolean, non-numeric arithmetic, assign RHS vs target
+property type, wrong-typed `default(...)` (incl. `now`/`today`/`guid` on the wrong
+property type), and enum-member validity for string literals. All three round-3
+agent-b probes now fail at analysis. (The interpretation analyzer resolves types but
+never validated compatibility — that gap is closed here at the DSL layer, which is also
+the only layer that protects the export.)
+
+**Move 2 — runtime fail-loud on coercion (`GuardCompatible` in `CoerceRead`).** The VM
+member read no longer silently mangles wrong-typed raw values (`Convert.ToInt64(true)`
+→ 1, number in a Text prop). Fundamentally wrong types now throw a clear
+`InvalidOperationException`; null → default coercion (the G-S6-1 `Name exists` contract)
+is preserved.
+
+**Move 3 — structural-invariant checks.** Action/policy name collision is rejected;
+a literal `default` violating its own `range`/`length` is rejected; duplicate stage names
+fail loud at parse (was an opaque catalog `ArgumentException`). Same-name actions across
+stages were investigated and found to be a *supported, tested* pattern (resolved by
+current stage) — the round-3 "merge" finding did not hold up and is not rejected.
+
+**Move 4 — shipped-surface narrowing (documented in the DSL guide).** `unique` is
+declared storage-projection metadata (not a runtime invariant); `now`/`today`/`guid` are
+excluded from policy bodies; `pattern` is declared write-time validation (not a read
+filter); relative date ordering is unsupported; and expression type-checking is
+documented as enforced.
+
+**Open backlog after moves 1–4:** the residual needs genuine feature work or decisions —
+date-ordering comparisons, `pattern` read filters (grep), `now`/`today` in policies,
+action-param defaults, reserved-keyword escaping (escape vs reject), `Name == null`
+(G-S6-1 null→"" tension), self-nav export codegen (trees are legitimate), quantified-
+invoke `-> T` export tail, same-stage/chained-transition export ordering, recursive-
+invoke export depth guard.
+
 ## Export / runtime parity notes
 
 - **🟡 Stage-scoped action not-found message is misleading.** Invoking a stage-scoped

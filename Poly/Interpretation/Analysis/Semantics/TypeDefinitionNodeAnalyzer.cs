@@ -430,10 +430,61 @@ internal static class DictionaryBackedValue {
             _ => null
         };
 
-        if (convertMethod is not null)
-            return Expression.Convert(Expression.Call(null, convertMethod, dictValue), typeof(object));
+        if (convertMethod is not null) {
+            // Fail loud on fundamentally wrong-typed raw values instead of silently
+            // coercing (Convert.ToInt64(true) → 1, Convert.ToString(null) → "", etc.):
+            // a property bag holding a bool for a Number prop (or a non-numeric string)
+            // must surface as an error, not a silently-mangled value.
+            var guard = typeof(DictionaryBackedValue).GetMethod(
+                nameof(GuardCompatible),
+                System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!;
+            var guarded = Expression.Call(
+                guard,
+                Expression.Convert(dictValue, typeof(object)),
+                Expression.Constant(primitive.Value));
+            return Expression.Convert(
+                Expression.Call(null, convertMethod, guarded),
+                typeof(object));
+        }
 
         return dictValue;
+    }
+
+    /// <summary>
+    /// Validates a raw bag value against the target primitive before coercion. Rejects
+    /// values that Convert.* would silently mangle (bool/object → number, null → default),
+    /// so the runtime fails loud instead of storing a corrupted value.
+    /// </summary>
+    internal static object GuardCompatible(object? raw, PrimitiveType target) {
+        if (raw is null) return null!;
+        switch (target) {
+            case PrimitiveType.Int64 or PrimitiveType.Int32 or PrimitiveType.Int16 or PrimitiveType.Int8
+                or PrimitiveType.Float64 or PrimitiveType.Float32 or PrimitiveType.Decimal:
+                if (raw is bool)
+                    throw new InvalidOperationException(
+                        $"Cannot store a Boolean value in a numeric property (got '{raw}').");
+                if (raw is not (long or int or short or byte or sbyte or ushort or uint or ulong or double or float or decimal))
+                    throw new InvalidOperationException(
+                        $"Cannot store a value of type '{raw.GetType().Name}' in a numeric property.");
+                return raw;
+            case PrimitiveType.Boolean:
+                if (raw is not bool)
+                    throw new InvalidOperationException(
+                        $"Cannot store a value of type '{raw.GetType().Name}' in a Boolean property.");
+                return raw;
+            case PrimitiveType.String:
+                if (raw is not string)
+                    throw new InvalidOperationException(
+                        $"Cannot store a value of type '{raw.GetType().Name}' in a Text property.");
+                return raw;
+            case PrimitiveType.Char:
+                if (raw is not char and not string)
+                    throw new InvalidOperationException(
+                        $"Cannot store a value of type '{raw.GetType().Name}' in a character property.");
+                return raw;
+            default:
+                return raw;
+        }
     }
 }
 

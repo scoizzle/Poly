@@ -41,9 +41,9 @@ public class PolicyConstraintAnalysisTests {
         var result = new DomainEvolution(start).Apply([
             new AddPolicyToEntityChange("Person",
                 new Policy("HasName",
-                    DomainExpression.GreaterThanOrEqual(
+                    DomainExpression.Equal(
                         DomainExpression.Property("Name"),
-                        DomainExpression.Literal(18))))]);
+                        DomainExpression.Literal("Alice"))))]);
 
         await Assert.That(result.Succeeded).IsTrue();
     }

@@ -307,7 +307,7 @@ public class PipelineMergeMetadataTests {
             Customer: entity {
               Name: Text required
               Email: Text unique
-              Status: Text default(Active)
+              Status: Text default("Active")
               profile: owned Profile
               GoodStanding: policy { Status is "Active" }
               Active: stage {

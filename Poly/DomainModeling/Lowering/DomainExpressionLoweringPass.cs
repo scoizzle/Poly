@@ -1,3 +1,4 @@
+using Prim = Poly.Introspection.PrimitiveType;
 using SN = Poly.Ast.Nodes;
 
 namespace Poly.DomainModeling.Lowering;
@@ -21,6 +22,7 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Node
     private readonly IReadOnlyDictionary<string, string>? _enumPropertyNames;
     private readonly Func<string, string>? _navigationNameResolver;
     private readonly Func<string, bool>? _isCollectionNavigation;
+    private readonly Func<string, string?>? _propertyTypeResolver;
     private Node _currentSubject = null!;
 
     /// <param name="parameters">
@@ -47,6 +49,7 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Node
         _enumPropertyNames = context.EnumPropertyNames;
         _navigationNameResolver = context.NavigationNameResolver;
         _isCollectionNavigation = context.IsCollectionNavigation;
+        _propertyTypeResolver = context.PropertyTypeResolver;
     }
 
     /// <summary>
@@ -160,11 +163,42 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Node
     private bool IsCollectionNav(string name) =>
         _isCollectionNavigation?.Invoke(name) == true;
 
-    protected override Node Add(Add a)
-        => new SN.Add(Lower(a.Left, _currentSubject), Lower(a.Right, _currentSubject));
+    protected override Node Add(Add a) {
+        var left = Lower(a.Left, _currentSubject);
+        var right = Lower(a.Right, _currentSubject);
+        return LowerDateArithmetic(a.Left, left, right, isSubtract: false);
+    }
 
-    protected override Node Subtract(Subtract s)
-        => new SN.Subtract(Lower(s.Left, _currentSubject), Lower(s.Right, _currentSubject));
+    protected override Node Subtract(Subtract s) {
+        var left = Lower(s.Left, _currentSubject);
+        var right = Lower(s.Right, _currentSubject);
+        return LowerDateArithmetic(s.Left, left, right, isSubtract: true);
+    }
+
+    /// <summary>
+    /// Hoists the date-arithmetic rewrite (`DueDate + 14` → `DueDate.AddDays(14)`,
+    /// `DueDate - 14` → `DueDate.AddDays(-14)`) into expression lowering so it applies
+    /// everywhere a date-typed member appears in arithmetic — policies, if conditions,
+    /// entry/exit, and create-in initializers — not just the assign path. The CLR types
+    /// don't support `DateOnly + long`, so without this the generated C# fails CS0019
+    /// (and the runtime evaluates garbage on heap-handle arithmetic).
+    /// </summary>
+    private Node LowerDateArithmetic(DomainExpression leftExpr, Node left, Node right, bool isSubtract) {
+        if (leftExpr is PropertyAccess pa
+            && _propertyTypeResolver?.Invoke(pa.Name) is { } typeName
+            && typeName is "DateTime" or "Timestamp" or "Date" or "DateOnly") {
+            // Subtract lowers to AddDays with a negated offset (DateOnly/DateTime have no
+            // `- long` operator). Negate the RHS rather than emitting `0 - N` so the
+            // DateOnly int-cast binds to the whole operand: (int)-14L, not (int)0L - 14L.
+            var rawArg = isSubtract ? (Node)new SN.UnaryMinus(right) : right;
+            // DateOnly.AddDays takes int; DateTime.AddDays takes double (long widens implicitly).
+            var typedArg = typeName is "Date" or "DateOnly"
+                ? new TypeCast(rawArg, new PrimitiveTypeReference(Prim.Int32))
+                : rawArg;
+            return new Invoke(new Member(left, "AddDays"), [typedArg]);
+        }
+        return isSubtract ? new SN.Subtract(left, right) : new SN.Add(left, right);
+    }
 
     protected override Node Multiply(Multiply m)
         => new SN.Multiply(Lower(m.Left, _currentSubject), Lower(m.Right, _currentSubject));

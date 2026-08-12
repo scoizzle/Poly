@@ -104,6 +104,46 @@ null→"" Text coercion (G-S6-1 `Name exists` contract) — a documented design 
   silently stores `System.Reflection.Missing`; self-invoke passing an action param
   stores a garbage `1`; duplicate subscriptions emit CS0111.
 
+## Filed-items round (2026-08-11) — fixed from the backlog
+
+Worked through the filed findings; four fixed with regression tests, two investigated
+and re-filed with the reason they were not changed:
+
+**Fixed:**
+- **Date arithmetic hoist + subtraction** (B-F1/B-F2, A-F1/F2): the AddDays rewrite
+  moved from the assign-only path into `DomainExpressionLoweringPass.Add/Subtract`, so
+  policies, if conditions, entry/exit, and create-in initializers lower `DueDate + 14`
+  / `DueDate - 14` → `AddDays(14)` / `AddDays(-14)` (int-cast for DateOnly). Probes
+  `loans.poly`/`bookings.poly` now compile 0/0.
+- **Runtime constraint validation** (C-F3, B-F3): `DomainEntityInstance.Create` now
+  enforces required/range/length/pattern (mirroring the export's Create-factory
+  guards) and fails loud; the runtime no longer silently accepts invalid instances.
+- **Negative/fractional range bounds** (C-F6, B-F7): `range(-500, )` and
+  `range(0.01, 1.0)` now parse (tokenizer scans `.`; the range grammar accepts a
+  signed bound).
+- **Conditional/if runtime effect drop** (C-F4, B-F5, round-3 C1): composites and
+  conditionals containing transition/invoke/create/create-in sub-effects now run each
+  sub-effect through the dispatcher instead of the VM path that silently lowered them
+  to no-op Comments. `if (rush) { create in ... }` and `if (Flag) { transition }` now
+  execute correctly at runtime.
+
+**Investigated, re-filed (not changed — relied-on lenient/valid behavior):**
+- Invoke with missing args: the runtime intentionally allows unbound action params
+  (fallthrough tests depend on it); the real bug is a *referenced* missing param being
+  read as `System.Reflection.Missing` and stored — needs a referenced-param check, not
+  an unconditional missing-arg rejection.
+- Duplicate subscriptions: the stage-scoped + entity-level combination for the same
+  Rel+Stage is a documented supported placement; a blanket duplicate-handler error
+  broke it. Needs export-side handler dedup or a narrower same-scope check.
+
+**Still open (filed with repros):** the systemic type-compatibility gap (agent-b
+headline), same-name actions across stages (needs the fallthrough nuance), self-navs in
+the export, default-vs-range contradictions, same-stage/chained transition export
+ordering, recursive-invoke export depth guard, `Name == null` (G-S6-1 null→"" tension),
+`Name + 5` string-number concat divergence, non-member enum strings at runtime,
+`now`/`today`/`guid` in policy bodies and as non-final initializer values, `unique`,
+date-literal defaults, cross-type date ops.
+
 ## Export / runtime parity notes
 
 - **🟡 Stage-scoped action not-found message is misleading.** Invoking a stage-scoped

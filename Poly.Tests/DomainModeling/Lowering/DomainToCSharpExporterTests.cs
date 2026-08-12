@@ -1540,4 +1540,47 @@ public class DomainToCSharpExporterTests {
         await Assert.That(stageSet).IsGreaterThanOrEqualTo(0);
         await Assert.That(entryTransition).IsGreaterThan(stageSet);
     }
+
+    [Test]
+    public async Task Export_DateArithmetic_InPolicyAndSubtraction_EmitsAddDays() {
+        // Filed B-F1/F2: date arithmetic was lowered to AddDays only for `assign` targets —
+        // policies and subtraction emitted raw `DateOnly ± long` (CS0019). Now hoisted into
+        // expression lowering: `DueDate - 7` in a policy → `DueDate.AddDays((int)-7L)`.
+        var (domain, analysis) = ParseAndAnalyze("""
+            domain Test
+            Loan: entity {
+              DueDate: Date
+              ReferenceDate: Date
+              IsDueSoon: policy { DueDate - 7 <= ReferenceDate }
+            }
+            """);
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var unit = new CompilationUnitNode([], null, types, null);
+        var cs = new CSharpGenerator().Generate(unit);
+
+        await Assert.That(cs).Contains("this.DueDate.AddDays((int)-7L)");
+        await Assert.That(cs).DoesNotContain("this.DueDate - 7L");
+    }
+
+    [Test]
+    public async Task Export_RangeNegativeAndFractionalBounds_Parse() {
+        // Filed C-F6/B-F7: `range(-500, )` and `range(0.01, 1.0)` were unparseable
+        // (unsigned-integer-only tokenizer + grammar). Signed/fractional bounds are the
+        // natural overdraft/pricing surface.
+        var (domain, analysis) = ParseAndAnalyze("""
+            domain Test
+            Account: entity {
+              Balance: Number range(-500, )
+              Price: Number range(0.01, 1.0)
+            }
+            """);
+        await Assert.That(analysis.HasErrors).IsFalse();
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var unit = new CompilationUnitNode([], null, types, null);
+        var cs = new CSharpGenerator().Generate(unit);
+
+        await Assert.That(cs).Contains("'Balance' must be >= -500.");
+        await Assert.That(cs).Contains("'Price' must be >= 0.01.");
+        await Assert.That(cs).Contains("'Price' must be <= 1.");
+    }
 }

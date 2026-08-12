@@ -1153,16 +1153,16 @@ public sealed class PolyDslParser : DslCursor {
                 Advance();
                 Expect(TokenKind.LParen);
                 object? min = null, max = null;
-                if (Current.Kind == TokenKind.Number) {
-                    min = double.Parse(Current.Text, CultureInfo.InvariantCulture);
-                    Advance();
+                // Signed/fractional bounds: range(-500, ) / range(0.01, 1.0) — the
+                // natural overdraft/pricing surface was previously unparseable.
+                if (Current.Kind == TokenKind.Number || Current.Kind == TokenKind.Minus) {
+                    min = ParseNumberBound();
                 }
                 if (Current.Kind == TokenKind.Comma) {
                     Advance();
                 }
-                if (Current.Kind == TokenKind.Number) {
-                    max = double.Parse(Current.Text, CultureInfo.InvariantCulture);
-                    Advance();
+                if (Current.Kind == TokenKind.Number || Current.Kind == TokenKind.Minus) {
+                    max = ParseNumberBound();
                 }
                 Expect(TokenKind.RParen);
                 return new RangeConstraint(min, max);
@@ -1205,6 +1205,17 @@ public sealed class PolyDslParser : DslCursor {
     }
 
     // ── Helpers ───────────────────────────────────────────────
+
+    /// <summary>Parses a signed numeric bound for `range(min, max)` — e.g. `-500` or `0.01`.</summary>
+    private double ParseNumberBound() {
+        var negative = Current.Kind == TokenKind.Minus;
+        if (negative) Advance();
+        if (Current.Kind != TokenKind.Number)
+            throw Error($"Expected a number in range bound, got '{Current.Text}'.");
+        var value = double.Parse(Current.Text, CultureInfo.InvariantCulture);
+        Advance();
+        return negative ? -value : value;
+    }
 
     private string ParseTypeName() {
         if (IsPrimitiveType(Current.Kind)) {

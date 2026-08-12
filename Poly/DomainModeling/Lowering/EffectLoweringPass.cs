@@ -55,7 +55,8 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         _expressionPass = new DomainExpressionLoweringPass(context with {
             NavigationNameResolver = context.NavigationNameResolver ?? BuildNavigationNameResolver(entity, _domain, _analysis),
             IsCollectionNavigation = context.IsCollectionNavigation
-                ?? BuildIsCollectionNavigation(entity, _domain, _analysis)
+                ?? BuildIsCollectionNavigation(entity, _domain, _analysis),
+            PropertyTypeResolver = context.PropertyTypeResolver ?? BuildPropertyTypeResolver(entity)
         });
         Subject = context.UseThisReference && context.Subject is Parameter { Name: "entity" }
             ? new ThisReference()
@@ -116,6 +117,16 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         return _ => false;
     }
 
+    /// <summary>
+    /// Builds the default property-name → domain-type-name resolver for date-arithmetic
+    /// lowering (entity.Properties primary; null when unknown).
+    /// </summary>
+    internal static Func<string, string?> BuildPropertyTypeResolver(Entity entity) {
+        var byName = entity.Properties.ToDictionary(
+            p => p.Name, p => p.Type.TypeName, StringComparer.Ordinal);
+        return name => byName.TryGetValue(name, out var typeName) ? typeName : null;
+    }
+
     /// <summary>The Syntax AST node representing the current entity instance.</summary>
     public Node Subject { get; }
 
@@ -162,20 +173,8 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
                 }
             }
 
-            // Date/DateTime arithmetic: DueDate + 14 → DueDate.AddDays(14)
-            // The domain type names "DateTime", "Timestamp", "Date", "DateOnly"
-            // map to CLR types where + long is invalid — use AddDays instead.
-            // DateTime.AddDays(double) accepts the long RHS via widening; but
-            // DateOnly.AddDays(int) requires an explicit cast or the generated
-            // code fails CS1503 (long → int).
-            if (entityProp is not null
-                && value is Ast.Nodes.Add { LeftHandValue: Node lhs, RightHandValue: Node rhs }
-                && IsDateTimeDomainType(entityProp.Type.TypeName)) {
-                Node arg = entityProp.Type.TypeName is "Date" or "DateOnly"
-                    ? new TypeCast(rhs, new PrimitiveTypeReference(Prim.Int32))
-                    : rhs;
-                value = new Invoke(new Member(lhs, "AddDays"), [arg]);
-            }
+            // Date arithmetic (DueDate + 14 → AddDays) is lowered by the expression
+            // pass (Add/Subtract) so it applies in every context — nothing more here.
         }
 
         return new Assignment(target, value);

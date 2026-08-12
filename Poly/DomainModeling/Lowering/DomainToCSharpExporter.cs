@@ -1287,7 +1287,8 @@ public sealed class DomainToCSharpExporter {
             UseThisReference: true,
             EnumPropertyNames: enumProps,
             NavigationNameResolver: EffectLoweringPass.BuildNavigationNameResolver(entity, domain, analysis),
-            IsCollectionNavigation: EffectLoweringPass.BuildIsCollectionNavigation(entity, domain, analysis)
+            IsCollectionNavigation: EffectLoweringPass.BuildIsCollectionNavigation(entity, domain, analysis),
+            PropertyTypeResolver: EffectLoweringPass.BuildPropertyTypeResolver(entity)
         );
         var pass = new DomainExpressionLoweringPass(context);
         var lowered = pass.Lower(expr, new Parameter("entity"));

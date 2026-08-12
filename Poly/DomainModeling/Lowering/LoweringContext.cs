@@ -74,6 +74,11 @@ namespace Poly.DomainModeling.Lowering;
 /// to lower <c>Rel exists</c> to a <c>.Count != 0</c> check (runtime store-link
 /// presence) instead of a never-null <c>collection != null</c>.
 /// </param>
+/// <param name="PropertyTypeResolver">
+/// Optional mapper from a property name to its domain type name. Used to lower
+/// date arithmetic (<c>DueDate + 14</c> → <c>DueDate.AddDays(...)</c>) in every
+/// expression context (policies, if conditions, initializers), not just assign.
+/// </param>
 public sealed record LoweringContext(
     Node Subject,
     IReadOnlyDictionary<string, Node>? Parameters = null,
@@ -87,5 +92,6 @@ public sealed record LoweringContext(
     string? SourceStageName = null,
     IReadOnlyDictionary<string, string>? EnumPropertyNames = null,
     Func<string, string>? NavigationNameResolver = null,
-    Func<string, bool>? IsCollectionNavigation = null
+    Func<string, bool>? IsCollectionNavigation = null,
+    Func<string, string?>? PropertyTypeResolver = null
 );

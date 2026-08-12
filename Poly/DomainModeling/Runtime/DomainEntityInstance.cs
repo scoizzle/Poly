@@ -1,3 +1,5 @@
+using System.Text.RegularExpressions;
+
 using Poly.Analysis;
 using Poly.Ast.Nodes;
 using Poly.DomainModeling.Analysis;
@@ -142,6 +144,13 @@ public sealed record DomainEntityInstance {
 
         var typeDefAnalyzer = BuildTypeDefAnalyzer(entity.Name, entity.Properties);
 
+        // Enforce constraints at creation, matching the C# export's Create factory guards.
+        // The runtime previously accepted out-of-range/pattern-violating/empty-required
+        // values silently while the export rejected them — a divergence (round-1 C-F3).
+        var validationError = ValidateConstraints(entity, values);
+        if (validationError is not null)
+            throw new InvalidOperationException(validationError);
+
         // Initial stage: first declared stage name (factory shape; not a semantic rediscovery).
         var currentStage = entity.Stages.FirstOrDefault()?.Name;
 
@@ -149,6 +158,61 @@ public sealed record DomainEntityInstance {
         ApplyInitialStageEntryEffects(instance);
         return instance;
     }
+
+    /// <summary>
+    /// Validates required/range/length/pattern constraints against the to-be-stored values,
+    /// mirroring the C# export's <c>Create</c> factory guards. Returns the first violation
+    /// message, or null when the values are valid. (Unique is store-aware and not checked here.)
+    /// </summary>
+    private static string? ValidateConstraints(
+        Entity entity,
+        IReadOnlyDictionary<string, object?> values) {
+        foreach (var prop in entity.Properties) {
+            values.TryGetValue(prop.Name, out var v);
+            foreach (var constraint in prop.Constraints) {
+                switch (constraint) {
+                    case RequiredConstraint:
+                        if (IsText(prop) && string.IsNullOrEmpty(v as string))
+                            return $"'{prop.Name}' is required.";
+                        if (v is null && IsNullableDomainTypeName(prop.Type.TypeName))
+                            return $"'{prop.Name}' is required.";
+                        break;
+                    case RangeConstraint r:
+                        if (v is IConvertible num && v is not bool and not string && v is not Guid and not DateTime and not DateOnly) {
+                            var dv = Convert.ToDecimal(num);
+                            if (r.Minimum is not null && dv < Convert.ToDecimal(r.Minimum))
+                                return $"'{prop.Name}' must be >= {r.Minimum}.";
+                            if (r.Maximum is not null && dv > Convert.ToDecimal(r.Maximum))
+                                return $"'{prop.Name}' must be <= {r.Maximum}.";
+                        }
+                        break;
+                    case LengthConstraint lc:
+                        if (v is string s) {
+                            if (s.Length < lc.MinLength)
+                                return $"'{prop.Name}' must be at least {lc.MinLength} characters.";
+                            if (lc.MaxLength < int.MaxValue && s.Length > lc.MaxLength)
+                                return $"'{prop.Name}' must be at most {lc.MaxLength} characters.";
+                        }
+                        break;
+                    case PatternConstraint pc:
+                        if (v is string ps && !Regex.IsMatch(ps, pc.Pattern))
+                            return $"'{prop.Name}' does not match the required pattern.";
+                        break;
+                }
+            }
+        }
+        return null;
+    }
+
+    private static bool IsText(Property prop) =>
+        prop.Type.TypeName is "Text" or "String";
+
+    private static bool IsNullableDomainTypeName(string typeName) =>
+        typeName is "Text" or "String"
+        || typeName is not ("Number" or "Int" or "Int64" or "Int32" or "Boolean"
+            or "Bool" or "DateTime" or "Timestamp" or "Date" or "DateOnly"
+            or "Time" or "TimeOnly" or "Duration" or "TimeSpan" or "Uuid" or "Guid"
+            or "Decimal" or "Float" or "Double");
 
     /// <summary>
     /// Applies the first stage's entry effects at creation time, matching the export's
@@ -263,7 +327,9 @@ public sealed record DomainEntityInstance {
         var expr = PreprocessQuantifiers(policy.Expression);
 
         var entityParam = new Parameter("entity", new TypeReference(Entity.Name));
-        var pass = new DomainExpressionLoweringPass();
+        var pass = new DomainExpressionLoweringPass(new LoweringContext(
+            entityParam,
+            PropertyTypeResolver: EffectLoweringPass.BuildPropertyTypeResolver(Entity)));
         var lowered = pass.Lower(expr, entityParam);
 
         var compiled = Interpreter.Compile(lowered, _typeDefAnalyzer);
@@ -482,6 +548,16 @@ public sealed record DomainEntityInstance {
         // Store-aware quantifiers / path-prefix / Rel exists must resolve before
         // Syntax lowering — same honesty as EvaluatePolicy (no bag pass-through).
         var prepared = PreprocessEffectExpressions(effect);
+
+        // A composite/conditional containing direct-execution sub-effects (transition,
+        // invoke, create/create-in) must run each sub-effect through this dispatcher —
+        // the VM path lowers those sub-effects to no-op Comments (silent drop).
+        if ((prepared is ConditionalEffect or CompositeEffect)
+            && ContainsDirectExecutionEffect(prepared)) {
+            ExecuteStructured(prepared, effectPass, typeProvider);
+            return;
+        }
+
         var lowered = effectPass.TryLowerVmNode(prepared);
         if (lowered is not null) {
             var compiled = Interpreter.Compile(lowered, typeProvider);
@@ -492,6 +568,53 @@ public sealed record DomainEntityInstance {
 
         EffectExecutor.Run(this, effectPass, typeProvider, prepared);
     }
+
+    /// <summary>
+    /// Executes a composite/conditional structurally: evaluates the branch condition (via
+    /// the VM) and routes each sub-effect through <see cref="ExecuteEffect"/> so both
+    /// VM-executable (assign) and direct-execution (transition/invoke/create) effects run.
+    /// </summary>
+    private void ExecuteStructured(
+        Effect effect,
+        EffectLoweringPass effectPass,
+        TypeDefinitionNodeAnalyzer typeProvider) {
+        switch (effect) {
+            case CompositeEffect c:
+                foreach (var sub in c.Effects)
+                    ExecuteEffect(sub, effectPass, typeProvider);
+                break;
+            case ConditionalEffect cond:
+                var condition = cond.Condition;
+                var entityParam = new Parameter("entity", new TypeReference(Entity.Name));
+                var pass = new DomainExpressionLoweringPass(new LoweringContext(
+                    entityParam,
+                    PropertyTypeResolver: EffectLoweringPass.BuildPropertyTypeResolver(Entity)));
+                var lowered = pass.Lower(condition, entityParam);
+                var compiled = Interpreter.Compile(lowered, typeProvider);
+                bool taken;
+                using (var exec = Interpreter.Execute(compiled,
+                           s => s.SetArgs(new object?[] { _values }))) {
+                    taken = exec.Result.GetValue<bool>();
+                }
+                var branch = taken ? cond.ThenEffects : (cond.ElseEffects ?? []);
+                foreach (var sub in branch)
+                    ExecuteEffect(sub, effectPass, typeProvider);
+                break;
+            default:
+                ExecuteEffect(effect, effectPass, typeProvider);
+                break;
+        }
+    }
+
+    /// <summary>True when an effect tree contains a direct-execution effect (transition,
+    /// invoke, create/create-in) that the VM path would silently drop.</summary>
+    private static bool ContainsDirectExecutionEffect(Effect effect) => effect switch {
+        StageTransitionEffect or CreateEntityInstance or CreateEntityInRelationshipEffect or InvokeActionEffect => true,
+        CompositeEffect c => c.Effects.Any(ContainsDirectExecutionEffect),
+        ConditionalEffect c => (c.ThenEffects?.Any(ContainsDirectExecutionEffect) ?? false)
+            || (c.ElseEffects?.Any(ContainsDirectExecutionEffect) ?? false),
+        _ => false
+    };
 
     /// <summary>
     /// Rewrites effect expression trees so store-dependent forms become literals

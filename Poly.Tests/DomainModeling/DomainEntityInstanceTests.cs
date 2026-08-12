@@ -2,6 +2,7 @@ using Poly.Analysis;
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Bootstrap;
+using Poly.DomainModeling.Constraints;
 using Poly.DomainModeling.Effects;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Parsing;
@@ -3235,6 +3236,127 @@ public class DomainEntityInstanceTests {
         sourceInst.InvokeAction("Call");
 
         await Assert.That(targetInst.GetProperty<string>("LastMessage")).IsEqualTo("hi");
+    }
+
+    [Test]
+    public async Task InvokeAction_DateSubtraction_AppliesAddDays() {
+        // Filed B-F2: `DueDate - 14` was never lowered (export CS0019, runtime opaque
+        // crash). Now lowers to AddDays with a negated offset and round-trips the heap.
+        var dueDate = new Property("DueDate", new DomainTypeReference("Date"), []);
+        var extend = new Poly.DomainModeling.Action("Extend", InvocationResult.Void, [], [
+            new AssignEffect(
+                DomainExpression.Property("DueDate"),
+                DomainExpression.Subtract(
+                    DomainExpression.Property("DueDate"),
+                    DomainExpression.Literal(14L)))
+        ], []);
+        var draft = new Stage("Draft", Actions: [extend], Policies: [], OnEntryEffects: [], OnExitEffects: []);
+        var entity = new Entity("Order", [dueDate], [extend], [], [draft]);
+
+        var instance = DomainEntityInstance.Create(entity,
+            new Dictionary<string, object?> { ["DueDate"] = new DateOnly(2026, 1, 15) });
+
+        var result = instance.InvokeAction("Extend");
+        await Assert.That(result.Succeeded).IsTrue();
+        await Assert.That(instance.GetProperty<DateOnly>("DueDate")).IsEqualTo(new DateOnly(2026, 1, 1));
+    }
+
+    [Test]
+    public async Task Create_EnforcesConstraints_FailLoud() {
+        // Filed round-1 C-F3 / round-2 B-F3: the runtime Create silently accepted
+        // out-of-range/pattern-violating values while the export's Create factory
+        // rejected them. The runtime now validates required/range/length/pattern.
+        var name = new Property("Name", new DomainTypeReference("Text"), [
+            new RequiredConstraint(), new PatternConstraint("^[A-Z][0-9]{3}$")
+        ]);
+        var qty = new Property("Qty", new DomainTypeReference("Number"), [
+            new RangeConstraint(0d, 100d)
+        ]);
+        var entity = new Entity("Item", [name, qty], [], [], []);
+
+        var valid = DomainEntityInstance.Create(entity,
+            new Dictionary<string, object?> { ["Name"] = "A123", ["Qty"] = 50L });
+        await Assert.That(valid.GetProperty<string>("Name")).IsEqualTo("A123");
+
+        await Assert.That(() => DomainEntityInstance.Create(entity,
+                new Dictionary<string, object?> { ["Name"] = "A123", ["Qty"] = 500L }))
+            .Throws<InvalidOperationException>()
+            .WithMessage("'Qty' must be <= 100.");
+
+        await Assert.That(() => DomainEntityInstance.Create(entity,
+                new Dictionary<string, object?> { ["Name"] = "bad", ["Qty"] = 50L }))
+            .Throws<InvalidOperationException>()
+            .WithMessage("'Name' does not match the required pattern.");
+
+        await Assert.That(() => DomainEntityInstance.Create(entity,
+                new Dictionary<string, object?> { ["Qty"] = 50L }))
+            .Throws<InvalidOperationException>()
+            .WithMessage("'Name' is required.");
+    }
+
+    [Test]
+    public async Task InvokeAction_ConditionalCreateIn_RunsDirectExecutionEffects() {
+        // Filed round-1 C-F4 / round-3 C1: create/create-in inside an `if` was silently
+        // dropped at runtime (the VM path lowered direct-execution sub-effects to no-op
+        // Comments). The conditional must run its branch effects through the dispatcher.
+        var sku = new Property("SKU", new DomainTypeReference("Text"), []);
+        var bin = new Entity("Bin", [sku], [], [], []);
+        var rel = new Relationship("bins",
+            new DomainTypeReference("Warehouse"), new DomainTypeReference("Bin"),
+            RelationshipCardinality.OneToMany, []);
+        var maybe = new Poly.DomainModeling.Action("Maybe", InvocationResult.Void,
+            Parameters: [new Property("rush", new DomainTypeReference("Boolean"), [])],
+            Effects: [
+                new ConditionalEffect(
+                    DomainExpression.Property("rush"),
+                    [new CreateEntityInRelationshipEffect("bins", [
+                        new PropertyBinding("SKU", DomainExpression.Literal("COND"))
+                    ])],
+                    null)
+            ],
+            Policies: []);
+        var warehouse = new Entity("Warehouse", [], [maybe], [], []);
+        var domain = DomainTestFactory.Create("Test", [warehouse, bin], [rel]);
+        var store = new DomainInstanceStore();
+        var wh = DomainEntityInstance.Create(warehouse, domain: domain);
+        store.Add(wh);
+
+        var noRush = wh.InvokeAction("Maybe", new Dictionary<string, object?> { ["rush"] = false });
+        await Assert.That(noRush.Succeeded).IsTrue();
+        await Assert.That(wh.CreatedChildren).IsEmpty();
+
+        var rush = wh.InvokeAction("Maybe", new Dictionary<string, object?> { ["rush"] = true });
+        await Assert.That(rush.Succeeded).IsTrue();
+        var child = wh.CreatedChildren.Single();
+        await Assert.That(child.GetProperty<string>("SKU")).IsEqualTo("COND");
+    }
+
+    [Test]
+    public async Task InvokeAction_ConditionalTransition_RunsDirectExecutionEffects() {
+        // Round-3 C1: a transition inside an `if` was silently dropped at runtime.
+        var go = new Poly.DomainModeling.Action("Go", InvocationResult.Void, [], [
+            new ConditionalEffect(
+                DomainExpression.Property("Flag"),
+                [new StageTransitionEffect(new StageReference("Active"))],
+                null)
+        ], []);
+        var draft = new Stage("Draft", Actions: [go], Policies: [], OnEntryEffects: [], OnExitEffects: []);
+        var active = new Stage("Active", Actions: [], Policies: [], OnEntryEffects: [], OnExitEffects: []);
+        var entity = new Entity("Item",
+            [new Property("Flag", new DomainTypeReference("Boolean"), [])],
+            [go], [], [draft, active]);
+
+        var noFlag = DomainEntityInstance.Create(entity,
+            new Dictionary<string, object?> { ["Flag"] = false });
+        var r1 = noFlag.InvokeAction("Go");
+        await Assert.That(r1.Succeeded).IsTrue();
+        await Assert.That(noFlag.CurrentStage).IsEqualTo("Draft");
+
+        var withFlag = DomainEntityInstance.Create(entity,
+            new Dictionary<string, object?> { ["Flag"] = true });
+        var r2 = withFlag.InvokeAction("Go");
+        await Assert.That(r2.Succeeded).IsTrue();
+        await Assert.That(withFlag.CurrentStage).IsEqualTo("Active");
     }
 
     [Test]

@@ -122,6 +122,16 @@ public sealed class DslTokenReader : BufferedTokenReader<DslToken, DslTokenKind>
             sb.Append(PeekChar());
             AdvanceChar();
         }
+        // Fractional bounds (range(0.01, 1.0)): consume a `.` and trailing digits.
+        if (_pos < _text.Length && PeekChar() == '.'
+            && _pos + 1 < _text.Length && char.IsDigit(_text[_pos + 1])) {
+            sb.Append('.');
+            AdvanceChar();
+            while (_pos < _text.Length && char.IsDigit(PeekChar())) {
+                sb.Append(PeekChar());
+                AdvanceChar();
+            }
+        }
         return new DslToken(DslTokenKind.Number, sb.ToString(), startLine, startCol);
     }
 

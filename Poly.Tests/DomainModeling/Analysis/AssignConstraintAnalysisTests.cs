@@ -158,48 +158,6 @@ public class AssignConstraintAnalysisTests {
     }
 
     [Test]
-    public async Task Assign_LiteralViolatesEnum_ReportsError() {
-        var entity = new Entity("Item",
-            [new Property("Status", new DomainTypeReference("Text"),
-                [new EnumConstraint([
-                    new EnumConstraint.Member("Active"),
-                    new EnumConstraint.Member("Inactive")])])],
-            [new DmAction("SetStatus", InvocationResult.Void, [],
-                [new AssignEffect(DomainExpression.Property("Status"),
-                    DomainExpression.Literal("Unknown"))],
-                [])],
-            [],
-            []);
-        var domain = DomainTestFactory.Create("Test", [Text, Number, entity], []);
-
-        var analysis = DomainModelAnalyzer.Analyze(domain);
-
-        await Assert.That(analysis.Diagnostics.Any(d =>
-            d.Code == DomainModelDiagnosticCodes.EffectConstraintViolation)).IsTrue();
-    }
-
-    [Test]
-    public async Task Assign_LiteralValidEnum_NoError() {
-        var entity = new Entity("Item",
-            [new Property("Status", new DomainTypeReference("Text"),
-                [new EnumConstraint([
-                    new EnumConstraint.Member("Active"),
-                    new EnumConstraint.Member("Inactive")])])],
-            [new DmAction("SetStatus", InvocationResult.Void, [],
-                [new AssignEffect(DomainExpression.Property("Status"),
-                    DomainExpression.Literal("Active"))],
-                [])],
-            [],
-            []);
-        var domain = DomainTestFactory.Create("Test", [Text, Number, entity], []);
-
-        var analysis = DomainModelAnalyzer.Analyze(domain);
-
-        await Assert.That(analysis.Diagnostics.Any(d =>
-            d.Code == DomainModelDiagnosticCodes.EffectConstraintViolation)).IsFalse();
-    }
-
-    [Test]
     public async Task Assign_LiteralNullOnRequired_ReportsError() {
         var entity = new Entity("Item",
             [new Property("Name", new DomainTypeReference("Text"),
@@ -422,58 +380,6 @@ public class AssignConstraintAnalysisTests {
                 [new Property("amount", new DomainTypeReference("Number"), [])],
                 [new AssignEffect(DomainExpression.Property("Total"),
                     DomainExpression.Parameter("amount"))],
-                [])],
-            [],
-            []);
-        var domain = DomainTestFactory.Create("Test", [Text, Number, entity], []);
-
-        var analysis = DomainModelAnalyzer.Analyze(domain);
-
-        await Assert.That(analysis.Diagnostics.Any(d =>
-            d.Code == DomainModelDiagnosticCodes.EffectConstraintViolation)).IsTrue();
-    }
-
-    [Test]
-    public async Task Assign_ParameterEnumSubsetOfPropertyEnum_NoWarning() {
-        var entity = new Entity("Item",
-            [new Property("Status", new DomainTypeReference("Text"),
-                [new EnumConstraint([
-                    new EnumConstraint.Member("Active"),
-                    new EnumConstraint.Member("Inactive"),
-                    new EnumConstraint.Member("Suspended")])])],
-            [new DmAction("SetStatus", InvocationResult.Void,
-                [new Property("s", new DomainTypeReference("Text"),
-                    [new EnumConstraint([
-                        new EnumConstraint.Member("Active"),
-                        new EnumConstraint.Member("Inactive")])])],
-                [new AssignEffect(DomainExpression.Property("Status"),
-                    DomainExpression.Parameter("s"))],
-                [])],
-            [],
-            []);
-        var domain = DomainTestFactory.Create("Test", [Text, Number, entity], []);
-
-        var analysis = DomainModelAnalyzer.Analyze(domain);
-
-        await Assert.That(analysis.Diagnostics.Any(d =>
-            d.Code == DomainModelDiagnosticCodes.EffectConstraintViolation)).IsFalse();
-    }
-
-    [Test]
-    public async Task Assign_ParameterEnumSupersetOfPropertyEnum_Warns() {
-        var entity = new Entity("Item",
-            [new Property("Status", new DomainTypeReference("Text"),
-                [new EnumConstraint([
-                    new EnumConstraint.Member("Active"),
-                    new EnumConstraint.Member("Inactive")])])],
-            [new DmAction("SetStatus", InvocationResult.Void,
-                [new Property("s", new DomainTypeReference("Text"),
-                    [new EnumConstraint([
-                        new EnumConstraint.Member("Active"),
-                        new EnumConstraint.Member("Inactive"),
-                        new EnumConstraint.Member("Suspended")])])],
-                [new AssignEffect(DomainExpression.Property("Status"),
-                    DomainExpression.Parameter("s"))],
                 [])],
             [],
             []);

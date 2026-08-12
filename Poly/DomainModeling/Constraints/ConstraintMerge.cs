@@ -3,7 +3,7 @@ namespace Poly.DomainModeling.Constraints;
 /// <summary>
 /// Combines two constraints of the same type into the net (more restrictive) version of
 /// that constraint type — the intersection. Used by the invariant model so combinations
-/// are not just numeric ranges: range, length, enum, required, equality, and pattern all
+/// are not just numeric ranges: range, length, required, equality, and pattern all
 /// merge to a net constraint. Returns null when the types differ, the merge is not
 /// statically expressible, or the intersection is empty (unsatisfiable).
 /// </summary>
@@ -15,7 +15,6 @@ public static class ConstraintMerge {
         return (self, other) switch {
             (RangeConstraint a, RangeConstraint b) => MergeRange(a, b),
             (LengthConstraint a, LengthConstraint b) => MergeLength(a, b),
-            (EnumConstraint a, EnumConstraint b) => MergeEnum(a, b),
             (RequiredConstraint, RequiredConstraint) => new RequiredConstraint(),
             (EqualityConstraint a, EqualityConstraint b) =>
                 Equals(a.ExpectedValue, b.ExpectedValue) ? a : null,
@@ -51,14 +50,6 @@ public static class ConstraintMerge {
         var min = Math.Max(a.MinLength, b.MinLength);
         var max = Math.Min(a.MaxLength, b.MaxLength);
         return min > max ? null : new LengthConstraint(min, max);
-    }
-
-    /// <summary>Intersection of two enum member sets.</summary>
-    public static EnumConstraint? MergeEnum(EnumConstraint a, EnumConstraint b) {
-        var members = a.Members
-            .Where(am => b.Members.Any(bm => string.Equals(am.Name, bm.Name, StringComparison.Ordinal)))
-            .ToList();
-        return members.Count == 0 ? null : new EnumConstraint(members);
     }
 
     private static int Compare(object x, object y) =>

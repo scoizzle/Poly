@@ -597,7 +597,6 @@ public sealed class DomainDslPrinter {
         PatternConstraint p => $"pattern(\"{EscapeStringLiteral(p.Pattern)}\")",
         DefaultValueConstraint dv => $"default({PrintDomainExpression(dv.Expression)})",
         EqualityConstraint e => $"/* equals({PrintLiteralValue(e.ExpectedValue)}) */", // legacy
-        EnumConstraint en => $"/* enum({string.Join(", ", en.Members.Select(m => m.Name))}) */", // legacy — no longer parsed
         _ => $"?{constraint.GetType().Name}",
     };
 

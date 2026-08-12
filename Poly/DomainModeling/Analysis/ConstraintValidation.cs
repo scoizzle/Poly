@@ -16,7 +16,6 @@ internal static class ConstraintValidation {
             RangeConstraint r => IsInRange(value, r.Minimum, r.Maximum),
             LengthConstraint l => IsValidLength(value, l.MinLength, l.MaxLength),
             PatternConstraint p => IsValidPattern(value, p.Pattern),
-            EnumConstraint e => IsValidEnumMember(value, e.Members),
             EqualityConstraint eq => Equals(value, eq.ExpectedValue),
             UniqueConstraint => true, // cannot validate statically; requires instance set
             DefaultValueConstraint => true, // default-expression does not constrain assignment
@@ -30,7 +29,6 @@ internal static class ConstraintValidation {
             RangeConstraint r => FormatRange(r),
             LengthConstraint l => $"length({l.MinLength}, {l.MaxLength})",
             PatternConstraint p => $"pattern({p.Pattern})",
-            EnumConstraint e => $"enum [{string.Join(", ", e.Members.Select(m => m.Name))}]",
             EqualityConstraint eq => $"== {eq.ExpectedValue}",
             UniqueConstraint => "unique",
             DefaultValueConstraint => "default(...)",
@@ -74,15 +72,6 @@ internal static class ConstraintValidation {
         catch (RegexParseException) {
             return false;
         }
-    }
-
-    private static bool IsValidEnumMember(object? value, IReadOnlyList<EnumConstraint.Member> members) {
-        if (value is null) return false;
-        var str = value.ToString();
-        return members.Any(m =>
-            string.Equals(m.Name, str, StringComparison.Ordinal) ||
-            (m.EffectiveCanonicalValue is not null &&
-             Equals(m.EffectiveCanonicalValue, value)));
     }
 
     private static double? ToDouble(object? value) {

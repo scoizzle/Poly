@@ -687,7 +687,7 @@ public sealed class MinimalApiGenerator {
             if (range is not null) targetConstraints.Add(range);
             targetConstraints.AddRange(targetProp.Constraints.Where(c =>
                 c is LengthConstraint or PatternConstraint or RequiredConstraint
-                    or EnumConstraint or EqualityConstraint));
+                    or EqualityConstraint));
 
             foreach (var constraint in targetConstraints) {
                 var existingIndex = merged.FindIndex(m => m.GetType() == constraint.GetType());
@@ -725,13 +725,9 @@ public sealed class MinimalApiGenerator {
                 case RequiredConstraint when clrType == "string":
                     attrs.Add(new AttributeNode("Required", []));
                     break;
-                // Value-set union: enum(...)/equals(v) → [AllowedValues(...)] — the member
-                // must be one of the allowed values. (Enum-typed members are enforced by the
-                // CLR enum type instead; see the enum [EnumDataType] propagation.)
-                case EnumConstraint e when clrType == "string" || IsNumericClrType(clrType):
-                    attrs.Add(new AttributeNode("AllowedValues",
-                        e.Members.Select(m => (Expression)new Constant(m.EffectiveCanonicalValue)).ToList()));
-                    break;
+                // Value-set union: equals(v) → [AllowedValues(...)] — the member must equal
+                // the pinned value. (Enum unions are enforced by the CLR enum type; see the
+                // enum [EnumDataType] propagation.)
                 case EqualityConstraint eq:
                     attrs.Add(new AttributeNode("AllowedValues", [new Constant(eq.ExpectedValue)]));
                     break;
@@ -800,7 +796,7 @@ public sealed class MinimalApiGenerator {
                 string.Equals(p.Name, param.Name, StringComparison.Ordinal))?.Constraints ?? [];
             effective.AddRange(declared.Where(c =>
                 c is LengthConstraint or PatternConstraint or RequiredConstraint
-                    or EnumConstraint or EqualityConstraint));
+                    or EqualityConstraint));
 
             var attrs = BuildConstraintAttributes(clrType, effective);
             // Enum-typed members: the CLR enum type enforces membership at binding; the

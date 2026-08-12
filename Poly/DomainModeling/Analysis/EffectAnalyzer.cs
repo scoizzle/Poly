@@ -1263,11 +1263,6 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
         if (inner is LengthConstraint il && outer is LengthConstraint ol) {
             return il.MinLength >= ol.MinLength && il.MaxLength <= ol.MaxLength;
         }
-        if (inner is EnumConstraint ie && outer is EnumConstraint oe) {
-            // Parameter's enum member set must be a subset of property's enum member set
-            return ie.Members.All(im =>
-                oe.Members.Any(om => string.Equals(im.Name, om.Name, StringComparison.Ordinal)));
-        }
         // For other constraint types, assume compatible (exact match on type was already checked)
         return true;
     }

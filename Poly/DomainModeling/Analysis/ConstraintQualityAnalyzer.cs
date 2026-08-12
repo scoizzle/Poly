@@ -39,7 +39,6 @@ internal sealed class ConstraintQualityAnalyzer : INodeAnalyzer {
         ValidateLengthSatisfiability(context, property, constraints);
         ValidateEqualitySatisfiability(context, property, constraints);
         ValidateJointConstraintSatisfiability(context, property, constraints);
-        ValidateEnumCombination(context, property, constraints);
         ValidateConstraintTypeCompatibility(context, property, constraints);
         ValidateDefaultWithinConstraints(context, property, constraints);
     }
@@ -215,54 +214,6 @@ internal sealed class ConstraintQualityAnalyzer : INodeAnalyzer {
                     DomainModelDiagnosticCodes.ConstraintSatisfiability);
             }
         }
-    }
-
-    private static void ValidateEnumCombination(
-        AnalysisContext context, Property property, IReadOnlyList<Constraint> constraints) {
-        var enumConstraint = constraints.OfType<EnumConstraint>().LastOrDefault();
-        if (enumConstraint is null) {
-            return;
-        }
-
-        foreach (var range in constraints.OfType<RangeConstraint>()) {
-            if (enumConstraint.Members.Any(m => m.EffectiveCanonicalValue is null || !IsWithinRange(m.EffectiveCanonicalValue, range))) {
-                context.ReportError(
-                    property,
-                    $"Property '{property.Name}' has unsatisfiable EnumConstraint + RangeConstraint combination.",
-                    DomainModelDiagnosticCodes.ConstraintSatisfiability);
-                break;
-            }
-        }
-
-        foreach (var length in constraints.OfType<LengthConstraint>()) {
-            if (enumConstraint.Members.Any(m => m.EffectiveCanonicalValue is not string text || !IsWithinLength(text, length))) {
-                context.ReportError(
-                    property,
-                    $"Property '{property.Name}' has unsatisfiable EnumConstraint + LengthConstraint combination.",
-                    DomainModelDiagnosticCodes.ConstraintSatisfiability);
-                break;
-            }
-        }
-    }
-
-    private static bool IsWithinRange(object value, RangeConstraint range) {
-        if (range.Minimum is not null && Compare(value, range.Minimum) < 0) {
-            return false;
-        }
-        if (range.Maximum is not null && Compare(value, range.Maximum) > 0) {
-            return false;
-        }
-        return true;
-    }
-
-    private static bool IsWithinLength(string value, LengthConstraint length) {
-        if (value.Length < length.MinLength) {
-            return false;
-        }
-        if (value.Length > length.MaxLength) {
-            return false;
-        }
-        return true;
     }
 
     private static int Compare(object left, object right) {

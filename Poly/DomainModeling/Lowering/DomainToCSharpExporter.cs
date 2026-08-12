@@ -978,11 +978,10 @@ public sealed class DomainToCSharpExporter {
                         }
                         break;
 
-                        // DefaultValueConstraint, UniqueConstraint, EnumConstraint
+                        // DefaultValueConstraint and UniqueConstraint
                         // are not validated at factory time:
                         //   • Default → already handled (only non-default props are params)
                         //   • Unique  → requires store awareness
-                        //   • Enum    → enforced by the type system at the compiler level
                 }
             }
         }

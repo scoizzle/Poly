@@ -96,19 +96,12 @@ public class SemanticAnalysisTests {
 
 
     [Test]
-    public async Task SemanticConstraintMismatch_ChildEnumNotSubsetOfParent_ReportsError() {
+    public async Task SemanticConstraintMismatch_ChildEqualityNotSubsetOfParent_ReportsError() {
         var parentProp = new Property("Status", new DomainTypeReference("Text"), [
-            new EnumConstraint([
-                new EnumConstraint.Member("Open"),
-                new EnumConstraint.Member("Closed")
-            ])
+            new EqualityConstraint("Open")
         ]);
         var childProp = new Property("Status", new DomainTypeReference("Text"), [
-            new EnumConstraint([
-                new EnumConstraint.Member("Open"),
-                new EnumConstraint.Member("Closed"),
-                new EnumConstraint.Member("Archived")
-            ])
+            new EqualityConstraint("Closed")
         ]);
         var parent = new Entity("BaseTicket", [parentProp], [], [], []);
         var child = new Entity("Ticket", [childProp], [], [], []);

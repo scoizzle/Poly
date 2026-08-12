@@ -1,0 +1,24 @@
+domain DiscoveryDates
+
+Subscription: entity {
+  StartDate: Date
+  EndDate: Date
+  CreatedAt: DateTime default(now)
+  ActiveSince: Date default(today)
+  RenewedAt: DateTime
+  Renewals: Number default(0)
+
+  IsCurrent: policy { EndDate >= StartDate }
+  RenewingSoon: policy { EndDate - 30 <= StartDate }
+  RenewedAfterCreate: policy { RenewedAt > CreatedAt }
+
+  Active: stage {
+    Renew: action {
+      assign EndDate to EndDate + 30
+      assign Renewals to Renewals + 1
+    }
+    Checkout: action {
+      assign RenewedAt to now
+    }
+  }
+}

@@ -973,6 +973,12 @@ public sealed class CSharpGenerator {
                 WriteBinary(sb, coalesce.LeftHandValue, " ?? ", coalesce.RightHandValue);
                 return;
 
+            // Throw expression (C# 7+ throw-expression)
+            case ThrowExpression throwExpression:
+                sb.Append("throw ");
+                WriteExpression(sb, throwExpression.Value);
+                return;
+
             // Conditional (ternary)
             case Conditional cond:
                 sb.Append('(');

@@ -284,12 +284,22 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
             args.Add(_expressionPass.Lower(binding.Expression, Subject));
         }
 
-        var target = i.TargetRelationship is not null
-            ? (Node)new Member(new NullForgiving(
-                new Member(Subject, DomainToCSharpExporter.ToPascalCase(i.TargetRelationship))), i.ActionName)
-            : new Member(Subject, i.ActionName);
+        // Singular cross-entity invoke (OneToOne): the runtime requires exactly one
+        // outbound link (ResolveRelationshipTarget) and fails loud otherwise. Enforce the
+        // invariant at the action boundary with a domain Failure BEFORE derefing the nav —
+        // never a bare null-forgiving deref (which would crash with an NRE at runtime).
+        if (i.TargetRelationship is not null) {
+            var navMember = new Member(Subject, DomainToCSharpExporter.ToPascalCase(i.TargetRelationship));
+            var guard = new IfStatement(
+                new Equal(navMember, new Constant(null!)),
+                new Block([new Return(new Invoke(
+                    new Member(new TypeReference("DomainResult"), "Failure"),
+                    new Constant($"'{i.ActionName}' requires a linked '{i.TargetRelationship}' on entity '{_entity.Name}'.")))]));
+            return new Block([guard,
+                new Invoke(new Member(navMember, i.ActionName), [.. args])]);
+        }
 
-        return new Invoke(target, [.. args]);
+        return new Invoke(new Member(Subject, i.ActionName), [.. args]);
     }
 
     /// <summary>

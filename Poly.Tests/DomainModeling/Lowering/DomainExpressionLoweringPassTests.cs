@@ -79,7 +79,7 @@ public class DomainExpressionLoweringPassTests {
     }
 
     [Test]
-    public async Task RelationshipNavigation_LowersToNestedMember() {
+    public async Task RelationshipNavigation_LowersToGuardedHop() {
         var inner = DomainExpression.Property("AvailableCopies");
         var expr = DomainExpression.RelationshipNav("Book", inner);
 
@@ -89,14 +89,16 @@ public class DomainExpressionLoweringPassTests {
         var outer = (Member)result;
         await Assert.That(outer.MemberName).IsEqualTo("AvailableCopies");
 
-        // The nav hop is null-forgiving (to-one navs are nullable in the export,
-        // so the leaf must not trip CS8602).
-        await Assert.That(outer.Value).IsTypeOf<NullForgiving>();
-        var nf = (NullForgiving)outer.Value;
-        await Assert.That(nf.Operand).IsTypeOf<Member>();
-        var nav = (Member)nf.Operand;
+        // The nav hop is guarded: an unlinked to-one nav coalesces to a deliberate
+        // InvalidOperationException (matching the runtime's fail-closed path-prefix
+        // contract) instead of a bare null-forgiving deref (NRE).
+        await Assert.That(outer.Value).IsTypeOf<Coalesce>();
+        var coalesce = (Coalesce)outer.Value;
+        await Assert.That(coalesce.LeftHandValue).IsTypeOf<Member>();
+        var nav = (Member)coalesce.LeftHandValue;
         await Assert.That(nav.MemberName).IsEqualTo("Book");
         await Assert.That(nav.Value).IsSameReferenceAs(Subject);
+        await Assert.That(coalesce.RightHandValue).IsTypeOf<ThrowExpression>();
     }
 
     [Test]

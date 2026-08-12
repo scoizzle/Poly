@@ -109,14 +109,17 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Node
             return Route(rn.TargetProperty, parameterSubject);
         }
 
-        // Every hop in a path-prefix is a relationship navigation. The exporter
-        // always pascal-cases nav properties, so a hop the entity-scoped resolver
-        // does not map (nested navs on target entities) still pascal-cases.
-        // The hop is null-forgiving: to-one navs are nullable, and without `!` a
-        // `this.Book.Title` leaf trips CS8602 (the runtime throws when unlinked,
-        // so the export's null-forgiving mirrors that fail-loud intent).
-        Node hop = new NullForgiving(
-            new Member(_currentSubject, ResolveNavName(rn.RelationshipName)));
+        // Every hop in a path-prefix is a relationship navigation. To-one navs are
+        // nullable in the export; the runtime fail-closes on an unlinked hop (no vacuous
+        // true/false — EvaluatePathPrefixChain throws). Lower the hop to a deliberate,
+        // message-carrying InvalidOperationException via a throw-expression coalesce, so an
+        // unlinked navigation fails loud with the runtime's contract — never a bare
+        // null-forgiving deref (NRE) and never a silent false.
+        var relMember = new Member(_currentSubject, ResolveNavName(rn.RelationshipName));
+        Node hop = new Coalesce(relMember,
+            new ThrowExpression(new New(
+                new NamedTypeReference("InvalidOperationException"),
+                new Constant($"No linked instances found for relationship '{rn.RelationshipName}'."))));
         return Route(rn.TargetProperty, hop);
     }
 

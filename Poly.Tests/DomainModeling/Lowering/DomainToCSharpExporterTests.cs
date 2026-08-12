@@ -1010,8 +1010,9 @@ public class DomainToCSharpExporterTests {
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
-        await Assert.That(cs).Contains("this.Source!.Path");
+        await Assert.That(cs).Contains("this.Source ?? throw");
         await Assert.That(cs).DoesNotContain("this.source.Path");
+        await Assert.That(cs).DoesNotContain("this.Source!");
     }
 
     [Test]
@@ -1234,10 +1235,11 @@ public class DomainToCSharpExporterTests {
     }
 
     [Test]
-    public async Task Export_CrossEntityInvoke_UsesPascalCasePropertyWithNullForgiving() {
-        // Code-review fix: `invoke assignee.Notify` must lower to the PascalCase
-        // nav property (`this.Assignee`), null-forgiving (the runtime requires an
-        // outbound link and fails loud otherwise) — the raw nav name did not compile.
+    public async Task Export_CrossEntityInvoke_GuardsMissingLinkBeforeDeref() {
+        // Hardening: `invoke assignee.Notify` must lower to the PascalCase nav property
+        // (`this.Assignee`) with a boundary guard that returns a domain Failure BEFORE the
+        // deref — the runtime requires an outbound link and fails loud otherwise. A bare
+        // null-forgiving deref (`this.Assignee!.Notify()`) would crash with an NRE.
         var (domain, analysis) = ParseAndAnalyze("""
             domain Test
             User: entity {
@@ -1255,8 +1257,36 @@ public class DomainToCSharpExporterTests {
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
-        await Assert.That(cs).Contains("this.Assignee!.Notify()");
+        await Assert.That(cs).Contains("this.Assignee == null");
+        await Assert.That(cs).Contains("DomainResult.Failure(\"'Notify' requires a linked 'assignee' on entity 'Issue'.\")");
+        await Assert.That(cs).Contains("this.Assignee.Notify()");
+        await Assert.That(cs).DoesNotContain("this.Assignee!");
         await Assert.That(cs).DoesNotContain("this.assignee.Notify");
+    }
+
+    [Test]
+    public async Task Export_PathPrefixPolicy_GuardsUnlinkedHopWithDeliberateThrow() {
+        // Hardening: a to-one nav hop in a policy must fail loud with a deliberate,
+        // message-carrying InvalidOperationException when unlinked (matching the runtime's
+        // fail-closed path-prefix contract) — never a bare null-forgiving deref (NRE) and
+        // never a silent false.
+        var (domain, analysis) = ParseAndAnalyze("""
+            domain Test
+            Book: entity {
+              Title: Text
+              Stock: Number
+            }
+            Order: entity {
+              book: Book
+              IsClassic: policy { book Title is "Classic" }
+            }
+            """);
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var unit = new CompilationUnitNode([], null, types, null);
+        var cs = new CSharpGenerator().Generate(unit);
+
+        await Assert.That(cs).Contains("this.Book ?? throw new InvalidOperationException(\"No linked instances found for relationship 'book'.\")");
+        await Assert.That(cs).DoesNotContain("this.Book!");
     }
 
     [Test]
@@ -1346,11 +1376,13 @@ public class DomainToCSharpExporterTests {
     }
 
     [Test]
-    public async Task Export_PathPrefixMultiHop_PascalCasesNestedNavAndNullForgives() {
+    public async Task Export_PathPrefixMultiHop_GuardsEachNestedNav() {
         // Discovery pilot A-F1/A-F4: `reporter team TeamName` (multi-hop to-one
-        // path-prefix) must emit `this.Reporter!.Team!.TeamName` — the nested nav
-        // `team` (on Engineer, not the policy's own entity) was left raw (CS1061)
-        // and the nullable navs were not null-forgiven (CS8602).
+        // path-prefix) must emit the PascalCased nested navs (`this.Reporter`, `.Team`)
+        // with each hop guarded by a deliberate throw — the nested nav `team` (on
+        // Engineer, not the policy's own entity) was left raw (CS1061) and the nullable
+        // navs were not null-forgiven (CS8602). The null-forgiving derefs are now
+        // deliberate InvalidOperationExceptions matching the runtime's fail-closed path.
         var (domain, analysis) = ParseAndAnalyze("""
             domain Test
             Engineer: entity { team: Team }
@@ -1364,7 +1396,10 @@ public class DomainToCSharpExporterTests {
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
-        await Assert.That(cs).Contains("this.Reporter!.Team!.TeamName == \"Blue\"");
+        await Assert.That(cs).Contains("(this.Reporter ?? throw");
+        await Assert.That(cs).Contains(".Team ?? throw");
+        await Assert.That(cs).Contains(".TeamName == \"Blue\"");
+        await Assert.That(cs).DoesNotContain("this.Reporter!.Team!");
         await Assert.That(cs).DoesNotContain("this.Reporter.team.TeamName");
     }
 

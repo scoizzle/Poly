@@ -187,9 +187,17 @@ The new pass rejects the agent-B class at authoring time: incompatible compariso
 operands, `not`/`and`/`or` on non-Boolean, non-numeric arithmetic, assign RHS vs target
 property type, wrong-typed `default(...)` (incl. `now`/`today`/`guid` on the wrong
 property type), and enum-member validity for string literals. All three round-3
-agent-b probes now fail at analysis. (The interpretation analyzer resolves types but
-never validated compatibility — that gap is closed here at the DSL layer, which is also
-the only layer that protects the export.)
+agent-b probes now fail at analysis.
+
+**Move 1b — interpretation-layer type check (`SyntaxTypeCompatibilityAnalyzer`).** The
+interpretation pipeline (the `AnalyzerBuilder` used by the VM) resolved types but never
+validated compatibility — `Name >= 18` sailed through, the VM coerced, the C# compiler
+was the first rejector. A new analyzer on the lowered Syntax AST reports the same class
+at VM-compile time (Text vs Number comparison, non-numeric arithmetic, non-Boolean
+`not`), and the DSL runtime paths (`EvaluatePolicy`, effect execution) compile via
+`Interpreter.CompileChecked`, which fails loud on those errors. The raw `Compile` stays
+lenient for direct VM/robustness callers. This closes the three-layer defense:
+DSL authoring rejects → interpretation/VM compile rejects → runtime coercion fails loud.
 
 **Move 2 — runtime fail-loud on coercion (`GuardCompatible` in `CoerceRead`).** The VM
 member read no longer silently mangles wrong-typed raw values (`Convert.ToInt64(true)`

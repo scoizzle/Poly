@@ -34,6 +34,7 @@ public static class Interpreter {
         .UseDefiniteAssignmentAnalysis()
         .UseLambdaReturnTypeResolution()
         .UseExceptionRegionAnalysis()
+        .UseSyntaxTypeCompatibility()
         // Direct AST-to-ABI lowering is the primary path.
         .Build();
 
@@ -61,12 +62,39 @@ public static class Interpreter {
     }
 
     /// <summary>
+    /// Compile, failing loud on interpretation type-compatibility errors. Used by the
+    /// DSL runtime paths (policy evaluation, effect execution) so the runtime rejects
+    /// incompatible operations at compile time instead of silently coercing. The raw
+    /// <see cref="Compile(Node, ITypeDefinitionProvider, CompilationMode)"/> stays
+    /// lenient for direct VM/robustness callers.
+    /// </summary>
+    public static VmProgram CompileChecked(Node node, ITypeDefinitionProvider typeDefinitions, CompilationMode mode = CompilationMode.Normal) {
+        var analysis = _analyzer.Analyze(node, typeDefinitions: typeDefinitions);
+        FailLoudOnTypeErrors(analysis);
+        return DirectVmAbiEmitter.Emit(node, analysis, mode);
+    }
+
+    /// <summary>
     /// Analyze and compile using the primary direct AST-to-VM-ABI lowering path.
     /// This is the supported way to produce a runnable <see cref="VmProgram"/>.
     /// </summary>
     public static VmProgram Compile(Node node, CompilationMode mode = CompilationMode.Normal) {
         var analysis = _analyzer.Analyze(node);
         return DirectVmAbiEmitter.Emit(node, analysis, mode);
+    }
+
+    /// <summary>
+    /// The interpretation type-compatibility pass rejects incompatible operations
+    /// (Text vs Number comparison, non-numeric arithmetic, non-Boolean <c>not</c>).
+    /// The DSL runtime must fail loud on those instead of silently coercing garbage.
+    /// </summary>
+    private static void FailLoudOnTypeErrors(AnalysisResult analysis) {
+        foreach (var d in analysis.Diagnostics) {
+            if (d.Severity != DiagnosticSeverity.Error) continue;
+            if (d.Code == Analysis.Semantics.SyntaxTypeCompatibilityAnalyzer.DiagnosticCode) {
+                throw new InvalidOperationException($"VM compile rejected: {d.Message}");
+            }
+        }
     }
 
     /// <summary>

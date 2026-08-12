@@ -332,7 +332,7 @@ public sealed record DomainEntityInstance {
             PropertyTypeResolver: EffectLoweringPass.BuildPropertyTypeResolver(Entity)));
         var lowered = pass.Lower(expr, entityParam);
 
-        var compiled = Interpreter.Compile(lowered, _typeDefAnalyzer);
+        var compiled = Interpreter.CompileChecked(lowered, _typeDefAnalyzer);
         using var exec = Interpreter.Execute(compiled,
             s => s.SetArgs(new object?[] { _values }));
         return exec.Result.GetValue<bool>();
@@ -560,7 +560,7 @@ public sealed record DomainEntityInstance {
 
         var lowered = effectPass.TryLowerVmNode(prepared);
         if (lowered is not null) {
-            var compiled = Interpreter.Compile(lowered, typeProvider);
+            var compiled = Interpreter.CompileChecked(lowered, typeProvider);
             using var exec = Interpreter.Execute(compiled,
                 s => s.SetArgs(new object?[] { _values }));
             return;
@@ -590,7 +590,7 @@ public sealed record DomainEntityInstance {
                     entityParam,
                     PropertyTypeResolver: EffectLoweringPass.BuildPropertyTypeResolver(Entity)));
                 var lowered = pass.Lower(condition, entityParam);
-                var compiled = Interpreter.Compile(lowered, typeProvider);
+                var compiled = Interpreter.CompileChecked(lowered, typeProvider);
                 bool taken;
                 using (var exec = Interpreter.Execute(compiled,
                            s => s.SetArgs(new object?[] { _values }))) {

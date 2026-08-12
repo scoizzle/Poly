@@ -3385,6 +3385,34 @@ public class DomainEntityInstanceTests {
     }
 
     [Test]
+    public async Task EvaluatePolicy_WrongTypedProgrammaticExpression_FailsLoudAtVmCompile() {
+        // Interpretation-layer type check: a programmatically-constructed wrong-typed
+        // policy (bypassing the DSL authoring analyzer) must fail loud at VM compile —
+        // the interpretation analyzer is the backstop that used to be missing.
+        var name = new Property("Name", new DomainTypeReference("Text"), []);
+        var bad = new Policy("Bad",
+            DomainExpression.Equal(DomainExpression.Property("Name"), DomainExpression.Literal(5)));
+        var entity = new Entity("T", [name], [], [bad], []);
+
+        var instance = DomainEntityInstance.Create(entity,
+            new Dictionary<string, object?> { ["Name"] = "x" });
+        var ex = Assert.Throws<InvalidOperationException>(() => instance.EvaluatePolicy(bad));
+        await Assert.That(ex!.Message).Contains("comparison between incompatible types");
+    }
+
+    [Test]
+    public async Task EvaluatePolicy_WellTypedProgrammaticExpression_Succeeds() {
+        var age = new Property("Age", new DomainTypeReference("Number"), []);
+        var adult = new Policy("Adult",
+            DomainExpression.GreaterThanOrEqual(DomainExpression.Property("Age"), DomainExpression.Literal(18)));
+        var entity = new Entity("T", [age], [], [adult], []);
+
+        var instance = DomainEntityInstance.Create(entity,
+            new Dictionary<string, object?> { ["Age"] = 25L });
+        await Assert.That(instance.EvaluatePolicy(adult)).IsTrue();
+    }
+
+    [Test]
     public async Task Create_AppliesFirstStageEntryEffects() {
         // Round-2 C-F3: the export ctor applies the first stage's entry effects; the
         // runtime Create must too (status stamps, IsOpen flags, timestamps) — divergent

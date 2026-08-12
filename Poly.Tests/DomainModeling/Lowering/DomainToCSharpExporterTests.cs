@@ -1509,4 +1509,35 @@ public class DomainToCSharpExporterTests {
             """));
         await Assert.That(ex!.Message).Contains("does not resolve to a text type");
     }
+
+    [Test]
+    public async Task Export_TransitionInEntryEffect_StageSetBeforeEntryRuns() {
+        // Round-3 C4: a transition nested inside an entry effect must not be overwritten
+        // by the outer stage-set. The export must set CurrentStage to the target BEFORE
+        // running the target's entry effects (matching the runtime TransitionStage), so a
+        // Draft→Active whose Active.entry transitions to Done ends at Done, not Active.
+        var (domain, analysis) = ParseAndAnalyze("""
+            domain Test
+            Item: entity {
+              Status: Text
+              Draft: stage {
+                go: action { transition to Active }
+              }
+              Active: stage {
+                entry { transition to Done }
+              }
+              Done: stage { }
+            }
+            """);
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var unit = new CompilationUnitNode([], null, types, null);
+        var cs = new CSharpGenerator().Generate(unit);
+
+        // The outer stage-set must precede the nested entry transition, so the entry
+        // transition (to Done) is not overwritten.
+        var stageSet = cs.IndexOf("this.CurrentStage = ItemStage.Active;", StringComparison.Ordinal);
+        var entryTransition = cs.IndexOf("this.CurrentStage = ItemStage.Done;", StringComparison.Ordinal);
+        await Assert.That(stageSet).IsGreaterThanOrEqualTo(0);
+        await Assert.That(entryTransition).IsGreaterThan(stageSet);
+    }
 }

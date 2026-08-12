@@ -66,6 +66,44 @@ initializer values (🟡), non-member enum initializer analysis (🔴), unbound 
 prop divergence (🟠), conditional create (🟠), `unique` (🟠), signed/fractional ranges
 (🟡), multi-initializer parse (🟡), nested `transition to` in entry effects (🟠).
 
+## Pilot round 3 (adversarial "silly things") — 2026-08-11
+
+Third round via `scripts/discovery-round.sh round3`: agents instructed to DELIBERATELY
+try degenerate/contradictory models (A), cross-type abuse (B), and control-flow
+pathologies (C). Findings in `probes/findings/round3/`, probes in `probes/agent-*/`.
+
+**Fixed in round 3:**
+- C4/agent-a F8: a `transition to` nested inside an entry effect no longer gets
+  overwritten by the outer stage-set in the export — `CurrentStage` is set before the
+  target's entry effects run (matching the runtime TransitionStage). Final stage now
+  agrees between export and runtime.
+
+**Headline finding (filed, not fixed — systemic):** the DSL has **no type-compatibility
+check in parse or analysis**. Wrong-typed comparisons/assigns/arithmetic/defaults pass
+analysis; the export then compile-fails (CSxxxx) while the runtime silently accepts and
+coerces garbage (agent-b F1–F3, F5–F12). This is the highest-value architectural gap:
+a type-compatibility analyzer pass would reject the whole class at authoring time.
+Sub-cases include a VM coercion that maps any string/Date → the constant `2` when read
+as a Number, and the `Name == null` → always-false behavior caused by the deliberate
+null→"" Text coercion (G-S6-1 `Name exists` contract) — a documented design tension.
+
+**Other filed round-3 findings (repros in `probes/findings/round3/`):**
+- A: same-name actions across stages silently merge bodies at runtime + CS0111 in the
+  export (needs the entity-action fallthrough nuance — empty stage-copy fallthrough is
+  supported); action/policy name collision passes analysis; self-`many`/to-one navs
+  break the export (CS1503 / nonexistent CreateParent); default violating its own
+  range accepted; always-false entity-level policy silently gates every action;
+  duplicate stage names crash opaquely.
+- B: `Name + 5` compiles 0/0 but runtime drops the numeric operand; non-member enum
+  strings accepted at runtime; date-arithmetic opaque casts; negative literals
+  unparseable; `assign Name to true` stores the whole bag.
+- C: `if` blocks silently drop transition/invoke/create-in at runtime (only assign
+  runs) — the runtime Conditional turns non-assign sub-effects into no-ops; same-stage
+  and chained transitions diverge in the export; recursive invoke has no export depth
+  guard (StackOverflow, guide says "cycles fail loud"); invoke with missing args
+  silently stores `System.Reflection.Missing`; self-invoke passing an action param
+  stores a garbage `1`; duplicate subscriptions emit CS0111.
+
 ## Export / runtime parity notes
 
 - **🟡 Stage-scoped action not-found message is misleading.** Invoking a stage-scoped

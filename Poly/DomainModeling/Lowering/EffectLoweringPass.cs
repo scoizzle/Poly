@@ -222,6 +222,17 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
             }
         }
 
+        // Set the target stage BEFORE the target's entry effects run — the runtime
+        // TransitionStage sets CurrentStage first, then runs entry effects, so a
+        // transition nested inside entry (entry of X → Y) must end at Y, not be
+        // overwritten by the outer assignment.
+        var stageEnumType = new NamedTypeReference(
+            _stageEnumTypeName ?? $"{_entity.Name}Stage");
+        nodes.Add(new Assignment(
+            new Member(Subject, "CurrentStage"),
+            new Member(stageEnumType, t.TargetStage.StageName)
+        ));
+
         // Include entry effects from the target stage (same analysis contract as exit).
         Stage? targetStage = null;
         if (_analysis is not null)
@@ -236,13 +247,6 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
                     nodes.Add(lowered);
             }
         }
-
-        var stageEnumType = new NamedTypeReference(
-            _stageEnumTypeName ?? $"{_entity.Name}Stage");
-        nodes.Add(new Assignment(
-            new Member(Subject, "CurrentStage"),
-            new Member(stageEnumType, t.TargetStage.StageName)
-        ));
 
         // Append post-transition notification nodes (subscription fan-out)
         if (_postTransitionNodes is not null

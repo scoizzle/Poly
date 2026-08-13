@@ -1,0 +1,21 @@
+domain S01AllOnOneToOne
+Invoice: entity {
+  Amount: Number default(0)
+  Draft: stage {}
+  Paid: stage {}
+}
+Customer: entity {
+  Name: Text
+  profile: Profile
+  invoices: many Invoice
+  Active: stage {
+    when all profile Active {
+      assign Name to "profileActive"
+    }
+  }
+}
+Profile: entity {
+  City: Text
+  Draft: stage {}
+  Active: stage {}
+}

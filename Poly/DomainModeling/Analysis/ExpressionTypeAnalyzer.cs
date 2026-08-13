@@ -65,17 +65,17 @@ internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
 
         // effects (actions, entry/exit, subscriptions)
         foreach (var action in entity.Actions)
-            CheckEffectTree(context, action.Effects, props, ParamsOf(action), enumTypes);
+            CheckEffectTree(context, action.Effects, entity.Name, props, ParamsOf(action), enumTypes);
         foreach (var stage in entity.Stages) {
             foreach (var action in stage.Actions)
-                CheckEffectTree(context, action.Effects, props, ParamsOf(action), enumTypes);
-            CheckEffectTree(context, stage.OnEntryEffects, props, null, enumTypes);
-            CheckEffectTree(context, stage.OnExitEffects, props, null, enumTypes);
+                CheckEffectTree(context, action.Effects, entity.Name, props, ParamsOf(action), enumTypes);
+            CheckEffectTree(context, stage.OnEntryEffects, entity.Name, props, null, enumTypes);
+            CheckEffectTree(context, stage.OnExitEffects, entity.Name, props, null, enumTypes);
             foreach (var sub in stage.Subscriptions)
-                CheckEffectTree(context, sub.Effects, props, null, enumTypes);
+                CheckEffectTree(context, sub.Effects, entity.Name, props, null, enumTypes);
         }
         foreach (var sub in entity.Subscriptions)
-            CheckEffectTree(context, sub.Effects, props, null, enumTypes);
+            CheckEffectTree(context, sub.Effects, entity.Name, props, null, enumTypes);
     }
 
     private static Dictionary<string, string>? ParamsOf(Action action) =>
@@ -95,16 +95,18 @@ internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
     private static void CheckEffectTree(
         AnalysisContext context,
         IEnumerable<Effect> effects,
+        string callerEntityName,
         Dictionary<string, string> props,
         Dictionary<string, string>? parameters,
         Dictionary<string, EnumType> enumTypes) {
         foreach (var effect in effects)
-            CheckEffect(context, effect, props, parameters, enumTypes);
+            CheckEffect(context, effect, callerEntityName, props, parameters, enumTypes);
     }
 
     private static void CheckEffect(
         AnalysisContext context,
         Effect effect,
+        string callerEntityName,
         Dictionary<string, string> props,
         Dictionary<string, string>? parameters,
         Dictionary<string, EnumType> enumTypes) {
@@ -114,36 +116,206 @@ internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
                     var targetType = ResolvePropertyType(target.Name, props, parameters);
                     if (targetType is not null)
                         CheckCompatible(context, assign.Value, targetType, enumTypes,
-                            $"assign to property '{target.Name}'");
+                            $"assign to property '{target.Name}'", props, parameters);
                 }
                 WalkExpression(context, assign.Value, props, parameters, enumTypes);
                 break;
             case ConditionalEffect cond:
                 WalkExpression(context, cond.Condition, props, parameters, enumTypes);
-                CheckEffectTree(context, cond.ThenEffects, props, parameters, enumTypes);
+                CheckEffectTree(context, cond.ThenEffects, callerEntityName, props, parameters, enumTypes);
                 if (cond.ElseEffects is { } elseEffects)
-                    CheckEffectTree(context, elseEffects, props, parameters, enumTypes);
+                    CheckEffectTree(context, elseEffects, callerEntityName, props, parameters, enumTypes);
                 break;
             case CompositeEffect composite:
-                CheckEffectTree(context, composite.Effects, props, parameters, enumTypes);
+                CheckEffectTree(context, composite.Effects, callerEntityName, props, parameters, enumTypes);
                 break;
             case CreateEntityInstance create:
-                foreach (var init in create.Initializers)
-                    WalkExpression(context, init.Expression, props, parameters, enumTypes);
+                CheckCreateInitializers(context, create.Type.TypeName, create.Initializers,
+                    props, parameters, enumTypes);
                 break;
             case CreateEntityInRelationshipEffect createIn:
-                foreach (var init in createIn.Initializers)
-                    WalkExpression(context, init.Expression, props, parameters, enumTypes);
+                CheckCreateInitializers(context,
+                    ResolveRelationshipTargetTypeName(context, callerEntityName, createIn.RelationshipName),
+                    createIn.Initializers, props, parameters, enumTypes);
                 break;
             case InvokeActionEffect invoke:
-                foreach (var binding in invoke.ParameterBindings)
-                    WalkExpression(context, binding.Expression, props, parameters, enumTypes);
+                CheckInvokeArgumentTypes(context, callerEntityName, invoke.TargetRelationship,
+                    binderName: null, invoke.ActionName, invoke.ParameterBindings, props, parameters, enumTypes);
                 break;
             case ForEachInvokeEffect efe:
-                foreach (var binding in efe.ParameterBindings)
-                    WalkExpression(context, binding.Expression, props, parameters, enumTypes);
+                CheckInvokeArgumentTypes(context, callerEntityName, efe.RelationshipName,
+                    binderName: efe.BinderName, efe.ActionName, efe.ParameterBindings, props, parameters, enumTypes);
                 break;
         }
+    }
+
+    /// <summary>
+    /// Type-checks invoke / for-fan-out argument bindings against the callee action's
+    /// declared parameter types (discovery round5 F7): a Text expression bound to a
+    /// Number parameter (invoke line.Mark(amount: line Status)) previously passed
+    /// analysis and broke the export at compile (CS1503). Mirrors assign-RHS checking.
+    /// </summary>
+    private static void CheckInvokeArgumentTypes(
+        AnalysisContext context,
+        string callerEntityName,
+        string? relationshipName,
+        string? binderName,
+        string actionName,
+        IReadOnlyList<PropertyBinding> bindings,
+        Dictionary<string, string> callerProps,
+        Dictionary<string, string>? parameters,
+        Dictionary<string, EnumType> enumTypes) {
+        if (bindings.Count == 0) return;
+        var calleeParams = ResolveActionParameterTypes(context, callerEntityName, relationshipName, actionName);
+        if (calleeParams is null) return; // unresolvable callee — other passes report shape errors
+        var targetEntityName = ResolveCalleeEntityName(context, callerEntityName, relationshipName);
+        foreach (var binding in bindings) {
+            if (calleeParams.TryGetValue(binding.PropertyName, out var paramType)) {
+                // A binder-rooted arg (for lines as line invoke line.Mark(amount: line Status),
+                // or arithmetic over it: line Qty + 1) resolves its type against the target
+                // entity's property.
+                var inferred = binderName is not null && BindsToBinder(binding.Expression, binderName)
+                    ? InferBinderExpressionType(context, targetEntityName, binderName, binding.Expression, enumTypes)
+                    : InferLiteralAware(binding.Expression, paramType, enumTypes);
+                var targetCategory = CategoryOf(paramType, enumTypes);
+                if (inferred.Category is not TypeCategory.Unknown
+                    && targetCategory is not TypeCategory.Unknown
+                    && !Compatible(inferred, new TypeInfo(targetCategory, paramType))) {
+                    Report(context, binding.Expression,
+                        $"type mismatch in argument '{binding.PropertyName}' of invoke '{actionName}': " +
+                        $"cannot assign '{Describe(inferred)}' to '{paramType}'");
+                }
+            }
+            WalkExpression(context, binding.Expression, callerProps, parameters, enumTypes);
+        }
+    }
+
+    /// <summary>True when an expression is a binder-root navigation or arithmetic over one
+    /// (e.g. <c>line Qty</c> or <c>line Qty + 1</c>).</summary>
+    private static bool BindsToBinder(DomainExpression expr, string binderName) {
+        if (expr is RelationshipNavigation { RelationshipName: var rel })
+            return string.Equals(rel, binderName, StringComparison.Ordinal);
+        if (expr is Add or Subtract or Multiply or Divide)
+            return expr.Children.OfType<DomainExpression>().Any(c => BindsToBinder(c, binderName));
+        return false;
+    }
+
+    /// <summary>Infers the type of a binder-rooted argument expression: a binder-root property
+    /// access, or arithmetic (numeric/numeric, date/number) over it. Non-scalar binder roots
+    /// (nested path-prefix) resolve to Unknown.</summary>
+    private static TypeInfo InferBinderExpressionType(
+        AnalysisContext context, string? targetEntityName, string binderName,
+        DomainExpression expr, Dictionary<string, EnumType> enumTypes) {
+        switch (expr) {
+            case RelationshipNavigation rn when string.Equals(rn.RelationshipName, binderName, StringComparison.Ordinal):
+                if (rn.TargetProperty is not PropertyAccess pa) return new(TypeCategory.Unknown);
+                var propType = ResolveTargetPropType(context, targetEntityName, pa.Name);
+                return propType is null ? new(TypeCategory.Unknown) : new(CategoryOf(propType, enumTypes), propType);
+            case Add or Subtract or Multiply or Divide:
+                var operandTypes = expr.Children.OfType<DomainExpression>()
+                    .Select(c => InferBinderExpressionType(context, targetEntityName, binderName, c, enumTypes))
+                    .ToList();
+                if (operandTypes.Any(t => t.Category is TypeCategory.Unknown)) return new(TypeCategory.Unknown);
+                if (operandTypes.All(t => IsNumeric(t.Category))) return new(TypeCategory.Number);
+                if (operandTypes.Count == 2 && IsDate(operandTypes[0].Category) && IsNumeric(operandTypes[1].Category))
+                    return operandTypes[0];
+                // Mixed non-numeric binder prop + number (line Status + 1): surface the
+                // non-numeric type so the param-type mismatch fires instead of passing.
+                return operandTypes.FirstOrDefault(t => !IsNumeric(t.Category));
+            case Literal { Value: long or int or double or float or decimal or short or byte }:
+                return new(TypeCategory.Number);
+            case Literal { Value: string }:
+                return new(TypeCategory.Text);
+            default:
+                return new(TypeCategory.Unknown);
+        }
+    }
+
+    private static string? ResolveTargetPropType(AnalysisContext context, string? targetEntityName, string propName) {
+        if (targetEntityName is null) return null;
+        var lookup = context.GetMetadata<DomainTypeLookupMetadata>(default);
+        var entity = lookup?.Domain?.Types.OfType<Entity>()
+            .FirstOrDefault(e => string.Equals(e.Name, targetEntityName, StringComparison.Ordinal));
+        return entity?.Properties.FirstOrDefault(p => string.Equals(p.Name, propName, StringComparison.Ordinal))?.Type.TypeName;
+    }
+
+    private static string? ResolveCalleeEntityName(
+        AnalysisContext context, string callerEntityName, string? relationshipName) {
+        if (relationshipName is null) return callerEntityName;
+        return ResolveRelationshipTargetTypeName(context, callerEntityName, relationshipName);
+    }
+
+    /// <summary>
+    /// Resolves the callee action's parameter name → type map. Self-invoke
+    /// (relationshipName null) targets the caller entity; cross-entity invoke resolves
+    /// the relationship's target entity. Stage-scoped actions are included.
+    /// </summary>
+    private static Dictionary<string, string>? ResolveActionParameterTypes(
+        AnalysisContext context,
+        string callerEntityName,
+        string? relationshipName,
+        string actionName) {
+        var lookup = context.GetMetadata<DomainTypeLookupMetadata>(default);
+        if (lookup?.Domain is not { } domain) return null;
+
+        var calleeEntityName = ResolveCalleeEntityName(context, callerEntityName, relationshipName);
+        if (calleeEntityName is null) return null;
+
+        var calleeEntity = domain.Types.OfType<Entity>()
+            .FirstOrDefault(e => string.Equals(e.Name, calleeEntityName, StringComparison.Ordinal));
+        if (calleeEntity is null) return null;
+        var action = calleeEntity.Actions.FirstOrDefault(a => string.Equals(a.Name, actionName, StringComparison.Ordinal))
+            ?? calleeEntity.Stages.SelectMany(s => s.Actions)
+                .FirstOrDefault(a => string.Equals(a.Name, actionName, StringComparison.Ordinal));
+        if (action is null || action.Parameters.Count == 0) return null;
+        return action.Parameters.ToDictionary(p => p.Name, p => p.Type.TypeName, StringComparer.Ordinal);
+    }
+
+    /// <summary>
+    /// Type-checks <c>create</c>/<c>create in</c> initializers against the TARGET
+    /// entity's property types (discovery round5 F4): a non-member enum literal
+    /// (create in bins { Status: "Bogus" }) previously passed analysis and broke the
+    /// export at compile (CS1503). Mirrors the assign-RHS compatibility check.
+    /// </summary>
+    private static void CheckCreateInitializers(
+        AnalysisContext context,
+        string? targetEntityTypeName,
+        IReadOnlyList<PropertyBinding> initializers,
+        Dictionary<string, string> callerProps,
+        Dictionary<string, string>? parameters,
+        Dictionary<string, EnumType> enumTypes) {
+        if (targetEntityTypeName is null) {
+            foreach (var init in initializers)
+                WalkExpression(context, init.Expression, callerProps, parameters, enumTypes);
+            return;
+        }
+        var targetProps = ResolveEntityProps(context, targetEntityTypeName);
+        foreach (var init in initializers) {
+            if (targetProps is not null
+                && targetProps.TryGetValue(init.PropertyName, out var targetType)) {
+                CheckCompatible(context, init.Expression, targetType, enumTypes,
+                    $"create initializer for property '{init.PropertyName}'", callerProps, parameters);
+            }
+            WalkExpression(context, init.Expression, callerProps, parameters, enumTypes);
+        }
+    }
+
+    private static string? ResolveRelationshipTargetTypeName(
+        AnalysisContext context, string callerEntityName, string relationshipName) {
+        var lookup = context.GetMetadata<DomainTypeLookupMetadata>(default);
+        var relationship = lookup?.Domain?.Relationships.FirstOrDefault(r =>
+            string.Equals(r.Source.TypeName, callerEntityName, StringComparison.Ordinal)
+            && string.Equals(r.Name, relationshipName, StringComparison.Ordinal));
+        return relationship?.Target.TypeName;
+    }
+
+    private static Dictionary<string, string>? ResolveEntityProps(AnalysisContext context, string entityTypeName) {
+        // Catalog lookup (name → type) — no linear domain.Types scan (round5 F7).
+        var lookup = context.GetMetadata<DomainTypeLookupMetadata>(default);
+        if (lookup is null || !lookup.Types.TryGetValue(entityTypeName, out var type) || type is not Entity entity)
+            return null;
+        return entity.Properties
+            .ToDictionary(p => p.Name, p => p.Type.TypeName, StringComparer.Ordinal);
     }
 
     // ── Expressions ─────────────────────────────────────────────
@@ -267,9 +439,19 @@ internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
         DomainExpression value,
         string targetTypeName,
         Dictionary<string, EnumType> enumTypes,
-        string what) {
-        var inferred = InferLiteralAware(value, targetTypeName, enumTypes);
+        string what,
+        Dictionary<string, string>? props = null,
+        Dictionary<string, string>? parameters = null) {
+        var inferred = InferLiteralAware(value, targetTypeName, enumTypes, props, parameters);
         var targetCategory = CategoryOf(targetTypeName, enumTypes);
+        // Bare non-member enum identifier on an enum-typed target: a PropertyAccess that is
+        // neither an enum member nor an entity property resolves to Unknown — reject at
+        // analysis (was a late CS1061 at compile time).
+        if (inferred.Category is TypeCategory.Unknown && targetCategory is TypeCategory.Enum
+            && value is PropertyAccess { Name: var name }
+            && ResolvePropertyType(name, props, parameters) is null) {
+            Report(context, value, $"'{name}' is not a member of enum '{targetTypeName}'");
+        }
         if (inferred.Category is TypeCategory.Unknown || targetCategory is TypeCategory.Unknown)
             return;
         // enum member validity for the RHS
@@ -339,7 +521,8 @@ internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
 
     private readonly record struct TypeInfo(TypeCategory Category, string? TypeName = null);
 
-    private static TypeInfo InferLiteralAware(DomainExpression expr, string targetTypeName, Dictionary<string, EnumType> enumTypes) {
+    private static TypeInfo InferLiteralAware(DomainExpression expr, string targetTypeName, Dictionary<string, EnumType> enumTypes,
+        Dictionary<string, string>? props = null, Dictionary<string, string>? parameters = null) {
         // For the assign RHS / default check, a bare enum-member identifier (PropertyAccess)
         // is valid when the target is enum-typed and the name is a member.
         if (expr is PropertyAccess pa && CategoryOf(targetTypeName, enumTypes) is TypeCategory.Enum) {
@@ -347,7 +530,7 @@ internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
                 && enumType.MemberNames.Contains(pa.Name, StringComparer.Ordinal))
                 return new(TypeCategory.Enum, targetTypeName);
         }
-        return InferType(expr, null, null, enumTypes);
+        return InferType(expr, props, parameters, enumTypes);
     }
 
     private static TypeInfo InferType(

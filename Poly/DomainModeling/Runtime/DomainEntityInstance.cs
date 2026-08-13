@@ -135,7 +135,7 @@ public sealed record DomainEntityInstance {
                 values[prop.Name] = v;
             }
             else if (prop.Constraints.OfType<DefaultValueConstraint>().FirstOrDefault() is { } defaultValue) {
-                values[prop.Name] = EvaluateDefaultValue(defaultValue.Expression);
+                values[prop.Name] = EvaluateDefaultValue(defaultValue.Expression, prop.Type.TypeName);
             }
             else {
                 values[prop.Name] = null; // default for unspecified properties
@@ -244,17 +244,24 @@ public sealed record DomainEntityInstance {
     }
 
     /// <summary>
-    /// Evaluates a DSL default expression to a concrete runtime value. The runtime
-    /// stores enum-typed properties as strings, so an enum member name (e.g.
-    /// <c>default(Active)</c>) lowers to its name string; <c>now</c>/<c>today</c>/<c>guid</c>
+    /// Evaluates a DSL default expression to a concrete runtime value, adapted to
+    /// the target property's CLR type when known (discovery round5 F1–F3).
+    /// The runtime stores enum-typed properties as strings, so an enum member name
+    /// (e.g. <c>default(Active)</c>) lowers to its name string; <c>now</c>/<c>today</c>/<c>guid</c>
     /// evaluate at creation time. Matches the C# export's defaulted optional ctor params.
     /// </summary>
-    private static object? EvaluateDefaultValue(DomainExpression expr) => expr switch {
+    private static object? EvaluateDefaultValue(DomainExpression expr, string? propTypeName = null) => expr switch {
         Literal lit => lit.Value,
         PropertyAccess pa => pa.Name switch {
-            "now" or "utcnow" => DateTime.UtcNow,
-            "today" => DateOnly.FromDateTime(DateTime.UtcNow),
-            "guid" => Guid.NewGuid(),
+            "now" or "utcnow" => propTypeName is "DateTime" or "Timestamp"
+                ? DateTime.UtcNow
+                : DateOnly.FromDateTime(DateTime.UtcNow),
+            "today" => propTypeName is "DateTime" or "Timestamp"
+                ? DateTime.Today
+                : DateOnly.FromDateTime(DateTime.Today),
+            "guid" => propTypeName is "Text" or "String"
+                ? Guid.NewGuid().ToString()
+                : Guid.NewGuid(),
             _ => pa.Name // enum member name — runtime stores enum values as strings
         },
         _ => null
@@ -622,7 +629,7 @@ public sealed record DomainEntityInstance {
     /// (or fail closed) before VM lowering.
     /// </summary>
     private Effect PreprocessEffectExpressions(Effect effect) => effect switch {
-        AssignEffect a => a with { Value = PreprocessQuantifiers(a.Value) },
+        AssignEffect a => a with { Value = PreprocessRuntimeKeyword(a.Value, (a.Target as PropertyAccess)?.Name) },
         ConditionalEffect c => c with {
             Condition = PreprocessQuantifiers(c.Condition),
             ThenEffects = c.ThenEffects.Select(PreprocessEffectExpressions).ToList(),
@@ -652,6 +659,18 @@ public sealed record DomainEntityInstance {
         ForEachInvokeEffect efe => efe,
         _ => effect
     };
+
+    /// <summary>Rewrites an assign RHS runtime keyword (now/today/guid) into a literal via the
+    /// type-aware <see cref="EvaluateDefaultValue"/> — the shared VM lowering emits
+    /// <c>DateOnly.FromDateTime(...)</c> for such RHS, which the runtime VM cannot execute.</summary>
+    private DomainExpression PreprocessRuntimeKeyword(DomainExpression value, string? targetPropName) {
+        if (value is PropertyAccess { Name: var name } && name is "now" or "utcnow" or "today" or "guid") {
+            var propType = Entity.Properties.FirstOrDefault(p =>
+                string.Equals(p.Name, targetPropName, StringComparison.Ordinal))?.Type.TypeName;
+            return DomainExpression.Literal(EvaluateDefaultValue(value, propType));
+        }
+        return PreprocessQuantifiers(value);
+    }
 
     /// <summary>
     /// Dispatches direct-execution effects using <see cref="EffectDispatch{TResult}"/>.

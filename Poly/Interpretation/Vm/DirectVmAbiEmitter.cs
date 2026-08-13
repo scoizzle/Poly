@@ -741,6 +741,19 @@ public static class DirectVmAbiEmitter {
             var ec = Call(typeof(object).GetMethod("Equals", [typeof(object), typeof(object)])!, lo, ro);
             return cf == Equal ? ec : Not(ec);
         }
+        if (!eq && ctx.Analysis is not null
+            && ctx.Analysis.GetValueRepresentation(left) == ValueRepresentationKind.HeapRef
+            && ctx.Analysis.GetValueRepresentation(right) == ValueRepresentationKind.HeapRef) {
+            // Relational comparison of heap-resident values (DateOnly/DateTime/
+            // Guid/string/...): compare the boxed values, not the raw handles.
+            // Analysis-known HeapRef on BOTH operands only — unresolved bag reads
+            // (Unknown) keep the scalar path.
+            var lo = HeapValueToObject(lv, ctx);
+            var ro = HeapValueToObject(rv, ctx);
+            var cmp = Call(typeof(VmHeapComparison).GetMethod(
+                nameof(VmHeapComparison.Compare), [typeof(object), typeof(object)])!, lo, ro);
+            return cf(cmp, Constant(0));
+        }
         if (IsDoubleValue(ctx, left) || IsDoubleValue(ctx, right))
             return cf(Call(BitConverterInt64BitsToDouble, lv), Call(BitConverterInt64BitsToDouble, rv));
         return cf(lv, rv);
@@ -759,6 +772,19 @@ public static class DirectVmAbiEmitter {
             var ec = Call(typeof(object).GetMethod("Equals", [typeof(object), typeof(object)])!, lo, ro);
             return Condition(ec, cf == Equal ? Constant(1L) : Constant(0L),
                                 cf == Equal ? Constant(0L) : Constant(1L));
+        }
+        if (!eq && ctx.Analysis is not null
+            && ctx.Analysis.GetValueRepresentation(left) == ValueRepresentationKind.HeapRef
+            && ctx.Analysis.GetValueRepresentation(right) == ValueRepresentationKind.HeapRef) {
+            // Relational comparison of heap-resident values (DateOnly/DateTime/
+            // Guid/string/...): compare the boxed values, not the raw handles.
+            // Analysis-known HeapRef on BOTH operands only — unresolved bag reads
+            // (Unknown) keep the scalar path.
+            var lo = HeapValueToObject(lv, ctx);
+            var ro = HeapValueToObject(rv, ctx);
+            var cmp = Call(typeof(VmHeapComparison).GetMethod(
+                nameof(VmHeapComparison.Compare), [typeof(object), typeof(object)])!, lo, ro);
+            return Condition(cf(cmp, Constant(0)), Constant(1L), Constant(0L));
         }
         if (IsDoubleValue(ctx, left) || IsDoubleValue(ctx, right))
             return Condition(cf(Call(BitConverterInt64BitsToDouble, lv), Call(BitConverterInt64BitsToDouble, rv)),

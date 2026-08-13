@@ -189,7 +189,8 @@ public sealed class DomainToCSharpExporter {
             var defaultValue = prop.Constraints.OfType<DefaultValueConstraint>().FirstOrDefault();
             var paramName = ToCamelCase(prop.Name);
             if (defaultValue is not null) {
-                var runtimeExpr = EffectLoweringPass.LowerDefaultExpression(defaultValue.Expression);
+                var runtimeExpr = EffectLoweringPass.LowerDefaultExpression(
+                    defaultValue.Expression, new NamedTypeReference(prop.Type.TypeName));
                 if (runtimeExpr is not null) {
                     // Runtime default (now/today/guid) can't be a compile-time default —
                     // T? = null sentinel; body applies the runtime default when null.
@@ -485,6 +486,37 @@ public sealed class DomainToCSharpExporter {
                             new Member(new NamedTypeReference(stageEnumTypeName), info.SubscriberStageName)),
                         new Block([new Return()]));
                     handlerBody = new Block([stageGate, handlerBody]);
+                }
+
+                // `when all Rel Stage` fires only when EVERY linked target is in the
+                // watched stage (and at least one exists) — the notify call fires per
+                // transition, so the set condition must gate the handler body. Mirrors
+                // the runtime dispatch (matchedCount == allLinkedTargets.Count; the
+                // empty set never fires). Discovery round5 F10. The gate references the
+                // target's CurrentStage / stage enum, so it is only emitted when the
+                // target actually has stages (a stageless target is rejected at analysis;
+                // the guard is defense-in-depth).
+                if (info.Subscription.Quantifier == StageSubscriptionQuantifier.All
+                    && info.TargetEntity.Stages.Count > 0) {
+                    var targetStageEnumName = metadata.GetMetadata<EntityStructureMetadata>(info.TargetEntity)
+                        ?.StageEnumTypeName ?? $"{info.TargetEntity.Name}Stage";
+                    var linkedVar = new Variable("linkedTarget");
+                    var matchedVar = new Variable("linkedMatched", new Constant(false));
+                    var gateLoop = new ForEachLoop(
+                        linkedVar,
+                        new Member(new ThisReference(), ToPascalCase(info.Relationship.Name)),
+                        new Block([
+                            new Assignment(matchedVar, new Constant(true)),
+                            new IfStatement(
+                                new NotEqual(
+                                    new Member(linkedVar, "CurrentStage"),
+                                    new Member(new NamedTypeReference(targetStageEnumName), info.StageName)),
+                                new Block([new Return()]))
+                        ]));
+                    var emptyCheck = new IfStatement(
+                        new Poly.Ast.Nodes.Not(matchedVar),
+                        new Block([new Return()]));
+                    handlerBody = new Block([matchedVar, gateLoop, emptyCheck, handlerBody]);
                 }
 
                 methods.Add(new MethodDefinitionNode(
@@ -801,7 +833,8 @@ public sealed class DomainToCSharpExporter {
 
             var paramName = ToCamelCase(prop.Name);
             var mapped = MapDomainTypeRef(prop.Type, domain, metadata);
-            var runtimeExpr = EffectLoweringPass.LowerDefaultExpression(defaultConstraint.Expression);
+            var runtimeExpr = EffectLoweringPass.LowerDefaultExpression(
+                defaultConstraint.Expression, new NamedTypeReference(prop.Type.TypeName));
             if (runtimeExpr is not null) {
                 methodParams.Add(new Parameter(paramName,
                     new OptionalTypeReference(mapped),

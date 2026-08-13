@@ -1,0 +1,42 @@
+domain Round5MissingParams
+
+// Guide §6 shape rules: "missing/duplicate action parameter bindings" are
+// rejected. Probe each: missing required param, unknown param, duplicate
+// binding of the same param.
+
+LineItem: entity {
+  Qty: Number default(1)
+  Active: stage { }
+
+  Mark: action (amount: Number) {
+    assign Qty to amount
+  }
+
+  MarkTwo: action (amount: Number, note: Text) {
+    assign Qty to amount
+  }
+}
+
+Order: entity {
+  lines: many LineItem
+
+  MissingParam: action {
+    // Mark requires `amount` — nothing bound.
+    for lines as line invoke line.Mark()
+  }
+
+  UnknownParam: action {
+    // `extra` is not a Mark parameter.
+    for lines as line invoke line.Mark(extra: 1)
+  }
+
+  DuplicateParam: action {
+    // `amount` bound twice.
+    for lines as line invoke line.Mark(amount: 1 amount: 2)
+  }
+
+  WrongPositional: action {
+    // `note` value lands on `amount` if binding names are dropped.
+    for lines as line invoke line.MarkTwo(amount: 1 note: "x")
+  }
+}

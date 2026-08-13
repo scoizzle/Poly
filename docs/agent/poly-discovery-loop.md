@@ -28,6 +28,13 @@ quantifiers", "date/time + defaults", "constraints + create paths", "subscriptio
 entry/exit + stage scoping"). Probe *within* your slice; you may wander into adjacent
 areas but only report findings you can back with a repro.
 
+**Sibling-form checklist (round-5 P1):** when a finding targets one authoring form of a
+semantic (e.g. a non-member enum identifier in a `create-in`), enumerate **all** authoring
+forms of that semantic and probe each: string literal, bare identifier, `assign` RHS,
+`create`/`create-in` initializer, `default(...)`, action-invoke argument, and (for invoke
+fan-out) the binder-rooted arg. A fix that covers only the literal form leaves the
+bare-identifier siblings late-rung. Add a regression test per form.
+
 ## Pipeline (the automated path — no MCP required)
 
 1. **Author 2–3 probe domains** under `probes/<your-agent>/<name>.poly`. Model a real,
@@ -38,6 +45,12 @@ areas but only report findings you can back with a repro.
    `scripts/run-probe.sh probes/<your-agent>/<name>.poly`
    → parse/analyze/export, then Roslyn compile-check (0 errors / 0 warnings required).
    A compile failure is a finding by itself (repro = the `.poly` + the error).
+   **Late-rung sweep (round-5 P2):** the compile gate does NOT catch codegen-time
+   exceptions or late-rung type failures (e.g. `default(now)` on a Number property that
+   passes analysis but fails at code generation). For a finding, probe the same DSL
+   through `--mode all` and check for codegen/export exceptions, and verify the analysis
+   rung rejects it first — a construct should fail at the earliest rung, not at the
+   compiler.
 3. **Review the export for the slice's constructs.** Read the generated C# for:
    - wrong member names / arity (CS1061/CS1503 class — the exporter emitted a raw
      DSL name or wrong type);

@@ -1,0 +1,48 @@
+domain Round5LoanbookBad
+
+// Deliberately-invalid surface: expect analysis rejection for each construct.
+// Each block below is authored to FAIL; run-probe.sh will report the diagnostics.
+
+Book: entity {
+  Title: Text required
+}
+
+Patron: entity {
+  Name: Text required
+  VIP: Boolean default(false)
+  loans: many Loan
+  book: Book // to-one nav — quantifier on non-OneToMany must be rejected
+
+  // 1) unparenthesized `or` inside a quantifier body (guide: body is an and-chain).
+  //    Expected: either rejection or hoist; check which.
+  OrHoist: policy { any loans where Total > 100 or VIP is true }
+  // 2) quantifier on a to-one relationship (DMEFF007 family) — must be rejected
+  AnyBook: policy { any book where Title is "Classic" }
+  // 3) bare path-prefix on a `many` relationship — must be rejected
+  LoansStatus: policy { loans Status is "Open" }
+}
+
+Loan: entity {
+  Total: Number range(0, )
+  Status: Text
+  borrower: Patron
+  book: Book
+
+  // 4) reverse-side path-prefix: `loans` is not a nav on Loan
+  ReverseSide: policy { loans Status is "Open" }
+  // 5) self-relationship quantifier — must be rejected
+  //    (Loan would need a self-rel; declared here as `related: many Loan`)
+  related: many Loan
+  SelfQuant: policy { any related where Total > 0 }
+}
+
+// 6) nested path-prefix under a subscription binder — must be rejected
+Receipt: entity {
+  note: Text
+  loan: Loan
+  Active: stage {
+    when loans Open as loan {
+      assign note to loan book Title
+    }
+  }
+}

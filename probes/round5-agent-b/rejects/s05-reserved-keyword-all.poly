@@ -1,0 +1,15 @@
+domain S05ReservedKeywordAll
+Invoice: entity {
+  Amount: Number default(0)
+  Draft: stage {}
+  Paid: stage {}
+}
+BadRelName: entity {
+  Status: Text default("")
+  all: Invoice
+  Draft: stage {
+    when all Active {
+      assign Status to "x"
+    }
+  }
+}

@@ -494,4 +494,26 @@ public class SubscriptionAnalysisTests {
 
         await Assert.That(trackerInstance.GetProperty<string>("Status")).IsEqualTo("Untouched");
     }
+
+    [Test]
+    public async Task Analyze_WhenAllOnStagelessTarget_ReportsError() {
+        // Round-5 F4: `when all Rel Stage` where the target has NO stages must be
+        // rejected at analysis (the watched stage cannot exist) — otherwise the export
+        // gate would emit a nonexistent CurrentStage/stage-enum reference (CS1061).
+        var ctx = DomainInputBuilder.CreateWithSqlPack().Build();
+        var parser = new PolyDslParser("""
+            domain Test
+            Task: entity { Flag: Text }
+            Project: entity {
+              tasks: many Task
+              when all tasks Done { }
+            }
+            """, ctx.Parser);
+        var changes = parser.Parse();
+        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(changes);
+
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(result.Analysis.Diagnostics.Any(d =>
+            d.Message.Contains("stage 'Done'") && d.Message.Contains("does not exist"))).IsTrue();
+    }
 }

@@ -1,0 +1,11 @@
+domain ReviewSubInvoke
+Task: entity {
+  Done: stage { }
+  Go: action { transition to Done }
+}
+Project: entity {
+  tasks: many Task
+  when tasks Done {
+    invoke Go
+  }
+}

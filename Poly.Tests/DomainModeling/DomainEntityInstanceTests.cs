@@ -78,6 +78,81 @@ public class DomainEntityInstanceTests {
             entity.Policies.First(p => p.Name == "IsAdult"))).IsTrue();
     }
 
+    private static Entity CreateDateComparisonEntity() {
+        var start = new Property("Start", new DomainTypeReference("Date"), []);
+        var end = new Property("End", new DomainTypeReference("Date"), []);
+        var name = new Property("Name", new DomainTypeReference("Text"), []);
+
+        var isCurrent = new Policy("IsCurrent",
+            DomainExpression.GreaterThanOrEqual(
+                DomainExpression.Property("End"),
+                DomainExpression.Property("Start")));
+        var isAfter = new Policy("IsAfter",
+            DomainExpression.GreaterThan(
+                DomainExpression.Property("End"),
+                DomainExpression.Property("Start")));
+        var isBefore = new Policy("IsBefore",
+            DomainExpression.LessThan(
+                DomainExpression.Property("End"),
+                DomainExpression.Property("Start")));
+        var namePastB = new Policy("NamePastB",
+            DomainExpression.GreaterThan(
+                DomainExpression.Property("Name"),
+                DomainExpression.Literal("b")));
+
+        return new Entity("Booking",
+            Properties: [start, end, name],
+            Actions: [],
+            Policies: [isCurrent, isAfter, isBefore, namePastB],
+            Stages: []);
+    }
+
+    [Test]
+    public async Task EvaluatePolicy_DateRelationalComparison_UsesValuesNotHeapHandles() {
+        // Discovery round5 F6: relational comparisons on heap-represented operands
+        // (DateOnly/DateTime/Guid/string) previously compared fresh heap handles —
+        // `a < b` always true, `a > b` always false regardless of values.
+        var entity = CreateDateComparisonEntity();
+        var instance = DomainEntityInstance.Create(entity, new Dictionary<string, object?> {
+            ["Start"] = new DateOnly(2024, 1, 1),
+            ["End"] = new DateOnly(2026, 1, 1)
+        });
+
+        await Assert.That(instance.EvaluatePolicy(entity.Policies.First(p => p.Name == "IsCurrent"))).IsTrue();
+        await Assert.That(instance.EvaluatePolicy(entity.Policies.First(p => p.Name == "IsAfter"))).IsTrue();
+        await Assert.That(instance.EvaluatePolicy(entity.Policies.First(p => p.Name == "IsBefore"))).IsFalse();
+    }
+
+    [Test]
+    public async Task EvaluatePolicy_StringRelationalComparison_UsesValuesNotHeapHandles() {
+        var entity = CreateDateComparisonEntity();
+        var instance = DomainEntityInstance.Create(entity, new Dictionary<string, object?> {
+            ["Name"] = "zebra"
+        });
+
+        await Assert.That(instance.EvaluatePolicy(entity.Policies.First(p => p.Name == "NamePastB"))).IsTrue();
+    }
+
+    [Test]
+    public async Task Create_RuntimeKeywordDefaults_AdaptToPropertyClrType() {
+        // Discovery round5 F1–F3: the runtime must store a DateOnly for `default(now)`
+        // on a Date prop and a string for `default(guid)` on a Text prop — not raw
+        // DateTime/Guid (cross-typed stores that broke downstream comparisons).
+        var start = new Property("Start", new DomainTypeReference("Date"),
+            [new DefaultValueConstraint(DomainExpression.Property("now"))]);
+        var externalId = new Property("ExternalId", new DomainTypeReference("Text"),
+            [new DefaultValueConstraint(DomainExpression.Property("guid"))]);
+        var entity = new Entity("A",
+            Properties: [start, externalId],
+            Actions: [],
+            Policies: [],
+            Stages: []);
+
+        var instance = DomainEntityInstance.Create(entity);
+        await Assert.That(instance.GetProperty<object>("Start")).IsTypeOf<DateOnly>();
+        await Assert.That(instance.GetProperty<object>("ExternalId")).IsTypeOf<string>();
+    }
+
     [Test]
     public async Task InvokeAction_WithPassingGuards_Succeeds() {
         var entity = CreatePersonEntity();
@@ -890,6 +965,25 @@ public class DomainEntityInstanceTests {
         await Assert.That(result.Succeeded).IsTrue();
         // amount = item.Qty (5) + Bonus (10) = 15.
         await Assert.That(tgt.GetProperty<long>("Qty")).IsEqualTo(15L);
+    }
+
+    [Test]
+    public async Task Assign_DatePropToNow_StoresDateOnly() {
+        // Round-5 F5: `assign DateProp to now` on the runtime path must store a DateOnly
+        // (not a DateTime) for a Date property — mirroring the type-aware default handling.
+        var dueDate = new Property("DueDate", new DomainTypeReference("Date"), []);
+        var action = new Poly.DomainModeling.Action("Touch", InvocationResult.Void, [], [
+            new AssignEffect(DomainExpression.Property("DueDate"), DomainExpression.Property("now"))
+        ], []);
+        var entity = new Entity("Item", [dueDate], [action], [], []);
+        var domain = DomainTestFactory.Create("Test", [entity]);
+
+        var instance = DomainEntityInstance.Create(entity, domain: domain);
+        var result = instance.InvokeAction("Touch");
+        await Assert.That(result.Succeeded).IsTrue();
+
+        var value = instance.GetProperty<object>("DueDate");
+        await Assert.That(value).IsTypeOf<DateOnly>();
     }
 
     [Test]

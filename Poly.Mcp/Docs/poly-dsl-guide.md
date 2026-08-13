@@ -470,6 +470,11 @@ and invokes the action on each. One fan-out mode, no `any`/`all`/`each` quantifi
 - **Zero matches fail** (no vacuous success).
 - Rollback of already-invoked records is a documented gap (fail-fast guarantees the caller
   always sees the failure; atomic undo is not shipped).
+- **Store-dependent predicates are runtime-only:** a predicate policy that needs the store
+  (collection quantifiers, path-prefix reads, `Rel exists`) is **rejected at analysis** on
+  the C# export path ("is store-dependent … cannot be compiled to standalone C#"). The
+  runtime store path (MCP `create_instance` + `link_instances` + `invoke_action`) supports
+  them. Use a **local policy over the record's own properties** for the standalone export.
 
 ```poly
 invoke Validate                              # self-only
@@ -747,6 +752,15 @@ diverging:
 - **`pattern(regex)` validates stored values at write time** (create/assign) — it is a
   constraint, not a query/read filter. Grep-style read-time matching against stored text
   is not expressible.
+- **Store-dependent expressions are runtime-only on the standalone C# export.** The C#
+  export lowers a policy that needs the store (Q3′ collection quantifiers `any`/`all`/
+  `none`/`count`, path-prefix reads beyond to-one hops, `Rel exists`/`not Rel exists`) to a
+  method that **throws `NotSupportedException` at call time** ("requires store-aware
+  evaluation"); a `for` predicate using such a policy is **rejected at analysis**. The
+  runtime store path (MCP `create_instance` + `link_instances` + `evaluate_policy` /
+  `invoke_action`) is the supported evaluation surface for these forms. Author store-
+  dependent expressions only when you run through the store, or keep policies local to the
+  record's own properties for the export.
 - **Relative date ordering is not supported** (e.g. comparing a date property to
   `now`/`today`); only comparisons between two date properties are authorable.
 - **Expressions are type-checked at analysis.** Wrong-typed comparisons, assigns,

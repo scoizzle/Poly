@@ -962,6 +962,28 @@ public class DomainToCSharpExporterTests {
             d.Message.Contains("store-dependent"))).IsTrue();
     }
 
+    [Test]
+    public async Task Export_WhenAllGate_UsesTargetStageEnumName() {
+        // Round-5 F8: the `when all` gate must reference the TARGET's stage enum (via the
+        // target's EntityStructureMetadata), not the subscriber's convention — the gate
+        // checks linkedTarget.CurrentStage != {Target}Stage.Done.
+        var (domain, analysis) = ParseAndAnalyze("""
+            domain Test
+            Task: entity {
+              Done: stage { }
+            }
+            Project: entity {
+              tasks: many Task
+              when all tasks Done { }
+            }
+            """);
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var unit = new CompilationUnitNode([], null, types, null);
+        var cs = new CSharpGenerator().Generate(unit);
+
+        await Assert.That(cs).Contains("linkedTarget.CurrentStage != TaskStage.Done");
+    }
+
     private static IEnumerable<Invoke> FindAllInvokes(Node node) {
         if (node is Invoke inv) yield return inv;
         foreach (var child in node.Children) {
@@ -1016,6 +1038,64 @@ public class DomainToCSharpExporterTests {
         // R6: the CS7036/CS1501 export class must fail in-suite, not at a consumer.
         var (domain, analysis) = ParseAndAnalyze(LibraryCheckoutDsl);
         await AssertExportCompiles(domain, analysis);
+    }
+
+    [Test]
+    public async Task Export_RuntimeKeywordDefaults_AdaptToTargetClrType() {
+        // Discovery round5 F1–F3: `default(guid)` on Text, `default(now)` on Date,
+        // `default(today)` on DateTime, and `assign DateProp to now` must export
+        // type-adapted C# — previously CS0019 (`string ?? Guid`, `DateOnly? ?? DateTime`,
+        // `DateTime? ?? DateOnly`) and CS0029 (`assign Date to now`).
+        const string dsl = """
+            domain KeywordDefaults
+
+            A: entity {
+              ExternalId: Text default(guid)
+              StartDate: Date default(now)
+              OpenedAt: DateTime default(today)
+              Stamp: action {
+                assign StartDate to now
+              }
+            }
+            """;
+        var (domain, analysis) = ParseAndAnalyze(dsl);
+        await AssertExportCompiles(domain, analysis);
+
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var csharp = new CSharpGenerator().Generate(types);
+        await Assert.That(csharp).Contains("Guid.NewGuid().ToString()");
+        await Assert.That(csharp).Contains("DateOnly.FromDateTime(DateTime.UtcNow)");
+        await Assert.That(csharp).Contains("DateTime.Today");
+    }
+
+    [Test]
+    public async Task Export_WhenAllSubscription_GatesHandlerOnFullSet() {
+        // Discovery round5 F10: `when all Rel Stage` must fire only when EVERY linked
+        // target is in the stage — the generated handler needs the all-set gate
+        // (previously it fired on the first matching transition, diverging from the
+        // runtime dispatch and the guide).
+        const string dsl = """
+            domain AllGate
+
+            WorkItem: entity {
+              Code: Text
+              Done: stage { }
+            }
+            Project: entity {
+              Status: Text default("starting")
+              items: many WorkItem
+              when all items Done {
+                assign Status to "allDone"
+              }
+            }
+            """;
+        var (domain, analysis) = ParseAndAnalyze(dsl);
+        await AssertExportCompiles(domain, analysis);
+
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var csharp = new CSharpGenerator().Generate(types);
+        await Assert.That(csharp).Contains("linkedTarget.CurrentStage != WorkItemStage.Done");
+        await Assert.That(csharp).Contains("if (!linkedMatched)");
     }
 
     [Test]

@@ -107,16 +107,35 @@ try {
     else {
         // stdout mode: prefer combined entity file when present;
         // otherwise emit all generated files with stable file headers.
+        // Each generated file is self-contained (`#nullable enable` + usings) —
+        // concatenating them with headers intact would put `using` clauses
+        // mid-file (CS1529). Emit the header once (all usings merged at the
+        // top, deduped), strip the per-file headers. Discovery round5 F5.
         var files = result.Files!;
         var combined = files.FirstOrDefault(f => f.FileName == "_all.cs");
         if (combined != default) {
             await Console.Out.WriteLineAsync(combined.Source);
         }
         else {
+            var seenUsings = new HashSet<string>(StringComparer.Ordinal);
+            var allUsings = new List<string>();
+            foreach (var file in files) {
+                foreach (var line in file.Source.Replace("\r\n", "\n").Split('\n')) {
+                    if (line.StartsWith("using ", StringComparison.Ordinal)
+                        && seenUsings.Add(line.Trim())) {
+                        allUsings.Add(line.Trim());
+                    }
+                }
+            }
+            await Console.Out.WriteLineAsync("#nullable enable");
+            foreach (var u in allUsings)
+                await Console.Out.WriteLineAsync(u);
+            await Console.Out.WriteLineAsync();
+
             for (int i = 0; i < files.Count; i++) {
                 var file = files[i];
                 await Console.Out.WriteLineAsync($"// ===== {file.FileName} =====");
-                await Console.Out.WriteLineAsync(file.Source);
+                await Console.Out.WriteLineAsync(StripGeneratedHeader(file.Source));
                 if (i < files.Count - 1) {
                     await Console.Out.WriteLineAsync();
                 }
@@ -129,4 +148,21 @@ try {
 catch (Exception ex) {
     Console.Error.WriteLine($"Error: {ex.Message}");
     return 1;
+}
+
+/// <summary>
+/// Removes a generated file's leading header block (<c>#nullable enable</c> +
+/// <c>using …;</c> lines + trailing blank lines) so concatenated stdout output
+/// keeps `using` clauses at the top of the file only (CS1529).
+/// </summary>
+static string StripGeneratedHeader(string source) {
+    var lines = source.Replace("\r\n", "\n").Split('\n');
+    int i = 0;
+    while (i < lines.Length && (lines[i].Trim() is "" or "#nullable enable" or "#nullable disable" or "#nullable restore"))
+        i++;
+    while (i < lines.Length && lines[i].StartsWith("using ", StringComparison.Ordinal))
+        i++;
+    while (i < lines.Length && string.IsNullOrWhiteSpace(lines[i]))
+        i++;
+    return string.Join('\n', lines[i..]);
 }

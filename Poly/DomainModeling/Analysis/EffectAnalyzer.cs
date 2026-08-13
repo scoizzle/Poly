@@ -742,6 +742,23 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
         if (!TryResolveRelationship(context, domain, entity.Name, efe.RelationshipName, efe, out var relationship))
             return;
         if (relationship is null) {
+            // Reverse-side detection: the name exists on a different source entity,
+            // so this is a wrong-direction `for`, not an unknown relationship.
+            // (Discovery round5 F9 — the old message sent authors hunting for a
+            // missing declaration that exists elsewhere.)
+            var relLookup = ResolveRelationshipLookup(context, domain);
+            if (relLookup is not null) {
+                var elsewhere = relLookup.FindByNameAcrossSources(efe.RelationshipName).FirstOrDefault();
+                if (elsewhere is not null) {
+                    context.ReportError(
+                        efe,
+                        $"ForEachInvoke relationship '{efe.RelationshipName}' is declared on source entity " +
+                        $"'{elsewhere.Source.TypeName}', not '{entity.Name}' — reverse-side fan-out invoke " +
+                        "is not supported.",
+                        DomainModelDiagnosticCodes.EffectInvokeShape);
+                    return;
+                }
+            }
             context.ReportError(
                 efe,
                 $"ForEachInvoke references relationship '{efe.RelationshipName}' which does not exist on domain.",
@@ -836,6 +853,18 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
                 $"ForEachInvoke references action '{efe.ActionName}' which does not exist on entity '{targetEntity.Name}'.",
                 DomainModelDiagnosticCodes.EffectBinding);
             return;
+        }
+
+        // Discovery round5 F8: fan-out invoking an entity-returning action from a void
+        // body drops the created instance and the export cannot compile it (CS0029 —
+        // DomainResult<T> returned from a DomainResult method). Fail-closed at analysis.
+        if (targetAction.Result.Members.Count > 0) {
+            context.ReportError(
+                efe,
+                $"ForEachInvoke references action '{targetAction.Name}' which declares a return type " +
+                $"('{targetAction.Result.Members[0].Type.TypeName}'). Fan-out invoking an entity-returning " +
+                "action is not supported — the created instance would be discarded.",
+                DomainModelDiagnosticCodes.EffectInvokeShape);
         }
 
         foreach (var binding in efe.ParameterBindings) {
@@ -992,6 +1021,17 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
                 $"on entity '{targetEntity.Name}'.",
                 DomainModelDiagnosticCodes.EffectBinding);
             return;
+        }
+
+        // Discovery round5 F8: invoking an entity-returning action as an effect drops
+        // the created instance (and the export cannot compile it in a void body — CS0029).
+        if (targetAction.Result.Members.Count > 0) {
+            context.ReportError(
+                iae,
+                $"InvokeAction effect references action '{targetAction.Name}' which declares a return type " +
+                $"('{targetAction.Result.Members[0].Type.TypeName}'). Invoking an entity-returning action " +
+                "as an effect is not supported — the created instance would be discarded.",
+                DomainModelDiagnosticCodes.EffectInvokeShape);
         }
 
         // Unknown bindings

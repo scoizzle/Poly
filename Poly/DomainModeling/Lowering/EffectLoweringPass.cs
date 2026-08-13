@@ -157,6 +157,20 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         if (a.Target is PropertyAccess propAccess) {
             var entityProp = _entity.Properties.FirstOrDefault(p =>
                 string.Equals(p.Name, propAccess.Name, StringComparison.Ordinal));
+
+            // Runtime keywords in an assign RHS (assign DueDate to now / today /
+            // guid) must adapt to the TARGET property's CLR type — the raw keyword
+            // shape (DateTime.UtcNow / DateOnly / Guid) would otherwise be
+            // cross-typed (CS0029/CS0019 in the export, wrong-typed stores at runtime).
+            // Discovery round5 F2/F3.
+            if (entityProp is not null
+                && a.Value is PropertyAccess keywordAccess
+                && keywordAccess.Name is "now" or "utcnow" or "today" or "guid") {
+                var adapted = LowerDefaultExpression(
+                    keywordAccess, new NamedTypeReference(entityProp.Type.TypeName));
+                if (adapted is not null) value = adapted;
+            }
+
             if (entityProp is not null
                 && DomainToCSharpExporter.TryResolveEnumType(_domain, _analysis, entityProp.Type.TypeName, out var enumType)
                 && enumType is not null) {
@@ -574,25 +588,34 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     // ── Runtime default expression helpers ───────────────────────
 
     /// <summary>
-    /// Builds a Syntax AST node for a runtime default expression.
-    /// Returns <c>DateTime.UtcNow</c>, <c>Guid.NewGuid()</c>, etc.
-    /// based on the expression type in the <see cref="DefaultValueConstraint"/>.
+    /// Builds a Syntax AST node for a runtime default expression, adapted to the
+    /// target property's CLR type when known (discovery round5 F1–F3).
+    /// <c>now</c>/<c>utcnow</c> → <c>DateTime.UtcNow</c> on a DateTime target,
+    /// <c>DateOnly.FromDateTime(DateTime.UtcNow)</c> on a Date target;
+    /// <c>today</c> → <c>DateTime.Today</c> / <c>DateOnly.FromDateTime(DateTime.Today)</c>;
+    /// <c>guid</c> → <c>Guid.NewGuid()</c> on a Guid target,
+    /// <c>Guid.NewGuid().ToString()</c> on a Text target.
     /// Returns null for literal defaults (handled directly by the exporter).
     /// </summary>
     internal static Node? LowerDefaultExpression(DomainExpression expr, Node? typeHint = null) {
-        if (expr is PropertyAccess pa) {
-            return pa.Name switch {
-                "now" or "utcnow" => new Member(
-                    new NamedTypeReference("DateTime"), "UtcNow"),
-                "today" => new Invoke(
-                    new Member(new NamedTypeReference("DateOnly"), "FromDateTime"),
+        if (expr is not PropertyAccess pa) return null;
+        var targetName = typeHint is NamedTypeReference ntr ? ntr.TypeName : null;
+        bool isDateTimeTarget = targetName is "DateTime" or "Timestamp";
+        return pa.Name switch {
+            "now" or "utcnow" => isDateTimeTarget
+                ? new Member(new NamedTypeReference("DateTime"), "UtcNow")
+                : new Invoke(new Member(new NamedTypeReference("DateOnly"), "FromDateTime"),
                     new Member(new NamedTypeReference("DateTime"), "UtcNow")),
-                "guid" => new Invoke(
-                    new Member(new NamedTypeReference("Guid"), "NewGuid")),
-                _ => null, // treat as enum member name
-            };
-        }
-        return null;
+            "today" => isDateTimeTarget
+                ? new Member(new NamedTypeReference("DateTime"), "Today")
+                : new Invoke(new Member(new NamedTypeReference("DateOnly"), "FromDateTime"),
+                    new Member(new NamedTypeReference("DateTime"), "Today")),
+            "guid" => targetName is "Text" or "String"
+                ? new Invoke(new Member(
+                    new Invoke(new Member(new NamedTypeReference("Guid"), "NewGuid")), "ToString"))
+                : new Invoke(new Member(new NamedTypeReference("Guid"), "NewGuid")),
+            _ => null, // treat as enum member name
+        };
     }
 
     /// <summary>
@@ -675,7 +698,8 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
             }
             else {
                 var defaultConstraint = prop.Constraints.OfType<DefaultValueConstraint>().First();
-                var runtimeExpr = EffectLoweringPass.LowerDefaultExpression(defaultConstraint.Expression);
+                var runtimeExpr = EffectLoweringPass.LowerDefaultExpression(
+                    defaultConstraint.Expression, new NamedTypeReference(prop.Type.TypeName));
                 var defaultNode = DomainToCSharpExporter.LowerDefaultConstantNode(defaultConstraint, prop, _domain, _analysis);
                 args.Add(runtimeExpr is not null
                     ? new Constant(null) // sentinel — ctor applies the runtime default

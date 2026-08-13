@@ -1,0 +1,53 @@
+domain Round5FulfillmentBad
+
+// Store-dependent `for` predicates — each must fail loud at analysis with a
+// clear message (the runtime supports them; the standalone export cannot).
+
+Route: entity {
+  carrier: Carrier
+  Status: Text default("Open")
+  packages: many Package
+
+  // store-dependent: quantifier
+  IsFull: policy { count packages > 10 }
+  // store-dependent: multi-hop path-prefix
+  IsPremium: policy { carrier Name is "Premium" }
+  // store-dependent: Rel exists on many
+  HasPackages: policy { packages exists }
+
+  expand: action {
+    assign Status to "expanded"
+  }
+  reroute: action {
+    assign Status to "rerouted"
+  }
+}
+
+Carrier: entity {
+  Name: Text required
+  routes: many Route
+}
+
+Package: entity {
+  route: Route
+  Weight: Number range(0, )
+}
+
+Hub: entity {
+  routes: many Route
+
+  // store-dependent predicate (quantifier policy) — export must fail loud
+  scheduleFull: action {
+    for routes as r where r IsFull invoke r.expand()
+  }
+
+  // store-dependent predicate (path-prefix policy) — export must fail loud
+  schedulePremium: action {
+    for routes as r where r IsPremium invoke r.reroute()
+  }
+
+  // store-dependent predicate (Rel exists policy) — export must fail loud
+  scheduleLaden: action {
+    for routes as r where r HasPackages invoke r.reroute()
+  }
+}

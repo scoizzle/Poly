@@ -1,0 +1,51 @@
+domain Round5Fulfillment
+
+// Fulfillment hub: carrier/route/package chains. Store-dependent `for` predicates.
+
+Carrier: entity {
+  Name: Text required
+  routes: many Route
+}
+
+Route: entity {
+  carrier: Carrier
+  capacity: Number default(100)
+  Status: Text default("Open")
+  packages: many Package
+
+  // local policy (compiles to standalone C#)
+  IsOpen: policy { Status is "Open" }
+
+  expand: action {
+    assign Status to "expanded"
+  }
+  reroute: action {
+    assign Status to "rerouted"
+  }
+}
+
+Package: entity {
+  route: Route
+  Weight: Number range(0, )
+  Status: Text default("InTransit")
+
+  // local predicate for `for`
+  IsHeavy: policy { Weight > 50 }
+  // store-dependent predicate for `for`: path-prefix multi-hop to-one
+  IsExpress: policy { route carrier Name is "Express" }
+  // store-dependent predicate for `for`: Rel exists
+  HasRoute: policy { route exists }
+
+  retag: action (weight: Number) {
+    assign Weight to weight
+  }
+}
+
+Hub: entity {
+  routes: many Route
+
+  // control: `for` with a purely-local predicate — must compile 0/0
+  scheduleOpen: action {
+    for routes as r where r IsOpen invoke r.expand()
+  }
+}

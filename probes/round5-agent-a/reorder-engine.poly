@@ -1,0 +1,70 @@
+domain Round5Reorder
+
+// Reorder engine: a warehouse sweeps its inventory bins and replenishes low
+// stock. Stresses: zero-match, binder/caller-member collision, reverse-side
+// `for`, store-dependent predicate (quantifier policy), self-relationship,
+// and for + assign composition.
+
+Bin: entity {
+  Sku: Text
+  Qty: Number default(0)
+  MaxQty: Number default(100)
+  HasStock: policy { Qty > 0 }
+  LowOnStock: policy { Qty < 10 }
+  HasBacklog: policy { any requests where QtyNeeded > 0 }
+  Active: stage { }
+  requests: many Request
+
+  Replenish: action (amount: Number) {
+    assign Qty to Qty + amount
+  }
+
+  FillRequests: action {
+    for requests as request invoke request.Fill()
+  }
+}
+
+Request: entity {
+  QtyNeeded: Number default(1)
+  Filled: Boolean default(false)
+  Open: stage { }
+
+  Fill: action {
+    assign Filled to true
+  }
+}
+
+Warehouse: entity {
+  bins: many Bin
+  bin: Text default("") // collides with binder name `bin` in Collide
+
+  Notify: action {
+    for bins as bin where bin LowOnStock invoke bin.Replenish(amount: 5)
+  }
+
+  ReorderAll: action {
+    for bins as bin invoke bin.Replenish(amount: 1)
+  }
+
+  Collide: action {
+    for bins as bin invoke bin.Replenish(amount: 1)
+  }
+
+  ReorderZero: action {
+    // Zero matches when no bin has stock — must fail loud, not silently succeed.
+    for bins as bin where bin HasStock invoke bin.Replenish(amount: 1)
+  }
+
+  BadStorePredicate: action {
+    // Store-dependent predicate policy (quantifier) — analysis must reject.
+    for bins as bin where bin HasBacklog invoke bin.Replenish(amount: 5)
+  }
+}
+
+TreeNode: entity {
+  children: many TreeNode
+
+  Visit: action {
+    for children as child invoke child.Visit()
+  }
+}

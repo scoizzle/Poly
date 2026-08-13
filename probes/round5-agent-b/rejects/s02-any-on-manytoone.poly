@@ -1,0 +1,15 @@
+domain S02AnyOnManyToOne
+Invoice: entity {
+  Amount: Number default(0)
+  Draft: stage {}
+  Paid: stage {}
+}
+Supplier: entity {
+  Name: Text
+  orders: many Invoice
+  Active: stage {
+    when any orders Paid {
+      assign Name to "paidSeen"
+    }
+  }
+}

@@ -1,0 +1,42 @@
+domain Round5Inventory
+
+// Warehouse bins: owned navigation (to-one and many owned), quantifiers over owned,
+// Rel exists on owned navs, count arithmetic.
+
+Bin: entity {
+  Label: Text required
+  Level: Text default("Safe")
+  warehouse: Warehouse
+  items: many Item
+}
+
+Item: entity {
+  SKU: Text required
+  Qty: Number range(0, )
+  bin: Bin
+}
+
+Warehouse: entity {
+  Name: Text required
+  bins: many owned Bin
+  primary: owned Bin
+
+  // quantifiers over `many owned` — guide: ownership flag unused at eval, works like plain many
+  AnyLowBin: policy { any bins where Level is "Low" }
+  AllSafe: policy { all bins where Level is "Safe" }
+  NoEmpty: policy { none bins where Level is "Empty" }
+  BinCount: policy { count bins > 10 }
+  CountedOwned: policy { count bins where Level is "High" * 2 > 4 }
+  // to-one owned path-prefix reads (single-hop)
+  PrimaryLow: policy { primary Level is "Low" }
+  // Rel exists on owned navs (to-one and many owned)
+  HasPrimary: policy { primary exists }
+  NotHasPrimary: policy { not primary exists }
+  HasBins: policy { bins exists }
+  // multi-hop to-one owned -> related to-one
+  PrimaryBinItem: policy { primary warehouse Name is "Depot" }
+
+  restock: action (label: Text) {
+    create in bins { Label: label }
+  }
+}

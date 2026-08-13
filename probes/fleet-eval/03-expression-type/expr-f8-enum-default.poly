@@ -1,0 +1,10 @@
+domain FleetF8EnumDefault
+// F8: default(<bare non-member identifier>) on an enum-typed property escapes
+// analysis (CheckDefault's PropertyAccess branch skips membership validation
+// when the target IS enum-typed) and dies at CODEGEN with a misleading
+// "not a member of an enum" NotSupportedException. Sibling forms (assign RHS,
+// create-in initializer, comparison) are all rejected at analysis.
+MemberStatus: enum { Active Suspended Closed }
+E: entity {
+  Status: MemberStatus default(Bogus)
+}

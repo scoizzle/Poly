@@ -1,0 +1,53 @@
+domain FleetEvalOrders
+
+Service: entity {
+  Name: Text
+  Status: Text default("idle")
+  Process: action (tag: Text) {
+    assign Status to tag
+  }
+}
+
+Order: entity {
+  Code: Text required
+  Total: Number range(0, ) default(0)
+  lines: many Line
+  service: Service
+
+  Active: stage {
+    Ship: action {
+      for lines as line where line IsPaid invoke line.Mark(amount: line Qty)
+      transition to Done
+    }
+    ShipAll: action {
+      for lines as line invoke line.Mark(amount: 1)
+    }
+    ShipInStage: action {
+      for lines as line where line in Paid invoke line.Mark(amount: 1)
+    }
+    ProcessViaService: action {
+      invoke service.Process(tag: "done")
+    }
+    NoLines: action {
+      for lines as line invoke line.Mark(amount: 1)
+    }
+    MarkBlocked: action {
+      for lines as line invoke line.BlockedMark(amount: 1)
+    }
+  }
+  Done: stage { }
+}
+
+Line: entity {
+  Qty: Number range(0, 100) default(1)
+  IsPaid: policy { Qty > 0 }
+  Paid: stage { }
+  Mark: action (amount: Number) {
+    assign Qty to amount
+  }
+  BlockedMark: action (amount: Number)
+    require IsPaid
+  {
+    assign Qty to amount
+  }
+}

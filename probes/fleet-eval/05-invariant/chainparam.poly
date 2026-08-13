@@ -1,0 +1,22 @@
+domain ChainParam
+
+// Call-chain argument binding: A invokes B(amount: 50), B does `assign Total to
+// Total + amount`. Per the guide, the binding flows [50, 50] into B's parameter,
+// so Total + amount ∈ [50, 150] can violate Total range(0, 100) — a call-chain
+// WARNING naming A -> B. Does the parsed DSL path produce it?
+
+Vault: entity {
+  Total: Number range(0, 100)
+
+  Add: action (amount: Number) {
+    assign Total to Total + amount
+  }
+
+  DoIt: action {
+    invoke Add(amount: 50)
+  }
+
+  Direct: action (amount: Number) {
+    assign Total to amount
+  }
+}

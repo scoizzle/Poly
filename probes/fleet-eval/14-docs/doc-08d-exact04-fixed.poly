@@ -1,0 +1,10 @@
+domain DocExact04Fixed
+
+// §0.4 verbatim but with space-separated create init (fixing the ; only)
+Patron: entity {
+  fines: many Fine
+
+  when loans Overdue {
+    create Fine { Amount: 5 Reason: "Overdue" }
+  }
+}

@@ -1,0 +1,40 @@
+domain EvolutionOrder
+
+// Ordering stress through the batch evolution path: entity declared after a nav
+// target reference, back-refs with the same name on different children, default
+// and constraint combination, and a stage-scoped action.
+
+Task: entity {
+  Note: Text default("")
+  State: Text default("New")
+  owner: Team
+
+  Mark: action {
+    assign State to "entity-mark"
+  }
+
+  Active: stage {
+    MarkStage: action {
+      assign Note to "stage-mark"
+      transition to Done
+    }
+  }
+  Done: stage {}
+}
+
+Team: entity {
+  Name: Text required
+  tasks: many Task
+  leads: many TaskLead
+}
+
+TaskLead: entity {
+  Name: Text required length(2, 40)
+  team: Team
+  tasks: many Task
+}
+
+Sub: entity {
+  Name: Text required
+  team: Team
+}

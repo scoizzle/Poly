@@ -1,0 +1,53 @@
+domain LibraryFines
+
+// Real system: a library. Loans transition Overdue -> Returned; a patron
+// subscription creates a fine (guide §0.4), and a singular back-reference
+// subscription (Each, no quantifier) on the loan side reacts to patron state.
+
+Patron: entity {
+  Name: Text
+  Status: Text default("good")
+  Balance: Number default(0)
+  loans: many Loan
+  fines: many Fine
+
+  Active: stage {
+    // Each, per matching transition — the canonical fine-on-overdue rule.
+    when loans Overdue {
+      create Fine { Amount: 5 }
+    }
+    // Notification-only, multi-stage list.
+    when loans Overdue, Returned {
+      assign Status to "loanMoved"
+    }
+  }
+
+  // Entity-level always-active with a peer binder.
+  when loans Returned as loan {
+    assign Balance to Balance + loan Amount
+  }
+}
+
+Loan: entity {
+  Code: Text
+  Amount: Number default(0)
+  patron: Patron
+
+  Active: stage {
+    MarkOverdue: action {
+      transition to Overdue
+    }
+  }
+  Overdue: stage {
+    Return: action {
+      transition to Returned
+    }
+  }
+  Returned: stage {
+  }
+}
+
+Fine: entity {
+  Amount: Number default(5)
+  Code: Text default("FINE")
+}

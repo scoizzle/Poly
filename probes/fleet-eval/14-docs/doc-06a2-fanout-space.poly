@@ -1,0 +1,18 @@
+domain DocFanoutSpace
+
+Line: entity {
+  Qty: Number default(0)
+  IsEligible: policy { Qty > 0 }
+  Mark: action (amount: Number) {
+    assign Qty to amount
+  }
+}
+
+Order: entity {
+  items: many Line
+
+  Go: action {
+    // space-form binder arg (the shape that compiles)
+    for items as item where item IsEligible invoke item.Mark(amount: item Qty)
+  }
+}

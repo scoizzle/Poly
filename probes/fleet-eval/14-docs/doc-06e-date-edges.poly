@@ -1,0 +1,20 @@
+domain DocDateEdges
+
+// §8 shipped-surface boundaries claims:
+//   - "a policy comparing a date property to today/now is rejected at analysis"
+//   - "default(today) on a Number property rejected at authoring time"
+//   - "Relative date ordering is not supported ... only comparisons between two date properties"
+Sub: entity {
+  StartDate: Date
+  EndDate: Date
+  Renewals: Number default(0)
+
+  // Should be REJECTED per guide (now/today not authorable in policy bodies)
+  BadPolicy: policy { EndDate >= today }
+
+  Active: stage {
+    Renew: action {
+      assign EndDate to EndDate + 30
+    }
+  }
+}

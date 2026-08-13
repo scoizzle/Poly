@@ -1,0 +1,16 @@
+domain DocDmeff007
+
+// §6 rejected forms: reverse-side invoke, invoke Rel on OneToMany
+Customer: entity {
+  orders: many Order
+}
+
+Order: entity {
+  customer: Customer
+
+  Go: action {
+    // reverse-side: Order is the target, not source
+    invoke customer.Submit()
+  }
+  Submit: action { }
+}

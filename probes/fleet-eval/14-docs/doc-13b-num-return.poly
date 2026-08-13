@@ -1,0 +1,11 @@
+domain DocNumReturn
+
+// §6: -> Number from assign alone is "Not product" (analysis error)
+Order: entity {
+  Total: Number default(0)
+  Result: Number default(0)
+
+  Compute: action (total: Number) -> Number {
+    assign Result to total * 0.1
+  }
+}

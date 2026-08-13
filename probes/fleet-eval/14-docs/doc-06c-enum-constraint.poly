@@ -1,0 +1,6 @@
+domain DocEnumConstraint
+
+// §11 Constraint Reference documents: Enum | enum(v1, v2, ...) | Color: Text enum(Red, Green, Blue)
+Widget: entity {
+  Color: Text enum(Red, Green, Blue)
+}

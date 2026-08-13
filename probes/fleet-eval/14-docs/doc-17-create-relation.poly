@@ -1,0 +1,13 @@
+domain DocCreateRelation
+
+// §9: "graph wiring happens through create in Rel { … } (or create with RelationshipName)"
+Customer: entity {
+  orders: many Order
+  CreateOrder: action {
+    create Order in orders { Total: 100 }
+  }
+}
+
+Order: entity {
+  Total: Number default(0)
+}

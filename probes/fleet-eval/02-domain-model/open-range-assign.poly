@@ -1,0 +1,16 @@
+domain OpenRangeAssign
+
+// Arithmetic assign onto an open-range property (guide-documented range(0, ) /
+// range(, 100) forms). Valid authoring — the inferred value range is fully
+// inside the constraint — is rejected as "entirely outside".
+
+Item: entity {
+  Qty: Number range(0, )
+  Stock: Number range(, 100)
+  add: action {
+    assign Qty to Qty + 5
+  }
+  drain: action {
+    assign Stock to Stock - 200
+  }
+}

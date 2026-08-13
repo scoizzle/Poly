@@ -1,0 +1,13 @@
+domain DeadStore
+
+// Sequential assigns: the first is a dead store (overwritten by the second).
+// The FINAL value is in-range. Does analysis flag the transient as an error?
+
+Item: entity {
+  Qty: Number range(0, 100)
+
+  Fix: action {
+    assign Qty to 200
+    assign Qty to 5
+  }
+}

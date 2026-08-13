@@ -1,0 +1,64 @@
+domain Clinic
+
+VisitState: enum {
+  Scheduled
+  CheckedIn
+  InTreatment
+  Completed
+  NoShow
+}
+
+// One-to-one navigation + cross-entity invoke probe
+Doctor: entity {
+  Name: Text required length(3, 60)
+  LicenseNo: Text unique pattern("^MD-[0-9]{6}$")
+  schedule: one Schedule
+
+  // OneToOne source -> target cross-entity invoke
+  StartShift: action {
+    invoke schedule.Open()
+  }
+}
+
+Schedule: entity {
+  Day: Text
+  Open: action {
+    assign State to "open"
+  }
+  State: Text
+}
+
+// Aggregate root with child under root, action DTO with entity-ref param
+Patient: entity {
+  Name: Text required
+  visits: many Visit
+  // for-invoke with a binder arg from child property
+  CheckInAll: action {
+    for visits as v where v in Scheduled
+        invoke v.CheckIn()
+  }
+}
+
+Visit: entity {
+  Reason: Text length(2, 200)
+  State: VisitState default(Scheduled)
+  patient: Patient
+  primaryDoctor: Doctor
+
+  CheckIn: action {
+    transition to CheckedIn
+  }
+
+  // Action with an entity-ref param (Doctor) -> action DTO gets doctorId
+  AssignDoctor: action (doctor: Doctor) {
+    assign Reason to "assigned"
+  }
+
+  Scheduled: stage { }
+  CheckedIn: stage {
+    entry { assign State to CheckedIn }
+  }
+  InTreatment: stage { }
+  Completed: stage { }
+  NoShow: stage { }
+}

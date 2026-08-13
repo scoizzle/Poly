@@ -1,0 +1,10 @@
+domain DocNavRequired
+
+// Can a navigation property be marked required at all?
+Patron: entity {
+  loans: many Loan
+}
+
+Loan: entity {
+  borrower: Patron required
+}

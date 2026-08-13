@@ -1,0 +1,10 @@
+domain FleetF9UnknownValue
+// F9: unresolvable bare identifiers in assign RHS (non-enum targets) pass
+// analysis (Unknown bypass) -> CS1061. Policies reject unknown identifiers
+// ("property does not exist"); effect bodies have no equivalent check.
+E: entity {
+  Name: Text
+  Qty: Number
+  A1: action { assign Name to Bogus }
+  A2: action { assign Qty to Bogus }
+}

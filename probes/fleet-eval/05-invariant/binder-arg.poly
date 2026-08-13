@@ -1,0 +1,32 @@
+domain BinderArg
+
+// Fan-out invoke with a binder-rooted argument (`invoke line.Scale(by: line Qty)`).
+// The binder argument references the TARGET entity's property. Does the invariant
+// analysis evaluate `line Qty` against the target entity's (policy-narrowed)
+// envelope, or against the CALLER's properties (mismatch -> Unknown)?
+
+Order: entity {
+  lines: many OrderLine
+
+  ScaleAll: action {
+    for lines as line where line IsBig invoke line.Scale(by: line Qty)
+  }
+
+  ScaleBig: action {
+    for lines as line where line IsBig invoke line.Bump(by: line Qty)
+  }
+}
+
+OrderLine: entity {
+  Qty: Number range(0, 100)
+  IsBig: policy { Qty > 80 }
+  order: Order
+
+  Scale: action (by: Number) {
+    assign Qty to by
+  }
+
+  Bump: action (by: Number) {
+    assign Qty to by + 50
+  }
+}

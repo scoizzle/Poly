@@ -1,0 +1,7 @@
+domain DocMissingRequired
+
+// §0.3: DMEFF011 — create omitting a required property is rejected
+Token: entity { Lexeme: Text required Kind: Text required }
+Lex: action {
+  create in tokens { Kind: Keyword }
+}

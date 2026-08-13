@@ -1,0 +1,18 @@
+domain DocDriftTargets
+
+// Targeted drift checks:
+// 1. §11 Constraint Reference documents enum(v1, v2, ...) as a Text constraint
+// 2. §8 "Shipped in the current product surface" lists invoke "quantifiers any/all; filter where"
+// 3. §3 default(value) + §11 default
+
+Palette: enum {
+  Red
+  Green
+  Blue
+}
+
+Widget: entity {
+  Color: Text enum(Red, Green, Blue)
+  Legacy: Text default("x")
+  Fav: Palette default(Red)
+}

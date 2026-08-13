@@ -1,0 +1,15 @@
+domain DocDmeff010
+
+// §6: DMEFF010 — create is not the final statement (transition after it)
+Order: entity {
+  tokens: many Token
+  Place: action -> Token {
+    create in tokens { Kind: "Keyword" }
+    transition to Active
+  }
+  Active: stage { }
+}
+
+Token: entity {
+  Kind: Text
+}

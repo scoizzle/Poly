@@ -1,0 +1,13 @@
+domain DocRequireNot
+
+// §6: require not PolicyName
+Order: entity {
+  Qty: Number default(0)
+  AtLimit: policy { Qty >= 100 }
+
+  CheckOut: action
+    require not AtLimit
+  {
+    assign Qty to Qty + 1
+  }
+}

@@ -1,0 +1,52 @@
+domain FleetVmOrders
+
+// Order discounting: arithmetic, comparison, boolean logic, if/else, require gates.
+Order: entity {
+  Total: Number default(0)
+  Discount: Number default(0)
+  FinalTotal: Number default(0)
+  Priority: Number default(0)
+  Flags: Text default("none")
+
+  IsHighValue: policy { Total > 100 }
+  IsDiscounted: policy { Discount > 0 and Total > 0 }
+  WithinBudget: policy { FinalTotal >= 0 and FinalTotal <= Total }
+  IsPriority: policy { Priority == 1 or Priority == 2 }
+
+  Open: stage {
+    ApplyDiscount: action (rate: Number) {
+      assign Discount to rate
+      assign FinalTotal to Total - (Total * rate)
+      assign Flags to "discounted"
+    }
+    ApplyFlat: action (amount: Number) {
+      assign FinalTotal to Total - amount
+    }
+    Grade: action {
+      if (Total > 500) {
+        assign Flags to "premium"
+      } else if (Total > 100) {
+        assign Flags to "standard"
+      } else {
+        assign Flags to "economy"
+      }
+    }
+    Split: action (parts: Number) {
+      assign FinalTotal to Total / parts
+      assign Flags to "split"
+    }
+    Bound: action {
+      if (Priority == 1 and Total > 50) {
+        assign Flags to "rush"
+      }
+      if (Priority == 0 or Total <= 50) {
+        assign Flags to "normal"
+      }
+    }
+  }
+  Paid: stage {
+    Refund: action (amount: Number) {
+      assign FinalTotal to Total - amount
+    }
+  }
+}

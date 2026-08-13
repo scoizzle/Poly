@@ -1,0 +1,150 @@
+domain FleetExprWrongTypes
+
+// Deliberately wrong-typed expressions. Every form here MUST be rejected at
+// analysis (the earliest rung) — not at C# compile, not at codegen.
+// One form per entity so the analysis error list identifies each.
+
+MemberStatus: enum { Active Suspended Closed }
+BookGenre: enum { Fiction Nonfiction }
+
+A: entity {
+  Name: Text
+  Age: Number
+
+  // 1. Text vs Number comparison
+  BadCompare: policy { Name >= 18 }
+}
+
+B: entity {
+  Name: Text
+  Age: Number
+
+  // 2. Number property assigned a string literal
+  Act: action {
+    assign Age to "old"
+  }
+}
+
+C: entity {
+  Name: Text
+
+  // 3. Text property assigned a boolean literal
+  Act: action {
+    assign Name to true
+  }
+}
+
+D: entity {
+  Age: Number
+
+  // 4. Number + string literal (string/number confusion in arithmetic)
+  Act: action {
+    assign Age to Age + "5"
+  }
+}
+
+E: entity {
+  Name: Text
+
+  // 5. Text + Text arithmetic
+  Act: action {
+    assign Name to Name + Name
+  }
+}
+
+F: entity {
+  Age: Number
+
+  // 6. `not` on a Number
+  BadNot: policy { not Age }
+}
+
+G: entity {
+  Age: Number
+  Status: MemberStatus
+
+  // 7. `and` with a Number operand
+  BadAnd: policy { Age and Status is "Active" }
+}
+
+H: entity {
+  // 8. default(now) on a Number property
+  Qty: Number default(now)
+}
+
+I: entity {
+  // 9. default(today) on a Number property
+  Qty: Number default(today)
+}
+
+J: entity {
+  // 10. default(guid) on a Number property
+  Qty: Number default(guid)
+}
+
+K: entity {
+  // 11. default(enum member) on a Text property
+  Name: Text default(Active)
+}
+
+L: entity {
+  Status: MemberStatus
+  loans: many M
+
+  // 12. non-member enum string literal in create-in initializer
+  Act: action {
+    create in loans { Status: "Bogus" }
+  }
+}
+
+M: entity {
+  Status: MemberStatus
+}
+
+N: entity {
+  Status: MemberStatus
+  loans: many O
+
+  // 13. non-member enum bare identifier in create-in initializer
+  Act: action {
+    create in loans { Status: Bogus }
+  }
+}
+
+O: entity {
+  Status: MemberStatus
+}
+
+P: entity {
+  Status: MemberStatus
+
+  // 14. non-member enum bare identifier in assign RHS
+  Act: action {
+    assign Status to Bogus
+  }
+}
+
+Q: entity {
+  Status: MemberStatus
+
+  // 15. non-member enum string literal in assign RHS
+  Act: action {
+    assign Status to "Bogus"
+  }
+}
+
+R: entity {
+  DueDate: Date
+
+  // 16. Date property compared to a string literal
+  BadDateCompare: policy { DueDate > "2026-01-01" }
+}
+
+S: entity {
+  Genre: BookGenre
+
+  // 17. enum property compared to another enum's member string
+  BadEnumCompare: policy { Genre is "Active" }
+}
+
+// (Form 18 — self-invoke wrong-typed arg — is NOT rejected at analysis: see expr-f1-invoke-args.poly / F1.)

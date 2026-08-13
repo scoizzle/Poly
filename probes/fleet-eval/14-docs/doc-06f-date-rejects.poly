@@ -1,0 +1,8 @@
+domain DocDateRejects
+
+// Guide claims these are REJECTED at analysis:
+//   - default(today) on a Number property
+//   - policy comparing date property to now/today
+Sub: entity {
+  Bad: Number default(today)
+}

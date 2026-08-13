@@ -1,0 +1,77 @@
+domain FleetOrders
+
+Customer: entity {
+  Name: Text required
+  Status: Text default("Gold")
+  IsGold: policy { Status is "Gold" }
+  orders: many Order
+  profile: one Profile
+
+  NotifyOnPaid: action { assign Status to "Notified" }
+}
+
+Profile: entity {
+  City: Text
+  Active: Boolean default(true)
+  IsUrban: policy { City is "Metropolis" and Active is true }
+}
+
+Invoice: entity {
+  Total: Number default(0)
+  Paid: Boolean default(false)
+  Open: stage {
+    Settle: action (amount: Number) {
+      assign Paid to true
+      transition to Paid
+    }
+  }
+  Paid: stage {}
+}
+
+Order: entity {
+  Total: Number range(0, ) default(0)
+  Status: Text default("Open")
+  invoice: Invoice
+  lines: many Line
+
+  HasPriority: policy { Total > 1000 }
+  AllLinesShipped: policy { all lines where Shipped is true }
+  OpenLineCount: policy { count lines where Status is "Open" > 0 }
+
+  Draft: stage {
+    Submit: action
+      require HasPriority
+    {
+      assign Status to "Submitted"
+      transition to Active
+    }
+  }
+  Active: stage {
+    entry { assign Status to "in_active" }
+    exit  { assign Status to "exited_active" }
+    ShipAll: action {
+      for lines as line where line IsShipped
+        invoke line.Ship()
+    }
+    Pay: action (amount: Number) {
+      invoke invoice.Settle(amount: amount)
+    }
+  }
+  Done: stage {}
+}
+
+Line: entity {
+  Qty: Number range(0, 100) default(1)
+  Shipped: Boolean default(false)
+  Status: Text default("Open")
+  IsShipped: policy { Shipped is false }
+
+  Open: stage {
+    Ship: action {
+      assign Shipped to true
+      assign Status to "Shipped"
+      transition to Shipped
+    }
+  }
+  Shipped: stage {}
+}

@@ -1,0 +1,78 @@
+domain DocStagesActions
+
+// §5 stages + entry/exit; §6 actions, effects, require gates, invoke, for fan-out
+Customer: entity {
+  orders: many Order
+  // §6 -> EntityType return with final create-in (documented example shape)
+  PlaceOrder: action -> Order {
+    create in orders { Total: 100 }
+  }
+}
+
+Order: entity {
+  Total: Number default(0)
+  Status: Text
+  items: many Item
+  invoice: Invoice
+  PositiveTotal: policy { Total > 0 }
+
+  Draft: stage {
+    Submit: action
+      require PositiveTotal
+    {
+      assign Status to "processing"
+      transition to Active
+    }
+  }
+  Active: stage {
+    entry {
+      assign Status to "entered_active"
+    }
+    exit {
+      assign Status to "exited_active"
+    }
+    // §6 cross-entity invoke OneToOne source
+    Pay: action (amount: Number) {
+      assign Total to amount
+      invoke invoice.Settle(amount: amount)
+    }
+    // §6 fan-out invoke OneToMany with policy predicate
+    MarkAll: action {
+      for items as item where item IsEligible invoke item.Mark(amount: item Qty)
+    }
+    // §6 fan-out with stage predicate
+    Archive: action {
+      for items as item where item in Active invoke item.Archive()
+    }
+    // §6 if / else if / else
+    Grade: action {
+      if (Total >= 90) {
+        assign Status to "A"
+      } else if (Total >= 70) {
+        assign Status to "B"
+      } else {
+        assign Status to "C"
+      }
+    }
+  }
+  Done: stage { }
+}
+
+Item: entity {
+  Qty: Number default(0)
+  IsEligible: policy { Qty > 0 }
+  Mark: action (amount: Number) {
+    assign Qty to amount
+  }
+  Archive: action {
+    assign Qty to 0
+  }
+  Active: stage { }
+}
+
+Invoice: entity {
+  Amount: Number default(0)
+  Settle: action (amount: Number) {
+    assign Amount to amount
+  }
+}

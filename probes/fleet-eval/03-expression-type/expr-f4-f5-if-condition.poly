@@ -1,0 +1,15 @@
+domain FleetF4F5IfCondition
+// F4: non-boolean if-conditions pass analysis (the condition's own type is never
+// checked) -> CS0029/CS1061. F5: a bare enum member on the RHS of a comparison
+// inside an action body passes analysis -> CS1061, while the SAME expression in
+// a policy body is rejected ("property does not exist").
+MemberStatus: enum { Active Suspended Closed }
+BookGenre: enum { Fiction Nonfiction }
+E: entity {
+  Qty: Number
+  Name: Text
+  Genre: BookGenre
+  C1: action { if (Qty) { assign Qty to 0 } }          // long -> bool
+  C2: action { if (Name) { assign Qty to 0 } }         // string -> bool
+  C3: action { if (Genre is Fiction) { assign Qty to 0 } } // this.Fiction (CS1061)
+}

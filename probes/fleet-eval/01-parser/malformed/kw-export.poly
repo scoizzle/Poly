@@ -1,0 +1,6 @@
+domain D
+
+Create: entity {
+  For: Text
+  If: Text
+}

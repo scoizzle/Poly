@@ -1,0 +1,63 @@
+domain FleetVmLibrary
+
+// Library loans: enum member comparisons (string-literal form), default enums,
+// boolean composition, `is`/`is not`, scalar vs heap.
+MemberStatus: enum {
+  Active
+  Suspended
+  Closed
+}
+
+BookCondition: enum {
+  New
+  Good
+  Worn
+  Damaged
+}
+
+Loan: entity {
+  BookCondition: BookCondition default(Good)
+  Status: MemberStatus default(Active)
+  DaysOut: Number default(0)
+  Renewals: Number default(0)
+  Fine: Number default(0)
+  Tags: Text default("")
+
+  DaysPlausible: policy { DaysOut <= 365 }
+  RenewalsOk: policy { Renewals <= 10 }
+  FineOk: policy { Fine <= 100 }
+
+  IsActive: policy { Status is "Active" }
+  NeedsRenewal: policy { DaysOut > 21 }
+  ConditionOk: policy { BookCondition is "Good" or BookCondition is "New" }
+  MaxRenewals: policy { Renewals < 3 }
+  NotSuspended: policy { not (Status is "Suspended") }
+
+  Borrowed: stage {
+    Renew: action {
+      assign Renewals to Renewals + 1
+      assign DaysOut to DaysOut + 14
+    }
+    MarkWorn: action {
+      assign BookCondition to "Worn"
+    }
+    Assess: action {
+      if (BookCondition is "Damaged") {
+        assign Fine to Fine + 5
+      }
+      if (DaysOut > 21 and Renewals > 2) {
+        assign Status to "Suspended"
+      }
+      if (DaysOut <= 7) {
+        assign Tags to "recent"
+      } else {
+        assign Tags to "overdue"
+      }
+    }
+  }
+  Closed: stage {
+    Close: action {
+      assign Status to "Closed"
+    }
+  }
+}

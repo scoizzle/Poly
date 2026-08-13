@@ -1,0 +1,104 @@
+domain FleetExprTypeConfusion
+
+// Candidate type-confusion forms. Some are false-positive rejections of valid
+// arithmetic (decimal literals), some may pass analysis and break the export.
+
+MemberStatus: enum { Active Suspended Closed }
+BookGenre: enum { Fiction Nonfiction }
+
+U: entity {
+  Total: Number default(0)
+  Fine: Number default(0)
+
+  // 1. decimal literal in arithmetic (guide §8: `Total * 0.9` is shipped)
+  Apply: action {
+    assign Total to Total * 0.9
+  }
+  // 2. decimal literal in comparison
+  Big: policy { Total > 0.5 }
+  // 3. decimal in date-offset-style arithmetic
+  Add: action {
+    assign Fine to Fine + 0.5
+  }
+}
+
+V: entity {
+  DueDate: Date
+
+  // 4. date arithmetic on an action PARAMETER (not a property) — the AddDays
+  //    lowering rewrite keys on PropertyAccess only
+  Set: action (d: Date) {
+    assign DueDate to d + 30
+  }
+}
+
+W: entity {
+  OpenedAt: Date
+  Qty: Number
+
+  // 5. assign runtime keyword to a wrong-typed target
+  A1: action { assign OpenedAt to guid } // Date = guid
+  A2: action { assign Qty to now }       // Number = now
+  A3: action { assign OpenedAt to now }  // Date = now (valid)
+}
+
+X: entity {
+  Qty: Number
+  Name: Text
+  Status: MemberStatus
+  Genre: BookGenre
+
+  // 6. non-boolean if-condition
+  C1: action { if (Qty) { assign Qty to 0 } }
+  C2: action { if (Name) { assign Qty to 0 } }
+  // 7. bare enum member on the RHS of a comparison inside an action body
+  C3: action { if (Genre is Fiction) { assign Qty to 0 } }
+}
+
+Y: entity {
+  Status: MemberStatus
+
+  // 8. non-member enum bare identifier in default(...) — CheckDefault's enum
+  //    branch does not validate membership
+  Bad: MemberStatus default(Bogus)
+}
+
+Z: entity {
+  Title: Text
+  Status: MemberStatus
+  loans: many Z1
+  Bump: action (n: Number) {
+    assign n to n
+  }
+  // 9. binder-root arg with wrong type (Text into Number param)
+  Fan1: action {
+    for loans as loan invoke loan.Bump(n: loan Title)
+  }
+  // 10. binder-root arg with valid arithmetic
+  Fan2: action {
+    for loans as loan invoke loan.Bump(n: loan Count + 1)
+  }
+  // 11. binder-root arg with decimal arithmetic
+  Fan3: action {
+    for loans as loan invoke loan.Bump(n: loan Count * 0.5)
+  }
+}
+
+Z1: entity {
+  Count: Number default(0)
+  Title: Text
+  loans: many Z2
+  Bump: action (n: Number) {
+    assign Count to n
+  }
+  Fan: action {
+    for loans as loan invoke loan.Bump(n: loan Title)
+  }
+}
+
+Z2: entity {
+  Count: Number default(0)
+  Bump: action (n: Number) {
+    assign Count to n
+  }
+}

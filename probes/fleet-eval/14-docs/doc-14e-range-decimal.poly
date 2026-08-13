@@ -1,0 +1,7 @@
+domain DocRangeDecimal
+
+Order: entity {
+  Rate: Number range(0.01, 1.0)
+  Total: Number default(0)
+  D: policy { Total * 0.9 >= 5 }
+}

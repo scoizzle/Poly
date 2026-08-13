@@ -1,0 +1,86 @@
+domain Fleet
+
+// Enum types declared before entities that reference them
+TruckStatus: enum {
+  Idle
+  EnRoute
+  Maintenance
+  OutOfService
+}
+
+CargoKind: enum {
+  General
+  Refrigerated
+  Hazardous
+  Oversize
+}
+
+// Root entity with full constraint surface
+Warehouse: entity {
+  Code: Text required length(2, 10) unique pattern("^WH-[0-9]{3}$")
+  Name: Text required length(3, 50)
+  Zip: Text pattern("^\\d{5}$")
+  Capacity: Number range(1, 10000)
+  SafetyStock: Number range(0, 5000) default(100)
+  Status: TruckStatus default(Idle)
+  trucks: many Truck
+
+  IsOperational: policy { Capacity > 0 }
+  HasCapacity: policy { Capacity > 0 }
+
+  // Action with param flowing into a constrained prop (implicit [Range])
+  AdjustCapacity: action (delta: Number) {
+    assign Capacity to Capacity + delta
+  }
+
+  // Action with an enum-typed param
+  SetStatus: action (status: TruckStatus) {
+    assign Status to status
+  }
+
+  // Action returning a created child (create in rel) -> Truck
+  RegisterTruck: action (vin: Text, maxLoad: Number) -> Truck {
+    create in trucks { Vin: vin MaxLoad: maxLoad }
+  }
+}
+
+// Child entity (aggregate) with back-ref
+Truck: entity {
+  Vin: Text required length(17, 17) unique pattern("^[A-HJ-NPR-Z0-9]{17}$")
+  MaxLoad: Number range(1, 40000)
+  CurrentLoad: Number range(0, 40000) default(0)
+  Status: TruckStatus default(Idle)
+  warehouse: Warehouse
+  deliveries: many Delivery
+
+  IsOverloaded: policy { CurrentLoad > MaxLoad }
+
+  // Action with param flowing into a constrained prop
+  Load: action (weight: Number) {
+    assign CurrentLoad to CurrentLoad + weight
+  }
+
+  // Action that transitions
+  Dispatch: action {
+    transition to EnRoute
+  }
+
+  EnRoute: stage {
+    entry { assign Status to EnRoute }
+  }
+  OutOfService: stage { }
+  Idle: stage { }
+}
+
+// Grandchild under Truck
+Delivery: entity {
+  Reference: Text required length(4, 20)
+  Weight: Number range(1, 40000)
+  truck: Truck
+
+  Confirm: action (notes: Text) {
+    assign Notes to notes
+  }
+
+  Notes: Text
+}

@@ -1,0 +1,15 @@
+domain D
+
+Guest: entity {
+  Status: Text
+  bookings: many Booking
+
+  when all bookings Completed as b {
+    assign Status to b Total
+  }
+}
+
+Booking: entity {
+  Total: Number
+  Completed: stage {}
+}

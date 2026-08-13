@@ -1,0 +1,20 @@
+domain DocReturnIf
+
+// §6: -> EntityType with final if/else, every branch produces
+Customer: entity {
+  orders: many Order
+
+  Place: action -> Order {
+    if (Rush is true) {
+      create in orders { Code: "rush" }
+    } else {
+      create in orders { Code: "normal" }
+    }
+  }
+  Rush: Boolean default(false)
+}
+
+Order: entity {
+  Code: Text
+  Total: Number default(0)
+}

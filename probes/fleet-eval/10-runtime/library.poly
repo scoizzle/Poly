@@ -1,0 +1,61 @@
+domain FleetEvalLibrary
+
+MemberStatus: enum {
+  Active
+  Suspended
+  Closed
+}
+
+Patron: entity {
+  Name: Text required
+  Status: MemberStatus default(Active)
+  MaxItems: Number range(1, 20) default(5)
+  Email: Text pattern("^[^@]+@[^@]+$")
+  loans: many Loan
+  fines: many Fine
+
+  GoodStanding: policy { Status is "Active" }
+  NotAtLimit: policy { count loans < MaxItems }
+
+  CheckOut: action (book: Book)
+    require GoodStanding
+    require NotAtLimit
+  {
+    create in loans { book: book }
+  }
+
+  when loans Overdue {
+    assign Status to "Suspended"
+  }
+
+  when loans Returned as loan {
+    assign Email to loan Note
+  }
+}
+
+Loan: entity {
+  book: Book
+  borrower: Patron
+  Note: Text
+  DueDate: Date
+  Active: stage {
+    Return: action {
+      transition to Returned
+    }
+    MarkOverdue: action {
+      transition to Overdue
+    }
+  }
+  Overdue: stage { }
+  Returned: stage { }
+}
+
+Book: entity {
+  Title: Text required
+  ISBN: Text pattern("^\\d{10}$") required
+}
+
+Fine: entity {
+  Amount: Number range(0, 100) default(5)
+  Reason: Text
+}

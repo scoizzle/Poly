@@ -1,0 +1,105 @@
+domain AnalysisRejects
+
+// Negative probe: each entity isolates one analysis-time rejection so the
+// failing diagnostic is attributable. Expected: all rejections fire at
+// analysis (earliest rung), never at codegen or C# compile.
+
+Widget: entity {
+  Name: Text
+}
+
+A: entity {
+  Status: Text
+
+  // DMEFF009: declares -> Widget but no create produces Widget.
+  Mk: action -> Widget {
+    assign Status to "x"
+  }
+}
+
+B: entity {
+  Active: stage { }
+
+  // DMEFF010: create is not the final statement (transition after it).
+  Mk2: action -> B {
+    create B { }
+    transition to Active
+  }
+}
+
+C: entity {
+  // DMEFF001: create-in references an unknown relationship.
+  Bad: action {
+    create in ghostRel { X: 1 }
+  }
+}
+
+D: entity {
+  // DMEFF001: invoke references an unknown relationship.
+  BadInvoke: action {
+    invoke ghostRel.DoSomething
+  }
+}
+
+E: entity {
+  Age: Number range(0, 150)
+
+  // DMEFF008: assigned value entirely outside the property range.
+  Ages: action {
+    assign Age to Age + 200
+  }
+}
+
+F: entity {
+  // Policy references a property that does not exist.
+  P: policy { Nope > 0 }
+}
+
+G: entity {
+  Name: Text required
+
+  // DMEFF011: create omits the required property.
+  Mk: action {
+    create G { }
+  }
+}
+
+H: entity {
+  // default(today) on a Number property — type-confused default.
+  Num: Number default(today)
+}
+
+I: entity {
+  Total: Number
+
+  // -> Number primitive return is not product (DMEFF009 path).
+  Compute: action (total: Number) -> Number {
+    assign Total to total
+  }
+}
+
+J: entity {
+  partner: J2
+
+  // DMEFF007: fan-out `for` requires OneToMany.
+  Bad: action {
+    for partner as p invoke p.DoIt()
+  }
+}
+
+J2: entity {
+  DoIt: action {
+  }
+}
+
+K2: entity {
+  members: many K
+}
+
+K: entity {
+  // DMEFF007: cross-entity invoke from the reverse side (K is the target of
+  // K2.members, not the source).
+  Bad: action {
+    invoke members.DoIt
+  }
+}

@@ -1,0 +1,39 @@
+domain FleetEvalIsolatedQuantifiers
+
+// any/all/Each subscription quantifiers on the same relationship+stage,
+// plus a stage-scoped subscription (subscriber stage gating).
+
+Shipment: entity {
+  Tracked: Boolean default(false)
+  Open: stage { }
+  InTransit: stage {
+    Arrive: action {
+      transition to Delivered
+    }
+  }
+  Delivered: stage { }
+}
+
+Tracker: entity {
+  shipments: many Shipment
+  Summary: Text default("none")
+  Alerted: Text default("none")
+
+  Open: stage {
+    Track: action {
+      create in shipments { Tracked: true }
+    }
+  }
+
+  when any shipments Delivered {
+    assign Alerted to "any"
+  }
+
+  when all shipments Delivered {
+    assign Summary to "all"
+  }
+
+  when shipments Delivered as s {
+    assign Summary to "each"
+  }
+}

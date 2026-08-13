@@ -1,0 +1,12 @@
+domain SelfRel
+
+A: entity {
+  bs: many B
+  Mk: action {
+    create in bs { }
+  }
+}
+
+B: entity {
+  bs: many B
+}

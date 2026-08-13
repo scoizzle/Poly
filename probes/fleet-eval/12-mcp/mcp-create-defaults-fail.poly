@@ -1,0 +1,14 @@
+domain CreateDefaultsFail
+
+Box: entity {
+  Label: Text required length(2, 20)
+  Qty: Number range(0, 150) default(0)
+  CreatedAt: DateTime default(now)
+}
+
+Pallet: entity {
+  boxes: many Box
+  Load: action -> Box {
+    create in boxes { Label: "BX" Qty: 10 }
+  }
+}

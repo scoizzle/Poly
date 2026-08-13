@@ -1,0 +1,26 @@
+domain Orders
+
+Customer: entity {
+  Name: Text required
+  Email: Text unique
+  orders: many Order
+}
+
+Order: entity {
+  Total: Number range(0, )
+  Status: Text
+  PositiveTotal: policy { Total > 0 }
+
+  Draft: stage {
+    Submit: action
+      require PositiveTotal
+    {
+      transition to Active
+    }
+  }
+  Active: stage {
+    entry { assign Status to "active" }
+    exit  { assign Status to "archived" }
+  }
+  Done: stage { }
+}

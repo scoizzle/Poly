@@ -1,0 +1,20 @@
+domain OpenRange
+
+// One-sided (open-ended) range constraints. Question: do null bounds survive the
+// abstract envelope, or does Convert.ToDouble(null)==0 turn `range(100, )` into
+// an inverted [100, 0] envelope? A `Balance - 50` on range(100, ) is a WARNING
+// (can fall below 100) — a false ERROR here means the null-bound->0 conversion
+// corrupted the envelope.
+
+Account: entity {
+  Balance: Number range(100, )
+  Score: Number range(, 50)
+
+  TopUp: action {
+    assign Balance to Balance - 50
+  }
+
+  Cap: action {
+    assign Score to Score + 100
+  }
+}

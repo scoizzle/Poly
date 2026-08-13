@@ -1,0 +1,9 @@
+domain D
+
+Box: entity {
+  Any: many Item
+
+  HasAny: policy { Any exists }
+}
+
+Item: entity { }

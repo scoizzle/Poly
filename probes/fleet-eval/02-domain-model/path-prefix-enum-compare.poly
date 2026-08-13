@@ -1,0 +1,21 @@
+domain PathPrefixEnumCompare
+
+// Guide §8 subject-first path-prefix read against an enum-typed related property.
+// Passes analysis (member check) but the export emits `enum == string` (CS0019).
+
+RoomType: enum { Standard, Deluxe, Suite }
+BookingStatus: enum { Pending, Confirmed }
+
+Room: entity {
+  Type: RoomType default(Standard)
+  Status: Text default("Ready")
+}
+
+Booking: entity {
+  Status: BookingStatus default(Pending)
+  room: Room
+
+  RoomIsDeluxe: policy { room Type is "Deluxe" }
+  RoomReady: policy { room Status is "Ready" }
+  NotDeluxe: policy { room Type is not "Deluxe" }
+}

@@ -1,0 +1,30 @@
+domain Library
+
+Genre: enum { Fiction, NonFiction, Reference }
+
+Patron: entity table("PATRON_MASTER") {
+  Name: Text required length(2, 80)
+  Email: Text unique column("EMAIL_ADDR")
+  Qty: Number range(0, )
+  CardNumber: Text column("CARD_NO", "VARCHAR2(20)") unique
+  JoinedOn: Date
+  LastVisitAt: DateTime
+}
+
+Book: entity {
+  Title: Text required length(2, 200)
+  Genre: Genre
+  IsActive: Boolean
+  Stock: Number range(0, 1000)
+  PublishedOn: Date
+  UpdatedAt: DateTime
+}
+
+Loan: entity {
+  CheckedOutAt: DateTime
+  DueDate: Date
+  Renewals: Number range(0, 5)
+  Returned: Boolean
+  patron: Patron
+  book: Book
+}

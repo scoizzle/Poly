@@ -1,0 +1,10 @@
+domain DocDmeff011Clean
+
+Token: entity { Lexeme: Text required Kind: Text required }
+
+Parser: entity {
+  tokens: many Token
+  Lex: action {
+    create in tokens { Lexeme: "let" Kind: "Keyword" }
+  }
+}

@@ -1,0 +1,8 @@
+domain DocDecimalDocumented
+
+// Guide §8 line 834 documents this exact shipped example:
+// "Arithmetic (+, -, *, /) | shipped | Total + 5 > 10, Total * 0.9"
+Order: entity {
+  Total: Number default(0)
+  Discounted: policy { Total * 0.9 >= 5 }
+}

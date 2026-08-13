@@ -1,0 +1,22 @@
+domain SameNameAction
+
+// Entity-level action and stage-scoped action with the same name. The runtime
+// (MCP incremental path) supports this shape; the batch DSL path exports two
+// identical methods (CS0111) and silently misattributes the stage-scoped effects
+// onto the entity-level twin.
+
+Task: entity {
+  Note: Text default("")
+  State: Text default("New")
+
+  Mark: action {
+    assign State to "entity-mark"
+  }
+
+  Active: stage {
+    Mark: action {
+      assign Note to "stage-mark"
+    }
+  }
+  Done: stage {}
+}

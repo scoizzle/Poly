@@ -1,0 +1,24 @@
+domain FleetF1InvokeArgs
+// F1: invoke-argument type check only catches literals + binder-rooted props.
+// Bare caller-property and caller-parameter args infer Unknown (props/parameters
+// not threaded into InferLiteralAware at the invoke site) and pass analysis.
+Svc: entity {
+  Age: Number
+  Name: Text
+  SetAge: action (age: Number) {
+    assign Age to age
+  }
+  Self: action {
+    invoke SetAge(age: Name)          // Text property -> Number param
+  }
+  SelfParam: action (s: Text) {
+    invoke SetAge(age: s)             // Text param -> Number param
+  }
+}
+Caller: entity {
+  Name: Text
+  service: Svc
+  Cross: action {
+    invoke service.SetAge(age: Name)  // caller Text property -> Number param
+  }
+}

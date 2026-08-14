@@ -41,6 +41,57 @@ Customer: entity {
 }
 ```
 
+### Value types and Contracts (used sub-domains)
+
+Named records without identity or lifecycle. Declare before entities that use them.
+A property typed as the value type is a nested document, not a relationship.
+
+```poly
+Money: value {
+  Amount: Number
+  Currency: Text
+}
+
+Order: entity {
+  Price: Money
+}
+```
+
+A contract is a **used sub-domain**: source + version + **value types** (the ACL you own)
++ endpoints. Bind attaches a parent action to an endpoint. No `import` keyword. No
+generated client. Value types declared **inside** the contract belong to that sub-domain;
+action parameters at the bind seam may use them, **stored entity properties may not**.
+
+```poly
+Stripe: contract external stripe v1 {
+  ChargeRequest: value {
+    Amount: Number
+    Currency: Text
+  }
+  Charge: outbound operation ChargeRequest
+}
+
+Order: entity {
+  Pay: action (request: ChargeRequest) {
+    assign Total to Total
+  }
+}
+
+ChargeOrder: bind Stripe Charge to Pay request
+```
+
+`external` / `internal`, `inbound` / `outbound`, `operation` / `event`. Analysis fails
+closed if the contract, endpoint, action, or parameter is missing, if the parameter type
+does not match the payload, if a payload type is unknown, or if two contracts (or the
+parent domain) share a value-type name.
+
+A `bind` is a **call in export**: the bound action's generated method invokes a
+`{Contract}Adapters` adapter for the endpoint. Until an in-process adapter is registered,
+the emitted adapter **throws** `NotImplementedException` — an unimplemented binding fails
+closed at runtime, never a silent no-op. The binding is never dropped by export. Export
+surfaces the **composition root only** — a produced `contract internal` contributes value
+types and endpoints, never child-entity routes.
+
 ## 3. Navigation Properties (N1 Relationships Only)
 
 Relationships are declared as **inline navigation properties** on the source entity.
@@ -117,9 +168,8 @@ Effects in an action body:
 | Property assignment | `assign PropertyName to expression` |
 | Create entity | `create EntityType { prop: value }` |
 | Create in relationship | `create in RelationshipName { prop: value }` |
-| Soft-delete self | `delete` |
 | Self-invoke | `invoke ActionName` / `invoke ActionName(param: expr, ...)` |
-| Cross-entity invoke | `invoke [any\|all] RelName.ActionName` / `invoke [any\|all] RelName.ActionName(param: expr, ...) [where expr]` |
+| Cross-entity invoke | `invoke RelName.ActionName` / `invoke RelName.ActionName(param: expr, ...)` — OneToOne source only |
 | Conditional | `if (expr) { effects } [else if (expr) { effects }]* [else { effects }]` |
 
 ```poly
@@ -162,24 +212,24 @@ Parser + analyzer (`DMEFF007`) + runtime all enforce the same contract.
 |------|----------------|
 | `invoke Action` | Self only |
 | `invoke Rel.Action` | Source of **OneToOne** `Rel` — exactly one outbound link |
-| `invoke any Rel.Action` / `invoke all Rel.Action` | Source of **OneToMany** `Rel`; **zero matches fail** (no vacuous `all`) |
-| `… where expr` | Only with `any`/`all` on OneToMany; `expr` is **target-local** only |
+| `for Rel as name [where …] invoke name.Action` | Source of **OneToMany** `Rel` — fan-out over every matching record; **zero matches fail** |
 
 **Rejected (`DMEFF007` / parse / runtime):**
-- `any`/`all` without `Rel.`; `where` without `any`/`all`; `where` on self/singular
-- bare `Rel.Action` on OneToMany; `any`/`all` on OneToOne
+- `invoke Rel.Action` on OneToMany (fan-out requires `for`); `for` on OneToOne
+- `any`/`all` invoke quantifiers — removed; the `for` fan-out is the only mode
 - reverse-side invoke (caller is relationship target, not source)
 - ManyToOne / ManyToMany; self-relationship (same type both ends)
-- filter with params, path-prefix, owned, exists, dates (local props/literals/comparisons/bool/arithmetic only)
+- `for` predicate that is not a **named policy or stage membership** on the target entity
 - missing/duplicate action parameter bindings
 
 ```poly
 invoke Validate                              # self-only
 invoke Validate(status: "ready")             # self-only with args (all params required)
 invoke service.Process                       # OneToOne source → target
-invoke any services.Process                  # OneToMany first success
-invoke all items.Process                     # OneToMany every target (fails if none)
-invoke all items.Tag() where Size > 10       # filtered (target-local Size)
+for items as item where item IsEligible
+    invoke item.Mark(amount: item Qty)       # fan-out, policy-filtered
+for items as item where item in Active
+    invoke item.Mark()                       # fan-out, stage-filtered
 ```
 
 Nested invoke depth is limited (max 16); recursive cycles fail loud.
@@ -325,13 +375,51 @@ against the target entity; reverse-side / self-rel / ManyToMany / OneToOne rejec
 **Shipped in the current product surface:**
 - Arithmetic (`+`, `-`, `*`, `/`) in expressions
 - Conditional effects (`if (expr) { effects } else { effects }`)
-- Invoke effect (`invoke ActionName` with optional arguments; cross-entity via `invoke RelName.ActionName`; quantifiers `any`/`all`; filter `where`)
+- Invoke effect (`invoke ActionName` with optional arguments; cross-entity via `invoke RelName.ActionName`; fan-out via the `for` form — one mode, no `any`/`all`/`each` quantifier)
 - Action parameters (`actionName: action (param: Type, ...)`)
-- `equals` and `enum` constraints
+- `default` constraints and enum-typed properties
 - Owned navigation (`rel: owned Entity`)
+- Temporal clock dates (`Now`/`Today`, `N days`/`N months`, `DateExpr ± duration`) — authoring, analysis, and `export_dsl` round-trip shipped
+
+#### Temporal Clock Dates (`Now`, `Today`, durations)
+
+With the temporal library (default in MCP `apply_dsl`), clock date values and relative date
+arithmetic are authorable in assign RHS and policy comparisons:
+
+```poly
+Renew: action {
+  assign DueDate to Now - 12 Days
+  assign RenewedAt to Today - 3 Months
+}
+
+IsExpired: policy { ExpiryDate < Now }
+Replenished: policy { DueDate + 14 Days > ExpiryDate }
+```
+
+| Form | Meaning |
+|------|---------|
+| `Now` | Current UTC timestamp (exact spelling) |
+| `Today` | Current calendar date (exact spelling) |
+| `N Days` / `N Months` | Relative duration (singular `Day`/`Month` also accepted; exact PascalCase) |
+| `DateExpr + N Days` / `DateExpr - N Months` | Offset `Now`/`Today`/a `Date` property by a duration |
+
+**Fail-closed:** unknown units (`12 Fortnights`) are a parse error; a bare `Number + Days`
+with no temporal left operand is rejected at analysis; without the library `Now` stays a plain
+`PropertyAccess` (never a clock read) and temporal authoring fails at parse.
+
+**Create-time defaults and assign-to-clock are shipped.** `default(Today)` / `default(Now)`
+and `assign Prop to Today` / `assign Prop to Now` evaluate at create/invoke. Offsets
+(`Now - 12 Days`) and **policy/VM** clock reads are **not** shipped: the fixed-clock
+`TimeProvider` seam is a production blocker (`simulate_policy` / the VM fail on
+`NamedTypeReference`). Author and round-trip those spellings; do not rely on policy
+clock values.
+
+**Explicitly NOT shipped:** `schedule at`/`at <time>`, business days, and timezone (TZ)
+handling are out of scope.
 
 **Not yet shipped** (planned for future phases):
-- Date operations
+- Date **runtime evaluation** — `Now`/`Today` clock reads parse, analyze, and round-trip
+  (shipped), but executing them at runtime is blocked on the fixed-clock `TimeProvider` seam
 - Owned/nested access in expressions
 
 ### Expression Gaps — IR vs DSL
@@ -346,7 +434,7 @@ and lowering pipeline but are **not yet authorable in product DSL**:
 | Scoped filter (`where`) | ✅ | ✅ **shipped** (`rel where and-chain`) | `customer where Status is "Active"` |
 | Owned/nested access | ✅ | Pull (same path-prefix approach) | `profile Field is "x"` — not `profile.Field` |
 | Collection quantifiers (`any`/`all`/`none`/`count`) | ✅ | ✅ **Q3′ shipped** | `any items where Status is "Open"`; store-aware runtime eval before VM lowering. |
-| Arithmetic (`+`, `-`, `*`, `/`) | ✅ | ✅ **shipped** | `Total + 5 > 10`, `Total * 0.9` |
+| Arithmetic (`+`, `-`, `*`, `/`) | ✅ | ✅ **shipped** | `Total + 5 > 10`, `Total * 2 > 10` |
 | Action parameters | ✅ | ✅ **shipped** | `actionName: action (param: Text) { ... }` |
 
 **Expression bodies are DSL text only** — JSON expression bags were retired with the catalog minify.
@@ -361,22 +449,21 @@ without a store (use create + link + `evaluate_policy`).
 | `assign Prop to expr` | action, entry, exit |
 | `create Type { ... }` | action |
 | `create in Rel { ... }` | action |
-| `delete` | action, entry, exit (soft-deletes the current instance) |
-| `invoke Action` / `invoke [any\|all] Rel.Action [where …]` | action (self; OneToOne / OneToMany source-only; fail-closed DMEFF007; depth-limited) |
+| `invoke Action` / `invoke Rel.Action` | action (self; OneToOne source-only; fail-closed DMEFF007; depth-limited) |
+| `for Rel as name [where policy \| where in stage] invoke name.Action` | action (OneToMany source-only fan-out; fail-fast; zero matches fail) |
 | `if (expr) { … } else if … else { … }` | action, entry, exit |
 
 The following effects exist in the runtime library but have **no DSL syntax** yet:
-- **link / unlink**: Connect existing instances. The MCP `link_instances` tool provides public access to `DomainInstanceStore.Link` with relationship + entity-type validation at the tool boundary. **DSL has no `link` keyword** — the product graph-write path for spawn-and-wire remains `create in Rel { … }` (or `create` with `RelationshipName`). `unlink_instances` deferred. Library API (`DomainInstanceStore.Link`/`Unlink`) remains available for test code.
-- **TransitionRelationship**: IR exists but **not executed at runtime** — do not use.
+- **link / unlink**: Connect existing instances. The MCP `link_instances` and `unlink_instances` tools expose `DomainInstanceStore.Link` / `DomainInstanceStore.Unlink` with relationship + entity-type validation at the tool boundary. **DSL has no `link` keyword** — the product graph-write path for spawn-and-wire remains `create in Rel { … }`. There is no Link/Unlink **Effect IR**.
 
-> **Note:** `delete` performs a **soft-delete** — it sets the `IsDeleted` flag on the current instance. Any subsequent `invoke_action` on a deleted instance is refused. This is not a typed mass-delete.
+> **Note:** the `delete` soft-delete effect was removed (2026-08-10). There is no delete effect; do not author `delete`.
 
 ## 9. Do NOT Use (Unsupported in Phase 1a/1b)
 
 | Construct | Why |
 |-----------|-----|
 | `actor` | Use `entity` instead |
-| `value { }` | Value types not supported |
+| `schedule`, `parallel` | Not product constructs |
 | `schedule`, `parallel`, `for` | Control flow not supported |
 
 | `relationship Name from A to B` | Use N1 nav properties instead |
@@ -387,7 +474,7 @@ The following effects exist in the runtime library but have **no DSL syntax** ye
 
 ### Action Parameters
 
-Actions can declare typed parameters. Bare identifiers in effect expressions resolve to the parameter when the name matches a declared parameter (same surface as property access). Parameters are injected for the duration of the action call and do not persist on the instance.
+Actions can declare typed parameters. There is no `param` keyword: a parameter is a **bare identifier** — the product parser emits it as a property access, and analysis/lowering/invoke-bindings/runtime treat an identifier matching an in-scope action parameter as a **parameter**, not a property. `ParameterAccess` is internal IR, not an authoring form. Parameters are injected for the duration of the action call and do not persist on the instance.
 
 Canonical form puts parameters after `: action` so members stay `Name: kind` (matches `export_dsl`):
 
@@ -407,7 +494,7 @@ SetName: action (newName: Text) {
 | Length | `length(min, max)` | `Code: Text length(2, 10)` |
 | Pattern | `pattern(regex)` | `Zip: Text pattern("^\\d{5}$")` |
 | Default | `default(value)` | `Status: MemberStatus default(Active)` |
-| Enum | `enum(v1, v2, ...)` | `Color: Text enum(Red, Green, Blue)` |
+| Enum-typed property | `Prop: EnumType` | `Color: Color` (top-level enum type; inline `enum(...)` constraints are not supported) |
 
 ## 11. Dual Authoring Path
 

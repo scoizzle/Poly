@@ -2,6 +2,7 @@ using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Effects;
 using Poly.DomainModeling.Evolution;
+using Poly.DomainModeling.Packs;
 using Poly.DomainModeling.Parsing;
 using Poly.DomainModeling.Queries;
 
@@ -22,7 +23,7 @@ public class SubscriptionAnalysisTests {
     /// must flow through the same analysis path as IR fixtures).
     /// </summary>
     private static Domain ParseDomain(string poly) {
-        var ctx = DomainInputBuilder.CreateWithSqlPack().Build();
+        var ctx = ExtensionCatalog.Core.Authoring;
         var parser = new PolyDslParser(poly, ctx.Parser);
         var changes = parser.Parse();
         var emptyDomain = DomainTestFactory.Create("_", [], []);
@@ -500,7 +501,7 @@ public class SubscriptionAnalysisTests {
         // Round-5 F4: `when all Rel Stage` where the target has NO stages must be
         // rejected at analysis (the watched stage cannot exist) — otherwise the export
         // gate would emit a nonexistent CurrentStage/stage-enum reference (CS1061).
-        var ctx = DomainInputBuilder.CreateWithSqlPack().Build();
+        var ctx = ExtensionCatalog.Core.Authoring;
         var parser = new PolyDslParser("""
             domain Test
             Task: entity { Flag: Text }

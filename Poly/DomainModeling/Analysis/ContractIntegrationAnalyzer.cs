@@ -21,8 +21,21 @@ internal sealed class ContractIntegrationAnalyzer : INodeAnalyzer {
     }
 
     private static void ValidateDomain(AnalysisContext context, Domain domain) {
+        ReportTypeNameClashes(context, domain);
+
         foreach (var contract in domain.ImportedContracts) {
-            ValidateContract(context, contract);
+            ValidateContract(context, domain, contract);
+        }
+
+        foreach (var entity in domain.Types.OfType<Entity>()) {
+            foreach (var prop in entity.Properties) {
+                if (FindContractOwningType(domain, prop.Type.TypeName) is { } owner) {
+                    context.ReportError(
+                        prop,
+                        $"Entity '{entity.Name}' property '{prop.Name}' is typed as contract value type '{prop.Type.TypeName}' from '{owner.Name}'. Stored state must use parent-domain types; use the contract type only on a bound action parameter.",
+                        DomainModelDiagnosticCodes.ContractIntegration);
+                }
+            }
         }
 
         foreach (var binding in domain.ContractBindings) {
@@ -30,7 +43,47 @@ internal sealed class ContractIntegrationAnalyzer : INodeAnalyzer {
         }
     }
 
-    private static void ValidateContract(AnalysisContext context, ImportedContract contract) {
+    private static void ReportTypeNameClashes(AnalysisContext context, Domain domain) {
+        var seen = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var t in domain.Types.OfType<ValueType>())
+            seen[t.Name] = $"domain value type '{t.Name}'";
+        foreach (var t in domain.Types.OfType<EnumType>())
+            seen[t.Name] = $"enum '{t.Name}'";
+        foreach (var t in domain.Types.OfType<Entity>())
+            seen[t.Name] = $"entity '{t.Name}'";
+
+        foreach (var contract in domain.ImportedContracts) {
+            foreach (var vt in contract.Types) {
+                if (seen.TryGetValue(vt.Name, out var prior)) {
+                    context.ReportError(
+                        vt,
+                        $"Value type '{vt.Name}' on contract '{contract.Name}' clashes with {prior}.",
+                        DomainModelDiagnosticCodes.ContractIntegration);
+                }
+                else {
+                    seen[vt.Name] = $"contract '{contract.Name}' value type '{vt.Name}'";
+                }
+            }
+        }
+    }
+
+    private static ImportedContract? FindContractOwningType(Domain domain, string typeName) {
+        foreach (var contract in domain.ImportedContracts) {
+            if (contract.Types.Any(t => string.Equals(t.Name, typeName, StringComparison.Ordinal)))
+                return contract;
+        }
+        return null;
+    }
+
+    private static bool PayloadTypeExists(Domain domain, ImportedContract contract, string typeName) {
+        if (typeName is "Text" or "Number" or "Boolean" or "DateTime" or "Date")
+            return true;
+        if (contract.Types.Any(t => string.Equals(t.Name, typeName, StringComparison.Ordinal)))
+            return true;
+        return domain.Types.Any(t => string.Equals(t.Name, typeName, StringComparison.Ordinal));
+    }
+
+    private static void ValidateContract(AnalysisContext context, Domain domain, ImportedContract contract) {
         if (string.IsNullOrWhiteSpace(contract.SourceIdentifier)) {
             context.ReportError(
                 contract,
@@ -43,6 +96,15 @@ internal sealed class ContractIntegrationAnalyzer : INodeAnalyzer {
                 contract,
                 $"Imported contract '{contract.Name}' is missing a version.",
                 DomainModelDiagnosticCodes.ContractIntegration);
+        }
+
+        foreach (var endpoint in contract.Endpoints) {
+            if (!PayloadTypeExists(domain, contract, endpoint.PayloadType.TypeName)) {
+                context.ReportError(
+                    endpoint,
+                    $"Contract '{contract.Name}' endpoint '{endpoint.Name}' payload type '{endpoint.PayloadType.TypeName}' is not a primitive or a value type on that contract (or the parent domain).",
+                    DomainModelDiagnosticCodes.ContractIntegration);
+            }
         }
     }
 
@@ -65,6 +127,13 @@ internal sealed class ContractIntegrationAnalyzer : INodeAnalyzer {
                 $"Contract binding '{binding.Name}' references endpoint '{binding.EndpointName}' that does not belong to contract '{binding.ContractName}'.",
                 DomainModelDiagnosticCodes.ContractIntegration);
             return;
+        }
+
+        if (!PayloadTypeExists(domain, contract, endpoint.PayloadType.TypeName)) {
+            context.ReportError(
+                endpoint,
+                $"Contract '{contract.Name}' endpoint '{endpoint.Name}' payload type '{endpoint.PayloadType.TypeName}' is not a primitive or a value type on that contract (or the parent domain).",
+                DomainModelDiagnosticCodes.ContractIntegration);
         }
 
         var action = FindActionOnAnyEntity(domain, binding.ActionName);

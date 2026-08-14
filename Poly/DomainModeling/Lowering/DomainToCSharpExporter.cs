@@ -1119,6 +1119,11 @@ public sealed class DomainToCSharpExporter {
         var effectsBody = LowerActionToMethodBody(entity, action, paramNames, stageEnumTypeName,
             postTransitionNodes, sourceStageName, domain, analysis);
 
+        // pack-3c-3: a bound action is a call. The exported method invokes the contract
+        // adapter (emitted per bound contract), never a bodyless local implementation —
+        // the binding must not be dropped by export.
+        effectsBody = PrependAdapterInvocation(domain, action, effectsBody);
+
         // Build the full method body: require guards first, then effects
         var isVoid = action.Result is not { Members.Count: > 0 };
         var body = BuildActionBodyWithGuards(action, entity, effectsBody, domain,
@@ -1321,6 +1326,77 @@ public sealed class DomainToCSharpExporter {
     }
 
     // ── Lowering helpers ────────────────────────────────────────
+
+    /// <summary>
+    /// When <paramref name="action"/> is bound to a contract endpoint, prepends the adapter
+    /// invocation (<c>{Contract}Adapters.{Endpoint}({param})</c>) to the effects body. The
+    /// binding is exported as a call into the emitted adapter (which throws until an
+    /// in-process adapter is registered) — never dropped, never a silent no-op. Unknown
+    /// contract/endpoint/binding are left untouched: analysis already rejected them, and the
+    /// projection never second-guesses a valid model.
+    /// </summary>
+    private static Node? PrependAdapterInvocation(Domain? domain, Action action, Node? effectsBody) {
+        if (domain is null) return effectsBody;
+        var binding = domain.ContractBindings.FirstOrDefault(b =>
+            string.Equals(b.ActionName, action.Name, StringComparison.Ordinal));
+        if (binding is null) return effectsBody;
+        var contract = domain.ImportedContracts.FirstOrDefault(c =>
+            string.Equals(c.Name, binding.ContractName, StringComparison.Ordinal));
+        if (contract is null) return effectsBody;
+        var endpoint = contract.Endpoints.FirstOrDefault(e =>
+            string.Equals(e.Name, binding.EndpointName, StringComparison.Ordinal));
+        if (endpoint is null) return effectsBody;
+
+        var call = new Invoke(
+            new Member(new TypeReference($"{contract.Name}Adapters"), endpoint.Name),
+            new Variable(binding.LocalParameterName));
+        return effectsBody is Block block
+            ? new Block([call, .. block.Nodes])
+            : new Block([call]);
+    }
+
+    /// <summary>
+    /// Builds the fail-closed adapter class for a contract with at least one bound endpoint.
+    /// One static method per bound endpoint; each throws <c>NotImplementedException</c> at
+    /// runtime until an in-process adapter is registered. There is no second parse of the
+    /// child domain — the produced contract endpoint has no callable in the exported root,
+    /// so an unimplemented binding fails loud instead of silently succeeding.
+    /// </summary>
+    internal static TypeDefinitionNode BuildContractAdapterTypeDef(
+        ImportedContract contract, IReadOnlyList<ContractEndpoint> boundEndpoints) {
+        var methods = new List<MethodDefinitionNode>();
+        foreach (var endpoint in boundEndpoints) {
+            var payload = new NamedTypeReference(
+                DomainTypeMapping.ToClrTypeName(endpoint.PayloadType.TypeName));
+            methods.Add(new MethodDefinitionNode(
+                endpoint.Name,
+                new NamedTypeReference("void"),
+                Parameters: [new Parameter("request", payload)],
+                Body: new Block([
+                    new ThrowStatement(
+                        new New(
+                            new NamedTypeReference("NotImplementedException"),
+                            new Constant(
+                                $"Contract endpoint '{contract.Name}.{endpoint.Name}' has no implementation. " +
+                                "The export emits a fail-closed adapter; register an in-process adapter to serve bound calls."))),
+                ]),
+                IsStatic: true,
+                AccessModifier: AccessModifier.Public
+            ));
+        }
+
+        return new TypeDefinitionNode(
+            $"{contract.Name}Adapters",
+            Constructors: [
+                new ConstructorDefinitionNode(
+                    Parameters: [],
+                    Body: new Block([new Comment("adapter holder")]),
+                    AccessModifier: AccessModifier.Private),
+            ],
+            Methods: methods,
+            Semantics: Syntactic.TypeDefinitionSemantics.MutableReference
+        );
+    }
 
     internal static Node? LowerActionToMethodBody(
         Entity entity, Action action,
@@ -1555,6 +1631,28 @@ public sealed class DomainToCSharpExporter {
             Properties: props,
             Constructors: [ctor],
             Methods: methods,
+            Semantics: Syntactic.TypeDefinitionSemantics.ImmutableValue
+        );
+    }
+
+    internal static TypeDefinitionNode BuildValueTypeTypeDef(
+        ValueType valueType, Domain domain, INodeMetadataProvider metadata) {
+        var props = new List<PropertyDefinitionNode>();
+        foreach (var prop in valueType.Properties) {
+            var propRef = MapDomainTypeRef(prop.Type, domain, metadata);
+            props.Add(new PropertyDefinitionNode(
+                prop.Name, propRef,
+                Getter: new PropertyGetterDefinitionNode(),
+                Setter: new PropertySetterDefinitionNode(),
+                Initializer: IsNonNullableReferenceScalar(propRef)
+                    ? new Syntactic.PropertyInitializerDefinitionNode(
+                        new Syntactic.NullForgiving(new Syntactic.Default()))
+                    : null
+            ));
+        }
+        return new TypeDefinitionNode(
+            valueType.Name,
+            Properties: props,
             Semantics: Syntactic.TypeDefinitionSemantics.ImmutableValue
         );
     }

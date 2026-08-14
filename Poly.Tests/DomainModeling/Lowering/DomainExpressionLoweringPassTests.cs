@@ -1,5 +1,6 @@
 using Poly.DomainModeling;
 using Poly.DomainModeling.Lowering;
+using Poly.DomainModeling.Packs.Temporal;
 
 using Parameter = Poly.Ast.Nodes.Parameter;
 using SN = Poly.Ast.Nodes;
@@ -255,7 +256,7 @@ public class DomainExpressionLoweringPassTests {
 
     [Test]
     public async Task DateOperation_AddDays_LowersToInvoke() {
-        var expr = DomainExpression.DateOp(
+        var expr = new DateOperation(
             DomainExpression.Property("DueDate"),
             DomainExpression.Literal(14),
             DateOperationKind.AddDays);
@@ -271,7 +272,7 @@ public class DomainExpressionLoweringPassTests {
 
     [Test]
     public async Task DateOperation_AddMonths_LowersToInvoke() {
-        var expr = DomainExpression.DateOp(
+        var expr = new DateOperation(
             DomainExpression.Property("StartDate"),
             DomainExpression.Literal(3),
             DateOperationKind.AddMonths);
@@ -284,7 +285,7 @@ public class DomainExpressionLoweringPassTests {
 
     [Test]
     public async Task DateOperation_DiffDays_LowersToInvoke() {
-        var expr = DomainExpression.DateOp(
+        var expr = new DateOperation(
             DomainExpression.Property("EndDate"),
             DomainExpression.Property("StartDate"),
             DateOperationKind.DiffDays);

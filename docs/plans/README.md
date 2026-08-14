@@ -54,6 +54,13 @@ copilot --agent plan-suite-until-done -p "Suite: mut-safety. Mode: until-done."
 | [`p1-temporal-research.md`](p1-temporal-research.md) | Temporal research (suite is p1-*) |
 | [`domain-dsl-absorption-proposals.md`](domain-dsl-absorption-proposals.md) | P* matrix; pick one suite at a time |
 | [`domainmodeling-workstream-map.md`](domainmodeling-workstream-map.md) | Orientation inventory |
+| [`domainmodeling-e2e-representation-2026-08-13.md`](domainmodeling-e2e-representation-2026-08-13.md) | Author → runtime → C# coverage; **parked** |
+| [`simple-agent-tasks/e2e-README.md`](simple-agent-tasks/e2e-README.md) | Fleet implementation queue for that plan (waves + exclusive files) |
+| [`live-demo-reliability-2026-08-13.md`](live-demo-reliability-2026-08-13.md) | Cut for “compile → run → HTTP” demos; warehouse/orders first |
+| [`live-pairing-demo-2026-08-13.md`](live-pairing-demo-2026-08-13.md) | Human + agent progressive authoring → `serve-poly.sh` |
+| [`contract-subdomain-2026-08-13.md`](contract-subdomain-2026-08-13.md) | Contract = used sub-domain; **executed 2026-08-13** |
+| [`pack-host-2026-08-13.md`](pack-host-2026-08-13.md) | **Grammar → pack surface → built-in packs**; proposed next admit = phase 1 (TokenWriter + print binders) |
+| [`fleet-eval-fixes-2026-08-12.md`](fleet-eval-fixes-2026-08-12.md) | Probe-finding execution checklist (P0–P7). Do not CURRENT beside an overlapping `e2e-*` |
 
 ---
 
@@ -63,13 +70,15 @@ copilot --agent plan-suite-until-done -p "Suite: mut-safety. Mode: until-done."
 |------|-------------|
 | ~~[`dead-dual-inventory-2026-08-08.md`](dead-dual-inventory-2026-08-08.md)~~ | ✅ **EXECUTED 2026-08-09** — Validation + Text.Matching deleted; StringView/Parsers kept |
 | ~~[`grammar-revision.md`](grammar-revision.md)~~ | ✅ **DONE 2026-08-09** — v2 engine + DSL cutover + printer + review fixes; see doc for final status |
+| [`domainmodeling-e2e-representation-2026-08-13.md`](domainmodeling-e2e-representation-2026-08-13.md) | Explicit slice admit (`e2e-honest` … `e2e-contracts`); do not mega-suite; do not overlap a live fleet-eval batch |
+| [`fleet-eval-fixes-2026-08-12.md`](fleet-eval-fixes-2026-08-12.md) | Explicit batch admit (P0-0 first). Same bugs as e2e slices P/R/S/3/4/X |
 | [`ef-and-api-codegen.md`](ef-and-api-codegen.md) | Explicit generation suite admit |
 | [`analysis-consuming-lowering.md`](analysis-consuming-lowering.md) | Explicit pick |
 | [`post-v2-delete-naming-cleanup.md`](post-v2-delete-naming-cleanup.md) | Idle green tree |
 | [`v2-to-v3/effect-surface-completeness.md`](v2-to-v3/effect-surface-completeness.md) | E5/E6 pain |
 | [`mcp-batch-snapshot-efficiency.md`](mcp-batch-snapshot-efficiency.md) · [`mcp-domain-inspection-completeness.md`](mcp-domain-inspection-completeness.md) | MCP pain |
 | [`domain-migration-poc-plan.md`](domain-migration-poc-plan.md) | Migration consumer |
-| [`dsl-plugin-pipeline-experiment.md`](dsl-plugin-pipeline-experiment.md) · [`domain-plugin-extension-platform.md`](domain-plugin-extension-platform.md) | Pack host consumer |
+| [`dsl-plugin-pipeline-experiment.md`](dsl-plugin-pipeline-experiment.md) · [`domain-plugin-extension-platform.md`](domain-plugin-extension-platform.md) | Historical P1–P4 (shipped). Live workstream: [`pack-host-2026-08-13.md`](pack-host-2026-08-13.md) |
 | [`poly-ast-analysis-module-split.md`](poly-ast-analysis-module-split.md) | After product stability |
 | [`array-specialization-plan.md`](array-specialization-plan.md) · [`analyzer-improvements.md`](analyzer-improvements.md) · [`ast-types-provider-instance-ergonomics.md`](ast-types-provider-instance-ergonomics.md) | Optional |
 | [`platform-velocity-review.md`](platform-velocity-review.md) · [`future-platform-capabilities.md`](future-platform-capabilities.md) | Idea / inventory |

@@ -6,7 +6,7 @@ namespace Poly.DomainModeling;
 public sealed record DomainTypeReference(string TypeName) : DomainObject;
 
 /// <summary>
-/// Base type for all named types in the domain model (Entity, Event, ValueType, PrimitiveType).
+/// Base type for all named types in the domain model (Entity, ValueType, PrimitiveType, EnumType).
 /// </summary>
 public abstract record DomainType(
     string Name,

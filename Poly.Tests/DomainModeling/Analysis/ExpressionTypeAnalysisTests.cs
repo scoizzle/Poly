@@ -109,7 +109,7 @@ public class ExpressionTypeAnalysisTests {
     public async Task Default_TodayOnText_Rejected() {
         var result = Parse("""
             domain Test
-            Event: entity { Label: Text default(today) }
+            Event: entity { Label: Text default(Today) }
             """);
         await Assert.That(result.Succeeded).IsFalse();
     }
@@ -274,23 +274,23 @@ public class ExpressionTypeAnalysisTests {
 
     [Test]
     public async Task Default_NowOnNumber_Rejected() {
-        // Round-5 F2/F6: default(now) on a non-Date target must fail at analysis, not codegen.
+        // Round-5 F2/F6: default(Now) on a non-Date target must fail at analysis, not codegen.
         var result = Parse("""
             domain Test
-            Item: entity { Qty: Number default(now) }
+            Item: entity { Qty: Number default(Now) }
             """);
         await Assert.That(result.Succeeded).IsFalse();
-        await Assert.That(HasError(result, "default(now) is not compatible")).IsTrue();
+        await Assert.That(HasError(result, "default(Now) is not compatible")).IsTrue();
     }
 
     [Test]
     public async Task Default_TodayOnNumber_Rejected() {
         var result = Parse("""
             domain Test
-            Item: entity { Qty: Number default(today) }
+            Item: entity { Qty: Number default(Today) }
             """);
         await Assert.That(result.Succeeded).IsFalse();
-        await Assert.That(HasError(result, "default(today) is not compatible")).IsTrue();
+        await Assert.That(HasError(result, "default(Today) is not compatible")).IsTrue();
     }
 
     [Test]

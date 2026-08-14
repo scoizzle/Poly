@@ -2,6 +2,7 @@ using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Lowering;
+using Poly.DomainModeling.Packs;
 using Poly.DomainModeling.Parsing;
 using Poly.Packs.SqlServer;
 
@@ -14,7 +15,7 @@ namespace Poly.Tests.DomainModeling.Lowering;
 /// </summary>
 public class SqlServerPackTests {
     private static Domain ParseDomain(string poly) {
-        var ctx = DomainInputBuilder.CreateWithSqlPack().Build();
+        var ctx = ExtensionCatalog.Core.Authoring;
         var parser = new PolyDslParser(poly, ctx.Parser);
         var changes = parser.Parse();
         var emptyDomain = DomainTestFactory.Create("_", [], []);
@@ -29,12 +30,58 @@ public class SqlServerPackTests {
 
     private static StorageModel AnalyzeStorage(
         Domain domain,
-        DomainInputSet? authoring = null) {
-        var ctx = authoring ?? DomainInputBuilder.CreateWithSqlPack().Build();
+        DomainHost? authoring = null) {
+        var ctx = authoring ?? ExtensionCatalog.Core.Authoring;
         return new StorageAnalyzer(domain, typeMaps: ctx.Analysis.TypeMaps, conventions: ctx.Analysis.StorageConventions).Analyze();
     }
 
     #region Type-map overrides
+
+    [Test]
+    public async Task AddPack_SqlServer_AppliesTypeMaps() {
+        var domain = ParseDomain("""
+            domain Test
+            Item: entity {
+              Title: Text
+              CreatedAt: DateTime
+              IsActive: Boolean
+            }
+            """);
+        var ctx = DomainHostBuilder.Create().WithStorageFacets()
+            .Load(new SqlServerLibrary())
+            .Build();
+        var storage = AnalyzeStorage(domain, ctx);
+        var cols = storage.Entities.Single().Columns
+            .ToDictionary(c => c.Name, StringComparer.Ordinal);
+        await Assert.That(cols["Title"].ColumnType).IsEqualTo("nvarchar(max)");
+        await Assert.That(cols["CreatedAt"].ColumnType).IsEqualTo("datetime2");
+        await Assert.That(cols["IsActive"].ColumnType).IsEqualTo("bit");
+    }
+
+    [Test]
+    public async Task AddPack_SqlServer_AppliesIdentifierConvention() {
+        var longName = new string('A', 129);
+        var domain = ParseDomain("""
+            domain Test
+            Item: entity { Name: Text }
+            """);
+        var item = domain.Types.OfType<Entity>().Single();
+        var prop = item.Properties.Single() with {
+            Facets = [
+                new Annotation("column", new Dictionary<string, AnnotationValue> {
+                    ["0"] = new AnnotationString(longName),
+                })
+            ]
+        };
+        var faceted = domain with { Types = [item with { Properties = [prop] }] };
+
+        var ctx = DomainHostBuilder.Create().WithStorageFacets()
+            .Load(new SqlServerLibrary())
+            .Build();
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            AnalyzeStorage(faceted, ctx));
+        await Assert.That(ex!.Message).Contains("exceeds SQL Server maximum");
+    }
 
     [Test]
     public async Task SqlServerDefaults_TextMapsToNvarcharMax() {
@@ -45,7 +92,7 @@ public class SqlServerPackTests {
               Description: Text
             }
             """);
-        var ctx = DomainInputBuilder.CreateWithSqlPack()
+        var ctx = DomainHostBuilder.Create().WithStorageFacets()
             .AddSqlServerDefaults()
             .Build();
         var storage = AnalyzeStorage(domain, ctx);
@@ -62,7 +109,7 @@ public class SqlServerPackTests {
               Flag: Boolean
             }
             """);
-        var ctx = DomainInputBuilder.CreateWithSqlPack()
+        var ctx = DomainHostBuilder.Create().WithStorageFacets()
             .AddSqlServerDefaults()
             .Build();
         var storage = AnalyzeStorage(domain, ctx);
@@ -79,7 +126,7 @@ public class SqlServerPackTests {
               UpdatedAt: DateTime
             }
             """);
-        var ctx = DomainInputBuilder.CreateWithSqlPack()
+        var ctx = DomainHostBuilder.Create().WithStorageFacets()
             .AddSqlServerDefaults()
             .Build();
         var storage = AnalyzeStorage(domain, ctx);
@@ -117,13 +164,13 @@ public class SqlServerPackTests {
             """);
 
         // Generic SQL defaults (no SqlServer pack)
-        var genericCtx = DomainInputBuilder.CreateWithSqlPack().Build();
+        var genericCtx = ExtensionCatalog.Core.Authoring;
         var genericInfra = AnalyzeStorage(domain, genericCtx);
         var genericCols = genericInfra.Entities.Single().Columns
             .ToDictionary(c => c.Name, StringComparer.Ordinal);
 
         // SQL Server defaults
-        var ssCtx = DomainInputBuilder.CreateWithSqlPack()
+        var ssCtx = DomainHostBuilder.Create().WithStorageFacets()
             .AddSqlServerDefaults()
             .Build();
         var ssInfra = AnalyzeStorage(domain, ssCtx);
@@ -155,12 +202,12 @@ public class SqlServerPackTests {
             }
             """);
 
-        var genericCtx = DomainInputBuilder.CreateWithSqlPack().Build();
+        var genericCtx = ExtensionCatalog.Core.Authoring;
         var genericInfra = AnalyzeStorage(domain, genericCtx);
         var genericCol = genericInfra.Entities.Single().Columns.Single();
         await Assert.That(genericCol.ColumnType).IsEqualTo("VARCHAR2(20)");
 
-        var ssCtx = DomainInputBuilder.CreateWithSqlPack()
+        var ssCtx = DomainHostBuilder.Create().WithStorageFacets()
             .AddSqlServerDefaults()
             .Build();
         var ssInfra = AnalyzeStorage(domain, ssCtx);
@@ -190,7 +237,7 @@ public class SqlServerPackTests {
         };
         var faceted = domain with { Types = [item with { Properties = [prop] }] };
 
-        var ctx = DomainInputBuilder.CreateWithSqlPack()
+        var ctx = DomainHostBuilder.Create().WithStorageFacets()
             .AddSqlServerDefaults()
             .Build();
         var ex = Assert.Throws<InvalidOperationException>(() =>
@@ -216,7 +263,7 @@ public class SqlServerPackTests {
         };
         var faceted = domain with { Types = [item with { Properties = [prop] }] };
 
-        var ctx = DomainInputBuilder.CreateWithSqlPack()
+        var ctx = DomainHostBuilder.Create().WithStorageFacets()
             .AddSqlServerDefaults()
             .Build();
         var infra = AnalyzeStorage(faceted, ctx);
@@ -240,7 +287,7 @@ public class SqlServerPackTests {
         };
         var faceted = domain with { Types = [item with { Facets = item.Facets }] };
 
-        var ctx = DomainInputBuilder.CreateWithSqlPack()
+        var ctx = DomainHostBuilder.Create().WithStorageFacets()
             .AddSqlServerDefaults()
             .Build();
         var ex = Assert.Throws<InvalidOperationException>(() =>
@@ -259,7 +306,7 @@ public class SqlServerPackTests {
             Item: entity { Name: Text }
             """);
 
-        var ctx = DomainInputBuilder.CreateWithSqlPack()
+        var ctx = DomainHostBuilder.Create().WithStorageFacets()
             .AddSqlServerDefaults()
             .AddStorageConvention(new PrefixConvention("tbl_"))
             .Build();

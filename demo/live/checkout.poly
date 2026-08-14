@@ -1,0 +1,18 @@
+domain Checkout
+
+Order: entity {
+  Total: Number
+  Pay: action (request: ChargeRequest) {
+    assign Total to Total
+  }
+}
+
+Stripe: contract external stripe v1 {
+  ChargeRequest: value {
+    Amount: Number
+    Currency: Text
+  }
+  Charge: outbound operation ChargeRequest
+}
+
+ChargeOrder: bind Stripe Charge to Pay request

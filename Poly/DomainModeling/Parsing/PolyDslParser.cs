@@ -37,6 +37,7 @@ public sealed class PolyDslParser : DslCursor {
 
     // Enum type names, for distinguishing typed properties from nav lines
     private readonly HashSet<string> _enumTypeNames = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _valueTypeNames = new(StringComparer.Ordinal);
 
     // Property names per entity, for collision detection with navs
     private readonly Dictionary<string, HashSet<string>> _entityPropertyNames = new(StringComparer.Ordinal);
@@ -93,6 +94,11 @@ public sealed class PolyDslParser : DslCursor {
         Expect(TokenKind.Domain);
         _domainName = ExpectIdentifier(TokenKind.Identifier, "domain name");
         changes.Add(new SetDomainNameChange(_domainName));
+        while (Current.Kind == TokenKind.Uses) {
+            Advance();
+            var extensionId = ExpectIdentifier(TokenKind.Identifier, "extension id");
+            changes.Add(new AddDomainExtensionChange(extensionId));
+        }
 
         // ── Enum type definitions + entity definitions ─────────
         // Parse entities and enum types in order; enum types must precede entities
@@ -108,6 +114,8 @@ public sealed class PolyDslParser : DslCursor {
                     ParseEntity(changes);
                     break;
                 default:
+                    if (TryParseNamedTopLevel(changes))
+                        break;
                     throw TopLevelRejection();
             }
         }
@@ -212,9 +220,9 @@ public sealed class PolyDslParser : DslCursor {
                             // known enum names, mirroring the legacy IsNavLine dispatch.
                             var name = ExpectIdentifier(TokenKind.Identifier, "property name");
                             Expect(TokenKind.Colon);
-                            if (_enumTypeNames.Contains(Current.Text)) {
-                                // Typed property referencing an enum type, with optional constraints/facets
-                                var typeName = ExpectIdentifier(TokenKind.Identifier, "enum type name");
+                            if (_enumTypeNames.Contains(Current.Text) || _valueTypeNames.Contains(Current.Text)) {
+                                // Typed property referencing an enum or value type
+                                var typeName = ExpectIdentifier(TokenKind.Identifier, "type name");
                                 TrackPropertyName(_currentEntityName, name);
                                 changes.Add(new AddPropertyToEntityChange(_currentEntityName,
                                     new Property(name, new DomainTypeReference(typeName), [])));
@@ -961,7 +969,32 @@ public sealed class PolyDslParser : DslCursor {
                     $"Define '{typeWord.Text}' properties directly on '{name}'.");
             }
         }
-        return Error($"Expected 'entity' or 'enum' definition, got '{Current.Text}'");
+        return Error($"Expected 'entity', 'enum', 'value', 'contract', or 'bind' definition, got '{Current.Text}'");
+    }
+
+    /// <summary>
+    /// Top-level <c>Name: value|contract|bind</c> — words stay identifiers so
+    /// <c>action (value: Text)</c> does not collide with a reserved keyword.
+    /// </summary>
+    private bool TryParseNamedTopLevel(List<DomainChange> changes) {
+        if (Current.Kind != TokenKind.Identifier || !PeekIs(TokenKind.Colon))
+            return false;
+        var kindTok = Peek(2);
+        if (kindTok.Kind != TokenKind.Identifier)
+            return false;
+        switch (kindTok.Text) {
+            case "value":
+                ParseValueType(changes);
+                return true;
+            case "contract":
+                ParseContract(changes);
+                return true;
+            case "bind":
+                ParseBind(changes);
+                return true;
+            default:
+                return false;
+        }
     }
 
     /// <summary>
@@ -1001,6 +1034,166 @@ public sealed class PolyDslParser : DslCursor {
 
         _enumTypeNames.Add(name);
         changes.Add(new AddEnumTypeChange(name, members));
+    }
+
+    /// <summary>
+    /// <c>Name: value { Prop: Type … }</c>. Value types must be declared before
+    /// entities that reference them.
+    /// </summary>
+    private void ParseValueType(List<DomainChange> changes) {
+        var name = ExpectIdentifier(TokenKind.Identifier, "value type name");
+        Expect(TokenKind.Colon);
+        ExpectWord("value");
+        var properties = ParseValueTypeProperties();
+        _valueTypeNames.Add(name);
+        changes.Add(new AddValueTypeChange(name, properties));
+    }
+
+    private IReadOnlyList<Property> ParseValueTypeProperties() {
+        Expect(TokenKind.LBrace);
+        var properties = new List<Property>();
+        while (Current.Kind != TokenKind.RBrace && Current.Kind != TokenKind.EndOfFile) {
+            var propName = ExpectIdentifier(TokenKind.Identifier, "property name");
+            Expect(TokenKind.Colon);
+            string typeName;
+            if (IsPrimitiveType(Current.Kind)) {
+                typeName = Current.Text;
+                Advance();
+            }
+            else {
+                typeName = ExpectIdentifier(TokenKind.Identifier, "type name");
+            }
+            var constraints = new List<Constraint>();
+            while (IsConstraint(Current.Kind)) {
+                var c = ParseConstraint();
+                if (c is not null)
+                    constraints.Add(c);
+            }
+            properties.Add(new Property(propName, new DomainTypeReference(typeName), constraints));
+        }
+        Expect(TokenKind.RBrace);
+        return properties;
+    }
+
+    /// <summary>
+    /// <c>Name: contract external|internal source version { Endpoint: inbound|outbound operation|event Type }</c>
+    /// </summary>
+    private void ParseContract(List<DomainChange> changes) {
+        var name = ExpectIdentifier(TokenKind.Identifier, "contract name");
+        Expect(TokenKind.Colon);
+        ExpectWord("contract");
+
+        ContractSourceKind sourceKind;
+        if (Current.Kind == TokenKind.Identifier && Current.Text == "external") {
+            Advance();
+            sourceKind = ContractSourceKind.ExternalProvider;
+        }
+        else if (Current.Kind == TokenKind.Identifier && Current.Text == "internal") {
+            Advance();
+            sourceKind = ContractSourceKind.InternalDomain;
+        }
+        else {
+            throw Error($"Expected 'external' or 'internal' after contract '{name}'");
+        }
+
+        string sourceId;
+        if (Current.Kind == TokenKind.StringLiteral) {
+            sourceId = Current.Text;
+            Advance();
+        }
+        else {
+            sourceId = ExpectIdentifier(TokenKind.Identifier, "contract source");
+        }
+
+        string version;
+        if (Current.Kind == TokenKind.StringLiteral) {
+            version = Current.Text;
+            Advance();
+        }
+        else {
+            version = ExpectIdentifier(TokenKind.Identifier, "contract version");
+        }
+
+        changes.Add(new AddImportedContractChange(name, sourceKind, sourceId, version));
+        Expect(TokenKind.LBrace);
+
+        // Contract bodies declare value types that reference primitives (e.g. `Amount: Number`),
+        // so the built-in primitive types must be ensured even when the domain has no entity
+        // (a pure ACL / used-sub-domain domain). Mirrors ParseEntity's EnsurePrimitivesOnce.
+        EnsurePrimitivesOnce(changes);
+
+        while (Current.Kind != TokenKind.RBrace && Current.Kind != TokenKind.EndOfFile) {
+            if (Current.Kind == TokenKind.Identifier
+                && PeekIs(TokenKind.Colon)
+                && Peek(2).Kind == TokenKind.Identifier
+                && string.Equals(Peek(2).Text, "value", StringComparison.Ordinal)) {
+                var vtName = ExpectIdentifier(TokenKind.Identifier, "value type name");
+                Expect(TokenKind.Colon);
+                ExpectWord("value");
+                var properties = ParseValueTypeProperties();
+                _valueTypeNames.Add(vtName);
+                changes.Add(new AddContractValueTypeChange(name, new ValueType(vtName, properties, [])));
+                continue;
+            }
+
+            var endpointName = ExpectIdentifier(TokenKind.Identifier, "endpoint name");
+            Expect(TokenKind.Colon);
+
+            ContractEndpointDirection direction;
+            if (Current.Kind == TokenKind.Identifier && Current.Text == "inbound") {
+                Advance();
+                direction = ContractEndpointDirection.Inbound;
+            }
+            else if (Current.Kind == TokenKind.Identifier && Current.Text == "outbound") {
+                Advance();
+                direction = ContractEndpointDirection.Outbound;
+            }
+            else {
+                throw Error($"Expected 'inbound' or 'outbound' on endpoint '{endpointName}'");
+            }
+
+            ContractEndpointKind kind;
+            if (Current.Kind == TokenKind.Identifier && Current.Text == "operation") {
+                Advance();
+                kind = ContractEndpointKind.Operation;
+            }
+            else if (Current.Kind == TokenKind.Identifier && Current.Text == "event") {
+                Advance();
+                kind = ContractEndpointKind.Event;
+            }
+            else {
+                throw Error($"Expected 'operation' or 'event' on endpoint '{endpointName}'");
+            }
+
+            string payloadType;
+            if (IsPrimitiveType(Current.Kind)) {
+                payloadType = Current.Text;
+                Advance();
+            }
+            else {
+                payloadType = ExpectIdentifier(TokenKind.Identifier, "payload type");
+            }
+
+            changes.Add(new AddContractEndpointChange(name,
+                new ContractEndpoint(endpointName, kind, direction, new DomainTypeReference(payloadType))));
+        }
+
+        Expect(TokenKind.RBrace);
+    }
+
+    /// <summary>
+    /// <c>Name: bind Contract Endpoint to Action param</c>
+    /// </summary>
+    private void ParseBind(List<DomainChange> changes) {
+        var name = ExpectIdentifier(TokenKind.Identifier, "binding name");
+        Expect(TokenKind.Colon);
+        ExpectWord("bind");
+        var contractName = ExpectIdentifier(TokenKind.Identifier, "contract name");
+        var endpointName = ExpectIdentifier(TokenKind.Identifier, "endpoint name");
+        Expect(TokenKind.To);
+        var actionName = ExpectIdentifier(TokenKind.Identifier, "action name");
+        var paramName = ExpectIdentifier(TokenKind.Identifier, "action parameter");
+        changes.Add(new AddContractBindingChange(name, contractName, endpointName, actionName, paramName));
     }
 
     private bool IsNavLine() {
@@ -1310,8 +1503,15 @@ public sealed class PolyDslParser : DslCursor {
     };
 
     private static readonly HashSet<string> _unsupportedKeywords = new(StringComparer.OrdinalIgnoreCase) {
-        "actor", "value", "schedule", "parallel", "for", "function"
+        "actor", "schedule", "parallel", "for", "function"
     };
+
+    private void ExpectWord(string word) {
+        if (Current.Kind != TokenKind.Identifier
+            || !string.Equals(Current.Text, word, StringComparison.Ordinal))
+            throw Error($"Expected '{word}', got '{Current.Text}'");
+        Advance();
+    }
 
     /// <summary>
     /// Throws a specific "not supported in Phase 1a" error if <paramref name="keyword"/>

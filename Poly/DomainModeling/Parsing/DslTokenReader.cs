@@ -154,6 +154,7 @@ public sealed class DslTokenReader : BufferedTokenReader<DslToken, DslTokenKind>
 
     private static DslTokenKind WordToKind(string word) => word switch {
         "domain" => DslTokenKind.Domain,
+        "uses" => DslTokenKind.Uses,
         "entity" => DslTokenKind.Entity,
         "stage" => DslTokenKind.Stage,
         "action" => DslTokenKind.Action,
@@ -195,7 +196,6 @@ public sealed class DslTokenReader : BufferedTokenReader<DslToken, DslTokenKind>
         "else" => DslTokenKind.Else,
         "entry" => DslTokenKind.Entry,
         "exit" => DslTokenKind.Exit,
-        "delete" => DslTokenKind.Delete,
         "as" => DslTokenKind.As,
         _ => DslTokenKind.Identifier,
     };

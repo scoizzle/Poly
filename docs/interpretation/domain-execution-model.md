@@ -119,9 +119,11 @@ For effects that mutate `DomainEntityInstance` state directly. The lowering pass
 | `CreateEntityInstance` | `CreateChildInstance(create)` | Creates via factory, adds to `_createdChildren`, optionally auto-links via `RelationshipName` |
 | `CreateEntityInRelationshipEffect` | `ExecuteCreateInRelationship(createIn)` | Creates instance and links via the named relationship |
 | `InvokeActionEffect` | `ExecuteInvokeEffect(invoke)` | See §5 cross-entity invoke |
-| `DeleteEntityInstance` | `IsDeleted = true` | Soft-delete; subsequent actions on this instance refuse |
-| `LinkRelationshipEffect` | `ExecuteLink(relName, target)` | Links via `Store.Link`; target resolved from property bag |
-| `UnlinkRelationshipEffect` | `ExecuteUnlink(relName, target)` | Unlinks via `Store.Unlink` |
+
+> **Removed 2026-08-10:** `DeleteEntityInstance`, `LinkRelationshipEffect`, `UnlinkRelationshipEffect`,
+> and `TransitionRelationshipEffect` were deleted. Linking existing instances is `DomainInstanceStore.Link`
+> / `DomainInstanceStore.Unlink` (MCP `link_instances` / `unlink_instances`) — a store operation, not an
+> Effect IR.
 
 ```csharp
 // DomainEntityInstance.EffectExecutor — dispatch base, named by effect subtype
@@ -160,11 +162,7 @@ ExecuteEffect(effect)
         ├─ StageTransitionEffect   → TransitionStage(...)
         ├─ CreateEntityInstance    → CreateChildInstance(...)
         ├─ CreateEntityInRelationship → ExecuteCreateInRelationship(...)
-        ├─ InvokeActionEffect      → ExecuteInvokeEffect(...)
-        ├─ DeleteEntityInstance    → IsDeleted = true
-        ├─ LinkRelationshipEffect  → ExecuteLink(...)
-        ├─ UnlinkRelationshipEffect → ExecuteUnlink(...)
-        └─ TransitionRelationshipEffect → (no runtime handler — DMEFF005)
+        └─ InvokeActionEffect      → ExecuteInvokeEffect(...)
 ```
 ### 2d. Comment Nodes — Documenting Lowering Gaps
 
@@ -458,7 +456,7 @@ This is the runtime counterpart of `StageSubscription` declarations in the DSL.
 | **Relationship navigation** | Lowered as `Member(Param, relName)` — semantically works via VM's unresolved-Member fallback | Dedicated navigation Syntax node with explicit semantics; fix goes in Syntax AST |
 | **Direct-execution effects in lowering** | Recorded as `Comment("Cannot lower: StageTransitionEffect")` nodes — the VM skips them via no-op. Information is preserved in the AST for future lowering improvements. | Over time, each effect type gets lowering support and the `Comment` nodes naturally disappear. |
 | **VM quantifier eval** | Per-target re-lowering + compile is expensive for large collections | Cached lowering or batch evaluation in VM |
-| **ParameterAccess in DSL** | Works via bag injection at runtime; no DSL syntax | Q1b: `@param` or `param Name` in expressions |
+| **ParameterAccess in DSL** | Product spelling is a **bare identifier** (`PropertyAccess`) — analysis/lowering/bindings/runtime treat an in-scope action-parameter name as a parameter (`paramEnv`); there is no distinct `param` keyword or `@param` form | L3 — no separate parameter authoring syntax |
 
 ---
 

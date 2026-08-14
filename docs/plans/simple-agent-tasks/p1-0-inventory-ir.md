@@ -1,7 +1,7 @@
 # p1-0 — Inventory existing temporal IR
 
 **Difficulty:** S  
-**Status:** `[ ]`  
+**Status:** `[x]`  
 
 ## Objective
 
@@ -25,8 +25,8 @@ Document what already exists. **No product feature code.**
 
 ## Verification
 
-- [ ] Notes file complete  
-- [ ] No production code changes  
+- [x] Notes file complete  
+- [x] No production code changes  
 
 ## File ownership
 
@@ -36,4 +36,6 @@ Document what already exists. **No product feature code.**
 
 ## Status
 
-**Status:** Not Started  
+Claimed by: opencode (p1-0-inventory-ir)
+
+**Status:** Done  

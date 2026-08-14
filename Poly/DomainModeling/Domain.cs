@@ -1,7 +1,9 @@
+using Poly.DomainModeling.Packs;
+
 namespace Poly.DomainModeling;
 
 /// <summary>
-/// A <see cref="Domain"/> aggregates all <see cref="DomainType"/> definitions (entities, value types, events, primitives)
+/// A <see cref="Domain"/> aggregates all <see cref="DomainType"/> definitions (entities, value types, primitives, enum types)
 /// and the relationships between them. It serves as the top-level container for the entire
 /// domain model and is the primary input to analyzers and lowering.
 /// </summary>
@@ -28,5 +30,17 @@ public sealed record Domain(
 
     public IReadOnlyList<ImportedContract> ImportedContracts { get; init; } = [];
     public IReadOnlyList<ContractBinding> ContractBindings { get; init; } = [];
+
+    /// <summary>
+    /// Extension ids this compilation unit depends on (e.g. <c>temporal</c>).
+    /// Ordered, unique, ordinal. Resolve via <see cref="ExtensionCatalog"/>.
+    /// Another Poly domain is <see cref="ImportedContracts"/>, not this list.
+    /// </summary>
+    public IReadOnlyList<string> Extensions { get; init; } = [];
+
     public sealed override IEnumerable<Node?> Children => [.. Types, .. ImportedContracts, .. ContractBindings];
+
+    /// <summary>Resolves this unit's extensions into parse/print/analysis tables.</summary>
+    public DomainHost ResolveHost(ExtensionCatalog? catalog = null, bool failOnUnknown = false) =>
+        (catalog ?? ExtensionCatalog.Core).ResolveHost(Extensions, failOnUnknown);
 }

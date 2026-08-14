@@ -183,8 +183,8 @@ internal sealed class ConstraintPropagationAnalyzer : INodeAnalyzer {
     }
 
     private static bool ExpressionReferencesParameter(DomainExpression expr, string paramName) {
-        if (expr is ParameterAccess pa)
-            return string.Equals(pa.Name, paramName, StringComparison.Ordinal);
+        if (IsParameterAccess(expr, paramName))
+            return true;
         foreach (var child in expr.Children.OfType<DomainExpression>()) {
             if (ExpressionReferencesParameter(child, paramName))
                 return true;
@@ -201,15 +201,19 @@ internal sealed class ConstraintPropagationAnalyzer : INodeAnalyzer {
             case Subtract sub:
                 if (IsParameterAccess(sub.Left, paramName) && GetLiteralValue(sub.Right) is long c3) return -c3;
                 return null;
-            case ParameterAccess pa:
-                return string.Equals(pa.Name, paramName, StringComparison.Ordinal) ? 0 : null;
+            case ParameterAccess or PropertyAccess:
+                return IsParameterAccess(expr, paramName) ? 0 : null;
             default:
                 return null;
         }
     }
 
     private static bool IsParameterAccess(DomainExpression expr, string paramName) =>
-        expr is ParameterAccess pa && string.Equals(pa.Name, paramName, StringComparison.Ordinal);
+        expr switch {
+            ParameterAccess pa => string.Equals(pa.Name, paramName, StringComparison.Ordinal),
+            PropertyAccess pa => string.Equals(pa.Name, paramName, StringComparison.Ordinal),
+            _ => false,
+        };
 
     private static long? GetLiteralValue(DomainExpression expr) {
         if (expr is Literal { Value: not null } lit) {

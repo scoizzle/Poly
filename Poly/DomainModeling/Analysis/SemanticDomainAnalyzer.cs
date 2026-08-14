@@ -49,6 +49,11 @@ internal sealed class SemanticDomainAnalyzer : INodeAnalyzer {
         var types = domain.Types
             .GroupBy(static type => type.Name, StringComparer.Ordinal)
             .ToDictionary(static group => group.Key, static group => group.Last(), StringComparer.Ordinal);
+        foreach (var contract in domain.ImportedContracts) {
+            foreach (var vt in contract.Types) {
+                types[vt.Name] = vt;
+            }
+        }
 
         DomainTypeLookupMetadata lookup = new(
             domain,

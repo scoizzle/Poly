@@ -7,5 +7,8 @@ public sealed record ImportedContract(
     string Version,
     IReadOnlyList<ContractEndpoint> Endpoints
 ) : DomainMember(Name) {
-    public sealed override IEnumerable<Node?> Children => [.. Endpoints];
+    /// <summary>ACL value types owned by this used sub-domain.</summary>
+    public IReadOnlyList<ValueType> Types { get; init; } = [];
+
+    public sealed override IEnumerable<Node?> Children => [.. Types, .. Endpoints];
 }

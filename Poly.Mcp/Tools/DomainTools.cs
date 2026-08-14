@@ -9,6 +9,7 @@ using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Constraints;
 using Poly.DomainModeling.Evolution;
+using Poly.DomainModeling.Packs;
 using Poly.DomainModeling.Parsing;
 using Poly.DomainModeling.Queries;
 using Poly.Mcp.Sessions;
@@ -484,7 +485,7 @@ internal sealed class EvolveTool {
     /// Incremental structure edits only — bulk structure, effects, and subscriptions go
     /// through <c>apply_dsl</c>. Expression bodies are product DSL text, never JSON IR.
     /// </summary>
-    [McpServerTool(Name = "add"), Description(@"Creates one domain definition element. kind is case-sensitive: entity, property, stage, action, stage_action, relationship, constraint, policy. payload is a JSON object of kind-specific fields:
+    [McpServerTool(Name = "add"), Description(@"Creates one domain definition element. kind is case-sensitive: entity, property, stage, action, stage_action, relationship, constraint, policy, value_type, contract, contract_value_type, contract_endpoint, contract_binding. payload is a JSON object of kind-specific fields:
 - entity: {""name"":""Order""}
 - property: {""entityName"":""Order"",""name"":""Total"",""typeName"":""Number""}
 - stage: {""entityName"":""Order"",""name"":""Active""}
@@ -493,6 +494,11 @@ internal sealed class EvolveTool {
 - relationship: {""name"":""OrderLines"",""source"":""Order"",""target"":""Line"",""cardinality"":""OneToMany""} (cardinality: OneToOne, OneToMany, ManyToMany, ManyToOne; source/target may also be sourceEntityName/targetEntityName)
 - constraint: {""entityName"":""Order"",""propertyName"":""Total"",""type"":""Range"",""min"":0,""max"":100} (types: Required, Unique, Range, Length, Pattern; Pattern needs {""pattern"":""^[a-z]+$""})
 - policy: {""entityName"":""Order"",""name"":""Adult"",""expression"":""Age >= 18""} — expression is DSL text only, never JSON
+- value_type: {""name"":""Money""}
+- contract: {""name"":""Stripe"",""sourceKind"":""ExternalProvider"",""source"":""stripe"",""version"":""v1""}
+- contract_value_type: {""contractName"":""Stripe"",""name"":""ChargeRequest""}
+- contract_endpoint: {""contractName"":""Stripe"",""name"":""Charge"",""kind"":""Operation"",""direction"":""Inbound"",""payloadType"":""Number""}
+- contract_binding: {""name"":""ChargeOrder"",""contractName"":""Stripe"",""endpointName"":""Charge"",""actionName"":""Pay"",""parameter"":""amount""}
 Unknown kind, missing required field, or invalid cardinality fails closed. For bulk structure, effects, or subscriptions use apply_dsl.")]
     public static DomainToolResponse Add(
         [Description("Session ID returned by create_domain_session")] string sessionId,
@@ -595,10 +601,76 @@ Unknown kind, missing required field, or invalid cardinality fails closed. For b
                     if (expression is null) return MissingField(sessionId, kind, "expression");
                     return AddPolicyCore(sessionId, entityName, name, expression);
                 }
+            case "value_type": {
+                    var name = Field(root, "name");
+                    if (name is null) return MissingField(sessionId, kind, "name");
+                    return Evolve(sessionId, builder => builder.AddValueType(name),
+                        successAffordances: ["add", "apply_dsl", "get_domain_overview"]);
+                }
+            case "contract": {
+                    var name = Field(root, "name");
+                    var source = Field(root, "source", "sourceIdentifier");
+                    var version = Field(root, "version");
+                    if (name is null) return MissingField(sessionId, kind, "name");
+                    if (source is null) return MissingField(sessionId, kind, "source");
+                    if (version is null) return MissingField(sessionId, kind, "version");
+                    var sourceKindText = Field(root, "sourceKind") ?? "ExternalProvider";
+                    if (!Enum.TryParse<ContractSourceKind>(sourceKindText, ignoreCase: true, out var sourceKind))
+                        return new DomainToolResponse(Success: false,
+                            Message: $"Unknown sourceKind '{sourceKindText}'. Use ExternalProvider or InternalDomain.",
+                            SessionId: sessionId, Affordances: ["apply_dsl"]);
+                    return Evolve(sessionId, builder => builder.AddImportedContract(name, sourceKind, source, version),
+                        successAffordances: ["add", "apply_dsl", "get_domain_overview"]);
+                }
+            case "contract_value_type": {
+                    var contractName = Field(root, "contractName");
+                    var name = Field(root, "name");
+                    if (contractName is null) return MissingField(sessionId, kind, "contractName");
+                    if (name is null) return MissingField(sessionId, kind, "name");
+                    return Evolve(sessionId, builder => builder.AddContractValueType(
+                            contractName, new Poly.DomainModeling.ValueType(name, [], [])),
+                        successAffordances: ["add", "apply_dsl"]);
+                }
+            case "contract_endpoint": {
+                    var contractName = Field(root, "contractName");
+                    var name = Field(root, "name");
+                    var payloadType = Field(root, "payloadType");
+                    if (contractName is null) return MissingField(sessionId, kind, "contractName");
+                    if (name is null) return MissingField(sessionId, kind, "name");
+                    if (payloadType is null) return MissingField(sessionId, kind, "payloadType");
+                    var kindText = Field(root, "kind") ?? "Operation";
+                    var dirText = Field(root, "direction") ?? "Inbound";
+                    if (!Enum.TryParse<ContractEndpointKind>(kindText, ignoreCase: true, out var epKind))
+                        return new DomainToolResponse(Success: false,
+                            Message: $"Unknown endpoint kind '{kindText}'. Use Operation or Event.",
+                            SessionId: sessionId, Affordances: ["apply_dsl"]);
+                    if (!Enum.TryParse<ContractEndpointDirection>(dirText, ignoreCase: true, out var dir))
+                        return new DomainToolResponse(Success: false,
+                            Message: $"Unknown direction '{dirText}'. Use Inbound or Outbound.",
+                            SessionId: sessionId, Affordances: ["apply_dsl"]);
+                    return Evolve(sessionId, builder => builder.AddContractEndpoint(contractName,
+                            new ContractEndpoint(name, epKind, dir, new DomainTypeReference(payloadType))),
+                        successAffordances: ["add", "apply_dsl"]);
+                }
+            case "contract_binding": {
+                    var name = Field(root, "name");
+                    var contractName = Field(root, "contractName");
+                    var endpointName = Field(root, "endpointName");
+                    var actionName = Field(root, "actionName");
+                    var parameter = Field(root, "parameter", "localParameterName");
+                    if (name is null) return MissingField(sessionId, kind, "name");
+                    if (contractName is null) return MissingField(sessionId, kind, "contractName");
+                    if (endpointName is null) return MissingField(sessionId, kind, "endpointName");
+                    if (actionName is null) return MissingField(sessionId, kind, "actionName");
+                    if (parameter is null) return MissingField(sessionId, kind, "parameter");
+                    return Evolve(sessionId, builder => builder.AddContractBinding(
+                            name, contractName, endpointName, actionName, parameter),
+                        successAffordances: ["add", "apply_dsl", "get_domain_analysis"]);
+                }
             default:
                 return new DomainToolResponse(
                     Success: false,
-                    Message: $"Unknown kind '{kind}'. Allowed kinds: entity, property, stage, action, stage_action, relationship, constraint, policy. Bulk structure/effects → apply_dsl.",
+                    Message: $"Unknown kind '{kind}'. Allowed kinds: entity, property, stage, action, stage_action, relationship, constraint, policy, value_type, contract, contract_value_type, contract_endpoint, contract_binding. Bulk structure/effects → apply_dsl.",
                     SessionId: sessionId,
                     Affordances: ["apply_dsl", "get_domain_overview"]);
         }
@@ -1267,13 +1339,25 @@ through the unified `add` / `remove` tools (kind + payload).")]
             if (!McpSessionStore.TryGet(sessionId, out var parseState))
                 return Failure_NotFound(sessionId);
 
-            var parser = new PolyDslParser(polyText, parseState.ParserInputs);
+            var seed = parseState.Domain.Extensions.Count > 0
+                ? parseState.Domain.Extensions
+                : ExtensionCatalog.ProductAuthoring;
+            var parseInputs = DomainCompilation.HostForSource(polyText, seed).Parser;
+            var parser = new PolyDslParser(polyText, parseInputs);
             changes = parser.Parse();
+            changes = DomainCompilation.WithSeed(changes, seed).ToList();
         }
         catch (FormatException ex) {
             return new DomainToolResponse(
                 Success: false,
                 Message: $"Parse error: {ex.Message}",
+                SessionId: sessionId,
+                Affordances: ["get_domain_analysis", "get_domain_overview"]);
+        }
+        catch (InvalidOperationException ex) {
+            return new DomainToolResponse(
+                Success: false,
+                Message: ex.Message,
                 SessionId: sessionId,
                 Affordances: ["get_domain_analysis", "get_domain_overview"]);
         }
@@ -1351,7 +1435,13 @@ through the unified `add` / `remove` tools (kind + payload).")]
         if (!McpSessionStore.TryGet(sessionId, out var state))
             return Failure_NotFound(sessionId);
 
-        var printer = new DomainDslPrinter(state.ParserInputs.Annotations);
+        DomainDslPrinter printer;
+        try {
+            printer = new DomainDslPrinter(state.Domain.ResolveHost().Parser);
+        }
+        catch (InvalidOperationException) {
+            printer = new DomainDslPrinter(state.ParserInputs);
+        }
         var polyText = printer.Print(state.Domain);
 
         return new DomainToolResponse(

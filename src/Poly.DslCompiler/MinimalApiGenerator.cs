@@ -6,6 +6,7 @@ using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Constraints;
 using Poly.DomainModeling.Effects;
 using Poly.DomainModeling.Lowering;
+using Poly.DomainModeling.Packs;
 using Poly.Interpretation.CSharp;
 
 namespace Poly.DslCompiler;
@@ -112,12 +113,37 @@ public sealed class MinimalApiGenerator {
     private static string Pluralize(string name) => name + "s";
     private static string ToCamelCase(string name) => DomainTypeMapping.ToCamelCase(name);
     private static string Pascalize(string name) => DomainTypeMapping.ToPascalCase(name);
+
+    /// <summary>
+    /// When parent and child share a key token (both shadow <c>id</c>), the child
+    /// route/param becomes <c>{entity}{Key}</c> so ASP.NET does not see two <c>{id}</c>.
+    /// </summary>
+    private static string DistinctChildKeyParam(string parentKey, string childKey, string childEntityName) {
+        if (!string.Equals(parentKey, childKey, StringComparison.OrdinalIgnoreCase))
+            return childKey;
+        return ToCamelCase(childEntityName) + Pascalize(childKey);
+    }
+
+    private static bool IsCollectionNavigation(StorageEntity parentStore, string pascalRel) =>
+        parentStore.CollectionNavigations.Any(n =>
+            string.Equals(n.PropertyName, pascalRel, StringComparison.Ordinal));
     private static string GetClrTypeName(string domainType) => DomainTypeMapping.ToClrTypeName(domainType);
 
     private static bool IsNumericClrType(string clrType) => clrType switch {
         "long" or "int" or "short" or "byte" or "double" or "float" or "decimal" => true,
         _ => false,
     };
+
+    /// <summary>True when the CLR type is a non-nullable value type (a primitive scalar or
+    /// enum) — the only CLR kinds that do not need a <c>default!</c> initializer on an
+    /// init-only DTO property. Value types (record classes) and <c>byte[]</c> are reference
+    /// types and must be initialized to silence CS8618.</summary>
+    private bool IsPrimitiveValueTypeClr(string domainType, string clrType) =>
+        clrType switch {
+            "long" or "int" or "short" or "byte" or "double" or "float" or "decimal" or "bool"
+                or "DateTime" or "DateOnly" or "TimeOnly" or "TimeSpan" or "Guid" => true,
+            _ => _enumLookup.ContainsKey(domainType),
+        };
 
     /// <summary>CLR-representable numeric bounds for a DTO member type — used to cap open
     /// range constraints so <c>[Range(min, max)]</c> never emits a raw double.MaxValue.</summary>
@@ -403,19 +429,22 @@ public sealed class MinimalApiGenerator {
         var parentKeyType = parentStore.KeyClrType;
         var childKey = childStore.KeyName;
         var childKeyType = childStore.KeyClrType;
+        var childKeyParam = DistinctChildKeyParam(parentKey, childKey, entity.Name);
         var pascalRel = Pascalize(relNameRaw);
+        var isCollection = IsCollectionNavigation(parentStore, pascalRel);
         var pluralParent = Pluralize(parentEntity.Name);
         var listRoute = $"/api/{Pluralize(parentEntity.Name).ToLowerInvariant()}/{{{parentKey}}}/{relName.ToLowerInvariant()}";
-        var detailRoute = $"{listRoute}/{{{childKey}}}";
+        var detailRoute = $"{listRoute}/{{{childKeyParam}}}";
         var parentKeyP = new Parameter(parentKey, new TypeReference(parentKeyType));
-        var childKeyP = new Parameter(childKey, new TypeReference(childKeyType));
+        var childKeyP = new Parameter(childKeyParam, new TypeReference(childKeyType));
         var dbP = new Parameter("db", new TypeReference(dbContextName));
 
-        // List: db.Entry(parent).Collection(e => e.Rel).LoadAsync() — use lambda param e, not parent
+        // List: Collection for many, Reference for to-one — use lambda param e, not parent
         var eParam = new Parameter("e");
         var entryCall = new Invoke(new Member(new TypeReference("db"), "Entry"), new Variable("parent"));
+        var loadMember = isCollection ? "Collection" : "Reference";
         var collCall = new Invoke(
-            new Member(entryCall, "Collection"),
+            new Member(entryCall, loadMember),
             new Lambda([eParam], new Member(eParam, pascalRel)));
 
         statements.Add(new Invoke(
@@ -435,6 +464,9 @@ public sealed class MinimalApiGenerator {
                         new Member(new Variable("parent"), pascalRel)))
                 }, variables: Array.Empty<Node>()))));
 
+        if (!isCollection)
+            return;
+
         // Detail: back-ref filtering matching string oracle
         var detailBody = new List<Node>();
         var backRefName = backRefRaw != null ? Pascalize(backRefRaw) : null;
@@ -452,14 +484,18 @@ public sealed class MinimalApiGenerator {
                                     new Member(new TypeReference("db"), Pluralize(entity.Name)),
                                     "Where"),
                                 new Lambda([eParam2],
-                                    new Equal(
-                                        new Member(new Member(eParam2, backRefName), parentKeyPropName),
-                                        new Variable(parentKey)))),
+                                    new Ast.Nodes.And(
+                                        new Ast.Nodes.Not(new Equal(
+                                            new Member(eParam2, backRefName),
+                                            new Constant(null!))),
+                                        new Equal(
+                                            new Member(new Member(eParam2, backRefName), parentKeyPropName),
+                                            new Variable(parentKey))))),
                             "FirstOrDefaultAsync"),
                         new Lambda([eParam2],
                             new Equal(
                                 new Member(eParam2, childKeyPropName),
-                                new Variable(childKey)))))));
+                                new Variable(childKeyParam)))))));
         }
         else {
             detailBody.Add(new Variable("parent",
@@ -509,10 +545,17 @@ public sealed class MinimalApiGenerator {
                 var pKeyName = pStore.KeyName;
                 var pKeyType = pStore.KeyClrType;
                 var pascalRel = Pascalize(relNameRaw);
+                var childKeyParam = DistinctChildKeyParam(pKeyName, keyName, entity.Name);
+                var isCollection = IsCollectionNavigation(pStore, pascalRel);
                 var parentRoute = $"/api/{Pluralize(pEntity.Name).ToLowerInvariant()}/{{{pKeyName}}}/{ToCamelCase(relNameRaw).ToLowerInvariant()}";
-                actionRoute = $"{parentRoute}/{{{keyName}}}/{ToCamelCase(ia.Name).ToLowerInvariant()}";
+                actionRoute = isCollection
+                    ? $"{parentRoute}/{{{childKeyParam}}}/{ToCamelCase(ia.Name).ToLowerInvariant()}"
+                    : $"{parentRoute}/{ToCamelCase(ia.Name).ToLowerInvariant()}";
                 actionParams.Add(new Parameter(pKeyName, new TypeReference(pKeyType)));
-                actionParams.Add(new Parameter(keyName, new TypeReference(keyType)));
+                if (isCollection)
+                    actionParams.Add(new Parameter(childKeyParam, new TypeReference(keyType)));
+                if (ia.Parameters.Count > 0)
+                    actionParams.Add(new Parameter("dto", new TypeReference($"{Pascalize(ia.Name)}Dto")));
                 actionParams.Add(new Parameter("db", new TypeReference(dbContextName)));
 
                 // Parent + entity lookup + membership check
@@ -520,19 +563,29 @@ public sealed class MinimalApiGenerator {
                     new Await(new Invoke(new Member(new Member(new TypeReference("db"), Pluralize(pEntity.Name)), "FindAsync"), new Variable(pKeyName)))));
                 preActionNodes.Add(new IfStatement(new Equal(new Variable("parentEntity"), new Constant(null!)),
                     new Block(new Return(new Invoke(new Member(new TypeReference("Results"), "NotFound"), new Constant($"{pEntity.Name} not found"))))));
-                preActionNodes.Add(new Variable("entity",
-                    new Await(new Invoke(new Member(new Member(new TypeReference("db"), pluralName), "FindAsync"), new Variable(keyName)))));
-                preActionNodes.Add(new IfStatement(new Equal(new Variable("entity"), new Constant(null!)),
-                    new Block(new Return(new Invoke(new Member(new TypeReference("Results"), "NotFound"), new Constant($"{entity.Name} not found"))))));
-                var parEntry = new Invoke(new Member(new TypeReference("db"), "Entry"), new Variable("parentEntity"));
-                var parColl = new Invoke(new Member(parEntry, "Collection"), new Lambda([new Parameter("e")], new Member(new Variable("e"), pascalRel)));
-                preActionNodes.Add(new Await(new Invoke(new Member(parColl, "LoadAsync"))));
-                preActionNodes.Add(new IfStatement(
-                    new Ast.Nodes.Not(
-                        new Invoke(
-                            new Member(new Member(new Variable("parentEntity"), pascalRel), "Any"),
-                            new Lambda([new Parameter("e")], new Equal(new Variable("e"), new Variable("entity"))))),
-                    new Block(new Return(new Invoke(new Member(new TypeReference("Results"), "NotFound"), new Constant($"{entity.Name} not found for this {pEntity.Name}"))))));
+                if (isCollection) {
+                    preActionNodes.Add(new Variable("entity",
+                        new Await(new Invoke(new Member(new Member(new TypeReference("db"), pluralName), "FindAsync"), new Variable(childKeyParam)))));
+                    preActionNodes.Add(new IfStatement(new Equal(new Variable("entity"), new Constant(null!)),
+                        new Block(new Return(new Invoke(new Member(new TypeReference("Results"), "NotFound"), new Constant($"{entity.Name} not found"))))));
+                    var parEntry = new Invoke(new Member(new TypeReference("db"), "Entry"), new Variable("parentEntity"));
+                    var parColl = new Invoke(new Member(parEntry, "Collection"), new Lambda([new Parameter("e")], new Member(new Variable("e"), pascalRel)));
+                    preActionNodes.Add(new Await(new Invoke(new Member(parColl, "LoadAsync"))));
+                    preActionNodes.Add(new IfStatement(
+                        new Ast.Nodes.Not(
+                            new Invoke(
+                                new Member(new Member(new Variable("parentEntity"), pascalRel), "Any"),
+                                new Lambda([new Parameter("e")], new Equal(new Variable("e"), new Variable("entity"))))),
+                        new Block(new Return(new Invoke(new Member(new TypeReference("Results"), "NotFound"), new Constant($"{entity.Name} not found for this {pEntity.Name}"))))));
+                }
+                else {
+                    var parEntry = new Invoke(new Member(new TypeReference("db"), "Entry"), new Variable("parentEntity"));
+                    var parRef = new Invoke(new Member(parEntry, "Reference"), new Lambda([new Parameter("e")], new Member(new Variable("e"), pascalRel)));
+                    preActionNodes.Add(new Await(new Invoke(new Member(parRef, "LoadAsync"))));
+                    preActionNodes.Add(new Variable("entity", new Member(new Variable("parentEntity"), pascalRel)));
+                    preActionNodes.Add(new IfStatement(new Equal(new Variable("entity"), new Constant(null!)),
+                        new Block(new Return(new Invoke(new Member(new TypeReference("Results"), "NotFound"), new Constant($"{entity.Name} not found"))))));
+                }
             }
             else {
                 var baseRoute = $"/api/{Pluralize(entity.Name).ToLowerInvariant()}";
@@ -629,9 +682,9 @@ public sealed class MinimalApiGenerator {
                     param.Name,
                     new TypeReference(clrType),
                     Getter: new PropertyGetterDefinitionNode(),
-                    Initializer: clrType == "string"
-                        ? new PropertyInitializerDefinitionNode(new NullForgiving(new Default()))
-                        : new PropertyInitializerDefinitionNode());
+                    Initializer: IsPrimitiveValueTypeClr(param.DomainType, clrType)
+                        ? new PropertyInitializerDefinitionNode()
+                        : new PropertyInitializerDefinitionNode(new NullForgiving(new Default())));
                 if (domainAction is not null) {
                     var attrs = BuildConstraintAttributes(
                         clrType, GetActionParamImplicitConstraints(entity, domainAction, param.Name));
@@ -842,9 +895,9 @@ public sealed class MinimalApiGenerator {
                 param.Name,
                 new TypeReference(clrType),
                 Getter: new PropertyGetterDefinitionNode(),
-                Initializer: clrType == "string"
-                    ? new PropertyInitializerDefinitionNode(new NullForgiving(new Default()))
-                    : new PropertyInitializerDefinitionNode());
+                Initializer: IsPrimitiveValueTypeClr(param.Type.TypeName, clrType)
+                    ? new PropertyInitializerDefinitionNode()
+                    : new PropertyInitializerDefinitionNode(new NullForgiving(new Default())));
 
             var effective = new List<Constraint>();
             var range = GetPropertyRange(entity, param.Name);
@@ -984,5 +1037,50 @@ public sealed class MinimalApiGenerator {
                 => new Member(new TypeReference(typeName), enumType.MemberNames[0]),
             _ => new Constant("Sample"),
         };
+    }
+}
+
+/// <summary>
+/// Emits the composition-root host files (<c>Program.cs</c> + <c>demo.http</c>) from the
+/// analyzed domain via the artifact-contributor hook. Surfaces only the root domain's own
+/// entities — produced internal contracts contribute value types and operation endpoints,
+/// never child-entity routes.
+/// </summary>
+public sealed class MinimalApiHostArtifactContributor : IArtifactContributor {
+    private readonly StorageModel _storage;
+    private readonly BehaviorModel _behavior;
+    private readonly AggregateModel _aggregate;
+    private readonly string _dbContextName;
+    private readonly IStorageSyntaxEmitter? _emitter;
+    private readonly DbmsPack _dbms;
+
+    public MinimalApiHostArtifactContributor(
+        StorageModel storage,
+        BehaviorModel behavior,
+        AggregateModel aggregate,
+        string dbContextName,
+        IStorageSyntaxEmitter? emitter = null,
+        DbmsPack dbms = DbmsPack.Generic) {
+        ArgumentNullException.ThrowIfNull(storage);
+        ArgumentNullException.ThrowIfNull(behavior);
+        ArgumentNullException.ThrowIfNull(aggregate);
+        ArgumentException.ThrowIfNullOrWhiteSpace(dbContextName);
+        _storage = storage;
+        _behavior = behavior;
+        _aggregate = aggregate;
+        _dbContextName = dbContextName;
+        _emitter = emitter;
+        _dbms = dbms;
+    }
+
+    public IReadOnlyList<(string FileName, string Source)> Contribute(Domain domain, AnalysisResult analysis) {
+        ArgumentNullException.ThrowIfNull(domain);
+        ArgumentNullException.ThrowIfNull(analysis);
+        var apiGen = new MinimalApiGenerator(domain, analysis, _storage, _behavior, _aggregate, _emitter, _dbms);
+        var httpGen = new HttpFileGenerator(domain, analysis, _storage, _behavior, _aggregate);
+        return [
+            ("Program.cs", new CSharpGenerator().Generate(apiGen.GenerateCompilationUnit(_dbContextName))),
+            ("demo.http", httpGen.Generate()),
+        ];
     }
 }

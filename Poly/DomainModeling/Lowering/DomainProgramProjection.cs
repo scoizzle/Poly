@@ -98,9 +98,34 @@ public static class DomainProgramProjection {
             ));
         }
 
+        foreach (var valueType in domain.Types.OfType<ValueType>())
+            result.Add(DomainToCSharpExporter.BuildValueTypeTypeDef(valueType, domain, metadata));
+        foreach (var contract in domain.ImportedContracts) {
+            foreach (var valueType in contract.Types)
+                result.Add(DomainToCSharpExporter.BuildValueTypeTypeDef(valueType, domain, metadata));
+        }
+
         // ── Build DomainResult infrastructure types ─────────────
         result.Add(DomainToCSharpExporter.BuildDomainResultTypeDef());
         result.Add(DomainToCSharpExporter.BuildDomainResultGenericTypeDef());
+
+        // ── Emit fail-closed adapters for bound contracts (pack-3c-3) ──
+        // A bind is a call in export: each contract with at least one bound endpoint gets
+        // an {Contract}Adapters class whose bound-endpoint methods throw
+        // NotImplementedException until an in-process adapter is registered. The binding
+        // is never dropped.
+        foreach (var contract in domain.ImportedContracts) {
+            var boundEndpoints = domain.ContractBindings
+                .Where(b => string.Equals(b.ContractName, contract.Name, StringComparison.Ordinal))
+                .Select(b => contract.Endpoints.FirstOrDefault(e =>
+                    string.Equals(e.Name, b.EndpointName, StringComparison.Ordinal)))
+                .Where(e => e is not null)
+                .Cast<ContractEndpoint>()
+                .DistinctBy(e => e.Name)
+                .ToList();
+            if (boundEndpoints.Count == 0) continue;
+            result.Add(DomainToCSharpExporter.BuildContractAdapterTypeDef(contract, boundEndpoints));
+        }
 
         // ── Build entity type definitions ─────────────────────────
         var handlerNames = DomainToCSharpExporter.BuildHandlerNames(subscriptionsBySubscriber);

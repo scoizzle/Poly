@@ -1,5 +1,3 @@
-using System.Text;
-
 namespace Poly.Grammar;
 
 /// <summary>
@@ -14,21 +12,32 @@ namespace Poly.Grammar;
 /// delegate to a handler callback so the caller supplies runtime values. Without a
 /// callback those positions emit nothing (the pattern prints as its fixed skeleton).
 ///
-/// This is the engine print surface (grammar-revision §2.6). The product DSL still
-/// prints via <c>DomainDslPrinter</c> (domain walk); table-parity print is deferred,
-/// and this printer is what that will build on.
+/// The printer emits **tokens** into an <see cref="ITokenWriter{TTokenKind}"/>, never
+/// spaces: separators are the writer's job (raw writers append verbatim; language
+/// writers insert the spaces their reader discards).
 /// </summary>
 public sealed class Printer<TToken, TTokenKind>
     where TToken : struct, IToken<TTokenKind>
     where TTokenKind : struct {
     private readonly Grammar<TToken, TTokenKind> _grammar;
-    private readonly Func<TTokenKind, string> _canonical;
+    private readonly Func<ITokenWriter<TTokenKind>> _writerFactory;
 
     /// <param name="grammar">The grammar whose patterns this printer walks.</param>
     /// <param name="canonical">Kind → canonical text (the tokenizer's inverse for fixed tokens).</param>
-    public Printer(Grammar<TToken, TTokenKind> grammar, Func<TTokenKind, string> canonical) {
+    public Printer(Grammar<TToken, TTokenKind> grammar, Func<TTokenKind, string> canonical)
+        : this(grammar, canonical, () => new StringTokenWriter<TTokenKind>(canonical)) {
+    }
+
+    /// <param name="grammar">The grammar whose patterns this printer walks.</param>
+    /// <param name="canonical">Kind → canonical text (the tokenizer's inverse for fixed tokens).</param>
+    /// <param name="writerFactory">Creates a fresh output writer per print (separators are writer-owned).</param>
+    public Printer(
+        Grammar<TToken, TTokenKind> grammar,
+        Func<TTokenKind, string> canonical,
+        Func<ITokenWriter<TTokenKind>> writerFactory) {
         _grammar = grammar ?? throw new ArgumentNullException(nameof(grammar));
-        _canonical = canonical ?? throw new ArgumentNullException(nameof(canonical));
+        _ = canonical ?? throw new ArgumentNullException(nameof(canonical));
+        _writerFactory = writerFactory ?? throw new ArgumentNullException(nameof(writerFactory));
     }
 
     /// <summary>Prints a pattern by name. Throws if the rule or pattern is unknown (fail closed).</summary>
@@ -40,27 +49,25 @@ public sealed class Printer<TToken, TTokenKind>
 
     /// <summary>Prints a pattern. Content positions delegate to <paramref name="onContent"/> when provided.</summary>
     public string Print(Pattern<TToken, TTokenKind> pattern, Action<PrintContext<TToken, TTokenKind>>? onContent = null) {
-        var sb = new StringBuilder();
-        PrintInto(sb, pattern, onContent);
-        return sb.ToString();
+        var writer = _writerFactory();
+        PrintInto(writer, pattern, onContent);
+        return writer.ToText();
     }
-
-    internal string Canonical(TTokenKind kind) => _canonical(kind);
 
     /// <summary>
-    /// Prints a named pattern into <paramref name="sb"/> using a FRESH scratch buffer
+    /// Prints a named pattern into <paramref name="writer"/> using a FRESH scratch writer
     /// (nested prints must never disturb the caller's in-progress output).
     /// </summary>
-    internal void PrintInto(StringBuilder sb, string ruleName, string patternName, Action<PrintContext<TToken, TTokenKind>>? onContent) {
+    internal void PrintInto(ITokenWriter<TTokenKind> writer, string ruleName, string patternName, Action<PrintContext<TToken, TTokenKind>>? onContent) {
         var pattern = _grammar.GetPatterns(ruleName).FirstOrDefault(p => p.Name == patternName)
             ?? throw new ArgumentException($"Unknown pattern '{patternName}' in rule '{ruleName}'");
-        var scratch = new StringBuilder();
+        var scratch = _writerFactory();
         PrintInto(scratch, pattern, onContent);
-        sb.Append(scratch);
+        writer.Write(default(TTokenKind), scratch.ToText());
     }
 
-    private void PrintInto(StringBuilder sb, Pattern<TToken, TTokenKind> pattern, Action<PrintContext<TToken, TTokenKind>>? onContent) {
-        var ctx = new PrintContext<TToken, TTokenKind>(this, sb);
+    private void PrintInto(ITokenWriter<TTokenKind> writer, Pattern<TToken, TTokenKind> pattern, Action<PrintContext<TToken, TTokenKind>>? onContent) {
+        var ctx = new PrintContext<TToken, TTokenKind>(this, writer);
         foreach (var element in pattern.Elements)
             PrintElement(element, ctx, onContent);
     }
@@ -99,30 +106,31 @@ public sealed class Printer<TToken, TTokenKind>
 
 /// <summary>
 /// Handler surface for content-bearing print positions. Emit fixed kinds or raw text;
-/// print nested rules into the same output via <see cref="PrintRule"/>.
+/// print nested rules into the same output via <see cref="PrintRule"/>. Binders never
+/// emit spaces — the underlying writer owns separators.
 /// </summary>
 public sealed class PrintContext<TToken, TTokenKind>
     where TToken : struct, IToken<TTokenKind>
     where TTokenKind : struct {
     private readonly Printer<TToken, TTokenKind> _printer;
-    private readonly StringBuilder _sb;
+    private readonly ITokenWriter<TTokenKind> _writer;
 
-    internal PrintContext(Printer<TToken, TTokenKind> printer, StringBuilder sb) {
+    internal PrintContext(Printer<TToken, TTokenKind> printer, ITokenWriter<TTokenKind> writer) {
         _printer = printer;
-        _sb = sb;
+        _writer = writer;
     }
 
     /// <summary>Emits the canonical text for a kind.</summary>
-    public void Emit(TTokenKind kind) => _sb.Append(_printer.Canonical(kind));
+    public void Emit(TTokenKind kind) => _writer.Write(kind);
 
     /// <summary>Emits raw text (e.g. a runtime value at a Value position).</summary>
-    public void Emit(string text) => _sb.Append(text);
+    public void Emit(string text) => _writer.Write(default(TTokenKind), text);
 
     /// <summary>Prints a named pattern of a rule into the current output.</summary>
     public void PrintRule(string ruleName, string patternName) =>
-        _printer.PrintInto(_sb, ruleName, patternName, onContent: null);
+        _printer.PrintInto(_writer, ruleName, patternName, onContent: null);
 
     /// <summary>Prints a named pattern with a content callback (nested value positions).</summary>
     public void PrintRule(string ruleName, string patternName, Action<PrintContext<TToken, TTokenKind>> onContent) =>
-        _printer.PrintInto(_sb, ruleName, patternName, onContent);
+        _printer.PrintInto(_writer, ruleName, patternName, onContent);
 }

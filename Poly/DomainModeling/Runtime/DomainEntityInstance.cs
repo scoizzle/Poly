@@ -48,6 +48,7 @@ public sealed record DomainEntityInstance {
     private bool _isExecutingSubscription;
     private int _invokeDepth;
     private int _transitionDepth;
+    private TypeDefinitionNodeAnalyzer? _bindingTypeProvider;
     /// <summary>Max nested <see cref="InvokeAction"/> depth (self-invoke / re-entrancy).</summary>
     public const int MaxInvokeDepth = 16;
     /// <summary>Max nested <see cref="TransitionStage"/> depth (OnEntry/OnExit re-entrancy).</summary>
@@ -252,19 +253,23 @@ public sealed record DomainEntityInstance {
     /// </summary>
     private static object? EvaluateDefaultValue(DomainExpression expr, string? propTypeName = null) => expr switch {
         Literal lit => lit.Value,
+        // Pack-owned clock nodes (Now/Today) resolve through the ambient default registry —
+        // core never names pack IR.
+        _ when ExpressionDefaultResolverRegistry.Default.TryResolve(expr, propTypeName, out var runtimeValue, out _) => runtimeValue,
         PropertyAccess pa => pa.Name switch {
-            "now" or "utcnow" => propTypeName is "DateTime" or "Timestamp"
+            "Now" or "UtcNow" => propTypeName is "DateTime" or "Timestamp"
                 ? DateTime.UtcNow
                 : DateOnly.FromDateTime(DateTime.UtcNow),
-            "today" => propTypeName is "DateTime" or "Timestamp"
+            "Today" => propTypeName is "DateTime" or "Timestamp"
                 ? DateTime.Today
                 : DateOnly.FromDateTime(DateTime.Today),
-            "guid" => propTypeName is "Text" or "String"
+            "Guid" => propTypeName is "Text" or "String"
                 ? Guid.NewGuid().ToString()
                 : Guid.NewGuid(),
             _ => pa.Name // enum member name — runtime stores enum values as strings
         },
-        _ => null
+        _ => throw new InvalidOperationException(
+            $"Cannot evaluate default expression of type '{expr.GetType().Name}'.")
     };
 
     /// <summary>
@@ -314,8 +319,23 @@ public sealed record DomainEntityInstance {
             throw new ArgumentException(
                 $"Property '{name}' does not exist on entity '{Entity.Name}'. " +
                 $"Available: {string.Join(", ", _values.Keys)}.");
+        if (Store is not null) {
+            var previous = _values[name];
+            _values[name] = value;
+            try {
+                Store.RejectUniqueCollision(this, except: this);
+            }
+            catch {
+                _values[name] = previous;
+                throw;
+            }
+            return;
+        }
         _values[name] = value;
     }
+
+    internal bool TryGetRaw(string name, out object? value) =>
+        _values.TryGetValue(name, out value);
 
     /// <summary>
     /// Evaluates <paramref name="policy"/> against this instance using the
@@ -383,23 +403,14 @@ public sealed record DomainEntityInstance {
         if (_invokeDepth >= MaxInvokeDepth)
             return ActionInvocationResult.InvokeDepthExceeded(actionName, MaxInvokeDepth);
 
-        // Inject action args into the property bag for the duration of execution.
-        var argKeys = new List<string>();
-        if (args is { Count: > 0 }) {
-            foreach (var kv in args) {
-                _values[kv.Key] = kv.Value;
-                argKeys.Add(kv.Key);
-            }
-        }
-
+        var injectedKeys = new List<string>();
         _invokeDepth++;
         try {
-            return InvokeActionInternal(actionName);
+            return InvokeActionInternal(actionName, args, injectedKeys);
         }
         finally {
             _invokeDepth--;
-            // Clean up injected args so subsequent calls don't see stale values.
-            foreach (var key in argKeys)
+            foreach (var key in injectedKeys)
                 _values.Remove(key);
         }
     }
@@ -409,7 +420,10 @@ public sealed record DomainEntityInstance {
     /// Domain-bound: catalog/helpers only; missing action map or stage structure throws.
     /// Standalone: structural entity/stage lookup only (reduced contract).
     /// </summary>
-    private ActionInvocationResult InvokeActionInternal(string actionName) {
+    private ActionInvocationResult InvokeActionInternal(
+        string actionName,
+        IReadOnlyDictionary<string, object?>? args,
+        List<string> injectedKeys) {
         AnalysisResult? runtimeAnalysis = null;
         Action? action;
 
@@ -428,6 +442,28 @@ public sealed record DomainEntityInstance {
 
         if (action is null)
             return ReportUnresolvedAction(actionName, runtimeAnalysis);
+
+        var declared = action.Parameters
+            .Select(p => p.Name)
+            .ToHashSet(StringComparer.Ordinal);
+        if (args is { Count: > 0 }) {
+            foreach (var key in args.Keys) {
+                if (!declared.Contains(key))
+                    return ActionInvocationResult.InvalidArguments(actionName,
+                        $"Unknown argument '{key}' for action '{actionName}'.");
+            }
+        }
+        foreach (var param in action.Parameters) {
+            if (args is null || !args.ContainsKey(param.Name))
+                return ActionInvocationResult.InvalidArguments(actionName,
+                    $"Missing argument '{param.Name}' for action '{actionName}'.");
+        }
+        if (args is { Count: > 0 }) {
+            foreach (var kv in args) {
+                _values[kv.Key] = kv.Value;
+                injectedKeys.Add(kv.Key);
+            }
+        }
 
         // ── Evaluate all guard policies ─────────────────────────
         var failures = new List<string>();
@@ -493,29 +529,35 @@ public sealed record DomainEntityInstance {
         var effectTypeProvider = action.Parameters.Count > 0
             ? BuildActionScopedTypeDefAnalyzer(action)
             : _typeDefAnalyzer;
+        var previousBindingProvider = _bindingTypeProvider;
+        _bindingTypeProvider = effectTypeProvider;
+        try {
+            var createdBefore = _createdChildren.Count;
+            foreach (var effect in action.Effects) {
+                ExecuteEffect(effect, effectPass, effectTypeProvider);
+            }
 
-        var createdBefore = _createdChildren.Count;
-        foreach (var effect in action.Effects) {
-            ExecuteEffect(effect, effectPass, effectTypeProvider);
-        }
-
-        // P3: declared -> Entity return = last child created this invoke of that type.
-        DomainEntityInstance? resultInstance = null;
-        string? resultTypeName = null;
-        if (action.Result.Members.Count > 0) {
-            resultTypeName = action.Result.Members[0].Type.TypeName;
-            for (var i = _createdChildren.Count - 1; i >= createdBefore; i--) {
-                if (string.Equals(_createdChildren[i].Entity.Name, resultTypeName, StringComparison.Ordinal)) {
-                    resultInstance = _createdChildren[i];
-                    break;
+            // P3: declared -> Entity return = last child created this invoke of that type.
+            DomainEntityInstance? resultInstance = null;
+            string? resultTypeName = null;
+            if (action.Result.Members.Count > 0) {
+                resultTypeName = action.Result.Members[0].Type.TypeName;
+                for (var i = _createdChildren.Count - 1; i >= createdBefore; i--) {
+                    if (string.Equals(_createdChildren[i].Entity.Name, resultTypeName, StringComparison.Ordinal)) {
+                        resultInstance = _createdChildren[i];
+                        break;
+                    }
+                }
+                if (resultInstance is null) {
+                    return ActionInvocationResult.MissingReturn(actionName, resultTypeName);
                 }
             }
-            if (resultInstance is null) {
-                return ActionInvocationResult.MissingReturn(actionName, resultTypeName);
-            }
-        }
 
-        return ActionInvocationResult.Ok(actionName, CurrentStage, resultInstance, resultTypeName);
+            return ActionInvocationResult.Ok(actionName, CurrentStage, resultInstance, resultTypeName);
+        }
+        finally {
+            _bindingTypeProvider = previousBindingProvider;
+        }
     }
 
     /// <summary>
@@ -534,7 +576,7 @@ public sealed record DomainEntityInstance {
         foreach (var binding in bindings) {
             var loweringPass = new DomainExpressionLoweringPass();
             var lowered = loweringPass.Lower(binding.Expression, subjectParam);
-            var compiled = Interpreter.Compile(lowered, _typeDefAnalyzer);
+            var compiled = Interpreter.Compile(lowered, _bindingTypeProvider ?? _typeDefAnalyzer);
             using var exec = Interpreter.Execute(compiled,
                 s => s.SetArgs(new object?[] { _values }));
             result[binding.PropertyName] = exec.Result.GetValue<object>();
@@ -664,11 +706,14 @@ public sealed record DomainEntityInstance {
     /// type-aware <see cref="EvaluateDefaultValue"/> — the shared VM lowering emits
     /// <c>DateOnly.FromDateTime(...)</c> for such RHS, which the runtime VM cannot execute.</summary>
     private DomainExpression PreprocessRuntimeKeyword(DomainExpression value, string? targetPropName) {
-        if (value is PropertyAccess { Name: var name } && name is "now" or "utcnow" or "today" or "guid") {
-            var propType = Entity.Properties.FirstOrDefault(p =>
-                string.Equals(p.Name, targetPropName, StringComparison.Ordinal))?.Type.TypeName;
+        var propType = Entity.Properties.FirstOrDefault(p =>
+            string.Equals(p.Name, targetPropName, StringComparison.Ordinal))?.Type.TypeName;
+        // Pack-owned clock nodes (Now/Today) resolve through the ambient default registry —
+        // core never names pack IR.
+        if (ExpressionDefaultResolverRegistry.Default.TryResolve(value, propType, out var runtimeValue, out _))
+            return DomainExpression.Literal(runtimeValue);
+        if (value is PropertyAccess { Name: var name } && name is "Now" or "UtcNow" or "Today" or "Guid")
             return DomainExpression.Literal(EvaluateDefaultValue(value, propType));
-        }
         return PreprocessQuantifiers(value);
     }
 
@@ -1591,5 +1636,11 @@ public sealed record ActionInvocationResult {
         ErrorMessage =
             $"Action invoke depth exceeded (max {maxDepth}) while calling '{actionName}'. " +
             "Possible recursive invoke cycle (e.g. action → invoke self, or OnEntry → invoke → transition loops)."
+    };
+
+    internal static ActionInvocationResult InvalidArguments(string actionName, string message) => new() {
+        ActionName = actionName,
+        Succeeded = false,
+        ErrorMessage = message
     };
 }

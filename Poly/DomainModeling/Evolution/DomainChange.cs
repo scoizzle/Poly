@@ -654,6 +654,24 @@ public sealed record SetDomainNameChange(
 }
 
 /// <summary>
+/// Adds one extension id to the domain (additive). Duplicate id fails closed.
+/// </summary>
+public sealed record AddDomainExtensionChange(
+    string ExtensionId
+) : DomainChange {
+    internal override void ApplyTo(DomainMutationContext context) {
+        ArgumentException.ThrowIfNullOrWhiteSpace(ExtensionId);
+        if (context.Extensions.Any(id => string.Equals(id, ExtensionId, StringComparison.Ordinal))) {
+            context.Errors.Add($"Domain already depends on extension '{ExtensionId}'.");
+            return;
+        }
+        context.Extensions.Add(ExtensionId);
+    }
+
+    internal override string GetDescription() => $"Add domain extension '{ExtensionId}'";
+}
+
+/// <summary>
 /// Adds a Property to a Relationship.
 /// </summary>
 public sealed record AddPropertyToRelationshipChange(
@@ -979,6 +997,29 @@ public sealed record AddContractEndpointChange(
     }
 
     internal override string GetDescription() => $"Add endpoint '{Endpoint.Name}' to contract '{ContractName}'";
+}
+
+public sealed record AddContractValueTypeChange(
+    string ContractName,
+    ValueType ValueType
+) : DomainChange {
+    internal override void ApplyTo(DomainMutationContext context) {
+        var idx = context.ImportedContracts.FindIndex(c =>
+            string.Equals(c.Name, ContractName, StringComparison.Ordinal));
+        if (idx < 0) {
+            context.RequireUpdate(false, $"Contract '{ContractName}' not found — cannot add value type '{ValueType.Name}'");
+            return;
+        }
+        var updated = context.ImportedContracts[idx] with {
+            Types = context.ImportedContracts[idx].Types.Append(ValueType).ToList()
+        };
+        context.ImportedContracts[idx] = updated;
+        context.ModifiedNodes.Add(updated);
+        context.ModifiedNodes.Add(ValueType);
+    }
+
+    internal override string GetDescription() =>
+        $"Add value type '{ValueType.Name}' to contract '{ContractName}'";
 }
 
 public sealed record RemoveContractEndpointChange(

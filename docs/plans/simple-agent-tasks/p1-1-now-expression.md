@@ -1,7 +1,7 @@
 # p1-1 — `Now` / `today` expression nodes + form
 
 **Difficulty:** M  
-**Status:** `[ ]`  
+**Status:** `[x]`  
 **Prereq:** task 0  
 
 ## Objective
@@ -28,8 +28,8 @@ dotnet build Poly.Tests/Poly.Tests.csproj
 dotnet run --project Poly.Tests/Poly.Tests.csproj --no-build
 ```
 
-- [ ] Now IR + form + test green  
-- [ ] Full suite green  
+- [x] Now IR + form + test green  
+- [x] Full suite green  
 
 ## File ownership
 
@@ -41,4 +41,5 @@ dotnet run --project Poly.Tests/Poly.Tests.csproj --no-build
 
 ## Status
 
-**Status:** Not Started  
+**Status:** Done  
+**Claimed by:** opencode (p1-1-now-expression)  

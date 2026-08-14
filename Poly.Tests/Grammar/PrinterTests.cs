@@ -121,6 +121,34 @@ public sealed class PrinterTests {
         await Assert.That(named).IsEqualTo("Order:entity");
     }
 
+    // ── Writers: raw (skeleton honesty) vs language writer (product spacing) ──
+
+    [Test]
+    public async Task Printer_WithRawWriter_StillEmitsSkeleton() {
+        // The raw writer appends canonical text verbatim (no inserted separators),
+        // so engine-tests that pin the no-spaces skeleton stay honest.
+        var printer = new Printer<DslToken, DslTokenKind>(
+            DslGrammar.Build(), DslGrammar.CanonicalText,
+            () => new StringTokenWriter<DslTokenKind>(DslGrammar.CanonicalText));
+
+        await Assert.That(printer.Print("top", "entity")).IsEqualTo(":entity");
+
+        var named = printer.Print("top", "entity", ctx => ctx.Emit("Order"));
+        await Assert.That(named).IsEqualTo("Order:entity");
+    }
+
+    [Test]
+    public async Task Printer_WithDslTokenWriter_InsertsProductSpacing() {
+        // The language writer owns separators (the inverse of the reader's whitespace
+        // skip): space after ':' before a word gives the product "Order: entity".
+        var printer = new Printer<DslToken, DslTokenKind>(
+            DslGrammar.Build(), DslGrammar.CanonicalText,
+            () => new DslTokenWriter());
+
+        var named = printer.Print("top", "entity", ctx => ctx.Emit("Order"));
+        await Assert.That(named).IsEqualTo("Order: entity");
+    }
+
     [Test]
     public async Task Print_DslCanonical_UnknownKind_Throws() {
         await Assert.That(() => DslGrammar.CanonicalText(DslTokenKind.EndOfFile))

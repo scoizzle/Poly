@@ -87,26 +87,34 @@ exactly one singular navigation pointing back to the source (e.g. `borrower`
 on `Loan` → `Patron`): the generated `Create{Nav}` factory passes `this` and the
 back-ref is not a constructor parameter. When the back-ref is ambiguous (multiple
 singular navs to the source) or a collection, it stays an unset constructor
-parameter. To-one navigation bindings in `create in` initializers remain rejected
-(analyzer fail-closed).
+parameter. To-one navigation bindings in `create in` initializers are **legal**
+(e.g. `create in loans { book: book }`) — the binding flows into the child's
+value bag / constructor parameter like a scalar initializer.
 
-**Required coverage (DMEFF011):** every `required` property of the created entity
-must be provided in the `create` / `create in` initializers, unless it has a
-`default`. The back-reference navigation is exempt from this check because the
-runtime store link (and the exported auto-wire) satisfies the reference.
-Analysis rejects a create that omits a required property — the generated `Create`
-factory would otherwise throw at runtime.
+**Required coverage (DMEFF011):** every `required` **scalar** property of the
+created entity must be provided in the `create` / `create in` initializers,
+unless it has a `default`. Only scalar/enum-typed properties carry constraints —
+navigation properties cannot be `required` (the DSL rejects `nav: Type required`
+as a parse error), so the back-reference exemption simply means the auto-wired
+nav needs no initializer value. Analysis rejects a create that omits a required
+property — the generated `Create` factory would otherwise throw at runtime.
 
 ```poly
 // ✅ Correct — both required props provided
 Token: entity { Lexeme: Text required Kind: Text required }
-Lex: action {
-  create in tokens { Lexeme: "let" Kind: Keyword }
+Parser: entity {
+  tokens: many Token
+  Lex: action {
+    create in tokens { Lexeme: "let" Kind: "Keyword" }
+  }
 }
 
 // ❌ Wrong — DMEFF011: 'Lexeme' is required but not provided
-// Lex: action {
-//   create in tokens { Kind: Keyword }
+// Parser2: entity {
+//   tokens: many Token
+//   Lex: action {
+//     create in tokens { Kind: "Keyword" }
+//   }
 // }
 ```
 
@@ -122,7 +130,7 @@ Patron: entity {
   fines: many Fine
 
   when loans Overdue {
-    create Fine { Amount: 5; Reason: "Overdue" }
+    create Fine { Amount: 5 Reason: "Overdue" }
   }
 }
 
@@ -171,10 +179,15 @@ Suspended: stage {
 
 ---
 
-Every valid `.poly` document starts with a domain name:
+Every valid `.poly` document starts with a domain name. Optional `uses` lines list
+**extensions** this compilation unit depends on (additive facts). Product `apply_dsl`
+seeds `temporal` and `storage` when none are listed. Unknown or duplicate ids
+fail closed. Another Poly domain is a `contract`, not a `uses` line.
 
 ```poly
 domain MyDomain
+uses temporal
+uses storage
 ```
 
 ## 2. Enum Types
@@ -195,6 +208,62 @@ MemberStatus: enum {
   Closed
 }
 ```
+
+### Value types
+
+Named records without identity or lifecycle. Declare before entities that use them.
+A property typed as the value type is a nested document, not a relationship.
+
+```poly
+Money: value {
+  Amount: Number
+  Currency: Text
+}
+
+Order: entity {
+  Price: Money
+}
+```
+
+### Contracts (used sub-domains)
+
+A contract is a **used sub-domain**: source + version + **value types** (the ACL you own)
++ endpoints. Bind attaches a parent action to an endpoint. No `import` keyword — an
+OpenAPI pack will emit this same IR later. No generated client.
+
+Value types declared **inside** the contract belong to that sub-domain. Action
+parameters at the bind seam may use those types. **Stored entity properties may not.**
+
+```poly
+Stripe: contract external stripe v1 {
+  ChargeRequest: value {
+    Amount: Number
+    Currency: Text
+  }
+  Charge: outbound operation ChargeRequest
+}
+
+Order: entity {
+  Pay: action (request: ChargeRequest) {
+    assign Total to Total
+  }
+}
+
+ChargeOrder: bind Stripe Charge to Pay request
+```
+
+`external` / `internal`, `inbound` / `outbound`, `operation` / `event`. Analysis fails
+closed if the contract, endpoint, action, or parameter is missing, if the parameter
+type does not match the payload, if a payload type is unknown, or if two contracts
+(or the parent domain) share a value-type name.
+
+The `InternalDomain` producer may fill the body of a `contract internal` from another
+loaded domain; a hand-authored body is still legal and unchanged.
+
+A `bind` is a **call in export**: the bound action's generated method invokes a
+`{Contract}Adapters` adapter for the endpoint. Until an in-process adapter is registered,
+the emitted adapter **throws** `NotImplementedException` — an unimplemented binding fails
+closed at runtime, never a silent no-op. The binding is never dropped by export.
 
 ## 3. Entities and Properties
 
@@ -238,7 +307,7 @@ Sql annotation pack (enabled by default in MCP `apply_dsl` and the DslCompiler).
 - **`column("name")`** overrides the physical column name (default: camelCase property name).
 - **`column("name", "type")`** additionally overrides the SQL column type (default: vendor pack type map, or core generic SQL).
 - **`table("name")`** overrides the table name (default: pluralized entity name, e.g. `Item` → `Items`).
-- Multiple annotations of the same keyword on the same target produce a parse error.
+- Multiple annotations of the same keyword on the same target: the **last one wins** (no parse error).
 - Unknown/unregistered annotations produce a parse error (fail-closed).
 
 Annotations interleave with built-in constraints in the property tail. Order does
@@ -252,7 +321,7 @@ Item: entity table("INVENTORY") {
 }
 ```
 
-Without the Sql pack enabled, `column(...)` and `table(...)` produce a parse error.
+Without the annotation library enabled, `column(...)` and `table(...)` produce a parse error.
 This is deliberate — portable domain text stays DBMS-agnostic; storage hints are
 an opt-in projection layer.
 ```
@@ -481,7 +550,7 @@ invoke Validate                              # self-only
 invoke Validate(status: "ready")             # self-only with args (all params required)
 invoke service.Process                       # OneToOne source → target
 for items as item where item IsEligible
-    invoke item.Mark(amount: item.Qty)       # fan-out, policy-filtered
+    invoke item.Mark(amount: item Qty)       # fan-out, policy-filtered
 for items as item where item in Active
     invoke item.Mark()                       # fan-out, stage-filtered
 ```
@@ -529,11 +598,12 @@ target enters a matching stage. Omit it for the default **`Each`**:
 - `any`/`all` on a **singular** relationship (OneToOne / ManyToOne) are
   **rejected at analysis time** (error `DMSS003` — `SubscriptionContractMismatch`).
   The quantifier is meaningless there; omit it (`Each`) or change cardinality.
-- **Reserved keywords:** `any` and `all` are parsed as quantifier keywords when
-  they immediately follow `when` — a relationship literally named `any` or `all`
-  cannot be used as the navigation in a `when` subscription (it is always consumed
-  as the quantifier). Rename such relationships (e.g. `anyOrders`). This is a
-  documented product limitation of the p4 quantifier grammar.
+- **Reserved keywords:** `any`, `all`, `none`, and `count` are parsed as quantifier
+  keywords in expression reads (`any Rel where …`, `count Rel`, …) and `any`/`all`
+  as subscription quantifiers after `when`. A relationship literally named `any`,
+  `all`, `none`, or `count` is **rejected at analysis** (structural failure) because
+  it would be silently consumed as the quantifier in every read. Rename such
+  relationships (e.g. `anyOrders`).
 - Peer binder (`as name`) remains valid with `any`/`all`; the peer is the
   **transitioned** instance for that firing (same as `Each` today).
 
@@ -710,6 +780,50 @@ TotalOrderCount: policy { count orders > 5 }
 **Analysis rules:** relationship must be OneToMany from the source; body properties validated
 against the target entity; reverse-side / self-rel / ManyToMany / OneToOne rejected (DMEFF007).
 
+#### Temporal Clock Dates (`Now`, `Today`, durations)
+
+The **temporal library** (loaded by the product language default — MCP sessions and `ExtensionCatalog.Core.Language`)
+ships clock date values and relative date arithmetic in expressions. These spellings parse to
+`Now` / `Today` / `DateOperation` IR, pass analysis, round-trip through `export_dsl`, and are
+authorable in **assign RHS and policy comparisons**:
+
+```poly
+Renew: action {
+  assign DueDate to Now - 12 Days
+  assign RenewedAt to Today - 3 Months
+}
+
+IsExpired: policy { ExpiryDate < Now }
+Replenished: policy { DueDate + 14 Days > ExpiryDate }
+```
+
+| Form | Meaning | Notes |
+|------|---------|-------|
+| `Now` | Current UTC timestamp (clock read) | Exact spelling `Now`; folds to clock IR |
+| `Today` | Current calendar date (clock read) | Exact spelling `Today`; folds to clock IR |
+| `N Days` / `N Months` | Relative duration | Singular and plural accepted (`Day`, `Days`, `Month`, `Months`); exact PascalCase |
+| `DateExpr + N Days` / `DateExpr - N Months` | Offset a date by a duration | `DateOperation` — `Now`, `Today`, or a `Date` property can be the left operand |
+
+**Fail-closed (parse):** unknown units (`12 fortnights`) are a **parse error** — never a
+vacuous `DateOperation` and never a dropped unit. A bare `Number + Days` with no temporal left
+operand is rejected at analysis, never a silent numeric constant. `Date + Date` (clock nodes
+or two `Date` properties) is rejected at analysis.
+
+**Fail-closed (library not loaded):** without the temporal library, `Now` stays a plain `PropertyAccess`
+(never a clock read), temporal authoring (`Now - 12 Days`, `5 Days`) fails at parse, and
+`DateOperation` printing throws. Product hosts load Temporal (`DomainHostBuilder.Create`);
+opt-out is `CreateEmpty()`, not a missing initializer.
+
+**Create-time defaults and assign-to-clock are shipped.** `default(Today)` / `default(Now)`
+and `assign Prop to Today` / `assign Prop to Now` evaluate at instance create / invoke
+(and the C# export emits a `??` coalesce). Offsets (`Now - 12 Days`) and **policy/VM**
+reads of `Now`/`Today` are **not** shipped: the fixed-clock `TimeProvider` seam is a
+blocked production gap (`simulate_policy` / the VM fail on static clock members,
+`DirectVmAbiEmitter: unsupported node type NamedTypeReference`). Author and round-trip
+those spellings; do not rely on policy evaluation of clock values.
+
+**Explicitly NOT shipped:** `schedule at` / `at <time>`, business days, and timezone (TZ)
+handling are out of scope — no `at 9am`, no business-day arithmetic, no TZ conversion.
 
 **Rules:**
 - `Rel Prop` on `many` relationships is invalid (use `any Rel where …` — Q3′ shipped). Cardinality validation is enforced at domain analysis time; the parser accepts the syntax but the analysis pipeline will reject it when relationship metadata is available.
@@ -727,13 +841,14 @@ against the target entity; reverse-side / self-rel / ManyToMany / OneToOne rejec
 **Shipped in the current product surface:**
 - Arithmetic (`+`, `-`, `*`, `/`) in expressions
 - Conditional effects (`if (expr) { effects } else { effects }`) — store-aware conditions (exists / path-prefix / quantifiers) preprocess like policies
-- Invoke effect (`invoke ActionName` with optional arguments; cross-entity via `invoke RelName.ActionName`; quantifiers `any`/`all`; filter `where`)
+- Invoke effect (`invoke ActionName` with optional arguments; cross-entity via `invoke RelName.ActionName`; fan-out via the `for` form — one mode, no `any`/`all`/`each` quantifier)
 - Action parameters (`actionName: action (param: Type, ...)`)
-- `default` and `enum` constraints
+- `default` constraints and enum-typed properties
 - Owned navigation declaration (`rel: owned Entity`) + **to-one path-prefix** policy reads (single-hop and multi-hop chains; store + `link_instances` required)
+- Temporal clock dates (`Now`/`Today`, `N days`/`N months`, `DateExpr ± duration`) — authoring, analysis, and `export_dsl` round-trip shipped; runtime clock eval is the only residual gap (see the temporal section)
 
 **Not yet shipped** (planned for future phases / residual gaps):
-- Date operations
+- Date **runtime evaluation** — `Now`/`Today` clock reads parse, analyze, and round-trip (shipped), but executing them at runtime is blocked on the fixed-clock `TimeProvider` seam (`DirectVmAbiEmitter: unsupported node type NamedTypeReference`); authoring is not a gap, runtime evaluation is
 - **Product DSL for IR-only `OwnedAccess`** (nested value-doc shape) — path-prefix → `RelationshipNavigation` is the product authoring surface; do not treat bag `OwnedAccess` as a second policy product path
 - Dedicated many-owned policy demos beyond Q3′ quantifiers on plain `many` (ownership flag is unused at eval; use `any`/`all`/`none`/`count` on `many owned` the same way)
 
@@ -742,29 +857,41 @@ against the target entity; reverse-side / self-rel / ManyToMany / OneToOne rejec
 Decisions that narrow the shipped claim so authoring fails loud instead of silently
 diverging:
 
-- **`unique` is storage-projection metadata, not a runtime invariant.** It is not
-  enforced by the C# export's `Create` factory nor by the runtime instance store.
-  Author `unique` for storage shape only; do not rely on it to reject duplicates.
-- **`now`/`today`/`guid` are authorable in `default(...)` and in assign RHS**, but **not
-  in policy bodies** — a policy comparing a date property to `today`/`now` is rejected at
-  analysis ("property does not exist"). Date-comparing policies must compare two real
-  properties (e.g. `DueDate < ReferenceDate`).
+- **`unique` is enforced at the runtime instance store** (`DomainInstanceStore.Add` /
+  property write) and projected to storage. The C# export's `Create` factory does not
+  emit a uniqueness check — export uniqueness is the generated unique index, not a
+  constructor guard. Duplicate values fail loud at the in-memory store.
+- **`Now`/`Today`/`Guid` are authorable in `default(...)` and in assign RHS.** With the
+  temporal library (default in MCP `apply_dsl`), `default(Today)` / `default(Now)` parse as
+  clock IR and still **evaluate at create time** and in the C# export coalesce (same as
+  the lowercase keyword forms). In **policy bodies**, `Now`/`Today` are authorable only
+  with the pack — see the temporal section. A bare `now`/`guid` (lowercase runtime
+  keyword) in a policy is still rejected at analysis ("property does not exist");
+  `Now`/`Today` in a policy round-trip but their **policy/VM evaluation is not shipped**
+  (fixed-clock `TimeProvider` seam is a production blocker). Date-comparing policies
+  comparing two real properties (e.g. `DueDate < ReferenceDate`) remain the
+  runtime-evaluable form.
 - **`pattern(regex)` validates stored values at write time** (create/assign) — it is a
   constraint, not a query/read filter. Grep-style read-time matching against stored text
   is not expressible.
 - **Store-dependent expressions are runtime-only on the standalone C# export.** The C#
-  export lowers a policy that needs the store (Q3′ collection quantifiers `any`/`all`/
-  `none`/`count`, path-prefix reads beyond to-one hops, `Rel exists`/`not Rel exists`) to a
-  method that **throws `NotSupportedException` at call time** ("requires store-aware
+  export lowers path-prefix reads and `Rel exists` / `not Rel exists` to standalone member
+  access (to-one hops, count-vs-null checks for collections) — those compile. **Only**
+  Q3′ collection quantifiers (`any`/`all`/`none`/`count`) cannot be lowered: the export
+  emits a method that **throws `NotSupportedException` at call time** ("requires store-aware
   evaluation"); a `for` predicate using such a policy is **rejected at analysis**. The
   runtime store path (MCP `create_instance` + `link_instances` + `evaluate_policy` /
-  `invoke_action`) is the supported evaluation surface for these forms. Author store-
+  `invoke_action`) is the supported evaluation surface for Q3′ forms. Author store-
   dependent expressions only when you run through the store, or keep policies local to the
   record's own properties for the export.
-- **Relative date ordering is not supported** (e.g. comparing a date property to
-  `now`/`today`); only comparisons between two date properties are authorable.
+- **Relative date ordering is authorable but not runtime-evaluable.** Comparing a date
+  property to `Now`/`Today` (e.g. `ExpiryDate < Now`, `DueDate + 14 Days > ExpiryDate`) is
+  **shipped** for authoring — it parses, analyzes, and round-trips through `export_dsl` with
+  the temporal library (default). **Runtime evaluation of `Now`/`Today` is not shipped**: the
+  VM fails on static clock members (`NamedTypeReference`) until the fixed-clock `TimeProvider`
+  seam lands, so such policies cannot yet be exercised via `simulate_policy` / `invoke_action`.
 - **Expressions are type-checked at analysis.** Wrong-typed comparisons, assigns,
-  arithmetic, and defaults (e.g. `Name >= 18` on a `Text` property, `default(today)` on
+  arithmetic, and defaults (e.g. `Name >= 18` on a `Text` property, `default(Today)` on
   a `Number` property) are rejected at authoring time — the export and runtime no longer
   receive type-confused expressions.
 - **Property constraints propagate onto effects.** An effect that assigns a value to a
@@ -831,7 +958,7 @@ and lowering pipeline but are **not yet authorable in product DSL**:
 | Owned / related single-hop | ✅ | ✅ **shipped** (path-prefix) | `profile City is "Metropolis"` — same space-delimited syntax as to-one nav; **requires store + link** at `evaluate_policy` |
 | Nested multi-hop path-prefix | ✅ | ✅ **shipped** (to-one hops) | `loan book Title is "Classic"`; many-middle requires `any`/`all` quantifiers |
 | Collection quantifiers (`any`/`all`/`none`/`count`) | ✅ | ✅ **Q3′ shipped** | `any items where Status is "Open"`; store-aware runtime eval before VM lowering. |
-| Arithmetic (`+`, `-`, `*`, `/`) | ✅ | ✅ **shipped** | `Total + 5 > 10`, `Total * 0.9` |
+| Arithmetic (`+`, `-`, `*`, `/`) | ✅ | ✅ **shipped** | `Total + 5 > 10`, `Total * 2 > 10` |
 | Action parameters | ✅ | ✅ **shipped** | `actionName: action (param: Text) { ... }` |
 
 **Expression bodies are DSL text only** — JSON expression bags were retired with the catalog minify.
@@ -850,15 +977,14 @@ without a store (use create + link + `evaluate_policy`).
 | `for Rel as name [where policy \| where in stage] invoke name.Action` | action (OneToMany source-only fan-out; fail-fast; zero matches fail) |
 | `if (expr) { … } else if … else { … }` | action, entry, exit |
 
-**Linking existing instances:** graph wiring happens through `create in Rel { … }` (or `create` with `RelationshipName`), which the runtime auto-links in the store. To connect already-existing instances, the MCP `link_instances` tool exposes `DomainInstanceStore.Link` with relationship + entity-type validation at the tool boundary; `unlink_instances` is deferred.
+**Linking existing instances:** graph wiring happens through `create in Rel { … }`, which the runtime auto-links in the store. To connect already-existing instances, the MCP `link_instances` and `unlink_instances` tools expose `DomainInstanceStore.Link` / `DomainInstanceStore.Unlink` with relationship + entity-type validation at the tool boundary. There is no Link/Unlink **Effect IR** — linking existing instances is a store/tool operation only.
 
 ## 10. Do NOT Use (Unsupported in Phase 1a/1b)
 
 | Construct | Why |
 |-----------|-----|
 | `actor` | Use `entity` instead |
-| `value { }` | Value types not supported |
-| `schedule`, `parallel`, `for` | Control flow not supported |
+| `schedule`, `parallel` | Not product constructs |
 
 | `relationship Name from A to B` | Use N1 nav properties instead |
 | `function` | Functions not supported |
@@ -869,7 +995,7 @@ without a store (use create + link + `evaluate_policy`).
 
 ### Action Parameters
 
-Actions can declare typed parameters. Bare identifiers in effect expressions resolve to the parameter when the name matches a declared parameter (same surface as property access). Parameters are injected for the duration of the action call and do not persist on the instance.
+Actions can declare typed parameters. There is no `param` keyword: a parameter is a **bare identifier** — the product parser emits it as a property access, and analysis/lowering/invoke-bindings/runtime treat an identifier matching an in-scope action parameter as a **parameter**, not a property. `ParameterAccess` is internal IR, not an authoring form. Parameters are injected for the duration of the action call and do not persist on the instance.
 
 Canonical form puts parameters after `: action` so members stay `Name: kind` (matches `export_dsl`):
 
@@ -889,7 +1015,7 @@ SetName: action (newName: Text) {
 | Length | `length(min, max)` | `Code: Text length(2, 10)` |
 | Pattern | `pattern(regex)` | `Zip: Text pattern("^\\d{5}$")` |
 | Default | `default(value)` | `Status: Text default("Active")` |
-| Enum | `enum(v1, v2, ...)` | `Color: Text enum(Red, Green, Blue)` |
+| Enum-typed property | `Prop: EnumType` | `Color: Color` (see §2 — top-level enum type; inline `enum(...)` constraints are not supported) |
 
 ### Annotations (portable metadata, not constraints)
 
@@ -925,8 +1051,9 @@ action's own effects — a parameter that flows into a constrained property inhe
 property's constraints, merged by intersection across all such targets. This covers
 `assign Prop to param` on the action's entity and `create`/`create in` initializer
 bindings (`Prop: param`) on related entities. Conflicting targets (e.g. different
-patterns) merge to nothing and emit no attribute. Value-set constraints (`equals(v)` in
-the model) propagate as `[AllowedValues(...)]` — the member must be one of the union.
+patterns) merge to nothing and emit no attribute. A pinned literal in the model
+(`EqualityConstraint`, evolution-only — not DSL) still projects as `[AllowedValues]`.
+Author a closed set as an **enum**, not a property constraint.
 
 **Soundness rules for implicit derivation:**
 - Only **unconditional** flows contribute. A parameter that reaches a target only inside
@@ -953,6 +1080,8 @@ oracle tools → iterate.
 
 ```poly
 domain Orders
+uses temporal
+uses storage
 
 Customer: entity {
   Name: Text required

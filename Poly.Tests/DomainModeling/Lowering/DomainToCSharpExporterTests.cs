@@ -8,6 +8,7 @@ using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Effects;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Lowering;
+using Poly.DomainModeling.Packs;
 using Poly.DomainModeling.Parsing;
 using Poly.Interpretation.CSharp;
 
@@ -38,7 +39,7 @@ public class DomainToCSharpExporterTests {
         Patron: entity {
           Name: Text required
           Email: Text unique pattern("^[^@]+@[^@]+$")
-          MemberSince: Date default(today)
+          MemberSince: Date default(Today)
           Status: PatronStatus default(Active)
           MaxItems: Number range(0, 20) required
           CurrentBorrowCount: Number
@@ -99,18 +100,18 @@ public class DomainToCSharpExporterTests {
           book: Book
           borrower: Patron
           Active: stage {
-            entry { assign CheckedOutAt to now }
+            entry { assign CheckedOutAt to Now }
             Renew: action {
               assign DueDate to DueDate + 14
               assign TimesRenewed to TimesRenewed + 1
             }
             Return: action {
-              assign ReturnedAt to now
+              assign ReturnedAt to Now
               transition to Returned
             }
           }
           Overdue: stage {
-            entry { assign CheckedOutAt to now }
+            entry { assign CheckedOutAt to Now }
           }
           Returned: stage { }
         }
@@ -118,7 +119,7 @@ public class DomainToCSharpExporterTests {
         Fine: entity {
           Amount: Number required
           Reason: Text
-          DateIssued: DateTime default(now)
+          DateIssued: DateTime default(Now)
           Paid: Boolean
           patron: Patron
           Unpaid: stage {
@@ -152,8 +153,12 @@ public class DomainToCSharpExporterTests {
         }
         """;
 
-    private static (Domain Domain, AnalysisResult Analysis) ParseAndAnalyze(string poly) {
-        var parser = new PolyDslParser(poly);
+    private static (Domain Domain, AnalysisResult Analysis) ParseAndAnalyze(string poly) =>
+        ParseAndAnalyze(poly, parserInputs: null);
+
+    private static (Domain Domain, AnalysisResult Analysis) ParseAndAnalyze(
+        string poly, DomainParserInputs? parserInputs) {
+        var parser = new PolyDslParser(poly, parserInputs);
         var changes = parser.Parse();
         var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(changes);
         if (!result.Succeeded) {
@@ -1042,19 +1047,19 @@ public class DomainToCSharpExporterTests {
 
     [Test]
     public async Task Export_RuntimeKeywordDefaults_AdaptToTargetClrType() {
-        // Discovery round5 F1–F3: `default(guid)` on Text, `default(now)` on Date,
-        // `default(today)` on DateTime, and `assign DateProp to now` must export
+        // Discovery round5 F1–F3: `default(Guid)` on Text, `default(Now)` on Date,
+        // `default(Today)` on DateTime, and `assign DateProp to now` must export
         // type-adapted C# — previously CS0019 (`string ?? Guid`, `DateOnly? ?? DateTime`,
         // `DateTime? ?? DateOnly`) and CS0029 (`assign Date to now`).
         const string dsl = """
             domain KeywordDefaults
 
             A: entity {
-              ExternalId: Text default(guid)
-              StartDate: Date default(now)
-              OpenedAt: DateTime default(today)
+              ExternalId: Text default(Guid)
+              StartDate: Date default(Now)
+              OpenedAt: DateTime default(Today)
               Stamp: action {
-                assign StartDate to now
+                assign StartDate to Now
               }
             }
             """;
@@ -1066,6 +1071,29 @@ public class DomainToCSharpExporterTests {
         await Assert.That(csharp).Contains("Guid.NewGuid().ToString()");
         await Assert.That(csharp).Contains("DateOnly.FromDateTime(DateTime.UtcNow)");
         await Assert.That(csharp).Contains("DateTime.Today");
+    }
+
+    [Test]
+    public async Task Export_TodayNowClockNodes_WithTemporalPack_EmitRuntimeDefaults() {
+        // Product MCP/SQL inputs register TemporalPack, so `Today`/`Now` are clock
+        // IR — not PropertyAccess keywords. Export must still emit the runtime
+        // coalesce, never drop the default to a silent `= null`.
+        const string dsl = """
+            domain KeywordDefaults
+
+            A: entity {
+              RecordedOn: Date default(Today)
+              OpenedAt: DateTime default(Now)
+            }
+            """;
+        var (domain, analysis) = ParseAndAnalyze(dsl, ExtensionCatalog.Core.Language.Parser);
+        await AssertExportCompiles(domain, analysis);
+
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var csharp = new CSharpGenerator().Generate(types);
+        await Assert.That(csharp).Contains("DateOnly.FromDateTime(DateTime.Today)");
+        await Assert.That(csharp).Contains("DateTime.UtcNow");
+        await Assert.That(csharp).Contains("??");
     }
 
     [Test]

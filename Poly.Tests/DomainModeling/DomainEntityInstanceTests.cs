@@ -5,6 +5,7 @@ using Poly.DomainModeling.Bootstrap;
 using Poly.DomainModeling.Constraints;
 using Poly.DomainModeling.Effects;
 using Poly.DomainModeling.Evolution;
+using Poly.DomainModeling.Packs.Temporal;
 using Poly.DomainModeling.Parsing;
 
 namespace Poly.Tests.DomainModeling;
@@ -135,13 +136,13 @@ public class DomainEntityInstanceTests {
 
     [Test]
     public async Task Create_RuntimeKeywordDefaults_AdaptToPropertyClrType() {
-        // Discovery round5 F1–F3: the runtime must store a DateOnly for `default(now)`
-        // on a Date prop and a string for `default(guid)` on a Text prop — not raw
+        // Discovery round5 F1–F3: the runtime must store a DateOnly for `default(Now)`
+        // on a Date prop and a string for `default(Guid)` on a Text prop — not raw
         // DateTime/Guid (cross-typed stores that broke downstream comparisons).
         var start = new Property("Start", new DomainTypeReference("Date"),
-            [new DefaultValueConstraint(DomainExpression.Property("now"))]);
+            [new DefaultValueConstraint(DomainExpression.Property("Now"))]);
         var externalId = new Property("ExternalId", new DomainTypeReference("Text"),
-            [new DefaultValueConstraint(DomainExpression.Property("guid"))]);
+            [new DefaultValueConstraint(DomainExpression.Property("Guid"))]);
         var entity = new Entity("A",
             Properties: [start, externalId],
             Actions: [],
@@ -151,6 +152,46 @@ public class DomainEntityInstanceTests {
         var instance = DomainEntityInstance.Create(entity);
         await Assert.That(instance.GetProperty<object>("Start")).IsTypeOf<DateOnly>();
         await Assert.That(instance.GetProperty<object>("ExternalId")).IsTypeOf<string>();
+    }
+
+    [Test]
+    public async Task Create_TodayAndNowClockNodes_AdaptToPropertyClrType() {
+        // Temporal language folds `Today`/`Now` to Today/Now IR. Create-time defaults
+        // must still evaluate — not silently store null (vacuous default).
+        TemporalLibrary.EnsureLanguage();
+        var recorded = new Property("RecordedOn", new DomainTypeReference("Date"),
+            [new DefaultValueConstraint(new Today())]);
+        var opened = new Property("OpenedAt", new DomainTypeReference("DateTime"),
+            [new DefaultValueConstraint(new Now())]);
+        var entity = new Entity("A",
+            Properties: [recorded, opened],
+            Actions: [],
+            Policies: [],
+            Stages: []);
+
+        var instance = DomainEntityInstance.Create(entity);
+        await Assert.That(instance.GetProperty<object>("RecordedOn")).IsTypeOf<DateOnly>();
+        await Assert.That(instance.GetProperty<DateOnly>("RecordedOn")).IsEqualTo(DateOnly.FromDateTime(DateTime.Today));
+        await Assert.That(instance.GetProperty<object>("OpenedAt")).IsTypeOf<DateTime>();
+    }
+
+    [Test]
+    public async Task InvokeAction_AssignTodayClockNode_StoresDate() {
+        TemporalLibrary.EnsureLanguage();
+        var due = new Property("Due", new DomainTypeReference("Date"), []);
+        var stamp = new Poly.DomainModeling.Action("Stamp", InvocationResult.Void, [],
+            [new AssignEffect(DomainExpression.Property("Due"), new Today())], []);
+        var entity = new Entity("Loan",
+            Properties: [due],
+            Actions: [stamp],
+            Policies: [],
+            Stages: []);
+
+        var instance = DomainEntityInstance.Create(entity);
+        var result = instance.InvokeAction("Stamp");
+        await Assert.That(result.Succeeded).IsTrue();
+        await Assert.That(instance.GetProperty<object>("Due")).IsTypeOf<DateOnly>();
+        await Assert.That(instance.GetProperty<DateOnly>("Due")).IsEqualTo(DateOnly.FromDateTime(DateTime.Today));
     }
 
     [Test]
@@ -212,7 +253,8 @@ public class DomainEntityInstanceTests {
             new Dictionary<string, object?>());
 
         await Assert.That(instance.Domain).IsNull();
-        var result = instance.InvokeAction("Submit");
+        var result = instance.InvokeAction("Submit",
+            new Dictionary<string, object?> { ["Note"] = "ok" });
 
         await Assert.That(result.Succeeded).IsTrue();
         await Assert.That(result.NewStage).IsEqualTo("Active");
@@ -973,7 +1015,7 @@ public class DomainEntityInstanceTests {
         // (not a DateTime) for a Date property — mirroring the type-aware default handling.
         var dueDate = new Property("DueDate", new DomainTypeReference("Date"), []);
         var action = new Poly.DomainModeling.Action("Touch", InvocationResult.Void, [], [
-            new AssignEffect(DomainExpression.Property("DueDate"), DomainExpression.Property("now"))
+            new AssignEffect(DomainExpression.Property("DueDate"), DomainExpression.Property("Now"))
         ], []);
         var entity = new Entity("Item", [dueDate], [action], [], []);
         var domain = DomainTestFactory.Create("Test", [entity]);

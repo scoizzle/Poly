@@ -3,6 +3,7 @@ using Poly.DomainModeling.Bootstrap;
 using Poly.DomainModeling.Constraints;
 using Poly.DomainModeling.Effects;
 using Poly.DomainModeling.Evolution;
+using Poly.DomainModeling.Packs.Temporal;
 
 namespace Poly.Tests.DomainModeling.Evolution;
 
@@ -940,7 +941,7 @@ public class DomainEvolutionApplicatorTests {
             .AddActionToStage("Loan", "Renewed", "ReturnBook")
             .AddParameterToAction("Loan", "ReturnBook", new Property("Condition", new DomainTypeReference("Text"), []))
             .AddEffectToAction("Loan", "ReturnBook", returnTransition)
-            // RenewLoan: increments RenewalCount +1, extends DueDate by 14 days, transitions to Renewed.
+            // RenewLoan: increments RenewalCount +1, extends DueDate by 14 Days, transitions to Renewed.
             .AddActionToStage("Loan", "Active", "RenewLoan")
             .AddEffectToAction("Loan", "RenewLoan",
                 new AssignEffect(
@@ -949,7 +950,7 @@ public class DomainEvolutionApplicatorTests {
             .AddEffectToAction("Loan", "RenewLoan",
                 new AssignEffect(
                     DomainExpression.Property("DueDate"),
-                    DomainExpression.DateOp(DomainExpression.Property("DueDate"), DomainExpression.Literal(14), DateOperationKind.AddDays)))
+                    new DateOperation(DomainExpression.Property("DueDate"), DomainExpression.Literal(14), DateOperationKind.AddDays)))
             .AddStageTransitionEffect("Loan", "RenewLoan", "Renewed")
             // ReportLost: transitions Loan to Lost stage.
             // GAP: Cannot conditionally create a Fine or decrement Book.TotalCopies.
@@ -1044,7 +1045,7 @@ public class DomainEvolutionApplicatorTests {
         //    Intentional exclusion: event/subscription pattern is the recommended approach.
         //
         // 2. Dynamic calculation: ✅ RESOLVED (Phase 4a) — Add, DateOperation, and
-        //    AssignEffect now support RenewalCount + 1 and DueDate + 14 days.
+        //    AssignEffect now support RenewalCount + 1 and DueDate + 14 Days.
         //
         // 3. Conditional effects: ReportLost should conditionally create a Fine entity and
         //    decrement Book.TotalCopies. Requires ConditionalEffect + InvokeAction.
@@ -1135,7 +1136,7 @@ public class DomainEvolutionApplicatorTests {
             .AddEffectToAction("Schedule", "Extend",
                 new AssignEffect(
                     DomainExpression.Property("Start"),
-                    DomainExpression.DateOp(DomainExpression.Property("Start"), DomainExpression.Literal(7), DateOperationKind.AddDays)))
+                    new DateOperation(DomainExpression.Property("Start"), DomainExpression.Literal(7), DateOperationKind.AddDays)))
             .Apply();
         await Assert.That(result.Succeeded).IsTrue();
         var schedule = result.Root.Types.OfType<Entity>().Single(e => e.Name == "Schedule");
@@ -1514,7 +1515,7 @@ public class DomainEvolutionApplicatorTests {
     public async Task Apply_AddContractEndpointChange_AddsEndpoint() {
         var contract = new ImportedContract("CrmContract", ContractSourceKind.ExternalProvider, "crm://api/ticket", "v1", []);
         var start = DomainTestFactory.Create("Test", [], []) with { ImportedContracts = [contract] };
-        var endpoint = new ContractEndpoint("GetTicket", ContractEndpointKind.Operation, ContractEndpointDirection.Inbound, new DomainTypeReference("TicketData"));
+        var endpoint = new ContractEndpoint("GetTicket", ContractEndpointKind.Operation, ContractEndpointDirection.Inbound, new DomainTypeReference("Number"));
         var result = new DomainEvolution(start).Apply([new AddContractEndpointChange("CrmContract", endpoint)]);
         await Assert.That(result.Succeeded).IsTrue();
         var updated = result.Root.ImportedContracts.Single(c => c.Name == "CrmContract");
@@ -1524,7 +1525,7 @@ public class DomainEvolutionApplicatorTests {
 
     [Test]
     public async Task Apply_RemoveContractEndpointChange_RemovesEndpoint() {
-        var endpoint = new ContractEndpoint("GetTicket", ContractEndpointKind.Operation, ContractEndpointDirection.Inbound, new DomainTypeReference("TicketData"));
+        var endpoint = new ContractEndpoint("GetTicket", ContractEndpointKind.Operation, ContractEndpointDirection.Inbound, new DomainTypeReference("Number"));
         var contract = new ImportedContract("CrmContract", ContractSourceKind.ExternalProvider, "crm://api/ticket", "v1", [endpoint]);
         var start = DomainTestFactory.Create("Test", [], []) with { ImportedContracts = [contract] };
         var result = new DomainEvolution(start).Apply([new RemoveContractEndpointChange("CrmContract", "GetTicket")]);

@@ -68,7 +68,7 @@ Codegen (optional host):
 | Source-ownership | `SourceOwnsTarget` | `Relationship.cs` | ✅ |
 | `create in Rel` auto-wire | `create in loans { }` | `Effects/CreateEntityInRelationshipEffect.cs` | ✅ |
 | MCP link existing | `link_instances` | `Poly.Mcp/Tools/RuntimeTool.cs` | ✅ (`7d067c0`) |
-| Link/unlink IR | no DSL keyword | `LinkRelationshipEffect` / `UnlinkRelationshipEffect` | ✅ MCP link; unlink library-only |
+| Link/unlink existing instances | no DSL keyword | `DomainInstanceStore.Link` / `.Unlink` (MCP `link_instances` / `unlink_instances`) | ✅ store operation — no Link/Unlink **Effect IR** |
 
 ---
 
@@ -102,8 +102,8 @@ Runtime: store-linked `DomainEntityInstance` preprocess + VM. Analysis: OneToMan
 
 | Capability | Status |
 |-----------|--------|
-| `DateOperation` IR (AddDays/AddMonths/DiffDays) + lowering | ✅ IR |
-| Product DSL for date ops | ⬜ Pull |
+| Temporal vertical (`Now`/`today`, `N days`/`N months`, `DateOperation` IR + lowering + print binders) | ✅ shipped, contained in `Poly/DomainModeling/Packs/Temporal/` (namespace `Poly.DomainModeling.Packs.Temporal`); core dispatches through the `DomainExpression` seam via open `ExpressionDispatchRegistry` (ambient product-default set) |
+| Product DSL for date ops | ⬜ p1 temporal plan |
 | `now` / `today` literals | ✅ shipped |
 
 ---
@@ -116,11 +116,10 @@ Runtime: store-linked `DomainEntityInstance` preprocess + VM. Analysis: OneToMan
 | `assign Prop to expr` | yes (local target only) | ✅ |
 | `create Type { }` | yes | ✅ |
 | `create in Rel { }` | yes | ✅ |
-| `delete` (soft-delete self) | yes | ✅ E1 |
 | `invoke Action` / `invoke Rel.Action` | yes | ✅ E3a/E3b |
-| `invoke any\|all Rel.Action [where …]` | yes | ✅ E3b + DMEFF007 |
+| `for Rel as name [where policy \| where in stage] invoke name.Action` | yes | ✅ fan-out (OneToMany) + DMEFF007 |
 | `if (expr) { } else { }` | yes | ✅ E4 |
-| Link / unlink | **no DSL**; MCP `link_instances`; library unlink | ✅ / 🟡 |
+| Link / unlink | **no DSL**; MCP `link_instances` / `unlink_instances` | ✅ store operation |
 
 Cross-entity **assign writes** banned (query §3.1). Peer mutation via create-in / link / invoke only.
 
@@ -177,7 +176,7 @@ Fail-closed: missing storage (db/all); missing behavior/aggregate (all) → `Inv
 
 | Capability | Status |
 |-----------|--------|
-| Create / snapshot / stage / soft-delete | ✅ |
+| Create / snapshot / stage | ✅ |
 | `InvokeAction` with params, depth limit, policies | ✅ |
 | `EvaluatePolicy` local vs store-linked (quantifiers) | ✅ |
 | `DomainInstanceStore` Add/Remove/Link/Unlink/GetRelated/NotifyTransition | ✅ |
@@ -231,7 +230,7 @@ Full names: `Poly.Mcp/Tools/DomainTools.cs`, `RuntimeTool.cs`, `OracleTool.cs`.
 
 Authoritative syntax: **`Poly.Mcp/Docs/poly-dsl-guide.md`** (keep in sync with parser).
 
-Shipped highlights: entities, properties, constraints, enums, navs, stages, actions, params, require, policies, entry/exit, subscriptions, transition/assign/create/create-in/delete/invoke/if, quantifiers + path-prefix + exists + where, `column`/`table` annotations, `owned`.
+Shipped highlights: entities, properties, constraints, enums, navs, stages, actions, params, require, policies, entry/exit, subscriptions, transition/assign/create/create-in/for-invoke/if, quantifiers + path-prefix + exists + where, `column`/`table` annotations, `owned`.
 
 ---
 

@@ -12,8 +12,9 @@
 |----------|--------|--------|
 | — | [`gpure-README.md`](./gpure-README.md) | ✅ DONE 2026-08-07 |
 | — | [`mcp-minify-README.md`](./mcp-minify-README.md) | ✅ DONE 2026-08-08 |
-| **1 admit** | [`mut-safety-README.md`](./mut-safety-README.md) | Ready — **admit next** |
-| **2** | [`p1-README.md`](./p1-README.md) | Ready after mut-safety |
+| **CURRENT** | [`pack-README.md`](./pack-README.md) | Phase 1 in flight 2026-08-13 |
+| parked | [`mut-safety-README.md`](./mut-safety-README.md) | After pack-host |
+| 3a | [`p1-README.md`](./p1-README.md) | After pack-2-gate |
 
 ```bash
 copilot --agent plan-suite-until-done -p "Suite: mut-safety. Mode: until-done."
@@ -39,6 +40,9 @@ Includes: dogfood, amu, p4, coh, p3, p2, grammar/GIP, older DAS/SPE/… suites, 
 | instance-commit-and-outbox | Needs durable host |
 | customer-trust-proof-map | Living index |
 | absorption matrix | Pick one P* → solidify suite first |
+| [`../domainmodeling-e2e-representation-2026-08-13.md`](../domainmodeling-e2e-representation-2026-08-13.md) | Parked parent |
+| [`e2e-README.md`](./e2e-README.md) | **Fleet task pack** — wave DAG + 12 slice READMEs; admit one wave |
+| [`../fleet-eval-fixes-2026-08-12.md`](../fleet-eval-fixes-2026-08-12.md) | Probe checklist; do not CURRENT beside overlapping `e2e-*` |
 | [`../dead-dual-inventory-2026-08-08.md`](../dead-dual-inventory-2026-08-08.md) | Kill list for Validation / Text — not CURRENT work |
 
 ---

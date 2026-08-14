@@ -2,9 +2,11 @@ using System.Linq;
 
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
+using Poly.DomainModeling.Bootstrap;
 using Poly.DomainModeling.Constraints;
 using Poly.DomainModeling.Effects;
 using Poly.DomainModeling.Evolution;
+using Poly.DomainModeling.Packs;
 using Poly.DomainModeling.Parsing;      // DomainDslPrinter (product print — v1 domain-walk, table-parity deferred)
                                         // PolyDslParser
 using Poly.Introspection;
@@ -760,20 +762,66 @@ public class PolyDslRoundTripTests {
     }
 
     [Test]
-    public async Task Unsupported_ValueType_ThrowsPhase1Error() {
+    public async Task Parse_ValueType_RoundTrips() {
         var poly = """
             domain Test
-            Money: value { }
-            """;
 
-        var parser = new PolyDslParser(poly);
-        var threw = false;
-        try { parser.Parse(); }
-        catch (FormatException ex) {
-            await Assert.That(ex.Message.Contains("not supported in Phase 1a")).IsTrue();
-            threw = true;
-        }
-        await Assert.That(threw).IsTrue();
+            Money: value {
+              Amount: Number
+              Currency: Text
+            }
+
+            Order: entity {
+              Price: Money
+            }
+            """;
+        var first = Apply(poly);
+        var money = first.Types.OfType<Poly.DomainModeling.ValueType>().Single();
+        await Assert.That(money.Name).IsEqualTo("Money");
+        await Assert.That(money.Properties.Count).IsEqualTo(2);
+        var printed = new DomainDslPrinter().Print(first);
+        await Assert.That(printed.Contains("Money: value")).IsTrue();
+        var second = Apply(printed);
+        await Assert.That(second.Types.OfType<Poly.DomainModeling.ValueType>().Single().Properties.Count).IsEqualTo(2);
+        await Assert.That(second.Types.OfType<Entity>().Single().Properties.Single().Type.TypeName)
+            .IsEqualTo("Money");
+    }
+
+    [Test]
+    public async Task Parse_ContractAndBind_RoundTrips() {
+        var poly = """
+            domain Test
+
+            Order: entity {
+              Total: Number
+              Pay: action (request: ChargeRequest) {
+                assign Total to Total
+              }
+            }
+
+            Stripe: contract external stripe v1 {
+              ChargeRequest: value {
+                Amount: Number
+                Currency: Text
+              }
+              Charge: outbound operation ChargeRequest
+            }
+
+            ChargeOrder: bind Stripe Charge to Pay request
+            """;
+        var first = Apply(poly);
+        await Assert.That(first.ImportedContracts.Count).IsEqualTo(1);
+        await Assert.That(first.ImportedContracts[0].Types.Count).IsEqualTo(1);
+        await Assert.That(first.ImportedContracts[0].Types[0].Name).IsEqualTo("ChargeRequest");
+        await Assert.That(first.ImportedContracts[0].Endpoints.Count).IsEqualTo(1);
+        await Assert.That(first.ContractBindings.Count).IsEqualTo(1);
+        var printed = new DomainDslPrinter().Print(first);
+        await Assert.That(printed.Contains("ChargeRequest: value")).IsTrue();
+        var second = Apply(printed);
+        await Assert.That(second.ImportedContracts[0].Name).IsEqualTo("Stripe");
+        await Assert.That(second.ImportedContracts[0].Types[0].Properties.Count).IsEqualTo(2);
+        await Assert.That(second.ContractBindings[0].ActionName).IsEqualTo("Pay");
+        await Assert.That(second.ContractBindings[0].LocalParameterName).IsEqualTo("request");
     }
 
     [Test]
@@ -1237,5 +1285,152 @@ public class PolyDslRoundTripTests {
             .Constraints.OfType<DefaultValueConstraint>().Single();
         var lit2 = dv2.Expression as Literal;
         await Assert.That(lit2?.Value).IsEqualTo("say \"hi\"");
+    }
+
+    [Test]
+    public async Task Print_NotComparison_RoundTripsWithParens() {
+        var poly = """
+            domain Test
+
+            Item: entity {
+              Total: Number
+              Positive: policy { not (Total > 0) }
+            }
+            """;
+        var first = Apply(poly);
+        var printed = new DomainDslPrinter().Print(first);
+        await Assert.That(printed.Contains("not (Total > 0)") || printed.Contains("not ((Total > 0))")).IsTrue();
+        var second = Apply(printed);
+        var expr = second.Types.OfType<Entity>().Single().Policies.Single().Expression;
+        await Assert.That(expr).IsTypeOf<Poly.DomainModeling.Not>();
+        await Assert.That(((Poly.DomainModeling.Not)expr).Operand).IsTypeOf<Comparison>();
+    }
+
+    [Test]
+    public async Task Print_MixedRequireGates_RoundTrips() {
+        var poly = """
+            domain Test
+
+            Item: entity {
+              Ok: policy { Status is "Ok" }
+              Blocked: policy { Status is "Blocked" }
+              Status: Text
+              Go: action
+                require Ok
+                require not Blocked
+              {
+                assign Status to "Went"
+              }
+            }
+            """;
+        var first = Apply(poly);
+        var printed = new DomainDslPrinter().Print(first);
+        await Assert.That(printed.Contains("require Ok, not Blocked")).IsFalse();
+        var second = Apply(printed);
+        var go = second.Types.OfType<Entity>().Single().Actions.Single(a => a.Name == "Go");
+        await Assert.That(go.Policies.Count).IsEqualTo(2);
+        await Assert.That(go.Policies.Any(p => p.Name == "Ok")).IsTrue();
+        await Assert.That(go.Policies.Any(p => p.Name == "not_Blocked")).IsTrue();
+    }
+
+    [Test]
+    public async Task Print_CreateInMultiInitializer_WhitespaceSeparators() {
+        var poly = """
+            domain Test
+
+            Customer: entity {
+              Name: Text
+              Place: action {
+                create in orders { Title: "A" Total: 1 }
+              }
+              orders: many Order
+            }
+
+            Order: entity {
+              Title: Text
+              Total: Number
+            }
+            """;
+        var first = Apply(poly);
+        var printed = new DomainDslPrinter().Print(first);
+        await Assert.That(printed.Contains("Title:")).IsTrue();
+        await Assert.That(printed.Contains(",")).IsFalse();
+        var second = Apply(printed);
+        var place = second.Types.OfType<Entity>().Single(e => e.Name == "Customer")
+            .Actions.Single(a => a.Name == "Place");
+        var createIn = (CreateEntityInRelationshipEffect)place.Effects[0];
+        await Assert.That(createIn.Initializers.Count).IsEqualTo(2);
+    }
+
+    [Test]
+    public async Task Print_EqualityConstraint_IsOmitted() {
+        var domain = Apply("""
+            domain Test
+            Item: entity { Status: Text }
+            """);
+        var item = domain.Types.OfType<Entity>().Single();
+        var pinned = item with {
+            Properties = [
+                item.Properties[0] with {
+                    Constraints = [new EqualityConstraint("Active")]
+                }
+            ]
+        };
+        var withEq = new Domain(domain.Name, [pinned]);
+        var printed = new DomainDslPrinter().Print(withEq);
+        await Assert.That(printed.Contains("equals")).IsFalse();
+        await Assert.That(printed.Contains("/*")).IsFalse();
+        var second = Apply(printed);
+        await Assert.That(second.Types.OfType<Entity>().Single().Properties.Single()
+            .Constraints.OfType<EqualityConstraint>().Any()).IsFalse();
+    }
+
+    private static Domain Apply(string poly) {
+        var result = new DomainEvolution(DomainTestFactory.Create("_", [], []))
+            .Apply(new PolyDslParser(poly).Parse());
+        if (!result.Succeeded)
+            throw new InvalidOperationException(result.FailureSummary ?? "evolution failed");
+        return result.Root!;
+    }
+
+    [Test]
+    public async Task ProduceFillPrintParse_FilledInternalContract_RoundTripsValueTypesAndEndpoints() {
+        // pack-3b-3: a producer-filled `contract internal` body must print back as
+        // hand-authored `contract internal` DSL that re-parses to the same types/endpoints.
+        var source = DomainFactory.Create("billing", b => b
+            .AddValueType("ChargeRequest",
+                new Property("Amount", new DomainTypeReference("Number"), []),
+                new Property("Currency", new DomainTypeReference("Text"), []))
+            .AddEntity("Ledger")
+            .AddActionWithParameters("Ledger", "Charge",
+                new Property("request", new DomainTypeReference("ChargeRequest"), [])));
+
+        var parent = Apply("""
+            domain Parent
+            Billing: contract internal billing v1 {}
+            """);
+        var filled = new DomainSuite([source, parent]).FillInternalContracts(parent);
+
+        var printed = new DomainDslPrinter().Print(filled);
+        await Assert.That(printed.Contains("Billing: contract internal billing v1", StringComparison.Ordinal)).IsTrue();
+
+        var reparsed = Apply(printed);
+        var contract = reparsed.ImportedContracts.Single(c => c.Name == "Billing");
+
+        await Assert.That(contract.SourceKind).IsEqualTo(ContractSourceKind.InternalDomain);
+        await Assert.That(contract.SourceIdentifier).IsEqualTo("billing");
+        await Assert.That(contract.Version).IsEqualTo("v1");
+
+        await Assert.That(contract.Types.Select(t => t.Name)).Contains("ChargeRequest");
+        var request = contract.Types.Single(t => t.Name == "ChargeRequest");
+        await Assert.That(request.Properties.Count).IsEqualTo(2);
+        await Assert.That(request.Properties.Select(p => p.Name)).Contains("Amount");
+        await Assert.That(request.Properties.Select(p => p.Name)).Contains("Currency");
+
+        await Assert.That(contract.Endpoints.Select(e => e.Name)).Contains("Charge");
+        var charge = contract.Endpoints.Single(e => e.Name == "Charge");
+        await Assert.That(charge.Kind).IsEqualTo(ContractEndpointKind.Operation);
+        await Assert.That(charge.Direction).IsEqualTo(ContractEndpointDirection.Outbound);
+        await Assert.That(charge.PayloadType.TypeName).IsEqualTo("ChargeRequest");
     }
 }

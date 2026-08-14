@@ -24,6 +24,7 @@ They do **not** represent current priorities, committed roadmap items, or active
 | Doc | Role |
 |-----|------|
 | [**domain-plugin-extension-platform.md**](domain-plugin-extension-platform.md) | Future research: C# extension packs for DSL facets (e.g. `column("…")`), analysis, target export — **not** active work |
+| [**isa-decompiler-agent-experiment.md**](isa-decompiler-agent-experiment.md) | Speculative: grammar-driven ISA lifting → Poly.Ast → analysis structuring → VM-executable decompilation for agents — **not** active work |
 
 ## Related directories
 

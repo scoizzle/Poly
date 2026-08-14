@@ -3,6 +3,7 @@ using System.Linq;
 using Poly.Analysis;
 using Poly.DomainModeling;
 using Poly.DomainModeling.Lowering;
+using Poly.DomainModeling.Packs.Temporal;
 using Poly.Interpretation;
 using Poly.Interpretation.Analysis.ConstantFolding;
 using Poly.Interpretation.Analysis.ControlFlow;
@@ -561,7 +562,7 @@ public class DomainExpressionVmExecutionTests {
     // DateOperation: lowers to Invoke(Member(date, "AddDays"/"AddMonths"/"Subtract"), offset)
     [Test]
     public async Task DateOperation_LowersWithoutThrowing() {
-        var expr = DomainExpression.DateOp(
+        var expr = new DateOperation(
             DomainExpression.Property("BirthDate"),
             DomainExpression.Literal(1),
             DateOperationKind.AddDays);

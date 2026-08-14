@@ -19,6 +19,24 @@ public class StructuralAnalysisTests {
             d.Code == DomainModelDiagnosticCodes.StructuralDuplicate)).IsTrue();
     }
 
+    [Test]
+    public async Task ReservedQuantifierNav_AnyAsRelationshipName_FailsClosed() {
+        // P7-4: a navigation named `any`/`all`/`none`/`count` is silently consumed as
+        // a quantifier keyword in expression reads — reject it at analysis.
+        var text = new Poly.DomainModeling.PrimitiveType("Text", TypeCategory.Text, []);
+        var foo = new Entity("Foo", [], [], [], []);
+        var order = new Entity("Order", [], [], [], []);
+        var rel = new Relationship("any",
+            new DomainTypeReference("Order"), new DomainTypeReference("Foo"),
+            RelationshipCardinality.OneToMany, []);
+        var domain = DomainTestFactory.Create("Test", [text, foo, order], [rel]);
+
+        var analysis = DomainModelAnalyzer.Analyze(domain);
+
+        await Assert.That(analysis.Diagnostics.Any(d =>
+            d.Code == DomainModelDiagnosticCodes.StructuralDuplicate)).IsTrue();
+    }
+
     // Entity inheritance was removed — no StructuralCycle test needed.
 
     [Test]

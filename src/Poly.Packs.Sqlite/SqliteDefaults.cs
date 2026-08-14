@@ -15,18 +15,18 @@ namespace Poly.Packs.Sqlite;
 ///
 /// Usage:
 /// <code>
-/// var inputs = DomainInputBuilder.CreateWithSqlPack()
+/// var inputs = DomainHostBuilder.Create().WithStorageFacets()
 ///     .AddSqliteDefaults();
 /// </code>
 /// </summary>
 public static class SqliteDefaults {
     /// <summary>
-    /// Registers SQLite type-map overrides on <paramref name="builder"/>.
+    /// Registers SQLite type-map overrides on <paramref name="builder"/> by
+    /// loading the <see cref="SqliteLibrary"/>.
     /// </summary>
-    public static DomainInputBuilder AddSqliteDefaults(this DomainInputBuilder builder) {
+    public static DomainHostBuilder AddSqliteDefaults(this DomainHostBuilder builder) {
         ArgumentNullException.ThrowIfNull(builder);
-        ApplyTypeMaps(builder.TypeMaps);
-        return builder;
+        return builder.Load(new SqliteLibrary());
     }
 
     /// <summary>

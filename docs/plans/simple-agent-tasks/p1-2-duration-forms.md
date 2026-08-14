@@ -1,7 +1,7 @@
 # p1-2 — Duration primary forms (`12 days`, `3 months`)
 
 **Difficulty:** M  
-**Status:** `[ ]`  
+**Status:** `[x]`  
 **Prereq:** task 1  
 
 ## Objective
@@ -31,8 +31,8 @@ Parse `N days` / `N months` (and optional `weeks` if trivial) as expressions tha
 dotnet run --project Poly.Tests/Poly.Tests.csproj --no-build
 ```
 
-- [ ] Duration + Now arithmetic vertical green  
-- [ ] Suite green  
+- [x] Duration + Now arithmetic vertical green  
+- [x] Suite green  
 
 ## File ownership
 
@@ -43,4 +43,6 @@ dotnet run --project Poly.Tests/Poly.Tests.csproj --no-build
 
 ## Status
 
-**Status:** Not Started  
+**Status:** Done  
+**Claimed by:** opencode (p1-2-duration-forms)  
+**Notes:** Form matches `day`/`days`/`month`/`months` only (exact lowercase). `Now`/`today` ± Duration folds in `ParseAdd` to `DateOperation` (subtract negates offset). Unknown units leave the number as a literal; leftover identifier fails parse (not a DateOperation).

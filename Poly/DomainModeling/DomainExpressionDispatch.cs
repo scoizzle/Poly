@@ -2,17 +2,34 @@ namespace Poly.DomainModeling;
 
 /// <summary>
 /// Dispatch base for the <see cref="DomainExpression"/> hierarchy.
-/// Subclasses override the methods for subtypes they handle.
+/// Subclasses override the methods for core subtypes they handle.
 /// Methods are named by the type they handle, not by the pattern.
 /// The concern (lower, print, parse) lives in the subclass name.
+///
+/// <para>Core subtypes route through the closed switch below. Pack-owned subtypes
+/// (<c>Now</c>, <c>Today</c>, <c>DateOperation</c>, <c>Duration</c> from the temporal
+/// pack) are dispatched through an <see cref="ExpressionDispatchRegistry{TResult}"/>
+/// — the explicit constructor registry, or <see cref="ExpressionDispatchRegistry{TResult}.Default"/>
+/// (the ambient product-default set). Unregistered pack IR fails closed.</para>
 /// </summary>
 public abstract class DomainExpressionDispatch<TResult> {
+    private readonly ExpressionDispatchRegistry<TResult>? _registry;
+
+    /// <param name="registry">
+    /// Optional pack handler registry. When null, concerns fall back to
+    /// <see cref="ExpressionDispatchRegistry{TResult}.Default"/> so the built-in
+    /// always-on pack reaches bare construction sites.
+    /// </param>
+    protected DomainExpressionDispatch(ExpressionDispatchRegistry<TResult>? registry = null) {
+        _registry = registry;
+    }
+
     /// <summary>
     /// Default result for expression subtypes this concern does not handle.
     /// </summary>
     protected abstract TResult Default();
 
-    // ── Methods named by the DomainExpression subtype ──
+    // ── Methods named by the core DomainExpression subtype ──
 
     protected virtual TResult PropertyAccess(PropertyAccess e) => Default();
     protected virtual TResult ParameterAccess(ParameterAccess e) => Default();
@@ -24,7 +41,6 @@ public abstract class DomainExpressionDispatch<TResult> {
     protected virtual TResult Add(Add e) => Default();
     protected virtual TResult Multiply(Multiply e) => Default();
     protected virtual TResult Divide(Divide e) => Default();
-    protected virtual TResult DateOperation(DateOperation e) => Default();
     protected virtual TResult RelationshipNavigation(RelationshipNavigation e) => Default();
     protected virtual TResult AnyExpr(AnyExpr e) => Default();
     protected virtual TResult AllExpr(AllExpr e) => Default();
@@ -37,7 +53,9 @@ public abstract class DomainExpressionDispatch<TResult> {
 
     /// <summary>
     /// Routes a <see cref="DomainExpression"/> to the appropriate handler method.
-    /// New subtypes cause a compile error here if not added to the switch.
+    /// Core subtypes use the switch; pack-owned subtypes fall through to the
+    /// registered handler registry. New core subtypes cause a compile error here
+    /// if not added to the switch.
     /// </summary>
     public TResult Route(DomainExpression expr) => expr switch {
         PropertyAccess e => PropertyAccess(e),
@@ -50,7 +68,6 @@ public abstract class DomainExpressionDispatch<TResult> {
         Add e => Add(e),
         Multiply e => Multiply(e),
         Divide e => Divide(e),
-        DateOperation e => DateOperation(e),
         RelationshipNavigation e => RelationshipNavigation(e),
         AnyExpr e => AnyExpr(e),
         AllExpr e => AllExpr(e),
@@ -60,7 +77,13 @@ public abstract class DomainExpressionDispatch<TResult> {
         And e => And(e),
         Or e => Or(e),
         Not e => Not(e),
-        _ => throw new NotSupportedException(
-            $"Expression type '{expr.GetType().Name}' is not handled by {GetType().Name}")
+        _ => RouteRegistered(expr),
     };
+
+    private TResult RouteRegistered(DomainExpression expr) {
+        var registry = _registry ?? ExpressionDispatchRegistry<TResult>.Default;
+        if (registry.TryDispatch(expr, x => Route(x), out var result))
+            return result;
+        return Default();
+    }
 }

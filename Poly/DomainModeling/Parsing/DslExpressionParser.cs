@@ -83,9 +83,9 @@ public sealed class DslExpressionParser {
             var isPlus = op.Tokens[0].Kind == DslTokenKind.Plus;
             Consume(op);
             var right = ParseMultiply();
-            left = isPlus
+            left = _forms.TryFoldBinary(left, right, isPlus) ?? (isPlus
                 ? DomainExpression.Add(left, right)
-                : DomainExpression.Subtract(left, right);
+                : DomainExpression.Subtract(left, right));
         }
         return left;
     }
@@ -113,6 +113,8 @@ public sealed class DslExpressionParser {
                 _c.Advance();
                 if (long.TryParse(numText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var longVal))
                     return DomainExpression.Literal(longVal);
+                if (double.TryParse(numText, NumberStyles.Float, CultureInfo.InvariantCulture, out var doubleVal))
+                    return DomainExpression.Literal(doubleVal);
                 return DomainExpression.Literal(numText);
 
             case DslTokenKind.StringLiteral:

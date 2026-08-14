@@ -1,6 +1,7 @@
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Evolution;
+using Poly.DomainModeling.Packs;
 using Poly.DomainModeling.Parsing;
 using Poly.Introspection;
 
@@ -8,7 +9,7 @@ namespace Poly.Tests.DomainModeling.Analysis;
 
 public class DomainModelAnalyzerContextTests {
     private static Domain ParseDomain(string poly) {
-        var ctx = DomainInputBuilder.CreateWithSqlPack().Build();
+        var ctx = ExtensionCatalog.Core.Authoring;
         var parser = new PolyDslParser(poly, ctx.Parser);
         var changes = parser.Parse();
         var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(changes);

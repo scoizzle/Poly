@@ -2,7 +2,6 @@ namespace Poly.DomainModeling;
 
 public abstract record DomainExpression : DomainObject {
     // Factory helpers for ergonomic construction (builders and tests)
-
     public static DomainExpression Property(string name) =>
         new PropertyAccess(Guard.ThrowIfNullOrEmpty(name));
 
@@ -32,9 +31,6 @@ public abstract record DomainExpression : DomainObject {
 
     public static DomainExpression Divide(DomainExpression left, DomainExpression right) =>
         new Divide(left, right);
-
-    public static DomainExpression DateOp(DomainExpression date, DomainExpression offset, DateOperationKind kind) =>
-        new DateOperation(date, offset, kind);
 
     public static DomainExpression RelationshipNav(string relationshipName, DomainExpression targetProperty) =>
         new RelationshipNavigation(Guard.ThrowIfNullOrEmpty(relationshipName), targetProperty);
@@ -172,16 +168,6 @@ public sealed record Divide(
     DomainExpression Right
 ) : DomainExpression {
     public sealed override IEnumerable<Node?> Children => [Left, Right];
-}
-
-public enum DateOperationKind { AddDays, AddMonths, DiffDays }
-
-public sealed record DateOperation(
-    DomainExpression Date,
-    DomainExpression Offset,
-    DateOperationKind Kind
-) : DomainExpression {
-    public sealed override IEnumerable<Node?> Children => [Date, Offset];
 }
 
 public sealed record RelationshipNavigation(

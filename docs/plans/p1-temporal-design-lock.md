@@ -1,8 +1,10 @@
 # P1 temporal — design lock (research spike output)
 
 **Date:** 2026-08-06  
-**Status:** **Design lock complete.** Implementation suite ready: [`simple-agent-tasks/p1-README.md`](simple-agent-tasks/p1-README.md) — admit explicitly (prefer after mcp-minify / mut-safety).  
-**Prereq:** Grammar GI + **E1** done (2026-08-07; plan archived under `archive/completed-2026-08-mid/grammar-integration.md`). Pack uses `ExpressionFormRegistry` / open forms.  
+**Status:** **Suite complete** (2026-08-13). Implementation suite done: [`simple-agent-tasks/p1-README.md`](simple-agent-tasks/p1-README.md) — DONE; gate [`simple-agent-tasks/p1-gate.md`](simple-agent-tasks/p1-gate.md) `[x]`. 2147/2147 green. Authoring/analysis/print-round-trip shipped; runtime clock eval (design-lock Q4 fixed `TimeProvider` seam) is a recorded follow-up, not shipped.
+
+**Pre-ship 2026-08-13 (🟡 filed, not blocking authoring):** shipped create/assign defaults use local `DateTime.Today` for `today`; VM/export lowering of a `Today` node still emits `DateOnly.FromDateTime(DateTime.UtcNow)`. Reconcile both to `TimeProvider` when Q4 ships. `ExpressionTypeAnalyzer.CategoryOf` still classifies IR property types `Time`/`Duration` as Date; DSL does not author those as primitives (`Hold: Duration` is a nav). DateOperation analysis now rejects them as date operands.  
+**Prereq:** Grammar GI + **E1** done (2026-08-07; plan archived under `archive/completed-2026-08-mid/grammar-integration.md`). Pack uses `ExpressionFormRegistry` / open forms **and matching print forms** ([`pack-host-2026-08-13.md`](pack-host-2026-08-13.md) wave 1; admit p1 as wave 3 after the host).  
 **Source research:** [`p1-temporal-research.md`](p1-temporal-research.md) (Q1–Q5 answered 2026-08-06)  
 **Parent vision:** [`domain-dsl-absorption-proposals.md`](domain-dsl-absorption-proposals.md) § P1 · experiment [`docs/experiments/DOMAIN-DSL-SPEC.md`](../experiments/DOMAIN-DSL-SPEC.md)
 
@@ -33,9 +35,7 @@
 
 ### Q1 — Core seed vs built-in pack + specialization registry
 
-- **Core (substrate):** extension registries (units, binary specializations); generic `DomainExpression` forms packs target — `DateOperation` stays core as the *resolved* shape; open grammar patterns for `N unitIdent`, `Now`/`today`, `±`; fail-closed "unknown specialization"; generic lowering of *already resolved* IR → Syntax.
-- **Built-in temporal pack (product default):** `Date`/`DateTime` usable in authoring; `Now`/`today`; units `days`/`months`/(optional `weeks`); specializers `date ± duration` → `DateOperation` kind, comparisons temporal×temporal; analysis rules; register patterns via **GI-4**; map resolved IR → CLR.
-- **Optional packs later:** business days, fiscal calendars, alternate clocks — same seams.
+- **Contained vertical slice (revised 2026-08-13):** the built-in temporal pack owns **everything** temporal — the IR (`Now`, `Today`, `DateOperation`, `Duration` + enums), the parse forms (`NowForm`, `DurationForm`), the binary fold (`DateOperationFold`), the print binders + grammar patterns, the runtime/export default resolvers, and the pack class — all under `Poly/DomainModeling/Packs/Temporal/` (namespace `Poly.DomainModeling.Packs.Temporal`). Core never names pack types: `DomainExpressionDispatch` falls through to an open `ExpressionDispatchRegistry<TResult>` (ambient product-default set, populated by the pack's module initializer) for pack-owned subtypes; the analyzer routes temporal inference + checks and the runtime routes default resolution through the same registries. The `DomainExpression.DateOp` factory was removed (pack constructs `DateOperation` directly). This supersedes the earlier "DateOperation stays core as the resolved shape" phrasing — the IR is pack-owned, dispatched through the core `DomainExpression` seam.
 
 ### Q2 — Product-minimal authoring
 

@@ -1,6 +1,7 @@
 namespace Poly.DomainModeling;
 
 using Poly.DomainModeling.Analysis;
+using Poly.DomainModeling.Constraints;
 
 /// <summary>
 /// Minimal in-memory store for <see cref="DomainEntityInstance"/> objects.
@@ -41,8 +42,29 @@ public sealed class DomainInstanceStore {
     /// <summary>Registers an instance. Called after creation.</summary>
     public void Add(DomainEntityInstance instance) {
         ArgumentNullException.ThrowIfNull(instance);
+        RejectUniqueCollision(instance, except: null);
         instance.Store = this;
         _instances.Add(instance);
+    }
+
+    internal void RejectUniqueCollision(DomainEntityInstance candidate, DomainEntityInstance? except) {
+        foreach (var prop in candidate.Entity.Properties) {
+            if (!prop.Constraints.OfType<UniqueConstraint>().Any())
+                continue;
+            if (!candidate.TryGetRaw(prop.Name, out var value) || value is null)
+                continue;
+            foreach (var other in _instances) {
+                if (ReferenceEquals(other, except) || ReferenceEquals(other, candidate))
+                    continue;
+                if (!string.Equals(other.Entity.Name, candidate.Entity.Name, StringComparison.Ordinal))
+                    continue;
+                if (!other.TryGetRaw(prop.Name, out var otherValue))
+                    continue;
+                if (Equals(otherValue, value))
+                    throw new InvalidOperationException(
+                        $"Unique constraint violated: '{prop.Name}' value is already used on another '{candidate.Entity.Name}'.");
+            }
+        }
     }
 
     /// <summary>Removes an instance (e.g. after delete effect). Also drops its links.</summary>
@@ -150,7 +172,7 @@ public sealed class DomainInstanceStore {
         if (incomingContracts.Count == 0) return;
 
         // For each subscriber: stage-scoped plan first, then always-active entity-level plan.
-        foreach (var subscriber in _instances) {
+        foreach (var subscriber in _instances.ToArray()) {
 
             // --- Stage-scoped (requires resolvable current stage) ---
             if (subscriber.CurrentStage is not null) {
@@ -246,7 +268,9 @@ public sealed class DomainInstanceStore {
                 if (allLinkedTargets.Count == 0) continue;
 
                 var matchedCount = allLinkedTargets.Count(t =>
-                    string.Equals(t.CurrentStage, targetStageName, StringComparison.Ordinal));
+                    t.CurrentStage is not null
+                    && entry.StageNames.Any(sn =>
+                        string.Equals(sn, t.CurrentStage, StringComparison.Ordinal)));
 
                 bool shouldFire = entry.Quantifier switch {
                     StageSubscriptionQuantifier.Any => matchedCount >= 1,

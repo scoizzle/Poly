@@ -4,6 +4,7 @@ using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Lowering;
+using Poly.DomainModeling.Packs;
 using Poly.DomainModeling.Parsing;
 using Poly.DslCompiler;
 using Poly.Interpretation.CSharp;
@@ -18,7 +19,7 @@ namespace Poly.Tests.DomainModeling.Lowering;
 /// </summary>
 public class DbContextGeneratorTests {
     private static Domain ParseDomain(string poly) {
-        var ctx = DomainInputBuilder.CreateWithSqlPack().Build();
+        var ctx = ExtensionCatalog.Core.Authoring;
         var parser = new PolyDslParser(poly, ctx.Parser);
         var changes = parser.Parse();
         var emptyDomain = DomainTestFactory.Create("_", [], []);

@@ -3,13 +3,14 @@ using System.Text;
 using Poly.DomainModeling;
 using Poly.DomainModeling.Constraints;
 using Poly.DomainModeling.Effects;
+using Poly.Grammar;
 
 namespace Poly.DomainModeling.Parsing;
 
 /// <summary>
 /// Canonical printer for the product Poly DSL (domain-graph walk).
-/// GI-6: emit surface for fixed tokens is also available via <see cref="DslTokenWriter"/>
-/// + Grammar <c>Printer</c>; this type remains the product print façade.
+/// GI-6: expression print resolves binders → Grammar <c>Printer</c> →
+/// <see cref="DslTokenWriter"/>; this type remains the product print façade.
 /// Converts a committed <see cref="Domain"/> to stable, deterministic .poly text.
 ///
 /// Output is idempotent: printing the same domain twice produces identical text.
@@ -21,10 +22,34 @@ namespace Poly.DomainModeling.Parsing;
 public sealed class DomainDslPrinter {
     private readonly StringBuilder _sb = new();
     private readonly AnnotationRegistry? _annotations;
+    private readonly ExpressionPrintRegistry _expressionBinders = new();
+    private readonly Printer<DslToken, DslTokenKind> _printTable;
 
-    /// <summary>Creates a printer with an optional annotation registry for facet printing.</summary>
-    public DomainDslPrinter(AnnotationRegistry? annotations = null) {
-        _annotations = annotations;
+    /// <summary>Creates a printer with default parser inputs.</summary>
+    public DomainDslPrinter() : this(parserInputs: null) {
+    }
+
+    /// <summary>Creates a printer with an annotation registry for facet printing.</summary>
+    public DomainDslPrinter(AnnotationRegistry annotations)
+        : this(parserInputs: new DomainParserInputs(annotations)) {
+    }
+
+    /// <summary>
+    /// Creates a printer with the same inputs the parser would use (annotations + E1
+    /// expression forms). Expression printing resolves binders → Grammar Printer →
+    /// <see cref="DslTokenWriter"/>. Pack binders register first so a pack owns the IR
+    /// it produced; core binders then fill the built-in surface.
+    /// </summary>
+    public DomainDslPrinter(DomainParserInputs? parserInputs) {
+        _annotations = parserInputs?.Annotations;
+        parserInputs?.ExpressionForms.ContributePrintMappings(_expressionBinders);
+        CoreExpressionPrintBinders.Register(_expressionBinders);
+        var grammar = DslGrammar.Build(g => {
+            parserInputs?.Annotations.ContributePatterns(g);
+            parserInputs?.ExpressionForms.ContributeGrammarPatterns(g);
+        });
+        _printTable = new Printer<DslToken, DslTokenKind>(
+            grammar, DslGrammar.CanonicalText, () => new DslTokenWriter());
     }
 
     /// <summary>
@@ -36,6 +61,10 @@ public sealed class DomainDslPrinter {
 
         // Domain header
         _sb.AppendLine($"domain {domain.Name}");
+        foreach (var extensionId in domain.Extensions) {
+            _sb.Append("uses ");
+            _sb.AppendLine(extensionId);
+        }
         _sb.AppendLine();
 
         // Entities (sorted by name for stability)
@@ -50,8 +79,23 @@ public sealed class DomainDslPrinter {
             _sb.AppendLine();
         }
 
+        foreach (var valueType in domain.Types.OfType<ValueType>().OrderBy(v => v.Name, StringComparer.Ordinal)) {
+            PrintValueType(valueType);
+            _sb.AppendLine();
+        }
+
         foreach (var entity in entities) {
             PrintEntity(entity);
+            _sb.AppendLine();
+        }
+
+        foreach (var contract in domain.ImportedContracts.OrderBy(c => c.Name, StringComparer.Ordinal)) {
+            PrintContract(contract);
+            _sb.AppendLine();
+        }
+
+        foreach (var binding in domain.ContractBindings.OrderBy(b => b.Name, StringComparer.Ordinal)) {
+            PrintBinding(binding);
             _sb.AppendLine();
         }
 
@@ -66,6 +110,85 @@ public sealed class DomainDslPrinter {
         _sb.AppendLine("}");
         _sb.AppendLine();
     }
+
+    private void PrintValueType(ValueType valueType) {
+        _sb.AppendLine($"{valueType.Name}: value {{");
+        foreach (var prop in valueType.Properties) {
+            _sb.Append("  ");
+            _sb.Append(prop.Name);
+            _sb.Append(": ");
+            _sb.Append(prop.Type.TypeName);
+            foreach (var c in prop.Constraints) {
+                var text = PrintConstraint(c);
+                if (text.Length == 0)
+                    continue;
+                _sb.Append(' ');
+                _sb.Append(text);
+            }
+            _sb.AppendLine();
+        }
+        _sb.AppendLine("}");
+    }
+
+    private void PrintContract(ImportedContract contract) {
+        var kind = contract.SourceKind == ContractSourceKind.ExternalProvider ? "external" : "internal";
+        _sb.Append(contract.Name);
+        _sb.Append(": contract ");
+        _sb.Append(kind);
+        _sb.Append(' ');
+        _sb.Append(NeedsQuotes(contract.SourceIdentifier) ? $"\"{EscapeStringLiteral(contract.SourceIdentifier)}\"" : contract.SourceIdentifier);
+        _sb.Append(' ');
+        _sb.Append(NeedsQuotes(contract.Version) ? $"\"{EscapeStringLiteral(contract.Version)}\"" : contract.Version);
+        _sb.AppendLine(" {");
+        foreach (var vt in contract.Types) {
+            _sb.Append("  ");
+            _sb.Append(vt.Name);
+            _sb.AppendLine(": value {");
+            foreach (var prop in vt.Properties) {
+                _sb.Append("    ");
+                _sb.Append(prop.Name);
+                _sb.Append(": ");
+                _sb.Append(prop.Type.TypeName);
+                foreach (var c in prop.Constraints) {
+                    var text = PrintConstraint(c);
+                    if (text.Length == 0)
+                        continue;
+                    _sb.Append(' ');
+                    _sb.Append(text);
+                }
+                _sb.AppendLine();
+            }
+            _sb.AppendLine("  }");
+        }
+        foreach (var ep in contract.Endpoints) {
+            _sb.Append("  ");
+            _sb.Append(ep.Name);
+            _sb.Append(": ");
+            _sb.Append(ep.Direction == ContractEndpointDirection.Inbound ? "inbound" : "outbound");
+            _sb.Append(' ');
+            _sb.Append(ep.Kind == ContractEndpointKind.Operation ? "operation" : "event");
+            _sb.Append(' ');
+            _sb.Append(ep.PayloadType.TypeName);
+            _sb.AppendLine();
+        }
+        _sb.AppendLine("}");
+    }
+
+    private void PrintBinding(ContractBinding binding) {
+        _sb.Append(binding.Name);
+        _sb.Append(": bind ");
+        _sb.Append(binding.ContractName);
+        _sb.Append(' ');
+        _sb.Append(binding.EndpointName);
+        _sb.Append(" to ");
+        _sb.Append(binding.ActionName);
+        _sb.Append(' ');
+        _sb.Append(binding.LocalParameterName);
+        _sb.AppendLine();
+    }
+
+    private static bool NeedsQuotes(string value) =>
+        value.Length == 0 || value.Any(c => !char.IsLetterOrDigit(c) && c != '_');
 
     private void PrintEntity(Entity entity) {
         _sb.Append(entity.Name);
@@ -86,8 +209,11 @@ public sealed class DomainDslPrinter {
             _sb.Append(prop.Type.TypeName);
 
             foreach (var c in prop.Constraints) {
+                var text = PrintConstraint(c);
+                if (text.Length == 0)
+                    continue;
                 _sb.Append(' ');
-                _sb.Append(PrintConstraint(c));
+                _sb.Append(text);
             }
 
             foreach (var facet in prop.Facets) {
@@ -221,14 +347,17 @@ public sealed class DomainDslPrinter {
             .Select(p => p.Name.Substring(4)) // "not_X" → "X"
             .ToList();
 
-        if (positiveRequires.Count > 0 || negatedRequires.Count > 0) {
+        if (positiveRequires.Count > 0) {
             _sb.AppendLine();
             _sb.Append(indent);
             _sb.Append("  require ");
-            var parts = new List<string>();
-            parts.AddRange(positiveRequires);
-            parts.AddRange(negatedRequires.Select(n => $"not {n}"));
-            _sb.Append(string.Join(", ", parts));
+            _sb.Append(string.Join(", ", positiveRequires));
+        }
+        foreach (var name in negatedRequires) {
+            _sb.AppendLine();
+            _sb.Append(indent);
+            _sb.Append("  require not ");
+            _sb.Append(name);
         }
 
         _sb.AppendLine(" {");
@@ -359,7 +488,6 @@ public sealed class DomainDslPrinter {
             }
             var first = true;
             foreach (var init in create.Initializers) {
-                if (!first) _sb.Append(',');
                 _sb.Append(' ');
                 _sb.Append(init.PropertyName);
                 _sb.Append(": ");
@@ -377,7 +505,6 @@ public sealed class DomainDslPrinter {
             _sb.Append(" {");
             var firstInit = true;
             foreach (var init in createIn.Initializers) {
-                if (!firstInit) _sb.Append(',');
                 _sb.Append(' ');
                 _sb.Append(init.PropertyName);
                 _sb.Append(": ");
@@ -479,6 +606,37 @@ public sealed class DomainDslPrinter {
     }
 
     /// <summary>
+    /// Table print for a bound expression: Grammar <see cref="Printer{TToken,TTokenKind}"/>
+    /// → <see cref="DslTokenWriter"/>. A binder-supplied fill carries the pack spelling
+    /// (e.g. <c>MAGIC</c>, <c>12 days</c>); otherwise the built-in per-type fill supplies
+    /// identifier/literal text. Returns null when no binder matches (dispatch fallback).
+    /// </summary>
+    private string? TryPrintBoundExpression(DomainExpression expr) {
+        if (!_expressionBinders.TryMap(expr, out var binding))
+            return null;
+        return binding.Fill is { } fill
+            ? _printTable.Print(binding.Rule, binding.Pattern, fill)
+            : _printTable.Print(binding.Rule, binding.Pattern, ctx => FillPrimaryText(ctx, expr));
+    }
+
+    private void FillPrimaryText(PrintContext<DslToken, DslTokenKind> ctx, DomainExpression expr) {
+        switch (expr) {
+            case PropertyAccess p:
+                ctx.Emit(p.Name);
+                return;
+            case ParameterAccess p:
+                ctx.Emit(p.Name);
+                return;
+            case Literal l:
+                ctx.Emit(PrintLiteral(l));
+                return;
+            default:
+                throw new InvalidOperationException(
+                    $"Expression type '{expr.GetType().Name}' has no table print fill.");
+        }
+    }
+
+    /// <summary>
     /// Expression dispatch for printing. Methods are named by the Expression subtype.
     /// The verb (print) comes from the containing DomainDslPrinter.
     /// </summary>
@@ -487,12 +645,20 @@ public sealed class DomainDslPrinter {
 
         private ExpressionPrinter(DomainDslPrinter printer) => _printer = printer;
 
-        protected override string Default() => $"?{CurrentExpr?.GetType().Name}";
+        protected override string Default() =>
+            throw new InvalidOperationException(
+                $"Cannot print expression type '{CurrentExpr?.GetType().Name}': no registered print binder or pattern.");
+
         private DomainExpression? CurrentExpr { get; set; }
 
         public static string Run(DomainDslPrinter printer, DomainExpression expr) {
             var ep = new ExpressionPrinter(printer) { CurrentExpr = expr };
-            return ep.Route(expr);
+            return ep.Print(expr);
+        }
+
+        private string Print(DomainExpression expr) {
+            CurrentExpr = expr;
+            return _printer.TryPrintBoundExpression(expr) ?? Route(expr);
         }
 
         protected override string PropertyAccess(PropertyAccess p) => p.Name;
@@ -515,7 +681,16 @@ public sealed class DomainDslPrinter {
             $"({Run(_printer, o.Left)} or {Run(_printer, o.Right)})";
 
         protected override string Not(Not n) =>
-            $"not {Run(_printer, n.Operand)}";
+            n.Operand is Poly.DomainModeling.Comparison
+                or Poly.DomainModeling.And
+                or Poly.DomainModeling.Or
+                or Poly.DomainModeling.Add
+                or Poly.DomainModeling.Subtract
+                or Poly.DomainModeling.Multiply
+                or Poly.DomainModeling.Divide
+                or Poly.DomainModeling.Not
+                ? $"not ({Run(_printer, n.Operand)})"
+                : $"not {Run(_printer, n.Operand)}";
 
         protected override string Add(Add a) =>
             $"({Run(_printer, a.Left)} + {Run(_printer, a.Right)})";
@@ -612,7 +787,7 @@ public sealed class DomainDslPrinter {
             : $"length({l.MinLength}, {l.MaxLength})",
         PatternConstraint p => $"pattern(\"{EscapeStringLiteral(p.Pattern)}\")",
         DefaultValueConstraint dv => $"default({PrintDomainExpression(dv.Expression)})",
-        EqualityConstraint e => $"/* equals({PrintLiteralValue(e.ExpectedValue)}) */", // legacy
+        EqualityConstraint => "",
         _ => $"?{constraint.GetType().Name}",
     };
 

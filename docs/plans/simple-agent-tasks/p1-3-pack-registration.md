@@ -1,7 +1,8 @@
 # p1-3 — Built-in temporal pack registration
 
 **Difficulty:** M  
-**Status:** `[ ]`  
+**Status:** `[x]`  
+**Claimed by:** p1-3  
 **Prereq:** tasks 1–2  
 
 ## Objective
@@ -22,8 +23,8 @@ Product default input set (or explicit `CreateWithTemporalPack`) registers tempo
 dotnet run --project Poly.Tests/Poly.Tests.csproj --no-build
 ```
 
-- [ ] Pack registration single entry point  
-- [ ] Suite green  
+- [x] Pack registration single entry point  
+- [x] Suite green  
 
 ## File ownership
 
@@ -33,4 +34,4 @@ dotnet run --project Poly.Tests/Poly.Tests.csproj --no-build
 
 ## Status
 
-**Status:** Not Started  
+**Status:** Done  

@@ -4,6 +4,7 @@ using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Effects;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Lowering;
+using Poly.DomainModeling.Packs;
 using Poly.DomainModeling.Parsing;
 using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
@@ -457,7 +458,7 @@ public class InfrastructureAnalyzerTests {
     // ╚══════════════════════════════════════════════════════════╝
 
     private static TestInfra AnalyzeWithPacks(string poly) {
-        var ctx = DomainInputBuilder.CreateWithSqlPack().Build();
+        var ctx = ExtensionCatalog.Core.Authoring;
         var parser = new PolyDslParser(poly, ctx.Parser);
         var changes = parser.Parse();
         var emptyDomain = DomainTestFactory.Create("_", [], []);
@@ -628,7 +629,7 @@ public class InfrastructureAnalyzerTests {
             Item: entity { Name: Text }
             """);
 
-        var ctx = DomainInputBuilder.Create()
+        var ctx = DomainHostBuilder.Create()
             .AddStorageConvention(new TestPrefixConvention("p_"))
             .Build();
         ctx.Analysis.TypeMaps.OverrideSqlColumnType("Text", "text");

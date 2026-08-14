@@ -14,7 +14,7 @@ namespace Poly.Packs.SqlServer;
 ///
 /// Usage:
 /// <code>
-/// var inputs = DomainInputBuilder.CreateWithSqlPack()
+/// var inputs = DomainHostBuilder.Create().WithStorageFacets()
 ///     .AddSqlServerDefaults();
 /// </code>
 /// </summary>
@@ -23,13 +23,9 @@ public static class SqlServerDefaults {
     /// Registers SQL Server type-map overrides and the identifier-length
     /// convention on <paramref name="builder"/>.
     /// </summary>
-    public static DomainInputBuilder AddSqlServerDefaults(this DomainInputBuilder builder) {
+    public static DomainHostBuilder AddSqlServerDefaults(this DomainHostBuilder builder) {
         ArgumentNullException.ThrowIfNull(builder);
-
-        ApplyTypeMaps(builder.TypeMaps);
-        builder.AddStorageConvention(new SqlServerIdentifierConvention());
-
-        return builder;
+        return builder.Load(new SqlServerLibrary());
     }
 
     /// <summary>

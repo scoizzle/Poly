@@ -1,4 +1,5 @@
 using Poly.DomainModeling;
+using Poly.DomainModeling.Packs.Temporal;
 
 namespace Poly.Tests.DomainModeling.Runtime;
 
@@ -19,7 +20,7 @@ public class DomainExpressionRewriteIdentityTests {
         var diff = DomainExpression.Subtract(sum, lit);                          // Subtract
         var prod = DomainExpression.Multiply(diff, lit);                         // Multiply
         var quot = DomainExpression.Divide(prod, lit);                           // Divide
-        var date = DomainExpression.DateOp(lit, lit, DateOperationKind.AddDays); // DateOperation
+        var date = new DateOperation(lit, lit, DateOperationKind.AddDays); // DateOperation
         var nav = DomainExpression.RelationshipNav("orders",
             DomainExpression.Property("Total"));                                 // RelationshipNavigation
         var exists = DomainExpression.Exists(nav);                               // Exists

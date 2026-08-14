@@ -165,7 +165,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
             // Discovery round5 F2/F3.
             if (entityProp is not null
                 && a.Value is PropertyAccess keywordAccess
-                && keywordAccess.Name is "now" or "utcnow" or "today" or "guid") {
+                && keywordAccess.Name is "Now" or "UtcNow" or "Today" or "Guid") {
                 var adapted = LowerDefaultExpression(
                     keywordAccess, new NamedTypeReference(entityProp.Type.TypeName));
                 if (adapted is not null) value = adapted;
@@ -598,19 +598,23 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     /// Returns null for literal defaults (handled directly by the exporter).
     /// </summary>
     internal static Node? LowerDefaultExpression(DomainExpression expr, Node? typeHint = null) {
-        if (expr is not PropertyAccess pa) return null;
         var targetName = typeHint is NamedTypeReference ntr ? ntr.TypeName : null;
+        // Pack-owned clock nodes (Now/Today) lower through the ambient default registry —
+        // core never names pack IR.
+        if (ExpressionDefaultResolverRegistry.Default.TryResolve(expr, targetName, out _, out var exportNode))
+            return exportNode;
+        if (expr is not PropertyAccess pa) return null;
         bool isDateTimeTarget = targetName is "DateTime" or "Timestamp";
         return pa.Name switch {
-            "now" or "utcnow" => isDateTimeTarget
+            "Now" or "UtcNow" => isDateTimeTarget
                 ? new Member(new NamedTypeReference("DateTime"), "UtcNow")
                 : new Invoke(new Member(new NamedTypeReference("DateOnly"), "FromDateTime"),
                     new Member(new NamedTypeReference("DateTime"), "UtcNow")),
-            "today" => isDateTimeTarget
+            "Today" => isDateTimeTarget
                 ? new Member(new NamedTypeReference("DateTime"), "Today")
                 : new Invoke(new Member(new NamedTypeReference("DateOnly"), "FromDateTime"),
                     new Member(new NamedTypeReference("DateTime"), "Today")),
-            "guid" => targetName is "Text" or "String"
+            "Guid" => targetName is "Text" or "String"
                 ? new Invoke(new Member(
                     new Invoke(new Member(new NamedTypeReference("Guid"), "NewGuid")), "ToString"))
                 : new Invoke(new Member(new NamedTypeReference("Guid"), "NewGuid")),

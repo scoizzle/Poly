@@ -3,6 +3,7 @@ using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Lowering;
+using Poly.DomainModeling.Packs;
 using Poly.DomainModeling.Parsing;
 using Poly.Interpretation.CSharp;
 using Poly.Packs.Sqlite;
@@ -18,7 +19,7 @@ public enum CompileMode {
     Entities,
     /// <summary>Entity types + EF Core DbContext.</summary>
     Db,
-    /// <summary>Entity types + DbContext + Minimal API. (Not yet implemented)</summary>
+    /// <summary>Entity types + EF Core DbContext + Minimal API Program.cs + demo.http.</summary>
     All,
 }
 
@@ -43,6 +44,8 @@ public enum DbmsPack {
 /// the same pipeline behind the MCP <c>export_domain_to_csharp</c> tool.
 /// </summary>
 public sealed class DslCompiler {
+    private readonly List<IArtifactContributor> _artifactContributors = [];
+
     /// <summary>
     /// Result of a compilation attempt.
     /// </summary>
@@ -51,6 +54,17 @@ public sealed class DslCompiler {
         IReadOnlyList<(string FileName, string Source)>? Files,
         IReadOnlyList<string>? Errors
     );
+
+    /// <summary>
+    /// Registers an artifact contributor, invoked after analysis succeeds to add
+    /// extra output files (analyzed domain + analysis result). Structural analysis
+    /// failures fail closed first — contributors are never asked.
+    /// </summary>
+    public DslCompiler AddArtifactContributor(IArtifactContributor contributor) {
+        ArgumentNullException.ThrowIfNull(contributor);
+        _artifactContributors.Add(contributor);
+        return this;
+    }
 
     /// <summary>
     /// Compiles .poly DSL text into C# source files (entities only — default mode).
@@ -72,6 +86,18 @@ public sealed class DslCompiler {
         Compile(polyText, mode, CreateInputs(dbms), dbms);
 
     /// <summary>
+    /// Compiles .poly DSL text with explicit domain libraries loaded in order.
+    /// Each library joins parse/print/analysis via <see cref="DomainHostBuilder.Load"/>;
+    /// the library list is the model (<c>DbmsPack</c> is a CLI convenience alias for
+    /// the built-in persistence libraries). The derived <see cref="DbmsPack"/> drives Minimal API
+    /// provider selection in <c>--mode all</c>.
+    /// </summary>
+    public CompileResult Compile(string polyText, CompileMode mode, params IDomainLibrary[] libraries) {
+        ArgumentNullException.ThrowIfNull(libraries);
+        return Compile(polyText, mode, CreateInputs(libraries), ResolveDbms(libraries));
+    }
+
+    /// <summary>
     /// Compiles .poly DSL text with explicit parse/analyze inputs.
     /// </summary>
     public CompileResult Compile(
@@ -86,7 +112,7 @@ public sealed class DslCompiler {
     /// and a DBMS pack (the pack drives Program.cs provider selection in
     /// <c>--mode all</c>).
     /// </summary>
-    public CompileResult Compile(string polyText, CompileMode mode, DomainInputSet inputs, DbmsPack dbms) =>
+    public CompileResult Compile(string polyText, CompileMode mode, DomainHost inputs, DbmsPack dbms) =>
         Compile(polyText, mode, inputs.Parser, inputs.Analysis, dbms);
 
     /// <summary>
@@ -108,11 +134,16 @@ public sealed class DslCompiler {
         // ── 1. Parse ─────────────────────────────────────────────
         List<DomainChange> changes;
         try {
-            var parser = new PolyDslParser(polyText, parserInputs);
-            changes = parser.Parse();
+            var seed = SeedFor(dbms);
+            var parseHost = DomainCompilation.HostForSource(polyText, seed, CompilerCatalog);
+            var parser = new PolyDslParser(polyText, parseHost.Parser);
+            changes = DomainCompilation.WithSeed(parser.Parse(), seed).ToList();
         }
         catch (FormatException ex) {
             return Fail($"Parse error: {ex.Message}");
+        }
+        catch (InvalidOperationException ex) {
+            return Fail(ex.Message);
         }
 
         if (changes.Count == 0)
@@ -150,7 +181,32 @@ public sealed class DslCompiler {
         // ── 3. Generate C# ───────────────────────────────────────
         var domain = outcome.Root;
         try {
-            var files = GenerateAllFiles(domain, outcome.Analysis, mode, analysisInputs, dbms);
+            var hostAnalysis = domain.Extensions.Count > 0
+                ? domain.ResolveHost(CompilerCatalog).Analysis
+                : analysisInputs;
+            var output = GenerateAllFiles(domain, outcome.Analysis, mode, hostAnalysis);
+            var files = output.Files.ToList();
+
+            // CompileMode.All emits Program.cs + demo.http through the artifact-contributor
+            // hook (composition-root host contributor), alongside any user-registered ones.
+            // The host contributor runs first to preserve the historical file order
+            // (Program.cs + demo.http before extra contributed files).
+            var contributors = new List<IArtifactContributor>();
+            if (mode == CompileMode.All) {
+                if (output.Storage is null || output.Behavior is null
+                    || output.Aggregate is null || output.DbContextName is null) {
+                    throw new InvalidOperationException(
+                        "CompileMode.All requires storage, behavior, and aggregate analysis metadata.");
+                }
+                contributors.Add(new MinimalApiHostArtifactContributor(
+                    output.Storage, output.Behavior, output.Aggregate, output.DbContextName,
+                    dbms: dbms));
+            }
+            contributors.AddRange(_artifactContributors);
+
+            foreach (var contributor in contributors)
+                foreach (var file in contributor.Contribute(domain, outcome.Analysis))
+                    files.Add(file);
             return new CompileResult(Success: true, Files: files, Errors: null);
         }
         catch (Exception ex) {
@@ -165,25 +221,71 @@ public sealed class DslCompiler {
     public CompileResult Compile(
         string polyText,
         CompileMode mode,
-        DomainInputSet inputs) {
+        DomainHost inputs) {
         ArgumentNullException.ThrowIfNull(inputs);
         return Compile(polyText, mode, inputs.Parser, inputs.Analysis);
     }
+
+    private static readonly ExtensionCatalog CompilerCatalog = ExtensionCatalog.Core
+        .With(new SqliteLibrary())
+        .With(new SqlServerLibrary());
+
+    private static IReadOnlyList<string> SeedFor(DbmsPack dbms) => dbms switch {
+        DbmsPack.Sqlite => [.. ExtensionCatalog.ProductAuthoring, "sqlite"],
+        DbmsPack.SqlServer => [.. ExtensionCatalog.ProductAuthoring, "sqlserver"],
+        _ => ExtensionCatalog.ProductAuthoring,
+    };
 
     /// <summary>
     /// Builds explicit parse/analyze inputs for a DBMS pack selection.
     /// Always includes portable <c>column</c>/<c>table</c> annotation syntax.
     /// </summary>
-    public static DomainInputSet CreateInputs(DbmsPack dbms) {
-        var builder = DomainInputBuilder.CreateWithSqlPack();
-        var configured = dbms switch {
-            DbmsPack.Generic => builder,
-            DbmsPack.Sqlite => builder.AddSqliteDefaults(),
-            DbmsPack.SqlServer => builder.AddSqlServerDefaults(),
-            _ => throw new ArgumentOutOfRangeException(nameof(dbms), dbms, "Unknown DBMS pack."),
-        };
+    public static DomainHost CreateInputs(DbmsPack dbms) =>
+        CreateInputs(DbmsPacks(dbms));
 
-        return configured.Build();
+    /// <summary>
+    /// Builds explicit parse/analyze inputs with the given domain libraries loaded
+    /// in order. Always includes portable <c>column</c>/<c>table</c> annotation
+    /// syntax (compiler host); duplicate library ids fail closed in
+    /// <see cref="DomainHostBuilder.Load"/>.
+    /// </summary>
+    public static DomainHost CreateInputs(params IDomainLibrary[] libraries) {
+        ArgumentNullException.ThrowIfNull(libraries);
+        var builder = DomainHostBuilder.Create().WithStorageFacets();
+        foreach (var library in libraries)
+            builder.Load(library);
+        return builder.Build();
+    }
+
+    /// <summary>
+    /// The built-in persistence libraries behind each <see cref="DbmsPack"/> alias.
+    /// The enum has no arms for future vendors — they register as
+    /// <see cref="IDomainLibrary"/> only.
+    /// </summary>
+    private static IDomainLibrary[] DbmsPacks(DbmsPack dbms) => dbms switch {
+        DbmsPack.Generic => [],
+        DbmsPack.Sqlite => [new SqliteLibrary()],
+        DbmsPack.SqlServer => [new SqlServerLibrary()],
+        _ => throw new ArgumentOutOfRangeException(nameof(dbms), dbms, "Unknown DBMS pack."),
+    };
+
+    /// <summary>
+    /// Derives the Minimal API provider selection from loaded library ids
+    /// (last matching known id wins; unknown libraries fall back to generic).
+    /// </summary>
+    private static DbmsPack ResolveDbms(IReadOnlyCollection<IDomainLibrary> libraries) {
+        var dbms = DbmsPack.Generic;
+        foreach (var library in libraries) {
+            switch (library.Id) {
+                case "sqlite":
+                    dbms = DbmsPack.Sqlite;
+                    break;
+                case "sqlserver":
+                    dbms = DbmsPack.SqlServer;
+                    break;
+            }
+        }
+        return dbms;
     }
 
     /// <summary>Parses CLI/host DBMS pack names (fail-closed on unknown).</summary>
@@ -200,11 +302,19 @@ public sealed class DslCompiler {
 
     // ── C# generation ───────────────────────────────────────────
 
-    private static IReadOnlyList<(string FileName, string Source)> GenerateAllFiles(
+    /// <summary>Output of <see cref="GenerateAllFiles"/>: generated files plus the
+    /// infrastructure models the CompileMode.All host contributor needs.</summary>
+    private sealed record GenerationOutput(
+        IReadOnlyList<(string FileName, string Source)> Files,
+        StorageModel? Storage,
+        BehaviorModel? Behavior,
+        AggregateModel? Aggregate,
+        string? DbContextName);
+
+    private static GenerationOutput GenerateAllFiles(
         Domain domain, AnalysisResult analysis,
         CompileMode mode = CompileMode.Entities,
-        DomainAnalysisInputs? analysisInputs = null,
-        DbmsPack dbms = DbmsPack.Generic) {
+        DomainAnalysisInputs? analysisInputs = null) {
 
         var files = new List<(string FileName, string Source)>();
 
@@ -279,33 +389,17 @@ public sealed class DslCompiler {
         }
 
         // DbContext (mode: db or all)
+        string? dbContextName = null;
         if (mode == CompileMode.Db || mode == CompileMode.All) {
-            var dbContextName = $"{domain.Name}DbContext";
+            dbContextName = $"{domain.Name}DbContext";
             var dbGen = new DbContextGenerator(domain, storageModel!);
             files.Add(($"{dbContextName}.cs",
                 new CSharpGenerator().Generate(dbGen.GenerateCompilationUnit())));
-
-            // Minimal API + .http file (mode: all only)
-            if (mode == CompileMode.All) {
-                var apiGen = new MinimalApiGenerator(domain,
-                    analysis: analysis,
-                    storageModel: storageModel!,
-                    behaviorModel: behaviorModel!,
-                    aggregateModel: aggregateModel!,
-                    dbms: dbms);
-                files.Add(("Program.cs",
-                    new CSharpGenerator().Generate(apiGen.GenerateCompilationUnit(dbContextName))));
-
-                var httpGen = new HttpFileGenerator(domain,
-                    analysis: analysis,
-                    storageModel: storageModel!,
-                    behaviorModel: behaviorModel!,
-                    aggregateModel: aggregateModel!);
-                files.Add(("demo.http", httpGen.Generate()));
-            }
         }
 
-        return files;
+        // Program.cs + demo.http are emitted by MinimalApiHostArtifactContributor through
+        // the artifact-contributor hook in CompileMode.All — never inline here.
+        return new GenerationOutput(files, storageModel, behaviorModel, aggregateModel, dbContextName);
     }
 
     private static CompileResult Fail(string message) =>

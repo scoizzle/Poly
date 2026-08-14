@@ -1,5 +1,6 @@
 using Poly.DomainModeling;
 using Poly.DomainModeling.Evolution;
+using Poly.DomainModeling.Packs;
 using Poly.DomainModeling.Parsing;      // DomainDslPrinter (v1 domain-walk print)
                                         // PolyDslParser
 
@@ -8,12 +9,12 @@ namespace Poly.Tests.DomainModeling.Parsing;
 
 public class AnnotationRoundTripTests {
     private static DomainParserInputs CreateTestContext() =>
-        DomainInputBuilder.CreateWithSqlPack().BuildParserInputs();
+        ExtensionCatalog.Core.Authoring.Parser;
 
     // Print path is unchanged v1 machinery (DomainDslPrinter walks the domain);
     // it needs the v1 annotation registry. Same SQL-pack handlers, v1 registry.
     private static AnnotationRegistry PrintAnnotations =>
-        DomainInputSet.Sql.Parser.Annotations;
+        ExtensionCatalog.Core.Authoring.Parser.Annotations;
 
     [Test]
     public async Task ColumnAnnotation_ParsePrint_RoundTrips() {

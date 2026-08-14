@@ -173,7 +173,19 @@ public sealed class EvolutionBuilder {
     public EvolutionBuilder RemoveValueType(string name) =>
         Apply(new RemoveValueTypeChange(name));
 
+    public EvolutionBuilder AddImportedContract(
+        string name, ContractSourceKind sourceKind, string sourceIdentifier, string version) =>
+        Apply(new AddImportedContractChange(name, sourceKind, sourceIdentifier, version));
 
+    public EvolutionBuilder AddContractEndpoint(string contractName, ContractEndpoint endpoint) =>
+        Apply(new AddContractEndpointChange(contractName, endpoint));
+
+    public EvolutionBuilder AddContractValueType(string contractName, ValueType valueType) =>
+        Apply(new AddContractValueTypeChange(contractName, valueType));
+
+    public EvolutionBuilder AddContractBinding(
+        string name, string contractName, string endpointName, string actionName, string localParameterName) =>
+        Apply(new AddContractBindingChange(name, contractName, endpointName, actionName, localParameterName));
 
     public EvolutionBuilder AddPrimitiveType(string name, TypeCategory typeCategory) =>
         Apply(new AddPrimitiveTypeChange(name, typeCategory, []));
@@ -369,6 +381,9 @@ public sealed class EvolutionBuilder {
 
     public EvolutionBuilder SetDomainName(string name) =>
         Apply(new SetDomainNameChange(name));
+
+    public EvolutionBuilder AddDomainExtension(string extensionId) =>
+        Apply(new AddDomainExtensionChange(extensionId));
 
     public EvolutionBuilder AddConstraintToDomainType(string typeName, Constraint constraint) =>
         Apply(new AddConstraintToDomainTypeChange(typeName, constraint));

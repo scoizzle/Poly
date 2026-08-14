@@ -61,6 +61,7 @@ public static class DslGrammar {
         DslTokenKind.If => "if",
         DslTokenKind.Else => "else",
         DslTokenKind.Domain => "domain",
+        DslTokenKind.Uses => "uses",
         DslTokenKind.Entity => "entity",
         DslTokenKind.Stage => "stage",
         DslTokenKind.Action => "action",
@@ -87,7 +88,6 @@ public static class DslGrammar {
         DslTokenKind.Owned => "owned",
         DslTokenKind.Create => "create",
         DslTokenKind.In => "in",
-        DslTokenKind.Delete => "delete",
         DslTokenKind.Invoke => "invoke",
         DslTokenKind.For => "for",
         DslTokenKind.Entry => "entry",
@@ -244,8 +244,6 @@ public static class DslGrammar {
                 .Kind(DslTokenKind.Create).Kind(DslTokenKind.In).Value(DslTokenKind.Identifier).Commit()
             .Pattern("create")
                 .Kind(DslTokenKind.Create).Value(DslTokenKind.Identifier).Commit()
-            .Pattern("delete")
-                .Kind(DslTokenKind.Delete).Commit()
             .Pattern("invoke")
                 .Kind(DslTokenKind.Invoke).Commit()
             .Pattern("for")
@@ -254,8 +252,8 @@ public static class DslGrammar {
                 .Kind(DslTokenKind.If).Kind(DslTokenKind.LParen).Commit();
 
         g.Define("expr-primary")
-            .Pattern("number").Kind(DslTokenKind.Number).Commit()
-            .Pattern("string").Kind(DslTokenKind.StringLiteral).Commit()
+            .Pattern("number").Value(DslTokenKind.Number).Commit()
+            .Pattern("string").Value(DslTokenKind.StringLiteral).Commit()
             .Pattern("true").Kind(DslTokenKind.True).Commit()
             .Pattern("false").Kind(DslTokenKind.False).Commit()
             .Pattern("null").Kind(DslTokenKind.Null).Commit()

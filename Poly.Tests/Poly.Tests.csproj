@@ -17,6 +17,7 @@
 		<ProjectReference Include="..\src\Poly.DslCompiler\Poly.DslCompiler.csproj" />
 		<ProjectReference Include="..\src\Poly.Packs.Sqlite\Poly.Packs.Sqlite.csproj" />
 		<ProjectReference Include="..\src\Poly.Packs.SqlServer\Poly.Packs.SqlServer.csproj" />
+		<ProjectReference Include="..\src\Poly.Packs.MySql\Poly.Packs.MySql.csproj" />
 	</ItemGroup>
 	<ItemGroup>
 	  <Folder Include="Introspection/" />

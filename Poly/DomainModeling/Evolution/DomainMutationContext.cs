@@ -37,6 +37,8 @@ internal sealed class DomainMutationContext {
 
     public List<ContractBinding> ContractBindings { get; }
 
+    public List<string> Extensions { get; }
+
     /// <summary>
     /// Nodes that were modified during mutation (populated by Update* helpers and direct additions).
     /// Used by DomainEvolution.GetAffectedNodes instead of a post-hoc switch over DomainChange subtypes.
@@ -54,12 +56,14 @@ internal sealed class DomainMutationContext {
         Types = new List<DomainType>(source.Types);
         ImportedContracts = new List<ImportedContract>(source.ImportedContracts);
         ContractBindings = new List<ContractBinding>(source.ContractBindings);
+        Extensions = new List<string>(source.Extensions);
         _mutationIndex = mutationIndex;
     }
 
     public Domain ToDomain() => new Domain(DomainName, Types) {
         ImportedContracts = ImportedContracts,
-        ContractBindings = ContractBindings
+        ContractBindings = ContractBindings,
+        Extensions = Extensions
     };
 
     // --- Generic list helpers for ApplyTo methods ---

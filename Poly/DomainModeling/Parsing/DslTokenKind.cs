@@ -40,6 +40,7 @@ public enum DslTokenKind {
     If,
     Else,
     Domain,
+    Uses,
     Entity,
     Stage,
     Action,
@@ -70,6 +71,5 @@ public enum DslTokenKind {
     For,
     Entry,
     Exit,
-    Delete,
     As,
 }

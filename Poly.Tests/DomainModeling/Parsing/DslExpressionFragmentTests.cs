@@ -61,7 +61,7 @@ public class DslExpressionFragmentTests {
 
     [Test]
     public async Task Fragment_OpenForm_Registry_Honored() {
-        var inputs = DomainInputBuilder.Create()
+        var inputs = DomainHostBuilder.Create()
             .RegisterExpressionForm(new MagicLiteralForm())
             .BuildParserInputs();
 

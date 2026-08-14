@@ -1,5 +1,4 @@
 namespace Poly.DomainModeling;
-
 /// <summary>
 /// Shared full-tree <see cref="DomainExpression"/> rewrite base (coh-d1).
 /// Composite nodes recurse into children through <see cref="DomainExpressionDispatch{TResult}.Route"/>
@@ -44,8 +43,6 @@ public abstract class DomainExpressionRewriteBase : DomainExpressionDispatch<Dom
         e with { Left = Route(e.Left), Right = Route(e.Right) };
     protected override DomainExpression Divide(Divide e) =>
         e with { Left = Route(e.Left), Right = Route(e.Right) };
-    protected override DomainExpression DateOperation(DateOperation e) =>
-        e with { Date = Route(e.Date), Offset = Route(e.Offset) };
     protected override DomainExpression OwnedAccess(OwnedAccess e) =>
         e with { Inner = Route(e.Inner) };
     protected override DomainExpression Exists(Exists e) =>

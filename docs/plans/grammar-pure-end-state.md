@@ -68,7 +68,7 @@ Do **not** grow `PolyDslParser` method trees as the long-term answer. Prefer eng
 
 | Artifact | Role under pure direction |
 |----------|---------------------------|
-| `ExpressionFormRegistry` | **Bridge**: keep for temporal p1 vertical if needed; migrate forms → grammar patterns when engine can host them |
+| `ExpressionFormRegistry` | **Bridge**: migrate to grammar patterns + print binders in [`pack-host-2026-08-13.md`](pack-host-2026-08-13.md) wave 1; do not grow RD forms for p1 |
 | `DslExpressionParser` | **Bridge**: shrink as rules move into tables; delete when empty |
 | `DateOperation` IR | Unchanged — pure Grammar does not mean new temporal IR |
 | p1 suite | May land on bridge; pure expr is **not** a hard prereq for first temporal goldens, but **new** expr sugar should not dig more RD |

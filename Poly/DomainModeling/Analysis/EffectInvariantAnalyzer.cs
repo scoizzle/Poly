@@ -228,6 +228,8 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
                     ? AbstractValue.From([new RangeConstraint(d, d)])
                     : AbstractValue.From(lit.Value is string s ? [new EqualityConstraint(s)] : []);
             case PropertyAccess pa:
+                if (paramEnv is not null && paramEnv.TryGetValue(pa.Name, out var fromParam))
+                    return fromParam;
                 if (env.TryGetValue(pa.Name, out var pv)) return pv;
                 // Cross-entity read: the property belongs to the target entity.
                 var owner = targetEntity ?? entity;

@@ -1730,7 +1730,7 @@ public class McpSmokeTests {
         var instanceId = ExtractInstanceId(
             System.Text.Json.JsonSerializer.Serialize(create.Data));
 
-        var call = RuntimeTool.InvokeAction(sessionId, instanceId!, "Submit");
+        var call = RuntimeTool.InvokeAction(sessionId, instanceId!, "Submit", """{"Note":"ok"}""");
         await Assert.That(call.Success).IsTrue();
         await Assert.That(call.Message).Contains("Active");
 

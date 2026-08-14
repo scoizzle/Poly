@@ -122,6 +122,10 @@ internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
                 break;
             case ConditionalEffect cond:
                 WalkExpression(context, cond.Condition, props, parameters, enumTypes);
+                var condType = InferType(cond.Condition, props, parameters, enumTypes);
+                if (condType.Category is not (TypeCategory.Boolean or TypeCategory.Unknown))
+                    Report(context, cond.Condition,
+                        $"if-condition must be Boolean (got '{Describe(condType)}')");
                 CheckEffectTree(context, cond.ThenEffects, callerEntityName, props, parameters, enumTypes);
                 if (cond.ElseEffects is { } elseEffects)
                     CheckEffectTree(context, elseEffects, callerEntityName, props, parameters, enumTypes);
@@ -176,7 +180,7 @@ internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
                 // entity's property.
                 var inferred = binderName is not null && BindsToBinder(binding.Expression, binderName)
                     ? InferBinderExpressionType(context, targetEntityName, binderName, binding.Expression, enumTypes)
-                    : InferLiteralAware(binding.Expression, paramType, enumTypes);
+                    : InferLiteralAware(binding.Expression, paramType, enumTypes, callerProps, parameters);
                 var targetCategory = CategoryOf(paramType, enumTypes);
                 if (inferred.Category is not TypeCategory.Unknown
                     && targetCategory is not TypeCategory.Unknown
@@ -354,12 +358,15 @@ internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
             case Or or:
                 CheckBooleanOperands(context, or.Left, or.Right, props, parameters, enumTypes);
                 return;
-            case DateOperation:
             case RelationshipNavigation:
             case Exists or NotExists or AnyExpr or AllExpr or NoneExpr or CountExpr:
                 // target-scoped (related-entity properties / store-aware) — no local type check
                 return;
             default:
+                // Pack-owned expression subtypes (temporal DateOperation, …) validate through
+                // the ambient check registry; the generic child walk continues below either way.
+                ExpressionTypeCheckRegistry.Default.TryCheck(
+                    context, expr, new ExpressionTypeCheckScope(props, parameters, enumTypes));
                 foreach (var child in expr.Children.OfType<DomainExpression>())
                     WalkExpression(context, child, props, parameters, enumTypes);
                 return;
@@ -372,11 +379,15 @@ internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
         Dictionary<string, EnumType> enumTypes) {
         var leftType = InferType(left, props, parameters, enumTypes);
         var rightType = InferType(right, props, parameters, enumTypes);
-        // numeric + numeric, or date + number (AddDays lowering); Unknown operands
-        // (path-prefix reads, peer binders) are out of this scope — skip.
+        // numeric + numeric, date + number (AddDays lowering), or date + duration
+        // (a parsed `N days` offset with a temporal left operand); Unknown operands
+        // (path-prefix reads, peer binders) are out of this scope — skip. A duration
+        // without a temporal left operand (Number + days, days + date) is an unresolved
+        // temporal specialization — reject, never a silent numeric constant.
         if (leftType.Category is not TypeCategory.Unknown && rightType.Category is not TypeCategory.Unknown
             && !(IsNumeric(leftType.Category) && IsNumeric(rightType.Category))
-            && !(IsDate(leftType.Category) && IsNumeric(rightType.Category)))
+            && !(IsDate(leftType.Category) && IsNumeric(rightType.Category))
+            && !(IsDate(leftType.Category) && rightType.Category is TypeCategory.Duration))
             Report(context, left,
                 $"arithmetic operand is not numeric (got '{Describe(leftType)}' and '{Describe(rightType)}')");
         WalkExpression(context, left, props, parameters, enumTypes);
@@ -442,6 +453,9 @@ internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
         string what,
         Dictionary<string, string>? props = null,
         Dictionary<string, string>? parameters = null) {
+        if (value is PropertyAccess { Name: "Now" or "UtcNow" or "Today" or "Guid" } kw)
+            CheckDefault(context, kw, targetTypeName, enumTypes);
+
         var inferred = InferLiteralAware(value, targetTypeName, enumTypes, props, parameters);
         var targetCategory = CategoryOf(targetTypeName, enumTypes);
         // Bare non-member enum identifier on an enum-typed target: a PropertyAccess that is
@@ -484,14 +498,14 @@ internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
             case PropertyAccess pa:
                 // runtime keyword (now/today/guid) or enum member — keyword handled; enum
                 // member is valid only for enum-typed props; anything else is a mismatch.
-                if (pa.Name is "now" or "utcnow" or "today" or "guid") {
-                    if (targetCategory is not TypeCategory.Date && pa.Name is "now" or "utcnow" or "today")
+                if (pa.Name is "Now" or "UtcNow" or "Today" or "Guid") {
+                    if (targetCategory is not TypeCategory.Date && pa.Name is "Now" or "UtcNow" or "Today")
                         Report(context, expr,
-                            $"default({pa.Name}) is not compatible with property type '{propTypeName}' (use a date property, or 'guid' for identifiers)");
-                    else if (pa.Name is "guid" && targetCategory is not TypeCategory.Guid
+                            $"default({pa.Name}) is not compatible with property type '{propTypeName}' (use a date property, or 'Guid' for identifiers)");
+                    else if (pa.Name is "Guid" && targetCategory is not TypeCategory.Guid
                              && targetCategory is not TypeCategory.Text)
                         Report(context, expr,
-                            $"default(guid) is not compatible with property type '{propTypeName}' (use a Uuid/Guid or Text property)");
+                            $"default(Guid) is not compatible with property type '{propTypeName}' (use a Uuid/Guid or Text property)");
                     return;
                 }
                 if (targetCategory is not TypeCategory.Enum)
@@ -499,6 +513,12 @@ internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
                         $"default({pa.Name}) on property '{propTypeName}' is not an enum member of that property's type");
                 return;
             default:
+                // Pack-owned default expressions (temporal Now/Today/Duration, …) validate
+                // through the ambient check registry, which knows the target property type.
+                ExpressionTypeCheckRegistry.Default.TryCheck(
+                    context, expr, new ExpressionTypeCheckScope(
+                        new Dictionary<string, string>(StringComparer.Ordinal), null, enumTypes,
+                        DefaultTargetTypeName: propTypeName));
                 return;
         }
     }
@@ -517,7 +537,7 @@ internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
 
     // ── Type inference ──────────────────────────────────────────
 
-    private enum TypeCategory { Text, Number, Boolean, Date, Enum, Guid, Null, Unknown }
+    internal enum TypeCategory { Text, Number, Boolean, Date, Duration, Enum, Guid, Null, Unknown }
 
     private readonly record struct TypeInfo(TypeCategory Category, string? TypeName = null);
 
@@ -548,11 +568,26 @@ internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
             Literal { Value: string } => new(TypeCategory.Text),
             Literal { Value: bool } => new(TypeCategory.Boolean),
             Literal { Value: long or int or double or float or decimal or short or byte } => new(TypeCategory.Number),
-            DateOperation d => new(TypeCategory.Date, "Date"),
             Exists or NotExists or AnyExpr or AllExpr or NoneExpr or Comparison or And or Or or Not => new(TypeCategory.Boolean),
             CountExpr => new(TypeCategory.Number),
-            _ => new(TypeCategory.Unknown),
+            _ => InferPackOwned(expr),
         };
+
+    /// <summary>
+    /// Routes pack-owned expression IR (temporal Now/Today/DateOperation/Duration) to the
+    /// ambient type-inference dispatch registry — core never names pack types.
+    /// </summary>
+    private static TypeInfo InferPackOwned(DomainExpression expr) {
+        var registry = ExpressionDispatchRegistry<TypeCategory>.Default;
+        if (registry.TryDispatch(expr, _ => TypeCategory.Unknown, out var category)) {
+            return category switch {
+                TypeCategory.Date => new(TypeCategory.Date, "Date"),
+                TypeCategory.Duration => new(TypeCategory.Duration, "duration"),
+                _ => new(category),
+            };
+        }
+        return new(TypeCategory.Unknown);
+    }
 
     private static string? ResolvePropertyType(string name, Dictionary<string, string>? props, Dictionary<string, string>? parameters) {
         if (props?.TryGetValue(name, out var pt) == true) return pt;
@@ -583,6 +618,7 @@ internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
         TypeCategory.Number => "Number",
         TypeCategory.Boolean => "Boolean",
         TypeCategory.Date => $"Date ({t.TypeName ?? "date"})",
+        TypeCategory.Duration => "duration",
         TypeCategory.Enum => $"enum {t.TypeName ?? "?"}",
         TypeCategory.Guid => "Guid",
         TypeCategory.Null => "null",
@@ -591,9 +627,12 @@ internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
     };
 
     private static bool Compatible(TypeInfo left, TypeInfo right) {
-        if (left.Category is TypeCategory.Unknown or TypeCategory.Null
-            || right.Category is TypeCategory.Unknown or TypeCategory.Null)
+        if (left.Category is TypeCategory.Unknown || right.Category is TypeCategory.Unknown)
             return true;
+        if (left.Category is TypeCategory.Null)
+            return right.Category is TypeCategory.Text or TypeCategory.Guid;
+        if (right.Category is TypeCategory.Null)
+            return left.Category is TypeCategory.Text or TypeCategory.Guid;
         if (left.Category is TypeCategory.Enum && right.Category is TypeCategory.Enum)
             return string.Equals(left.TypeName, right.TypeName, StringComparison.Ordinal);
         if (left.Category is TypeCategory.Enum && right.Category is TypeCategory.Text)

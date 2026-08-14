@@ -73,8 +73,8 @@ public class DslCompilerCompileOracleTests {
         return byName.Values.ToList();
     }
 
-    private static async Task AssertSolutionCompiles() {
-        var result = new Compiler().Compile(Dsl, CompileMode.All, DbmsPack.Sqlite);
+    private static async Task AssertSolutionCompiles(string? polyText = null) {
+        var result = new Compiler().Compile(polyText ?? Dsl, CompileMode.All, DbmsPack.Sqlite);
         if (!result.Success)
             throw new InvalidOperationException(
                 $"DslCompiler failed: {string.Join("; ", result.Errors ?? [])}");
@@ -126,5 +126,66 @@ public class DslCompilerCompileOracleTests {
     [Test]
     public async Task Compile_All_Sqlite_EmitsCompilableSolution() {
         await AssertSolutionCompiles();
+    }
+
+    [Test]
+    [Arguments("probes/fleet-eval/09-transport/warehouse.poly")]
+    [Arguments("probes/fleet-eval/09-transport/orders.poly")]
+    [Arguments("probes/fleet-eval/09-transport/clinic.poly")]
+    [Arguments("probes/fleet-eval/12-mcp/mcp-library.poly")]
+    public async Task Compile_All_DemoDomains_EmitCompilableSolution(string relativePath) {
+        var root = FindRepoRoot();
+        var poly = await File.ReadAllTextAsync(Path.Combine(root, relativePath));
+        await AssertSolutionCompiles(poly);
+    }
+
+    [Test]
+    public async Task Compile_All_BoundContractDomain_EmitCompilableSolution() {
+        // pack-3c-3: a root action bound to a produced contract endpoint compiles end-to-end —
+        // entity file calls {Contract}Adapters.{Endpoint}(param); the fail-closed adapter class
+        // and the contract value type are emitted alongside. The child's Ledger entity never
+        // becomes a public route (composition root only).
+        const string poly = """
+            domain Shop
+
+            Order: entity {
+              Number: Text unique
+              Pay: action (request: ChargeRequest) {
+              }
+            }
+
+            Billing: contract internal billing v1 {
+              ChargeRequest: value {
+                Amount: Number
+                Currency: Text
+              }
+              Charge: outbound operation ChargeRequest
+            }
+
+            ChargeOrder: bind Billing Charge to Pay request
+            """;
+        var result = new Compiler().Compile(poly, CompileMode.All, DbmsPack.Sqlite);
+        await Assert.That(result.Success).IsTrue();
+
+        var order = result.Files!.Single(f => f.FileName == "Order.cs").Source;
+        await Assert.That(order).Contains("BillingAdapters.Charge(request)");
+        var types = result.Files!.Single(f => f.FileName == "Poly.Types.cs").Source;
+        await Assert.That(types).Contains("class BillingAdapters");
+        await Assert.That(types).Contains("NotImplementedException");
+        var program = result.Files!.Single(f => f.FileName == "Program.cs").Source;
+        await Assert.That(program.Contains("/api/ledgers")).IsFalse();
+
+        await AssertSolutionCompiles(poly);
+    }
+
+    private static string FindRepoRoot() {
+        var dir = AppContext.BaseDirectory;
+        while (dir is not null) {
+            if (File.Exists(Path.Combine(dir, "Poly.sln"))
+                || File.Exists(Path.Combine(dir, "docs/CORE.md")))
+                return dir;
+            dir = Directory.GetParent(dir)?.FullName;
+        }
+        throw new InvalidOperationException("Could not find repo root from " + AppContext.BaseDirectory);
     }
 }

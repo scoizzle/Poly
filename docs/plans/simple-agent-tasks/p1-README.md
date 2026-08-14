@@ -7,7 +7,7 @@
 **Pre-ship:** [`../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md`](../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md)  
 **Guide:** `Poly.Mcp/Docs/poly-dsl-guide.md`  
 
-**Status:** Ready to admit — **not CURRENT** until human admits (after minify/mut-safety preferred).
+**Status:** **DONE — 2026-08-13 (p1-gate).** Phase 3a complete. All tasks 0–7 `[x]`; gate `[x]`. Full suite 2147/2147 green. Design-lock negatives covered by tests (incl. the Number-property date-operand gap fixed at the gate); guide documents temporal as shipped for authoring/analysis/round-trip with runtime clock eval explicitly NOT shipped (fixed `TimeProvider` seam is a recorded follow-up). P9 schedule NOT started.
 
 ---
 
@@ -30,7 +30,7 @@ Ship **built-in temporal pack** vertical:
 | T3 | Host clock: `TimeProvider` (CLR); injectable for tests |
 | T4 | No `schedule at` (P9) |
 | T5 | Unknown unit / missing pack → fail closed |
-| T6 | Use `IExpressionPrimaryForm` / `ExpressionFormRegistry` from E1 |
+| T6 | Grammar patterns + print binders on both primaries (pack-host wave 1). `IExpressionPrimaryForm` only if an engine gap is cited. |
 
 ### Thin vertical success
 
@@ -50,14 +50,15 @@ policy { ExpiryDate < Now }  with fixed clock → true/false
 
 | ID | File | Size | Status |
 |----|------|------|--------|
-| **0** | [`p1-0-inventory-ir.md`](./p1-0-inventory-ir.md) | S | `[ ]` |
-| **1** | [`p1-1-now-expression.md`](./p1-1-now-expression.md) | M | `[ ]` |
-| **2** | [`p1-2-duration-forms.md`](./p1-2-duration-forms.md) | M | `[ ]` |
-| **3** | [`p1-3-pack-registration.md`](./p1-3-pack-registration.md) | M | `[ ]` |
-| **4** | [`p1-4-analysis-fail-closed.md`](./p1-4-analysis-fail-closed.md) | M | `[ ]` |
-| **5** | [`p1-5-goldens.md`](./p1-5-goldens.md) | M | `[ ]` |
-| **6** | [`p1-6-guide.md`](./p1-6-guide.md) | S | `[ ]` |
-| **G** | [`p1-gate.md`](./p1-gate.md) | S | `[ ]` |
+| **0** | [`p1-0-inventory-ir.md`](./p1-0-inventory-ir.md) | S | `[x]` |
+| **1** | [`p1-1-now-expression.md`](./p1-1-now-expression.md) | M | `[x]` |
+| **2** | [`p1-2-duration-forms.md`](./p1-2-duration-forms.md) | M | `[x]` |
+| **3** | [`p1-3-pack-registration.md`](./p1-3-pack-registration.md) | M | `[x]` |
+| **4** | [`p1-4-analysis-fail-closed.md`](./p1-4-analysis-fail-closed.md) | M | `[x]` |
+| **5** | [`p1-5-goldens.md`](./p1-5-goldens.md) | M | `[x]` |
+| **6** | [`p1-6-guide.md`](./p1-6-guide.md) | S | `[x]` |
+| **7** | [`pack-3a-print-roundtrip.md`](./pack-3a-print-roundtrip.md) | M | `[x]` |
+| **G** | [`p1-gate.md`](./p1-gate.md) | S | `[x]` |
 
 ### Kickoff
 

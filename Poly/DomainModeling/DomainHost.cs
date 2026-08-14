@@ -1,47 +1,30 @@
 using Poly.Analysis;
 using Poly.DomainModeling.Lowering;
+using Poly.DomainModeling.Packs;
+using Poly.DomainModeling.Packs.Temporal;
 using Poly.DomainModeling.Parsing;
 
 namespace Poly.DomainModeling;
 
 /// <summary>
-/// Upstream convenience bundle for parse+analyze authoring flows.
-/// Analysis APIs should depend on <see cref="DomainAnalysisInputs"/> directly.
+/// Resolved parse/print and analysis tables for a set of extension ids.
+/// Prefer <see cref="Domain.ResolveHost"/> or <see cref="ExtensionCatalog.ResolveHost"/>.
 /// </summary>
-public sealed record DomainInputSet(
+public sealed record DomainHost(
     DomainParserInputs Parser,
     DomainAnalysisInputs Analysis
-) {
-    public static DomainInputSet Default { get; } = DomainInputBuilder.Create().Build();
-    public static DomainInputSet Sql { get; } = DomainInputBuilder.CreateWithSqlPack().Build();
-}
+);
 
 /// <summary>
-/// Canonical parser/analysis defaults with no requirement to bundle them.
-/// </summary>
-public static class DomainInputDefaults {
-    public static DomainParserInputs Parser { get; } =
-        DomainInputBuilder.Create().BuildParserInputs();
-
-    public static DomainAnalysisInputs Analysis { get; } =
-        DomainInputBuilder.Create().BuildAnalysisInputs();
-
-    public static DomainParserInputs SqlParser { get; } =
-        DomainInputBuilder.CreateWithSqlPack().BuildParserInputs();
-
-    public static DomainAnalysisInputs SqlAnalysis { get; } =
-        DomainInputBuilder.CreateWithSqlPack().BuildAnalysisInputs();
-}
-
-/// <summary>
-/// Immutable parser inputs for a parse/print session.
+/// Immutable parser/printer tables for one session.
 /// </summary>
 public sealed class DomainParserInputs {
-    public static DomainParserInputs Default { get; } = new(new AnnotationRegistry());
+    /// <summary>Empty tables — no language libraries.</summary>
+    public static DomainParserInputs Empty { get; } = new(new AnnotationRegistry());
 
     public AnnotationRegistry Annotations { get; }
 
-    /// <summary>E1 open expression forms (temporal units, <c>Now</c>, …).</summary>
+    /// <summary>Expression forms, folds, and print mappings.</summary>
     public ExpressionFormRegistry ExpressionForms { get; }
 
     public DomainParserInputs(AnnotationRegistry annotations, ExpressionFormRegistry? expressionForms = null) {
@@ -54,10 +37,11 @@ public sealed class DomainParserInputs {
 }
 
 /// <summary>
-/// Immutable analyzer inputs for one analysis session.
+/// Immutable analyzer tables for one session.
 /// </summary>
 public sealed class DomainAnalysisInputs {
-    public static DomainAnalysisInputs Default { get; } = new(
+    /// <summary>Empty maps, conventions, and extra passes.</summary>
+    public static DomainAnalysisInputs Empty { get; } = new(
         new TypeMappingRegistry(),
         [],
         []);
@@ -89,44 +73,65 @@ public sealed class DomainAnalysisInputs {
 }
 
 /// <summary>
-/// Builder used to construct explicit immutable parse/analyze inputs.
+/// Composes a <see cref="DomainHost"/> by loading libraries into parse and analysis surfaces.
 /// </summary>
-public sealed class DomainInputBuilder {
+public sealed class DomainHostBuilder {
     private readonly List<IStorageConvention> _storageConventions = [];
     private readonly List<INodeAnalyzer> _analysisPasses = [];
+    private readonly HashSet<string> _loadedIds = new(StringComparer.Ordinal);
 
     public AnnotationRegistry Annotations { get; } = new();
     public ExpressionFormRegistry ExpressionForms { get; } = new();
     public TypeMappingRegistry TypeMaps { get; } = new();
 
-    public static DomainInputBuilder Create() => new();
+    /// <summary>No extensions loaded — used by the catalog when resolving ids.</summary>
+    public static DomainHostBuilder CreateEmpty() => new();
 
-    public static DomainInputBuilder CreateWithSqlPack() {
-        var builder = Create();
-        builder.Annotations.Register(new ColumnAnnotationSyntax());
-        builder.Annotations.Register(new TableAnnotationSyntax());
-        return builder;
+    /// <summary>Loads Temporal. Prefer resolving <see cref="Domain.Extensions"/> in product paths.</summary>
+    public static DomainHostBuilder Create() =>
+        CreateEmpty().Load(new TemporalLibrary());
+
+    /// <summary>Loads <c>column</c>/<c>table</c> spelling.</summary>
+    public DomainHostBuilder WithStorageFacets() => Load(new StorageFacetLibrary());
+
+    /// <summary>
+    /// Loads <paramref name="library"/>. Duplicate <see cref="IDomainLibrary.Id"/> fails closed.
+    /// </summary>
+    public DomainHostBuilder Load(IDomainLibrary library) {
+        ArgumentNullException.ThrowIfNull(library);
+        if (string.IsNullOrWhiteSpace(library.Id))
+            throw new ArgumentException("Library id must be non-empty.", nameof(library));
+        if (!_loadedIds.Add(library.Id))
+            throw new InvalidOperationException($"A library with id '{library.Id}' is already loaded.");
+        library.Register(new HostSurfaces(this));
+        return this;
     }
 
-    public DomainInputBuilder RegisterAnnotation(IAnnotationSyntax syntax) {
+    public DomainHostBuilder RegisterAnnotation(IAnnotationSyntax syntax) {
         ArgumentNullException.ThrowIfNull(syntax);
         Annotations.Register(syntax);
         return this;
     }
 
-    public DomainInputBuilder RegisterExpressionForm(IExpressionPrimaryForm form) {
+    public DomainHostBuilder RegisterExpressionForm(IExpressionPrimaryForm form) {
         ArgumentNullException.ThrowIfNull(form);
         ExpressionForms.Register(form);
         return this;
     }
 
-    public DomainInputBuilder AddStorageConvention(IStorageConvention convention) {
+    public DomainHostBuilder RegisterBinaryFold(IBinaryExpressionFold fold) {
+        ArgumentNullException.ThrowIfNull(fold);
+        ExpressionForms.RegisterBinaryFold(fold);
+        return this;
+    }
+
+    public DomainHostBuilder AddStorageConvention(IStorageConvention convention) {
         ArgumentNullException.ThrowIfNull(convention);
         _storageConventions.Add(convention);
         return this;
     }
 
-    public DomainInputBuilder AddAnalysisPass(INodeAnalyzer pass) {
+    public DomainHostBuilder AddAnalysisPass(INodeAnalyzer pass) {
         ArgumentNullException.ThrowIfNull(pass);
         _analysisPasses.Add(pass);
         return this;
@@ -138,6 +143,6 @@ public sealed class DomainInputBuilder {
     public DomainAnalysisInputs BuildAnalysisInputs() =>
         new(TypeMaps, _storageConventions, _analysisPasses);
 
-    public DomainInputSet Build() =>
+    public DomainHost Build() =>
         new(BuildParserInputs(), BuildAnalysisInputs());
 }

@@ -5,6 +5,7 @@ using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Bootstrap;
 using Poly.DomainModeling.Evolution;
+using Poly.DomainModeling.Packs;
 
 namespace Poly.Mcp.Sessions;
 
@@ -13,7 +14,7 @@ namespace Poly.Mcp.Sessions;
 /// New sessions snapshot these defaults into session state.
 /// </summary>
 internal static class McpDefaults {
-    public static DomainParserInputs ParserInputs { get; } = DomainInputDefaults.SqlParser;
+    public static DomainParserInputs ParserInputs { get; } = ExtensionCatalog.Core.Authoring.Parser;
 }
 
 /// <summary>
@@ -54,18 +55,41 @@ internal static class McpSessionStore {
     private static readonly Lock StoreLock = new();
 
     /// <summary>
-    /// Creates a new session with a bootstrapped domain.
+    /// Creates a new session with a bootstrapped domain and the product authoring
+    /// inputs (Temporal language + optional storage annotations).
     /// </summary>
-    public static (string SessionId, McpSessionState State) Create(string domainName, string? preferredSessionId = null) {
+    public static (string SessionId, McpSessionState State) Create(string domainName, string? preferredSessionId = null) =>
+        Create(domainName, McpDefaults.ParserInputs, preferredSessionId);
+
+    /// <summary>
+    /// Creates a new session with explicit parser/printer inputs built once per session.
+    /// <c>apply_dsl</c>, <c>export_dsl</c>, and policy-fragment parsing all consume
+    /// these same session inputs so packs registered here shape both parse and print.
+    /// </summary>
+    public static (string SessionId, McpSessionState State) Create(
+        string domainName,
+        DomainParserInputs parserInputs,
+        string? preferredSessionId = null) {
+        ArgumentNullException.ThrowIfNull(parserInputs);
         lock (StoreLock) {
             var sessionId = string.IsNullOrWhiteSpace(preferredSessionId)
                 ? Guid.NewGuid().ToString("N")
                 : preferredSessionId;
 
-            var domain = DomainFactory.Create(domainName);
-            var parserInputs = McpDefaults.ParserInputs;
+            var domain = DomainFactory.Create(domainName) with {
+                Extensions = [.. ExtensionCatalog.ProductAuthoring]
+            };
             var analysis = DomainModelAnalyzer.Analyze(domain);
-            var state = new McpSessionState(domain, analysis, Revision: 0, parserInputs);
+            var resolved = parserInputs;
+            try {
+                resolved = domain.ResolveHost().Parser;
+            }
+            catch (InvalidOperationException) {
+                // Caller-supplied parserInputs (tests) when catalog cannot resolve.
+            }
+            if (!ReferenceEquals(parserInputs, McpDefaults.ParserInputs))
+                resolved = parserInputs;
+            var state = new McpSessionState(domain, analysis, Revision: 0, resolved);
             Sessions[sessionId] = state;
             return (sessionId, state);
         }
@@ -150,12 +174,18 @@ internal static class McpSessionStore {
         lock (StoreLock) {
             if (!Sessions.TryGetValue(sessionId, out var current))
                 return false;
-            // Fresh state: domain + analysis only. InstanceMap/InstanceStore reset.
+            DomainParserInputs parserInputs;
+            try {
+                parserInputs = domain.ResolveHost().Parser;
+            }
+            catch (InvalidOperationException) {
+                parserInputs = current.ParserInputs;
+            }
             Sessions[sessionId] = new McpSessionState(
                 domain,
                 analysis,
                 current.Revision + 1,
-                current.ParserInputs);
+                parserInputs);
             return true;
         }
     }

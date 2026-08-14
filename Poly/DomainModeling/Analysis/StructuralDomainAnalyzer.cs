@@ -53,8 +53,24 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
                     $"Relationship name '{nav.Name}' collides with a type of the same name.",
                     DomainModelDiagnosticCodes.StructuralDuplicate);
             }
+            // P7-4: `any`/`all`/`none`/`count` are consumed as quantifier keywords in
+            // expression reads — a nav by that name would be silently unreadable.
+            if (IsReservedExpressionWord(nav.Name)) {
+                context.ReportStructuralFailure(
+                    nav,
+                    $"Relationship name '{nav.Name}' is reserved (used by expression quantifiers) " +
+                    "and cannot be read in policies, subscriptions, or invoke bindings. " +
+                    "Rename the relationship.",
+                    DomainModelDiagnosticCodes.StructuralDuplicate);
+            }
         }
     }
+
+    private static bool IsReservedExpressionWord(string name) =>
+        string.Equals(name, "any", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(name, "all", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(name, "none", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(name, "count", StringComparison.OrdinalIgnoreCase);
 
     private static void AnalyzeEntity(AnalysisContext context, Entity entity) {
         ReportDuplicateNames(context, entity.Properties, "entity", entity.Name);

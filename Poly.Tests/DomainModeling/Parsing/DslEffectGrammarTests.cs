@@ -60,6 +60,16 @@ public sealed class DslEffectGrammarTests {
     }
 
     [Test]
+    public async Task ParseEffect_DeleteKeyword_FailsClosed() {
+        // P7-1: the `delete` effect grammar was removed — a `delete` in an action
+        // body must fail parse with a clean diagnostic, not an internal
+        // "Unhandled effect pattern" leak.
+        var ex = await Assert.ThrowsAsync(
+            () => Task.FromResult(ParseEffects("delete")));
+        await Assert.That(ex!.Message).Contains("Expected effect (transition, assign, create, invoke, for, if), got 'delete'");
+    }
+
+    [Test]
     public async Task EffectGrammar_FailClosed_Negatives() {
         // F6: fail loud — no vacuous success.
         await AssertFails("assign Status to");          // missing expr

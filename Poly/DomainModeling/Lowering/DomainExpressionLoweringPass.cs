@@ -271,20 +271,6 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Node
         return null;
     }
 
-    protected override Node DateOperation(DateOperation d)
-        => d.Kind switch {
-            DateOperationKind.AddDays => new Invoke(
-                new Member(Lower(d.Date, _currentSubject), "AddDays"),
-                Lower(d.Offset, _currentSubject)),
-            DateOperationKind.AddMonths => new Invoke(
-                new Member(Lower(d.Date, _currentSubject), "AddMonths"),
-                Lower(d.Offset, _currentSubject)),
-            DateOperationKind.DiffDays => new Invoke(
-                new Member(Lower(d.Date, _currentSubject), "Subtract"),
-                Lower(d.Offset, _currentSubject)),
-            _ => throw new NotSupportedException($"DateOperation kind '{d.Kind}' is not supported."),
-        };
-
     // Collection quantifiers — authoring-only for now (need store-aware evaluation).
     protected override Node AnyExpr(AnyExpr a) => throw Q3NotSupported("any", a.RelationshipName);
     protected override Node AllExpr(AllExpr a) => throw Q3NotSupported("all", a.RelationshipName);

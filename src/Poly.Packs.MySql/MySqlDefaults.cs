@@ -13,15 +13,14 @@ namespace Poly.Packs.MySql;
 ///
 /// Usage:
 /// <code>
-/// var inputs = DomainInputBuilder.CreateWithSqlPack()
+/// var inputs = DomainHostBuilder.Create().WithStorageFacets()
 ///     .AddMySqlDefaults();
 /// </code>
 /// </summary>
 public static class MySqlDefaults {
-    public static DomainInputBuilder AddMySqlDefaults(this DomainInputBuilder builder) {
+    public static DomainHostBuilder AddMySqlDefaults(this DomainHostBuilder builder) {
         ArgumentNullException.ThrowIfNull(builder);
-        ApplyTypeMaps(builder.TypeMaps);
-        return builder;
+        return builder.Load(new MySqlLibrary());
     }
 
     public static void ApplyTypeMaps(TypeMappingRegistry registry) {

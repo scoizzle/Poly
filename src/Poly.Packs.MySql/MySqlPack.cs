@@ -1,5 +1,7 @@
 using Poly.DomainModeling;
-using Poly.DomainModeling.Packs;
+using Poly.DomainModeling.Compile;
+using Poly.DomainModeling.ContractFill;
+using Poly.DomainModeling.Libraries.Storage;
 
 namespace Poly.Packs.MySql;
 
@@ -9,7 +11,7 @@ namespace Poly.Packs.MySql;
 public sealed class MySqlLibrary : IDomainLibrary {
     public string Id => "mysql";
 
-    public void Register(DomainHostBuilder builder) {
+    public void Register(SessionBuilder builder) {
         ArgumentNullException.ThrowIfNull(builder);
         MySqlDefaults.ApplyTypeMaps(builder.TypeMaps);
     }

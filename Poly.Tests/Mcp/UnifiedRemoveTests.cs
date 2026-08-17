@@ -121,13 +121,13 @@ public class UnifiedRemoveTests {
         EvolveTool.Add(sessionId, "stage", """{"entityName":"Order","name":"Active"}""");
         EvolveTool.Add(sessionId, "property", """{"entityName":"Order","name":"Score","typeName":"Number"}""");
 
-        McpSessionStore.Evolve(sessionId, domain =>
+        McpSessionStore.Evolve(sessionId, (domain, session) =>
             new DomainEvolution(domain).Evolve()
                 .AddPolicyToStage("Order", "Active", "Guard",
                     DomainExpression.GreaterThanOrEqual(
                         DomainExpression.Property("Score"),
                         DomainExpression.Literal(0)))
-                .Apply());
+                .Apply(session: session));
 
         var response = EvolveTool.Remove(sessionId, "policy",
             """{"entityName":"Order","name":"Guard","stageName":"Active"}""");
@@ -146,13 +146,13 @@ public class UnifiedRemoveTests {
         EvolveTool.Add(sessionId, "action", """{"entityName":"Order","name":"Submit"}""");
         EvolveTool.Add(sessionId, "property", """{"entityName":"Order","name":"Score","typeName":"Number"}""");
 
-        McpSessionStore.Evolve(sessionId, domain =>
+        McpSessionStore.Evolve(sessionId, (domain, session) =>
             new DomainEvolution(domain).Evolve()
                 .AddPolicyToAction("Order", "Submit", "Guard",
                     DomainExpression.GreaterThanOrEqual(
                         DomainExpression.Property("Score"),
                         DomainExpression.Literal(0)))
-                .Apply());
+                .Apply(session: session));
 
         var response = EvolveTool.Remove(sessionId, "policy",
             """{"entityName":"Order","name":"Guard","actionName":"Submit"}""");

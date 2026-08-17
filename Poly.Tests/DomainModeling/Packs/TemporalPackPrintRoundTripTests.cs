@@ -1,8 +1,10 @@
 using Poly.DomainModeling;
+using Poly.DomainModeling.Compile;
+using Poly.DomainModeling.ContractFill;
 using Poly.DomainModeling.Evolution;
-using Poly.DomainModeling.Packs;
-using Poly.DomainModeling.Packs.Temporal;
-using Poly.DomainModeling.Parsing;
+using Poly.DomainModeling.Language;
+using Poly.DomainModeling.Libraries.Storage;
+using Poly.DomainModeling.Libraries.Temporal;
 using Poly.Grammar;
 
 namespace Poly.Tests.DomainModeling.Packs;
@@ -15,8 +17,8 @@ namespace Poly.Tests.DomainModeling.Packs;
 /// (parse rejects, DateOperation print throws).
 /// </summary>
 public sealed class TemporalPackPrintRoundTripTests {
-    private static DomainParserInputs TemporalInputs() =>
-        ExtensionCatalog.Core.Language.Parser;
+    private static DomainSession TemporalInputs() =>
+        ExtensionCatalog.Core.Language;
 
     private const string TemporalDomain = """
         domain TemporalDomain
@@ -30,7 +32,7 @@ public sealed class TemporalPackPrintRoundTripTests {
         }
         """;
 
-    private static Domain Apply(string poly, DomainParserInputs inputs) {
+    private static Domain Apply(string poly, DomainSession inputs) {
         var changes = new PolyDslParser(poly, inputs).Parse();
         var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(changes);
         if (!result.Succeeded)
@@ -175,7 +177,7 @@ public sealed class TemporalPackPrintRoundTripTests {
         await Assert.That(() => noInputsPrinter.Print(domain))
             .Throws<InvalidOperationException>();
 
-        var defaultInputsPrinter = new DomainDslPrinter(DomainParserInputs.Empty);
+        var defaultInputsPrinter = new DomainDslPrinter(DomainSession.ForExtensions([]));
         await Assert.That(() => defaultInputsPrinter.Print(domain))
             .Throws<InvalidOperationException>();
     }

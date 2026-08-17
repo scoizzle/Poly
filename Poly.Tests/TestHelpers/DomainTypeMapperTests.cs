@@ -1,7 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 
 using Poly.DomainModeling;
-using Poly.DomainModeling.Constraints;
+using Poly.DomainModeling.Ontology.Constraints;
 using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.TestHelpers;

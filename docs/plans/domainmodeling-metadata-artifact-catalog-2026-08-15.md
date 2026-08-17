@@ -13,14 +13,14 @@
 ```text
 .poly  →  Domain (facts + uses ids)
        →  DomainSession (libraries loaded: Language, folds, meaning, type maps, artifacts)
-       →  DomainModelAnalyzer (fixed pipeline)
+       →  session.Analyze (pipeline with session type maps in StoragePass)
        →  IAnalysisMetadata on nodes
        →  consume: runtime | MCP | lower/export | IArtifactContributor
 ```
 
 - **Write:** `context.SetMetadata(node, bag)` in an `INodeAnalyzer`.
 - **Read:** `analysis.GetMetadata<T>(node)` or `DomainSemanticLookupExtensions` (catalog / capability / structure).
-- **Library register:** `IDomainLibrary.Register(DomainHostBuilder)` may add DSL, analysis inputs, and artifact contributors. Not MEF.
+- **Library register:** `IDomainLibrary.Register(SessionBuilder)` may add DSL, type maps, conventions, and artifact contributors. Not MEF.
 
 Session-level tables (not analysis metadata): `AnnotationRegistry`, `ExpressionFormRegistry` / `ExpressionFoldTable`, `ExpressionMeaning`, `TypeMappingRegistry`, `IStorageConvention[]`, `IArtifactContributor[]`.
 

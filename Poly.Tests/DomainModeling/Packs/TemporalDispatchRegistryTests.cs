@@ -1,6 +1,6 @@
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
-using Poly.DomainModeling.Packs.Temporal;
+using Poly.DomainModeling.Libraries.Temporal;
 
 namespace Poly.Tests.DomainModeling.Packs;
 

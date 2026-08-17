@@ -1,11 +1,13 @@
 using Poly.Analysis;
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
+using Poly.DomainModeling.Compile;
+using Poly.DomainModeling.ContractFill;
 using Poly.DomainModeling.Evolution;
+using Poly.DomainModeling.Language;
+using Poly.DomainModeling.Libraries.Storage;
+using Poly.DomainModeling.Libraries.Temporal;
 using Poly.DomainModeling.Lowering;
-using Poly.DomainModeling.Packs;
-using Poly.DomainModeling.Packs.Temporal;
-using Poly.DomainModeling.Parsing;
 
 namespace Poly.Tests.DomainModeling.Analysis;
 
@@ -24,8 +26,9 @@ namespace Poly.Tests.DomainModeling.Analysis;
 ///    lowered as a clock) and temporal authoring is rejected at analysis.
 /// </summary>
 public class TemporalFailClosedAnalysisTests {
-    private static EvolutionResult Evolve(string poly, DomainParserInputs? parserInputs = null) {
-        var changes = new PolyDslParser(poly, parserInputs).Parse();
+    private static EvolutionResult Evolve(string poly, DomainSession? parserInputs = null) {
+        var parser = parserInputs is null ? new PolyDslParser(poly) : new PolyDslParser(poly, parserInputs);
+        var changes = parser.Parse();
         return new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(changes);
     }
 
@@ -43,7 +46,7 @@ public class TemporalFailClosedAnalysisTests {
               Expiry: Date
               Bad: policy { Expiry < Now - 12 Fortnights }
             }
-            """, ExtensionCatalog.Core.Language.Parser))
+            """, ExtensionCatalog.Core.Language))
             .Throws<FormatException>();
     }
 
@@ -55,7 +58,7 @@ public class TemporalFailClosedAnalysisTests {
             Item: entity {
               Bad: policy { Now + Today is 1 }
             }
-            """, ExtensionCatalog.Core.Language.Parser);
+            """, ExtensionCatalog.Core.Language);
 
         await Assert.That(result.Succeeded).IsFalse();
         await Assert.That(Errors(result).Any(e =>
@@ -87,7 +90,7 @@ public class TemporalFailClosedAnalysisTests {
               Qty: Number
               Bad: policy { Qty > 5 + 3 Days }
             }
-            """, ExtensionCatalog.Core.Language.Parser);
+            """, ExtensionCatalog.Core.Language);
 
         await Assert.That(result.Succeeded).IsFalse();
         await Assert.That(Errors(result).Any(e =>
@@ -105,7 +108,7 @@ public class TemporalFailClosedAnalysisTests {
                 assign Qty to 3 Days
               }
             }
-            """, ExtensionCatalog.Core.Language.Parser);
+            """, ExtensionCatalog.Core.Language);
 
         await Assert.That(result.Succeeded).IsFalse();
         await Assert.That(Errors(result).Any(e =>
@@ -127,7 +130,7 @@ public class TemporalFailClosedAnalysisTests {
               Expiry: Date
               Bad: policy { Qty + 3 Days > Expiry }
             }
-            """, ExtensionCatalog.Core.Language.Parser);
+            """, ExtensionCatalog.Core.Language);
 
         await Assert.That(result.Succeeded).IsFalse();
         await Assert.That(Errors(result).Any(e =>
@@ -194,7 +197,7 @@ public class TemporalFailClosedAnalysisTests {
                 assign Expiry to Qty + 3 Days
               }
             }
-            """, ExtensionCatalog.Core.Language.Parser);
+            """, ExtensionCatalog.Core.Language);
 
         await Assert.That(result.Succeeded).IsFalse();
         await Assert.That(Errors(result).Any(e =>
@@ -248,7 +251,7 @@ public class TemporalFailClosedAnalysisTests {
             domain T
             uses temporal
             Event: entity { Label: Text default(Today) }
-            """, ExtensionCatalog.Core.Language.Parser);
+            """, ExtensionCatalog.Core.Language);
 
         await Assert.That(result.Succeeded).IsFalse();
         await Assert.That(Errors(result).Any(e =>
@@ -262,11 +265,11 @@ public class TemporalFailClosedAnalysisTests {
             domain T
             uses temporal
             Event: entity { RecordedOn: Date default(Today) }
-            """, ExtensionCatalog.Core.Language.Parser);
+            """, ExtensionCatalog.Core.Language);
 
         await Assert.That(result.Succeeded).IsTrue();
         var expr = result.Root!.Types.OfType<Entity>().Single()
-            .Properties.Single().Constraints.OfType<Poly.DomainModeling.Constraints.DefaultValueConstraint>()
+            .Properties.Single().Constraints.OfType<Poly.DomainModeling.Ontology.Constraints.DefaultValueConstraint>()
             .Single().Expression;
         await Assert.That(expr).IsTypeOf<Today>();
     }

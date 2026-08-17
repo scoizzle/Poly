@@ -1,6 +1,6 @@
 using Poly.DomainModeling;
-using Poly.DomainModeling.Bootstrap;
 using Poly.DomainModeling.Evolution;
+using Poly.DomainModeling.Ontology.Bootstrap;
 
 namespace Poly.Tests.TestHelpers;
 

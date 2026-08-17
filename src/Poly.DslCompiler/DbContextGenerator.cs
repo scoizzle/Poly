@@ -2,8 +2,8 @@ using Poly.Ast;
 using Poly.Ast.Nodes;
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
-using Poly.DomainModeling.Constraints;
 using Poly.DomainModeling.Lowering;
+using Poly.DomainModeling.Ontology.Constraints;
 using Poly.Interpretation.CSharp;
 using Poly.Introspection;
 

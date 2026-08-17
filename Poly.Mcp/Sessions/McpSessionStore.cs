@@ -3,9 +3,11 @@ using System.Collections.Concurrent;
 using Poly.Analysis;
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
-using Poly.DomainModeling.Bootstrap;
+using Poly.DomainModeling.Compile;
+using Poly.DomainModeling.ContractFill;
 using Poly.DomainModeling.Evolution;
-using Poly.DomainModeling.Packs;
+using Poly.DomainModeling.Libraries.Storage;
+using Poly.DomainModeling.Ontology.Bootstrap;
 
 namespace Poly.Mcp.Sessions;
 
@@ -56,8 +58,8 @@ internal static class McpSessionStore {
             var domain = DomainFactory.Create(domainName) with {
                 Extensions = [.. ExtensionCatalog.ProductAuthoring]
             };
-            var analysis = DomainModelAnalyzer.Analyze(domain);
             var modeling = DomainSession.Open(domain);
+            var analysis = modeling.Analyze(domain);
             var state = new McpSessionState(domain, analysis, Revision: 0, modeling);
             Sessions[sessionId] = state;
             return (sessionId, state);
@@ -82,7 +84,7 @@ internal static class McpSessionStore {
     /// </summary>
     public static EvolutionResult? Evolve(
         string sessionId,
-        Func<Domain, EvolutionResult> mutate) {
+        Func<Domain, DomainSession, EvolutionResult> mutate) {
         if (string.IsNullOrWhiteSpace(sessionId))
             throw new ArgumentException("Session ID is required.", nameof(sessionId));
 
@@ -90,7 +92,7 @@ internal static class McpSessionStore {
             if (!Sessions.TryGetValue(sessionId, out var current))
                 return null;
 
-            var outcome = mutate(current.Domain);
+            var outcome = mutate(current.Domain, current.Modeling);
             if (!outcome.Succeeded) {
                 Sessions[sessionId] = current with { LatestAnalysis = outcome.Analysis };
                 return outcome;

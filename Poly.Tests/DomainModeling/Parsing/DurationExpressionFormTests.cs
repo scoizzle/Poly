@@ -1,9 +1,11 @@
 using Poly.Ast.Nodes;
 using Poly.DomainModeling;
+using Poly.DomainModeling.Compile;
+using Poly.DomainModeling.ContractFill;
+using Poly.DomainModeling.Language;
+using Poly.DomainModeling.Libraries.Storage;
+using Poly.DomainModeling.Libraries.Temporal;
 using Poly.DomainModeling.Lowering;
-using Poly.DomainModeling.Packs;
-using Poly.DomainModeling.Packs.Temporal;
-using Poly.DomainModeling.Parsing;
 
 namespace Poly.Tests.DomainModeling.Parsing;
 
@@ -14,11 +16,11 @@ namespace Poly.Tests.DomainModeling.Parsing;
 /// parse. Unknown units (<c>12 fortnights</c>) fail closed — never a DateOperation.
 /// </summary>
 public class DurationExpressionFormTests {
-    private static DomainParserInputs DurationInputs() =>
-        ExtensionCatalog.Core.Language.Parser;
+    private static DomainSession DurationInputs() =>
+        ExtensionCatalog.Core.Language;
 
-    private static DomainParserInputs TemporalInputs() =>
-        ExtensionCatalog.Core.Language.Parser;
+    private static DomainSession TemporalInputs() =>
+        ExtensionCatalog.Core.Language;
 
     private readonly DomainExpressionLoweringPass Pass = new(
         new LoweringContext(new Parameter("entity"), Meaning: ExtensionCatalog.Core.Language.Meaning));

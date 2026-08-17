@@ -1,5 +1,5 @@
 using Poly.Analysis;
-using Poly.DomainModeling.Effects;
+using Poly.DomainModeling.Ontology.Effects;
 
 namespace Poly.DomainModeling.Analysis;
 
@@ -18,11 +18,12 @@ namespace Poly.DomainModeling.Analysis;
 ///  - assign RHS is compatible with the target property;
 ///  - <c>default(...)</c> is compatible with the property type.
 /// </summary>
-internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
+internal sealed class ExpressionTypeAnalyzer(ExpressionMeaning? meaning = null) : INodeAnalyzer {
     public const string Id = "DomainExpressionType";
     public string PassName => Id;
     // Lint-only: reads domain + entity structure; publishes no bags.
     public string[] Dependencies => [DomainCatalogPass.Id];
+    private readonly ExpressionMeaning? _meaning = meaning;
 
     public void Analyze(AnalysisContext context, Node node) {
         if (!context.ShouldAnalyze(node))
@@ -36,14 +37,14 @@ internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
 
     // ── Entry points per entity ────────────────────────────────
 
-    private static void AnalyzeEntity(AnalysisContext context, Entity entity) {
+    private void AnalyzeEntity(AnalysisContext context, Entity entity) {
         var enumTypes = ResolveEnums(context);
         var props = entity.Properties
             .ToDictionary(p => p.Name, p => p.Type.TypeName, StringComparer.Ordinal);
 
         // default(...) on properties
         foreach (var prop in entity.Properties) {
-            foreach (var dv in prop.Constraints.OfType<Constraints.DefaultValueConstraint>()) {
+            foreach (var dv in prop.Constraints.OfType<DefaultValueConstraint>()) {
                 CheckDefault(context, dv.Expression, prop.Type.TypeName, enumTypes);
             }
         }
@@ -92,7 +93,7 @@ internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
 
     // ── Effects ─────────────────────────────────────────────────
 
-    private static void CheckEffectTree(
+    private void CheckEffectTree(
         AnalysisContext context,
         IEnumerable<Effect> effects,
         string callerEntityName,
@@ -103,7 +104,7 @@ internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
             CheckEffect(context, effect, callerEntityName, props, parameters, enumTypes);
     }
 
-    private static void CheckEffect(
+    private void CheckEffect(
         AnalysisContext context,
         Effect effect,
         string callerEntityName,
@@ -159,7 +160,7 @@ internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
     /// Number parameter (invoke line.Mark(amount: line Status)) previously passed
     /// analysis and broke the export at compile (CS1503). Mirrors assign-RHS checking.
     /// </summary>
-    private static void CheckInvokeArgumentTypes(
+    private void CheckInvokeArgumentTypes(
         AnalysisContext context,
         string callerEntityName,
         string? relationshipName,
@@ -281,7 +282,7 @@ internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
     /// (create in bins { Status: "Bogus" }) previously passed analysis and broke the
     /// export at compile (CS1503). Mirrors the assign-RHS compatibility check.
     /// </summary>
-    private static void CheckCreateInitializers(
+    private void CheckCreateInitializers(
         AnalysisContext context,
         string? targetEntityTypeName,
         IReadOnlyList<PropertyBinding> initializers,
@@ -324,7 +325,7 @@ internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
 
     // ── Expressions ─────────────────────────────────────────────
 
-    private static void WalkExpression(
+    private void WalkExpression(
         AnalysisContext context,
         DomainExpression expr,
         Dictionary<string, string> props,
@@ -373,7 +374,7 @@ internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
         }
     }
 
-    private static void CheckArithmetic(
+    private void CheckArithmetic(
         AnalysisContext context, DomainExpression left, DomainExpression right,
         Dictionary<string, string> props, Dictionary<string, string>? parameters,
         Dictionary<string, EnumType> enumTypes) {
@@ -394,7 +395,7 @@ internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
         WalkExpression(context, right, props, parameters, enumTypes);
     }
 
-    private static void CheckNumericArithmetic(
+    private void CheckNumericArithmetic(
         AnalysisContext context, DomainExpression left, DomainExpression right,
         Dictionary<string, string> props, Dictionary<string, string>? parameters,
         Dictionary<string, EnumType> enumTypes) {
@@ -408,7 +409,7 @@ internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
         WalkExpression(context, right, props, parameters, enumTypes);
     }
 
-    private static void CheckBooleanOperands(
+    private void CheckBooleanOperands(
         AnalysisContext context, DomainExpression left, DomainExpression right,
         Dictionary<string, string> props, Dictionary<string, string>? parameters,
         Dictionary<string, EnumType> enumTypes) {
@@ -422,7 +423,7 @@ internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
         WalkExpression(context, right, props, parameters, enumTypes);
     }
 
-    private static void CheckComparison(
+    private void CheckComparison(
         AnalysisContext context,
         Comparison cmp,
         Dictionary<string, string> props,
@@ -445,7 +446,7 @@ internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
         WalkExpression(context, cmp.Right, props, parameters, enumTypes);
     }
 
-    private static void CheckCompatible(
+    private void CheckCompatible(
         AnalysisContext context,
         DomainExpression value,
         string targetTypeName,
@@ -476,7 +477,7 @@ internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
                 $"type mismatch in {what}: cannot assign '{Describe(inferred)}' to '{targetTypeName}'");
     }
 
-    private static void CheckDefault(
+    private void CheckDefault(
         AnalysisContext context,
         DomainExpression expr,
         string propTypeName,
@@ -575,8 +576,8 @@ internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
             _ => InferPackOwned(expr, meaning ?? ExpressionMeaning.Empty),
         };
 
-    private static ExpressionMeaning MeaningOf(AnalysisContext context) =>
-        ExpressionMeaning.For(context.GetTypeLookup()?.Domain);
+    private ExpressionMeaning MeaningOf(AnalysisContext context) =>
+        _meaning ?? RuntimeAnalysisCache.Meaning(context.GetTypeLookup()?.Domain);
 
     /// <summary>
     /// Routes pack-owned expression IR to the session inference table — core never names pack types.

@@ -13,6 +13,18 @@ Immutable domain facts, evolution, analysis, and lower-to-AST. Product surface i
 
 `.poly` is one language. `uses foo` loads Foo’s concepts (what `Now` or `column` means), not a dialect. Some extensions **bind product doors** (REST) or projections (SQL); they do not give the Domain a `Main`. MCP holds a `DomainSession` and is the **interactive harness** (simulate with supplied context). Another Poly domain is `ImportedContract`, not an extension id.
 
+## How you enter
+
+One door per job. Do not add a fourth assembler.
+
+| You have | Call | Do not |
+|----------|------|--------|
+| A `Domain` | `DomainSession.Open(domain)` | Re-open from ids beside the domain |
+| `.poly` text | `DomainSession.ForSource(poly, seed, catalog)` then `new PolyDslParser(poly, session)` | A parameterless parser |
+| Analysis | `session.Analyze(domain)` | `DomainModelAnalyzer.Analyze` (tests/runtime leftovers only) |
+| Mutation | `new DomainEvolution(domain).Apply(changes, session)` | Apply without a session when maps matter |
+| CLI emit | `new DslCompiler().Compile(poly, mode, dbms)` | `CreateInputs` / a second session inside compile |
+
 A library is `Id` + `Register` (concepts, not new productions). Duplicate ids fail closed. Agent lock: [`docs/decisions/2026-08-15-domain-library-extensions-mcp-harness.md`](../../docs/decisions/2026-08-15-domain-library-extensions-mcp-harness.md).
 
 ## Quick start
@@ -28,7 +40,7 @@ var session = DomainSession.Open(domain);
 var result = new DomainEvolution(domain).Evolve()
     .AddEntity("Order")
     .AddPropertyToEntity("Order", new Property("Status", new DomainTypeReference("Text"), []))
-    .Apply();
+    .Apply(session: session);
 
 if (result.Succeeded)
     domain = result.Root;
@@ -64,16 +76,22 @@ Well-formed  →  Catalog (first metadata)  →  Derive (capability, required, t
 
 ## Directory overview
 
+Layout matches [`docs/plans/domainmodeling-target-architecture-2026-08-16.md`](../../docs/plans/domainmodeling-target-architecture-2026-08-16.md). Folder namespaces match the tree except **ontology facts** (`Domain`, `Entity`, `Action`, …), **dispatch**, and **runtime**, which stay `Poly.DomainModeling` so they remain in the parent namespace (avoids `Action`/`Add`/`ValueType` collisions with `System` and `Poly.Ast`).
+
 | Directory | Purpose |
 |-----------|---------|
-| `Bootstrap/` | `DomainFactory` and built-in primitive types |
-| `Queries/` | MCP/query projections |
-| `Evolution/` | `DomainEvolution`, `DomainChange` |
+| `Ontology/` | Facts: Domain, Entity, effects, constraints, contracts, `Bootstrap/` |
+| `Dispatch/` | Closed-world walkers (`DomainExpressionDispatch`, `EffectDispatch`) |
+| `Compile/` | `DomainSession`, `SessionBuilder`, catalog, library + artifact contracts |
+| `Language/` | Product `.poly`: tokens, grammar, parser, printer |
+| `Meaning/` | Folds, forms, print maps, `ExpressionMeaning`, annotations, type maps |
 | `Analysis/` | Domain analyzers on the shared Analysis substrate |
 | `Lowering/` | DomainExpression → AST, C# export |
 | `Runtime/` | `DomainEntityInstance`, `DomainInstanceStore` |
-| `Parsing/` | Product `.poly`: tokens, `DslGrammar`, parser, printer |
-| `Packs/` | Libraries (`TemporalLibrary`, storage, catalog, suite) |
+| `Evolution/` | `DomainEvolution`, `DomainChange` |
+| `Queries/` | MCP/query projections |
+| `Libraries/` | In-assembly seeds (`Temporal/`, `Storage/`) |
+| `ContractFill/` | Another Domain → `ImportedContract` (not session load) |
 | `Constraints/` | Constraint types |
 | `Effects/` | Effect types |
 

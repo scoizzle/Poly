@@ -1,4 +1,4 @@
-using Poly.DomainModeling.Parsing;
+using Poly.DomainModeling.Language;
 using Poly.Grammar;
 
 using JsonKind = Poly.Tests.Grammar.JsonKind;

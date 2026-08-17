@@ -1,8 +1,10 @@
 using Poly.DomainModeling;
-using Poly.DomainModeling.Bootstrap;
+using Poly.DomainModeling.Compile;
+using Poly.DomainModeling.ContractFill;
 using Poly.DomainModeling.Evolution;
-using Poly.DomainModeling.Packs;
-using Poly.DomainModeling.Parsing;
+using Poly.DomainModeling.Language;
+using Poly.DomainModeling.Libraries.Storage;
+using Poly.DomainModeling.Ontology.Bootstrap;
 using Poly.Tests.TestHelpers;
 
 using CompileMode = Poly.DslCompiler.CompileMode;
@@ -41,7 +43,7 @@ public class ContractBindingExportTests {
 
     private static Domain ParseDomain(string poly) {
         var ctx = ExtensionCatalog.Core.Authoring;
-        var parser = new PolyDslParser(poly, ctx.Parser);
+        var parser = new PolyDslParser(poly, ctx);
         var changes = parser.Parse();
         var emptyDomain = DomainTestFactory.Create("_", [], []);
         var result = new DomainEvolution(emptyDomain).Apply(changes);

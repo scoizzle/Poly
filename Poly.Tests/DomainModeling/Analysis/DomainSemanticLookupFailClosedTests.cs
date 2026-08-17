@@ -1,8 +1,8 @@
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
-using Poly.DomainModeling.Effects;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Lowering;
+using Poly.DomainModeling.Ontology.Effects;
 using Poly.Mcp.Sessions;
 using Poly.Mcp.Tools;
 
@@ -380,7 +380,7 @@ public class DomainSemanticLookupFailClosedTests {
     public async Task DescribeStage_EffectiveCounts_MatchHelpers() {
         var (sessionId, _) = McpSessionStore.Create("W2Effective");
 
-        var outcome = McpSessionStore.Evolve(sessionId, domain =>
+        var outcome = McpSessionStore.Evolve(sessionId, (domain, session) =>
             new DomainEvolution(domain).Evolve()
                 .AddEntity("Order")
                 .AddPropertyToEntity("Order", new Property("Age", new DomainTypeReference("Number"), []))
@@ -401,7 +401,7 @@ public class DomainSemanticLookupFailClosedTests {
                     DomainExpression.NotEqual(
                         DomainExpression.Property("Note"),
                         DomainExpression.Literal("")))
-                .Apply());
+                .Apply(session: session));
         await Assert.That(outcome).IsNotNull();
         await Assert.That(outcome!.Succeeded).IsTrue();
 

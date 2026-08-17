@@ -1,5 +1,5 @@
 using Poly.Analysis;
-using Poly.DomainModeling.Constraints;
+using Poly.DomainModeling.Ontology.Constraints;
 
 namespace Poly.DomainModeling.Analysis;
 
@@ -43,7 +43,7 @@ public sealed record BehaviorMetadata(BehaviorModel Behavior) {
     }
 
     internal static BehaviorModel BuildBehavior(Domain domain) {
-        var analysis = DomainModelAnalyzer.Analyze(domain);
+        var analysis = RuntimeAnalysisCache.GetOrAnalyze(domain);
         return From(domain, analysis);
     }
 

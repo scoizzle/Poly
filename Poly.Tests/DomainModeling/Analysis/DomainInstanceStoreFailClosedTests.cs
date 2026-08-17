@@ -1,6 +1,6 @@
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
-using Poly.DomainModeling.Effects;
+using Poly.DomainModeling.Ontology.Effects;
 
 namespace Poly.Tests.DomainModeling.Analysis;
 

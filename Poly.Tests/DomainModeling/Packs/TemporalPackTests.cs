@@ -1,7 +1,9 @@
 using Poly.DomainModeling;
-using Poly.DomainModeling.Packs;
-using Poly.DomainModeling.Packs.Temporal;
-using Poly.DomainModeling.Parsing;
+using Poly.DomainModeling.Compile;
+using Poly.DomainModeling.ContractFill;
+using Poly.DomainModeling.Language;
+using Poly.DomainModeling.Libraries.Storage;
+using Poly.DomainModeling.Libraries.Temporal;
 
 namespace Poly.Tests.DomainModeling.Packs;
 
@@ -14,7 +16,7 @@ public sealed class TemporalPackTests {
     public async Task DomainInputDefaults_NowMinus1Days_ParsesAsDateOperation() {
         var expr = DslExpressionFragment.ParseExpressionFragment(
             "Now - 1 Days",
-            ExtensionCatalog.Core.Language.Parser);
+            ExtensionCatalog.Core.Language);
 
         await Assert.That(expr).IsTypeOf<DateOperation>();
         var dateOp = (DateOperation)expr;
@@ -26,7 +28,7 @@ public sealed class TemporalPackTests {
 
     [Test]
     public async Task CreateWithTemporalPack_NowMinus1Days_ParsesAsDateOperation() {
-        var inputs = ExtensionCatalog.Core.Language.Parser;
+        var inputs = ExtensionCatalog.Core.Language;
 
         var expr = DslExpressionFragment.ParseExpressionFragment("Now - 1 Days", inputs);
 
@@ -41,7 +43,7 @@ public sealed class TemporalPackTests {
     public async Task SqlParser_NowMinus1Days_ParsesAsDateOperation() {
         var expr = DslExpressionFragment.ParseExpressionFragment(
             "Now - 1 Days",
-            ExtensionCatalog.Core.Authoring.Parser);
+            ExtensionCatalog.Core.Authoring);
 
         await Assert.That(expr).IsTypeOf<DateOperation>();
         var dateOp = (DateOperation)expr;

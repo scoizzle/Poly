@@ -1,7 +1,7 @@
 # DomainModeling — vision cleanup (three slices)
 
-**Date:** 2026-08-16  
-**Status:** Proposal. **Not CURRENT.** Do not execute until admitted (`simple-agent-tasks/PIPELINE-STATUS.md`). This file does not admit itself.  
+**Date:** 2026-08-16 (executed 2026-08-17)  
+**Status:** **Slices 1–3 landed 2026-08-17** (2205 tests green). Admit nothing else from this file. Next suite is chosen separately.  
 **Supersedes:** [`domainmodeling-vision-cleanup-2026-08-15.md`](domainmodeling-vision-cleanup-2026-08-15.md) (five-wave story; review found its ACs self-contradictory).  
 **Lock:** [`docs/decisions/2026-08-15-domain-library-extensions-mcp-harness.md`](../decisions/2026-08-15-domain-library-extensions-mcp-harness.md) · [`2026-08-14-domain-libraries.md`](../decisions/2026-08-14-domain-libraries.md) · `docs/CORE.md` · AGENTS platform facts.  
 **Review that forced this rewrite:** [`docs/agent/reviews/2026-08-15-vision-cleanup-plan-review.md`](../agent/reviews/2026-08-15-vision-cleanup-plan-review.md).
@@ -27,19 +27,19 @@ This plan does **not** make every lock locally true. After the last slice, write
 
 ---
 
-## Honesty (recomputed 2026-08-16)
+## Honesty (recomputed 2026-08-17, after slices 1–3)
 
 | Lock | Code |
 |------|------|
-| Unknown `uses` fails closed | `DomainSession.Create` → `ResolveHost(ids, failOnUnknown: false)` skips unknown ids (`DomainSession.cs:92-93`). Catalog default throws (`ExtensionCatalog.cs:64-77`). |
-| One load path | Three: catalog `ResolveHost`; `DslCompiler.CreateInputs` always `Load(Temporal+Storage+vendor)` + optional MinimalAPI contributor; `ExtraArtifactLibrary` Guid ids (`DslCompiler.cs:232-280`). Parse uses `HostForSource` (`:147`). |
-| Analyze is the session | `DomainEvolution.Apply` and `McpSessionStore` call static `DomainModelAnalyzer.Analyze` (`DomainEvolution.cs:38-39,118`; `McpSessionStore.cs:59`). Pipeline `StoragePass()` has **no** type maps (`DomainModelAnalyzer.cs:87`). Compiler re-runs `StoragePass` when maps/conventions exist (`DslCompiler.cs:376-397`) — that is how Sqlite `TEXT`/`INTEGER` land. |
-| One lowering | Emit-mode context: `LowerStageTransitions` also gates invoke / for-invoke / create / create-in (`EffectLoweringPass.cs:216+`). `UseThisReference`, `PostTransitionNodes`, `SourceStageName`, nav resolvers change **which nodes** exist (`LoweringContext.cs:82-88`). |
-| No Comment / second interpreter as meaning | 8 `new Comment(` sites. Mixed `if`+create **must** use `ExecuteStructured` (`DomainEntityInstance.cs:594-611`) because children become Comment (`EffectLoweringPass.cs:406-416`). |
-| MCP simulate = name + context + same AST | `simulate_policy` = no session, fake `Entity("Subject")`, `InferPropertyTypes` (`OracleTool.cs:370-415`). `evaluate_policy` = named policy. `create_instance`+`invoke_action` = store. |
-| Core has no `Program.cs` | `CompileMode.All` adds `MinimalApiHostArtifactContributor`. |
+| Unknown `uses` fails closed | **True.** `DomainSession.Open` / `ForSource` / `ForExtensions` throw. `rg failOnUnknown` empty in product. |
+| One load path | **True for compile.** `DslCompiler` opens one session (`OpenCompileSession`) for parse, analyze, and artifacts. `CreateInputs` / Guid `ExtraArtifactLibrary` are gone. `CompileMode.All` still appends the HTTP contributor (not `uses http`). |
+| Analyze is the session | **True for authoring/MCP/compile.** `DomainEvolution.Apply`, fluent `EvolutionBuilder.Apply`, `McpSessionStore.Create`/`Evolve`, and `apply_dsl` go through a session. Session `StoragePass` gets type maps. Compiler does not `new StoragePass(`. **Still a lie for runtime helpers:** `BehaviorMetadata.BuildBehavior` and `RuntimeAnalysisCache.GetOrAnalyze` call static `DomainModelAnalyzer.Analyze` (no maps). `StoragePass` still has a core-catalog `Open` fallback for standalone `new StoragePass()`. |
+| One lowering | **Still a lie.** Emit-mode `LowerStageTransitions` still gates invoke / for-invoke / create / create-in. Runtime ≠ emit for store effects. |
+| No Comment / second interpreter as meaning | **True on emit.** `rg 'new Comment\('` empty under `Poly/DomainModeling`. Empty bodies are empty blocks. **Still a lie at runtime:** mixed `if`+create goes through named `ExecuteStructured`. |
+| MCP simulate = name + context + same AST | **Still a lie.** `simulate_policy` = no session, fake `Entity("Subject")`, `InferPropertyTypes`. `evaluate_policy` = named policy. `create_instance`+`invoke_action` = store. |
+| Core has no `Program.cs` | **Still a lie.** `CompileMode.All` still adds `MinimalApiHostArtifactContributor`. |
 
-`IDomainPack` and `Domain.ResolveHost` are already gone. Do not put them on a kill list.
+`IDomainPack`, `Domain.ResolveHost`, `DomainHost*`, `DomainParserInputs`, `FromInputs` are gone. Do not put them on a kill list.
 
 ---
 

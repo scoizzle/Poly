@@ -1,11 +1,12 @@
 using Poly.Analysis;
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
+using Poly.DomainModeling.Compile;
+using Poly.DomainModeling.ContractFill;
 using Poly.DomainModeling.Evolution;
+using Poly.DomainModeling.Language;
+using Poly.DomainModeling.Libraries.Storage;
 using Poly.DomainModeling.Lowering;
-using Poly.DomainModeling.Packs;
-using Poly.DomainModeling.Packs.Temporal;
-using Poly.DomainModeling.Parsing;
 using Poly.Interpretation.CSharp;
 using Poly.Packs.Sqlite;
 using Poly.Packs.SqlServer;
@@ -46,6 +47,7 @@ public enum DbmsPack {
 /// </summary>
 public sealed class DslCompiler {
     private readonly List<IDomainLibrary> _extraLibraries = [];
+    private readonly List<IArtifactContributor> _extraArtifacts = [];
 
     /// <summary>
     /// Result of a compilation attempt.
@@ -57,7 +59,8 @@ public sealed class DslCompiler {
     );
 
     /// <summary>
-    /// Loads an extra library for subsequent compiles (DSL, analysis, and/or artifacts).
+    /// Loads an extra library for subsequent compiles. The library is on the
+    /// same session as parse and analyze — not a side bag.
     /// </summary>
     public DslCompiler Load(IDomainLibrary library) {
         ArgumentNullException.ThrowIfNull(library);
@@ -66,18 +69,19 @@ public sealed class DslCompiler {
     }
 
     /// <summary>
-    /// Registers an artifact contributor as a one-off library on this compiler.
+    /// Registers a one-off artifact contributor (not a <c>uses</c> id).
     /// </summary>
     public DslCompiler AddArtifactContributor(IArtifactContributor contributor) {
         ArgumentNullException.ThrowIfNull(contributor);
-        return Load(new ExtraArtifactLibrary(contributor));
+        _extraArtifacts.Add(contributor);
+        return this;
     }
 
     /// <summary>
     /// Compiles .poly DSL text into C# source files (entities only — default mode).
     /// </summary>
     public CompileResult Compile(string polyText) =>
-        Compile(polyText, CompileMode.Entities);
+        Compile(polyText, CompileMode.Entities, DbmsPack.Generic);
 
     /// <summary>
     /// Compiles .poly DSL text into C# source files with the given mode
@@ -87,66 +91,37 @@ public sealed class DslCompiler {
         Compile(polyText, mode, DbmsPack.Generic);
 
     /// <summary>
-    /// Compiles .poly DSL text with the given mode and DBMS pack selection.
+    /// Compiles .poly. One session: seed (or source <c>uses</c>) plus
+    /// <see cref="Load"/> libraries. <paramref name="dbms"/> seeds the vendor
+    /// id and selects the Minimal API provider in <c>--mode all</c>.
     /// </summary>
     public CompileResult Compile(string polyText, CompileMode mode, DbmsPack dbms) =>
-        Compile(polyText, mode, CreateInputs(DbmsPacks(dbms), extra: _extraLibraries, hostArtifacts: mode == CompileMode.All, dbms), dbms);
+        CompileCore(polyText, mode, dbms, _extraLibraries);
 
     /// <summary>
-    /// Compiles .poly DSL text with explicit domain libraries loaded in order.
-    /// Each library joins parse/print/analysis via <see cref="DomainHostBuilder.Load"/>;
-    /// the library list is the model (<c>DbmsPack</c> is a CLI convenience alias for
-    /// the built-in persistence libraries). The derived <see cref="DbmsPack"/> drives Minimal API
-    /// provider selection in <c>--mode all</c>.
+    /// Compiles .poly with extra libraries on the same session.
+    /// <see cref="DbmsPack"/> is derived from known vendor ids for Program.cs.
     /// </summary>
     public CompileResult Compile(string polyText, CompileMode mode, params IDomainLibrary[] libraries) {
         ArgumentNullException.ThrowIfNull(libraries);
-        var dbms = ResolveDbms(libraries);
-        return Compile(polyText, mode, CreateInputs(libraries, extra: _extraLibraries, hostArtifacts: mode == CompileMode.All, dbms), dbms);
+        IReadOnlyList<IDomainLibrary> extras = [.. _extraLibraries, .. libraries];
+        return CompileCore(polyText, mode, ResolveDbms(extras), extras);
     }
 
-    /// <summary>
-    /// Compiles .poly DSL text with explicit parse/analyze inputs.
-    /// </summary>
-    public CompileResult Compile(
+    private CompileResult CompileCore(
         string polyText,
         CompileMode mode,
-        DomainParserInputs parserInputs,
-        DomainAnalysisInputs analysisInputs) =>
-        Compile(polyText, mode, parserInputs, analysisInputs, DbmsPack.Generic, artifacts: []);
-
-    /// <summary>
-    /// Compiles .poly DSL text from an upstream convenience parse/analyze bundle
-    /// and a DBMS pack (the pack drives Program.cs provider selection in
-    /// <c>--mode all</c>).
-    /// </summary>
-    public CompileResult Compile(string polyText, CompileMode mode, DomainHost inputs, DbmsPack dbms) =>
-        Compile(polyText, mode, inputs.Parser, inputs.Analysis, dbms, inputs.Artifacts);
-
-    /// <summary>
-    /// Compiles .poly DSL text with explicit parse/analyze inputs and a DBMS pack
-    /// (the pack drives Program.cs provider selection in <c>--mode all</c>).
-    /// </summary>
-    private CompileResult Compile(
-        string polyText,
-        CompileMode mode,
-        DomainParserInputs parserInputs,
-        DomainAnalysisInputs analysisInputs,
         DbmsPack dbms,
-        IReadOnlyList<IArtifactContributor>? artifacts = null) {
-        ArgumentNullException.ThrowIfNull(parserInputs);
-        ArgumentNullException.ThrowIfNull(analysisInputs);
-
+        IReadOnlyList<IDomainLibrary> extraLibraries) {
         if (string.IsNullOrWhiteSpace(polyText))
             return Fail("DSL text is empty.");
 
-        // ── 1. Parse ─────────────────────────────────────────────
+        DomainSession session;
         List<DomainChange> changes;
         try {
-            var seed = SeedFor(dbms);
-            var parseHost = DomainCompilation.HostForSource(polyText, seed, CompilerCatalog);
-            var parser = new PolyDslParser(polyText, parseHost.Parser);
-            changes = DomainCompilation.WithSeed(parser.Parse(), seed).ToList();
+            session = OpenCompileSession(polyText, dbms, extraLibraries);
+            var parser = new PolyDslParser(polyText, session);
+            changes = DomainCompilation.WithSeed(parser.Parse(), SeedFor(dbms)).ToList();
         }
         catch (FormatException ex) {
             return Fail($"Parse error: {ex.Message}");
@@ -158,14 +133,12 @@ public sealed class DslCompiler {
         if (changes.Count == 0)
             return Fail("No domain changes parsed from the DSL text.");
 
-        // ── 2. Evolve from empty domain ──────────────────────────
         var nameChange = changes.OfType<SetDomainNameChange>().FirstOrDefault();
         var domainName = nameChange?.Name ?? "PolyDomain";
-
         var emptyDomain = new Domain(domainName, []);
         EvolutionResult outcome;
         try {
-            outcome = new DomainEvolution(emptyDomain).Apply(changes);
+            outcome = new DomainEvolution(emptyDomain).Apply(changes, session: session);
         }
         catch (Exception ex) {
             return Fail($"Evolution failed: {ex.Message}");
@@ -187,19 +160,11 @@ public sealed class DslCompiler {
             );
         }
 
-        // ── 3. Generate C# ───────────────────────────────────────
         var domain = outcome.Root;
         try {
-            var hostAnalysis = domain.Extensions.Count > 0
-                ? DomainSession.Open(domain, CompilerCatalog).Analysis
-                : analysisInputs;
-            var output = GenerateAllFiles(domain, outcome.Analysis, mode, hostAnalysis);
+            var output = GenerateAllFiles(domain, outcome.Analysis, mode);
             var files = output.Files.ToList();
 
-            // CompileMode.All emits Program.cs + demo.http through the artifact-contributor
-            // hook (composition-root host contributor), alongside any user-registered ones.
-            // The host contributor runs first to preserve the historical file order
-            // (Program.cs + demo.http before extra contributed files).
             if (mode == CompileMode.All
                 && (output.Storage is null || output.Behavior is null
                     || output.Aggregate is null || output.DbContextName is null)) {
@@ -207,26 +172,14 @@ public sealed class DslCompiler {
                     "CompileMode.All requires storage, behavior, and aggregate analysis metadata.");
             }
 
-            foreach (var contributor in artifacts ?? [])
+            foreach (var contributor in CollectArtifacts(session, mode, dbms))
                 foreach (var file in contributor.Contribute(domain, outcome.Analysis))
                     files.Add(file);
             return new CompileResult(Success: true, Files: files, Errors: null);
         }
         catch (Exception ex) {
-            // Projection / emit failures must surface as compile errors (fail loud).
             return Fail($"Code generation failed: {ex.Message}");
         }
-    }
-
-    /// <summary>
-    /// Compiles .poly DSL text with an upstream convenience parse/analyze bundle.
-    /// </summary>
-    public CompileResult Compile(
-        string polyText,
-        CompileMode mode,
-        DomainHost inputs) {
-        ArgumentNullException.ThrowIfNull(inputs);
-        return Compile(polyText, mode, inputs.Parser, inputs.Analysis, DbmsPack.Generic, inputs.Artifacts);
     }
 
     private static readonly ExtensionCatalog CompilerCatalog = ExtensionCatalog.Core
@@ -240,57 +193,37 @@ public sealed class DslCompiler {
     };
 
     /// <summary>
-    /// Builds explicit parse/analyze inputs for a DBMS pack selection.
-    /// Always includes portable <c>column</c>/<c>table</c> annotation syntax.
+    /// One session for parse, analyze, and artifacts. Source <c>uses</c> wins
+    /// over the DBMS seed; <paramref name="extraLibraries"/> are always loaded.
     /// </summary>
-    public static DomainHost CreateInputs(DbmsPack dbms) =>
-        CreateInputs(DbmsPacks(dbms));
+    private static DomainSession OpenCompileSession(
+        string polyText,
+        DbmsPack dbms,
+        IReadOnlyList<IDomainLibrary> extraLibraries) {
+        var peeked = DomainCompilation.PeekExtensions(polyText);
+        var ids = new List<string>(peeked.Count > 0 ? peeked : SeedFor(dbms));
+        var seen = new HashSet<string>(ids, StringComparer.Ordinal);
+        var catalog = CompilerCatalog;
+        foreach (var library in extraLibraries) {
+            if (!catalog.Contains(library.Id))
+                catalog = catalog.With(library);
+            if (seen.Add(library.Id))
+                ids.Add(library.Id);
+        }
+        return DomainSession.ForExtensions(ids, catalog);
+    }
 
-    /// <summary>
-    /// Builds explicit parse/analyze inputs with the given domain libraries loaded
-    /// in order. Always includes portable <c>column</c>/<c>table</c> annotation
-    /// syntax (compiler host); duplicate library ids fail closed in
-    /// <see cref="DomainHostBuilder.Load"/>.
-    /// </summary>
-    public static DomainHost CreateInputs(params IDomainLibrary[] libraries) =>
-        CreateInputs(libraries, extra: [], hostArtifacts: false, DbmsPack.Generic);
-
-    private static DomainHost CreateInputs(
-        IReadOnlyList<IDomainLibrary> libraries,
-        IReadOnlyList<IDomainLibrary> extra,
-        bool hostArtifacts,
+    private IEnumerable<IArtifactContributor> CollectArtifacts(
+        DomainSession session,
+        CompileMode mode,
         DbmsPack dbms) {
-        ArgumentNullException.ThrowIfNull(libraries);
-        var builder = DomainHostBuilder.CreateEmpty()
-            .Load(new TemporalLibrary())
-            .Load(new StorageFacetLibrary());
-        foreach (var library in libraries)
-            builder.Load(library);
-        foreach (var library in extra)
-            builder.Load(library);
-        if (hostArtifacts)
-            builder.AddArtifactContributor(new MinimalApiHostArtifactContributor(dbms: dbms));
-        return builder.Build();
+        if (mode == CompileMode.All)
+            yield return new MinimalApiHostArtifactContributor(dbms: dbms);
+        foreach (var artifact in session.Artifacts)
+            yield return artifact;
+        foreach (var artifact in _extraArtifacts)
+            yield return artifact;
     }
-
-    private sealed class ExtraArtifactLibrary(IArtifactContributor contributor) : IDomainLibrary {
-        public string Id { get; } = "artifact:" + contributor.GetType().FullName + ":" + Guid.NewGuid().ToString("N");
-
-        public void Register(DomainHostBuilder builder) =>
-            builder.AddArtifactContributor(contributor);
-    }
-
-    /// <summary>
-    /// The built-in persistence libraries behind each <see cref="DbmsPack"/> alias.
-    /// The enum has no arms for future vendors — they register as
-    /// <see cref="IDomainLibrary"/> only.
-    /// </summary>
-    private static IDomainLibrary[] DbmsPacks(DbmsPack dbms) => dbms switch {
-        DbmsPack.Generic => [],
-        DbmsPack.Sqlite => [new SqliteLibrary()],
-        DbmsPack.SqlServer => [new SqlServerLibrary()],
-        _ => throw new ArgumentOutOfRangeException(nameof(dbms), dbms, "Unknown DBMS pack."),
-    };
 
     /// <summary>
     /// Derives the Minimal API provider selection from loaded library ids
@@ -336,8 +269,7 @@ public sealed class DslCompiler {
 
     private static GenerationOutput GenerateAllFiles(
         Domain domain, AnalysisResult analysis,
-        CompileMode mode = CompileMode.Entities,
-        DomainAnalysisInputs? analysisInputs = null) {
+        CompileMode mode = CompileMode.Entities) {
 
         var files = new List<(string FileName, string Source)>();
 
@@ -373,28 +305,11 @@ public sealed class DslCompiler {
             files.Add(("Poly.Types.cs", scaffolding));
         }
 
-        // Infrastructure metadata — prefer domain analysis result (which already ran
-        // StoragePass via UseDomainModelAnalysisPipeline). Fall back
-        // to a narrow StoragePass re-run only when pack-specific type maps or
-        // conventions require refinement (e.g., Sqlite type mappings).
+        // Infrastructure metadata comes from the session analysis (which already ran
+        // StoragePass with the session's type maps + conventions). No second StoragePass.
         var storageModel = analysis.GetMetadata<StorageMappingMetadata>(domain)?.Storage;
         var behaviorModel = BehaviorMetadata.From(domain, analysis);
         var aggregateModel = analysis.GetMetadata<OwnershipAggregateMetadata>(domain)?.Aggregate;
-
-        var needsInfraPipeline = (mode == CompileMode.Db || mode == CompileMode.All)
-            && (storageModel == null
-                || (analysisInputs?.TypeMaps.HasOverrides ?? false)
-                || (analysisInputs?.StorageConventions.Count ?? 0) > 0);
-
-        if (needsInfraPipeline) {
-            var context = AnalysisContext.CreateDefault();
-            var storagePass = new StoragePass(
-                typeMaps: analysisInputs?.TypeMaps,
-                conventions: analysisInputs?.StorageConventions,
-                analysis: analysis);
-            storagePass.Analyze(context, domain);
-            storageModel = context.GetMetadata<StorageMappingMetadata>(domain)?.Storage;
-        }
 
         // Fail closed — no silent re-analyze (storage, behavior, aggregate).
         if ((mode == CompileMode.Db || mode == CompileMode.All) && storageModel == null)

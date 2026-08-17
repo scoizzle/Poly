@@ -1,7 +1,0 @@
-namespace Poly.DomainModeling.Effects;
-
-public sealed record CompositeEffect(
-    IReadOnlyList<Effect> Effects
-) : Effect {
-    public sealed override IEnumerable<Node?> Children => [.. Effects];
-}

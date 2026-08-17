@@ -7,10 +7,12 @@ using ModelContextProtocol.Server;
 using Poly.Analysis;
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
-using Poly.DomainModeling.Constraints;
+using Poly.DomainModeling.Compile;
+using Poly.DomainModeling.ContractFill;
 using Poly.DomainModeling.Evolution;
-using Poly.DomainModeling.Packs;
-using Poly.DomainModeling.Parsing;
+using Poly.DomainModeling.Language;
+using Poly.DomainModeling.Libraries.Storage;
+using Poly.DomainModeling.Ontology.Constraints;
 using Poly.DomainModeling.Queries;
 using Poly.Mcp.Sessions;
 
@@ -705,7 +707,7 @@ Unknown kind, missing required field, or invalid cardinality fails closed. For b
 
         DomainExpression expr;
         try {
-            expr = DslExpressionFragment.ParseExpressionFragment(expressionDsl, state.Modeling.ParserInputs);
+            expr = DslExpressionFragment.ParseExpressionFragment(expressionDsl, state.Modeling);
         }
         catch (Exception ex) {
             return new DomainToolResponse(
@@ -953,10 +955,10 @@ Unknown kind or missing required field fails closed.")]
         var before = GetFingerprint(snapshot.Domain);
         var preRevision = snapshot.Revision;
 
-        var outcome = McpSessionStore.Evolve(sessionId, domain => {
+        var outcome = McpSessionStore.Evolve(sessionId, (domain, modeling) => {
             var result = new DomainEvolution(domain).Evolve();
             result = mutate(result);
-            return result.Apply();
+            return result.Apply(session: modeling);
         });
 
         // Session was just validated above; null shouldn't happen but guard anyway.
@@ -1334,6 +1336,7 @@ through the unified `add` / `remove` tools (kind + payload).")]
 
         // ── 1. Parse ───────────────────────────────────────────
         List<DomainChange> changes;
+        DomainSession parseSession;
         try {
             if (!McpSessionStore.TryGet(sessionId, out var parseState))
                 return Failure_NotFound(sessionId);
@@ -1341,9 +1344,8 @@ through the unified `add` / `remove` tools (kind + payload).")]
             var seed = parseState.Domain.Extensions.Count > 0
                 ? parseState.Domain.Extensions
                 : ExtensionCatalog.ProductAuthoring;
-            var parser = new PolyDslParser(
-                polyText,
-                DomainSession.ForSource(polyText, seed, failOnUnknown: true));
+            parseSession = DomainSession.ForSource(polyText, seed);
+            var parser = new PolyDslParser(polyText, parseSession);
             changes = parser.Parse();
             changes = DomainCompilation.WithSeed(changes, seed).ToList();
         }
@@ -1371,7 +1373,7 @@ through the unified `add` / `remove` tools (kind + payload).")]
 
         EvolutionResult outcome;
         try {
-            outcome = new DomainEvolution(emptyDomain).Apply(changes);
+            outcome = new DomainEvolution(emptyDomain).Apply(changes, session: parseSession);
         }
         catch (Exception ex) {
             return new DomainToolResponse(

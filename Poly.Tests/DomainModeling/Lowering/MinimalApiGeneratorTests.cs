@@ -1,13 +1,15 @@
 using Poly.Ast.Nodes;
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
-using Poly.DomainModeling.Bootstrap;
-using Poly.DomainModeling.Constraints;
-using Poly.DomainModeling.Effects;
+using Poly.DomainModeling.Compile;
+using Poly.DomainModeling.ContractFill;
 using Poly.DomainModeling.Evolution;
+using Poly.DomainModeling.Language;
+using Poly.DomainModeling.Libraries.Storage;
 using Poly.DomainModeling.Lowering;
-using Poly.DomainModeling.Packs;
-using Poly.DomainModeling.Parsing;
+using Poly.DomainModeling.Ontology.Bootstrap;
+using Poly.DomainModeling.Ontology.Constraints;
+using Poly.DomainModeling.Ontology.Effects;
 using Poly.DslCompiler;
 using Poly.Interpretation.CSharp;
 using Poly.Tests.TestHelpers;
@@ -21,7 +23,7 @@ namespace Poly.Tests.DomainModeling.Lowering;
 public class MinimalApiGeneratorTests {
     private static Domain ParseDomain(string poly) {
         var ctx = ExtensionCatalog.Core.Authoring;
-        var parser = new PolyDslParser(poly, ctx.Parser);
+        var parser = new PolyDslParser(poly, ctx);
         var changes = parser.Parse();
         var emptyDomain = DomainTestFactory.Create("_", [], []);
         var result = new DomainEvolution(emptyDomain).Apply(changes);

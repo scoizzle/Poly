@@ -3,8 +3,8 @@ using System.Text;
 using Poly.Analysis;
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
-using Poly.DomainModeling.Constraints;
 using Poly.DomainModeling.Lowering;
+using Poly.DomainModeling.Ontology.Constraints;
 
 namespace Poly.DslCompiler;
 

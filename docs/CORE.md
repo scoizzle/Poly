@@ -101,6 +101,8 @@ Use these. If you think you need a parallel facility, stop and re-read this sect
 
 **Domain catalog:** `DomainCatalogPass` is the first metadata pass (after structural well-formedness). It publishes `DomainCatalogMetadata` on the domain (types, relationships, actions, stages, owners) and aliases the same type/relationship maps on `default` for child-node walks. Later passes read that catalog; they do not rebuild name indexes. `TryGetStage` / `TryResolveAction` / `GetTypeLookup` go through it. Derived bags (capability, required-by-policy, dispatch plans, topology, storage, entity structure keys/ctor) stay later. **Relationships are entity-owned navigations:** `Domain.Relationships` is a computed flatten. `AnalyzeRequiringCatalog` requires the catalog for analyzable domains.
 
+**Domain analysis door:** authoring, MCP, and compile analyze through `DomainSession.Analyze`. That pipeline constructs `StoragePass` with the session's type maps and storage conventions. Evolution and `McpSessionStore` must not call static `DomainModelAnalyzer.Analyze`. The static type remains for tests and two runtime helpers (`BehaviorMetadata`, `RuntimeAnalysisCache`) that still ignore vendor maps.
+
 **Subscription dispatch (stage + entity-level):** `RuntimeContractAnalyzer` publishes `SubscriptionDispatchPlanMetadata` on each **stage** (stage-scoped `when`) and each **entity** (always-active `Entity.Subscriptions`, empty plan when none). `DomainInstanceStore.NotifyTransition` requires catalog + relationship contracts; dispatches **stage plan first, then entity plan**; missing bags throw. The C# export consumes the SAME dispatch plan (no re-walk of `StageSubscription`): optional peer binder `when Rel Stage as name` — VM rewrites binder path-prefix against the transitioned peer; export emits quantifier-aware handlers `When{Any|All|Each}{Target}{Stage}(TargetType name)` and `sub.When…(this)`, one registry per (stage, subscriber) pair, notify fan-out to every handler. Analysis fail-closed for unbound peer-like roots, nested peer path-prefix, and peer assign targets. Historical suite: [`plans/archive/domainmodeling-completed-2026-08/simple-agent-tasks/spe-README.md`](plans/archive/domainmodeling-completed-2026-08/simple-agent-tasks/spe-README.md).
 
 **Policy store reads:** `EvaluatePolicy` preprocesses Q3′ quantifiers, singular path-prefix (`RelationshipNavigation`), and relationship **`Rel exists` / `NotExists`** against outbound store links (`GetOutboundRelatedInstances`). Fail closed without store/domain for those forms; empty links → `exists` false (not throw).
@@ -192,9 +194,9 @@ Module README: `Poly/Introspection/README.md`.
 | Persistence (`storage`, `sqlite`, …) | listed / compiler seed | no |
 | Product host (REST / HTTP, …) | **only** if listed | **yes** — binds already-lowered operations |
 
-Unknown or duplicate ids fail closed. CLI `--dbms sqlite` seeds id `sqlite`; it does not imply HTTP. Core seed does not emit `Program.cs`. A host extension that cannot bind a lowered operation fails closed.
+Unknown or duplicate ids fail closed. CLI `--dbms sqlite` seeds id `sqlite`; it does not imply HTTP. The compiler opens **one** session (`ForSource`/`ForExtensions` + extras) for parse, analyze, and artifacts. Core seed does not emit `Program.cs`. A host extension that cannot bind a lowered operation fails closed.
 
-Folder `Packs/` is a leftover name. The noun is **extension** / **library**.
+Folder `Libraries/` holds in-assembly seeds (Temporal, storage facets). Vendor packs stay in `src/`. The noun is **extension** / **library**.
 
 ### 3.7 Debugging / tracing (VM)
 

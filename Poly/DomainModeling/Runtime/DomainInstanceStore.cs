@@ -1,7 +1,7 @@
 namespace Poly.DomainModeling;
 
 using Poly.DomainModeling.Analysis;
-using Poly.DomainModeling.Constraints;
+using Poly.DomainModeling.Ontology.Constraints;
 
 /// <summary>
 /// Minimal in-memory store for <see cref="DomainEntityInstance"/> objects.

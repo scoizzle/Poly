@@ -1,6 +1,8 @@
 using Poly.Analysis;
 using Poly.DomainModeling;
-using Poly.DomainModeling.Packs;
+using Poly.DomainModeling.Compile;
+using Poly.DomainModeling.ContractFill;
+using Poly.DomainModeling.Libraries.Storage;
 
 using CompileMode = Poly.DslCompiler.CompileMode;
 using Compiler = Poly.DslCompiler.DslCompiler;
@@ -92,7 +94,7 @@ public class DslCompilerArtifactContributorTests {
     private sealed class HelloLibrary(HelloContributor contributor) : IDomainLibrary {
         public string Id => "hello-artifact";
 
-        public void Register(DomainHostBuilder builder) =>
+        public void Register(SessionBuilder builder) =>
             builder.AddArtifactContributor(contributor);
     }
 }

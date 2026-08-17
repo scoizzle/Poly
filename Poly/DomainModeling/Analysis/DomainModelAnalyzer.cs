@@ -5,26 +5,34 @@ using Poly.DomainModeling.Lowering;
 namespace Poly.DomainModeling.Analysis;
 
 /// <summary>
-/// Static analyzer for V3 domain models. Uses a cached pipeline internally
-/// for all analysis entry points.
-/// Thread-safe — the underlying passes are stateless.
+/// Compatibility door for tests. Product analyze is <see cref="DomainSession.Analyze"/>.
+/// This forwards to a core-catalog session for the domain.
 /// </summary>
 public static class DomainModelAnalyzer {
-    private static readonly Analyzer _analyzer = new AnalyzerBuilder()
-        .UseIncrementalAnalysis()
-        .UseDomainModelAnalysisPipeline()
-        .Build();
+    /// <summary>
+    /// Builds the product analysis pipeline with the session's storage type maps
+    /// and conventions wired into <see cref="StoragePass"/>. The session owns its
+    /// analyzer; this factory is the single construction point.
+    /// </summary>
+    internal static Analyzer BuildPipeline(
+        TypeMappingRegistry? typeMaps,
+        IReadOnlyList<IStorageConvention>? conventions,
+        ExpressionMeaning? meaning = null) =>
+        new AnalyzerBuilder()
+            .UseIncrementalAnalysis()
+            .UseDomainModelAnalysisPipeline(typeMaps, conventions, meaning)
+            .Build();
 
     public static AnalysisResult Analyze(Domain domain) {
         ArgumentNullException.ThrowIfNull(domain);
-        return _analyzer.Analyze(domain);
+        return RuntimeAnalysisCache.Session(domain).Analyze(domain);
     }
 
     public static AnalysisResult Analyze(Domain domain, AnalysisResult priorAnalysis, IEnumerable<Node> invalidatedNodes) {
         ArgumentNullException.ThrowIfNull(domain);
         ArgumentNullException.ThrowIfNull(priorAnalysis);
         ArgumentNullException.ThrowIfNull(invalidatedNodes);
-        return _analyzer.Analyze(domain, priorAnalysis, invalidatedNodes);
+        return RuntimeAnalysisCache.Session(domain).Analyze(domain, priorAnalysis, invalidatedNodes);
     }
 
     /// <summary>
@@ -56,7 +64,10 @@ public static class DomainModelAnalyzer {
 
 public static class DomainModelAnalysisBuilderExtensions {
     extension(AnalyzerBuilder builder) {
-        public AnalyzerBuilder UseDomainModelAnalysisPipeline() {
+        public AnalyzerBuilder UseDomainModelAnalysisPipeline(
+            TypeMappingRegistry? typeMaps = null,
+            IReadOnlyList<IStorageConvention>? conventions = null,
+            ExpressionMeaning? meaning = null) {
             // Registration order must introduce each pass only after its declared
             // Dependencies are present (AnalyzerBuilder inserts after the last dep).
             // Fact emitters vs validate packs:
@@ -69,7 +80,7 @@ public static class DomainModelAnalysisBuilderExtensions {
             builder.AddAnalyzer(new RuntimeContractAnalyzer());
             builder.AddAnalyzer(new RequiredPropertiesPass());
             builder.AddAnalyzer(new PolicyConstraintAnalyzer());
-            builder.AddAnalyzer(new ExpressionTypeAnalyzer());
+            builder.AddAnalyzer(new ExpressionTypeAnalyzer(meaning));
             // DownstreamConstraintsMetadata consumed by EffectAnalyzer — register first
             builder.AddAnalyzer(new ConstraintPropagationAnalyzer());
             builder.AddAnalyzer(new EffectFactsPass());
@@ -84,7 +95,7 @@ public static class DomainModelAnalysisBuilderExtensions {
             builder.AddAnalyzer(new EffectTopologyPass());
             builder.AddAnalyzer(new OwnershipAggregatePass());
             builder.AddAnalyzer(new CrossReferencePass());
-            builder.AddAnalyzer(new StoragePass());
+            builder.AddAnalyzer(new StoragePass(typeMaps, conventions));
             builder.AddAnalyzer(new AuthoringSuggestionAnalyzer());
             // Entity Syntax projection is export-time only — not an analysis fact.
             return builder;

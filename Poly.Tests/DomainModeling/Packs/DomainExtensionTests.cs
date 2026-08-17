@@ -1,8 +1,10 @@
 using Poly.DomainModeling;
-using Poly.DomainModeling.Bootstrap;
+using Poly.DomainModeling.Compile;
+using Poly.DomainModeling.ContractFill;
 using Poly.DomainModeling.Evolution;
-using Poly.DomainModeling.Packs;
-using Poly.DomainModeling.Parsing;
+using Poly.DomainModeling.Language;
+using Poly.DomainModeling.Libraries.Storage;
+using Poly.DomainModeling.Ontology.Bootstrap;
 
 namespace Poly.Tests.DomainModeling.Packs;
 
@@ -14,8 +16,8 @@ public sealed class DomainExtensionTests {
             uses temporal
             Item: entity { Name: Text }
             """;
-        var host = DomainCompilation.HostForSource(poly, ExtensionCatalog.ProductLanguage);
-        var changes = new PolyDslParser(poly, host.Parser).Parse();
+        var host = DomainSession.ForSource(poly, ExtensionCatalog.ProductLanguage);
+        var changes = new PolyDslParser(poly, host).Parse();
         var result = new DomainEvolution(new Domain("T", [])).Apply(changes);
 
         await Assert.That(result.Succeeded).IsTrue();
@@ -34,7 +36,7 @@ public sealed class DomainExtensionTests {
 
     [Test]
     public async Task Parse_UnknownExtension_ResolveHostThrows() {
-        await Assert.That(() => ExtensionCatalog.Core.ResolveHost(["nope"]))
+        await Assert.That(() => DomainSession.ForExtensions(["nope"]))
             .Throws<InvalidOperationException>()
             .WithMessageContaining("nope");
     }
@@ -53,9 +55,9 @@ public sealed class DomainExtensionTests {
             domain T
             Item: entity { Name: Text }
             """;
-        var host = DomainCompilation.HostForSource(poly, ExtensionCatalog.ProductLanguage);
+        var host = DomainSession.ForSource(poly, ExtensionCatalog.ProductLanguage);
         var changes = DomainCompilation.WithSeed(
-            new PolyDslParser(poly, host.Parser).Parse(),
+            new PolyDslParser(poly, host).Parse(),
             ExtensionCatalog.ProductLanguage);
         var result = new DomainEvolution(new Domain("T", [])).Apply(changes);
 

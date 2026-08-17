@@ -1,10 +1,10 @@
 using System.ComponentModel.DataAnnotations;
 using System.Reflection;
 
-using Poly.DomainModeling.Constraints;
 using Poly.DomainModeling.Evolution;
+using Poly.DomainModeling.Ontology.Constraints;
 
-namespace Poly.DomainModeling.Bootstrap;
+namespace Poly.DomainModeling.Ontology.Bootstrap;
 
 /// <summary>
 /// Maps CLR types to domain entity definitions, and verifies domain entities

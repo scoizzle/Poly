@@ -1,9 +1,11 @@
 using Poly.Ast.Nodes;
 using Poly.DomainModeling;
+using Poly.DomainModeling.Compile;
+using Poly.DomainModeling.ContractFill;
+using Poly.DomainModeling.Language;
+using Poly.DomainModeling.Libraries.Storage;
+using Poly.DomainModeling.Libraries.Temporal;
 using Poly.DomainModeling.Lowering;
-using Poly.DomainModeling.Packs;
-using Poly.DomainModeling.Packs.Temporal;
-using Poly.DomainModeling.Parsing;
 
 namespace Poly.Tests.DomainModeling.Parsing;
 
@@ -14,8 +16,8 @@ namespace Poly.Tests.DomainModeling.Parsing;
 /// stay <see cref="PropertyAccess"/> (back-compat; pack-absent analysis is task 4).
 /// </summary>
 public class NowExpressionFormTests {
-    private static DomainParserInputs NowFormInputs() =>
-        ExtensionCatalog.Core.Language.Parser;
+    private static DomainSession NowFormInputs() =>
+        ExtensionCatalog.Core.Language;
 
     private readonly DomainExpressionLoweringPass Pass = new(
         new LoweringContext(new Parameter("entity"), Meaning: ExtensionCatalog.Core.Language.Meaning));

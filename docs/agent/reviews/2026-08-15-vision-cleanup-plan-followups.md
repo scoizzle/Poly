@@ -25,9 +25,9 @@ Addressed by rewriting the plan (2026-08-16 three slices), not by executing wave
 
 ## Open (execution — only after admission)
 
-- [ ] **E1** — Execute slice 1 of the 2026-08-16 plan.
-- [ ] **E2** — Execute slice 2.
-- [ ] **E3** — Execute slice 3.
+- [x] **E1** — Slice 1 landed 2026-08-17: unknown `uses` throws; `DomainHost*` / `FromInputs` / `failOnUnknown` gone.
+- [x] **E2** — Slice 2 landed 2026-08-17: `session.Analyze` is the Evolution/MCP/compiler door; no compiler `new StoragePass(`.
+- [x] **E3** — Slice 3 landed 2026-08-17: `new Comment(` empty under `Poly/DomainModeling`; `ExecuteStructured` kept.
 
 ## Disposition (prior)
 

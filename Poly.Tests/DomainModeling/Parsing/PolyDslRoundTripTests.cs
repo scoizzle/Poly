@@ -2,13 +2,15 @@ using System.Linq;
 
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
-using Poly.DomainModeling.Bootstrap;
-using Poly.DomainModeling.Constraints;
-using Poly.DomainModeling.Effects;
+using Poly.DomainModeling.Compile;
+using Poly.DomainModeling.ContractFill;
 using Poly.DomainModeling.Evolution;
-using Poly.DomainModeling.Packs;
-using Poly.DomainModeling.Parsing;      // DomainDslPrinter (product print — v1 domain-walk, table-parity deferred)
-                                        // PolyDslParser
+using Poly.DomainModeling.Language;      // DomainDslPrinter (product print — v1 domain-walk, table-parity deferred)
+using Poly.DomainModeling.Libraries.Storage;
+using Poly.DomainModeling.Ontology.Bootstrap;
+using Poly.DomainModeling.Ontology.Constraints;
+using Poly.DomainModeling.Ontology.Effects;
+                                         // PolyDslParser
 using Poly.Introspection;
 
 namespace Poly.Tests.DomainModeling.Parsing;

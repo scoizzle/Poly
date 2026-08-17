@@ -1,6 +1,6 @@
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
-using Poly.DomainModeling.Effects;
+using Poly.DomainModeling.Ontology.Effects;
 
 namespace Poly.DomainModeling.Evolution;
 
@@ -26,17 +26,22 @@ public sealed class DomainEvolution {
     /// Applies a batch of changes against the current snapshot.
     /// Produces a proposed new root, runs analysis, and returns either a successful
     /// result with the new root or a rolled-back result containing the original root + diagnostics.
+    /// <paramref name="session"/> supplies the analysis pipeline (type maps/conventions); when null
+    /// the core catalog resolves the proposed domain's extensions.
     /// </summary>
-    public EvolutionResult Apply(IReadOnlyList<DomainChange> changes, AnalysisResult? priorAnalysis = null) {
+    public EvolutionResult Apply(
+        IReadOnlyList<DomainChange> changes,
+        AnalysisResult? priorAnalysis = null,
+        DomainSession? session = null) {
         var start = DateTime.UtcNow;
 
-        var mutationIndex = ResolveMutationTargetIndex(priorAnalysis);
+        var mutationIndex = ResolveMutationTargetIndex(priorAnalysis, session);
 
         var (proposed, modifiedNodes, evalErrors) = ApplyChanges(_current, changes, mutationIndex);
 
         var analysis = priorAnalysis is null
-            ? DomainModelAnalyzer.Analyze(proposed)
-            : DomainModelAnalyzer.Analyze(proposed, priorAnalysis, modifiedNodes);
+            ? ResolveSession(proposed, session).Analyze(proposed)
+            : ResolveSession(proposed, session).Analyze(proposed, priorAnalysis, modifiedNodes);
 
         // Integrate change history as first-class Information diagnostics *immediately*
         // after analysis, before any access to .Diagnostics. This ensures the EVOLUTION_STEP
@@ -110,16 +115,21 @@ public sealed class DomainEvolution {
         return (context.ToDomain(), context.ModifiedNodes, context.Errors);
     }
 
-    private MutationTargetIndexMetadata ResolveMutationTargetIndex(AnalysisResult? priorAnalysis) {
+    private MutationTargetIndexMetadata ResolveMutationTargetIndex(
+        AnalysisResult? priorAnalysis,
+        DomainSession? session) {
         var index = priorAnalysis?.GetMutationIndex(_current);
         if (index is not null)
             return index;
 
-        var currentAnalysis = DomainModelAnalyzer.Analyze(_current);
+        var currentAnalysis = ResolveSession(_current, session).Analyze(_current);
         return currentAnalysis.GetMutationIndex(_current)
             ?? throw new InvalidOperationException(
                 $"Domain analysis did not produce catalog mutation-target index for mutation-target resolution.");
     }
+
+    private static DomainSession ResolveSession(Domain domain, DomainSession? session) =>
+        session ?? DomainSession.ForExtensions(domain.Extensions);
 
     private EvolutionTrace BuildTrace(
         IReadOnlyList<DomainChange> changes,
@@ -537,6 +547,6 @@ public sealed class EvolutionBuilder {
     /// Returns either a successful EvolutionResult with the new root,
     /// or a rejected proposal result (WasRolledBack = true) with the original root + diagnostics + trace.
     /// </summary>
-    public EvolutionResult Apply(AnalysisResult? priorAnalysis = null)
-        => _evolution.Apply(_changes, priorAnalysis);
+    public EvolutionResult Apply(AnalysisResult? priorAnalysis = null, DomainSession? session = null)
+        => _evolution.Apply(_changes, priorAnalysis, session);
 }

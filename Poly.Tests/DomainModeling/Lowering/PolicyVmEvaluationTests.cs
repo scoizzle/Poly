@@ -1,7 +1,7 @@
 using Poly.DomainModeling;
-using Poly.DomainModeling.Bootstrap;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Lowering;
+using Poly.DomainModeling.Ontology.Bootstrap;
 using Poly.Introspection;
 
 namespace Poly.Tests.DomainModeling.Lowering;

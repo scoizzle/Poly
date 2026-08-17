@@ -1,7 +1,7 @@
 using Poly.Analysis;
 using Poly.DomainModeling.Analysis;
-using Poly.DomainModeling.Constraints;
-using Poly.DomainModeling.Effects;
+using Poly.DomainModeling.Ontology.Constraints;
+using Poly.DomainModeling.Ontology.Effects;
 
 using AccessModifier = Poly.Introspection.AccessModifier;
 using PrimType = Poly.Introspection.PrimitiveType;
@@ -191,7 +191,7 @@ public sealed class DomainToCSharpExporter {
             if (defaultValue is not null) {
                 var runtimeExpr = EffectLoweringPass.LowerDefaultExpression(
                     defaultValue.Expression, new NamedTypeReference(prop.Type.TypeName),
-                    ExpressionMeaning.For(domain));
+                    RuntimeAnalysisCache.Meaning(domain));
                 if (runtimeExpr is not null) {
                     // Runtime default (now/today/guid) can't be a compile-time default —
                     // T? = null sentinel; body applies the runtime default when null.
@@ -466,15 +466,16 @@ public sealed class DomainToCSharpExporter {
                         LowerStageTransitions: true,
                         Domain: domain,
                         EnumPropertyNames: esm.EnumPropertyNames,
-                        Meaning: ExpressionMeaning.For(domain)
+                        Meaning: RuntimeAnalysisCache.Meaning(domain)
                     );
                     var effectPass = new EffectLoweringPass(entity, context);
                     var composite = new CompositeEffect(subscriptionEffects);
                     handlerBody = effectPass.TryLowerVmNode(composite)
-                        ?? new Block([new Comment("no-op")]);
+                        ?? throw new InvalidOperationException(
+                            "Subscription effects could not be lowered to a Syntax AST node.");
                 }
                 else {
-                    handlerBody = new Block([new Comment("no-op")]);
+                    handlerBody = new Block([]);
                 }
 
                 // Stage-scoped subscriptions (`when` inside a subscriber stage) fire only
@@ -585,7 +586,7 @@ public sealed class DomainToCSharpExporter {
                         LowerStageTransitions: false,
                         Domain: domain,
                         EnumPropertyNames: esm.EnumPropertyNames,
-                        Meaning: ExpressionMeaning.For(domain)
+                        Meaning: RuntimeAnalysisCache.Meaning(domain)
                     );
                     var entryPass = new EffectLoweringPass(entity, entryCtx);
                     foreach (var entryEffect in firstStage.OnEntryEffects) {
@@ -613,8 +614,6 @@ public sealed class DomainToCSharpExporter {
                     new Member(new ThisReference(), f.Name),
                     new New(f.FieldType)));
             }
-            if (paramlessBody.Count == 0)
-                paramlessBody.Add(new Comment("EF materialization"));
             ctors = [new ConstructorDefinitionNode(
                 Parameters: null,
                 Body: new Block(paramlessBody),
@@ -838,7 +837,7 @@ public sealed class DomainToCSharpExporter {
             var mapped = MapDomainTypeRef(prop.Type, domain, metadata);
             var runtimeExpr = EffectLoweringPass.LowerDefaultExpression(
                 defaultConstraint.Expression, new NamedTypeReference(prop.Type.TypeName),
-                ExpressionMeaning.For(domain));
+                RuntimeAnalysisCache.Meaning(domain));
             if (runtimeExpr is not null) {
                 methodParams.Add(new Parameter(paramName,
                     new OptionalTypeReference(mapped),
@@ -1322,10 +1321,7 @@ public sealed class DomainToCSharpExporter {
             }
         }
 
-        // Block requires ≥1 node; use Comment for empty method bodies
-        if (nodes.Count == 0)
-            nodes.Add(new Comment("no-op"));
-
+        // Block is a sequence; an empty action body is an empty block.
         return new Block(nodes);
     }
 
@@ -1394,7 +1390,7 @@ public sealed class DomainToCSharpExporter {
             Constructors: [
                 new ConstructorDefinitionNode(
                     Parameters: [],
-                    Body: new Block([new Comment("adapter holder")]),
+                    Body: new Block([]),
                     AccessModifier: AccessModifier.Private),
             ],
             Methods: methods,
@@ -1421,7 +1417,7 @@ public sealed class DomainToCSharpExporter {
             SourceStageName: sourceStageName,
             Domain: domain,
             EnumPropertyNames: enumProps,
-            Meaning: ExpressionMeaning.For(domain)
+            Meaning: RuntimeAnalysisCache.Meaning(domain)
         );
         var effectPass = new EffectLoweringPass(entity, context);
         var composite = new CompositeEffect(action.Effects);
@@ -1440,7 +1436,7 @@ public sealed class DomainToCSharpExporter {
             NavigationNameResolver: EffectLoweringPass.BuildNavigationNameResolver(entity, domain, analysis),
             IsCollectionNavigation: EffectLoweringPass.BuildIsCollectionNavigation(entity, domain, analysis),
             PropertyTypeResolver: EffectLoweringPass.BuildPropertyTypeResolver(entity),
-            Meaning: ExpressionMeaning.For(domain)
+            Meaning: RuntimeAnalysisCache.Meaning(domain)
         );
         var pass = new DomainExpressionLoweringPass(context);
         var lowered = pass.Lower(expr, new Parameter("entity"));

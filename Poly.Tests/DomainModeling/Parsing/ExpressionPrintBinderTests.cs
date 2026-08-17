@@ -1,5 +1,5 @@
 using Poly.DomainModeling;
-using Poly.DomainModeling.Parsing;
+using Poly.DomainModeling.Language;
 
 namespace Poly.Tests.DomainModeling.Parsing;
 

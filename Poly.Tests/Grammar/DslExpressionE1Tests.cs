@@ -1,6 +1,6 @@
 using Poly.DomainModeling;
 using Poly.DomainModeling.Evolution;
-using Poly.DomainModeling.Parsing;
+using Poly.DomainModeling.Language;
 using Poly.Grammar;
 
 namespace Poly.Tests.Grammar;
@@ -62,8 +62,8 @@ public class DslExpressionE1Tests {
         }
     }
 
-    private static DomainParserInputs BuildMagicPackInputs() {
-        var builder = DomainHostBuilder.CreateEmpty();
+    private static DomainSession BuildMagicPackInputs() {
+        var builder = SessionBuilder.CreateEmpty();
         foreach (var rule in new[] { "expr-primary", "expr-primary-no-not" })
             builder.ExpressionForms.RegisterFold(rule, "magic", _ => new MagicLiteral(42));
         builder.ExpressionForms.RegisterPrintMapping(new MagicBinder());
@@ -75,11 +75,11 @@ public class DslExpressionE1Tests {
                     .Commit();
             }
         });
-        return builder.BuildParserInputs();
+        return builder.Build();
     }
 
-    private static DomainParserInputs BuildDurationPackInputs() {
-        var builder = DomainHostBuilder.CreateEmpty();
+    private static DomainSession BuildDurationPackInputs() {
+        var builder = SessionBuilder.CreateEmpty();
         foreach (var rule in new[] { "expr-primary", "expr-primary-no-not" }) {
             builder.ExpressionForms.RegisterFold(rule, "duration", match => {
                 var amount = match.Captures["amount"][0].Text;
@@ -96,7 +96,7 @@ public class DslExpressionE1Tests {
                     .Commit();
             }
         });
-        return builder.BuildParserInputs();
+        return builder.Build();
     }
 
     [Test]

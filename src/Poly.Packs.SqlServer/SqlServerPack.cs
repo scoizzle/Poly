@@ -1,5 +1,7 @@
 using Poly.DomainModeling;
-using Poly.DomainModeling.Packs;
+using Poly.DomainModeling.Compile;
+using Poly.DomainModeling.ContractFill;
+using Poly.DomainModeling.Libraries.Storage;
 
 namespace Poly.Packs.SqlServer;
 
@@ -9,7 +11,7 @@ namespace Poly.Packs.SqlServer;
 public sealed class SqlServerLibrary : IDomainLibrary {
     public string Id => "sqlserver";
 
-    public void Register(DomainHostBuilder builder) {
+    public void Register(SessionBuilder builder) {
         ArgumentNullException.ThrowIfNull(builder);
         SqlServerDefaults.ApplyTypeMaps(builder.TypeMaps);
         builder.AddStorageConvention(new SqlServerIdentifierConvention());

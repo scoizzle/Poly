@@ -1,9 +1,11 @@
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
-using Poly.DomainModeling.Effects;
+using Poly.DomainModeling.Compile;
+using Poly.DomainModeling.ContractFill;
 using Poly.DomainModeling.Evolution;
-using Poly.DomainModeling.Packs;
-using Poly.DomainModeling.Parsing;
+using Poly.DomainModeling.Language;
+using Poly.DomainModeling.Libraries.Storage;
+using Poly.DomainModeling.Ontology.Effects;
 using Poly.DomainModeling.Queries;
 
 namespace Poly.Tests.DomainModeling.Analysis;
@@ -24,7 +26,7 @@ public class SubscriptionAnalysisTests {
     /// </summary>
     private static Domain ParseDomain(string poly) {
         var ctx = ExtensionCatalog.Core.Authoring;
-        var parser = new PolyDslParser(poly, ctx.Parser);
+        var parser = new PolyDslParser(poly, ctx);
         var changes = parser.Parse();
         var emptyDomain = DomainTestFactory.Create("_", [], []);
         var result = new DomainEvolution(emptyDomain).Apply(changes);
@@ -509,7 +511,7 @@ public class SubscriptionAnalysisTests {
               tasks: many Task
               when all tasks Done { }
             }
-            """, ctx.Parser);
+            """, ctx);
         var changes = parser.Parse();
         var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(changes);
 

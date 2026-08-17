@@ -1,33 +1,35 @@
 using Poly.DomainModeling;
+using Poly.DomainModeling.Compile;
+using Poly.DomainModeling.ContractFill;
+using Poly.DomainModeling.Libraries.Storage;
+using Poly.DomainModeling.Libraries.Temporal;
 using Poly.DomainModeling.Lowering;
-using Poly.DomainModeling.Packs;
-using Poly.DomainModeling.Packs.Temporal;
 
 namespace Poly.Tests.DomainModeling.Packs;
 
 /// <summary>
 /// One load entry. Duplicate library id fails closed; a library loaded via
-/// <see cref="DomainHostBuilder.Load"/> registers into the host so
-/// <see cref="DomainHostBuilder.Build"/> carries the surfaces forward.
+/// <see cref="SessionBuilder.Load"/> registers into the host so
+/// <see cref="SessionBuilder.Build"/> carries the surfaces forward.
 /// </summary>
 public sealed class DomainPackTests {
     private sealed class TestLibrary : IDomainLibrary {
-        private readonly Action<DomainHostBuilder> _register;
+        private readonly Action<SessionBuilder> _register;
 
-        public TestLibrary(string id, Action<DomainHostBuilder> register) {
+        public TestLibrary(string id, Action<SessionBuilder> register) {
             Id = id;
             _register = register;
         }
 
         public string Id { get; }
 
-        public void Register(DomainHostBuilder builder) => _register(builder);
+        public void Register(SessionBuilder builder) => _register(builder);
     }
 
     [Test]
     public async Task Load_DuplicateId_Throws() {
         var library = new TestLibrary("dup", _ => { });
-        var host = DomainHostBuilder.CreateEmpty().Load(new TemporalLibrary());
+        var host = SessionBuilder.CreateEmpty().Load(new TemporalLibrary());
 
         host.Load(library);
 
@@ -37,7 +39,7 @@ public sealed class DomainPackTests {
 
     [Test]
     public async Task Load_RegistersAnnotationsAndTypeMaps() {
-        var host = DomainHostBuilder.CreateEmpty().Load(new TemporalLibrary());
+        var host = SessionBuilder.CreateEmpty().Load(new TemporalLibrary());
 
         host.Load(new TestLibrary("maps", builder => {
             builder.Annotations.Register(new ColumnAnnotationSyntax());
@@ -46,7 +48,7 @@ public sealed class DomainPackTests {
 
         var built = host.Build();
 
-        await Assert.That(built.Parser.Annotations.CanAccept("column")).IsTrue();
-        await Assert.That(built.Analysis.TypeMaps.ToSqlColumnType("Text")).IsEqualTo("TEXT");
+        await Assert.That(built.Annotations.CanAccept("column")).IsTrue();
+        await Assert.That(built.TypeMaps.ToSqlColumnType("Text")).IsEqualTo("TEXT");
     }
 }

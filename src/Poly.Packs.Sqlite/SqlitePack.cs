@@ -1,5 +1,7 @@
 using Poly.DomainModeling;
-using Poly.DomainModeling.Packs;
+using Poly.DomainModeling.Compile;
+using Poly.DomainModeling.ContractFill;
+using Poly.DomainModeling.Libraries.Storage;
 
 namespace Poly.Packs.Sqlite;
 
@@ -10,6 +12,6 @@ namespace Poly.Packs.Sqlite;
 public sealed class SqliteLibrary : IDomainLibrary {
     public string Id => "sqlite";
 
-    public void Register(DomainHostBuilder builder) =>
+    public void Register(SessionBuilder builder) =>
         SqliteDefaults.ApplyTypeMaps(builder.TypeMaps);
 }

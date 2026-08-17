@@ -1,11 +1,13 @@
 using Poly.Ast.Nodes;
 using Poly.DomainModeling;
-using Poly.DomainModeling.Effects;
+using Poly.DomainModeling.Compile;
+using Poly.DomainModeling.ContractFill;
 using Poly.DomainModeling.Evolution;
+using Poly.DomainModeling.Language;
+using Poly.DomainModeling.Libraries.Storage;
+using Poly.DomainModeling.Libraries.Temporal;
 using Poly.DomainModeling.Lowering;
-using Poly.DomainModeling.Packs;
-using Poly.DomainModeling.Packs.Temporal;
-using Poly.DomainModeling.Parsing;
+using Poly.DomainModeling.Ontology.Effects;
 
 namespace Poly.Tests.DomainModeling.Packs;
 
@@ -30,10 +32,10 @@ namespace Poly.Tests.DomainModeling.Packs;
 /// No production edits: everything here exercises the shipped surface.
 /// </summary>
 public sealed class TemporalGoldenTests {
-    private static DomainParserInputs TemporalInputs() =>
-        ExtensionCatalog.Core.Language.Parser;
+    private static DomainSession TemporalInputs() =>
+        ExtensionCatalog.Core.Language;
 
-    private static Domain Apply(string poly, DomainParserInputs inputs) {
+    private static Domain Apply(string poly, DomainSession inputs) {
         var changes = new PolyDslParser(poly, inputs).Parse();
         var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(changes);
         if (!result.Succeeded)

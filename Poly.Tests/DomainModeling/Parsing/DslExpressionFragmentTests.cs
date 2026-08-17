@@ -1,5 +1,5 @@
 using Poly.DomainModeling;
-using Poly.DomainModeling.Parsing;
+using Poly.DomainModeling.Language;
 using Poly.Grammar;
 
 
@@ -53,7 +53,7 @@ public class DslExpressionFragmentTests {
 
     [Test]
     public async Task Fragment_OpenForm_Registry_Honored() {
-        var builder = DomainHostBuilder.CreateEmpty();
+        var builder = SessionBuilder.CreateEmpty();
         foreach (var rule in new[] { "expr-primary", "expr-primary-no-not" })
             builder.ExpressionForms.RegisterFold(rule, "magic", _ => DomainExpression.Literal(42L));
         builder.ExpressionForms.RegisterGrammarContributor(g => {
@@ -64,7 +64,7 @@ public class DslExpressionFragmentTests {
                     .Commit();
             }
         });
-        var inputs = builder.BuildParserInputs();
+        var inputs = builder.Build();
 
         var expr = DslExpressionFragment.ParseExpressionFragment("MAGIC == 42", inputs);
 

@@ -4,7 +4,7 @@
 **Ask:** nothing is sacred (zero customers). Identify excess complexity for clarity and reliability.  
 **Not this doc:** a rewrite of Grammar or the VM. The product path stays `.poly` → Domain facts → session load → analyze → lower → export/VM.
 
-**Progress 2026-08-15:** A (session door) and B (`*.Default` gone, `*Defaults.Add*` gone, MCP holds `DomainSession` only) and C (`BehaviorPass` deleted — project at emit/read) and F (`IContractProducer` deleted) and G (DomainModeling README + CORE + guide) landed. Remaining: fold `DomainHostBuilder`/`DomainHost` names into the session; lint-pass merge + catalog dual; D/E megaclass shrink.
+**Progress 2026-08-17:** A (session door) including Host nouns: `DomainHost*` / `DomainParserInputs` / `FromInputs` / `failOnUnknown` gone; `IDomainLibrary.Register(SessionBuilder)`; `session.Analyze` is Evolution/MCP/compiler. B (`*.Default` gone, `*Defaults.Add*` gone, MCP holds `DomainSession` only) and C (`BehaviorPass` deleted — project at emit/read) and F (`IContractProducer` deleted) and G (DomainModeling README + CORE + guide) landed. Slice 3: `Comment` is not emit meaning. Remaining: `CreateInputs` third assembler; lint-pass merge + catalog dual; D/E megaclass shrink; host-ABI one-lowering.
 
 ---
 

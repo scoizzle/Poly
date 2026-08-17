@@ -1,10 +1,10 @@
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
-using Poly.DomainModeling.Bootstrap;
-using Poly.DomainModeling.Constraints;
-using Poly.DomainModeling.Effects;
 using Poly.DomainModeling.Evolution;
-using Poly.DomainModeling.Packs.Temporal;
+using Poly.DomainModeling.Libraries.Temporal;
+using Poly.DomainModeling.Ontology.Bootstrap;
+using Poly.DomainModeling.Ontology.Constraints;
+using Poly.DomainModeling.Ontology.Effects;
 
 namespace Poly.Tests.DomainModeling.Evolution;
 

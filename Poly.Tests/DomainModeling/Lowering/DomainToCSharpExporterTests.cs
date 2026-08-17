@@ -5,11 +5,13 @@ using Poly.Analysis;
 using Poly.Ast.Nodes;
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
-using Poly.DomainModeling.Effects;
+using Poly.DomainModeling.Compile;
+using Poly.DomainModeling.ContractFill;
 using Poly.DomainModeling.Evolution;
+using Poly.DomainModeling.Language;
+using Poly.DomainModeling.Libraries.Storage;
 using Poly.DomainModeling.Lowering;
-using Poly.DomainModeling.Packs;
-using Poly.DomainModeling.Parsing;
+using Poly.DomainModeling.Ontology.Effects;
 using Poly.Interpretation.CSharp;
 
 namespace Poly.Tests.DomainModeling.Lowering;
@@ -157,8 +159,8 @@ public class DomainToCSharpExporterTests {
         ParseAndAnalyze(poly, parserInputs: null);
 
     private static (Domain Domain, AnalysisResult Analysis) ParseAndAnalyze(
-        string poly, DomainParserInputs? parserInputs) {
-        var parser = new PolyDslParser(poly, parserInputs);
+        string poly, DomainSession? parserInputs) {
+        var parser = parserInputs is null ? new PolyDslParser(poly) : new PolyDslParser(poly, parserInputs);
         var changes = parser.Parse();
         var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(changes);
         if (!result.Succeeded) {
@@ -1087,7 +1089,7 @@ public class DomainToCSharpExporterTests {
               OpenedAt: DateTime default(Now)
             }
             """;
-        var (domain, analysis) = ParseAndAnalyze(dsl, ExtensionCatalog.Core.Language.Parser);
+        var (domain, analysis) = ParseAndAnalyze(dsl, ExtensionCatalog.Core.Language);
         await AssertExportCompiles(domain, analysis);
 
         var types = new DomainToCSharpExporter().Export(domain, analysis);

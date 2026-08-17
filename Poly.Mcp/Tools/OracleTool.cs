@@ -7,10 +7,12 @@ using ModelContextProtocol.Server;
 
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
+using Poly.DomainModeling.Compile;
+using Poly.DomainModeling.ContractFill;
+using Poly.DomainModeling.Language;
+using Poly.DomainModeling.Libraries.Storage;
+using Poly.DomainModeling.Libraries.Temporal;
 using Poly.DomainModeling.Lowering;
-using Poly.DomainModeling.Packs;
-using Poly.DomainModeling.Packs.Temporal;
-using Poly.DomainModeling.Parsing;
 using Poly.DomainModeling.Queries;
 using Poly.Interpretation.CSharp;
 using Poly.Mcp.Sessions;
@@ -29,7 +31,7 @@ internal sealed class OracleTool {
         expr = null!;
         try {
             // Product authoring tables (temporal + storage) — same folds as add(kind: policy).
-            expr = DslExpressionFragment.ParseExpressionFragment(expressionDsl, ExtensionCatalog.Core.Authoring.Parser);
+            expr = DslExpressionFragment.ParseExpressionFragment(expressionDsl, ExtensionCatalog.Core.Authoring);
             return null;
         }
         catch (Exception ex) {

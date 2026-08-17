@@ -1,6 +1,6 @@
-using Poly.DomainModeling.Effects;
 using Poly.DomainModeling.Evolution;
-using Poly.DomainModeling.Parsing;
+using Poly.DomainModeling.Language;
+using Poly.DomainModeling.Ontology.Effects;
 
 namespace Poly.Tests.DomainModeling.Parsing;
 

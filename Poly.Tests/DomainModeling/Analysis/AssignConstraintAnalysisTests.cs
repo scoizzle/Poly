@@ -1,7 +1,7 @@
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
-using Poly.DomainModeling.Constraints;
-using Poly.DomainModeling.Effects;
+using Poly.DomainModeling.Ontology.Constraints;
+using Poly.DomainModeling.Ontology.Effects;
 using Poly.Introspection;
 
 namespace Poly.Tests.DomainModeling.Analysis;

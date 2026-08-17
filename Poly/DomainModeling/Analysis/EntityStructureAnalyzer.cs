@@ -1,7 +1,7 @@
 using Poly.Analysis;
-using Poly.DomainModeling.Constraints;
-using Poly.DomainModeling.Effects;
 using Poly.DomainModeling.Lowering;
+using Poly.DomainModeling.Ontology.Constraints;
+using Poly.DomainModeling.Ontology.Effects;
 
 namespace Poly.DomainModeling.Analysis;
 

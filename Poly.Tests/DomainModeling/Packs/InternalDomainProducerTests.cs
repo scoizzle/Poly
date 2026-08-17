@@ -1,6 +1,8 @@
 using Poly.DomainModeling;
-using Poly.DomainModeling.Bootstrap;
-using Poly.DomainModeling.Packs;
+using Poly.DomainModeling.Compile;
+using Poly.DomainModeling.ContractFill;
+using Poly.DomainModeling.Libraries.Storage;
+using Poly.DomainModeling.Ontology.Bootstrap;
 
 namespace Poly.Tests.DomainModeling.Packs;
 

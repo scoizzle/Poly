@@ -35,12 +35,12 @@ F1–F11 addressed in `docs/plans/domainmodeling-target-architecture-2026-08-16.
 
 Prior F1–F11: **confirmed fixed** in the current doc (see `2026-08-17-target-architecture-review-r2.md`). New items:
 
-- [ ] **F12** — `IStorageSyntaxEmitter` is host-emit (`EmitDbContext` / `EmitApi`). Home = `src/` / vendor, or delete. Not `Meaning/` or in-tree `Libraries/Storage`.
-- [ ] **F13** — Ontology list: `DomainMember`, `DomainObject`, `DomainType`/`DomainTypeReference`, `Constraint`, `StageSubscription`, `SubscriptionEventAccess`.
-- [ ] **F14** — Locked M2 `Emit` is target; slices 1–2 only require session `Analyze` (+ parse/print). `session.Emit` is later.
-- [ ] **F15** — Close O3 as vendors in `src/`; remaining question is catalog membership (mysql extra).
-- [ ] **F16** — `ExpressionTypeCheckRegistry` next to the type-check pass, or say why Meaning.
-- [ ] **F17** — Session comment: `print(.poly)` vs `contribute artifacts`, not one word `emit`.
+- [x] **F12** — `IStorageSyntaxEmitter` home = `src/` / vendor. Not `Meaning/` or in-tree `Libraries/Storage`. (§4)
+- [x] **F13** — Ontology list + §4b include `DomainMember`, `DomainObject`, `DomainType`/`DomainTypeReference`, `Constraint`, `StageSubscription`, `SubscriptionEventAccess`.
+- [x] **F14** — Locked M2 `Emit` is target; slices 1–2 only require session `Analyze` (+ parse/print).
+- [x] **F15** — O3 closed: vendors in `src/`; mysql extra / not a CLI seed. Remnant = catalog membership.
+- [x] **F16** — `ExpressionTypeCheckRegistry` stays beside `ExpressionTypeAnalyzer` under `Analysis/`.
+- [x] **F17** — Session comment: `parse · analyze · print(.poly) · lower · contribute artifacts`.
 
 ## Disposition (prior)
 

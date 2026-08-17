@@ -1,8 +1,8 @@
 using Poly.Analysis;
 using Poly.Ast.Nodes;
 using Poly.DomainModeling.Analysis;
-using Poly.DomainModeling.Constraints;
-using Poly.DomainModeling.Effects;
+using Poly.DomainModeling.Ontology.Constraints;
+using Poly.DomainModeling.Ontology.Effects;
 
 using Prim = Poly.Introspection.PrimitiveType;
 
@@ -396,21 +396,20 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     }
 
     /// <summary>
-    /// Lowers a CompositeEffect. Only VM-compilable sub-effects are included;
-    /// direct-execution sub-effects (which return null) are recorded as
-    /// <see cref="Comment"/> nodes so the lowered AST preserves information
-    /// about what was not lowered. The Syntax AST's Block requires at least
-    /// one expression (type inference constraint), so Comments serve as
-    /// both documentation and a structural placeholder.
+    /// Lowers a CompositeEffect. Every sub-effect must lower in emit mode —
+    /// a sub-effect that cannot be lowered (unknown create target, unresolved
+    /// relationship) is a fail-closed error, never a silent drop. The runtime
+    /// seam for mixed composites is <see cref="DomainEntityInstance.ExecuteStructured"/>,
+    /// not this pass.
     /// </summary>
     protected override Node? Composite(CompositeEffect c) {
         var nodes = new List<Node>();
         foreach (var sub in c.Effects) {
             var lowered = Route(sub);
-            if (lowered is not null)
-                CollectNode(nodes, lowered);
-            else
-                nodes.Add(new Comment(DescribeEffect(sub)));
+            if (lowered is null)
+                throw new InvalidOperationException(
+                    $"Cannot lower effect '{DescribeEffect(sub)}' to a Syntax AST node.");
+            CollectNode(nodes, lowered);
         }
         return new Block(nodes);
     }
@@ -420,10 +419,10 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         var thenNodes = new List<Node>();
         foreach (var sub in c.ThenEffects) {
             var lowered = Route(sub);
-            if (lowered is not null)
-                CollectNode(thenNodes, lowered);
-            else
-                thenNodes.Add(new Comment(DescribeEffect(sub)));
+            if (lowered is null)
+                throw new InvalidOperationException(
+                    $"Cannot lower effect '{DescribeEffect(sub)}' to a Syntax AST node.");
+            CollectNode(thenNodes, lowered);
         }
 
         if (c.ElseEffects is not { Count: > 0 })
@@ -432,17 +431,16 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         var elseNodes = new List<Node>();
         foreach (var sub in c.ElseEffects) {
             var lowered = Route(sub);
-            if (lowered is not null)
-                CollectNode(elseNodes, lowered);
-            else
-                elseNodes.Add(new Comment(DescribeEffect(sub)));
+            if (lowered is null)
+                throw new InvalidOperationException(
+                    $"Cannot lower effect '{DescribeEffect(sub)}' to a Syntax AST node.");
+            CollectNode(elseNodes, lowered);
         }
 
         return new IfStatement(condition, new Block(thenNodes), new Block(elseNodes));
     }
 
-    /// <summary>Adds a lowered node to a list. Flattens Block children.
-    /// If null, no node is added (the calling code handled the comment).</summary>
+    /// <summary>Adds a lowered node to a list. Flattens Block children.</summary>
     private static void CollectNode(List<Node> nodes, Node? lowered) {
         if (lowered is null) return;
         if (lowered is Block b)

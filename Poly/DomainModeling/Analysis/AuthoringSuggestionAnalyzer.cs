@@ -118,7 +118,7 @@ internal sealed class AuthoringSuggestionAnalyzer : INodeAnalyzer {
 
         bool hasPolicyRelevantProps = entity.Properties.Any(p =>
             string.Equals(p.Type.TypeName, "Boolean", StringComparison.Ordinal) ||
-            p.Constraints.Any(c => c is Constraints.RangeConstraint));
+            p.Constraints.Any(c => c is RangeConstraint));
 
         if (!hasPolicyRelevantProps)
             return;

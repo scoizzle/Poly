@@ -1,6 +1,6 @@
 using Poly.Analysis;
 using Poly.DomainModeling.Analysis;
-using Poly.DomainModeling.Effects;
+using Poly.DomainModeling.Ontology.Effects;
 
 using AccessModifier = Poly.Introspection.AccessModifier;
 using PrimType = Poly.Introspection.PrimitiveType;

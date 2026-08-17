@@ -1,7 +1,7 @@
 # DomainModeling — target architecture & layout
 
-**Date:** 2026-08-16 (edited 2026-08-17: F1–F11; r2 re-verify items 1–6)
-**Status:** Proposal (target shape for review). **Not CURRENT.** Not a migration plan — do not implement from this document. Not admitted via `simple-agent-tasks/PIPELINE-STATUS.md`.
+**Date:** 2026-08-16 (edited 2026-08-17: F1–F11; r2 F12–F17; slices 1–3 landed)  
+**Status:** Proposal (target shape for review). **Not CURRENT.** Not a migration plan — do not implement from this document. Cleanup slices 1–2 (the folder-move precondition) landed 2026-08-17; this file still does **not** admit a rename CURRENT.
 **Lock (do not reopen):** [`docs/decisions/2026-08-15-domain-library-extensions-mcp-harness.md`](../decisions/2026-08-15-domain-library-extensions-mcp-harness.md) · [`2026-08-14-domain-libraries.md`](../decisions/2026-08-14-domain-libraries.md) · `docs/CORE.md` · AGENTS platform facts.
 **Complements (does not replace):** [`domainmodeling-vision-cleanup-2026-08-16.md`](domainmodeling-vision-cleanup-2026-08-16.md) — the executable deletion of dual paths. This document is the **end-state layout** those deletions converge toward.
 **Review that forced this edit:** [`docs/agent/reviews/2026-08-17-target-architecture-review.md`](../agent/reviews/2026-08-17-target-architecture-review.md).
@@ -34,7 +34,7 @@ Each phase has **one input and one output**; the session threads the frozen tabl
 
 ## 2. Target layout
 
-> **Target names only** — current paths are in §4. **No folder moves until cleanup slices 1–2 land** (session exists without `DomainHost`). This file does not admit a rename CURRENT.
+> **Folders + namespaces landed 2026-08-17.** `Packs` → `Compile` / `Libraries.*` / `ContractFill`; `Parsing` → `Language`; type maps → `Meaning`; constraints/effects/bootstrap → `Ontology.*`. Fact types, dispatch, and runtime stay `Poly.DomainModeling` (parent-namespace lookup; `Action`/`Add`/`ValueType` collide with `System`/`Ast` if globally imported). Analysis is not split into Catalog/Capability/… subfolders. `IStorageSyntaxEmitter` lives in `src/Poly.DslCompiler`.
 
 ```
 Poly.DomainModeling/

@@ -9,9 +9,9 @@ namespace Poly.Packs.SqlServer;
 public sealed class SqlServerLibrary : IDomainLibrary {
     public string Id => "sqlserver";
 
-    public void Register(HostSurfaces surfaces) {
-        ArgumentNullException.ThrowIfNull(surfaces);
-        SqlServerDefaults.ApplyTypeMaps(surfaces.TypeMaps);
-        surfaces.AddStorageConvention(new SqlServerIdentifierConvention());
+    public void Register(DomainHostBuilder builder) {
+        ArgumentNullException.ThrowIfNull(builder);
+        SqlServerDefaults.ApplyTypeMaps(builder.TypeMaps);
+        builder.AddStorageConvention(new SqlServerIdentifierConvention());
     }
 }

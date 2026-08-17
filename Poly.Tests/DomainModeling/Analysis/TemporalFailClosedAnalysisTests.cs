@@ -51,6 +51,7 @@ public class TemporalFailClosedAnalysisTests {
     public async Task DatePlusDate_ClockNodes_Policy_ReportsArithmeticError() {
         var result = Evolve("""
             domain T
+            uses temporal
             Item: entity {
               Bad: policy { Now + Today is 1 }
             }
@@ -81,6 +82,7 @@ public class TemporalFailClosedAnalysisTests {
     public async Task NumberPlusDays_NoTemporalLeftOperand_Policy_ReportsDurationError() {
         var result = Evolve("""
             domain T
+            uses temporal
             Item: entity {
               Qty: Number
               Bad: policy { Qty > 5 + 3 Days }
@@ -96,6 +98,7 @@ public class TemporalFailClosedAnalysisTests {
     public async Task BareDuration_AssignWithoutTemporalLeftOperand_ReportsDurationError() {
         var result = Evolve("""
             domain T
+            uses temporal
             Item: entity {
               Qty: Number
               Go: action {
@@ -118,6 +121,7 @@ public class TemporalFailClosedAnalysisTests {
         // make the folded operand look compatible).
         var result = Evolve("""
             domain T
+            uses temporal
             Item: entity {
               Qty: Number
               Expiry: Date
@@ -147,7 +151,8 @@ public class TemporalFailClosedAnalysisTests {
                     DateOperationKind.AddDays),
                 DomainExpression.Property("Expiry")))],
             []);
-        var analysis = DomainModelAnalyzer.Analyze(DomainTestFactory.Create("T", [item], []));
+        var analysis = DomainModelAnalyzer.Analyze(
+            DomainTestFactory.Create("T", [item], []) with { Extensions = [ExtensionCatalog.TemporalId] });
 
         await Assert.That(analysis.Diagnostics.Any(d =>
             d.Severity == DiagnosticSeverity.Error
@@ -169,7 +174,8 @@ public class TemporalFailClosedAnalysisTests {
                     DateOperationKind.AddDays),
                 DomainExpression.Property("Expiry")))],
             []);
-        var analysis = DomainModelAnalyzer.Analyze(DomainTestFactory.Create("T", [item], []));
+        var analysis = DomainModelAnalyzer.Analyze(
+            DomainTestFactory.Create("T", [item], []) with { Extensions = [ExtensionCatalog.TemporalId] });
 
         await Assert.That(analysis.Diagnostics.Any(d =>
             d.Severity == DiagnosticSeverity.Error
@@ -180,6 +186,7 @@ public class TemporalFailClosedAnalysisTests {
     public async Task NumberPropertyPlusDays_NoTemporalLeftOperand_AssignRhs_ReportsDateError() {
         var result = Evolve("""
             domain T
+            uses temporal
             Item: entity {
               Qty: Number
               Expiry: Date
@@ -239,6 +246,7 @@ public class TemporalFailClosedAnalysisTests {
     public async Task Default_TodayOnText_WithTemporalPack_Rejected() {
         var result = Evolve("""
             domain T
+            uses temporal
             Event: entity { Label: Text default(Today) }
             """, ExtensionCatalog.Core.Language.Parser);
 
@@ -252,6 +260,7 @@ public class TemporalFailClosedAnalysisTests {
     public async Task Default_TodayOnDate_WithTemporalPack_Succeeds() {
         var result = Evolve("""
             domain T
+            uses temporal
             Event: entity { RecordedOn: Date default(Today) }
             """, ExtensionCatalog.Core.Language.Parser);
 

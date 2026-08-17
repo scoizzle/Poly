@@ -3,10 +3,8 @@ using Poly.Analysis;
 namespace Poly.DomainModeling.Analysis;
 
 /// <summary>
-/// Single domain-scoped catalog of name→member maps for semantic lookup.
-/// Sole write site for action-resolution and mutation-target indexes.
-/// Embeds intermediate Semantic type/relationship lookups; product consumers
-/// read this bag via <see cref="DomainSemanticLookupExtensions"/>.
+/// Name→member catalog published by <see cref="DomainCatalogPass"/>.
+/// Product lookups go through <see cref="DomainSemanticLookupExtensions"/>.
 /// </summary>
 internal sealed record DomainCatalogMetadata(
     Domain Domain,

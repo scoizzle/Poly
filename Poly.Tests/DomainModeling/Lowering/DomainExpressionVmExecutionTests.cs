@@ -3,6 +3,7 @@ using System.Linq;
 using Poly.Analysis;
 using Poly.DomainModeling;
 using Poly.DomainModeling.Lowering;
+using Poly.DomainModeling.Packs;
 using Poly.DomainModeling.Packs.Temporal;
 using Poly.Interpretation;
 using Poly.Interpretation.Analysis.ConstantFolding;
@@ -25,7 +26,8 @@ public class DomainExpressionVmExecutionTests {
     // Instance fields: TUnit creates a fresh class instance per test, and
     // DomainExpressionLoweringPass carries mutable _currentSubject state — a shared
     // static instance raced under parallel execution (Exists_NonNullValue_ReturnsTrue flake).
-    private readonly DomainExpressionLoweringPass Pass = new();
+    private readonly DomainExpressionLoweringPass Pass = new(
+        new LoweringContext(new SN.Parameter("entity"), Meaning: ExtensionCatalog.Core.Language.Meaning));
     private readonly ParameterReference Subject = new();
 
     private static AnalysisResult Analyze(Node node) =>

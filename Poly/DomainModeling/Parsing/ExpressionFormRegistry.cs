@@ -3,43 +3,38 @@ using Poly.Grammar;
 namespace Poly.DomainModeling.Parsing;
 
 /// <summary>
-/// Cited-gap RD escape only (pack-host lock 13): the product expression parser is
-/// recursive descent and cannot fold by grammar pattern name, so a pack form keeps
-/// this hand-rolled hook until the engine folds by pattern. Must leave the cursor
-/// unchanged when returning false. New product forms must NOT use this type.
-/// </summary>
-public interface IExpressionPrimaryForm {
-    bool TryParse(IDslParseCursor cursor, DslExpressionParser expressions, out DomainExpression expression);
-}
-
-/// <summary>
-/// Pre-IDomainLibrary bridge for pack extension (pack-1-4). A pack registers Grammar
-/// <b>patterns</b> (<see cref="RegisterGrammarContributor"/>) on existing rules and a
-/// <b>print mapping</b> (<see cref="RegisterPrintMapping"/>) mapping its IR back to a
-/// (rule, pattern, fills) form, so parse and print share one Grammar seam.
-/// <see cref="IExpressionPrimaryForm"/> is the cited-gap fold escape only — not the
-/// product API; new product forms must not register here.
+/// Concept bindings on product expression shapes: folds (existing tokens → IR)
+/// and print mappings. Not a place to add new language productions.
 /// </summary>
 public sealed class ExpressionFormRegistry {
-    private readonly List<IExpressionPrimaryForm> _forms = [];
-    private readonly List<Action<Grammar<DslToken, DslTokenKind>>> _grammarContributors = [];
+    private readonly List<Action<GrammarBuilder<DslToken, DslTokenKind>>> _grammarContributors = [];
     private readonly List<IExpressionPrintMapping> _printMappings = [];
     private readonly List<IBinaryExpressionFold> _binaryFolds = [];
+    private readonly List<(string Rule, string Pattern, Func<MatchResult<DslToken, DslTokenKind>, DomainExpression> Fold)> _folds = [];
 
     public ExpressionFormRegistry() {
     }
 
     public ExpressionFormRegistry(ExpressionFormRegistry source) {
         ArgumentNullException.ThrowIfNull(source);
-        _forms.AddRange(source._forms);
         _grammarContributors.AddRange(source._grammarContributors);
         _printMappings.AddRange(source._printMappings);
         _binaryFolds.AddRange(source._binaryFolds);
+        _folds.AddRange(source._folds);
     }
 
-    public void Register(IExpressionPrimaryForm form) {
-        ArgumentNullException.ThrowIfNull(form);
-        _forms.Add(form);
+    /// <summary>Registers a (rule, pattern) fold into session <see cref="ExpressionFoldTable"/>.</summary>
+    public void RegisterFold(string rule, string pattern, Func<MatchResult<DslToken, DslTokenKind>, DomainExpression> fold) {
+        ArgumentException.ThrowIfNullOrWhiteSpace(rule);
+        ArgumentException.ThrowIfNullOrWhiteSpace(pattern);
+        ArgumentNullException.ThrowIfNull(fold);
+        _folds.Add((rule, pattern, fold));
+    }
+
+    public void ContributeFolds(ExpressionFoldTable table) {
+        ArgumentNullException.ThrowIfNull(table);
+        foreach (var (rule, pattern, fold) in _folds)
+            table.Register(rule, pattern, fold);
     }
 
     /// <summary>Registers an IR → Grammar print mapping.</summary>
@@ -48,8 +43,8 @@ public sealed class ExpressionFormRegistry {
         _printMappings.Add(mapping);
     }
 
-    /// <summary>Grammar patterns for pack primaries (recognition + Matcher probes + print table).</summary>
-    public void RegisterGrammarContributor(Action<Grammar<DslToken, DslTokenKind>> contribute) {
+    /// <summary>Patterns on existing expression rules (e.g. ident / number+ident).</summary>
+    public void RegisterGrammarContributor(Action<GrammarBuilder<DslToken, DslTokenKind>> contribute) {
         ArgumentNullException.ThrowIfNull(contribute);
         _grammarContributors.Add(contribute);
     }
@@ -66,10 +61,10 @@ public sealed class ExpressionFormRegistry {
         _binaryFolds.Add(fold);
     }
 
-    public void ContributeGrammarPatterns(Grammar<DslToken, DslTokenKind> grammar) {
-        ArgumentNullException.ThrowIfNull(grammar);
+    public void ContributeGrammarPatterns(GrammarBuilder<DslToken, DslTokenKind> builder) {
+        ArgumentNullException.ThrowIfNull(builder);
         foreach (var c in _grammarContributors)
-            c(grammar);
+            c(builder);
     }
 
     /// <summary>Registers this library's print mappings (before core mappings).</summary>
@@ -94,16 +89,6 @@ public sealed class ExpressionFormRegistry {
         return null;
     }
 
-    public bool TryParsePrimary(IDslParseCursor cursor, DslExpressionParser expressions, out DomainExpression expression) {
-        ArgumentNullException.ThrowIfNull(cursor);
-        ArgumentNullException.ThrowIfNull(expressions);
-        foreach (var form in _forms) {
-            if (form.TryParse(cursor, expressions, out expression!))
-                return true;
-        }
-        expression = null!;
-        return false;
-    }
 }
 
 /// <summary>

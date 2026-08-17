@@ -13,7 +13,7 @@ namespace Poly.DomainModeling.Analysis;
 internal sealed class RequiredPropertiesPass : INodeAnalyzer {
     public const string Id = "DomainRequiredProperties";
     public string PassName => Id;
-    public string[] Dependencies => [SemanticDomainAnalyzer.Id];
+    public string[] Dependencies => [DomainCatalogPass.Id];
 
     public void Analyze(AnalysisContext context, Node node) {
         if (!context.ShouldAnalyze(node))

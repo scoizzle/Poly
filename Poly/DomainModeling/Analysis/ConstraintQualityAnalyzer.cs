@@ -8,7 +8,7 @@ internal sealed class ConstraintQualityAnalyzer : INodeAnalyzer {
     public const string Id = "DomainConstraintQualityAnalyzer";
     public string PassName => Id;
     // Reads DomainTypeLookupMetadata / ResolvedTypeReferenceMetadata.
-    public string[] Dependencies => [SemanticDomainAnalyzer.Id];
+    public string[] Dependencies => [DomainCatalogPass.Id];
     public void Analyze(AnalysisContext context, Node node) {
         if (!context.ShouldAnalyze(node)) {
             return;
@@ -27,7 +27,7 @@ internal sealed class ConstraintQualityAnalyzer : INodeAnalyzer {
     }
 
     private static void ValidateDomainFixedPoint(AnalysisContext context, Domain domain) {
-        var lookup = context.GetMetadata<DomainTypeLookupMetadata>(default);
+        var lookup = context.GetTypeLookup();
         if (lookup is null) return;
 
         // Inheritance removed — no parent-entity fixed-point validation needed.

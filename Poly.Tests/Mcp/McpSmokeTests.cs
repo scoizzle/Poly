@@ -801,7 +801,7 @@ public class McpSmokeTests {
 
         var exists = McpSessionStore.TryGet(sessionId, out var state);
         await Assert.That(exists).IsTrue();
-        await Assert.That(state!.Domain.Relationships.Count).IsEqualTo(1);
+        await Assert.That(state!.LatestAnalysis!.GetAllRelationships(state!.Domain).Count).IsEqualTo(1);
     }
 
     [Test]
@@ -967,8 +967,8 @@ public class McpSmokeTests {
 
         var exists = McpSessionStore.TryGet(sessionId, out var state);
         await Assert.That(exists).IsTrue();
-        await Assert.That(state!.Domain.Relationships.Count).IsEqualTo(1);
-        await Assert.That(state.Domain.Relationships[0].Name).IsEqualTo("Tracks");
+        await Assert.That(state!.LatestAnalysis!.GetAllRelationships(state!.Domain).Count).IsEqualTo(1);
+        await Assert.That(state.LatestAnalysis!.GetAllRelationships(state.Domain)[0].Name).IsEqualTo("Tracks");
 
         var tracker = state.Domain.Types.OfType<Entity>().Single(e => e.Name == "Tracker");
         var pending = tracker.Stages.Single(s => s.Name == "Pending");
@@ -1022,8 +1022,8 @@ public class McpSmokeTests {
         var emptyDomain = DomainTestFactory.Create("_", [], []);
         var result = new DomainEvolution(emptyDomain).Apply(changes);
         await Assert.That(result.Succeeded).IsTrue();
-        await Assert.That(result.Root!.Relationships.Count).IsEqualTo(1);
-        await Assert.That(result.Root.Relationships[0].Name).IsEqualTo("Tracks");
+        await Assert.That(result.Relationships().Count).IsEqualTo(1);
+        await Assert.That(result.Relationships()[0].Name).IsEqualTo("Tracks");
     }
 
     // ── Slice MR: MCP remove_* micro-tools ──────────────────────
@@ -1198,8 +1198,8 @@ public class McpSmokeTests {
 
         var exists = McpSessionStore.TryGet(sessionId, out var state);
         await Assert.That(exists).IsTrue();
-        await Assert.That(state!.Domain.Relationships.Count).IsEqualTo(1);
-        await Assert.That(state.Domain.Relationships[0].Name).IsEqualTo("orders");
+        await Assert.That(state!.LatestAnalysis!.GetAllRelationships(state!.Domain).Count).IsEqualTo(1);
+        await Assert.That(state.LatestAnalysis!.GetAllRelationships(state.Domain)[0].Name).IsEqualTo("orders");
 
         // Verify create-in effect parsed correctly
         var customer = state.Domain.Types.OfType<Entity>().Single(e => e.Name == "Customer");

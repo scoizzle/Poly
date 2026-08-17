@@ -25,10 +25,9 @@ public class EffectAnalyzerFailClosedTests {
         return DomainTestFactory.Create("Test", [customer, order], [rel]);
     }
 
-    /// <summary>Intermediate Semantic bags (DTLM/RLM) only — no DomainCatalogPass.</summary>
-    private static AnalysisContext SemanticOnlyContext(Domain domain) {
+    private static AnalysisContext CatalogContext(Domain domain) {
         var context = AnalysisContext.CreateDefault();
-        new SemanticDomainAnalyzer().Analyze(context, domain);
+        new DomainCatalogPass().Analyze(context, domain);
         return context;
     }
 
@@ -38,28 +37,24 @@ public class EffectAnalyzerFailClosedTests {
     // ── F1: RLM fallback parity (catalog stripped) ─────────────
 
     [Test]
-    public async Task EffectAnalyzer_WithoutCatalog_ResolvesCreateInViaRlmFallback() {
+    public async Task EffectAnalyzer_WithCatalog_ResolvesCreateIn() {
         var domain = BuildCreateInDomain();
-        var context = SemanticOnlyContext(domain);
+        var context = CatalogContext(domain);
 
         new EffectAnalyzer().Analyze(context, domain);
 
-        // Known relationship must NOT be reported unknown just because the
-        // catalog is absent — the intermediate RLM fallback resolves it.
         await Assert.That(AllDiagnostics(context).Any(d =>
             d.Severity == DiagnosticSeverity.Error)).IsFalse();
         await Assert.That(context.HasStructuralFailure).IsFalse();
     }
 
     [Test]
-    public async Task EffectAnalyzer_WithoutCatalog_UnknownRelationship_ReportsError() {
+    public async Task EffectAnalyzer_WithCatalog_UnknownRelationship_ReportsError() {
         var domain = BuildCreateInDomain("NoSuchRel");
-        var context = SemanticOnlyContext(domain);
+        var context = CatalogContext(domain);
 
         new EffectAnalyzer().Analyze(context, domain);
 
-        // Genuinely unknown name must still be reported (RLM fallback resolves,
-        // name is absent) — no soft skip, no vacuous success.
         var diags = AllDiagnostics(context);
         await Assert.That(diags.Any(d =>
             d.Code == DomainModelDiagnosticCodes.EffectBinding &&
@@ -87,9 +82,9 @@ public class EffectAnalyzerFailClosedTests {
     // ── F3: facts pass resolves via the same bags (no tree scan) ──
 
     [Test]
-    public async Task EffectFactsPass_WithoutCatalog_PublishesResolvedTargetViaRlmFallback() {
+    public async Task EffectFactsPass_WithCatalog_PublishesResolvedTarget() {
         var domain = BuildCreateInDomain();
-        var context = SemanticOnlyContext(domain);
+        var context = CatalogContext(domain);
 
         new EffectFactsPass().Analyze(context, domain);
 

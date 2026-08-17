@@ -133,7 +133,7 @@ public static class DomainQueries {
         return new DomainOverview(
             Name: domain.Name,
             EntityCount: entities.Count,
-            RelationshipCount: domain.Relationships.Count,
+            RelationshipCount: entities.SelectMany(e => e.Navigations).Count(),
             PrimitiveTypeCount: primitives.Count,
             ValueTypeCount: valueTypes.Count
         );
@@ -194,13 +194,17 @@ public static class DomainQueries {
             })
             .ToList();
 
+        var allRelationships = metadata is not null
+            ? metadata.GetAllRelationships(domain)
+            : domain.Types.OfType<Entity>().SelectMany(e => e.Navigations);
+
         return new EntityDetail(
             Name: entity.Name,
             Properties: properties,
             Stages: stages,
             Actions: actions,
             Policies: policies,
-            Navigations: domain.Relationships
+            Navigations: allRelationships
                 .Where(r => string.Equals(r.Source.TypeName, entity.Name, StringComparison.Ordinal)
                          || string.Equals(r.Target.TypeName, entity.Name, StringComparison.Ordinal))
                 .Select(r => new NavigationDetail(
@@ -236,7 +240,7 @@ public static class DomainQueries {
     /// </summary>
     public static IReadOnlyList<RelationshipSummary> ListRelationships(Domain domain) {
         ArgumentNullException.ThrowIfNull(domain);
-        return domain.Relationships.Select(r => new RelationshipSummary(
+        return domain.Types.OfType<Entity>().SelectMany(e => e.Navigations).Select(r => new RelationshipSummary(
             r.Name,
             r.Source.TypeName,
             r.Target.TypeName,

@@ -47,8 +47,9 @@ public class SameNameRelationshipSourceScopingTests {
     [Test]
     public async Task Parse_SameNavNameOnDifferentSources_ProducesTwoRelationships() {
         var domain = ParseAndBuild();
+        var analysis = DomainModelAnalyzer.Analyze(domain);
 
-        var rels = domain.Relationships;
+        var rels = analysis.GetAllRelationships(domain);
         await Assert.That(rels.Count).IsEqualTo(2);
 
         var machineOrders = rels.Single(r => r.Source.TypeName == "Machine");
@@ -145,29 +146,30 @@ public class SameNameRelationshipSourceScopingTests {
         var changes = new PolyDslParser(poly).Parse();
         var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(changes);
         await Assert.That(result.Succeeded).IsTrue();
-        await Assert.That(result.Root.Relationships.Count).IsEqualTo(4);
-        await Assert.That(result.Root.Relationships.Count(r => r.Name == "order")).IsEqualTo(2);
+        await Assert.That(result.Relationships().Count).IsEqualTo(4);
+        await Assert.That(result.Relationships().Count(r => r.Name == "order")).IsEqualTo(2);
         await Assert.That(result.Analysis.HasErrors).IsFalse();
 
         // Round-trips: the printer emits the same-name navs per source entity.
         var printed = new DomainDslPrinter().Print(result.Root);
         var reparsed = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(new PolyDslParser(printed).Parse());
         await Assert.That(reparsed.Succeeded).IsTrue();
-        await Assert.That(reparsed.Root.Relationships.Count(r => r.Name == "order")).IsEqualTo(2);
+        await Assert.That(reparsed.Relationships().Count(r => r.Name == "order")).IsEqualTo(2);
     }
 
     [Test]
     public async Task Model_Relationships_AreDerivedFlatten_OfEntityNavs() {
-        // Storage is entity-owned navs; Domain.Relationships is a derived flatten.
+        // Storage is entity-owned navs; the analysis catalog derives relationships from them.
         var order = new Entity("Order", [], [], [], []);
         var customer = new Entity("Customer", [], [], [], []);
         var rel = new Relationship("orders",
             new DomainTypeReference("Customer"), new DomainTypeReference("Order"),
             RelationshipCardinality.OneToMany, []);
         var domain = DomainTestFactory.Create("Test", [customer with { Navigations = [rel] }, order]);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
 
-        await Assert.That(domain.Relationships.Count).IsEqualTo(1);
-        await Assert.That(ReferenceEquals(domain.Relationships[0], rel)).IsTrue();
+        await Assert.That(analysis.GetAllRelationships(domain).Count).IsEqualTo(1);
+        await Assert.That(ReferenceEquals(analysis.GetAllRelationships(domain)[0], rel)).IsTrue();
         var customerInDomain = domain.Types.OfType<Entity>().Single(e => e.Name == "Customer");
         await Assert.That(customerInDomain.Navigations.Count).IsEqualTo(1);
         await Assert.That(ReferenceEquals(customerInDomain.Navigations[0], rel)).IsTrue();
@@ -182,9 +184,10 @@ public class SameNameRelationshipSourceScopingTests {
             new DomainTypeReference("Customer"), new DomainTypeReference("Order"),
             RelationshipCardinality.OneToMany, []);
         var domain = DomainTestFactory.Create("Test", [customer, order], [rel]);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
 
-        await Assert.That(domain.Relationships.Count).IsEqualTo(1);
-        await Assert.That(ReferenceEquals(domain.Relationships[0], rel)).IsTrue();
+        await Assert.That(analysis.GetAllRelationships(domain).Count).IsEqualTo(1);
+        await Assert.That(ReferenceEquals(analysis.GetAllRelationships(domain)[0], rel)).IsTrue();
         var customerInDomain = domain.Types.OfType<Entity>().Single(e => e.Name == "Customer");
         await Assert.That(customerInDomain.Navigations.Count).IsEqualTo(1);
         await Assert.That(ReferenceEquals(customerInDomain.Navigations[0], rel)).IsTrue();
@@ -215,13 +218,13 @@ public class SameNameRelationshipSourceScopingTests {
         await Assert.That(added.Succeeded).IsTrue();
         var addedEntity = added.Root!.Types.OfType<Entity>().Single(e => e.Name == "Machine");
         await Assert.That(addedEntity.Navigations.Count).IsEqualTo(before + 1);
-        await Assert.That(added.Root.Relationships.Any(r => r.Name == "extra")).IsTrue();
+        await Assert.That(added.Relationships().Any(r => r.Name == "extra")).IsTrue();
 
         var removed = new DomainEvolution(added.Root).Apply([new RemoveRelationshipChange("Machine", "extra")]);
         await Assert.That(removed.Succeeded).IsTrue();
         var removedEntity = removed.Root!.Types.OfType<Entity>().Single(e => e.Name == "Machine");
         await Assert.That(removedEntity.Navigations.Count).IsEqualTo(before);
-        await Assert.That(removed.Root.Relationships.Any(r => r.Name == "extra")).IsFalse();
+        await Assert.That(removed.Relationships().Any(r => r.Name == "extra")).IsFalse();
     }
 
     [Test]

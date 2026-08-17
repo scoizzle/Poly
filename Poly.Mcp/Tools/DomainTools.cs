@@ -285,13 +285,12 @@ internal sealed class QueryTool {
         // ── Structured facts from LatestAnalysis metadata ──
 
         var entityCount = state.Domain.Types.OfType<Entity>().Count();
-        var relationshipCount = state.Domain.Relationships.Count;
+        var relationshipCount = state.LatestAnalysis.GetAllRelationships(state.Domain).Count;
 
-        // Root entity names from EntityStructureMetadata (produced by EntityStructureAnalyzer)
+        // Root entities from EntityStructureMetadata only (aggregate copies that bit).
         var rootEntityNames = state.Domain.Types.OfType<Entity>()
-            .Select(e => (Entity: e, Structure: state.LatestAnalysis.GetMetadata<EntityStructureMetadata>(e)))
-            .Where(t => t.Structure?.IsRoot == true)
-            .Select(t => t.Entity.Name)
+            .Where(e => state.LatestAnalysis.GetStructure(e)?.IsRoot == true)
+            .Select(e => e.Name)
             .ToList();
 
         // Topology summary from EffectTopologyMetadata
@@ -299,8 +298,8 @@ internal sealed class QueryTool {
         var createInCount = topology?.CreateInRelations.Count ?? 0;
         var subscriptionCount = topology?.Subscriptions.Count ?? 0;
 
-        // Action names from BehaviorMetadata
-        var behavior = state.LatestAnalysis.GetMetadata<BehaviorMetadata>(state.Domain)?.Behavior;
+        // Action names projected from capability facts
+        var behavior = BehaviorMetadata.From(state.Domain, state.LatestAnalysis);
         var actionSummary = behavior?.Entities
             .SelectMany(e => e.Actions.Select(a => new ActionFact(
                 EntityName: e.Name,
@@ -697,7 +696,7 @@ Unknown kind, missing required field, or invalid cardinality fails closed. For b
     internal static DomainToolResponse AddPolicyCore(
         string sessionId, string entityName, string policyName, string expressionDsl) {
         // Session-first (consistent with other tools); parse with the session's
-        // ParserInputs so pack open forms behave the same as apply_dsl (S3).
+        // Same session tables as apply_dsl so concept folds (Now, durations) agree.
         if (!McpSessionStore.TryGet(sessionId, out var state))
             return new DomainToolResponse(
                 Success: false,
@@ -706,7 +705,7 @@ Unknown kind, missing required field, or invalid cardinality fails closed. For b
 
         DomainExpression expr;
         try {
-            expr = DslExpressionFragment.ParseExpressionFragment(expressionDsl, state.ParserInputs);
+            expr = DslExpressionFragment.ParseExpressionFragment(expressionDsl, state.Modeling.ParserInputs);
         }
         catch (Exception ex) {
             return new DomainToolResponse(
@@ -855,7 +854,7 @@ Unknown kind or missing required field fails closed.")]
                     // disambiguates when the name is declared on multiple entities.
                     var source = Field(root, "source", "sourceEntityName");
                     if (source is null && McpSessionStore.TryGet(sessionId, out var state) && state.Domain is not null) {
-                        var sources = state.Domain.Relationships
+                        var sources = (state.LatestAnalysis?.GetAllRelationships(state.Domain) ?? [])
                             .Where(r => string.Equals(r.Name, name, StringComparison.Ordinal))
                             .Select(r => r.Source.TypeName)
                             .Distinct(StringComparer.Ordinal)
@@ -920,7 +919,7 @@ Unknown kind or missing required field fails closed.")]
     /// to a non-existent entity, which silently no-ops in the current evolution layer).
     /// </summary>
     internal static string GetFingerprint(Domain domain) {
-        var typeCounts = $"T:{domain.Types.Count}|R:{domain.Relationships.Count}";
+        var typeCounts = $"T:{domain.Types.Count}|R:{domain.Types.OfType<Entity>().SelectMany(e => e.Navigations).Count()}";
         var entityDetails = domain.Types
             .OfType<Entity>()
             .OrderBy(e => e.Name)
@@ -1342,8 +1341,9 @@ through the unified `add` / `remove` tools (kind + payload).")]
             var seed = parseState.Domain.Extensions.Count > 0
                 ? parseState.Domain.Extensions
                 : ExtensionCatalog.ProductAuthoring;
-            var parseInputs = DomainCompilation.HostForSource(polyText, seed).Parser;
-            var parser = new PolyDslParser(polyText, parseInputs);
+            var parser = new PolyDslParser(
+                polyText,
+                DomainSession.ForSource(polyText, seed, failOnUnknown: true));
             changes = parser.Parse();
             changes = DomainCompilation.WithSeed(changes, seed).ToList();
         }
@@ -1409,7 +1409,7 @@ through the unified `add` / `remove` tools (kind + payload).")]
             return Failure_NotFound(sessionId);
 
         var entityCount = outcome.Root.Types.OfType<Entity>().Count();
-        var relCount = outcome.Root.Relationships.Count;
+        var relCount = outcome.Analysis.GetAllRelationships(outcome.Root).Count;
         var message = $"Domain '{domainName}' applied: {entityCount} entities, {relCount} relationships.";
 
         // Build a compact snapshot for the response
@@ -1435,13 +1435,7 @@ through the unified `add` / `remove` tools (kind + payload).")]
         if (!McpSessionStore.TryGet(sessionId, out var state))
             return Failure_NotFound(sessionId);
 
-        DomainDslPrinter printer;
-        try {
-            printer = new DomainDslPrinter(state.Domain.ResolveHost().Parser);
-        }
-        catch (InvalidOperationException) {
-            printer = new DomainDslPrinter(state.ParserInputs);
-        }
+        var printer = new DomainDslPrinter(state.Modeling);
         var polyText = printer.Print(state.Domain);
 
         return new DomainToolResponse(
@@ -1494,15 +1488,18 @@ through the unified `add` / `remove` tools (kind + payload).")]
             policyCount = e.Policies.Count
         }).ToList();
 
+        var allRelationships = analysis?.GetAllRelationships(domain)
+            ?? domain.Types.OfType<Entity>().SelectMany(e => e.Navigations);
+
         return new {
             domainName = domain.Name,
             revision,
             entityCount = entities.Count,
-            relationshipCount = domain.Relationships.Count,
+            relationshipCount = allRelationships.Count(),
             primitiveCount = domain.Types.OfType<PrimitiveType>().Count(),
             hasErrors = analysis?.Diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error) ?? false,
             entities,
-            relationships = domain.Relationships.Select(r => new {
+            relationships = allRelationships.Select(r => new {
                 name = r.Name,
                 source = r.Source.TypeName,
                 target = r.Target.TypeName,

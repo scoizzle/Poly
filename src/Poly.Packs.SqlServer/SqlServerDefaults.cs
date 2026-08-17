@@ -1,4 +1,3 @@
-using Poly.DomainModeling;
 using Poly.DomainModeling.Lowering;
 
 namespace Poly.Packs.SqlServer;
@@ -12,22 +11,9 @@ namespace Poly.Packs.SqlServer;
 /// that validates identifier length (max 128 chars) and rejects oversized
 /// column/table names.
 ///
-/// Usage:
-/// <code>
-/// var inputs = DomainHostBuilder.Create().WithStorageFacets()
-///     .AddSqlServerDefaults();
-/// </code>
+/// Load via <c>builder.Load(new SqlServerLibrary())</c>.
 /// </summary>
 public static class SqlServerDefaults {
-    /// <summary>
-    /// Registers SQL Server type-map overrides and the identifier-length
-    /// convention on <paramref name="builder"/>.
-    /// </summary>
-    public static DomainHostBuilder AddSqlServerDefaults(this DomainHostBuilder builder) {
-        ArgumentNullException.ThrowIfNull(builder);
-        return builder.Load(new SqlServerLibrary());
-    }
-
     /// <summary>
     /// Registers SQL Server type-map overrides on the given registry.
     /// </summary>

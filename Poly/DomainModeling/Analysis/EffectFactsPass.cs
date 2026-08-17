@@ -12,7 +12,7 @@ namespace Poly.DomainModeling.Analysis;
 internal sealed class EffectFactsPass : INodeAnalyzer {
     public const string Id = "DomainEffectFacts";
     public string PassName => Id;
-    public string[] Dependencies => [SemanticDomainAnalyzer.Id];
+    public string[] Dependencies => [DomainCatalogPass.Id];
 
     public void Analyze(AnalysisContext context, Node node) {
         if (!context.ShouldAnalyze(node))
@@ -27,7 +27,7 @@ internal sealed class EffectFactsPass : INodeAnalyzer {
     }
 
     private static void PublishDomain(AnalysisContext context, Domain domain) {
-        var lookup = context.GetMetadata<DomainTypeLookupMetadata>(default);
+        var lookup = context.GetTypeLookup();
         if (lookup is null)
             return;
 
@@ -77,7 +77,7 @@ internal sealed class EffectFactsPass : INodeAnalyzer {
         targetEntity = null!;
 
         var relLookup = context.GetRelationshipLookup(domain)
-            ?? context.GetMetadata<RelationshipLookupMetadata>(default);
+            ?? context.GetRelationshipLookup();
         if (relLookup is null)
             return false;
 

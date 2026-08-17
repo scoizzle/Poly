@@ -553,8 +553,8 @@ public class PolyDslRoundTripTests {
         var result = new DomainEvolution(emptyDomain).Apply(changes);
         await Assert.That(result.Succeeded).IsTrue();
 
-        await Assert.That(result.Root!.Relationships.Count).IsEqualTo(1);
-        await Assert.That(result.Root.Relationships[0].Name).IsEqualTo("Tracks");
+        await Assert.That(result.Relationships().Count).IsEqualTo(1);
+        await Assert.That(result.Relationships()[0].Name).IsEqualTo("Tracks");
 
         var tracker = result.Root.Types.OfType<Entity>().Single(e => e.Name == "Tracker");
         var pending = tracker.Stages.Single(s => s.Name == "Pending");
@@ -571,7 +571,7 @@ public class PolyDslRoundTripTests {
         var emptyDomain2 = DomainTestFactory.Create("_", [], []);
         var result2 = new DomainEvolution(emptyDomain2).Apply(changes2);
         await Assert.That(result2.Succeeded).IsTrue();
-        await Assert.That(result2.Root!.Relationships.Count).IsEqualTo(1);
+        await Assert.That(result2.Relationships().Count).IsEqualTo(1);
     }
 
     [Test]
@@ -1129,7 +1129,7 @@ public class PolyDslRoundTripTests {
         var result = new DomainEvolution(emptyDomain).Apply(changes);
         await Assert.That(result.Succeeded).IsTrue();
         // Verify the relationship exists and has SourceOwnsTarget=true
-        var rel = result.Root.Relationships.FirstOrDefault(r => r.Name == "passport");
+        var rel = result.Relationships().FirstOrDefault(r => r.Name == "passport");
         await Assert.That(rel).IsNotNull();
         await Assert.That(rel!.SourceOwnsTarget).IsTrue();
     }
@@ -1185,7 +1185,7 @@ public class PolyDslRoundTripTests {
         await Assert.That(promote.Parameters.Count).IsEqualTo(1);
         await Assert.That(promote.Effects.Any(e => e is ConditionalEffect)).IsTrue();
 
-        var owned = result.Root.Relationships.Single(r => r.Name == "passport");
+        var owned = result.Relationships().Single(r => r.Name == "passport");
         await Assert.That(owned.SourceOwnsTarget).IsTrue();
 
         var printer = new DomainDslPrinter();
@@ -1208,7 +1208,7 @@ public class PolyDslRoundTripTests {
         await Assert.That(worker2.Properties.Any(p => p.Name == "Role")).IsTrue();
         await Assert.That(worker2.Stages.Single(s => s.Name == "Draft").Actions
             .Single(a => a.Name == "Promote").Parameters.Count).IsEqualTo(1);
-        await Assert.That(result2.Root.Relationships.Single(r => r.Name == "passport").SourceOwnsTarget).IsTrue();
+        await Assert.That(result2.Relationships().Single(r => r.Name == "passport").SourceOwnsTarget).IsTrue();
 
         var analysis = DomainModelAnalyzer.Analyze(result2.Root);
         await Assert.That(analysis.HasStructuralFailure).IsFalse();

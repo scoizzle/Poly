@@ -4,7 +4,7 @@ namespace Poly.DomainModeling;
 /// Handles a pack-owned <see cref="DomainExpression"/> subtype for one core concern
 /// (rewrite, lowering, analysis inference). Registered into an
 /// <see cref="ExpressionDispatchRegistry{TResult}"/>; core dispatch consults the
-/// registry after its closed switch so packs extend the expression surface without
+/// session registry after its closed switch so packs extend the expression surface without
 /// core naming pack types.
 /// </summary>
 /// <typeparam name="TResult">The concern's result type (e.g. <c>DomainExpression</c>,
@@ -23,17 +23,12 @@ public interface IExpressionDispatchHandler<TResult> {
 }
 
 /// <summary>
-/// Ordered registry of pack-provided expression dispatch handlers. Core concerns fall
-/// back to <see cref="Default"/> when constructed without an explicit registry, so the
-/// built-in always-on pack (temporal) reaches bare construction sites (runtime lowering,
-/// static analyzer pipeline) without threading. Duplicate <see cref="IExpressionDispatchHandler{TResult}.ExpressionType"/>
+/// Ordered registry of pack-provided expression dispatch handlers on a session.
+/// Duplicate <see cref="IExpressionDispatchHandler{TResult}.ExpressionType"/>
 /// registration fails closed.
 /// </summary>
 public sealed class ExpressionDispatchRegistry<TResult> {
     private readonly List<IExpressionDispatchHandler<TResult>> _handlers = [];
-
-    /// <summary>Ambient product-default handler set (built-in packs register here).</summary>
-    public static ExpressionDispatchRegistry<TResult> Default { get; } = new();
 
     /// <summary>Registered handlers, in order.</summary>
     public IReadOnlyList<IExpressionDispatchHandler<TResult>> Handlers => _handlers;

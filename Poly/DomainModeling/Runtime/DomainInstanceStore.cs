@@ -176,17 +176,8 @@ public sealed class DomainInstanceStore {
 
             // --- Stage-scoped (requires resolvable current stage) ---
             if (subscriber.CurrentStage is not null) {
-                var subscriberEntityStructure = analysis.GetMetadata<EntityStructureMetadata>(subscriber.Entity);
-                if (subscriberEntityStructure is null)
-                    throw new InvalidOperationException(
-                        $"Runtime dispatch requires {nameof(EntityStructureMetadata)} for subscriber entity '{subscriber.Entity.Name}'.");
-                if (subscriberEntityStructure.StageByName is null)
-                    throw new InvalidOperationException(
-                        $"Entity '{subscriber.Entity.Name}' has no lifecycle stages; cannot dispatch subscription for current stage '{subscriber.CurrentStage}'.");
-
-                // Best-effort per subscriber: unknown current stage skips stage path only
-                // (entity-level still runs). Contrast InvokeActionInternal's fail-closed throw.
-                if (subscriberEntityStructure.StageByName.TryGetValue(subscriber.CurrentStage, out var subscriberStage)) {
+                if (analysis.TryGetStage(subscriber.Entity, subscriber.CurrentStage, out var subscriberStage)
+                    && subscriberStage is not null) {
                     var stagePlan = analysis.GetMetadata<SubscriptionDispatchPlanMetadata>(subscriberStage)
                         ?? throw new InvalidOperationException(
                             $"Runtime dispatch requires {nameof(SubscriptionDispatchPlanMetadata)} for stage '{subscriberStage.Name}'.");

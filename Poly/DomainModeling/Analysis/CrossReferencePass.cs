@@ -21,7 +21,7 @@ internal sealed class CrossReferencePass : INodeAnalyzer {
         if (context.HasStructuralFailure) return;
 
         var topology = context.GetMetadata<EffectTopologyMetadata>(domain)?.Topology;
-        var relationships = domain.Relationships.ToList();
+        var relationships = context.GetAllRelationships(domain);
         var entities = domain.Types.OfType<Entity>().ToList();
         var entityNames = entities.Select(e => e.Name).ToHashSet(StringComparer.Ordinal);
         var relLookup = relationships

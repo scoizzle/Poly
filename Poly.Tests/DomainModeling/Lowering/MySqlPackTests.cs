@@ -11,7 +11,7 @@ namespace Poly.Tests.DomainModeling.Lowering;
 public class MySqlPackTests {
     [Test]
     public async Task AddPack_MySql_AppliesTypeMaps() {
-        var builder = DomainHostBuilder.Create();
+        var builder = DomainHostBuilder.CreateEmpty();
 
         builder.Load(new MySqlLibrary());
 

@@ -62,9 +62,9 @@ internal sealed class StoragePass : INodeAnalyzer {
         var typeMaps = _typeMaps;
         var conventions = _conventions;
         if (typeMaps is null && domain.Extensions.Count > 0) {
-            var host = domain.ResolveHost();
-            typeMaps = host.Analysis.TypeMaps;
-            conventions = host.Analysis.StorageConventions;
+            var session = DomainSession.Open(domain);
+            typeMaps = session.Analysis.TypeMaps;
+            conventions = session.Analysis.StorageConventions;
         }
 
         var analyzer = new StorageAnalyzer(domain, context: context, analysis: _analysis, typeMaps: typeMaps, conventions: conventions);

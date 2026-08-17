@@ -811,8 +811,8 @@ or two `Date` properties) is rejected at analysis.
 
 **Fail-closed (library not loaded):** without the temporal library, `Now` stays a plain `PropertyAccess`
 (never a clock read), temporal authoring (`Now - 12 Days`, `5 Days`) fails at parse, and
-`DateOperation` printing throws. Product hosts load Temporal (`DomainHostBuilder.Create`);
-opt-out is `CreateEmpty()`, not a missing initializer.
+`DateOperation` printing throws. Product sessions load Temporal via `uses temporal`
+(or the SDK/MCP seed). A unit that does not list Temporal does not get clock meaning.
 
 **Create-time defaults and assign-to-clock are shipped.** `default(Today)` / `default(Now)`
 and `assign Prop to Today` / `assign Prop to Now` evaluate at instance create / invoke

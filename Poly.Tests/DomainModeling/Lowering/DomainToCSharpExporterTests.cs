@@ -1080,6 +1080,7 @@ public class DomainToCSharpExporterTests {
         // coalesce, never drop the default to a silent `= null`.
         const string dsl = """
             domain KeywordDefaults
+            uses temporal
 
             A: entity {
               RecordedOn: Date default(Today)

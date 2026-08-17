@@ -9,4 +9,4 @@ public sealed record EnumType(
     string Name,
     IReadOnlyList<string> MemberNames,
     IReadOnlyList<Constraint> Constraints
-) : DomainType(Name, [], Constraints);
+) : DomainType(Name, Properties: [], Constraints);

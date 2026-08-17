@@ -1,5 +1,6 @@
 using System.Globalization;
 
+using Poly.DomainModeling;
 using Poly.DomainModeling.Constraints;
 using Poly.DomainModeling.Effects;
 using Poly.DomainModeling.Evolution;
@@ -12,7 +13,7 @@ namespace Poly.DomainModeling.Parsing;
 /// <summary>
 /// Grammar-table-driven parser for the product Poly DSL.
 /// Structure/annotations: Matcher over <see cref="DslGrammar"/>.
-/// Expressions: <see cref="DslExpressionParser"/> (E1 open forms).
+/// Expressions: <see cref="DslExpressionParser"/> (product shapes + session concept folds).
 /// Cursor mechanics (Current/Advance/Expect/MatchRule/Consume/Error) come from
 /// <see cref="DslCursor"/> — the reader owns the committed position.
 /// </summary>
@@ -73,12 +74,14 @@ public sealed class PolyDslParser : DslCursor {
     /// Pack grammar contributors apply when building the table.
     /// </summary>
     public PolyDslParser(string text, DomainParserInputs? parserInputs)
-        : base(new DslTokenReader(text), r => new Matcher<DslToken, DslTokenKind>(DslGrammar.Build(g => {
-            parserInputs?.Annotations.ContributePatterns(g);
-            parserInputs?.ExpressionForms.ContributeGrammarPatterns(g);
-        }), r)) {
-        _parserInputs = parserInputs;
-        _expressions = new DslExpressionParser(this, parserInputs?.ExpressionForms);
+        : this(text, DomainSession.FromInputs(parserInputs)) {
+    }
+
+    public PolyDslParser(string text, DomainSession session)
+        : base(new DslTokenReader(text), r => new Matcher<DslToken, DslTokenKind>(session.Language.Grammar, r)) {
+        ArgumentNullException.ThrowIfNull(session);
+        _parserInputs = session.ParserInputs;
+        _expressions = new DslExpressionParser(this, session.ParserInputs.ExpressionForms, session.Folds);
     }
 
     private DomainExpression ParseExpression() => _expressions.ParseExpression();

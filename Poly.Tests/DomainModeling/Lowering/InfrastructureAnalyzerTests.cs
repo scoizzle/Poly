@@ -46,7 +46,7 @@ public class InfrastructureAnalyzerTests {
         var topology = Poly.DomainModeling.Analysis.EffectTopologyPass.Scan(domain);
         var aggregate = Poly.DomainModeling.Analysis.OwnershipAggregatePass.BuildAggregate(domain, null, topology);
         var storage = new StorageAnalyzer(domain).Analyze(aggregate, topology);
-        var behavior = Poly.DomainModeling.Analysis.BehaviorPass.BuildBehavior(domain);
+        var behavior = Poly.DomainModeling.Analysis.BehaviorMetadata.BuildBehavior(domain);
         return new TestInfra(storage, topology, behavior, aggregate);
     }
 
@@ -57,7 +57,7 @@ public class InfrastructureAnalyzerTests {
         var topology = Poly.DomainModeling.Analysis.EffectTopologyPass.Scan(domain);
         var aggregate = Poly.DomainModeling.Analysis.OwnershipAggregatePass.BuildAggregate(domain, null, topology);
         var storage = new StorageAnalyzer(domain, analysis).Analyze(aggregate, topology);
-        var behavior = Poly.DomainModeling.Analysis.BehaviorPass.BuildBehavior(domain);
+        var behavior = Poly.DomainModeling.Analysis.BehaviorMetadata.BuildBehavior(domain);
         return new TestInfra(storage, topology, behavior, aggregate);
     }
 
@@ -334,8 +334,8 @@ public class InfrastructureAnalyzerTests {
 
     [Test]
     public async Task Behavior_StageActionEffectivePolicies_EntityStageActionParity() {
-        // M3: the consolidated composition (entity + stage + action) that BehaviorPass
-        // reads from the capability surface must equal the canonical composition.
+        // M3: the consolidated composition (entity + stage + action) projected
+        // from the capability surface must equal the canonical composition.
         var entityPolicy = new Policy("EntityPolicy", DomainExpression.Property("Status"));
         var stagePolicy = new Policy("StagePolicy", DomainExpression.Property("Status"));
         var actionPolicy = new Policy("ActionPolicy", DomainExpression.Property("Status"));
@@ -348,11 +348,11 @@ public class InfrastructureAnalyzerTests {
             [], [entityPolicy], [activeStage, doneStage]);
         var domain = DomainTestFactory.Create("Test", [new Poly.DomainModeling.PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []), patron]);
 
-        var behavior = DomainModelAnalyzer.Analyze(domain)
-            .GetMetadata<BehaviorMetadata>(domain)?.Behavior;
-        await Assert.That(behavior).IsNotNull();
+        var analyzed = DomainModelAnalyzer.Analyze(domain);
+        var behavior = BehaviorMetadata.From(domain, analyzed);
+        await Assert.That(behavior.Entities).IsNotEmpty();
 
-        var go = behavior!.Entities.First(e => e.Name == "Patron").Actions.First(a => a.Name == "Go");
+        var go = behavior.Entities.First(e => e.Name == "Patron").Actions.First(a => a.Name == "Go");
         await Assert.That(go.StageName).IsEqualTo("Active");
         await Assert.That(go.Policies).IsEquivalentTo(["EntityPolicy", "StagePolicy", "ActionPolicy"]);
     }
@@ -473,7 +473,7 @@ public class InfrastructureAnalyzerTests {
         var topology = Poly.DomainModeling.Analysis.EffectTopologyPass.Scan(domain);
         var aggregate = Poly.DomainModeling.Analysis.OwnershipAggregatePass.BuildAggregate(domain, null, topology);
         var storage = new StorageAnalyzer(domain, typeMaps: ctx.Analysis.TypeMaps, conventions: ctx.Analysis.StorageConventions).Analyze(aggregate, topology);
-        var behavior = Poly.DomainModeling.Analysis.BehaviorPass.BuildBehavior(domain);
+        var behavior = Poly.DomainModeling.Analysis.BehaviorMetadata.BuildBehavior(domain);
         return new TestInfra(storage, topology, behavior, aggregate);
     }
 
@@ -629,7 +629,7 @@ public class InfrastructureAnalyzerTests {
             Item: entity { Name: Text }
             """);
 
-        var ctx = DomainHostBuilder.Create()
+        var ctx = DomainHostBuilder.CreateEmpty()
             .AddStorageConvention(new TestPrefixConvention("p_"))
             .Build();
         ctx.Analysis.TypeMaps.OverrideSqlColumnType("Text", "text");
@@ -767,10 +767,10 @@ public class InfrastructurePipelineTests {
         var domainResult = DomainModelAnalyzer.Analyze(domain);
 
         var topology = domainResult.GetMetadata<EffectTopologyMetadata>(domain);
-        var behavior = domainResult.GetMetadata<BehaviorMetadata>(domain);
+        var behavior = BehaviorMetadata.From(domain, domainResult);
         var aggregate = domainResult.GetMetadata<OwnershipAggregateMetadata>(domain);
         await Assert.That(topology).IsNotNull();
-        await Assert.That(behavior).IsNotNull();
+        await Assert.That(behavior.Entities).IsNotEmpty();
         await Assert.That(aggregate).IsNotNull();
 
         // Use the full domain analysis pipeline to produce all metadata,

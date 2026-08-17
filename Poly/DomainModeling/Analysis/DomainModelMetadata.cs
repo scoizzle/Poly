@@ -13,9 +13,7 @@ public sealed record ResolvedTypeReferenceMetadata(DomainType Type) : IAnalysisM
 
 /// <summary>
 /// Reverse membership index: the entity that owns an <see cref="Action"/> or
-/// <see cref="Stage"/> node. Published once (SemanticDomainAnalyzer) so passes
-/// that need "which entity does this action/stage belong to" don't re-scan
-/// every entity's members.
+/// <see cref="Stage"/> node. Published once by <see cref="DomainCatalogPass"/>.
 /// </summary>
 public sealed record OwnerEntityMetadata(Entity Owner) : IAnalysisMetadata;
 

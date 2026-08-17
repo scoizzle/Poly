@@ -64,6 +64,20 @@ public class DslCompilerArtifactContributorTests {
     }
 
     [Test]
+    public async Task Compile_LibraryRegisteringArtifact_IncludesContributedFile() {
+        var contributor = new HelloContributor();
+        var result = new Compiler().Compile(
+            SampleDomain,
+            CompileMode.Entities,
+            new HelloLibrary(contributor));
+
+        await Assert.That(result.Success).IsTrue();
+        var hello = result.Files!.Single(f => f.FileName == "hello.txt");
+        await Assert.That(hello.Source).IsEqualTo("hello from Library");
+        await Assert.That(contributor.Called).IsTrue();
+    }
+
+    [Test]
     public async Task Compile_WithArtifactContributor_OnStructuralFailure_EmitsNothing() {
         var contributor = new HelloContributor();
         var result = new Compiler()
@@ -73,5 +87,12 @@ public class DslCompilerArtifactContributorTests {
         await Assert.That(result.Success).IsFalse();
         await Assert.That(result.Files).IsNull();
         await Assert.That(contributor.Called).IsFalse();
+    }
+
+    private sealed class HelloLibrary(HelloContributor contributor) : IDomainLibrary {
+        public string Id => "hello-artifact";
+
+        public void Register(DomainHostBuilder builder) =>
+            builder.AddArtifactContributor(contributor);
     }
 }

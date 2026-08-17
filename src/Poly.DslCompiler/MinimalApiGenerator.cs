@@ -48,7 +48,7 @@ public sealed class MinimalApiGenerator {
         _aggregateLookup = aggregateModel.Entities.ToDictionary(e => e.Name, StringComparer.Ordinal);
         _enumLookup = domain.Types.OfType<EnumType>().ToDictionary(e => e.Name, StringComparer.Ordinal);
         _entityStructureLookup = _entities
-            .Select(entity => new { entity.Name, Metadata = analysis.GetMetadata<EntityStructureMetadata>(entity) })
+            .Select(entity => new { entity.Name, Metadata = analysis.GetStructure(entity) })
             .Where(x => x.Metadata is not null)
             .ToDictionary(x => x.Name, x => x.Metadata!, StringComparer.Ordinal);
     }
@@ -1047,28 +1047,12 @@ public sealed class MinimalApiGenerator {
 /// never child-entity routes.
 /// </summary>
 public sealed class MinimalApiHostArtifactContributor : IArtifactContributor {
-    private readonly StorageModel _storage;
-    private readonly BehaviorModel _behavior;
-    private readonly AggregateModel _aggregate;
-    private readonly string _dbContextName;
     private readonly IStorageSyntaxEmitter? _emitter;
     private readonly DbmsPack _dbms;
 
     public MinimalApiHostArtifactContributor(
-        StorageModel storage,
-        BehaviorModel behavior,
-        AggregateModel aggregate,
-        string dbContextName,
         IStorageSyntaxEmitter? emitter = null,
         DbmsPack dbms = DbmsPack.Generic) {
-        ArgumentNullException.ThrowIfNull(storage);
-        ArgumentNullException.ThrowIfNull(behavior);
-        ArgumentNullException.ThrowIfNull(aggregate);
-        ArgumentException.ThrowIfNullOrWhiteSpace(dbContextName);
-        _storage = storage;
-        _behavior = behavior;
-        _aggregate = aggregate;
-        _dbContextName = dbContextName;
         _emitter = emitter;
         _dbms = dbms;
     }
@@ -1076,10 +1060,18 @@ public sealed class MinimalApiHostArtifactContributor : IArtifactContributor {
     public IReadOnlyList<(string FileName, string Source)> Contribute(Domain domain, AnalysisResult analysis) {
         ArgumentNullException.ThrowIfNull(domain);
         ArgumentNullException.ThrowIfNull(analysis);
-        var apiGen = new MinimalApiGenerator(domain, analysis, _storage, _behavior, _aggregate, _emitter, _dbms);
-        var httpGen = new HttpFileGenerator(domain, analysis, _storage, _behavior, _aggregate);
+        var storage = analysis.GetMetadata<StorageMappingMetadata>(domain)?.Storage
+            ?? throw new InvalidOperationException(
+                "Minimal API artifacts require StorageMappingMetadata.");
+        var behavior = BehaviorMetadata.From(domain, analysis);
+        var aggregate = analysis.GetMetadata<OwnershipAggregateMetadata>(domain)?.Aggregate
+            ?? throw new InvalidOperationException(
+                "Minimal API artifacts require OwnershipAggregateMetadata.");
+        var dbContextName = $"{domain.Name}DbContext";
+        var apiGen = new MinimalApiGenerator(domain, analysis, storage, behavior, aggregate, _emitter, _dbms);
+        var httpGen = new HttpFileGenerator(domain, analysis, storage, behavior, aggregate);
         return [
-            ("Program.cs", new CSharpGenerator().Generate(apiGen.GenerateCompilationUnit(_dbContextName))),
+            ("Program.cs", new CSharpGenerator().Generate(apiGen.GenerateCompilationUnit(dbContextName))),
             ("demo.http", httpGen.Generate()),
         ];
     }

@@ -17,7 +17,7 @@ public sealed record Entity(
     IReadOnlyList<Action> Actions,
     IReadOnlyList<Policy> Policies,
     IReadOnlyList<Stage> Stages
-) : DomainType(Name, Properties, []) {
+) : DomainType(Name, Properties, Constraints: []) {
     /// <summary>
     /// Entity-level subscriptions that fire when a related entity transitions into
     /// a matching stage. Unlike stage-scoped subscriptions, these are active regardless
@@ -27,8 +27,8 @@ public sealed record Entity(
 
     /// <summary>
     /// The navigation properties declared on this entity. A relationship is a
-    /// source-entity-owned navigation; the domain-global relationship list
-    /// (<c>Domain.Relationships</c>) is a derived flatten of these.
+    /// source-entity-owned navigation; there is no domain-global relationship member —
+    /// the analysis catalog derives the relationship view from these.
     /// </summary>
     public IReadOnlyList<Relationship> Navigations { get; init; } = [];
 

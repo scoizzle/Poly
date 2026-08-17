@@ -12,7 +12,7 @@ namespace Poly.DomainModeling.Analysis;
 public static class DomainModelAnalyzer {
     private static readonly Analyzer _analyzer = new AnalyzerBuilder()
         .UseIncrementalAnalysis()
-        .UseDomainModelValidation()
+        .UseDomainModelAnalysisPipeline()
         .Build();
 
     public static AnalysisResult Analyze(Domain domain) {
@@ -65,10 +65,8 @@ public static class DomainModelAnalysisBuilderExtensions {
             // Lint-only: Structural, PolicyConstraint, Effect, ConstraintQuality,
             // RuleCoverage, ContractIntegration, Subscription, AuthoringSuggestion.
             builder.AddAnalyzer(new StructuralDomainAnalyzer());
-            builder.AddAnalyzer(new SemanticDomainAnalyzer());
-            builder.AddAnalyzer(new RuntimeContractAnalyzer());
-            // Sole name→member catalog publisher
             builder.AddAnalyzer(new DomainCatalogPass());
+            builder.AddAnalyzer(new RuntimeContractAnalyzer());
             builder.AddAnalyzer(new RequiredPropertiesPass());
             builder.AddAnalyzer(new PolicyConstraintAnalyzer());
             builder.AddAnalyzer(new ExpressionTypeAnalyzer());
@@ -85,15 +83,11 @@ public static class DomainModelAnalysisBuilderExtensions {
             builder.AddAnalyzer(new SubscriptionAnalyzer());
             builder.AddAnalyzer(new EffectTopologyPass());
             builder.AddAnalyzer(new OwnershipAggregatePass());
-            builder.AddAnalyzer(new BehaviorPass());
             builder.AddAnalyzer(new CrossReferencePass());
             builder.AddAnalyzer(new StoragePass());
             builder.AddAnalyzer(new AuthoringSuggestionAnalyzer());
             // Entity Syntax projection is export-time only — not an analysis fact.
             return builder;
         }
-
-        public AnalyzerBuilder UseDomainModelValidation() =>
-            builder.UseDomainModelAnalysisPipeline();
     }
 }

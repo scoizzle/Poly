@@ -23,6 +23,7 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Node
     private readonly Func<string, string>? _navigationNameResolver;
     private readonly Func<string, bool>? _isCollectionNavigation;
     private readonly Func<string, string?>? _propertyTypeResolver;
+    private readonly ExpressionMeaning? _meaning;
     private Node _currentSubject = null!;
 
     /// <param name="parameters">
@@ -42,7 +43,8 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Node
     /// <see cref="LoweringContext.NavigationNameResolver"/> maps DSL relationship
     /// names to generated member names (pascal-cased navs).
     /// </summary>
-    public DomainExpressionLoweringPass(LoweringContext context) {
+    public DomainExpressionLoweringPass(LoweringContext context)
+        : base(context.Meaning?.Lowering) {
         _parameters = context.Parameters ?? new Dictionary<string, Node>();
         _actionParameterNames = context.ActionParameterNames;
         _useThisReference = context.UseThisReference;
@@ -50,6 +52,7 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Node
         _navigationNameResolver = context.NavigationNameResolver;
         _isCollectionNavigation = context.IsCollectionNavigation;
         _propertyTypeResolver = context.PropertyTypeResolver;
+        _meaning = context.Meaning;
     }
 
     /// <summary>
@@ -74,7 +77,7 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Node
         // expressions (DateTime.UtcNow, DateOnly.FromDateTime, Guid.NewGuid)
         // instead of entity property access.
         if (_useThisReference) {
-            var runtime = EffectLoweringPass.LowerDefaultExpression(p);
+            var runtime = EffectLoweringPass.LowerDefaultExpression(p, meaning: _meaning);
             if (runtime is not null) return runtime;
         }
 

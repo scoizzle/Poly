@@ -4,9 +4,9 @@ namespace Poly.DomainModeling.Analysis;
 
 /// <summary>
 /// Shared semantic lookup helpers over analysis metadata.
-/// Product paths with a domain key read <see cref="DomainCatalogMetadata"/> only
-/// (dual-write of ARM/MTI retired). Domain-less helpers fall back to
-/// intermediate Semantic DTLM/RLM bags used mid-pipeline.
+/// Name lookups read <see cref="DomainCatalogMetadata"/> (type/relationship maps
+/// on <c>default</c> are the same instances). Effective policies/actions read
+/// <see cref="StageCapabilityMetadata"/> only.
 /// Methods fail closed (false/empty) when required metadata is absent —
 /// they do not tree-scan the domain.
 /// <para>
@@ -56,39 +56,71 @@ public static class DomainSemanticLookupExtensions {
         analysis.GetCatalog(domain)?.Index;
 
     /// <summary>
-    /// Catalog type lookup when <paramref name="domain"/> is set; else intermediate DTLM.
+    /// Catalog type lookup. Domain-keyed reads the catalog; otherwise the
+    /// default alias written by <see cref="DomainCatalogPass"/> (same instance).
     /// </summary>
     internal static DomainTypeLookupMetadata? GetTypeLookup(
         this INodeMetadataProvider analysis,
         Domain? domain = null) {
-        if (domain is not null) {
-            var fromCatalog = analysis.GetCatalog(domain)?.Types;
-            if (fromCatalog is not null) return fromCatalog;
-            return null;
-        }
+        if (domain is not null)
+            return analysis.GetCatalog(domain)?.Types;
         return analysis.GetMetadata<DomainTypeLookupMetadata>(default);
     }
 
     /// <summary>
-    /// Catalog relationships when <paramref name="domain"/> is set; else intermediate RLM.
+    /// Catalog relationship lookup. Domain-keyed reads the catalog; otherwise the
+    /// default alias written by <see cref="DomainCatalogPass"/> (same instance).
     /// </summary>
     internal static RelationshipLookupMetadata? GetRelationshipLookup(
         this INodeMetadataProvider analysis,
         Domain? domain = null) {
-        if (domain is not null) {
-            var fromCatalog = analysis.GetCatalog(domain)?.Relationships;
-            if (fromCatalog is not null) return fromCatalog;
-            return null;
-        }
+        if (domain is not null)
+            return analysis.GetCatalog(domain)?.Relationships;
         return analysis.GetMetadata<RelationshipLookupMetadata>(default);
+    }
+
+    /// <summary>
+    /// Relationships authored on <paramref name="entity"/> (its source-owned
+    /// navigation properties), resolved from the analysis catalog. Relationship
+    /// semantics are analysis-only: returns empty when the catalog is absent.
+    /// </summary>
+    public static IReadOnlyList<Relationship> GetRelationships(
+        this INodeMetadataProvider analysis,
+        Entity entity) {
+        var rlm = analysis.GetRelationshipLookup();
+        if (rlm is not null && rlm.BySourceEntity.TryGetValue(entity.Name, out var byNav))
+            return byNav.Values.ToList();
+        return Array.Empty<Relationship>();
+    }
+
+    /// <summary>
+    /// Flat relationship list across the domain (entity order, then nav order),
+    /// resolved from the analysis catalog. Returns empty when the catalog is absent.
+    /// </summary>
+    public static IReadOnlyList<Relationship> GetAllRelationships(
+        this INodeMetadataProvider analysis,
+        Domain domain) {
+        var rlm = analysis.GetRelationshipLookup(domain);
+        if (rlm is null)
+            return Array.Empty<Relationship>();
+        var result = new List<Relationship>();
+        foreach (var entity in domain.Types.OfType<Entity>())
+            if (rlm.BySourceEntity.TryGetValue(entity.Name, out var byNav))
+                result.AddRange(byNav.Values);
+        return result;
     }
 
     // ── Stage resolution ──────────────────────────────────────
 
     public static bool TryGetStage(this INodeMetadataProvider analysis, Entity entity, string stageName, out Stage? stage) {
-        var esm = analysis.GetMetadata<EntityStructureMetadata>(entity);
-        if (esm?.StageByName is not null && esm.StageByName.TryGetValue(stageName, out stage))
-            return true;
+        var lookup = analysis.GetTypeLookup();
+        if (lookup is not null) {
+            var catalog = analysis.GetCatalog(lookup.Domain);
+            if (catalog is not null
+                && catalog.Index.StagesByEntity.TryGetValue(entity.Name, out var stages)
+                && stages.TryGetValue(stageName, out stage))
+                return true;
+        }
         stage = null;
         return false;
     }
@@ -151,54 +183,55 @@ public static class DomainSemanticLookupExtensions {
     // ── Effective surface (stage policies / actions) ──────────
 
     /// <summary>
-    /// Effective policies at a stage. Prefer the canonical
-    /// <see cref="StageCapabilityMetadata"/> surface; else re-apply
-    /// <see cref="DomainEffectiveSurface"/> over catalog Index maps
-    /// (entity + stage policies only — not action policies).
+    /// Entity structure published for <paramref name="entity"/>, or null.
+    /// </summary>
+    public static EntityStructureMetadata? GetStructure(
+        this INodeMetadataProvider analysis,
+        Entity entity) =>
+        analysis.GetMetadata<EntityStructureMetadata>(entity);
+
+    /// <summary>
+    /// Effective policies at a stage. Capability bag only — no catalog recomposition.
     /// </summary>
     public static IReadOnlyList<Policy> GetEffectivePolicies(
         this AnalysisResult analysis,
         Domain domain,
         Entity entity,
         string stageName) {
-        // Fail closed on unknown stage (symmetric with GetEffectiveActions).
+        _ = domain;
         if (!analysis.TryGetStage(entity, stageName, out var stage) || stage is null)
             return Array.Empty<Policy>();
 
-        var cap = analysis.GetMetadata<StageCapabilityMetadata>(stage);
-        if (cap is not null)
-            return cap.View.EffectivePolicies;
-
-        var mti = analysis.GetMutationIndex(domain);
-        if (mti is null) return Array.Empty<Policy>();
-
-        mti.EntityPoliciesByEntity.TryGetValue(entity.Name, out var entityPolicies);
-        IReadOnlyDictionary<string, Policy>? stageScoped = null;
-        if (mti.StagePoliciesByEntity.TryGetValue(entity.Name, out var stagePolicies))
-            stagePolicies.TryGetValue(stageName, out stageScoped);
-        return DomainEffectiveSurface.ComposeStagePolicies(entityPolicies, stageScoped);
+        return analysis.GetMetadata<StageCapabilityMetadata>(stage)?.View.EffectivePolicies
+            ?? [];
     }
 
     /// <summary>
-    /// Effective actions at a stage. Prefer the canonical
-    /// <see cref="StageCapabilityMetadata"/> surface; else stage-local actions
-    /// via <see cref="DomainEffectiveSurface"/> (stage-local only).
+    /// Effective actions at a stage. Capability bag only — stage-local names.
+    /// Entity-level actions stay on <see cref="TryResolveAction"/> for dispatch.
     /// </summary>
     public static IReadOnlyList<Action> GetEffectiveActions(
         this AnalysisResult analysis,
         Domain domain,
         Entity entity,
         string stageName) {
+        _ = domain;
         if (!analysis.TryGetStage(entity, stageName, out var stage) || stage is null)
             return Array.Empty<Action>();
 
-        // Stage-local only (Capability EffectiveActions mirror stage.Actions; SA entity
-        // actions stay on TryResolveAction for runtime dispatch, not this list).
-        if (analysis.GetMetadata<StageCapabilityMetadata>(stage) is not null
-            || analysis.GetCatalog(domain) is not null)
-            return DomainEffectiveSurface.ComposeStageActions(stage);
+        var cap = analysis.GetMetadata<StageCapabilityMetadata>(stage);
+        if (cap is null)
+            return [];
 
-        return Array.Empty<Action>();
+        var byName = stage.Actions
+            .GroupBy(a => a.Name, StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.Last(), StringComparer.Ordinal);
+        var actions = new List<Action>(cap.View.EffectiveActions.Count);
+        foreach (var view in cap.View.EffectiveActions) {
+            if (byName.TryGetValue(view.ActionName, out var action))
+                actions.Add(action);
+        }
+        return actions;
     }
 
     // ── Relationship resolution ───────────────────────────────

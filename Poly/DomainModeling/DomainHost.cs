@@ -1,30 +1,31 @@
-using Poly.Analysis;
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Packs;
-using Poly.DomainModeling.Packs.Temporal;
 using Poly.DomainModeling.Parsing;
 
 namespace Poly.DomainModeling;
 
 /// <summary>
-/// Resolved parse/print and analysis tables for a set of extension ids.
-/// Prefer <see cref="Domain.ResolveHost"/> or <see cref="ExtensionCatalog.ResolveHost"/>.
+/// Frozen parse/print and analysis tables for a set of extension ids.
+/// Product callers open a <see cref="DomainSession"/>; the catalog builds this bundle.
 /// </summary>
 public sealed record DomainHost(
     DomainParserInputs Parser,
-    DomainAnalysisInputs Analysis
-);
+    DomainAnalysisInputs Analysis,
+    ExpressionMeaning Meaning
+) {
+    public IReadOnlyList<IArtifactContributor> Artifacts { get; init; } = [];
+}
 
 /// <summary>
 /// Immutable parser/printer tables for one session.
 /// </summary>
 public sealed class DomainParserInputs {
-    /// <summary>Empty tables — no language libraries.</summary>
+    /// <summary>Empty tables — no libraries loaded.</summary>
     public static DomainParserInputs Empty { get; } = new(new AnnotationRegistry());
 
     public AnnotationRegistry Annotations { get; }
 
-    /// <summary>Expression forms, folds, and print mappings.</summary>
+    /// <summary>Concept folds and print mappings on product expression shapes.</summary>
     public ExpressionFormRegistry ExpressionForms { get; }
 
     public DomainParserInputs(AnnotationRegistry annotations, ExpressionFormRegistry? expressionForms = null) {
@@ -40,35 +41,21 @@ public sealed class DomainParserInputs {
 /// Immutable analyzer tables for one session.
 /// </summary>
 public sealed class DomainAnalysisInputs {
-    /// <summary>Empty maps, conventions, and extra passes.</summary>
+    /// <summary>Empty type maps and storage conventions.</summary>
     public static DomainAnalysisInputs Empty { get; } = new(
         new TypeMappingRegistry(),
-        [],
         []);
 
     public TypeMappingRegistry TypeMaps { get; }
     public IReadOnlyList<IStorageConvention> StorageConventions { get; }
-    public IReadOnlyList<INodeAnalyzer> AdditionalPasses { get; }
 
     public DomainAnalysisInputs(
         TypeMappingRegistry typeMaps,
-        IReadOnlyList<IStorageConvention> storageConventions,
-        IReadOnlyList<INodeAnalyzer> additionalPasses) {
+        IReadOnlyList<IStorageConvention> storageConventions) {
         ArgumentNullException.ThrowIfNull(typeMaps);
         ArgumentNullException.ThrowIfNull(storageConventions);
-        ArgumentNullException.ThrowIfNull(additionalPasses);
-
-        var duplicatePass = additionalPasses
-            .GroupBy(p => p.PassName, StringComparer.Ordinal)
-            .FirstOrDefault(g => g.Count() > 1);
-        if (duplicatePass is not null) {
-            throw new InvalidOperationException(
-                $"Duplicate analyzer pass '{duplicatePass.Key}' in explicit analysis inputs.");
-        }
-
         TypeMaps = typeMaps.Clone();
         StorageConventions = storageConventions.ToArray();
-        AdditionalPasses = additionalPasses.ToArray();
     }
 }
 
@@ -77,22 +64,16 @@ public sealed class DomainAnalysisInputs {
 /// </summary>
 public sealed class DomainHostBuilder {
     private readonly List<IStorageConvention> _storageConventions = [];
-    private readonly List<INodeAnalyzer> _analysisPasses = [];
+    private readonly List<IArtifactContributor> _artifacts = [];
     private readonly HashSet<string> _loadedIds = new(StringComparer.Ordinal);
 
     public AnnotationRegistry Annotations { get; } = new();
     public ExpressionFormRegistry ExpressionForms { get; } = new();
     public TypeMappingRegistry TypeMaps { get; } = new();
+    public ExpressionMeaning Meaning { get; } = new();
 
     /// <summary>No extensions loaded — used by the catalog when resolving ids.</summary>
     public static DomainHostBuilder CreateEmpty() => new();
-
-    /// <summary>Loads Temporal. Prefer resolving <see cref="Domain.Extensions"/> in product paths.</summary>
-    public static DomainHostBuilder Create() =>
-        CreateEmpty().Load(new TemporalLibrary());
-
-    /// <summary>Loads <c>column</c>/<c>table</c> spelling.</summary>
-    public DomainHostBuilder WithStorageFacets() => Load(new StorageFacetLibrary());
 
     /// <summary>
     /// Loads <paramref name="library"/>. Duplicate <see cref="IDomainLibrary.Id"/> fails closed.
@@ -103,7 +84,7 @@ public sealed class DomainHostBuilder {
             throw new ArgumentException("Library id must be non-empty.", nameof(library));
         if (!_loadedIds.Add(library.Id))
             throw new InvalidOperationException($"A library with id '{library.Id}' is already loaded.");
-        library.Register(new HostSurfaces(this));
+        library.Register(this);
         return this;
     }
 
@@ -113,9 +94,11 @@ public sealed class DomainHostBuilder {
         return this;
     }
 
-    public DomainHostBuilder RegisterExpressionForm(IExpressionPrimaryForm form) {
-        ArgumentNullException.ThrowIfNull(form);
-        ExpressionForms.Register(form);
+    public DomainHostBuilder RegisterFold(
+        string rule,
+        string pattern,
+        Func<Poly.Grammar.MatchResult<Parsing.DslToken, Parsing.DslTokenKind>, DomainExpression> fold) {
+        ExpressionForms.RegisterFold(rule, pattern, fold);
         return this;
     }
 
@@ -131,9 +114,9 @@ public sealed class DomainHostBuilder {
         return this;
     }
 
-    public DomainHostBuilder AddAnalysisPass(INodeAnalyzer pass) {
-        ArgumentNullException.ThrowIfNull(pass);
-        _analysisPasses.Add(pass);
+    public DomainHostBuilder AddArtifactContributor(IArtifactContributor contributor) {
+        ArgumentNullException.ThrowIfNull(contributor);
+        _artifacts.Add(contributor);
         return this;
     }
 
@@ -141,8 +124,10 @@ public sealed class DomainHostBuilder {
         new(Annotations, ExpressionForms);
 
     public DomainAnalysisInputs BuildAnalysisInputs() =>
-        new(TypeMaps, _storageConventions, _analysisPasses);
+        new(TypeMaps, _storageConventions);
 
     public DomainHost Build() =>
-        new(BuildParserInputs(), BuildAnalysisInputs());
+        new(BuildParserInputs(), BuildAnalysisInputs(), Meaning) {
+            Artifacts = [.. _artifacts]
+        };
 }

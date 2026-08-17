@@ -40,16 +40,16 @@ public sealed class DomainDslPrinter {
     /// <see cref="DslTokenWriter"/>. Pack binders register first so a pack owns the IR
     /// it produced; core binders then fill the built-in surface.
     /// </summary>
-    public DomainDslPrinter(DomainParserInputs? parserInputs) {
-        _annotations = parserInputs?.Annotations;
-        parserInputs?.ExpressionForms.ContributePrintMappings(_expressionBinders);
+    public DomainDslPrinter(DomainParserInputs? parserInputs)
+        : this(DomainSession.FromInputs(parserInputs)) {
+    }
+
+    public DomainDslPrinter(DomainSession session) {
+        ArgumentNullException.ThrowIfNull(session);
+        _annotations = session.ParserInputs.Annotations;
+        session.ParserInputs.ExpressionForms.ContributePrintMappings(_expressionBinders);
         CoreExpressionPrintBinders.Register(_expressionBinders);
-        var grammar = DslGrammar.Build(g => {
-            parserInputs?.Annotations.ContributePatterns(g);
-            parserInputs?.ExpressionForms.ContributeGrammarPatterns(g);
-        });
-        _printTable = new Printer<DslToken, DslTokenKind>(
-            grammar, DslGrammar.CanonicalText, () => new DslTokenWriter());
+        _printTable = session.Language.Printer;
     }
 
     /// <summary>
@@ -59,11 +59,15 @@ public sealed class DomainDslPrinter {
         ArgumentNullException.ThrowIfNull(domain);
         _sb.Clear();
 
-        // Domain header
-        _sb.AppendLine($"domain {domain.Name}");
+        _sb.AppendLine(_printTable.Print(
+            "document",
+            "header",
+            fills: new Dictionary<string, string>(StringComparer.Ordinal) { ["name"] = domain.Name }));
         foreach (var extensionId in domain.Extensions) {
-            _sb.Append("uses ");
-            _sb.AppendLine(extensionId);
+            _sb.AppendLine(_printTable.Print(
+                "uses",
+                "id",
+                fills: new Dictionary<string, string>(StringComparer.Ordinal) { ["id"] = extensionId }));
         }
         _sb.AppendLine();
 
@@ -614,9 +618,11 @@ public sealed class DomainDslPrinter {
     private string? TryPrintBoundExpression(DomainExpression expr) {
         if (!_expressionBinders.TryMap(expr, out var binding))
             return null;
-        return binding.Fill is { } fill
-            ? _printTable.Print(binding.Rule, binding.Pattern, fill)
-            : _printTable.Print(binding.Rule, binding.Pattern, ctx => FillPrimaryText(ctx, expr));
+        return _printTable.Print(
+            binding.Rule,
+            binding.Pattern,
+            binding.Fill ?? (binding.NamedFills is null ? ctx => FillPrimaryText(ctx, expr) : null),
+            binding.NamedFills);
     }
 
     private void FillPrimaryText(PrintContext<DslToken, DslTokenKind> ctx, DomainExpression expr) {

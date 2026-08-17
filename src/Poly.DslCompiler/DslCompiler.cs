@@ -4,6 +4,7 @@ using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Packs;
+using Poly.DomainModeling.Packs.Temporal;
 using Poly.DomainModeling.Parsing;
 using Poly.Interpretation.CSharp;
 using Poly.Packs.Sqlite;
@@ -44,7 +45,7 @@ public enum DbmsPack {
 /// the same pipeline behind the MCP <c>export_domain_to_csharp</c> tool.
 /// </summary>
 public sealed class DslCompiler {
-    private readonly List<IArtifactContributor> _artifactContributors = [];
+    private readonly List<IDomainLibrary> _extraLibraries = [];
 
     /// <summary>
     /// Result of a compilation attempt.
@@ -56,14 +57,20 @@ public sealed class DslCompiler {
     );
 
     /// <summary>
-    /// Registers an artifact contributor, invoked after analysis succeeds to add
-    /// extra output files (analyzed domain + analysis result). Structural analysis
-    /// failures fail closed first — contributors are never asked.
+    /// Loads an extra library for subsequent compiles (DSL, analysis, and/or artifacts).
+    /// </summary>
+    public DslCompiler Load(IDomainLibrary library) {
+        ArgumentNullException.ThrowIfNull(library);
+        _extraLibraries.Add(library);
+        return this;
+    }
+
+    /// <summary>
+    /// Registers an artifact contributor as a one-off library on this compiler.
     /// </summary>
     public DslCompiler AddArtifactContributor(IArtifactContributor contributor) {
         ArgumentNullException.ThrowIfNull(contributor);
-        _artifactContributors.Add(contributor);
-        return this;
+        return Load(new ExtraArtifactLibrary(contributor));
     }
 
     /// <summary>
@@ -83,7 +90,7 @@ public sealed class DslCompiler {
     /// Compiles .poly DSL text with the given mode and DBMS pack selection.
     /// </summary>
     public CompileResult Compile(string polyText, CompileMode mode, DbmsPack dbms) =>
-        Compile(polyText, mode, CreateInputs(dbms), dbms);
+        Compile(polyText, mode, CreateInputs(DbmsPacks(dbms), extra: _extraLibraries, hostArtifacts: mode == CompileMode.All, dbms), dbms);
 
     /// <summary>
     /// Compiles .poly DSL text with explicit domain libraries loaded in order.
@@ -94,7 +101,8 @@ public sealed class DslCompiler {
     /// </summary>
     public CompileResult Compile(string polyText, CompileMode mode, params IDomainLibrary[] libraries) {
         ArgumentNullException.ThrowIfNull(libraries);
-        return Compile(polyText, mode, CreateInputs(libraries), ResolveDbms(libraries));
+        var dbms = ResolveDbms(libraries);
+        return Compile(polyText, mode, CreateInputs(libraries, extra: _extraLibraries, hostArtifacts: mode == CompileMode.All, dbms), dbms);
     }
 
     /// <summary>
@@ -105,7 +113,7 @@ public sealed class DslCompiler {
         CompileMode mode,
         DomainParserInputs parserInputs,
         DomainAnalysisInputs analysisInputs) =>
-        Compile(polyText, mode, parserInputs, analysisInputs, DbmsPack.Generic);
+        Compile(polyText, mode, parserInputs, analysisInputs, DbmsPack.Generic, artifacts: []);
 
     /// <summary>
     /// Compiles .poly DSL text from an upstream convenience parse/analyze bundle
@@ -113,7 +121,7 @@ public sealed class DslCompiler {
     /// <c>--mode all</c>).
     /// </summary>
     public CompileResult Compile(string polyText, CompileMode mode, DomainHost inputs, DbmsPack dbms) =>
-        Compile(polyText, mode, inputs.Parser, inputs.Analysis, dbms);
+        Compile(polyText, mode, inputs.Parser, inputs.Analysis, dbms, inputs.Artifacts);
 
     /// <summary>
     /// Compiles .poly DSL text with explicit parse/analyze inputs and a DBMS pack
@@ -124,7 +132,8 @@ public sealed class DslCompiler {
         CompileMode mode,
         DomainParserInputs parserInputs,
         DomainAnalysisInputs analysisInputs,
-        DbmsPack dbms) {
+        DbmsPack dbms,
+        IReadOnlyList<IArtifactContributor>? artifacts = null) {
         ArgumentNullException.ThrowIfNull(parserInputs);
         ArgumentNullException.ThrowIfNull(analysisInputs);
 
@@ -182,7 +191,7 @@ public sealed class DslCompiler {
         var domain = outcome.Root;
         try {
             var hostAnalysis = domain.Extensions.Count > 0
-                ? domain.ResolveHost(CompilerCatalog).Analysis
+                ? DomainSession.Open(domain, CompilerCatalog).Analysis
                 : analysisInputs;
             var output = GenerateAllFiles(domain, outcome.Analysis, mode, hostAnalysis);
             var files = output.Files.ToList();
@@ -191,20 +200,14 @@ public sealed class DslCompiler {
             // hook (composition-root host contributor), alongside any user-registered ones.
             // The host contributor runs first to preserve the historical file order
             // (Program.cs + demo.http before extra contributed files).
-            var contributors = new List<IArtifactContributor>();
-            if (mode == CompileMode.All) {
-                if (output.Storage is null || output.Behavior is null
-                    || output.Aggregate is null || output.DbContextName is null) {
-                    throw new InvalidOperationException(
-                        "CompileMode.All requires storage, behavior, and aggregate analysis metadata.");
-                }
-                contributors.Add(new MinimalApiHostArtifactContributor(
-                    output.Storage, output.Behavior, output.Aggregate, output.DbContextName,
-                    dbms: dbms));
+            if (mode == CompileMode.All
+                && (output.Storage is null || output.Behavior is null
+                    || output.Aggregate is null || output.DbContextName is null)) {
+                throw new InvalidOperationException(
+                    "CompileMode.All requires storage, behavior, and aggregate analysis metadata.");
             }
-            contributors.AddRange(_artifactContributors);
 
-            foreach (var contributor in contributors)
+            foreach (var contributor in artifacts ?? [])
                 foreach (var file in contributor.Contribute(domain, outcome.Analysis))
                     files.Add(file);
             return new CompileResult(Success: true, Files: files, Errors: null);
@@ -223,7 +226,7 @@ public sealed class DslCompiler {
         CompileMode mode,
         DomainHost inputs) {
         ArgumentNullException.ThrowIfNull(inputs);
-        return Compile(polyText, mode, inputs.Parser, inputs.Analysis);
+        return Compile(polyText, mode, inputs.Parser, inputs.Analysis, DbmsPack.Generic, inputs.Artifacts);
     }
 
     private static readonly ExtensionCatalog CompilerCatalog = ExtensionCatalog.Core
@@ -249,12 +252,32 @@ public sealed class DslCompiler {
     /// syntax (compiler host); duplicate library ids fail closed in
     /// <see cref="DomainHostBuilder.Load"/>.
     /// </summary>
-    public static DomainHost CreateInputs(params IDomainLibrary[] libraries) {
+    public static DomainHost CreateInputs(params IDomainLibrary[] libraries) =>
+        CreateInputs(libraries, extra: [], hostArtifacts: false, DbmsPack.Generic);
+
+    private static DomainHost CreateInputs(
+        IReadOnlyList<IDomainLibrary> libraries,
+        IReadOnlyList<IDomainLibrary> extra,
+        bool hostArtifacts,
+        DbmsPack dbms) {
         ArgumentNullException.ThrowIfNull(libraries);
-        var builder = DomainHostBuilder.Create().WithStorageFacets();
+        var builder = DomainHostBuilder.CreateEmpty()
+            .Load(new TemporalLibrary())
+            .Load(new StorageFacetLibrary());
         foreach (var library in libraries)
             builder.Load(library);
+        foreach (var library in extra)
+            builder.Load(library);
+        if (hostArtifacts)
+            builder.AddArtifactContributor(new MinimalApiHostArtifactContributor(dbms: dbms));
         return builder.Build();
+    }
+
+    private sealed class ExtraArtifactLibrary(IArtifactContributor contributor) : IDomainLibrary {
+        public string Id { get; } = "artifact:" + contributor.GetType().FullName + ":" + Guid.NewGuid().ToString("N");
+
+        public void Register(DomainHostBuilder builder) =>
+            builder.AddArtifactContributor(contributor);
     }
 
     /// <summary>
@@ -355,14 +378,13 @@ public sealed class DslCompiler {
         // to a narrow StoragePass re-run only when pack-specific type maps or
         // conventions require refinement (e.g., Sqlite type mappings).
         var storageModel = analysis.GetMetadata<StorageMappingMetadata>(domain)?.Storage;
-        var behaviorModel = analysis.GetMetadata<BehaviorMetadata>(domain)?.Behavior;
+        var behaviorModel = BehaviorMetadata.From(domain, analysis);
         var aggregateModel = analysis.GetMetadata<OwnershipAggregateMetadata>(domain)?.Aggregate;
 
         var needsInfraPipeline = (mode == CompileMode.Db || mode == CompileMode.All)
             && (storageModel == null
                 || (analysisInputs?.TypeMaps.HasOverrides ?? false)
-                || (analysisInputs?.StorageConventions.Count ?? 0) > 0
-                || (analysisInputs?.AdditionalPasses.Count ?? 0) > 0);
+                || (analysisInputs?.StorageConventions.Count ?? 0) > 0);
 
         if (needsInfraPipeline) {
             var context = AnalysisContext.CreateDefault();
@@ -382,7 +404,7 @@ public sealed class DslCompiler {
         if (mode == CompileMode.All) {
             if (behaviorModel == null)
                 throw new InvalidOperationException(
-                    "Domain analysis did not produce behavior metadata. Ensure BehaviorPass is registered in the domain analysis pipeline.");
+                    "Could not project behavior from analysis (capability + entities).");
             if (aggregateModel == null)
                 throw new InvalidOperationException(
                     "Domain analysis did not produce aggregate metadata. Ensure OwnershipAggregatePass is registered in the domain analysis pipeline.");

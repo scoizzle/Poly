@@ -350,7 +350,7 @@ public class ExpressionTypeAnalysisTests {
             """;
         var parsed = Parse(dsl);
         var analysis = new Poly.Analysis.AnalyzerBuilder()
-            .AddAnalyzer(new SemanticDomainAnalyzer())
+            .AddAnalyzer(new DomainCatalogPass())
             .AddAnalyzer(new ExpressionTypeAnalyzer())
             .Build()
             .Analyze(parsed.Root!);

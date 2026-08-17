@@ -7,11 +7,7 @@ namespace Poly.Tests.Grammar;
 
 /// <summary>
 /// E1: expression module + open form registry (temporal-ready seam).
-/// pack-1-4: pack-shaped open forms are Grammar patterns + fold + print binder.
-/// The matcher recognizes the pack pattern on both primary rules; the fold is the
-/// cited-gap RD escape (<see cref="IExpressionPrimaryForm"/>, pack-host lock 13 —
-/// the product expr parser is recursive descent and cannot fold by grammar pattern
-/// name); the print binder re-emits the pack spelling so reparse hits the form again.
+/// pack-shaped open forms: Grammar patterns + session fold + named print fills.
 /// </summary>
 public class DslExpressionE1Tests {
     private static bool IsMagicIdentifier(DslToken token) =>
@@ -30,36 +26,6 @@ public class DslExpressionE1Tests {
     /// <summary>Pack IR for <c>N unit</c>: a tiny test-only node (no product temporal IR).</summary>
     private sealed record DurationLiteral(string Text) : DomainExpression;
 
-    /// <summary>Fold (cited-gap RD escape): identifier <c>MAGIC</c> → <see cref="MagicLiteral"/>.</summary>
-    private sealed class MagicForm : IExpressionPrimaryForm {
-        public bool TryParse(IDslParseCursor cursor, DslExpressionParser expressions, out DomainExpression expression) {
-            expression = null!;
-            if (cursor.Current.Kind != DslTokenKind.Identifier
-                || !string.Equals(cursor.Current.Text, "MAGIC", StringComparison.Ordinal))
-                return false;
-            cursor.Advance();
-            expression = new MagicLiteral(42);
-            return true;
-        }
-    }
-
-    /// <summary>Fold (cited-gap RD escape): <c>Number Identifier</c> → <see cref="DurationLiteral"/>.</summary>
-    private sealed class DurationForm : IExpressionPrimaryForm {
-        public bool TryParse(IDslParseCursor cursor, DslExpressionParser expressions, out DomainExpression expression) {
-            expression = null!;
-            if (cursor.Current.Kind != DslTokenKind.Number
-                || cursor.Peek(1).Kind != DslTokenKind.Identifier)
-                return false;
-            var num = cursor.Current.Text;
-            var unit = cursor.Peek(1).Text;
-            cursor.Advance();
-            cursor.Advance();
-            expression = new DurationLiteral($"{num} {unit}");
-            return true;
-        }
-    }
-
-    /// <summary>Pack-scoped print binder: <see cref="MagicLiteral"/> prints as the <c>MAGIC</c> identifier.</summary>
     private sealed class MagicBinder : IExpressionPrintMapping {
         public Type ExpressionType => typeof(MagicLiteral);
 
@@ -68,16 +34,14 @@ public class DslExpressionE1Tests {
                 binding = default;
                 return false;
             }
-            var at = 0;
-            binding = new PrintMapping("expr-primary", "magic", ctx => {
-                if (at++ == 0)
-                    ctx.Emit("MAGIC");
-            });
+            binding = new PrintMapping(
+                "expr-primary",
+                "magic",
+                NamedFills: new Dictionary<string, string>(StringComparer.Ordinal) { ["magic"] = "MAGIC" });
             return true;
         }
     }
 
-    /// <summary>Pack-scoped print binder: <see cref="DurationLiteral"/> prints as <c>N unit</c>.</summary>
     private sealed class DurationBinder : IExpressionPrintMapping {
         public Type ExpressionType => typeof(DurationLiteral);
 
@@ -87,24 +51,27 @@ public class DslExpressionE1Tests {
                 return false;
             }
             var parts = duration.Text.Split(' ', 2);
-            var at = 0;
-            binding = new PrintMapping("expr-primary", "duration", ctx => {
-                ctx.Emit(parts[at++ % parts.Length]);
-            });
+            binding = new PrintMapping(
+                "expr-primary",
+                "duration",
+                NamedFills: new Dictionary<string, string>(StringComparer.Ordinal) {
+                    ["amount"] = parts[0],
+                    ["unit"] = parts.Length > 1 ? parts[1] : "",
+                });
             return true;
         }
     }
 
     private static DomainParserInputs BuildMagicPackInputs() {
         var builder = DomainHostBuilder.CreateEmpty();
-        builder.ExpressionForms.Register(new MagicForm());
+        foreach (var rule in new[] { "expr-primary", "expr-primary-no-not" })
+            builder.ExpressionForms.RegisterFold(rule, "magic", _ => new MagicLiteral(42));
         builder.ExpressionForms.RegisterPrintMapping(new MagicBinder());
         builder.ExpressionForms.RegisterGrammarContributor(g => {
             foreach (var rule in new[] { "expr-primary", "expr-primary-no-not" }) {
                 g.Define(rule)
-                    .Pattern("magic")
-                    .Predicate(IsMagicIdentifier, "magic-identifier")
-                    .Optional(DslTokenKind.Comma)
+                    .Pattern("magic", priority: 1)
+                    .Predicate(IsMagicIdentifier, "magic")
                     .Commit();
             }
         });
@@ -113,13 +80,19 @@ public class DslExpressionE1Tests {
 
     private static DomainParserInputs BuildDurationPackInputs() {
         var builder = DomainHostBuilder.CreateEmpty();
-        builder.ExpressionForms.Register(new DurationForm());
+        foreach (var rule in new[] { "expr-primary", "expr-primary-no-not" }) {
+            builder.ExpressionForms.RegisterFold(rule, "duration", match => {
+                var amount = match.Captures["amount"][0].Text;
+                var unit = match.Captures["unit"][0].Text;
+                return new DurationLiteral($"{amount} {unit}");
+            });
+        }
         builder.ExpressionForms.RegisterPrintMapping(new DurationBinder());
         builder.ExpressionForms.RegisterGrammarContributor(g => {
             foreach (var rule in new[] { "expr-primary", "expr-primary-no-not" }) {
                 g.Define(rule)
                     .Pattern("duration")
-                    .Value(DslTokenKind.Number).Value(DslTokenKind.Identifier)
+                    .Value(DslTokenKind.Number, "amount").Value(DslTokenKind.Identifier, "unit")
                     .Commit();
             }
         });
@@ -233,11 +206,9 @@ public class DslExpressionE1Tests {
         var g = DslGrammar.Build(grammar => {
             foreach (var rule in new[] { "expr-primary", "expr-primary-no-not" }) {
                 grammar.Define(rule)
-                    .Pattern("magic")
-                    .Predicate(IsMagicIdentifier, "magic-identifier")
-                    .Optional(DslTokenKind.Comma)
-                    .Commit();
-                grammar.Define(rule)
+                    .Pattern("magic", priority: 1)
+                    .Predicate(IsMagicIdentifier, "magic")
+                    .Commit()
                     .Pattern("duration")
                     .Value(DslTokenKind.Number).Value(DslTokenKind.Identifier)
                     .Commit();

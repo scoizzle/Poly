@@ -1,3 +1,4 @@
+using Poly.DomainModeling;
 using Poly.Grammar;
 
 namespace Poly.DomainModeling.Parsing;
@@ -11,8 +12,8 @@ public static class DslExpressionFragment {
     /// <summary>
     /// Parses <paramref name="expression"/> as a DSL expression fragment. Throws
     /// <see cref="FormatException"/> (via GrammarError) on empty input, invalid syntax,
-    /// or trailing tokens. <paramref name="inputs"/> supplies E1 open expression forms;
-    /// when null the default (empty) registry is used.
+    /// or trailing tokens. <paramref name="inputs"/> supplies session concept folds;
+    /// when null the empty registry is used.
     /// </summary>
     public static DomainExpression ParseExpressionFragment(
         string expression,
@@ -20,12 +21,11 @@ public static class DslExpressionFragment {
         if (string.IsNullOrWhiteSpace(expression))
             throw GrammarError.Error("Expression must not be empty");
 
-        var forms = inputs?.ExpressionForms;
+        var session = DomainSession.FromInputs(inputs);
         var reader = new DslTokenReader(expression);
-        var grammar = DslGrammar.Build(g => forms?.ContributeGrammarPatterns(g));
-        var matcher = new Matcher<DslToken, DslTokenKind>(grammar, reader);
+        var matcher = session.Language.Matcher(reader);
         var cursor = new DslCursor(reader, matcher);
-        var parser = new DslExpressionParser(cursor, forms);
+        var parser = new DslExpressionParser(cursor, session.ParserInputs.ExpressionForms, session.Folds);
         var result = parser.ParseExpression();
 
         if (cursor.Current.Kind != DslTokenKind.EndOfFile)

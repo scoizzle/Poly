@@ -8,6 +8,7 @@ using ModelContextProtocol.Server;
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Lowering;
+using Poly.DomainModeling.Packs;
 using Poly.DomainModeling.Packs.Temporal;
 using Poly.DomainModeling.Parsing;
 using Poly.DomainModeling.Queries;
@@ -27,9 +28,8 @@ internal sealed class OracleTool {
     private static DomainToolResponse? TryParseDslExpression(string expressionDsl, out DomainExpression expr) {
         expr = null!;
         try {
-            // Session-default parser inputs (same registry sessions snapshot) so
-            // simulate_policy and add(kind: policy) agree on open forms (S3).
-            expr = DslExpressionFragment.ParseExpressionFragment(expressionDsl, McpDefaults.ParserInputs);
+            // Product authoring tables (temporal + storage) — same folds as add(kind: policy).
+            expr = DslExpressionFragment.ParseExpressionFragment(expressionDsl, ExtensionCatalog.Core.Authoring.Parser);
             return null;
         }
         catch (Exception ex) {
@@ -200,7 +200,7 @@ internal sealed class OracleTool {
             : state.Domain.Types.OfType<Entity>();
         var missingStructure = false;
         foreach (var entity in entities) {
-            if (analysis.GetMetadata<EntityStructureMetadata>(entity) is null) {
+            if (analysis.GetStructure(entity) is null) {
                 missingStructure = true;
                 continue;
             }
@@ -275,11 +275,10 @@ internal sealed class OracleTool {
         if (state.LatestAnalysis is null)
             return new DomainToolResponse(Success: false, Message: $"Session '{sessionId}' has no analysis. Apply a domain first (apply_dsl or evolution).", SessionId: sessionId, Affordances: ["apply_dsl", "get_domain_overview"]);
 
-        // Catalog mutation index only. Missing index ≠ not-found.
+        // Catalog required (analysis published). Policies are Domain facts.
         var analysis = state.LatestAnalysis;
-        var mti = analysis.GetMutationIndex(state.Domain);
-        if (mti is null)
-            return new DomainToolResponse(Success: false, Message: $"Session analysis is missing DomainCatalogMetadata (mutation index) required to describe policy '{name}'.", SessionId: sessionId, Affordances: ["get_domain_analysis"]);
+        if (analysis.GetCatalog(state.Domain) is null)
+            return new DomainToolResponse(Success: false, Message: $"Session analysis is missing DomainCatalogMetadata required to describe policy '{name}'.", SessionId: sessionId, Affordances: ["get_domain_analysis"]);
 
         var entities = entityName is not null
             ? state.Domain.Types.OfType<Entity>().Where(e => string.Equals(e.Name, entityName, StringComparison.Ordinal))
@@ -288,29 +287,27 @@ internal sealed class OracleTool {
             Policy? policy = null;
             string? scope = null;
 
-            if (mti.EntityPoliciesByEntity.TryGetValue(entity.Name, out var entityPols)
-                && entityPols.TryGetValue(name, out var ep)) {
-                policy = ep;
+            policy = entity.Policies.FirstOrDefault(p => string.Equals(p.Name, name, StringComparison.Ordinal));
+            if (policy is not null)
                 scope = "entity";
-            }
 
-            if (policy is null
-                && mti.StagePoliciesByEntity.TryGetValue(entity.Name, out var stagePols)) {
-                foreach (var kv in stagePols) {
-                    if (kv.Value.TryGetValue(name, out var sp)) {
+            if (policy is null) {
+                foreach (var stage in entity.Stages) {
+                    var sp = stage.Policies.FirstOrDefault(p => string.Equals(p.Name, name, StringComparison.Ordinal));
+                    if (sp is not null) {
                         policy = sp;
-                        scope = $"stage '{kv.Key}'";
+                        scope = $"stage '{stage.Name}'";
                         break;
                     }
                 }
             }
 
-            if (policy is null
-                && mti.ActionPoliciesByEntity.TryGetValue(entity.Name, out var actionPols)) {
-                foreach (var kv in actionPols) {
-                    if (kv.Value.TryGetValue(name, out var ap)) {
+            if (policy is null) {
+                foreach (var action in entity.Actions.Concat(entity.Stages.SelectMany(s => s.Actions))) {
+                    var ap = action.Policies.FirstOrDefault(p => string.Equals(p.Name, name, StringComparison.Ordinal));
+                    if (ap is not null) {
                         policy = ap;
-                        scope = $"action '{kv.Key}'";
+                        scope = $"action '{action.Name}'";
                         break;
                     }
                 }
@@ -413,7 +410,10 @@ internal sealed class OracleTool {
                 .ToList();
             var entity = new Entity("Subject", props, [], [], []);
             var policy = new Policy("_sim", expr);
-            var instance = DomainEntityInstance.Create(entity, subjectValues);
+            var domain = new Domain("Subject", [entity]) {
+                Extensions = [.. ExtensionCatalog.ProductAuthoring],
+            };
+            var instance = DomainEntityInstance.Create(entity, subjectValues, domain);
             var result = instance.EvaluatePolicy(policy);
 
             var data = new { result };

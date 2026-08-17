@@ -1,23 +1,24 @@
+using Poly.Ast.Nodes;
 using Poly.DomainModeling;
 using Poly.DomainModeling.Lowering;
+using Poly.DomainModeling.Packs;
 using Poly.DomainModeling.Packs.Temporal;
 using Poly.DomainModeling.Parsing;
 
 namespace Poly.Tests.DomainModeling.Parsing;
 
 /// <summary>
-/// p1-1: clock <c>Now</c>/<c>today</c> expression IR + <see cref="NowForm"/>.
+/// p1-1: clock <c>Now</c>/<c>Today</c> expression IR via Temporal folds.
 /// With the form registered, identifiers <c>Now</c>/<c>today</c> fold to the
 /// dedicated clock nodes and lower to CLR clock members; without the form they
 /// stay <see cref="PropertyAccess"/> (back-compat; pack-absent analysis is task 4).
 /// </summary>
 public class NowExpressionFormTests {
     private static DomainParserInputs NowFormInputs() =>
-        DomainHostBuilder.Create()
-            .RegisterExpressionForm(new NowForm())
-            .BuildParserInputs();
+        ExtensionCatalog.Core.Language.Parser;
 
-    private readonly DomainExpressionLoweringPass Pass = new();
+    private readonly DomainExpressionLoweringPass Pass = new(
+        new LoweringContext(new Parameter("entity"), Meaning: ExtensionCatalog.Core.Language.Meaning));
 
     [Test]
     public async Task Now_Form_ParsesAndLowers() {

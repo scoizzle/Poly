@@ -3,9 +3,8 @@ using Poly.Analysis;
 namespace Poly.DomainModeling.Packs;
 
 /// <summary>
-/// Emits extra output files from the analyzed domain. Contributors run only after
-/// domain analysis succeeds; structural analysis failures fail closed first and the
-/// compiler never asks a contributor over a failed analysis.
+/// Extra output files from the analyzed domain. Libraries register these on the
+/// session builder. The compiler asks them only after analysis succeeds.
 /// </summary>
 public interface IArtifactContributor {
     /// <summary>Produces additional files for <paramref name="domain"/>, or an empty

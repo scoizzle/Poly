@@ -81,7 +81,7 @@ public abstract class DomainExpressionDispatch<TResult> {
     };
 
     private TResult RouteRegistered(DomainExpression expr) {
-        var registry = _registry ?? ExpressionDispatchRegistry<TResult>.Default;
+        var registry = _registry ?? new ExpressionDispatchRegistry<TResult>();
         if (registry.TryDispatch(expr, x => Route(x), out var result))
             return result;
         return Default();

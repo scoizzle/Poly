@@ -1,5 +1,6 @@
 using Poly.DomainModeling;
 using Poly.DomainModeling.Lowering;
+using Poly.DomainModeling.Packs;
 using Poly.DomainModeling.Packs.Temporal;
 
 using Parameter = Poly.Ast.Nodes.Parameter;
@@ -8,7 +9,8 @@ using SN = Poly.Ast.Nodes;
 namespace Poly.Tests.DomainModeling.Lowering;
 
 public class DomainExpressionLoweringPassTests {
-    private readonly DomainExpressionLoweringPass Pass = new();
+    private readonly DomainExpressionLoweringPass Pass = new(
+        new LoweringContext(new Parameter("entity"), Meaning: ExtensionCatalog.Core.Language.Meaning));
 
     private readonly ParameterReference Subject = new();
 

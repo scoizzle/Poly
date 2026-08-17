@@ -37,14 +37,10 @@ public readonly record struct ExpressionTypeCheckScope(
     string? DefaultTargetTypeName = null);
 
 /// <summary>
-/// Ambient registry of pack-owned expression type checks. <see cref="Default"/> is the
-/// product-default set the built-in temporal pack contributes to.
+/// Session registry of pack-owned expression type checks.
 /// </summary>
 public sealed class ExpressionTypeCheckRegistry {
     private readonly List<IExpressionTypeCheck> _checks = [];
-
-    /// <summary>Ambient product-default check set (built-in packs register here).</summary>
-    public static ExpressionTypeCheckRegistry Default { get; } = new();
 
     public void Register(IExpressionTypeCheck check) {
         ArgumentNullException.ThrowIfNull(check);

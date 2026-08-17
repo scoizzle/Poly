@@ -1,4 +1,3 @@
-using Poly.DomainModeling;
 using Poly.DomainModeling.Lowering;
 
 namespace Poly.Packs.Sqlite;
@@ -13,22 +12,9 @@ namespace Poly.Packs.Sqlite;
 /// <c>Boolean</c> → <c>INTEGER</c>, <c>DateTime</c> → <c>TEXT</c>,
 /// <c>Binary</c> → <c>BLOB</c>, etc.
 ///
-/// Usage:
-/// <code>
-/// var inputs = DomainHostBuilder.Create().WithStorageFacets()
-///     .AddSqliteDefaults();
-/// </code>
+/// Load via <c>builder.Load(new SqliteLibrary())</c>.
 /// </summary>
 public static class SqliteDefaults {
-    /// <summary>
-    /// Registers SQLite type-map overrides on <paramref name="builder"/> by
-    /// loading the <see cref="SqliteLibrary"/>.
-    /// </summary>
-    public static DomainHostBuilder AddSqliteDefaults(this DomainHostBuilder builder) {
-        ArgumentNullException.ThrowIfNull(builder);
-        return builder.Load(new SqliteLibrary());
-    }
-
     /// <summary>
     /// Registers SQLite type-map overrides on the given registry.
     /// Values match common EF Core SQLite provider column types / affinities.

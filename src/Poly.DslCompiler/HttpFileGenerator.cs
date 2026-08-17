@@ -44,7 +44,7 @@ public sealed class HttpFileGenerator {
     /// metadata, non-nav) — the DTO/JSON body mirrors what Entity.Create(...) takes.
     /// </summary>
     private IReadOnlyList<ConstructorParameterOrder> GetCreateScalarParams(Entity entity) {
-        if (_analysis.GetMetadata<EntityStructureMetadata>(entity) is { } esm)
+        if (_analysis.GetStructure(entity) is { } esm)
             return esm.ConstructorParameters.Where(p => !p.IsNavigation).ToList();
         return [];
     }

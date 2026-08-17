@@ -192,11 +192,10 @@ public class C99ParserInterpreterTests {
 
         public static Grammar<C99Token, C99TokenKind> Get() => Instance;
 
-        private static Grammar<C99Token, C99TokenKind> Build() {
-            var g = new Grammar<C99Token, C99TokenKind>();
-
+        private static Grammar<C99Token, C99TokenKind> Build() =>
+            new GrammarBuilder<C99Token, C99TokenKind>()
             // Top-level before function body: struct defs, then function header start.
-            g.Define("top")
+            .Define("top")
                 .Pattern("struct-def")
                     .Kind(C99TokenKind.KwStruct).Value(C99TokenKind.Identifier).Kind(C99TokenKind.LBrace)
                     .Commit()
@@ -208,9 +207,8 @@ public class C99ParserInterpreterTests {
                     .Commit()
                 .Pattern("function-struct")
                     .Kind(C99TokenKind.KwStruct).Value(C99TokenKind.Identifier).Value(C99TokenKind.Identifier).Kind(C99TokenKind.LParen)
-                    .Commit();
-
-            g.Define("block-item")
+                    .Commit()
+            .Define("block-item")
                 .Pattern("decl")
                     .Predicate(t => IsTypeKeyword(t.Kind), "type")
                     .Commit()
@@ -234,10 +232,8 @@ public class C99ParserInterpreterTests {
                     .Commit()
                 .Pattern("expr-stmt")
                     .Predicate(t => IsExprStmtStart(t.Kind), "expr-start")
-                    .Commit();
-
-            return g;
-        }
+                    .Commit()
+            .Build();
 
         private static bool IsTypeKeyword(C99TokenKind k) =>
             k is C99TokenKind.KwInt or C99TokenKind.KwFloat or C99TokenKind.KwDouble;

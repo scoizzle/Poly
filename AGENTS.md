@@ -24,6 +24,8 @@ Non-negotiable. Each principle has a **one-line rule** and a short **how** for a
 
 **When principles pull opposite ways:** prefer **domain fidelity and end-to-end ownership via CORE seams** over a locally smaller wrong path; prefer a **smaller tested loop** over a larger untested batch; prefer **no new abstraction** over a “cleaner” framework without a second real use. “More generic” production under green means fewer special cases — not a premature pattern catalog.
 
+**Platform facts (must adhere):** A domain is a **library of legal operations**, not a process. It lowers to complete Syntax ASTs **per operation** (shipped ⊆ lowerable). Product entry points (REST, …) are **opt-in extensions** (`uses`). **Poly.MCP** is the interactive harness: author, inspect, simulate a named policy/action only with **caller-supplied context** — same lowered AST as emit. Do not invent `Main` in core, grow `Comment` / a second interpreter as shipped meaning, or treat MCP as the customer API. Policy: [`docs/decisions/2026-08-15-domain-library-extensions-mcp-harness.md`](docs/decisions/2026-08-15-domain-library-extensions-mcp-harness.md). Mechanisms: [`docs/CORE.md`](docs/CORE.md).
+
 **Platform trust bar:** **We are our own first customer.** Product surface (including **external contracts**) is built *through* domain + modules; substrate ops glue is separate. **Customer product generation funds neurosymbolic work over time** — generation is the engine, not a side demo; substrate depth is steered by what generation and honesty need. Contract surface pains *us* first by design. Market platform trust = **T2**; **T1** = design partners. Dogfood pain → fix the seam or narrow the claim. Policy: [`docs/decisions/2026-07-11-platform-trust-bar-and-dogfood.md`](docs/decisions/2026-07-11-platform-trust-bar-and-dogfood.md).
 
 ### 1. The domain model is the key artifact
@@ -75,6 +77,7 @@ Non-negotiable. Each principle has a **one-line rule** and a short **how** for a
 2. Grow that slice with §4 loops; leave adjacent cases for the next loop.
 3. Reject “complete the subsystem first” unless the slice cannot work without it.
 4. Document remaining gaps in `docs/plans/`, not as unfinished abstractions in product code.
+5. **Shrink the shipped language** if the next construct cannot lower to a complete operation AST. Do not ship a keyword whose implementation is a host escape (`Comment`, `null` lower, second interpreter, consumer-only lowering flag). §5 does not override shipped ⊆ lowerable.
 
 ### 6. Working code before extracted abstractions
 

@@ -22,7 +22,7 @@ internal sealed class RuntimeContractAnalyzer : INodeAnalyzer {
 
     public string PassName => Id;
 
-    public string[] Dependencies => [SemanticDomainAnalyzer.Id];
+    public string[] Dependencies => [DomainCatalogPass.Id];
 
     public void Analyze(AnalysisContext context, Node node) {
         if (!context.ShouldAnalyze(node)) {
@@ -45,7 +45,7 @@ internal sealed class RuntimeContractAnalyzer : INodeAnalyzer {
     }
 
     private static void PublishRelationshipContracts(AnalysisContext context, Domain domain) {
-        var contracts = domain.Relationships
+        var contracts = context.GetAllRelationships(domain)
             .Select(r => new RelationshipContract(
                 Name: r.Name,
                 SourceEntityName: r.Source.TypeName,

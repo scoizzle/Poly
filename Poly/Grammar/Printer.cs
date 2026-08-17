@@ -41,16 +41,20 @@ public sealed class Printer<TToken, TTokenKind>
     }
 
     /// <summary>Prints a pattern by name. Throws if the rule or pattern is unknown (fail closed).</summary>
-    public string Print(string ruleName, string patternName, Action<PrintContext<TToken, TTokenKind>>? onContent = null) {
-        var pattern = _grammar.GetPatterns(ruleName).FirstOrDefault(p => p.Name == patternName)
-            ?? throw new ArgumentException($"Unknown pattern '{patternName}' in rule '{ruleName}'");
-        return Print(pattern, onContent);
-    }
+    public string Print(
+        string ruleName,
+        string patternName,
+        Action<PrintContext<TToken, TTokenKind>>? onContent = null,
+        IReadOnlyDictionary<string, string>? fills = null) =>
+        Print(_grammar.GetPattern(ruleName, patternName), onContent, fills);
 
-    /// <summary>Prints a pattern. Content positions delegate to <paramref name="onContent"/> when provided.</summary>
-    public string Print(Pattern<TToken, TTokenKind> pattern, Action<PrintContext<TToken, TTokenKind>>? onContent = null) {
+    /// <summary>Prints a pattern. Named holes use <paramref name="fills"/>; unnamed holes call <paramref name="onContent"/>.</summary>
+    public string Print(
+        Pattern<TToken, TTokenKind> pattern,
+        Action<PrintContext<TToken, TTokenKind>>? onContent = null,
+        IReadOnlyDictionary<string, string>? fills = null) {
         var writer = _writerFactory();
-        PrintInto(writer, pattern, onContent);
+        PrintInto(writer, pattern, onContent, fills);
         return writer.ToText();
     }
 
@@ -58,16 +62,24 @@ public sealed class Printer<TToken, TTokenKind>
     /// Prints a named pattern into <paramref name="writer"/> using a FRESH scratch writer
     /// (nested prints must never disturb the caller's in-progress output).
     /// </summary>
-    internal void PrintInto(ITokenWriter<TTokenKind> writer, string ruleName, string patternName, Action<PrintContext<TToken, TTokenKind>>? onContent) {
-        var pattern = _grammar.GetPatterns(ruleName).FirstOrDefault(p => p.Name == patternName)
-            ?? throw new ArgumentException($"Unknown pattern '{patternName}' in rule '{ruleName}'");
+    internal void PrintInto(
+        ITokenWriter<TTokenKind> writer,
+        string ruleName,
+        string patternName,
+        Action<PrintContext<TToken, TTokenKind>>? onContent,
+        IReadOnlyDictionary<string, string>? fills = null) {
+        var pattern = _grammar.GetPattern(ruleName, patternName);
         var scratch = _writerFactory();
-        PrintInto(scratch, pattern, onContent);
+        PrintInto(scratch, pattern, onContent, fills);
         writer.Write(default(TTokenKind), scratch.ToText());
     }
 
-    private void PrintInto(ITokenWriter<TTokenKind> writer, Pattern<TToken, TTokenKind> pattern, Action<PrintContext<TToken, TTokenKind>>? onContent) {
-        var ctx = new PrintContext<TToken, TTokenKind>(this, writer);
+    private void PrintInto(
+        ITokenWriter<TTokenKind> writer,
+        Pattern<TToken, TTokenKind> pattern,
+        Action<PrintContext<TToken, TTokenKind>>? onContent,
+        IReadOnlyDictionary<string, string>? fills) {
+        var ctx = new PrintContext<TToken, TTokenKind>(this, writer, fills);
         foreach (var element in pattern.Elements)
             PrintElement(element, ctx, onContent);
     }
@@ -76,6 +88,14 @@ public sealed class Printer<TToken, TTokenKind>
         switch (element) {
             case MatchKind<TToken, TTokenKind> k:
                 ctx.Emit(k.Kind);
+                return;
+
+            case Value<TToken, TTokenKind> { Name: { Length: > 0 } name }:
+                ctx.EmitFill(name);
+                return;
+
+            case MatchPredicate<TToken, TTokenKind> { Label: { Length: > 0 } label } when ctx.HasFill(label):
+                ctx.EmitFill(label);
                 return;
 
             case Value<TToken, TTokenKind>:
@@ -114,10 +134,15 @@ public sealed class PrintContext<TToken, TTokenKind>
     where TTokenKind : struct {
     private readonly Printer<TToken, TTokenKind> _printer;
     private readonly ITokenWriter<TTokenKind> _writer;
+    private readonly IReadOnlyDictionary<string, string> _fills;
 
-    internal PrintContext(Printer<TToken, TTokenKind> printer, ITokenWriter<TTokenKind> writer) {
+    internal PrintContext(
+        Printer<TToken, TTokenKind> printer,
+        ITokenWriter<TTokenKind> writer,
+        IReadOnlyDictionary<string, string>? fills = null) {
         _printer = printer;
         _writer = writer;
+        _fills = fills ?? new Dictionary<string, string>(StringComparer.Ordinal);
     }
 
     /// <summary>Emits the canonical text for a kind.</summary>
@@ -125,6 +150,17 @@ public sealed class PrintContext<TToken, TTokenKind>
 
     /// <summary>Emits raw text (e.g. a runtime value at a Value position).</summary>
     public void Emit(string text) => _writer.Write(default(TTokenKind), text);
+
+    /// <summary>True when a named fill was supplied for this print.</summary>
+    public bool HasFill(string name) =>
+        name is { Length: > 0 } && _fills.ContainsKey(name);
+
+    /// <summary>Emits the named fill. Missing name fails closed.</summary>
+    public void EmitFill(string name) {
+        if (!_fills.TryGetValue(name, out var text))
+            throw new InvalidOperationException($"No print fill for '{name}'.");
+        Emit(text);
+    }
 
     /// <summary>Prints a named pattern of a rule into the current output.</summary>
     public void PrintRule(string ruleName, string patternName) =>

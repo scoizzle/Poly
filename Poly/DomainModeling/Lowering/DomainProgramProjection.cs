@@ -37,7 +37,7 @@ public static class DomainProgramProjection {
         Domain domain, INodeMetadataProvider metadata) {
         ArgumentNullException.ThrowIfNull(domain);
         ArgumentNullException.ThrowIfNull(metadata);
-        var domainRelationships = domain.Relationships.ToList();
+        var domainRelationships = metadata.GetAllRelationships(domain);
         var entities = domain.Types.OfType<Entity>().ToList();
         var entityLookup = entities.ToDictionary(e => e.Name, StringComparer.Ordinal);
         var result = new List<TypeDefinitionNode>();

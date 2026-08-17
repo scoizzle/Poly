@@ -30,7 +30,7 @@ internal sealed class EffectTopologyPass : INodeAnalyzer {
         ArgumentNullException.ThrowIfNull(domain);
 
         var entities = domain.Types.OfType<Entity>().ToList();
-        var relationships = domain.Relationships.ToList();
+        var relationships = entities.SelectMany(e => e.Navigations).ToList();
         var createInRels = new List<CreateInRelation>();
         var crossInvokes = new List<CrossEntityInvoke>();
         var subscriptions = new List<SubscriptionRelation>();

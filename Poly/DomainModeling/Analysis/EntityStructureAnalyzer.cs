@@ -19,7 +19,7 @@ namespace Poly.DomainModeling.Analysis;
 internal sealed class EntityStructureAnalyzer : INodeAnalyzer {
     public const string Id = "DomainEntityStructureAnalyzer";
     public string PassName => Id;
-    public string[] Dependencies => [SemanticDomainAnalyzer.Id]; // needs DomainTypeLookupMetadata
+    public string[] Dependencies => [DomainCatalogPass.Id];
 
     public void Analyze(AnalysisContext context, Node node) {
         if (!context.ShouldAnalyze(node)) return;
@@ -33,7 +33,7 @@ internal sealed class EntityStructureAnalyzer : INodeAnalyzer {
     }
 
     private static void AnalyzeDomain(AnalysisContext context, Domain domain) {
-        var lookup = context.GetMetadata<DomainTypeLookupMetadata>(default);
+        var lookup = context.GetTypeLookup(domain);
         if (lookup is null) return;
 
         foreach (var entity in lookup.Entities) {
@@ -147,9 +147,7 @@ internal sealed class EntityStructureAnalyzer : INodeAnalyzer {
             lookup.Types.TryGetValue(p.Type.TypeName, out var type) && type is Entity))
             return true;
 
-        foreach (var rel in lookup.Domain.Relationships) {
-            if (!string.Equals(rel.Source.TypeName, entity.Name, StringComparison.Ordinal))
-                continue;
+        foreach (var rel in entity.Navigations) {
             if (rel.Cardinality is RelationshipCardinality.OneToMany or RelationshipCardinality.ManyToMany)
                 continue;
             if (string.Equals(rel.Target.TypeName, entity.Name, StringComparison.Ordinal))

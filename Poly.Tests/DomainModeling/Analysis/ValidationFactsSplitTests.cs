@@ -92,7 +92,6 @@ public class ValidationFactsSplitTests {
         // while validate pack still runs if registered alone with deps.
         var builder = new AnalyzerBuilder()
             .AddAnalyzer(new StructuralDomainAnalyzer())
-            .AddAnalyzer(new SemanticDomainAnalyzer())
             .AddAnalyzer(new DomainCatalogPass())
             .AddAnalyzer(new RequiredPropertiesPass())
             .AddAnalyzer(new ConstraintPropagationAnalyzer())

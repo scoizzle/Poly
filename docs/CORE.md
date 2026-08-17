@@ -14,29 +14,37 @@
 
 ## 1. Purpose
 
-Poly is a **neurosymbolic platform**: domain models and policies are authored as structured data, lowered to a **symbolic AST**, analyzed, then executed by the **VM** (canonical semantics). The goal is shipped, correct end-to-end behavior — not framework completeness.
+Poly is a **neurosymbolic platform**: domain models and policies are authored as structured data, lowered to a **symbolic AST**, analyzed, then executed by the **VM** (canonical semantics). A domain is a **library of legal operations**, not a process with a required `Main`. Known algorithms are a second generation path on the same AST → VM spine. The goal is shipped, correct end-to-end behavior — not framework completeness.
 
 ```text
-Domain (immutable records)
-  → DomainExpression / evolution Apply
-  → Syntax AST          ← primary symbolic / serializable IR
-  → Analysis            ← metadata + diagnostics + optional node replacement
-  → DirectVmAbiEmitter  ← direct AST → VM ABI (no intermediate primitive IR)
-  → VM (VmState)        ← canonical execution
+Domain (facts + uses ids)
+  → DomainSession (extensions loaded once)
+  → analyze
+  → lower each action / policy / create / subscription → Syntax AST
+  → Interpreter (VM)  and/or  CSharpGenerator
+  → opt-in extension emit (REST, SQL, …) binds doors / projections
+MCP harness: agent supplies context → simulate that same operation AST
 ```
 
 **Hard lines**
 
 | Truth | Implication |
 |-------|-------------|
+| Domain is a **module**, not a process | Do not invent `Main` / `Program.cs` in core. Capability/catalog is the operation menu |
+| Shipped ⊆ lowerable | A construct is shipped only if it lowers to a complete, legal Syntax AST. Gaps stay in `docs/plans/`, not in the parser or guide |
+| Always-legal **operations** | Each named operation is a full tree (no `Comment` / `null` / host walk as shipped meaning). Runtime and emit consume the same trees |
 | AST is the symbolic primary | Do not reintroduce a parallel “primitive IR” for product paths |
-| VM is canonical execution | LINQ path is secondary (oracle / reference), not a second product engine |
-| Domain lowers to **generic** ops | No domain-specific VM opcodes |
+| VM is canonical execution of a **program** (operation or algorithm) | LINQ path is secondary (oracle / reference), not a second product engine. Do not grow a domain-side interpreter beside it |
+| Domain lowers to **generic** ops | No domain-specific VM opcodes. Host ABI is store/clocks (`Create` / `Link` / `Notify` / `Outbound` / time) |
+| Product doors are **opt-in extensions** | REST and the like load via `uses`. CLI flags seed ids only. Core seed does not emit a host |
+| MCP is the **interactive harness** | Author, inspect, simulate by supplied context. Not the `DomainSession`. Not the customer API |
 | Extend the platform **in the pipeline** | New meaning: lower to existing nodes, analyze, and/or **replace nodes** — not special-case the emitter, ABI, or one host’s type filter |
 | Analysis is required for downstream semantics | Domain/runtime/tooling paths that resolve semantic meaning must consume an `AnalysisResult`; no semantic execution path without analysis |
 | One coherent path | Prefer composing existing mechanisms over a parallel rewriter, evaluator, or type registry |
 | Immutability at domain boundary | Mutate via `DomainEvolution`…`Apply`, not by editing graphs in place |
 | Smallest coherent platform | Prefer using an existing mechanism over inventing a parallel one |
+
+Policy: [`docs/decisions/2026-08-15-domain-library-extensions-mcp-harness.md`](decisions/2026-08-15-domain-library-extensions-mcp-harness.md).
 
 TFM: `net10.0`, nullable on, zero external dependencies in core `Poly/`.
 
@@ -50,11 +58,11 @@ TFM: `net10.0`, nullable on, zero external dependencies in core `Poly/`.
 | **Analysis** | Analysis framework (`Analyzer`, `AnalysisContext`, metadata store, **node replacement**) | Execution semantics, domain concepts, MCP session |
 | **Interpretation** | Semantic passes, `Interpreter`, `DirectVmAbiEmitter`, VM runtime | Domain concepts; one-off ABI/emitter forks for a single consumer |
 | **Introspection** | Platform-agnostic type/member model so Interpretation can **simulate any reasonable type system on any reasonable platform**; CLR is the first provider | Depending on Interpretation; baking one host into the core contract |
-| **DomainModeling** | Immutable `Domain`, evolution, `DomainExpression`, lower-to-AST; **stage transitions are the authorable observable**; **`ImportedContract` is a used sub-domain** (owned value types + endpoints; `bind` is the only door — no `import` keyword; `internal` / `external` are producers of the same IR, including another Poly domain) | Domain VM opcodes; tree rewrites outside analysis + node replacement; merging child entities into the parent |
+| **DomainModeling** | Immutable `Domain` (facts), evolution, `DomainExpression`, lower-to-AST **per operation**; **stage transitions are the authorable observable**; **`ImportedContract` is a used sub-domain** (owned value types + endpoints; `bind` is the only door — no `import` keyword; `internal` / `external` are producers of the same IR, including another Poly domain) | Domain VM opcodes; a process/`Main`; tree rewrites outside analysis + node replacement; merging child entities into the parent; growing `Comment` / `EffectExecutor` as shipped meaning |
 | **Validation** | **Deleted 2026-08-09** (dead-dual cleanup — no product callers ever existed; see [`plans/dead-dual-inventory-2026-08-08.md`](plans/dead-dual-inventory-2026-08-08.md)); domain constraints live under DomainModeling constraints + domain analysis | Reintroducing a dormant rule surface; owning the AST or VM |
-| **Grammar** | Pattern-table engine (`Poly/Grammar/`) — **language-shaped token streams**: the tokenizer owns decoding (`IToken<TTokenKind>` + `BufferedTokenReader.ScanNextToken`), the matcher owns recognition (`Matcher`, longest-match, `ITokenStreamReader` examine/consume), handlers own meaning; diagnostics positions are caller-owned | Product DSL table/handlers (owned by DomainModeling); do not grow parallel pattern engines (`Poly.Text.Matching` is historical — see dead-dual inventory) |
-| **DomainModeling (DSL)** | Product `.poly` surface: `DslTokenReader`, `DslGrammar` (+ product expr/effect **table + handlers** — parse control flow is Grammar-driven, gpure), language libraries via **the same tables** (pattern + fold + print mapping — [`plans/pack-host-2026-08-13.md`](plans/pack-host-2026-08-13.md)); `ExpressionFormRegistry` is a bridge to delete; `DomainDslPrinter` is the IR→pattern walker (keyword spelling is `Printer` + `CanonicalText`) | Replacing Grammar engine; dual legacy tokenizer (removed GI-7); re-introducing recursive-descent **language** or a second print dialect (`IExpressionPrintForm` string concat); secret module-initializer meaning that `Load` did not register |
-| **MCP (`Poly.Mcp`)** | Session store, tools, tool honesty | Domain mutation semantics; claiming capabilities the core does not have |
+| **Grammar** | Pattern-table engine (`Poly/Grammar/`) — **language-shaped token streams**: tokenizer decodes (`IToken<TTokenKind>` + `BufferedTokenReader.ScanNextToken`); matcher recognizes (`Matcher`, longest-match); `Printer` + `ITokenWriter` emit; **`Language<TToken,TTokenKind>`** is the table + printer a session holds. `Grammar` is immutable; **`GrammarBuilder`** is the mutable construct path (`Commit` does not allocate a table; `Build` freezes once). `Extend` copies into a builder, applies contributions, freezes once. Duplicate `(rule, pattern)` fails closed. Handlers own meaning; diagnostics positions are caller-owned | Product DSL table/handlers (owned by DomainModeling); do not grow parallel pattern engines (`Poly.Text.Matching` is historical — see dead-dual inventory) |
+| **DomainModeling (DSL)** | One closed `.poly` language. `Domain` is facts (`uses` ids). `DomainSession` binds **concepts** those ids name (meaning, type maps, artifacts) — not new spell. Grammar is the product table; folds map existing tokens (`Now`, `12 days`, `column(...)`) to IR. Never process-wide `Default`. | Extensible dialects; new token kinds per library; process-wide Temporal `*.Default`; `Domain.ResolveHost`; a second plugin host |
+| **MCP (`Poly.Mcp`)** | Interactive **harness**: tool conversation, revision, scratch store; **simulate** named policies/actions when the caller supplies context | Domain mutation semantics; product entry points (that is an opt-in extension); a second evaluator; claiming capabilities the core does not have; inferring `Main` |
 | **Synthesis** | Macros (VM validates) | Reverse deps from Interpretation |
 
 **Enforced dependency direction (core):**
@@ -89,13 +97,15 @@ Use these. If you think you need a parallel facility, stop and re-read this sect
 
 **Domain analysis shape (shipped):** validate · catalog · derive; single catalog; export is not a domain-fact pass. Historical acceptance / cutover notes: [`plans/archive/domainmodeling-completed-2026-08/domain-analysis-future-state.md`](plans/archive/domainmodeling-completed-2026-08/domain-analysis-future-state.md), [`domain-analysis-simplification.md`](plans/archive/domainmodeling-completed-2026-08/domain-analysis-simplification.md).
 
-**Domain catalog (DAS W1):** `DomainCatalogPass` is the sole product publisher of name→member maps (`DomainCatalogMetadata` on the domain node). Missing Semantic DTLM/RLM is a structural failure. Product lookups go through `DomainSemanticLookupExtensions` (catalog-only when domain-keyed). **Relationships are entity-owned navigations:** a relationship is a nav on its source entity (`Entity.Navigations`); `Domain.Relationships` is a computed flatten (never stored) for analysis-free consumers; the RLM/mutation-index relationship bags are synthesized from entity navs keyed source → nav name, so the same nav name may be declared on different source entities (e.g. back-references both named `order`). `DomainModelAnalyzer.AnalyzeRequiringCatalog` / `RuntimeAnalysisCache.GetOrAnalyze` require a catalog for analyzable domains. Intermediate Semantic DTLM/RLM still publish for mid-pipeline analyzers and are embedded in the catalog. Remaining non-catalog bags (relationship contracts, stage subscription plans, entity structure, capabilities): ownership matrix in [`plans/archive/domainmodeling-completed-2026-08/das-catalog-design.md`](plans/archive/domainmodeling-completed-2026-08/das-catalog-design.md).
+**Bag + emit inventory:** [`plans/domainmodeling-metadata-artifact-catalog-2026-08-15.md`](plans/domainmodeling-metadata-artifact-catalog-2026-08-15.md) — who publishes each metadata bag, who emits files, and where library extension is real vs claimed.
+
+**Domain catalog:** `DomainCatalogPass` is the first metadata pass (after structural well-formedness). It publishes `DomainCatalogMetadata` on the domain (types, relationships, actions, stages, owners) and aliases the same type/relationship maps on `default` for child-node walks. Later passes read that catalog; they do not rebuild name indexes. `TryGetStage` / `TryResolveAction` / `GetTypeLookup` go through it. Derived bags (capability, required-by-policy, dispatch plans, topology, storage, entity structure keys/ctor) stay later. **Relationships are entity-owned navigations:** `Domain.Relationships` is a computed flatten. `AnalyzeRequiringCatalog` requires the catalog for analyzable domains.
 
 **Subscription dispatch (stage + entity-level):** `RuntimeContractAnalyzer` publishes `SubscriptionDispatchPlanMetadata` on each **stage** (stage-scoped `when`) and each **entity** (always-active `Entity.Subscriptions`, empty plan when none). `DomainInstanceStore.NotifyTransition` requires catalog + relationship contracts; dispatches **stage plan first, then entity plan**; missing bags throw. The C# export consumes the SAME dispatch plan (no re-walk of `StageSubscription`): optional peer binder `when Rel Stage as name` — VM rewrites binder path-prefix against the transitioned peer; export emits quantifier-aware handlers `When{Any|All|Each}{Target}{Stage}(TargetType name)` and `sub.When…(this)`, one registry per (stage, subscriber) pair, notify fan-out to every handler. Analysis fail-closed for unbound peer-like roots, nested peer path-prefix, and peer assign targets. Historical suite: [`plans/archive/domainmodeling-completed-2026-08/simple-agent-tasks/spe-README.md`](plans/archive/domainmodeling-completed-2026-08/simple-agent-tasks/spe-README.md).
 
 **Policy store reads:** `EvaluatePolicy` preprocesses Q3′ quantifiers, singular path-prefix (`RelationshipNavigation`), and relationship **`Rel exists` / `NotExists`** against outbound store links (`GetOutboundRelatedInstances`). Fail closed without store/domain for those forms; empty links → `exists` false (not throw).
 
-**Effective stage surface (DAS W2):** `CapabilityAnalyzer` publishes the canonical effective view (`StageCapabilityMetadata` for stages, `ActionCapabilityMetadata` for actions — the latter carries stage/entity + action effective policies). Composition is one algorithm in `DomainEffectiveSurface` — policies = entity + stage + action; actions = stage-local only. Product paths use `GetEffectivePolicies` / `GetEffectiveActions`; MCP `DescribeStage` uses those helpers. `BehaviorPass` is a pack DTO adapter over the capability surface (no separate action-level EPM; the only effective-surface producer is `CapabilityAnalyzer`).
+**Effective stage surface:** `CapabilityAnalyzer` publishes the only effective view (`StageCapabilityMetadata` / `ActionCapabilityMetadata`). Downstream `GetEffectivePolicies` / `GetEffectiveActions` read that bag only — they do not recompose from the catalog. Name lookups with a domain key read the catalog only. `IsRoot` is `EntityStructureMetadata` (aggregate/storage copy it). Evolution still uses the catalog mutation index to apply changes.
 
 **Fact vs validate packs (DAS W3.2):** Small fact emitters publish bags consumers read; megapass diagnostics stay in validate packs. Template split: `RequiredPropertiesPass` → `RequiredPropertiesMetadata`; `EffectFactsPass` → `ResolvedRelationshipTargetMetadata` on create-in. `PolicyConstraintAnalyzer` / `EffectAnalyzer` are lint-only (no fact publication). Historical split notes: [`plans/archive/domainmodeling-completed-2026-08/simple-agent-tasks/das-w3-2-split-validation-facts.md`](plans/archive/domainmodeling-completed-2026-08/simple-agent-tasks/das-w3-2-split-validation-facts.md).
 
@@ -134,10 +144,12 @@ No intermediate primitive flattening step. Inputs are the AST plus analysis meta
 | Piece | Location |
 |-------|----------|
 | Lower DE → Syntax AST | `Poly/DomainModeling/Lowering/DomainExpressionLoweringPass.cs` |
+| Lower effects → Syntax AST | `Poly/DomainModeling/Lowering/EffectLoweringPass.cs` — product path is a real node, not `null` |
+| Module projection | `DomainProgramProjection.ToSyntax` — types + operations; **not** a compilation unit with `Main` |
 | Policy compile/eval | `DomainEntityInstance.EvaluatePolicy` → `DomainExpressionLoweringPass` → `Interpreter` — **VM-primary**; LINQ dual-oracle + CLR-subject wrapper `PolicyEvaluator` are test-only (`Poly.Tests/TestHelpers/`) |
 | Domain change | `DomainEvolution`…`Apply()` with analysis gate + rollback |
 
-Domain concepts expand to **generic** Syntax nodes, not new opcodes. ADR: `docs/decisions/2026-06-08-domain-lowering-boundary.md`.
+Domain concepts expand to **generic** Syntax nodes, not new opcodes. ADR: `docs/decisions/2026-06-08-domain-lowering-boundary.md`. New work must not add consumer-specific lowering flags or a parallel effect interpreter. Residual dual-path is debt — do not grow it.
 
 ### 3.5 Introspection (types and members)
 
@@ -162,15 +174,27 @@ Domain concepts expand to **generic** Syntax nodes, not new opcodes. ADR: `docs/
 
 Module README: `Poly/Introspection/README.md`.
 
-### 3.6 MCP
+### 3.6 MCP (harness) and extensions (doors)
 
 | Piece | Location |
 |-------|----------|
-| Tools / session | `Poly.Mcp/Tools/`, `Poly.Mcp/Sessions/` |
+| Tools / conversation | `Poly.Mcp/Tools/`, `Poly.Mcp/Sessions/` |
+| Domain compile | `DomainSession` in `Poly/DomainModeling/` — MCP **holds** this; it is not the same type |
+| Libraries | `IDomainLibrary` (`Id` + `Register`); artifacts via `IArtifactContributor` |
 
-**Principle:** thin adapter — session, tools, honest capability claims. Wraps DomainModeling; does not invent domain or execution semantics.
+**MCP principle:** interactive harness for agents. Author, inspect, **simulate** a named operation when the caller **supplies context** (properties, stage, args, links, clock). Thin adapter — does not invent domain or execution semantics. Simulate runs the same lowered AST + `Interpreter` as emit. Scratch `DomainInstanceStore` is conversation state, not the production store. MCP is not a `uses` product host and not the customer API.
 
-**Domain extensions:** a `Domain` is a compilation unit. `Domain.Extensions` lists library ids it depends on (`uses temporal` in `.poly`). Parse/print/analyze/emit resolve that list through `ExtensionCatalog` → `DomainHost` (a cache of tables, not a place). Another Poly domain is `ImportedContract`, not an extension id. Product SDK seeds `temporal` (and MCP authoring also `storage`) onto new units as additive facts. Unknown or duplicate ids fail closed. `DbmsPack` is a CLI alias that seeds a vendor id onto the compile.
+**Extensions:** `.poly` is one language. A `Domain` is facts (`uses` ids). A **`DomainSession`** binds the **concepts** those ids name (folds, meaning, type maps, **artifact contributors**). It does not load a dialect. Meaning is not process-wide. Another Poly domain is `ImportedContract`, not an extension id.
+
+| Extension job | Loads when | Emits a process door? |
+|---------------|------------|------------------------|
+| Meaning (`temporal`) | `uses temporal` (SDK seed if source lists no `uses`) | no |
+| Persistence (`storage`, `sqlite`, …) | listed / compiler seed | no |
+| Product host (REST / HTTP, …) | **only** if listed | **yes** — binds already-lowered operations |
+
+Unknown or duplicate ids fail closed. CLI `--dbms sqlite` seeds id `sqlite`; it does not imply HTTP. Core seed does not emit `Program.cs`. A host extension that cannot bind a lowered operation fails closed.
+
+Folder `Packs/` is a leftover name. The noun is **extension** / **library**.
 
 ### 3.7 Debugging / tracing (VM)
 
@@ -187,9 +211,11 @@ Module README: `Poly/Introspection/README.md`.
 | Facts about a node | `IAnalysisMetadata` on `AnalysisContext` | Parallel side tables outside the metadata store |
 | Resolve types / members | `ITypeDefinitionProvider` + `AnalysisContext.TypeDefinitions` | Ad-hoc reflection; second type registry; emitter method-lookup fallbacks |
 | Stack host + custom types | `TypeDefinitionProviderCollection` | Hard-coding a single runtime into product modules |
-| Run a program / policy | `Interpreter` after `DomainEntityInstance.EvaluatePolicy` | Second evaluator framework |
+| Run a program / policy / action | `Interpreter` on the **lowered operation AST** | Second evaluator; `Comment` as success; MCP-only semantics |
+| Simulate in a conversation | MCP tool + **caller-supplied context** + same AST | Infer `Main`; treat MCP as the product API |
+| Product entry point (REST, …) | Opt-in extension `uses` + `IArtifactContributor` | Core `Program.cs`; compiler flag that bypasses the catalog |
 | Domain mutation | `DomainEvolution`…`Apply` | In-place graph edits; resurrecting V2 |
-| Domain feature at runtime | Lower to existing Syntax ops (+ analyze/replace) | Domain opcodes; ABI special cases for one feature |
+| Domain feature at runtime | Lower to existing Syntax ops (+ analyze/replace) | Domain opcodes; ABI special cases for one feature; grow `EffectExecutor` |
 | Cross-cutting “why” | `docs/decisions/` | Re-litigating in drive-by comments |
 | Multi-step work | `docs/plans/` | Expanding CORE or AGENTS into a plan |
 
@@ -203,6 +229,7 @@ Module README: `Poly/Introspection/README.md`.
 | Principles (values) | `AGENTS.md` + `docs/decisions/2026-core-engineering-principles.md` |
 | Trust bar + first-customer strategy (T1–T3; product via domain + modules) | [`docs/decisions/2026-07-11-platform-trust-bar-and-dogfood.md`](decisions/2026-07-11-platform-trust-bar-and-dogfood.md) |
 | Why of a major choice | `docs/decisions/README.md` |
+| Domain = library; extensions = doors; MCP = harness | [`docs/decisions/2026-08-15-domain-library-extensions-mcp-harness.md`](decisions/2026-08-15-domain-library-extensions-mcp-harness.md) |
 | Active execution work | `docs/plans/v2-to-v3/master-roadmap.md` (Agent pick) · `docs/plans/README.md` (admission) · `docs/plans/domainmodeling-workstream-map.md` |
 | Module detail | `Poly/*/README.md`, `docs/interpretation/*` |
 | Introspection detail | `Poly/Introspection/README.md`, `docs/technical/introspection.md` |
@@ -215,5 +242,8 @@ Module README: `Poly/Introspection/README.md`.
 1. Did I compose an existing mechanism from §3 instead of a parallel one?  
 2. Did I stay inside the ownership table in §2?  
 3. If I needed a new shape or rewrite, did I lower / analyze / **replace nodes** rather than special-case the emitter, ABI, or a host type filter?  
-4. Do docs (this file if mechanisms changed) still match the code?  
-5. Build/tests green (`AGENTS.md` Build & Test).
+4. If I added DSL/effect surface, does it lower to a complete operation AST (shipped ⊆ lowerable)? Did I avoid `Comment` / a second interpreter / a consumer-specific lowering flag?  
+5. If I added a process door, is it an opt-in extension rather than core `Program.cs`?  
+6. If I added MCP behavior, is it harness (author / inspect / simulate-with-context) on the same AST — not a private evaluator or inferred `Main`?  
+7. Do docs (this file if mechanisms changed) still match the code?  
+8. Build/tests green (`AGENTS.md` Build & Test).

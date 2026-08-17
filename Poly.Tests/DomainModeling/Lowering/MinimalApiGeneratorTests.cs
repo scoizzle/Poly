@@ -217,7 +217,7 @@ public class MinimalApiGeneratorTests {
         var d = ParseDomain("domain T\nItem: entity { Name: Text }");
         var analysis = DomainModelAnalyzer.Analyze(d);
         var storage = analysis.GetMetadata<StorageMappingMetadata>(d)!.Storage;
-        var behavior = analysis.GetMetadata<BehaviorMetadata>(d)!.Behavior;
+        var behavior = BehaviorMetadata.From(d, analysis);
         var aggregate = analysis.GetMetadata<OwnershipAggregateMetadata>(d)!.Aggregate;
         var item = d.Types.OfType<Entity>().First();
         analysis.GetMetadataStore().Remove<EntityStructureMetadata>(item);
@@ -348,12 +348,8 @@ public class MinimalApiGeneratorTests {
             .FillInternalContracts(ParentWithBillingContract());
 
         var analysis = DomainModelAnalyzer.Analyze(filled);
-        var storage = analysis.GetMetadata<StorageMappingMetadata>(filled)!.Storage;
-        var behavior = analysis.GetMetadata<BehaviorMetadata>(filled)!.Behavior;
-        var aggregate = analysis.GetMetadata<OwnershipAggregateMetadata>(filled)!.Aggregate;
 
-        var contributor = new MinimalApiHostArtifactContributor(
-            storage, behavior, aggregate, "ParentDbContext");
+        var contributor = new MinimalApiHostArtifactContributor();
         var files = contributor.Contribute(filled, analysis);
         var program = files.Single(f => f.FileName == "Program.cs").Source;
         var http = files.Single(f => f.FileName == "demo.http").Source;

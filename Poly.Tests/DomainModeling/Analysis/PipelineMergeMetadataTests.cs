@@ -83,10 +83,10 @@ public class PipelineMergeMetadataTests {
             }
             """);
         var analysis = DomainModelAnalyzer.Analyze(domain);
-        var behavior = analysis.GetMetadata<BehaviorMetadata>(domain);
-        await Assert.That(behavior).IsNotNull();
+        var behavior = BehaviorMetadata.From(domain, analysis);
+        await Assert.That(behavior.Entities).IsNotEmpty();
 
-        var itemBeh = behavior!.Behavior.Entities.First(e => e.Name == "Item");
+        var itemBeh = behavior.Entities.First(e => e.Name == "Item");
         await Assert.That(itemBeh.Actions.Count).IsGreaterThanOrEqualTo(1);
         await Assert.That(itemBeh.Actions.Any(a => a.Name == "Activate")).IsTrue();
     }
@@ -110,7 +110,7 @@ public class PipelineMergeMetadataTests {
 
         await Assert.That(analysis.GetMetadata<EffectTopologyMetadata>(domain)).IsNotNull();
         await Assert.That(analysis.GetMetadata<OwnershipAggregateMetadata>(domain)).IsNotNull();
-        await Assert.That(analysis.GetMetadata<BehaviorMetadata>(domain)).IsNotNull();
+        await Assert.That(BehaviorMetadata.From(domain, analysis).Entities).IsNotEmpty();
     }
 
     // ── Phase B diagnostic tests (B′.1) ─────────────────────────
@@ -336,7 +336,7 @@ public class PipelineMergeMetadataTests {
         var structuralError = analysis.Diagnostics.Any(d => d.Code is "DMSTR001" or "DMSTR002" or "DMSTR003");
         await Assert.That(structuralError).IsFalse();
 
-        // SemanticDomainAnalyzer — DomainTypeLookupMetadata, ResolvedTypeReferenceMetadata
+        // DomainCatalogPass — DomainTypeLookupMetadata alias + resolved type refs
         await Assert.That(analysis.GetMetadata<DomainTypeLookupMetadata>(default)).IsNotNull();
 
         // RequiredPropertiesPass — RequiredPropertiesMetadata (per entity with policies)
@@ -380,8 +380,8 @@ public class PipelineMergeMetadataTests {
         // OwnershipAggregatePass — OwnershipAggregateMetadata
         await Assert.That(analysis.GetMetadata<OwnershipAggregateMetadata>(domain)).IsNotNull();
 
-        // BehaviorPass — BehaviorMetadata
-        await Assert.That(analysis.GetMetadata<BehaviorMetadata>(domain)).IsNotNull();
+        // Behavior — projected from capability (not a pipeline pass)
+        await Assert.That(BehaviorMetadata.From(domain, analysis).Entities).IsNotEmpty();
 
         // CrossReferencePass — cycle diagnostic only (no published metadata)
 

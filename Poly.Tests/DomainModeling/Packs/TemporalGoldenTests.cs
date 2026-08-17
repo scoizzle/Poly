@@ -84,7 +84,8 @@ public sealed class TemporalGoldenTests {
         var domain = Apply(RenewDomain, TemporalInputs());
         var assign = SingleAssign(SingleEntity(domain));
 
-        var pass = new DomainExpressionLoweringPass();
+        var pass = new DomainExpressionLoweringPass(
+            new LoweringContext(new Parameter("entity"), Meaning: ExtensionCatalog.Core.Language.Meaning));
         var lowered = pass.Lower(assign.Value, new ParameterReference());
 
         await Assert.That(lowered).IsTypeOf<Invoke>();

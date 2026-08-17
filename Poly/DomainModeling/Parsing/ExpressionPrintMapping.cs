@@ -9,7 +9,8 @@ namespace Poly.DomainModeling.Parsing;
 public readonly record struct PrintMapping(
     string Rule,
     string Pattern,
-    Action<PrintContext<DslToken, DslTokenKind>>? Fill = null);
+    Action<PrintContext<DslToken, DslTokenKind>>? Fill = null,
+    IReadOnlyDictionary<string, string>? NamedFills = null);
 
 /// <summary>
 /// Maps one concrete <see cref="DomainExpression"/> subtype to a print form.

@@ -10,6 +10,8 @@ namespace Poly.DomainModeling;
 /// new expression subtype unhandled (no silent pass-through).</para>
 /// </summary>
 public abstract class DomainExpressionRewriteBase : DomainExpressionDispatch<DomainExpression> {
+    protected DomainExpressionRewriteBase(ExpressionDispatchRegistry<DomainExpression>? registry = null)
+        : base(registry) { }
     /// <summary>
     /// Catch-all for expression subtypes not overridden by a concrete rewrite.
     /// Fail-loud instead of silently returning the node unchanged.

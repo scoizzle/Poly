@@ -42,7 +42,7 @@ public sealed class DomainExtensionTests {
     [Test]
     public async Task Print_EmitsUses_InDomainOrder() {
         var domain = new Domain("T", []) { Extensions = ["temporal", "storage"] };
-        var printed = new DomainDslPrinter(domain.ResolveHost().Parser).Print(domain);
+        var printed = new DomainDslPrinter(DomainSession.Open(domain)).Print(domain);
 
         await Assert.That(printed.StartsWith("domain T\nuses temporal\nuses storage\n", StringComparison.Ordinal)).IsTrue();
     }

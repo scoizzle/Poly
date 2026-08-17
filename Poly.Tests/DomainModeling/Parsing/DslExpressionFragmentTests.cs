@@ -1,5 +1,6 @@
 using Poly.DomainModeling;
-using Poly.DomainModeling.Parsing;      // DslTokenKind (language-owned kind enum)
+using Poly.DomainModeling.Parsing;
+using Poly.Grammar;
 
 
 
@@ -7,18 +8,9 @@ namespace Poly.Tests.DomainModeling.Parsing;
 
 /// <summary>mcp-minify-1 parity: standalone DSL expression fragment API fail-closed cases.</summary>
 public class DslExpressionFragmentTests {
-    /// <summary>Pack form: identifier <c>MAGIC</c> → literal 42.</summary>
-    private sealed class MagicLiteralForm : IExpressionPrimaryForm {
-        public bool TryParse(IDslParseCursor cursor, DslExpressionParser expressions, out DomainExpression expression) {
-            expression = null!;
-            if (cursor.Current.Kind != DslTokenKind.Identifier
-                || !string.Equals(cursor.Current.Text, "MAGIC", StringComparison.Ordinal))
-                return false;
-            cursor.Advance();
-            expression = DomainExpression.Literal(42L);
-            return true;
-        }
-    }
+    private static bool IsMagic(DslToken token) =>
+        token.Kind == DslTokenKind.Identifier
+        && string.Equals(token.Text, "MAGIC", StringComparison.Ordinal);
 
     [Test]
     public async Task Fragment_AgeGte18_IsComparison() {
@@ -61,9 +53,18 @@ public class DslExpressionFragmentTests {
 
     [Test]
     public async Task Fragment_OpenForm_Registry_Honored() {
-        var inputs = DomainHostBuilder.Create()
-            .RegisterExpressionForm(new MagicLiteralForm())
-            .BuildParserInputs();
+        var builder = DomainHostBuilder.CreateEmpty();
+        foreach (var rule in new[] { "expr-primary", "expr-primary-no-not" })
+            builder.ExpressionForms.RegisterFold(rule, "magic", _ => DomainExpression.Literal(42L));
+        builder.ExpressionForms.RegisterGrammarContributor(g => {
+            foreach (var rule in new[] { "expr-primary", "expr-primary-no-not" }) {
+                g.Define(rule)
+                    .Pattern("magic", priority: 1)
+                    .Predicate(IsMagic, "magic")
+                    .Commit();
+            }
+        });
+        var inputs = builder.BuildParserInputs();
 
         var expr = DslExpressionFragment.ParseExpressionFragment("MAGIC == 42", inputs);
 

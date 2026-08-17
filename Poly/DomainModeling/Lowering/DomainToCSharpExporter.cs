@@ -132,7 +132,7 @@ public sealed class DomainToCSharpExporter {
 
         ArgumentNullException.ThrowIfNull(metadata);
 
-        var esm = metadata.GetMetadata<EntityStructureMetadata>(entity)
+        var esm = metadata.GetStructure(entity)
             ?? throw new InvalidOperationException(
                 $"EntityStructureMetadata is required for entity '{entity.Name}'.");
 
@@ -190,7 +190,8 @@ public sealed class DomainToCSharpExporter {
             var paramName = ToCamelCase(prop.Name);
             if (defaultValue is not null) {
                 var runtimeExpr = EffectLoweringPass.LowerDefaultExpression(
-                    defaultValue.Expression, new NamedTypeReference(prop.Type.TypeName));
+                    defaultValue.Expression, new NamedTypeReference(prop.Type.TypeName),
+                    ExpressionMeaning.For(domain));
                 if (runtimeExpr is not null) {
                     // Runtime default (now/today/guid) can't be a compile-time default —
                     // T? = null sentinel; body applies the runtime default when null.
@@ -464,7 +465,8 @@ public sealed class DomainToCSharpExporter {
                         UseThisReference: true,
                         LowerStageTransitions: true,
                         Domain: domain,
-                        EnumPropertyNames: esm.EnumPropertyNames
+                        EnumPropertyNames: esm.EnumPropertyNames,
+                        Meaning: ExpressionMeaning.For(domain)
                     );
                     var effectPass = new EffectLoweringPass(entity, context);
                     var composite = new CompositeEffect(subscriptionEffects);
@@ -498,7 +500,7 @@ public sealed class DomainToCSharpExporter {
                 // the guard is defense-in-depth).
                 if (info.Subscription.Quantifier == StageSubscriptionQuantifier.All
                     && info.TargetEntity.Stages.Count > 0) {
-                    var targetStageEnumName = metadata.GetMetadata<EntityStructureMetadata>(info.TargetEntity)
+                    var targetStageEnumName = metadata.GetStructure(info.TargetEntity)
                         ?.StageEnumTypeName ?? $"{info.TargetEntity.Name}Stage";
                     var linkedVar = new Variable("linkedTarget");
                     var matchedVar = new Variable("linkedMatched", new Constant(false));
@@ -582,7 +584,8 @@ public sealed class DomainToCSharpExporter {
                         UseThisReference: true,
                         LowerStageTransitions: false,
                         Domain: domain,
-                        EnumPropertyNames: esm.EnumPropertyNames
+                        EnumPropertyNames: esm.EnumPropertyNames,
+                        Meaning: ExpressionMeaning.For(domain)
                     );
                     var entryPass = new EffectLoweringPass(entity, entryCtx);
                     foreach (var entryEffect in firstStage.OnEntryEffects) {
@@ -834,7 +837,8 @@ public sealed class DomainToCSharpExporter {
             var paramName = ToCamelCase(prop.Name);
             var mapped = MapDomainTypeRef(prop.Type, domain, metadata);
             var runtimeExpr = EffectLoweringPass.LowerDefaultExpression(
-                defaultConstraint.Expression, new NamedTypeReference(prop.Type.TypeName));
+                defaultConstraint.Expression, new NamedTypeReference(prop.Type.TypeName),
+                ExpressionMeaning.For(domain));
             if (runtimeExpr is not null) {
                 methodParams.Add(new Parameter(paramName,
                     new OptionalTypeReference(mapped),
@@ -915,7 +919,7 @@ public sealed class DomainToCSharpExporter {
     private static IReadOnlyList<ConstructorParameterOrder> GetConstructorParameters(
         Entity targetEntity,
         INodeMetadataProvider analysis) {
-        if (analysis.GetMetadata<EntityStructureMetadata>(targetEntity) is EntityStructureMetadata esm)
+        if (analysis.GetStructure(targetEntity) is EntityStructureMetadata esm)
             return esm.ConstructorParameters;
 
         throw new InvalidOperationException(
@@ -1416,7 +1420,8 @@ public sealed class DomainToCSharpExporter {
             PostTransitionNodes: postTransitionNodes,
             SourceStageName: sourceStageName,
             Domain: domain,
-            EnumPropertyNames: enumProps
+            EnumPropertyNames: enumProps,
+            Meaning: ExpressionMeaning.For(domain)
         );
         var effectPass = new EffectLoweringPass(entity, context);
         var composite = new CompositeEffect(action.Effects);
@@ -1434,7 +1439,8 @@ public sealed class DomainToCSharpExporter {
             EnumPropertyNames: enumProps,
             NavigationNameResolver: EffectLoweringPass.BuildNavigationNameResolver(entity, domain, analysis),
             IsCollectionNavigation: EffectLoweringPass.BuildIsCollectionNavigation(entity, domain, analysis),
-            PropertyTypeResolver: EffectLoweringPass.BuildPropertyTypeResolver(entity)
+            PropertyTypeResolver: EffectLoweringPass.BuildPropertyTypeResolver(entity),
+            Meaning: ExpressionMeaning.For(domain)
         );
         var pass = new DomainExpressionLoweringPass(context);
         var lowered = pass.Lower(expr, new Parameter("entity"));
@@ -1483,7 +1489,7 @@ public sealed class DomainToCSharpExporter {
     internal static IReadOnlyDictionary<string, string>? GetEnumPropertyNames(
         Entity entity, Domain? domain, INodeMetadataProvider? analysis) {
         if (analysis is not null
-            && analysis.GetMetadata<EntityStructureMetadata>(entity) is { EnumPropertyNames: not null } esm)
+            && analysis.GetStructure(entity) is { EnumPropertyNames: not null } esm)
             return esm.EnumPropertyNames;
         return domain is not null ? BuildEnumPropertyNames(entity, domain, analysis) : null;
     }

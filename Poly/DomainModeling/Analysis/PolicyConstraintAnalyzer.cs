@@ -11,7 +11,7 @@ internal sealed class PolicyConstraintAnalyzer : INodeAnalyzer {
     public const string Id = "DomainPolicyConstraint";
     public string PassName => Id;
     // Lint-only: reads DomainTypeLookupMetadata; publishes no bags others read.
-    public string[] Dependencies => [SemanticDomainAnalyzer.Id];
+    public string[] Dependencies => [DomainCatalogPass.Id];
     public void Analyze(AnalysisContext context, Node node) {
         if (!context.ShouldAnalyze(node))
             return;
@@ -24,7 +24,7 @@ internal sealed class PolicyConstraintAnalyzer : INodeAnalyzer {
     }
 
     private static void AnalyzeEntity(AnalysisContext context, Entity entity) {
-        var lookup = context.GetMetadata<DomainTypeLookupMetadata>(default);
+        var lookup = context.GetTypeLookup();
         var entityPropMap = BuildPropertyMap(entity);
 
         foreach (var policy in entity.Policies) {
@@ -355,13 +355,10 @@ internal sealed class PolicyConstraintAnalyzer : INodeAnalyzer {
     }
 
     /// <summary>
-    /// Relationship lookup for domain-bound name resolve (amu-w1-2). Prefers the
-    /// catalog relationship bag; falls back to the intermediate RLM bag published
-    /// by <see cref="SemanticDomainAnalyzer"/>. Null when neither is available
-    /// (stripped/failed trees) — callers skip validation rather than false-report.
+    /// Catalog relationship lookup.
     /// </summary>
     private static RelationshipLookupMetadata? ResolveRelationshipLookup(AnalysisContext context, Domain domain) =>
-        context.GetRelationshipLookup(domain) ?? context.GetMetadata<RelationshipLookupMetadata>(default);
+        context.GetRelationshipLookup(domain) ?? context.GetRelationshipLookup();
 
     private static void ValidateOwnedAccessName(
         AnalysisContext context,

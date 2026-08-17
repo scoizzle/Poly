@@ -1,5 +1,9 @@
 # Poly.Mcp — MCP Server for Poly Domain Modeling
 
+**Role:** interactive **harness** for agents using Poly. Holds a `DomainSession` (it is not that session). Author, inspect, and **simulate** named policies/actions when the caller **supplies context**. Not a product entry-point extension (REST is `uses http`). Not a second evaluator — simulate must use the same lowered AST as emit.
+
+Lock: [`docs/decisions/2026-08-15-domain-library-extensions-mcp-harness.md`](../docs/decisions/2026-08-15-domain-library-extensions-mcp-harness.md). Mechanisms: [`docs/CORE.md`](../docs/CORE.md) §3.6.
+
 ## Tool Surface
 
 Tools live in `Poly.Mcp/Tools/` and use only `Poly.DomainModeling` types (no `Poly.Data.Modeling`).

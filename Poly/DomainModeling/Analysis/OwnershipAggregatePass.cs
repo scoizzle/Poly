@@ -46,7 +46,9 @@ internal sealed class OwnershipAggregatePass : INodeAnalyzer {
     internal static AggregateModel BuildAggregate(Domain domain, AnalysisContext? context, EffectTopology? topology = null) {
         var entities = domain.Types.OfType<Entity>().ToList();
         var entityLookup = entities.ToDictionary(e => e.Name, StringComparer.Ordinal);
-        var relationships = domain.Relationships.ToList();
+        var relationships = context is not null
+            ? context.GetAllRelationships(domain).ToList()
+            : entities.SelectMany(e => e.Navigations).ToList();
 
         var incomingRels = new Dictionary<string, List<Relationship>>(StringComparer.Ordinal);
         foreach (var rel in relationships) {
@@ -145,7 +147,7 @@ internal sealed class OwnershipAggregatePass : INodeAnalyzer {
         Dictionary<string, Entity> entityLookup, List<Relationship> relationships) {
         // EntityStructureMetadata.IsRoot is the authoritative root signal from EntityStructureAnalyzer.
         // If metadata is absent (test/legacy path), fall back to structural heuristic.
-        var meta = context?.GetMetadata<EntityStructureMetadata>(entity);
+        var meta = context?.GetStructure(entity);
         if (meta is not null)
             return meta.IsRoot;
         // Legacy fallback — no EntityStructureAnalyzer ran

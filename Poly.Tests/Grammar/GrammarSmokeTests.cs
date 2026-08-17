@@ -37,20 +37,19 @@ public class GrammarSmokeTests {
         public override bool EndOfStream(CharKind kind) => kind == CharKind.EndOfStream;
     }
 
-    private static Grammar<CharToken, CharKind> BuildGrammar() {
-        var g = new Grammar<CharToken, CharKind>();
-        g.Define("expr")
-            .Pattern("chain").LeftAssoc("term", CharKind.Plus).Commit();
-        g.Define("term")
+    private static Grammar<CharToken, CharKind> BuildGrammar() =>
+        new GrammarBuilder<CharToken, CharKind>()
+            .Define("expr")
+            .Pattern("chain").LeftAssoc("term", CharKind.Plus).Commit()
+            .Define("term")
             .Pattern("lit").Kind(CharKind.Digit).Commit()
-            .Pattern("star").Kind(CharKind.Letter).Value(CharKind.Star).Commit();
-        g.Define("sentence")
-            .Pattern("letters").Repeat("digit-or-letter", min: 1).Commit();
-        g.Define("digit-or-letter")
+            .Pattern("star").Kind(CharKind.Letter).Value(CharKind.Star).Commit()
+            .Define("sentence")
+            .Pattern("letters").Repeat("digit-or-letter", min: 1).Commit()
+            .Define("digit-or-letter")
             .Pattern("digit").Kind(CharKind.Digit).Commit()
-            .Pattern("letter").Kind(CharKind.Letter).Commit();
-        return g;
-    }
+            .Pattern("letter").Kind(CharKind.Letter).Commit()
+            .Build();
 
     // ── Basic longest-match + chain folding surface ──
 
@@ -59,12 +58,13 @@ public class GrammarSmokeTests {
         // Sorted order puts the 3-element pattern first, but it consumes fewer
         // tokens (3) than the Repeat-led sibling (4). True longest-match = most
         // tokens consumed, so "greedy" must win.
-        var g = new Grammar<CharToken, CharKind>();
-        g.Define("digit-any")
-            .Pattern("d").Kind(CharKind.Digit).Commit();
-        g.Define("rule")
+        var g = new GrammarBuilder<CharToken, CharKind>()
+            .Define("digit-any")
+            .Pattern("d").Kind(CharKind.Digit).Commit()
+            .Define("rule")
             .Pattern("fixed").Kind(CharKind.Letter).Kind(CharKind.Digit).Kind(CharKind.Digit).Commit()
-            .Pattern("greedy").Kind(CharKind.Letter).Repeat("digit-any", min: 1, max: 5).Commit();
+            .Pattern("greedy").Kind(CharKind.Letter).Repeat("digit-any", min: 1, max: 5).Commit()
+            .Build();
 
         var m = new Matcher<CharToken, CharKind>(g, new CharReader("a123"));
 
@@ -144,11 +144,12 @@ public class GrammarSmokeTests {
 
     [Test]
     public async Task Predicate_SeesTokenContent_NotJustKind() {
-        var g = new Grammar<CharToken, CharKind>();
-        g.Define("word")
-            .Pattern("lower").Predicate(t => t.Char == 'a', "a-letter").Commit();
-        g.Define("word2")
-            .Pattern("upper").Predicate(t => t.Char == 'Z', "z-letter").Commit();
+        var g = new GrammarBuilder<CharToken, CharKind>()
+            .Define("word")
+            .Pattern("lower").Predicate(t => t.Char == 'a', "a-letter").Commit()
+            .Define("word2")
+            .Pattern("upper").Predicate(t => t.Char == 'Z', "z-letter").Commit()
+            .Build();
 
         var m1 = new Matcher<CharToken, CharKind>(g, new CharReader("a"));
         await Assert.That(m1.TryMatch("word")).IsNotNull();
@@ -181,9 +182,10 @@ public class GrammarSmokeTests {
 
     [Test]
     public async Task EndOfStream_BalancedUnterminated_Fails() {
-        var g = new Grammar<CharToken, CharKind>();
-        g.Define("group")
-            .Pattern("b").Balanced(CharKind.Plus, CharKind.Star).Commit();
+        var g = new GrammarBuilder<CharToken, CharKind>()
+            .Define("group")
+            .Pattern("b").Balanced(CharKind.Plus, CharKind.Star).Commit()
+            .Build();
 
         // open '+' present, but stream ends before any '*' close.
         var m = new Matcher<CharToken, CharKind>(g, new CharReader("+ab"));
@@ -203,9 +205,10 @@ public class GrammarSmokeTests {
 
     [Test]
     public async Task Balanced_ContentBeforeOpener_DoesNotMatch() {
-        var g = new Grammar<CharToken, CharKind>();
-        g.Define("group")
-            .Pattern("b").Balanced(CharKind.Plus, CharKind.Star).Commit();
+        var g = new GrammarBuilder<CharToken, CharKind>()
+            .Define("group")
+            .Pattern("b").Balanced(CharKind.Plus, CharKind.Star).Commit()
+            .Build();
 
         // 'a' precedes the opener: Balanced must NOT scan forward past it.
         var m = new Matcher<CharToken, CharKind>(g, new CharReader("a+*"));

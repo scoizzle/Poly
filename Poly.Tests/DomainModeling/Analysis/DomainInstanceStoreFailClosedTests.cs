@@ -64,8 +64,7 @@ public class DomainInstanceStoreFailClosedTests {
     }
 
     [Test]
-    public async Task NotifyTransition_Throws_WhenEntityStructureMetadataMissing_ForSubscriber() {
-        // Arrange
+    public async Task NotifyTransition_ResolvesStage_FromCatalog_WhenEntityStructureMissing() {
         var domain = BuildDomainWithSubscriptions();
         var store = new DomainInstanceStore();
 
@@ -78,13 +77,10 @@ public class DomainInstanceStoreFailClosedTests {
         store.Add(tracker);
         store.Link("Tracks", tracker, order);
 
-        // Corrupt the cache: remove EntityStructureMetadata for the subscriber entity
         var analysis = RuntimeAnalysisCache.GetOrAnalyze(domain);
         analysis.GetMetadataStore().Remove<EntityStructureMetadata>((Entity)domain.Types[1]);
 
-        // Act & Assert: throws when subscriber metadata is missing
-        await Assert.That(() => order.TransitionStage("Active"))
-            .Throws<InvalidOperationException>();
+        await Assert.That(() => order.TransitionStage("Active")).ThrowsNothing();
     }
 
     [Test]
@@ -128,7 +124,7 @@ public class DomainInstanceStoreFailClosedTests {
     }
 
     [Test]
-    public async Task TransitionStage_DomainBound_Throws_WhenEntityStructureMetadataMissing() {
+    public async Task TransitionStage_DomainBound_ResolvesStage_FromCatalog_WhenEntityStructureMissing() {
         var domain = BuildDomainWithSubscriptions();
         var orderEntity = (Entity)domain.Types[0];
         var order = DomainEntityInstance.Create(orderEntity, new Dictionary<string, object?>(), domain);
@@ -136,8 +132,7 @@ public class DomainInstanceStoreFailClosedTests {
         var analysis = RuntimeAnalysisCache.GetOrAnalyze(domain);
         analysis.GetMetadataStore().Remove<EntityStructureMetadata>(orderEntity);
 
-        var ex = Assert.Throws<InvalidOperationException>(() => order.TransitionStage("Active"));
-        await Assert.That(ex!.Message).Contains("EntityStructureMetadata");
+        await Assert.That(() => order.TransitionStage("Active")).ThrowsNothing();
     }
 
     [Test]

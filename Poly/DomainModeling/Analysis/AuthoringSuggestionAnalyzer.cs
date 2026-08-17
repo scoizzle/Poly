@@ -10,7 +10,7 @@ internal sealed class AuthoringSuggestionAnalyzer : INodeAnalyzer {
     public const string Id = "DomainAuthoringSuggestionAnalyzer";
     public string PassName => Id;
     // Reads DomainTypeLookupMetadata for entity enumeration.
-    public string[] Dependencies => [SemanticDomainAnalyzer.Id];
+    public string[] Dependencies => [DomainCatalogPass.Id];
 
     public void Analyze(AnalysisContext context, Node node) {
         if (!context.ShouldAnalyze(node))
@@ -25,7 +25,7 @@ internal sealed class AuthoringSuggestionAnalyzer : INodeAnalyzer {
     }
 
     private static void ValidateDomainSuggestions(AnalysisContext context, Domain domain) {
-        var lookup = context.GetMetadata<DomainTypeLookupMetadata>(default);
+        var lookup = context.GetTypeLookup();
         if (lookup is null) return;
 
         foreach (var entity in lookup.Entities) {

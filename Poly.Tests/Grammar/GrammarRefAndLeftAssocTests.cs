@@ -13,11 +13,12 @@ public class GrammarRefAndLeftAssocTests {
 
     [Test]
     public async Task Ref_SingleOccurrence_ForwardsTokens() {
-        var g = new Grammar<TestToken, TestKind>();
-        g.Define("value")
-            .Pattern("num").Kind(TestKind.Number).Commit();
-        g.Define("pair")
-            .Pattern("wrapped").Ref("value").Kind(TestKind.Colon).Ref("value").Commit();
+        var g = new GrammarBuilder<TestToken, TestKind>()
+            .Define("value")
+            .Pattern("num").Kind(TestKind.Number).Commit()
+            .Define("pair")
+            .Pattern("wrapped").Ref("value").Kind(TestKind.Colon).Ref("value").Commit()
+            .Build();
 
         var r = new Matcher<TestToken, TestKind>(g, new TestTokenizer("1 : 2")).TryMatch("pair");
         await Assert.That(r).IsNotNull();
@@ -29,10 +30,11 @@ public class GrammarRefAndLeftAssocTests {
 
     [Test]
     public async Task Ref_RecursiveRule_NestedLists() {
-        var g = new Grammar<TestToken, TestKind>();
-        g.Define("list")
+        var g = new GrammarBuilder<TestToken, TestKind>()
+            .Define("list")
             .Pattern("atom").Kind(TestKind.Identifier).Commit()
-            .Pattern("nested").Kind(TestKind.LBrace).Ref("list").Kind(TestKind.RBrace).Commit();
+            .Pattern("nested").Kind(TestKind.LBrace).Ref("list").Kind(TestKind.RBrace).Commit()
+            .Build();
 
         var r = new Matcher<TestToken, TestKind>(g, new TestTokenizer("{ { { a } } }")).TryMatch("list");
         await Assert.That(r).IsNotNull();
@@ -46,12 +48,13 @@ public class GrammarRefAndLeftAssocTests {
     public async Task Ref_ZeroWidthSubMatch_Fails() {
         // "maybe" can match zero tokens (both optionals absent); Ref treats a
         // zero-width sub-match as failure (infinite-recursion guard).
-        var g = new Grammar<TestToken, TestKind>();
-        g.Define("maybe")
+        var g = new GrammarBuilder<TestToken, TestKind>()
+            .Define("maybe")
             .Pattern("m").Optional(new MatchKind<TestToken, TestKind>(TestKind.Plus))
-                         .Optional(new MatchKind<TestToken, TestKind>(TestKind.Star)).Commit();
-        g.Define("use")
-            .Pattern("u").Ref("maybe").Kind(TestKind.Identifier).Commit();
+                         .Optional(new MatchKind<TestToken, TestKind>(TestKind.Star)).Commit()
+            .Define("use")
+            .Pattern("u").Ref("maybe").Kind(TestKind.Identifier).Commit()
+            .Build();
 
         var r = new Matcher<TestToken, TestKind>(g, new TestTokenizer("a")).TryMatch("use");
         await Assert.That(r).IsNull(); // Ref consumed 0 → failure, pattern can't match
@@ -59,9 +62,10 @@ public class GrammarRefAndLeftAssocTests {
 
     [Test]
     public async Task Ref_UnknownRule_Throws() {
-        var g = new Grammar<TestToken, TestKind>();
-        g.Define("use")
-            .Pattern("u").Ref("missing").Kind(TestKind.Identifier).Commit();
+        var g = new GrammarBuilder<TestToken, TestKind>()
+            .Define("use")
+            .Pattern("u").Ref("missing").Kind(TestKind.Identifier).Commit()
+            .Build();
 
         var m = new Matcher<TestToken, TestKind>(g, new TestTokenizer("a"));
         await Assert.That(() => m.TryMatch("use")).Throws<ArgumentException>();
@@ -71,11 +75,12 @@ public class GrammarRefAndLeftAssocTests {
 
     [Test]
     public async Task LeftAssoc_MixedOperatorKinds_FoldsFlat() {
-        var g = new Grammar<TestToken, TestKind>();
-        g.Define("expr")
-            .Pattern("chain").LeftAssoc("term", TestKind.Plus, TestKind.Star).Commit();
-        g.Define("term")
-            .Pattern("n").Kind(TestKind.Number).Commit();
+        var g = new GrammarBuilder<TestToken, TestKind>()
+            .Define("expr")
+            .Pattern("chain").LeftAssoc("term", TestKind.Plus, TestKind.Star).Commit()
+            .Define("term")
+            .Pattern("n").Kind(TestKind.Number).Commit()
+            .Build();
 
         var r = new Matcher<TestToken, TestKind>(g, new TestTokenizer("1 + 2 * 3 + 4")).TryMatch("expr");
         await Assert.That(r).IsNotNull();
@@ -89,11 +94,12 @@ public class GrammarRefAndLeftAssocTests {
 
     [Test]
     public async Task LeftAssoc_TrailingOperator_FailsWholeChain() {
-        var g = new Grammar<TestToken, TestKind>();
-        g.Define("expr")
-            .Pattern("chain").LeftAssoc("term", TestKind.Plus).Commit();
-        g.Define("term")
-            .Pattern("n").Kind(TestKind.Number).Commit();
+        var g = new GrammarBuilder<TestToken, TestKind>()
+            .Define("expr")
+            .Pattern("chain").LeftAssoc("term", TestKind.Plus).Commit()
+            .Define("term")
+            .Pattern("n").Kind(TestKind.Number).Commit()
+            .Build();
 
         var r = new Matcher<TestToken, TestKind>(g, new TestTokenizer("1 +")).TryMatch("expr");
         await Assert.That(r).IsNull();
@@ -101,11 +107,12 @@ public class GrammarRefAndLeftAssocTests {
 
     [Test]
     public async Task LeftAssoc_NoFirstOperand_Fails() {
-        var g = new Grammar<TestToken, TestKind>();
-        g.Define("expr")
-            .Pattern("chain").LeftAssoc("term", TestKind.Plus).Commit();
-        g.Define("term")
-            .Pattern("n").Kind(TestKind.Number).Commit();
+        var g = new GrammarBuilder<TestToken, TestKind>()
+            .Define("expr")
+            .Pattern("chain").LeftAssoc("term", TestKind.Plus).Commit()
+            .Define("term")
+            .Pattern("n").Kind(TestKind.Number).Commit()
+            .Build();
 
         var r = new Matcher<TestToken, TestKind>(g, new TestTokenizer("+ 1")).TryMatch("expr");
         await Assert.That(r).IsNull();
@@ -115,11 +122,12 @@ public class GrammarRefAndLeftAssocTests {
     public async Task LeftAssoc_ZeroWidthFirstOperand_Fails() {
         // Operand rule matches zero tokens (optional Number absent): the chain
         // must fail rather than accept an empty first operand (recursion guard).
-        var g = new Grammar<TestToken, TestKind>();
-        g.Define("expr")
-            .Pattern("chain").LeftAssoc("maybe-term", TestKind.Plus).Commit();
-        g.Define("maybe-term")
-            .Pattern("m").Optional(new MatchKind<TestToken, TestKind>(TestKind.Number)).Commit();
+        var g = new GrammarBuilder<TestToken, TestKind>()
+            .Define("expr")
+            .Pattern("chain").LeftAssoc("maybe-term", TestKind.Plus).Commit()
+            .Define("maybe-term")
+            .Pattern("m").Optional(new MatchKind<TestToken, TestKind>(TestKind.Number)).Commit()
+            .Build();
 
         var r = new Matcher<TestToken, TestKind>(g, new TestTokenizer("+ 1")).TryMatch("expr");
         await Assert.That(r).IsNull();
@@ -129,11 +137,12 @@ public class GrammarRefAndLeftAssocTests {
     public async Task LeftAssoc_ZeroWidthContinuation_FailsWholeChain() {
         // "1 +" with an operand rule that can match zero tokens: the continuation
         // must not silently accept an empty operand (trailing-operator rule).
-        var g = new Grammar<TestToken, TestKind>();
-        g.Define("expr")
-            .Pattern("chain").LeftAssoc("maybe-term", TestKind.Plus).Commit();
-        g.Define("maybe-term")
-            .Pattern("m").Optional(new MatchKind<TestToken, TestKind>(TestKind.Number)).Commit();
+        var g = new GrammarBuilder<TestToken, TestKind>()
+            .Define("expr")
+            .Pattern("chain").LeftAssoc("maybe-term", TestKind.Plus).Commit()
+            .Define("maybe-term")
+            .Pattern("m").Optional(new MatchKind<TestToken, TestKind>(TestKind.Number)).Commit()
+            .Build();
 
         var r = new Matcher<TestToken, TestKind>(g, new TestTokenizer("1 +")).TryMatch("expr");
         await Assert.That(r).IsNull();
@@ -141,11 +150,12 @@ public class GrammarRefAndLeftAssocTests {
 
     [Test]
     public async Task LeftAssoc_SingleOperand_NoOperator_MatchesOne() {
-        var g = new Grammar<TestToken, TestKind>();
-        g.Define("expr")
-            .Pattern("chain").LeftAssoc("term", TestKind.Plus).Commit();
-        g.Define("term")
-            .Pattern("n").Kind(TestKind.Number).Commit();
+        var g = new GrammarBuilder<TestToken, TestKind>()
+            .Define("expr")
+            .Pattern("chain").LeftAssoc("term", TestKind.Plus).Commit()
+            .Define("term")
+            .Pattern("n").Kind(TestKind.Number).Commit()
+            .Build();
 
         var r = new Matcher<TestToken, TestKind>(g, new TestTokenizer("42")).TryMatch("expr");
         await Assert.That(r).IsNotNull();

@@ -27,16 +27,16 @@ public sealed class PrinterTests {
     };
 
     private static Grammar<JsonToken, JsonKind> JsonGrammar() {
-        var g = new Grammar<JsonToken, JsonKind>();
-        g.Define("value")
+        return new GrammarBuilder<JsonToken, JsonKind>()
+            .Define("value")
             .Pattern("string").Kind(JsonKind.String).Commit()
             .Pattern("number").Kind(JsonKind.Number).Commit()
             .Pattern("true").Kind(JsonKind.True).Commit()
             .Pattern("false").Kind(JsonKind.False).Commit()
             .Pattern("null").Kind(JsonKind.Null).Commit()
             .Pattern("object").Balanced(JsonKind.LBrace, JsonKind.RBrace).Commit()
-            .Pattern("array").Balanced(JsonKind.LBracket, JsonKind.RBracket).Commit();
-        return g;
+            .Pattern("array").Balanced(JsonKind.LBracket, JsonKind.RBracket).Commit()
+            .Build();
     }
 
     // ── Fixed kinds print canonical text ──

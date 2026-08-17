@@ -136,7 +136,7 @@ public sealed record DomainEntityInstance {
                 values[prop.Name] = v;
             }
             else if (prop.Constraints.OfType<DefaultValueConstraint>().FirstOrDefault() is { } defaultValue) {
-                values[prop.Name] = EvaluateDefaultValue(defaultValue.Expression, prop.Type.TypeName);
+                values[prop.Name] = EvaluateDefaultValue(defaultValue.Expression, prop.Type.TypeName, domain);
             }
             else {
                 values[prop.Name] = null; // default for unspecified properties
@@ -233,7 +233,8 @@ public sealed record DomainEntityInstance {
         var loweringContext = new LoweringContext(
             new Parameter("entity", new TypeReference(instance.Entity.Name)),
             Analysis: analysis,
-            Domain: instance.Domain);
+            Domain: instance.Domain,
+            Meaning: ExpressionMeaning.For(instance.Domain));
         var entryPass = new EffectLoweringPass(instance.Entity, loweringContext);
         foreach (var effect in firstStage.OnEntryEffects) {
             // The export ctor lowers first-stage entry effects with transitions disabled —
@@ -251,11 +252,12 @@ public sealed record DomainEntityInstance {
     /// (e.g. <c>default(Active)</c>) lowers to its name string; <c>now</c>/<c>today</c>/<c>guid</c>
     /// evaluate at creation time. Matches the C# export's defaulted optional ctor params.
     /// </summary>
-    private static object? EvaluateDefaultValue(DomainExpression expr, string? propTypeName = null) => expr switch {
+    private object? EvaluateDefaultValue(DomainExpression expr, string? propTypeName = null) =>
+        EvaluateDefaultValue(expr, propTypeName, Domain);
+
+    private static object? EvaluateDefaultValue(DomainExpression expr, string? propTypeName, Domain? domain) => expr switch {
         Literal lit => lit.Value,
-        // Pack-owned clock nodes (Now/Today) resolve through the ambient default registry —
-        // core never names pack IR.
-        _ when ExpressionDefaultResolverRegistry.Default.TryResolve(expr, propTypeName, out var runtimeValue, out _) => runtimeValue,
+        _ when ExpressionMeaning.For(domain).Defaults.TryResolve(expr, propTypeName, out var runtimeValue, out _) => runtimeValue,
         PropertyAccess pa => pa.Name switch {
             "Now" or "UtcNow" => propTypeName is "DateTime" or "Timestamp"
                 ? DateTime.UtcNow
@@ -356,7 +358,8 @@ public sealed record DomainEntityInstance {
         var entityParam = new Parameter("entity", new TypeReference(Entity.Name));
         var pass = new DomainExpressionLoweringPass(new LoweringContext(
             entityParam,
-            PropertyTypeResolver: EffectLoweringPass.BuildPropertyTypeResolver(Entity)));
+            PropertyTypeResolver: EffectLoweringPass.BuildPropertyTypeResolver(Entity),
+            Meaning: ExpressionMeaning.For(Domain)));
         var lowered = pass.Lower(expr, entityParam);
 
         var compiled = Interpreter.CompileChecked(lowered, _typeDefAnalyzer);
@@ -475,16 +478,7 @@ public sealed record DomainEntityInstance {
 
         Stage? stage = null;
         if (runtimeAnalysis is not null && CurrentStage is not null) {
-            // Fail closed: when analysis ran, a stage-guard lookup miss must not
-            // silently skip the stage's policy guards. Unreachable for a
-            // consistently-analyzed domain (CurrentStage is drawn from
-            // Entity.Stages, which is the same source as ESM.StageByName), so this
-            // only fires when analysis and instance disagree.
-            var esm = runtimeAnalysis.GetMetadata<EntityStructureMetadata>(Entity);
-            if (esm is null)
-                throw new InvalidOperationException(
-                    $"Runtime dispatch requires {nameof(EntityStructureMetadata)} for entity '{Entity.Name}' during action dispatch.");
-            if (esm.StageByName is null || !esm.StageByName.TryGetValue(CurrentStage, out stage))
+            if (!runtimeAnalysis.TryGetStage(Entity, CurrentStage, out stage) || stage is null)
                 throw new InvalidOperationException(
                     $"Stage '{CurrentStage}' not resolvable for entity '{Entity.Name}' during action dispatch.");
         }
@@ -521,7 +515,8 @@ public sealed record DomainEntityInstance {
         var loweringContext = new LoweringContext(
             subjectParam,
             Analysis: runtimeAnalysis,
-            Domain: Domain);
+            Domain: Domain,
+            Meaning: ExpressionMeaning.For(Domain));
         var effectPass = new EffectLoweringPass(Entity, loweringContext);
         // Action parameters are injected into _values for the call duration, but are not
         // entity schema properties. Compile with an action-scoped type def so PropertyAccess
@@ -574,7 +569,7 @@ public sealed record DomainEntityInstance {
         var subjectParam = new Parameter("entity", new TypeReference(Entity.Name));
 
         foreach (var binding in bindings) {
-            var loweringPass = new DomainExpressionLoweringPass();
+            var loweringPass = new DomainExpressionLoweringPass(new LoweringContext(new Parameter("entity"), Meaning: ExpressionMeaning.For(Domain)));
             var lowered = loweringPass.Lower(binding.Expression, subjectParam);
             var compiled = Interpreter.Compile(lowered, _bindingTypeProvider ?? _typeDefAnalyzer);
             using var exec = Interpreter.Execute(compiled,
@@ -637,7 +632,8 @@ public sealed record DomainEntityInstance {
                 var entityParam = new Parameter("entity", new TypeReference(Entity.Name));
                 var pass = new DomainExpressionLoweringPass(new LoweringContext(
                     entityParam,
-                    PropertyTypeResolver: EffectLoweringPass.BuildPropertyTypeResolver(Entity)));
+                    PropertyTypeResolver: EffectLoweringPass.BuildPropertyTypeResolver(Entity),
+                    Meaning: ExpressionMeaning.For(Domain)));
                 var lowered = pass.Lower(condition, entityParam);
                 var compiled = Interpreter.CompileChecked(lowered, typeProvider);
                 bool taken;
@@ -710,7 +706,7 @@ public sealed record DomainEntityInstance {
             string.Equals(p.Name, targetPropName, StringComparison.Ordinal))?.Type.TypeName;
         // Pack-owned clock nodes (Now/Today) resolve through the ambient default registry —
         // core never names pack IR.
-        if (ExpressionDefaultResolverRegistry.Default.TryResolve(value, propType, out var runtimeValue, out _))
+        if (ExpressionMeaning.For(Domain).Defaults.TryResolve(value, propType, out var runtimeValue, out _))
             return DomainExpression.Literal(runtimeValue);
         if (value is PropertyAccess { Name: var name } && name is "Now" or "UtcNow" or "Today" or "Guid")
             return DomainExpression.Literal(EvaluateDefaultValue(value, propType));
@@ -906,7 +902,8 @@ public sealed record DomainEntityInstance {
             var loweringContext = new LoweringContext(
                 subject,
                 Analysis: analysis,
-                Domain: Domain);
+                Domain: Domain,
+                Meaning: ExpressionMeaning.For(Domain));
 
             // ── Run OnExit effects on the current stage ────────────
             if (previousStageName is not null) {
@@ -989,7 +986,8 @@ public sealed record DomainEntityInstance {
                 effectPass = new EffectLoweringPass(Entity, new LoweringContext(
                     subjectParam,
                     Analysis: analysis,
-                    Domain: Domain));
+                    Domain: Domain,
+                    Meaning: ExpressionMeaning.For(Domain)));
             }
             else {
                 effectPass = new EffectLoweringPass(Entity, subjectParam);
@@ -1065,7 +1063,7 @@ public sealed record DomainEntityInstance {
     /// <see cref="DomainExpressionRewriteBase"/>; composites recurse in the base).
     /// </summary>
     private sealed class PeerBindingRewrite(string peerBinding, DomainEntityInstance peer)
-        : DomainExpressionRewriteBase {
+        : DomainExpressionRewriteBase(ExpressionMeaning.For(peer.Domain).Rewrite) {
         protected override DomainExpression RelationshipNavigation(RelationshipNavigation e) {
             if (string.Equals(e.RelationshipName, peerBinding, StringComparison.Ordinal))
                 return DomainExpression.Literal(EvaluateExprOnPeer(e.TargetProperty, peer));
@@ -1077,7 +1075,7 @@ public sealed record DomainEntityInstance {
     /// Lowers and executes <paramref name="expr"/> against the peer instance bag.
     /// </summary>
     private static object? EvaluateExprOnPeer(DomainExpression expr, DomainEntityInstance peer) {
-        var pass = new DomainExpressionLoweringPass();
+        var pass = new DomainExpressionLoweringPass(new LoweringContext(new Parameter("entity"), Meaning: ExpressionMeaning.For(peer.Domain)));
         var lowered = pass.Lower(expr,
             new Parameter("entity", new TypeReference(peer.Entity.Name)));
         var compiled = Interpreter.Compile(lowered, peer._typeDefAnalyzer);
@@ -1121,7 +1119,7 @@ public sealed record DomainEntityInstance {
         var initializerTypeProvider = parentTypeProvider ?? _typeDefAnalyzer;
         var initialValues = new Dictionary<string, object?>(StringComparer.Ordinal);
         foreach (var binding in createEffect.Initializers) {
-            var lowered = new DomainExpressionLoweringPass().Lower(
+            var lowered = new DomainExpressionLoweringPass(new LoweringContext(new Parameter("entity"), Meaning: ExpressionMeaning.For(Domain))).Lower(
                 binding.Expression,
                 new Parameter("entity", new TypeReference(Entity.Name)));
             var compiled = Interpreter.Compile(lowered, initializerTypeProvider);
@@ -1357,7 +1355,7 @@ public sealed record DomainEntityInstance {
 
         var result = new List<DomainEntityInstance>();
         foreach (var t in all) {
-            var loweringPass = new DomainExpressionLoweringPass();
+            var loweringPass = new DomainExpressionLoweringPass(new LoweringContext(new Parameter("entity"), Meaning: ExpressionMeaning.For(Domain)));
             var lowered = loweringPass.Lower(filter,
                 new Parameter("entity", new TypeReference(t.Entity.Name)));
             var compiled = Interpreter.Compile(lowered, t._typeDefAnalyzer);
@@ -1393,7 +1391,7 @@ public sealed record DomainEntityInstance {
     /// metadata or missing outbound links throw (no vacuous true/false).
     /// </summary>
     private sealed class QuantifierPreprocessRewrite(DomainEntityInstance instance)
-        : DomainExpressionRewriteBase {
+        : DomainExpressionRewriteBase(ExpressionMeaning.For(instance.Domain).Rewrite) {
         private readonly DomainEntityInstance _instance = instance;
 
         protected override DomainExpression AnyExpr(AnyExpr e) =>
@@ -1432,7 +1430,7 @@ public sealed record DomainEntityInstance {
                 return EvaluatePathPrefixChain(nested, hop);
 
             // Leaf (comparison, property, etc.) on the final hop instance.
-            var pass = new DomainExpressionLoweringPass();
+            var pass = new DomainExpressionLoweringPass(new LoweringContext(new Parameter("entity"), Meaning: ExpressionMeaning.For(hop.Domain)));
             var lowered = pass.Lower(r.TargetProperty,
                 new Parameter("entity", new TypeReference(hop.Entity.Name)));
             var compiled = Interpreter.Compile(lowered, hop._typeDefAnalyzer);
@@ -1522,7 +1520,7 @@ public sealed record DomainEntityInstance {
     /// result. This is the same pattern used by <see cref="GetRelatedTargets"/>.
     /// </summary>
     private static bool EvaluateBodyOnTarget(DomainExpression body, DomainEntityInstance target) {
-        var pass = new DomainExpressionLoweringPass();
+        var pass = new DomainExpressionLoweringPass(new LoweringContext(new Parameter("entity"), Meaning: ExpressionMeaning.For(target.Domain)));
         var lowered = pass.Lower(body,
             new Parameter("entity", new TypeReference(target.Entity.Name)));
         var compiled = Interpreter.Compile(lowered, target._typeDefAnalyzer);

@@ -36,10 +36,16 @@ public sealed class Matcher<TToken, TTokenKind>
     public MatchResult<TToken, TTokenKind>? TryMatch(string ruleName) {
         EnsureKnownRule(ruleName);
         MatchResult<TToken, TTokenKind>? best = null;
+        var bestPriority = int.MinValue;
         foreach (var pattern in _grammar.GetPatterns(ruleName)) {
-            if (TryMatchPattern(pattern, 0, out var tokens)) {
-                if (best is null || tokens.Count > best.Consumed)
-                    best = new MatchResult<TToken, TTokenKind>(pattern.Name, tokens);
+            var captures = new Dictionary<string, IReadOnlyList<TToken>>(StringComparer.Ordinal);
+            if (TryMatchPattern(pattern, 0, out var tokens, captures)) {
+                if (best is null
+                    || tokens.Count > best.Consumed
+                    || (tokens.Count == best.Consumed && pattern.Priority > bestPriority)) {
+                    best = new MatchResult<TToken, TTokenKind>(pattern.Name, tokens, captures);
+                    bestPriority = pattern.Priority;
+                }
             }
         }
         return best;
@@ -54,7 +60,7 @@ public sealed class Matcher<TToken, TTokenKind>
         EnsureKnownRule(ruleName);
         List<TToken>? best = null;
         foreach (var pattern in _grammar.GetPatterns(ruleName)) {
-            if (TryMatchPattern(pattern, offset, out var tokens)) {
+            if (TryMatchPattern(pattern, offset, out var tokens, captures: null)) {
                 if (best is null || tokens.Count > best.Count)
                     best = tokens;
             }
@@ -90,11 +96,15 @@ public sealed class Matcher<TToken, TTokenKind>
         return seen;
     }
 
-    private bool TryMatchPattern(Pattern<TToken, TTokenKind> pattern, int offset, out List<TToken> consumed) {
+    private bool TryMatchPattern(
+        Pattern<TToken, TTokenKind> pattern,
+        int offset,
+        out List<TToken> consumed,
+        Dictionary<string, IReadOnlyList<TToken>>? captures) {
         var tokens = new List<TToken>();
         var pos = offset;
         foreach (var element in pattern.Elements) {
-            if (!TryMatchElement(element, pos, out var elementTokens)) {
+            if (!TryMatchElement(element, pos, out var elementTokens, captures)) {
                 consumed = [];
                 return false;
             }
@@ -105,13 +115,26 @@ public sealed class Matcher<TToken, TTokenKind>
         return true;
     }
 
-    private bool TryMatchElement(IPatternElement<TToken, TTokenKind> element, int offset, out List<TToken> consumed) {
+    private void RecordCapture(Dictionary<string, IReadOnlyList<TToken>>? captures, string? name, IReadOnlyList<TToken> tokens) {
+        if (captures is null || string.IsNullOrEmpty(name) || tokens.Count == 0)
+            return;
+        captures[name] = tokens;
+    }
+
+    private bool TryMatchElement(
+        IPatternElement<TToken, TTokenKind> element,
+        int offset,
+        out List<TToken> consumed,
+        Dictionary<string, IReadOnlyList<TToken>>? captures) {
         switch (element) {
             case MatchKind<TToken, TTokenKind> k:
                 return TryMatchKind(k.Kind, offset, consumed: out consumed);
 
             case Value<TToken, TTokenKind> v:
-                return TryMatchKind(v.Kind, offset, consumed: out consumed);
+                if (!TryMatchKind(v.Kind, offset, consumed: out consumed))
+                    return false;
+                RecordCapture(captures, v.Name, consumed);
+                return true;
 
             case MatchPredicate<TToken, TTokenKind> p:
                 var pt = _reader.Peek(offset);
@@ -120,10 +143,11 @@ public sealed class Matcher<TToken, TTokenKind>
                     return false;
                 }
                 consumed = [pt];
+                RecordCapture(captures, p.Label, consumed);
                 return true;
 
             case Optional<TToken, TTokenKind> o:
-                if (TryMatchElement(o.Inner, offset, out var optTokens)) {
+                if (TryMatchElement(o.Inner, offset, out var optTokens, captures)) {
                     consumed = optTokens;
                     return true;
                 }
@@ -180,7 +204,7 @@ public sealed class Matcher<TToken, TTokenKind>
         while (count < r.Max) {
             var matched = false;
             foreach (var sub in subPatterns) {
-                if (TryMatchPattern(sub, pos, out var subTokens)) {
+                if (TryMatchPattern(sub, pos, out var subTokens, captures: null)) {
                     if (subTokens.Count == 0)
                         break; // zero-width sub-match: stop, avoid infinite loop
                     tokens.AddRange(subTokens);

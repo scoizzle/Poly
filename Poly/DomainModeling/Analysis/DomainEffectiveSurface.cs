@@ -4,8 +4,7 @@ namespace Poly.DomainModeling.Analysis;
 /// Single composition algorithm for stage-effective policies and actions.
 /// <para>
 /// <b>Canonical surface:</b> <see cref="StageCapabilityMetadata"/> / <see cref="StageCapabilityView"/>
-/// published by <see cref="CapabilityAnalyzer"/>. Helpers and MCP describe routes read that
-/// surface (or re-apply these rules over the catalog when the capability bag is absent).
+/// published by <see cref="CapabilityAnalyzer"/>. Downstream reads that surface only.
 /// </para>
 /// <para>
 /// <b>Composition rules:</b>
@@ -32,21 +31,4 @@ internal static class DomainEffectiveSurface {
         return combined;
     }
 
-    public static IReadOnlyList<Policy> ComposeStagePolicies(
-        IReadOnlyDictionary<string, Policy>? entityPoliciesByName,
-        IReadOnlyDictionary<string, Policy>? stagePoliciesByName) {
-        var entity = entityPoliciesByName?.Values.ToList() ?? [];
-        var stage = stagePoliciesByName?.Values.ToList() ?? [];
-        if (entity.Count == 0 && stage.Count == 0)
-            return Array.Empty<Policy>();
-        if (entity.Count == 0)
-            return stage;
-        if (stage.Count == 0)
-            return entity;
-        entity.AddRange(stage);
-        return entity;
-    }
-
-    public static IReadOnlyList<Action> ComposeStageActions(Stage stage) =>
-        stage.Actions.Count == 0 ? Array.Empty<Action>() : stage.Actions;
 }

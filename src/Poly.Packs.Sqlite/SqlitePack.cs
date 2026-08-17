@@ -10,6 +10,6 @@ namespace Poly.Packs.Sqlite;
 public sealed class SqliteLibrary : IDomainLibrary {
     public string Id => "sqlite";
 
-    public void Register(HostSurfaces surfaces) =>
-        SqliteDefaults.ApplyTypeMaps(surfaces.TypeMaps);
+    public void Register(DomainHostBuilder builder) =>
+        SqliteDefaults.ApplyTypeMaps(builder.TypeMaps);
 }

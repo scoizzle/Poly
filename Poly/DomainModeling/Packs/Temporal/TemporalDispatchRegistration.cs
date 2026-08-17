@@ -7,53 +7,34 @@ using Poly.DomainModeling.Parsing;
 namespace Poly.DomainModeling.Packs.Temporal;
 
 /// <summary>
-/// Registers temporal meaning into the process language tables. Called only from
-/// <see cref="TemporalLibrary.EnsureLanguage"/> / <see cref="TemporalLibrary.Apply"/> —
-/// never at module load.
+/// Registers temporal meaning onto a session <see cref="ExpressionMeaning"/>.
 /// </summary>
 public static class TemporalDispatchRegistration {
-    private static int _registered;
+    /// <summary>Registers temporal meaning onto a session's tables. Not process-wide.</summary>
+    public static void Populate(ExpressionMeaning meaning) {
+        ArgumentNullException.ThrowIfNull(meaning);
+        meaning.Rewrite.Register(new NowRewriteHandler());
+        meaning.Rewrite.Register(new TodayRewriteHandler());
+        meaning.Rewrite.Register(new DurationRewriteHandler());
+        meaning.Rewrite.Register(new DateOperationRewriteHandler());
 
-    internal static void EnsureRegistered() {
-        if (Interlocked.Exchange(ref _registered, 1) == 1)
-            return;
-        Register();
-    }
+        meaning.Lowering.Register(new DateOperationLoweringHandler());
+        meaning.Lowering.Register(new NowLoweringHandler());
+        meaning.Lowering.Register(new TodayLoweringHandler());
+        meaning.Lowering.Register(new DurationLoweringHandler());
 
-    private static void Register() {
-        // Rewrite: identity leaves + composite recursion (DomainExpression → DomainExpression).
-        var rewrite = ExpressionDispatchRegistry<DomainExpression>.Default;
-        rewrite.Register(new NowRewriteHandler());
-        rewrite.Register(new TodayRewriteHandler());
-        rewrite.Register(new DurationRewriteHandler());
-        rewrite.Register(new DateOperationRewriteHandler());
+        meaning.Inference.Register(new NowTypeHandler());
+        meaning.Inference.Register(new TodayTypeHandler());
+        meaning.Inference.Register(new DateOperationTypeHandler());
+        meaning.Inference.Register(new DurationTypeHandler());
 
-        // Lowering: DateOperation → AddDays/AddMonths/Subtract invoke; Now/Today → CLR clock;
-        // bare Duration → fail loud.
-        var lowering = ExpressionDispatchRegistry<Node>.Default;
-        lowering.Register(new DateOperationLoweringHandler());
-        lowering.Register(new NowLoweringHandler());
-        lowering.Register(new TodayLoweringHandler());
-        lowering.Register(new DurationLoweringHandler());
+        meaning.Checks.Register(new DateOperationTypeCheck());
+        meaning.Checks.Register(new DurationDefaultCheck());
+        meaning.Checks.Register(new NowDefaultCheck());
+        meaning.Checks.Register(new TodayDefaultCheck());
 
-        // Analysis inference: Now/Today/DateOperation → Date; Duration → Duration.
-        var inference = ExpressionDispatchRegistry<ExpressionTypeAnalyzer.TypeCategory>.Default;
-        inference.Register(new NowTypeHandler());
-        inference.Register(new TodayTypeHandler());
-        inference.Register(new DateOperationTypeHandler());
-        inference.Register(new DurationTypeHandler());
-
-        // Analysis checks: DateOperation date-operand validation, temporal defaults.
-        var checks = ExpressionTypeCheckRegistry.Default;
-        checks.Register(new DateOperationTypeCheck());
-        checks.Register(new DurationDefaultCheck());
-        checks.Register(new NowDefaultCheck());
-        checks.Register(new TodayDefaultCheck());
-
-        // Runtime/export defaults: Now/Today → CLR clock values/nodes.
-        var defaults = ExpressionDefaultResolverRegistry.Default;
-        defaults.Register(new NowDefaultResolver());
-        defaults.Register(new TodayDefaultResolver());
+        meaning.Defaults.Register(new NowDefaultResolver());
+        meaning.Defaults.Register(new TodayDefaultResolver());
     }
 }
 

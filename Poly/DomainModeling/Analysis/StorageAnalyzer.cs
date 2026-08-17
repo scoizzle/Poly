@@ -43,8 +43,10 @@ public sealed class StorageAnalyzer {
         // amu-w2-1: prefer the live pipeline bags (EntityStructureAnalyzer ran before
         // StoragePass in the AnalyzerBuilder pipeline); fall back to priorAnalysis for
         // standalone / codegen-pipeline usage where the context is fresh/invalidated.
-        var lookup = context?.GetMetadata<DomainTypeLookupMetadata>(default)
-            ?? analysis?.GetMetadata<DomainTypeLookupMetadata>(default);
+        var lookup = context?.GetTypeLookup(domain)
+            ?? analysis?.GetTypeLookup(domain)
+            ?? context?.GetTypeLookup()
+            ?? analysis?.GetTypeLookup();
         if (lookup is not null) {
             _entities = lookup.Entities.ToList();
             _entityLookup = lookup.Types
@@ -64,7 +66,9 @@ public sealed class StorageAnalyzer {
             _enumTypeNames = null;
         }
 
-        _relationships = domain.Relationships.ToList();
+        _relationships = (context?.GetAllRelationships(domain)
+            ?? analysis?.GetAllRelationships(domain)
+            ?? domain.Types.OfType<Entity>().SelectMany(e => e.Navigations)).ToList();
     }
 
     public StorageModel Analyze(AggregateModel? aggregate = null, EffectTopology? topology = null) {
@@ -159,8 +163,8 @@ public sealed class StorageAnalyzer {
         Dictionary<string, AggregateEntity>? aggLookup,
         EffectTopology? topology) {
         // amu-w2-1: context bag first (full pipeline), priorAnalysis fallback (standalone).
-        var meta = _context?.GetMetadata<EntityStructureMetadata>(entity)
-            ?? _analysis?.GetMetadata<EntityStructureMetadata>(entity);
+        var meta = _context?.GetStructure(entity)
+            ?? _analysis?.GetStructure(entity);
         var agg = aggLookup?.GetValueOrDefault(entity.Name);
 
         Property? keyProperty;
@@ -179,8 +183,7 @@ public sealed class StorageAnalyzer {
             keyName = meta.KeyPropertyName is not null
                 ? DomainTypeMapping.ToCamelCase(meta.KeyPropertyName) : "id";
             keyClrType = meta.KeyClrType;
-            // Aggregate owns hierarchy; prefer it when present.
-            isRoot = agg?.IsRoot ?? meta.IsRoot;
+            isRoot = meta.IsRoot;
             hasStages = meta.HasStages;
             if (hasStages) {
                 stagePropertyName = "CurrentStage";
@@ -381,8 +384,8 @@ public sealed class StorageAnalyzer {
         if (aggLookup is not null &&
             aggLookup.TryGetValue(agg.AggregateParentName, out _) &&
             _entityLookup.TryGetValue(agg.AggregateParentName, out var parentEntity)) {
-            var parentMeta = _context?.GetMetadata<EntityStructureMetadata>(parentEntity)
-                ?? _analysis?.GetMetadata<EntityStructureMetadata>(parentEntity);
+            var parentMeta = _context?.GetStructure(parentEntity)
+                ?? _analysis?.GetStructure(parentEntity);
             if (parentMeta?.KeyPropertyName is not null)
                 parentKeyProperty = parentMeta.KeyPropertyName;
             else {

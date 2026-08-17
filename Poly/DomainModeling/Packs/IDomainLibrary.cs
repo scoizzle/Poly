@@ -1,13 +1,14 @@
 namespace Poly.DomainModeling.Packs;
 
 /// <summary>
-/// A library that registers into a <see cref="DomainHost"/>. Duplicate
-/// <see cref="Id"/> fails closed. Not a plugin host.
+/// A library that registers <b>concepts</b> into a session: meaning for existing
+/// spellings, type maps, conventions, and/or artifact files. It does not add
+/// language shapes. Duplicate <see cref="Id"/> fails closed. Not a discovery host.
 /// </summary>
 public interface IDomainLibrary {
     /// <summary>Unique, ordinal-compared identity. Duplicates fail closed.</summary>
     string Id { get; }
 
-    /// <summary>Registers this library into the host's spell and mean surfaces.</summary>
-    void Register(HostSurfaces surfaces);
+    /// <summary>Registers this library onto the session builder.</summary>
+    void Register(DomainHostBuilder builder);
 }

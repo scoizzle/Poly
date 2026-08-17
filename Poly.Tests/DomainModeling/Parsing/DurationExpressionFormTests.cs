@@ -1,5 +1,7 @@
+using Poly.Ast.Nodes;
 using Poly.DomainModeling;
 using Poly.DomainModeling.Lowering;
+using Poly.DomainModeling.Packs;
 using Poly.DomainModeling.Packs.Temporal;
 using Poly.DomainModeling.Parsing;
 
@@ -13,18 +15,13 @@ namespace Poly.Tests.DomainModeling.Parsing;
 /// </summary>
 public class DurationExpressionFormTests {
     private static DomainParserInputs DurationInputs() =>
-        DomainHostBuilder.Create()
-            .RegisterExpressionForm(new DurationForm())
-            .BuildParserInputs();
+        ExtensionCatalog.Core.Language.Parser;
 
     private static DomainParserInputs TemporalInputs() =>
-        DomainHostBuilder.Create()
-            .RegisterExpressionForm(new NowForm())
-            .RegisterExpressionForm(new DurationForm())
-            .RegisterBinaryFold(new DateOperationFold())
-            .BuildParserInputs();
+        ExtensionCatalog.Core.Language.Parser;
 
-    private readonly DomainExpressionLoweringPass Pass = new();
+    private readonly DomainExpressionLoweringPass Pass = new(
+        new LoweringContext(new Parameter("entity"), Meaning: ExtensionCatalog.Core.Language.Meaning));
 
     [Test]
     public async Task Duration_12Days_Form_Parses() {

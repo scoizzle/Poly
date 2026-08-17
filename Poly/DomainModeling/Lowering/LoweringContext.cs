@@ -93,5 +93,6 @@ public sealed record LoweringContext(
     IReadOnlyDictionary<string, string>? EnumPropertyNames = null,
     Func<string, string>? NavigationNameResolver = null,
     Func<string, bool>? IsCollectionNavigation = null,
-    Func<string, string?>? PropertyTypeResolver = null
+    Func<string, string?>? PropertyTypeResolver = null,
+    ExpressionMeaning? Meaning = null
 );

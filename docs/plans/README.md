@@ -20,6 +20,7 @@ Architectural rationale → **`docs/decisions/`**. Module maps → **`Poly/*/REA
 | **DONE same PR** | Suite gate Done → update PIPELINE-STATUS + READY-TO-TASK + master-roadmap Agent pick together. |
 
 **CURRENT truth:** [`simple-agent-tasks/PIPELINE-STATUS.md`](simple-agent-tasks/PIPELINE-STATUS.md)  
+**Vision cleanup (proposal, not CURRENT):** [`domainmodeling-vision-cleanup-2026-08-16.md`](domainmodeling-vision-cleanup-2026-08-16.md) — supersedes the 2026-08-15 five-wave draft.  
 **Ready suites index:** [`simple-agent-tasks/READY-TO-TASK.md`](simple-agent-tasks/READY-TO-TASK.md)  
 **Milestones:** [`v2-to-v3/master-roadmap.md`](v2-to-v3/master-roadmap.md) (mirrors Agent pick)  
 **Pre-ship (always-on):** [`v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md`](v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md)
@@ -60,6 +61,12 @@ copilot --agent plan-suite-until-done -p "Suite: mut-safety. Mode: until-done."
 | [`live-pairing-demo-2026-08-13.md`](live-pairing-demo-2026-08-13.md) | Human + agent progressive authoring → `serve-poly.sh` |
 | [`contract-subdomain-2026-08-13.md`](contract-subdomain-2026-08-13.md) | Contract = used sub-domain; **executed 2026-08-13** |
 | [`pack-host-2026-08-13.md`](pack-host-2026-08-13.md) | **Grammar → pack surface → built-in packs**; proposed next admit = phase 1 (TokenWriter + print binders) |
+| [`domainmodeling-simplification-2026-08-14.md`](domainmodeling-simplification-2026-08-14.md) | Deletion-first DomainModeling proposal (names, host-owned meaning, pass collapse). **Not CURRENT** |
+| [`grammar-cycle-2026-08-14.md`](grammar-cycle-2026-08-14.md) · [`gcyc-*`](simple-agent-tasks/gcyc-README.md) | Grammar as the parse/print cycle; delete RD/print hoops. **Not CURRENT** until admitted |
+| [`domainmodeling-cleanup-inventory-2026-08-15.md`](domainmodeling-cleanup-inventory-2026-08-15.md) | Excess-complexity inventory (session vs host, analysis DTO passes, leftover pack names). Identification, not CURRENT |
+| [`domainmodeling-metadata-artifact-catalog-2026-08-15.md`](domainmodeling-metadata-artifact-catalog-2026-08-15.md) | Every analysis bag + artifact path; who writes/reads; library extension gaps. Identification, not CURRENT |
+| [`domainmodeling-session-is-the-compile-2026-08-15.md`](domainmodeling-session-is-the-compile-2026-08-15.md) | Session is the compile (coordinator). Proposal, not CURRENT |
+| [`domainmodeling-extension-architecture-2026-08-15.md`](domainmodeling-extension-architecture-2026-08-15.md) | Best extension arch: four surfaces on DomainSession. Supersedes the extension half. Not CURRENT |
 | [`fleet-eval-fixes-2026-08-12.md`](fleet-eval-fixes-2026-08-12.md) | Probe-finding execution checklist (P0–P7). Do not CURRENT beside an overlapping `e2e-*` |
 
 ---

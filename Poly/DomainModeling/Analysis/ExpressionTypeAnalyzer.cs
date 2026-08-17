@@ -22,7 +22,7 @@ internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
     public const string Id = "DomainExpressionType";
     public string PassName => Id;
     // Lint-only: reads domain + entity structure; publishes no bags.
-    public string[] Dependencies => [SemanticDomainAnalyzer.Id];
+    public string[] Dependencies => [DomainCatalogPass.Id];
 
     public void Analyze(AnalysisContext context, Node node) {
         if (!context.ShouldAnalyze(node))
@@ -84,7 +84,7 @@ internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
             : null;
 
     private static Dictionary<string, EnumType> ResolveEnums(AnalysisContext context) {
-        var lookup = context.GetMetadata<DomainTypeLookupMetadata>(default);
+        var lookup = context.GetTypeLookup();
         if (lookup?.Domain is not { } domain) return new(StringComparer.Ordinal);
         return domain.Types.OfType<EnumType>()
             .ToDictionary(e => e.Name, StringComparer.Ordinal);
@@ -122,7 +122,7 @@ internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
                 break;
             case ConditionalEffect cond:
                 WalkExpression(context, cond.Condition, props, parameters, enumTypes);
-                var condType = InferType(cond.Condition, props, parameters, enumTypes);
+                var condType = InferType(cond.Condition, props, parameters, enumTypes, MeaningOf(context));
                 if (condType.Category is not (TypeCategory.Boolean or TypeCategory.Unknown))
                     Report(context, cond.Condition,
                         $"if-condition must be Boolean (got '{Describe(condType)}')");
@@ -180,7 +180,7 @@ internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
                 // entity's property.
                 var inferred = binderName is not null && BindsToBinder(binding.Expression, binderName)
                     ? InferBinderExpressionType(context, targetEntityName, binderName, binding.Expression, enumTypes)
-                    : InferLiteralAware(binding.Expression, paramType, enumTypes, callerProps, parameters);
+                    : InferLiteralAware(binding.Expression, paramType, enumTypes, callerProps, parameters, MeaningOf(context));
                 var targetCategory = CategoryOf(paramType, enumTypes);
                 if (inferred.Category is not TypeCategory.Unknown
                     && targetCategory is not TypeCategory.Unknown
@@ -237,7 +237,7 @@ internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
 
     private static string? ResolveTargetPropType(AnalysisContext context, string? targetEntityName, string propName) {
         if (targetEntityName is null) return null;
-        var lookup = context.GetMetadata<DomainTypeLookupMetadata>(default);
+        var lookup = context.GetTypeLookup();
         var entity = lookup?.Domain?.Types.OfType<Entity>()
             .FirstOrDefault(e => string.Equals(e.Name, targetEntityName, StringComparison.Ordinal));
         return entity?.Properties.FirstOrDefault(p => string.Equals(p.Name, propName, StringComparison.Ordinal))?.Type.TypeName;
@@ -259,7 +259,7 @@ internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
         string callerEntityName,
         string? relationshipName,
         string actionName) {
-        var lookup = context.GetMetadata<DomainTypeLookupMetadata>(default);
+        var lookup = context.GetTypeLookup();
         if (lookup?.Domain is not { } domain) return null;
 
         var calleeEntityName = ResolveCalleeEntityName(context, callerEntityName, relationshipName);
@@ -306,16 +306,16 @@ internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
 
     private static string? ResolveRelationshipTargetTypeName(
         AnalysisContext context, string callerEntityName, string relationshipName) {
-        var lookup = context.GetMetadata<DomainTypeLookupMetadata>(default);
-        var relationship = lookup?.Domain?.Relationships.FirstOrDefault(r =>
-            string.Equals(r.Source.TypeName, callerEntityName, StringComparison.Ordinal)
-            && string.Equals(r.Name, relationshipName, StringComparison.Ordinal));
-        return relationship?.Target.TypeName;
+        var lookup = context.GetRelationshipLookup();
+        return lookup is not null
+            && lookup.TryGetRelationship(callerEntityName, relationshipName, out var relationship)
+            ? relationship.Target.TypeName
+            : null;
     }
 
     private static Dictionary<string, string>? ResolveEntityProps(AnalysisContext context, string entityTypeName) {
         // Catalog lookup (name → type) — no linear domain.Types scan (round5 F7).
-        var lookup = context.GetMetadata<DomainTypeLookupMetadata>(default);
+        var lookup = context.GetTypeLookup();
         if (lookup is null || !lookup.Types.TryGetValue(entityTypeName, out var type) || type is not Entity entity)
             return null;
         return entity.Properties
@@ -347,7 +347,7 @@ internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
                 CheckNumericArithmetic(context, div.Left, div.Right, props, parameters, enumTypes);
                 return;
             case Not not:
-                var operand = InferType(not.Operand, props, parameters, enumTypes);
+                var operand = InferType(not.Operand, props, parameters, enumTypes, MeaningOf(context));
                 if (operand.Category is not (TypeCategory.Boolean or TypeCategory.Unknown))
                     Report(context, expr, $"'not' requires a Boolean operand (got '{Describe(operand)}')");
                 WalkExpression(context, not.Operand, props, parameters, enumTypes);
@@ -365,7 +365,7 @@ internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
             default:
                 // Pack-owned expression subtypes (temporal DateOperation, …) validate through
                 // the ambient check registry; the generic child walk continues below either way.
-                ExpressionTypeCheckRegistry.Default.TryCheck(
+                MeaningOf(context).Checks.TryCheck(
                     context, expr, new ExpressionTypeCheckScope(props, parameters, enumTypes));
                 foreach (var child in expr.Children.OfType<DomainExpression>())
                     WalkExpression(context, child, props, parameters, enumTypes);
@@ -377,8 +377,8 @@ internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
         AnalysisContext context, DomainExpression left, DomainExpression right,
         Dictionary<string, string> props, Dictionary<string, string>? parameters,
         Dictionary<string, EnumType> enumTypes) {
-        var leftType = InferType(left, props, parameters, enumTypes);
-        var rightType = InferType(right, props, parameters, enumTypes);
+        var leftType = InferType(left, props, parameters, enumTypes, MeaningOf(context));
+        var rightType = InferType(right, props, parameters, enumTypes, MeaningOf(context));
         // numeric + numeric, date + number (AddDays lowering), or date + duration
         // (a parsed `N days` offset with a temporal left operand); Unknown operands
         // (path-prefix reads, peer binders) are out of this scope — skip. A duration
@@ -398,8 +398,8 @@ internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
         AnalysisContext context, DomainExpression left, DomainExpression right,
         Dictionary<string, string> props, Dictionary<string, string>? parameters,
         Dictionary<string, EnumType> enumTypes) {
-        var leftType = InferType(left, props, parameters, enumTypes);
-        var rightType = InferType(right, props, parameters, enumTypes);
+        var leftType = InferType(left, props, parameters, enumTypes, MeaningOf(context));
+        var rightType = InferType(right, props, parameters, enumTypes, MeaningOf(context));
         if (leftType.Category is not TypeCategory.Unknown && rightType.Category is not TypeCategory.Unknown
             && (!IsNumeric(leftType.Category) || !IsNumeric(rightType.Category)))
             Report(context, left,
@@ -412,8 +412,8 @@ internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
         AnalysisContext context, DomainExpression left, DomainExpression right,
         Dictionary<string, string> props, Dictionary<string, string>? parameters,
         Dictionary<string, EnumType> enumTypes) {
-        var leftType = InferType(left, props, parameters, enumTypes);
-        var rightType = InferType(right, props, parameters, enumTypes);
+        var leftType = InferType(left, props, parameters, enumTypes, MeaningOf(context));
+        var rightType = InferType(right, props, parameters, enumTypes, MeaningOf(context));
         if (leftType.Category is not (TypeCategory.Boolean or TypeCategory.Unknown)
             || rightType.Category is not (TypeCategory.Boolean or TypeCategory.Unknown))
             Report(context, left,
@@ -428,8 +428,8 @@ internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
         Dictionary<string, string> props,
         Dictionary<string, string>? parameters,
         Dictionary<string, EnumType> enumTypes) {
-        var left = InferType(cmp.Left, props, parameters, enumTypes);
-        var right = InferType(cmp.Right, props, parameters, enumTypes);
+        var left = InferType(cmp.Left, props, parameters, enumTypes, MeaningOf(context));
+        var right = InferType(cmp.Right, props, parameters, enumTypes, MeaningOf(context));
 
         // enum member literal validity: Enum prop compared to a string must be a member
         if (left.Category is TypeCategory.Enum && cmp.Right is Literal { Value: string s })
@@ -456,7 +456,7 @@ internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
         if (value is PropertyAccess { Name: "Now" or "UtcNow" or "Today" or "Guid" } kw)
             CheckDefault(context, kw, targetTypeName, enumTypes);
 
-        var inferred = InferLiteralAware(value, targetTypeName, enumTypes, props, parameters);
+        var inferred = InferLiteralAware(value, targetTypeName, enumTypes, props, parameters, MeaningOf(context));
         var targetCategory = CategoryOf(targetTypeName, enumTypes);
         // Bare non-member enum identifier on an enum-typed target: a PropertyAccess that is
         // neither an enum member nor an entity property resolves to Unknown — reject at
@@ -490,7 +490,7 @@ internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
                 CheckEnumMember(context, expr, propTypeName, s, enumTypes);
                 return;
             case Literal lit:
-                var inferred = InferType(expr, null, null, enumTypes);
+                var inferred = InferType(expr, null, null, enumTypes, MeaningOf(context));
                 if (!Compatible(inferred, new TypeInfo(targetCategory, propTypeName)))
                     Report(context, expr,
                         $"default value of type '{Describe(inferred)}' is not compatible with property type '{propTypeName}'");
@@ -515,7 +515,7 @@ internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
             default:
                 // Pack-owned default expressions (temporal Now/Today/Duration, …) validate
                 // through the ambient check registry, which knows the target property type.
-                ExpressionTypeCheckRegistry.Default.TryCheck(
+                MeaningOf(context).Checks.TryCheck(
                     context, expr, new ExpressionTypeCheckScope(
                         new Dictionary<string, string>(StringComparer.Ordinal), null, enumTypes,
                         DefaultTargetTypeName: propTypeName));
@@ -542,7 +542,8 @@ internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
     private readonly record struct TypeInfo(TypeCategory Category, string? TypeName = null);
 
     private static TypeInfo InferLiteralAware(DomainExpression expr, string targetTypeName, Dictionary<string, EnumType> enumTypes,
-        Dictionary<string, string>? props = null, Dictionary<string, string>? parameters = null) {
+        Dictionary<string, string>? props = null, Dictionary<string, string>? parameters = null,
+        ExpressionMeaning? meaning = null) {
         // For the assign RHS / default check, a bare enum-member identifier (PropertyAccess)
         // is valid when the target is enum-typed and the name is a member.
         if (expr is PropertyAccess pa && CategoryOf(targetTypeName, enumTypes) is TypeCategory.Enum) {
@@ -550,14 +551,15 @@ internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
                 && enumType.MemberNames.Contains(pa.Name, StringComparer.Ordinal))
                 return new(TypeCategory.Enum, targetTypeName);
         }
-        return InferType(expr, props, parameters, enumTypes);
+        return InferType(expr, props, parameters, enumTypes, meaning);
     }
 
     private static TypeInfo InferType(
         DomainExpression expr,
         Dictionary<string, string>? props,
         Dictionary<string, string>? parameters,
-        Dictionary<string, EnumType> enumTypes) => expr switch {
+        Dictionary<string, EnumType> enumTypes,
+        ExpressionMeaning? meaning = null) => expr switch {
             PropertyAccess pa => ResolvePropertyType(pa.Name, props, parameters) is { } pt
                 ? new(CategoryOf(pt, enumTypes), pt)
                 : new(TypeCategory.Unknown),
@@ -570,16 +572,17 @@ internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
             Literal { Value: long or int or double or float or decimal or short or byte } => new(TypeCategory.Number),
             Exists or NotExists or AnyExpr or AllExpr or NoneExpr or Comparison or And or Or or Not => new(TypeCategory.Boolean),
             CountExpr => new(TypeCategory.Number),
-            _ => InferPackOwned(expr),
+            _ => InferPackOwned(expr, meaning ?? ExpressionMeaning.Empty),
         };
 
+    private static ExpressionMeaning MeaningOf(AnalysisContext context) =>
+        ExpressionMeaning.For(context.GetTypeLookup()?.Domain);
+
     /// <summary>
-    /// Routes pack-owned expression IR (temporal Now/Today/DateOperation/Duration) to the
-    /// ambient type-inference dispatch registry — core never names pack types.
+    /// Routes pack-owned expression IR to the session inference table — core never names pack types.
     /// </summary>
-    private static TypeInfo InferPackOwned(DomainExpression expr) {
-        var registry = ExpressionDispatchRegistry<TypeCategory>.Default;
-        if (registry.TryDispatch(expr, _ => TypeCategory.Unknown, out var category)) {
+    private static TypeInfo InferPackOwned(DomainExpression expr, ExpressionMeaning meaning) {
+        if (meaning.Inference.TryDispatch(expr, _ => TypeCategory.Unknown, out var category)) {
             return category switch {
                 TypeCategory.Date => new(TypeCategory.Date, "Date"),
                 TypeCategory.Duration => new(TypeCategory.Duration, "duration"),

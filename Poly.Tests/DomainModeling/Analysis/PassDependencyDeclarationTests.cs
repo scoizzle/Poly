@@ -36,32 +36,26 @@ public class PassDependencyDeclarationTests {
 
     [Test]
     public async Task FactConsumerPasses_DeclareKnownDependencies() {
-        AssertDeclares(new DomainCatalogPass(), SemanticDomainAnalyzer.Id);
-        AssertDeclares(new RuntimeContractAnalyzer(), SemanticDomainAnalyzer.Id);
-        AssertDeclares(new RequiredPropertiesPass(), SemanticDomainAnalyzer.Id);
-        AssertDeclares(new PolicyConstraintAnalyzer(), SemanticDomainAnalyzer.Id); // lint pack
-        AssertDeclares(new ConstraintPropagationAnalyzer()); // root fact publisher
-        AssertDeclares(new EffectFactsPass(), SemanticDomainAnalyzer.Id);
+        AssertDeclares(new DomainCatalogPass());
+        AssertDeclares(new RuntimeContractAnalyzer(), DomainCatalogPass.Id);
+        AssertDeclares(new RequiredPropertiesPass(), DomainCatalogPass.Id);
+        AssertDeclares(new PolicyConstraintAnalyzer(), DomainCatalogPass.Id);
+        AssertDeclares(new ConstraintPropagationAnalyzer());
+        AssertDeclares(new EffectFactsPass(), DomainCatalogPass.Id);
         AssertDeclares(
-            new EffectAnalyzer(), // lint pack
-            SemanticDomainAnalyzer.Id,
+            new EffectAnalyzer(),
             DomainCatalogPass.Id,
             RequiredPropertiesPass.Id,
             ConstraintPropagationAnalyzer.Id);
         AssertDeclares(
             new CapabilityAnalyzer(),
-            SemanticDomainAnalyzer.Id,
             DomainCatalogPass.Id);
-        AssertDeclares(new EntityStructureAnalyzer(), SemanticDomainAnalyzer.Id);
+        AssertDeclares(new EntityStructureAnalyzer(), DomainCatalogPass.Id);
         AssertDeclares(new EffectTopologyPass()); // pure tree scan
         AssertDeclares(
             new OwnershipAggregatePass(),
             EffectTopologyPass.Id,
             EntityStructureAnalyzer.Id);
-        AssertDeclares(
-            new BehaviorPass(),
-            SemanticDomainAnalyzer.Id,
-            CapabilityAnalyzer.Id);
         AssertDeclares(new CrossReferencePass(), EffectTopologyPass.Id);
         AssertDeclares(
             new StoragePass(),
@@ -72,15 +66,14 @@ public class PassDependencyDeclarationTests {
         AssertDeclares(new RuleCoverageAnalyzer(), RequiredPropertiesPass.Id);
         AssertDeclares(
             new SubscriptionAnalyzer(),
-            SemanticDomainAnalyzer.Id,
+            DomainCatalogPass.Id,
             CapabilityAnalyzer.Id);
-        AssertDeclares(new ConstraintQualityAnalyzer(), SemanticDomainAnalyzer.Id);
-        AssertDeclares(new AuthoringSuggestionAnalyzer(), SemanticDomainAnalyzer.Id);
+        AssertDeclares(new ConstraintQualityAnalyzer(), DomainCatalogPass.Id);
+        AssertDeclares(new AuthoringSuggestionAnalyzer(), DomainCatalogPass.Id);
 
-        // Spot-check: catalog must not silently depend on RuntimeContract (not read).
         var catalogDeps = new DomainCatalogPass().Dependencies;
         await Assert.That(catalogDeps.Contains(RuntimeContractAnalyzer.Id)).IsFalse();
-        await Assert.That(catalogDeps.Contains(SemanticDomainAnalyzer.Id)).IsTrue();
+        await Assert.That(catalogDeps.Length).IsEqualTo(0);
     }
 
     [Test]
@@ -107,14 +100,13 @@ public class PassDependencyDeclarationTests {
         }
 
         // Catalog / structure / topology consumers after their publishers
-        await Assert.That(Index(SemanticDomainAnalyzer.Id)).IsLessThan(Index(DomainCatalogPass.Id));
+        await Assert.That(Index(StructuralDomainAnalyzer.Id)).IsLessThan(Index(DomainCatalogPass.Id));
         await Assert.That(Index(DomainCatalogPass.Id)).IsLessThan(Index(CapabilityAnalyzer.Id));
-        await Assert.That(Index(SemanticDomainAnalyzer.Id)).IsLessThan(Index(EntityStructureAnalyzer.Id));
+        await Assert.That(Index(DomainCatalogPass.Id)).IsLessThan(Index(EntityStructureAnalyzer.Id));
         await Assert.That(Index(EffectTopologyPass.Id)).IsLessThan(Index(OwnershipAggregatePass.Id));
         await Assert.That(Index(EntityStructureAnalyzer.Id)).IsLessThan(Index(OwnershipAggregatePass.Id));
         await Assert.That(Index(OwnershipAggregatePass.Id)).IsLessThan(Index(StoragePass.Id));
         await Assert.That(Index(EffectTopologyPass.Id)).IsLessThan(Index(CrossReferencePass.Id));
-        await Assert.That(Index(CapabilityAnalyzer.Id)).IsLessThan(Index(BehaviorPass.Id));
         await Assert.That(Index(ConstraintPropagationAnalyzer.Id)).IsLessThan(Index(EffectAnalyzer.Id));
         await Assert.That(Index(RequiredPropertiesPass.Id)).IsLessThan(Index(EffectAnalyzer.Id));
         await Assert.That(Index(RequiredPropertiesPass.Id)).IsLessThan(Index(RuleCoverageAnalyzer.Id));

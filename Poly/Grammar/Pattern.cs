@@ -12,8 +12,12 @@ public sealed class Pattern<TToken, TTokenKind>
 
     public IReadOnlyList<IPatternElement<TToken, TTokenKind>> Elements { get; }
 
-    public Pattern(string name, IReadOnlyList<IPatternElement<TToken, TTokenKind>> elements) {
+    /// <summary>Higher wins a longest-match tie. Default 0.</summary>
+    public int Priority { get; }
+
+    public Pattern(string name, IReadOnlyList<IPatternElement<TToken, TTokenKind>> elements, int priority = 0) {
         Name = name ?? throw new ArgumentNullException(nameof(name));
         Elements = elements ?? throw new ArgumentNullException(nameof(elements));
+        Priority = priority;
     }
 }

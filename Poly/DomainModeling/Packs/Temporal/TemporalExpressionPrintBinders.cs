@@ -14,6 +14,27 @@ namespace Poly.DomainModeling.Packs.Temporal;
 /// surface; the <c>date-operation</c> rule is the DateOperation print table.
 /// </summary>
 public static class TemporalExpressionPrintBinders {
+    /// <summary>Registers Now/Today/Duration folds on the session fold table.</summary>
+    public static void RegisterFolds(ExpressionFoldTable table) {
+        ArgumentNullException.ThrowIfNull(table);
+        foreach (var rule in new[] { "expr-primary", "expr-primary-no-not" }) {
+            table.Register(rule, "now", _ => new Now());
+            table.Register(rule, "today", _ => new Today());
+            table.Register(rule, "duration", FoldDuration);
+        }
+    }
+
+    private static DomainExpression FoldDuration(MatchResult<DslToken, DslTokenKind> match) {
+        if (!match.Captures.TryGetValue("amount", out var amounts) || amounts.Count == 0
+            || !match.Captures.TryGetValue("unit", out var units) || units.Count == 0)
+            throw new InvalidOperationException("Duration match is missing amount/unit captures.");
+        if (!long.TryParse(amounts[0].Text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var amount))
+            throw new InvalidOperationException($"Duration amount '{amounts[0].Text}' is not an integer.");
+        if (!DurationForm.TryGetUnit(units[0].Text, out var unit))
+            throw new InvalidOperationException($"Unknown duration unit '{units[0].Text}'.");
+        return new Duration(amount, unit);
+    }
+
     /// <summary>Registers the temporal print binders on a pack's expression forms.</summary>
     public static void Register(ExpressionFormRegistry forms) {
         ArgumentNullException.ThrowIfNull(forms);
@@ -27,25 +48,23 @@ public static class TemporalExpressionPrintBinders {
     /// rules, and the DateOperation spell rule. Recognition only — folding stays the
     /// RD parse forms' job (pack-host lock 13, cited gap).
     /// </summary>
-    public static void ContributeGrammarPatterns(Grammar<DslToken, DslTokenKind> g) {
+    public static void ContributeGrammarPatterns(GrammarBuilder<DslToken, DslTokenKind> g) {
         ArgumentNullException.ThrowIfNull(g);
         foreach (var rule in new[] { "expr-primary", "expr-primary-no-not" }) {
             g.Define(rule)
-                .Pattern("now").Predicate(IsNowIdentifier, "now-identifier").Optional(DslTokenKind.Comma).Commit();
-            g.Define(rule)
-                .Pattern("today").Predicate(IsTodayIdentifier, "today-identifier").Optional(DslTokenKind.Comma).Commit();
-            g.Define(rule)
-                .Pattern("duration").Value(DslTokenKind.Number).Value(DslTokenKind.Identifier).Commit();
+                .Pattern("now", priority: 1).Predicate(IsNowIdentifier, "now").Commit()
+                .Pattern("today", priority: 1).Predicate(IsTodayIdentifier, "today").Commit()
+                .Pattern("duration").Value(DslTokenKind.Number, "amount").Predicate(IsDurationUnitToken, "unit").Commit();
         }
 
         g.Define("date-operation")
             .Pattern("add")
                 .Ref("expr-primary").Kind(DslTokenKind.Plus)
-                .Value(DslTokenKind.Number).Value(DslTokenKind.Identifier)
+                .Value(DslTokenKind.Number, "amount").Predicate(IsDurationUnitToken, "unit")
                 .Commit()
             .Pattern("sub")
                 .Ref("expr-primary").Kind(DslTokenKind.Minus)
-                .Value(DslTokenKind.Number).Value(DslTokenKind.Identifier)
+                .Value(DslTokenKind.Number, "amount").Predicate(IsDurationUnitToken, "unit")
                 .Commit();
     }
 
@@ -57,6 +76,9 @@ public static class TemporalExpressionPrintBinders {
         t.Kind == DslTokenKind.Identifier
         && string.Equals(t.Text, "Today", StringComparison.Ordinal);
 
+    internal static bool IsDurationUnitToken(DslToken t) =>
+        t.Kind == DslTokenKind.Identifier && DurationForm.TryGetUnit(t.Text, out _);
+
     /// <summary>Prints <see cref="Now"/> as the <c>Now</c> primary.</summary>
     private sealed class NowBinder : IExpressionPrintMapping {
         public Type ExpressionType => typeof(Now);
@@ -66,11 +88,10 @@ public static class TemporalExpressionPrintBinders {
                 binding = default;
                 return false;
             }
-            var at = 0;
-            binding = new PrintMapping("expr-primary", "now", ctx => {
-                if (at++ == 0)
-                    ctx.Emit("Now");
-            });
+            binding = new PrintMapping(
+                "expr-primary",
+                "now",
+                NamedFills: new Dictionary<string, string>(StringComparer.Ordinal) { ["now"] = "Now" });
             return true;
         }
     }
@@ -84,11 +105,10 @@ public static class TemporalExpressionPrintBinders {
                 binding = default;
                 return false;
             }
-            var at = 0;
-            binding = new PrintMapping("expr-primary", "today", ctx => {
-                if (at++ == 0)
-                    ctx.Emit("Today");
-            });
+            binding = new PrintMapping(
+                "expr-primary",
+                "today",
+                NamedFills: new Dictionary<string, string>(StringComparer.Ordinal) { ["today"] = "Today" });
             return true;
         }
     }
@@ -120,20 +140,14 @@ public static class TemporalExpressionPrintBinders {
             };
 
             var pattern = isSubtract ? "sub" : "add";
-            var at = 0;
-            binding = new PrintMapping("date-operation", pattern, ctx => {
-                switch (at++) {
-                    case 0:
-                        EmitDate(ctx, dOp.Date);
-                        return;
-                    case 1:
-                        ctx.Emit(amount.ToString(CultureInfo.InvariantCulture));
-                        return;
-                    case 2:
-                        ctx.Emit(unit);
-                        return;
-                }
-            });
+            binding = new PrintMapping(
+                "date-operation",
+                pattern,
+                Fill: ctx => EmitDate(ctx, dOp.Date),
+                NamedFills: new Dictionary<string, string>(StringComparer.Ordinal) {
+                    ["amount"] = amount.ToString(CultureInfo.InvariantCulture),
+                    ["unit"] = unit,
+                });
             return true;
         }
 

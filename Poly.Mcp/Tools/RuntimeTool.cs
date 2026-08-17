@@ -5,6 +5,7 @@ using System.Text.Json.Serialization;
 using ModelContextProtocol.Server;
 
 using Poly.DomainModeling;
+using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Queries;
 using Poly.Mcp.Sessions;
@@ -248,7 +249,7 @@ Use case — Collection quantifiers:
         // Validate relationship exists in domain model and entity ends match.
         // Relationship identity is (source entity, name); the instances disambiguate
         // a name declared on multiple source entities.
-        var relationship = state.Domain.Relationships
+        var relationship = (state.LatestAnalysis?.GetAllRelationships(state.Domain) ?? [])
             .FirstOrDefault(r => string.Equals(r.Name, relationshipName, StringComparison.Ordinal)
                 && (string.Equals(r.Source.TypeName, source.Entity.Name, StringComparison.Ordinal)
                     || string.Equals(r.Target.TypeName, source.Entity.Name, StringComparison.Ordinal)));
@@ -256,7 +257,7 @@ Use case — Collection quantifiers:
             return new DomainToolResponse(
                 Success: false,
                 Message: $"Relationship '{relationshipName}' not found in domain '{state.Domain.Name}'. " +
-                    $"Available: {string.Join(", ", state.Domain.Relationships.Select(r => r.Name))}.",
+                    $"Available: {string.Join(", ", (state.LatestAnalysis?.GetAllRelationships(state.Domain) ?? []).Select(r => r.Name))}.",
                 SessionId: sessionId,
                 Affordances: ["get_relationships"]);
 
@@ -358,7 +359,7 @@ Use case — reassign a child from one parent to another:
         // Validate relationship exists in domain model and entity ends match.
         // Relationship identity is (source entity, name); the instances disambiguate
         // a name declared on multiple source entities.
-        var relationship = state.Domain.Relationships
+        var relationship = (state.LatestAnalysis?.GetAllRelationships(state.Domain) ?? [])
             .FirstOrDefault(r => string.Equals(r.Name, relationshipName, StringComparison.Ordinal)
                 && (string.Equals(r.Source.TypeName, source.Entity.Name, StringComparison.Ordinal)
                     || string.Equals(r.Target.TypeName, source.Entity.Name, StringComparison.Ordinal)));
@@ -366,7 +367,7 @@ Use case — reassign a child from one parent to another:
             return new DomainToolResponse(
                 Success: false,
                 Message: $"Relationship '{relationshipName}' not found in domain '{state.Domain.Name}'. " +
-                    $"Available: {string.Join(", ", state.Domain.Relationships.Select(r => r.Name))}.",
+                    $"Available: {string.Join(", ", (state.LatestAnalysis?.GetAllRelationships(state.Domain) ?? []).Select(r => r.Name))}.",
                 SessionId: sessionId,
                 Affordances: ["get_relationships"]);
 
@@ -451,7 +452,7 @@ Use case — reassign a child from one parent to another:
         var navs = new List<NavigationLinkData>();
         if (state.InstanceStore is not null) {
             var entityName = instance.Entity.Name;
-            foreach (var rel in state.Domain.Relationships) {
+            foreach (var rel in state.LatestAnalysis?.GetAllRelationships(state.Domain) ?? []) {
                 var isSource = string.Equals(rel.Source.TypeName, entityName, StringComparison.Ordinal);
                 var isTarget = string.Equals(rel.Target.TypeName, entityName, StringComparison.Ordinal);
                 if (!isSource && !isTarget) continue;

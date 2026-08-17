@@ -33,7 +33,7 @@ internal sealed record StageCapabilityMetadata(StageCapabilityView View) : IAnal
 internal sealed class CapabilityAnalyzer : INodeAnalyzer {
     public const string Id = "DomainCapabilityAnalyzer";
     public string PassName => Id;
-    public string[] Dependencies => [SemanticDomainAnalyzer.Id, DomainCatalogPass.Id];
+    public string[] Dependencies => [DomainCatalogPass.Id];
 
     public void Analyze(AnalysisContext context, Node node) {
         if (!context.ShouldAnalyze(node)) {
@@ -72,7 +72,7 @@ internal sealed class CapabilityAnalyzer : INodeAnalyzer {
 
     private static void AnalyzeAction(AnalysisContext context, Action action) {
         var ownerEntity = context.GetMetadata<OwnerEntityMetadata>(action)?.Owner;
-        Domain? domain = context.GetMetadata<DomainTypeLookupMetadata>(default)?.Domain;
+        Domain? domain = context.GetTypeLookup()?.Domain;
         AnalyzeAction(context, action, domain, ownerEntity, ownerEntity?.Policies ?? Array.Empty<Policy>());
     }
 

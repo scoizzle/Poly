@@ -1,3 +1,4 @@
+using Poly.DomainModeling;
 using Poly.DomainModeling.Packs;
 
 namespace Poly.Packs.MySql;
@@ -8,8 +9,8 @@ namespace Poly.Packs.MySql;
 public sealed class MySqlLibrary : IDomainLibrary {
     public string Id => "mysql";
 
-    public void Register(HostSurfaces surfaces) {
-        ArgumentNullException.ThrowIfNull(surfaces);
-        MySqlDefaults.ApplyTypeMaps(surfaces.TypeMaps);
+    public void Register(DomainHostBuilder builder) {
+        ArgumentNullException.ThrowIfNull(builder);
+        MySqlDefaults.ApplyTypeMaps(builder.TypeMaps);
     }
 }

@@ -9,9 +9,9 @@ namespace Poly.DomainModeling.Packs;
 public sealed class StorageFacetLibrary : IDomainLibrary {
     public string Id => "storage";
 
-    public void Register(HostSurfaces surfaces) {
-        ArgumentNullException.ThrowIfNull(surfaces);
-        surfaces.Annotations.Register(new ColumnAnnotationSyntax());
-        surfaces.Annotations.Register(new TableAnnotationSyntax());
+    public void Register(DomainHostBuilder builder) {
+        ArgumentNullException.ThrowIfNull(builder);
+        builder.Annotations.Register(new ColumnAnnotationSyntax());
+        builder.Annotations.Register(new TableAnnotationSyntax());
     }
 }

@@ -11,10 +11,15 @@ namespace Poly.DomainModeling.Parsing;
 public sealed class DslExpressionParser {
     private readonly IDslParseCursor _c;
     private readonly ExpressionFormRegistry _forms;
+    private readonly ExpressionFoldTable _folds;
 
-    public DslExpressionParser(IDslParseCursor cursor, ExpressionFormRegistry? forms = null) {
+    public DslExpressionParser(
+        IDslParseCursor cursor,
+        ExpressionFormRegistry? forms = null,
+        ExpressionFoldTable? folds = null) {
         _c = cursor ?? throw new ArgumentNullException(nameof(cursor));
         _forms = forms ?? new ExpressionFormRegistry();
+        _folds = folds ?? ExpressionFoldTable.Core();
     }
 
     public DomainExpression ParseExpression() => ParseOr();
@@ -104,8 +109,11 @@ public sealed class DslExpressionParser {
     }
 
     private DomainExpression ParsePrimary() {
-        if (_forms.TryParsePrimary(_c, this, out var specialized))
-            return specialized;
+        if (_c.MatchRule("expr-primary") is { } matched
+            && _folds.TryFold("expr-primary", matched, out var folded)) {
+            Consume(matched);
+            return folded;
+        }
 
         switch (_c.Current.Kind) {
             case DslTokenKind.Number:

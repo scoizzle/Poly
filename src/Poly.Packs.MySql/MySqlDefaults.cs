@@ -1,4 +1,3 @@
-using Poly.DomainModeling;
 using Poly.DomainModeling.Lowering;
 
 namespace Poly.Packs.MySql;
@@ -11,18 +10,9 @@ namespace Poly.Packs.MySql;
 /// <c>Boolean</c> → <c>tinyint(1)</c>, <c>DateTime</c> → <c>datetime(6)</c>,
 /// etc.
 ///
-/// Usage:
-/// <code>
-/// var inputs = DomainHostBuilder.Create().WithStorageFacets()
-///     .AddMySqlDefaults();
-/// </code>
+/// Load via <c>builder.Load(new MySqlLibrary())</c>.
 /// </summary>
 public static class MySqlDefaults {
-    public static DomainHostBuilder AddMySqlDefaults(this DomainHostBuilder builder) {
-        ArgumentNullException.ThrowIfNull(builder);
-        return builder.Load(new MySqlLibrary());
-    }
-
     public static void ApplyTypeMaps(TypeMappingRegistry registry) {
         ArgumentNullException.ThrowIfNull(registry);
 

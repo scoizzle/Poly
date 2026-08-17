@@ -76,7 +76,9 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     internal static Func<string, string> BuildNavigationNameResolver(
         Entity entity, Domain? domain, INodeMetadataProvider? analysis) {
         if (analysis is not null) {
-            var rlm = analysis.GetMetadata<RelationshipLookupMetadata>(default);
+            var rlm = domain is not null
+                ? analysis.GetRelationshipLookup(domain)
+                : analysis.GetRelationshipLookup();
             if (rlm is not null) {
                 return name => rlm.TryGetRelationship(entity.Name, name, out var rel)
                         ? DomainToCSharpExporter.ToPascalCase(name)
@@ -104,7 +106,9 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     internal static Func<string, bool> BuildIsCollectionNavigation(
         Entity entity, Domain? domain, INodeMetadataProvider? analysis) {
         if (analysis is not null) {
-            var rlm = analysis.GetMetadata<RelationshipLookupMetadata>(default);
+            var rlm = domain is not null
+                ? analysis.GetRelationshipLookup(domain)
+                : analysis.GetRelationshipLookup();
             if (rlm is not null) {
                 return name => rlm.TryGetRelationship(entity.Name, name, out var rel)
                     && rel.Cardinality is RelationshipCardinality.OneToMany or RelationshipCardinality.ManyToMany;
@@ -382,7 +386,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
             var targetEntity = _domain.Types.OfType<Entity>()
                 .FirstOrDefault(t => string.Equals(t.Name, targetName, StringComparison.Ordinal));
             if (targetEntity is not null && _analysis is not null) {
-                var esm = _analysis.GetMetadata<EntityStructureMetadata>(targetEntity);
+                var esm = _analysis.GetStructure(targetEntity);
                 if (esm?.StageEnumTypeName is { } custom) return custom;
             }
             if (targetEntity is not null && targetEntity.Stages.Count > 0)
@@ -597,11 +601,12 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     /// <c>Guid.NewGuid().ToString()</c> on a Text target.
     /// Returns null for literal defaults (handled directly by the exporter).
     /// </summary>
-    internal static Node? LowerDefaultExpression(DomainExpression expr, Node? typeHint = null) {
+    internal static Node? LowerDefaultExpression(
+        DomainExpression expr,
+        Node? typeHint = null,
+        ExpressionMeaning? meaning = null) {
         var targetName = typeHint is NamedTypeReference ntr ? ntr.TypeName : null;
-        // Pack-owned clock nodes (Now/Today) lower through the ambient default registry —
-        // core never names pack IR.
-        if (ExpressionDefaultResolverRegistry.Default.TryResolve(expr, targetName, out _, out var exportNode))
+        if ((meaning ?? ExpressionMeaning.Empty).Defaults.TryResolve(expr, targetName, out _, out var exportNode))
             return exportNode;
         if (expr is not PropertyAccess pa) return null;
         bool isDateTimeTarget = targetName is "DateTime" or "Timestamp";
@@ -739,7 +744,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
 
     private IReadOnlyList<ConstructorParameterOrder> GetConstructorParameterOrder(Entity targetEntity) {
         if (_analysis is not null) {
-            if (_analysis.GetMetadata<EntityStructureMetadata>(targetEntity) is EntityStructureMetadata metadata)
+            if (_analysis.GetStructure(targetEntity) is EntityStructureMetadata metadata)
                 return metadata.ConstructorParameters;
 
             throw new InvalidOperationException(

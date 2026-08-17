@@ -126,11 +126,22 @@ public class DomainSemanticLookupFailClosedTests {
     }
 
     [Test]
-    public async Task TryGetStage_ReturnsFalse_WhenEsmMissing() {
+    public async Task TryGetStage_UsesCatalog_WhenEsmMissing() {
         var domain = BuildOrderDomain();
         var analysis = RuntimeAnalysisCache.GetOrAnalyze(domain);
         var order = (Entity)domain.Types[0];
         analysis.GetMetadataStore().Remove<EntityStructureMetadata>(order);
+
+        await Assert.That(analysis.TryGetStage(order, "Draft", out var stage)).IsTrue();
+        await Assert.That(stage!.Name).IsEqualTo("Draft");
+    }
+
+    [Test]
+    public async Task TryGetStage_ReturnsFalse_WhenCatalogMissing() {
+        var domain = BuildOrderDomain();
+        var analysis = RuntimeAnalysisCache.GetOrAnalyze(domain);
+        var order = (Entity)domain.Types[0];
+        analysis.GetMetadataStore().Remove<DomainCatalogMetadata>(domain);
 
         await Assert.That(analysis.TryGetStage(order, "Draft", out _)).IsFalse();
     }
@@ -256,19 +267,17 @@ public class DomainSemanticLookupFailClosedTests {
     }
 
     [Test]
-    public async Task GetEffectivePolicies_UsesCatalogIndex_WhenCapabilityStripped() {
+    public async Task GetEffectivePolicies_ReturnsEmpty_WhenCapabilityStripped() {
         var domain = BuildPolicyDomain();
         var analysis = RuntimeAnalysisCache.GetOrAnalyze(domain);
         var order = (Entity)domain.Types[0];
         var draft = order.Stages[0];
-        // Force catalog Index path (not StageCapability).
         analysis.GetMetadataStore().Remove<StageCapabilityMetadata>(draft);
 
-        await Assert.That(analysis.GetMetadata<MutationTargetIndexMetadata>(domain)).IsNull();
         await Assert.That(analysis.GetCatalog(domain)).IsNotNull();
         var policies = analysis.GetEffectivePolicies(domain, order, "Draft");
 
-        await Assert.That(policies.Count).IsEqualTo(2);
+        await Assert.That(policies).IsEmpty();
     }
 
     [Test]
@@ -288,8 +297,8 @@ public class DomainSemanticLookupFailClosedTests {
 
         var viaCatalog = analysis.GetEffectivePolicies(domain, order, "DoesNotExist");
         await Assert.That(viaCatalog).IsEmpty();
-        // Sanity: known stage still composes entity+stage policies via catalog.
-        await Assert.That(analysis.GetEffectivePolicies(domain, order, "Draft").Count).IsEqualTo(2);
+        // Known stage with capability stripped is empty — no catalog recomposition.
+        await Assert.That(analysis.GetEffectivePolicies(domain, order, "Draft")).IsEmpty();
     }
 
     [Test]

@@ -11,13 +11,9 @@ namespace Poly.DomainModeling.Analysis;
 internal sealed class EffectAnalyzer : INodeAnalyzer {
     public const string Id = "DomainEffectAnalyzer";
     public string PassName => Id;
-    // Lint-only: reads DTLM/ResolvedType (Semantic), catalog (DomainCatalogPass),
-    // RequiredProperties (facts), DownstreamConstraints (ConstraintPropagation).
-    // No metadata publication. Catalog dependency is declared (not accidental
-    // pipeline order) so a catalog-less pipeline cannot silently soft-skip
-    // domain-bound effect validation (review F1).
+    // Lint-only: reads catalog types/resolved refs, RequiredProperties,
+    // DownstreamConstraints. No metadata publication.
     public string[] Dependencies => [
-        SemanticDomainAnalyzer.Id,
         DomainCatalogPass.Id,
         RequiredPropertiesPass.Id,
         ConstraintPropagationAnalyzer.Id,
@@ -43,7 +39,7 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
             context.ReportStructuralFailure(
                 domain,
                 "Domain type lookup bag is unavailable; effect binding cannot be validated. " +
-                "Run a successful SemanticDomainAnalyzer before EffectAnalyzer.",
+                "Run DomainCatalogPass before EffectAnalyzer.",
                 DomainModelDiagnosticCodes.SemanticReferenceResolution);
             return;
         }
@@ -433,7 +429,7 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
                 // evaluates the binding into the child's value bag and the exporter
                 // wires it as a Create(...) nav parameter. Rejecting it here would
                 // contradict both (and the shipped demo).
-                if (targetProp is null && !IsSingularTargetNavigation(domain, targetEntity.Name, initializer.PropertyName)) {
+                if (targetProp is null && !IsSingularTargetNavigation(context, domain, targetEntity.Name, initializer.PropertyName)) {
                     context.ReportError(
                         initializer,
                         $"CreateEntityInstance initializer references unknown property '{initializer.PropertyName}' on entity '{targetEntity.Name}'.",
@@ -457,7 +453,7 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
             // P2′.2: Reject bare create of exclusively-owned entity types
             // An entity is exclusively-owned if it is only ever the target of SourceOwnsTarget relationships
             // and no relationship has it as source.
-            if (cei.RelationshipName is null && IsExclusivelyOwned(targetEntity, domain)) {
+            if (cei.RelationshipName is null && IsExclusivelyOwned(context, targetEntity, domain)) {
                 context.ReportError(
                     cei,
                     $"Cannot directly create '{targetEntity.Name}': it is exclusively owned by other entities. " +
@@ -516,12 +512,12 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
         }
     }
 
-    private static bool IsExclusivelyOwned(Entity entity, Domain domain) {
+    private static bool IsExclusivelyOwned(AnalysisContext context, Entity entity, Domain domain) {
         var entityName = entity.Name;
         bool isSource = false;
         bool isOwnedTarget = false;
 
-        foreach (var rel in domain.Relationships) {
+        foreach (var rel in context.GetAllRelationships(domain)) {
             if (string.Equals(rel.Source.TypeName, entityName, StringComparison.Ordinal)) {
                 isSource = true;
             }
@@ -558,13 +554,10 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
     }
 
     /// <summary>
-    /// Relationship lookup for domain-bound name resolve (amu-w1-1; review F1).
-    /// Catalog relationship bag first; intermediate RLM bag from
-    /// <see cref="SemanticDomainAnalyzer"/> as fallback (same contract as
-    /// <see cref="PolicyConstraintAnalyzer"/>). Null only when neither bag exists.
+    /// Catalog relationship lookup.
     /// </summary>
     private static RelationshipLookupMetadata? ResolveRelationshipLookup(AnalysisContext context, Domain domain) =>
-        context.GetRelationshipLookup(domain) ?? context.GetMetadata<RelationshipLookupMetadata>(default);
+        context.GetRelationshipLookup(domain) ?? context.GetRelationshipLookup();
 
     /// <summary>
     /// Catalog/RLM entity type resolve (amu-w1-1; review F1). Replaces linear
@@ -589,13 +582,10 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
     }
 
     /// <summary>
-    /// Type lookup for domain-bound name resolve (amu-w1-1; review F1).
-    /// Catalog type lookup first; intermediate DTLM from
-    /// <see cref="SemanticDomainAnalyzer"/> as fallback. Null only when neither
-    /// bag exists.
+    /// Catalog type lookup.
     /// </summary>
     private static DomainTypeLookupMetadata? ResolveTypeLookup(AnalysisContext context, Domain domain) =>
-        context.GetTypeLookup(domain) ?? context.GetMetadata<DomainTypeLookupMetadata>(default);
+        context.GetTypeLookup(domain) ?? context.GetTypeLookup();
 
     /// <summary>
     /// Fail-closed: domain-bound validation cannot proceed without the semantic
@@ -606,7 +596,7 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
         context.ReportStructuralFailure(
             node,
             "Domain relationship/type lookup bags are unavailable; effect binding cannot be validated. " +
-            "Run DomainCatalogPass over a successful SemanticDomainAnalyzer result before EffectAnalyzer.",
+            "Run DomainCatalogPass before EffectAnalyzer.",
             DomainModelDiagnosticCodes.SemanticReferenceResolution);
 
     private static void ValidateCreateEntityInRelationship(
@@ -654,7 +644,7 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
 
             // Singular nav bindings are legal (see ValidateCreateEntityInstance) —
             // the demo's `create in loans { book: book }` relies on this.
-            if (targetProp is null && !IsSingularTargetNavigation(domain, targetEntity.Name, initializer.PropertyName)) {
+            if (targetProp is null && !IsSingularTargetNavigation(context, domain, targetEntity.Name, initializer.PropertyName)) {
                 context.ReportError(
                     initializer,
                     $"CreateIn initializer references unknown property '{initializer.PropertyName}' on entity '{targetEntity.Name}'.",
@@ -687,11 +677,12 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
     /// that entity). Collection navs are not bindable initializer targets — the
     /// exporter emits empty collections for those.
     /// </summary>
-    private static bool IsSingularTargetNavigation(Domain domain, string targetEntityName, string name) =>
-        domain.Relationships.Any(r =>
-            string.Equals(r.Source.TypeName, targetEntityName, StringComparison.Ordinal)
-            && string.Equals(r.Name, name, StringComparison.Ordinal)
-            && r.Cardinality == RelationshipCardinality.OneToOne);
+    private static bool IsSingularTargetNavigation(AnalysisContext context, Domain domain, string targetEntityName, string name) {
+        var lookup = context.GetRelationshipLookup(domain);
+        return lookup is not null
+            && lookup.TryGetRelationship(targetEntityName, name, out var rel)
+            && rel.Cardinality == RelationshipCardinality.OneToOne;
+    }
 
     /// <summary>
     /// DMEFF011: a <c>create</c> / <c>create in</c> must provide a value for every

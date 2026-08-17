@@ -13,7 +13,7 @@ internal sealed class SubscriptionAnalyzer : INodeAnalyzer {
     public string PassName => Id;
     // DomainTypeLookupMetadata (Semantic) + ActionCapabilityMetadata (Capability)
     // for causality edges filtered to transitions that can produce cycles.
-    public string[] Dependencies => [SemanticDomainAnalyzer.Id, CapabilityAnalyzer.Id];
+    public string[] Dependencies => [DomainCatalogPass.Id, CapabilityAnalyzer.Id];
 
     public void Analyze(AnalysisContext context, Node node) {
         if (!context.ShouldAnalyze(node)) return;
@@ -27,16 +27,13 @@ internal sealed class SubscriptionAnalyzer : INodeAnalyzer {
     }
 
     /// <summary>
-    /// Relationship lookup for domain-bound name resolve (amu-w1-3). Prefers the
-    /// catalog relationship bag; falls back to the intermediate RLM bag published
-    /// by <see cref="SemanticDomainAnalyzer"/>. Null when neither is available
-    /// (stripped/failed trees) — callers skip validation rather than false-report.
+    /// Catalog relationship bag (same instance as the default alias).
     /// </summary>
     private static RelationshipLookupMetadata? ResolveRelationshipLookup(AnalysisContext context, Domain domain) =>
-        context.GetRelationshipLookup(domain) ?? context.GetMetadata<RelationshipLookupMetadata>(default);
+        context.GetRelationshipLookup(domain) ?? context.GetRelationshipLookup();
 
     private static void ValidateDomain(AnalysisContext context, Domain domain) {
-        var lookup = context.GetMetadata<DomainTypeLookupMetadata>(default);
+        var lookup = context.GetTypeLookup(domain);
         if (lookup is null) return;
 
         foreach (var entity in lookup.Entities) {
@@ -285,9 +282,7 @@ internal sealed class SubscriptionAnalyzer : INodeAnalyzer {
 
         // ── Validate that subscription effect expressions reference known properties ──
         var subscriberRelNames = new HashSet<string>(
-            domain.Relationships
-                .Where(r => string.Equals(r.Source.TypeName, entity.Name, StringComparison.Ordinal))
-                .Select(r => r.Name),
+            entity.Navigations.Select(n => n.Name),
             StringComparer.Ordinal);
         ValidateSubscriptionEffectBindings(context, subscription, entity, targetEntity, subscriberRelNames);
     }

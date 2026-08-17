@@ -10,7 +10,7 @@ namespace Poly.DomainModeling;
 /// </summary>
 public sealed class AnnotationRegistry {
     private readonly Dictionary<string, IAnnotationSyntax> _syntaxByKeyword = new(StringComparer.Ordinal);
-    private readonly List<Action<Grammar<DslToken, DslTokenKind>>> _grammarContributors = [];
+    private readonly List<Action<GrammarBuilder<DslToken, DslTokenKind>>> _grammarContributors = [];
 
     public AnnotationRegistry() {
     }
@@ -38,16 +38,16 @@ public sealed class AnnotationRegistry {
     /// GI-5: register extra grammar patterns (e.g. non-literal annotation args).
     /// Invoked when building the product <see cref="DslGrammar"/> for a parse session.
     /// </summary>
-    public void RegisterGrammarContributor(Action<Grammar<DslToken, DslTokenKind>> contribute) {
+    public void RegisterGrammarContributor(Action<GrammarBuilder<DslToken, DslTokenKind>> contribute) {
         ArgumentNullException.ThrowIfNull(contribute);
         _grammarContributors.Add(contribute);
     }
 
-    /// <summary>Applies all pack grammar contributors to <paramref name="grammar"/>.</summary>
-    public void ContributePatterns(Grammar<DslToken, DslTokenKind> grammar) {
-        ArgumentNullException.ThrowIfNull(grammar);
+    /// <summary>Applies all pack grammar contributors to <paramref name="builder"/>.</summary>
+    public void ContributePatterns(GrammarBuilder<DslToken, DslTokenKind> builder) {
+        ArgumentNullException.ThrowIfNull(builder);
         foreach (var contribute in _grammarContributors)
-            contribute(grammar);
+            contribute(builder);
     }
 
     /// <summary>True when the given keyword has a registered handler.</summary>

@@ -14,8 +14,12 @@ public sealed record MatchKind<TToken, TTokenKind>(TTokenKind Kind) : IPatternEl
     where TToken : struct, IToken<TTokenKind>
     where TTokenKind : struct;
 
-/// <summary>Matches a single value-bearing token of a specific kind (runtime content — printer callback).</summary>
-public sealed record Value<TToken, TTokenKind>(TTokenKind Kind) : IPatternElement<TToken, TTokenKind>
+/// <summary>
+/// Matches a single value-bearing token of a specific kind (runtime content).
+/// <paramref name="Name"/> is the capture / print-fill key; null is unnamed (legacy callback).
+/// </summary>
+public sealed record Value<TToken, TTokenKind>(TTokenKind Kind, string? Name = null)
+    : IPatternElement<TToken, TTokenKind>
     where TToken : struct, IToken<TTokenKind>
     where TTokenKind : struct;
 

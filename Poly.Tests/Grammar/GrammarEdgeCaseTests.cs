@@ -29,8 +29,8 @@ public sealed class GrammarEdgeCaseTests {
     // ── 1. AnyToken — wildcard element ──
     [Test]
     public async Task AnyToken_Wildcard() {
-        var g = new Grammar<TestToken, TestKind>();
-        g.Define("stmt")
+        var g = new GrammarBuilder<TestToken, TestKind>()
+            .Define("stmt")
             .Pattern("decl").Kind(TestKind.Entity).Any().Any().Commit();
 
         var m = new Matcher<TestToken, TestKind>(g, new TestTokenizer("entity X 42"));
@@ -46,8 +46,8 @@ public sealed class GrammarEdgeCaseTests {
     // ── 2. AnyToken as the only element + EOF guard ──
     [Test]
     public async Task AnyToken_OnlyElement() {
-        var g = new Grammar<TestToken, TestKind>();
-        g.Define("value")
+        var g = new GrammarBuilder<TestToken, TestKind>()
+            .Define("value")
             .Pattern("wild").Any().Commit();
 
         var r1 = new Matcher<TestToken, TestKind>(g, new TestTokenizer("hello")).TryMatch("value");
@@ -66,8 +66,8 @@ public sealed class GrammarEdgeCaseTests {
     // ── 3. Optional at the start of a pattern ──
     [Test]
     public async Task Optional_AtStart() {
-        var g = new Grammar<TestToken, TestKind>();
-        g.Define("decl")
+        var g = new GrammarBuilder<TestToken, TestKind>()
+            .Define("decl")
             .Pattern("entity-decl").Optional(new MatchKind<TestToken, TestKind>(TestKind.Entity))
                                    .Kind(TestKind.Identifier)
                                    .Commit();
@@ -84,8 +84,8 @@ public sealed class GrammarEdgeCaseTests {
     // ── 4. Multiple Optionals in sequence ──
     [Test]
     public async Task MultipleOptionals() {
-        var g = new Grammar<TestToken, TestKind>();
-        g.Define("prop")
+        var g = new GrammarBuilder<TestToken, TestKind>()
+            .Define("prop")
             .Pattern("prop").Kind(TestKind.Identifier)
                             .Optional(new MatchKind<TestToken, TestKind>(TestKind.Required))
                             .Optional(new MatchKind<TestToken, TestKind>(TestKind.Unique))
@@ -100,8 +100,8 @@ public sealed class GrammarEdgeCaseTests {
     // ── 5. Predicate as the first element (content-aware) ──
     [Test]
     public async Task Predicate_AsFirstElement() {
-        var g = new Grammar<TestToken, TestKind>();
-        g.Define("type-decl")
+        var g = new GrammarBuilder<TestToken, TestKind>()
+            .Define("type-decl")
             .Pattern("type-assign").Predicate(IsPrimitive, "type")
                                    .Kind(TestKind.Colon)
                                    .Kind(TestKind.Number)
@@ -118,8 +118,8 @@ public sealed class GrammarEdgeCaseTests {
     // ── 6. Repeat on empty rule — zero patterns → zero tokens ──
     [Test]
     public async Task Repeat_RuleWithZeroPatterns() {
-        var g = new Grammar<TestToken, TestKind>();
-        g.Define("file")
+        var g = new GrammarBuilder<TestToken, TestKind>()
+            .Define("file")
             .Pattern("empty").Repeat("body").Kind(TestKind.EndOfFile).Commit();
         // "body" rule has no patterns — Repeat immediately produces zero tokens
 
@@ -132,10 +132,10 @@ public sealed class GrammarEdgeCaseTests {
     // ── 7. Repeat zero items ──
     [Test]
     public async Task Repeat_EmptyBody_ReturnsZeroTokens() {
-        var g = new Grammar<TestToken, TestKind>();
-        g.Define("item")
-            .Pattern("word").Kind(TestKind.Identifier).Commit();
-        g.Define("file")
+        var g = new GrammarBuilder<TestToken, TestKind>()
+            .Define("item")
+            .Pattern("word").Kind(TestKind.Identifier).Commit()
+            .Define("file")
             .Pattern("empty-body").Repeat("item").Kind(TestKind.EndOfFile).Commit();
 
         var r = new Matcher<TestToken, TestKind>(g, new TestTokenizer("")).TryMatch("file");
@@ -147,8 +147,8 @@ public sealed class GrammarEdgeCaseTests {
     // ── 8. Optional containing Balanced (nested) ──
     [Test]
     public async Task Optional_BalancedInside() {
-        var g = new Grammar<TestToken, TestKind>();
-        g.Define("decl")
+        var g = new GrammarBuilder<TestToken, TestKind>()
+            .Define("decl")
             .Pattern("with-body").Kind(TestKind.Entity)
                                   .Kind(TestKind.Identifier)
                                   .Optional(new Balanced<TestToken, TestKind>(TestKind.LBrace, TestKind.RBrace))
@@ -166,8 +166,8 @@ public sealed class GrammarEdgeCaseTests {
     // ── 9. Balanced hitting EOF (unterminated) ──
     [Test]
     public async Task Balanced_EndOfStream_ReturnsNull() {
-        var g = new Grammar<TestToken, TestKind>();
-        g.Define("value")
+        var g = new GrammarBuilder<TestToken, TestKind>()
+            .Define("value")
             .Pattern("object").Balanced(TestKind.LBrace, TestKind.RBrace).Commit();
 
         var r = new Matcher<TestToken, TestKind>(g, new TestTokenizer("{ ")).TryMatch("value");
@@ -177,8 +177,8 @@ public sealed class GrammarEdgeCaseTests {
     // ── 10. Scan loop over pure wildcards ──
     [Test]
     public async Task ScanLoop_PureWildcards() {
-        var g = new Grammar<TestToken, TestKind>();
-        g.Define("token")
+        var g = new GrammarBuilder<TestToken, TestKind>()
+            .Define("token")
             .Pattern("any").Any().Commit();
 
         var reader = new TestTokenizer("a b c");
@@ -195,10 +195,10 @@ public sealed class GrammarEdgeCaseTests {
     // ── 11. Repeat followed by EndOfFile — full consumption ──
     [Test]
     public async Task Repeat_ThenEndOfStream() {
-        var g = new Grammar<TestToken, TestKind>();
-        g.Define("item")
-            .Pattern("ident").Kind(TestKind.Identifier).Commit();
-        g.Define("file")
+        var g = new GrammarBuilder<TestToken, TestKind>()
+            .Define("item")
+            .Pattern("ident").Kind(TestKind.Identifier).Commit()
+            .Define("file")
             .Pattern("idents").Repeat("item").Kind(TestKind.EndOfFile).Commit();
 
         var reader = new TestTokenizer("alpha beta gamma");
@@ -213,8 +213,8 @@ public sealed class GrammarEdgeCaseTests {
     // ── 12. Predicate + AnyToken in same pattern ──
     [Test]
     public async Task PredicateThenAnyToken() {
-        var g = new Grammar<TestToken, TestKind>();
-        g.Define("prop")
+        var g = new GrammarBuilder<TestToken, TestKind>()
+            .Define("prop")
             .Pattern("typed").Predicate(IsPrimitive, "type").Any().Commit();
 
         var r = new Matcher<TestToken, TestKind>(g, new TestTokenizer("Text :")).TryMatch("prop");
@@ -228,8 +228,8 @@ public sealed class GrammarEdgeCaseTests {
     // ── 13. Optional after Balanced ──
     [Test]
     public async Task Optional_AfterBalanced() {
-        var g = new Grammar<TestToken, TestKind>();
-        g.Define("decl")
+        var g = new GrammarBuilder<TestToken, TestKind>()
+            .Define("decl")
             .Pattern("entity").Kind(TestKind.Entity).Kind(TestKind.Identifier)
                               .Balanced(TestKind.LBrace, TestKind.RBrace)
                               .Optional(new MatchKind<TestToken, TestKind>(TestKind.Required))

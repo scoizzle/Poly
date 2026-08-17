@@ -95,22 +95,47 @@ public static class DslGrammar {
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, $"No canonical text for DSL token kind '{kind}'"),
     };
 
-    /// <summary>
-    /// Builds the DSL grammar — tables for top / entity-body / stage-body /
-    /// annotation / expr layers / effect heads / expr-primary.
-    /// </summary>
-    public static Grammar<DslToken, DslTokenKind> Build(Action<Grammar<DslToken, DslTokenKind>>? configure = null) {
-        var g = new Grammar<DslToken, DslTokenKind>();
+    private static readonly Grammar<DslToken, DslTokenKind> CoreTable = CreateCore();
 
-        g.Define("top")
+    /// <summary>Immutable product table. Libraries <see cref="Grammar{TToken,TTokenKind}.Extend"/> this.</summary>
+    public static Grammar<DslToken, DslTokenKind> Core => CoreTable;
+
+    /// <summary>
+    /// Product table plus optional library contributions. No configure returns
+    /// the shared <see cref="Core"/>. Contributors mutate one builder; freeze once.
+    /// </summary>
+    public static Grammar<DslToken, DslTokenKind> Build(
+        Action<GrammarBuilder<DslToken, DslTokenKind>>? configure = null) =>
+        configure is null ? CoreTable : CoreTable.Extend(configure);
+
+    /// <summary>Product table plus annotation and expression-form contributions from <paramref name="inputs"/>.</summary>
+    public static Grammar<DslToken, DslTokenKind> For(DomainParserInputs? inputs) {
+        if (inputs is null)
+            return CoreTable;
+        var builder = CoreTable.ToBuilder();
+        inputs.Annotations.ContributePatterns(builder);
+        inputs.ExpressionForms.ContributeGrammarPatterns(builder);
+        return builder.Build();
+    }
+
+    /// <summary>Parse/print pair for <paramref name="inputs"/> — one table, one printer.</summary>
+    public static Language<DslToken, DslTokenKind> LanguageFor(DomainParserInputs? inputs) =>
+        new(For(inputs), CanonicalText, () => new DslTokenWriter());
+
+    private static Grammar<DslToken, DslTokenKind> CreateCore() =>
+        new GrammarBuilder<DslToken, DslTokenKind>()
+        .Define("document")
+            .Pattern("header").Kind(DslTokenKind.Domain).Value(DslTokenKind.Identifier, "name").Commit()
+        .Define("uses")
+            .Pattern("id").Kind(DslTokenKind.Uses).Value(DslTokenKind.Identifier, "id").Commit()
+        .Define("top")
             .Pattern("enum")
                 .Value(DslTokenKind.Identifier).Kind(DslTokenKind.Colon).Kind(DslTokenKind.Enum)
                 .Commit()
             .Pattern("entity")
                 .Value(DslTokenKind.Identifier).Kind(DslTokenKind.Colon).Kind(DslTokenKind.Entity)
-                .Commit();
-
-        g.Define("entity-body")
+                .Commit()
+        .Define("entity-body")
             .Pattern("entity-subscription")
                 .Kind(DslTokenKind.When).Value(DslTokenKind.Identifier)
                 .Commit()
@@ -143,9 +168,8 @@ public static class DslGrammar {
                 .Commit()
             .Pattern("primitive-name")
                 .Predicate(IsPrimitiveToken, "primitive-type").Kind(DslTokenKind.Colon)
-                .Commit();
-
-        g.Define("stage-body")
+                .Commit()
+        .Define("stage-body")
             .Pattern("entry")
                 .Kind(DslTokenKind.Entry)
                 .Commit()
@@ -157,85 +181,66 @@ public static class DslGrammar {
                 .Commit()
             .Pattern("stage-action")
                 .Value(DslTokenKind.Identifier)
-                .Commit();
-
-        g.Define("annotation")
+                .Commit()
+        .Define("annotation")
             .Pattern("no-args")
                 .Value(DslTokenKind.Identifier).Kind(DslTokenKind.LParen).Kind(DslTokenKind.RParen)
                 .Commit()
             .Pattern("with-args")
                 .Value(DslTokenKind.Identifier).Kind(DslTokenKind.LParen).Repeat("annotation-args").Kind(DslTokenKind.RParen)
-                .Commit();
-
-        g.Define("annotation-args")
+                .Commit()
+        .Define("annotation-args")
             .Pattern("str").Optional(DslTokenKind.Comma).Kind(DslTokenKind.StringLiteral).Commit()
             .Pattern("num").Optional(DslTokenKind.Comma).Kind(DslTokenKind.Number).Commit()
             .Pattern("tru").Optional(DslTokenKind.Comma).Kind(DslTokenKind.True).Commit()
             .Pattern("fal").Optional(DslTokenKind.Comma).Kind(DslTokenKind.False).Commit()
-            .Pattern("nul").Optional(DslTokenKind.Comma).Kind(DslTokenKind.Null).Commit();
-
-        g.Define("expr")
-            .Pattern("top").Ref("expr-or").Commit();
-
-        g.Define("expr-or")
-            .Pattern("chain").LeftAssoc("expr-and", DslTokenKind.Or).Commit();
-
-        g.Define("expr-and")
-            .Pattern("chain").LeftAssoc("expr-not", DslTokenKind.And).Commit();
-
-        g.Define("expr-not")
+            .Pattern("nul").Optional(DslTokenKind.Comma).Kind(DslTokenKind.Null).Commit()
+        .Define("expr")
+            .Pattern("top").Ref("expr-or").Commit()
+        .Define("expr-or")
+            .Pattern("chain").LeftAssoc("expr-and", DslTokenKind.Or).Commit()
+        .Define("expr-and")
+            .Pattern("chain").LeftAssoc("expr-not", DslTokenKind.And).Commit()
+        .Define("expr-not")
             .Pattern("not").Kind(DslTokenKind.Not).Ref("expr-add").Commit()
-            .Pattern("pass-through").Ref("expr-compare").Commit();
-
-        g.Define("expr-compare")
+            .Pattern("pass-through").Ref("expr-compare").Commit()
+        .Define("expr-compare")
             .Pattern("bare").Ref("expr-add-no-not").Commit()
             .Pattern("with-op")
                 .Ref("expr-add-no-not")
                 .Predicate(IsCompareToken, "compare-op")
-                .Ref("expr-add").Commit();
-
-        g.Define("expr-add-no-not")
-            .Pattern("chain").LeftAssoc("expr-mul-no-not", DslTokenKind.Plus, DslTokenKind.Minus).Commit();
-
-        g.Define("expr-mul-no-not")
-            .Pattern("chain").LeftAssoc("expr-primary-no-not", DslTokenKind.Star, DslTokenKind.Slash).Commit();
-
-        g.Define("expr-primary-no-not")
+                .Ref("expr-add").Commit()
+        .Define("expr-add-no-not")
+            .Pattern("chain").LeftAssoc("expr-mul-no-not", DslTokenKind.Plus, DslTokenKind.Minus).Commit()
+        .Define("expr-mul-no-not")
+            .Pattern("chain").LeftAssoc("expr-primary-no-not", DslTokenKind.Star, DslTokenKind.Slash).Commit()
+        .Define("expr-primary-no-not")
             .Pattern("number").Kind(DslTokenKind.Number).Commit()
             .Pattern("string").Kind(DslTokenKind.StringLiteral).Commit()
             .Pattern("true").Kind(DslTokenKind.True).Commit()
             .Pattern("false").Kind(DslTokenKind.False).Commit()
             .Pattern("null").Kind(DslTokenKind.Null).Commit()
             .Pattern("group").Kind(DslTokenKind.LParen).Ref("expr").Kind(DslTokenKind.RParen).Commit()
-            .Pattern("ident").Value(DslTokenKind.Identifier).Commit();
-
-        g.Define("expr-add")
-            .Pattern("chain").LeftAssoc("expr-mul", DslTokenKind.Plus, DslTokenKind.Minus).Commit();
-
-        g.Define("expr-mul")
-            .Pattern("chain").LeftAssoc("expr-primary", DslTokenKind.Star, DslTokenKind.Slash).Commit();
-
-        g.Define("expr-or-op")
-            .Pattern("or").Kind(DslTokenKind.Or).Commit();
-
-        g.Define("expr-and-op")
-            .Pattern("and").Kind(DslTokenKind.And).Commit();
-
-        g.Define("expr-not-op")
-            .Pattern("not").Kind(DslTokenKind.Not).Commit();
-
-        g.Define("expr-add-op")
+            .Pattern("ident").Value(DslTokenKind.Identifier).Commit()
+        .Define("expr-add")
+            .Pattern("chain").LeftAssoc("expr-mul", DslTokenKind.Plus, DslTokenKind.Minus).Commit()
+        .Define("expr-mul")
+            .Pattern("chain").LeftAssoc("expr-primary", DslTokenKind.Star, DslTokenKind.Slash).Commit()
+        .Define("expr-or-op")
+            .Pattern("or").Kind(DslTokenKind.Or).Commit()
+        .Define("expr-and-op")
+            .Pattern("and").Kind(DslTokenKind.And).Commit()
+        .Define("expr-not-op")
+            .Pattern("not").Kind(DslTokenKind.Not).Commit()
+        .Define("expr-add-op")
             .Pattern("plus").Kind(DslTokenKind.Plus).Commit()
-            .Pattern("minus").Kind(DslTokenKind.Minus).Commit();
-
-        g.Define("expr-mul-op")
+            .Pattern("minus").Kind(DslTokenKind.Minus).Commit()
+        .Define("expr-mul-op")
             .Pattern("star").Kind(DslTokenKind.Star).Commit()
-            .Pattern("slash").Kind(DslTokenKind.Slash).Commit();
-
-        g.Define("expr-compare-op")
-            .Pattern("op").Predicate(IsCompareToken, "compare-op").Commit();
-
-        g.Define("effect")
+            .Pattern("slash").Kind(DslTokenKind.Slash).Commit()
+        .Define("expr-compare-op")
+            .Pattern("op").Predicate(IsCompareToken, "compare-op").Commit()
+        .Define("effect")
             .Pattern("transition")
                 .Kind(DslTokenKind.Transition).Kind(DslTokenKind.To).Value(DslTokenKind.Identifier).Commit()
             .Pattern("assign")
@@ -249,9 +254,8 @@ public static class DslGrammar {
             .Pattern("for")
                 .Kind(DslTokenKind.For).Commit()
             .Pattern("if")
-                .Kind(DslTokenKind.If).Kind(DslTokenKind.LParen).Commit();
-
-        g.Define("expr-primary")
+                .Kind(DslTokenKind.If).Kind(DslTokenKind.LParen).Commit()
+        .Define("expr-primary")
             .Pattern("number").Value(DslTokenKind.Number).Commit()
             .Pattern("string").Value(DslTokenKind.StringLiteral).Commit()
             .Pattern("true").Kind(DslTokenKind.True).Commit()
@@ -259,9 +263,6 @@ public static class DslGrammar {
             .Pattern("null").Kind(DslTokenKind.Null).Commit()
             .Pattern("group").Kind(DslTokenKind.LParen).Ref("expr").Kind(DslTokenKind.RParen).Commit()
             .Pattern("not").Kind(DslTokenKind.Not).Ref("expr-add").Commit()
-            .Pattern("ident").Value(DslTokenKind.Identifier).Commit();
-
-        configure?.Invoke(g);
-        return g;
-    }
+            .Pattern("ident").Value(DslTokenKind.Identifier).Commit()
+            .Build();
 }

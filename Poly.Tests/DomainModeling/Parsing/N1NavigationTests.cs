@@ -31,8 +31,8 @@ public class N1NavigationTests {
         var result = new DomainEvolution(emptyDomain).Apply(changes);
         await Assert.That(result.Succeeded).IsTrue();
 
-        await Assert.That(result.Root!.Relationships.Count).IsEqualTo(1);
-        var rel = result.Root.Relationships[0];
+        await Assert.That(result.Relationships().Count).IsEqualTo(1);
+        var rel = result.Relationships()[0];
         await Assert.That(rel.Name).IsEqualTo("customer");
         await Assert.That(rel.Source.TypeName).IsEqualTo("Order");
         await Assert.That(rel.Target.TypeName).IsEqualTo("Customer");
@@ -61,8 +61,8 @@ public class N1NavigationTests {
         var result = new DomainEvolution(emptyDomain).Apply(changes);
         await Assert.That(result.Succeeded).IsTrue();
 
-        await Assert.That(result.Root!.Relationships.Count).IsEqualTo(1);
-        var rel = result.Root.Relationships[0];
+        await Assert.That(result.Relationships().Count).IsEqualTo(1);
+        var rel = result.Relationships()[0];
         await Assert.That(rel.Name).IsEqualTo("ceo");
         await Assert.That(rel.Source.TypeName).IsEqualTo("Company");
         await Assert.That(rel.Target.TypeName).IsEqualTo("Employee");
@@ -95,8 +95,8 @@ public class N1NavigationTests {
         var result = new DomainEvolution(emptyDomain).Apply(changes);
         await Assert.That(result.Succeeded).IsTrue();
 
-        await Assert.That(result.Root!.Relationships.Count).IsEqualTo(1);
-        var rel = result.Root.Relationships[0];
+        await Assert.That(result.Relationships().Count).IsEqualTo(1);
+        var rel = result.Relationships()[0];
         await Assert.That(rel.Name).IsEqualTo("lineItems");
         await Assert.That(rel.Source.TypeName).IsEqualTo("Order");
         await Assert.That(rel.Target.TypeName).IsEqualTo("LineItem");
@@ -125,8 +125,8 @@ public class N1NavigationTests {
         var result = new DomainEvolution(emptyDomain).Apply(changes);
         await Assert.That(result.Succeeded).IsTrue();
 
-        await Assert.That(result.Root!.Relationships.Count).IsEqualTo(1);
-        var rel = result.Root.Relationships[0];
+        await Assert.That(result.Relationships().Count).IsEqualTo(1);
+        var rel = result.Relationships()[0];
         await Assert.That(rel.Name).IsEqualTo("passport");
         await Assert.That(rel.Source.TypeName).IsEqualTo("Person");
         await Assert.That(rel.Cardinality).IsEqualTo(RelationshipCardinality.OneToOne);
@@ -154,8 +154,8 @@ public class N1NavigationTests {
         var result = new DomainEvolution(emptyDomain).Apply(changes);
         await Assert.That(result.Succeeded).IsTrue();
 
-        await Assert.That(result.Root!.Relationships.Count).IsEqualTo(1);
-        var rel = result.Root.Relationships[0];
+        await Assert.That(result.Relationships().Count).IsEqualTo(1);
+        var rel = result.Relationships()[0];
         await Assert.That(rel.Name).IsEqualTo("profile");
         await Assert.That(rel.Cardinality).IsEqualTo(RelationshipCardinality.OneToOne);
         await Assert.That(rel.SourceOwnsTarget).IsTrue();
@@ -187,7 +187,7 @@ public class N1NavigationTests {
         await Assert.That(order.Properties.Count).IsEqualTo(2);
         await Assert.That(order.Properties.Any(p => p.Name == "count")).IsTrue();
         await Assert.That(order.Properties.Any(p => p.Name == "Title")).IsTrue();
-        await Assert.That(result.Root.Relationships.Count).IsEqualTo(1);
+        await Assert.That(result.Relationships().Count).IsEqualTo(1);
     }
 
     [Test]
@@ -316,7 +316,7 @@ public class N1NavigationTests {
         var emptyDomain = DomainTestFactory.Create("_", [], []);
         var result = new DomainEvolution(emptyDomain).Apply(changes);
         await Assert.That(result.Succeeded).IsTrue();
-        await Assert.That(result.Root!.Relationships.Count).IsEqualTo(2);
+        await Assert.That(result.Relationships().Count).IsEqualTo(2);
 
         // First print: N1 output
         var printer = new DomainDslPrinter();
@@ -330,12 +330,12 @@ public class N1NavigationTests {
         await Assert.That(result2.Succeeded).IsTrue();
 
         // Structural comparison
-        await Assert.That(result2.Root!.Relationships.Count).IsEqualTo(result.Root.Relationships.Count);
+        await Assert.That(result2.Relationships().Count).IsEqualTo(result.Relationships().Count);
         await Assert.That(result2.Root.Types.OfType<Entity>().Count())
             .IsEqualTo(result.Root.Types.OfType<Entity>().Count());
 
-        foreach (var rel in result2.Root.Relationships) {
-            var orig = result.Root.Relationships.FirstOrDefault(r => r.Name == rel.Name);
+        foreach (var rel in result2.Relationships()) {
+            var orig = result.Relationships().FirstOrDefault(r => r.Name == rel.Name);
             await Assert.That(orig).IsNotNull();
             await Assert.That(rel.Source.TypeName).IsEqualTo(orig!.Source.TypeName);
             await Assert.That(rel.Target.TypeName).IsEqualTo(orig.Target.TypeName);
@@ -380,31 +380,31 @@ public class N1NavigationTests {
         var result = new DomainEvolution(emptyDomain).Apply(changes);
         await Assert.That(result.Succeeded).IsTrue();
 
-        await Assert.That(result.Root!.Relationships.Count).IsEqualTo(4);
+        await Assert.That(result.Relationships().Count).IsEqualTo(4);
 
         // Company → Department (OneToMany)
-        await Assert.That(result.Root.Relationships.Any(r =>
+        await Assert.That(result.Relationships().Any(r =>
             r.Name == "departments" &&
             r.Source.TypeName == "Company" &&
             r.Target.TypeName == "Department" &&
             r.Cardinality == RelationshipCardinality.OneToMany)).IsTrue();
 
         // Company → Employee (OneToMany)
-        await Assert.That(result.Root.Relationships.Any(r =>
+        await Assert.That(result.Relationships().Any(r =>
             r.Name == "employees" &&
             r.Source.TypeName == "Company" &&
             r.Target.TypeName == "Employee" &&
             r.Cardinality == RelationshipCardinality.OneToMany)).IsTrue();
 
         // Department → Employee (OneToOne)
-        await Assert.That(result.Root.Relationships.Any(r =>
+        await Assert.That(result.Relationships().Any(r =>
             r.Name == "manager" &&
             r.Source.TypeName == "Department" &&
             r.Target.TypeName == "Employee" &&
             r.Cardinality == RelationshipCardinality.OneToOne)).IsTrue();
 
         // Employee → PerformanceReview (OneToMany)
-        await Assert.That(result.Root.Relationships.Any(r =>
+        await Assert.That(result.Relationships().Any(r =>
             r.Name == "reviews" &&
             r.Source.TypeName == "Employee" &&
             r.Target.TypeName == "PerformanceReview" &&
@@ -513,9 +513,9 @@ public class N1NavigationTests {
         var result = new DomainEvolution(emptyDomain).Apply(changes);
         await Assert.That(result.Succeeded).IsTrue();
 
-        await Assert.That(result.Root!.Relationships.Count).IsEqualTo(2);
-        await Assert.That(result.Root.Relationships.Any(r => r.Name == "tracks")).IsTrue();
-        await Assert.That(result.Root.Relationships.Any(r => r.Name == "Audits")).IsTrue();
+        await Assert.That(result.Relationships().Count).IsEqualTo(2);
+        await Assert.That(result.Relationships().Any(r => r.Name == "tracks")).IsTrue();
+        await Assert.That(result.Relationships().Any(r => r.Name == "Audits")).IsTrue();
 
         var analysis = DomainModelAnalyzer.Analyze(result.Root);
         await Assert.That(analysis.HasStructuralFailure).IsFalse();
@@ -539,8 +539,8 @@ public class N1NavigationTests {
         var result = new DomainEvolution(emptyDomain).Apply(changes);
         await Assert.That(result.Succeeded).IsTrue();
 
-        await Assert.That(result.Root!.Relationships.Count).IsEqualTo(1);
-        var rel = result.Root.Relationships[0];
+        await Assert.That(result.Relationships().Count).IsEqualTo(1);
+        var rel = result.Relationships()[0];
         await Assert.That(rel.Name).IsEqualTo("friends");
         await Assert.That(rel.Source.TypeName).IsEqualTo("Person");
         await Assert.That(rel.Target.TypeName).IsEqualTo("Person");
@@ -582,7 +582,7 @@ public class N1NavigationTests {
         var emptyDomain = DomainTestFactory.Create("_", [], []);
         var result = new DomainEvolution(emptyDomain).Apply(changes);
         await Assert.That(result.Succeeded).IsTrue();
-        await Assert.That(result.Root!.Relationships.Count).IsEqualTo(1);
+        await Assert.That(result.Relationships().Count).IsEqualTo(1);
 
         var printer = new DomainDslPrinter();
         var printed = printer.Print(result.Root);
@@ -595,7 +595,7 @@ public class N1NavigationTests {
         var emptyDomain2 = DomainTestFactory.Create("_", [], []);
         var result2 = new DomainEvolution(emptyDomain2).Apply(changes2);
         await Assert.That(result2.Succeeded).IsTrue();
-        await Assert.That(result2.Root!.Relationships.Count).IsEqualTo(1);
+        await Assert.That(result2.Relationships().Count).IsEqualTo(1);
 
         var tracker = result2.Root.Types.OfType<Entity>().Single(e => e.Name == "Tracker");
         var pending = tracker.Stages.Single(s => s.Name == "Pending");
@@ -637,8 +637,8 @@ public class N1NavigationTests {
         var emptyDomain = DomainTestFactory.Create("_", [], []);
         var result = new DomainEvolution(emptyDomain).Apply(changes);
         await Assert.That(result.Succeeded).IsTrue();
-        await Assert.That(result.Root!.Relationships.Count).IsEqualTo(1);
-        var rel = result.Root.Relationships[0];
+        await Assert.That(result.Relationships().Count).IsEqualTo(1);
+        var rel = result.Relationships()[0];
         await Assert.That(rel.Name).IsEqualTo("Tracks");
         await Assert.That(rel.Source.TypeName).IsEqualTo("Tracker");
         await Assert.That(rel.Target.TypeName).IsEqualTo("Order");
@@ -651,8 +651,8 @@ public class N1NavigationTests {
         var emptyDomain2 = DomainTestFactory.Create("_", [], []);
         var result2 = new DomainEvolution(emptyDomain2).Apply(changes2);
         await Assert.That(result2.Succeeded).IsTrue();
-        await Assert.That(result2.Root!.Relationships.Count).IsEqualTo(1);
-        await Assert.That(result2.Root.Relationships[0].Name).IsEqualTo("Tracks");
+        await Assert.That(result2.Relationships().Count).IsEqualTo(1);
+        await Assert.That(result2.Relationships()[0].Name).IsEqualTo("Tracks");
 
         var tracker = result2.Root.Types.OfType<Entity>().Single(e => e.Name == "Tracker");
         var pending = tracker.Stages.Single(s => s.Name == "Pending");

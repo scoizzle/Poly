@@ -5,6 +5,7 @@ using Poly.DomainModeling.Bootstrap;
 using Poly.DomainModeling.Constraints;
 using Poly.DomainModeling.Effects;
 using Poly.DomainModeling.Evolution;
+using Poly.DomainModeling.Packs;
 using Poly.DomainModeling.Packs.Temporal;
 using Poly.DomainModeling.Parsing;
 
@@ -158,7 +159,6 @@ public class DomainEntityInstanceTests {
     public async Task Create_TodayAndNowClockNodes_AdaptToPropertyClrType() {
         // Temporal language folds `Today`/`Now` to Today/Now IR. Create-time defaults
         // must still evaluate — not silently store null (vacuous default).
-        TemporalLibrary.EnsureLanguage();
         var recorded = new Property("RecordedOn", new DomainTypeReference("Date"),
             [new DefaultValueConstraint(new Today())]);
         var opened = new Property("OpenedAt", new DomainTypeReference("DateTime"),
@@ -168,8 +168,12 @@ public class DomainEntityInstanceTests {
             Actions: [],
             Policies: [],
             Stages: []);
+        var domain = DomainFactory.Create("T") with {
+            Types = [entity],
+            Extensions = [ExtensionCatalog.TemporalId],
+        };
 
-        var instance = DomainEntityInstance.Create(entity);
+        var instance = DomainEntityInstance.Create(entity, domain: domain);
         await Assert.That(instance.GetProperty<object>("RecordedOn")).IsTypeOf<DateOnly>();
         await Assert.That(instance.GetProperty<DateOnly>("RecordedOn")).IsEqualTo(DateOnly.FromDateTime(DateTime.Today));
         await Assert.That(instance.GetProperty<object>("OpenedAt")).IsTypeOf<DateTime>();
@@ -177,7 +181,6 @@ public class DomainEntityInstanceTests {
 
     [Test]
     public async Task InvokeAction_AssignTodayClockNode_StoresDate() {
-        TemporalLibrary.EnsureLanguage();
         var due = new Property("Due", new DomainTypeReference("Date"), []);
         var stamp = new Poly.DomainModeling.Action("Stamp", InvocationResult.Void, [],
             [new AssignEffect(DomainExpression.Property("Due"), new Today())], []);
@@ -186,8 +189,12 @@ public class DomainEntityInstanceTests {
             Actions: [stamp],
             Policies: [],
             Stages: []);
+        var domain = DomainFactory.Create("T") with {
+            Types = [entity],
+            Extensions = [ExtensionCatalog.TemporalId],
+        };
 
-        var instance = DomainEntityInstance.Create(entity);
+        var instance = DomainEntityInstance.Create(entity, domain: domain);
         var result = instance.InvokeAction("Stamp");
         await Assert.That(result.Succeeded).IsTrue();
         await Assert.That(instance.GetProperty<object>("Due")).IsTypeOf<DateOnly>();
@@ -419,17 +426,18 @@ public class DomainEntityInstanceTests {
 
     [Test]
     public async Task RequireCatalog_Returns_WhenStructuralFailureWithoutCatalog() {
-        // CatalogPass without Semantic bags → structural failure, no catalog (Q2/Q3).
-        // Invoke pass directly; AnalyzerBuilder rejects CatalogPass without its dep registered.
-        var domain = DomainTestFactory.Create("EmptyStructural", [], []);
+        var entity = new Entity("Order",
+            [new Property("Name", new DomainTypeReference("Nope"), [])],
+            [], [], []);
+        var domain = DomainTestFactory.Create("EmptyStructural", [entity], []);
         var context = AnalysisContext.CreateDefault();
         new DomainCatalogPass().Analyze(context, domain);
         var analysis = new AnalysisResult(context, AnalysisTelemetry.Empty);
 
         await Assert.That(analysis.HasStructuralFailure).IsTrue();
+        analysis.GetMetadataStore().Remove<DomainCatalogMetadata>(domain);
         await Assert.That(analysis.GetCatalog(domain)).IsNull();
 
-        // Must not throw — structural failures may omit catalog.
         DomainModelAnalyzer.RequireCatalog(analysis, domain);
     }
 
@@ -2082,8 +2090,10 @@ public class DomainEntityInstanceTests {
         // Verify the domain has the relationship and create-in effect
         var customerEntity = evolveResult.Root.Types.OfType<Entity>().Single(e => e.Name == "Customer");
         var orderEntity = evolveResult.Root.Types.OfType<Entity>().Single(e => e.Name == "Order");
-        await Assert.That(evolveResult.Root.Relationships.Count).IsEqualTo(1);
-        await Assert.That(evolveResult.Root.Relationships[0].Name).IsEqualTo("orders");
+
+        var relationships = evolveResult.Analysis.GetAllRelationships(evolveResult.Root);
+        await Assert.That(relationships.Count).IsEqualTo(1);
+        await Assert.That(relationships[0].Name).IsEqualTo("orders");
 
         var placeOrder = customerEntity.Stages
             .SelectMany(s => s.Actions)

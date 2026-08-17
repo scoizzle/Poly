@@ -22,14 +22,10 @@ public interface IExpressionDefaultResolver {
 }
 
 /// <summary>
-/// Ambient registry of pack-owned default-expression resolvers. <see cref="Default"/> is the
-/// product-default set the built-in temporal pack contributes to.
+/// Session registry of pack-owned default-expression resolvers.
 /// </summary>
 public sealed class ExpressionDefaultResolverRegistry {
     private readonly List<IExpressionDefaultResolver> _resolvers = [];
-
-    /// <summary>Ambient product-default resolver set (built-in packs register here).</summary>
-    public static ExpressionDefaultResolverRegistry Default { get; } = new();
 
     public void Register(IExpressionDefaultResolver resolver) {
         ArgumentNullException.ThrowIfNull(resolver);

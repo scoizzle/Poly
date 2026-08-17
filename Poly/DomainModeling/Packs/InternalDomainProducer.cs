@@ -22,7 +22,7 @@ namespace Poly.DomainModeling.Packs;
 /// closed rather than emitting a lying contract.</description></item>
 /// </list>
 /// </summary>
-public sealed class InternalDomainProducer : IContractProducer {
+public sealed class InternalDomainProducer {
     /// <summary>Default version for producer-created contracts.</summary>
     public const string DefaultVersion = "v1";
 

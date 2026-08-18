@@ -1,7 +1,4 @@
 #nullable enable
-using System;
-using System.Collections.Generic;
-
 public class Book {
     private Book() {
         // EF materialization.

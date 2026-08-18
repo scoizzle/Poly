@@ -4,10 +4,7 @@ using System.Text.Json.Serialization;
 
 using ModelContextProtocol.Server;
 
-using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
-using Poly.DomainModeling.Lowering;
-using Poly.DomainModeling.Queries;
 using Poly.Mcp.Sessions;
 
 namespace Poly.Mcp.Tools;

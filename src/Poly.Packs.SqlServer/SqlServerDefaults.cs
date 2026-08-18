@@ -1,5 +1,3 @@
-using Poly.DomainModeling.Lowering;
-
 namespace Poly.Packs.SqlServer;
 
 /// <summary>

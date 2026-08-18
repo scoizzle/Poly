@@ -1,7 +1,4 @@
-using Poly.Analysis;
-using Poly.Ast.Nodes;
 using Poly.Interpretation.Analysis.ControlFlow;
-using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.Interpretation.Analysis.Semantics;

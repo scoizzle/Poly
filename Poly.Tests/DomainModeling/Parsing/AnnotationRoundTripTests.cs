@@ -1,9 +1,5 @@
 using Poly.DomainModeling;
-using Poly.DomainModeling.Compile;
-using Poly.DomainModeling.ContractFill;
 using Poly.DomainModeling.Evolution;
-using Poly.DomainModeling.Language;      // DomainDslPrinter (v1 domain-walk print)
-using Poly.DomainModeling.Libraries.Storage;
 using Poly.DomainModeling.Ontology;
 // PolyDslParser
 

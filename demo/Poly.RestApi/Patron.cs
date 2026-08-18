@@ -1,7 +1,4 @@
 #nullable enable
-using System;
-using System.Collections.Generic;
-
 public enum PatronStage {
     Active = 0,
     Suspended = 1,

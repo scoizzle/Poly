@@ -1,4 +1,3 @@
-using Poly.DomainModeling.Ontology;
 using Poly.Grammar;
 
 // Shared TestKind/TestTokenizer from TestGrammar.cs (mirrors v1 where the

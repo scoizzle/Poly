@@ -1,9 +1,6 @@
 using Poly.DomainModeling.Dispatch;
 using Poly.DomainModeling.Ontology;
-using Poly.DomainModeling.Ontology.Contract;
-using Poly.DomainModeling.Runtime;
 
-using Action = Poly.DomainModeling.Ontology.Action;
 using Add = Poly.DomainModeling.Ontology.Add;
 using And = Poly.DomainModeling.Ontology.And;
 using Divide = Poly.DomainModeling.Ontology.Divide;
@@ -11,10 +8,8 @@ using Multiply = Poly.DomainModeling.Ontology.Multiply;
 using Not = Poly.DomainModeling.Ontology.Not;
 using Or = Poly.DomainModeling.Ontology.Or;
 using Prim = Poly.Introspection.PrimitiveType;
-using PrimitiveType = Poly.DomainModeling.Ontology.PrimitiveType;
 using SN = Poly.Ast.Nodes;
 using Subtract = Poly.DomainModeling.Ontology.Subtract;
-using ValueType = Poly.DomainModeling.Ontology.ValueType;
 
 namespace Poly.DomainModeling.Lowering;
 

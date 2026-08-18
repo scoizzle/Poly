@@ -1,6 +1,3 @@
-using Poly.Ast;
-using Poly.Ast.Nodes;
-
 namespace Poly.Interpretation.Vm;
 
 /// <summary>Represents a single word of data in the VM's call stack.

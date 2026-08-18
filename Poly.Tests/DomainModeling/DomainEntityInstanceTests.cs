@@ -1,16 +1,7 @@
-using Poly.Analysis;
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
-using Poly.DomainModeling.Compile;
-using Poly.DomainModeling.ContractFill;
 using Poly.DomainModeling.Evolution;
-using Poly.DomainModeling.Language;
-using Poly.DomainModeling.Libraries.Storage;
-using Poly.DomainModeling.Libraries.Temporal;
 using Poly.DomainModeling.Ontology;
-using Poly.DomainModeling.Ontology.Bootstrap;
-using Poly.DomainModeling.Ontology.Constraints;
-using Poly.DomainModeling.Ontology.Effects;
 
 namespace Poly.Tests.DomainModeling;
 

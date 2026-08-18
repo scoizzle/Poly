@@ -1,9 +1,4 @@
-using System.Linq.Expressions;
-
-using Poly.Analysis;
 using Poly.Grammar;
-using Poly.Interpretation;
-using Poly.Interpretation.Analysis.Semantics;
 using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.Integration;

@@ -1,12 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Data;
-using System.Linq;
-using System.Reflection.Metadata;
-using System.Text.Json;
-
-using Poly.Introspection;
-
 namespace Poly.Benchmarks;
 
 // record Entity(string Name, string Description);

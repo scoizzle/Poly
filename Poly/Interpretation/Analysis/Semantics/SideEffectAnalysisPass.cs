@@ -1,5 +1,3 @@
-using Poly.Ast.Nodes;
-
 namespace Poly.Interpretation.Analysis.Semantics;
 
 /// <summary>Options controlling dead code / elision analysis and diagnostics.</summary>

@@ -1,18 +1,13 @@
 using System.Linq.Expressions;
 
-using Poly.Analysis;
-using Poly.Ast;
-using Poly.DomainModeling;
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
 using Poly.Interpretation;
-using Poly.Interpretation.Analysis;
 using Poly.Interpretation.Analysis.ConstantFolding;
 using Poly.Interpretation.Analysis.ControlFlow;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Interpretation.LinqExpressions;
 using Poly.Interpretation.Vm;
-using Poly.Tests.TestHelpers;
 
 using Expr = System.Linq.Expressions.Expression;
 using SN = Poly.Ast.Nodes;

@@ -1,9 +1,3 @@
-using Poly.DomainModeling;
-using Poly.DomainModeling.Compile;
-using Poly.DomainModeling.ContractFill;
-using Poly.DomainModeling.Language;
-using Poly.DomainModeling.Libraries.Storage;
-using Poly.DomainModeling.Libraries.Temporal;
 using Poly.DomainModeling.Ontology;
 
 namespace Poly.Tests.DomainModeling.Packs;

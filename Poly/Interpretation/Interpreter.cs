@@ -1,5 +1,3 @@
-using Poly.Analysis;
-using Poly.Ast;
 using Poly.Interpretation.Analysis;
 using Poly.Interpretation.Analysis.ConstantFolding;
 using Poly.Interpretation.Analysis.ControlFlow;

@@ -1,5 +1,3 @@
-using Poly.Ast.Nodes;
-using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Ontology;
 using Poly.DslCompiler;

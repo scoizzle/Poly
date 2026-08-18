@@ -1,5 +1,3 @@
-using System.Linq.Expressions;
-
 using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.Interpretation;

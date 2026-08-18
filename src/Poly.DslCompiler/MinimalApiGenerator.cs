@@ -1,14 +1,7 @@
 using Poly.Analysis;
 using Poly.Ast;
 using Poly.Ast.Nodes;
-using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
-using Poly.DomainModeling.Compile;
-using Poly.DomainModeling.ContractFill;
-using Poly.DomainModeling.Libraries.Storage;
-using Poly.DomainModeling.Lowering;
-using Poly.DomainModeling.Ontology.Constraints;
-using Poly.DomainModeling.Ontology.Effects;
 using Poly.Interpretation.CSharp;
 
 namespace Poly.DslCompiler;

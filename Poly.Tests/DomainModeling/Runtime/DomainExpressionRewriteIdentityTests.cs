@@ -1,5 +1,3 @@
-using Poly.DomainModeling;
-using Poly.DomainModeling.Libraries.Temporal;
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
 

@@ -1,7 +1,4 @@
 #nullable enable
-using System;
-using System.Collections.Generic;
-
 public enum Genre {
     Fiction = 0,
     NonFiction = 1,

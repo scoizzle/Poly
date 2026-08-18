@@ -1,7 +1,4 @@
 using Poly.DomainModeling.Evolution;
-using Poly.DomainModeling.Compile;
-using Poly.DomainModeling.Libraries.Storage;
-using Poly.DomainModeling.ContractFill;
 
 namespace Poly.DomainModeling.Ontology.Bootstrap;
 

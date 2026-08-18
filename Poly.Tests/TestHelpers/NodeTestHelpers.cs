@@ -1,5 +1,4 @@
 using Poly.Interpretation;
-using Poly.Interpretation.Analysis;
 using Poly.Interpretation.Analysis.ControlFlow;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Interpretation.LinqExpressions;
@@ -7,7 +6,6 @@ using Poly.Interpretation.Vm;
 
 using Expr = System.Linq.Expressions.Expression;
 using Exprs = System.Linq.Expressions;
-using SN = Poly.Ast.Nodes;
 
 namespace Poly.Tests.TestHelpers;
 

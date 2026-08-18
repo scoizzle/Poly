@@ -1,8 +1,6 @@
-using Poly.Analysis;
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Evolution;
-using Poly.DomainModeling.Language;
 using Poly.DomainModeling.Ontology;
 
 namespace Poly.Tests.DomainModeling;

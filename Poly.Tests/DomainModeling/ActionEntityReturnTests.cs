@@ -1,11 +1,7 @@
-using Poly.Analysis;
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Evolution;
-using Poly.DomainModeling.Language;
 using Poly.DomainModeling.Ontology;
-using Poly.DomainModeling.Ontology.Bootstrap;
-using Poly.DomainModeling.Ontology.Effects;
 
 using DmAction = Poly.DomainModeling.Ontology.Action;
 

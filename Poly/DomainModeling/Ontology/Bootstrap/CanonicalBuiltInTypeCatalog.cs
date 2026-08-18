@@ -1,5 +1,4 @@
 using Poly.DomainModeling.Evolution;
-using Poly.Introspection;
 
 namespace Poly.DomainModeling.Ontology.Bootstrap;
 

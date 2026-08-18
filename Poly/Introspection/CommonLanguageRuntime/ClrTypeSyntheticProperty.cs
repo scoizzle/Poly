@@ -1,5 +1,3 @@
-using Poly.Introspection;
-
 namespace Poly.Introspection.CommonLanguageRuntime;
 
 /// <summary>

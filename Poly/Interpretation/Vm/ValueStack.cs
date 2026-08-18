@@ -1,6 +1,3 @@
-using System.Buffers;
-using System.Runtime.CompilerServices;
-
 namespace Poly.Interpretation.Vm;
 
 /// <summary>Pooled value stack for the Poly VM. Stores 64-bit scalar values

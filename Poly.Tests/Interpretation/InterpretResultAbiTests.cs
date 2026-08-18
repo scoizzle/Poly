@@ -1,5 +1,3 @@
-using Poly.Ast;
-using Poly.Ast.Nodes;
 using Poly.Interpretation;
 
 namespace Poly.Tests.Interpretation;

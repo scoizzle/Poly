@@ -1,6 +1,3 @@
-using Poly.Analysis;
-using Poly.Ast.Nodes;
-
 namespace Poly.Interpretation.Analysis.Semantics;
 
 // ── Metadata types ──────────────────────────────────────────────

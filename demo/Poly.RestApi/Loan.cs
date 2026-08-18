@@ -1,7 +1,4 @@
 #nullable enable
-using System;
-using System.Collections.Generic;
-
 public enum LoanStage {
     Active = 0,
     Overdue = 1,

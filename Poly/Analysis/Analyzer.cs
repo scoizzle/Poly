@@ -1,5 +1,3 @@
-using System.Diagnostics;
-
 namespace Poly.Analysis;
 
 /// <summary>

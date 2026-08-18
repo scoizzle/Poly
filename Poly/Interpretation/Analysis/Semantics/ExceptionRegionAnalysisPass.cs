@@ -1,5 +1,3 @@
-using Poly.Analysis;
-using Poly.Ast.Nodes;
 using Poly.Interpretation.Analysis.ControlFlow;
 
 namespace Poly.Interpretation.Analysis.Semantics;

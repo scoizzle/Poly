@@ -1,10 +1,7 @@
-using Poly.DomainModeling;
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
 using Poly.Interpretation;
 using Poly.Interpretation.Vm;
-
-using SN = Poly.Ast.Nodes;
 
 namespace Poly.Tests.DomainModeling.Lowering;
 

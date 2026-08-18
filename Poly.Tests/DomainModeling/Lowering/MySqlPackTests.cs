@@ -1,6 +1,3 @@
-using Poly.DomainModeling;
-using Poly.DomainModeling.Lowering;
-using Poly.DomainModeling.Ontology;
 using Poly.Packs.MySql;
 
 namespace Poly.Tests.DomainModeling.Lowering;

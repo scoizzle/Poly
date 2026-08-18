@@ -1,5 +1,3 @@
-using Poly.Analysis;
-
 namespace Poly.Interpretation.Analysis.Semantics;
 
 public static class SyntaxTypeCompatibilityAnalyzerExtensions {

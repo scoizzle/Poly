@@ -1,6 +1,3 @@
-using Poly.DomainModeling;
-using Poly.DomainModeling.Language;
-using Poly.DomainModeling.Libraries.Temporal;
 using Poly.DomainModeling.Ontology;
 using Poly.Grammar;
 // Disambiguate from Poly.Ast.Nodes records imported via global usings.

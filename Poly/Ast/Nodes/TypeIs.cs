@@ -1,6 +1,3 @@
-using Poly.Interpretation.Analysis.Semantics;
-using Poly.Introspection.CommonLanguageRuntime;
-
 namespace Poly.Ast.Nodes;
 
 /// <summary>

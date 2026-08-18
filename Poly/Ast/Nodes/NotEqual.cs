@@ -1,5 +1,3 @@
-using Poly.Interpretation.Analysis.Semantics;
-
 namespace Poly.Ast.Nodes;
 
 /// <summary>

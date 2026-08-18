@@ -76,7 +76,7 @@ Well-formed  →  Catalog (first metadata)  →  Derive (capability, required, t
 
 ## Directory overview
 
-Layout matches [`docs/plans/domainmodeling-target-architecture-2026-08-16.md`](../../docs/plans/domainmodeling-target-architecture-2026-08-16.md). Folder namespaces match the tree except **ontology facts** (`Domain`, `Entity`, `Action`, …), **dispatch**, and **runtime**, which stay `Poly.DomainModeling` so they remain in the parent namespace (avoids `Action`/`Add`/`ValueType` collisions with `System` and `Poly.Ast`).
+Layout matches [`docs/plans/domainmodeling-target-architecture-2026-08-16.md`](../../docs/plans/domainmodeling-target-architecture-2026-08-16.md). Namespaces follow folders: facts in `Ontology` (and `Ontology.Contract` / `Constraints` / `Effects` / `Bootstrap`), walkers in `Dispatch`, instances in `Runtime`. Do not `global using` `Ontology` in the core `Poly` assembly — `Action`/`Add`/`ValueType`/`PrimitiveType` collide with `System` and `Poly.Ast`. Sibling folders use explicit usings plus aliases.
 
 | Directory | Purpose |
 |-----------|---------|

@@ -2,6 +2,7 @@ using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Language;
+using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Ontology.Effects;
 using Poly.DomainModeling.Queries;
 using Poly.Mcp.Sessions;
@@ -1799,8 +1800,8 @@ public class McpSmokeTests {
     public async Task Parser_Exists_NotRelExists_CreatesNotExists() {
         // Q1.3: `not Rel exists` → Not(Exists(PropertyAccess))
         var parsed = ParseExpression("not certificate exists");
-        await Assert.That(parsed).IsTypeOf<Poly.DomainModeling.Not>();
-        var notExpr = (Poly.DomainModeling.Not)parsed;
+        await Assert.That(parsed).IsTypeOf<Poly.DomainModeling.Ontology.Not>();
+        var notExpr = (Poly.DomainModeling.Ontology.Not)parsed;
         await Assert.That(notExpr.Operand).IsTypeOf<Exists>();
         var exists = (Exists)notExpr.Operand;
         await Assert.That(exists.Target).IsTypeOf<PropertyAccess>();
@@ -1814,7 +1815,7 @@ public class McpSmokeTests {
         await Assert.That(parsed).IsTypeOf<RelationshipNavigation>();
         var nav = (RelationshipNavigation)parsed;
         await Assert.That(nav.RelationshipName).IsEqualTo("customer");
-        await Assert.That(nav.TargetProperty).IsTypeOf<Poly.DomainModeling.And>();
+        await Assert.That(nav.TargetProperty).IsTypeOf<Poly.DomainModeling.Ontology.And>();
     }
 
     [Test]
@@ -1853,7 +1854,7 @@ public class McpSmokeTests {
         await Assert.That(printed).IsEqualTo("not certificate exists");
 
         var reParsed = ParseExpression(printed);
-        await Assert.That(reParsed).IsTypeOf<Poly.DomainModeling.Not>();
+        await Assert.That(reParsed).IsTypeOf<Poly.DomainModeling.Ontology.Not>();
     }
 
     [Test]
@@ -1886,7 +1887,7 @@ public class McpSmokeTests {
     public async Task Parser_ComplexLocalExpr_StillWorks() {
         // Mixed and/or/not with parens
         var parsed = ParseExpression("(Total > 0) or Rush is true");
-        await Assert.That(parsed).IsTypeOf<Poly.DomainModeling.Or>();
+        await Assert.That(parsed).IsTypeOf<Poly.DomainModeling.Ontology.Or>();
     }
 
     /// <summary>
@@ -2164,8 +2165,8 @@ E: entity {{
         // Q1′′′.6: `not Rel exists` produces Not(Exists(...)), not NotExists.
         // Guide table updated to reflect this.
         var parsed = ParseExpression("not certificate exists");
-        await Assert.That(parsed).IsTypeOf<Poly.DomainModeling.Not>();
-        var notExpr = (Poly.DomainModeling.Not)parsed;
+        await Assert.That(parsed).IsTypeOf<Poly.DomainModeling.Ontology.Not>();
+        var notExpr = (Poly.DomainModeling.Ontology.Not)parsed;
         await Assert.That(notExpr.Operand).IsTypeOf<Exists>();
     }
 
@@ -2866,23 +2867,23 @@ E: entity {{
         var parsed = ParseExpression("any items where P1 is \"x\" and P2 >= 10");
         await Assert.That(parsed).IsTypeOf<AnyExpr>();
         var any = (AnyExpr)parsed;
-        await Assert.That(any.Body).IsTypeOf<Poly.DomainModeling.And>();
+        await Assert.That(any.Body).IsTypeOf<Poly.DomainModeling.Ontology.And>();
     }
 
     [Test]
     public async Task Parser_Quantifier_Any_In_Expression() {
         // Quantifier inside a larger expression
         var parsed = ParseExpression("P2 > 0 and any items where P1 is \"x\"");
-        await Assert.That(parsed).IsTypeOf<Poly.DomainModeling.And>();
-        var andExpr = (Poly.DomainModeling.And)parsed;
+        await Assert.That(parsed).IsTypeOf<Poly.DomainModeling.Ontology.And>();
+        var andExpr = (Poly.DomainModeling.Ontology.And)parsed;
         await Assert.That(andExpr.Right).IsTypeOf<AnyExpr>();
     }
 
     [Test]
     public async Task Parser_Quantifier_Any_Negated() {
         var parsed = ParseExpression("not any items where P1 is \"x\"");
-        await Assert.That(parsed).IsTypeOf<Poly.DomainModeling.Not>();
-        var notExpr = (Poly.DomainModeling.Not)parsed;
+        await Assert.That(parsed).IsTypeOf<Poly.DomainModeling.Ontology.Not>();
+        var notExpr = (Poly.DomainModeling.Ontology.Not)parsed;
         await Assert.That(notExpr.Operand).IsTypeOf<AnyExpr>();
     }
 
@@ -2932,7 +2933,7 @@ E: entity {{
         var parsed = ParseExpression("any items where (P1 is \"x\" or P1 is \"y\")");
         await Assert.That(parsed).IsTypeOf<AnyExpr>();
         var any = (AnyExpr)parsed;
-        await Assert.That(any.Body).IsTypeOf<Poly.DomainModeling.Or>();
+        await Assert.That(any.Body).IsTypeOf<Poly.DomainModeling.Ontology.Or>();
     }
 
     [Test]

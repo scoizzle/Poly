@@ -1,9 +1,24 @@
 using System.Text;
 
 using Poly.DomainModeling;
+using Poly.DomainModeling.Dispatch;
+using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Ontology.Constraints;
+using Poly.DomainModeling.Ontology.Contract;
 using Poly.DomainModeling.Ontology.Effects;
+using Poly.DomainModeling.Runtime;
 using Poly.Grammar;
+
+using Action = Poly.DomainModeling.Ontology.Action;
+using Add = Poly.DomainModeling.Ontology.Add;
+using And = Poly.DomainModeling.Ontology.And;
+using Divide = Poly.DomainModeling.Ontology.Divide;
+using Multiply = Poly.DomainModeling.Ontology.Multiply;
+using Not = Poly.DomainModeling.Ontology.Not;
+using Or = Poly.DomainModeling.Ontology.Or;
+using PrimitiveType = Poly.DomainModeling.Ontology.PrimitiveType;
+using Subtract = Poly.DomainModeling.Ontology.Subtract;
+using ValueType = Poly.DomainModeling.Ontology.ValueType;
 
 namespace Poly.DomainModeling.Language;
 
@@ -682,14 +697,14 @@ public sealed class DomainDslPrinter {
             $"({Run(_printer, o.Left)} or {Run(_printer, o.Right)})";
 
         protected override string Not(Not n) =>
-            n.Operand is Poly.DomainModeling.Comparison
-                or Poly.DomainModeling.And
-                or Poly.DomainModeling.Or
-                or Poly.DomainModeling.Add
-                or Poly.DomainModeling.Subtract
-                or Poly.DomainModeling.Multiply
-                or Poly.DomainModeling.Divide
-                or Poly.DomainModeling.Not
+            n.Operand is Poly.DomainModeling.Ontology.Comparison
+                or Poly.DomainModeling.Ontology.And
+                or Poly.DomainModeling.Ontology.Or
+                or Poly.DomainModeling.Ontology.Add
+                or Poly.DomainModeling.Ontology.Subtract
+                or Poly.DomainModeling.Ontology.Multiply
+                or Poly.DomainModeling.Ontology.Divide
+                or Poly.DomainModeling.Ontology.Not
                 ? $"not ({Run(_printer, n.Operand)})"
                 : $"not {Run(_printer, n.Operand)}";
 

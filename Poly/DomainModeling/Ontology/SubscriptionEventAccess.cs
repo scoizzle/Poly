@@ -1,4 +1,4 @@
-namespace Poly.DomainModeling;
+namespace Poly.DomainModeling.Ontology;
 
 /// <summary>
 /// Legacy naming constants for the retired subscription <c>event</c> root.

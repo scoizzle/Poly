@@ -1,4 +1,4 @@
-namespace Poly.DomainModeling;
+namespace Poly.DomainModeling.Ontology;
 
 /// <summary>
 /// Base type for all named members within a domain model (entities, stages, actions, policies, properties, etc.).

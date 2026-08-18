@@ -1,4 +1,4 @@
-namespace Poly.DomainModeling;
+namespace Poly.DomainModeling.Ontology;
 
 /// <summary>
 /// Closed value type for annotation arguments. Only these types may appear

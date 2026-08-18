@@ -7,6 +7,7 @@ using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Language;
 using Poly.DomainModeling.Libraries.Storage;
 using Poly.DomainModeling.Libraries.Temporal;
+using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Ontology.Bootstrap;
 using Poly.DomainModeling.Ontology.Constraints;
 using Poly.DomainModeling.Ontology.Effects;
@@ -29,7 +30,7 @@ public class DomainEntityInstanceTests {
                 DomainExpression.Property("Active"),
                 DomainExpression.Literal(true)));
 
-        var activate = new Poly.DomainModeling.Action("Activate", InvocationResult.Void, [],
+        var activate = new Poly.DomainModeling.Ontology.Action("Activate", InvocationResult.Void, [],
             Effects: [new StageTransitionEffect(new StageReference("Active"))],
             Policies: [isActive]);
 
@@ -184,7 +185,7 @@ public class DomainEntityInstanceTests {
     [Test]
     public async Task InvokeAction_AssignTodayClockNode_StoresDate() {
         var due = new Property("Due", new DomainTypeReference("Date"), []);
-        var stamp = new Poly.DomainModeling.Action("Stamp", InvocationResult.Void, [],
+        var stamp = new Poly.DomainModeling.Ontology.Action("Stamp", InvocationResult.Void, [],
             [new AssignEffect(DomainExpression.Property("Due"), new Today())], []);
         var entity = new Entity("Loan",
             Properties: [due],
@@ -244,12 +245,12 @@ public class DomainEntityInstanceTests {
     public async Task InvokeAction_Standalone_EmptyStageCopyWithParams_FallsThroughToEntityAction() {
         // Standalone reduced contract (Domain null): structural SA fallthrough must
         // match catalog semantics. Params-carrying empty stage-copy → entity action.
-        var entityAction = new Poly.DomainModeling.Action("Submit", InvocationResult.Void,
+        var entityAction = new Poly.DomainModeling.Ontology.Action("Submit", InvocationResult.Void,
             Parameters: [new Property("Note", new DomainTypeReference("Text"), [])],
             Effects: [new StageTransitionEffect(new StageReference("Active"))],
             Policies: []);
         var draft = new Stage("Draft",
-            Actions: [new Poly.DomainModeling.Action("Submit", InvocationResult.Void,
+            Actions: [new Poly.DomainModeling.Ontology.Action("Submit", InvocationResult.Void,
                 Parameters: [new Property("Note", new DomainTypeReference("Text"), [])],
                 Effects: [], Policies: [])],
             Policies: [], OnEntryEffects: [], OnExitEffects: []);
@@ -272,10 +273,10 @@ public class DomainEntityInstanceTests {
 
     [Test]
     public async Task InvokeAction_DomainBound_EmptyStageCopy_UsesCatalogFallthrough() {
-        var entityAction = new Poly.DomainModeling.Action("Submit", InvocationResult.Void, [],
+        var entityAction = new Poly.DomainModeling.Ontology.Action("Submit", InvocationResult.Void, [],
             [new StageTransitionEffect(new StageReference("Active"))], []);
         var draft = new Stage("Draft",
-            [new Poly.DomainModeling.Action("Submit", InvocationResult.Void, [], [], [])],
+            [new Poly.DomainModeling.Ontology.Action("Submit", InvocationResult.Void, [], [], [])],
             [], [], []);
         var active = new Stage("Active", [], [], [], []);
         var order = new Entity("Order",
@@ -296,10 +297,10 @@ public class DomainEntityInstanceTests {
 
     [Test]
     public async Task InvokeAction_DomainBound_Throws_WhenCatalogMissing() {
-        var entityAction = new Poly.DomainModeling.Action("Submit", InvocationResult.Void, [],
+        var entityAction = new Poly.DomainModeling.Ontology.Action("Submit", InvocationResult.Void, [],
             [new StageTransitionEffect(new StageReference("Active"))], []);
         var draft = new Stage("Draft",
-            [new Poly.DomainModeling.Action("Submit", InvocationResult.Void, [], [], [])],
+            [new Poly.DomainModeling.Ontology.Action("Submit", InvocationResult.Void, [], [], [])],
             [], [], []);
         var active = new Stage("Active", [], [], [], []);
         var order = new Entity("Order",
@@ -334,7 +335,7 @@ public class DomainEntityInstanceTests {
     [Test]
     public async Task InvokeAction_Standalone_CreateInRelationship_Unsupported() {
         // Standalone reduced contract: relationship semantic resolve requires Domain.
-        var createIn = new Poly.DomainModeling.Action("Spawn", InvocationResult.Void, [],
+        var createIn = new Poly.DomainModeling.Ontology.Action("Spawn", InvocationResult.Void, [],
             [new CreateEntityInRelationshipEffect("Owns", [])], []);
         var entity = new Entity("Parent",
             [new Property("Name", new DomainTypeReference("Text"), [])],
@@ -481,7 +482,7 @@ public class DomainEntityInstanceTests {
     public async Task AssignEffect_UpdatesPropertyViaVm() {
         var age = new Property("Age", new DomainTypeReference("Number"), []);
         var entity = new Entity("Person", [age], Actions: [
-            new Poly.DomainModeling.Action("SetAge", InvocationResult.Void, [],
+            new Poly.DomainModeling.Ontology.Action("SetAge", InvocationResult.Void, [],
                 Effects: [new AssignEffect(
                     DomainExpression.Property("Age"),
                     DomainExpression.Literal(42L))],
@@ -501,7 +502,7 @@ public class DomainEntityInstanceTests {
         var label = new Property("Label", new DomainTypeReference("Text"), []);
         var valueParam = new Property("value", new DomainTypeReference("Text"), []);
         var entity = new Entity("Item", [label], Actions: [
-            new Poly.DomainModeling.Action("Tag", InvocationResult.Void,
+            new Poly.DomainModeling.Ontology.Action("Tag", InvocationResult.Void,
                 Parameters: [valueParam],
                 Effects: [new AssignEffect(
                     DomainExpression.Property("Label"),
@@ -525,12 +526,12 @@ public class DomainEntityInstanceTests {
         var label = new Property("Label", new DomainTypeReference("Text"), []);
         var valueParam = new Property("value", new DomainTypeReference("Text"), []);
         var entity = new Entity("Item", [label], Actions: [
-            new Poly.DomainModeling.Action("Go", InvocationResult.Void, [],
+            new Poly.DomainModeling.Ontology.Action("Go", InvocationResult.Void, [],
                 Effects: [new InvokeActionEffect("Apply", [
                     new PropertyBinding("value", DomainExpression.Literal("from-invoke"))
                 ])],
                 Policies: []),
-            new Poly.DomainModeling.Action("Apply", InvocationResult.Void,
+            new Poly.DomainModeling.Ontology.Action("Apply", InvocationResult.Void,
                 Parameters: [valueParam],
                 Effects: [new AssignEffect(
                     DomainExpression.Property("Label"),
@@ -551,7 +552,7 @@ public class DomainEntityInstanceTests {
         var age = new Property("Age", new DomainTypeReference("Number"), []);
         var active = new Property("Active", new DomainTypeReference("Boolean"), []);
         var entity = new Entity("Person", [age, active], Actions: [
-            new Poly.DomainModeling.Action("Setup", InvocationResult.Void, [],
+            new Poly.DomainModeling.Ontology.Action("Setup", InvocationResult.Void, [],
                 Effects: [new CompositeEffect([
                     new AssignEffect(DomainExpression.Property("Age"), DomainExpression.Literal(30L)),
                     new AssignEffect(DomainExpression.Property("Active"), DomainExpression.Literal(true))
@@ -573,7 +574,7 @@ public class DomainEntityInstanceTests {
         var status = new Property("Status", new DomainTypeReference("Text"), []);
         var total = new Property("Total", new DomainTypeReference("Number"), []);
         var entity = new Entity("Order", [status, total], Actions: [
-            new Poly.DomainModeling.Action("Process", InvocationResult.Void, [],
+            new Poly.DomainModeling.Ontology.Action("Process", InvocationResult.Void, [],
                 Effects: [new ConditionalEffect(
                     Condition: DomainExpression.GreaterThanOrEqual(
                         DomainExpression.Property("Total"),
@@ -604,7 +605,7 @@ public class DomainEntityInstanceTests {
         var status = new Property("Status", new DomainTypeReference("Text"), []);
         var total = new Property("Total", new DomainTypeReference("Number"), []);
         var entity = new Entity("Order", [status, total], Actions: [
-            new Poly.DomainModeling.Action("FlagLarge", InvocationResult.Void, [],
+            new Poly.DomainModeling.Ontology.Action("FlagLarge", InvocationResult.Void, [],
                 Effects: [new ConditionalEffect(
                     Condition: DomainExpression.GreaterThanOrEqual(
                         DomainExpression.Property("Total"),
@@ -628,7 +629,7 @@ public class DomainEntityInstanceTests {
         var name = new Property("Name", new DomainTypeReference("Text"), []);
         var age = new Property("Age", new DomainTypeReference("Number"), []);
         var entity = new Entity("Person", [name, age], Actions: [
-            new Poly.DomainModeling.Action("Spawn", InvocationResult.Void, [],
+            new Poly.DomainModeling.Ontology.Action("Spawn", InvocationResult.Void, [],
                 Effects: [new CreateEntityInstance(
                     new DomainTypeReference("Person"),
                     Initializers: [
@@ -653,7 +654,7 @@ public class DomainEntityInstanceTests {
     [Test]
     public async Task CreateEntityInstance_MultipleChildren_AllCreated() {
         var entity = new Entity("Item", [], Actions: [
-            new Poly.DomainModeling.Action("Batch", InvocationResult.Void, [],
+            new Poly.DomainModeling.Ontology.Action("Batch", InvocationResult.Void, [],
                 Effects: [
                     new CreateEntityInstance(new DomainTypeReference("Item")),
                     new CreateEntityInstance(new DomainTypeReference("Item")),
@@ -672,7 +673,7 @@ public class DomainEntityInstanceTests {
     public async Task CreateEntityInstance_SameType_WhenNoDomainReference() {
         var name = new Property("Name", new DomainTypeReference("Text"), []);
         var entity = new Entity("Person", [name], Actions: [
-            new Poly.DomainModeling.Action("Clone", InvocationResult.Void, [],
+            new Poly.DomainModeling.Ontology.Action("Clone", InvocationResult.Void, [],
                 Effects: [new CreateEntityInstance(new DomainTypeReference("Person"),
                     Initializers: [new PropertyBinding("Name", DomainExpression.Literal("Clone"))])],
                 Policies: [])
@@ -690,7 +691,7 @@ public class DomainEntityInstanceTests {
         var personName = new Property("PersonName", new DomainTypeReference("Text"), []);
         var itemName = new Property("ItemName", new DomainTypeReference("Text"), []);
         var person = new Entity("Person", [personName], Actions: [
-            new Poly.DomainModeling.Action("CreateItem", InvocationResult.Void, [],
+            new Poly.DomainModeling.Ontology.Action("CreateItem", InvocationResult.Void, [],
                 Effects: [new CreateEntityInstance(new DomainTypeReference("Item"),
                     Initializers: [new PropertyBinding("ItemName", DomainExpression.Literal("Widget"))])],
                 Policies: [])
@@ -710,12 +711,12 @@ public class DomainEntityInstanceTests {
     public async Task InvokeActionEffect_ChainsToAnotherAction() {
         var count = new Property("Count", new DomainTypeReference("Number"), []);
         var entity = new Entity("Counter", [count], Actions: [
-            new Poly.DomainModeling.Action("Increment", InvocationResult.Void, [],
+            new Poly.DomainModeling.Ontology.Action("Increment", InvocationResult.Void, [],
                 Effects: [new AssignEffect(
                     DomainExpression.Property("Count"),
                     DomainExpression.Add(DomainExpression.Property("Count"), DomainExpression.Literal(1L)))],
                 Policies: []),
-            new Poly.DomainModeling.Action("DoubleIncrement", InvocationResult.Void, [],
+            new Poly.DomainModeling.Ontology.Action("DoubleIncrement", InvocationResult.Void, [],
                 Effects: [
                     new InvokeActionEffect("Increment", []),
                     new InvokeActionEffect("Increment", [])
@@ -738,7 +739,7 @@ public class DomainEntityInstanceTests {
 
         // Target entity: Service has an action we invoke
         var service = new Entity("Service", [status, count], Actions: [
-            new Poly.DomainModeling.Action("Process", InvocationResult.Void, [], [
+            new Poly.DomainModeling.Ontology.Action("Process", InvocationResult.Void, [], [
                 new AssignEffect(DomainExpression.Property("Status"),
                     DomainExpression.Literal("processed"))
             ], [])
@@ -746,7 +747,7 @@ public class DomainEntityInstanceTests {
 
         // Source entity: Orchestrator has an action that invokes service.Process
         var orchestrator = new Entity("Orchestrator", [count], Actions: [
-            new Poly.DomainModeling.Action("Run", InvocationResult.Void, [], [
+            new Poly.DomainModeling.Ontology.Action("Run", InvocationResult.Void, [], [
                 new InvokeActionEffect("Process", [], TargetRelationship: "ServiceCall")
             ], [])
         ], [], []);
@@ -780,7 +781,7 @@ public class DomainEntityInstanceTests {
         var label = new Property("Label", new DomainTypeReference("Text"), []);
 
         var target = new Entity("Target", [label], Actions: [
-            new Poly.DomainModeling.Action("SetText", InvocationResult.Void,
+            new Poly.DomainModeling.Ontology.Action("SetText", InvocationResult.Void,
                 Parameters: [new Property("msg", new DomainTypeReference("Text"), [])],
                 Effects: [new AssignEffect(
                     DomainExpression.Property("Label"),
@@ -789,7 +790,7 @@ public class DomainEntityInstanceTests {
         ], [], []);
 
         var source = new Entity("Source", [], Actions: [
-            new Poly.DomainModeling.Action("Go", InvocationResult.Void, [], [
+            new Poly.DomainModeling.Ontology.Action("Go", InvocationResult.Void, [], [
                 new InvokeActionEffect("SetText", [
                     new PropertyBinding("msg", DomainExpression.Literal("cross-entity!"))
                 ], TargetRelationship: "Link")
@@ -820,14 +821,14 @@ public class DomainEntityInstanceTests {
     public async Task ForEachInvoke_InvokesOnEveryTarget() {
         var status = new Property("Status", new DomainTypeReference("Text"), []);
         var target = new Entity("Target", [status], Actions: [
-            new Poly.DomainModeling.Action("Process", InvocationResult.Void, [], [
+            new Poly.DomainModeling.Ontology.Action("Process", InvocationResult.Void, [], [
                 new AssignEffect(DomainExpression.Property("Status"),
                     DomainExpression.Literal("done"))
             ], [])
         ], [], []);
 
         var source = new Entity("Source", [], Actions: [
-            new Poly.DomainModeling.Action("RunAll", InvocationResult.Void, [], [
+            new Poly.DomainModeling.Ontology.Action("RunAll", InvocationResult.Void, [], [
                 new ForEachInvokeEffect("Items", "item", null, "Process", [])
             ], [])
         ], [], []);
@@ -859,14 +860,14 @@ public class DomainEntityInstanceTests {
         var count = new Property("Count", new DomainTypeReference("Number"), []);
         var isSelected = new Policy("IsSelected",
             DomainExpression.Equal(DomainExpression.Property("Count"), DomainExpression.Literal(42L)));
-        var process = new Poly.DomainModeling.Action("Process", InvocationResult.Void, [], [
+        var process = new Poly.DomainModeling.Ontology.Action("Process", InvocationResult.Void, [], [
             new AssignEffect(DomainExpression.Property("Status"), DomainExpression.Literal("done"))
         ], []);
 
         var target = new Entity("Target", [status, count], [process], [isSelected], []);
 
         var source = new Entity("Source", [], Actions: [
-            new Poly.DomainModeling.Action("RunSelected", InvocationResult.Void, [], [
+            new Poly.DomainModeling.Ontology.Action("RunSelected", InvocationResult.Void, [], [
                 new ForEachInvokeEffect("Items", "item",
                     new ForEachNamedPolicy("IsSelected"), "Process", [])
             ], [])
@@ -903,14 +904,14 @@ public class DomainEntityInstanceTests {
         // Fail-closed: vacuous success is not allowed.
         var status = new Property("Status", new DomainTypeReference("Text"), []);
         var target = new Entity("Target", [status], Actions: [
-            new Poly.DomainModeling.Action("Process", InvocationResult.Void, [], [
+            new Poly.DomainModeling.Ontology.Action("Process", InvocationResult.Void, [], [
                 new AssignEffect(DomainExpression.Property("Status"),
                     DomainExpression.Literal("done"))
             ], [])
         ], [], []);
 
         var source = new Entity("Source", [], Actions: [
-            new Poly.DomainModeling.Action("RunAll", InvocationResult.Void, [], [
+            new Poly.DomainModeling.Ontology.Action("RunAll", InvocationResult.Void, [], [
                 new ForEachInvokeEffect("Items", "item", null, "Process", [])
             ], [])
         ], [], []);
@@ -934,7 +935,7 @@ public class DomainEntityInstanceTests {
         var qty = new Property("Qty", new DomainTypeReference("Number"), []);
         var isPositive = new Policy("IsPositive",
             DomainExpression.GreaterThan(DomainExpression.Property("Qty"), DomainExpression.Literal(0L)));
-        var mark = new Poly.DomainModeling.Action("Mark", InvocationResult.Void,
+        var mark = new Poly.DomainModeling.Ontology.Action("Mark", InvocationResult.Void,
             Parameters: [new Property("amount", new DomainTypeReference("Number"), [])],
             Effects: [
                 new AssignEffect(DomainExpression.Property("Qty"), DomainExpression.Property("amount"))
@@ -943,7 +944,7 @@ public class DomainEntityInstanceTests {
 
         var target = new Entity("Target", [qty], [mark], [isPositive], []);
         var source = new Entity("Source", [], Actions: [
-            new Poly.DomainModeling.Action("Run", InvocationResult.Void, [], [
+            new Poly.DomainModeling.Ontology.Action("Run", InvocationResult.Void, [], [
                 new ForEachInvokeEffect("Items", "item", null, "Mark",
                     [new PropertyBinding("amount", DomainExpression.Literal(100L))])
             ], [])
@@ -981,7 +982,7 @@ public class DomainEntityInstanceTests {
         // `for items as item invoke item.Mark(amount: item Qty + Bonus)` — the binder root
         // resolves against the current target, the caller's property against the source.
         var qty = new Property("Qty", new DomainTypeReference("Number"), []);
-        var mark = new Poly.DomainModeling.Action("Mark", InvocationResult.Void,
+        var mark = new Poly.DomainModeling.Ontology.Action("Mark", InvocationResult.Void,
             Parameters: [new Property("amount", new DomainTypeReference("Number"), [])],
             Effects: [
                 new AssignEffect(DomainExpression.Property("Qty"), DomainExpression.Property("amount"))
@@ -990,7 +991,7 @@ public class DomainEntityInstanceTests {
         var target = new Entity("Target", [qty], [mark], [], []);
         var bonus = new Property("Bonus", new DomainTypeReference("Number"), []);
         var source = new Entity("Source", [bonus], Actions: [
-            new Poly.DomainModeling.Action("Run", InvocationResult.Void, [], [
+            new Poly.DomainModeling.Ontology.Action("Run", InvocationResult.Void, [], [
                 new ForEachInvokeEffect("Items", "item", null, "Mark", [
                     new PropertyBinding("amount",
                         DomainExpression.Add(
@@ -1024,7 +1025,7 @@ public class DomainEntityInstanceTests {
         // Round-5 F5: `assign DateProp to now` on the runtime path must store a DateOnly
         // (not a DateTime) for a Date property — mirroring the type-aware default handling.
         var dueDate = new Property("DueDate", new DomainTypeReference("Date"), []);
-        var action = new Poly.DomainModeling.Action("Touch", InvocationResult.Void, [], [
+        var action = new Poly.DomainModeling.Ontology.Action("Touch", InvocationResult.Void, [], [
             new AssignEffect(DomainExpression.Property("DueDate"), DomainExpression.Property("Now"))
         ], []);
         var entity = new Entity("Item", [dueDate], [action], [], []);
@@ -1043,7 +1044,7 @@ public class DomainEntityInstanceTests {
         var status = new Property("Status", new DomainTypeReference("Text"), []);
         var count = new Property("Count", new DomainTypeReference("Number"), []);
         var entity = new Entity("Worker", [status, count], Actions: [
-            new Poly.DomainModeling.Action("DoAll", InvocationResult.Void, [],
+            new Poly.DomainModeling.Ontology.Action("DoAll", InvocationResult.Void, [],
                 Effects: [
                     new AssignEffect(DomainExpression.Property("Status"),
                         DomainExpression.Literal("Started")),
@@ -1088,7 +1089,7 @@ public class DomainEntityInstanceTests {
 
         var orderCode = new Property("Code", new DomainTypeReference("Text"), []);
         var order = new Entity("Order", [orderCode], [
-            new Poly.DomainModeling.Action("Activate", InvocationResult.Void, [], [
+            new Poly.DomainModeling.Ontology.Action("Activate", InvocationResult.Void, [], [
                 new StageTransitionEffect(new StageReference("Active"))
             ], [])
         ], [], [
@@ -1139,7 +1140,7 @@ public class DomainEntityInstanceTests {
         var order = new Entity("Order", [
             new Property("Code", new DomainTypeReference("Text"), [])
         ], [
-            new Poly.DomainModeling.Action("Activate", InvocationResult.Void, [], [
+            new Poly.DomainModeling.Ontology.Action("Activate", InvocationResult.Void, [], [
                 new StageTransitionEffect(new StageReference("Active"))
             ], [])
         ], [], [
@@ -1185,7 +1186,7 @@ public class DomainEntityInstanceTests {
         var order = new Entity("Order", [
             new Property("Code", new DomainTypeReference("Text"), [])
         ], [
-            new Poly.DomainModeling.Action("Activate", InvocationResult.Void, [], [
+            new Poly.DomainModeling.Ontology.Action("Activate", InvocationResult.Void, [], [
                 new StageTransitionEffect(new StageReference("Active"))
             ], [])
         ], [], [
@@ -1232,7 +1233,7 @@ public class DomainEntityInstanceTests {
         var order = new Entity("Order", [
             new Property("Code", new DomainTypeReference("Text"), [])
         ], [
-            new Poly.DomainModeling.Action("Activate", InvocationResult.Void, [], [
+            new Poly.DomainModeling.Ontology.Action("Activate", InvocationResult.Void, [], [
                 new StageTransitionEffect(new StageReference("Active"))
             ], [])
         ], [], [
@@ -1446,7 +1447,7 @@ public class DomainEntityInstanceTests {
         var order = new Entity("Order", [
             new Property("Code", new DomainTypeReference("Text"), [])
         ], [
-            new Poly.DomainModeling.Action("Activate", InvocationResult.Void, [], [
+            new Poly.DomainModeling.Ontology.Action("Activate", InvocationResult.Void, [], [
                 new StageTransitionEffect(new StageReference("Active"))
             ], [])
         ], [], [
@@ -1503,7 +1504,7 @@ public class DomainEntityInstanceTests {
         var order = new Entity("Order", [
             new Property("Code", new DomainTypeReference("Text"), [])
         ], [
-            new Poly.DomainModeling.Action("Activate", InvocationResult.Void, [], [
+            new Poly.DomainModeling.Ontology.Action("Activate", InvocationResult.Void, [], [
                 new StageTransitionEffect(new StageReference("Active"))
             ], [])
         ], [], [
@@ -1552,7 +1553,7 @@ public class DomainEntityInstanceTests {
         var order = new Entity("Order", [
             new Property("Code", new DomainTypeReference("Text"), [])
         ], [
-            new Poly.DomainModeling.Action("Activate", InvocationResult.Void, [], [
+            new Poly.DomainModeling.Ontology.Action("Activate", InvocationResult.Void, [], [
                 new StageTransitionEffect(new StageReference("Active"))
             ], [])
         ], [], [
@@ -1651,7 +1652,7 @@ public class DomainEntityInstanceTests {
         var order = new Entity("Order", [
             new Property("Code", new DomainTypeReference("Text"), [])
         ], [
-            new Poly.DomainModeling.Action("Activate", InvocationResult.Void, [], [
+            new Poly.DomainModeling.Ontology.Action("Activate", InvocationResult.Void, [], [
                 new StageTransitionEffect(new StageReference("Active"))
             ], [])
         ], [], [
@@ -1825,7 +1826,7 @@ public class DomainEntityInstanceTests {
         var order = new Entity("Order", [
             new Property("Code", new DomainTypeReference("Text"), [])
         ], [
-            new Poly.DomainModeling.Action("Activate", InvocationResult.Void, [], [
+            new Poly.DomainModeling.Ontology.Action("Activate", InvocationResult.Void, [], [
                 new StageTransitionEffect(new StageReference("Active"))
             ], [])
         ], [], [
@@ -1857,7 +1858,7 @@ public class DomainEntityInstanceTests {
         var entryTarget = new Property("EntryTarget", new DomainTypeReference("Text"), []);
         var status = new Property("Status", new DomainTypeReference("Text"), []);
         var entity = new Entity("TestEnt", [status, entryTarget], [
-            new Poly.DomainModeling.Action("Go", InvocationResult.Void, [], [
+            new Poly.DomainModeling.Ontology.Action("Go", InvocationResult.Void, [], [
                 new StageTransitionEffect(new StageReference("Active"))
             ], [])
         ], [], [
@@ -1891,7 +1892,7 @@ public class DomainEntityInstanceTests {
         // BR.3.1: OnExit effects execute before leaving a stage.
         var exitNote = new Property("ExitNote", new DomainTypeReference("Text"), []);
         var entity = new Entity("TestEnt", [exitNote], [
-            new Poly.DomainModeling.Action("Go", InvocationResult.Void, [], [
+            new Poly.DomainModeling.Ontology.Action("Go", InvocationResult.Void, [], [
                 new StageTransitionEffect(new StageReference("Active"))
             ], [])
         ], [], [
@@ -1920,14 +1921,14 @@ public class DomainEntityInstanceTests {
     public async Task StageScopedAction_OnlyCallableFromThatStage() {
         // BR.3.2: Actions defined on a stage are only available while on that stage.
         var count = new Property("Count", new DomainTypeReference("Number"), []);
-        var stageAction = new Poly.DomainModeling.Action("StageOnly", InvocationResult.Void, [], [
+        var stageAction = new Poly.DomainModeling.Ontology.Action("StageOnly", InvocationResult.Void, [], [
             new AssignEffect(
                 DomainExpression.Property("Count"),
                 DomainExpression.Add(DomainExpression.Property("Count"), DomainExpression.Literal(1L)))
         ], []);
         var entity = new Entity("TestEnt", [count], [
             // Entity-level action to transition
-            new Poly.DomainModeling.Action("Go", InvocationResult.Void, [], [
+            new Poly.DomainModeling.Ontology.Action("Go", InvocationResult.Void, [], [
                 new StageTransitionEffect(new StageReference("StageA"))
             ], [])
         ], [], [
@@ -1962,7 +1963,7 @@ public class DomainEntityInstanceTests {
         var parentName = new Property("ParentName", new DomainTypeReference("Text"), []);
         var child = new Entity("Child", [childName], [], [], []);
         var parent = new Entity("Parent", [parentName], [
-            new Poly.DomainModeling.Action("Spawn", InvocationResult.Void, [], [
+            new Poly.DomainModeling.Ontology.Action("Spawn", InvocationResult.Void, [], [
                 new CreateEntityInstance(new DomainTypeReference("Child"),
                     Initializers: [new PropertyBinding("ChildName", DomainExpression.Literal("AutoAdded"))])
             ], [])
@@ -1998,7 +1999,7 @@ public class DomainEntityInstanceTests {
         var parent = new Entity("Parent", [
             new Property("ParentName", new DomainTypeReference("Text"), [])
         ], [
-            new Poly.DomainModeling.Action("Spawn", InvocationResult.Void, [], [
+            new Poly.DomainModeling.Ontology.Action("Spawn", InvocationResult.Void, [], [
                 new CreateEntityInstance(new DomainTypeReference("Child"),
                     [new PropertyBinding("ChildName", DomainExpression.Literal("Linked"))],
                     RelationshipName: "hasChild")
@@ -2029,7 +2030,7 @@ public class DomainEntityInstanceTests {
         // Create effect without RelationshipName → child is NOT linked.
         var child = new Entity("Child", [], [], [], []);
         var parent = new Entity("Parent", [], [
-            new Poly.DomainModeling.Action("Spawn", InvocationResult.Void, [], [
+            new Poly.DomainModeling.Ontology.Action("Spawn", InvocationResult.Void, [], [
                 new CreateEntityInstance(new DomainTypeReference("Child"))
             ], [])
         ], [], [
@@ -2145,7 +2146,7 @@ public class DomainEntityInstanceTests {
         // Customer ──places──► Order. Customer subscribes to Order's transition.
         var orderStatus = new Property("OrderStatus", new DomainTypeReference("Text"), []);
         var order = new Entity("Order", [orderStatus], [
-            new Poly.DomainModeling.Action("Activate", InvocationResult.Void, [], [
+            new Poly.DomainModeling.Ontology.Action("Activate", InvocationResult.Void, [], [
                 new StageTransitionEffect(new StageReference("Active"))
             ], [])
         ], [], [
@@ -2155,7 +2156,7 @@ public class DomainEntityInstanceTests {
 
         var custStatus = new Property("CustStatus", new DomainTypeReference("Text"), []);
         var customer = new Entity("Customer", [custStatus], [
-            new Poly.DomainModeling.Action("PlaceOrder", InvocationResult.Void, [], [
+            new Poly.DomainModeling.Ontology.Action("PlaceOrder", InvocationResult.Void, [], [
                 // Create + auto-link via "places" relationship
                 new CreateEntityInstance(new DomainTypeReference("Order"),
                     [new PropertyBinding("OrderStatus", DomainExpression.Literal("New"))],
@@ -2204,7 +2205,7 @@ public class DomainEntityInstanceTests {
         // Create with RelationshipName but no store → no crash, no link.
         var child = new Entity("Child", [], [], [], []);
         var parent = new Entity("Parent", [], [
-            new Poly.DomainModeling.Action("Spawn", InvocationResult.Void, [], [
+            new Poly.DomainModeling.Ontology.Action("Spawn", InvocationResult.Void, [], [
                 new CreateEntityInstance(new DomainTypeReference("Child"), [],
                     RelationshipName: "someRel")
             ], [])
@@ -2237,7 +2238,7 @@ public class DomainEntityInstanceTests {
         ]);
 
         var b = new Entity("B", [], [
-            new Poly.DomainModeling.Action("Activate", InvocationResult.Void, [], [
+            new Poly.DomainModeling.Ontology.Action("Activate", InvocationResult.Void, [], [
                 new StageTransitionEffect(new StageReference("Active"))
             ], [])
         ], [], [
@@ -2272,19 +2273,19 @@ public class DomainEntityInstanceTests {
     public async Task StageAction_NotInheritedFromOtherStage() {
         // Stage hierarchy not supported — actions are only accessible on their own stage.
         var count = new Property("Count", new DomainTypeReference("Number"), []);
-        var childAction = new Poly.DomainModeling.Action("ChildOp", InvocationResult.Void, [], [
+        var childAction = new Poly.DomainModeling.Ontology.Action("ChildOp", InvocationResult.Void, [], [
             new AssignEffect(
                 DomainExpression.Property("Count"),
                 DomainExpression.Add(DomainExpression.Property("Count"), DomainExpression.Literal(10L)))
         ], []);
-        var parentAction = new Poly.DomainModeling.Action("ParentOp", InvocationResult.Void, [], [
+        var parentAction = new Poly.DomainModeling.Ontology.Action("ParentOp", InvocationResult.Void, [], [
             new AssignEffect(
                 DomainExpression.Property("Count"),
                 DomainExpression.Add(DomainExpression.Property("Count"), DomainExpression.Literal(1L)))
         ], []);
 
         var entity = new Entity("TestEnt", [count], [
-            new Poly.DomainModeling.Action("GoToChild", InvocationResult.Void, [], [
+            new Poly.DomainModeling.Ontology.Action("GoToChild", InvocationResult.Void, [], [
                 new StageTransitionEffect(new StageReference("Child"))
             ], [])
         ], [], [
@@ -2332,7 +2333,7 @@ public class DomainEntityInstanceTests {
         // OnEntry effect that throws via a deliberate VM crash (bad property access).
         // The throw is on Active's OnEntryEffects, executes when A transitions Draft→Active.
         var a = new Entity("A", [aStatus], [
-            new Poly.DomainModeling.Action("Go", InvocationResult.Void, [], [
+            new Poly.DomainModeling.Ontology.Action("Go", InvocationResult.Void, [], [
                 new StageTransitionEffect(new StageReference("Active"))
             ], [])
         ], [], [
@@ -2402,7 +2403,7 @@ public class DomainEntityInstanceTests {
 
         // E0: triggered by manual action — transitions to Active
         var e0 = new Entity("E0", [status], [
-            new Poly.DomainModeling.Action("Go", InvocationResult.Void, [], [
+            new Poly.DomainModeling.Ontology.Action("Go", InvocationResult.Void, [], [
                 new StageTransitionEffect(new StageReference("Active"))
             ], [])
         ], [], [
@@ -2484,7 +2485,7 @@ public class DomainEntityInstanceTests {
             new Stage("Done", [], [], [], [])
         ]);
 
-        var childAction = new Poly.DomainModeling.Action("Activate", InvocationResult.Void, [], [
+        var childAction = new Poly.DomainModeling.Ontology.Action("Activate", InvocationResult.Void, [], [
             new StageTransitionEffect(new StageReference("Active"))
         ], []);
         var child = new Entity("Child", [
@@ -2497,7 +2498,7 @@ public class DomainEntityInstanceTests {
         var parent = new Entity("Parent", [
             new Property("PName", new DomainTypeReference("Text"), [])
         ], [
-            new Poly.DomainModeling.Action("Spawn", InvocationResult.Void, [], [
+            new Poly.DomainModeling.Ontology.Action("Spawn", InvocationResult.Void, [], [
                 new CreateEntityInstance(new DomainTypeReference("Child"),
                     Initializers: [new PropertyBinding("Name", DomainExpression.Literal("AutoChild"))])
             ], [])
@@ -2550,7 +2551,7 @@ public class DomainEntityInstanceTests {
         ]);
 
         var order = new Entity("Order", [], [
-            new Poly.DomainModeling.Action("Activate", InvocationResult.Void, [], [
+            new Poly.DomainModeling.Ontology.Action("Activate", InvocationResult.Void, [], [
                 new StageTransitionEffect(new StageReference("Active"))
             ], [])
         ], [], [
@@ -2607,10 +2608,10 @@ public class DomainEntityInstanceTests {
         ]);
 
         var order = new Entity("Order", [], [
-            new Poly.DomainModeling.Action("Activate", InvocationResult.Void, [], [
+            new Poly.DomainModeling.Ontology.Action("Activate", InvocationResult.Void, [], [
                 new StageTransitionEffect(new StageReference("Active"))
             ], []),
-            new Poly.DomainModeling.Action("Reset", InvocationResult.Void, [], [
+            new Poly.DomainModeling.Ontology.Action("Reset", InvocationResult.Void, [], [
                 new StageTransitionEffect(new StageReference("Draft"))
             ], [])
         ], [], [
@@ -2650,7 +2651,7 @@ public class DomainEntityInstanceTests {
         // P2′.3: Create with a relationship name that doesn't exist in the domain should throw.
         var child = new Entity("Child", [], [], [], []);
         var parent = new Entity("Parent", [], [
-            new Poly.DomainModeling.Action("Spawn", InvocationResult.Void, [], [
+            new Poly.DomainModeling.Ontology.Action("Spawn", InvocationResult.Void, [], [
                 new CreateEntityInstance(new DomainTypeReference("Child"), [],
                     RelationshipName: "nonexistentRel")
             ], [])
@@ -2678,7 +2679,7 @@ public class DomainEntityInstanceTests {
         // Use direct API to avoid analysis gate issues (the create-in needs domain context)
         var orderEntity = new Entity("Order", [new Property("Title", new DomainTypeReference("Text"), [])], [], [], []);
         var customerEntity = new Entity("Customer", [new Property("Name", new DomainTypeReference("Text"), [])], [
-            new Poly.DomainModeling.Action("Go", InvocationResult.Void, [], [
+            new Poly.DomainModeling.Ontology.Action("Go", InvocationResult.Void, [], [
                 new CreateEntityInRelationshipEffect("orders", [])
             ], [])
         ], [], [
@@ -2714,7 +2715,7 @@ public class DomainEntityInstanceTests {
         // P2′′′.3: CreateEntityInstance + RelationshipName on wrong source entity should throw.
         var order = new Entity("Order", [], [], [], []);
         var customer = new Entity("Customer", [], [], [], []);
-        var action = new Poly.DomainModeling.Action("Spawn", InvocationResult.Void, [], [
+        var action = new Poly.DomainModeling.Ontology.Action("Spawn", InvocationResult.Void, [], [
             new CreateEntityInstance(new DomainTypeReference("Order"), [],
                 RelationshipName: "rel")
         ], []);
@@ -2743,7 +2744,7 @@ public class DomainEntityInstanceTests {
         // P2′′′.3: CreateEntityInstance + RelationshipName where created type ≠ rel target should throw.
         var invoice = new Entity("Invoice", [], [], [], []);
         var order = new Entity("Order", [], [], [], []);
-        var action = new Poly.DomainModeling.Action("Spawn", InvocationResult.Void, [], [
+        var action = new Poly.DomainModeling.Ontology.Action("Spawn", InvocationResult.Void, [], [
             new CreateEntityInstance(new DomainTypeReference("Invoice"), [],
                 RelationshipName: "rel")
         ], []);
@@ -2772,7 +2773,7 @@ public class DomainEntityInstanceTests {
         // P2′′′.4: CreateIn effect on wrong source entity should throw at runtime.
         var order = new Entity("Order", [], [], [], []);
         var customer = new Entity("Customer", [], [], [], []);
-        var action = new Poly.DomainModeling.Action("Spawn", InvocationResult.Void, [], [
+        var action = new Poly.DomainModeling.Ontology.Action("Spawn", InvocationResult.Void, [], [
             new CreateEntityInRelationshipEffect("rel", [])
         ], []);
         var maker = new Entity("Maker", [], [action], [], []);
@@ -3331,7 +3332,7 @@ public class DomainEntityInstanceTests {
         // DateOnly.AddDays((int)14) — the read, invoke, and write all round-trip the
         // heap handle so the action applies the shifted date.
         var dueDate = new Property("DueDate", new DomainTypeReference("Date"), []);
-        var extend = new Poly.DomainModeling.Action("Extend", InvocationResult.Void, [], [
+        var extend = new Poly.DomainModeling.Ontology.Action("Extend", InvocationResult.Void, [], [
             new AssignEffect(
                 DomainExpression.Property("DueDate"),
                 DomainExpression.Add(
@@ -3353,7 +3354,7 @@ public class DomainEntityInstanceTests {
     public async Task InvokeAction_DateArithmetic_AddDays_AppliesDateTime() {
         // Same heap round-trip for DateTime (AddDays takes double — no int cast).
         var dueDate = new Property("DueDate", new DomainTypeReference("DateTime"), []);
-        var extend = new Poly.DomainModeling.Action("Extend", InvocationResult.Void, [], [
+        var extend = new Poly.DomainModeling.Ontology.Action("Extend", InvocationResult.Void, [], [
             new AssignEffect(
                 DomainExpression.Property("DueDate"),
                 DomainExpression.Add(
@@ -3413,9 +3414,9 @@ public class DomainEntityInstanceTests {
     [Test]
     public async Task InvokeAction_StageTransition_RunsExitThenEntryEffects() {
         // Entry/exit effects are documented as shipped (§5); lock the runtime execution.
-        var go = new Poly.DomainModeling.Action("Go", InvocationResult.Void, [],
+        var go = new Poly.DomainModeling.Ontology.Action("Go", InvocationResult.Void, [],
             [new StageTransitionEffect(new StageReference("Active"))], []);
-        var finish = new Poly.DomainModeling.Action("Finish", InvocationResult.Void, [],
+        var finish = new Poly.DomainModeling.Ontology.Action("Finish", InvocationResult.Void, [],
             [new StageTransitionEffect(new StageReference("Done"))], []);
         var draft = new Stage("Draft", [go], [], [],
             [new AssignEffect(DomainExpression.Property("Trace"), DomainExpression.Literal("left_draft"))]);
@@ -3441,13 +3442,13 @@ public class DomainEntityInstanceTests {
     public async Task InvokeAction_CrossEntity_WithParameterBinding_PassesArgs() {
         // Cross-entity invoke with a param binding (guide: invoke Rel.Action(param: expr)).
         // Source invokes Process on the linked Target via `service`, passing "hi".
-        var process = new Poly.DomainModeling.Action("Process", InvocationResult.Void, [
+        var process = new Poly.DomainModeling.Ontology.Action("Process", InvocationResult.Void, [
             new Property("message", new DomainTypeReference("Text"), [])
         ], [
             // Action args are injected into the instance bag — params read as property access.
             new AssignEffect(DomainExpression.Property("LastMessage"), DomainExpression.Property("message"))
         ], []);
-        var call = new Poly.DomainModeling.Action("Call", InvocationResult.Void, [], [
+        var call = new Poly.DomainModeling.Ontology.Action("Call", InvocationResult.Void, [], [
             new InvokeActionEffect("Process",
                 [new PropertyBinding("message", DomainExpression.Literal("hi"))],
                 TargetRelationship: "service")
@@ -3476,7 +3477,7 @@ public class DomainEntityInstanceTests {
         // Filed B-F2: `DueDate - 14` was never lowered (export CS0019, runtime opaque
         // crash). Now lowers to AddDays with a negated offset and round-trips the heap.
         var dueDate = new Property("DueDate", new DomainTypeReference("Date"), []);
-        var extend = new Poly.DomainModeling.Action("Extend", InvocationResult.Void, [], [
+        var extend = new Poly.DomainModeling.Ontology.Action("Extend", InvocationResult.Void, [], [
             new AssignEffect(
                 DomainExpression.Property("DueDate"),
                 DomainExpression.Subtract(
@@ -3537,7 +3538,7 @@ public class DomainEntityInstanceTests {
         var rel = new Relationship("bins",
             new DomainTypeReference("Warehouse"), new DomainTypeReference("Bin"),
             RelationshipCardinality.OneToMany, []);
-        var maybe = new Poly.DomainModeling.Action("Maybe", InvocationResult.Void,
+        var maybe = new Poly.DomainModeling.Ontology.Action("Maybe", InvocationResult.Void,
             Parameters: [new Property("rush", new DomainTypeReference("Boolean"), [])],
             Effects: [
                 new ConditionalEffect(
@@ -3567,7 +3568,7 @@ public class DomainEntityInstanceTests {
     [Test]
     public async Task InvokeAction_ConditionalTransition_RunsDirectExecutionEffects() {
         // Round-3 C1: a transition inside an `if` was silently dropped at runtime.
-        var go = new Poly.DomainModeling.Action("Go", InvocationResult.Void, [], [
+        var go = new Poly.DomainModeling.Ontology.Action("Go", InvocationResult.Void, [], [
             new ConditionalEffect(
                 DomainExpression.Property("Flag"),
                 [new StageTransitionEffect(new StageReference("Active"))],
@@ -3671,7 +3672,7 @@ public class DomainEntityInstanceTests {
         // string-concat arm). Must produce the concatenated text like the export.
         var status = new Property("Status", new DomainTypeReference("Text"), []);
         var code = new Property("Code", new DomainTypeReference("Text"), []);
-        var tag = new Poly.DomainModeling.Action("Tag", InvocationResult.Void, [], [
+        var tag = new Poly.DomainModeling.Ontology.Action("Tag", InvocationResult.Void, [], [
             new AssignEffect(
                 DomainExpression.Property("Code"),
                 DomainExpression.Add(
@@ -3692,7 +3693,7 @@ public class DomainEntityInstanceTests {
     public async Task InvokeAction_StageScopedFromWrongStage_ReportsRequiredStage() {
         // Round-2 C-F4: invoking a stage-scoped action from another stage said "not
         // found on entity" — the action exists but is stage-scoped. Must report the stage.
-        var ship = new Poly.DomainModeling.Action("Ship", InvocationResult.Void, [], [], []);
+        var ship = new Poly.DomainModeling.Ontology.Action("Ship", InvocationResult.Void, [], [], []);
         var pending = new Stage("Pending", Actions: [], Policies: [], OnEntryEffects: [], OnExitEffects: []);
         var paid = new Stage("Paid", Actions: [ship], Policies: [], OnEntryEffects: [], OnExitEffects: []);
         var entity = new Entity("Order", [], [], [], [pending, paid]);
@@ -3717,7 +3718,7 @@ public class DomainEntityInstanceTests {
         var rel = new Relationship("bins",
             new DomainTypeReference("Warehouse"), new DomainTypeReference("Bin"),
             RelationshipCardinality.OneToMany, []);
-        var make = new Poly.DomainModeling.Action("Make", InvocationResult.Void,
+        var make = new Poly.DomainModeling.Ontology.Action("Make", InvocationResult.Void,
             Parameters: [new Property("qty", new DomainTypeReference("Number"), [])],
             Effects: [new CreateEntityInRelationshipEffect("bins", [
                 new PropertyBinding("Capacity", DomainExpression.Property("qty"))

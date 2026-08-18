@@ -1,5 +1,6 @@
 using Poly.DomainModeling;
 using Poly.DomainModeling.Language;
+using Poly.DomainModeling.Ontology;
 using Poly.Grammar;
 
 
@@ -29,8 +30,8 @@ public class DslExpressionFragmentTests {
     public async Task Fragment_AndOr_Parses() {
         var expr = DslExpressionFragment.ParseExpressionFragment("(A == 1) and (B == 2)");
 
-        await Assert.That(expr).IsTypeOf<Poly.DomainModeling.And>();
-        var and = (Poly.DomainModeling.And)expr;
+        await Assert.That(expr).IsTypeOf<Poly.DomainModeling.Ontology.And>();
+        var and = (Poly.DomainModeling.Ontology.And)expr;
         await Assert.That(and.Left).IsTypeOf<Comparison>();
         await Assert.That(and.Right).IsTypeOf<Comparison>();
     }

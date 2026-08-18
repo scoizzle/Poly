@@ -1,6 +1,8 @@
 using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
 
+using PrimitiveType = Poly.Introspection.PrimitiveType;
+
 namespace Poly.Tests.Introspection;
 
 public class TypeDefinitionProviderCollectionTests {

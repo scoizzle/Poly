@@ -1,4 +1,4 @@
-namespace Poly.DomainModeling;
+namespace Poly.DomainModeling.Ontology;
 
 /// <summary>
 /// Represents a primitive (built-in) type in the domain model (e.g. Text, Timestamp, Integer).

@@ -1,4 +1,4 @@
-namespace Poly.DomainModeling;
+namespace Poly.DomainModeling.Ontology;
 
 /// <summary>
 /// A value type or owned document structure. Value types do not have independent lifecycle or identity

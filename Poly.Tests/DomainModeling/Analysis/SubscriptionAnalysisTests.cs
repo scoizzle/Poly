@@ -5,6 +5,7 @@ using Poly.DomainModeling.ContractFill;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Language;
 using Poly.DomainModeling.Libraries.Storage;
+using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Ontology.Effects;
 using Poly.DomainModeling.Queries;
 
@@ -222,7 +223,7 @@ public class SubscriptionAnalysisTests {
             new DomainTypeReference("EntityB"), new DomainTypeReference("EntityA"),
             RelationshipCardinality.OneToOne, []);
 
-        var activateA = new Poly.DomainModeling.Action("Activate", InvocationResult.Void,
+        var activateA = new Poly.DomainModeling.Ontology.Action("Activate", InvocationResult.Void,
             [], [new StageTransitionEffect(new StageReference("Active"))], []);
         var stageA = new Stage("Active", [activateA], [], [], []) {
             Subscriptions = [
@@ -231,7 +232,7 @@ public class SubscriptionAnalysisTests {
         };
         var entityA = new Entity("EntityA", [], [activateA], [], [stageA]);
 
-        var activateB = new Poly.DomainModeling.Action("Activate", InvocationResult.Void,
+        var activateB = new Poly.DomainModeling.Ontology.Action("Activate", InvocationResult.Void,
             [], [new StageTransitionEffect(new StageReference("Active"))], []);
         var stageB = new Stage("Active", [activateB], [], [], []) {
             Subscriptions = [
@@ -415,7 +416,7 @@ public class SubscriptionAnalysisTests {
             }
         ]);
 
-        var orderAction = new Poly.DomainModeling.Action("Activate", InvocationResult.Void, [], [
+        var orderAction = new Poly.DomainModeling.Ontology.Action("Activate", InvocationResult.Void, [], [
             new StageTransitionEffect(new StageReference("Active"))
         ], []);
         var order = new Entity("Order", [], [orderAction], [], [
@@ -468,7 +469,7 @@ public class SubscriptionAnalysisTests {
             }
         ]);
 
-        var orderAction = new Poly.DomainModeling.Action("Activate", InvocationResult.Void, [], [
+        var orderAction = new Poly.DomainModeling.Ontology.Action("Activate", InvocationResult.Void, [], [
             new StageTransitionEffect(new StageReference("Active"))
         ], []);
         var order = new Entity("Order", [], [orderAction], [], [

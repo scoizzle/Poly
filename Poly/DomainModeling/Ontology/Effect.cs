@@ -1,4 +1,6 @@
-namespace Poly.DomainModeling;
+using Poly.DomainModeling.Runtime;
+
+namespace Poly.DomainModeling.Ontology;
 
 /// <summary>
 /// Effects represent the observable side effects that occur as a result of an action being invoked

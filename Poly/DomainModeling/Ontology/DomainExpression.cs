@@ -1,4 +1,4 @@
-namespace Poly.DomainModeling;
+namespace Poly.DomainModeling.Ontology;
 
 public abstract record DomainExpression : DomainObject {
     // Factory helpers for ergonomic construction (builders and tests)

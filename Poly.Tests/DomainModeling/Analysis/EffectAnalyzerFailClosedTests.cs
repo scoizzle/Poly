@@ -1,6 +1,7 @@
 using Poly.Analysis;
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
+using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Ontology.Effects;
 
 namespace Poly.Tests.DomainModeling.Analysis;
@@ -15,7 +16,7 @@ namespace Poly.Tests.DomainModeling.Analysis;
 public class EffectAnalyzerFailClosedTests {
     private static Domain BuildCreateInDomain(string effectRelationshipName = "rel") {
         var order = new Entity("Order", [], [], [], []);
-        var action = new Poly.DomainModeling.Action("DoIt", InvocationResult.Void, [], [
+        var action = new Poly.DomainModeling.Ontology.Action("DoIt", InvocationResult.Void, [], [
             new CreateEntityInRelationshipEffect(effectRelationshipName, [])
         ], []);
         var customer = new Entity("Customer", [], [action], [], []);

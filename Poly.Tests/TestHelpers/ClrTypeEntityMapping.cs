@@ -2,6 +2,7 @@ using System.ComponentModel.DataAnnotations;
 using System.Reflection;
 
 using Poly.DomainModeling.Evolution;
+using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Ontology.Constraints;
 
 namespace Poly.DomainModeling.Ontology.Bootstrap;

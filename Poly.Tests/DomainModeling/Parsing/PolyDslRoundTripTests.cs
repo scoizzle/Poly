@@ -7,10 +7,11 @@ using Poly.DomainModeling.ContractFill;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Language;      // DomainDslPrinter (product print — v1 domain-walk, table-parity deferred)
 using Poly.DomainModeling.Libraries.Storage;
+using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Ontology.Bootstrap;
 using Poly.DomainModeling.Ontology.Constraints;
 using Poly.DomainModeling.Ontology.Effects;
-                                         // PolyDslParser
+// PolyDslParser
 using Poly.Introspection;
 
 namespace Poly.Tests.DomainModeling.Parsing;
@@ -517,7 +518,7 @@ public class PolyDslRoundTripTests {
         var result = new DomainEvolution(emptyDomain).Apply(changes);
         await Assert.That(result.Succeeded).IsTrue();
 
-        var primitives = result.Root!.Types.OfType<Poly.DomainModeling.PrimitiveType>().ToList();
+        var primitives = result.Root!.Types.OfType<Poly.DomainModeling.Ontology.PrimitiveType>().ToList();
         await Assert.That(primitives.Count).IsEqualTo(5);
         var entities = result.Root.Types.OfType<Entity>().ToList();
         await Assert.That(entities.Count).IsEqualTo(2);
@@ -707,7 +708,7 @@ public class PolyDslRoundTripTests {
         await Assert.That(activate2.Policies.Count).IsEqualTo(1);
         var policy2 = activate2.Policies[0];
         await Assert.That(policy2.Name).IsEqualTo("not_IsBlocked");
-        await Assert.That(policy2.Expression).IsTypeOf<Poly.DomainModeling.Not>();
+        await Assert.That(policy2.Expression).IsTypeOf<Poly.DomainModeling.Ontology.Not>();
     }
 
     [Test]
@@ -778,13 +779,13 @@ public class PolyDslRoundTripTests {
             }
             """;
         var first = Apply(poly);
-        var money = first.Types.OfType<Poly.DomainModeling.ValueType>().Single();
+        var money = first.Types.OfType<Poly.DomainModeling.Ontology.ValueType>().Single();
         await Assert.That(money.Name).IsEqualTo("Money");
         await Assert.That(money.Properties.Count).IsEqualTo(2);
         var printed = new DomainDslPrinter().Print(first);
         await Assert.That(printed.Contains("Money: value")).IsTrue();
         var second = Apply(printed);
-        await Assert.That(second.Types.OfType<Poly.DomainModeling.ValueType>().Single().Properties.Count).IsEqualTo(2);
+        await Assert.That(second.Types.OfType<Poly.DomainModeling.Ontology.ValueType>().Single().Properties.Count).IsEqualTo(2);
         await Assert.That(second.Types.OfType<Entity>().Single().Properties.Single().Type.TypeName)
             .IsEqualTo("Money");
     }
@@ -962,7 +963,7 @@ public class PolyDslRoundTripTests {
         await Assert.That(validate.Policies.Count).IsEqualTo(1);
         var policy = validate.Policies[0];
         await Assert.That(policy.Name).IsEqualTo("not_IsBlocked");
-        await Assert.That(policy.Expression).IsTypeOf<Poly.DomainModeling.Not>();
+        await Assert.That(policy.Expression).IsTypeOf<Poly.DomainModeling.Ontology.Not>();
     }
 
     [Test]
@@ -1304,8 +1305,8 @@ public class PolyDslRoundTripTests {
         await Assert.That(printed.Contains("not (Total > 0)") || printed.Contains("not ((Total > 0))")).IsTrue();
         var second = Apply(printed);
         var expr = second.Types.OfType<Entity>().Single().Policies.Single().Expression;
-        await Assert.That(expr).IsTypeOf<Poly.DomainModeling.Not>();
-        await Assert.That(((Poly.DomainModeling.Not)expr).Operand).IsTypeOf<Comparison>();
+        await Assert.That(expr).IsTypeOf<Poly.DomainModeling.Ontology.Not>();
+        await Assert.That(((Poly.DomainModeling.Ontology.Not)expr).Operand).IsTypeOf<Comparison>();
     }
 
     [Test]

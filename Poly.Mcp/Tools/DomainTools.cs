@@ -629,7 +629,7 @@ Unknown kind, missing required field, or invalid cardinality fails closed. For b
                     if (contractName is null) return MissingField(sessionId, kind, "contractName");
                     if (name is null) return MissingField(sessionId, kind, "name");
                     return Evolve(sessionId, builder => builder.AddContractValueType(
-                            contractName, new Poly.DomainModeling.ValueType(name, [], [])),
+                            contractName, new Poly.DomainModeling.Ontology.ValueType(name, [], [])),
                         successAffordances: ["add", "apply_dsl"]);
                 }
             case "contract_endpoint": {

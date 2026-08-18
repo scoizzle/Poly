@@ -6,4 +6,6 @@ global using Poly.DomainModeling.Libraries.Temporal;
 global using Poly.DomainModeling.Meaning;
 global using Poly.DomainModeling.Ontology.Bootstrap;
 global using Poly.DomainModeling.Ontology.Constraints;
+global using Poly.DomainModeling.Ontology.Contract;
 global using Poly.DomainModeling.Ontology.Effects;
+global using Poly.DomainModeling.Runtime;

@@ -3,6 +3,7 @@ using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Language;
+using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Ontology.Constraints;
 using Poly.DomainModeling.Ontology.Effects;
 
@@ -182,7 +183,7 @@ public class ConstraintPropagationEffectTests {
         // must take the stricter maximum (60).
         var qty = new Property("Qty", new DomainTypeReference("Number"),
             [new RangeConstraint(0d, 90d)]);
-        var inc = new Poly.DomainModeling.Action("Inc", InvocationResult.Void, [], [
+        var inc = new Poly.DomainModeling.Ontology.Action("Inc", InvocationResult.Void, [], [
             new AssignEffect(DomainExpression.Property("Qty"),
                 DomainExpression.Add(DomainExpression.Property("Qty"), DomainExpression.Literal(10L)))
         ], []);
@@ -260,7 +261,7 @@ public class ConstraintPropagationEffectTests {
         // respected — a warning is reported because one state can violate.
         var qty = new Property("Qty", new DomainTypeReference("Number"),
             [new RangeConstraint(0d, 90d)]);
-        var inc = new Poly.DomainModeling.Action("Inc", InvocationResult.Void, [], [
+        var inc = new Poly.DomainModeling.Ontology.Action("Inc", InvocationResult.Void, [], [
             new AssignEffect(DomainExpression.Property("Qty"),
                 DomainExpression.Add(DomainExpression.Property("Qty"), DomainExpression.Literal(30L)))
         ], []);
@@ -423,7 +424,7 @@ public class ConstraintPropagationEffectTests {
         // range(0, 100) → reported on the cross-entity chain.
         var qty = new Property("Qty", new DomainTypeReference("Number"),
             [new RangeConstraint(0d, 100d)]);
-        var add = new Poly.DomainModeling.Action("Add", InvocationResult.Void,
+        var add = new Poly.DomainModeling.Ontology.Action("Add", InvocationResult.Void,
             [new Property("amount", new DomainTypeReference("Number"), [])],
             [new AssignEffect(DomainExpression.Property("Qty"),
                 DomainExpression.Add(DomainExpression.Property("Qty"), DomainExpression.Parameter("amount")))],
@@ -433,7 +434,7 @@ public class ConstraintPropagationEffectTests {
         var rel = new Relationship("lines",
             new DomainTypeReference("Order"), new DomainTypeReference("OrderLine"),
             RelationshipCardinality.OneToMany, []);
-        var addToAll = new Poly.DomainModeling.Action("AddToAll", InvocationResult.Void,
+        var addToAll = new Poly.DomainModeling.Ontology.Action("AddToAll", InvocationResult.Void,
             [new Property("amt", new DomainTypeReference("Number"),
                 [new RangeConstraint(0d, 30d)])],
             [new InvokeActionEffect("Add",
@@ -517,12 +518,12 @@ public class ConstraintPropagationEffectTests {
         var qty = new Property("Qty", new DomainTypeReference("Number"), []);
         var total = new Property("Total", new DomainTypeReference("Number"),
             [new RangeConstraint(0d, 100d)]);
-        var b = new Poly.DomainModeling.Action("B", InvocationResult.Void,
+        var b = new Poly.DomainModeling.Ontology.Action("B", InvocationResult.Void,
             [new Property("x", new DomainTypeReference("Number"),
                 [new RangeConstraint(0d, 200d)])],
             [new AssignEffect(DomainExpression.Property("Total"), DomainExpression.Parameter("x"))],
             []);
-        var a = new Poly.DomainModeling.Action("A", InvocationResult.Void,
+        var a = new Poly.DomainModeling.Ontology.Action("A", InvocationResult.Void,
             [new Property("amount", new DomainTypeReference("Number"),
                 [new RangeConstraint(0d, 200d)])],
             [new InvokeActionEffect("B", [
@@ -549,11 +550,11 @@ public class ConstraintPropagationEffectTests {
         // postcondition can violate Total's range. The call-chain diagnostic must fire.
         var total = new Property("Total", new DomainTypeReference("Number"),
             [new RangeConstraint(0d, 50d)]);
-        var b = new Poly.DomainModeling.Action("B", InvocationResult.Void,
+        var b = new Poly.DomainModeling.Ontology.Action("B", InvocationResult.Void,
             [new Property("x", new DomainTypeReference("Number"), [])],
             [new AssignEffect(DomainExpression.Property("Total"), DomainExpression.Parameter("x"))],
             []);
-        var a = new Poly.DomainModeling.Action("A", InvocationResult.Void,
+        var a = new Poly.DomainModeling.Ontology.Action("A", InvocationResult.Void,
             [new Property("amount", new DomainTypeReference("Number"),
                 [new RangeConstraint(0d, 200d)])],
             [new InvokeActionEffect("B", [
@@ -597,7 +598,7 @@ public class ConstraintPropagationEffectTests {
         // provided to the action carries its own constraints into the effect.
         var total = new Property("Total", new DomainTypeReference("Number"),
             [new RangeConstraint(0d, 100d)]);
-        var setTotal = new Poly.DomainModeling.Action("SetTotal", InvocationResult.Void,
+        var setTotal = new Poly.DomainModeling.Ontology.Action("SetTotal", InvocationResult.Void,
             [new Property("amount", new DomainTypeReference("Number"),
                 [new RangeConstraint(0d, 200d)])],
             [new AssignEffect(DomainExpression.Property("Total"),

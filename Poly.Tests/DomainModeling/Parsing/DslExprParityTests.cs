@@ -1,15 +1,16 @@
 using Poly.DomainModeling;
 using Poly.DomainModeling.Language;
 using Poly.DomainModeling.Libraries.Temporal;
+using Poly.DomainModeling.Ontology;
 using Poly.Grammar;
 // Disambiguate from Poly.Ast.Nodes records imported via global usings.
-using Add = Poly.DomainModeling.Add;
-using And = Poly.DomainModeling.And;
-using Divide = Poly.DomainModeling.Divide;
-using Multiply = Poly.DomainModeling.Multiply;
-using Not = Poly.DomainModeling.Not;
-using Or = Poly.DomainModeling.Or;
-using Subtract = Poly.DomainModeling.Subtract;
+using Add = Poly.DomainModeling.Ontology.Add;
+using And = Poly.DomainModeling.Ontology.And;
+using Divide = Poly.DomainModeling.Ontology.Divide;
+using Multiply = Poly.DomainModeling.Ontology.Multiply;
+using Not = Poly.DomainModeling.Ontology.Not;
+using Or = Poly.DomainModeling.Ontology.Or;
+using Subtract = Poly.DomainModeling.Ontology.Subtract;
 
 namespace Poly.Tests.DomainModeling.Parsing;
 

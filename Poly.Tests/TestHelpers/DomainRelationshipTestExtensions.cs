@@ -2,6 +2,7 @@
 // file that constructs a Domain (via `using Poly.DomainModeling;`) sees this helper.
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Evolution;
+using Poly.DomainModeling.Ontology;
 
 namespace Poly.DomainModeling;
 

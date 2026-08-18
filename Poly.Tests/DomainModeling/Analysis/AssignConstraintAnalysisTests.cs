@@ -6,10 +6,11 @@ using Poly.Introspection;
 
 namespace Poly.Tests.DomainModeling.Analysis;
 
-// Resolve Action ambiguity: Poly.DomainModeling.Action vs System.Action
-using DmAction = Poly.DomainModeling.Action;
+using Poly.DomainModeling.Ontology;
+// Resolve Action ambiguity: Poly.DomainModeling.Ontology.Action vs System.Action
+using DmAction = Poly.DomainModeling.Ontology.Action;
 // Resolve PrimitiveType ambiguity: Poly.DomainModeling vs Poly.Introspection
-using DmPrimitiveType = Poly.DomainModeling.PrimitiveType;
+using DmPrimitiveType = Poly.DomainModeling.Ontology.PrimitiveType;
 
 /// <summary>
 /// Tests for constraint validation on assignments, initializers, and parameter flows.

@@ -4,6 +4,7 @@ using Poly.DomainModeling.ContractFill;
 using Poly.DomainModeling.Libraries.Storage;
 using Poly.DomainModeling.Libraries.Temporal;
 using Poly.DomainModeling.Lowering;
+using Poly.DomainModeling.Ontology;
 
 using Parameter = Poly.Ast.Nodes.Parameter;
 using SN = Poly.Ast.Nodes;

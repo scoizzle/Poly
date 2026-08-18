@@ -5,6 +5,7 @@ using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Language;
 using Poly.DomainModeling.Libraries.Storage;
 using Poly.DomainModeling.Libraries.Temporal;
+using Poly.DomainModeling.Ontology;
 using Poly.Grammar;
 
 namespace Poly.Tests.DomainModeling.Packs;

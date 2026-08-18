@@ -1,8 +1,9 @@
 using Poly.DomainModeling.Compile;
-using Poly.DomainModeling.Libraries.Storage;
 using Poly.DomainModeling.ContractFill;
+using Poly.DomainModeling.Libraries.Storage;
+using Poly.DomainModeling.Ontology.Contract;
 
-namespace Poly.DomainModeling;
+namespace Poly.DomainModeling.Ontology;
 
 /// <summary>
 /// A <see cref="Domain"/> aggregates all <see cref="DomainType"/> definitions (entities, value types, primitives, enum types).

@@ -2,6 +2,7 @@ using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Lowering;
+using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Ontology.Effects;
 using Poly.Mcp.Sessions;
 using Poly.Mcp.Tools;
@@ -21,9 +22,9 @@ public class DomainSemanticLookupFailClosedTests {
 
     private static Domain BuildOrderDomain() {
         // Entity action carries a transition effect; stage copy is an empty shell.
-        var entityAction = new Poly.DomainModeling.Action("Submit", InvocationResult.Void, [],
+        var entityAction = new Poly.DomainModeling.Ontology.Action("Submit", InvocationResult.Void, [],
             [new StageTransitionEffect(new StageReference("Active"))], []);
-        var draft = new Stage("Draft", [new Poly.DomainModeling.Action("Submit", InvocationResult.Void, [], [], [])], [], [], []);
+        var draft = new Stage("Draft", [new Poly.DomainModeling.Ontology.Action("Submit", InvocationResult.Void, [], [], [])], [], [], []);
         var active = new Stage("Active", [], [], [], []);
         var order = new Entity("Order",
             [new Property("Name", new DomainTypeReference("Text"), [])],
@@ -37,11 +38,11 @@ public class DomainSemanticLookupFailClosedTests {
         // B-1 scenario at the model level: the stage copy carries the entity action's
         // parameters (AddActionToStageChange copies Parameters) but has no effects,
         // while the entity action carries the transition effect.
-        var entityAction = new Poly.DomainModeling.Action("Submit", InvocationResult.Void,
+        var entityAction = new Poly.DomainModeling.Ontology.Action("Submit", InvocationResult.Void,
             [new Property("Note", new DomainTypeReference("Text"), [])],
             [new StageTransitionEffect(new StageReference("Active"))], []);
         var draft = new Stage("Draft",
-            [new Poly.DomainModeling.Action("Submit", InvocationResult.Void,
+            [new Poly.DomainModeling.Ontology.Action("Submit", InvocationResult.Void,
                 [new Property("Note", new DomainTypeReference("Text"), [])], [], [])],
             [], [], []);
         var active = new Stage("Active", [], [], [], []);
@@ -86,7 +87,7 @@ public class DomainSemanticLookupFailClosedTests {
             DomainExpression.NotEqual(
                 DomainExpression.Property("Note"),
                 DomainExpression.Literal("")));
-        var submit = new Poly.DomainModeling.Action("Submit", InvocationResult.Void, [],
+        var submit = new Poly.DomainModeling.Ontology.Action("Submit", InvocationResult.Void, [],
             [new StageTransitionEffect(new StageReference("Active"))],
             [hasNote]);
         var draft = new Stage("Draft", [submit], [active], [], []);
@@ -156,9 +157,9 @@ public class DomainSemanticLookupFailClosedTests {
         var order = (Entity)domain.Types[0];
 
         // Rebuild with a stage action that has effects (AddActionToStage copies them).
-        var entityAction = new Poly.DomainModeling.Action("Submit", InvocationResult.Void, [],
+        var entityAction = new Poly.DomainModeling.Ontology.Action("Submit", InvocationResult.Void, [],
             [new StageTransitionEffect(new StageReference("Active"))], []);
-        var stageAction = new Poly.DomainModeling.Action("Submit", InvocationResult.Void, [],
+        var stageAction = new Poly.DomainModeling.Ontology.Action("Submit", InvocationResult.Void, [],
             [new StageTransitionEffect(new StageReference("Active"))], []);
         var draft = new Stage("Draft", [stageAction], [], [], []);
         var active = new Stage("Active", [], [], [], []);

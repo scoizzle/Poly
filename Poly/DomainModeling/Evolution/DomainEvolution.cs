@@ -1,6 +1,9 @@
-using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
-using Poly.DomainModeling.Ontology.Effects;
+using Poly.DomainModeling.Ontology;
+using Poly.DomainModeling.Ontology.Contract;
+using Poly.DomainModeling.Runtime;
+
+using ValueType = Poly.DomainModeling.Ontology.ValueType;
 
 namespace Poly.DomainModeling.Evolution;
 

@@ -1,5 +1,20 @@
+using Poly.DomainModeling.Dispatch;
 using Poly.DomainModeling.Language;
+using Poly.DomainModeling.Ontology;
+using Poly.DomainModeling.Ontology.Contract;
+using Poly.DomainModeling.Runtime;
 using Poly.Grammar;
+
+using Action = Poly.DomainModeling.Ontology.Action;
+using Add = Poly.DomainModeling.Ontology.Add;
+using And = Poly.DomainModeling.Ontology.And;
+using Divide = Poly.DomainModeling.Ontology.Divide;
+using Multiply = Poly.DomainModeling.Ontology.Multiply;
+using Not = Poly.DomainModeling.Ontology.Not;
+using Or = Poly.DomainModeling.Ontology.Or;
+using PrimitiveType = Poly.DomainModeling.Ontology.PrimitiveType;
+using Subtract = Poly.DomainModeling.Ontology.Subtract;
+using ValueType = Poly.DomainModeling.Ontology.ValueType;
 
 namespace Poly.DomainModeling.Meaning;
 
@@ -10,7 +25,7 @@ namespace Poly.DomainModeling.Meaning;
 /// </summary>
 public sealed class AnnotationRegistry {
     private readonly Dictionary<string, IAnnotationSyntax> _syntaxByKeyword = new(StringComparer.Ordinal);
-    private readonly List<Action<GrammarBuilder<DslToken, DslTokenKind>>> _grammarContributors = [];
+    private readonly List<System.Action<GrammarBuilder<DslToken, DslTokenKind>>> _grammarContributors = [];
 
     public AnnotationRegistry() {
     }
@@ -38,7 +53,7 @@ public sealed class AnnotationRegistry {
     /// GI-5: register extra grammar patterns (e.g. non-literal annotation args).
     /// Invoked when building the product <see cref="DslGrammar"/> for a parse session.
     /// </summary>
-    public void RegisterGrammarContributor(Action<GrammarBuilder<DslToken, DslTokenKind>> contribute) {
+    public void RegisterGrammarContributor(System.Action<GrammarBuilder<DslToken, DslTokenKind>> contribute) {
         ArgumentNullException.ThrowIfNull(contribute);
         _grammarContributors.Add(contribute);
     }

@@ -8,6 +8,7 @@ using Poly.DomainModeling.Language;
 using Poly.DomainModeling.Libraries.Storage;
 using Poly.DomainModeling.Libraries.Temporal;
 using Poly.DomainModeling.Lowering;
+using Poly.DomainModeling.Ontology;
 
 namespace Poly.Tests.DomainModeling.Analysis;
 

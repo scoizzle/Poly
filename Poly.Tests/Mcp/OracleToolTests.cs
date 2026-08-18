@@ -1,6 +1,7 @@
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Evolution;
+using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Ontology.Effects;
 using Poly.Mcp.Sessions;
 using Poly.Mcp.Tools;

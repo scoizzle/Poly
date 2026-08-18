@@ -2,6 +2,7 @@ using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Language;
+using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Ontology.Constraints;
 using Poly.DomainModeling.Ontology.Effects;
 
@@ -29,7 +30,7 @@ public class DomainModelingSurfaceCompletionTests {
         await Assert.That(analysis.Diagnostics.Any(d =>
             d.Severity == DiagnosticSeverity.Error)).IsFalse();
         var expr = domain.Types.OfType<Entity>().Single().Policies.Single().Expression;
-        var mul = (Poly.DomainModeling.Multiply)((Poly.DomainModeling.Comparison)expr).Left;
+        var mul = (Poly.DomainModeling.Ontology.Multiply)((Poly.DomainModeling.Ontology.Comparison)expr).Left;
         await Assert.That(((Literal)mul.Right).Value).IsEqualTo(0.9);
     }
 
@@ -96,7 +97,7 @@ public class DomainModelingSurfaceCompletionTests {
     public async Task InvokeAction_UnknownArgKey_FailsClosed() {
         var entity = new Entity("Item",
             [new Property("Age", new DomainTypeReference("Number"), [])],
-            [new Poly.DomainModeling.Action("Go", InvocationResult.Void, [], [], [])],
+            [new Poly.DomainModeling.Ontology.Action("Go", InvocationResult.Void, [], [], [])],
             [], []);
         var instance = DomainEntityInstance.Create(entity,
             new Dictionary<string, object?> { ["Age"] = 15L });
@@ -110,7 +111,7 @@ public class DomainModelingSurfaceCompletionTests {
     public async Task InvokeAction_MissingDeclaredParam_FailsClosed() {
         var entity = new Entity("Item",
             [new Property("Qty", new DomainTypeReference("Number"), [])],
-            [new Poly.DomainModeling.Action("Add", InvocationResult.Void,
+            [new Poly.DomainModeling.Ontology.Action("Add", InvocationResult.Void,
                 [new Property("amount", new DomainTypeReference("Number"), [])],
                 [], [])],
             [], []);

@@ -1,5 +1,20 @@
 using Poly.Analysis;
+using Poly.DomainModeling.Dispatch;
+using Poly.DomainModeling.Ontology;
+using Poly.DomainModeling.Ontology.Contract;
 using Poly.DomainModeling.Ontology.Effects;
+using Poly.DomainModeling.Runtime;
+
+using Action = Poly.DomainModeling.Ontology.Action;
+using Add = Poly.DomainModeling.Ontology.Add;
+using And = Poly.DomainModeling.Ontology.And;
+using Divide = Poly.DomainModeling.Ontology.Divide;
+using Multiply = Poly.DomainModeling.Ontology.Multiply;
+using Not = Poly.DomainModeling.Ontology.Not;
+using Or = Poly.DomainModeling.Ontology.Or;
+using PrimitiveType = Poly.DomainModeling.Ontology.PrimitiveType;
+using Subtract = Poly.DomainModeling.Ontology.Subtract;
+using ValueType = Poly.DomainModeling.Ontology.ValueType;
 
 namespace Poly.DomainModeling.Analysis;
 
@@ -102,7 +117,7 @@ internal sealed class EffectTopologyPass : INodeAnalyzer {
         }
     }
 
-    private static void WalkEffects(Effect effect, Action<Effect> visitor) {
+    private static void WalkEffects(Effect effect, System.Action<Effect> visitor) {
         visitor(effect);
         if (effect is CompositeEffect ce) {
             foreach (var child in ce.Effects)

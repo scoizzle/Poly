@@ -1,4 +1,4 @@
-namespace Poly.DomainModeling;
+namespace Poly.DomainModeling.Ontology.Contract;
 
 public sealed record ContractFieldMap(
     string RemoteFieldName,

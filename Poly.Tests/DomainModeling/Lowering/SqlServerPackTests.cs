@@ -7,6 +7,7 @@ using Poly.DomainModeling.Language;
 using Poly.DomainModeling.Libraries.Storage;
 using Poly.DomainModeling.Libraries.Temporal;
 using Poly.DomainModeling.Lowering;
+using Poly.DomainModeling.Ontology;
 using Poly.Packs.SqlServer;
 
 namespace Poly.Tests.DomainModeling.Lowering;

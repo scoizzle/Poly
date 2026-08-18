@@ -1,4 +1,4 @@
-namespace Poly.DomainModeling;
+namespace Poly.DomainModeling.Ontology;
 
 public sealed record StageReference(string StageName) : DomainObject;
 

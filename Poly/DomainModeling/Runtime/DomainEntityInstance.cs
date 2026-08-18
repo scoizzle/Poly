@@ -3,16 +3,30 @@ using System.Text.RegularExpressions;
 using Poly.Analysis;
 using Poly.Ast.Nodes;
 using Poly.DomainModeling.Analysis;
+using Poly.DomainModeling.Dispatch;
 using Poly.DomainModeling.Lowering;
+using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Ontology.Constraints;
+using Poly.DomainModeling.Ontology.Contract;
 using Poly.DomainModeling.Ontology.Effects;
+using Poly.DomainModeling.Runtime;
 using Poly.Interpretation;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Interpretation.Vm;
 
+using Action = Poly.DomainModeling.Ontology.Action;
+using Add = Poly.DomainModeling.Ontology.Add;
+using And = Poly.DomainModeling.Ontology.And;
+using Divide = Poly.DomainModeling.Ontology.Divide;
+using Multiply = Poly.DomainModeling.Ontology.Multiply;
+using Not = Poly.DomainModeling.Ontology.Not;
+using Or = Poly.DomainModeling.Ontology.Or;
 using Prim = Poly.Introspection.PrimitiveType;
+using PrimitiveType = Poly.DomainModeling.Ontology.PrimitiveType;
+using Subtract = Poly.DomainModeling.Ontology.Subtract;
+using ValueType = Poly.DomainModeling.Ontology.ValueType;
 
-namespace Poly.DomainModeling;
+namespace Poly.DomainModeling.Runtime;
 
 /// <summary>
 /// A materialized instance of a domain <see cref="Entity"/>, backed by a

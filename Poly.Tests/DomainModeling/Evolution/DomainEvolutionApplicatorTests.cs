@@ -2,6 +2,7 @@ using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Libraries.Temporal;
+using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Ontology.Bootstrap;
 using Poly.DomainModeling.Ontology.Constraints;
 using Poly.DomainModeling.Ontology.Effects;
@@ -167,7 +168,7 @@ public class DomainEvolutionApplicatorTests {
 
     [Test]
     public async Task Apply_RemoveActionChange_RemovesAction() {
-        var action = new Poly.DomainModeling.Action("Die", InvocationResult.Void, [], [], []);
+        var action = new Poly.DomainModeling.Ontology.Action("Die", InvocationResult.Void, [], [], []);
         var entity = new Entity("Person", [], [action], [], []);
         var start = DomainTestFactory.Create("Test", [entity], []);
 
@@ -276,7 +277,7 @@ public class DomainEvolutionApplicatorTests {
         await Assert.That(result2.Relationships()[0].Name).IsEqualTo("Friends");
 
         // Verify ValueTypes were added
-        var valueTypes = result2.Root.Types.OfType<Poly.DomainModeling.ValueType>().ToList();
+        var valueTypes = result2.Root.Types.OfType<Poly.DomainModeling.Ontology.ValueType>().ToList();
         await Assert.That(valueTypes.Count).IsEqualTo(2);
         await Assert.That(valueTypes.Any(v => v.Name == "BirthCertificate")).IsTrue();
         await Assert.That(valueTypes.Any(v => v.Name == "DeathCertificate")).IsTrue();
@@ -287,9 +288,9 @@ public class DomainEvolutionApplicatorTests {
     [Test]
     public async Task Apply_AddEffectToActionChange_AttachesCreateEffect() {
         // Setup: Person entity with a Die action + the target ValueType (owned doc pattern)
-        var dieAction = new Poly.DomainModeling.Action("Die", InvocationResult.Void, [], [], []);
+        var dieAction = new Poly.DomainModeling.Ontology.Action("Die", InvocationResult.Void, [], [], []);
         var person = new Entity("Person", [], [dieAction], [], []);
-        var deathCert = new Poly.DomainModeling.ValueType("DeathCertificate", [], []);
+        var deathCert = new Poly.DomainModeling.Ontology.ValueType("DeathCertificate", [], []);
         var start = DomainTestFactory.Create("Test", [person, deathCert], []);
 
         var createDeathCert = new CreateEntityInstance(new DomainTypeReference("DeathCertificate"));
@@ -307,7 +308,7 @@ public class DomainEvolutionApplicatorTests {
 
     [Test]
     public async Task Apply_AddEffectToActionChange_AttachesStageTransition() {
-        var dieAction = new Poly.DomainModeling.Action("Die", InvocationResult.Void, [], [], []);
+        var dieAction = new Poly.DomainModeling.Ontology.Action("Die", InvocationResult.Void, [], [], []);
         var deadStage = new Stage("Dead", [], [], [], []);
         var person = new Entity("Person", [], [dieAction], [], [deadStage]);
         var start = DomainTestFactory.Create("Test", [person], []);
@@ -492,9 +493,9 @@ public class DomainEvolutionApplicatorTests {
     public async Task NodeId_Continuity_PreservesIdsOnUnchangedSubtrees() {
         // Build a small domain with depth (Entity > Stage + Action + Effect + Property)
         var text = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
-        var someDoc = new Poly.DomainModeling.ValueType("SomeDoc", [], []);
+        var someDoc = new Poly.DomainModeling.Ontology.ValueType("SomeDoc", [], []);
         var createEffect = new CreateEntityInstance(new DomainTypeReference("SomeDoc"));
-        var dieAction = new Poly.DomainModeling.Action("Die", InvocationResult.Void, [], [createEffect], []);
+        var dieAction = new Poly.DomainModeling.Ontology.Action("Die", InvocationResult.Void, [], [createEffect], []);
         var aliveStage = new Stage("Alive", [], [], [], []);
         var deadStage = new Stage("Dead", [], [], [], []);
         var person = new Entity("Person", [new Property("Name", new DomainTypeReference("Text"), [])], [dieAction], [], [aliveStage, deadStage]);
@@ -611,7 +612,7 @@ public class DomainEvolutionApplicatorTests {
 
     [Test]
     public async Task RemoveActionFromStage_Works() {
-        var action = new Poly.DomainModeling.Action("Approve", InvocationResult.Void, [], [], []);
+        var action = new Poly.DomainModeling.Ontology.Action("Approve", InvocationResult.Void, [], [], []);
         var stage = new Stage("Pending", [action], [], [], []);
         var entity = new Entity("Order", [], [], [], [stage]);
         var start = DomainTestFactory.Create("Test", [entity], []);
@@ -801,7 +802,7 @@ public class DomainEvolutionApplicatorTests {
         await Assert.That(alive.Actions[0].Effects.Any(e => e is StageTransitionEffect)).IsTrue();
 
         // ValueTypes and Events are present as documented
-        await Assert.That(final.Types.OfType<Poly.DomainModeling.ValueType>().Count()).IsEqualTo(2);
+        await Assert.That(final.Types.OfType<Poly.DomainModeling.Ontology.ValueType>().Count()).IsEqualTo(2);
 
         // The trace tells the full story (high-fidelity change history as Information diagnostics)
         // step2 added stages + policies + OnEntry effects
@@ -1010,8 +1011,8 @@ public class DomainEvolutionApplicatorTests {
         var renewAssignCount = (AssignEffect)renew.Effects[0];
         await Assert.That(renewAssignCount.Target).IsTypeOf<PropertyAccess>();
         await Assert.That(((PropertyAccess)renewAssignCount.Target).Name).IsEqualTo("RenewalCount");
-        await Assert.That(renewAssignCount.Value).IsTypeOf<Poly.DomainModeling.Add>();
-        var addExpr = (Poly.DomainModeling.Add)renewAssignCount.Value;
+        await Assert.That(renewAssignCount.Value).IsTypeOf<Poly.DomainModeling.Ontology.Add>();
+        var addExpr = (Poly.DomainModeling.Ontology.Add)renewAssignCount.Value;
         await Assert.That(addExpr.Left).IsTypeOf<PropertyAccess>();
         await Assert.That(((PropertyAccess)addExpr.Left).Name).IsEqualTo("RenewalCount");
         await Assert.That(addExpr.Right).IsTypeOf<Literal>();
@@ -1083,7 +1084,7 @@ public class DomainEvolutionApplicatorTests {
         var action = counter.Actions.Single(a => a.Name == "Increment");
         var assign = (AssignEffect)action.Effects.Single();
         await Assert.That(assign.Target).IsTypeOf<PropertyAccess>();
-        await Assert.That(assign.Value).IsTypeOf<Poly.DomainModeling.Add>();
+        await Assert.That(assign.Value).IsTypeOf<Poly.DomainModeling.Ontology.Add>();
     }
 
     [Test]
@@ -1103,7 +1104,7 @@ public class DomainEvolutionApplicatorTests {
         var cart = result.Root.Types.OfType<Entity>().Single(e => e.Name == "Cart");
         var action = cart.Actions.Single(a => a.Name == "ScaleTotal");
         var assign = (AssignEffect)action.Effects.Single();
-        await Assert.That(assign.Value).IsTypeOf<Poly.DomainModeling.Multiply>();
+        await Assert.That(assign.Value).IsTypeOf<Poly.DomainModeling.Ontology.Multiply>();
     }
 
     [Test]
@@ -1123,7 +1124,7 @@ public class DomainEvolutionApplicatorTests {
         var splitter = result.Root.Types.OfType<Entity>().Single(e => e.Name == "Splitter");
         var action = splitter.Actions.Single(a => a.Name == "Halve");
         var assign = (AssignEffect)action.Effects.Single();
-        await Assert.That(assign.Value).IsTypeOf<Poly.DomainModeling.Divide>();
+        await Assert.That(assign.Value).IsTypeOf<Poly.DomainModeling.Ontology.Divide>();
     }
 
     [Test]
@@ -1261,7 +1262,7 @@ public class DomainEvolutionApplicatorTests {
 
     [Test]
     public async Task InvokeActionEffect_CanBeStoredInAction() {
-        var entity = new Entity("Orchestrator", [], [new Poly.DomainModeling.Action("Step1", InvocationResult.Void, [], [], [])], [], []);
+        var entity = new Entity("Orchestrator", [], [new Poly.DomainModeling.Ontology.Action("Step1", InvocationResult.Void, [], [], [])], [], []);
         var start = DomainTestFactory.Create("Test", [entity], []);
         var result = new DomainEvolution(start)
             .Evolve()
@@ -1540,7 +1541,7 @@ public class DomainEvolutionApplicatorTests {
         var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
         var endpoint = new ContractEndpoint("GetTicket", ContractEndpointKind.Operation, ContractEndpointDirection.Inbound, new DomainTypeReference("Text"));
         var contract = new ImportedContract("CrmContract", ContractSourceKind.ExternalProvider, "crm://api", "v1", [endpoint]);
-        var action = new Poly.DomainModeling.Action("SomeAction", InvocationResult.Void,
+        var action = new Poly.DomainModeling.Ontology.Action("SomeAction", InvocationResult.Void,
             [new Property("input", new DomainTypeReference("Text"), [])], [], []);
         var entity = new Entity("MyEntity", [new Property("Name", new DomainTypeReference("Text"), [])], [action], [], []);
         var start = DomainTestFactory.Create("Test", [entity, textPrimitive], []) with {
@@ -1568,7 +1569,7 @@ public class DomainEvolutionApplicatorTests {
         var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
         var endpoint = new ContractEndpoint("GetTicket", ContractEndpointKind.Operation, ContractEndpointDirection.Inbound, new DomainTypeReference("Text"));
         var contract = new ImportedContract("CrmContract", ContractSourceKind.ExternalProvider, "crm://api", "v1", [endpoint]);
-        var action = new Poly.DomainModeling.Action("SomeAction", InvocationResult.Void,
+        var action = new Poly.DomainModeling.Ontology.Action("SomeAction", InvocationResult.Void,
             [new Property("input", new DomainTypeReference("Text"), [])], [], []);
         var entity = new Entity("MyEntity", [new Property("Name", new DomainTypeReference("Text"), [])], [action], [], []);
         var binding = new ContractBinding("MyBinding", "CrmContract", "GetTicket", "SomeAction", "input", []);
@@ -1589,7 +1590,7 @@ public class DomainEvolutionApplicatorTests {
         var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
         var endpoint = new ContractEndpoint("GetTicket", ContractEndpointKind.Operation, ContractEndpointDirection.Inbound, new DomainTypeReference("Text"));
         var contract = new ImportedContract("CrmContract", ContractSourceKind.ExternalProvider, "crm://api", "v1", [endpoint]);
-        var action = new Poly.DomainModeling.Action("SomeAction", InvocationResult.Void,
+        var action = new Poly.DomainModeling.Ontology.Action("SomeAction", InvocationResult.Void,
             [new Property("input", new DomainTypeReference("Text"), [])], [], []);
         var entity = new Entity("MyEntity", [new Property("Name", new DomainTypeReference("Text"), [])], [action], [], []);
         var fieldMap = new ContractFieldMap("remoteId", "localId");
@@ -1668,7 +1669,7 @@ public class DomainEvolutionApplicatorTests {
         var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
         var endpoint = new ContractEndpoint("GetTicket", ContractEndpointKind.Operation, ContractEndpointDirection.Inbound, new DomainTypeReference("Text"));
         var contract = new ImportedContract("CrmContract", ContractSourceKind.ExternalProvider, "crm://api", "v1", [endpoint]);
-        var action = new Poly.DomainModeling.Action("MyAction", InvocationResult.Void,
+        var action = new Poly.DomainModeling.Ontology.Action("MyAction", InvocationResult.Void,
             [new Property("something", new DomainTypeReference("Text"), [])], [], []);
         var entity = new Entity("MyEntity", [new Property("Name", new DomainTypeReference("Text"), [])], [action], [], []);
         var binding = new ContractBinding("MyBinding", "CrmContract", "GetTicket", "MyAction", "missingParam", []);
@@ -1687,7 +1688,7 @@ public class DomainEvolutionApplicatorTests {
         var ticketDataPrimitive = new PrimitiveType("TicketData", Poly.Introspection.TypeCategory.Text, []);
         var endpoint = new ContractEndpoint("GetTicket", ContractEndpointKind.Operation, ContractEndpointDirection.Inbound, new DomainTypeReference("TicketData"));
         var contract = new ImportedContract("CrmContract", ContractSourceKind.ExternalProvider, "crm://api", "v1", [endpoint]);
-        var action = new Poly.DomainModeling.Action("MyAction", InvocationResult.Void,
+        var action = new Poly.DomainModeling.Ontology.Action("MyAction", InvocationResult.Void,
             [new Property("input", new DomainTypeReference("Text"), [])], [], []);
         var entity = new Entity("MyEntity", [new Property("Name", new DomainTypeReference("Text"), [])], [action], [], []);
         var binding = new ContractBinding("MyBinding", "CrmContract", "GetTicket", "MyAction", "input", []);
@@ -1726,7 +1727,7 @@ public class DomainEvolutionApplicatorTests {
         var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
         var endpoint = new ContractEndpoint("GetTicket", ContractEndpointKind.Operation, ContractEndpointDirection.Inbound, new DomainTypeReference("Text"));
         var contract = new ImportedContract("CrmContract", ContractSourceKind.ExternalProvider, "crm://api/ticket", "v1", [endpoint]);
-        var action = new Poly.DomainModeling.Action("MyAction", InvocationResult.Void,
+        var action = new Poly.DomainModeling.Ontology.Action("MyAction", InvocationResult.Void,
             [new Property("input", new DomainTypeReference("Text"), [])], [], []);
         var entity = new Entity("MyEntity", [new Property("Name", new DomainTypeReference("Text"), [])], [action], [], []);
         var binding = new ContractBinding("MyBinding", "CrmContract", "GetTicket", "MyAction", "input", [
@@ -1894,7 +1895,7 @@ public class DomainEvolutionApplicatorTests {
     [Test]
     public async Task RemoveAction_MissingName_FailsWithClearError() {
         var entity = new Entity("Order", [], [
-            new Poly.DomainModeling.Action("Submit", InvocationResult.Void, [], [], [])
+            new Poly.DomainModeling.Ontology.Action("Submit", InvocationResult.Void, [], [], [])
         ], [], []);
         var start = DomainTestFactory.Create("Test", [entity], []);
 

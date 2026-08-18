@@ -1,4 +1,4 @@
-namespace Poly.DomainModeling;
+namespace Poly.DomainModeling.Ontology;
 
 /// <summary>
 /// An <see cref="Entity"/> owns properties, participates in lifecycle stages, exposes actions,

@@ -5,6 +5,7 @@ using Poly.DomainModeling.ContractFill;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Language;
 using Poly.DomainModeling.Libraries.Storage;
+using Poly.DomainModeling.Ontology;
 using Poly.Introspection;
 
 namespace Poly.Tests.DomainModeling.Analysis;

@@ -1,3 +1,19 @@
+using Poly.DomainModeling.Dispatch;
+using Poly.DomainModeling.Ontology;
+using Poly.DomainModeling.Ontology.Contract;
+using Poly.DomainModeling.Runtime;
+
+using Action = Poly.DomainModeling.Ontology.Action;
+using Add = Poly.DomainModeling.Ontology.Add;
+using And = Poly.DomainModeling.Ontology.And;
+using Divide = Poly.DomainModeling.Ontology.Divide;
+using Multiply = Poly.DomainModeling.Ontology.Multiply;
+using Not = Poly.DomainModeling.Ontology.Not;
+using Or = Poly.DomainModeling.Ontology.Or;
+using PrimitiveType = Poly.DomainModeling.Ontology.PrimitiveType;
+using Subtract = Poly.DomainModeling.Ontology.Subtract;
+using ValueType = Poly.DomainModeling.Ontology.ValueType;
+
 namespace Poly.DomainModeling.Analysis;
 
 /// <summary>
@@ -8,7 +24,7 @@ internal static class DomainAnalysis {
     /// <summary>
     /// Iterates all entity types in <paramref name="domain"/> and invokes <paramref name="action"/> for each.
     /// </summary>
-    public static void ForEachEntity(Domain domain, Action<Entity> action) {
+    public static void ForEachEntity(Domain domain, System.Action<Entity> action) {
         foreach (var type in domain.Types) {
             if (type is Entity entity)
                 action(entity);
@@ -19,7 +35,7 @@ internal static class DomainAnalysis {
     /// Iterates all actions on <paramref name="entity"/>, including those on
     /// the entity directly and those on its stages.
     /// </summary>
-    public static void ForEachAction(Entity entity, Action<Action> action) {
+    public static void ForEachAction(Entity entity, System.Action<Action> action) {
         foreach (var a in entity.Actions)
             action(a);
         foreach (var stage in entity.Stages)
@@ -30,7 +46,7 @@ internal static class DomainAnalysis {
     /// <summary>
     /// Iterates all actions directly on <paramref name="entity"/> (not stage actions).
     /// </summary>
-    public static void ForEachEntityAction(Entity entity, Action<Action> action) {
+    public static void ForEachEntityAction(Entity entity, System.Action<Action> action) {
         foreach (var a in entity.Actions)
             action(a);
     }
@@ -38,7 +54,7 @@ internal static class DomainAnalysis {
     /// <summary>
     /// Iterates all stages on <paramref name="entity"/>.
     /// </summary>
-    public static void ForEachStage(Entity entity, Action<Stage> action) {
+    public static void ForEachStage(Entity entity, System.Action<Stage> action) {
         foreach (var stage in entity.Stages)
             action(stage);
     }
@@ -46,7 +62,7 @@ internal static class DomainAnalysis {
     /// <summary>
     /// Iterates all actions on <paramref name="stage"/>.
     /// </summary>
-    public static void ForEachStageAction(Stage stage, Action<Action> action) {
+    public static void ForEachStageAction(Stage stage, System.Action<Action> action) {
         foreach (var a in stage.Actions)
             action(a);
     }
@@ -56,9 +72,9 @@ internal static class DomainAnalysis {
     /// </summary>
     public static void ForEachEntityWithActionsAndStages(
         Domain domain,
-        Action<Entity>? onEntity = null,
-        Action<Action>? onAction = null,
-        Action<Stage>? onStage = null) {
+        System.Action<Entity>? onEntity = null,
+        System.Action<Action>? onAction = null,
+        System.Action<Stage>? onStage = null) {
         foreach (var type in domain.Types) {
             if (type is not Entity entity) continue;
             onEntity?.Invoke(entity);

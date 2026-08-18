@@ -1,5 +1,6 @@
 using System.Text;
 
+using Poly.DomainModeling.Ontology;
 using Poly.Grammar;
 
 // Shared TestKind/TestTokenizer now live in TestGrammar.cs (used by the

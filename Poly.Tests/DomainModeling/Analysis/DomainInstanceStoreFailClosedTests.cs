@@ -1,13 +1,14 @@
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
+using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Ontology.Effects;
 
 namespace Poly.Tests.DomainModeling.Analysis;
 
 public class DomainInstanceStoreFailClosedTests {
     private static Domain BuildDomainWithSubscriptions() {
-        var submit = new Poly.DomainModeling.Action("Submit", InvocationResult.Void, [], [], []);
-        var escalate = new Poly.DomainModeling.Action("Escalate", InvocationResult.Void, [], [], []);
+        var submit = new Poly.DomainModeling.Ontology.Action("Submit", InvocationResult.Void, [], [], []);
+        var escalate = new Poly.DomainModeling.Ontology.Action("Escalate", InvocationResult.Void, [], [], []);
 
         var orderPending = new Stage("Pending", [submit], [], [], []);
         var orderActive = new Stage("Active", [], [], [], []);
@@ -25,7 +26,7 @@ public class DomainInstanceStoreFailClosedTests {
 
         var tracker = new Entity("Tracker",
             [new Property("Label", new DomainTypeReference("Text"), [])],
-            Actions: [new Poly.DomainModeling.Action("Reset", InvocationResult.Void, [], [], [])],
+            Actions: [new Poly.DomainModeling.Ontology.Action("Reset", InvocationResult.Void, [], [], [])],
             Policies: [],
             Stages: [trackerPending]);
 

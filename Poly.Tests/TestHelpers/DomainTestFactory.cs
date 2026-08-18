@@ -1,3 +1,4 @@
+using Poly.DomainModeling.Ontology;
 // Deliberately in the Poly.DomainModeling namespace (test assembly) so every test file
 // that constructs a Domain (via `using Poly.DomainModeling;`) sees this factory.
 namespace Poly.DomainModeling;

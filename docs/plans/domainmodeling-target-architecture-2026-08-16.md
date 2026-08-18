@@ -34,7 +34,7 @@ Each phase has **one input and one output**; the session threads the frozen tabl
 
 ## 2. Target layout
 
-> **Folders + namespaces landed 2026-08-17.** `Packs` → `Compile` / `Libraries.*` / `ContractFill`; `Parsing` → `Language`; type maps → `Meaning`; constraints/effects/bootstrap → `Ontology.*`. Fact types, dispatch, and runtime stay `Poly.DomainModeling` (parent-namespace lookup; `Action`/`Add`/`ValueType` collide with `System`/`Ast` if globally imported). Analysis is not split into Catalog/Capability/… subfolders. `IStorageSyntaxEmitter` lives in `src/Poly.DslCompiler`.
+> **Folders + namespaces landed 2026-08-17.** Facts are `Poly.DomainModeling.Ontology` (contract/constraints/effects/bootstrap nested). Dispatch and runtime match their folders. Do not assembly-global-import `Ontology` in `Poly` (collides with `System`/`Ast`). Analysis is not split into Catalog/Capability/… subfolders. `IStorageSyntaxEmitter` lives in `src/Poly.DslCompiler`.
 
 ```
 Poly.DomainModeling/

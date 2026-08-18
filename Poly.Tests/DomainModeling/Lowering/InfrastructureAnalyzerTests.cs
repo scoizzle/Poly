@@ -7,6 +7,7 @@ using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Language;
 using Poly.DomainModeling.Libraries.Storage;
 using Poly.DomainModeling.Lowering;
+using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Ontology.Effects;
 using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
@@ -341,14 +342,14 @@ public class InfrastructureAnalyzerTests {
         var entityPolicy = new Policy("EntityPolicy", DomainExpression.Property("Status"));
         var stagePolicy = new Policy("StagePolicy", DomainExpression.Property("Status"));
         var actionPolicy = new Policy("ActionPolicy", DomainExpression.Property("Status"));
-        var goAction = new Poly.DomainModeling.Action("Go", InvocationResult.Void, [],
+        var goAction = new Poly.DomainModeling.Ontology.Action("Go", InvocationResult.Void, [],
             [new StageTransitionEffect(new StageReference("Done"))], [actionPolicy]);
         var activeStage = new Stage("Active", [goAction], [stagePolicy], [], []);
         var doneStage = new Stage("Done", [], [], [], []);
         var patron = new Entity("Patron",
             [new Property("Status", new DomainTypeReference("Text"), [])],
             [], [entityPolicy], [activeStage, doneStage]);
-        var domain = DomainTestFactory.Create("Test", [new Poly.DomainModeling.PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []), patron]);
+        var domain = DomainTestFactory.Create("Test", [new Poly.DomainModeling.Ontology.PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []), patron]);
 
         var analyzed = DomainModelAnalyzer.Analyze(domain);
         var behavior = BehaviorMetadata.From(domain, analyzed);

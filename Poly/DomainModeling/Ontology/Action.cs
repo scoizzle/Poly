@@ -1,4 +1,6 @@
-namespace Poly.DomainModeling;
+using Poly.DomainModeling.Runtime;
+
+namespace Poly.DomainModeling.Ontology;
 
 /// <summary>
 /// Represents a behavior or operation that can be performed on an <see cref="Entity"/> (or within a specific <see cref="Stage"/>).

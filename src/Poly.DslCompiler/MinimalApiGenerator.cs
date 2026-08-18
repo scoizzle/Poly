@@ -734,7 +734,7 @@ public sealed class MinimalApiGenerator {
     /// an <c>if</c> branch has no universally-provable envelope, and intersecting the
     /// branches' ranges would falsely reject valid inputs.
     /// </summary>
-    private IReadOnlyList<Constraint> GetActionParamImplicitConstraints(Entity entity, Poly.DomainModeling.Action action, string paramName) {
+    private IReadOnlyList<Constraint> GetActionParamImplicitConstraints(Entity entity, Poly.DomainModeling.Ontology.Action action, string paramName) {
         var merged = new List<Constraint>();
         var unconditional = FlattenUnconditionalEffects(action.Effects).ToList();
 

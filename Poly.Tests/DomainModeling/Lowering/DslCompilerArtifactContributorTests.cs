@@ -3,6 +3,7 @@ using Poly.DomainModeling;
 using Poly.DomainModeling.Compile;
 using Poly.DomainModeling.ContractFill;
 using Poly.DomainModeling.Libraries.Storage;
+using Poly.DomainModeling.Ontology;
 
 using CompileMode = Poly.DslCompiler.CompileMode;
 using Compiler = Poly.DslCompiler.DslCompiler;

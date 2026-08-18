@@ -1,4 +1,19 @@
+using Poly.DomainModeling.Dispatch;
+using Poly.DomainModeling.Ontology;
+using Poly.DomainModeling.Ontology.Contract;
+using Poly.DomainModeling.Runtime;
 using Poly.Grammar;
+
+using Action = Poly.DomainModeling.Ontology.Action;
+using Add = Poly.DomainModeling.Ontology.Add;
+using And = Poly.DomainModeling.Ontology.And;
+using Divide = Poly.DomainModeling.Ontology.Divide;
+using Multiply = Poly.DomainModeling.Ontology.Multiply;
+using Not = Poly.DomainModeling.Ontology.Not;
+using Or = Poly.DomainModeling.Ontology.Or;
+using PrimitiveType = Poly.DomainModeling.Ontology.PrimitiveType;
+using Subtract = Poly.DomainModeling.Ontology.Subtract;
+using ValueType = Poly.DomainModeling.Ontology.ValueType;
 
 namespace Poly.DomainModeling.Meaning;
 
@@ -7,7 +22,7 @@ namespace Poly.DomainModeling.Meaning;
 /// and print mappings. Not a place to add new language productions.
 /// </summary>
 public sealed class ExpressionFormRegistry {
-    private readonly List<Action<GrammarBuilder<DslToken, DslTokenKind>>> _grammarContributors = [];
+    private readonly List<System.Action<GrammarBuilder<DslToken, DslTokenKind>>> _grammarContributors = [];
     private readonly List<IExpressionPrintMapping> _printMappings = [];
     private readonly List<IBinaryExpressionFold> _binaryFolds = [];
     private readonly List<(string Rule, string Pattern, Func<MatchResult<DslToken, DslTokenKind>, DomainExpression> Fold)> _folds = [];
@@ -44,7 +59,7 @@ public sealed class ExpressionFormRegistry {
     }
 
     /// <summary>Patterns on existing expression rules (e.g. ident / number+ident).</summary>
-    public void RegisterGrammarContributor(Action<GrammarBuilder<DslToken, DslTokenKind>> contribute) {
+    public void RegisterGrammarContributor(System.Action<GrammarBuilder<DslToken, DslTokenKind>> contribute) {
         ArgumentNullException.ThrowIfNull(contribute);
         _grammarContributors.Add(contribute);
     }

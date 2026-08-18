@@ -1,4 +1,4 @@
-namespace Poly.DomainModeling;
+namespace Poly.DomainModeling.Ontology;
 
 /// <summary>
 /// A named piece of data belonging to a <see cref="DomainType"/> (Entity, ValueType, etc.).

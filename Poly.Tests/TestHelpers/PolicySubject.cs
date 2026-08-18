@@ -1,3 +1,4 @@
+using Poly.DomainModeling.Ontology;
 namespace Poly.DomainModeling.Lowering;
 
 /// <summary>

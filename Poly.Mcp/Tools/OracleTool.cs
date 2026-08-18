@@ -244,7 +244,7 @@ internal sealed class OracleTool {
             // runtime dispatch. TryResolveAction uses stage-first + SA semantics
             // for execution; entity-first is preferred here for broad search.
             var arm = analysis.GetActionResolution(state.Domain, entity);
-            Poly.DomainModeling.Action? action = null;
+            Poly.DomainModeling.Ontology.Action? action = null;
             if (arm is not null) {
                 arm.EntityActions.TryGetValue(name, out action);
                 if (action is null) {

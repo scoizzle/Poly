@@ -1,3 +1,5 @@
+using System.Collections.Concurrent;
+
 namespace Poly.Analysis;
 
 /// <summary>
@@ -17,23 +19,35 @@ public sealed class Analyzer {
     public AnalysisOptions Options { get; init; } = AnalysisOptions.Default;
 
     private AnalysisResult RunPasses(AnalysisContext context, Node root, bool incremental, int invalidatedNodeCount) {
+        // Each pass runs in its own task, but the tasks are chained by dependencies so that
+        // a pass only runs after all of its dependencies have completed.  This allows
+        // independent passes to run in parallel while still respecting the dependency order.
+        // This assumes _analyzers is a DAG (no cycles) and that all dependencies are present 
+        // in the list, and in the correct order. AnalyzerBuilder enforces this at construction time.
+
         var collector = new AnalysisTelemetryCollector();
         var totalStart = Stopwatch.GetTimestamp();
+        var passes = new ConcurrentDictionary<string, Task>();
 
         foreach (var analyzer in _analyzers) {
+            passes[analyzer.PassName] = RunPassAsync(analyzer);
+        }
+
+        Task.WaitAll(passes.Values);
+        var telemetry = collector.ToSnapshot(Stopwatch.GetElapsedTime(totalStart), incremental, invalidatedNodeCount);
+        return new AnalysisResult(context, telemetry, Options);
+
+        async Task RunPassAsync(INodeAnalyzer analyzer) {
+            var dependencies = analyzer.Dependencies.Select(e => passes[e]);
+            await Task.WhenAll(dependencies).ConfigureAwait(false);
+
             if (!context.ShouldContinue(Options))
-                break;
+                return;
 
             var passStart = Stopwatch.GetTimestamp();
             analyzer.Analyze(context, root);
             collector.RecordPass(analyzer.PassName, Stopwatch.GetElapsedTime(passStart));
-
-            if (!context.ShouldContinue(Options))
-                break;
         }
-
-        var telemetry = collector.ToSnapshot(Stopwatch.GetElapsedTime(totalStart), incremental, invalidatedNodeCount);
-        return new AnalysisResult(context, telemetry, Options);
     }
 
     /// <summary>

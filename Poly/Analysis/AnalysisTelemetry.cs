@@ -1,3 +1,5 @@
+using System.Collections.Concurrent;
+
 namespace Poly.Analysis;
 
 public sealed record AnalyzerPassTelemetry(
@@ -15,13 +17,11 @@ public sealed record AnalysisTelemetry(
 }
 
 internal sealed class AnalysisTelemetryCollector {
-    private readonly List<AnalyzerPassTelemetry> _passes = [];
+    private readonly ConcurrentQueue<AnalyzerPassTelemetry> _passes = [];
 
-    public void RecordPass(string passName, TimeSpan elapsed) {
-        _passes.Add(new AnalyzerPassTelemetry(passName, elapsed));
-    }
+    public void RecordPass(string passName, TimeSpan elapsed) => _passes.Enqueue(new AnalyzerPassTelemetry(passName, elapsed));
 
     public AnalysisTelemetry ToSnapshot(TimeSpan totalElapsed, bool incremental, int invalidatedNodeCount) {
-        return new AnalysisTelemetry(_passes.ToArray(), totalElapsed, incremental, invalidatedNodeCount);
+        return new AnalysisTelemetry([.. _passes], totalElapsed, incremental, invalidatedNodeCount);
     }
 }

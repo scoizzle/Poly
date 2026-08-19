@@ -1,3 +1,5 @@
+using System.Collections.Concurrent;
+
 namespace Poly.Analysis;
 
 /// <summary>
@@ -21,12 +23,16 @@ namespace Poly.Analysis;
 public sealed class NodeMetadataStore {
     private const int InlineCapacity = 4;
 
-    private readonly Dictionary<NodeId, NodeBucket> _buckets = new();
+    private readonly ConcurrentDictionary<NodeId, NodeBucket> _buckets = new();
 
     public NodeMetadataStore() { }
 
     public NodeMetadataStore(NodeMetadataStore source) {
         ArgumentNullException.ThrowIfNull(source);
+        // Snapshot clone: each bucket is duplicated under its own lock so the copy is
+        // consistent per bucket, even if another thread is mutating the source
+        // concurrently. Buckets are never replaced once added, so iterating the
+        // concurrent table while cloning is safe.
         foreach (var (id, bucket) in source._buckets) {
             _buckets[id] = bucket.Clone();
         }
@@ -70,85 +76,96 @@ public sealed class NodeMetadataStore {
     /// Removes all metadata for <paramref name="node"/> in O(1).
     /// </summary>
     public void RemoveAll(Node? node) {
-        _buckets.Remove(node?.Id ?? NodeId.Empty);
+        _buckets.TryRemove(node?.Id ?? NodeId.Empty, out _);
     }
 
     /// <summary>
     /// Removes all metadata for the specified node id in O(1).
     /// </summary>
     public void RemoveAll(NodeId nodeId) {
-        _buckets.Remove(nodeId);
+        _buckets.TryRemove(nodeId, out _);
     }
 
     private NodeBucket GetOrCreateBucket(NodeId id) {
-        if (!_buckets.TryGetValue(id, out var bucket)) {
-            bucket = new NodeBucket();
-            _buckets[id] = bucket;
-        }
-
-        return bucket;
+        return _buckets.GetOrAdd(id, static _ => new NodeBucket());
     }
 
     /// <summary>
     /// Per-node metadata container. Stores up to <see cref="InlineCapacity"/> entries using
     /// parallel inline arrays (no heap allocation per entry) and promotes to a dictionary
     /// only when that limit is exceeded.
+    /// All mutations are guarded by <see cref="_lock"/> so a single store can be shared by
+    /// concurrently-running analysis passes. Reads stay lock-free until a bucket promotes to
+    /// its overflow dictionary — the common inline path only touches that bucket's own
+    /// retained arrays, and the overflow path (five or more distinct metadata types) is
+    /// rare enough that taking the lock keeps readers consistent with writers.
     /// </summary>
     private sealed class NodeBucket {
-        private Type[]? _keys;
-        private IAnalysisMetadata[]? _values;
+        private readonly Lock _lock = new();
         private int _count;
+        private (Type _keys, IAnalysisMetadata _values)[]? _inline;
         private Dictionary<Type, IAnalysisMetadata>? _overflow;
 
         public void Set(Type type, IAnalysisMetadata data) {
+            using var scope = _lock.EnterScope();
+
             if (_overflow is not null) {
                 _overflow[type] = data;
+                _count = _overflow.Count;
                 return;
             }
 
             for (var i = 0; i < _count; i++) {
-                if (_keys![i] == type) {
-                    _values![i] = data;
+                if (_inline![i]._keys == type) {
+                    _inline![i]._values = data;
                     return;
                 }
             }
 
             if (_count < InlineCapacity) {
-                if (_keys is null) {
-                    _keys = new Type[InlineCapacity];
-                    _values = new IAnalysisMetadata[InlineCapacity];
+                if (_inline is null) {
+                    _inline = new (Type _keys, IAnalysisMetadata _values)[InlineCapacity];
                 }
 
-                _keys[_count] = type;
-                _values![_count] = data;
+                _inline[_count]._keys = type;
+                _inline[_count]._values = data;
                 _count++;
             }
             else {
+                Debug.Assert(_inline is not null);
+
                 _overflow = new Dictionary<Type, IAnalysisMetadata>(_count + 1, ReferenceEqualityComparer.Instance);
-                for (var i = 0; i < _count; i++) {
-                    _overflow[_keys![i]] = _values![i];
+                foreach (var (key, value) in _inline) {
+                    _overflow[key] = value;
                 }
 
                 _overflow[type] = data;
-                _keys = null;
-                _values = null;
-                _count = 0;
+                _count = _overflow.Count;
+                _inline = null;
             }
         }
 
         public IAnalysisMetadata? Get(Type type) {
-            if (_overflow is not null) {
-                return _overflow.TryGetValue(type, out var v) ? v : null;
-            }
+            using var scope = _lock.EnterScope();
 
-            for (var i = 0; i < _count; i++) {
-                if (_keys![i] == type) return _values![i];
-            }
+            if (_count == 0) return default;
 
-            return null;
+            if (_inline is not null) {
+                foreach (var (key, value) in _inline) {
+                    if (key == type) return value;
+                }
+
+                return default;
+            }
+            else {
+                Debug.Assert(_overflow is not null);
+                _overflow.TryGetValue(type, out var result);
+                return result;
+            }
         }
 
         public IAnalysisMetadata GetOrAdd(Type type, Func<IAnalysisMetadata> factory) {
+            using var scope = _lock.EnterScope();
             var existing = Get(type);
             if (existing is not null) return existing;
 
@@ -158,44 +175,56 @@ public sealed class NodeMetadataStore {
         }
 
         public void Remove(Type type) {
-            if (_overflow is not null) {
-                _overflow.Remove(type);
-                return;
-            }
+            using var scope = _lock.EnterScope();
 
-            for (var i = 0; i < _count; i++) {
-                if (_keys![i] != type) continue;
+            if (_inline is not null) {
+                for (var i = 0; i < _count; i++) {
+                    var (key, _) = _inline[i];
+                    if (key != type) continue;
 
-                _count--;
-                for (var j = i; j < _count; j++) {
-                    _keys[j] = _keys[j + 1];
-                    _values![j] = _values[j + 1];
+                    Array.Copy(_inline, i + 1, _inline, i, _count - i - 1);
+                    _count--;
+                    // Clear the vacated trailing slot so a removed metadata instance is
+                    // promptly eligible for collection instead of lingering for the
+                    // bucket's lifetime.
+                    _inline[_count] = default;
+                    return;
                 }
-
-                _keys[_count] = null!;
-                _values![_count] = null!;
-                return;
+            }
+            else {
+                Debug.Assert(_overflow is not null);
+                _overflow.Remove(type);
+                _count = _overflow.Count;
             }
         }
 
         public IAnalysisMetadata[] GetAll() {
-            if (_overflow is not null) return [.. _overflow.Values];
             if (_count == 0) return [];
+            using var scope = _lock.EnterScope();
 
-            var result = new IAnalysisMetadata[_count];
-            Array.Copy(_values!, result, _count);
-            return result;
+            if (_inline is not null) {
+                var result = new IAnalysisMetadata[_count];
+                for (var i = 0; i < _count; i++) {
+                    result[i] = _inline[i]._values;
+                }
+                return result;
+            }
+            else {
+                Debug.Assert(_overflow is not null);
+                return _overflow.Values.ToArray();
+            }
         }
 
         public NodeBucket Clone() {
+            using var _ = _lock.EnterScope();
             var clone = new NodeBucket();
 
             if (_overflow is not null) {
                 clone._overflow = new Dictionary<Type, IAnalysisMetadata>(_overflow, ReferenceEqualityComparer.Instance);
             }
             else if (_count > 0) {
-                clone._keys = (Type[])_keys!.Clone();
-                clone._values = (IAnalysisMetadata[])_values!.Clone();
+                clone._inline = new (Type _keys, IAnalysisMetadata _values)[InlineCapacity];
+                Array.Copy(_inline!, clone._inline, _count);
                 clone._count = _count;
             }
 

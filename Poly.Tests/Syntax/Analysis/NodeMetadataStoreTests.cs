@@ -102,6 +102,29 @@ public class NodeMetadataStoreTests {
         await Assert.That(store.Get<LabelMetadata>(node)!.Label).IsEqualTo("hello");
     }
 
+    // --- Remove then add a new type (stale inline slot must not resurface) ---
+
+    [Test]
+    public async Task Remove_ThenSetNewType_PromotesFromRemainingEntriesWithoutStaleSlot() {
+        var store = new NodeMetadataStore();
+        var node = new Constant(1);
+
+        // Fill enough distinct types to force inline mode (≤ 4 entries).
+        store.Set(node, new ValueMetadata(1));
+        store.Set(node, new LabelMetadata("a"));
+
+        // Remove the entry in the middle of the inline array, then add a new 3rd
+        // type. If the vacated trailing slot was not cleared and later (via the
+        // promotion loop) read as a live entry, the removed metadata would leak
+        // back into the overflow.
+        store.Remove<ValueMetadata>(node);
+        store.Set(node, new FlagMetadata(true));
+
+        await Assert.That(store.Get<ValueMetadata>(node)).IsNull();
+        await Assert.That(store.Get<LabelMetadata>(node)!.Label).IsEqualTo("a");
+        await Assert.That(store.Get<FlagMetadata>(node)!.Flag).IsTrue();
+    }
+
     // --- Copy constructor (snapshot) ---
 
     [Test]

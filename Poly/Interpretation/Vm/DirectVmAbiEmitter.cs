@@ -39,6 +39,25 @@ public static class DirectVmAbiEmitter {
     /// </summary>
     private sealed record Capture(Variable Variable, int OuterSlotIndex);
 
+    // ── Cached reflection lookups ──────────────────────────────────
+    // These were previously resolved via typeof(T).GetMethod(...) at each call
+    // site, repeated for every expression/statement during the AST walk. Hoisting
+    // them into static readonly fields removes the per-site reflection overhead.
+    private static readonly MethodInfo HeapUnsafeGet = Ref<Heap>.Method(h => h.UnsafeGet(0));
+    private static readonly MethodInfo HeapAllocate = Ref<Heap>.Method(h => h.Allocate(default!));
+    private static readonly MethodInfo ObjectEquals = Ref.Method(
+        (Expression<Func<object?, object?, bool>>)((a, b) => object.Equals(a, b)));
+    private static readonly MethodInfo StringConcat = Ref.Method(
+        (Expression<Func<object?, object?, string?>>)((a, b) => string.Concat(a, b)));
+    private static readonly MethodInfo VmHeapCompare = Ref.Method(
+        (Expression<Func<object?, object?, int>>)((a, b) => VmHeapComparison.Compare(a, b)));
+    private static readonly MethodInfo BitOperationsPopCount = Ref.Method(
+        (Expression<Func<ulong, int>>)(v => System.Numerics.BitOperations.PopCount(v)));
+    private static readonly MethodInfo IDisposableDispose =
+        Ref<IDisposable>.Method(d => d.Dispose());
+    private static readonly MethodInfo SetStackPointer = Ref<ValueStack>.Method(s => s.SetStackPointer(0));
+
+
     /// <summary>Emits a compiled <see cref="VmProgram"/> from an analyzed AST
     /// root node, targeting the bespoke VM ABI directly. This is the canonical
     /// compilation path — no primitives or intermediate IR.</summary>
@@ -301,7 +320,7 @@ public static class DirectVmAbiEmitter {
         if (c.Value is float flt)
             return Assign(ctx.RingVar(slot), Constant(BitConverter.DoubleToInt64Bits(flt)));
         // Non-numeric: allocate on heap
-        var allocate = Call(ctx.HeapLocal, Ref<Heap>.Method(h => h.Allocate(null!)),
+        var allocate = Call(ctx.HeapLocal, HeapAllocate,
             Convert(Constant(c.Value), typeof(object)));
         return Assign(ctx.RingVar(slot), Convert(allocate, typeof(long)));
     }
@@ -356,15 +375,9 @@ public static class DirectVmAbiEmitter {
                 if (paramType.IsValueType) {
                     ctorArgs[i] = Convert(ringVal, paramType);
                 }
-                else if (paramType == typeof(string)) {
-                    ctorArgs[i] = Convert(
-                        Call(ctx.HeapLocal, typeof(Heap).GetMethod(nameof(Heap.UnsafeGet))!,
-                            Convert(ringVal, typeof(int))),
-                        paramType);
-                }
                 else {
                     ctorArgs[i] = Convert(
-                        Call(ctx.HeapLocal, typeof(Heap).GetMethod(nameof(Heap.UnsafeGet))!,
+                        Call(ctx.HeapLocal, HeapUnsafeGet,
                             Convert(ringVal, typeof(int))),
                         paramType);
                 }
@@ -373,7 +386,7 @@ public static class DirectVmAbiEmitter {
             var newExpr = New(ctor, ctorArgs);
             var boxed = Convert(newExpr, typeof(object));
             int slot = ctx.AllocSlot();
-            var handle = Call(ctx.HeapLocal, Ref<Heap>.Method(h => h.Allocate(null!)), boxed);
+            var handle = Call(ctx.HeapLocal, HeapAllocate, boxed);
             ctx.RingDepth = slot + 1;
             return Block(argExprs.Concat([Assign(ctx.RingVar(slot), Convert(handle, typeof(long)))]));
         }
@@ -384,14 +397,14 @@ public static class DirectVmAbiEmitter {
                 ? Convert(Constant(0L), typeof(object))
                 : Constant(null, typeof(object));
             int slot2 = ctx.AllocSlot();
-            var handle2 = Call(ctx.HeapLocal, Ref<Heap>.Method(h => h.Allocate(null!)), defaultObj);
+            var handle2 = Call(ctx.HeapLocal, HeapAllocate, defaultObj);
             return Assign(ctx.RingVar(slot2), Convert(handle2, typeof(long)));
         }
 
         // Last resort: empty object[]
         int slot3 = ctx.AllocSlot();
         var placeholder = NewArrayBounds(typeof(object), Constant(0));
-        var handle3 = Call(ctx.HeapLocal, Ref<Heap>.Method(h => h.Allocate(null!)),
+        var handle3 = Call(ctx.HeapLocal, HeapAllocate,
             Convert(placeholder, typeof(object)));
         return Assign(ctx.RingVar(slot3), Convert(handle3, typeof(long)));
     }
@@ -425,7 +438,7 @@ public static class DirectVmAbiEmitter {
         }
 
         var arr = NewArrayBounds(elemType, Convert(ctx.RingVar(lenSlot), typeof(int)));
-        var handle = Call(ctx.HeapLocal, Ref<Heap>.Method(h => h.Allocate(null!)),
+        var handle = Call(ctx.HeapLocal, HeapAllocate,
             Convert(arr, typeof(object)));
         return Block(lenExpr, fold, Assign(ctx.RingVar(slot), Convert(handle, typeof(long))));
     }
@@ -444,7 +457,7 @@ public static class DirectVmAbiEmitter {
 
         int outSlot = ctx.AllocSlot();
 
-        var rawObj = Call(ctx.HeapLocal, typeof(Heap).GetMethod(nameof(Heap.UnsafeGet))!,
+        var rawObj = Call(ctx.HeapLocal, HeapUnsafeGet,
             Convert(ctx.RingVar(arrSlot), typeof(int)));
         var idx = Convert(ctx.RingVar(idxSlot), typeof(int));
 
@@ -647,11 +660,9 @@ public static class DirectVmAbiEmitter {
             return null;
         var lo = HeapValueToObject(leftVal, ctx);
         var ro = HeapValueToObject(rightVal, ctx);
-        var concat = Call(
-            typeof(string).GetMethod("Concat", [typeof(object), typeof(object)])!,
-            lo, ro);
+        var concat = Call(StringConcat, lo, ro);
         var handle = Call(ctx.HeapLocal,
-            typeof(Heap).GetMethod(nameof(Heap.Allocate))!,
+            HeapAllocate,
             Convert(concat, typeof(object)));
         return Convert(handle, typeof(long));
     }
@@ -676,8 +687,7 @@ public static class DirectVmAbiEmitter {
         Not(CompileValue(n.Operand, ctx));
 
     private static Expression EmitPopCountValue(PopCount pc, AbiCtx ctx) =>
-        Convert(Call(null, typeof(System.Numerics.BitOperations)
-            .GetMethod(nameof(System.Numerics.BitOperations.PopCount), [typeof(ulong)])!,
+        Convert(Call(null, BitOperationsPopCount,
             Convert(CompileValue(pc.Operand, ctx), typeof(ulong))), typeof(long));
 
     private static Expression EmitConditionalValue(Conditional c, AbiCtx ctx) =>
@@ -737,7 +747,7 @@ public static class DirectVmAbiEmitter {
         if (eq && AreHeapValues(ctx, left, right)) {
             var lo = HeapValueToObject(lv, ctx);
             var ro = HeapValueToObject(rv, ctx);
-            var ec = Call(typeof(object).GetMethod("Equals", [typeof(object), typeof(object)])!, lo, ro);
+            var ec = Call(ObjectEquals, lo, ro);
             return cf == Equal ? ec : Not(ec);
         }
         if (!eq && ctx.Analysis is not null
@@ -749,8 +759,7 @@ public static class DirectVmAbiEmitter {
             // (Unknown) keep the scalar path.
             var lo = HeapValueToObject(lv, ctx);
             var ro = HeapValueToObject(rv, ctx);
-            var cmp = Call(typeof(VmHeapComparison).GetMethod(
-                nameof(VmHeapComparison.Compare), [typeof(object), typeof(object)])!, lo, ro);
+            var cmp = Call(VmHeapCompare, lo, ro);
             return cf(cmp, Constant(0));
         }
         if (IsDoubleValue(ctx, left) || IsDoubleValue(ctx, right))
@@ -768,7 +777,7 @@ public static class DirectVmAbiEmitter {
         if (eq && AreHeapValues(ctx, left, right)) {
             var lo = HeapValueToObject(lv, ctx);
             var ro = HeapValueToObject(rv, ctx);
-            var ec = Call(typeof(object).GetMethod("Equals", [typeof(object), typeof(object)])!, lo, ro);
+            var ec = Call(ObjectEquals, lo, ro);
             return Condition(ec, cf == Equal ? Constant(1L) : Constant(0L),
                                 cf == Equal ? Constant(0L) : Constant(1L));
         }
@@ -781,8 +790,7 @@ public static class DirectVmAbiEmitter {
             // (Unknown) keep the scalar path.
             var lo = HeapValueToObject(lv, ctx);
             var ro = HeapValueToObject(rv, ctx);
-            var cmp = Call(typeof(VmHeapComparison).GetMethod(
-                nameof(VmHeapComparison.Compare), [typeof(object), typeof(object)])!, lo, ro);
+            var cmp = Call(VmHeapCompare, lo, ro);
             return Condition(cf(cmp, Constant(0)), Constant(1L), Constant(0L));
         }
         if (IsDoubleValue(ctx, left) || IsDoubleValue(ctx, right))
@@ -836,7 +844,7 @@ public static class DirectVmAbiEmitter {
         if (eq && AreHeapValues(ctx, left, right)) {
             var lo = HeapValueToObject(ctx.RingVar(leftSlot), ctx);
             var ro = HeapValueToObject(ctx.RingVar(rightSlot), ctx);
-            var ec = Call(typeof(object).GetMethod("Equals", [typeof(object), typeof(object)])!, lo, ro);
+            var ec = Call(ObjectEquals, lo, ro);
             ctx.RingDepth = d + 1;
             return Block(leftCompiled, rightCompiled, Assign(ctx.RingVar(d),
                 Condition(ec, cf == Equal ? Constant(1L) : Constant(0L),
@@ -895,7 +903,7 @@ public static class DirectVmAbiEmitter {
             // Read both objects from heap and compare — handle 0 maps to null.
             var leftObj = HeapValueToObject(ctx.RingVar(leftResult), ctx);
             var rightObj = HeapValueToObject(ctx.RingVar(rightResult), ctx);
-            var equalCheck = Call(typeof(object).GetMethod("Equals", [typeof(object), typeof(object)])!,
+            var equalCheck = Call(ObjectEquals,
                 leftObj, rightObj);
             var result = Assign(ctx.RingVar(d),
                 comparisonFactory == Equal
@@ -930,7 +938,7 @@ public static class DirectVmAbiEmitter {
     private static Expression HeapValueToObject(Expression handle, AbiCtx ctx) {
         var intHandle = Convert(handle, typeof(int));
         var deref = Call(ctx.HeapLocal,
-            typeof(Heap).GetMethod(nameof(Heap.UnsafeGet))!, intHandle);
+            HeapUnsafeGet, intHandle);
         return Condition(Equal(handle, Constant(0L)),
             Constant(null, typeof(object)),
             deref);
@@ -1062,7 +1070,7 @@ public static class DirectVmAbiEmitter {
         int resultSlot = ctx.RingDepth - 1;
         var fold = FoldResultToSlot(ref resultSlot, d, ctx);
         var call = Call(null,
-            typeof(System.Numerics.BitOperations).GetMethod(nameof(System.Numerics.BitOperations.PopCount), [typeof(ulong)])!,
+            BitOperationsPopCount,
             Convert(ctx.RingVar(resultSlot), typeof(ulong)));
         var result = Assign(ctx.RingVar(resultSlot), Convert(call, typeof(long)));
         ctx.RingDepth = resultSlot + 1;
@@ -1096,7 +1104,7 @@ public static class DirectVmAbiEmitter {
             }
             else {
                 instanceObj = Call(ctx.HeapLocal,
-                    typeof(Heap).GetMethod(nameof(Heap.UnsafeGet))!,
+                    HeapUnsafeGet,
                     Convert(ctx.RingVar(instanceSlot), typeof(int)));
             }
             return EmitResolvedMember(resolved, instanceObj, d, ctx, Block(instanceExpr, fold));
@@ -1163,7 +1171,7 @@ public static class DirectVmAbiEmitter {
         }
         // Reference type (or non-long value type): box/allocate on heap and return handle
         var handle = Call(ctx.HeapLocal,
-            typeof(Heap).GetMethod(nameof(Heap.Allocate))!,
+            HeapAllocate,
             readCall);
         return Convert(handle, typeof(long));
     }
@@ -1195,7 +1203,7 @@ public static class DirectVmAbiEmitter {
 
         // Read heap object and check type: _heap.UnsafeGet((int)handle) is TargetType
         var heapObj = Call(ctx.HeapLocal,
-            typeof(Heap).GetMethod(nameof(Heap.UnsafeGet))!,
+            HeapUnsafeGet,
             Convert(ctx.RingVar(resultSlot), typeof(int)));
         var typeCheck = TypeIs(heapObj, targetType);
         var result = Condition(typeCheck, Constant(1L), Constant(0L));
@@ -1411,7 +1419,7 @@ public static class DirectVmAbiEmitter {
 
         // Dispose call on the resource handle (simplified — real impl casts to IDisposable via heap)
         var resourceSlot = ctx.RingDepth - 1;
-        var disposeMethod = typeof(IDisposable).GetMethod(nameof(IDisposable.Dispose))!;
+        var disposeMethod = IDisposableDispose;
         // For POC, just wrap body in try/finally (dispose omitted at ABI level)
         return Block(resourceExpr, TryFinally(bodyExpr, Empty()));
     }
@@ -1555,7 +1563,7 @@ public static class DirectVmAbiEmitter {
                 instanceObj = Convert(ctx.RingVar(instanceSlot), typeof(object));
             else
                 instanceObj = Call(ctx.HeapLocal,
-                    typeof(Heap).GetMethod(nameof(Heap.UnsafeGet))!,
+                    HeapUnsafeGet,
                     Convert(ctx.RingVar(instanceSlot), typeof(int)));
 
             // Coerce the ABI value (long ring slot) to the member's CLR type
@@ -1578,7 +1586,7 @@ public static class DirectVmAbiEmitter {
                 // Reference type or non-long value type: the ring slot holds a heap
                 // handle — deref the boxed object and write it through.
                 writeValue = Call(ctx.HeapLocal,
-                    typeof(Heap).GetMethod(nameof(Heap.UnsafeGet))!,
+                    HeapUnsafeGet,
                     Convert(ctx.RingVar(valueSlot), typeof(int)));
             }
 
@@ -1845,7 +1853,7 @@ public static class DirectVmAbiEmitter {
             int resultSlot = ctx.RingDepth - 1;
 
             var heapObj = Call(ctx.HeapLocal,
-                typeof(Heap).GetMethod(nameof(Heap.UnsafeGet))!,
+                HeapUnsafeGet,
                 Convert(ctx.RingVar(resultSlot), typeof(int)));
             var exVar = Variable(typeof(Exception), "_thrownEx");
             return Block(
@@ -1893,7 +1901,7 @@ public static class DirectVmAbiEmitter {
             var bodyExpr = CompileNode(clause.Body, ctx);
 
             // Allocate handle for the ex so ABI code can see it as a "value".
-            var allocate = Call(ctx.HeapLocal, Ref<Heap>.Method(h => h.Allocate(null!)), Convert(exParam, typeof(object)));
+            var allocate = Call(ctx.HeapLocal, HeapAllocate, Convert(exParam, typeof(object)));
             var handle = Convert(allocate, typeof(long));
 
             Expression catchBodyExpr = bodyExpr;
@@ -2005,7 +2013,7 @@ public static class DirectVmAbiEmitter {
                 Convert(ctx.VariableRead(cap.Variable), typeof(object))));
         }
 
-        var handle = Call(ctx.HeapLocal, Ref<Heap>.Method(h => h.Allocate(null!)),
+        var handle = Call(ctx.HeapLocal, HeapAllocate,
             Convert(closureArrVar, typeof(object)));
         int slot = ctx.AllocSlot();
         body.Add(Assign(ctx.RingVar(slot), Convert(handle, typeof(long))));
@@ -2084,19 +2092,13 @@ public static class DirectVmAbiEmitter {
                             methodArgs[i] = AbiValueTypes.IsLongRepresentable(paramType)
                                 ? Convert(ringVal, paramType)
                                 : Convert(
-                                    Call(ctx.HeapLocal, typeof(Heap).GetMethod(nameof(Heap.UnsafeGet))!,
+                                    Call(ctx.HeapLocal, HeapUnsafeGet,
                                         Convert(ringVal, typeof(int))),
                                     paramType);
                         }
-                        else if (paramType == typeof(string)) {
-                            methodArgs[i] = Convert(
-                                Call(ctx.HeapLocal, typeof(Heap).GetMethod(nameof(Heap.UnsafeGet))!,
-                                    Convert(ringVal, typeof(int))),
-                                paramType);
-                        }
                         else {
                             methodArgs[i] = Convert(
-                                Call(ctx.HeapLocal, typeof(Heap).GetMethod(nameof(Heap.UnsafeGet))!,
+                                Call(ctx.HeapLocal, HeapUnsafeGet,
                                     Convert(ringVal, typeof(int))),
                                 paramType);
                         }
@@ -2108,7 +2110,7 @@ public static class DirectVmAbiEmitter {
                     }
                     else {
                         var instanceObj = Call(ctx.HeapLocal,
-                            typeof(Heap).GetMethod(nameof(Heap.UnsafeGet))!,
+                            HeapUnsafeGet,
                             Convert(ctx.RingVar(instanceSlot), typeof(int)));
                         // Convert from 'object' to the declaring type so Expression.Call
                         // can resolve the method. This is a no-op cast at runtime for
@@ -2139,14 +2141,14 @@ public static class DirectVmAbiEmitter {
                         }
                         else {
                             fullBody.Add(Assign(ctx.RingVar(slot),
-                                Convert(Call(ctx.HeapLocal, typeof(Heap).GetMethod(nameof(Heap.Allocate))!,
+                                Convert(Call(ctx.HeapLocal, HeapAllocate,
                                     Convert(callExpr, typeof(object))), typeof(long))));
                         }
                         return Block(fullBody);
                     }
                     // Reference type return: allocate on heap
                     fullBody.Add(Assign(ctx.RingVar(slot),
-                        Convert(Call(ctx.HeapLocal, typeof(Heap).GetMethod(nameof(Heap.Allocate))!,
+                        Convert(Call(ctx.HeapLocal, HeapAllocate,
                             Convert(callExpr, typeof(object))), typeof(long))));
                     return Block(fullBody);
                 }
@@ -2234,7 +2236,7 @@ public static class DirectVmAbiEmitter {
                     Convert(callSp, typeof(long))));
                 // Advance SP past the 2-word header
                 preBody.Add(Call(Property(ctx.State, "Stack"),
-                    Ref<ValueStack>.Method(s => s.SetStackPointer(0)),
+                    SetStackPointer,
                     Add(callSp, Constant(headerSize))));
             }
 
@@ -2247,7 +2249,7 @@ public static class DirectVmAbiEmitter {
             // Advance SP past args
             if (invoke.Arguments.Length > 0 || headerSize > 0) {
                 preBody.Add(Call(Property(ctx.State, "Stack"),
-                    Ref<ValueStack>.Method(s => s.SetStackPointer(0)),
+                    SetStackPointer,
                     Add(callSp, Constant(headerSize + invoke.Arguments.Length))));
             }
 

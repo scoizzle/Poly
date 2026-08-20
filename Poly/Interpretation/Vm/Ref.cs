@@ -20,6 +20,17 @@ internal static class Ref {
             ? mce.Method
             : ((MethodCallExpression)((UnaryExpression)expr.Body).Operand).Method;
 
+    /// <summary>
+    /// General-purpose method lookup for any delegate-shaped expression
+    /// (static or instance, any arity and return type), e.g.
+    /// <c>Ref.Method((object? a, object? b) =&gt; object.Equals(a, b))</c> or
+    /// <c>Ref.Method((ulong v) =&gt; System.Numerics.BitOperations.PopCount(v))</c>.
+    /// The delegate type is inferred from the lambda, so no predeclared
+    /// delegate type is required.
+    /// </summary>
+    public static MethodInfo Method<TDelegate>(Expression<TDelegate> expr) where TDelegate : Delegate =>
+        ((MethodCallExpression)expr.Body).Method;
+
     /// <summary>Constructor via <c>() => new T(args)</c>, e.g. <c>Ref.Constructor(() => new InvalidOperationException(""))</c>.
     /// Extract the <see cref="ConstructorInfo"/> from the <c>new</c> expression.</summary>
     public static ConstructorInfo Constructor<T>(Expression<Func<T>> expr) =>

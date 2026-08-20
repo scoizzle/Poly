@@ -55,7 +55,7 @@ public sealed class TypeDefinitionProviderCollection(params IEnumerable<ITypeDef
     /// Resolves by name, querying providers from top to bottom. Returns null when not found.
     /// </summary>
     public ITypeDefinition? GetTypeDefinition(string name) {
-        foreach (var provider in _providers) {
+        foreach (var provider in _providers.AsReadOnly()) {
             var typeDef = provider.GetTypeDefinition(name);
             if (typeDef is not null) {
                 return typeDef;
@@ -68,7 +68,7 @@ public sealed class TypeDefinitionProviderCollection(params IEnumerable<ITypeDef
     /// Resolves by runtime type, querying providers from top to bottom. Returns null when not found.
     /// </summary>
     public ITypeDefinition? GetTypeDefinition(Type type) {
-        foreach (var provider in _providers) {
+        foreach (var provider in _providers.AsReadOnly()) {
             var typeDef = provider.GetTypeDefinition(type);
             if (typeDef is not null) {
                 return typeDef;

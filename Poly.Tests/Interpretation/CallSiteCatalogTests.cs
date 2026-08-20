@@ -1,3 +1,4 @@
+using Poly.Interpretation.Analysis.ConstantFolding;
 using Poly.Interpretation.Analysis.ControlFlow;
 using Poly.Interpretation.Analysis.Semantics;
 
@@ -11,6 +12,7 @@ public class CallSiteCatalogTests {
             .UseVariableScopeValidator()
             .UseSideEffectAnalysis()
             .UseJumpTargetResolution()
+            .UseConstantFolding()
             .UseControlFlowAnalysis()
             .UseValueRepresentationAnalysis()
             .UseCallSiteCatalog()
@@ -115,6 +117,7 @@ public class CallSiteCatalogTests {
             .UseVariableScopeValidator()
             .UseSideEffectAnalysis()
             .UseJumpTargetResolution()
+            .UseConstantFolding()
             .UseControlFlowAnalysis()
             .UseValueRepresentationAnalysis()
             .UseCallSiteCatalog()

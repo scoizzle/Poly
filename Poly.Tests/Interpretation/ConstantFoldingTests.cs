@@ -16,8 +16,8 @@ public class ConstantFoldingTests {
             .UseVariableScopeValidator()
             .UseSideEffectAnalysis()
             .UseJumpTargetResolution()
-            .UseControlFlowAnalysis()
-            .UseConstantFolding().Build().Analyze(ast);
+            .UseConstantFolding()
+            .UseControlFlowAnalysis().Build().Analyze(ast);
 
         // Assert
         await Assert.That(result.IsConstant(ast)).IsTrue();
@@ -39,8 +39,8 @@ public class ConstantFoldingTests {
             .UseVariableScopeValidator()
             .UseSideEffectAnalysis()
             .UseJumpTargetResolution()
-            .UseControlFlowAnalysis()
-            .UseConstantFolding().Build().Analyze(ast);
+            .UseConstantFolding()
+            .UseControlFlowAnalysis().Build().Analyze(ast);
 
 
         // Assert
@@ -58,8 +58,8 @@ public class ConstantFoldingTests {
             .UseVariableScopeValidator()
             .UseSideEffectAnalysis()
             .UseJumpTargetResolution()
-            .UseControlFlowAnalysis()
-            .UseConstantFolding().Build().Analyze(ast);
+            .UseConstantFolding()
+            .UseControlFlowAnalysis().Build().Analyze(ast);
 
 
         // Assert
@@ -77,8 +77,8 @@ public class ConstantFoldingTests {
             .UseVariableScopeValidator()
             .UseSideEffectAnalysis()
             .UseJumpTargetResolution()
-            .UseControlFlowAnalysis()
-            .UseConstantFolding().Build().Analyze(ast);
+            .UseConstantFolding()
+            .UseControlFlowAnalysis().Build().Analyze(ast);
 
 
         // Assert
@@ -96,8 +96,8 @@ public class ConstantFoldingTests {
             .UseVariableScopeValidator()
             .UseSideEffectAnalysis()
             .UseJumpTargetResolution()
-            .UseControlFlowAnalysis()
-            .UseConstantFolding().Build().Analyze(ast);
+            .UseConstantFolding()
+            .UseControlFlowAnalysis().Build().Analyze(ast);
 
 
         // Assert
@@ -115,8 +115,8 @@ public class ConstantFoldingTests {
             .UseVariableScopeValidator()
             .UseSideEffectAnalysis()
             .UseJumpTargetResolution()
-            .UseControlFlowAnalysis()
-            .UseConstantFolding().Build().Analyze(ast);
+            .UseConstantFolding()
+            .UseControlFlowAnalysis().Build().Analyze(ast);
 
 
         // Assert
@@ -136,8 +136,8 @@ public class ConstantFoldingTests {
             .UseVariableScopeValidator()
             .UseSideEffectAnalysis()
             .UseJumpTargetResolution()
-            .UseControlFlowAnalysis()
-            .UseConstantFolding().Build().Analyze(ast);
+            .UseConstantFolding()
+            .UseControlFlowAnalysis().Build().Analyze(ast);
 
 
         // Assert
@@ -159,8 +159,8 @@ public class ConstantFoldingTests {
             .UseVariableScopeValidator()
             .UseSideEffectAnalysis()
             .UseJumpTargetResolution()
-            .UseControlFlowAnalysis()
-            .UseConstantFolding().Build().Analyze(ast);
+            .UseConstantFolding()
+            .UseControlFlowAnalysis().Build().Analyze(ast);
 
 
         // Assert
@@ -178,8 +178,8 @@ public class ConstantFoldingTests {
             .UseVariableScopeValidator()
             .UseSideEffectAnalysis()
             .UseJumpTargetResolution()
-            .UseControlFlowAnalysis()
-            .UseConstantFolding().Build().Analyze(ast);
+            .UseConstantFolding()
+            .UseControlFlowAnalysis().Build().Analyze(ast);
 
 
         // Assert
@@ -197,8 +197,8 @@ public class ConstantFoldingTests {
             .UseVariableScopeValidator()
             .UseSideEffectAnalysis()
             .UseJumpTargetResolution()
-            .UseControlFlowAnalysis()
-            .UseConstantFolding().Build().Analyze(ast);
+            .UseConstantFolding()
+            .UseControlFlowAnalysis().Build().Analyze(ast);
 
 
         // Assert
@@ -216,8 +216,8 @@ public class ConstantFoldingTests {
             .UseVariableScopeValidator()
             .UseSideEffectAnalysis()
             .UseJumpTargetResolution()
-            .UseControlFlowAnalysis()
-            .UseConstantFolding().Build().Analyze(ast);
+            .UseConstantFolding()
+            .UseControlFlowAnalysis().Build().Analyze(ast);
 
 
         // Assert
@@ -235,8 +235,8 @@ public class ConstantFoldingTests {
             .UseVariableScopeValidator()
             .UseSideEffectAnalysis()
             .UseJumpTargetResolution()
-            .UseControlFlowAnalysis()
-            .UseConstantFolding().Build().Analyze(ast);
+            .UseConstantFolding()
+            .UseControlFlowAnalysis().Build().Analyze(ast);
 
 
         // Assert
@@ -254,8 +254,8 @@ public class ConstantFoldingTests {
             .UseVariableScopeValidator()
             .UseSideEffectAnalysis()
             .UseJumpTargetResolution()
-            .UseControlFlowAnalysis()
-            .UseConstantFolding().Build().Analyze(ast);
+            .UseConstantFolding()
+            .UseControlFlowAnalysis().Build().Analyze(ast);
 
 
         // Assert
@@ -273,8 +273,8 @@ public class ConstantFoldingTests {
             .UseVariableScopeValidator()
             .UseSideEffectAnalysis()
             .UseJumpTargetResolution()
-            .UseControlFlowAnalysis()
-            .UseConstantFolding().Build().Analyze(ast);
+            .UseConstantFolding()
+            .UseControlFlowAnalysis().Build().Analyze(ast);
 
 
         // Assert
@@ -292,8 +292,8 @@ public class ConstantFoldingTests {
             .UseVariableScopeValidator()
             .UseSideEffectAnalysis()
             .UseJumpTargetResolution()
-            .UseControlFlowAnalysis()
-            .UseConstantFolding().Build().Analyze(ast);
+            .UseConstantFolding()
+            .UseControlFlowAnalysis().Build().Analyze(ast);
 
 
         // Assert
@@ -311,8 +311,8 @@ public class ConstantFoldingTests {
             .UseVariableScopeValidator()
             .UseSideEffectAnalysis()
             .UseJumpTargetResolution()
-            .UseControlFlowAnalysis()
-            .UseConstantFolding().Build().Analyze(ast);
+            .UseConstantFolding()
+            .UseControlFlowAnalysis().Build().Analyze(ast);
 
 
         // Assert
@@ -331,8 +331,8 @@ public class ConstantFoldingTests {
             .UseVariableScopeValidator()
             .UseSideEffectAnalysis()
             .UseJumpTargetResolution()
-            .UseControlFlowAnalysis()
-            .UseConstantFolding().Build().Analyze(ast);
+            .UseConstantFolding()
+            .UseControlFlowAnalysis().Build().Analyze(ast);
 
 
         // Assert
@@ -350,8 +350,8 @@ public class ConstantFoldingTests {
             .UseVariableScopeValidator()
             .UseSideEffectAnalysis()
             .UseJumpTargetResolution()
-            .UseControlFlowAnalysis()
-            .UseConstantFolding().Build().Analyze(ast);
+            .UseConstantFolding()
+            .UseControlFlowAnalysis().Build().Analyze(ast);
 
 
         // Assert - division by zero should not fold
@@ -368,8 +368,8 @@ public class ConstantFoldingTests {
             .UseVariableScopeValidator()
             .UseSideEffectAnalysis()
             .UseJumpTargetResolution()
-            .UseControlFlowAnalysis()
-            .UseConstantFolding().Build().Analyze(ast);
+            .UseConstantFolding()
+            .UseControlFlowAnalysis().Build().Analyze(ast);
 
 
         // Assert
@@ -387,8 +387,8 @@ public class ConstantFoldingTests {
             .UseVariableScopeValidator()
             .UseSideEffectAnalysis()
             .UseJumpTargetResolution()
-            .UseControlFlowAnalysis()
-            .UseConstantFolding().Build().Analyze(ast);
+            .UseConstantFolding()
+            .UseControlFlowAnalysis().Build().Analyze(ast);
 
 
         await Assert.That(result.IsConstant(ast)).IsTrue();
@@ -405,8 +405,8 @@ public class ConstantFoldingTests {
             .UseVariableScopeValidator()
             .UseSideEffectAnalysis()
             .UseJumpTargetResolution()
-            .UseControlFlowAnalysis()
-            .UseConstantFolding().Build().Analyze(ast);
+            .UseConstantFolding()
+            .UseControlFlowAnalysis().Build().Analyze(ast);
 
 
         await Assert.That(result.IsConstant(ast)).IsTrue();
@@ -423,8 +423,8 @@ public class ConstantFoldingTests {
             .UseVariableScopeValidator()
             .UseSideEffectAnalysis()
             .UseJumpTargetResolution()
-            .UseControlFlowAnalysis()
-            .UseConstantFolding().Build().Analyze(ast);
+            .UseConstantFolding()
+            .UseControlFlowAnalysis().Build().Analyze(ast);
 
 
         // Assert
@@ -442,8 +442,8 @@ public class ConstantFoldingTests {
             .UseVariableScopeValidator()
             .UseSideEffectAnalysis()
             .UseJumpTargetResolution()
-            .UseControlFlowAnalysis()
-            .UseConstantFolding().Build().Analyze(ast);
+            .UseConstantFolding()
+            .UseControlFlowAnalysis().Build().Analyze(ast);
 
 
         // Assert
@@ -462,8 +462,8 @@ public class ConstantFoldingTests {
             .UseVariableScopeValidator()
             .UseSideEffectAnalysis()
             .UseJumpTargetResolution()
-            .UseControlFlowAnalysis()
-            .UseConstantFolding().Build().Analyze(ast);
+            .UseConstantFolding()
+            .UseControlFlowAnalysis().Build().Analyze(ast);
 
 
         await Assert.That(result.IsConstant(ast)).IsTrue();
@@ -482,8 +482,8 @@ public class ConstantFoldingTests {
             .UseVariableScopeValidator()
             .UseSideEffectAnalysis()
             .UseJumpTargetResolution()
-            .UseControlFlowAnalysis()
-            .UseConstantFolding().Build().Analyze(ast);
+            .UseConstantFolding()
+            .UseControlFlowAnalysis().Build().Analyze(ast);
 
 
         await Assert.That(result.IsConstant(ast)).IsTrue();
@@ -503,8 +503,8 @@ public class ConstantFoldingTests {
             .UseVariableScopeValidator()
             .UseSideEffectAnalysis()
             .UseJumpTargetResolution()
-            .UseControlFlowAnalysis()
-            .UseConstantFolding().Build().Analyze(ast);
+            .UseConstantFolding()
+            .UseControlFlowAnalysis().Build().Analyze(ast);
 
 
         // Assert

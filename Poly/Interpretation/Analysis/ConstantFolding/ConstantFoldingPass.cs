@@ -273,29 +273,57 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
             return multiply.LeftHandValue;
         if (IsZero(context, multiply.LeftHandValue) || IsZero(context, multiply.RightHandValue))
             return new Constant(0L);
-        // x * 2^n → shift left by n
-        var mulRightVal = GetConstantValue(context, multiply.RightHandValue);
-        if (mulRightVal.HasValue && ToLong(mulRightVal.Value) is long mr && IsPowerOf2(mr))
-            return new ShiftLeft(multiply.LeftHandValue, new Constant((int)double.Log2(mr)));
+        // x * 2^n → shift left by n (integer operands only)
+        if (IsIntegerOperand(context, multiply.LeftHandValue)) {
+            var mulRightVal = GetConstantValue(context, multiply.RightHandValue);
+            if (mulRightVal.HasValue && ToLong(mulRightVal.Value) is long mr && IsPowerOf2(mr))
+                return new ShiftLeft(multiply.LeftHandValue, new Constant((int)double.Log2(mr)));
+        }
         return null;
     }
 
     private Node? SimplifyDivision(AnalysisContext context, Divide divide) {
         if (IsOne(context, divide.RightHandValue))
             return divide.LeftHandValue;
-        // x / 2^n → shift right by n
-        var divRightVal = GetConstantValue(context, divide.RightHandValue);
-        if (divRightVal.HasValue && ToLong(divRightVal.Value) is long dr && IsPowerOf2(dr))
-            return new ShiftRight(divide.LeftHandValue, new Constant((int)double.Log2(dr)));
+        // x / 2^n → shift right by n (integer operands only)
+        if (IsIntegerOperand(context, divide.LeftHandValue)) {
+            var divRightVal = GetConstantValue(context, divide.RightHandValue);
+            if (divRightVal.HasValue && ToLong(divRightVal.Value) is long dr && IsPowerOf2(dr))
+                return new ShiftRight(divide.LeftHandValue, new Constant((int)double.Log2(dr)));
+        }
         return null;
     }
 
     private Node? SimplifyModulo(AnalysisContext context, Modulo mod) {
-        // x % 2^n → bitwise and with (2^n - 1)
+        // x % 2^n → bitwise and with (2^n - 1); the mask must match the
+        // left operand's integer type so the emitted And is type-correct.
+        if (!IsIntegerOperand(context, mod.LeftHandValue))
+            return null;
+
         var modRightVal = GetConstantValue(context, mod.RightHandValue);
-        if (modRightVal.HasValue && ToLong(modRightVal.Value) is long mr && IsPowerOf2(mr))
-            return new BitwiseAnd(mod.LeftHandValue, new Constant(mr - 1));
-        return null;
+        if (!modRightVal.HasValue || ToLong(modRightVal.Value) is not long mr || !IsPowerOf2(mr))
+            return null;
+
+        var mask = BuildMaskConstant(context, mod.LeftHandValue, mr - 1);
+        return mask is null ? null : new BitwiseAnd(mod.LeftHandValue, mask);
+    }
+
+    private static bool IsIntegerOperand(AnalysisContext context, Node node) =>
+        context.GetResolvedType(node)?.TypeCategory.Is(TypeCategory.Integer) ?? false;
+
+    private static Constant? BuildMaskConstant(AnalysisContext context, Node left, long mask) {
+        object? value = context.GetResolvedType(left)?.PrimitiveType switch {
+            PrimitiveType.Int8 => (sbyte)mask,
+            PrimitiveType.Int16 => (short)mask,
+            PrimitiveType.UInt8 => (byte)mask,
+            PrimitiveType.UInt16 => (ushort)mask,
+            PrimitiveType.Int32 => (int)mask,
+            PrimitiveType.UInt32 => (uint)mask,
+            PrimitiveType.Int64 => mask,
+            PrimitiveType.UInt64 => (ulong)mask,
+            _ => (object?)null
+        };
+        return value is null ? null : new Constant(value);
     }
 
     private Node? SimplifyUnaryMinus(AnalysisContext context, UnaryMinus neg) {

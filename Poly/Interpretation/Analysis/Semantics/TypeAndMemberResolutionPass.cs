@@ -27,11 +27,11 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
             Parameter p => ResolveParameterType(context, p),
             Variable v => context.GetResolvedType(v)
                 ?? (v.Value is null ? null : ResolveNodeType(context, v.Value)),
-            Add add => ResolveArithmeticType(context, add.LeftHandValue, add.RightHandValue),
-            Subtract sub => ResolveArithmeticType(context, sub.LeftHandValue, sub.RightHandValue),
-            Multiply mul => ResolveArithmeticType(context, mul.LeftHandValue, mul.RightHandValue),
-            Divide div => ResolveArithmeticType(context, div.LeftHandValue, div.RightHandValue),
-            Modulo mod => ResolveArithmeticType(context, mod.LeftHandValue, mod.RightHandValue),
+            Add add => ResolveNumericArithmeticType(context, add.LeftHandValue, add.RightHandValue),
+            Subtract sub => ResolveNumericArithmeticType(context, sub.LeftHandValue, sub.RightHandValue),
+            Multiply mul => ResolveNumericArithmeticType(context, mul.LeftHandValue, mul.RightHandValue),
+            Divide div => ResolveNumericArithmeticType(context, div.LeftHandValue, div.RightHandValue),
+            Modulo mod => ResolveNumericArithmeticType(context, mod.LeftHandValue, mod.RightHandValue),
             UnaryMinus minus => ResolveNodeType(context, minus.Operand),
             And => context.TypeDefinitions.GetTypeDefinition(typeof(bool)),
             Or => context.TypeDefinitions.GetTypeDefinition(typeof(bool)),
@@ -106,6 +106,42 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
 
     private static ITypeDefinition? ResolveThisReferenceType(AnalysisContext context, ThisReference thisReference) =>
         context.GetResolvedType(thisReference);
+
+    private static ITypeDefinition? ResolveNumericArithmeticType(
+        AnalysisContext context,
+        Node left,
+        Node right) {
+        var leftType = ResolveNodeType(context, left);
+        var rightType = ResolveNodeType(context, right);
+
+        if (leftType == null || rightType == null)
+            return null;
+
+        var leftRank = GetNumericRank(leftType);
+        var rightRank = GetNumericRank(rightType);
+
+        // Promote to the wider numeric type (C#-style); fall back to the
+        // left operand type when either side is not a numeric primitive.
+        if (leftRank is null || rightRank is null)
+            return leftType;
+
+        return leftRank >= rightRank ? leftType : rightType;
+    }
+
+    private static int? GetNumericRank(ITypeDefinition type) => type.PrimitiveType switch {
+        PrimitiveType.Int8 => 1,
+        PrimitiveType.Int16 => 2,
+        PrimitiveType.UInt8 => 3,
+        PrimitiveType.UInt16 => 4,
+        PrimitiveType.Int32 => 5,
+        PrimitiveType.UInt32 => 6,
+        PrimitiveType.Int64 => 7,
+        PrimitiveType.UInt64 => 8,
+        PrimitiveType.Float32 => 9,
+        PrimitiveType.Float64 => 10,
+        PrimitiveType.Decimal => 11,
+        _ => null
+    };
 
     private static ITypeDefinition? ResolveArithmeticType(
         AnalysisContext context,

@@ -1,4 +1,5 @@
 using Poly.Interpretation;
+using Poly.Interpretation.Analysis.ConstantFolding;
 using Poly.Interpretation.Analysis.ControlFlow;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Interpretation.LinqExpressions;
@@ -20,6 +21,7 @@ public static class AnalyzerBuilderExtensions {
             .UseVariableScopeValidator()
             .UseSideEffectAnalysis()
             .UseJumpTargetResolution()
+            .UseConstantFolding()
             .UseControlFlowAnalysis()
             .UseValueRepresentationAnalysis()
             .UseCallSiteCatalog()

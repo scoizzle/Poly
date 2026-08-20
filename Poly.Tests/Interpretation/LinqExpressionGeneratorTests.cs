@@ -82,8 +82,8 @@ public class LinqExpressionGeneratorTests {
             .UseVariableScopeValidator()
             .UseSideEffectAnalysis()
             .UseJumpTargetResolution()
-            .UseControlFlowAnalysis()
             .UseConstantFolding()
+            .UseControlFlowAnalysis()
             .Build()
             .Analyze(node);
 
@@ -106,8 +106,8 @@ public class LinqExpressionGeneratorTests {
             .UseVariableScopeValidator()
             .UseSideEffectAnalysis()
             .UseJumpTargetResolution()
-            .UseControlFlowAnalysis()
             .UseConstantFolding()
+            .UseControlFlowAnalysis()
             .Build()
             .Analyze(node);
 
@@ -130,8 +130,8 @@ public class LinqExpressionGeneratorTests {
             .UseVariableScopeValidator()
             .UseSideEffectAnalysis()
             .UseJumpTargetResolution()
-            .UseControlFlowAnalysis()
             .UseConstantFolding()
+            .UseControlFlowAnalysis()
             .Build()
             .Analyze(node);
 
@@ -153,8 +153,8 @@ public class LinqExpressionGeneratorTests {
             .UseVariableScopeValidator()
             .UseSideEffectAnalysis()
             .UseJumpTargetResolution()
-            .UseControlFlowAnalysis()
             .UseConstantFolding()
+            .UseControlFlowAnalysis()
             .Build()
             .Analyze(node);
 

@@ -245,8 +245,8 @@ public class DomainExpressionVmExecutionTests {
             .UseVariableScopeValidator()
             .UseSideEffectAnalysis()
             .UseJumpTargetResolution()
-            .UseControlFlowAnalysis()
             .UseConstantFolding()
+            .UseControlFlowAnalysis()
             .UseDefiniteAssignmentAnalysis()
             .Build()
             .Analyze(node);

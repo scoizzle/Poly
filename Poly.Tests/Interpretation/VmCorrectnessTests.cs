@@ -24,8 +24,8 @@ public class VmCorrectnessTests {
             .UseVariableScopeValidator()
             .UseSideEffectAnalysis()
             .UseJumpTargetResolution()
-            .UseControlFlowAnalysis()
             .UseConstantFolding()
+            .UseControlFlowAnalysis()
             .UseDefiniteAssignmentAnalysis()
             .Build()
             .Analyze(node);

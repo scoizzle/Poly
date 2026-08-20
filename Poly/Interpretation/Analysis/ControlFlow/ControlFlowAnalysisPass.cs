@@ -29,7 +29,7 @@ public sealed record MustExecuteMetadata(bool MustExecute) : IAnalysisMetadata;
 public sealed class ControlFlowAnalysisPass : INodeAnalyzer {
     public const string Id = "ControlFlow";
     public string PassName => Id;
-    public string[] Dependencies => [TypeAndMemberResolver.Id, SideEffectAnalyzer.Id, JumpTargetAnalyzer.Id];
+    public string[] Dependencies => [TypeAndMemberResolver.Id, SideEffectAnalyzer.Id, JumpTargetAnalyzer.Id, ConstantFoldingPass.Id];
     public void Analyze(AnalysisContext context, Node node) {
         var state = new CfgState();
         state.CurrentBlock = state.Cfg.CreateBlock();

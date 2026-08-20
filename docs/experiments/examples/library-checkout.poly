@@ -18,6 +18,7 @@
 // =============================================================================
 
 domain Library
+uses temporal
 
 // ── Enum Types ─────────────────────────────────────────────────
 
@@ -66,7 +67,7 @@ Book: entity {
 Patron: entity {
   Name: Text required
   Email: Text unique pattern("^[^@]+@[^@]+$")
-  MemberSince: Date default(today)
+  MemberSince: Date default(Today)
   Status: PatronStatus default(Active)
   MaxItems: Number range(0, 20) required
   CurrentBorrowCount: Number
@@ -158,20 +159,20 @@ Loan: entity {
 
   // ── Active — currently borrowed and not yet overdue ────────────────────────
   Active: stage {
-    entry { assign CheckedOutAt to now }
+    entry { assign CheckedOutAt to Now }
     Renew: action {
       assign DueDate to DueDate + 14
       assign TimesRenewed to TimesRenewed + 1
     }
     Return: action {
-      assign ReturnedAt to now
+      assign ReturnedAt to Now
       transition to Returned
     }
   }
 
   // ── Overdue — beyond due date; fines applied at patron level via subscription ──
   Overdue: stage {
-    entry { assign CheckedOutAt to now }
+    entry { assign CheckedOutAt to Now }
   }
 
   // ── Returned — resolved ─────────────────────────────────────────────────────
@@ -186,7 +187,7 @@ Loan: entity {
 Fine: entity {
   Amount: Number required
   Reason: Text
-  DateIssued: DateTime default(now)
+  DateIssued: DateTime default(Now)
   Paid: Boolean
 
   // The patron who owes this fine

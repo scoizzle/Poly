@@ -88,14 +88,6 @@ public class DslExpressionE1Tests {
             });
         }
         builder.ExpressionForms.RegisterPrintMapping(new DurationBinder());
-        builder.ExpressionForms.RegisterGrammarContributor(g => {
-            foreach (var rule in new[] { "expr-primary", "expr-primary-no-not" }) {
-                g.Define(rule)
-                    .Pattern("duration")
-                    .Value(DslTokenKind.Number, "amount").Value(DslTokenKind.Identifier, "unit")
-                    .Commit();
-            }
-        });
         return builder.Build();
     }
 
@@ -136,7 +128,7 @@ public class DslExpressionE1Tests {
         var poly = """
             domain D
             E: entity {
-              P: policy { 12 days == 12 days }
+              P: policy { 12 Days == 12 Days }
             }
             """;
 
@@ -146,19 +138,19 @@ public class DslExpressionE1Tests {
 
         var cmp = (Comparison)result.Root!.Types.OfType<Entity>().Single().Policies.Single().Expression;
         await Assert.That(cmp.Left).IsTypeOf<DurationLiteral>();
-        await Assert.That(((DurationLiteral)cmp.Left).Text).IsEqualTo("12 days");
-        await Assert.That(((DurationLiteral)cmp.Right).Text).IsEqualTo("12 days");
+        await Assert.That(((DurationLiteral)cmp.Left).Text).IsEqualTo("12 Days");
+        await Assert.That(((DurationLiteral)cmp.Right).Text).IsEqualTo("12 Days");
 
         var printed = new DomainDslPrinter(inputs).Print(result.Root!);
-        await Assert.That(printed.Contains("12 days is 12 days", StringComparison.Ordinal)).IsTrue();
+        await Assert.That(printed.Contains("12 Days is 12 Days", StringComparison.Ordinal)).IsTrue();
 
         var reparsed = new DomainEvolution(DomainTestFactory.Create("_", [], []))
             .Apply(new PolyDslParser(printed, inputs).Parse());
         await Assert.That(reparsed.Succeeded).IsTrue();
         var cmp2 = (Comparison)reparsed.Root!.Types.OfType<Entity>().Single().Policies.Single().Expression;
         await Assert.That(cmp2.Left).IsTypeOf<DurationLiteral>();
-        await Assert.That(((DurationLiteral)cmp2.Left).Text).IsEqualTo("12 days");
-        await Assert.That(((DurationLiteral)cmp2.Right).Text).IsEqualTo("12 days");
+        await Assert.That(((DurationLiteral)cmp2.Left).Text).IsEqualTo("12 Days");
+        await Assert.That(((DurationLiteral)cmp2.Right).Text).IsEqualTo("12 Days");
     }
 
     [Test]
@@ -208,9 +200,6 @@ public class DslExpressionE1Tests {
                 grammar.Define(rule)
                     .Pattern("magic", priority: 1)
                     .Predicate(IsMagicIdentifier, "magic")
-                    .Commit()
-                    .Pattern("duration")
-                    .Value(DslTokenKind.Number).Value(DslTokenKind.Identifier)
                     .Commit();
             }
         });
@@ -224,7 +213,7 @@ public class DslExpressionE1Tests {
             await Assert.That(magicPrimary?.PatternName).IsEqualTo("magic");
             await Assert.That(magicPrimary!.Consumed).IsEqualTo(1);
 
-            var duration = new Matcher<DslToken, DslTokenKind>(g, new DslTokenReader("12 days"));
+            var duration = new Matcher<DslToken, DslTokenKind>(g, new DslTokenReader("12 Days"));
             var durationPrimary = duration.TryMatch(rule);
             await Assert.That(durationPrimary?.PatternName).IsEqualTo("duration");
             await Assert.That(durationPrimary!.Consumed).IsEqualTo(2);

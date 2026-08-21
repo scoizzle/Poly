@@ -23,9 +23,9 @@ One door per job. Do not add a fourth assembler.
 | `.poly` text | `DomainSession.ForSource(poly, seed, catalog)` then `new PolyDslParser(poly, session)` | A parameterless parser |
 | Analysis | `session.Analyze(domain)` | `DomainModelAnalyzer.Analyze` (tests/runtime leftovers only) |
 | Mutation | `new DomainEvolution(domain).Apply(changes, session)` | Apply without a session when maps matter |
-| CLI emit | `new DslCompiler().Compile(poly, mode, dbms)` | `CreateInputs` / a second session inside compile |
+| CLI emit | `session.Emit` (entity C#) then bag-gated DbContext/HTTP | `GenerateAllFiles` / inventing files without analysis bags |
 
-A library is `Id` + `Register` (concepts, not new productions). Duplicate ids fail closed. Agent lock: [`docs/decisions/2026-08-15-domain-library-extensions-mcp-harness.md`](../../docs/decisions/2026-08-15-domain-library-extensions-mcp-harness.md).
+A library is `Id` + `Register`. The product extension slot is `AddAnalyzer` (`INodeAnalyzer`); `uses` means those passes run on `session.Analyze`. Duplicate ids fail closed. Agent lock: [`docs/decisions/2026-08-15-domain-library-extensions-mcp-harness.md`](../../docs/decisions/2026-08-15-domain-library-extensions-mcp-harness.md).
 
 ## Quick start
 

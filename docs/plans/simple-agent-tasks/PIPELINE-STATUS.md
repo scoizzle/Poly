@@ -1,6 +1,6 @@
 # Pipeline status
 
-**Updated:** 2026-08-17  
+**Updated:** 2026-08-20  
 **Authority:** this file is the **sole CURRENT/DONE truth** for agent suite admission.  
 Other indexes must **mirror** this file (or link here) — do not invent a second CURRENT line.
 
@@ -10,10 +10,10 @@ Other indexes must **mirror** this file (or link here) — do not invent a secon
 
 ```text
 DONE:    gpure (2026-08-07 + follow-ups 08-08); mcp-minify (2026-08-08 + follow-ups); grammar-revision (2026-08-09: v2 engine + DSL cutover + printer + review fixes); dead-dual cleanup (2026-08-09: Validation + Text.Matching deleted); domainmodeling vision-cleanup slices 1–3 (2026-08-17: one door, session.Analyze, Comment not emit-meaning)
-CURRENT: (none — next suite needs admit)
-ADMIT:   (none)
-THEN:    pick one: host-ABI CallExternal (one lowering); lint-pass merge; require session on every Analyze leftover. Folder moves wait on a rename suite.
-PARKED:  pack-2 IDomainPack; mut-safety; e2e-*
+CURRENT: emit-session (slices 0–4 landed: AddAnalyzer, closed spell, Temporal on dispatch/type-check, bag-gated emit; Meaning table unused by TemporalLibrary; CompileMode remains a seed alias)
+ADMIT:   emit-session
+THEN:    host-ABI CallExternal (one lowering) after emit-session
+PARKED:  pack-2 IDomainPack; mut-safety; e2e-*; pack-host “packs extend Grammar tables”; session four-slot Meaning/Emit
 PULL:    E5; EF codegen; naming cleanup
 ```
 
@@ -31,7 +31,8 @@ opencode run --dir . --auto --title pack-1-1 --agent build "Assigned: docs/plans
 | **gpure** | ✅ **DONE** 2026-08-07 (+ follow-ups 2026-08-08) | Pure Grammar product path (Option A ladder + tables); S1–S5/N1–N4/P1 closed. |
 | **mcp-minify** | ✅ **DONE** 2026-08-08 (+ follow-ups same day) | Catalog 46→24; DSL-only expressions; unified `add`/`remove`; follow-ups closed. |
 | **grammar-revision** | ✅ **DONE** 2026-08-09 | v2 engine (`Grammar<TToken, TTokenKind>`, examine/consume, longest-match, stateless printer) + DSL cutover; review B1–B3/N1–N3/C1 closed. Executed directly (not via plan-suite) — see [`../grammar-revision.md`](../grammar-revision.md) |
-| **pack-host** | Parked (phase 1 shipped) | TokenWriter + binders done. pack-2 `IDomainPack` parked. |
+| **emit-session** | **CURRENT** 2026-08-20 | Libraries add `INodeAnalyzer`. Spell closed. Emit reads bags, not `CompileMode`. |
+| **pack-host** | Parked (phase 1 shipped; **extension model superseded**) | TokenWriter + binders done. “Packs extend Grammar tables” is not the product contract — extension is analysis passes. pack-2 `IDomainPack` parked. |
 | **gcyc** | Parked (first admit shipped) | [`gcyc-README.md`](./gcyc-README.md) — remaining G4 unparse is THEN, not CURRENT |
 | **grammar wrap-up** | Parked | LeftAssoc live-fold — not a prereq of pack-1 TokenWriter |
 | **mut-safety** | Parked | Session lock + idempotent add + rollback DX |

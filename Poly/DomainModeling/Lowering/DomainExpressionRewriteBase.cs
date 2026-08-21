@@ -21,8 +21,6 @@ namespace Poly.DomainModeling.Lowering;
 /// new expression subtype unhandled (no silent pass-through).</para>
 /// </summary>
 public abstract class DomainExpressionRewriteBase : DomainExpressionDispatch<DomainExpression> {
-    protected DomainExpressionRewriteBase(ExpressionDispatchRegistry<DomainExpression>? registry = null)
-        : base(registry) { }
     /// <summary>
     /// Catch-all for expression subtypes not overridden by a concrete rewrite.
     /// Fail-loud instead of silently returning the node unchanged.
@@ -72,4 +70,9 @@ public abstract class DomainExpressionRewriteBase : DomainExpressionDispatch<Dom
         e with { Body = e.Body is null ? null : Route(e.Body) };
     protected override DomainExpression RelationshipNavigation(RelationshipNavigation e) =>
         e with { TargetProperty = Route(e.TargetProperty) };
+    protected override DomainExpression Now(Now e) => e;
+    protected override DomainExpression Today(Today e) => e;
+    protected override DomainExpression Duration(Duration e) => e;
+    protected override DomainExpression DateOperation(DateOperation e) =>
+        e with { Date = Route(e.Date), Offset = Route(e.Offset) };
 }

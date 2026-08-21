@@ -598,13 +598,22 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     /// </summary>
     internal static Node? LowerDefaultExpression(
         DomainExpression expr,
-        Node? typeHint = null,
-        ExpressionMeaning? meaning = null) {
+        Node? typeHint = null) {
         var targetName = typeHint is NamedTypeReference ntr ? ntr.TypeName : null;
-        if ((meaning ?? ExpressionMeaning.Empty).Defaults.TryResolve(expr, targetName, out _, out var exportNode))
-            return exportNode;
+        var isDateTimeTarget = targetName is "DateTime" or "Timestamp";
+        if (expr is Now) {
+            return isDateTimeTarget
+                ? new Member(new NamedTypeReference("DateTime"), "UtcNow")
+                : new Invoke(new Member(new NamedTypeReference("DateOnly"), "FromDateTime"),
+                    new Member(new NamedTypeReference("DateTime"), "UtcNow"));
+        }
+        if (expr is Today) {
+            return isDateTimeTarget
+                ? new Member(new NamedTypeReference("DateTime"), "Today")
+                : new Invoke(new Member(new NamedTypeReference("DateOnly"), "FromDateTime"),
+                    new Member(new NamedTypeReference("DateTime"), "Today"));
+        }
         if (expr is not PropertyAccess pa) return null;
-        bool isDateTimeTarget = targetName is "DateTime" or "Timestamp";
         return pa.Name switch {
             "Now" or "UtcNow" => isDateTimeTarget
                 ? new Member(new NamedTypeReference("DateTime"), "UtcNow")

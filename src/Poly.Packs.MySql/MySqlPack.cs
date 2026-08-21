@@ -9,5 +9,6 @@ public sealed class MySqlLibrary : IDomainLibrary {
     public void Register(SessionBuilder builder) {
         ArgumentNullException.ThrowIfNull(builder);
         MySqlDefaults.ApplyTypeMaps(builder.TypeMaps);
+        builder.AddAnalyzer(new PersistenceSurfacePass());
     }
 }

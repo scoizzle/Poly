@@ -25,7 +25,8 @@ public sealed class ExtensionCatalog {
 
     public static ExtensionCatalog Core { get; } = new ExtensionCatalog()
         .With(new TemporalLibrary())
-        .With(new StorageFacetLibrary());
+        .With(new StorageFacetLibrary())
+        .With(new PersistenceEmitLibrary());
 
     public ExtensionCatalog() {
         _libraries = new Dictionary<string, IDomainLibrary>(StringComparer.Ordinal);

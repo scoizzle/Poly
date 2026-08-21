@@ -1,6 +1,9 @@
+using Poly.Analysis;
 using Poly.DomainModeling.Analysis;
+using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
 using Poly.Grammar;
+using Poly.Interpretation.CSharp;
 
 namespace Poly.DomainModeling.Compile;
 
@@ -30,11 +33,13 @@ public sealed class DomainSession {
 
     public IReadOnlyList<IArtifactContributor> Artifacts { get; }
 
+    internal IReadOnlyList<INodeAnalyzer> ExtraAnalyzers { get; }
+
     private Analyzer? _analyzer;
 
-    /// <summary>The session's analysis pipeline, with its storage type maps wired into <see cref="StoragePass"/>.</summary>
+    /// <summary>The session's analysis pipeline: core product passes plus library analyzers, with storage type maps wired into <see cref="StoragePass"/>.</summary>
     private Analyzer Analyzer =>
-        _analyzer ??= DomainModelAnalyzer.BuildPipeline(TypeMaps, StorageConventions, Meaning);
+        _analyzer ??= DomainModelAnalyzer.BuildPipeline(TypeMaps, StorageConventions, ExtraAnalyzers);
 
     internal DomainSession(
         Domain? domain,
@@ -46,7 +51,8 @@ public sealed class DomainSession {
         IReadOnlyList<IStorageConvention> storageConventions,
         ExpressionFoldTable folds,
         ExpressionMeaning meaning,
-        IReadOnlyList<IArtifactContributor>? artifacts = null) {
+        IReadOnlyList<IArtifactContributor>? artifacts = null,
+        IReadOnlyList<INodeAnalyzer>? extraAnalyzers = null) {
         Domain = domain;
         Extensions = extensions;
         Language = language;
@@ -57,6 +63,7 @@ public sealed class DomainSession {
         Folds = folds;
         Meaning = meaning;
         Artifacts = artifacts ?? [];
+        ExtraAnalyzers = extraAnalyzers ?? [];
     }
 
     /// <summary>Loads libraries for an existing domain's extension ids. Unknown id throws.</summary>
@@ -100,7 +107,7 @@ public sealed class DomainSession {
     public DomainSession WithDomain(Domain domain) {
         ArgumentNullException.ThrowIfNull(domain);
         if (SameExtensions(Extensions, domain.Extensions))
-            return new DomainSession(domain, domain.Extensions, Language, Annotations, ExpressionForms, TypeMaps, StorageConventions, Folds, Meaning, Artifacts);
+            return new DomainSession(domain, domain.Extensions, Language, Annotations, ExpressionForms, TypeMaps, StorageConventions, Folds, Meaning, Artifacts, ExtraAnalyzers);
         return Open(domain);
     }
 
@@ -108,6 +115,39 @@ public sealed class DomainSession {
     public AnalysisResult Analyze(Domain domain) {
         ArgumentNullException.ThrowIfNull(domain);
         return Analyzer.Analyze(domain);
+    }
+
+    /// <summary>
+    /// Entity-module C# files from analyzed facts. Persistence and HTTP files are
+    /// compiler/host emitters gated on analysis bags, not this method.
+    /// </summary>
+    public IReadOnlyList<(string FileName, string Source)> Emit(Domain domain, AnalysisResult analysis) {
+        ArgumentNullException.ThrowIfNull(domain);
+        ArgumentNullException.ThrowIfNull(analysis);
+        var files = new List<(string FileName, string Source)>();
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
+        var entities = domain.Types.OfType<Entity>().ToList();
+        foreach (var entity in entities) {
+            var entityNames = new HashSet<string>(StringComparer.Ordinal) {
+                entity.Name,
+                $"{entity.Name}Stage"
+            };
+            var entityDefs = types
+                .Where(d => entityNames.Contains(d.Name))
+                .ToList();
+            if (entityDefs.Count == 0)
+                throw new InvalidOperationException(
+                    $"DomainProgramProjection produced no type definitions for entity '{entity.Name}'.");
+            files.Add(($"{entity.Name}.cs", new CSharpGenerator().Generate(entityDefs)));
+        }
+
+        var scaffoldingDefs = types
+            .Where(d => !entities.Any(e =>
+                d.Name == e.Name || d.Name == $"{e.Name}Stage"))
+            .ToList();
+        if (scaffoldingDefs.Count > 0)
+            files.Add(("Poly.Types.cs", new CSharpGenerator().Generate(scaffoldingDefs)));
+        return files;
     }
 
     /// <summary>Incrementally analyzes <paramref name="domain"/> with this session's pipeline.</summary>
@@ -118,10 +158,8 @@ public sealed class DomainSession {
         return Analyzer.Analyze(domain, priorAnalysis, invalidatedNodes);
     }
 
-    internal static ExpressionFoldTable FoldsFor(Grammar<DslToken, DslTokenKind> grammar, ExpressionFormRegistry forms) {
+    internal static ExpressionFoldTable FoldsFor(ExpressionFormRegistry forms) {
         var folds = ExpressionFoldTable.Core();
-        if (grammar.TryGetPattern("expr-primary", "now", out _))
-            TemporalExpressionPrintBinders.RegisterFolds(folds);
         forms.ContributeFolds(folds);
         return folds;
     }

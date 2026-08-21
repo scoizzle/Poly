@@ -15,11 +15,24 @@ public static class DomainModelAnalyzer {
     internal static Analyzer BuildPipeline(
         TypeMappingRegistry? typeMaps,
         IReadOnlyList<IStorageConvention>? conventions,
-        ExpressionMeaning? meaning = null) =>
-        new AnalyzerBuilder()
+        IReadOnlyList<INodeAnalyzer>? extraAnalyzers = null) {
+        var builder = new AnalyzerBuilder()
             .UseIncrementalAnalysis()
-            .UseDomainModelAnalysisPipeline(typeMaps, conventions, meaning)
-            .Build();
+            .UseDomainModelAnalysisPipeline(typeMaps, conventions);
+        if (extraAnalyzers is not null) {
+            foreach (var analyzer in extraAnalyzers) {
+                try {
+                    builder.AddAnalyzer(analyzer);
+                }
+                catch (ArgumentException ex) {
+                    throw new InvalidOperationException(
+                        $"An analyzer with pass name '{analyzer.PassName}' is already registered.",
+                        ex);
+                }
+            }
+        }
+        return builder.Build();
+    }
 
     public static AnalysisResult Analyze(Domain domain) {
         ArgumentNullException.ThrowIfNull(domain);
@@ -64,8 +77,7 @@ public static class DomainModelAnalysisBuilderExtensions {
     extension(AnalyzerBuilder builder) {
         public AnalyzerBuilder UseDomainModelAnalysisPipeline(
             TypeMappingRegistry? typeMaps = null,
-            IReadOnlyList<IStorageConvention>? conventions = null,
-            ExpressionMeaning? meaning = null) {
+            IReadOnlyList<IStorageConvention>? conventions = null) {
             // Registration order must introduce each pass only after its declared
             // Dependencies are present (AnalyzerBuilder inserts after the last dep).
             // Fact emitters vs validate packs:
@@ -78,7 +90,7 @@ public static class DomainModelAnalysisBuilderExtensions {
             builder.AddAnalyzer(new RuntimeContractAnalyzer());
             builder.AddAnalyzer(new RequiredPropertiesPass());
             builder.AddAnalyzer(new PolicyConstraintAnalyzer());
-            builder.AddAnalyzer(new ExpressionTypeAnalyzer(meaning));
+            builder.AddAnalyzer(new ExpressionTypeAnalyzer());
             // DownstreamConstraintsMetadata consumed by EffectAnalyzer — register first
             builder.AddAnalyzer(new ConstraintPropagationAnalyzer());
             builder.AddAnalyzer(new EffectFactsPass());

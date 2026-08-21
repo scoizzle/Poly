@@ -191,8 +191,7 @@ public sealed class DomainToCSharpExporter {
             var paramName = ToCamelCase(prop.Name);
             if (defaultValue is not null) {
                 var runtimeExpr = EffectLoweringPass.LowerDefaultExpression(
-                    defaultValue.Expression, new NamedTypeReference(prop.Type.TypeName),
-                    RuntimeAnalysisCache.Meaning(domain));
+                    defaultValue.Expression, new NamedTypeReference(prop.Type.TypeName));
                 if (runtimeExpr is not null) {
                     // Runtime default (now/today/guid) can't be a compile-time default —
                     // T? = null sentinel; body applies the runtime default when null.
@@ -466,9 +465,7 @@ public sealed class DomainToCSharpExporter {
                         UseThisReference: true,
                         LowerStageTransitions: true,
                         Domain: domain,
-                        EnumPropertyNames: esm.EnumPropertyNames,
-                        Meaning: RuntimeAnalysisCache.Meaning(domain)
-                    );
+                        EnumPropertyNames: esm.EnumPropertyNames);
                     var effectPass = new EffectLoweringPass(entity, context);
                     var composite = new CompositeEffect(subscriptionEffects);
                     handlerBody = effectPass.TryLowerVmNode(composite)
@@ -586,9 +583,7 @@ public sealed class DomainToCSharpExporter {
                         UseThisReference: true,
                         LowerStageTransitions: false,
                         Domain: domain,
-                        EnumPropertyNames: esm.EnumPropertyNames,
-                        Meaning: RuntimeAnalysisCache.Meaning(domain)
-                    );
+                        EnumPropertyNames: esm.EnumPropertyNames);
                     var entryPass = new EffectLoweringPass(entity, entryCtx);
                     foreach (var entryEffect in firstStage.OnEntryEffects) {
                         var lowered = entryPass.Route(entryEffect);
@@ -837,8 +832,7 @@ public sealed class DomainToCSharpExporter {
             var paramName = ToCamelCase(prop.Name);
             var mapped = MapDomainTypeRef(prop.Type, domain, metadata);
             var runtimeExpr = EffectLoweringPass.LowerDefaultExpression(
-                defaultConstraint.Expression, new NamedTypeReference(prop.Type.TypeName),
-                RuntimeAnalysisCache.Meaning(domain));
+                defaultConstraint.Expression, new NamedTypeReference(prop.Type.TypeName));
             if (runtimeExpr is not null) {
                 methodParams.Add(new Parameter(paramName,
                     new OptionalTypeReference(mapped),
@@ -1417,9 +1411,7 @@ public sealed class DomainToCSharpExporter {
             PostTransitionNodes: postTransitionNodes,
             SourceStageName: sourceStageName,
             Domain: domain,
-            EnumPropertyNames: enumProps,
-            Meaning: RuntimeAnalysisCache.Meaning(domain)
-        );
+            EnumPropertyNames: enumProps);
         var effectPass = new EffectLoweringPass(entity, context);
         var composite = new CompositeEffect(action.Effects);
         return effectPass.TryLowerVmNode(composite);
@@ -1436,9 +1428,7 @@ public sealed class DomainToCSharpExporter {
             EnumPropertyNames: enumProps,
             NavigationNameResolver: EffectLoweringPass.BuildNavigationNameResolver(entity, domain, analysis),
             IsCollectionNavigation: EffectLoweringPass.BuildIsCollectionNavigation(entity, domain, analysis),
-            PropertyTypeResolver: EffectLoweringPass.BuildPropertyTypeResolver(entity),
-            Meaning: RuntimeAnalysisCache.Meaning(domain)
-        );
+            PropertyTypeResolver: EffectLoweringPass.BuildPropertyTypeResolver(entity));
         var pass = new DomainExpressionLoweringPass(context);
         var lowered = pass.Lower(expr, new Parameter("entity"));
         return lowered is not null

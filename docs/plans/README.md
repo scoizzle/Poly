@@ -19,8 +19,8 @@ Architectural rationale → **`docs/decisions/`**. Module maps → **`Poly/*/REA
 | **Pull ≠ CURRENT** | Available when admitted, not parallel debt. |
 | **DONE same PR** | Suite gate Done → update PIPELINE-STATUS + READY-TO-TASK + master-roadmap Agent pick together. |
 
-**CURRENT truth:** [`simple-agent-tasks/PIPELINE-STATUS.md`](simple-agent-tasks/PIPELINE-STATUS.md)  
-**Vision cleanup (proposal, not CURRENT):** [`domainmodeling-vision-cleanup-2026-08-16.md`](domainmodeling-vision-cleanup-2026-08-16.md) — supersedes the 2026-08-15 five-wave draft.  
+**CURRENT truth:** [`simple-agent-tasks/PIPELINE-STATUS.md`](simple-agent-tasks/PIPELINE-STATUS.md) — **`emit-session`**.  
+**Vision cleanup (slices 1–3 done; remaining duals parked):** [`domainmodeling-vision-cleanup-2026-08-16.md`](domainmodeling-vision-cleanup-2026-08-16.md). Session four-slot / pack-host Grammar.Extend **superseded** — libraries add `INodeAnalyzer`.  
 **Ready suites index:** [`simple-agent-tasks/READY-TO-TASK.md`](simple-agent-tasks/READY-TO-TASK.md)  
 **Milestones:** [`v2-to-v3/master-roadmap.md`](v2-to-v3/master-roadmap.md) (mirrors Agent pick)  
 **Pre-ship (always-on):** [`v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md`](v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md)

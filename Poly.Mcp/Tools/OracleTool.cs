@@ -119,11 +119,9 @@ internal sealed class OracleTool {
             return new DomainToolResponse(Success: false, Message: $"Session '{sessionId}' has no analysis. Apply a domain first (apply_dsl or evolution).", SessionId: sessionId, Affordances: ["apply_dsl", "get_domain_overview"]);
 
         try {
-            var exporter = new DomainToCSharpExporter();
-            var typeDefs = exporter.Export(state.Domain, state.LatestAnalysis);
-            var generator = new CSharpGenerator();
-            var csharp = generator.Generate(typeDefs);
-            return new DomainToolResponse(Success: true, Message: $"Domain exported to C#: {typeDefs.Count} types.", SessionId: sessionId, Data: new { csharp, typeCount = typeDefs.Count }, Affordances: ["get_domain_overview", "get_entity_detail", "apply_dsl"]);
+            var files = state.Modeling.Emit(state.Domain, state.LatestAnalysis);
+            var csharp = string.Join("\n\n", files.Select(f => f.Source));
+            return new DomainToolResponse(Success: true, Message: $"Domain exported to C#: {files.Count} file(s).", SessionId: sessionId, Data: new { csharp, fileCount = files.Count, files = files.Select(f => f.FileName).ToArray() }, Affordances: ["get_domain_overview", "get_entity_detail", "apply_dsl"]);
         }
         catch (Exception ex) {
             return new DomainToolResponse(Success: false, Message: $"Domain-to-C# export failed: {ex.Message}", SessionId: sessionId, Data: new { error = ex.Message }, Affordances: []);

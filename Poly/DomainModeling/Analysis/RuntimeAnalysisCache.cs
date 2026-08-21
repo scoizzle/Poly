@@ -27,9 +27,6 @@ internal static class RuntimeAnalysisCache {
         return session;
     }
 
-    public static ExpressionMeaning Meaning(Domain? domain) =>
-        domain is null ? ExpressionMeaning.Empty : Session(domain).Meaning;
-
     public static AnalysisResult GetOrAnalyze(Domain domain) {
         ArgumentNullException.ThrowIfNull(domain);
         _ = Session(domain);

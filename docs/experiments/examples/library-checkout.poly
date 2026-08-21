@@ -161,7 +161,7 @@ Loan: entity {
   Active: stage {
     entry { assign CheckedOutAt to Now }
     Renew: action {
-      assign DueDate to DueDate + 14
+      assign DueDate to CheckedOutAt + 14 Days
       assign TimesRenewed to TimesRenewed + 1
     }
     Return: action {

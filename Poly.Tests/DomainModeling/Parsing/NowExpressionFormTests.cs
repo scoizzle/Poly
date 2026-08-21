@@ -14,7 +14,7 @@ public class NowExpressionFormTests {
         ExtensionCatalog.Core.Language;
 
     private readonly DomainExpressionLoweringPass Pass = new(
-        new LoweringContext(new Parameter("entity"), Meaning: ExtensionCatalog.Core.Language.Meaning));
+        new LoweringContext(new Parameter("entity")));
 
     [Test]
     public async Task Now_Form_ParsesAndLowers() {

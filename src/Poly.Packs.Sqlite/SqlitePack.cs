@@ -7,6 +7,9 @@ namespace Poly.Packs.Sqlite;
 public sealed class SqliteLibrary : IDomainLibrary {
     public string Id => "sqlite";
 
-    public void Register(SessionBuilder builder) =>
+    public void Register(SessionBuilder builder) {
+        ArgumentNullException.ThrowIfNull(builder);
         SqliteDefaults.ApplyTypeMaps(builder.TypeMaps);
+        builder.AddAnalyzer(new PersistenceSurfacePass());
+    }
 }

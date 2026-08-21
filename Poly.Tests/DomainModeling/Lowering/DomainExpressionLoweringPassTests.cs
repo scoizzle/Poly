@@ -8,7 +8,7 @@ namespace Poly.Tests.DomainModeling.Lowering;
 
 public class DomainExpressionLoweringPassTests {
     private readonly DomainExpressionLoweringPass Pass = new(
-        new LoweringContext(new Parameter("entity"), Meaning: ExtensionCatalog.Core.Language.Meaning));
+        new LoweringContext(new Parameter("entity")));
 
     private readonly ParameterReference Subject = new();
 

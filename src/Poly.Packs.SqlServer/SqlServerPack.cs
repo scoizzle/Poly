@@ -10,5 +10,6 @@ public sealed class SqlServerLibrary : IDomainLibrary {
         ArgumentNullException.ThrowIfNull(builder);
         SqlServerDefaults.ApplyTypeMaps(builder.TypeMaps);
         builder.AddStorageConvention(new SqlServerIdentifierConvention());
+        builder.AddAnalyzer(new PersistenceSurfacePass());
     }
 }

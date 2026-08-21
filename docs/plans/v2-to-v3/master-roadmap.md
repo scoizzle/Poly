@@ -52,12 +52,12 @@ MCP / direct API as thin consumers
 ### Agent pick (one line)
 
 ```text
-DONE:    … p3/p2; GI; E1; gpure (2026-08-07); mcp-minify (2026-08-08)
-CURRENT: (none)
-ADMIT:   mut-safety
-THEN:    mut-safety → p1 temporal
-PARKED:  outbox lock; multi-assembly DM; actors/schedule; LeftAssoc live-fold
-PULL:    E5; EF codegen; naming cleanup; Validation/Text delete (dead-dual inventory)
+DONE:    … p3/p2; GI; E1; gpure (2026-08-07); mcp-minify (2026-08-08); vision-cleanup 1–3 (2026-08-17)
+CURRENT: emit-session
+ADMIT:   emit-session
+THEN:    host-ABI CallExternal (one lowering)
+PARKED:  mut-safety; p1 as new sugar; pack-host dialect host; outbox lock
+PULL:    E5; EF codegen; naming cleanup
 ```
 
 **Honest product claim today:** Path-prefix multi-hop; exists/where/Q3′; peer/entity when; catalog; action `-> Entity` returns. **Grammar:** product parse is Grammar-table-guided (Option A expr ladder + effect heads; printer deferred). **MCP:** DSL-only expressions; unified `add`/`remove` + `apply_dsl`. **No** temporal DSL authoring until p1.

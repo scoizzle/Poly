@@ -16,23 +16,10 @@ namespace Poly.DomainModeling.Dispatch;
 /// Methods are named by the type they handle, not by the pattern.
 /// The concern (lower, print, parse) lives in the subclass name.
 ///
-/// <para>Core subtypes route through the closed switch below. Pack-owned subtypes
-/// (<c>Now</c>, <c>Today</c>, <c>DateOperation</c>, <c>Duration</c> from the temporal
-/// pack) are dispatched through an <see cref="ExpressionDispatchRegistry{TResult}"/>
-/// — the explicit constructor registry, or <see cref="ExpressionDispatchRegistry{TResult}.Default"/>
-/// (the ambient product-default set). Unregistered pack IR fails closed.</para>
+/// <para>Core subtypes route through the closed switch below, including temporal
+/// clocks and durations (same assembly). Unhandled subtypes hit <see cref="Default"/>.</para>
 /// </summary>
 public abstract class DomainExpressionDispatch<TResult> {
-    private readonly ExpressionDispatchRegistry<TResult>? _registry;
-
-    /// <param name="registry">
-    /// Optional pack handler registry. When null, concerns fall back to
-    /// <see cref="ExpressionDispatchRegistry{TResult}.Default"/> so the built-in
-    /// always-on pack reaches bare construction sites.
-    /// </param>
-    protected DomainExpressionDispatch(ExpressionDispatchRegistry<TResult>? registry = null) {
-        _registry = registry;
-    }
 
     /// <summary>
     /// Default result for expression subtypes this concern does not handle.
@@ -60,6 +47,10 @@ public abstract class DomainExpressionDispatch<TResult> {
     protected virtual TResult And(And e) => Default();
     protected virtual TResult Or(Or e) => Default();
     protected virtual TResult Not(Not e) => Default();
+    protected virtual TResult Now(Now e) => Default();
+    protected virtual TResult Today(Today e) => Default();
+    protected virtual TResult Duration(Duration e) => Default();
+    protected virtual TResult DateOperation(DateOperation e) => Default();
 
     /// <summary>
     /// Routes a <see cref="DomainExpression"/> to the appropriate handler method.
@@ -87,13 +78,10 @@ public abstract class DomainExpressionDispatch<TResult> {
         And e => And(e),
         Or e => Or(e),
         Not e => Not(e),
-        _ => RouteRegistered(expr),
+        Now e => Now(e),
+        Today e => Today(e),
+        Duration e => Duration(e),
+        DateOperation e => DateOperation(e),
+        _ => Default(),
     };
-
-    private TResult RouteRegistered(DomainExpression expr) {
-        var registry = _registry ?? new ExpressionDispatchRegistry<TResult>();
-        if (registry.TryDispatch(expr, x => Route(x), out var result))
-            return result;
-        return Default();
-    }
 }

@@ -33,7 +33,6 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Node
     private readonly Func<string, string>? _navigationNameResolver;
     private readonly Func<string, bool>? _isCollectionNavigation;
     private readonly Func<string, string?>? _propertyTypeResolver;
-    private readonly ExpressionMeaning? _meaning;
     private Node _currentSubject = null!;
 
     /// <param name="parameters">
@@ -53,8 +52,7 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Node
     /// <see cref="LoweringContext.NavigationNameResolver"/> maps DSL relationship
     /// names to generated member names (pascal-cased navs).
     /// </summary>
-    public DomainExpressionLoweringPass(LoweringContext context)
-        : base(context.Meaning?.Lowering) {
+    public DomainExpressionLoweringPass(LoweringContext context) {
         _parameters = context.Parameters ?? new Dictionary<string, Node>();
         _actionParameterNames = context.ActionParameterNames;
         _useThisReference = context.UseThisReference;
@@ -62,7 +60,6 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Node
         _navigationNameResolver = context.NavigationNameResolver;
         _isCollectionNavigation = context.IsCollectionNavigation;
         _propertyTypeResolver = context.PropertyTypeResolver;
-        _meaning = context.Meaning;
     }
 
     /// <summary>
@@ -87,7 +84,7 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Node
         // expressions (DateTime.UtcNow, DateOnly.FromDateTime, Guid.NewGuid)
         // instead of entity property access.
         if (_useThisReference) {
-            var runtime = EffectLoweringPass.LowerDefaultExpression(p, meaning: _meaning);
+            var runtime = EffectLoweringPass.LowerDefaultExpression(p);
             if (runtime is not null) return runtime;
         }
 
@@ -294,4 +291,28 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Node
         new NotSupportedException(
             $"Collection quantifier '{quantifier} {relName} …' requires store-aware evaluation " +
             "which is not yet implemented on the VM compilation path.");
+
+    protected override Node Now(Now _) =>
+        new Member(new NamedTypeReference("DateTime"), "UtcNow");
+
+    protected override Node Today(Today _) =>
+        new Invoke(
+            new Member(new NamedTypeReference("DateOnly"), "FromDateTime"),
+            new Member(new NamedTypeReference("DateTime"), "UtcNow"));
+
+    protected override Node Duration(Duration d) =>
+        throw new NotSupportedException(
+            $"Bare duration '{d.Amount} {d.Unit}' reached lowering without a temporal left operand " +
+            "(e.g. 'Now - 12 days'). Resolve it into a DateOperation before lowering.");
+
+    protected override Node DateOperation(DateOperation d) {
+        var date = Route(d.Date);
+        var offset = Route(d.Offset);
+        return d.Kind switch {
+            DateOperationKind.AddDays => new Invoke(new Member(date, "AddDays"), offset),
+            DateOperationKind.AddMonths => new Invoke(new Member(date, "AddMonths"), offset),
+            DateOperationKind.DiffDays => new Invoke(new Member(date, "Subtract"), offset),
+            _ => throw new NotSupportedException($"DateOperation kind '{d.Kind}' is not supported."),
+        };
+    }
 }

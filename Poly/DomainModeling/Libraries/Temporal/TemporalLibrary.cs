@@ -9,9 +9,9 @@ public sealed class TemporalLibrary : IDomainLibrary {
 
     public void Register(SessionBuilder builder) {
         ArgumentNullException.ThrowIfNull(builder);
-        TemporalDispatchRegistration.Populate(builder.Meaning);
         builder.ExpressionForms.RegisterBinaryFold(new DateOperationFold());
         TemporalExpressionPrintBinders.Register(builder.ExpressionForms);
-        builder.ExpressionForms.RegisterGrammarContributor(TemporalExpressionPrintBinders.ContributeGrammarPatterns);
+        TemporalExpressionPrintBinders.RegisterFolds(builder.ExpressionForms);
+        builder.AddAnalyzer(new TemporalPass());
     }
 }

@@ -43,6 +43,8 @@ public sealed class AnnotationRegistry {
         _grammarContributors.Add(contribute);
     }
 
+    internal bool HasGrammarContributors => _grammarContributors.Count > 0;
+
     /// <summary>Applies all pack grammar contributors to <paramref name="builder"/>.</summary>
     public void ContributePatterns(GrammarBuilder<DslToken, DslTokenKind> builder) {
         ArgumentNullException.ThrowIfNull(builder);

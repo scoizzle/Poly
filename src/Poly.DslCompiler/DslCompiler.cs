@@ -114,9 +114,9 @@ public sealed class DslCompiler {
         DomainSession session;
         List<DomainChange> changes;
         try {
-            session = OpenCompileSession(polyText, dbms, extraLibraries);
+            session = OpenCompileSession(polyText, mode, dbms, extraLibraries);
             var parser = new PolyDslParser(polyText, session);
-            changes = DomainCompilation.WithSeed(parser.Parse(), SeedFor(dbms)).ToList();
+            changes = DomainCompilation.WithSeed(parser.Parse(), SeedFor(dbms, mode)).ToList();
         }
         catch (FormatException ex) {
             return Fail($"Parse error: {ex.Message}");
@@ -157,17 +157,34 @@ public sealed class DslCompiler {
 
         var domain = outcome.Root;
         try {
-            var output = GenerateAllFiles(domain, outcome.Analysis, mode);
-            var files = output.Files.ToList();
+            var files = session.Emit(domain, outcome.Analysis).ToList();
+            var persist = outcome.Analysis.GetMetadata<PersistenceSurfaceMetadata>(domain);
+            var http = outcome.Analysis.GetMetadata<HttpSurfaceMetadata>(domain);
+            var storageModel = outcome.Analysis.GetMetadata<StorageMappingMetadata>(domain)?.Storage;
 
-            if (mode == CompileMode.All
-                && (output.Storage is null || output.Behavior is null
-                    || output.Aggregate is null || output.DbContextName is null)) {
-                throw new InvalidOperationException(
-                    "CompileMode.All requires storage, behavior, and aggregate analysis metadata.");
+            if (persist is not null) {
+                if (storageModel is null)
+                    throw new InvalidOperationException(
+                        "Infrastructure pipeline did not produce storage mapping metadata.");
+                var dbContextName = $"{domain.Name}DbContext";
+                files.Add(($"{dbContextName}.cs",
+                    new CSharpGenerator().Generate(
+                        new DbContextGenerator(domain, storageModel).GenerateCompilationUnit())));
             }
 
-            foreach (var contributor in CollectArtifacts(session, mode, dbms))
+            if (http is not null) {
+                if (storageModel is null
+                    || BehaviorMetadata.From(domain, outcome.Analysis) is null
+                    || outcome.Analysis.GetMetadata<OwnershipAggregateMetadata>(domain)?.Aggregate is null) {
+                    throw new InvalidOperationException(
+                        "HTTP artifacts require storage, behavior, and aggregate analysis metadata.");
+                }
+                foreach (var file in new MinimalApiHostArtifactContributor(dbms: dbms)
+                    .Contribute(domain, outcome.Analysis))
+                    files.Add(file);
+            }
+
+            foreach (var contributor in session.Artifacts.Concat(_extraArtifacts))
                 foreach (var file in contributor.Contribute(domain, outcome.Analysis))
                     files.Add(file);
             return new CompileResult(Success: true, Files: files, Errors: null);
@@ -179,13 +196,19 @@ public sealed class DslCompiler {
 
     private static readonly ExtensionCatalog CompilerCatalog = ExtensionCatalog.Core
         .With(new SqliteLibrary())
-        .With(new SqlServerLibrary());
+        .With(new SqlServerLibrary())
+        .With(new HttpLibrary());
 
-    private static IReadOnlyList<string> SeedFor(DbmsPack dbms) => dbms switch {
-        DbmsPack.Sqlite => [.. ExtensionCatalog.ProductAuthoring, "sqlite"],
-        DbmsPack.SqlServer => [.. ExtensionCatalog.ProductAuthoring, "sqlserver"],
-        _ => ExtensionCatalog.ProductAuthoring,
-    };
+    private static IReadOnlyList<string> SeedFor(DbmsPack dbms, CompileMode mode) {
+        if (mode is CompileMode.Entities)
+            return ExtensionCatalog.ProductAuthoring;
+        var seed = new List<string>(ExtensionCatalog.ProductAuthoring);
+        if (dbms is DbmsPack.Sqlite)
+            seed.Add("sqlite");
+        else if (dbms is DbmsPack.SqlServer)
+            seed.Add("sqlserver");
+        return seed;
+    }
 
     /// <summary>
     /// One session for parse, analyze, and artifacts. Source <c>uses</c> wins
@@ -193,10 +216,11 @@ public sealed class DslCompiler {
     /// </summary>
     private static DomainSession OpenCompileSession(
         string polyText,
+        CompileMode mode,
         DbmsPack dbms,
         IReadOnlyList<IDomainLibrary> extraLibraries) {
         var peeked = DomainCompilation.PeekExtensions(polyText);
-        var ids = new List<string>(peeked.Count > 0 ? peeked : SeedFor(dbms));
+        var ids = new List<string>(peeked.Count > 0 ? peeked : SeedFor(dbms, mode));
         var seen = new HashSet<string>(ids, StringComparer.Ordinal);
         var catalog = CompilerCatalog;
         foreach (var library in extraLibraries) {
@@ -205,19 +229,13 @@ public sealed class DslCompiler {
             if (seen.Add(library.Id))
                 ids.Add(library.Id);
         }
+        if (mode is CompileMode.Db or CompileMode.All
+            && !ids.Exists(id => id is "sqlite" or "sqlserver" or "mysql" or "persistence")
+            && seen.Add("persistence"))
+            ids.Add("persistence");
+        if (mode == CompileMode.All && seen.Add("http"))
+            ids.Add("http");
         return DomainSession.ForExtensions(ids, catalog);
-    }
-
-    private IEnumerable<IArtifactContributor> CollectArtifacts(
-        DomainSession session,
-        CompileMode mode,
-        DbmsPack dbms) {
-        if (mode == CompileMode.All)
-            yield return new MinimalApiHostArtifactContributor(dbms: dbms);
-        foreach (var artifact in session.Artifacts)
-            yield return artifact;
-        foreach (var artifact in _extraArtifacts)
-            yield return artifact;
     }
 
     /// <summary>
@@ -249,89 +267,6 @@ public sealed class DslCompiler {
             var other => throw new FormatException(
                 $"Unknown DBMS pack '{other}'. Valid values: generic, sqlite, sqlserver"),
         };
-    }
-
-    // ── C# generation ───────────────────────────────────────────
-
-    /// <summary>Output of <see cref="GenerateAllFiles"/>: generated files plus the
-    /// infrastructure models the CompileMode.All host contributor needs.</summary>
-    private sealed record GenerationOutput(
-        IReadOnlyList<(string FileName, string Source)> Files,
-        StorageModel? Storage,
-        BehaviorModel? Behavior,
-        AggregateModel? Aggregate,
-        string? DbContextName);
-
-    private static GenerationOutput GenerateAllFiles(
-        Domain domain, AnalysisResult analysis,
-        CompileMode mode = CompileMode.Entities) {
-
-        var files = new List<(string FileName, string Source)>();
-
-        // Entity types (always generated) — export-time projection on finished AnalysisResult.
-        // No mid-pipeline EntitySyntaxMetadata; failures throw (caught as compile errors).
-        var types = DomainProgramProjection.ToSyntax(domain, analysis);
-        var entities = domain.Types.OfType<Entity>().ToList();
-        foreach (var entity in entities) {
-            var entityNames = new HashSet<string>(StringComparer.Ordinal) {
-                entity.Name,
-                $"{entity.Name}Stage"
-            };
-            var entityDefs = types
-                .Where(d => entityNames.Contains(d.Name))
-                .ToList();
-            if (entityDefs.Count == 0)
-                throw new InvalidOperationException(
-                    $"DomainProgramProjection produced no type definitions for entity '{entity.Name}'.");
-            var csharp = new CSharpGenerator().Generate(entityDefs);
-            files.Add(($"{entity.Name}.cs", csharp));
-        }
-
-        // Scaffolding (enums + DomainResult infrastructure) — the entity files
-        // reference these (Genre, DomainResult<T>); without them the output does
-        // not compile. One shared file, emitted before the entity files' content
-        // is referenced by the rest of the project.
-        var scaffoldingDefs = types
-            .Where(d => !entities.Any(e =>
-                d.Name == e.Name || d.Name == $"{e.Name}Stage"))
-            .ToList();
-        if (scaffoldingDefs.Count > 0) {
-            var scaffolding = new CSharpGenerator().Generate(scaffoldingDefs);
-            files.Add(("Poly.Types.cs", scaffolding));
-        }
-
-        // Infrastructure metadata comes from the session analysis (which already ran
-        // StoragePass with the session's type maps + conventions). No second StoragePass.
-        var storageModel = analysis.GetMetadata<StorageMappingMetadata>(domain)?.Storage;
-        var behaviorModel = BehaviorMetadata.From(domain, analysis);
-        var aggregateModel = analysis.GetMetadata<OwnershipAggregateMetadata>(domain)?.Aggregate;
-
-        // Fail closed — no silent re-analyze (storage, behavior, aggregate).
-        if ((mode == CompileMode.Db || mode == CompileMode.All) && storageModel == null)
-            throw new InvalidOperationException(
-                "Infrastructure pipeline did not produce storage mapping metadata.");
-
-        if (mode == CompileMode.All) {
-            if (behaviorModel == null)
-                throw new InvalidOperationException(
-                    "Could not project behavior from analysis (capability + entities).");
-            if (aggregateModel == null)
-                throw new InvalidOperationException(
-                    "Domain analysis did not produce aggregate metadata. Ensure OwnershipAggregatePass is registered in the domain analysis pipeline.");
-        }
-
-        // DbContext (mode: db or all)
-        string? dbContextName = null;
-        if (mode == CompileMode.Db || mode == CompileMode.All) {
-            dbContextName = $"{domain.Name}DbContext";
-            var dbGen = new DbContextGenerator(domain, storageModel!);
-            files.Add(($"{dbContextName}.cs",
-                new CSharpGenerator().Generate(dbGen.GenerateCompilationUnit())));
-        }
-
-        // Program.cs + demo.http are emitted by MinimalApiHostArtifactContributor through
-        // the artifact-contributor hook in CompileMode.All — never inline here.
-        return new GenerationOutput(files, storageModel, behaviorModel, aggregateModel, dbContextName);
     }
 
     private static CompileResult Fail(string message) =>

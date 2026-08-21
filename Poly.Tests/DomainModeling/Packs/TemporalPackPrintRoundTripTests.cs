@@ -136,8 +136,7 @@ public sealed class TemporalPackPrintRoundTripTests {
 
     [Test]
     public async Task TemporalPack_GrammarPatterns_RegisterOnBothPrimaries() {
-        var inputs = TemporalInputs();
-        var g = DslGrammar.Build(grammar => inputs.ExpressionForms.ContributeGrammarPatterns(grammar));
+        var g = DslGrammar.Core;
 
         foreach (var rule in new[] { "expr-primary", "expr-primary-no-not" }) {
             await Assert.That(g.GetPatterns(rule).Any(p => p.Name == "now")).IsTrue();

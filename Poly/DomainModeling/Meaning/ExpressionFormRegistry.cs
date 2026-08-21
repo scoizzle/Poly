@@ -62,6 +62,8 @@ public sealed class ExpressionFormRegistry {
         _binaryFolds.Add(fold);
     }
 
+    internal bool HasGrammarContributors => _grammarContributors.Count > 0;
+
     public void ContributeGrammarPatterns(GrammarBuilder<DslToken, DslTokenKind> builder) {
         ArgumentNullException.ThrowIfNull(builder);
         foreach (var c in _grammarContributors)

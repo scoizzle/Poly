@@ -97,23 +97,25 @@ public static class DslGrammar {
 
     private static readonly Grammar<DslToken, DslTokenKind> CoreTable = CreateCore();
 
-    /// <summary>Immutable product table. Libraries <see cref="Grammar{TToken,TTokenKind}.Extend"/> this.</summary>
+    /// <summary>Immutable product table. Spell is constant; libraries do not Extend this.</summary>
     public static Grammar<DslToken, DslTokenKind> Core => CoreTable;
 
     /// <summary>
-    /// Product table plus optional library contributions. No configure returns
+    /// Product table plus optional extra patterns (tests). No configure returns
     /// the shared <see cref="Core"/>. Contributors mutate one builder; freeze once.
     /// </summary>
     public static Grammar<DslToken, DslTokenKind> Build(
         System.Action<GrammarBuilder<DslToken, DslTokenKind>>? configure = null) =>
         configure is null ? CoreTable : CoreTable.Extend(configure);
 
-    /// <summary>Product table plus annotation and expression-form contributions.</summary>
+    /// <summary>Product table. Extra productions only when a registry still has test contributors.</summary>
     public static Grammar<DslToken, DslTokenKind> For(
         AnnotationRegistry annotations,
         ExpressionFormRegistry forms) {
         ArgumentNullException.ThrowIfNull(annotations);
         ArgumentNullException.ThrowIfNull(forms);
+        if (!annotations.HasGrammarContributors && !forms.HasGrammarContributors)
+            return CoreTable;
         var builder = CoreTable.ToBuilder();
         annotations.ContributePatterns(builder);
         forms.ContributeGrammarPatterns(builder);
@@ -225,6 +227,9 @@ public static class DslGrammar {
             .Pattern("false").Kind(DslTokenKind.False).Commit()
             .Pattern("null").Kind(DslTokenKind.Null).Commit()
             .Pattern("group").Kind(DslTokenKind.LParen).Ref("expr").Kind(DslTokenKind.RParen).Commit()
+            .Pattern("now", priority: 1).Predicate(IsNowIdentifier, "now").Commit()
+            .Pattern("today", priority: 1).Predicate(IsTodayIdentifier, "today").Commit()
+            .Pattern("duration").Value(DslTokenKind.Number, "amount").Predicate(IsDurationUnitToken, "unit").Commit()
             .Pattern("ident").Value(DslTokenKind.Identifier).Commit()
         .Define("expr-add")
             .Pattern("chain").LeftAssoc("expr-mul", DslTokenKind.Plus, DslTokenKind.Minus).Commit()
@@ -267,6 +272,29 @@ public static class DslGrammar {
             .Pattern("null").Kind(DslTokenKind.Null).Commit()
             .Pattern("group").Kind(DslTokenKind.LParen).Ref("expr").Kind(DslTokenKind.RParen).Commit()
             .Pattern("not").Kind(DslTokenKind.Not).Ref("expr-add").Commit()
+            .Pattern("now", priority: 1).Predicate(IsNowIdentifier, "now").Commit()
+            .Pattern("today", priority: 1).Predicate(IsTodayIdentifier, "today").Commit()
+            .Pattern("duration").Value(DslTokenKind.Number, "amount").Predicate(IsDurationUnitToken, "unit").Commit()
             .Pattern("ident").Value(DslTokenKind.Identifier).Commit()
+        .Define("date-operation")
+            .Pattern("add")
+                .Ref("expr-primary").Kind(DslTokenKind.Plus)
+                .Value(DslTokenKind.Number, "amount").Predicate(IsDurationUnitToken, "unit")
+                .Commit()
+            .Pattern("sub")
+                .Ref("expr-primary").Kind(DslTokenKind.Minus)
+                .Value(DslTokenKind.Number, "amount").Predicate(IsDurationUnitToken, "unit")
+                .Commit()
             .Build();
+
+    internal static bool IsNowIdentifier(DslToken t) =>
+        t.Kind == DslTokenKind.Identifier
+        && string.Equals(t.Text, "Now", StringComparison.Ordinal);
+
+    internal static bool IsTodayIdentifier(DslToken t) =>
+        t.Kind == DslTokenKind.Identifier
+        && string.Equals(t.Text, "Today", StringComparison.Ordinal);
+
+    internal static bool IsDurationUnitToken(DslToken t) =>
+        t.Kind == DslTokenKind.Identifier && DurationForm.TryGetUnit(t.Text, out _);
 }

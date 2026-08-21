@@ -18,11 +18,10 @@ Poly is a **neurosymbolic platform**: domain models and policies are authored as
 
 ```text
 Domain (facts + uses ids)
-  → DomainSession (extensions loaded once)
-  → analyze
+  → DomainSession (extensions loaded once: analyzers + maps)
+  → session.Analyze (core pipeline + library INodeAnalyzer)
   → lower each action / policy / create / subscription → Syntax AST
-  → Interpreter (VM)  and/or  CSharpGenerator
-  → opt-in extension emit (REST, SQL, …) binds doors / projections
+  → session.Emit (entity C#) + bag-gated host files (DbContext / HTTP)
 MCP harness: agent supplies context → simulate that same operation AST
 ```
 
@@ -182,11 +181,11 @@ Module README: `Poly/Introspection/README.md`.
 |-------|----------|
 | Tools / conversation | `Poly.Mcp/Tools/`, `Poly.Mcp/Sessions/` |
 | Domain compile | `DomainSession` in `Poly/DomainModeling/` — MCP **holds** this; it is not the same type |
-| Libraries | `IDomainLibrary` (`Id` + `Register`); artifacts via `IArtifactContributor` |
+| Libraries | `IDomainLibrary` (`Id` + `Register`); product slot is `SessionBuilder.AddAnalyzer`. `uses sqlite` publishes persistence bag → DbContext; `uses http` publishes HTTP bag → Program.cs. Entity C# is `session.Emit`. `CompileMode` only seeds ids |
 
 **MCP principle:** interactive harness for agents. Author, inspect, **simulate** a named operation when the caller **supplies context** (properties, stage, args, links, clock). Thin adapter — does not invent domain or execution semantics. Simulate runs the same lowered AST + `Interpreter` as emit. Scratch `DomainInstanceStore` is conversation state, not the production store. MCP is not a `uses` product host and not the customer API.
 
-**Extensions:** `.poly` is one language. A `Domain` is facts (`uses` ids). A **`DomainSession`** binds the **concepts** those ids name (folds, meaning, type maps, **artifact contributors**). It does not load a dialect. Meaning is not process-wide. Another Poly domain is `ImportedContract`, not an extension id.
+**Extensions:** `.poly` is one language. A `Domain` is facts (`uses` ids). A **`DomainSession`** loads those ids as analyzers (and type maps / folds they close over). It does not load a dialect. Spell is `DslGrammar.Core`. Another Poly domain is `ImportedContract`, not an extension id.
 
 | Extension job | Loads when | Emits a process door? |
 |---------------|------------|------------------------|

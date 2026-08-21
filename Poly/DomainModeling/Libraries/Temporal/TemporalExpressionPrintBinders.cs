@@ -24,6 +24,16 @@ public static class TemporalExpressionPrintBinders {
         }
     }
 
+    /// <summary>Vocabulary folds on existing product patterns. Does not Extend Grammar.</summary>
+    public static void RegisterFolds(ExpressionFormRegistry forms) {
+        ArgumentNullException.ThrowIfNull(forms);
+        foreach (var rule in new[] { "expr-primary", "expr-primary-no-not" }) {
+            forms.RegisterFold(rule, "now", _ => new Now());
+            forms.RegisterFold(rule, "today", _ => new Today());
+            forms.RegisterFold(rule, "duration", FoldDuration);
+        }
+    }
+
     private static DomainExpression FoldDuration(MatchResult<DslToken, DslTokenKind> match) {
         if (!match.Captures.TryGetValue("amount", out var amounts) || amounts.Count == 0
             || !match.Captures.TryGetValue("unit", out var units) || units.Count == 0)

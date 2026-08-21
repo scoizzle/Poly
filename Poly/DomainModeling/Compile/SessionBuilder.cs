@@ -1,17 +1,19 @@
+using Poly.Analysis;
 using Poly.DomainModeling.Ontology;
 
 namespace Poly.DomainModeling.Compile;
 
 /// <summary>
 /// Mutable assembly surface for <see cref="IDomainLibrary.Register"/>. Libraries
-/// contribute meaning, type maps, conventions, and artifacts; <see cref="Build"/>
-/// freezes the result into a <see cref="DomainSession"/>. The session is the
-/// primary assembler — this builder is the library-registration surface, not a
-/// fail-open door.
+/// contribute analyzers (the product extension slot), plus type maps / conventions
+/// those passes close over. <see cref="Build"/> freezes the result into a
+/// <see cref="DomainSession"/>.
 /// </summary>
 public sealed class SessionBuilder {
     private readonly List<IStorageConvention> _storageConventions = [];
     private readonly List<IArtifactContributor> _artifacts = [];
+    private readonly List<INodeAnalyzer> _analyzers = [];
+    private readonly HashSet<string> _analyzerPassNames = new(StringComparer.Ordinal);
     private readonly List<string> _loadedIds = [];
     private readonly HashSet<string> _loadedIdSet = new(StringComparer.Ordinal);
 
@@ -49,6 +51,22 @@ public sealed class SessionBuilder {
         return this;
     }
 
+    /// <summary>
+    /// Appends a library analyzer to this unit's pipeline. Duplicate
+    /// <see cref="INodeAnalyzer.PassName"/> fails closed. Placement among core
+    /// passes uses <see cref="INodeAnalyzer.Dependencies"/> at freeze.
+    /// </summary>
+    public SessionBuilder AddAnalyzer(INodeAnalyzer analyzer) {
+        ArgumentNullException.ThrowIfNull(analyzer);
+        if (string.IsNullOrWhiteSpace(analyzer.PassName))
+            throw new ArgumentException("Analyzer PassName must be non-empty.", nameof(analyzer));
+        if (!_analyzerPassNames.Add(analyzer.PassName))
+            throw new InvalidOperationException(
+                $"An analyzer with pass name '{analyzer.PassName}' is already registered.");
+        _analyzers.Add(analyzer);
+        return this;
+    }
+
     /// <summary>Freezes the loaded libraries into a session.</summary>
     public DomainSession Build(Domain? domain = null) {
         var annotations = new AnnotationRegistry(Annotations);
@@ -62,8 +80,9 @@ public sealed class SessionBuilder {
             expressionForms,
             TypeMaps.Clone(),
             _storageConventions,
-            DomainSession.FoldsFor(language.Grammar, expressionForms),
+            DomainSession.FoldsFor(expressionForms),
             Meaning,
-            _artifacts);
+            _artifacts,
+            _analyzers);
     }
 }

@@ -47,9 +47,11 @@ if (inputPath is null) {
     Console.Error.WriteLine("Usage: poly-dsl-compiler [--mode entities|db|all] [--dbms generic|sqlite|sqlserver] <input.poly> [output-dir]");
     Console.Error.WriteLine();
     Console.Error.WriteLine("Compiles a .poly DSL domain model into C# source files.");
-    Console.Error.WriteLine("  --mode entities    Entity type definitions only (default)");
-    Console.Error.WriteLine("  --mode db          Entity types + EF Core DbContext");
-    Console.Error.WriteLine("  --mode all          Entity types + DbContext + Minimal API (via Syntax IR)");
+    Console.Error.WriteLine("  File set follows uses (and CLI seeds): entity C# always;");
+    Console.Error.WriteLine("  DbContext when sqlite/sqlserver/persistence; Program.cs when http.");
+    Console.Error.WriteLine("  --mode entities    Seed language only (default)");
+    Console.Error.WriteLine("  --mode db          Seed persistence (vendor from --dbms)");
+    Console.Error.WriteLine("  --mode all          Seed persistence + http");
     Console.Error.WriteLine("  --dbms generic     Core generic SQL column types (default)");
     Console.Error.WriteLine("  --dbms sqlite      SQLite affinities (first shippable pack; no server required)");
     Console.Error.WriteLine("  --dbms sqlserver   SQL Server column types");

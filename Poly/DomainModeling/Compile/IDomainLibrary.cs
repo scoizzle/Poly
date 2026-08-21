@@ -1,9 +1,10 @@
 namespace Poly.DomainModeling.Compile;
 
 /// <summary>
-/// A library that registers <b>concepts</b> into a session: meaning for existing
-/// spellings, type maps, conventions, and/or artifact files. It does not add
-/// language shapes. Duplicate <see cref="Id"/> fails closed. Not a discovery host.
+/// A library that registers into a session. The product extension slot is
+/// <see cref="SessionBuilder.AddAnalyzer"/>; type maps/conventions are config those
+/// passes close over. It does not add language shapes. Duplicate <see cref="Id"/>
+/// fails closed. Not a discovery host.
 /// </summary>
 public interface IDomainLibrary {
     /// <summary>Unique, ordinal-compared identity. Duplicates fail closed.</summary>

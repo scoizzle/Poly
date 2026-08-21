@@ -1,7 +1,7 @@
 # DomainModeling — extension architecture
 
 **Date:** 2026-08-15  
-**Status:** Design (best architecture). Supersedes the extension half of [`domainmodeling-session-is-the-compile-2026-08-15.md`](domainmodeling-session-is-the-compile-2026-08-15.md). Not CURRENT.  
+**Status:** **Superseded 2026-08-20** by `emit-session` — libraries add analysis passes; emit consumes bags. Four-slot `Register` (Spell/Meaning/Check/Emit) is the extra plugin host. Not CURRENT.  
 **Locks:** Domain = facts; `DomainSession` = compile (core); MCP session ≠ domain session; no MEF; no 12-method plugin.
 
 ---

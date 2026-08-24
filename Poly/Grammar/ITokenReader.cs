@@ -12,7 +12,7 @@ namespace Poly.Grammar;
 /// (<see cref="ScanNextToken"/>) on <see cref="BufferedTokenReader{TToken,TTokenKind}"/>;
 /// they never reimplement buffering or position tracking.
 /// </summary>
-public interface ITokenStreamReader<TToken, TTokenKind>
+public interface ITokenReader<TToken, TTokenKind>
     where TToken : struct, IToken<TTokenKind>
     where TTokenKind : struct {
     /// <summary>

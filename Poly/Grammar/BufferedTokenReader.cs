@@ -6,7 +6,7 @@ namespace Poly.Grammar;
 /// committed position is always the buffer head. Languages implement only
 /// <see cref="ScanNextToken"/>.
 /// </summary>
-public abstract class BufferedTokenReader<TToken, TTokenKind> : ITokenStreamReader<TToken, TTokenKind>
+public abstract class BufferedTokenReader<TToken, TTokenKind> : ITokenReader<TToken, TTokenKind>
     where TToken : struct, IToken<TTokenKind>
     where TTokenKind : struct {
     private readonly List<TToken> _buffer = [];

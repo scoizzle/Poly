@@ -34,6 +34,6 @@ public sealed class Language<TToken, TTokenKind>
         return new Language<TToken, TTokenKind>(Grammar.Extend(contribute), Canonical, WriterFactory);
     }
 
-    public Matcher<TToken, TTokenKind> Matcher(ITokenStreamReader<TToken, TTokenKind> reader) =>
+    public Matcher<TToken, TTokenKind> Matcher(ITokenReader<TToken, TTokenKind> reader) =>
         new(Grammar, reader);
 }

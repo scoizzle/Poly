@@ -16,9 +16,9 @@ public sealed class Matcher<TToken, TTokenKind>
     where TToken : struct, IToken<TTokenKind>
     where TTokenKind : struct {
     private readonly Grammar<TToken, TTokenKind> _grammar;
-    private readonly ITokenStreamReader<TToken, TTokenKind> _reader;
+    private readonly ITokenReader<TToken, TTokenKind> _reader;
 
-    public Matcher(Grammar<TToken, TTokenKind> grammar, ITokenStreamReader<TToken, TTokenKind> reader) {
+    public Matcher(Grammar<TToken, TTokenKind> grammar, ITokenReader<TToken, TTokenKind> reader) {
         _grammar = grammar ?? throw new ArgumentNullException(nameof(grammar));
         _reader = reader ?? throw new ArgumentNullException(nameof(reader));
     }

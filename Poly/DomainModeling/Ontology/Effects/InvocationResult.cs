@@ -1,8 +1,5 @@
-using Poly.DomainModeling.Ontology;
 
-using Action = Poly.DomainModeling.Ontology.Action;
-
-namespace Poly.DomainModeling.Runtime;
+namespace Poly.DomainModeling.Ontology.Effects;
 
 /// <summary>
 /// Describes the output(s) produced by an <see cref="Action"/> or <see cref="Effect"/>.

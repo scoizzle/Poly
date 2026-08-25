@@ -131,8 +131,8 @@ public static partial class DirectVmAbiEmitter {
         }
 
         if (a.Destination is not Variable destVar) {
-            throw new NotSupportedException(
-                $"Assignment destination must be a Variable or IndexAccess, got {a.Destination.GetType().Name}");
+            throw new InvalidOperationException(
+                $"VM compile rejected: assignment destination must be a Variable, Member, or IndexAccess, got {a.Destination.GetType().Name}.");
         }
 
         if (a.Value is NewArray newArr && newArr.Length is Constant lenConst

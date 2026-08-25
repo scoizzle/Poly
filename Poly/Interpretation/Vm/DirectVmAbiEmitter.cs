@@ -357,6 +357,10 @@ public static partial class DirectVmAbiEmitter {
     }
 
     private static Expression EmitIndexAccess(IndexAccess n, AbiCtx ctx) {
+        var indexKind = ctx.Analysis?.GetValueRepresentation(n.Value);
+        if (indexKind is ValueRepresentationKind.StackScalar or ValueRepresentationKind.Bool)
+            throw new InvalidOperationException(
+                "VM compile rejected: index access requires an array or indexer.");
         if (n.Value is Variable arrVar && ctx.TryGetFrameLocalBase(arrVar) is int) {
             return SpillToRing(EmitIndexAccessValue(n, ctx), ctx);
         }

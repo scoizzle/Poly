@@ -328,8 +328,8 @@ public static partial class DirectVmAbiEmitter {
                 Block(preBody.Concat(postBody)));
         }
 
-        throw new NotSupportedException(
-            $"DirectVmAbiEmitter: Invoke not supported for delegate type {invoke.Delegate.GetType().Name}");
+        throw new InvalidOperationException(
+            $"VM compile rejected: Invoke target must be a member or lambda, got {invoke.Delegate.GetType().Name}.");
     }
 
     /// <summary>Inline a small lambda with no captures and a single-expression body.

@@ -191,7 +191,6 @@ public static partial class DirectVmAbiEmitter {
             Parameter p => EmitParameter(p, ctx),
             Lambda l => EmitLambda(l, ctx),
             Invoke inv => EmitInvoke(inv, ctx),
-            CallExternal ce => EmitCallExternal(ce, ctx),
             New n => EmitNew(n, ctx),
             NewArray n => EmitNewArray(n, ctx),
             IndexAccess n => EmitIndexAccess(n, ctx),

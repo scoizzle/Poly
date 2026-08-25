@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-24  
 **Rule:** One CURRENT suite at a time.  
-**CURRENT truth:** [`PIPELINE-STATUS.md`](./PIPELINE-STATUS.md) (only) — **CURRENT: `emit-session`**.
+**CURRENT truth:** [`PIPELINE-STATUS.md`](./PIPELINE-STATUS.md) (only) — **CURRENT: `host-ABI`**.
 
 ---
 
@@ -12,7 +12,8 @@
 |----------|--------|--------|
 | — | [`gpure-README.md`](./gpure-README.md) | ✅ DONE 2026-08-07 |
 | — | [`mcp-minify-README.md`](./mcp-minify-README.md) | ✅ DONE 2026-08-08 |
-| **CURRENT** | emit-session | Libraries add `INodeAnalyzer`; emit consumes bags. CompileMode seeds persistence only; HTTP host requires `uses http` (or `Load(HttpLibrary)`). Parent: plans admission / CORE §3.1 |
+| — | emit-session | ✅ DONE 2026-08-24 (CompileMode seed-only honesty). Remaining lies: Temporal Meaning unused; RuntimeAnalysisCache core-catalog reopen. |
+| **CURRENT** | host-ABI | First slice: StageTransition Assignment + CallExternal Notify. Remaining store effects still EffectExecutor. |
 | parked | [`mut-safety-README.md`](./mut-safety-README.md) | After pack-host |
 | 3a | [`p1-README.md`](./p1-README.md) | After pack-2-gate |
 

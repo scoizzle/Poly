@@ -10,9 +10,9 @@ Other indexes must **mirror** this file (or link here) — do not invent a secon
 
 ```text
 DONE:    gpure (2026-08-07 + follow-ups 08-08); mcp-minify (2026-08-08 + follow-ups); grammar-revision (2026-08-09: v2 engine + DSL cutover + printer + review fixes); dead-dual cleanup (2026-08-09: Validation + Text.Matching deleted); domainmodeling vision-cleanup slices 1–3 (2026-08-17: one door, session.Analyze, Comment not emit-meaning); emit-session CompileMode seed-only (2026-08-24: HTTP host only via uses http / Load(HttpLibrary); bag-gated emit)
-CURRENT: emit-session (CompileMode is seed-only. Remaining: Meaning table unused by TemporalLibrary — Temporal is dispatch/type-check + TemporalPass, not Meaning handlers. RuntimeAnalysisCache reopens a core-catalog session; vendor maps still ignored.)
-ADMIT:   emit-session
-THEN:    host-ABI CallExternal (one lowering) after emit-session
+CURRENT: host-ABI CallExternal (first slice in progress: StageTransition Assignment + CallExternal Notify on runtime and emit. Remaining store effects still EffectExecutor.)
+ADMIT:   host-ABI
+THEN:    host-ABI remaining store effects (create / create-in / invoke / for-invoke)
 PARKED:  pack-2 IDomainPack; mut-safety; e2e-*; pack-host “packs extend Grammar tables”; session four-slot Meaning/Emit
 PULL:    E5; EF codegen; naming cleanup
 ```
@@ -31,7 +31,8 @@ opencode run --dir . --auto --title pack-1-1 --agent build "Assigned: docs/plans
 | **gpure** | ✅ **DONE** 2026-08-07 (+ follow-ups 2026-08-08) | Pure Grammar product path (Option A ladder + tables); S1–S5/N1–N4/P1 closed. |
 | **mcp-minify** | ✅ **DONE** 2026-08-08 (+ follow-ups same day) | Catalog 46→24; DSL-only expressions; unified `add`/`remove`; follow-ups closed. |
 | **grammar-revision** | ✅ **DONE** 2026-08-09 | v2 engine (`Grammar<TToken, TTokenKind>`, examine/consume, longest-match, stateless printer) + DSL cutover; review B1–B3/N1–N3/C1 closed. Executed directly (not via plan-suite) — see [`../grammar-revision.md`](../grammar-revision.md) |
-| **emit-session** | **CURRENT** 2026-08-24 | Libraries add `INodeAnalyzer`. Spell closed. Emit reads bags, not `CompileMode`. CompileMode.All/Db seed persistence only; HTTP host requires `uses http` (catalog id `http`) or `Load(HttpLibrary)`. |
+| **emit-session** | ✅ **DONE** 2026-08-24 (CompileMode honesty) | Libraries add `INodeAnalyzer`. Spell closed. Emit reads bags, not `CompileMode`. CompileMode.All/Db seed persistence only; HTTP host requires `uses http` (catalog id `http`) or `Load(HttpLibrary)`. Remaining lies: TemporalLibrary Meaning unused; RuntimeAnalysisCache core-catalog reopen. |
+| **host-ABI** | **CURRENT** 2026-08-24 | First slice: StageTransition lowers to Assignment + `CallExternal("Notify")` on runtime and emit. Create/invoke/for still EffectExecutor. |
 | **pack-host** | Parked (phase 1 shipped; **extension model superseded**) | TokenWriter + binders done. “Packs extend Grammar tables” is not the product contract — extension is analysis passes. pack-2 `IDomainPack` parked. |
 | **gcyc** | Parked (first admit shipped) | [`gcyc-README.md`](./gcyc-README.md) — remaining G4 unparse is THEN, not CURRENT |
 | **grammar wrap-up** | Parked | LeftAssoc live-fold — not a prereq of pack-1 TokenWriter |
@@ -56,4 +57,5 @@ opencode run --dir . --auto --title pack-1-1 --agent build "Assigned: docs/plans
 - **grammar wrap-up** (admit next): LeftAssoc live-fold + S1 span reconciliation — product fold path.
 - **grammar-revision** ✅ DONE 2026-08-09: v2 engine + DSL cutover + printer + review fixes (B1–B3, N1–N3, C1).
 - Span-vs-fold `not`-in-chain pinned: `SpanVsFold_NotInChain_TableRejectsFoldAccepts` until wrap-up reconciles.
-- **emit-session remaining lies:** TemporalLibrary does not register Meaning handlers (design: dispatch/type-check + `TemporalPass` vocabulary bag). `RuntimeAnalysisCache` / static `DomainModelAnalyzer.Analyze` reopen a core-catalog session (vendor maps ignored). One lowering for store effects is THEN (host-ABI `CallExternal`).
+- **emit-session remaining lies:** TemporalLibrary does not register Meaning handlers (design: dispatch/type-check + `TemporalPass` vocabulary bag). `RuntimeAnalysisCache` / static `DomainModelAnalyzer.Analyze` reopen a core-catalog session (vendor maps ignored). CompileMode seed-only honesty is DONE via #20.
+- **host-ABI remaining lie:** create / create-in / invoke / for-invoke still EffectExecutor. `ExecuteStructured` remains until mixed if+create can lower. `LowerStageTransitions` still gates those effects (not StageTransition).

@@ -33,10 +33,10 @@ namespace Poly.DomainModeling.Lowering;
 /// parameters (e.g. <c>maxAmount</c>) instead of <c>this.maxAmount</c>.
 /// </param>
 /// <param name="LowerStageTransitions">
-/// When true, <see cref="StageTransitionEffect"/> is lowered to an Assignment
-/// node (<c>this.CurrentStage = Xxx</c>) instead of returning null for direct
-/// execution. Used for C# code generation where transitions should be emitted
-/// as property writes. Defaults to false (runtime-compatible mode).
+/// When true, create / invoke / for-invoke effects lower to C#-shaped Ast
+/// (factories, method calls). Defaults to false (runtime path keeps those on
+/// EffectExecutor). <see cref="StageTransitionEffect"/> always lowers — this
+/// flag does not gate it.
 /// </param>
 /// <param name="Domain">Optional domain reference for cross-entity type resolution.</param>
 /// <param name="StageEnumTypeName">

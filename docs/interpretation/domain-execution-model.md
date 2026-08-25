@@ -97,14 +97,14 @@ For effects that map directly to Syntax AST nodes. The effect is lowered, compil
 | `AssignEffect` | `Assignment(target, value)` | Target and value lowered via `DomainExpressionLoweringPass` |
 | `CompositeEffect` | `Block(nodes)` | Sub-effects lowered recursively; direct-execution children filtered out; empty → `Block([Constant(0L)])` |
 | `ConditionalEffect` | `IfStatement(cond, thenBlock, elseBlock?)` | Then/else effects lowered recursively; same empty-block fallback |
+| `StageTransitionEffect` | Assignment of `CurrentStage` + `Invoke(Member(This, "Notify"), stageName)` (plus inlined exit/entry when they lower) | Same tree on runtime and emit. `Notify` is an instance method on This, resolved via the type def. Not a host-ABI node. Not an EffectExecutor arm. |
 
 ```csharp
 // DomainEntityInstance.ExecuteEffect — VM-compiled path
 var lowered = effectPass.TryLowerVmNode(effect);
 if (lowered is not null) {
     var compiled = Interpreter.Compile(lowered, typeProvider);
-    using var exec = Interpreter.Execute(compiled,
-        s => s.SetArgs(new object?[] { _values }));
+    using var exec = Interpreter.Execute(compiled, s => s.SetArgs(new object?[] { this }));
     return;
 }
 ```
@@ -115,7 +115,6 @@ For effects that mutate `DomainEntityInstance` state directly. The lowering pass
 
 | Effect | Action | Notes |
 |--------|--------|-------|
-| `StageTransitionEffect` | `TransitionStage(name, notifyStore: true)` | Sets `CurrentStage`; notifies `DomainInstanceStore` for subscription fan-out |
 | `CreateEntityInstance` | `CreateChildInstance(create)` | Creates via factory, adds to `_createdChildren`, optionally auto-links via `RelationshipName` |
 | `CreateEntityInRelationshipEffect` | `ExecuteCreateInRelationship(createIn)` | Creates instance and links via the named relationship |
 | `InvokeActionEffect` | `ExecuteInvokeEffect(invoke)` | See §5 cross-entity invoke |
@@ -128,10 +127,7 @@ For effects that mutate `DomainEntityInstance` state directly. The lowering pass
 ```csharp
 // DomainEntityInstance.EffectExecutor — dispatch base, named by effect subtype
 private sealed class EffectExecutor : EffectDispatch<object?> {
-    protected override object? StageTransition(StageTransitionEffect t) {
-        _instance.TransitionStage(t.TargetStage.StageName, notifyStore: true);
-        return null;
-    }
+    // StageTransitionEffect must lower — EffectExecutor throws if reached.
     protected override object? InvokeAction(InvokeActionEffect i) {
         _instance.ExecuteInvokeEffect(i);
         return null;
@@ -150,16 +146,16 @@ ExecuteEffect(effect)
   │   ├─ AssignEffect  → Assignment
   │   ├─ CompositeEffect → Block
   │   ├─ ConditionalEffect → IfStatement
-  │   └─ (all others) → null
+  │   ├─ StageTransitionEffect → CurrentStage Assignment + Invoke Notify on This
+  │   └─ (create / invoke / for) → null
   │
   ├─ returned Node ≠ null
   │   → Interpreter.Compile(lowered)
-  │   → Interpreter.Execute(compiled, args: _values)
+  │   → Interpreter.Execute(compiled, args: this)
   │
   └─ returned null
       → EffectExecutor.Run(instance, pass, provider, effect)
         │
-        ├─ StageTransitionEffect   → TransitionStage(...)
         ├─ CreateEntityInstance    → CreateChildInstance(...)
         ├─ CreateEntityInRelationship → ExecuteCreateInRelationship(...)
         └─ InvokeActionEffect      → ExecuteInvokeEffect(...)
@@ -213,8 +209,8 @@ Policy.Expression (DomainExpression)
   │   Analyzes + emits VM program targeting the instance's type definition.
   │   Member nodes resolve through ITypeDefinitionProvider → dictionary indexer.
   │
-  ├─ Interpreter.Execute(compiled, args: _values)
-  │   Runs the compiled program with the instance's property bag as args.
+  ├─ Interpreter.Execute(compiled, args: this)
+  │   Runs the compiled program with the instance as args (This).
   │
   └─ exec.Result.GetValue<bool>()
       Returns the boolean result.
@@ -231,7 +227,7 @@ public bool EvaluatePolicy(Policy policy) {
 
     var compiled = Interpreter.Compile(lowered, _typeDefAnalyzer);
     using var exec = Interpreter.Execute(compiled,
-        s => s.SetArgs(new object?[] { _values }));
+        s => s.SetArgs(new object?[] { this }));
     return exec.Result.GetValue<bool>();
 }
 ```
@@ -302,7 +298,7 @@ private static bool EvaluateBodyOnTarget(DomainExpression body, DomainEntityInst
     var pass = new DomainExpressionLoweringPass();
     var lowered = pass.Lower(body, new Parameter("entity", new TypeReference(target.Entity.Name)));
     var compiled = Interpreter.Compile(lowered, target._typeDefAnalyzer);
-    using var exec = Interpreter.Execute(compiled, s => s.SetArgs(target._values));
+    using var exec = Interpreter.Execute(compiled, s => s.SetArgs(new object?[] { target }));
     return exec.Result.GetValue<bool>();
 }
 ```
@@ -421,7 +417,7 @@ RelationshipNavigation("customer", PropertyAccess("Tier"))
 Member(Member(entityParam, "customer"), "Tier")
 ```
 
-The outer `Member(entityParam, "customer")` resolves the relationship name. At the Syntax AST level, this is an unresolved Member — it has no analysis metadata because "customer" is a relationship name, not a CLR property. The VM's `EmitResolvedMember` fallback for unresolved members returns the entire instance as a passthrough (the `_values` dictionary). The inner `Member("Tier")` then resolves via the standard `ITypeDefinitionProvider` path (dictionary indexer on the target entity's type definition).
+The outer `Member(entityParam, "customer")` resolves the relationship name. At the Syntax AST level, this is an unresolved Member — it has no analysis metadata because "customer" is a relationship name, not a CLR property. The VM's `EmitResolvedMember` fallback for unresolved members returns the entire instance as a passthrough (the instance is the `IDictionary`). The inner `Member("Tier")` then resolves via the standard `ITypeDefinitionProvider` path (dictionary indexer on the target entity's type definition).
 
 **This works but is semantically misleading.** The outer Member should conceptually read "navigate the relationship," not "access a property." Future work may introduce a dedicated navigation IR node that makes this distinction explicit.
 
@@ -454,7 +450,7 @@ This is the runtime counterpart of `StageSubscription` declarations in the DSL.
 |------|---------|---------|
 | **Quantifier lowering** | Preprocessed out before lowering (dual path) — the Syntax AST and VM have no store-aware nodes | Store-aware lowering node or dedicated Syntax AST extension; fix goes in Syntax/VM, not lowering |
 | **Relationship navigation** | Lowered as `Member(Param, relName)` — semantically works via VM's unresolved-Member fallback | Dedicated navigation Syntax node with explicit semantics; fix goes in Syntax AST |
-| **Direct-execution effects in lowering** | Recorded as `Comment("Cannot lower: StageTransitionEffect")` nodes — the VM skips them via no-op. Information is preserved in the AST for future lowering improvements. | Over time, each effect type gets lowering support and the `Comment` nodes naturally disappear. |
+| **Direct-execution effects in lowering** | Create / create-in / invoke / for-invoke still return `null` on the runtime path (EffectExecutor). StageTransition lowers to Assignment + `Invoke(Member(This, "Notify"))` (not Comment, not a host-ABI node). Sequential transitions still share stale `SourceStageName` at lowering time. | Remaining store effects share the same lowered tree on runtime and emit. |
 | **VM quantifier eval** | Per-target re-lowering + compile is expensive for large collections | Cached lowering or batch evaluation in VM |
 | **ParameterAccess in DSL** | Product spelling is a **bare identifier** (`PropertyAccess`) — analysis/lowering/bindings/runtime treat an in-scope action-parameter name as a parameter (`paramEnv`); there is no distinct `param` keyword or `@param` form | L3 — no separate parameter authoring syntax |
 

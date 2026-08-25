@@ -127,7 +127,6 @@ public sealed class CSharpGenerator {
                 WriteStatement(sb, attrNode.Inner, indent);
                 return;
             case MethodDefinitionNode method when indent == 0:
-                // Top-level method: emit as local function without access modifier
                 WriteLocalFunction(sb, method);
                 return;
             case TypeDefinitionNode typeDef:
@@ -238,19 +237,15 @@ public sealed class CSharpGenerator {
             return;
         }
         sb.AppendLine("{");
-
         foreach (var v in block.Variables) {
             WriteStatement(sb, v, indent + 1);
         }
-
-        // DCE: skip lowering elidable pure unused nodes (non-last in block).
         for (int i = 0; i < block.Nodes.Count; i++) {
             var node = block.Nodes[i];
             if (i == block.Nodes.Count - 1 || _analysisResult == null || !_analysisResult.CanElide(node)) {
                 WriteStatement(sb, node, indent + 1);
             }
         }
-
         Indent(sb, indent);
         sb.AppendLine("}");
     }
@@ -260,7 +255,6 @@ public sealed class CSharpGenerator {
         sb.Append("if (");
         WriteExpression(sb, ifStmt.Condition);
         sb.AppendLine(")");
-
         if (_analysisResult == null || !_analysisResult.CanElide(ifStmt.ThenBranch)) {
             WriteIfBody(sb, ifStmt.ThenBranch, indent);
         }
@@ -268,7 +262,6 @@ public sealed class CSharpGenerator {
             Indent(sb, indent + 1);
             sb.AppendLine("{}");
         }
-
         if (ifStmt.ElseBranch != null) {
             if (_analysisResult == null || !_analysisResult.CanElide(ifStmt.ElseBranch)) {
                 AppendElse(sb, ifStmt.ElseBranch, indent);
@@ -276,7 +269,6 @@ public sealed class CSharpGenerator {
         }
     }
 
-    /// <summary>Emits the body of an if/else-if branch, always wrapped in braces.</summary>
     private void WriteIfBody(StringBuilder sb, Node body, int indent) {
         if (body is Block block) {
             WriteStatement(sb, block, indent);
@@ -290,7 +282,6 @@ public sealed class CSharpGenerator {
         }
     }
 
-    /// <summary>Emits an else clause, handling else-if chains recursively.</summary>
     private void AppendElse(StringBuilder sb, Node elseBranch, int indent) {
         if (elseBranch is IfStatement elseIf) {
             Indent(sb, indent);
@@ -311,7 +302,7 @@ public sealed class CSharpGenerator {
     private void WriteWhileLoop(StringBuilder sb, WhileLoop whileLoop, int indent) {
         Indent(sb, indent);
         sb.Append("while (");
-        WriteExpression(sb, whileLoop.Condition);  // value used for control
+        WriteExpression(sb, whileLoop.Condition);
         sb.AppendLine(")");
         WriteStatement(sb, whileLoop.Body, whileLoop.Body is Block ? indent : indent + 1);
     }
@@ -322,7 +313,7 @@ public sealed class CSharpGenerator {
         WriteStatement(sb, doWhile.Body, doWhile.Body is Block ? indent : indent + 1);
         Indent(sb, indent);
         sb.Append("while (");
-        WriteExpression(sb, doWhile.Condition);  // value used for control
+        WriteExpression(sb, doWhile.Condition);
         sb.AppendLine(");");
     }
 
@@ -334,7 +325,6 @@ public sealed class CSharpGenerator {
         }
         sb.Append("; ");
         if (forLoop.Condition != null) {
-            // Always emit condition: its value is used for loop control.
             WriteExpression(sb, forLoop.Condition);
         }
         sb.Append("; ");
@@ -350,7 +340,7 @@ public sealed class CSharpGenerator {
         sb.Append("foreach (var ");
         sb.Append(forEach.LoopVariable.Name);
         sb.Append(" in ");
-        WriteExpression(sb, forEach.Collection);  // value used to drive iteration
+        WriteExpression(sb, forEach.Collection);
         sb.AppendLine(")");
         WriteStatement(sb, forEach.Body, forEach.Body is Block ? indent : indent + 1);
     }
@@ -362,7 +352,6 @@ public sealed class CSharpGenerator {
         sb.AppendLine(")");
         Indent(sb, indent);
         sb.AppendLine("{");
-
         foreach (var caseNode in switchStmt.Cases) {
             Indent(sb, indent + 1);
             sb.Append("case ");
@@ -370,13 +359,11 @@ public sealed class CSharpGenerator {
             sb.AppendLine(":");
             WriteStatement(sb, caseNode.Body, indent + 1);
         }
-
         if (switchStmt.DefaultCase != null) {
             Indent(sb, indent + 1);
             sb.AppendLine("default:");
             WriteStatement(sb, switchStmt.DefaultCase, indent + 1);
         }
-
         Indent(sb, indent);
         sb.AppendLine("}");
     }
@@ -385,7 +372,6 @@ public sealed class CSharpGenerator {
         Indent(sb, indent);
         sb.AppendLine("try");
         WriteBracedBody(sb, tryCatch.TryBlock, indent);
-
         if (tryCatch.CatchClauses != null) {
             foreach (var clause in tryCatch.CatchClauses) {
                 Indent(sb, indent);
@@ -405,7 +391,6 @@ public sealed class CSharpGenerator {
                 WriteBracedBody(sb, clause.Body, indent);
             }
         }
-
         if (tryCatch.FinallyBlock != null) {
             Indent(sb, indent);
             sb.AppendLine("finally");
@@ -413,11 +398,6 @@ public sealed class CSharpGenerator {
         }
     }
 
-    /// <summary>
-    /// C# requires compound statements ({ … }) for try/catch/finally bodies — a bare
-    /// statement (e.g. <c>catch … return x;</c>) is a syntax error. Emit braces
-    /// around any non-Block body.
-    /// </summary>
     private void WriteBracedBody(StringBuilder sb, Node body, int indent) {
         if (body is Block) {
             WriteStatement(sb, body, indent);
@@ -433,7 +413,6 @@ public sealed class CSharpGenerator {
     private void WriteUsingStatement(StringBuilder sb, UsingStatement usingStmt, int indent) {
         Indent(sb, indent);
         sb.Append("using (");
-        // R2: When resource is a Variable with initializer, emit "var name = value"
         if (usingStmt.Resource is Variable v && v.Value != null) {
             sb.Append("var ");
             sb.Append(v.Name);
@@ -452,7 +431,6 @@ public sealed class CSharpGenerator {
         var isEnum = typeDef.Fields?.All(f => f.DefaultValue is Constant) == true
                      && (typeDef.Methods?.Count ?? 0) == 0
                      && (typeDef.Constructors?.Count ?? 0) == 0;
-
         if (isEnum) {
             Indent(sb, indent);
             WriteAccessModifier(sb, typeDef.AccessModifier);
@@ -477,7 +455,6 @@ public sealed class CSharpGenerator {
             sb.AppendLine("}");
             return;
         }
-
         if (typeDef.IsInterface) {
             Indent(sb, indent);
             WriteAccessModifier(sb, typeDef.AccessModifier);
@@ -492,24 +469,20 @@ public sealed class CSharpGenerator {
             sb.AppendLine();
             Indent(sb, indent);
             sb.AppendLine("{");
-
             if (typeDef.Properties != null) {
                 foreach (var property in typeDef.Properties) {
                     WriteInterfacePropertyDefinition(sb, property, indent + 1);
                 }
             }
-
             if (typeDef.Methods != null) {
                 foreach (var method in typeDef.Methods) {
                     WriteInterfaceMethodDefinition(sb, method, indent + 1);
                 }
             }
-
             Indent(sb, indent);
             sb.AppendLine("}");
             return;
         }
-
         Indent(sb, indent);
         WriteAccessModifier(sb, typeDef.AccessModifier);
         sb.Append(typeDef.EffectiveSemantics.HasValueEquality ? "record " : "class ");
@@ -529,33 +502,27 @@ public sealed class CSharpGenerator {
             sb.AppendLine(";");
             return;
         }
-
         sb.AppendLine();
         Indent(sb, indent);
         sb.AppendLine("{");
-
         if (typeDef.Fields != null) {
             foreach (var field in typeDef.Fields) {
                 WriteStatement(sb, field, indent + 1);
             }
         }
-
         if (typeDef.Constructors != null) {
             foreach (var ctor in typeDef.Constructors) {
                 WriteConstructorDefinition(sb, ctor, indent + 1, typeDef.Name);
             }
         }
-
         foreach (var prop in GetBodyProperties(typeDef)) {
             WriteStatement(sb, prop, indent + 1);
         }
-
         if (typeDef.Methods != null) {
             foreach (var method in typeDef.Methods) {
                 WriteStatement(sb, method, indent + 1);
             }
         }
-
         Indent(sb, indent);
         sb.AppendLine("}");
     }
@@ -598,12 +565,10 @@ public sealed class CSharpGenerator {
         if (typeDef.Properties is null || !typeDef.EffectiveSemantics.HasValueEquality || typeDef.PrimaryConstructorParameters is not { Count: > 0 }) {
             return typeDef.Properties ?? [];
         }
-
         var primaryParameterNames = typeDef.PrimaryConstructorParameters
             .Where(static parameter => parameter.TypeReference is not null)
             .Select(static parameter => parameter.Name)
             .ToHashSet(StringComparer.Ordinal);
-
         return typeDef.Properties
             .Where(property => !primaryParameterNames.Contains(property.Name))
             .ToArray();
@@ -624,15 +589,12 @@ public sealed class CSharpGenerator {
             WriteParameterDeclarations(sb, method.Parameters);
         }
         sb.Append(')');
-
-        // Expression-bodied: Block with single Return node → => expr;
         if (method.Body is Block { Nodes: [Return r] }) {
             sb.Append(" => ");
             WriteExpression(sb, r.Value ?? new Constant(0L));
             sb.AppendLine(";");
             return;
         }
-
         if (method.Body != null) {
             sb.AppendLine();
             WriteStatement(sb, method.Body, indent);
@@ -642,7 +604,6 @@ public sealed class CSharpGenerator {
         }
     }
 
-    /// <summary>Emits a top-level local function (no access modifier, no trailing semicolon).</summary>
     private void WriteLocalFunction(StringBuilder sb, MethodDefinitionNode method) {
         if (method.IsStatic) sb.Append("static ");
         if (method.IsAsync) sb.Append("async ");
@@ -654,7 +615,6 @@ public sealed class CSharpGenerator {
             WriteParameterDeclarations(sb, method.Parameters);
         }
         sb.Append(')');
-
         if (method.Body != null) {
             sb.AppendLine();
             WriteStatement(sb, method.Body, 0);
@@ -674,8 +634,6 @@ public sealed class CSharpGenerator {
             WriteParameterDeclarations(sb, ctor.Parameters);
         }
         sb.Append(')');
-
-        // Emit : base(args) when applicable
         if (ctor.BaseConstructorInvocation != null) {
             sb.Append(" : ");
             WriteExpression(sb, ctor.BaseConstructorInvocation);
@@ -688,7 +646,6 @@ public sealed class CSharpGenerator {
             }
             sb.Append(')');
         }
-
         if (ctor.Body != null) {
             sb.AppendLine();
             WriteStatement(sb, ctor.Body, indent);
@@ -702,11 +659,9 @@ public sealed class CSharpGenerator {
         WriteAttributes(sb, prop.Attributes, indent);
         Indent(sb, indent);
         WriteAccessModifier(sb, prop.AccessModifier);
-
         WriteExpression(sb, prop.MemberType);
         sb.Append(' ');
         sb.Append(prop.Name);
-
         if (IsAutoProperty(prop)) {
             sb.Append(" { ");
             if (prop.Getter != null) {
@@ -732,7 +687,6 @@ public sealed class CSharpGenerator {
             }
             return;
         }
-
         if (prop.Getter != null || prop.Setter != null) {
             sb.AppendLine();
             Indent(sb, indent);
@@ -813,11 +767,9 @@ public sealed class CSharpGenerator {
             .Concat(typeDef.BaseType is null ? [] : [typeDef.BaseType])
             .Concat(typeDef.Interfaces ?? [])
             .ToArray();
-
         if (lineage.Length == 0) {
             return;
         }
-
         sb.Append(" : ");
         WriteCommaSeparated(sb, lineage);
     }
@@ -895,8 +847,6 @@ public sealed class CSharpGenerator {
                 WriteExpression(sb, map.ValueType);
                 sb.Append('>');
                 return;
-
-            // Unary
             case UnaryMinus minus:
                 sb.Append('-');
                 WriteExpression(sb, minus.Operand);
@@ -922,8 +872,6 @@ public sealed class CSharpGenerator {
                     sb.Append(')');
                 }
                 return;
-
-            // Binary arithmetic
             case Add add:
                 WriteBinary(sb, add.LeftHandValue, " + ", add.RightHandValue);
                 return;
@@ -939,8 +887,6 @@ public sealed class CSharpGenerator {
             case Modulo mod:
                 WriteBinary(sb, mod.LeftHandValue, " % ", mod.RightHandValue);
                 return;
-
-            // Comparison
             case Equal eq:
                 WriteBinary(sb, eq.LeftHandValue, " == ", eq.RightHandValue);
                 return;
@@ -959,27 +905,19 @@ public sealed class CSharpGenerator {
             case GreaterThanOrEqual gte:
                 WriteBinary(sb, gte.LeftHandValue, " >= ", gte.RightHandValue);
                 return;
-
-            // Boolean
             case And and:
                 WriteBinary(sb, and.LeftHandValue, " && ", and.RightHandValue);
                 return;
             case Or or:
                 WriteBinary(sb, or.LeftHandValue, " || ", or.RightHandValue);
                 return;
-
-            // Coalesce
             case Coalesce coalesce:
                 WriteBinary(sb, coalesce.LeftHandValue, " ?? ", coalesce.RightHandValue);
                 return;
-
-            // Throw expression (C# 7+ throw-expression)
             case ThrowExpression throwExpression:
                 sb.Append("throw ");
                 WriteExpression(sb, throwExpression.Value);
                 return;
-
-            // Conditional (ternary)
             case Conditional cond:
                 sb.Append('(');
                 WriteExpression(sb, cond.Condition);
@@ -989,15 +927,11 @@ public sealed class CSharpGenerator {
                 WriteExpression(sb, cond.IfFalse);
                 sb.Append(')');
                 return;
-
-            // Assignment
             case Assignment assign:
                 WriteExpression(sb, assign.Destination);
                 sb.Append(" = ");
                 WriteExpression(sb, assign.Value);
                 return;
-
-            // Member access
             case Member member:
                 if (member.Value is ParameterReference) {
                     sb.Append(member.MemberName);
@@ -1011,22 +945,16 @@ public sealed class CSharpGenerator {
                     sb.Append(member.MemberName);
                 }
                 return;
-
-            // Index access
             case IndexAccess index:
                 WriteExpression(sb, index.Value);
                 sb.Append('[');
                 WriteCommaSeparated(sb, index.Arguments);
                 sb.Append(']');
                 return;
-
-            // Await
             case Await awaitNode:
                 sb.Append("await ");
                 WriteExpression(sb, awaitNode.Operand);
                 return;
-
-            // Invocation
             case Invoke invoke:
                 WriteExpression(sb, invoke.Delegate);
                 if (invoke.TypeArguments is { Count: > 0 }) {
@@ -1038,8 +966,6 @@ public sealed class CSharpGenerator {
                 WriteCommaSeparated(sb, invoke.Arguments);
                 sb.Append(')');
                 return;
-
-            // Constructor
             case New @new:
                 sb.Append("new ");
                 WriteExpression(sb, @new.Type);
@@ -1047,8 +973,6 @@ public sealed class CSharpGenerator {
                 WriteCommaSeparated(sb, @new.Arguments);
                 sb.Append(')');
                 return;
-
-            // Type operations
             case TypeCast cast:
                 sb.Append('(');
                 WriteExpression(sb, cast.TargetTypeReference);
@@ -1069,13 +993,9 @@ public sealed class CSharpGenerator {
                 sb.Append(" as ");
                 WriteExpression(sb, typeAs.TargetTypeReference);
                 return;
-
-            // Lambda
             case Lambda lambda:
                 WriteLambda(sb, lambda);
                 return;
-
-            // Block used inline (e.g., as lambda body) - inline format
             case Block block:
                 sb.Append('{');
                 if (block.Nodes.Count == 0 && block.Variables.Count == 0) {
@@ -1084,10 +1004,8 @@ public sealed class CSharpGenerator {
                 else {
                     for (int i = 0; i < block.Nodes.Count; i++) {
                         var n = block.Nodes[i];
-                        // DCE: skip elidable in inline blocks too (keep last)
                         if (i == block.Nodes.Count - 1 || _analysisResult == null || !_analysisResult.CanElide(n)) {
                             sb.Append(' ');
-                            // R1: Use WriteStatement for proper var/if/return emission
                             WriteStatement(sb, n, 0);
                         }
                     }
@@ -1095,8 +1013,6 @@ public sealed class CSharpGenerator {
                 }
                 sb.Append('}');
                 return;
-
-            // Bitwise operations
             case BitwiseAnd bitwiseAnd:
                 WriteBinary(sb, bitwiseAnd.LeftHandValue, " & ", bitwiseAnd.RightHandValue);
                 return;
@@ -1116,8 +1032,6 @@ public sealed class CSharpGenerator {
             case ShiftRight shiftRight:
                 WriteBinary(sb, shiftRight.LeftHandValue, " >> ", shiftRight.RightHandValue);
                 return;
-
-            // VM-specific primitives (lowered to runtime ops in compiled path)
             case PopCount popCount:
                 sb.Append("System.Numerics.BitOperations.PopCount((ulong)");
                 WriteExpression(sb, popCount.Operand);
@@ -1138,7 +1052,6 @@ public sealed class CSharpGenerator {
             case SuspendNode suspend:
                 WriteExpression(sb, suspend.Inner);
                 return;
-
             case BaseConstructorInvocationNode baseCtor:
                 sb.Append("base(");
                 WriteCommaSeparated(sb, baseCtor.Arguments);
@@ -1206,41 +1119,15 @@ public sealed class CSharpGenerator {
         WriteBinaryOperand(sb, right);
     }
 
-    /// <summary>
-    /// C# operator precedence levels (highest to lowest for relevant operators):
-    /// <list type="bullet">
-    ///   <item>Primary: x.y, x(), x[] — never parenthesized</item>
-    ///   <item>Unary: !, - — <see cref="Not"/> handles its own parens</item>
-    ///   <item>Multiplicative: *, /, %</item>
-    ///   <item>Additive: +, -</item>
-    ///   <item>Relational: &lt;, &gt;, &lt;=, &gt;=</item>
-    ///   <item>Equality: ==, !=</item>
-    ///   <item>Logical AND: &amp;&amp;</item>
-    ///   <item>Logical OR: ||</item>
-    ///   <item>Null coalescing: ??</item>
-    /// </list>
-    /// </summary>
     private void WriteBinaryOperand(StringBuilder sb, Node node) {
-        // Always parenthesize ternary and null-coalescing — they're right-associative traps
         if (node is Coalesce or Conditional) { sb.Append('('); WriteExpression(sb, node); sb.Append(')'); return; }
-
-        // Precedence guard: parenthesize logical OR inside logical AND
-        // C#: &amp;&amp; binds tighter than || — And(Left, Or(A, B)) must become "Left &amp;&amp; (A || B)"
         if (node is Or) { sb.Append('('); WriteExpression(sb, node); sb.Append(')'); return; }
-
-        // Precedence guard: parenthesize additive/multiplicative inside relational or equality
-        // C#: comparisons bind tighter than arithmetic — "x + y &gt; z" is correct, but "x &gt; y + z" needs no parens
-        // However "x == y + z" is fine — add/subtract bind tighter than == in C#. The problem is the reverse:
-        // "x + y == z" is fine. "(x + y) == z" is also fine but redundant. No issue here.
-
         WriteExpression(sb, node);
     }
 
     private void WriteLambda(StringBuilder sb, Lambda lambda) {
-        // Emit async keyword if body contains Await nodes
         if (BodyContainsAwait(lambda.Body))
             sb.Append("async ");
-
         if (lambda.Parameters.Count == 1 && lambda.Parameters[0].TypeReference is null) {
             WriteExpression(sb, lambda.Parameters[0]);
         }
@@ -1261,7 +1148,6 @@ public sealed class CSharpGenerator {
         WriteExpression(sb, lambda.Body);
     }
 
-    /// <summary>Checks if an expression tree contains Await nodes (used for lambda async emission).</summary>
     private static bool BodyContainsAwait(Node node) {
         if (node is Await) return true;
         foreach (var child in node.Children)

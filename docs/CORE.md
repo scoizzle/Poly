@@ -34,7 +34,7 @@ MCP harness: agent supplies context → simulate that same operation AST
 | Always-legal **operations** | Each named operation is a full tree (no `Comment` / `null` / host walk as shipped meaning). Runtime and emit consume the same trees |
 | AST is the symbolic primary | Do not reintroduce a parallel “primitive IR” for product paths |
 | VM is canonical execution of a **program** (operation or algorithm) | LINQ path is secondary (oracle / reference), not a second product engine. Do not grow a domain-side interpreter beside it |
-| Domain lowers to **generic** ops | No domain-specific VM opcodes. Host ABI is store/clocks (`Create` / `Link` / `Notify` / `Outbound` / time) |
+| Domain lowers to **generic** ops | No domain-specific VM opcodes. StageTransition is type-def + Assignment + `Invoke(Member(This, "Notify"))`. Remaining store/clocks (`Create` / `Link` / `Outbound` / time) still dual-path |
 | Product doors are **opt-in extensions** | REST and the like load via `uses`. CLI flags seed ids only. Core seed does not emit a host |
 | MCP is the **interactive harness** | Author, inspect, simulate by supplied context. Not the `DomainSession`. Not the customer API |
 | Extend the platform **in the pipeline** | New meaning: lower to existing nodes, analyze, and/or **replace nodes** — not special-case the emitter, ABI, or one host’s type filter |
@@ -150,7 +150,7 @@ No intermediate primitive flattening step. Inputs are the AST plus analysis meta
 | Policy compile/eval | `DomainEntityInstance.EvaluatePolicy` → `DomainExpressionLoweringPass` → `Interpreter` — **VM-primary**; LINQ dual-oracle + CLR-subject wrapper `PolicyEvaluator` are test-only (`Poly.Tests/TestHelpers/`) |
 | Domain change | `DomainEvolution`…`Apply()` with analysis gate + rollback |
 
-Domain concepts expand to **generic** Syntax nodes, not new opcodes. ADR: `docs/decisions/2026-06-08-domain-lowering-boundary.md`. New work must not add consumer-specific lowering flags or a parallel effect interpreter. Residual dual-path is debt — do not grow it.
+Domain concepts expand to **generic** Syntax nodes, not new opcodes. ADR: `docs/decisions/2026-06-08-domain-lowering-boundary.md`. **StageTransition** lowers to handwritten IR on both runtime and emit: Assignment of `CurrentStage` plus `Invoke(Member(This, "Notify"), stageName)` in `finally`. The entity type def includes `Notify(string)` so TypeAndMemberResolution can resolve it; the live instance (not a bag, not `VmState.Host`) is the receiver. Remaining store effects (create / create-in / invoke / for-invoke) still dual-path via EffectExecutor. Sequential transitions in one action still share stale `SourceStageName` at lowering time. New work must not add consumer-specific lowering flags or a parallel effect interpreter. Residual dual-path is debt — do not grow it.
 
 ### 3.5 Introspection (types and members)
 

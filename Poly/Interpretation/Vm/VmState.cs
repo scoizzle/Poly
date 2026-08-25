@@ -368,7 +368,7 @@ public sealed class VmState : IDisposable {
 
     /// <summary>Seeds top-level arguments on the value stack. Reference-type
     /// values are allocated on the heap and their handles placed in the
-    /// parameter slots so that <c>LoadSlot</c>/<c>CallExternalDirect</c>
+    /// parameter slots so that <c>LoadSlot</c>
     /// resolve correctly.</summary>
     /// <remarks>Call <em>before</em> <c>Interpreter.Execute</c>, after the
     /// program has been loaded. The number and order of arguments must match

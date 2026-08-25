@@ -299,14 +299,14 @@ internal sealed class AstPropertyDefinition(PropertyDefinitionNode node, AstType
     public Mutability Mutability => _node.Mutability;
 
     /// <summary>
-    /// Emits an expression that reads this property from a <c>Dictionary&lt;string, object?&gt;</c>
+    /// Emits an expression that reads this property from an <c>IDictionary&lt;string, object?&gt;</c>
     /// using the indexer. Coerces the stored value to the property's target type.
     /// Returns the property's <c>DefaultValue</c> (or <see cref="System.Reflection.Missing.Value"/>)
     /// when the key is not present.
     /// </summary>
     public Expression? EmitRead(Expression? instance) {
         if (instance is null) return null;
-        var dictType = typeof(Dictionary<string, object?>);
+        var dictType = typeof(IDictionary<string, object?>);
         var contains = dictType.GetMethod("ContainsKey", [typeof(string)])!;
         var getItem = dictType.GetMethod("get_Item", [typeof(string)])!;
         var typed = Expression.Convert(instance, dictType);
@@ -322,7 +322,7 @@ internal sealed class AstPropertyDefinition(PropertyDefinitionNode node, AstType
 
     public Expression? EmitWrite(Expression? instance, Expression value) {
         if (instance is null) return null;
-        var dictType = typeof(Dictionary<string, object?>);
+        var dictType = typeof(IDictionary<string, object?>);
         var typed = Expression.Convert(instance, dictType);
         var setItem = dictType.GetMethod("set_Item", [typeof(string), typeof(object)])!;
         return Expression.Block(
@@ -372,7 +372,7 @@ internal sealed class AstFieldDefinition(FieldDefinitionNode node, AstTypeDefini
 
     public Expression? EmitRead(Expression? instance) {
         if (instance is null) return null;
-        var dictType = typeof(Dictionary<string, object?>);
+        var dictType = typeof(IDictionary<string, object?>);
         var contains = dictType.GetMethod("ContainsKey", [typeof(string)])!;
         var getItem = dictType.GetMethod("get_Item", [typeof(string)])!;
         var typed = Expression.Convert(instance, dictType);
@@ -388,7 +388,7 @@ internal sealed class AstFieldDefinition(FieldDefinitionNode node, AstTypeDefini
 
     public Expression? EmitWrite(Expression? instance, Expression value) {
         if (instance is null) return null;
-        var dictType = typeof(Dictionary<string, object?>);
+        var dictType = typeof(IDictionary<string, object?>);
         var typed = Expression.Convert(instance, dictType);
         var setItem = dictType.GetMethod("set_Item", [typeof(string), typeof(object)])!;
         return Expression.Block(

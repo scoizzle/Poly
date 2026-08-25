@@ -11,11 +11,13 @@ namespace Poly.DomainModeling.Lowering;
 /// <see cref="DomainExpressionLoweringPass"/> for expression-heavy effects
 /// like <see cref="AssignEffect"/> and <see cref="ConditionalEffect"/>.
 ///
-/// <para>Some effects (<see cref="StageTransitionEffect"/>,
-/// <see cref="CreateEntityInstance"/>, <see cref="InvokeActionEffect"/>)
-/// execute directly on <see cref="DomainEntityInstance"/> rather than
-/// through the VM — they produce <c>null</c> from <see cref="Route"/>
-/// and are handled by the caller.</para>
+/// <para>Store effects other than <see cref="StageTransitionEffect"/>
+/// (<see cref="CreateEntityInstance"/>, <see cref="InvokeActionEffect"/>,
+/// <see cref="ForEachInvokeEffect"/>) still produce <c>null</c> from
+/// <see cref="Route"/> on the runtime path and are handled by
+/// EffectExecutor. StageTransition lowers to Assignment of CurrentStage
+/// plus <c>Invoke(Member(Subject, "Notify"), stageName)</c> on both
+/// runtime and emit — handwritten IR, not a host-ABI node.</para>
 ///
 /// <para>When <see cref="Analysis"/> is set, lowering reads pre-computed
 /// <see cref="IAnalysisMetadata"/> instead of re-scanning domain collections.
@@ -205,13 +207,17 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     };
 
     /// <summary>
-    /// Lowers a stage transition. When <see cref="_lowerStageTransitions"/> is true,
-    /// emits the source stage's exit effects (if known), then the target stage's entry
-    /// effects, then a CurrentStage assignment, then post-transition notification nodes.
-    /// Otherwise returns null so the runtime calls <see cref="DomainEntityInstance.TransitionStage"/>.
+    /// Lowers a stage transition to generic Syntax AST on both runtime and emit:
+    /// source-stage exit effects (when known), CurrentStage assignment, target-stage
+    /// entry effects (in try), post-transition notification nodes, then
+    /// <c>Invoke(Member(Subject, "Notify"), stageName)</c> in finally.
+    /// Not a host-ABI node. Not gated on <see cref="LoweringContext.LowerStageTransitions"/>
+    /// — that flag still gates create / invoke / for-invoke.
     /// </summary>
     protected override Node? StageTransition(StageTransitionEffect t) {
-        if (!_lowerStageTransitions) return null;
+        if (!_entity.Stages.Any(s =>
+            string.Equals(s.Name, t.TargetStage.StageName, StringComparison.Ordinal)))
+            return new Block([]);
 
         var nodes = new List<Node>();
 
@@ -243,14 +249,18 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         // TransitionStage sets CurrentStage first, then runs entry effects, so a
         // transition nested inside entry (entry of X → Y) must end at Y, not be
         // overwritten by the outer assignment.
-        var stageEnumType = new NamedTypeReference(
-            _stageEnumTypeName ?? $"{_entity.Name}Stage");
+        Node stageValue = _useThisReference || _stageEnumTypeName is not null
+            ? new Member(
+                new NamedTypeReference(_stageEnumTypeName ?? $"{_entity.Name}Stage"),
+                t.TargetStage.StageName)
+            : new Constant(t.TargetStage.StageName);
         nodes.Add(new Assignment(
             new Member(Subject, "CurrentStage"),
-            new Member(stageEnumType, t.TargetStage.StageName)
-        ));
+            stageValue));
 
-        // Include entry effects from the target stage (same analysis contract as exit).
+        // Entry + C# post-transition fan-out run inside try so Invoke Notify
+        // still fires in finally (TransitionStage notified the store in finally).
+        var tryNodes = new List<Node>();
         Stage? targetStage = null;
         if (_analysis is not null)
             _analysis.TryGetStage(_entity, t.TargetStage.StageName, out targetStage);
@@ -261,25 +271,36 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
             foreach (var entryEffect in targetStage.OnEntryEffects) {
                 var lowered = Route(entryEffect);
                 if (lowered is not null)
-                    nodes.Add(lowered);
+                    tryNodes.Add(lowered);
             }
         }
 
-        // Append post-transition notification nodes (subscription fan-out)
         if (_postTransitionNodes is not null
             && _postTransitionNodes.TryGetValue(t.TargetStage.StageName, out var postNodes)) {
             foreach (var postNode in postNodes)
-                nodes.Add(postNode);
+                tryNodes.Add(postNode);
         }
+
+        Node tryBody = tryNodes.Count switch {
+            0 => new Block([]),
+            1 => tryNodes[0],
+            _ => new Block(tryNodes)
+        };
+        nodes.Add(new TryCatchFinally(
+            tryBody,
+            CatchClauses: null,
+            FinallyBlock: new Invoke(
+                new Member(Subject, "Notify"),
+                new Constant(t.TargetStage.StageName))));
 
         return nodes.Count == 1 ? nodes[0] : new Block(nodes);
     }
 
     /// <summary>
     /// Lowers invoke effects for C# codegen mode. Self-invoke (no TargetRelationship)
-    /// becomes <c>this.ActionName(args)</c>. Singular cross-entity invoke becomes
-    /// <c>this.TargetRelationship.ActionName(args)</c> with a linked-target guard.
-    /// OneToMany fan-out uses the <see cref="ForEachInvoke"/> lowering (fail-fast loop).
+    /// becomes this.ActionName(args). Singular cross-entity invoke becomes
+    /// this.TargetRelationship.ActionName(args) with a linked-target guard.
+    /// OneToMany fan-out uses the for-each lowering (fail-fast loop).
     /// </summary>
     protected override Node? InvokeAction(InvokeActionEffect i) {
         if (!_lowerStageTransitions) return null;
@@ -584,7 +605,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         return new Block(blockNodes);
     }
 
-    // ── Runtime default expression helpers ───────────────────────
+    // ── Runtime default expression helpers ─────────────────
 
     /// <summary>
     /// Builds a Syntax AST node for a runtime default expression, adapted to the

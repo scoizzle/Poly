@@ -117,6 +117,7 @@ internal sealed class SideEffectAnalyzer : INodeAnalyzer {
         (SideEffectKind)int.Max((int)a, (int)b);
 
     private static SideEffectKind ClassifyIntrinsic(Node node) => node switch {
+        Variable { Value: not null } => SideEffectKind.Write,
         Assignment => SideEffectKind.Write,
         SuspendNode => SideEffectKind.External,
         Return => SideEffectKind.Write,

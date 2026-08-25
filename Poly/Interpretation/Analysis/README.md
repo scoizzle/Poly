@@ -24,23 +24,23 @@ Each pass implements `INodeAnalyzer` and is registered via an extension method o
 
 ## Pass Ordering
 
-Matches `Interpreter._analyzer` (`Interpreter.cs`). Direct AST-to-VM-ABI lowering; no primitive expansion.
+Built order of `Interpreter.Analyzer` after `AnalyzerBuilder` topological insert (asserted by `StandardAnalyzer_PassNames_MatchInterpreterPipeline`). Direct AST-to-VM-ABI lowering; no primitive expansion. `Use*` registration in `Interpreter.cs` is the source list; `Dependencies` can insert a pass earlier than its `Use*` line.
 
 ```
- 1. TypeDefinitionNodeAnalyzer      (AST type defs available before this/members)
+ 1. TypeDefinitionNodeAnalyzer
  2. ThisReferenceContext            (root this is legal SetArgs slot 0; TH0001 in static bodies)
- 3. TypeAndMemberResolver           (depends on This)
- 4. ScopeValidator                  (variable scopes before side-effect analysis)
- 5. SideEffectAnalyzer              (purity/elision feeds CFG and constant folding)
- 6. JumpTargetAnalyzer              (jump targets before CFG)
- 7. ConstantFoldingPass             (constant-condition facts before CFG)
- 8. ControlFlowAnalysisPass         (depends on jump targets + constant folding)
- 9. ValueRepresentationAnalyzer     (after CFG)
-10. CallSiteCatalogAnalyzer
-11. DefiniteAssignmentAnalyzer      (post-CFG assignment facts)
-12. LambdaReturnTypeAnalyzer
-13. ExceptionRegionAnalyzer
-14. SyntaxTypeCompatibilityAnalyzer (fail-closed on incompatible ops)
+ 3. TypeAndMemberResolver
+ 4. ScopeValidator
+ 5. SideEffectAnalyzer
+ 6. ConstantFoldingPass             (inserted after SideEffect; before JumpTarget)
+ 7. JumpTargetAnalyzer
+ 8. ControlFlowAnalysisPass
+ 9. ExceptionRegionAnalyzer
+10. DefiniteAssignmentAnalyzer
+11. ValueRepresentationAnalyzer
+12. SyntaxTypeCompatibilityAnalyzer
+13. CallSiteCatalogAnalyzer
+14. LambdaReturnTypeAnalyzer
 ```
 
 Ad-hoc test pipelines may omit `TypeDefinitionNodeAnalyzer`. This/TypeAndMember do not declare it as a hard `Dependencies` entry so CLR-only trees still analyze.
@@ -128,7 +128,7 @@ Circular dependencies cause a build-time exception.
 2. Variable scoping must precede side-effect analysis.
 3. Jump targets must be resolved before CFG construction.
 4. Constant folding runs before CFG; ValueRepresentation, definite assignment, and EH run after CFG.
-5. SyntaxTypeCompatibility is last on the standard Interpreter pipeline.
+5. SyntaxTypeCompatibility and CallSiteCatalog run after ValueRepresentation; LambdaReturnType has no deps and lands last.
 
 ---
 

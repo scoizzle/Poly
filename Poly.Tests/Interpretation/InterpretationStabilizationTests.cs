@@ -1,4 +1,7 @@
 using Poly.Interpretation;
+using Poly.Interpretation.Analysis;
+using Poly.Interpretation.Analysis.ConstantFolding;
+using Poly.Interpretation.Analysis.ControlFlow;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Interpretation.Vm;
 using Poly.Introspection;
@@ -231,26 +234,82 @@ public class InterpretationStabilizationTests {
 
     [Test, Timeout(10_000)]
     public async Task MaxLoopIterations_WhileTrue_Throws(CancellationToken ct) {
-        var node = new WhileLoop(new Constant(true), new Constant(0L));
-        var program = Interpreter.Compile(node);
-        await Assert.That(() => {
-            using var exec = Interpreter.Execute(program, s => s.MaxLoopIterations = 10);
-        }).Throws<InvalidOperationException>();
+        await AssertExceedsLoopLimit(new WhileLoop(new Constant(true), new Constant(0L)));
+    }
+
+    [Test, Timeout(10_000)]
+    public async Task MaxLoopIterations_DoWhileTrue_Throws(CancellationToken ct) {
+        await AssertExceedsLoopLimit(new DoWhileLoop(new Constant(0L), new Constant(true)));
+    }
+
+    [Test, Timeout(10_000)]
+    public async Task MaxLoopIterations_ForTrue_Throws(CancellationToken ct) {
+        await AssertExceedsLoopLimit(new ForLoop(null, new Constant(true), null, new Constant(0L)));
+    }
+
+    [Test, Timeout(10_000)]
+    public async Task MaxLoopIterations_ForEachInfinite_Throws(CancellationToken ct) {
+        var item = new Variable("item");
+        await AssertExceedsLoopLimit(new ForEachLoop(
+            item, new Constant(Forever(1)), new Constant(0L)));
     }
 
     [Test]
-    public async Task MaxLoopIterations_Unlimited_FiniteLoopCompletes() {
+    public async Task MaxLoopIterations_CountsHeaderVisits_NIterationsNeedNPlusOne() {
         var i = new Variable("i");
-        var node = new Block([
-            new Assignment(i, new Constant(0L)),
-            new WhileLoop(
-                new LessThan(i, new Constant(3L)),
-                new Assignment(i, new Add(i, new Constant(1L)))),
-            i
-        ], [i]);
+        var node = CountToThree(i);
         var program = Interpreter.Compile(node);
+        await Assert.That(() => {
+            using var exec = Interpreter.Execute(program, s => s.MaxLoopIterations = 3);
+        }).Throws<InvalidOperationException>();
+        using var ok = Interpreter.Execute(program, s => s.MaxLoopIterations = 4);
+        await Assert.That(ok.GetValue<long>()).IsEqualTo(3L);
+    }
+
+    [Test]
+    public async Task MaxLoopIterations_Unlimited_DoesNotIncrementLoopTicks() {
+        var i = new Variable("i");
+        var program = Interpreter.Compile(CountToThree(i));
         using var exec = Interpreter.Execute(program, s => s.MaxLoopIterations = -1);
         await Assert.That(exec.GetValue<long>()).IsEqualTo(3L);
+        await Assert.That(exec.State.LoopTicks).IsEqualTo(0L);
+    }
+
+    [Test]
+    public async Task MaxLoopIterations_Reset_ZerosLoopTicks() {
+        var program = Interpreter.Compile(new WhileLoop(new Constant(true), new Constant(0L)));
+        var state = new VmState(program) { MaxLoopIterations = 5, Registers = new long[256] };
+        state.Status = InterpreterStatus.Running;
+        try {
+            try { program.Delegate(state); } catch (InvalidOperationException) { }
+            await Assert.That(state.LoopTicks).IsGreaterThan(5L);
+            state.Reset();
+            await Assert.That(state.LoopTicks).IsEqualTo(0L);
+        }
+        finally {
+            state.Dispose();
+        }
+    }
+
+    [Test]
+    public async Task CompileChecked_RootThisReference_DoesNotThrow() {
+        var program = Interpreter.CompileChecked(new ThisReference(), new TypeDefinitionNodeAnalyzer());
+        using var exec = Interpreter.Execute(program);
+        await Assert.That(exec.RawValue).IsEqualTo(0L);
+    }
+
+    [Test]
+    public async Task GetValue_FloatConstant_IsBitcast() {
+        using var exec = Interpreter.Execute(Interpreter.Compile(new Constant(1.5f)));
+        await Assert.That(exec.GetValue<float>()).IsEqualTo(1.5f);
+    }
+
+    [Test]
+    public async Task GetValue_BoolConstant_IsTrueFalse() {
+        using var t = Interpreter.Execute(Interpreter.Compile(new Constant(true)));
+        using var f = Interpreter.Execute(Interpreter.Compile(new Constant(false)));
+        await Assert.That(t.GetValue<bool>()).IsTrue();
+        await Assert.That(f.GetValue<bool>()).IsFalse();
     }
 
     [Test]
@@ -258,6 +317,48 @@ public class InterpretationStabilizationTests {
         var program = Interpreter.Compile(new Block([Return.Void]));
         using var exec = Interpreter.Execute(program);
         await Assert.That(exec.Result.IsVoid).IsTrue();
+        await Assert.That(exec.Result.HasValue).IsFalse();
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(0L);
+    }
+
+    [Test]
+    public async Task Return_VoidAfterAssignment_DoesNotLeaveValue() {
+        var x = new Variable("x");
+        var node = new Block([
+            new Assignment(x, new Constant(42L)),
+            Return.Void
+        ], [x]);
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.Result.IsVoid).IsTrue();
+    }
+
+    [Test]
+    public async Task Vm_VariableWithValue_AssignsOnDeclare() {
+        var x = new Variable("x", new Constant(41L));
+        var node = new Block(x, new Add(x, new Constant(1L)));
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(42L);
+    }
+
+    [Test]
+    public async Task Vm_VariableWithValue_AssignmentDoesNotReapplyInitializer() {
+        var x = new Variable("x", new Constant(1L));
+        var node = new Block(x, new Assignment(x, new Constant(10L)), x);
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(10L);
+    }
+
+    [Test]
+    public async Task Heap_AllocateNull_ReturnsZero() {
+        var heap = new Heap();
+        await Assert.That(heap.Allocate(null)).IsEqualTo(0);
+        await Assert.That(heap.Get(0)).IsNull();
+    }
+
+    [Test]
+    public async Task Heap_SetHandleZero_Throws() {
+        var heap = new Heap();
+        await Assert.That(() => heap.Set(0, "x")).Throws<ArgumentOutOfRangeException>();
     }
 
     [Test]
@@ -266,6 +367,7 @@ public class InterpretationStabilizationTests {
         int h = heap.Allocate("a");
         heap.Set(h, null);
         await Assert.That(() => heap.Set(h, null)).Throws<InvalidOperationException>();
+        await Assert.That(() => heap.UnsafeSet(h, "z")).Throws<InvalidOperationException>();
         int reused = heap.Allocate("b");
         int next = heap.Allocate("c");
         await Assert.That(reused).IsEqualTo(h);
@@ -275,17 +377,106 @@ public class InterpretationStabilizationTests {
     }
 
     [Test]
+    public async Task Word_IsHandle_PositiveOnly() {
+        await Assert.That(new Word(0).IsHandle).IsFalse();
+        await Assert.That(new Word(1).IsHandle).IsTrue();
+        await Assert.That(new Word(-1).IsHandle).IsFalse();
+    }
+
+    [Test]
     public async Task SetArgs_Double_StoresIeeeBits() {
-        var program = Interpreter.Compile(new ThisReference());
-        using var exec = Interpreter.Execute(program, s => s.SetArgs(1.5));
-        await Assert.That(exec.RawValue).IsEqualTo(BitConverter.DoubleToInt64Bits(1.5));
+        await AssertSlot0(1.5, BitConverter.DoubleToInt64Bits(1.5));
+    }
+
+    [Test]
+    public async Task SetArgs_Float_StoresIeeeBitsViaDouble() {
+        await AssertSlot0(1.5f, BitConverter.DoubleToInt64Bits(1.5f));
     }
 
     [Test]
     public async Task SetArgs_Char_StoresCodeUnit() {
+        await AssertSlot0('A', 'A');
+    }
+
+    [Test]
+    public async Task SetArgs_Bool_StoresZeroOrOne() {
+        await AssertSlot0(true, 1L);
+        await AssertSlot0(false, 0L);
+    }
+
+    [Test]
+    public async Task SetArgs_Null_StoresAbiZero() {
+        await AssertSlot0(null, 0L);
+    }
+
+    [Test]
+    public async Task SetArgs_UInt_StoresAsLong() {
+        await AssertSlot0(uint.MaxValue, uint.MaxValue);
+    }
+
+    [Test]
+    public async Task SetArgs_Decimal_IsHeapHandle() {
         var program = Interpreter.Compile(new ThisReference());
-        using var exec = Interpreter.Execute(program, s => s.SetArgs('A'));
-        await Assert.That(exec.RawValue).IsEqualTo((long)'A');
+        using var exec = Interpreter.Execute(program, s => s.SetArgs(1.5m));
+        await Assert.That(exec.RawValue).IsGreaterThan(0L);
+        await Assert.That(exec.State.Heap.Get((int)exec.RawValue)).IsEqualTo(1.5m);
+    }
+
+    [Test]
+    public async Task VmForEach_NonEnumerable_Throws() {
+        var item = new Variable("item");
+        var node = new ForEachLoop(item, new Constant(new object()), new Constant(0L));
+        var program = Interpreter.Compile(node);
+        await Assert.That(() => {
+            using var exec = Interpreter.Execute(program);
+        }).Throws<InvalidOperationException>();
+    }
+
+    [Test]
+    public async Task StandardAnalyzer_PassNames_MatchInterpreterPipeline() {
+        string[] expected = [
+            TypeDefinitionNodeAnalyzer.Id,
+            ThisReferenceContextAnalyzer.Id,
+            TypeAndMemberResolver.Id,
+            ScopeValidator.Id,
+            SideEffectAnalyzer.Id,
+            ConstantFoldingPass.Id,
+            JumpTargetAnalyzer.Id,
+            ControlFlowAnalysisPass.Id,
+            ExceptionRegionAnalyzer.Id,
+            DefiniteAssignmentAnalyzer.Id,
+            ValueRepresentationAnalyzer.Id,
+            SyntaxTypeCompatibilityAnalyzer.Id,
+            CallSiteCatalogAnalyzer.Id,
+            LambdaReturnTypeAnalyzer.Id,
+        ];
+        await Assert.That(string.Join(",", Interpreter.Analyzer.PassNames)).IsEqualTo(string.Join(",", expected));
+    }
+
+    private static Node CountToThree(Variable i) => new Block([
+        new Assignment(i, new Constant(0L)),
+        new WhileLoop(
+            new LessThan(i, new Constant(3L)),
+            new Assignment(i, new Add(i, new Constant(1L)))),
+        i
+    ], [i]);
+
+    private static async Task AssertExceedsLoopLimit(Node node) {
+        var program = Interpreter.Compile(node);
+        await Assert.That(() => {
+            using var exec = Interpreter.Execute(program, s => s.MaxLoopIterations = 10);
+        }).Throws<InvalidOperationException>()
+            .WithMessage("MaxLoopIterations exceeded.");
+    }
+
+    private static async Task AssertSlot0(object? arg, long expectedRaw) {
+        var program = Interpreter.Compile(new ThisReference());
+        using var exec = Interpreter.Execute(program, s => s.SetArgs(arg));
+        await Assert.That(exec.RawValue).IsEqualTo(expectedRaw);
+    }
+
+    private static IEnumerable<int> Forever(int value) {
+        while (true) yield return value;
     }
 
     private sealed class TrackingDisposable : IDisposable {

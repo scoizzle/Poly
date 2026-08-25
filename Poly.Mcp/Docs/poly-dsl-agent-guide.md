@@ -464,7 +464,6 @@ The following effects exist in the runtime library but have **no DSL syntax** ye
 |-----------|-----|
 | `actor` | Use `entity` instead |
 | `schedule`, `parallel` | Not product constructs |
-| `schedule`, `parallel`, `for` | Control flow not supported |
 
 | `relationship Name from A to B` | Use N1 nav properties instead |
 | `function` | Functions not supported |

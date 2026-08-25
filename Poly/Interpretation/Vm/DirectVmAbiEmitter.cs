@@ -54,12 +54,12 @@ public static partial class DirectVmAbiEmitter {
         Ref<IDisposable>.Method(d => d.Dispose());
     private static readonly ConstructorInfo InvalidOperationExceptionStringCtor =
         Ref.Constructor(() => new InvalidOperationException(""));
-    private static readonly MethodInfo AsIListOrThrowInfo =
-        Ref.Method((Expression<Func<object?, System.Collections.IList>>)(c => AsIListOrThrow(c)));
-    private static readonly MethodInfo IListCountOfInfo =
-        Ref.Method((Expression<Func<System.Collections.IList, int>>)(l => IListCountOf(l)));
-    private static readonly MethodInfo IListItemAtInfo =
-        Ref.Method((Expression<Func<System.Collections.IList, int, object?>>)((l, i) => IListItemAt(l, i)));
+    private static readonly MethodInfo GetEnumeratorOrThrowInfo =
+        Ref.Method((Expression<Func<object?, System.Collections.IEnumerator>>)(c => GetEnumeratorOrThrow(c)));
+    private static readonly MethodInfo EnumeratorMoveNext =
+        Ref<System.Collections.IEnumerator>.Method(e => e.MoveNext());
+    private static readonly PropertyInfo EnumeratorCurrent =
+        Ref<System.Collections.IEnumerator>.Property(e => e.Current);
     private static readonly MethodInfo BoxToAbiInfo =
         Ref.Method((Expression<Func<Heap, object?, long>>)((h, v) => BoxToAbi(h, v)));
     private static readonly MethodInfo SetStackPointer = Ref<ValueStack>.Method(s => s.SetStackPointer(0));

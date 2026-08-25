@@ -52,20 +52,7 @@ public class PolicySampleSubjectSpikeTests {
         var subject = new Constant(dict);
 
         var node = Pass.Lower(DomainExpression.Property("Age"), subject);
-
-        var result = ExecuteOnVm(node);
-        // Fail closed: assert the bag value is NOT returned, even accounting
-        // for int→long or other numeric ABI conversions the VM may apply.
-        await Assert.That(MatchNumeric(result.Value, 99999)).IsFalse();
-
-        // Also: Age >= 18 with Age=99999 must NOT evaluate as adult-true.
-        var guardNode = Pass.Lower(
-            DomainExpression.GreaterThanOrEqual(
-                DomainExpression.Property("Age"), DomainExpression.Literal(18)),
-            subject);
-        var guardResult = ExecuteOnVm(guardNode);
-        bool isAdult = guardResult.Value is long l && l == 1L;
-        await Assert.That(isAdult).IsFalse();
+        await Assert.That(() => ExecuteOnVm(node)).Throws<InvalidOperationException>();
     }
 
     // ── Approach 3: ExpandoObject ─────────────────────────────────
@@ -78,20 +65,7 @@ public class PolicySampleSubjectSpikeTests {
         var subject = new Constant((object)expando);
 
         var node = Pass.Lower(DomainExpression.Property("Age"), subject);
-
-        // ExpandoObject's Age is a dynamic property — CLR reflection won't find it.
-        var result = ExecuteOnVm(node);
-        // Fail closed: assert the bag value is NOT returned (int/long aware).
-        await Assert.That(MatchNumeric(result.Value, 99999)).IsFalse();
-
-        // Also: Age >= 18 with Age=99999 must NOT evaluate as adult-true.
-        var guardNode = Pass.Lower(
-            DomainExpression.GreaterThanOrEqual(
-                DomainExpression.Property("Age"), DomainExpression.Literal(18)),
-            subject);
-        var guardResult = ExecuteOnVm(guardNode);
-        bool isAdult = guardResult.Value is long l && l == 1L;
-        await Assert.That(isAdult).IsFalse();
+        await Assert.That(() => ExecuteOnVm(node)).Throws<InvalidOperationException>();
     }
 
     // ── Approach 4: Custom sealed record (baseline — known working) ─
@@ -144,7 +118,7 @@ public class PolicySampleSubjectSpikeTests {
     // ── Approach 6: PropBag with non-nullable value types ──────────
     // Avoids nullable issues by using non-nullable int (default 0 for absent).
 
-    private sealed record StrictBag(int Age, string Name, string Status, decimal Total);
+    private sealed record StrictBag(int Age, string Name, string Status, long Total);
 
     [Test]
     public async Task StrictBag_PropertyAccess_Works() {

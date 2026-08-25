@@ -100,20 +100,12 @@ public static partial class DirectVmAbiEmitter {
                         return Block(fullBody);
                     }
                     if (resultType.IsValueType) {
-                        if (AbiValueTypes.IsLongRepresentable(resultType)) {
-                            fullBody.Add(Assign(ctx.RingVar(slot), Convert(callExpr, typeof(long))));
-                        }
-                        else {
-                            fullBody.Add(Assign(ctx.RingVar(slot),
-                                Convert(Call(ctx.HeapLocal, HeapAllocate,
-                                    Convert(callExpr, typeof(object))), typeof(long))));
-                        }
+                        fullBody.Add(Assign(ctx.RingVar(slot),
+                            ConvertClrToRing(callExpr, resultType, ctx)));
                         return Block(fullBody);
                     }
-                    // Reference type return: allocate on heap
                     fullBody.Add(Assign(ctx.RingVar(slot),
-                        Convert(Call(ctx.HeapLocal, HeapAllocate,
-                            Convert(callExpr, typeof(object))), typeof(long))));
+                        ConvertClrToRing(Convert(callExpr, typeof(object)), resultType, ctx)));
                     return Block(fullBody);
                 }
             }
@@ -557,18 +549,14 @@ public static partial class DirectVmAbiEmitter {
             $"Type '{instanceType.Name}' does not define method '{methodName}' with {args.Length} parameter(s).");
     }
 
-    private static System.Collections.IList AsIListOrThrow(object? collection) {
-        if (collection is System.Collections.IList list)
-            return list;
+    private static System.Collections.IEnumerator GetEnumeratorOrThrow(object? collection) {
+        if (collection is null)
+            throw new InvalidOperationException("foreach collection is null.");
+        if (collection is System.Collections.IEnumerable enumerable)
+            return enumerable.GetEnumerator();
         throw new InvalidOperationException(
-            collection is null
-                ? "foreach collection is null."
-                : $"foreach collection type '{collection.GetType().Name}' is not IList.");
+            $"foreach collection type '{collection.GetType().Name}' is not IEnumerable.");
     }
-
-    private static int IListCountOf(System.Collections.IList list) => list.Count;
-
-    private static object? IListItemAt(System.Collections.IList list, int index) => list[index];
 
     private static long BoxToAbi(Heap heap, object? value) => value switch {
         null => 0L,
@@ -580,6 +568,8 @@ public static partial class DirectVmAbiEmitter {
         int i => i,
         uint ui => ui,
         long l => l,
+        float f => BitConverter.DoubleToInt64Bits(f),
+        double d => BitConverter.DoubleToInt64Bits(d),
         _ => heap.Allocate(value)
     };
 

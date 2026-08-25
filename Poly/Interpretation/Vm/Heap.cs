@@ -24,6 +24,7 @@ public sealed class Heap {
     /// <param name="value">The object to store (may be null).</param>
     /// <returns>A non-zero handle that can be used to retrieve the object.</returns>
     public int Allocate(object? value) {
+        if (value is null) return 0;
         if (_freeSlots.TryPop(out int freeHandle)) {
             _objects[freeHandle] = value;
             return freeHandle;

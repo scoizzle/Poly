@@ -231,55 +231,40 @@ public static partial class DirectVmAbiEmitter {
         var valueExpr = CompileNode(sw.Value, ctx);
         int valSlot = ctx.RingDepth - 1;
         var foldVal = FoldResultToSlot(ref valSlot, d, ctx);
-        ctx.RingDepth = valSlot + 1;
-
-        Expression defExpr;
-        int defSlot;
-        if (sw.DefaultCase != null) {
-            int defDepth = ctx.RingDepth;
-            defExpr = CompileNode(sw.DefaultCase, ctx);
-            ctx.RingDepth = defDepth + 1;
-            defSlot = defDepth;
-        }
-        else {
-            defSlot = ctx.AllocSlot();
-            defExpr = Assign(ctx.RingVar(defSlot), Constant(0L));
-        }
-
-        var compiledCases = new (Expression pExpr, int pSlot, Expression bExpr, int bSlot)[sw.Cases.Count];
-        for (int i = 0; i < sw.Cases.Count; i++) {
-            var c = sw.Cases[i];
-            int pDepth = ctx.RingDepth;
-            var pExpr = CompileNode(c.Pattern, ctx);
-            ctx.RingDepth = pDepth + 1;
-            int pSlot = pDepth;
-            int bDepth = ctx.RingDepth;
-            var bExpr = CompileNode(c.Body, ctx);
-            ctx.RingDepth = bDepth + 1;
-            int bSlot = bDepth;
-            compiledCases[i] = (pExpr, pSlot, bExpr, bSlot);
-        }
-
-        Expression resultExpr = ctx.RingVar(defSlot);
-        for (int i = sw.Cases.Count - 1; i >= 0; i--) {
-            var (_, pSlot, _, bSlot) = compiledCases[i];
-            resultExpr = Condition(
-                Expression.Equal(ctx.RingVar(valSlot), ctx.RingVar(pSlot)),
-                ctx.RingVar(bSlot),
-                resultExpr
-            );
-        }
+        int savedDepth = valSlot + 1;
+        ctx.RingDepth = savedDepth;
 
         int outSlot = ctx.AllocSlot();
-        ctx.RingDepth = outSlot + 1;
-        var allExprs = new List<Expression> { valueExpr, defExpr };
-        foreach (var (pExpr, _, bExpr, _) in compiledCases) {
-            allExprs.Add(pExpr);
-            allExprs.Add(bExpr);
+        ctx.RingDepth = savedDepth;
+
+        Expression rest;
+        if (sw.DefaultCase != null) {
+            var defBody = CompileNode(sw.DefaultCase, ctx);
+            int defSlot = ctx.RingDepth - 1;
+            rest = Block(defBody, Assign(ctx.RingVar(outSlot), ctx.RingVar(defSlot)));
         }
-        allExprs.Add(foldVal);
-        allExprs.Add(Assign(ctx.RingVar(outSlot), resultExpr));
-        return Block(allExprs);
+        else {
+            rest = Assign(ctx.RingVar(outSlot), Constant(0L));
+        }
+
+        for (int i = sw.Cases.Count - 1; i >= 0; i--) {
+            ctx.RingDepth = savedDepth;
+            var c = sw.Cases[i];
+            var pExpr = CompileNode(c.Pattern, ctx);
+            int pSlot = ctx.RingDepth - 1;
+            ctx.RingDepth = savedDepth;
+            var bExpr = CompileNode(c.Body, ctx);
+            int bSlot = ctx.RingDepth - 1;
+            rest = Block(
+                pExpr,
+                IfThenElse(
+                    Equal(ctx.RingVar(valSlot), ctx.RingVar(pSlot)),
+                    Block(bExpr, Assign(ctx.RingVar(outSlot), ctx.RingVar(bSlot))),
+                    rest));
+        }
+
+        ctx.RingDepth = outSlot + 1;
+        return Block(valueExpr, foldVal, rest, ctx.RingVar(outSlot));
     }
 
     private static Expression EmitWhileLoop(WhileLoop wl, AbiCtx ctx) {
@@ -350,7 +335,7 @@ public static partial class DirectVmAbiEmitter {
         }
         var catchBlocks = new List<CatchBlock>();
         foreach (var clause in tcf.CatchClauses) {
-            var exType = typeof(Exception);
+            var exType = ResolveCatchClrType(clause.ExceptionType, ctx);
             var exParam = Parameter(exType, clause.VariableName ?? "ex");
             ctx.PushScope();
             Variable? synthetic = null;
@@ -522,10 +507,10 @@ public static partial class DirectVmAbiEmitter {
 
         var loopBody = new List<Expression> {
             IfThen(Not(test), Goto(breakLabel)),
-            bodyExpr
+            bodyExpr,
+            Label(continueLabel)
         };
         if (incrementExpr != null) loopBody.Add(incrementExpr);
-        loopBody.Add(Label(continueLabel));
 
         stmts.Add(Loop(Block(loopBody), breakLabel));
         ctx.PopLoopScope();
@@ -534,9 +519,9 @@ public static partial class DirectVmAbiEmitter {
     }
 
     /// <summary>
-    /// ForEachLoop: walk a heap <see cref="System.Collections.IList"/>, bind each
-    /// item onto the loop variable as a heap handle, run the body. Non-IList
-    /// (including null) fails loud via <c>AsIListOrThrow</c> — no silent empty.
+    /// ForEachLoop: walk a heap <see cref="System.Collections.IEnumerable"/>,
+    /// bind each Current onto the loop variable via <c>BoxToAbi</c>, run the body.
+    /// Null / non-enumerable fails loud. Enumerator is disposed when IDisposable.
     /// </summary>
     private static Expression EmitForEachLoop(ForEachLoop fel, AbiCtx ctx) {
         var breakLabel = Label("foreach_break");
@@ -550,9 +535,7 @@ public static partial class DirectVmAbiEmitter {
         int colSlot = ctx.RingDepth - 1;
         var foldCol = FoldResultToSlot(ref colSlot, d, ctx);
 
-        var list = Variable(typeof(System.Collections.IList), "_list");
-        var index = Variable(typeof(int), "_i");
-        var current = Variable(typeof(object), "_cur");
+        var enumerator = Variable(typeof(System.Collections.IEnumerator), "_en");
         var colObj = Variable(typeof(object), "_col");
 
         int bodyDepth = ctx.RingDepth;
@@ -561,14 +544,12 @@ public static partial class DirectVmAbiEmitter {
 
         var loop = Loop(
             Block(
-                IfThen(GreaterThanOrEqual(index, Call(null, IListCountOfInfo, list)),
+                IfThen(Not(Call(enumerator, EnumeratorMoveNext)),
                     Goto(breakLabel)),
-                Assign(current, Call(null, IListItemAtInfo, list, index)),
                 ctx.VariableWrite(fel.LoopVariable,
-                    Convert(Call(ctx.HeapLocal, HeapAllocate, current), typeof(long))),
+                    Call(null, BoxToAbiInfo, ctx.HeapLocal, Property(enumerator, EnumeratorCurrent))),
                 bodyExpr,
-                Label(continueLabel),
-                Assign(index, Add(index, Constant(1)))),
+                Label(continueLabel)),
             breakLabel);
 
         ctx.PopLoopScope();
@@ -576,14 +557,17 @@ public static partial class DirectVmAbiEmitter {
         ctx.RingDepth = d;
 
         return Block(
-            [list, index, current, colObj],
+            [enumerator, colObj],
             collectionExpr,
             foldCol,
             Assign(colObj, Call(ctx.HeapLocal, HeapUnsafeGet,
                 Convert(ctx.RingVar(colSlot), typeof(int)))),
-            Assign(list, Call(null, AsIListOrThrowInfo, colObj)),
-            Assign(index, Constant(0)),
-            loop);
+            Assign(enumerator, Call(null, GetEnumeratorOrThrowInfo, colObj)),
+            TryFinally(
+                loop,
+                IfThen(
+                    TypeIs(enumerator, typeof(IDisposable)),
+                    Call(Convert(enumerator, typeof(IDisposable)), IDisposableDispose))));
     }
 
     /// <summary>Goto statement: jump to a named label.</summary>
@@ -598,11 +582,35 @@ public static partial class DirectVmAbiEmitter {
         return Block(Label(label), CompileNode(ld.Statement, ctx));
     }
 
-    /// <summary>UsingStatement: lower to try/finally with Dispose call.</summary>
+    /// <summary>UsingStatement: try/finally Dispose when the resource is IDisposable.</summary>
     private static Expression EmitUsingStatement(UsingStatement us, AbiCtx ctx) {
+        int d = ctx.RingDepth;
         var resourceExpr = CompileNode(us.Resource, ctx);
+        int resSlot = ctx.RingDepth - 1;
         var bodyExpr = CompileNode(us.Body, ctx);
-        return Block(resourceExpr, TryFinally(bodyExpr, Empty()));
+        ctx.RingDepth = d;
+        var resObj = Variable(typeof(object), "_using");
+        return Block(
+            [resObj],
+            resourceExpr,
+            Assign(resObj, Call(ctx.HeapLocal, HeapUnsafeGet,
+                Convert(ctx.RingVar(resSlot), typeof(int)))),
+            TryFinally(
+                bodyExpr,
+                IfThen(
+                    TypeIs(resObj, typeof(IDisposable)),
+                    Call(Convert(resObj, typeof(IDisposable)), IDisposableDispose))));
+    }
+
+    private static Type ResolveCatchClrType(Node? exceptionType, AbiCtx ctx) {
+        if (exceptionType is null) return typeof(Exception);
+        if (exceptionType is ClrTypeReference ctr
+            && typeof(Exception).IsAssignableFrom(ctr.RuntimeType))
+            return ctr.RuntimeType;
+        var rt = ctx.Analysis?.GetResolvedType(exceptionType)?.GetRuntimeType();
+        if (rt is not null && typeof(Exception).IsAssignableFrom(rt))
+            return rt;
+        return typeof(Exception);
     }
 
     /// <summary>Return statement: write value to frame slot, set SP, jump to exit.</summary>

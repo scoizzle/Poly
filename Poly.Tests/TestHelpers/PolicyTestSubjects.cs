@@ -23,19 +23,19 @@ public static class PolicyTestSubjects {
     /// Properties are non-nullable with safe defaults: missing values become
     /// 0, <c>string.Empty</c>, or 0m.
     /// </summary>
-    public static StrictBag SampleFromBag(string? name, int? age, string? status, decimal? total) =>
+    public static StrictBag SampleFromBag(string? name, int? age, string? status, long? total) =>
         new(
             Age: age ?? 0,
             Name: name ?? string.Empty,
             Status: status ?? string.Empty,
-            Total: total ?? 0m
+            Total: total ?? 0
         );
 
     /// <summary>
     /// Non-nullable subject bag proven by WS8 spike. Use as the default
     /// subject type for ad-hoc policy evaluation in tests.
     /// </summary>
-    public sealed record StrictBag(int Age, string Name, string Status, decimal Total);
+    public sealed record StrictBag(int Age, string Name, string Status, long Total);
 
     /// <summary>
     /// Minimal subject with a single <c>Age</c> property for age-guard policies.

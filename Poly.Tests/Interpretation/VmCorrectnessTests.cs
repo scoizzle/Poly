@@ -257,13 +257,7 @@ public class VmCorrectnessTests {
         // property access on bare parameters.
         var e = new Parameter("entity");  // NO TypeReference
         var body = new Member(e, "Age");
-        var prog = Compile(body);
-        using var exec = Interpreter.Execute(prog, s => s.SetArgs(new PersonRecord("Test", 25)));
-        // The Member access may emit a Nop (no resolved type), return 0, or
-        // leave the stack in an unexpected state.  The important contract is
-        // that the VM does not crash — the caller is responsible for providing
-        // type info.
-        await Assert.That(exec.State.Stack.StackPointer).IsGreaterThan(0);
+        await Assert.That(() => Compile(body)).Throws<InvalidOperationException>();
     }
 
     [Test]

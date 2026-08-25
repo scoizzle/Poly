@@ -389,8 +389,8 @@ public static partial class DirectVmAbiEmitter {
             return EmitResolvedMember(resolved, instanceObj, d, ctx, prelude);
         }
 
-        // No metadata — fallback passthrough
-        return instanceExpr;
+        throw new InvalidOperationException(
+            $"Member '{m.MemberName}' is not resolved.");
     }
 
     /// <summary>Emit the resolved member access expression and store the result
@@ -441,13 +441,17 @@ public static partial class DirectVmAbiEmitter {
     private static Expression ConvertMemberResult(Expression readCall, ITypeMember resolved, AbiCtx ctx) {
         var clrType = resolved.MemberTypeDefinition.GetRuntimeType()
             ?? resolved.MemberTypeDefinition.PrimitiveType?.GetClrType();
-        if (clrType is not null && clrType.IsValueType && AbiValueTypes.IsLongRepresentable(clrType)) {
-            return Convert(Convert(readCall, clrType), typeof(long));
+        return ConvertClrToRing(readCall, clrType, ctx);
+    }
+
+    private static Expression ConvertClrToRing(Expression value, Type? clrType, AbiCtx ctx) {
+        if (clrType == typeof(float) || clrType == typeof(double)) {
+            return Call(BitConverterDoubleToInt64Bits, Convert(value, typeof(double)));
         }
-        var handle = Call(ctx.HeapLocal,
-            HeapAllocate,
-            readCall);
-        return Convert(handle, typeof(long));
+        if (clrType is not null && clrType.IsValueType && AbiValueTypes.IsLongRepresentable(clrType)) {
+            return Convert(Convert(value, clrType), typeof(long));
+        }
+        return Call(null, BoxToAbiInfo, ctx.HeapLocal, Convert(value, typeof(object)));
     }
 
     /// <summary>TypeIs: check if the operand's heap object is assignable to the target type.</summary>

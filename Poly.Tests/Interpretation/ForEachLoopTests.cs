@@ -1,3 +1,4 @@
+using Poly.Interpretation;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Introspection;
 using Poly.Tests.TestHelpers;
@@ -39,8 +40,11 @@ public class ForEachLoopTests {
 
         var expr = node.BuildExpression();
         var result = Expr.Lambda<Func<int>>(expr).Compile()();
-
         await Assert.That(result).IsEqualTo(10);
+
+        var program = Interpreter.Compile(node);
+        using var exec = Interpreter.Execute(program);
+        await Assert.That(exec.Result.GetValue<long>()).IsEqualTo(10L);
     }
 
     [Test]

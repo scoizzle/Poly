@@ -60,15 +60,15 @@ public static class Interpreter {
     }
 
     /// <summary>
-    /// Compile, failing loud on interpretation type-compatibility errors. Used by the
-    /// DSL runtime paths (policy evaluation, effect execution) so the runtime rejects
-    /// incompatible operations at compile time instead of silently coercing. The raw
+    /// Compile, failing loud on analysis errors. Used by the DSL runtime paths
+    /// (policy evaluation, effect execution) so the runtime rejects illegal
+    /// trees at compile time instead of silently coercing. The raw
     /// <see cref="Compile(Node, ITypeDefinitionProvider, CompilationMode)"/> stays
     /// lenient for direct VM/robustness callers.
     /// </summary>
     public static VmProgram CompileChecked(Node node, ITypeDefinitionProvider typeDefinitions, CompilationMode mode = CompilationMode.Normal) {
         var analysis = _analyzer.Analyze(node, typeDefinitions: typeDefinitions);
-        FailLoudOnTypeErrors(analysis);
+        FailLoudOnAnalysisErrors(analysis);
         return DirectVmAbiEmitter.Emit(node, analysis, mode);
     }
 
@@ -82,16 +82,13 @@ public static class Interpreter {
     }
 
     /// <summary>
-    /// The interpretation type-compatibility pass rejects incompatible operations
-    /// (Text vs Number comparison, non-numeric arithmetic, non-Boolean <c>not</c>).
-    /// The DSL runtime must fail loud on those instead of silently coercing garbage.
+    /// Analysis errors (type incompatibility, missing members, illegal <c>this</c>,
+    /// definite assignment, …) must fail closed on the domain compile path.
     /// </summary>
-    private static void FailLoudOnTypeErrors(AnalysisResult analysis) {
+    private static void FailLoudOnAnalysisErrors(AnalysisResult analysis) {
         foreach (var d in analysis.Diagnostics) {
             if (d.Severity != DiagnosticSeverity.Error) continue;
-            if (d.Code == Analysis.Semantics.SyntaxTypeCompatibilityAnalyzer.DiagnosticCode) {
-                throw new InvalidOperationException($"VM compile rejected: {d.Message}");
-            }
+            throw new InvalidOperationException($"VM compile rejected: {d.Message}");
         }
     }
 

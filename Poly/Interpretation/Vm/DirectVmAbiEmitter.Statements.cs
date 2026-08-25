@@ -459,4 +459,114 @@ public static partial class DirectVmAbiEmitter {
                 FindCapturesRecursive(child, outerCtx, result, seen);
         }
     }
+
+    /// <summary>Break statement: jump to current loop's break label.</summary>
+    private static Expression EmitBreakStatement(BreakStatement bs, AbiCtx ctx) {
+        var labels = ctx.CurrentLoopLabels;
+        if (labels == null)
+            throw new InvalidOperationException("Break outside loop");
+        return Goto(labels.Value.breakLabel);
+    }
+
+    /// <summary>Continue statement: jump to current loop's continue label.</summary>
+    private static Expression EmitContinueStatement(ContinueStatement cs, AbiCtx ctx) {
+        var labels = ctx.CurrentLoopLabels;
+        if (labels == null)
+            throw new InvalidOperationException("Continue outside loop");
+        return Goto(labels.Value.continueLabel);
+    }
+
+    /// <summary>
+    /// ForLoop: lower to { init; while(condition) { body; increment; } }
+    /// When condition is null, treat as 'while(true)'.
+    /// </summary>
+    private static Expression EmitForLoop(ForLoop fl, AbiCtx ctx) {
+        var breakLabel = Label("for_break");
+        var continueLabel = Label("for_continue");
+        ctx.PushLoopScope(breakLabel, continueLabel);
+
+        var stmts = new List<Expression>();
+        if (fl.Initializer != null)
+            stmts.Add(CompileNode(fl.Initializer, ctx));
+        var condition = fl.Condition ?? new Constant(1L);
+        int d = ctx.RingDepth;
+
+        int bodyDepth = ctx.RingDepth;
+        var bodyExpr = CompileNode(fl.Body, ctx);
+        ctx.RingDepth = bodyDepth;
+
+        Expression? incrementExpr = null;
+        if (fl.Increment != null) {
+            ctx.RingDepth = d;
+            incrementExpr = CompileNode(fl.Increment, ctx);
+            ctx.RingDepth = d;
+        }
+
+        var test = CompileConditionAsBool(condition, ctx);
+        ctx.RingDepth = d;
+
+        var loopBody = new List<Expression> {
+            IfThen(Not(test), Goto(breakLabel)),
+            bodyExpr
+        };
+        if (incrementExpr != null) loopBody.Add(incrementExpr);
+        loopBody.Add(Label(continueLabel));
+
+        stmts.Add(Loop(Block(loopBody), breakLabel));
+        ctx.PopLoopScope();
+        ctx.RingDepth = d;
+        return Block(stmts);
+    }
+
+    /// <summary>ForEachLoop: compile the body (POC — real enumeration requires CLR interop).</summary>
+    private static Expression EmitForEachLoop(ForEachLoop fel, AbiCtx ctx) {
+        var breakLabel = Label("foreach_break");
+        var continueLabel = Label("foreach_continue");
+        ctx.PushLoopScope(breakLabel, continueLabel);
+
+        var collectionExpr = CompileNode(fel.Collection, ctx);
+
+        int bodyDepth = ctx.RingDepth;
+        var bodyExpr = CompileNode(fel.Body, ctx);
+        ctx.RingDepth = bodyDepth;
+
+        ctx.PopLoopScope();
+        ctx.RingDepth = 0;
+        return Block(collectionExpr, bodyExpr);
+    }
+
+    /// <summary>Goto statement: jump to a named label.</summary>
+    private static Expression EmitGotoStatement(GotoStatement gs, AbiCtx ctx) {
+        var target = ctx.GetLabel(gs.Target);
+        return Goto(target);
+    }
+
+    /// <summary>Label declaration: emit a label marker in the expression tree.</summary>
+    private static Expression EmitLabelDeclaration(LabelDeclaration ld, AbiCtx ctx) {
+        var label = ctx.GetLabel(ld.Name);
+        return Block(Label(label), CompileNode(ld.Statement, ctx));
+    }
+
+    /// <summary>UsingStatement: lower to try/finally with Dispose call.</summary>
+    private static Expression EmitUsingStatement(UsingStatement us, AbiCtx ctx) {
+        var resourceExpr = CompileNode(us.Resource, ctx);
+        var bodyExpr = CompileNode(us.Body, ctx);
+        return Block(resourceExpr, TryFinally(bodyExpr, Empty()));
+    }
+
+    /// <summary>Return statement: write value to frame slot, set SP, jump to exit.</summary>
+    private static Expression EmitReturn(Return ret, AbiCtx ctx) {
+        int d = ctx.RingDepth;
+        var retVal = ret.Value ?? throw new InvalidOperationException("Return with null value");
+        var valueExpr = CompileNode(retVal, ctx);
+        int resultSlot = ctx.RingDepth - 1;
+        var fold = FoldResultToSlot(ref resultSlot, d, ctx);
+
+        return Block(
+            valueExpr, fold,
+            Assign(ArrayAccess(ctx.SlotsLocal, ctx.FramePosLocal), ctx.RingVar(resultSlot)),
+            Assign(ctx.SlotsStackPointer,
+                Add(ctx.FramePosLocal, Constant(1))),
+            Goto(ctx.ExitLabel));
+    }
 }

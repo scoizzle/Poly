@@ -8,6 +8,10 @@ delegates for fast execution via `DirectVmAbiEmitter`.
 | File | Purpose |
 |------|---------|
 | `DirectVmAbiEmitter.cs` | **Primary compiler**: walks analyzed AST, emits `Action<VmState>` delegate |
+| `DirectVmAbiEmitter.AbiCtx.cs` | Compilation context (ring, frames, scopes) |
+| `DirectVmAbiEmitter.Expressions.cs` | Arithmetic, comparison, logic, members, types |
+| `DirectVmAbiEmitter.Statements.cs` | Assignment, blocks, branches, loops, EH, return |
+| `DirectVmAbiEmitter.Invoke.cs` | Invoke, lambda bodies, instance dispatch |
 | `VmState.cs` | Per-execution state: stack, heap, registers, debug interrupt, trace, loop limits |
 | `VmProgram.cs` | Compiled program record (delegate + max local depth) |
 | `ValueStack.cs` | Pooled `long[]` stack backed by `ArrayPool<long>.Shared` |

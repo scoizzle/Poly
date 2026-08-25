@@ -13,7 +13,7 @@
 | — | [`gpure-README.md`](./gpure-README.md) | ✅ DONE 2026-08-07 |
 | — | [`mcp-minify-README.md`](./mcp-minify-README.md) | ✅ DONE 2026-08-08 |
 | — | emit-session | ✅ DONE 2026-08-24 (CompileMode seed-only honesty). Remaining lies: Temporal Meaning unused; RuntimeAnalysisCache core-catalog reopen. |
-| **CURRENT** | host-ABI | StageTransition DONE (PR 21). Self-invoke DONE (PR 22). CURRENT: cross-entity invoke. THEN: create / create-in / for-invoke. |
+| **CURRENT** | host-ABI | StageTransition DONE (PR 21). Self-invoke DONE (PR 22). Cross-entity invoke DONE (PR 23). CURRENT: for-invoke. THEN: create / create-in. |
 | parked | [`mut-safety-README.md`](./mut-safety-README.md) | After pack-host |
 | 3a | [`p1-README.md`](./p1-README.md) | After pack-2-gate |
 

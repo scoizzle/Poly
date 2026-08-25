@@ -12,14 +12,12 @@ namespace Poly.DomainModeling.Lowering;
 /// like <see cref="AssignEffect"/> and <see cref="ConditionalEffect"/>.
 ///
 /// <para>Store effects other than <see cref="StageTransitionEffect"/> and
-/// self-invoke (<see cref="CreateEntityInstance"/>, cross-entity
-/// <see cref="InvokeActionEffect"/>, <see cref="ForEachInvokeEffect"/>)
+/// invoke (<see cref="CreateEntityInstance"/>, <see cref="ForEachInvokeEffect"/>)
 /// still produce <c>null</c> from <see cref="Route"/> on the runtime path
-/// and are handled by EffectExecutor. StageTransition and self-invoke
-/// (<c>InvokeActionEffect</c> with null TargetRelationship) are handwritten
-/// IR on both runtime and emit — not host-ABI nodes.
-/// <c>LowerStageTransitions</c> still gates create / for-invoke / cross-entity
-/// invoke.</para>
+/// and are handled by EffectExecutor. StageTransition, self-invoke, and
+/// singular cross-entity invoke are handwritten IR on both runtime and emit
+/// — not host-ABI nodes. <c>LowerStageTransitions</c> still gates create /
+/// for-invoke.</para>
 ///
 /// <para>When <see cref="Analysis"/> is set, lowering reads pre-computed
 /// <see cref="IAnalysisMetadata"/> instead of re-scanning domain collections.
@@ -214,7 +212,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     /// entry effects (in try), post-transition notification nodes, then
     /// <c>Invoke(Member(Subject, "Notify"), stageName)</c> in finally.
     /// Not a host-ABI node. Not gated on <see cref="LoweringContext.LowerStageTransitions"/>
-    /// — that flag still gates create / for-invoke / cross-entity invoke.
+    /// — that flag still gates create / for-invoke.
     /// </summary>
     protected override Node? StageTransition(StageTransitionEffect t) {
         if (!_entity.Stages.Any(s =>
@@ -301,15 +299,13 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     /// <summary>
     /// Self-invoke (no TargetRelationship) is handwritten IR like StageTransition:
     /// <c>Invoke(Member(Subject, actionName), args)</c> on both runtime and emit.
-    /// Not gated on <see cref="LoweringContext.LowerStageTransitions"/> — that flag
-    /// still gates create / for-invoke / cross-entity invoke.
-    /// Singular cross-entity invoke becomes this.TargetRelationship.ActionName(args)
-    /// with a linked-target guard (still flag-gated). OneToMany fan-out uses the
-    /// for-each lowering.
+    /// Singular cross-entity invoke is <c>this.Rel.Action(args)</c> with a
+    /// linked-target guard that returns <c>DomainResult.Failure</c> before deref
+    /// (never a bare NRE). Not gated on
+    /// <see cref="LoweringContext.LowerStageTransitions"/> — that flag still
+    /// gates create / for-invoke. OneToMany fan-out uses the for-each lowering.
     /// </summary>
     protected override Node? InvokeAction(InvokeActionEffect i) {
-        if (i.TargetRelationship is not null && !_lowerStageTransitions) return null;
-
         var args = new List<Node>();
         foreach (var binding in i.ParameterBindings) {
             args.Add(_expressionPass.Lower(binding.Expression, Subject));

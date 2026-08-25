@@ -46,7 +46,7 @@ public class SelfInvokeHostAbiTests {
         await Assert.That(((Invoke)loweredOff!).Delegate).IsTypeOf<Member>();
         await Assert.That(((Member)((Invoke)loweredOff!).Delegate).MemberName).IsEqualTo("Other");
         await Assert.That(off.TryLowerVmNode(
-            new InvokeActionEffect("Other", [], TargetRelationship: "orders"))).IsNull();
+            new InvokeActionEffect("Other", [], TargetRelationship: "orders"))).IsNotNull();
     }
 
     [Test]

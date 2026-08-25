@@ -34,7 +34,7 @@ MCP harness: agent supplies context → simulate that same operation AST
 | Always-legal **operations** | Each named operation is a full tree (no `Comment` / `null` / host walk as shipped meaning). Runtime and emit consume the same trees |
 | AST is the symbolic primary | Do not reintroduce a parallel “primitive IR” for product paths |
 | VM is canonical execution of a **program** (operation or algorithm) | LINQ path is secondary (oracle / reference), not a second product engine. Do not grow a domain-side interpreter beside it |
-| Domain lowers to **generic** ops | No domain-specific VM opcodes. StageTransition is type-def + Assignment + `Invoke(Member(This, "Notify"))`. Self-invoke is `Invoke(Member(This, action))`. Remaining store/clocks (`Create` / `Link` / `Outbound` / time) still dual-path |
+| Domain lowers to **generic** ops | No domain-specific VM opcodes. StageTransition is type-def + Assignment + `Invoke(Member(This, "Notify"))`. Self-invoke is `Invoke(Member(This, action))`. Cross-entity invoke is `this.Rel.Action(args)` with a `DomainResult.Failure` linked-target guard. Remaining store/clocks (`Create` / `for-invoke` / time) still dual-path |
 | Product doors are **opt-in extensions** | REST and the like load via `uses`. CLI flags seed ids only. Core seed does not emit a host |
 | MCP is the **interactive harness** | Author, inspect, simulate by supplied context. Not the `DomainSession`. Not the customer API |
 | Extend the platform **in the pipeline** | New meaning: lower to existing nodes, analyze, and/or **replace nodes** — not special-case the emitter, ABI, or one host’s type filter |

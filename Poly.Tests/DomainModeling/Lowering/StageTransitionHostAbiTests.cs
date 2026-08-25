@@ -65,7 +65,7 @@ public class StageTransitionHostAbiTests {
     }
 
     [Test]
-    public async Task CreateAndInvoke_StillNullOnRuntimePath() {
+    public async Task CreateAndForEach_StillNullOnRuntimePath() {
         var entity = CreatePersonEntity();
         var pass = new EffectLoweringPass(entity, new LoweringContext(
             new Parameter("entity"), LowerStageTransitions: false));
@@ -73,7 +73,7 @@ public class StageTransitionHostAbiTests {
         await Assert.That(pass.TryLowerVmNode(
             new CreateEntityInstance(new DomainTypeReference("Person")))).IsNull();
         await Assert.That(pass.TryLowerVmNode(
-            new InvokeActionEffect("Activate", [], TargetRelationship: "orders"))).IsNull();
+            new InvokeActionEffect("Activate", [], TargetRelationship: "orders"))).IsNotNull();
         await Assert.That(pass.TryLowerVmNode(
             new ForEachInvokeEffect("orders", "x", null, "Activate", []))).IsNull();
     }

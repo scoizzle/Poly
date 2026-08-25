@@ -16,18 +16,31 @@ public sealed partial record DomainEntityInstance : IDictionary<string, object?>
     bool ICollection<KeyValuePair<string, object?>>.IsReadOnly => false;
 
     object? IDictionary<string, object?>.this[string key] {
-        get => _values[key];
+        get {
+            if (_values.TryGetValue(key, out var stored))
+                return stored;
+            if (TryGetOneToOneNavigation(key, out var nav))
+                return nav;
+            return _values[key];
+        }
         set => _values[key] = value;
     }
 
     void IDictionary<string, object?>.Add(string key, object? value) => _values.Add(key, value);
 
-    bool IDictionary<string, object?>.ContainsKey(string key) => _values.ContainsKey(key);
+    bool IDictionary<string, object?>.ContainsKey(string key) =>
+        _values.ContainsKey(key) || TryGetOneToOneNavigation(key, out _);
 
     bool IDictionary<string, object?>.Remove(string key) => _values.Remove(key);
 
-    bool IDictionary<string, object?>.TryGetValue(string key, [MaybeNullWhen(false)] out object? value) =>
-        _values.TryGetValue(key, out value);
+    bool IDictionary<string, object?>.TryGetValue(string key, [MaybeNullWhen(false)] out object? value) {
+        if (_values.TryGetValue(key, out value))
+            return true;
+        if (TryGetOneToOneNavigation(key, out value))
+            return true;
+        value = null;
+        return false;
+    }
 
     void ICollection<KeyValuePair<string, object?>>.Add(KeyValuePair<string, object?> item) =>
         ((ICollection<KeyValuePair<string, object?>>)_values).Add(item);

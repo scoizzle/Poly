@@ -122,7 +122,10 @@ public sealed partial record DomainEntityInstance {
             }
         }
 
-        var typeDefAnalyzer = BuildTypeDefAnalyzer(entity.Name, entity.Properties, actions: EnumerateTypeDefActions(entity));
+        var typeDefAnalyzer = BuildTypeDefAnalyzer(
+            entity.Name, entity.Properties,
+            actions: EnumerateTypeDefActions(entity),
+            navigations: NavigationsFor(entity, domain));
 
         // Enforce constraints at creation, matching the C# export's Create factory guards.
         // The runtime previously accepted out-of-range/pattern-violating/empty-required
@@ -363,7 +366,7 @@ public sealed partial record DomainEntityInstance {
     ///   <item>Execute each effect in declaration order:
     ///     <list type="bullet">
     ///       <item><b>VM-compiled</b> (<see cref="AssignEffect"/>, <see cref="CompositeEffect"/>, <see cref="ConditionalEffect"/>, <see cref="StageTransitionEffect"/>) → lowered to Syntax AST → compiled via <see cref="Interpreter.Compile"/> → executed via VM. StageTransition is Assignment of CurrentStage + Invoke Notify on This.</item>
-    ///       <item><b>Direct-execution</b> (<see cref="CreateEntityInstance"/>, cross-entity <see cref="InvokeActionEffect"/>, <see cref="ForEachInvokeEffect"/>) → mutates instance state directly via EffectExecutor. Self-invoke lowers to <c>Invoke(Member(This, action))</c>.</item>
+    ///       <item><b>Direct-execution</b> (<see cref="CreateEntityInstance"/>, <see cref="ForEachInvokeEffect"/>) → mutates instance state directly via EffectExecutor. Self-invoke and singular cross-entity invoke lower to <c>Invoke(Member(…))</c>.</item>
     ///     </list>
     ///   </item>
     ///   <item>On <see cref="StageTransitionEffect"/>: lowered tree sets stage then <c>Invoke(Member(This, "Notify"))</c> (store fan-out in finally).</item>
@@ -374,9 +377,9 @@ public sealed partial record DomainEntityInstance {
     /// lowered to Syntax AST, compiled, and executed via the VM.</para>
     ///
     /// <para><b>Direct-execution effects</b> (<see cref="CreateEntityInstance"/>,
-    /// cross-entity <see cref="InvokeActionEffect"/>, <see cref="ForEachInvokeEffect"/>)
-    /// mutate the instance directly. <see cref="StageTransitionEffect"/> and
-    /// self-invoke share the lowered tree with emit.</para>
+    /// <see cref="ForEachInvokeEffect"/>) mutate the instance directly.
+    /// <see cref="StageTransitionEffect"/> and invoke share the lowered tree
+    /// with emit.</para>
     /// </summary>
     /// <param name="actionName">Name of the action to invoke.</param>
     /// <param name="args">Optional parameter values injected into the property
@@ -577,9 +580,9 @@ public sealed partial record DomainEntityInstance {
         var prepared = PreprocessEffectExpressions(effect);
 
         // A composite/conditional containing remaining direct-execution sub-effects
-        // (create/create-in, cross-entity invoke, for-invoke) must run each sub-effect
-        // through this dispatcher — those still cannot lower on the runtime path.
-        // StageTransition and self-invoke now lower.
+        // (create/create-in, for-invoke) must run each sub-effect through this
+        // dispatcher — those still cannot lower on the runtime path.
+        // StageTransition and invoke now lower.
         if ((prepared is ConditionalEffect or CompositeEffect)
             && ContainsDirectExecutionEffect(prepared)) {
             ExecuteStructured(prepared, effectPass, typeProvider);
@@ -588,7 +591,7 @@ public sealed partial record DomainEntityInstance {
 
         var lowered = effectPass.TryLowerVmNode(prepared);
         if (lowered is not null) {
-            var compiled = Interpreter.CompileChecked(lowered, typeProvider);
+            var compiled = Interpreter.CompileChecked(lowered, DomainResultTypeProvider.Wrap(typeProvider));
             using var exec = Interpreter.Execute(compiled,
                 s => s.SetArgs(new object?[] { this }));
             return;
@@ -600,7 +603,7 @@ public sealed partial record DomainEntityInstance {
     /// <summary>
     /// Executes a composite/conditional structurally: evaluates the branch condition (via
     /// the VM) and routes each sub-effect through <see cref="ExecuteEffect"/> so both
-    /// VM-executable (assign, stage transition, self-invoke) and remaining direct-execution (create / cross-entity invoke) effects run.
+    /// VM-executable (assign, stage transition, invoke) and remaining direct-execution (create / for-invoke) effects run.
     /// </summary>
     private void ExecuteStructured(
         Effect effect,
@@ -618,7 +621,7 @@ public sealed partial record DomainEntityInstance {
                     entityParam,
                     PropertyTypeResolver: EffectLoweringPass.BuildPropertyTypeResolver(Entity)));
                 var lowered = pass.Lower(condition, entityParam);
-                var compiled = Interpreter.CompileChecked(lowered, typeProvider);
+                var compiled = Interpreter.CompileChecked(lowered, DomainResultTypeProvider.Wrap(typeProvider));
                 bool taken;
                 using (var exec = Interpreter.Execute(compiled,
                            s => s.SetArgs(new object?[] { this }))) {
@@ -635,11 +638,10 @@ public sealed partial record DomainEntityInstance {
     }
 
     /// <summary>True when an effect tree contains a remaining direct-execution effect
-    /// (cross-entity invoke, create/create-in, for-invoke) that the VM path would silently drop.
-    /// Self-invoke (<see cref="InvokeActionEffect.TargetRelationship"/> null) lowers.</summary>
+    /// (create/create-in, for-invoke) that the VM path would silently drop.
+    /// Invoke (self and singular cross-entity) lowers.</summary>
     private static bool ContainsDirectExecutionEffect(Effect effect) => effect switch {
-        InvokeActionEffect { TargetRelationship: not null }
-            or CreateEntityInstance or CreateEntityInRelationshipEffect
+        CreateEntityInstance or CreateEntityInRelationshipEffect
             or ForEachInvokeEffect => true,
         CompositeEffect c => c.Effects.Any(ContainsDirectExecutionEffect),
         ConditionalEffect c => (c.ThenEffects?.Any(ContainsDirectExecutionEffect) ?? false)

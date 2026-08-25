@@ -69,6 +69,7 @@ internal sealed class ValueRepresentationAnalyzer : INodeAnalyzer {
             Return => (ValueRepresentationKind.Void, null),
             ThrowStatement => (ValueRepresentationKind.Void, null),
             Assignment => (ValueRepresentationKind.Void, null),
+            CallExternal => (ValueRepresentationKind.Void, null),
             Equal => (ValueRepresentationKind.Bool, typeof(bool)),
             NotEqual => (ValueRepresentationKind.Bool, typeof(bool)),
             LessThan => (ValueRepresentationKind.Bool, typeof(bool)),
@@ -237,6 +238,8 @@ internal sealed class ValueRepresentationAnalyzer : INodeAnalyzer {
 
     private static (ValueRepresentationKind Kind, Type? ClrType) ClassifyBlock(
         AnalysisContext context, Block block) {
+        if (block.Nodes.Count == 0)
+            return (ValueRepresentationKind.Void, null);
         var last = block.Nodes[^1];
         return PropagateChild(context, last);
     }

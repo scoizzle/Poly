@@ -273,8 +273,6 @@ public sealed partial class LinqExpressionGenerator {
                 typeof(System.Numerics.BitOperations).GetMethod(nameof(System.Numerics.BitOperations.PopCount), [typeof(ulong)])!,
                 Expression.Convert(CompileNode(pc.Operand, context), typeof(ulong))),
             SuspendNode sn => CompileNode(sn.Inner, context),
-            CallExternal ce => throw new InvalidOperationException(
-                $"CallExternal '{ce.MethodName}' is VM-host ABI; the LINQ path does not execute it."),
             _ => throw new InvalidOperationException($"Unsupported node type: {node.GetType().Name}")
         };
     }

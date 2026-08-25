@@ -61,7 +61,8 @@ public sealed partial record DomainEntityInstance {
     private static TypeDefinitionNodeAnalyzer BuildTypeDefAnalyzer(
         string entityName,
         IEnumerable<Property> properties,
-        IEnumerable<Property>? extraProperties = null) {
+        IEnumerable<Property>? extraProperties = null,
+        IEnumerable<Action>? actions = null) {
         var propDefs = new List<PropertyDefinitionNode>();
         var seen = new HashSet<string>(StringComparer.Ordinal);
 
@@ -85,17 +86,33 @@ public sealed partial record DomainEntityInstance {
                 Getter: new PropertyGetterDefinitionNode()));
         }
 
-        var notify = new MethodDefinitionNode(
-            "Notify",
-            new TypeReference("void"),
-            Parameters: [new Parameter("stageName",
-                new PrimitiveTypeReference(Prim.String))],
-            Body: new Block([]));
+        var methods = new List<MethodDefinitionNode> {
+            new MethodDefinitionNode(
+                "Notify",
+                new TypeReference("void"),
+                Parameters: [new Parameter("stageName",
+                    new PrimitiveTypeReference(Prim.String))],
+                Body: new Block([]))
+        };
+        // Empty bodies: analysis resolves Member(entity, action) as ITypeMethod.
+        // VM does not inline them; InvokeNamed / generated C# owns the implementation.
+        if (actions is not null) {
+            foreach (var action in actions) {
+                if (string.Equals(action.Name, "Notify", StringComparison.Ordinal))
+                    continue;
+                methods.Add(new MethodDefinitionNode(
+                    action.Name,
+                    new TypeReference("void"),
+                    Parameters: [.. action.Parameters.Select(p =>
+                        new Parameter(p.Name, MapDomainTypeToAstNode(p.Type)))],
+                    Body: new Block([])));
+            }
+        }
 
         var typeDefNode = new TypeDefinitionNode(
             Name: entityName,
             Properties: [.. propDefs],
-            Methods: [notify],
+            Methods: [.. methods],
             Namespace: null);
 
         var analyzer = new TypeDefinitionNodeAnalyzer();
@@ -110,7 +127,7 @@ public sealed partial record DomainEntityInstance {
     /// </summary>
     private TypeDefinitionNodeAnalyzer BuildActionScopedTypeDefAnalyzer(
         Action action) =>
-        BuildTypeDefAnalyzer(Entity.Name, Entity.Properties, action.Parameters);
+        BuildTypeDefAnalyzer(Entity.Name, Entity.Properties, action.Parameters, Entity.Actions);
 
     /// <summary>
     /// Resolves an outbound relationship by (this entity, name). Relationship identity

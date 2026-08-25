@@ -96,9 +96,12 @@ public sealed partial record DomainEntityInstance {
         };
         // Empty bodies: analysis resolves Member(entity, action) as ITypeMethod.
         // VM does not inline them; InvokeNamed / generated C# owns the implementation.
+        // Include stage actions — they are methods on This, same as entity.Actions
+        // (C# export emits both). Duplicate names keep the first stub.
+        var methodNames = new HashSet<string>(StringComparer.Ordinal) { "Notify" };
         if (actions is not null) {
             foreach (var action in actions) {
-                if (string.Equals(action.Name, "Notify", StringComparison.Ordinal))
+                if (!methodNames.Add(action.Name))
                     continue;
                 methods.Add(new MethodDefinitionNode(
                     action.Name,
@@ -127,7 +130,20 @@ public sealed partial record DomainEntityInstance {
     /// </summary>
     private TypeDefinitionNodeAnalyzer BuildActionScopedTypeDefAnalyzer(
         Action action) =>
-        BuildTypeDefAnalyzer(Entity.Name, Entity.Properties, action.Parameters, Entity.Actions);
+        BuildTypeDefAnalyzer(Entity.Name, Entity.Properties, action.Parameters, EnumerateTypeDefActions(Entity));
+
+    /// <summary>
+    /// Actions on This: entity-level plus every stage's actions. Same set the
+    /// C# export emits as methods. Empty-body stubs only — do not inline bodies.
+    /// </summary>
+    private static IEnumerable<Action> EnumerateTypeDefActions(Entity entity) {
+        foreach (var action in entity.Actions)
+            yield return action;
+        foreach (var stage in entity.Stages) {
+            foreach (var action in stage.Actions)
+                yield return action;
+        }
+    }
 
     /// <summary>
     /// Resolves an outbound relationship by (this entity, name). Relationship identity

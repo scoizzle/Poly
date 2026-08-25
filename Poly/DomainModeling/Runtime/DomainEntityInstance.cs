@@ -122,7 +122,7 @@ public sealed partial record DomainEntityInstance {
             }
         }
 
-        var typeDefAnalyzer = BuildTypeDefAnalyzer(entity.Name, entity.Properties, actions: entity.Actions);
+        var typeDefAnalyzer = BuildTypeDefAnalyzer(entity.Name, entity.Properties, actions: EnumerateTypeDefActions(entity));
 
         // Enforce constraints at creation, matching the C# export's Create factory guards.
         // The runtime previously accepted out-of-range/pattern-violating/empty-required

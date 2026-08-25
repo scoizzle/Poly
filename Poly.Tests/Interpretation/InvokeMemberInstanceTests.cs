@@ -1,4 +1,5 @@
 using System.Collections;
+
 using Poly.Interpretation;
 using Poly.Interpretation.Analysis;
 using Poly.Interpretation.Analysis.Semantics;
@@ -96,5 +97,38 @@ public class InvokeMemberInstanceTests {
             using var exec = Interpreter.Execute(program, s => s.SetArgs(new object?[] { bag }));
         });
         await Assert.That(ex!.Message).Contains("does not define method 'Notify'");
+    }
+
+    public sealed class NamedDispatchInstance {
+        public List<string> Names { get; } = [];
+        internal object? InvokeNamed(string name, object?[] args) {
+            Names.Add(name);
+            if (string.Equals(name, "Bounce", StringComparison.Ordinal) && Names.Count > 2)
+                throw new InvalidOperationException("Action invoke depth exceeded (max 2) while calling 'Bounce'.");
+            return null;
+        }
+    }
+
+    [Test]
+    public async Task Execute_UnresolvedMember_FallsBackToInvokeNamed() {
+        var instance = new NamedDispatchInstance();
+        var invoke = new Invoke(
+            new Member(new Parameter("entity", new TypeReference("Person")), "Bounce"));
+        var program = Interpreter.Compile(invoke, BuildNotifyTypeDef());
+        using var exec = Interpreter.Execute(program, s => s.SetArgs(new object?[] { instance }));
+        await Assert.That(instance.Names).IsEquivalentTo(["Bounce"]);
+    }
+
+    [Test]
+    public async Task Execute_InvokeNamedThrow_SurfacesInnerMessage() {
+        var instance = new NamedDispatchInstance();
+        var bounce = new Invoke(
+            new Member(new Parameter("entity", new TypeReference("Person")), "Bounce"));
+        var program = Interpreter.Compile(
+            new Block([bounce, bounce, bounce]), BuildNotifyTypeDef());
+        await Assert.That(() => {
+            using var exec = Interpreter.Execute(program, s => s.SetArgs(new object?[] { instance }));
+        }).Throws<InvalidOperationException>()
+            .WithMessageContaining("depth exceeded");
     }
 }

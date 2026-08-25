@@ -67,4 +67,23 @@ public class SelfInvokeHostAbiTests {
         var cs = new CSharpGenerator().Generate(node);
         await Assert.That(cs).IsEqualTo("this.Checkout();");
     }
+
+    [Test]
+    public async Task SelfInvoke_StageAction_Recursive_ExceedsDepth() {
+        var bounce = new Poly.DomainModeling.Ontology.Action("Bounce", InvocationResult.Void, [],
+            Effects: [new InvokeActionEffect("Bounce", [])],
+            Policies: []);
+        var draft = new Stage("Draft", [bounce], [], [], []);
+        var entity = new Entity("Loop",
+            Properties: [new Property("Status", new DomainTypeReference("Text"), [])],
+            Actions: [],
+            Policies: [],
+            Stages: [draft]);
+        var instance = DomainEntityInstance.Create(entity,
+            new Dictionary<string, object?> { ["Status"] = "x" });
+
+        await Assert.That(() => instance.InvokeAction("Bounce"))
+            .Throws<InvalidOperationException>()
+            .WithMessageContaining("depth exceeded");
+    }
 }

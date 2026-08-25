@@ -53,16 +53,16 @@ MCP / direct API as thin consumers
 
 ```text
 DONE:    … p3/p2; GI; E1; gpure (2026-08-07); mcp-minify (2026-08-08); vision-cleanup 1–3 (2026-08-17); emit-session CompileMode seed-only (2026-08-24); host-ABI PRs 21–24
-CURRENT: rewrite-to-master (ship the strong slice; do not wait on create)
-ADMIT:   rewrite-to-master
-THEN:    parallel streams from master (create/create-in; MCP mut-safety; Grammar wrap-up; V3 naming)
+CURRENT: (none) — parallel streams admitted from master
+ADMIT:   parallel (exclusive files)
+THEN:    create/create-in; MCP mut-safety; Grammar wrap-up; V3 naming
 PARKED:  mut-safety; p1 as new sugar; pack-host dialect host; outbox lock
 PULL:    E5; EF codegen; naming cleanup
 ```
 
 **Honest product claim today:** Path-prefix multi-hop; exists/where/Q3′; peer/entity when; catalog; action `→ Entity` returns. **Grammar:** product parse is Grammar-table-guided (Option A expr ladder + effect heads; printer deferred). **MCP:** DSL-only expressions; unified `add`/`remove` + `apply_dsl`. CompileMode seeds persistence only; HTTP host is `uses http`. **No** temporal DSL authoring until p1.
 
-**Focus (2026-08-25):** merge rewrite to master. Strong host-ABI slice DONE (PRs 21–24). Create / create-in is post-merge. Plan: [`../simple-agent-tasks/rewrite-to-master-2026-08-25.md`](../simple-agent-tasks/rewrite-to-master-2026-08-25.md). CURRENT: [`../simple-agent-tasks/PIPELINE-STATUS.md`](../simple-agent-tasks/PIPELINE-STATUS.md).
+**Focus (2026-08-25):** rewrite is `master` (PR 26). Parallel streams from trunk. Plan: [`../simple-agent-tasks/rewrite-to-master-2026-08-25.md`](../simple-agent-tasks/rewrite-to-master-2026-08-25.md). CURRENT: [`../simple-agent-tasks/PIPELINE-STATUS.md`](../simple-agent-tasks/PIPELINE-STATUS.md).
 ---
 
 ## Archived material

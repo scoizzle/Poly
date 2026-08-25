@@ -1,7 +1,7 @@
 # Goal: merge the DomainModeling rewrite to `master`
 
 **Date:** 2026-08-25  
-**Status:** CURRENT  
+**Status:** ✅ DONE (PR 26)  
 **Does not wait on:** create / create-in leaving EffectExecutor.
 
 ## Goal

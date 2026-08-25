@@ -69,7 +69,6 @@ internal sealed class ValueRepresentationAnalyzer : INodeAnalyzer {
             Return => (ValueRepresentationKind.Void, null),
             ThrowStatement => (ValueRepresentationKind.Void, null),
             Assignment => (ValueRepresentationKind.Void, null),
-            CallExternal => (ValueRepresentationKind.Void, null),
             Equal => (ValueRepresentationKind.Bool, typeof(bool)),
             NotEqual => (ValueRepresentationKind.Bool, typeof(bool)),
             LessThan => (ValueRepresentationKind.Bool, typeof(bool)),

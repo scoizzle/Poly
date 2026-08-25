@@ -1,5 +1,7 @@
 # DomainModeling — combined cleanup implementation (executable)
 
+> **Honesty (2026-08-25, PRs 21–24):** Historical checklist — do not treat “next suite = host-ABI `CallExternal`” as CURRENT. StageTransition, self-invoke, cross-entity invoke, and for-invoke are **same-tree** (runtime + emit). `LowerStageTransitions` now gates **create / create-in only**. Remaining lie: create/create-in `EffectExecutor` + `ExecuteStructured` for mixed `if`+create. Host-ABI `CallExternal` for those ops was the **wrong next-step**; they lowered to generic Syntax instead. Slice “Done” lists below are what 2026-08-17 shipped, unchanged.
+
 **Date:** 2026-08-17  
 **Combines:** [`domainmodeling-vision-cleanup-2026-08-16.md`](domainmodeling-vision-cleanup-2026-08-16.md) (the executable deletion of dual paths) and [`domainmodeling-target-architecture-2026-08-16.md`](domainmodeling-target-architecture-2026-08-16.md) (the end-state layout).  
 **Status:** Execution checklist. The three cleanup slices are the only thing admitted here; folder renames and M1/M3/M4 wait on host-ABI `CallExternal` and are **not** part of this plan.

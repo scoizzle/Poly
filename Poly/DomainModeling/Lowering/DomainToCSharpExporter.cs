@@ -350,7 +350,7 @@ public sealed partial class DomainToCSharpExporter {
                         new New(
                             new NamedTypeReference("NotSupportedException"),
                             new Constant(
-                                $"Policy '{policy.Name}' requires store-aware evaluation and cannot be compiled to standalone C#.")))
+                                $"Policy '{policy.Name}' requires store-aware evaluation and cannot be compiled to standalone C.")))
                 ]);
             }
             methods.Add(new MethodDefinitionNode(
@@ -653,9 +653,10 @@ public sealed partial class DomainToCSharpExporter {
             ));
         }
 
-        // Host ABI no-op: runtime CallExternal("Notify") binds to DomainEntityInstance.Notify
-        // (store fan-out). Generated C# already fans out via PostTransitionNodes /
-        // Notify{Stage}Subscribers, so this method exists so the shared tree compiles.
+        // No-op instance method: runtime Invoke(Member(This, "Notify")) binds to
+        // DomainEntityInstance.Notify (store fan-out). Generated C# already fans out
+        // via PostTransitionNodes / Notify{Stage}Subscribers, so this method exists
+        // so the shared tree compiles.
         if (entity.Stages.Count > 0) {
             methods.Add(new MethodDefinitionNode(
                 "Notify",

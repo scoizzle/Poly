@@ -346,7 +346,7 @@ public sealed partial record DomainEntityInstance {
 
         var compiled = Interpreter.CompileChecked(lowered, _typeDefAnalyzer);
         using var exec = Interpreter.Execute(compiled,
-            s => s.SetArgs(new object?[] { _values }));
+            s => s.SetArgs(new object?[] { this }));
         return exec.Result.GetValue<bool>();
     }
 
@@ -362,11 +362,11 @@ public sealed partial record DomainEntityInstance {
     ///   <item>Evaluate entity-level guard policies.</item>
     ///   <item>Execute each effect in declaration order:
     ///     <list type="bullet">
-    ///       <item><b>VM-compiled</b> (<see cref="AssignEffect"/>, <see cref="CompositeEffect"/>, <see cref="ConditionalEffect"/>, <see cref="StageTransitionEffect"/>) → lowered to Syntax AST → compiled via <see cref="Interpreter.Compile"/> → executed via VM. StageTransition is Assignment of CurrentStage + CallExternal Notify.</item>
+    ///       <item><b>VM-compiled</b> (<see cref="AssignEffect"/>, <see cref="CompositeEffect"/>, <see cref="ConditionalEffect"/>, <see cref="StageTransitionEffect"/>) → lowered to Syntax AST → compiled via <see cref="Interpreter.Compile"/> → executed via VM. StageTransition is Assignment of CurrentStage + Invoke Notify on This.</item>
     ///       <item><b>Direct-execution</b> (<see cref="CreateEntityInstance"/>, <see cref="InvokeActionEffect"/>, <see cref="ForEachInvokeEffect"/>) → mutates instance state directly via EffectExecutor.</item>
     ///     </list>
     ///   </item>
-    ///   <item>On <see cref="StageTransitionEffect"/>: lowered tree sets stage then <c>CallExternal("Notify")</c> (store fan-out in finally).</item>
+    ///   <item>On <see cref="StageTransitionEffect"/>: lowered tree sets stage then <c>Invoke(Member(This, "Notify"))</c> (store fan-out in finally).</item>
     /// </list>
     ///
     /// <para><b>VM-executable effects</b> (<see cref="AssignEffect"/>,
@@ -556,7 +556,7 @@ public sealed partial record DomainEntityInstance {
             var lowered = loweringPass.Lower(binding.Expression, subjectParam);
             var compiled = Interpreter.Compile(lowered, _bindingTypeProvider ?? _typeDefAnalyzer);
             using var exec = Interpreter.Execute(compiled,
-                s => s.SetArgs(new object?[] { _values }));
+                s => s.SetArgs(new object?[] { this }));
             result[binding.PropertyName] = exec.Result.GetValue<object>();
         }
 
@@ -588,10 +588,8 @@ public sealed partial record DomainEntityInstance {
         var lowered = effectPass.TryLowerVmNode(prepared);
         if (lowered is not null) {
             var compiled = Interpreter.CompileChecked(lowered, typeProvider);
-            using var exec = Interpreter.Execute(compiled, s => {
-                s.SetArgs(new object?[] { _values });
-                s.Host = this;
-            });
+            using var exec = Interpreter.Execute(compiled,
+                s => s.SetArgs(new object?[] { this }));
             return;
         }
 
@@ -622,7 +620,7 @@ public sealed partial record DomainEntityInstance {
                 var compiled = Interpreter.CompileChecked(lowered, typeProvider);
                 bool taken;
                 using (var exec = Interpreter.Execute(compiled,
-                           s => s.SetArgs(new object?[] { _values }))) {
+                           s => s.SetArgs(new object?[] { this }))) {
                     taken = exec.Result.GetValue<bool>();
                 }
                 var branch = taken ? cond.ThenEffects : (cond.ElseEffects ?? []);

@@ -35,10 +35,11 @@ The lowering pass should emit Syntax AST that mirrors how a C# developer would e
 | `AssignEffect(target, value)` | `target = value` | `Assignment(target, value)` |
 | `ConditionalEffect(cond, then, else)` | `if (cond) { ... } else { ... }` | `IfStatement(cond, thenBlock, elseBlock?)` |
 | `CompositeEffect(stmts)` | `{ stmt1; stmt2; }` | `Block(nodes)` |
-| Self-invoke `InvokeActionEffect("Activate")` | `this.Activate()` | `Member(this, "Activate")` + `Invoke(...)` |
-| Cross-entity invoke | `this.customer.Activate()` | `Member(Member(this, "customer"), "Activate")` + `Invoke(...)` |
+| Self-invoke `InvokeActionEffect("Activate")` | `this.Activate()` | `Invoke(Member(This, "Activate"), args)` |
+| Cross-entity invoke | `this.customer.Activate()` | `this.Rel.Action(args)` with a `DomainResult.Failure` linked-target guard |
+| For-invoke | `foreach (var x in Rel) { x.Action(...); }` | Fail-fast `ForEachLoop` over a **OneToMany** collection nav |
 
-When a domain concept cannot be expressed in the current Syntax AST (e.g., store-aware collection operations for quantifiers), the fix goes into the Syntax AST or VM — not into lowering workarounds. The `Comment` node (see §2d) exists to document these gaps inline in the generated AST without silently losing information.
+When a domain concept cannot be expressed in the current Syntax AST (e.g., store-aware collection operations for quantifiers), the fix goes into the Syntax AST or VM — not into lowering workarounds. Do not emit `Comment` as shipped meaning (§2d). Remaining store effects (create / create-in) still return `null` on the runtime path.
 
 ---
 
@@ -78,7 +79,7 @@ Two distinct lowering passes produce Syntax AST nodes:
 | Pass | Input | Output | Inherits |
 |------|-------|--------|----------|
 | `DomainExpressionLoweringPass` | `DomainExpression` tree | `Syntax.Node` | `DomainExpressionDispatch<Node>` |
-| `EffectLoweringPass` | `Effect` tree | `Syntax.Node?` (`null` for direct-execution) | `EffectDispatch<Node?>` |
+| `EffectLoweringPass` | `Effect` tree | `Syntax.Node?` (`null` only for remaining create / create-in on the runtime path) | `EffectDispatch<Node?>` |
 
 Both consume a `LoweringContext` that carries the current-instance `Subject` and optional parameter map.
 
@@ -86,7 +87,7 @@ Both consume a `LoweringContext` that carries the current-instance `Subject` and
 
 ## 2. Dual-Path Effect Execution
 
-Effects execute through **two independent paths** determined by the lowering pass:
+StageTransition, self-invoke, cross-entity invoke, and for-invoke **lower to the same Syntax AST on runtime and emit**. Create / create-in still dual-path: `null` on the runtime path (EffectExecutor); C# emit is gated on `LowerStageTransitions`. Do not grow EffectExecutor.
 
 ### 2a. VM-Compiled Path (Lowering → Compile → Execute)
 
@@ -95,12 +96,13 @@ For effects that map directly to Syntax AST nodes. The effect is lowered, compil
 | Effect | Lowered to | Notes |
 |--------|-----------|-------|
 | `AssignEffect` | `Assignment(target, value)` | Target and value lowered via `DomainExpressionLoweringPass` |
-| `CompositeEffect` | `Block(nodes)` | Sub-effects lowered recursively; direct-execution children filtered out; empty → `Block([Constant(0L)])` |
-| `ConditionalEffect` | `IfStatement(cond, thenBlock, elseBlock?)` | Then/else effects lowered recursively; same empty-block fallback |
-| `StageTransitionEffect` | Assignment of `CurrentStage` + `Invoke(Member(This, "Notify"), stageName)` (plus inlined exit/entry when they lower) | Same tree on runtime and emit. `Notify` is an instance method on This, resolved via the type def. Not a host-ABI node. Not an EffectExecutor arm. |
+| `CompositeEffect` | `Block(nodes)` | Sub-effects lowered recursively. A sub-effect that cannot lower throws (no silent drop). Mixed create children use `ExecuteStructured` at runtime |
+| `ConditionalEffect` | `IfStatement(cond, thenBlock, elseBlock?)` | Then/else effects lowered recursively; same fail-closed rule |
+| `StageTransitionEffect` | Assignment of `CurrentStage` + `Invoke(Member(This, "Notify"), stageName)` (plus inlined exit/entry when they lower) | Same tree on runtime and emit. `Notify` is an instance method on This, resolved via the type def. Not a host-ABI node. Not an EffectExecutor arm |
+| `InvokeActionEffect` | Self: `Invoke(Member(This, action), args)`. Cross-entity: `this.Rel.Action(args)` with a linked-target `DomainResult.Failure` guard | Same tree on runtime and emit. Not gated on `LowerStageTransitions`. Self / singular cross-entity do not wrap `IsSuccess` |
+| `ForEachInvokeEffect` | Fail-fast `ForEachLoop` over a **OneToMany** collection nav | Zero-match `DomainResult.Failure`; per-item `if (!result.IsSuccess) return result`. VM walks `IList` (fail-loud non-IList). Analysis rejects ManyToMany / OneToOne |
 
 ```csharp
-// DomainEntityInstance.ExecuteEffect — VM-compiled path
 var lowered = effectPass.TryLowerVmNode(effect);
 if (lowered is not null) {
     var compiled = Interpreter.Compile(lowered, typeProvider);
@@ -111,13 +113,14 @@ if (lowered is not null) {
 
 ### 2b. Direct-Execution Path (Instance Mutation)
 
-For effects that mutate `DomainEntityInstance` state directly. The lowering pass returns `null`, and dispatch falls through to `EffectExecutor`.
+Remaining store effects that still return `null` from `TryLowerVmNode` on the runtime path. Dispatch falls through to `EffectExecutor`. Emit of create / create-in is gated on `LowerStageTransitions`. Do not implement create lowering on the runtime path here.
 
 | Effect | Action | Notes |
 |--------|--------|-------|
 | `CreateEntityInstance` | `CreateChildInstance(create)` | Creates via factory, adds to `_createdChildren`, optionally auto-links via `RelationshipName` |
 | `CreateEntityInRelationshipEffect` | `ExecuteCreateInRelationship(createIn)` | Creates instance and links via the named relationship |
-| `InvokeActionEffect` | `ExecuteInvokeEffect(invoke)` | See §5 cross-entity invoke |
+
+StageTransition, InvokeAction, and ForEachInvoke **must lower**. EffectExecutor throws if they reach it. `ExecuteInvokeEffect` does not exist.
 
 > **Removed 2026-08-10:** `DeleteEntityInstance`, `LinkRelationshipEffect`, `UnlinkRelationshipEffect`,
 > and `TransitionRelationshipEffect` were deleted. Linking existing instances is `DomainInstanceStore.Link`
@@ -125,14 +128,22 @@ For effects that mutate `DomainEntityInstance` state directly. The lowering pass
 > Effect IR.
 
 ```csharp
-// DomainEntityInstance.EffectExecutor — dispatch base, named by effect subtype
 private sealed class EffectExecutor : EffectDispatch<object?> {
-    // StageTransitionEffect must lower — EffectExecutor throws if reached.
-    protected override object? InvokeAction(InvokeActionEffect i) {
-        _instance.ExecuteInvokeEffect(i);
-        return null;
+    protected override object? StageTransition(StageTransitionEffect t) =>
+        throw new InvalidOperationException(
+            "StageTransitionEffect must lower to Ast; EffectExecutor is not the shipped path.");
+    protected override object? InvokeAction(InvokeActionEffect i) =>
+        throw new InvalidOperationException(
+            "InvokeActionEffect must lower to Ast; EffectExecutor is not the shipped path.");
+    protected override object? ForEachInvoke(ForEachInvokeEffect e) =>
+        throw new InvalidOperationException(
+            "ForEachInvokeEffect must lower to Ast; EffectExecutor is not the shipped path.");
+    protected override object? CreateEntityInstance(CreateEntityInstance create) {
+        return _instance.CreateChildInstance(create, _typeProvider);
     }
-    // ... one method per direct-execution effect
+    protected override object? CreateEntityInRelationship(CreateEntityInRelationshipEffect createIn) {
+        return _instance.ExecuteCreateInRelationship(createIn, _typeProvider);
+    }
 }
 ```
 
@@ -141,49 +152,37 @@ private sealed class EffectExecutor : EffectDispatch<object?> {
 ```
 ExecuteEffect(effect)
   │
+  ├─ mixed Composite/Conditional with create/create-in
+  │   → ExecuteStructured (each sub-effect through ExecuteEffect)
+  │
   ├─ EffectLoweringPass.TryLowerVmNode(effect)
   │   │
   │   ├─ AssignEffect  → Assignment
-  │   ├─ CompositeEffect → Block
+  │   ├─ CompositeEffect → Block (cannot-lower sub-effect throws)
   │   ├─ ConditionalEffect → IfStatement
   │   ├─ StageTransitionEffect → CurrentStage Assignment + Invoke Notify on This
-  │   └─ (create / invoke / for) → null
+  │   ├─ InvokeActionEffect → Invoke(Member(...)) (self or Rel with Failure guard)
+  │   ├─ ForEachInvokeEffect → ForEachLoop (IList walk; fail-loud non-IList)
+  │   └─ CreateEntityInstance / CreateEntityInRelationship
+  │         → null on runtime path; C# emit when LowerStageTransitions
   │
   ├─ returned Node ≠ null
   │   → Interpreter.Compile(lowered)
   │   → Interpreter.Execute(compiled, args: this)
+  │   → failed DomainResult throws
   │
   └─ returned null
       → EffectExecutor.Run(instance, pass, provider, effect)
         │
         ├─ CreateEntityInstance    → CreateChildInstance(...)
         ├─ CreateEntityInRelationship → ExecuteCreateInRelationship(...)
-        └─ InvokeActionEffect      → ExecuteInvokeEffect(...)
-```
-### 2d. Comment Nodes — Documenting Lowering Gaps
-
-When an effect cannot be lowered to Syntax AST (direct-execution effects), the lowering pass emits a **`Comment` node** instead of silently dropping it:
-
-```csharp
-// EffectLoweringPass — direct-execution effects become Comment nodes
-protected override Node? Composite(CompositeEffect c) {
-    var nodes = new List<Node>();
-    foreach (var sub in c.Effects) {
-        var lowered = Route(sub);
-        if (lowered is not null)
-            nodes.Add(lowered);
-        else
-            nodes.Add(new Comment($"Cannot lower: {sub.GetType().Name}"));
-    }
-    return new Block(nodes);
-}
+        └─ StageTransition / InvokeAction / ForEachInvoke → throw
 ```
 
-`Comment` is a Syntax AST `Expression` node that carries human-readable text. The VM evaluates it as a no-op (`Constant(0L)`). It exists to:
+### 2d. Comment is not shipped meaning
 
-1. **Satisfy structural constraints** — `Block` requires ≥1 expression (type inference). Comments fill this without placeholder values.
-2. **Preserve information** — reading the lowered AST shows what effects are not yet VM-lowerable, making the gap visible for future improvement.
-3. **Document the boundary** — over time, as effect types gain lowering support, the `Comment` nodes naturally disappear from the generated AST.
+`EffectLoweringPass` does **not** emit `Comment` nodes. A composite/conditional sub-effect that cannot lower throws `InvalidOperationException`. Remaining create / create-in return `null` on the runtime path (EffectExecutor) and lower only when `LowerStageTransitions` is set (emit). The `Comment` AST node is not product meaning and must not be used as a lowering-gap marker.
+
 ---
 
 ## 3. Policy Evaluation
@@ -311,39 +310,17 @@ private static bool EvaluateBodyOnTarget(DomainExpression body, DomainEntityInst
 
 ---
 
-## 5. Cross-Entity Invoke Flow
+## 5. Cross-Entity and For-Invoke Flow
 
-`InvokeActionEffect` with a `TargetRelationship` resolves a linked instance and invokes an action on it.
+`InvokeActionEffect` and `ForEachInvokeEffect` lower to Syntax AST on both runtime and emit. There is no `ExecuteInvokeEffect`. Runtime `This` has no CLR method for domain actions, so `InvokeNamed` runs the action (Notify still hits the real CLR method first).
 
-### 5a. Outbound Resolution
+| Case | Lowered to | Behavior |
+|------|------------|----------|
+| Self-invoke | `Invoke(Member(This, action), args)` | Analysis sees the action on the type def; C# prints `this.Checkout()`. Nested Failure is discarded like C# `this.Foo();` |
+| Singular cross-entity | `this.Rel.Action(args)` with a linked-target `DomainResult.Failure` guard before deref | Same tree on runtime and emit. Not gated on `LowerStageTransitions`. Does not wrap `IsSuccess` |
+| For-invoke | Fail-fast `ForEachLoop` over a **OneToMany** collection nav | Analysis rejects ManyToMany / OneToOne. VM walks `IList` (fail-loud non-IList). Per-item `if (!result.IsSuccess) return result`. Zero-match `DomainResult.Failure`; `ExecuteEffect` throws on a failed program result |
 
-All cross-entity resolve goes through `GetOutboundRelatedInstances`, which enforces:
-
-1. **Domain must exist** — relationship lookup requires domain metadata.
-2. **Relationship must exist** — by name.
-3. **Caller must be source** — only the relationship's source entity may cross-invoke.
-4. **Cardinality must be OneToOne or OneToMany** — ManyToMany rejected (fail-closed).
-5. **Store must exist** — instance must be registered.
-6. **Only source→target links** — filters results by target type name (no reverse-walk drift).
-
-```csharp
-private IReadOnlyList<DomainEntityInstance> GetOutboundRelatedInstances(string relationshipName) {
-    // ... domain + relationship + source + cardinality + store checks ...
-    return Store.GetRelatedInstances(relationshipName, this)
-        .Where(t => string.Equals(t.Entity.Name, relationship.Target.TypeName, Ordinal))
-        .ToList();
-}
-```
-
-### 5b. Invoke Dispatch
-
-`ExecuteInvokeEffect` handles three cases:
-
-| Case | Branch | Behavior |
-|------|--------|----------|
-| Collection invoke | `TargetRelationship != null` + quantifier (any/all) | Resolve targets, optionally filter, invoke per quantifier rules. Empty set → throws. |
-| Singular invoke | `TargetRelationship != null` + no quantifier | Resolve exactly one target. 0 targets → throws. >1 → throws. |
-| Self invoke | `TargetRelationship == null` | `InvokeAction(actionName, args)` on current instance (re-entrant, depth-limited to 16). |
+`GetOutboundRelatedInstances` remains the store path for Q3′ quantifiers, path-prefix, and `Rel exists` preprocessing — not for invoke dispatch.
 
 ---
 
@@ -385,7 +362,7 @@ public abstract class EffectDispatch<TResult> {
 | Concern | Subclass | Result Type | Pattern |
 |---------|----------|-------------|---------|
 | Expression → Syntax AST | `DomainExpressionLoweringPass` | `Node` | Inherits `DomainExpressionDispatch<Node>` |
-| Effect → Syntax AST | `EffectLoweringPass` | `Node?` | Inherits `EffectDispatch<Node?>`; null = direct-execution |
+| Effect → Syntax AST | `EffectLoweringPass` | `Node?` | Inherits `EffectDispatch<Node?>`; null = remaining create / create-in on the runtime path |
 | Effect → runtime mutation | `EffectExecutor` (nested in `DomainEntityInstance`) | `object?` | Inherits `EffectDispatch<object?>` |
 | Effect → DSL text | `EffectPrinter` (nested in `DomainDslPrinter`) | `object?` | Inherits `EffectDispatch<object?>` |
 | Expression → DSL text | `ExpressionPrinter` (nested in `DomainDslPrinter`) | `string` | Inherits `DomainExpressionDispatch<string>` |

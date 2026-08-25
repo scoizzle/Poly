@@ -15,8 +15,9 @@ namespace Poly.DomainModeling.Lowering;
 /// (<see cref="CreateEntityInstance"/>, <see cref="InvokeActionEffect"/>,
 /// <see cref="ForEachInvokeEffect"/>) still produce <c>null</c> from
 /// <see cref="Route"/> on the runtime path and are handled by
-/// EffectExecutor. StageTransition lowers to Assignment +
-/// <see cref="CallExternal"/> on both runtime and emit.</para>
+/// EffectExecutor. StageTransition lowers to Assignment of CurrentStage
+/// plus <c>Invoke(Member(Subject, "Notify"), stageName)</c> on both
+/// runtime and emit — handwritten IR, not a host-ABI node.</para>
 ///
 /// <para>When <see cref="Analysis"/> is set, lowering reads pre-computed
 /// <see cref="IAnalysisMetadata"/> instead of re-scanning domain collections.
@@ -209,9 +210,9 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     /// Lowers a stage transition to generic Syntax AST on both runtime and emit:
     /// source-stage exit effects (when known), CurrentStage assignment, target-stage
     /// entry effects (in try), post-transition notification nodes, then
-    /// <c>CallExternal("Notify", stageName)</c> in finally for the host store ABI.
-    /// Not gated on <see cref="LoweringContext.LowerStageTransitions"/> — that flag
-    /// still gates create / invoke / for-invoke.
+    /// <c>Invoke(Member(Subject, "Notify"), stageName)</c> in finally.
+    /// Not a host-ABI node. Not gated on <see cref="LoweringContext.LowerStageTransitions"/>
+    /// — that flag still gates create / invoke / for-invoke.
     /// </summary>
     protected override Node? StageTransition(StageTransitionEffect t) {
         if (!_entity.Stages.Any(s =>
@@ -257,7 +258,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
             new Member(Subject, "CurrentStage"),
             stageValue));
 
-        // Entry + C# post-transition fan-out run inside try so CallExternal Notify
+        // Entry + C# post-transition fan-out run inside try so Invoke Notify
         // still fires in finally (TransitionStage notified the store in finally).
         var tryNodes = new List<Node>();
         Stage? targetStage = null;
@@ -288,7 +289,9 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         nodes.Add(new TryCatchFinally(
             tryBody,
             CatchClauses: null,
-            FinallyBlock: new CallExternal("Notify", new Constant(t.TargetStage.StageName))));
+            FinallyBlock: new Invoke(
+                new Member(Subject, "Notify"),
+                new Constant(t.TargetStage.StageName))));
 
         return nodes.Count == 1 ? nodes[0] : new Block(nodes);
     }
@@ -602,7 +605,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         return new Block(blockNodes);
     }
 
-    // ── Runtime default expression helpers ───────────────────────
+    // ── Runtime default expression helpers ─────────────────
 
     /// <summary>
     /// Builds a Syntax AST node for a runtime default expression, adapted to the

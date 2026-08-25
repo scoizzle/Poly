@@ -144,7 +144,7 @@ public sealed partial record DomainEntityInstance {
 
     /// <summary>
     /// Instance method invoked from the lowered StageTransition tree
-    /// (<c>Invoke(Member(This, \"Notify\"), stageName)</c>) after a stage
+    /// (<c>Invoke(Member(This, "Notify"), stageName)</c>) after a stage
     /// assignment. Store subscription fan-out only — does not re-run exit/entry
     /// (those belong in the lowered tree). Skips when executing a subscription
     /// (cascade is store-owned) or when no store is attached. Not a CallExternal
@@ -157,35 +157,35 @@ public sealed partial record DomainEntityInstance {
 
     /// <summary>
     /// Transitions to a target stage. Execution order:
-    /// <list type=\"number\">
+    /// <list type="number">
     ///   <item>OnExit effects on the current stage (before any state change).</item>
-    ///   <item>Set <see cref=\"CurrentStage\"/> to <paramref name=\"targetStageName\"/>.</item>
+    ///   <item>Set <see cref="CurrentStage"/> to <paramref name="targetStageName"/>.</item>
     ///   <item>OnEntry effects on the target stage (stage already set — partial-entry state
     ///     possible if an effect throws).</item>
     ///   <item>Notify store subscribers (in a <c>finally</c> block — fires even if OnEntry throws).</item>
     /// </list>
     /// Store notification fires when:
-    /// <list type=\"bullet\">
-    ///   <item><paramref name=\"notifyStore\"/> is <c>true</c>,</item>
+    /// <list type="bullet">
+    ///   <item><paramref name="notifyStore"/> is <c>true</c>,</item>
     ///   <item><c>Store</c> is set,</item>
-    ///   <item>we are <b>not</b> inside a <see cref=\"ExecuteSubscriptionEffects\"/> call
-    ///     (subscription-triggered transitions cascade through <see cref=\"DomainInstanceStore.NotifyTransition\"/>
+    ///   <item>we are <b>not</b> inside a <see cref="ExecuteSubscriptionEffects"/> call
+    ///     (subscription-triggered transitions cascade through <see cref="DomainInstanceStore.NotifyTransition"/>
     ///     recursion, not through a second store call).</item>
     /// </list>
     /// </summary>
     /// <remarks>
     /// <b>Stage policy vs action hierarchy:</b> Stage-scoped policies are evaluated only on the
-    /// <b>current</b> stage (not the parent chain), while <see cref=\"InvokeAction\"/> walks the
+    /// <b>current</b> stage (not the parent chain), while <see cref="InvokeAction"/> walks the
     /// parent chain for actions. This asymmetry exists because effective-policy computation
     /// is performed by analyzers (walking the hierarchy), while runtime scenario gating is
     /// still a per-stage concern.
     ///
     /// <b>OnEntry re-entrancy:</b> Nested same-instance transitions (e.g. OnEntry →
-    /// another <c>TransitionStage</c>) are bounded by <see cref=\"MaxTransitionDepth\"/>
-    /// (default 16). Exceeding it throws <see cref=\"InvalidOperationException\"/>.
+    /// another <c>TransitionStage</c>) are bounded by <see cref="MaxTransitionDepth"/>
+    /// (default 16). Exceeding it throws <see cref="InvalidOperationException"/>.
     /// Partial stage application is possible if a nested throw occurs after
     /// <c>CurrentStage</c> was already updated. Store subscription fan-out remains
-    /// separately bounded by <see cref=\"DomainInstanceStore\"/> cascade <c>maxDepth</c>.
+    /// separately bounded by <see cref="DomainInstanceStore"/> cascade <c>maxDepth</c>.
     /// </remarks>
     internal void TransitionStage(string targetStageName, bool notifyStore = true) {
         if (!Entity.Stages.Any(s => string.Equals(s.Name, targetStageName, StringComparison.Ordinal)))
@@ -211,7 +211,7 @@ public sealed partial record DomainEntityInstance {
                         $"Runtime transition requires {nameof(DomainCatalogMetadata)} for domain '{Domain.Name}' (TransitionStage).");
             }
 
-            var subject = new Parameter(\"entity\", new TypeReference(Entity.Name));
+            var subject = new Parameter("entity", new TypeReference(Entity.Name));
             var loweringContext = new LoweringContext(
                 subject,
                 Analysis: analysis,
@@ -227,7 +227,7 @@ public sealed partial record DomainEntityInstance {
                 }
             }
 
-            // ── Set new stage ──────────────────────────
+            // ── Set new stage ──────────────────────────────────────
             CurrentStage = targetStageName;
 
             // ── Run OnEntry effects on the target stage ────────────
@@ -287,11 +287,11 @@ public sealed partial record DomainEntityInstance {
 
     /// <summary>
     /// Executes subscription effects in this instance's context (subscriber).
-    /// <paramref name=\"peerInstance\"/> is the related entity that transitioned.
-    /// When <paramref name=\"peerBinding\"/> is set (<c>when Rel Stage as name</c>),
+    /// <paramref name="peerInstance"/> is the related entity that transitioned.
+    /// When <paramref name="peerBinding"/> is set (<c>when Rel Stage as name</c>),
     /// path-prefix roots equal to that name resolve against the peer bag before
     /// lowering (notification-only subscriptions omit the binder).
-    /// Called by <see cref=\"DomainInstanceStore.NotifyTransition\"/>.
+    /// Called by <see cref="DomainInstanceStore.NotifyTransition"/>.
     ///
     /// Subscription-triggered transitions suppress store notification via
     /// <c>_isExecutingSubscription</c> — cascading is handled by the store's
@@ -304,7 +304,7 @@ public sealed partial record DomainEntityInstance {
         _isExecutingSubscription = true;
 
         try {
-            var subjectParam = new Parameter(\"entity\", new TypeReference(Entity.Name));
+            var subjectParam = new Parameter("entity", new TypeReference(Entity.Name));
             EffectLoweringPass effectPass;
             if (Domain is not null) {
                 var analysis = RuntimeAnalysisCache.GetOrAnalyze(Domain);
@@ -330,7 +330,7 @@ public sealed partial record DomainEntityInstance {
     }
 
     /// <summary>
-    /// Rewrites peer path-prefix roots (<c>name Prop</c> → <see cref=\"RelationshipNavigation\"/>)
+    /// Rewrites peer path-prefix roots (<c>name Prop</c> → <see cref="RelationshipNavigation"/>)
     /// into literals evaluated against the transitioned peer bag.
     /// </summary>
     private static Effect BindPeerInEffect(Effect effect, string peerBinding, DomainEntityInstance peer) {
@@ -384,7 +384,7 @@ public sealed partial record DomainEntityInstance {
     /// <summary>
     /// Rewrites peer path-prefix roots (<c>name Prop</c>) into literals evaluated
     /// against the transitioned peer bag (coh-d1 — leaf override on the shared
-    /// <see cref=\"DomainExpressionRewriteBase\"/>; composites recurse in the base).
+    /// <see cref="DomainExpressionRewriteBase"/>; composites recurse in the base).
     /// </summary>
     private sealed class PeerBindingRewrite(string peerBinding, DomainEntityInstance peer)
         : DomainExpressionRewriteBase {
@@ -396,12 +396,12 @@ public sealed partial record DomainEntityInstance {
     }
 
     /// <summary>
-    /// Lowers and executes <paramref name=\"expr\"/> against the peer instance bag.
+    /// Lowers and executes <paramref name="expr"/> against the peer instance bag.
     /// </summary>
     private static object? EvaluateExprOnPeer(DomainExpression expr, DomainEntityInstance peer) {
-        var pass = new DomainExpressionLoweringPass(new LoweringContext(new Parameter(\"entity\")));
+        var pass = new DomainExpressionLoweringPass(new LoweringContext(new Parameter("entity")));
         var lowered = pass.Lower(expr,
-            new Parameter(\"entity\", new TypeReference(peer.Entity.Name)));
+            new Parameter("entity", new TypeReference(peer.Entity.Name)));
         var compiled = Interpreter.Compile(lowered, peer._typeDefAnalyzer);
         using var exec = Interpreter.Execute(compiled,
             s => s.SetArgs(new object?[] { peer }));
@@ -409,9 +409,9 @@ public sealed partial record DomainEntityInstance {
     }
 
     /// <summary>
-    /// Creates a child entity instance from a <see cref=\"CreateEntityInstance\"/>
+    /// Creates a child entity instance from a <see cref="CreateEntityInstance"/>
     /// effect. Looks up the target entity by type name — first from the parent
-    /// <see cref=\"Domain\"/> if available, otherwise falls back to the current
+    /// <see cref="Domain"/> if available, otherwise falls back to the current
     /// entity (same-type creation). Initializer expressions are evaluated
     /// against the <em>parent</em> instance and bound to the child's properties.
     /// </summary>
@@ -443,9 +443,9 @@ public sealed partial record DomainEntityInstance {
         var initializerTypeProvider = parentTypeProvider ?? _typeDefAnalyzer;
         var initialValues = new Dictionary<string, object?>(StringComparer.Ordinal);
         foreach (var binding in createEffect.Initializers) {
-            var lowered = new DomainExpressionLoweringPass(new LoweringContext(new Parameter(\"entity\"))).Lower(
+            var lowered = new DomainExpressionLoweringPass(new LoweringContext(new Parameter("entity"))).Lower(
                 binding.Expression,
-                new Parameter(\"entity\", new TypeReference(Entity.Name)));
+                new Parameter("entity", new TypeReference(Entity.Name)));
             var compiled = Interpreter.Compile(lowered, initializerTypeProvider);
             using var exec = Interpreter.Execute(compiled,
                 s => s.SetArgs(new object?[] { this }));
@@ -481,10 +481,10 @@ public sealed partial record DomainEntityInstance {
     }
 
     /// <summary>
-    /// Executes a <see cref=\"CreateEntityInRelationshipEffect\"/>: resolves the target
+    /// Executes a <see cref="CreateEntityInRelationshipEffect"/>: resolves the target
     /// entity type from the relationship definition on the domain, creates the instance,
     /// auto-registers it, and links it via the named relationship.
-    /// Returns the created <see cref=\"DomainEntityInstance\"/>.
+    /// Returns the created <see cref="DomainEntityInstance"/>.
     /// </summary>
     private DomainEntityInstance ExecuteCreateInRelationship(
         CreateEntityInRelationshipEffect effect,

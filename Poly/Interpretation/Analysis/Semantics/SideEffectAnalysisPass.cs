@@ -125,7 +125,6 @@ internal sealed class SideEffectAnalyzer : INodeAnalyzer {
         WhileLoop or DoWhileLoop or ForLoop or ForEachLoop => SideEffectKind.Write,
         IfStatement or SwitchStatement or ThrowStatement => SideEffectKind.External,
         Invoke => SideEffectKind.External,
-        CallExternal => SideEffectKind.External,
         Await => SideEffectKind.External,
         TryCatchFinally or UsingStatement => SideEffectKind.External,
         BreakStatement or ContinueStatement or GotoStatement or LabelDeclaration => SideEffectKind.Write,

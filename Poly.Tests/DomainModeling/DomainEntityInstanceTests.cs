@@ -2363,10 +2363,11 @@ public class DomainEntityInstanceTests {
         store.Add(bInstance);
         store.Link("rel", bInstance, aInstance);
 
-        // Trigger transition — OnEntry throws, but notify should still fire in finally
+        // Trigger transition — OnEntry throws, but notify should still fire in finally.
+        // TransitionStage sets CurrentStage then runs OnEntry in try; Notify is finally.
         var threw = false;
         try {
-            aInstance.InvokeAction("Go");
+            aInstance.TransitionStage("Active");
         }
         catch {
             // Expected — OnEntry effect throws

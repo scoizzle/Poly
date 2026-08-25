@@ -118,7 +118,7 @@ public class SqlitePackTests {
         var domain = ParseDomain("""
             domain Test
             Item: entity {
-              Code: Text column(\"CODE\", \"VARCHAR2(20)\")
+              Code: Text column("CODE", "VARCHAR2(20)")
             }
             """);
         var ctx = SessionBuilder.CreateEmpty().Load(new TemporalLibrary()).Load(new StorageFacetLibrary()).Load(new SqliteLibrary()).Build();
@@ -413,7 +413,7 @@ public class SqlitePackTests {
             domain Demo
             Book: entity {
               Title: Text required length(2, 50)
-              Code: Text pattern(\"^[A-Z]{2}-[0-9]{3}$\")
+              Code: Text pattern("^[A-Z]{2}-[0-9]{3}$")
               Pages: Number range(1, 10000)
 
               Rename: action (value: Text) {

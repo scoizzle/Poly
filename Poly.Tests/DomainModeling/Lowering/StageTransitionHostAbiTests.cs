@@ -9,7 +9,7 @@ public class StageTransitionHostAbiTests {
     private static Entity CreatePersonEntity() {
         var name = new Property("Name", new DomainTypeReference("Text"), []);
         var activate = new Poly.DomainModeling.Ontology.Action("Activate", InvocationResult.Void, [],
-            Effects: [new StageTransitionEffect(new StageReference("Active"))]);
+            [new StageTransitionEffect(new StageReference("Active"))], []);
         var draft = new Stage("Draft",
             Actions: [activate],
             Policies: [], OnEntryEffects: [], OnExitEffects: []);

@@ -120,40 +120,40 @@ public static partial class DirectVmAbiEmitter {
                 // ITypeMethod without MethodInfo (AstMethodDefinition): dispatch on
                 // the live heap instance by name+arity. Generic — not Notify-specific.
                 int astDepth = ctx.RingDepth;
-                var instanceExpr = CompileNode(member.Value, ctx);
-                int instanceSlot = ctx.RingDepth - 1;
-                var foldInst = FoldResultToSlot(ref instanceSlot, astDepth, ctx);
-                instanceExpr = Block(instanceExpr, foldInst);
-                ctx.RingDepth = instanceSlot + 1;
+                var astInstanceExpr = CompileNode(member.Value, ctx);
+                int astInstanceSlot = ctx.RingDepth - 1;
+                var astFoldInst = FoldResultToSlot(ref astInstanceSlot, astDepth, ctx);
+                astInstanceExpr = Block(astInstanceExpr, astFoldInst);
+                ctx.RingDepth = astInstanceSlot + 1;
 
-                var argExprs = new List<Expression>();
-                int[] argSlots = new int[invoke.Arguments.Length];
+                var astArgExprs = new List<Expression>();
+                int[] astArgSlots = new int[invoke.Arguments.Length];
                 for (int i = 0; i < invoke.Arguments.Length; i++) {
-                    argExprs.Add(CompileNode(invoke.Arguments[i], ctx));
-                    argSlots[i] = ctx.RingDepth - 1;
+                    astArgExprs.Add(CompileNode(invoke.Arguments[i], ctx));
+                    astArgSlots[i] = ctx.RingDepth - 1;
                 }
 
-                var instanceObj = Call(ctx.HeapLocal, HeapUnsafeGet,
-                    Convert(ctx.RingVar(instanceSlot), typeof(int)));
+                var astInstanceObj = Call(ctx.HeapLocal, HeapUnsafeGet,
+                    Convert(ctx.RingVar(astInstanceSlot), typeof(int)));
                 var argObjs = new Expression[invoke.Arguments.Length];
                 for (int i = 0; i < invoke.Arguments.Length; i++) {
                     argObjs[i] = Call(ctx.HeapLocal, HeapUnsafeGet,
-                        Convert(ctx.RingVar(argSlots[i]), typeof(int)));
+                        Convert(ctx.RingVar(astArgSlots[i]), typeof(int)));
                 }
 
                 var invokeCall = Call(
                     null,
                     InvokeInstanceMethodInfo,
-                    instanceObj,
+                    astInstanceObj,
                     Constant(member.MemberName),
                     NewArrayInit(typeof(object), argObjs));
 
                 int astSlot = ctx.AllocSlot();
                 ctx.RingDepth = astSlot + 1;
-                var astBody = new List<Expression>(argExprs.Count + 3) { instanceExpr };
-                astBody.AddRange(argExprs);
+                var astBody = new List<Expression>(astArgExprs.Count + 3) { astInstanceExpr };
+                astBody.AddRange(astArgExprs);
 
-                bool isVoid = method.MemberTypeDefinition.RuntimeType == typeof(void)
+                bool isVoid = method.MemberTypeDefinition.GetRuntimeType() == typeof(void)
                     || string.Equals(method.MemberTypeDefinition.Name, "void", StringComparison.Ordinal);
                 if (isVoid) {
                     astBody.Add(invokeCall);
@@ -443,11 +443,9 @@ public static partial class DirectVmAbiEmitter {
         // Create a ReadOnlySpan<long> directly over _slots[_fb .. _fb + localCount].
         // This is a zero-allocation slice — no buffer copy needed.
         Expression spanExpr = localCount == 0
-            ? New(
-                typeof(ReadOnlySpan<long>).GetConstructor([typeof(long[])])!,
+            ? New(ReadOnlySpanLongArrayCtor,
                 NewArrayBounds(typeof(long), Constant(0)))
-            : New(
-                typeof(ReadOnlySpan<long>).GetConstructor([typeof(long[]), typeof(int), typeof(int)])!,
+            : New(ReadOnlySpanLongSliceCtor,
                 ctx.SlotsLocal, ctx.FramePosLocal, Constant(localCount));
 
         stmts.Add(Invoke(ctx.DebugHookProp, ctx.CurrentAstNodeExpr, spanExpr, ctx.HeapLocal));
@@ -480,14 +478,14 @@ public static partial class DirectVmAbiEmitter {
     // ── Float/double helpers ────────────────────────
 
     private static readonly MethodInfo BitConverterInt64BitsToDouble =
-        typeof(BitConverter).GetMethod(nameof(BitConverter.Int64BitsToDouble), [typeof(long)])!;
+        Ref.Method((Expression<Func<long, double>>)(v => BitConverter.Int64BitsToDouble(v)));
 
     private static readonly MethodInfo BitConverterDoubleToInt64Bits =
-        typeof(BitConverter).GetMethod(nameof(BitConverter.DoubleToInt64Bits), [typeof(double)])!;
+        Ref.Method((Expression<Func<double, long>>)(v => BitConverter.DoubleToInt64Bits(v)));
 
     private static readonly MethodInfo InvokeInstanceMethodInfo =
-        typeof(DirectVmAbiEmitter).GetMethod(nameof(InvokeInstanceMethod),
-            BindingFlags.NonPublic | BindingFlags.Static)!;
+        Ref.Method((Expression<Func<object, string, object?[], object?>>)((instance, name, args) =>
+            InvokeInstanceMethod(instance, name, args)));
 
     /// <summary>
     /// Generic instance-method dispatch for Invoke(Member) whose resolved

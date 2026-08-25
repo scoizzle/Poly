@@ -323,8 +323,8 @@ public class DomainToCSharpExporterTests {
 
         await Assert.That(lowered).IsNotNull();
         await Assert.That(lowered).IsTypeOf<Block>();
-        var nodes = ((Block)lowered!).Nodes.ToList();
-        // Entry effect emitted: this.MaxItems = <0> (int or long constant — match numerically).
+        var nodes = FlattenLowered(lowered!).ToList();
+        // Entry effect is inside the try of Assignment + TryCatchFinally(Notify).
         await Assert.That(nodes.Any(n =>
             n is Assignment {
                 Destination: Member { Value: ThisReference, MemberName: "MaxItems" },
@@ -1155,6 +1155,15 @@ public class DomainToCSharpExporterTests {
         var (domain, analysis) = ParseAndAnalyze(dsl);
         await Assert.That(analysis.HasErrors).IsFalse();
         await AssertExportCompiles(domain, analysis);
+    }
+
+    private static IEnumerable<Node> FlattenLowered(Node node) {
+        yield return node;
+        foreach (var child in node.Children) {
+            if (child is null) continue;
+            foreach (var n in FlattenLowered(child))
+                yield return n;
+        }
     }
 
     private static Assignment? FindFirstAssignment(Node? node) {

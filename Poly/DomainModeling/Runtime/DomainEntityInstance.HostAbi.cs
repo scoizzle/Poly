@@ -220,7 +220,7 @@ public sealed partial record DomainEntityInstance {
                 if (prevStage?.OnExitEffects is { Count: > 0 }) {
                     var exitPass = new EffectLoweringPass(Entity, loweringContext);
                     foreach (var effect in prevStage.OnExitEffects)
-                        ExecuteEffect(effect, exitPass, _typeDefAnalyzer);
+                        RunTransitionEffect(effect, exitPass, notifyStore);
                 }
             }
 
@@ -235,7 +235,7 @@ public sealed partial record DomainEntityInstance {
                 if (targetStage?.OnEntryEffects is { Count: > 0 }) {
                     var entryPass = new EffectLoweringPass(Entity, loweringContext);
                     foreach (var effect in targetStage.OnEntryEffects)
-                        ExecuteEffect(effect, entryPass, _typeDefAnalyzer);
+                        RunTransitionEffect(effect, entryPass, notifyStore);
                 }
             }
             finally {
@@ -247,6 +247,19 @@ public sealed partial record DomainEntityInstance {
         finally {
             _transitionDepth--;
         }
+    }
+
+    /// <summary>
+    /// Nested <see cref="StageTransitionEffect"/> in entry/exit must recurse through
+    /// <see cref="TransitionStage"/> so depth, intermediate exits, and OnEntry chains
+    /// stay on the runtime helper. Flattening them into one VM tree skips the bound.
+    /// </summary>
+    private void RunTransitionEffect(Effect effect, EffectLoweringPass pass, bool notifyStore) {
+        if (effect is StageTransitionEffect nested) {
+            TransitionStage(nested.TargetStage.StageName, notifyStore);
+            return;
+        }
+        ExecuteEffect(effect, pass, _typeDefAnalyzer);
     }
 
     /// <summary>

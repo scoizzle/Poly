@@ -966,12 +966,6 @@ public sealed class CSharpGenerator {
                 WriteCommaSeparated(sb, invoke.Arguments);
                 sb.Append(')');
                 return;
-            case CallExternal callExternal:
-                sb.Append(callExternal.MethodName);
-                sb.Append('(');
-                WriteCommaSeparated(sb, callExternal.Arguments);
-                sb.Append(')');
-                return;
             case New @new:
                 sb.Append("new ");
                 WriteExpression(sb, @new.Type);

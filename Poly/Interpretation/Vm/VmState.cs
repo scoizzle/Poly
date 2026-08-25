@@ -323,17 +323,15 @@ public sealed class VmState : IDisposable {
     public Action<Node, ReadOnlySpan<long>, Heap>? DebugHook { get; set; }
 
     /// <summary>Maximum number of loop iterations before the VM throws.
-    /// Set to -1 (default) for unlimited iterations. Each loop header
-    /// in the compiled delegate increments <see cref="LoopTicks"/> and
-    /// throws when the count exceeds this limit.</summary>
+    /// Set to -1 (default) for unlimited iterations. Honored only in
+    /// <see cref="CompilationMode.Normal"/>: each loop header increments
+    /// <see cref="LoopTicks"/> and throws when the count exceeds this limit.
+    /// <see cref="CompilationMode.NoDebug"/> does not emit the check.</summary>
     public long MaxLoopIterations { get; set; } = -1;
 
     /// <summary>Total loop-header visits this execution. Reset with the state.
     /// Compared against <see cref="MaxLoopIterations"/> when that limit is &gt;= 0.</summary>
     public long LoopTicks { get; set; }
-
-    /// <summary>Per-loop iteration counters (legacy). Prefer <see cref="LoopTicks"/>.</summary>
-    public long[]? LoopCounters { get; set; }
 
     // ── Closure/function call frame state ────────────────────────
 
@@ -407,7 +405,7 @@ public sealed class VmState : IDisposable {
     };
 
     /// <summary>Resets the VM state to its initial condition, clearing the
-    /// stack, heap, loop counters, and current node tracking. Does not
+    /// stack, heap, loop ticks, and current node tracking. Does not
     /// change the <see cref="Program"/> reference. Useful for reusing a
     /// <see cref="VmState"/> across multiple executions of the same program.</summary>
     public void Reset() {
@@ -416,7 +414,6 @@ public sealed class VmState : IDisposable {
         FramePos = 0;
         Stack.Reset();
         Heap.Clear();
-        LoopCounters = null;
         LoopTicks = 0;
         CurrentAstNode = null;
         CurrentNodeId = null;

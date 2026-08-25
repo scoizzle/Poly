@@ -655,10 +655,10 @@ public static partial class DirectVmAbiEmitter {
     private static Expression EmitVariable(Variable v, AbiCtx ctx) {
         // Statement form `var x = expr` (C# generator prints a declaration).
         // First encounter declares and writes; later reads ignore Value.
-        if (v.Value is not null && !ctx.IsDeclared(v)) {
+        if (v.Initializer is not null && !ctx.IsDeclared(v)) {
             ctx.DeclareVariable(v);
             int d = ctx.RingDepth;
-            var init = CompileNode(v.Value, ctx);
+            var init = CompileNode(v.Initializer, ctx);
             int slot = ctx.RingDepth - 1;
             var fold = FoldResultToSlot(ref slot, d, ctx);
             return Block(init, fold, ctx.VariableWrite(v, ctx.RingVar(slot)), ctx.RingVar(slot));

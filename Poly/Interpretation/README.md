@@ -151,10 +151,10 @@ ring locals.
 
 ### Compilation Modes
 
-| Mode | Debug Hooks | PC Tracking | Use Case |
-|------|-------------|-------------|----------|
-| `Normal` (default) | Enabled | Enabled | Development, debugging, testing |
-| `NoDebug` | Disabled | Disabled | Production, benchmarks, maximum speed |
+| Mode | Debug Hooks | PC Tracking | Loop-tick sandbox | Use Case |
+|------|-------------|-------------|-------------------|----------|
+| `Normal` (default) | Enabled | Enabled | Enabled | Development, debugging, testing |
+| `NoDebug` | Disabled | Disabled | Omitted | Production, benchmarks, maximum speed |
 
 ---
 
@@ -218,9 +218,12 @@ the hook checks a `volatile bool` and returns immediately. `StepOver` sets a fla
 so the next hook invocation blocks and signals back — the program runs at full
 speed when nobody is stepping.
 
-For lower-level control, use `VmState.DebugInterrupt` (invoked before each µop
-with the full `VmState`) or `VmState.DebugHook` (invoked before each AST node
-with a locals span and heap reference).
+`VmState.DebugHook` is the live integration: Normal-mode `CompileStatement` invokes
+it before each statement (root, and each `Block` child). Loop/if/try bodies are
+hooked only when those bodies are themselves `Block`s. `CompilationMode.NoDebug`
+omits the hook entirely. `CurrentAstNode` is written only when a hook is attached.
+
+`VmState.DebugInterrupt` is unused by the emitter (kept on `VmState` only).
 
 ---
 
@@ -367,7 +370,7 @@ dotnet run --project Poly.Tests/Poly.Tests.csproj
 Syntax types Interpretation most often compiles:
 
 - **Core:** `Constant`, `Parameter`, `Variable`, `Block`
-- **Calls:** `Member`, `Invoke`, `IndexAccess`, `New`, `Lambda`
+- **Calls:** `Member`, `Invoke` (`Lambda`, stored `Variable`/`Parameter` closures, or `Member`), `IndexAccess`, `New`, `Lambda`
 - **Operators:** `Add`, `Subtract`, `Multiply`, `Divide`, `Equal`, comparisons, `And` / `Or` / `Not`, bitwise/shift
 - **Control flow:** `Conditional`, `IfStatement`, loops, `Return`, `BreakStatement`, `ContinueStatement`, `GotoStatement`, `TryCatchFinally`, `UsingStatement`, `SwitchStatement`
 - **Types:** `TypeCast`, `TypeIs`, `TypeAs`, `TypeReference`

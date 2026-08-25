@@ -267,6 +267,15 @@ public class InterpretationStabilizationTests {
     }
 
     [Test]
+    public async Task MaxLoopIterations_NoDebug_DoesNotGuard() {
+        var i = new Variable("i");
+        var program = Interpreter.Compile(CountToThree(i), CompilationMode.NoDebug);
+        using var exec = Interpreter.Execute(program, s => s.MaxLoopIterations = 1);
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(3L);
+        await Assert.That(exec.State.LoopTicks).IsEqualTo(0L);
+    }
+
+    [Test]
     public async Task MaxLoopIterations_Unlimited_DoesNotIncrementLoopTicks() {
         var i = new Variable("i");
         var program = Interpreter.Compile(CountToThree(i));

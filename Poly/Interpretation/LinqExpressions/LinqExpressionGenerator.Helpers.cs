@@ -257,7 +257,7 @@ public sealed partial class LinqExpressionGenerator {
             return Expression.Variable(runtimeType, variable.Name);
         }
 
-        if (variable.Value is Constant { Value: not null } constant) {
+        if (variable.Initializer is Constant { Value: not null } constant) {
             return Expression.Variable(constant.Value.GetType(), variable.Name);
         }
 
@@ -278,14 +278,14 @@ public sealed partial class LinqExpressionGenerator {
     }
 
     /// <summary>
-    /// Statement form <c>var x = expr</c>: assign <see cref="Variable.Value"/> on first
-    /// encounter (same as VM <c>EmitVariable</c>). Later reads ignore Value.
+    /// Statement form <c>var x = expr</c>: assign <see cref="Variable.Initializer"/> on first
+    /// encounter (same as VM <c>EmitVariable</c>). Later reads ignore Initializer.
     /// </summary>
     private Expression CompileVariableUse(Variable variable, CompilationContext context) {
-        if (variable.Value is not null && !context.TryGetVariable(variable, out _)) {
+        if (variable.Initializer is not null && !context.TryGetVariable(variable, out _)) {
             var param = CompileVariable(variable, context);
             context.HoistVariable(param);
-            var init = CompileNode(variable.Value, context);
+            var init = CompileNode(variable.Initializer, context);
             if (init.Type != param.Type)
                 init = Expression.Convert(init, param.Type);
             return Expression.Assign(param, init);

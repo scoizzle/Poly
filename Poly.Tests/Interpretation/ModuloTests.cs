@@ -89,18 +89,6 @@ public class ModuloTests {
     }
 
     [Test]
-    public async Task Modulo_GetTypeDefinition_ReturnsNumericType() {
-        // Arrange
-        var node = new Modulo(Wrap(17), Wrap(5));
-
-        // Act - build to trigger semantic analysis
-        _ = node.BuildExpression();
-
-        // Assert
-        await Assert.That(node).IsNotNull();
-    }
-
-    [Test]
     public async Task Modulo_ToString_ReturnsExpectedFormat() {
         // Arrange
         var node = new Modulo(Wrap(17), Wrap(5));

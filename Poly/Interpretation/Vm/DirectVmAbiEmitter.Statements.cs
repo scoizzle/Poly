@@ -271,7 +271,7 @@ public static partial class DirectVmAbiEmitter {
         int d = ctx.RingDepth;
         var breakLabel = Label("wl_break");
         var continueLabel = Label("wl_continue");
-        ctx.PushLoopScope(breakLabel, continueLabel);
+        ctx.PushLoopScope(breakLabel, continueLabel, wl.Label);
         var test = CompileConditionAsBool(wl.Condition, ctx);
         ctx.RingDepth = d;
         var bodyExpr = CompileNode(wl.Body, ctx);
@@ -288,6 +288,8 @@ public static partial class DirectVmAbiEmitter {
     }
 
     private static Expression EmitLoopIterationGuard(AbiCtx ctx) {
+        if (ctx.Mode == CompilationMode.NoDebug)
+            return Empty();
         var max = Property(ctx.State, nameof(VmState.MaxLoopIterations));
         var ticks = Property(ctx.State, nameof(VmState.LoopTicks));
         return IfThen(
@@ -304,7 +306,7 @@ public static partial class DirectVmAbiEmitter {
         int d = ctx.RingDepth;
         var breakLabel = Label("dwl_break");
         var continueLabel = Label("dwl_continue");
-        ctx.PushLoopScope(breakLabel, continueLabel);
+        ctx.PushLoopScope(breakLabel, continueLabel, dwl.Label);
         var bodyExpr = CompileNode(dwl.Body, ctx);
         ctx.RingDepth = d;
         var test = CompileConditionAsBool(dwl.Condition, ctx);
@@ -428,7 +430,8 @@ public static partial class DirectVmAbiEmitter {
             return ctx.RingVar(ringSlot);
         if (!ctx.TryGetParameterSlot(p, out int paramIdx))
             paramIdx = ctx.DeclareParameter(p);
-        if (paramIdx == 0 && ctx.ParamSlotOffset == 0 && !ctx.HasInlineParameters)
+        if (paramIdx == 0 && ctx.ParamSlotOffset == 0 && !ctx.HasInlineParameters
+            && !ctx.IsCompiledFunctionBody)
             return ctx.InstanceHandle;
         return ctx.ParameterRead(paramIdx);
     }
@@ -446,8 +449,6 @@ public static partial class DirectVmAbiEmitter {
         if (lambda.LambdaIndex < 0)
             throw new InvalidOperationException("Lambda.LambdaIndex not set during lambda collection");
         var captures = FindCaptures(lambda.Body, ctx, lambda.Parameters);
-        for (int i = 0; i < captures.Count; i++)
-            ctx.DeclareCapture(captures[i].Binding, i);
         int arrLen = 1 + captures.Count;
         var closureArrVar = Variable(typeof(object[]), "_closureArr");
         var body = new List<Expression>();
@@ -475,6 +476,62 @@ public static partial class DirectVmAbiEmitter {
         foreach (var child in node.Children) {
             if (child is not null)
                 DeclareFreeParameters(child, ctx, ownParams);
+        }
+    }
+
+    private static List<Capture> FindBodyCaptures(Lambda lambda) {
+        var declared = new HashSet<Variable>(ReferenceEqualityComparer.Instance);
+        CollectDeclaredLocals(lambda.Body, declared);
+        var result = new List<Capture>();
+        var seenVars = new HashSet<Variable>(ReferenceEqualityComparer.Instance);
+        var seenParams = new HashSet<Parameter>(ReferenceEqualityComparer.Instance);
+        var ownParams = new HashSet<Parameter>(lambda.Parameters, ReferenceEqualityComparer.Instance);
+        FindBodyCapturesRecursive(lambda.Body, result, seenVars, seenParams, ownParams, declared);
+        return result;
+    }
+
+    private static void CollectDeclaredLocals(Node node, HashSet<Variable> declared) {
+        if (node is Lambda)
+            return;
+        if (node is Block block) {
+            foreach (var v in block.Variables) {
+                if (v is Variable variable)
+                    declared.Add(variable);
+            }
+        }
+        if (node is ForEachLoop fe)
+            declared.Add(fe.LoopVariable);
+        if (node is Variable declaredVar && declaredVar.Initializer is not null)
+            declared.Add(declaredVar);
+        foreach (var child in node.Children) {
+            if (child is not null)
+                CollectDeclaredLocals(child, declared);
+        }
+    }
+
+    private static void FindBodyCapturesRecursive(
+        Node node, List<Capture> result,
+        HashSet<Variable> seenVars, HashSet<Parameter> seenParams,
+        HashSet<Parameter> ownParams, HashSet<Variable> declared) {
+        if (node is Lambda nested) {
+            var nestedOwn = new HashSet<Parameter>(ownParams, ReferenceEqualityComparer.Instance);
+            foreach (var np in nested.Parameters)
+                nestedOwn.Add(np);
+            FindBodyCapturesRecursive(nested.Body, result, seenVars, seenParams, nestedOwn, declared);
+            return;
+        }
+        if (node is Variable v && seenVars.Add(v) && !declared.Contains(v)) {
+            result.Add(new Capture(v, null));
+            return;
+        }
+        if (node is Parameter p && seenParams.Add(p)) {
+            if (!ownParams.Contains(p) && ownParams.All(op => op.Name != p.Name))
+                result.Add(new Capture(null, p));
+            return;
+        }
+        foreach (var child in node.Children) {
+            if (child is not null)
+                FindBodyCapturesRecursive(child, result, seenVars, seenParams, ownParams, declared);
         }
     }
 
@@ -527,21 +584,13 @@ public static partial class DirectVmAbiEmitter {
         return ParameterValue(cap.Parameter!, ctx);
     }
 
-    /// <summary>Break statement: jump to current loop's break label.</summary>
-    private static Expression EmitBreakStatement(BreakStatement bs, AbiCtx ctx) {
-        var labels = ctx.CurrentLoopLabels;
-        if (labels == null)
-            throw new InvalidOperationException("Break outside loop");
-        return Goto(labels.Value.breakLabel);
-    }
+    /// <summary>Break statement: jump to the named loop, or the innermost if unlabeled.</summary>
+    private static Expression EmitBreakStatement(BreakStatement bs, AbiCtx ctx) =>
+        Goto(ctx.ResolveLoopLabels(bs.Label).breakLabel);
 
-    /// <summary>Continue statement: jump to current loop's continue label.</summary>
-    private static Expression EmitContinueStatement(ContinueStatement cs, AbiCtx ctx) {
-        var labels = ctx.CurrentLoopLabels;
-        if (labels == null)
-            throw new InvalidOperationException("Continue outside loop");
-        return Goto(labels.Value.continueLabel);
-    }
+    /// <summary>Continue statement: jump to the named loop's continue, or the innermost if unlabeled.</summary>
+    private static Expression EmitContinueStatement(ContinueStatement cs, AbiCtx ctx) =>
+        Goto(ctx.ResolveLoopLabels(cs.Label).continueLabel);
 
     /// <summary>
     /// ForLoop: lower to { init; while(condition) { body; increment; } }
@@ -550,7 +599,7 @@ public static partial class DirectVmAbiEmitter {
     private static Expression EmitForLoop(ForLoop fl, AbiCtx ctx) {
         var breakLabel = Label("for_break");
         var continueLabel = Label("for_continue");
-        ctx.PushLoopScope(breakLabel, continueLabel);
+        ctx.PushLoopScope(breakLabel, continueLabel, fl.Label);
 
         var stmts = new List<Expression>();
         if (fl.Initializer != null)
@@ -594,7 +643,7 @@ public static partial class DirectVmAbiEmitter {
     private static Expression EmitForEachLoop(ForEachLoop fel, AbiCtx ctx) {
         var breakLabel = Label("foreach_break");
         var continueLabel = Label("foreach_continue");
-        ctx.PushLoopScope(breakLabel, continueLabel);
+        ctx.PushLoopScope(breakLabel, continueLabel, fel.Label);
         ctx.PushScope();
         ctx.DeclareVariable(fel.LoopVariable);
 

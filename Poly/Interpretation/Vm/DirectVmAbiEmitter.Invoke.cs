@@ -210,6 +210,9 @@ public static partial class DirectVmAbiEmitter {
 
             // 1. Compile the Lambda node — allocates closure on heap, result on ring
             var closureExpr = EmitLambda(lambda, ctx);
+            var invokeCaptures = FindCaptures(lambda.Body, ctx, lambda.Parameters);
+            for (int i = 0; i < invokeCaptures.Count; i++)
+                ctx.DeclareCapture(invokeCaptures[i].Binding, i);
             int closureSlot = ctx.RingDepth - 1;
 
             // 2. Compile arguments — each goes on ring
@@ -328,8 +331,76 @@ public static partial class DirectVmAbiEmitter {
                 Block(preBody.Concat(postBody)));
         }
 
+        if (invoke.Delegate is Poly.Ast.Nodes.Variable or Poly.Ast.Nodes.Parameter)
+            return EmitInvokeIndirect(invoke, ctx);
+
         throw new InvalidOperationException(
             $"VM compile rejected: Invoke target must be a member or lambda, got {invoke.Delegate.GetType().Name}.");
+    }
+
+    private static Expression EmitInvokeIndirect(Invoke invoke, AbiCtx ctx) {
+        var targetExpr = CompileNode(invoke.Delegate, ctx);
+        int targetSlot = ctx.RingDepth - 1;
+        var argExprs = new List<Expression>();
+        int[] argSlots = new int[invoke.Arguments.Length];
+        for (int i = 0; i < invoke.Arguments.Length; i++) {
+            argExprs.Add(CompileNode(invoke.Arguments[i], ctx));
+            argSlots[i] = ctx.RingDepth - 1;
+        }
+        var argInits = new Expression[invoke.Arguments.Length];
+        for (int i = 0; i < invoke.Arguments.Length; i++)
+            argInits[i] = ctx.RingVar(argSlots[i]);
+        int outSlot = ctx.AllocSlot();
+        ctx.RingDepth = outSlot + 1;
+        var call = Assign(ctx.RingVar(outSlot),
+            Call(null, InvokeHeapClosureInfo,
+                ctx.State,
+                ctx.RingVar(targetSlot),
+                ctx.FunctionTableExpr!,
+                NewArrayInit(typeof(long), argInits)));
+        var seq = new List<Expression>(argExprs.Count + 2) { targetExpr };
+        seq.AddRange(argExprs);
+        seq.Add(call);
+        return Block(seq);
+    }
+
+    private static long InvokeHeapClosure(VmState state, long handle, Action<VmState>[] table, long[] args) {
+        if (handle <= 0)
+            throw new InvalidOperationException("VM: invoke of null.");
+        var obj = state.Heap.UnsafeGet((int)handle);
+        if (obj is not object[] closure || closure.Length < 1 || closure[0] is not long idxL)
+            throw new InvalidOperationException("VM: invoke target is not a closure.");
+        int idx = (int)idxL;
+        if ((uint)idx >= (uint)table.Length || table[idx] is null)
+            throw new InvalidOperationException("VM: invalid closure index.");
+
+        var stack = state.Stack;
+        int callSp = stack.StackPointer;
+        int header = 2;
+        int n = Math.Max(1, args.Length);
+        int need = callSp + header + n;
+        if (need > stack.RawSlots.Length)
+            throw new InvalidOperationException("VM: value stack overflow.");
+        stack.SetStackPointer(need);
+        var slots = stack.RawSlots;
+        slots[callSp] = state.FramePos;
+        slots[callSp + 1] = callSp;
+        for (int i = 0; i < args.Length; i++)
+            slots[callSp + header + i] = args[i];
+
+        int savedFp = state.FramePos;
+        int savedClosure = state.ClosureHandle;
+        state.FramePos = callSp + header;
+        state.ClosureHandle = (int)handle;
+        try {
+            table[idx](state);
+            return slots[callSp + header];
+        }
+        finally {
+            state.FramePos = savedFp;
+            state.ClosureHandle = savedClosure;
+            stack.SetStackPointer(callSp);
+        }
     }
 
     /// <summary>Inline a small lambda with no captures and a single-expression body.
@@ -374,25 +445,23 @@ public static partial class DirectVmAbiEmitter {
         IReadOnlyList<Parameter> parameters,
         List<Capture> captures,
         Action<VmState>[] functionTable,
-        CompilationMode mode) {
+        CompilationMode mode,
+        AnalysisResult analysis) {
 
         var fnCtx = new AbiCtx();
         fnCtx.FunctionTableExpr = Constant(functionTable);
         fnCtx.Mode = mode;
+        fnCtx.Analysis = analysis;
+        fnCtx.IsCompiledFunctionBody = true;
         var bodyExprs = new List<Expression>();
 
-        // Preamble
         bodyExprs.Add(Label(fnCtx.EntryLabel));
         bodyExprs.Add(Assign(fnCtx.SlotsLocal, fnCtx.SlotsInitExpression));
         bodyExprs.Add(Assign(fnCtx.HeapLocal, fnCtx.HeapInitExpression));
         bodyExprs.Add(Assign(fnCtx.Registers,
             Coalesce(fnCtx.Registers, NewArrayBounds(typeof(long), Constant(256)))));
         bodyExprs.Add(Assign(fnCtx.FramePosLocal,
-            Condition(
-                Equal(Property(fnCtx.State, nameof(VmState.Status)),
-                    Constant(InterpreterStatus.Resuming)),
-                Property(fnCtx.State, nameof(VmState.FramePos)),
-                Constant(0))));
+            Property(fnCtx.State, nameof(VmState.FramePos))));
 
         if (mode != CompilationMode.NoDebug) {
             fnCtx.DebugHookProp = Property(fnCtx.State, nameof(VmState.DebugHook));
@@ -503,6 +572,9 @@ public static partial class DirectVmAbiEmitter {
     private static readonly MethodInfo InvokeInstanceMethodInfo =
         Ref.Method((Expression<Func<object, string, object?[], object?>>)((instance, name, args) =>
             InvokeInstanceMethod(instance, name, args)));
+    private static readonly MethodInfo InvokeHeapClosureInfo =
+        typeof(DirectVmAbiEmitter).GetMethod(nameof(InvokeHeapClosure),
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!;
 
     /// <summary>
     /// Generic instance-method dispatch for Invoke(Member) whose resolved

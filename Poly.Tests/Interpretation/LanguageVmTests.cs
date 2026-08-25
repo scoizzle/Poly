@@ -1,32 +1,10 @@
 using Poly.Interpretation;
-using Poly.Interpretation.Analysis.Semantics;
 using Poly.Introspection;
 
 namespace Poly.Tests.Interpretation;
 
 /// <summary>Language-VM oracles: Interpreter.Compile on Syntax nodes, no DomainModeling.</summary>
 public class LanguageVmTests {
-    [Test]
-    public async Task Compile_UnresolvedMember_Throws() {
-        await Assert.That(() => Interpreter.Compile(new Member(new Parameter("entity"), "Nope")))
-            .Throws<InvalidOperationException>();
-    }
-
-    [Test]
-    public async Task Compile_StaticThis_Throws() {
-        var thisReference = new ThisReference();
-        var typeNode = new TypeDefinitionNode(
-            "Widget",
-            Methods: [
-                new MethodDefinitionNode(
-                    "Bad",
-                    new PrimitiveTypeReference(PrimitiveType.String),
-                    Body: thisReference,
-                    IsStatic: true)
-            ]);
-        await Assert.That(() => Interpreter.Compile(typeNode)).Throws<InvalidOperationException>();
-    }
-
     [Test]
     public async Task Comment_AsProgram_IsVoid() {
         using var exec = Interpreter.Execute(Interpreter.Compile(new Comment("note")));
@@ -149,20 +127,6 @@ public class LanguageVmTests {
     }
 
     [Test]
-    public async Task Conditional_PicksBranch() {
-        var node = new Conditional(new Constant(true), new Constant(1L), new Constant(2L));
-        using var exec = Interpreter.Execute(Interpreter.Compile(node));
-        await Assert.That(exec.GetValue<long>()).IsEqualTo(1L);
-    }
-
-    [Test]
-    public async Task Coalesce_NullTakesRight() {
-        var node = new Coalesce(new Constant(null), new Constant("fallback"));
-        using var exec = Interpreter.Execute(Interpreter.Compile(node));
-        await Assert.That(exec.GetValue<string>()).IsEqualTo("fallback");
-    }
-
-    [Test]
     public async Task Parameter_SetArgs_ReturnsArg() {
         var p = new Parameter("x", TypeReference.To<long>());
         var program = Interpreter.Compile(p);
@@ -193,13 +157,6 @@ public class LanguageVmTests {
     }
 
     [Test]
-    public async Task Add_StringAndNumber_CompileRejected() {
-        await Assert.That(() =>
-            Interpreter.Compile(new Add(new Constant("x"), new Constant(1L)))
-        ).Throws<InvalidOperationException>();
-    }
-
-    [Test]
     public async Task Comment_OnlyInBlock_IsVoid() {
         using var exec = Interpreter.Execute(Interpreter.Compile(new Block([new Comment("note")])));
         await Assert.That(exec.Result.IsVoid).IsTrue();
@@ -220,6 +177,13 @@ public class LanguageVmTests {
     }
 
     [Test]
+    public async Task Coalesce_LongZero_KeepsZero() {
+        var node = new Coalesce(new Constant(0L), new Constant(99L));
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(0L);
+    }
+
+    [Test]
     public async Task TypeCast_PrimitiveTypeReference_Int32() {
         var node = new TypeCast(new Constant(42L), new PrimitiveTypeReference(PrimitiveType.Int32));
         using var exec = Interpreter.Execute(Interpreter.Compile(node));
@@ -235,15 +199,6 @@ public class LanguageVmTests {
         var node = new Invoke(outer, new Constant(41L));
         using var exec = Interpreter.Execute(Interpreter.Compile(node));
         await Assert.That(exec.GetValue<long>()).IsEqualTo(42L);
-    }
-
-    [Test]
-    public async Task Lambda_ArityMismatch_CompileRejected() {
-        var p = new Parameter("x", TypeReference.To<long>());
-        var lambda = new Lambda([p], p);
-        await Assert.That(() =>
-            Interpreter.Compile(new Invoke(lambda, new Constant(1L), new Constant(2L)))
-        ).Throws<InvalidOperationException>();
     }
 
     [Test]

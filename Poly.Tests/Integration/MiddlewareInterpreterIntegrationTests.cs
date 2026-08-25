@@ -198,44 +198,6 @@ public class MiddlewareInterpreterIntegrationTests {
     }
 
     /// <summary>
-    /// Test conditional (ternary) operator.
-    /// </summary>
-    [Test]
-    public async Task Conditional_WithTrueCondition_ReturnsIfTrueValue() {
-        // Act - Build: true ? 42 : 0
-        var ast = new Conditional(
-            Wrap(true),
-            Wrap(42),
-            Wrap(0));
-        var expr = ast.BuildExpression();
-
-        var lambda = Expression.Lambda<Func<int>>(expr);
-        var result = lambda.Compile()();
-
-        // Assert
-        await Assert.That(result).IsEqualTo(42);
-    }
-
-    /// <summary>
-    /// Test conditional (ternary) operator with false condition.
-    /// </summary>
-    [Test]
-    public async Task Conditional_WithFalseCondition_ReturnsIfFalseValue() {
-        // Act - Build: false ? 42 : 0
-        var ast = new Conditional(
-            Wrap(false),
-            Wrap(42),
-            Wrap(0));
-        var expr = ast.BuildExpression();
-
-        var lambda = Expression.Lambda<Func<int>>(expr);
-        var result = lambda.Compile()();
-
-        // Assert
-        await Assert.That(result).IsEqualTo(0);
-    }
-
-    /// <summary>
     /// Test unary minus operator.
     /// </summary>
     [Test]

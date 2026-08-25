@@ -18,6 +18,8 @@ Canonical meaning is still the VM. When they disagree, fix the VM (or shrink the
 
 Language-meaning `BuildExpression` tests in Arithmetic/Modulo/UnaryMinus/NumericPromotion/Constant/Parameter/Block/BlockScope/Conditional/Coalesce/ForEach/TypeCast/New/Lambda/InterpreterIntegration now also `Interpreter.Compile` the same tree (or assert VM compile-reject). `LanguageVmTests` covers additional executable kinds.
 
+Interpreter-implementation gotchas from CPython, Lua, JavaScript, Ruby, and C# are `InterpreterLanguageGotchaTests`: short-circuit `And`/`Or` vs always-eval `BitwiseAnd`, IEEE NaN/`0.1+0.2`, C# remainder/truncation (not Python floor-div), unchecked long wrap, string value equality (not identity), `??` vs truthy-`||` already in `LanguageVmTests`, labeled `break`/`continue`, `finally` vs throw/return, first matching `catch`, `using` dispose on throw, foreach live enumerator (mutating `List` throws), index OOB, Python-style chained comparison rejected, stored-lambda `Invoke(Variable)` via the function table (captures snapshot at creation).
+
 ## Remaining VM↔LINQ mismatches
 
 Closed: numeric promotion (IEEE mix + decimal + uint/ulong), string `Add`, optional ctor defaults, lambda outer `Parameter` capture / inline bind, nullable coalesce (`int?` heap-boxed so `0` ≠ null).

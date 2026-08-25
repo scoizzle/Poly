@@ -28,7 +28,7 @@ namespace Poly.Interpretation.Vm;
 ///   <item><b>Frame model</b> — 2-word header (previousFP + savedSP) with
 ///   compile-time-known argument/local counts.</item>
 ///   <item><b>Debug modes</b> — <see cref="CompilationMode.Normal"/> includes
-///   DebugHook and PC tracking; <see cref="CompilationMode.NoDebug"/> omits
+///   DebugHook, PC tracking, and loop-tick guards; <see cref="CompilationMode.NoDebug"/> omits
 ///   them for maximum speed.</item>
 /// </list>
 /// </remarks>
@@ -89,6 +89,13 @@ public static partial class DirectVmAbiEmitter {
 
         var lambdas = new List<Lambda>();
         CollectLambdas(root, lambdas);
+        var functionTable = new Action<VmState>[lambdas.Count];
+        ctx.FunctionTableExpr = Constant(functionTable);
+        for (int i = 0; i < lambdas.Count; i++) {
+            var lam = lambdas[i];
+            functionTable[i] = CompileFunctionBody(
+                lam.Body, lam.Parameters, FindBodyCaptures(lam), functionTable, mode, analysis);
+        }
 
         body.Add(Label(ctx.EntryLabel));
         body.Add(Assign(ctx.SlotsLocal, ctx.SlotsInitExpression));
@@ -435,7 +442,9 @@ public static partial class DirectVmAbiEmitter {
             Constant c when TryValueToLong(c.Value, out _) || c.Value is double || c.Value is float
                 => EmitConstantValue(c),
             Constant c => SpillRingRead(EmitConstant(c, ctx), ctx),
-            Variable v => ctx.VariableRead(v),
+            Variable v => ctx.TryGetCapture(v, out _)
+                ? SpillRingRead(EmitVariable(v, ctx), ctx)
+                : ctx.VariableRead(v),
             Add n => EmitBinaryArithmeticValue(n.LeftHandValue, n.RightHandValue, Add, ctx),
             Subtract n => EmitBinaryArithmeticValue(n.LeftHandValue, n.RightHandValue, Subtract, ctx),
             Multiply n => EmitBinaryArithmeticValue(n.LeftHandValue, n.RightHandValue, Multiply, ctx),
@@ -479,6 +488,7 @@ public static partial class DirectVmAbiEmitter {
             TypeIs t => SpillRingRead(CompileNode(t, ctx), ctx),
             SwitchStatement sw => SpillRingRead(CompileNode(sw, ctx), ctx),
             StridedSetBits ssb => SpillRingRead(CompileNode(ssb, ctx), ctx),
+            Assignment a => SpillRingRead(CompileNode(a, ctx), ctx),
             Comment => RejectCompile("Comment is not a VM value."),
             _ => throw new NotSupportedException(
                 $"CompileValue: unhandled {node.GetType().Name}")

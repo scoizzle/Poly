@@ -131,23 +131,7 @@ public class UnaryMinusTests {
     }
 
     [Test]
-    public async Task UnaryMinus_ToString_ReturnsExpectedFormat() {
-        // Arrange
-        var node = new UnaryMinus(Wrap(42));
-
-        // Act
-        var result = node.ToString();
-
-        // Assert
-        await Assert.That(result).IsEqualTo("-42");
-    }
-
-    [Test]
-    public async Task UnaryMinus_WithNullArgument_AllowsNull() {
-        // Act
-        var node = new UnaryMinus(null!);
-
-        // Assert
-        await Assert.That(node).IsNotNull();
+    public async Task UnaryMinus_NestedInAddition_EvaluatesCorrectly() {
+        await new Add(Wrap(10), new UnaryMinus(Wrap(5))).AssertDualOracleInt(5);
     }
 }

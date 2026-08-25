@@ -125,4 +125,19 @@ public static class NodeTestHelpers {
         using var exec = Interpreter.Execute(node.CompileWithPrimitives());
         return exec.Result;
     }
+
+    /// <summary>Same-tree LINQ + VM oracle for integer results (VM ABI as long).</summary>
+    public static async Task AssertDualOracleInt(this Node node, int expected) {
+        var linq = Expr.Lambda<Func<int>>(node.BuildExpression()).Compile()();
+        await Assert.That(linq).IsEqualTo(expected);
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo((long)expected);
+    }
+
+    public static async Task AssertDualOracleDouble(this Node node, double expected) {
+        var linq = Expr.Lambda<Func<double>>(node.BuildExpression()).Compile()();
+        await Assert.That(linq).IsEqualTo(expected);
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<double>()).IsEqualTo(expected);
+    }
 }

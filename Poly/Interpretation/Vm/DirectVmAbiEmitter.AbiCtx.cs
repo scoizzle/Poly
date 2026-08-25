@@ -106,6 +106,7 @@ public static partial class DirectVmAbiEmitter {
         public CompilationMode Mode { get; set; }
         public int RegisterCount => _registerCount;
         public Expression? FunctionTableExpr { get; set; }
+        public bool IsCompiledFunctionBody { get; set; }
         public AnalysisResult? Analysis { get; set; }
         public IReadOnlyList<ParameterExpression> Locals => _locals;
 
@@ -335,16 +336,26 @@ public static partial class DirectVmAbiEmitter {
 
         public bool HasInlineParameters => _inlineParameters is not null;
 
-        private readonly Stack<(LabelTarget breakLabel, LabelTarget continueLabel)> _loopScopes = new();
+        private readonly Stack<(LabelTarget breakLabel, LabelTarget continueLabel, string? name)> _loopScopes = new();
 
-        public void PushLoopScope(LabelTarget breakLabel, LabelTarget continueLabel) {
-            _loopScopes.Push((breakLabel, continueLabel));
+        public void PushLoopScope(LabelTarget breakLabel, LabelTarget continueLabel, string? name = null) {
+            _loopScopes.Push((breakLabel, continueLabel, name));
         }
 
         public void PopLoopScope() => _loopScopes.Pop();
 
-        public (LabelTarget breakLabel, LabelTarget continueLabel)? CurrentLoopLabels =>
-            _loopScopes.Count > 0 ? _loopScopes.Peek() : null;
+        public (LabelTarget breakLabel, LabelTarget continueLabel) ResolveLoopLabels(string? name) {
+            if (_loopScopes.Count == 0)
+                throw new InvalidOperationException("VM compile rejected: break/continue outside an enclosing loop.");
+            if (name is null)
+                return (_loopScopes.Peek().breakLabel, _loopScopes.Peek().continueLabel);
+            foreach (var scope in _loopScopes) {
+                if (scope.name == name)
+                    return (scope.breakLabel, scope.continueLabel);
+            }
+            throw new InvalidOperationException(
+                $"VM compile rejected: no enclosing loop with label '{name}'.");
+        }
 
         private readonly Dictionary<string, LabelTarget> _labels = new();
 

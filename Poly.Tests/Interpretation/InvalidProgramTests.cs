@@ -141,6 +141,12 @@ public class InvalidProgramTests {
             "lambda");
     }
 
+    [Test]
+    public async Task CompilationUnit_AsProgram_CompileRejects() {
+        await Assert.That(() => Interpreter.Compile(new CompilationUnitNode([], null, [], null)))
+            .Throws<Exception>();
+    }
+
     private static async Task AssertAnalysisThenCompileRejects(
         Node node, string messageNeedle, string? expectedCode) {
         var analysis = Interpreter.Analyze(node);

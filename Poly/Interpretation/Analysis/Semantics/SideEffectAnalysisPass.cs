@@ -117,7 +117,10 @@ internal sealed class SideEffectAnalyzer : INodeAnalyzer {
         (SideEffectKind)int.Max((int)a, (int)b);
 
     private static SideEffectKind ClassifyIntrinsic(Node node) => node switch {
-        Variable { Value: not null } => SideEffectKind.Write,
+        // Declare-init (`var x = e` as a block statement). Rvalue uses of the
+        // same node still carry Initializer; that over-approximates as Write (safe).
+        // Volatile *reads* are Member + VolatileAccess → Read, below.
+        Variable { Initializer: not null } => SideEffectKind.Write,
         Assignment => SideEffectKind.Write,
         SuspendNode => SideEffectKind.External,
         Return => SideEffectKind.Write,

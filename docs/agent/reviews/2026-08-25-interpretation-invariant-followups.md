@@ -10,14 +10,14 @@ Owning stream: Interpretation only.
 - [x] Lambda explicit-arg arity must match.
 - [x] Nested lambda parameters are not outer captures.
 - [x] Comment-only block is void; empty-string coalesce; non-nullable zero coalesce; PrimitiveTypeReference TypeCast; int−double promote.
+- [x] **U2** — `FoldCoalesce` no longer treats `0L` as empty; `0` is a value for non-nullable coalesce (matches emit).
+- [x] **U5** — `CompileFunctionBody` is the function-table entry for stored-lambda `Invoke(Variable)` / `Invoke(Parameter)`.
 
 ## Open
 
 - [ ] **U1** — `ulong` values that do not fit in signed `long` (`ulong.MaxValue`): define ABI (heap vs reject) and test.
-- [ ] **U2** — Align `FoldCoalesce` (`0L` is empty) with emit (`0` is a value for non-nullable). Nested `CompileValue` should honor replacements or fold should not special-case only `long` 0L.
 - [ ] **U3** — `new` all-optional ctor with 0 args; unresolved ctor fail-closed (no dummy `object[0]`).
 - [ ] **U4** — Closure-path `Parameter` identity vs same-name different instance (fuzz hides via inline).
-- [ ] **U5** — `CompileFunctionBody` appears unused; confirm dead or test.
 
 ## Process
 

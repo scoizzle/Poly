@@ -1,5 +1,7 @@
 # DomainModeling — vision cleanup (three slices)
 
+> **Honesty (2026-08-25, PRs 21–24):** Historical plan — do not treat later “still a lie” lines as CURRENT. StageTransition, self-invoke, cross-entity invoke, and for-invoke are **same-tree** (runtime + emit). `LowerStageTransitions` now gates **create / create-in only**. Remaining lie: create/create-in `EffectExecutor` + `ExecuteStructured` for mixed `if`+create. Host-ABI `CallExternal` for those ops was the **wrong next-step**; they lowered to generic Syntax instead. Slice text below is what the 2026-08-17 work did, unchanged.
+
 **Date:** 2026-08-16 (executed 2026-08-17)  
 **Status:** **Slices 1–3 landed 2026-08-17** (2205 tests green). Admit nothing else from this file. Next suite is chosen separately.  
 **Supersedes:** [`domainmodeling-vision-cleanup-2026-08-15.md`](domainmodeling-vision-cleanup-2026-08-15.md) (five-wave story; review found its ACs self-contradictory).  
@@ -27,14 +29,14 @@ This plan does **not** make every lock locally true. After the last slice, write
 
 ---
 
-## Honesty (recomputed 2026-08-17, after slices 1–3)
+## Honesty (recomputed 2026-08-17 after slices 1–3; One-lowering row updated 2026-08-25)
 
 | Lock | Code |
 |------|------|
 | Unknown `uses` fails closed | **True.** `DomainSession.Open` / `ForSource` / `ForExtensions` throw. `rg failOnUnknown` empty in product. |
 | One load path | **True for compile.** `DslCompiler` opens one session (`OpenCompileSession`) for parse, analyze, and artifacts. `CreateInputs` / Guid `ExtraArtifactLibrary` are gone. `CompileMode.All` still appends the HTTP contributor (not `uses http`). |
 | Analyze is the session | **True for authoring/MCP/compile.** `DomainEvolution.Apply`, fluent `EvolutionBuilder.Apply`, `McpSessionStore.Create`/`Evolve`, and `apply_dsl` go through a session. Session `StoragePass` gets type maps. Compiler does not `new StoragePass(`. **Still a lie for runtime helpers:** `BehaviorMetadata.BuildBehavior` and `RuntimeAnalysisCache.GetOrAnalyze` call static `DomainModelAnalyzer.Analyze` (no maps). `StoragePass` still has a core-catalog `Open` fallback for standalone `new StoragePass()`. |
-| One lowering | **Still a lie.** Emit-mode `LowerStageTransitions` still gates invoke / for-invoke / create / create-in. Runtime ≠ emit for store effects. |
+| One lowering | **Partially true (2026-08-25, PRs 21–24).** StageTransition / self-invoke / cross-entity invoke / for-invoke are same-tree. `LowerStageTransitions` now gates **create / create-in only**. Remaining lie: create/create-in `EffectExecutor` + `ExecuteStructured` for mixed `if`+create. (2026-08-17 row claimed invoke/for-invoke/create/create-in were all gated — that is stale.) |
 | No Comment / second interpreter as meaning | **True on emit.** `rg 'new Comment\('` empty under `Poly/DomainModeling`. Empty bodies are empty blocks. **Still a lie at runtime:** mixed `if`+create goes through named `ExecuteStructured`. |
 | MCP simulate = name + context + same AST | **Still a lie.** `simulate_policy` = no session, fake `Entity("Subject")`, `InferPropertyTypes`. `evaluate_policy` = named policy. `create_instance`+`invoke_action` = store. |
 | Core has no `Program.cs` | **Still a lie.** `CompileMode.All` still adds `MinimalApiHostArtifactContributor`. |

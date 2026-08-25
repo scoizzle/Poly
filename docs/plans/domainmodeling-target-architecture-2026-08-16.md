@@ -1,5 +1,7 @@
 # DomainModeling — target architecture & layout
 
+> **Honesty (2026-08-25, PRs 21–24):** Historical target — do not treat M3/M4 “wait on host-ABI `CallExternal`” as CURRENT for StageTransition / invoke / for-invoke. Those ops are **same-tree** (runtime + emit) via generic Syntax, not `CallExternal`. `LowerStageTransitions` now gates **create / create-in only**. Remaining lie: create/create-in `EffectExecutor` + `ExecuteStructured` for mixed `if`+create. Host-ABI `CallExternal` for those ops was the **wrong next-step**. Layout and slice mapping below are the 2026-08-16/17 proposal, unchanged.
+
 **Date:** 2026-08-16 (edited 2026-08-17: F1–F11; r2 F12–F17; slices 1–3 landed)  
 **Status:** Proposal (target shape for review). **Not CURRENT.** Not a migration plan — do not implement from this document. Cleanup slices 1–2 (the folder-move precondition) landed 2026-08-17; this file still does **not** admit a rename CURRENT.
 **Lock (do not reopen):** [`docs/decisions/2026-08-15-domain-library-extensions-mcp-harness.md`](../decisions/2026-08-15-domain-library-extensions-mcp-harness.md) · [`2026-08-14-domain-libraries.md`](../decisions/2026-08-14-domain-libraries.md) · `docs/CORE.md` · AGENTS platform facts.

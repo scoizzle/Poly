@@ -104,6 +104,11 @@ public class LambdaInvokeTests {
 
         await Assert.That(compiled(9)).IsEqualTo(10);
         await Assert.That(compiled(0)).IsEqualTo(1);
+        var program = Interpreter.Compile(invoke);
+        using var exec9 = Interpreter.Execute(program, s => s.SetArgs(9));
+        await Assert.That(exec9.GetValue<int>()).IsEqualTo(10);
+        using var exec0 = Interpreter.Execute(program, s => s.SetArgs(0));
+        await Assert.That(exec0.GetValue<int>()).IsEqualTo(1);
     }
 
     [Test]
@@ -117,6 +122,11 @@ public class LambdaInvokeTests {
 
         await Assert.That(compiled(10)).IsEqualTo(15);
         await Assert.That(compiled(0)).IsEqualTo(5);
+        var program = Interpreter.Compile(invoke);
+        using var exec10 = Interpreter.Execute(program, s => s.SetArgs(10));
+        await Assert.That(exec10.GetValue<int>()).IsEqualTo(15);
+        using var exec0 = Interpreter.Execute(program, s => s.SetArgs(0));
+        await Assert.That(exec0.GetValue<int>()).IsEqualTo(5);
     }
 
     // InvokeWith extension

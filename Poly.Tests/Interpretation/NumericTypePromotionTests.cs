@@ -34,6 +34,8 @@ public class NumericTypePromotionTests {
 
         // Assert
         await Assert.That(result).IsEqualTo(10.0f);
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<float>()).IsEqualTo(10.0f);
     }
 
     [Test]
@@ -64,6 +66,8 @@ public class NumericTypePromotionTests {
 
         // Assert
         await Assert.That(result).IsEqualTo(25m);
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<decimal>()).IsEqualTo(25m);
     }
 
     [Test]
@@ -126,6 +130,8 @@ public class NumericTypePromotionTests {
 
         // Assert
         await Assert.That(result).IsEqualTo(50L);
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(50L);
     }
 
     [Test]
@@ -140,6 +146,8 @@ public class NumericTypePromotionTests {
 
         // Assert
         await Assert.That(result).IsEqualTo(150UL);
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<ulong>()).IsEqualTo(150UL);
     }
 
     [Test]
@@ -155,5 +163,8 @@ public class NumericTypePromotionTests {
 
         // Assert
         await Assert.That(Math.Abs(result - 13.14) < 0.01).IsTrue();
+        var program = Interpreter.Compile(node);
+        using var exec = Interpreter.Execute(program, s => s.SetArgs(10, 3.14));
+        await Assert.That(Math.Abs(exec.GetValue<double>() - 13.14) < 0.01).IsTrue();
     }
 }

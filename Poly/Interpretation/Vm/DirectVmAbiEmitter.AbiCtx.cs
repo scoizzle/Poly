@@ -2,6 +2,7 @@ using System.Linq.Expressions;
 using System.Reflection;
 
 using Poly.Interpretation.Analysis.Semantics;
+using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
 
 using static System.Linq.Expressions.Expression;
@@ -305,21 +306,34 @@ public static partial class DirectVmAbiEmitter {
         }
 
         public Expression ParameterRead(int paramIndex) =>
-            _inlineParameterMap is { } map && map.TryGetValue(paramIndex, out int ringSlot)
-                ? RingVar(ringSlot)
-                : (Expression)ArrayAccess(SlotsLocal,
-                    Add(FramePosLocal, Constant(paramIndex - ParamSlotOffset)));
+            ArrayAccess(SlotsLocal,
+                Add(FramePosLocal, Constant(paramIndex - ParamSlotOffset)));
 
-        private Dictionary<int, int>? _inlineParameterMap;
+        private Dictionary<Parameter, int>? _inlineParameters;
 
-        public void MapInlineParameter(int paramIndex, int ringSlot) {
-            _inlineParameterMap ??= new();
-            _inlineParameterMap[paramIndex] = ringSlot;
+        public void MapInlineParameter(Parameter parameter, int ringSlot) {
+            _inlineParameters ??= new(ReferenceEqualityComparer.Instance);
+            _inlineParameters[parameter] = ringSlot;
         }
 
-        public void ClearInlineParameters() => _inlineParameterMap = null;
+        public bool TryGetInlineParameter(Parameter parameter, out int ringSlot) {
+            if (_inlineParameters is { } map) {
+                if (map.TryGetValue(parameter, out ringSlot))
+                    return true;
+                foreach (var (p, slot) in map) {
+                    if (p.Name == parameter.Name) {
+                        ringSlot = slot;
+                        return true;
+                    }
+                }
+            }
+            ringSlot = 0;
+            return false;
+        }
 
-        public bool HasInlineParameters => _inlineParameterMap is not null;
+        public void ClearInlineParameters() => _inlineParameters = null;
+
+        public bool HasInlineParameters => _inlineParameters is not null;
 
         private readonly Stack<(LabelTarget breakLabel, LabelTarget continueLabel)> _loopScopes = new();
 
@@ -350,8 +364,18 @@ public static partial class DirectVmAbiEmitter {
         public int DeclareParameter(Parameter p) {
             int slot = _nextParamSlot++;
             _parameters[p] = slot;
+            if (ParamSlotOffset == 0 && !HasInlineParameters) {
+                while (_rootParameterClrTypes.Count <= slot)
+                    _rootParameterClrTypes.Add(null);
+                Type? t = p.TypeReference is ClrTypeReference ctr ? ctr.RuntimeType : null;
+                t ??= Analysis?.GetResolvedType(p)?.GetRuntimeType();
+                _rootParameterClrTypes[slot] = t;
+            }
             return slot;
         }
+
+        private readonly List<Type?> _rootParameterClrTypes = [];
+        public IReadOnlyList<Type?> RootParameterClrTypes => _rootParameterClrTypes;
 
         public bool TryGetParameterSlot(Parameter p, out int slot) =>
             _parameters.TryGetValue(p, out slot);
@@ -364,14 +388,14 @@ public static partial class DirectVmAbiEmitter {
 
         public void RestoreParamSlots(int saved) => _nextParamSlot = saved;
 
-        private readonly Dictionary<Variable, int> _capturedVars = new(ReferenceEqualityComparer.Instance);
+        private readonly Dictionary<object, int> _capturedBindings = new(ReferenceEqualityComparer.Instance);
 
-        public void DeclareCapture(Variable v, int captureIndex) {
-            _capturedVars[v] = captureIndex;
+        public void DeclareCapture(object binding, int captureIndex) {
+            _capturedBindings[binding] = captureIndex;
         }
 
-        public bool TryGetCapture(Variable v, out int captureIndex) =>
-            _capturedVars.TryGetValue(v, out captureIndex);
+        public bool TryGetCapture(object binding, out int captureIndex) =>
+            _capturedBindings.TryGetValue(binding, out captureIndex);
 
         private readonly List<Node?> _stepNodes = new();
         public IReadOnlyList<Node> StepNodes => _stepNodes.ToArray().Where(n => n is not null).Select(n => n!).ToList().AsReadOnly();

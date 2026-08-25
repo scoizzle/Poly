@@ -170,7 +170,7 @@ public class ConditionalNodeTests {
         using (var exec = Interpreter.Execute(program, s => s.SetArgs(50)))
             await Assert.That(exec.GetValue<long>()).IsEqualTo(50L);
         using (var exec = Interpreter.Execute(program, s => s.SetArgs(0)))
-            await Assert.That(exec.GetValue<long>()).IsEqualTo(100L);
+            await Assert.That(exec.GetValue<long>()).IsEqualTo(0L);
     }
 
     [Test]

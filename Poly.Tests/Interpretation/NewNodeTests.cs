@@ -62,6 +62,11 @@ public class NewNodeTests {
 
         await Assert.That(result.Name).IsEqualTo("alpha");
         await Assert.That(result.Count).IsEqualTo(0);
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        var vmResult = exec.GetValue<Widget>();
+        await Assert.That(vmResult).IsNotNull();
+        await Assert.That(vmResult!.Name).IsEqualTo("alpha");
+        await Assert.That(vmResult.Count).IsEqualTo(0);
     }
 
     [Test]

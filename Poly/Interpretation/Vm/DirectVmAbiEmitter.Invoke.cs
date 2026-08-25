@@ -179,13 +179,20 @@ public static partial class DirectVmAbiEmitter {
         }
 
         if (invoke.Delegate is Lambda lambda) {
+            var ownParams = new HashSet<Parameter>(lambda.Parameters, ReferenceEqualityComparer.Instance);
+            DeclareFreeParameters(lambda.Body, ctx, ownParams);
+            foreach (var arg in invoke.Arguments) {
+                if (arg is Parameter p && !ownParams.Contains(p) && ownParams.All(op => op.Name != p.Name))
+                    if (!ctx.TryGetParameterSlot(p, out _))
+                        ctx.DeclareParameter(p);
+            }
 
             // Trivial inline: no captures → compile body directly in the caller's
             // context.  Skip when the lambda has parameters but Invoke has no
             // argument expressions (SetArgs pattern): those parameters live in
             // value-stack slots and need ParamSlotOffset/FramePos setup from the
             // frame path so locals don't overwrite them on EmitScopeStores.
-            if (FindCaptures(lambda.Body, ctx).Count == 0
+            if (FindCaptures(lambda.Body, ctx, lambda.Parameters).Count == 0
                 && !(lambda.Parameters.Count > 0 && invoke.Arguments.Length == 0)) {
                 return EmitInlineInvoke(lambda, invoke, ctx);
             }
@@ -330,7 +337,7 @@ public static partial class DirectVmAbiEmitter {
         var argExprs = new Expression[invoke.Arguments.Length];
         for (int i = 0; i < invoke.Arguments.Length; i++) {
             argExprs[i] = CompileNode(invoke.Arguments[i], ctx);
-            ctx.MapInlineParameter(i, ctx.RingDepth - 1);
+            ctx.MapInlineParameter(lambda.Parameters[i], ctx.RingDepth - 1);
         }
         var bodyExpr = CompileNode(lambda.Body, ctx);
         ctx.ClearInlineParameters();
@@ -390,7 +397,7 @@ public static partial class DirectVmAbiEmitter {
 
         // Register captures so EmitVariable/EmitAssignment can route to heap reads
         for (int i = 0; i < captures.Count; i++)
-            fnCtx.DeclareCapture(captures[i].Variable, i);
+            fnCtx.DeclareCapture(captures[i].Binding, i);
 
         // Declare parameters as value-stack variables (mapped to _slots[_fp + idx])
         fnCtx.PushScope();
@@ -587,6 +594,13 @@ public static partial class DirectVmAbiEmitter {
         }
         var converted = target.IsInstanceOfType(value) ? value : System.Convert.ChangeType(value, target);
         return BoxToAbi(heap, converted);
+    }
+
+    private static long UnboxNullableToLong(Heap heap, long handle) {
+        if (handle == 0L) return 0L;
+        var obj = heap.UnsafeGet((int)handle);
+        if (obj is null) return 0L;
+        return System.Convert.ToInt64(obj);
     }
 
     private static long TypeAsAbi(Heap heap, long raw, Type target) {

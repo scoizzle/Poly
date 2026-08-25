@@ -18,12 +18,6 @@ Canonical meaning is still the VM. When they disagree, fix the VM (or shrink the
 
 Language-meaning `BuildExpression` tests in Arithmetic/Modulo/UnaryMinus/NumericPromotion/Constant/Parameter/Block/BlockScope/Conditional/Coalesce/ForEach/TypeCast/New/Lambda/InterpreterIntegration now also `Interpreter.Compile` the same tree (or assert VM compile-reject). `LanguageVmTests` covers additional executable kinds.
 
-## Remaining VM↔LINQ mismatches (next loop — fix VM, not drop LINQ)
+## Remaining VM↔LINQ mismatches
 
-- Numeric promotion: float×int, decimal÷int, uint/ulong constants treated as heap handles
-- `Add` of strings: VM returns a handle, not concatenated text
-- `New` optional constructor arguments: `EmitNew` IndexOutOfRange when omitted
-- Lambda: outer `Parameter` not captured; `SetArgs` on `Invoke(lambda, param)` slot remap
-- Coalesce: ring `0` is both integer zero and ABI null
-
-When these disagree, the VM is wrong relative to the inspectable LINQ tree.
+Closed: numeric promotion (IEEE mix + decimal + uint/ulong), string `Add`, optional ctor defaults, lambda outer `Parameter` capture / inline bind, nullable coalesce (`int?` heap-boxed so `0` ≠ null).

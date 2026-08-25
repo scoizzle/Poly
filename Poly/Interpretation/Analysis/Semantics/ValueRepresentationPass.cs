@@ -79,11 +79,11 @@ internal sealed class ValueRepresentationAnalyzer : INodeAnalyzer {
             And => (ValueRepresentationKind.Bool, typeof(bool)),
             Or => (ValueRepresentationKind.Bool, typeof(bool)),
             Not => (ValueRepresentationKind.Bool, typeof(bool)),
-            Add => ClassifyWithResolvedType(context, node, ValueRepresentationKind.StackScalar),
-            Subtract => ClassifyWithResolvedType(context, node, ValueRepresentationKind.StackScalar),
-            Multiply => ClassifyWithResolvedType(context, node, ValueRepresentationKind.StackScalar),
-            Divide => ClassifyWithResolvedType(context, node, ValueRepresentationKind.StackScalar),
-            Modulo => ClassifyWithResolvedType(context, node, ValueRepresentationKind.StackScalar),
+            Add n => ClassifyArithmetic(context, n, n.LeftHandValue, n.RightHandValue, isAdd: true),
+            Subtract n => ClassifyArithmetic(context, n, n.LeftHandValue, n.RightHandValue, isAdd: false),
+            Multiply n => ClassifyArithmetic(context, n, n.LeftHandValue, n.RightHandValue, isAdd: false),
+            Divide n => ClassifyArithmetic(context, n, n.LeftHandValue, n.RightHandValue, isAdd: false),
+            Modulo n => ClassifyArithmetic(context, n, n.LeftHandValue, n.RightHandValue, isAdd: false),
             UnaryMinus => ClassifyWithResolvedType(context, node, ValueRepresentationKind.StackScalar),
             BitwiseAnd => ClassifyWithResolvedType(context, node, ValueRepresentationKind.StackScalar),
             BitwiseOr => ClassifyWithResolvedType(context, node, ValueRepresentationKind.StackScalar),
@@ -114,6 +114,25 @@ internal sealed class ValueRepresentationAnalyzer : INodeAnalyzer {
     /// Classify a node using its resolved type for ClrType, defaulting to
     /// <paramref name="defaultKind"/> when the kind is already known (e.g. StackScalar).
     /// </summary>
+    private static (ValueRepresentationKind Kind, Type? ClrType) ClassifyArithmetic(
+        AnalysisContext context, Node op, Node left, Node right, bool isAdd) {
+        var l = context.GetMetadata<ValueRepresentationMetadata>(left);
+        var r = context.GetMetadata<ValueRepresentationMetadata>(right);
+        if (isAdd && (l?.ClrType == typeof(string) || r?.ClrType == typeof(string)
+            || left is Constant { Value: string } || right is Constant { Value: string }))
+            return (ValueRepresentationKind.HeapRef, typeof(string));
+        if (l?.ClrType == typeof(decimal) || r?.ClrType == typeof(decimal)
+            || left is Constant { Value: decimal } || right is Constant { Value: decimal })
+            return (ValueRepresentationKind.HeapRef, typeof(decimal));
+        if (l?.ClrType == typeof(double) || r?.ClrType == typeof(double)
+            || left is Constant { Value: double } || right is Constant { Value: double })
+            return (ValueRepresentationKind.StackScalar, typeof(double));
+        if (l?.ClrType == typeof(float) || r?.ClrType == typeof(float)
+            || left is Constant { Value: float } || right is Constant { Value: float })
+            return (ValueRepresentationKind.StackScalar, typeof(float));
+        return ClassifyWithResolvedType(context, op, ValueRepresentationKind.StackScalar);
+    }
+
     private static (ValueRepresentationKind Kind, Type? ClrType) ClassifyWithResolvedType(
         AnalysisContext context, Node node, ValueRepresentationKind defaultKind) {
         var typeDef = context.GetResolvedType(node);
@@ -171,6 +190,8 @@ internal sealed class ValueRepresentationAnalyzer : INodeAnalyzer {
     }
 
     private static (ValueRepresentationKind Kind, Type? ClrType) ClassifyClr(Type t) {
+        if (Nullable.GetUnderlyingType(t) is not null)
+            return (ValueRepresentationKind.HeapRef, t);
         if (t == typeof(bool))
             return (ValueRepresentationKind.Bool, typeof(bool));
         if (t.IsValueType && AbiValueTypes.IsLongRepresentable(t))
@@ -249,6 +270,8 @@ internal sealed class ValueRepresentationAnalyzer : INodeAnalyzer {
         // Check if it's a CLR type — if so, use IsValueType to distinguish
         if (typeDef is IClrTypeDefinition clrType) {
             var rt = clrType.RuntimeType;
+            if (Nullable.GetUnderlyingType(rt) is not null)
+                return (ValueRepresentationKind.HeapRef, rt);
             if (rt == typeof(bool))
                 return (ValueRepresentationKind.Bool, rt);
             if (rt.IsValueType || rt.IsPrimitive) {

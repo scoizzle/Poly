@@ -409,16 +409,28 @@ public static partial class DirectVmAbiEmitter {
     }
 
     private static Expression EmitParameter(Parameter p, AbiCtx ctx) {
-        if (!ctx.TryGetParameterSlot(p, out int paramIdx)) {
-            paramIdx = ctx.DeclareParameter(p);
-        }
         int slot = ctx.AllocSlot();
-        // Root SetArgs({ this }) lives in InstanceHandle so locals cannot wipe it.
-        // Nested lambda parameters use the frame / inline map.
-        Expression value = paramIdx == 0 && ctx.ParamSlotOffset == 0 && !ctx.HasInlineParameters
-            ? ctx.InstanceHandle
-            : ctx.ParameterRead(paramIdx);
-        return Assign(ctx.RingVar(slot), value);
+        if (ctx.TryGetCapture(p, out int capIndex)) {
+            var closureHandle = ctx.ClosureHandle;
+            var closureArr = Convert(
+                ArrayAccess(ctx.HeapRawSlots, Convert(closureHandle, typeof(int))),
+                typeof(object[]));
+            var captured = Convert(
+                ArrayAccess(closureArr, Constant(capIndex + 1)),
+                typeof(long));
+            return Assign(ctx.RingVar(slot), captured);
+        }
+        return Assign(ctx.RingVar(slot), ParameterValue(p, ctx));
+    }
+
+    private static Expression ParameterValue(Parameter p, AbiCtx ctx) {
+        if (ctx.TryGetInlineParameter(p, out int ringSlot))
+            return ctx.RingVar(ringSlot);
+        if (!ctx.TryGetParameterSlot(p, out int paramIdx))
+            paramIdx = ctx.DeclareParameter(p);
+        if (paramIdx == 0 && ctx.ParamSlotOffset == 0 && !ctx.HasInlineParameters)
+            return ctx.InstanceHandle;
+        return ctx.ParameterRead(paramIdx);
     }
 
     /// <summary>
@@ -433,9 +445,9 @@ public static partial class DirectVmAbiEmitter {
     private static Expression EmitLambda(Lambda lambda, AbiCtx ctx) {
         if (lambda.LambdaIndex < 0)
             throw new InvalidOperationException("Lambda.LambdaIndex not set during lambda collection");
-        var captures = FindCaptures(lambda.Body, ctx);
+        var captures = FindCaptures(lambda.Body, ctx, lambda.Parameters);
         for (int i = 0; i < captures.Count; i++)
-            ctx.DeclareCapture(captures[i].Variable, i);
+            ctx.DeclareCapture(captures[i].Binding, i);
         int arrLen = 1 + captures.Count;
         var closureArrVar = Variable(typeof(object[]), "_closureArr");
         var body = new List<Expression>();
@@ -445,7 +457,7 @@ public static partial class DirectVmAbiEmitter {
         for (int i = 0; i < captures.Count; i++) {
             var cap = captures[i];
             body.Add(Assign(ArrayAccess(closureArrVar, Constant(1 + i)),
-                Convert(ctx.VariableRead(cap.Variable), typeof(object))));
+                Convert(ReadCaptureSource(cap, ctx), typeof(object))));
         }
         var handle = Call(ctx.HeapLocal, HeapAllocate,
             Convert(closureArrVar, typeof(object)));
@@ -454,25 +466,56 @@ public static partial class DirectVmAbiEmitter {
         return Block([closureArrVar], body);
     }
 
-    private static List<Capture> FindCaptures(Node body, AbiCtx outerCtx) {
+    private static void DeclareFreeParameters(Node node, AbiCtx ctx, HashSet<Parameter> ownParams) {
+        if (node is Parameter p
+            && !ownParams.Contains(p)
+            && ownParams.All(op => op.Name != p.Name)
+            && !ctx.TryGetParameterSlot(p, out _))
+            ctx.DeclareParameter(p);
+        foreach (var child in node.Children) {
+            if (child is not null)
+                DeclareFreeParameters(child, ctx, ownParams);
+        }
+    }
+
+    private static List<Capture> FindCaptures(
+        Node body, AbiCtx outerCtx, IReadOnlyList<Parameter>? lambdaParameters = null) {
         var result = new List<Capture>();
-        var seen = new HashSet<Variable>(ReferenceEqualityComparer.Instance);
-        FindCapturesRecursive(body, outerCtx, result, seen);
+        var seenVars = new HashSet<Variable>(ReferenceEqualityComparer.Instance);
+        var seenParams = new HashSet<Parameter>(ReferenceEqualityComparer.Instance);
+        var ownParams = lambdaParameters is null
+            ? null
+            : new HashSet<Parameter>(lambdaParameters, ReferenceEqualityComparer.Instance);
+        FindCapturesRecursive(body, outerCtx, result, seenVars, seenParams, ownParams);
         return result;
     }
 
     private static void FindCapturesRecursive(
-        Node node, AbiCtx outerCtx, List<Capture> result, HashSet<Variable> seen) {
-        if (node is Variable v && seen.Add(v)) {
-            if (outerCtx.TryGetVariable(v, out int slotIndex)) {
-                result.Add(new Capture(v, slotIndex));
-            }
+        Node node, AbiCtx outerCtx, List<Capture> result,
+        HashSet<Variable> seenVars, HashSet<Parameter> seenParams,
+        HashSet<Parameter>? ownParams) {
+        if (node is Variable v && seenVars.Add(v)) {
+            if (outerCtx.TryGetVariable(v, out _))
+                result.Add(new Capture(v, null));
+            return;
+        }
+        if (node is Parameter p && seenParams.Add(p)) {
+            bool isOwn = ownParams is not null
+                && (ownParams.Contains(p) || ownParams.Any(op => op.Name == p.Name));
+            if (!isOwn)
+                result.Add(new Capture(null, p));
             return;
         }
         foreach (var child in node.Children) {
             if (child is not null)
-                FindCapturesRecursive(child, outerCtx, result, seen);
+                FindCapturesRecursive(child, outerCtx, result, seenVars, seenParams, ownParams);
         }
+    }
+
+    private static Expression ReadCaptureSource(Capture cap, AbiCtx ctx) {
+        if (cap.Variable is not null)
+            return ctx.VariableRead(cap.Variable);
+        return ParameterValue(cap.Parameter!, ctx);
     }
 
     /// <summary>Break statement: jump to current loop's break label.</summary>

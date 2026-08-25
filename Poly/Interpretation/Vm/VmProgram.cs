@@ -33,5 +33,6 @@ public sealed record VmProgram(
     IReadOnlyList<CallSiteEntry>? CallSites = null,
     IReadOnlyList<Node>? StepNodes = null,
     object? DebugInfo = null,
-    int RegisterCount = 8
+    int RegisterCount = 8,
+    IReadOnlyList<Type?>? RootParameterClrTypes = null
 );

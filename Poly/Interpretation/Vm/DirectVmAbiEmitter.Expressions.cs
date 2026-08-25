@@ -90,8 +90,8 @@ public static partial class DirectVmAbiEmitter {
 
         if (IsDoubleValue(ctx, left) || IsDoubleValue(ctx, right)) {
             var resultBits = Call(BitConverterDoubleToInt64Bits,
-                factory(Call(BitConverterInt64BitsToDouble, ctx.RingVar(leftSlot)),
-                        Call(BitConverterInt64BitsToDouble, ctx.RingVar(rightSlot))));
+                factory(AsIeeeDouble(left, ctx.RingVar(leftSlot), ctx),
+                        AsIeeeDouble(right, ctx.RingVar(rightSlot), ctx)));
             ctx.RingDepth = d + 1;
             return Block(leftCompiled, rightCompiled, Assign(ctx.RingVar(d), resultBits));
         }
@@ -145,10 +145,11 @@ public static partial class DirectVmAbiEmitter {
         var rightVal = CompileValue(right, ctx);
         if (TryEmitStringConcat(left, right, leftVal, rightVal, factory, ctx) is { } concat)
             return SpillToRing(concat, ctx);
+        if (TryEmitDecimalArithmetic(left, right, leftVal, rightVal, factory, ctx) is { } dec)
+            return SpillToRing(dec, ctx);
         if (IsDoubleValue(ctx, left) || IsDoubleValue(ctx, right))
             return SpillToRing(Call(BitConverterDoubleToInt64Bits,
-                factory(Call(BitConverterInt64BitsToDouble, leftVal),
-                        Call(BitConverterInt64BitsToDouble, rightVal))), ctx);
+                factory(AsIeeeDouble(left, leftVal, ctx), AsIeeeDouble(right, rightVal, ctx))), ctx);
         var rhs = rightVal;
         if (factory == LeftShift || factory == RightShift) rhs = Convert(rhs, typeof(int));
         return SpillToRing(factory(leftVal, rhs), ctx);

@@ -257,6 +257,8 @@ public class InterpreterIntegrationTests {
 
         // Assert
         await Assert.That(result).IsEqualTo("Hello World");
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<string>()).IsEqualTo("Hello World");
     }
 
     [Test]
@@ -271,5 +273,10 @@ public class InterpreterIntegrationTests {
         // Assert
         await Assert.That(compiled("Alice")).IsEqualTo("Hello, Alice");
         await Assert.That(compiled("Bob")).IsEqualTo("Hello, Bob");
+        var program = Interpreter.Compile(node);
+        using var execA = Interpreter.Execute(program, s => s.SetArgs("Alice"));
+        await Assert.That(execA.GetValue<string>()).IsEqualTo("Hello, Alice");
+        using var execB = Interpreter.Execute(program, s => s.SetArgs("Bob"));
+        await Assert.That(execB.GetValue<string>()).IsEqualTo("Hello, Bob");
     }
 }

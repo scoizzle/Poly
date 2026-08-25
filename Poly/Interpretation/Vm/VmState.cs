@@ -379,8 +379,13 @@ public sealed class VmState : IDisposable {
     /// and their handles stored on the stack.</param>
     public void SetArgs(params IEnumerable<object?> args) {
         var slots = Stack.RawSlots;
+        var types = Program.RootParameterClrTypes;
         foreach (var (i, arg) in args.Index()) {
-            slots[i] = ToRing(arg);
+            if (types is not null && i < types.Count && types[i] is Type pt
+                && Nullable.GetUnderlyingType(pt) is not null)
+                slots[i] = arg is null ? 0L : Heap.Allocate(arg);
+            else
+                slots[i] = ToRing(arg);
         }
     }
 

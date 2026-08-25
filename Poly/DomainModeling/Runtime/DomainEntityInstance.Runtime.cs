@@ -85,9 +85,17 @@ public sealed partial record DomainEntityInstance {
                 Getter: new PropertyGetterDefinitionNode()));
         }
 
+        var notify = new MethodDefinitionNode(
+            "Notify",
+            new TypeReference("void"),
+            Parameters: [new Parameter("stageName",
+                new PrimitiveTypeReference(Prim.String))],
+            Body: new Block([]));
+
         var typeDefNode = new TypeDefinitionNode(
             Name: entityName,
             Properties: [.. propDefs],
+            Methods: [notify],
             Namespace: null);
 
         var analyzer = new TypeDefinitionNodeAnalyzer();
@@ -196,7 +204,7 @@ public sealed partial record DomainEntityInstance {
                 new Parameter("entity", new TypeReference(t.Entity.Name)));
             var compiled = Interpreter.Compile(lowered, t._typeDefAnalyzer);
             using var exec = Interpreter.Execute(compiled,
-                s => s.SetArgs(new object?[] { t._values }));
+                s => s.SetArgs(new object?[] { t }));
             if (exec.Result.GetValue<bool>())
                 result.Add(t);
         }
@@ -271,7 +279,7 @@ public sealed partial record DomainEntityInstance {
                 new Parameter("entity", new TypeReference(hop.Entity.Name)));
             var compiled = Interpreter.Compile(lowered, hop._typeDefAnalyzer);
             using var exec = Interpreter.Execute(compiled,
-                s => s.SetArgs(new object?[] { hop._values }));
+                s => s.SetArgs(new object?[] { hop }));
             return exec.Result.GetValue<object>();
         }
 
@@ -361,7 +369,7 @@ public sealed partial record DomainEntityInstance {
             new Parameter("entity", new TypeReference(target.Entity.Name)));
         var compiled = Interpreter.Compile(lowered, target._typeDefAnalyzer);
         using var exec = Interpreter.Execute(compiled,
-            s => s.SetArgs(new object?[] { target._values }));
+            s => s.SetArgs(new object?[] { target }));
         return exec.Result.GetValue<bool>();
     }
 

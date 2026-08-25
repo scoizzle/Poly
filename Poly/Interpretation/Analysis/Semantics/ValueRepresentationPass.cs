@@ -94,6 +94,11 @@ internal sealed class ValueRepresentationAnalyzer : INodeAnalyzer {
             NewArray => (ValueRepresentationKind.HeapRef, null),
             Lambda => (ValueRepresentationKind.HeapRef, null),
             TypeAs => (ValueRepresentationKind.HeapRef, null),
+            TypeCast tc => ClassifyTypeCast(context, tc),
+            TypeOf => (ValueRepresentationKind.HeapRef, typeof(Type)),
+            Comment => (ValueRepresentationKind.Void, null),
+            ThrowExpression => (ValueRepresentationKind.Void, null),
+            Default d => ClassifyDefault(d),
             TypeIs => (ValueRepresentationKind.Bool, typeof(bool)),
             IndexAccess ia => ClassifyIndexAccess(context, ia),
             Member ma => ClassifyMember(context, ma),
@@ -145,6 +150,34 @@ internal sealed class ValueRepresentationAnalyzer : INodeAnalyzer {
             return (trueMeta.Kind, trueMeta.ClrType);
 
         return (ValueRepresentationKind.Unknown, null);
+    }
+
+    private static (ValueRepresentationKind Kind, Type? ClrType) ClassifyTypeCast(
+        AnalysisContext context, TypeCast tc) {
+        var fromResolved = ClassifyFromResolvedType(context, tc);
+        if (fromResolved.Kind != ValueRepresentationKind.Unknown)
+            return fromResolved;
+        if (tc.TargetTypeReference is ClrTypeReference ctr)
+            return ClassifyClr(ctr.RuntimeType);
+        return (ValueRepresentationKind.Unknown, null);
+    }
+
+    private static (ValueRepresentationKind Kind, Type? ClrType) ClassifyDefault(Default d) {
+        if (d.TargetType is ClrTypeReference ctr)
+            return ClassifyClr(ctr.RuntimeType);
+        if (d.TargetType is null)
+            return (ValueRepresentationKind.StackScalar, typeof(long));
+        return (ValueRepresentationKind.Unknown, null);
+    }
+
+    private static (ValueRepresentationKind Kind, Type? ClrType) ClassifyClr(Type t) {
+        if (t == typeof(bool))
+            return (ValueRepresentationKind.Bool, typeof(bool));
+        if (t.IsValueType && AbiValueTypes.IsLongRepresentable(t))
+            return (ValueRepresentationKind.StackScalar, t);
+        if (t == typeof(float) || t == typeof(double))
+            return (ValueRepresentationKind.StackScalar, t);
+        return (ValueRepresentationKind.HeapRef, t);
     }
 
     private static (ValueRepresentationKind Kind, Type? ClrType) ClassifyConstant(Constant c) {

@@ -1,10 +1,10 @@
 # Poly.Interpretation
 
-Semantic analysis and VM execution for programs expressed as `Poly.Syntax.Nodes` ASTs.
+Generic **language VM** for programs expressed as `Poly.Ast` Syntax trees. DomainModeling is a client that lowers into this language.
 
 **Platform map:** [`docs/CORE.md`](../../docs/CORE.md) — boundaries, node replacement, direct AST→VM (read before inventing parallel paths).
 
-The module turns a syntax tree into a runnable program: analysis passes attach metadata and diagnostics, then the direct AST-to-VM-ABI emitter produces an executable delegate. Per [VM as canonical semantics](../../docs/decisions/2026-06-08-vm-as-canonical-semantics.md), this path is the **authoritative behavior** for the platform — not the legacy LINQ expression generator or removed tree-walker.
+Analyze → `Interpreter.Compile` (fail-closed on analysis errors) → `DirectVmAbiEmitter` → `VmState`. Per [VM as canonical semantics](../../docs/decisions/2026-06-08-vm-as-canonical-semantics.md), this path is the **authoritative behavior**. LINQ and C# emit are projections, never oracles.
 
 ---
 
@@ -18,7 +18,7 @@ The module turns a syntax tree into a runnable program: analysis passes attach m
 | Out | `Poly.Synthesis` | Uses VM to validate macros |
 | No | `Poly.Synthesis` | Interpretation must not depend on Synthesis |
 
-Domain constructs lower to generic VM opcodes — no domain opcodes in this module ([domain-lowering boundary](../../docs/decisions/2026-06-08-domain-lowering-boundary.md)).
+Domain constructs lower to generic Syntax nodes — no domain opcodes or domain types in this module ([domain-lowering boundary](../../docs/decisions/2026-06-08-domain-lowering-boundary.md)).
 
 ---
 
@@ -104,26 +104,11 @@ Root files: `Interpreter.cs` (pipeline + execute), `ExecutionResult.cs`, `Interp
 
 ---
 
-## Standard analysis pipeline (12 passes)
+## Standard analysis pipeline
 
-Registered in `Interpreter._analyzer` in this order. **Do not reorder** without updating [`Analysis/README.md`](Analysis/README.md) and tests.
+`Interpreter._analyzer` is 14 passes. **Built order** (after `AnalyzerBuilder` topological insert) is asserted by `StandardAnalyzer_PassNames_MatchInterpreterPipeline` and listed in [`Analysis/README.md`](Analysis/README.md). Do not copy a `Use*` registration list here — insert order ≠ registration order.
 
-| # | Extension | Purpose |
-|---|-----------|---------|
-| 1 | `.UseTypeAndMemberResolver()` | Resolved types and members |
-| 2 | `.UseVariableScopeValidator()` | Scopes and variable lifetime |
-| 3 | `.UseSideEffectAnalysis()` | Purity, elision, assignment-use |
-| 4 | `.UseThisReferenceContext()` | `this` type in member bodies |
-| 5 | `.UseJumpTargetResolution()` | Break / continue / goto targets |
-| 6 | `.UseControlFlowAnalysis()` | CFG, reachability, loop metadata |
-| 7 | `.UseValueRepresentationAnalysis()` | Stack scalar / bool / heap ref / void |
-| 8 | `.UseCallSiteCatalog()` | Module call-site table + per-node indices |
-| 9 | `.UseConstantFolding()` | Constant propagation and folding |
-| 10 | `.UseDefiniteAssignmentAnalysis()` | Definite assignment |
-| 11 | `.UseLambdaReturnTypeResolution()` | Lambda return types |
-| 12 | `.UseExceptionRegionAnalysis()` | Try/catch/using region table |
-
-Custom pipelines: build your own `Analyzer` via `AnalyzerBuilder` (same extensions).
+`Interpreter.Compile` fails closed on every `DiagnosticSeverity.Error`. Use `Analyze` to inspect diagnostics without emitting.
 
 ---
 

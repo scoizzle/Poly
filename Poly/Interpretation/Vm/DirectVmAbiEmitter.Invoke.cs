@@ -171,9 +171,7 @@ public static partial class DirectVmAbiEmitter {
                     Convert(Convert(invokeCall, returnClr), typeof(long))));
             }
             else {
-                // Resolved non-void AST method, or unresolved member (method is null).
-                // InvokeNamed returns DomainResult / policy bool / null. BoxToAbi maps
-                // bool to 0/1 and null to 0 (same as the old unresolved assign-0).
+                // CLR/AST invoke result → ring via BoxToAbi (bool 0/1, null 0, refs handles).
                 astBody.Add(Assign(ctx.RingVar(astSlot),
                     Call(null, BoxToAbiInfo, ctx.HeapLocal, invokeCall)));
             }
@@ -556,6 +554,45 @@ public static partial class DirectVmAbiEmitter {
             return enumerable.GetEnumerator();
         throw new InvalidOperationException(
             $"foreach collection type '{collection.GetType().Name}' is not IEnumerable.");
+    }
+
+    private static long ConvertAbi(Heap heap, long raw, Type? source, Type target) {
+        object? value;
+        if (source == typeof(double) || source == typeof(float))
+            value = BitConverter.Int64BitsToDouble(raw);
+        else if (source == typeof(bool))
+            value = raw != 0L;
+        else if (source is not null && source.IsValueType && AbiValueTypes.IsLongRepresentable(source))
+            value = System.Convert.ChangeType(raw, source);
+        else if (source is not null && !source.IsValueType)
+            value = raw == 0L ? null : heap.UnsafeGet((int)raw);
+        else if (!target.IsValueType)
+            value = raw == 0L ? null : heap.UnsafeGet((int)raw);
+        else
+            value = raw;
+
+        if (value is null) {
+            if (target.IsValueType)
+                throw new InvalidCastException($"Cannot convert null to '{target}'.");
+            return 0L;
+        }
+
+        if (target == typeof(double) || target == typeof(float))
+            return BitConverter.DoubleToInt64Bits(System.Convert.ToDouble(value));
+        if (target == typeof(bool))
+            return System.Convert.ToBoolean(value) ? 1L : 0L;
+        if (target.IsValueType && AbiValueTypes.IsLongRepresentable(target)) {
+            var truncated = Math.Truncate(System.Convert.ToDouble(value));
+            return System.Convert.ToInt64(System.Convert.ChangeType(truncated, target));
+        }
+        var converted = target.IsInstanceOfType(value) ? value : System.Convert.ChangeType(value, target);
+        return BoxToAbi(heap, converted);
+    }
+
+    private static long TypeAsAbi(Heap heap, long raw, Type target) {
+        if (raw == 0L) return 0L;
+        var obj = heap.UnsafeGet((int)raw);
+        return obj is not null && target.IsInstanceOfType(obj) ? raw : 0L;
     }
 
     private static long BoxToAbi(Heap heap, object? value) => value switch {

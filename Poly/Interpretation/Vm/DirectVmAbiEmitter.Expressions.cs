@@ -2,6 +2,7 @@ using System.Linq.Expressions;
 using System.Reflection;
 
 using Poly.Interpretation.Analysis.Semantics;
+using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
 
 using static System.Linq.Expressions.Expression;
@@ -488,28 +489,74 @@ public static partial class DirectVmAbiEmitter {
         return Block(operandExpr, fold, Assign(ctx.RingVar(resultSlot), result));
     }
 
-    /// <summary>TypeAs: Expression.TypeAs(operand, targetType).</summary>
+    private static Type? ResolveClrType(Node? typeRef, Node typedNode, AbiCtx ctx) {
+        if (typeRef is ClrTypeReference ctr)
+            return ctr.RuntimeType;
+        if (typeRef is PrimitiveTypeReference ptr)
+            return ptr.PrimitiveId.GetClrType();
+        if (ctx.Analysis is not null) {
+            var fromNode = ctx.Analysis.GetResolvedType(typedNode)?.GetRuntimeType();
+            if (fromNode is not null) return fromNode;
+            if (typeRef is not null)
+                return ctx.Analysis.GetResolvedType(typeRef)?.GetRuntimeType();
+        }
+        return null;
+    }
+
+    /// <summary>TypeAs: heap object assignable to T keeps the handle; otherwise ABI null.</summary>
     private static Expression EmitTypeAs(TypeAs t, AbiCtx ctx) {
-        // Passthrough for POC — same as EmitMember passthrough
-        return CompileNode(t.Operand, ctx);
+        var targetType = ResolveClrType(t.TargetTypeReference, t, ctx)
+            ?? throw new InvalidOperationException("VM compile rejected: TypeAs target type is unresolved.");
+        if (targetType.IsValueType)
+            throw new InvalidOperationException($"VM compile rejected: TypeAs target '{targetType}' is a value type.");
+        int d = ctx.RingDepth;
+        var operandExpr = CompileNode(t.Operand, ctx);
+        int slot = ctx.RingDepth - 1;
+        var fold = FoldResultToSlot(ref slot, d, ctx);
+        return Block(
+            operandExpr, fold,
+            Assign(ctx.RingVar(slot),
+                Call(null, TypeAsAbiInfo, ctx.HeapLocal, ctx.RingVar(slot), Constant(targetType, typeof(Type)))));
     }
 
-    /// <summary>TypeCast: Expression.Convert(operand, targetType).</summary>
+    /// <summary>TypeCast: convert the operand into the target CLR type, then re-box to the ring.</summary>
     private static Expression EmitTypeCast(TypeCast t, AbiCtx ctx) {
-        // Passthrough for POC — values are already long in the ABI
-        return CompileNode(t.Operand, ctx);
+        var targetType = ResolveClrType(t.TargetTypeReference, t, ctx)
+            ?? throw new InvalidOperationException("VM compile rejected: TypeCast target type is unresolved.");
+        Type? sourceType = ctx.Analysis?.GetMetadata<ValueRepresentationMetadata>(t.Operand)?.ClrType;
+        if (sourceType is null && t.Operand is Constant c && c.Value is not null)
+            sourceType = c.Value.GetType();
+        int d = ctx.RingDepth;
+        var operandExpr = CompileNode(t.Operand, ctx);
+        int slot = ctx.RingDepth - 1;
+        var fold = FoldResultToSlot(ref slot, d, ctx);
+        return Block(
+            operandExpr, fold,
+            Assign(ctx.RingVar(slot),
+                Call(null, ConvertAbiInfo, ctx.HeapLocal, ctx.RingVar(slot),
+                    Constant(sourceType, typeof(Type)), Constant(targetType, typeof(Type)))));
     }
 
-    /// <summary>Await: synchronous extraction via GetAwaiter().GetResult().</summary>
-    private static Expression EmitAwait(Await a, AbiCtx ctx) {
-        // Passthrough for POC — the operand value is the result
-        return CompileNode(a.Operand, ctx);
-    }
-
-    /// <summary>Default: produce the default value for a type (0 for long/scalar).</summary>
+    /// <summary>Default of the resolved type (0 / false / ABI null / heap default struct).</summary>
     private static Expression EmitDefault(Default d, AbiCtx ctx) {
         int slot = ctx.AllocSlot();
-        return Assign(ctx.RingVar(slot), Constant(0L));
+        var target = ResolveClrType(d.TargetType, d, ctx);
+        if (target is null || (target.IsValueType && AbiValueTypes.IsLongRepresentable(target))
+            || target == typeof(bool) || target == typeof(float) || target == typeof(double)
+            || !target.IsValueType)
+            return Assign(ctx.RingVar(slot), Constant(0L));
+        var instance = Activator.CreateInstance(target);
+        return Assign(ctx.RingVar(slot),
+            Call(ctx.HeapLocal, HeapAllocate, Convert(Constant(instance, typeof(object)), typeof(object))));
+    }
+
+    private static Expression EmitTypeOf(TypeOf t, AbiCtx ctx) {
+        var runtime = ResolveClrType(t.Type, t, ctx)
+            ?? throw new InvalidOperationException("VM compile rejected: TypeOf type is unresolved.");
+        int slot = ctx.AllocSlot();
+        return Assign(ctx.RingVar(slot),
+            Convert(Call(ctx.HeapLocal, HeapAllocate, Convert(Constant(runtime, typeof(object)), typeof(object))),
+                typeof(long)));
     }
 
     /// <summary>ParameterReference: resolve to the referenced Parameter node and emit it.</summary>

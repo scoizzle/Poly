@@ -124,12 +124,12 @@ public class DirectVmAbiEmitterTests {
 
     [Test, Timeout(10_000)]
     public async Task Not_ReturnsOneWhenZero(CancellationToken ct) {
-        await Assert.That(ExecDirect(new Not(new Constant(0)))).IsEqualTo(1);
+        await Assert.That(ExecDirect(new Not(new Constant(false)))).IsEqualTo(1);
     }
 
     [Test, Timeout(10_000)]
     public async Task Not_ReturnsZeroWhenNonZero(CancellationToken ct) {
-        await Assert.That(ExecDirect(new Not(new Constant(42)))).IsEqualTo(0);
+        await Assert.That(ExecDirect(new Not(new Constant(true)))).IsEqualTo(0);
     }
 
     [Test, Timeout(10_000)]

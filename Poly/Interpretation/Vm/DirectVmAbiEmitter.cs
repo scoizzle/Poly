@@ -62,6 +62,10 @@ public static partial class DirectVmAbiEmitter {
         Ref<System.Collections.IEnumerator>.Property(e => e.Current);
     private static readonly MethodInfo BoxToAbiInfo =
         Ref.Method((Expression<Func<Heap, object?, long>>)((h, v) => BoxToAbi(h, v)));
+    private static readonly MethodInfo ConvertAbiInfo =
+        Ref.Method((Expression<Func<Heap, long, Type?, Type, long>>)((h, r, s, t) => ConvertAbi(h, r, s, t)));
+    private static readonly MethodInfo TypeAsAbiInfo =
+        Ref.Method((Expression<Func<Heap, long, Type, long>>)((h, r, t) => TypeAsAbi(h, r, t)));
     private static readonly MethodInfo SetStackPointer = Ref<ValueStack>.Method(s => s.SetStackPointer(0));
     // Expression<Func<T>> cannot close over a ref struct (CS9244).
     private static readonly ConstructorInfo ReadOnlySpanLongArrayCtor =
@@ -171,13 +175,15 @@ public static partial class DirectVmAbiEmitter {
             GreaterThan n => SpillToRing(EmitComparisonValue(n.LeftHandValue, n.RightHandValue, GreaterThan, ctx), ctx),
             GreaterThanOrEqual n => SpillToRing(EmitComparisonValue(n.LeftHandValue, n.RightHandValue, GreaterThanOrEqual, ctx), ctx),
             Variable v => EmitVariable(v, ctx),
-            Default d => SpillToRing(CompileValue(d, ctx), ctx),
+            Default d => EmitDefault(d, ctx),
             ThisReference _ => EmitThis(ctx),
-            ParameterReference pr => SpillToRing(CompileValue(pr, ctx), ctx),
+            ParameterReference => RejectCompile("ParameterReference is not a VM value; bind a Parameter."),
             NullForgiving n => SpillToRing(CompileValue(n, ctx), ctx),
-            TypeAs t => SpillToRing(CompileValue(t, ctx), ctx),
-            TypeCast t => SpillToRing(CompileValue(t, ctx), ctx),
-            Await a => SpillToRing(CompileValue(a, ctx), ctx),
+            TypeAs t => EmitTypeAs(t, ctx),
+            TypeCast t => EmitTypeCast(t, ctx),
+            Await => RejectCompile("Await is not executable on the VM."),
+            TypeOf t => EmitTypeOf(t, ctx),
+            ThrowExpression te => EmitThrow(new ThrowStatement(te.Value), ctx),
             Not n => SpillToRing(EmitNotValue(n, ctx), ctx),
             UnaryMinus n => SpillToRing(EmitUnaryMinusValue(n, ctx), ctx),
             BitwiseNot n => SpillToRing(EmitBitwiseNotValue(n, ctx), ctx),
@@ -202,7 +208,7 @@ public static partial class DirectVmAbiEmitter {
             TryCatchFinally tcf => EmitTryCatchFinally(tcf, ctx),
             UsingStatement us => EmitUsingStatement(us, ctx),
             SuspendNode sn => EmitSuspendNode(sn, ctx),
-            Comment _ => SpillToRing(Constant(0L), ctx),
+            Comment => Empty(),
             Assignment a => EmitAssignment(a, ctx),
             Block b => EmitBlock(b, ctx),
             Parameter p => EmitParameter(p, ctx),
@@ -217,6 +223,9 @@ public static partial class DirectVmAbiEmitter {
                 $"DirectVmAbiEmitter: unsupported node type {node.GetType().Name}")
         };
     }
+
+    private static Expression RejectCompile(string message) =>
+        throw new InvalidOperationException($"VM compile rejected: {message}");
 
     private static Expression EmitConstant(Constant c, AbiCtx ctx) {
         int slot = ctx.AllocSlot();
@@ -424,13 +433,15 @@ public static partial class DirectVmAbiEmitter {
             Coalesce n => EmitCoalesceValue(n, ctx),
             And n => EmitLogicalAndValue(n, ctx),
             Or n => EmitLogicalOrValue(n, ctx),
-            Default _ => Constant(0L),
+            Default d => SpillRingRead(EmitDefault(d, ctx), ctx),
             ThisReference _ => SpillRingRead(EmitThis(ctx), ctx),
-            ParameterReference _ => Constant(0L),
+            ParameterReference => RejectCompile("ParameterReference is not a VM value; bind a Parameter."),
             NullForgiving n => CompileValue(n.Operand, ctx),
-            TypeAs ta => CompileValue(ta.Operand, ctx),
-            TypeCast tc => CompileValue(tc.Operand, ctx),
-            Await a => CompileValue(a.Operand, ctx),
+            TypeAs ta => SpillRingRead(EmitTypeAs(ta, ctx), ctx),
+            TypeCast tc => SpillRingRead(EmitTypeCast(tc, ctx), ctx),
+            Await => RejectCompile("Await is not executable on the VM."),
+            TypeOf t => SpillRingRead(EmitTypeOf(t, ctx), ctx),
+            ThrowExpression te => EmitThrow(new ThrowStatement(te.Value), ctx),
             IndexAccess n => EmitIndexAccessValue(n, ctx),
             Block b => SpillRingRead(CompileNode(b, ctx), ctx),
             Member m => SpillRingRead(CompileNode(m, ctx), ctx),
@@ -441,7 +452,7 @@ public static partial class DirectVmAbiEmitter {
             TypeIs t => SpillRingRead(CompileNode(t, ctx), ctx),
             SwitchStatement sw => SpillRingRead(CompileNode(sw, ctx), ctx),
             StridedSetBits ssb => SpillRingRead(CompileNode(ssb, ctx), ctx),
-            Comment _ => Constant(0L),
+            Comment => RejectCompile("Comment is not a VM value."),
             _ => throw new NotSupportedException(
                 $"CompileValue: unhandled {node.GetType().Name}")
         };

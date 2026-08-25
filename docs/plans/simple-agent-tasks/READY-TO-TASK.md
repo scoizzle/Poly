@@ -1,8 +1,8 @@
 # Plans ready for agent micro-tasks
 
-**Date:** 2026-08-24  
-**Rule:** One CURRENT suite at a time.  
-**CURRENT truth:** [`PIPELINE-STATUS.md`](./PIPELINE-STATUS.md) (only) — **CURRENT: `rewrite-to-master`**.
+**Date:** 2026-08-25  
+**Rule:** Trunk is `master`. Parallel streams with exclusive file ownership.  
+**CURRENT truth:** [`PIPELINE-STATUS.md`](./PIPELINE-STATUS.md) (only) — **CURRENT: `(none)` — parallel streams from `master`**.
 
 ---
 
@@ -13,7 +13,7 @@
 | — | [`gpure-README.md`](./gpure-README.md) | ✅ DONE 2026-08-07 |
 | — | [`mcp-minify-README.md`](./mcp-minify-README.md) | ✅ DONE 2026-08-08 |
 | — | emit-session | ✅ DONE 2026-08-24 (CompileMode seed-only honesty). Remaining lies: Temporal Meaning unused; RuntimeAnalysisCache core-catalog reopen. |
-| **CURRENT** | rewrite-to-master | Fast-forward rewrite onto master. Strong host-ABI slice DONE (PRs 21–24). Create / create-in is a post-merge DomainModeling stream, not the merge gate. Plan: [`rewrite-to-master-2026-08-25.md`](./rewrite-to-master-2026-08-25.md). |
+| — | rewrite-to-master | ✅ DONE PR 26. Trunk is `master`. Plan: [`rewrite-to-master-2026-08-25.md`](./rewrite-to-master-2026-08-25.md). |
 | parked | [`mut-safety-README.md`](./mut-safety-README.md) | After pack-host |
 | 3a | [`p1-README.md`](./p1-README.md) | After pack-2-gate |
 

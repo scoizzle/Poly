@@ -30,6 +30,10 @@ public class MinimalApiGeneratorTests {
     private static CompilationUnitNode IrUnit(Domain d) =>
         GenerationAssertions.MinimalApiIr(d);
 
+    /// <summary>Honest HTTP seed: Load(HttpLibrary), not CompileMode.All inventing a host.</summary>
+    private static Compiler CompilerWithHttpHost() =>
+        new Compiler().Load(new HttpLibrary());
+
     // ── Structural IR assertions (preferred) ─────────────────
 
     [Test]
@@ -357,13 +361,13 @@ public class MinimalApiGeneratorTests {
 
     [Test]
     public async Task Compile_All_ParentWithProducedBillingContract_DoesNotEmitLedgerRoutes() {
-        // pack-3c-2 end-to-end: CompileMode.All pulls Program.cs + demo.http through the
-        // hook; a filled internal billing contract still yields composition-root-only output.
+        // pack-3c-2 end-to-end: Load(HttpLibrary) + CompileMode.All persistence seed;
+        // a filled internal billing contract still yields composition-root-only output.
         var filled = new DomainSuite([BillingSource(), ParentWithBillingContract()])
             .FillInternalContracts(ParentWithBillingContract());
         var poly = new DomainDslPrinter().Print(filled);
 
-        var result = new Compiler().Compile(poly, CompileMode.All, DbmsPack.Sqlite);
+        var result = CompilerWithHttpHost().Compile(poly, CompileMode.All, DbmsPack.Sqlite);
         await Assert.That(result.Success).IsTrue();
 
         var program = result.Files!.Single(f => f.FileName == "Program.cs").Source;
@@ -401,7 +405,7 @@ public class MinimalApiGeneratorTests {
             .FillInternalContracts(ParentWithBillingBind());
         var poly = new DomainDslPrinter().Print(filled);
 
-        var result = new Compiler().Compile(poly, CompileMode.All, DbmsPack.Sqlite);
+        var result = CompilerWithHttpHost().Compile(poly, CompileMode.All, DbmsPack.Sqlite);
         await Assert.That(result.Success).IsTrue();
 
         var program = result.Files!.Single(f => f.FileName == "Program.cs").Source;

@@ -62,7 +62,8 @@ public sealed partial record DomainEntityInstance {
         string entityName,
         IEnumerable<Property> properties,
         IEnumerable<Property>? extraProperties = null,
-        IEnumerable<Action>? actions = null) {
+        IEnumerable<Action>? actions = null,
+        IEnumerable<Relationship>? navigations = null) {
         var propDefs = new List<PropertyDefinitionNode>();
         var seen = new HashSet<string>(StringComparer.Ordinal);
 
@@ -84,6 +85,21 @@ public sealed partial record DomainEntityInstance {
                 "CurrentStage",
                 new PrimitiveTypeReference(Prim.String),
                 Getter: new PropertyGetterDefinitionNode()));
+        }
+
+        if (navigations is not null) {
+            foreach (var nav in navigations) {
+                if (nav.Cardinality is not RelationshipCardinality.OneToOne)
+                    continue;
+                var pascal = DomainToCSharpExporter.ToPascalCase(nav.Name);
+                if (!seen.Add(pascal))
+                    continue;
+                propDefs.Add(new PropertyDefinitionNode(
+                    pascal,
+                    new TypeReference(nav.Target.TypeName),
+                    DefaultValue: new Constant(null!),
+                    Getter: new PropertyGetterDefinitionNode()));
+            }
         }
 
         var methods = new List<MethodDefinitionNode> {
@@ -130,7 +146,23 @@ public sealed partial record DomainEntityInstance {
     /// </summary>
     private TypeDefinitionNodeAnalyzer BuildActionScopedTypeDefAnalyzer(
         Action action) =>
-        BuildTypeDefAnalyzer(Entity.Name, Entity.Properties, action.Parameters, EnumerateTypeDefActions(Entity));
+        BuildTypeDefAnalyzer(Entity.Name, Entity.Properties, action.Parameters,
+            EnumerateTypeDefActions(Entity), NavigationsFor(Entity, Domain));
+
+    /// <summary>
+    /// Source-entity navigations. Prefer the domain's copy of the entity
+    /// (tests often pass a pre-redistribution entity plus a Domain that
+    /// already owns the navs).
+    /// </summary>
+    private static IEnumerable<Relationship> NavigationsFor(Entity entity, Domain? domain) {
+        if (domain is not null) {
+            var live = domain.Types.OfType<Entity>()
+                .FirstOrDefault(e => string.Equals(e.Name, entity.Name, StringComparison.Ordinal));
+            if (live is not null)
+                return live.Navigations;
+        }
+        return entity.Navigations;
+    }
 
     /// <summary>
     /// Actions on This: entity-level plus every stage's actions. Same set the
@@ -172,21 +204,39 @@ public sealed partial record DomainEntityInstance {
     }
 
     /// <summary>
-    /// Resolves the singular target for a cross-entity invoke (E3b).
-    /// Fail-closed: caller must be relationship source; exactly one outbound link.
+    /// IDictionary read of a OneToOne nav property: the linked target, or
+    /// <c>null</c> when unlinked so the lowered guard can return
+    /// <c>DomainResult.Failure</c> instead of NRE. More than one link is
+    /// fail-closed (singular invoke).
     /// </summary>
-    private DomainEntityInstance ResolveRelationshipTarget(string relationshipName) {
-        var related = GetOutboundRelatedInstances(relationshipName);
-        if (related.Count == 0)
-            throw new InvalidOperationException(
-                $"No linked instances found for relationship '{relationshipName}' on entity '{Entity.Name}'.");
+    internal bool TryGetOneToOneNavigation(string key, out object? value) {
+        value = null;
+        Relationship? match = null;
+        foreach (var nav in NavigationsFor(Entity, Domain)) {
+            if (nav.Cardinality is not RelationshipCardinality.OneToOne)
+                continue;
+            if (!string.Equals(DomainToCSharpExporter.ToPascalCase(nav.Name), key, StringComparison.Ordinal))
+                continue;
+            match = nav;
+            break;
+        }
+        if (match is null)
+            return false;
 
+        if (Store is null || Domain is null) {
+            value = null;
+            return true;
+        }
+
+        var related = Store.GetRelatedInstances(match.Name, this)
+            .Where(t => string.Equals(t.Entity.Name, match.Target.TypeName, StringComparison.Ordinal))
+            .ToList();
         if (related.Count > 1)
             throw new InvalidOperationException(
-                $"Relationship '{relationshipName}' has {related.Count} linked instances; " +
+                $"Relationship '{match.Name}' has {related.Count} linked instances; " +
                 "singular cross-entity invoke requires exactly one target.");
-
-        return related[0];
+        value = related.Count == 0 ? null : related[0];
+        return true;
     }
 
     /// <summary>

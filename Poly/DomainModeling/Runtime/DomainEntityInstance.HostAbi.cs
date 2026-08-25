@@ -47,41 +47,13 @@ public sealed partial record DomainEntityInstance {
             return _instance.ExecuteCreateInRelationship(createIn, _typeProvider);
         }
 
-        protected override object? InvokeAction(InvokeActionEffect invoke) {
-            if (invoke.TargetRelationship is null)
-                throw new InvalidOperationException(
-                    "InvokeActionEffect self-invoke must lower to Ast; EffectExecutor is not the shipped path.");
-            _instance.ExecuteInvokeEffect(invoke);
-            return null;
-        }
+        protected override object? InvokeAction(InvokeActionEffect invoke) =>
+            throw new InvalidOperationException(
+                "InvokeActionEffect must lower to Ast; EffectExecutor is not the shipped path.");
 
         protected override object? ForEachInvoke(ForEachInvokeEffect efe) {
             _instance.ExecuteForEachInvoke(efe);
             return null;
-        }
-    }
-
-    /// <summary>
-    /// Resolves <paramref name="targetExpr"/> to a <see cref="DomainEntityInstance"/> and
-    /// records an instance link (source = this, target = resolved) in the store.
-    /// Target must be a <see cref="PropertyAccess"/> whose current value is a
-    /// <see cref="DomainEntityInstance"/> (set via property bag or prior effects).
-    /// Prefer <see cref="DomainInstanceStore.Link"/> for direct API linking.
-    /// </summary>
-    private void ExecuteInvokeEffect(InvokeActionEffect invoke) {
-        if (invoke.TargetRelationship is null)
-            throw new InvalidOperationException(
-                "InvokeActionEffect self-invoke must lower to Ast; EffectExecutor is not the shipped path.");
-
-        var chainedArgs = EvaluateParameterBindings(invoke.ParameterBindings);
-        var target = ResolveRelationshipTarget(invoke.TargetRelationship);
-        var nestedResult = target.InvokeAction(invoke.ActionName, chainedArgs);
-        if (!nestedResult.Succeeded) {
-            throw new InvalidOperationException(
-                nestedResult.ErrorMessage
-                ?? (nestedResult.FailedGuards.Count > 0
-                    ? $"invoke '{invoke.ActionName}' blocked by guards: {string.Join(", ", nestedResult.FailedGuards)}"
-                    : $"invoke '{invoke.ActionName}' failed."));
         }
     }
 

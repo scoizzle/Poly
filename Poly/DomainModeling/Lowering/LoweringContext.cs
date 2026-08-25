@@ -33,10 +33,10 @@ namespace Poly.DomainModeling.Lowering;
 /// parameters (e.g. <c>maxAmount</c>) instead of <c>this.maxAmount</c>.
 /// </param>
 /// <param name="LowerStageTransitions">
-/// When true, create / invoke / for-invoke effects lower to C#-shaped Ast
+/// When true, create / for-invoke effects lower to C#-shaped Ast
 /// (factories, method calls). Defaults to false (runtime path keeps those on
-/// EffectExecutor). <see cref="StageTransitionEffect"/> always lowers — this
-/// flag does not gate it.
+/// EffectExecutor). StageTransition and invoke always lower — this flag
+/// does not gate them.
 /// </param>
 /// <param name="Domain">Optional domain reference for cross-entity type resolution.</param>
 /// <param name="StageEnumTypeName">

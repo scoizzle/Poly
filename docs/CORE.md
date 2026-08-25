@@ -150,7 +150,7 @@ No intermediate primitive flattening step. Inputs are the AST plus analysis meta
 | Policy compile/eval | `DomainEntityInstance.EvaluatePolicy` → `DomainExpressionLoweringPass` → `Interpreter` — **VM-primary**; LINQ dual-oracle + CLR-subject wrapper `PolicyEvaluator` are test-only (`Poly.Tests/TestHelpers/`) |
 | Domain change | `DomainEvolution`…`Apply()` with analysis gate + rollback |
 
-Domain concepts expand to **generic** Syntax nodes, not new opcodes. ADR: `docs/decisions/2026-06-08-domain-lowering-boundary.md`. New work must not add consumer-specific lowering flags or a parallel effect interpreter. Residual dual-path is debt — do not grow it.
+Domain concepts expand to **generic** Syntax nodes, not new opcodes. ADR: `docs/decisions/2026-06-08-domain-lowering-boundary.md`. Host ABI: `CallExternal` (generic node + `VmState.Host`) ships for **StageTransition** — Assignment of `CurrentStage` + `CallExternal("Notify", stageName)` on both runtime and emit. Remaining store effects (create / create-in / invoke / for-invoke) still dual-path via EffectExecutor. New work must not add consumer-specific lowering flags or a parallel effect interpreter. Residual dual-path is debt — do not grow it.
 
 ### 3.5 Introspection (types and members)
 

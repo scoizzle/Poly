@@ -18,7 +18,7 @@ namespace Poly.Interpretation.LinqExpressions;
 /// (<see cref="DirectVmAbiEmitter"/>) first. Parity tests may continue to
 /// use this path for cross-validation.</para>
 /// </remarks>
-public sealed class LinqExpressionGenerator {
+public sealed partial class LinqExpressionGenerator {
     private readonly AnalysisResult _analysisResult;
 
     /// <summary>Holds the compiled LINQ Expression and the set of parameters
@@ -278,3 +278,4 @@ public sealed class LinqExpressionGenerator {
             _ => throw new InvalidOperationException($"Unsupported node type: {node.GetType().Name}")
         };
     }
+}

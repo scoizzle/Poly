@@ -1,0 +1,741 @@
+using System.Linq.Expressions;
+using System.Reflection;
+
+using Poly.Interpretation.Analysis.Semantics;
+using Poly.Introspection.CommonLanguageRuntime;
+
+using static System.Linq.Expressions.Expression;
+
+namespace Poly.Interpretation.Vm;
+
+public static partial class DirectVmAbiEmitter {
+    /// <summary>Comparison as a bool Expression (no 0/1 long).</summary>
+    private static Expression CompileCompareTest(
+        Node left, Node right,
+        Func<Expression, Expression, BinaryExpression> cf,
+        AbiCtx ctx) {
+        var lv = CompileValue(left, ctx);
+        var rv = CompileValue(right, ctx);
+        bool eq = cf == Equal || cf == NotEqual;
+        if (eq && AreHeapValues(ctx, left, right)) {
+            var lo = HeapValueToObject(lv, ctx);
+            var ro = HeapValueToObject(rv, ctx);
+            var ec = Call(ObjectEquals, lo, ro);
+            return cf == Equal ? ec : Not(ec);
+        }
+        if (!eq && ctx.Analysis is not null
+            && ctx.Analysis.GetValueRepresentation(left) == ValueRepresentationKind.HeapRef
+            && ctx.Analysis.GetValueRepresentation(right) == ValueRepresentationKind.HeapRef) {
+            // Relational comparison of heap-resident values (DateOnly/DateTime/
+            // Guid/string/...): compare the boxed values, not the raw handles.
+            // Analysis-known HeapRef on BOTH operands only — unresolved bag reads
+            // (Unknown) keep the scalar path.
+            var lo = HeapValueToObject(lv, ctx);
+            var ro = HeapValueToObject(rv, ctx);
+            var cmp = Call(VmHeapCompare, lo, ro);
+            return cf(cmp, Constant(0));
+        }
+        if (IsDoubleValue(ctx, left) || IsDoubleValue(ctx, right))
+            return cf(Call(BitConverterInt64BitsToDouble, lv), Call(BitConverterInt64BitsToDouble, rv));
+        return cf(lv, rv);
+    }
+
+    private static Expression EmitComparisonValue(
+        Node left, Node right,
+        Func<Expression, Expression, BinaryExpression> cf,
+        AbiCtx ctx, Node? cn = null) {
+        var lv = CompileValue(left, ctx);
+        var rv = CompileValue(right, ctx);
+        bool eq = cf == Equal || cf == NotEqual;
+        if (eq && AreHeapValues(ctx, left, right)) {
+            var lo = HeapValueToObject(lv, ctx);
+            var ro = HeapValueToObject(rv, ctx);
+            var ec = Call(ObjectEquals, lo, ro);
+            return Condition(ec, cf == Equal ? Constant(1L) : Constant(0L),
+                                cf == Equal ? Constant(0L) : Constant(1L));
+        }
+        if (!eq && ctx.Analysis is not null
+            && ctx.Analysis.GetValueRepresentation(left) == ValueRepresentationKind.HeapRef
+            && ctx.Analysis.GetValueRepresentation(right) == ValueRepresentationKind.HeapRef) {
+            // Relational comparison of heap-resident values (DateOnly/DateTime/
+            // Guid/string/...): compare the boxed values, not the raw handles.
+            // Analysis-known HeapRef on BOTH operands only — unresolved bag reads
+            // (Unknown) keep the scalar path.
+            var lo = HeapValueToObject(lv, ctx);
+            var ro = HeapValueToObject(rv, ctx);
+            var cmp = Call(VmHeapCompare, lo, ro);
+            return Condition(cf(cmp, Constant(0)), Constant(1L), Constant(0L));
+        }
+        if (IsDoubleValue(ctx, left) || IsDoubleValue(ctx, right))
+            return Condition(cf(Call(BitConverterInt64BitsToDouble, lv), Call(BitConverterInt64BitsToDouble, rv)),
+                Constant(1L), Constant(0L));
+        return Condition(cf(lv, rv), Constant(1L), Constant(0L));
+    }
+
+    // ── Ring-based expression helpers ──
+    // Retained for paths that still walk operands via CompileNode (Member, etc.).
+    // Pure expression dispatch uses CompileValue + SpillToRing instead.
+
+    /// <summary>Binary arithmetic — ring-based (operands through CompileNode).</summary>
+    private static Expression EmitBinaryArithmeticRing(
+        Node left, Node right,
+        Func<Expression, Expression, BinaryExpression> factory,
+        AbiCtx ctx) {
+        int d = ctx.RingDepth;
+        var leftCompiled = CompileNode(left, ctx);
+        int leftSlot = ctx.RingDepth - 1;
+        var rightCompiled = CompileNode(right, ctx);
+        int rightSlot = ctx.RingDepth - 1;
+
+        if (IsDoubleValue(ctx, left) || IsDoubleValue(ctx, right)) {
+            var resultBits = Call(BitConverterDoubleToInt64Bits,
+                factory(Call(BitConverterInt64BitsToDouble, ctx.RingVar(leftSlot)),
+                        Call(BitConverterInt64BitsToDouble, ctx.RingVar(rightSlot))));
+            ctx.RingDepth = d + 1;
+            return Block(leftCompiled, rightCompiled, Assign(ctx.RingVar(d), resultBits));
+        }
+
+        Expression rhs = ctx.RingVar(rightSlot);
+        if (factory == LeftShift || factory == RightShift)
+            rhs = Convert(rhs, typeof(int));
+        ctx.RingDepth = d + 1;
+        return Block(leftCompiled, rightCompiled, Assign(ctx.RingVar(d), factory(ctx.RingVar(leftSlot), rhs)));
+    }
+
+    /// <summary>Comparison — ring-based (operands through CompileNode).</summary>
+    private static Expression EmitComparisonRing(
+        Node left, Node right,
+        Func<Expression, Expression, BinaryExpression> cf,
+        AbiCtx ctx, Node? cn = null) {
+        int d = ctx.RingDepth;
+        var leftCompiled = CompileNode(left, ctx);
+        int leftSlot = ctx.RingDepth - 1;
+        var rightCompiled = CompileNode(right, ctx);
+        int rightSlot = ctx.RingDepth - 1;
+
+        bool eq = cf == Equal || cf == NotEqual;
+        if (eq && AreHeapValues(ctx, left, right)) {
+            var lo = HeapValueToObject(ctx.RingVar(leftSlot), ctx);
+            var ro = HeapValueToObject(ctx.RingVar(rightSlot), ctx);
+            var ec = Call(ObjectEquals, lo, ro);
+            ctx.RingDepth = d + 1;
+            return Block(leftCompiled, rightCompiled, Assign(ctx.RingVar(d),
+                Condition(ec, cf == Equal ? Constant(1L) : Constant(0L),
+                              cf == Equal ? Constant(0L) : Constant(1L))));
+        }
+        if (IsDoubleValue(ctx, left) || IsDoubleValue(ctx, right)) {
+            ctx.RingDepth = d + 1;
+            return Block(leftCompiled, rightCompiled, Assign(ctx.RingVar(d),
+                Condition(cf(Call(BitConverterInt64BitsToDouble, ctx.RingVar(leftSlot)),
+                              Call(BitConverterInt64BitsToDouble, ctx.RingVar(rightSlot))),
+                    Constant(1L), Constant(0L))));
+        }
+        ctx.RingDepth = d + 1;
+        return Block(leftCompiled, rightCompiled, Assign(ctx.RingVar(d),
+            Condition(cf(ctx.RingVar(leftSlot), ctx.RingVar(rightSlot)), Constant(1L), Constant(0L))));
+    }
+
+    /// <summary>Binary arithmetic — uses CompileValue for operands,</summary>
+    private static Expression EmitBinaryArithmetic(
+        Node left, Node right,
+        Func<Expression, Expression, BinaryExpression> factory,
+        AbiCtx ctx) {
+        var leftVal = CompileValue(left, ctx);
+        var rightVal = CompileValue(right, ctx);
+        if (TryEmitStringConcat(left, right, leftVal, rightVal, factory, ctx) is { } concat)
+            return SpillToRing(concat, ctx);
+        if (IsDoubleValue(ctx, left) || IsDoubleValue(ctx, right))
+            return SpillToRing(Call(BitConverterDoubleToInt64Bits,
+                factory(Call(BitConverterInt64BitsToDouble, leftVal),
+                        Call(BitConverterInt64BitsToDouble, rightVal))), ctx);
+        var rhs = rightVal;
+        if (factory == LeftShift || factory == RightShift) rhs = Convert(rhs, typeof(int));
+        return SpillToRing(factory(leftVal, rhs), ctx);
+    }
+
+    /// <summary>Comparison (eq, neq, lt, gt, etc.) → 0/1 long.
+    /// For Equal/NotEqual, heap reference values (strings, objects) are compared
+    /// using object.Equals at runtime rather than handle equality.</summary>
+    private static Expression EmitComparison(
+        Node left, Node right,
+        Func<Expression, Expression, BinaryExpression> comparisonFactory,
+        AbiCtx ctx,
+        Node? comparisonNode = null) {
+        int d = ctx.RingDepth;
+        var leftExpr = CompileNode(left, ctx);
+        int leftResult = ctx.RingDepth - 1;
+
+        var rightExpr = CompileNode(right, ctx);
+        int rightResult = ctx.RingDepth - 1;
+
+        // Detect string comparison: when Equal/NotEqual and both operands are
+        // heap references (strings), compare via object.Equals at runtime.
+        bool isEquality = comparisonFactory == Equal
+                       || comparisonFactory == NotEqual;
+        if (isEquality && AreHeapValues(ctx, left, right)) {
+            // Read both objects from heap and compare — handle 0 maps to null.
+            var leftObj = HeapValueToObject(ctx.RingVar(leftResult), ctx);
+            var rightObj = HeapValueToObject(ctx.RingVar(rightResult), ctx);
+            var equalCheck = Call(ObjectEquals,
+                leftObj, rightObj);
+            var result = Assign(ctx.RingVar(d),
+                comparisonFactory == Equal
+                    ? Condition(equalCheck, Constant(1L), Constant(0L))
+                    : Condition(equalCheck, Constant(0L), Constant(1L)));
+            ctx.RingDepth = d + 1;
+            return Block(leftExpr, rightExpr, result);
+        }
+
+        // Double/float comparison: reinterpret bits before comparing
+        if (IsDoubleValue(ctx, left) || IsDoubleValue(ctx, right)) {
+            var leftDbl = Call(BitConverterInt64BitsToDouble, ctx.RingVar(leftResult));
+            var rightDbl = Call(BitConverterInt64BitsToDouble, ctx.RingVar(rightResult));
+            var result = Assign(ctx.RingVar(d),
+                Condition(comparisonFactory(leftDbl, rightDbl),
+                    Constant(1L), Constant(0L)));
+            ctx.RingDepth = d + 1;
+            return Block(leftExpr, rightExpr, result);
+        }
+
+        var simpleResult = Assign(
+            ctx.RingVar(d),
+            Condition(comparisonFactory(ctx.RingVar(leftResult), ctx.RingVar(rightResult)),
+                Constant(1L), Constant(0L)));
+        ctx.RingDepth = d + 1;
+        return Block(leftExpr, rightExpr, simpleResult);
+    }
+
+    /// <summary>Converts a long value (heap handle or 0 for null) to an object
+    /// reference suitable for comparison. Handle 0 maps to CLR null rather
+    /// than being dereferenced via <c>Heap.UnsafeGet</c>.</summary>
+    private static Expression HeapValueToObject(Expression handle, AbiCtx ctx) {
+        var intHandle = Convert(handle, typeof(int));
+        var deref = Call(ctx.HeapLocal,
+            HeapUnsafeGet, intHandle);
+        return Condition(Equal(handle, Constant(0L)),
+            Constant(null, typeof(object)),
+            deref);
+    }
+
+    /// <summary>Check if both nodes likely produce heap reference values that
+    /// should be compared by value rather than handle.</summary>
+    private static bool AreHeapValues(AbiCtx ctx, Node left, Node right) {
+        if (ctx.Analysis is not null) {
+            var leftRep = ctx.Analysis.GetValueRepresentation(left);
+            var rightRep = ctx.Analysis.GetValueRepresentation(right);
+            if (leftRep == ValueRepresentationKind.HeapRef
+                || rightRep == ValueRepresentationKind.HeapRef)
+                return true;
+            // Both representations known and neither is a heap ref (StackScalar/Bool) →
+            // the comparison is scalar. Do NOT fall through to the Member heuristic:
+            // a value-typed (e.g. long) member read produces a scalar, and treating it
+            // as a heap handle reads garbage heap slots (broken `== 0` in quantifiers).
+            if (leftRep != ValueRepresentationKind.Unknown
+                && rightRep != ValueRepresentationKind.Unknown)
+                return false;
+        }
+        if (left is Constant cl && cl.Value is string) return true;
+        if (right is Constant cr && cr.Value is string) return true;
+        if (left is Member) return true;
+        if (right is Member) return true;
+        return false;
+    }
+
+    /// <summary>Short-circuit AND: if left is false, skip right.</summary>
+    private static Expression EmitLogicalAnd(And and, AbiCtx ctx) {
+        int d = ctx.RingDepth;
+        var leftExpr = CompileNode(and.LeftHandValue, ctx);
+        int leftSlot = ctx.RingDepth - 1;
+        var foldLeft = FoldResultToSlot(ref leftSlot, d, ctx);
+
+        int rightStart = ctx.RingDepth;
+        var rightExpr = CompileNode(and.RightHandValue, ctx);
+        int rightSlot = ctx.RingDepth - 1;
+
+        var result = Assign(ctx.RingVar(d),
+            Block(
+                leftExpr, foldLeft,
+                Condition(
+                    Equal(ctx.RingVar(leftSlot), Constant(0L)),
+                    Constant(0L),
+                    Block(
+                        rightExpr,
+                        ctx.RingVar(rightSlot)
+                    )
+                )
+            ));
+        ctx.RingDepth = d + 1;
+        return result;
+    }
+
+    /// <summary>Short-circuit OR: if left is true, skip right.</summary>
+    private static Expression EmitLogicalOr(Or or, AbiCtx ctx) {
+        int d = ctx.RingDepth;
+        var leftExpr = CompileNode(or.LeftHandValue, ctx);
+        int leftSlot = ctx.RingDepth - 1;
+        var foldLeft = FoldResultToSlot(ref leftSlot, d, ctx);
+
+        int rightStart = ctx.RingDepth;
+        var rightExpr = CompileNode(or.RightHandValue, ctx);
+        int rightSlot = ctx.RingDepth - 1;
+
+        var result = Assign(ctx.RingVar(d),
+            Block(
+                leftExpr, foldLeft,
+                Condition(
+                    NotEqual(ctx.RingVar(leftSlot), Constant(0L)),
+                    Constant(1L),
+                    Block(
+                        rightExpr,
+                        ctx.RingVar(rightSlot)
+                    )
+                )
+            ));
+        ctx.RingDepth = d + 1;
+        return result;
+    }
+
+    /// <summary>Logical NOT: 0→1, anything else→0.</summary>
+    private static Expression EmitNot(Not not, AbiCtx ctx) {
+        int d = ctx.RingDepth;
+        var operandExpr = CompileNode(not.Value, ctx);
+        int resultSlot = ctx.RingDepth - 1;
+        var fold = FoldResultToSlot(ref resultSlot, d, ctx);
+        var result = Assign(ctx.RingVar(resultSlot),
+            Condition(Equal(ctx.RingVar(resultSlot), Constant(0L)), Constant(1L), Constant(0L)));
+        ctx.RingDepth = resultSlot + 1;
+        return Block(operandExpr, fold, result);
+    }
+
+    /// <summary>Unary minus: negate value.</summary>
+    private static Expression EmitUnaryMinus(UnaryMinus unaryMinus, AbiCtx ctx) {
+        int d = ctx.RingDepth;
+        var operandExpr = CompileNode(unaryMinus.Operand, ctx);
+        int resultSlot = ctx.RingDepth - 1;
+        var fold = FoldResultToSlot(ref resultSlot, d, ctx);
+        Expression result;
+        if (IsDoubleValue(ctx, unaryMinus.Operand)) {
+            var dbl = Call(BitConverterInt64BitsToDouble, ctx.RingVar(resultSlot));
+            result = Assign(ctx.RingVar(resultSlot),
+                Call(BitConverterDoubleToInt64Bits, Negate(dbl)));
+        }
+        else {
+            result = Assign(ctx.RingVar(resultSlot), Negate(ctx.RingVar(resultSlot)));
+        }
+        ctx.RingDepth = resultSlot + 1;
+        return Block(operandExpr, fold, result);
+    }
+
+    private static Expression EmitBitwiseNot(BitwiseNot n, AbiCtx ctx) {
+        int d = ctx.RingDepth;
+        var operandExpr = CompileNode(n.Operand, ctx);
+        int resultSlot = ctx.RingDepth - 1;
+        var fold = FoldResultToSlot(ref resultSlot, d, ctx);
+        var result = Assign(ctx.RingVar(resultSlot), Not(ctx.RingVar(resultSlot)));
+        ctx.RingDepth = resultSlot + 1;
+        return Block(operandExpr, fold, result);
+    }
+
+    /// <summary>PopCount via System.Numerics.BitOperations.PopCount.</summary>
+    private static Expression EmitPopCount(PopCount pc, AbiCtx ctx) {
+        int d = ctx.RingDepth;
+        var operandExpr = CompileNode(pc.Operand, ctx);
+        int resultSlot = ctx.RingDepth - 1;
+        var fold = FoldResultToSlot(ref resultSlot, d, ctx);
+        var call = Call(null,
+            BitOperationsPopCount,
+            Convert(ctx.RingVar(resultSlot), typeof(ulong)));
+        var result = Assign(ctx.RingVar(resultSlot), Convert(call, typeof(long)));
+        ctx.RingDepth = resultSlot + 1;
+        return Block(operandExpr, fold, result);
+    }
+
+    /// <summary>Member access via CLR reflection: resolve from analysis metadata
+    /// and emit a property getter, field read, or method call.</summary>
+    private static Expression EmitMember(Member m, AbiCtx ctx) {
+        int d = ctx.RingDepth;
+        var instanceExpr = CompileNode(m.Value, ctx);
+        int instanceSlot = ctx.RingDepth - 1;
+        var fold = FoldResultToSlot(ref instanceSlot, d, ctx);
+
+        var resolved = ctx.Analysis?.GetResolvedMember(m);
+
+        // Static member — no instance needed
+        if (resolved?.LifetimeModifier == LifetimeModifier.Static) {
+            return EmitResolvedMember(resolved, null, d, ctx, Block(instanceExpr, fold));
+        }
+
+        if (resolved is not null) {
+            var declaringTypeDef = resolved.DeclaringTypeDefinition;
+            bool isInlineValueType = declaringTypeDef is ClrTypeDefinition clrDef
+                && clrDef.RuntimeType.IsValueType
+                && AbiValueTypes.IsLongRepresentable(clrDef.RuntimeType);
+
+            Expression instanceObj;
+            if (isInlineValueType) {
+                instanceObj = Convert(ctx.RingVar(instanceSlot), typeof(object));
+            }
+            else {
+                instanceObj = Call(ctx.HeapLocal,
+                    HeapUnsafeGet,
+                    Convert(ctx.RingVar(instanceSlot), typeof(int)));
+            }
+            return EmitResolvedMember(resolved, instanceObj, d, ctx, Block(instanceExpr, fold));
+        }
+
+        // No metadata — fallback passthrough
+        return instanceExpr;
+    }
+
+    /// <summary>Emit the resolved member access expression and store the result
+    /// on the ring.  Uses the member's <see cref="ITypeMember.EmitRead"/> hook so
+    /// the emitter stays provider-agnostic — CLR types, AST-backed types, and
+    /// future provider types each return their own expression trees.</summary>
+    private static Expression EmitResolvedMember(
+        ITypeMember resolved,
+        Expression? instanceObj,
+        int resultSlot,
+        AbiCtx ctx,
+        Expression instanceExpr) {
+
+        // Polymorphic EmitRead — each ITypeMember implementation provides its
+        // own expression tree. CLR properties use Property(inst, propInfo),
+        // AST properties use Dictionary indexer, fields use Field(inst, fieldInfo).
+        if (resolved.EmitRead(instanceObj) is Expression readExpr) {
+            return Block(instanceExpr, Assign(ctx.RingVar(resultSlot),
+                ConvertMemberResult(readExpr, resolved, ctx)));
+        }
+
+        // Parameterless method call (e.g. ToString, GetHashCode) — invoke via MethodInfo.
+        // Methods don't have an EmitRead path; they need explicit invocation.
+        if (resolved is ITypeMethod method) {
+            var clrMethod = resolved as ClrMethod;
+            var methodInfo = clrMethod?.MethodInfo;
+            if (methodInfo is not null && methodInfo.GetParameters().Length == 0) {
+                Expression? instanceForCall = instanceObj;
+                if (instanceObj is not null && methodInfo.DeclaringType?.IsValueType == true) {
+                    instanceForCall = Convert(instanceObj, methodInfo.DeclaringType);
+                }
+                Expression resultExpr = instanceForCall is not null
+                    ? Call(instanceForCall, methodInfo)
+                    : Call(null, methodInfo);
+                return Block(instanceExpr, Assign(ctx.RingVar(resultSlot),
+                    ConvertMemberResult(resultExpr, resolved, ctx)));
+            }
+        }
+
+        // Fallback: return instance
+        return instanceExpr;
+    }
+
+    /// <summary>Convert a member access result (object?) to the ring ABI (long).
+    /// Long-representable value types are unboxed to long; everything else
+    /// (reference types and non-numeric value types like DateTime/DateOnly/Guid)
+    /// is boxed and allocated on the heap, returning a heap handle.</summary>
+    private static Expression ConvertMemberResult(Expression readCall, ITypeMember resolved, AbiCtx ctx) {
+        // Try to determine if the member type is a value type via CLR metadata.
+        var memberTypeDef = resolved.MemberTypeDefinition;
+        if (memberTypeDef is ClrTypeDefinition clrDef) {
+            var clrType = clrDef.RuntimeType;
+            if (clrType.IsValueType && AbiValueTypes.IsLongRepresentable(clrType)) {
+                // Unbox: (long)(T)(object?)readCall
+                return Convert(Convert(readCall, clrType), typeof(long));
+            }
+        }
+        // Reference type (or non-long value type): box/allocate on heap and return handle
+        var handle = Call(ctx.HeapLocal,
+            HeapAllocate,
+            readCall);
+        return Convert(handle, typeof(long));
+    }
+
+    /// <summary>TypeIs: check if the operand's heap object is assignable to the target type.</summary>
+    private static Expression EmitTypeIs(TypeIs t, AbiCtx ctx) {
+        int d = ctx.RingDepth;
+        var operandExpr = CompileNode(t.Operand, ctx);
+        int resultSlot = ctx.RingDepth - 1;
+        var fold = FoldResultToSlot(ref resultSlot, d, ctx);
+
+        // Resolve target type from TypeReference via analysis or CLR type lookup
+        Type? targetType = null;
+        if (t.TargetTypeReference is ClrTypeReference clrRef) {
+            targetType = clrRef.RuntimeType;
+        }
+        // Try analysis metadata fallback
+        if (targetType is null && ctx.Analysis is not null) {
+            var resolvedType = ctx.Analysis.GetResolvedType(t);
+            if (resolvedType is ClrTypeDefinition clrDef) {
+                targetType = clrDef.RuntimeType;
+            }
+        }
+
+        if (targetType is null) {
+            // Cannot resolve — return 0 (false)
+            return Block(operandExpr, fold, Assign(ctx.RingVar(resultSlot), Constant(0L)));
+        }
+
+        // Read heap object and check type: _heap.UnsafeGet((int)handle) is TargetType
+        var heapObj = Call(ctx.HeapLocal,
+            HeapUnsafeGet,
+            Convert(ctx.RingVar(resultSlot), typeof(int)));
+        var typeCheck = TypeIs(heapObj, targetType);
+        var result = Condition(typeCheck, Constant(1L), Constant(0L));
+        return Block(operandExpr, fold, Assign(ctx.RingVar(resultSlot), result));
+    }
+
+    /// <summary>TypeAs: Expression.TypeAs(operand, targetType).</summary>
+    private static Expression EmitTypeAs(TypeAs t, AbiCtx ctx) {
+        // Passthrough for POC — same as EmitMember passthrough
+        return CompileNode(t.Operand, ctx);
+    }
+
+    /// <summary>TypeCast: Expression.Convert(operand, targetType).</summary>
+    private static Expression EmitTypeCast(TypeCast t, AbiCtx ctx) {
+        // Passthrough for POC — values are already long in the ABI
+        return CompileNode(t.Operand, ctx);
+    }
+
+    /// <summary>Await: synchronous extraction via GetAwaiter().GetResult().</summary>
+    private static Expression EmitAwait(Await a, AbiCtx ctx) {
+        // Passthrough for POC — the operand value is the result
+        return CompileNode(a.Operand, ctx);
+    }
+
+    /// <summary>Default: produce the default value for a type (0 for long/scalar).</summary>
+    private static Expression EmitDefault(Default d, AbiCtx ctx) {
+        int slot = ctx.AllocSlot();
+        return Assign(ctx.RingVar(slot), Constant(0L));
+    }
+
+    /// <summary>ParameterReference: resolve to the referenced Parameter node and emit it.</summary>
+    private static Expression EmitParameterReference(ParameterReference pr, AbiCtx ctx) {
+        // Try to resolve the referenced Parameter via analysis metadata.
+        // The DomainExpressionLoweringPass may produce Member(ParameterReference, ...)
+        // where ParameterReference aliases a concrete Parameter node from the lowering.
+        // Fall back to 0L if unresolvable.
+        int slot = ctx.AllocSlot();
+        return Assign(ctx.RingVar(slot), Constant(0L));
+    }
+
+    /// <summary>StridedSetBits: bit-level strided set (handle, start, step, limit).</summary>
+    private static Expression EmitStridedSetBits(StridedSetBits ssb, AbiCtx ctx) {
+        int d = ctx.RingDepth;
+
+        // Compile-time fast path: if the array is a tracked frame-local variable,
+        // access _slots[base + elemIdx] directly with no runtime dispatch.
+        if (ssb.Array is Variable arrVarS && ctx.TryGetFrameLocalBase(arrVarS) is int flBaseS) {
+            var startExprS = CompileNode(ssb.StartValue, ctx);
+            int startSlotS = ctx.RingDepth - 1;
+            var stepExprS = CompileNode(ssb.Step, ctx);
+            int stepSlotS = ctx.RingDepth - 1;
+            var limitExprS = CompileNode(ssb.Limit, ctx);
+            int limitSlotS = ctx.RingDepth - 1;
+
+            var foldStartS = FoldResultToSlot(ref startSlotS, d, ctx);
+            var foldStepS = FoldResultToSlot(ref stepSlotS, d + 1, ctx);
+            var foldLimitS = FoldResultToSlot(ref limitSlotS, d + 2, ctx);
+            ctx.RingDepth = d + 3;
+
+            var jS = Variable(typeof(long), "_bits_j");
+            var elemIdxS = Convert(RightShift(jS, Constant(6)), typeof(int));
+            var slotAddr = Add(Constant(flBaseS), elemIdxS);
+
+            var loopStartS = Label("_stride_loop_f");
+            var loopEndS = Label("_stride_done_f");
+            var loopBodyS = Block(
+                Assign(ArrayAccess(ctx.SlotsLocal, slotAddr),
+                    Or(ArrayAccess(ctx.SlotsLocal, slotAddr),
+                        LeftShift(Constant(1L), Convert(And(jS, Constant(63L)), typeof(int))))),
+                Assign(jS, Add(jS, ctx.RingVar(stepSlotS))),
+                IfThen(GreaterThan(jS, ctx.RingVar(limitSlotS)), Goto(loopEndS)),
+                Goto(loopStartS));
+            return Block(startExprS, stepExprS, limitExprS,
+                Block([jS],
+                    Assign(jS, ctx.RingVar(startSlotS)),
+                    Label(loopStartS), loopBodyS, Label(loopEndS)));
+        }
+
+        var arrExpr = CompileNode(ssb.Array, ctx);
+        int arrSlot = ctx.RingDepth - 1;
+        var startExpr = CompileNode(ssb.StartValue, ctx);
+        int startSlot = ctx.RingDepth - 1;
+        var stepExpr = CompileNode(ssb.Step, ctx);
+        int stepSlot = ctx.RingDepth - 1;
+        var limitExpr = CompileNode(ssb.Limit, ctx);
+        int limitSlot = ctx.RingDepth - 1;
+
+        // Fold all four operands to consecutive slots starting at d
+        var foldArr = FoldResultToSlot(ref arrSlot, d, ctx);
+        var foldStart = FoldResultToSlot(ref startSlot, d + 1, ctx);
+        var foldStep = FoldResultToSlot(ref stepSlot, d + 2, ctx);
+        var foldLimit = FoldResultToSlot(ref limitSlot, d + 3, ctx);
+        ctx.RingDepth = d + 4;
+
+        // ABI-level strided set — heap array path (direct cast to long[]).
+        // Frame-local arrays are handled via the compile-time fast path above.
+        var arrObj = Convert(ArrayAccess(ctx.HeapRawSlots,
+            Convert(ctx.RingVar(arrSlot), typeof(int))), typeof(long[]));
+        var j = Variable(typeof(long), "_bits_j");
+        var loopStart = Label("_stride_loop");
+        var loopEnd = Label("_stride_done");
+        var loopBody = Block(
+            Assign(ArrayAccess(arrObj, Convert(RightShift(j, Constant(6)), typeof(int))),
+                Or(ArrayAccess(arrObj, Convert(RightShift(j, Constant(6)), typeof(int))),
+                    LeftShift(Constant(1L), Convert(And(j, Constant(63L)), typeof(int))))),
+            Assign(j, Add(j, ctx.RingVar(stepSlot))), // j += step
+            IfThen(GreaterThan(j, ctx.RingVar(limitSlot)), Goto(loopEnd)),
+            Goto(loopStart)
+        );
+        var result = Block(
+            [j],
+            Assign(j, ctx.RingVar(startSlot)), // j = start
+            Label(loopStart),
+            loopBody,
+            Label(loopEnd)
+        );
+        return Block(arrExpr, startExpr, stepExpr, limitExpr, result);
+    }
+
+    /// <summary>Break statement: jump to current loop's break label.</summary>
+    private static Expression EmitBreakStatement(BreakStatement bs, AbiCtx ctx) {
+        var labels = ctx.CurrentLoopLabels;
+        if (labels == null)
+            throw new InvalidOperationException("Break outside loop");
+        return Goto(labels.Value.breakLabel);
+    }
+
+    /// <summary>Continue statement: jump to current loop's continue label.</summary>
+    private static Expression EmitContinueStatement(ContinueStatement cs, AbiCtx ctx) {
+        var labels = ctx.CurrentLoopLabels;
+        if (labels == null)
+            throw new InvalidOperationException("Continue outside loop");
+        return Goto(labels.Value.continueLabel);
+    }
+
+    /// <summary>
+    /// ForLoop: lower to { init; while(condition) { body; increment; } }
+    /// When condition is null, treat as 'while(true)'.
+    /// </summary>
+    private static Expression EmitForLoop(ForLoop fl, AbiCtx ctx) {
+        var breakLabel = Label("for_break");
+        var continueLabel = Label("for_continue");
+        ctx.PushLoopScope(breakLabel, continueLabel);
+
+        var stmts = new List<Expression>();
+        if (fl.Initializer != null)
+            stmts.Add(CompileNode(fl.Initializer, ctx));
+        var condition = fl.Condition ?? new Constant(1L);
+        int d = ctx.RingDepth;
+
+        int bodyDepth = ctx.RingDepth;
+        var bodyExpr = CompileNode(fl.Body, ctx);
+        ctx.RingDepth = bodyDepth;
+
+        Expression? incrementExpr = null;
+        if (fl.Increment != null) {
+            ctx.RingDepth = d;
+            incrementExpr = CompileNode(fl.Increment, ctx);
+            ctx.RingDepth = d;
+        }
+
+        var test = CompileConditionAsBool(condition, ctx);
+        ctx.RingDepth = d;
+
+        var loopBody = new List<Expression> {
+            IfThen(Not(test), Goto(breakLabel)),
+            bodyExpr
+        };
+        if (incrementExpr != null) loopBody.Add(incrementExpr);
+        loopBody.Add(Label(continueLabel));
+
+        stmts.Add(Loop(Block(loopBody), breakLabel));
+        ctx.PopLoopScope();
+        ctx.RingDepth = d;
+        return Block(stmts);
+    }
+
+    /// <summary>ForEachLoop: compile the body (POC — real enumeration requires CLR interop).</summary>
+    private static Expression EmitForEachLoop(ForEachLoop fel, AbiCtx ctx) {
+        var breakLabel = Label("foreach_break");
+        var continueLabel = Label("foreach_continue");
+        ctx.PushLoopScope(breakLabel, continueLabel);
+
+        var collectionExpr = CompileNode(fel.Collection, ctx);
+        // collection result is not used (POC — enumeration stub)
+
+        int bodyDepth = ctx.RingDepth;
+        var bodyExpr = CompileNode(fel.Body, ctx);
+        ctx.RingDepth = bodyDepth;
+
+        ctx.PopLoopScope();
+        ctx.RingDepth = 0;
+        return Block(collectionExpr, bodyExpr);
+    }
+
+    /// <summary>Goto statement: jump to a named label.</summary>
+    private static Expression EmitGotoStatement(GotoStatement gs, AbiCtx ctx) {
+        var target = ctx.GetLabel(gs.Target);
+        return Goto(target);
+    }
+
+    /// <summary>Label declaration: emit a label marker in the expression tree.</summary>
+    private static Expression EmitLabelDeclaration(LabelDeclaration ld, AbiCtx ctx) {
+        var label = ctx.GetLabel(ld.Name);
+        return Block(Label(label), CompileNode(ld.Statement, ctx));
+    }
+
+    /// <summary>UsingStatement: lower to try/finally with Dispose call.</summary>
+    private static Expression EmitUsingStatement(UsingStatement us, AbiCtx ctx) {
+        // Evaluate resource, wrap body in try/finally with Dispose
+        var resourceExpr = CompileNode(us.Resource, ctx);
+        var bodyExpr = CompileNode(us.Body, ctx);
+
+        // Dispose call on the resource handle (simplified — real impl casts to IDisposable via heap)
+        var resourceSlot = ctx.RingDepth - 1;
+        var disposeMethod = IDisposableDispose;
+        // For POC, just wrap body in try/finally (dispose omitted at ABI level)
+        return Block(resourceExpr, TryFinally(bodyExpr, Empty()));
+    }
+
+    // ── Statements ─────────────────────────────────────────────────
+
+    /// <summary>Return statement: write value to frame slot, set SP, jump to exit.</summary>
+    private static Expression EmitReturn(Return ret, AbiCtx ctx) {
+        int d = ctx.RingDepth;
+        var retVal = ret.Value ?? throw new InvalidOperationException("Return with null value");
+        var valueExpr = CompileNode(retVal, ctx);
+        int resultSlot = ctx.RingDepth - 1;
+        var fold = FoldResultToSlot(ref resultSlot, d, ctx);
+
+        // Write to _slots[_fp], set SP = _fp + 1, goto exit
+        return Block(
+            valueExpr, fold,
+            Assign(ArrayAccess(ctx.SlotsLocal, ctx.FramePosLocal), ctx.RingVar(resultSlot)),
+            Assign(ctx.SlotsStackPointer,
+                Add(ctx.FramePosLocal, Constant(1))),
+            Goto(ctx.ExitLabel));
+    }
+
+    /// <summary>Variable reference: read from value stack or from
+    /// closure capture array (if this is a captured upvalue).
+    /// Leaving the value on the ring for expression chaining.</summary>
+    private static Expression EmitVariable(Variable v, AbiCtx ctx) {
+        // Check capture (upvalue) first — used inside lambda bodies
+        if (ctx.TryGetCapture(v, out int capIndex)) {
+            int slot = ctx.AllocSlot();
+            // Read from heap[ state.ClosureHandle ][ capIndex + 1 ]
+            // The closure array is object[] stored at the handle in heap raw slots.
+            var closureHandle = ctx.ClosureHandle;
+            var closureArr = Convert(
+                ArrayAccess(ctx.HeapRawSlots, Convert(closureHandle, typeof(int))),
+                typeof(object[]));
+            var captured = Convert(
+                ArrayAccess(closureArr, Constant(capIndex + 1)),
+                typeof(long));
+            return Assign(ctx.RingVar(slot), captured);
+        }
+        // Local variable on value stack — read via compile-time frame offset
+        int slot2 = ctx.AllocSlot();
+        return Assign(ctx.RingVar(slot2), ctx.VariableRead(v));
+    }
+}

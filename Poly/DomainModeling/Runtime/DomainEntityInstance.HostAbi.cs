@@ -48,6 +48,9 @@ public sealed partial record DomainEntityInstance {
         }
 
         protected override object? InvokeAction(InvokeActionEffect invoke) {
+            if (invoke.TargetRelationship is null)
+                throw new InvalidOperationException(
+                    "InvokeActionEffect self-invoke must lower to Ast; EffectExecutor is not the shipped path.");
             _instance.ExecuteInvokeEffect(invoke);
             return null;
         }
@@ -66,16 +69,13 @@ public sealed partial record DomainEntityInstance {
     /// Prefer <see cref="DomainInstanceStore.Link"/> for direct API linking.
     /// </summary>
     private void ExecuteInvokeEffect(InvokeActionEffect invoke) {
-        var chainedArgs = EvaluateParameterBindings(invoke.ParameterBindings);
+        if (invoke.TargetRelationship is null)
+            throw new InvalidOperationException(
+                "InvokeActionEffect self-invoke must lower to Ast; EffectExecutor is not the shipped path.");
 
-        ActionInvocationResult nestedResult;
-        if (invoke.TargetRelationship is not null) {
-            var target = ResolveRelationshipTarget(invoke.TargetRelationship);
-            nestedResult = target.InvokeAction(invoke.ActionName, chainedArgs);
-        }
-        else {
-            nestedResult = InvokeAction(invoke.ActionName, chainedArgs);
-        }
+        var chainedArgs = EvaluateParameterBindings(invoke.ParameterBindings);
+        var target = ResolveRelationshipTarget(invoke.TargetRelationship);
+        var nestedResult = target.InvokeAction(invoke.ActionName, chainedArgs);
         if (!nestedResult.Succeeded) {
             throw new InvalidOperationException(
                 nestedResult.ErrorMessage

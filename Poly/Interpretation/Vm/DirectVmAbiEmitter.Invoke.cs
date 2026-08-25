@@ -19,13 +19,13 @@ public static partial class DirectVmAbiEmitter {
         if (invoke.Delegate is Member member) {
             var resolved = ctx.Analysis?.GetResolvedMember(member)
                 ?? ctx.Analysis?.GetResolvedMember(invoke);
-            if (resolved is ITypeMethod method) {
-                var clrMethod = resolved as ClrMethod;
-                var methodInfo = clrMethod?.MethodInfo;
+            var method = resolved as ITypeMethod;
+            if (method is not null) {
+                var methodInfo = (method as ClrMethod)?.MethodInfo;
                 if (methodInfo is not null) {
                     int d = ctx.RingDepth;
                     // Compile instance (for instance methods) or null (for static)
-                    bool isStatic = resolved.LifetimeModifier == LifetimeModifier.Static;
+                    bool isStatic = method.LifetimeModifier == LifetimeModifier.Static;
                     int instanceSlot = -1;
                     Expression? instanceExpr = null;
                     if (!isStatic) {
@@ -116,59 +116,57 @@ public static partial class DirectVmAbiEmitter {
                             Convert(callExpr, typeof(object))), typeof(long))));
                     return Block(fullBody);
                 }
-
-                // ITypeMethod without MethodInfo (AstMethodDefinition): dispatch on
-                // the live heap instance by name+arity. Generic — not Notify-specific.
-                int astDepth = ctx.RingDepth;
-                var astInstanceExpr = CompileNode(member.Value, ctx);
-                int astInstanceSlot = ctx.RingDepth - 1;
-                var astFoldInst = FoldResultToSlot(ref astInstanceSlot, astDepth, ctx);
-                astInstanceExpr = Block(astInstanceExpr, astFoldInst);
-                ctx.RingDepth = astInstanceSlot + 1;
-
-                var astArgExprs = new List<Expression>();
-                int[] astArgSlots = new int[invoke.Arguments.Length];
-                for (int i = 0; i < invoke.Arguments.Length; i++) {
-                    astArgExprs.Add(CompileNode(invoke.Arguments[i], ctx));
-                    astArgSlots[i] = ctx.RingDepth - 1;
-                }
-
-                var astInstanceObj = Call(ctx.HeapLocal, HeapUnsafeGet,
-                    Convert(ctx.RingVar(astInstanceSlot), typeof(int)));
-                var argObjs = new Expression[invoke.Arguments.Length];
-                for (int i = 0; i < invoke.Arguments.Length; i++) {
-                    argObjs[i] = Call(ctx.HeapLocal, HeapUnsafeGet,
-                        Convert(ctx.RingVar(astArgSlots[i]), typeof(int)));
-                }
-
-                var invokeCall = Call(
-                    null,
-                    InvokeInstanceMethodInfo,
-                    astInstanceObj,
-                    Constant(member.MemberName),
-                    NewArrayInit(typeof(object), argObjs));
-
-                int astSlot = ctx.AllocSlot();
-                ctx.RingDepth = astSlot + 1;
-                var astBody = new List<Expression>(astArgExprs.Count + 3) { astInstanceExpr };
-                astBody.AddRange(astArgExprs);
-
-                bool isVoid = method.MemberTypeDefinition.GetRuntimeType() == typeof(void)
-                    || string.Equals(method.MemberTypeDefinition.Name, "void", StringComparison.Ordinal);
-                if (isVoid) {
-                    astBody.Add(invokeCall);
-                    astBody.Add(Assign(ctx.RingVar(astSlot), Constant(0L)));
-                }
-                else {
-                    astBody.Add(Assign(ctx.RingVar(astSlot),
-                        Convert(Call(ctx.HeapLocal, HeapAllocate, invokeCall), typeof(long))));
-                }
-                return Block(astBody);
             }
-            // If method resolution fails, throw a clear error
-            throw new NotSupportedException(
-                $"DirectVmAbiEmitter: Invoke with Member delegate '{member.MemberName}' " +
-                $"could not resolve to a method. Ensure TypeAndMemberResolver is in the pipeline.");
+
+            // ITypeMethod without MethodInfo, or Member that analysis did not
+            // resolve as a method: live instance by name+arity, then
+            // InvokeNamed(string, object?[]). Fail-closed inside InvokeInstanceMethod.
+            int astDepth = ctx.RingDepth;
+            var astInstanceExpr = CompileNode(member.Value, ctx);
+            int astInstanceSlot = ctx.RingDepth - 1;
+            var astFoldInst = FoldResultToSlot(ref astInstanceSlot, astDepth, ctx);
+            astInstanceExpr = Block(astInstanceExpr, astFoldInst);
+            ctx.RingDepth = astInstanceSlot + 1;
+
+            var astArgExprs = new List<Expression>();
+            int[] astArgSlots = new int[invoke.Arguments.Length];
+            for (int i = 0; i < invoke.Arguments.Length; i++) {
+                astArgExprs.Add(CompileNode(invoke.Arguments[i], ctx));
+                astArgSlots[i] = ctx.RingDepth - 1;
+            }
+
+            var astInstanceObj = Call(ctx.HeapLocal, HeapUnsafeGet,
+                Convert(ctx.RingVar(astInstanceSlot), typeof(int)));
+            var argObjs = new Expression[invoke.Arguments.Length];
+            for (int i = 0; i < invoke.Arguments.Length; i++) {
+                argObjs[i] = Call(ctx.HeapLocal, HeapUnsafeGet,
+                    Convert(ctx.RingVar(astArgSlots[i]), typeof(int)));
+            }
+
+            var invokeCall = Call(
+                null,
+                InvokeInstanceMethodInfo,
+                astInstanceObj,
+                Constant(member.MemberName),
+                NewArrayInit(typeof(object), argObjs));
+
+            int astSlot = ctx.AllocSlot();
+            ctx.RingDepth = astSlot + 1;
+            var astBody = new List<Expression>(astArgExprs.Count + 3) { astInstanceExpr };
+            astBody.AddRange(astArgExprs);
+
+            bool isVoid = method is null
+                || method.MemberTypeDefinition.GetRuntimeType() == typeof(void)
+                || string.Equals(method.MemberTypeDefinition.Name, "void", StringComparison.Ordinal);
+            if (isVoid) {
+                astBody.Add(invokeCall);
+                astBody.Add(Assign(ctx.RingVar(astSlot), Constant(0L)));
+            }
+            else {
+                astBody.Add(Assign(ctx.RingVar(astSlot),
+                    Convert(Call(ctx.HeapLocal, HeapAllocate, invokeCall), typeof(long))));
+            }
+            return Block(astBody);
         }
 
         if (invoke.Delegate is Lambda lambda) {
@@ -491,8 +489,10 @@ public static partial class DirectVmAbiEmitter {
     /// Generic instance-method dispatch for Invoke(Member) whose resolved
     /// <see cref="ITypeMethod"/> has no MethodInfo (AST type defs). Looks up
     /// <paramref name="methodName"/> on the live object's type by name and
-    /// arity (public + non-public instance). Fail-closed if the instance is
-    /// null or the method is missing.
+    /// arity (public + non-public instance). If missing, looks for
+    /// <c>InvokeNamed(string, object?[])</c> and calls it with the method
+    /// name plus args. Fail-closed if the instance is null or neither method
+    /// is present.
     /// </summary>
     private static object? InvokeInstanceMethod(object instance, string methodName, object?[] args) {
         if (instance is null)
@@ -512,11 +512,40 @@ public static partial class DirectVmAbiEmitter {
             break;
         }
 
-        if (match is null)
-            throw new InvalidOperationException(
-                $"Type '{instanceType.Name}' does not define method '{methodName}' with {args.Length} parameter(s).");
+        if (match is not null)
+            return InvokeAndUnwrap(match, instance, args);
 
-        return match.Invoke(instance, args);
+        // AST methods with no CLR MethodInfo (e.g. domain actions): optional
+        // InvokeNamed(string, object?[]) dispatcher. Generic — no domain types.
+        MethodInfo? invokeNamed = null;
+        foreach (var candidate in instanceType.GetMethods(flags)) {
+            if (candidate.Name != "InvokeNamed")
+                continue;
+            var ps = candidate.GetParameters();
+            if (ps.Length != 2)
+                continue;
+            if (ps[0].ParameterType != typeof(string))
+                continue;
+            if (ps[1].ParameterType != typeof(object[]))
+                continue;
+            invokeNamed = candidate;
+            break;
+        }
+        if (invokeNamed is not null)
+            return InvokeAndUnwrap(invokeNamed, instance, [methodName, args]);
+
+        throw new InvalidOperationException(
+            $"Type '{instanceType.Name}' does not define method '{methodName}' with {args.Length} parameter(s).");
+    }
+
+    private static object? InvokeAndUnwrap(MethodInfo method, object instance, object?[] args) {
+        try {
+            return method.Invoke(instance, args);
+        }
+        catch (TargetInvocationException ex) when (ex.InnerException is not null) {
+            System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(ex.InnerException).Throw();
+            throw;
+        }
     }
 
 }

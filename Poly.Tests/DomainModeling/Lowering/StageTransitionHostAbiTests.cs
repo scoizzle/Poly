@@ -73,7 +73,7 @@ public class StageTransitionHostAbiTests {
         await Assert.That(pass.TryLowerVmNode(
             new CreateEntityInstance(new DomainTypeReference("Person")))).IsNull();
         await Assert.That(pass.TryLowerVmNode(
-            new InvokeActionEffect("Activate", []))).IsNull();
+            new InvokeActionEffect("Activate", [], TargetRelationship: "orders"))).IsNull();
         await Assert.That(pass.TryLowerVmNode(
             new ForEachInvokeEffect("orders", "x", null, "Activate", []))).IsNull();
     }

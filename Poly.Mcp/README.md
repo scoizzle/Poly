@@ -1,6 +1,6 @@
 # Poly.Mcp — MCP Server for Poly Domain Modeling
 
-**Role:** interactive **harness** for agents using Poly. Holds a `DomainSession` (it is not that session). Author, inspect, and **simulate** named policies/actions when the caller **supplies context**. Not a product entry-point extension (REST is `uses http`). Not a second evaluator — simulate must use the same lowered AST as emit.
+**Role:** interactive **harness** for agents using Poly. Holds a `DomainSession` (it is not that session). Author and inspect. Named-policy/action **simulate** (caller-supplied context; same lowered AST as emit) is the harness lock — **not** what `simulate_policy` does today. Not a product entry-point extension (REST is `uses http`). Not a second evaluator.
 
 Lock: [`docs/decisions/2026-08-15-domain-library-extensions-mcp-harness.md`](../docs/decisions/2026-08-15-domain-library-extensions-mcp-harness.md). Mechanisms: [`docs/CORE.md`](../docs/CORE.md) §3.6.
 
@@ -54,7 +54,7 @@ Tools live in `Poly.Mcp/Tools/` and use only `Poly.DomainModeling` types (no `Po
 | Tool | Class | Purpose |
 |------|-------|---------|
 | `describe_domain_element` | `OracleTool` | Describes entity/stage/action/policy/relationship |
-| `simulate_policy` | `OracleTool` | VM-evaluates a **DSL expression fragment** against a subject bag (no session) |
+| `simulate_policy` | `OracleTool` | Expression oracle: VM-evaluates a **DSL expression fragment** against a local property bag. **Not** named-policy simulate, **not** `evaluate_policy`, **not** session — synthetic `Entity("Subject")` |
 | `export_domain_to_csharp` | `OracleTool` | Exports the domain session as C# record/class definitions |
 
 ### Runtime
@@ -128,7 +128,7 @@ Every MCP tool's **Name + Description + Success** must match actual behavior:
 | Only inspects metadata | Must be named/described as inspect/get/describe — **never** "evaluates via VM" |
 | Evaluation fails | `Success: false` (or explicit error), not success without a bool |
 
-**Current policy tools:** `get_policy_expression` (inspect-only, no VM), `add(kind: policy)` / `evaluate_policy` (VM eval via session), `simulate_policy` (VM eval, no session, DSL fragment). All satisfy the invariant.
+**Current policy tools:** `get_policy_expression` (inspect-only, no VM), `add(kind: policy)` / `evaluate_policy` (VM eval of a **named** session policy against a local bag or store instance). `simulate_policy` is an **expression oracle** (DSL fragment + bag, no session, synthetic Subject) — **not** named-policy simulate and **not** `evaluate_policy`. All satisfy the invariant for what they actually do.
 
 **DSL tools:** `apply_dsl` (parses .poly text → evolves empty domain → analysis gate → replaces session domain; revision+1; clears runtime instances; explicit HONESTY NOTES: action `when Stage` is not a separate runtime gate, subscriptions need RuntimeTool instances to fan out), `export_dsl` (printer round-trip, no side effects), `get_dsl_guide` (embedded product guide).
 

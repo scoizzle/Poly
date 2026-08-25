@@ -1,0 +1,42 @@
+domain DocSubscriptions
+
+// §7 stage subscriptions — stage-scoped, entity-level, quantifiers, peer binder
+Customer: entity {
+  orders: many Order
+  LastCode: Text
+  Status: Text
+
+  // entity-level (always-active) subscription with peer binder
+  when orders Active as order {
+    assign LastCode to order Code
+  }
+
+  Pending: stage {
+    // default Each
+    when orders Active, Completed {
+      assign Status to "fulfilled"
+    }
+    // quantifier any
+    when any orders Active {
+      assign Status to "hasOrder"
+    }
+  }
+  Active: stage {
+    // quantifier all
+    when all orders Completed {
+      assign Status to "allDone"
+    }
+  }
+}
+
+Order: entity {
+  Code: Text
+  customer: Customer
+  Draft: stage {
+    Submit: action {
+      transition to Active
+    }
+  }
+  Active: stage { }
+  Completed: stage { }
+}

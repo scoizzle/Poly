@@ -1,0 +1,46 @@
+domain FleetVmWarehouse
+
+// Warehouse stock: arithmetic (division, negation, add/sub), boolean negation,
+// nested boolean logic. Entity-level policies are positive invariants so
+// actions stay runnable; arithmetic/boolean expressions live in policies too.
+Bin: entity {
+  Qty: Number default(0)
+  Capacity: Number default(0)
+  Reserved: Number default(0)
+  Minimum: Number default(0)
+  IsActive: Boolean default(true)
+  Note: Text default("")
+
+  AtCapacity: policy { Qty <= Capacity }
+  ReservedOk: policy { Reserved <= Qty }
+  MinOk: policy { Qty >= Minimum }
+  WithinBin: policy { Reserved <= Capacity }
+
+  HalfFree: policy { Qty * 2 <= Capacity }
+  ThirdRule: policy { Capacity / 3 >= Qty }
+  IsQuiet: policy { not IsActive }
+  Mixed: policy { (Qty > 0 and Reserved < Qty) or Qty == 0 }
+  HalfSplit: policy { Qty / 2 > Reserved }
+
+  Open: stage {
+    Restock: action (amount: Number) {
+      assign Qty to Qty + amount
+    }
+    Reserve: action (amount: Number) {
+      assign Reserved to Reserved + amount
+    }
+    EvenSplit: action (groups: Number) {
+      assign Qty to Qty / groups
+    }
+    Flip: action {
+      assign IsActive to not IsActive
+    }
+    ZeroOut: action {
+      assign Qty to Qty - Qty
+    }
+    Mark: action (label: Text) {
+      assign Note to label
+    }
+  }
+  Closed: stage { }
+}

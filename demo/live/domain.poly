@@ -1,0 +1,10 @@
+domain Live
+
+// Working document for a human-guided MCP pairing session.
+// Agent: after every accepted edit, apply_dsl this whole file, then get_domain_analysis.
+// Go live: scripts/serve-poly.sh demo/live/domain.poly
+
+Patron: entity {
+  Name: Text required length(2, 80)
+  Email: Text unique
+}

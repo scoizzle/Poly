@@ -1,0 +1,29 @@
+domain MissingSubscriberProp
+
+// A subscription body referencing a property that does not exist on the
+// SUBSCRIBER entity (and no peer binder is declared). Per the three-layer
+// defense this must fail at analysis (earliest rung), not at the C# compiler.
+
+Account: entity {
+  Name: Text
+  orders: many Order
+
+  Active: stage {
+    when orders Delivered {
+      assign Balance to Total
+    }
+  }
+}
+
+Order: entity {
+  Total: Number default(0)
+  Code: Text
+
+  Received: stage {
+    Ship: action {
+      transition to Delivered
+    }
+  }
+  Delivered: stage {
+  }
+}

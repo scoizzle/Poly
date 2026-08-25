@@ -1,0 +1,70 @@
+domain Logistics
+
+OrderState: enum {
+  Pending
+  Paid
+  Shipped
+  Delivered
+  Cancelled
+}
+
+// Root aggregate with a child collection
+Customer: entity {
+  Email: Text required unique
+  Name: Text required length(2, 100)
+  Tier: Text default("standard")
+  orders: many Order
+
+  // for-invoke fan-out over child actions
+  ShipAll: action {
+    for orders as o where o IsPaid
+        invoke o.Ship()
+  }
+
+  // for-invoke with stage filter
+  CancelPending: action {
+    for orders as o where o in Pending
+        invoke o.Cancel(reason: "customer request")
+  }
+}
+
+Order: entity {
+  Total: Number range(0, 100000)
+  Discount: Number range(0, 100)
+  State: OrderState default(Pending)
+  customer: Customer
+  items: many OrderItem
+
+  IsPaid: policy { State is "Paid" }
+
+  Ship: action {
+    transition to Shipped
+  }
+
+  Cancel: action (reason: Text) {
+    assign CancelReason to reason
+    transition to Cancelled
+  }
+
+  ApplyDiscount: action (amount: Number) {
+    assign Discount to amount
+  }
+
+  Pending: stage {
+    Pay: action {
+      transition to Paid
+    }
+  }
+  Paid: stage { }
+  Shipped: stage { }
+  Delivered: stage { }
+  Cancelled: stage { }
+
+  CancelReason: Text length(0, 200)
+}
+
+OrderItem: entity {
+  Sku: Text required pattern("^[A-Z]{3}-[0-9]{4}$")
+  Qty: Number range(1, 1000)
+  order: Order
+}

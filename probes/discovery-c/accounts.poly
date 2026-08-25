@@ -1,0 +1,38 @@
+domain Accounts
+
+AccountStatus: enum {
+  Active,
+  Suspended,
+  Closed,
+}
+
+Account: entity {
+  Email: Text required
+  Status: AccountStatus default(Active)
+  Nickname: Text required default("guest")
+  Balance: Number range(0, )
+  OverdraftLimit: Number range(, 100000)
+  holder: Customer
+  CanWithdraw: policy { Status is "Active" and Balance >= 0 }
+  suspend: action {
+    assign Status to Suspended
+  }
+  close: action {
+    assign Status to "Closed"
+  }
+  deposit: action (amount: Number) {
+    assign Balance to Balance + amount
+  }
+}
+
+Customer: entity {
+  Name: Text required
+  Email: Text unique pattern("[^@]+@[^@]+") required
+  accounts: many Account
+  openAccount: action (email: Text) -> Account {
+    create in accounts { Email: email }
+  }
+  tagAccount: action (email: Text) {
+    create in accounts { Email: "x@y.z" Status: Suspended }
+  }
+}

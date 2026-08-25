@@ -1,0 +1,14 @@
+domain DocNavPlain
+
+Patron: entity {
+  loans: many Loan
+}
+
+Loan: entity {
+  borrower: Patron
+  book: Book
+}
+
+Book: entity {
+  Title: Text required
+}

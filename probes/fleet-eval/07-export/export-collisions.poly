@@ -1,0 +1,48 @@
+domain FleetEvalExportCollisions
+
+// Identifier/collision stress: every name below is a VALID DSL identifier
+// (not a DSL keyword) but collides with C# reserved words or with members
+// the exporter itself generates. The export must fail loud at analysis or
+// emit escaped (@-prefixed) C# identifiers — not broken C#.
+
+object: entity {
+  event: Text
+  string: Number
+}
+
+class: entity {
+  Name: Text
+}
+
+CurrentStageHolder: entity {
+  CurrentStage: Text
+  Active: stage { }
+}
+
+CreateNamed: entity {
+  Create: action {
+    assign Name to "x"
+  }
+  Name: Text default("n")
+}
+
+notPrefixedPolicy: entity {
+  Paid: policy { Amount > 0 }
+  not_Paid: policy { Amount == 0 }
+  Amount: Number
+  Pay: action require not_Paid {
+    assign Amount to 1
+  }
+}
+
+KeywordEnum: enum {
+  class
+  base
+}
+
+KeywordEnumUser: entity {
+  Level: KeywordEnum
+  UseIt: action {
+    assign Level to "class"
+  }
+}

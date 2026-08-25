@@ -10,8 +10,7 @@ public class StaticMemberSupportTests {
     private readonly ClrTypeDefinitionRegistry _registry = ClrTypeDefinitionRegistry.Shared;
 
     [Test]
-    public async Task IsStatic_InstanceField_ReturnsFalse()
-    {
+    public async Task IsStatic_InstanceField_ReturnsFalse() {
         var stringType = _registry.GetTypeDefinition<string>();
         var lengthProperty = stringType.Properties.WithName("Length").First() as ClrTypeProperty;
 
@@ -20,8 +19,7 @@ public class StaticMemberSupportTests {
     }
 
     [Test]
-    public async Task IsStatic_StaticField_ReturnsTrue()
-    {
+    public async Task IsStatic_StaticField_ReturnsTrue() {
         var stringType = _registry.GetTypeDefinition<string>();
         var emptyField = stringType.Fields.WithName("Empty").FirstOrDefault() as ClrTypeField;
 
@@ -30,8 +28,7 @@ public class StaticMemberSupportTests {
     }
 
     [Test]
-    public async Task IsStatic_InstanceMethod_ReturnsFalse()
-    {
+    public async Task IsStatic_InstanceMethod_ReturnsFalse() {
         var stringType = _registry.GetTypeDefinition<string>();
         var toUpperMethod = stringType.Methods.WithName("ToUpper").FirstOrDefault(m => m is ClrMethod) as ClrMethod;
 
@@ -40,8 +37,7 @@ public class StaticMemberSupportTests {
     }
 
     [Test]
-    public async Task IsStatic_StaticMethod_ReturnsTrue()
-    {
+    public async Task IsStatic_StaticMethod_ReturnsTrue() {
         var stringType = _registry.GetTypeDefinition<string>();
         var concatMethod = stringType.Methods.WithName("Concat").FirstOrDefault(m => m is ClrMethod) as ClrMethod;
 
@@ -50,8 +46,7 @@ public class StaticMemberSupportTests {
     }
 
     [Test]
-    public async Task IsStatic_ListInstanceCount_ReturnsFalse()
-    {
+    public async Task IsStatic_ListInstanceCount_ReturnsFalse() {
         var listType = _registry.GetTypeDefinition(typeof(List<int>));
         var countProperty = listType.Properties.WithName("Count").First() as ClrTypeProperty;
 
@@ -60,8 +55,7 @@ public class StaticMemberSupportTests {
     }
 
     [Test]
-    public async Task StaticMembers_ReturnsOnlyStaticMembers()
-    {
+    public async Task StaticMembers_ReturnsOnlyStaticMembers() {
         ITypeDefinition stringType = _registry.GetTypeDefinition<string>();
         var staticMembers = stringType.Members.Where(e => e.IsStatic).ToList();
 
@@ -73,8 +67,7 @@ public class StaticMemberSupportTests {
     }
 
     [Test]
-    public async Task InstanceMembers_ReturnsOnlyInstanceMembers()
-    {
+    public async Task InstanceMembers_ReturnsOnlyInstanceMembers() {
         ITypeDefinition stringType = _registry.GetTypeDefinition<string>();
         var instanceMembers = stringType.Members.Where(e => !e.IsStatic).ToList();
 
@@ -86,8 +79,7 @@ public class StaticMemberSupportTests {
     }
 
     [Test]
-    public async Task StaticAndInstanceMembers_AreDisjoint()
-    {
+    public async Task StaticAndInstanceMembers_AreDisjoint() {
         ITypeDefinition stringType = _registry.GetTypeDefinition<string>();
         var allMembers = stringType.Members.ToList();
         var staticMembers = stringType.Members.Where(e => e.IsStatic).ToList();
@@ -103,8 +95,7 @@ public class StaticMemberSupportTests {
     }
 
     [Test]
-    public async Task IsStatic_ConsoleOut_ReturnsTrue()
-    {
+    public async Task IsStatic_ConsoleOut_ReturnsTrue() {
         var consoleType = _registry.GetTypeDefinition(typeof(Console));
         var outProperty = consoleType.Properties.WithName("Out").FirstOrDefault() as ClrTypeProperty;
 

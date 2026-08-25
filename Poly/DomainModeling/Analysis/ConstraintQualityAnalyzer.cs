@@ -1,0 +1,281 @@
+using Poly.DomainModeling.Ontology;
+
+using PrimitiveType = Poly.DomainModeling.Ontology.PrimitiveType;
+
+namespace Poly.DomainModeling.Analysis;
+
+/// <summary>Lint-only: constraint quality diagnostics; writes no metadata others read.</summary>
+internal sealed class ConstraintQualityAnalyzer : INodeAnalyzer {
+    public const string Id = "DomainConstraintQualityAnalyzer";
+    public string PassName => Id;
+    // Reads DomainTypeLookupMetadata / ResolvedTypeReferenceMetadata.
+    public string[] Dependencies => [DomainCatalogPass.Id];
+    public void Analyze(AnalysisContext context, Node node) {
+        if (!context.ShouldAnalyze(node)) {
+            return;
+        }
+
+        switch (node) {
+            case Domain domain:
+                ValidateDomainFixedPoint(context, domain);
+                break;
+            case Property property:
+                ValidatePropertyConstraints(context, property);
+                break;
+        }
+
+        this.AnalyzeChildren(context, node);
+    }
+
+    private static void ValidateDomainFixedPoint(AnalysisContext context, Domain domain) {
+        var lookup = context.GetTypeLookup();
+        if (lookup is null) return;
+
+        // Inheritance removed — no parent-entity fixed-point validation needed.
+    }
+
+    private static void ValidatePropertyConstraints(AnalysisContext context, Property property) {
+        var constraints = property.Constraints;
+        ValidateRangeSatisfiability(context, property, constraints);
+        ValidateLengthSatisfiability(context, property, constraints);
+        ValidateEqualitySatisfiability(context, property, constraints);
+        ValidateJointConstraintSatisfiability(context, property, constraints);
+        ValidateConstraintTypeCompatibility(context, property, constraints);
+        ValidateDefaultWithinConstraints(context, property, constraints);
+    }
+
+    /// <summary>
+    /// Joint satisfiability — the deeper suite. A property's constraints must be satisfiable
+    /// together, not just individually:
+    ///  - duplicate constraints of the same type must merge (intersect) without becoming empty
+    ///    (two disjoint ranges, two incompatible lengths, two differing patterns);
+    ///  - an EqualityConstraint's value must satisfy the length/pattern constraints;
+    ///  - a literal default must satisfy the pattern/equality constraints (range/length are
+    ///    covered by <see cref="ValidateDefaultWithinConstraints"/>).
+    /// </summary>
+    private static void ValidateJointConstraintSatisfiability(
+        AnalysisContext context, Property property, IReadOnlyList<Constraint> constraints) {
+        foreach (var group in constraints
+                     .Where(c => c is not EqualityConstraint)
+                     .GroupBy(c => c.GetType())) {
+            if (group.Count() < 2) continue;
+            Constraint? net = null;
+            foreach (var c in group) {
+                net = net is null ? c : net.Merge(c);
+                if (net is null) {
+                    context.ReportError(
+                        property,
+                        $"Property '{property.Name}' has contradictory {ConstraintValidation.Describe(group.First())} constraints — unsatisfiable.",
+                        DomainModelDiagnosticCodes.ConstraintSatisfiability);
+                    break;
+                }
+            }
+        }
+
+        var equality = constraints.OfType<EqualityConstraint>().FirstOrDefault();
+        if (equality is not null) {
+            foreach (var c in constraints) {
+                if (c is EqualityConstraint or RangeConstraint) continue; // range covered elsewhere
+                if (!ConstraintValidation.IsSatisfiedBy(c, equality.ExpectedValue)) {
+                    context.ReportError(
+                        property,
+                        $"Property '{property.Name}' EqualityConstraint value '{equality.ExpectedValue}' " +
+                        $"violates {ConstraintValidation.Describe(c)}.",
+                        DomainModelDiagnosticCodes.ConstraintSatisfiability);
+                }
+            }
+        }
+
+        if (constraints.OfType<DefaultValueConstraint>().FirstOrDefault()?.Expression is Literal lit) {
+            foreach (var c in constraints) {
+                if (c is DefaultValueConstraint or RangeConstraint or LengthConstraint) continue; // covered elsewhere
+                if (!ConstraintValidation.IsSatisfiedBy(c, lit.Value)) {
+                    context.ReportError(
+                        property,
+                        $"Property '{property.Name}' default value '{lit.Value}' violates {ConstraintValidation.Describe(c)}.",
+                        DomainModelDiagnosticCodes.ConstraintSatisfiability);
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Multiple equality constraints that disagree (must equal 'a' and 'b') make a property
+    /// unsatisfiable — a structural contradiction, reported at authoring. An equality value
+    /// outside the declared range is the same satisfiability class.
+    /// </summary>
+    private static void ValidateEqualitySatisfiability(
+        AnalysisContext context, Property property, IReadOnlyList<Constraint> constraints) {
+        var equalities = constraints.OfType<EqualityConstraint>().ToList();
+        if (equalities.Count > 1) {
+            var first = equalities[0].ExpectedValue;
+            var conflicting = equalities.Skip(1)
+                .FirstOrDefault(e => !Equals(e.ExpectedValue, first));
+            if (conflicting is not null) {
+                context.ReportError(
+                    property,
+                    $"Property '{property.Name}' has contradictory EqualityConstraints " +
+                    $"(must equal both '{first}' and '{conflicting.ExpectedValue}') — unsatisfiable.",
+                    DomainModelDiagnosticCodes.ConstraintSatisfiability);
+            }
+        }
+
+        var equality = equalities.FirstOrDefault();
+        var range = constraints.OfType<RangeConstraint>().FirstOrDefault();
+        if (equality is not null && range is not null
+            && !ConstraintValidation.IsSatisfiedBy(range, equality.ExpectedValue)) {
+            context.ReportError(
+                property,
+                $"Property '{property.Name}' EqualityConstraint ({equality.ExpectedValue}) is outside its " +
+                $"RangeConstraint {ConstraintValidation.Describe(range)} — unsatisfiable.",
+                DomainModelDiagnosticCodes.ConstraintSatisfiability);
+        }
+    }
+
+    /// <summary>
+    /// A literal <c>default(...)</c> that violates the property's own range/length is a
+    /// contradiction: the export's Create factory fails on every unoverridden create, and
+    /// the runtime silently stores the out-of-range value. Reject at authoring.
+    /// </summary>
+    private static void ValidateDefaultWithinConstraints(
+        AnalysisContext context, Property property, IReadOnlyList<Constraint> constraints) {
+        var defaultConstraint = constraints.OfType<DefaultValueConstraint>().FirstOrDefault();
+        if (defaultConstraint?.Expression is not Literal { Value: long l }) return;
+
+        var range = constraints.OfType<RangeConstraint>().FirstOrDefault();
+        if (range is not null) {
+            if (range.Minimum is not null && l < Convert.ToInt64(range.Minimum)) {
+                context.ReportError(
+                    property,
+                    $"Property '{property.Name}' default value {l} is below its range minimum {range.Minimum}.",
+                    DomainModelDiagnosticCodes.SemanticTypeCompatibility);
+            }
+            else if (range.Maximum is not null && l > Convert.ToInt64(range.Maximum)) {
+                context.ReportError(
+                    property,
+                    $"Property '{property.Name}' default value {l} exceeds its range maximum {range.Maximum}.",
+                    DomainModelDiagnosticCodes.SemanticTypeCompatibility);
+            }
+        }
+
+        var length = constraints.OfType<LengthConstraint>().FirstOrDefault();
+        if (length is not null && defaultConstraint.Expression is Literal { Value: string s }) {
+            if (s.Length < length.MinLength || s.Length > length.MaxLength) {
+                context.ReportError(
+                    property,
+                    $"Property '{property.Name}' default value length {s.Length} is outside its length bounds ({length.MinLength}, {length.MaxLength}).",
+                    DomainModelDiagnosticCodes.SemanticTypeCompatibility);
+            }
+        }
+    }
+
+    private static void ValidateEntityFixedPoint(AnalysisContext context, Entity entity, Entity parentEntity) {
+        foreach (var property in entity.Properties) {
+            var parentProperty = parentEntity.Properties
+                .FirstOrDefault(p => string.Equals(p.Name, property.Name, StringComparison.Ordinal));
+            if (parentProperty is null) continue;
+
+            var parentRequired = parentProperty.Constraints.Any(static c => c is RequiredConstraint);
+            var childRequired = property.Constraints.Any(static c => c is RequiredConstraint);
+            if (parentRequired && !childRequired) {
+                context.ReportWarning(
+                    property,
+                    $"Property '{property.Name}' on '{entity.Name}' breaks constraint fixed-point by weakening parent requiredness.",
+                    DomainModelDiagnosticCodes.ConstraintFixedPoint);
+            }
+
+            if (!string.Equals(property.Type.TypeName, parentProperty.Type.TypeName, StringComparison.Ordinal)) {
+                context.ReportWarning(
+                    property,
+                    $"Property '{property.Name}' on '{entity.Name}' overrides parent type '{parentProperty.Type.TypeName}' with incompatible type '{property.Type.TypeName}'.",
+                    DomainModelDiagnosticCodes.ConstraintFixedPoint);
+            }
+        }
+    }
+
+    private static void ValidateRangeSatisfiability(
+        AnalysisContext context, Property property, IReadOnlyList<Constraint> constraints) {
+        foreach (var range in constraints.OfType<RangeConstraint>()) {
+            if (range.Minimum is not null && range.Maximum is not null && Compare(range.Minimum, range.Maximum) > 0) {
+                context.ReportError(
+                    property,
+                    $"Property '{property.Name}' has unsatisfiable RangeConstraint: minimum exceeds maximum.",
+                    DomainModelDiagnosticCodes.ConstraintSatisfiability);
+            }
+        }
+    }
+
+    private static void ValidateLengthSatisfiability(
+        AnalysisContext context, Property property, IReadOnlyList<Constraint> constraints) {
+        foreach (var length in constraints.OfType<LengthConstraint>()) {
+            if (length.MinLength < 0 || length.MaxLength < 0 || length.MinLength > length.MaxLength) {
+                context.ReportError(
+                    property,
+                    $"Property '{property.Name}' has unsatisfiable LengthConstraint bounds (min={length.MinLength}, max={length.MaxLength}).",
+                    DomainModelDiagnosticCodes.ConstraintSatisfiability);
+            }
+        }
+    }
+
+    private static int Compare(object left, object right) {
+        if (left is IComparable comparable && AreComparableTypes(left.GetType(), right.GetType())) {
+            return comparable.CompareTo(Convert.ChangeType(right, left.GetType()));
+        }
+        return 0;
+    }
+
+    private static bool AreComparableTypes(Type left, Type right) {
+        if (left == right) {
+            return true;
+        }
+        return IsNumericType(left) && IsNumericType(right);
+    }
+
+    private static bool IsNumericType(Type type) =>
+        Type.GetTypeCode(type) is TypeCode.Byte
+            or TypeCode.SByte
+            or TypeCode.Int16
+            or TypeCode.UInt16
+            or TypeCode.Int32
+            or TypeCode.UInt32
+            or TypeCode.Int64
+            or TypeCode.UInt64
+            or TypeCode.Single
+            or TypeCode.Double
+            or TypeCode.Decimal;
+
+    private static void ValidateConstraintTypeCompatibility(
+        AnalysisContext context, Property property, IReadOnlyList<Constraint> constraints) {
+        var hasRange = constraints.OfType<RangeConstraint>().Any();
+        var hasLength = constraints.OfType<LengthConstraint>().Any();
+        var hasPattern = constraints.OfType<PatternConstraint>().Any();
+
+        if (!hasRange && !hasLength && !hasPattern) return;
+
+        var resolved = context.GetMetadata<ResolvedTypeReferenceMetadata>(property.Type);
+        if (resolved?.Type is not PrimitiveType primitiveType) return;
+
+        var category = primitiveType.TypeCategory;
+
+        if (hasRange && !category.Is(TypeCategory.Numeric)) {
+            context.ReportError(
+                property,
+                $"Property '{property.Name}' has a RangeConstraint but its type '{property.Type.TypeName}' does not resolve to a numeric type.",
+                DomainModelDiagnosticCodes.SemanticTypeCompatibility);
+        }
+
+        if (hasLength && !category.Is(TypeCategory.Text)) {
+            context.ReportError(
+                property,
+                $"Property '{property.Name}' has a LengthConstraint but its type '{property.Type.TypeName}' does not resolve to a text type.",
+                DomainModelDiagnosticCodes.SemanticTypeCompatibility);
+        }
+
+        if (hasPattern && !category.Is(TypeCategory.Text)) {
+            context.ReportError(
+                property,
+                $"Property '{property.Name}' has a PatternConstraint but its type '{property.Type.TypeName}' does not resolve to a text type.",
+                DomainModelDiagnosticCodes.SemanticTypeCompatibility);
+        }
+    }
+}

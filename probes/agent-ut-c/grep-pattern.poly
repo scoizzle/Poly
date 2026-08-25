@@ -1,0 +1,25 @@
+domain GrepPattern
+
+File: entity {
+  Path: Text required unique
+  lines: many Line
+
+  HasMatch: policy { any lines where Matched is true }
+  Count: policy { count lines where Matched is true > 0 }
+
+  Scan: action {
+    invoke all lines.Evaluate
+  }
+}
+
+Line: entity {
+  LineNo: Number range(1, )
+  Body: Text pattern("grep")
+  Matched: Boolean default(false)
+  file: File
+
+  Evaluate: action {
+    assign Matched to true
+  }
+}
+

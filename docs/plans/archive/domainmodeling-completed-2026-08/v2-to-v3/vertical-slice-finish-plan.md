@@ -1,0 +1,304 @@
+# V3 Finish Plan — One Vertical Slice at a Time
+
+**Status:** Active (M2 **Done** — post-M2 expansion)  
+**Last Updated:** 2026-07-12 — M2 closed; migration inventory archived  
+**Purpose:** Product vertical-slice status after V2 delete.  
+**Authority:** Status + post-M2 calendar. **Pick work from** [`simple-agent-tasks/vs-README.md`](simple-agent-tasks/vs-README.md).  
+**Related:**
+
+| Doc | Role |
+|-----|------|
+| [`master-roadmap.md`](master-roadmap.md) | Milestones (M2 **Done**) |
+| [`../archive/v2-to-v3-migration/designs/v3-completion-plan.md`](../archive/v2-to-v3-migration/designs/v3-completion-plan.md) | Archived WP inventory — **do not execute** |
+| [`2026-07-11-review-fix-plan.md`](../2026-07-11-review-fix-plan.md) | Trust layer 1 honesty (feeds Slice 0) |
+| [`../../decisions/2026-07-11-platform-trust-bar-and-dogfood.md`](../../decisions/2026-07-11-platform-trust-bar-and-dogfood.md) | First customer; generation funds platform |
+| [`spikes/first-v3-consumer.md`](spikes/first-v3-consumer.md) | MCP + direct API quality bar |
+| **[`simple-agent-tasks/vs-README.md`](simple-agent-tasks/vs-README.md)** | **Simple-agent pick queue** (one micro-task at a time) |
+| [Archived migration](../archive/v2-to-v3-migration/README.md) | WS8/WP/ws micro-tasks — **do not execute** |
+
+---
+
+## 1. Migration reality check
+
+| Milestone | Status |
+|-----------|--------|
+| M1 Foundation (evolution, proofs) | ✅ Done |
+| M2 First consumer (vertical slices 0–3) | ✅ **Done** — bootstrap, evolve, query, structure MCP, policy VM eval, domain-attached policy, add/evaluate MCP tools; 1175 tests |
+| M3 V2 freeze | ✅ Done |
+| M4 V2 delete | ✅ Done |
+
+**V2 is gone.** “Finish the migration” no longer means porting V2. It means **finish V3 as a trustworthy product path** one **vertical slice** at a time, then pull expressiveness only when a slice or first customer needs it.
+
+```text
+Done:   V2 deleted · bootstrap · evolve structure · query · MCP session/structure · DE lower · policy VM tests (core) ·
+       honesty (fail-loud, MCP desc, subject guard, EmitInvoke) ·
+       domain-attached policy eval · add/evaluate MCP tools ·
+       pipeline visibility tools planned · 1175 tests green
+Open:   MCP Phase1–4 tools (actions, effects, remove, events) ·
+       DSL batch apply · simulation/debug tools ·
+       actionable analysis suggestions · Capture mode (reverse-engineering) ·
+       effect execution (Slice 4) · T2 dogfood
+```
+
+---
+
+## 2. Slice protocol (non-negotiable)
+
+### What “fully implemented” means for a slice
+
+Every open slice exits only when **all** of the following are true for that slice’s scope:
+
+| Layer | Requirement |
+|-------|-------------|
+| **Direct API** | Composable ops on `DomainEvolution` / queries / eval; TUnit proves success **and** failure paths |
+| **Runtime truth** | If the slice claims execution (policy, effect), **VM-primary** result is tested (dual-oracle where LINQ is reference) |
+| **MCP (if in slice)** | Tool name/description/success match behavior; smoke for the multi-tool agent path |
+| **Honesty** | No silent success, no silent wrong ABI, no “claims eval without bool” |
+| **Docs** | Slice README blurb or DomainModeling/MCP note matches reality |
+
+### Rules
+
+1. **One open product slice at a time.** Finish exit criteria before starting the next product slice.  
+2. **Honesty substrate (Slice 0)** may run first or in parallel *only* where it unblocks the active product slice — do not expand into orphan cleanup mid-slice.  
+3. **No breadth flush** (extra MCP tools, Actor, full effect catalog, Validation revive) until the active slice is green.  
+4. **Pull-only** after Slice 3: relationships, effects, actors, codegen — only when a named scenario requires them.  
+5. Prefer **Person lifecycle** (or Order) as the canonical slice entity — already in demos/tests; do not invent a third demo domain until one is fully green end-to-end.
+
+### Definition of “V3 migration product-complete” (this plan)
+
+Not T2 dogfood. Not every analyzer. **Product-complete for V2→V3** means:
+
+- [x] V2 deleted  
+- [x] Slice 0 honesty for the sold path  
+- [x] Slice 1 structure path reaffirmed green  
+- [x] Slice 2 policy runtime on direct API product-enforced  
+- [x] Slice 3 policy MCP agent loop green  
+
+**M2 fully closed** (1175 tests, 0 failures). Further work is **post-M2 expansion**: MCP tool gaps, DSL, simulation/debug, actionable suggestions, Capture mode, effect execution.
+
+---
+
+## 3. Vertical slices (execution order)
+
+```text
+Slice 0  Honesty foundation          ── trust layer 1 for sold path
+Slice 1  Structure authoring         ── entity · props · stages · actions · query · MCP
+Slice 2  Policy runtime (direct API) ── attach + evaluate on CLR record / subject helper
+Slice 3  Policy MCP product loop     ── add_policy · evaluate_policy · e2e smoke
+──────── M2 product-complete ────────
+Slice 4  First effect (optional)     ── one executable effect kind
+Slice 5  Relationship (optional)     ── only if product needs second entity link
+```
+
+---
+
+### Slice 0 — Honesty foundation
+
+**Why first:** Silent no-ops and dishonest tools make every later slice untrustworthy (trust ADR + review).
+
+**In scope (tasks):**
+
+| ID | Task | Exit check | Status |
+|----|------|------------|--------|
+| **S0.1** | Fail-loud evolution when entity/stage/action target missing | `RequireUpdate` + rollback | ✅ **Done** |
+| **S0.1a** | Surface evalErrors as `EVOLUTION_TARGET` Error diagnostics | Inject before `Diagnostics` Lazy | ✅ **Done** |
+| **S0.1b** | Fail-loud missing **stage/property** (child targets) | Child existence check + tests | ✅ **Done** |
+| **S0.1c** | RequireUpdate on remaining ApplyTo paths | All Update* ApplyTo use `RequireUpdate` | ✅ **Done** |
+| **S0.1d** | Fail-loud remove-by-name zero match *(optional)* | Remove missing child name fails if parent exists | ⬜ Optional — vs **0.1d** |
+| **S0.2** | `add_action_to_stage` honesty (create stage-local) | Tool Description + code + test | ✅ **Done** |
+| **S0.2a** | MCP README row matches create semantics *(nit)* | Not “places existing” | ⬜ Optional — vs **0.2a** |
+| **S0.3** | Wire `PolicySubject` into product evaluate/compile | Dict/Expando rejected | ✅ **Done** |
+| **S0.4** | Instance `EmitInvoke` sequences **receiver** | Dual-oracle instance method VM test | ✅ **Done** |
+| **S0.5** | MCP README V3-only honesty | No V2 DomainTools claim; tool table complete | ✅ **Done** |
+
+**Status:** ✅ **Done.**
+
+**Next:** Slice 1 (verify structure path + pin canonical entity)
+
+**Micro-tasks:** [`simple-agent-tasks/vs-README.md`](simple-agent-tasks/vs-README.md)
+
+---
+
+### Slice 1 — Structure authoring (lifecycle entity)
+
+**Story:** Author a lifecycle-shaped entity end-to-end without policy eval.
+
+```text
+create session / DomainFactory
+  → add entity → properties → stages → actions → (optional) stage placement
+  → get overview / entity detail / analysis
+  → bad evolve → rollback + diagnostics
+```
+
+| ID | Task | Exit check | Status |
+|----|------|------------|--------|
+| **S1.1** | Verify structure e2e coverage (inventory + fill gaps) | Checklist + tests green | ✅ **Done** — summary + `GetDomainAnalysis_ReportsNoErrors_ForValidDomain` |
+| **S1.2** | Pin **canonical entity** for Slice 2–3: **Person** | Documented in vs-README + this plan | ✅ **Done** — **Person** (simplest numeric property `Age`) |
+
+**Out of scope:** policies, relationships, effects execution.
+
+**Done when:** S1.1–S1.2 closed.
+
+**Status:** ✅ **Done.**
+
+**Micro-tasks:** [`vs-s1-verify-structure-path.md`](simple-agent-tasks/vs-s1-verify-structure-path.md) ✅ · [`vs-s1-pin-canonical-entity.md`](simple-agent-tasks/vs-s1-pin-canonical-entity.md) ✅
+
+**Next:** Slice 2 — Policy runtime (direct API only)
+
+---
+
+### Slice 2 — Policy runtime (direct API only)
+
+**Story:** Domain-attached policy evaluates true/false on a valid subject via **product** API.
+
+```text
+Domain with Entity + Property + Policy(DomainExpression)
+  → PolicyEvaluator.Evaluate / CompileVMPredicate
+  → bool on CLR record / approved subject helper
+  → reject invalid subjects
+```
+
+| ID | Task | Exit check | Maps to |
+|----|------|------------|---------|
+| **S2.1** | Product subject helper defaults (non-null bags; no Dict/Expando) | Helper + tests I1–I3 | ws8 **6d**, **6h** |
+| **S2.2** | Bool ABI adult assert (true is bool, not only `1L`) | Dual path assert | ws8 **6e** |
+| **S2.3** | `MatchNumeric` (or Age≥N) positive control true/false | VM + dual-oracle | ws8 **6f** |
+| **S2.4** | Property name alignment: domain property ↔ DE ↔ subject | Documented + test | ws8 **6g** |
+| **S2.5** | Domain-attached policy e2e on **canonical entity** (Person/Order) via direct API only | One “definition of done” test file | PolicyVmEvaluationTests / new |
+| **S2.6** | Optional: fail closed DiffDays / date if slice expressions need dates — else document “not in slice” | No silent wrong days | Review F if pulled |
+
+**Depends on:** S0.3, S0.4 if expressions invoke instance methods.
+
+**Out of scope:** MCP add/evaluate tools (Slice 3); free-form AST from agents.
+
+**Done when:** S2.1–S2.5 green; agent-facing claim “policies evaluate on VM” is true **on direct API**.
+
+**Status:** ✅ **Done.**
+
+**Next:** Slice 3 — MCP policy product loop.
+
+---
+
+### Slice 3 — Policy MCP product loop
+
+**Story:** Agent attaches and evaluates a policy without core test hacks.
+
+```text
+MCP: create session → structure (Slice 1) → add_policy → get_policy_expression
+  → evaluate_policy (sample subject JSON → VM bool)
+  → true and false cases
+```
+
+| ID | Task | Exit check | Maps to |
+|----|------|------------|---------|
+| **S3.1** | Constrained expression contract for `add_policy` (no free-form AST bags) | Schema/docs + reject bad payload | ws8 **7a** |
+| **S3.2** | `add_policy` tool (direct API only under the hood) | Policy appears on entity; analysis gate | ws8 **7** |
+| **S3.3** | `evaluate_policy` tool — returns VM bool; never claims eval without result | Honesty invariant I4 | ws8 **8**, **11** |
+| **S3.4** | MCP e2e smoke: structure + policy + eval true/false | One smoke class | ws8 **9** |
+| **S3.5** | Polish: affordances, diagnostics, README for policy tools | Agent-usable | ws8 **10** |
+
+**Depends on:** Slice 2 exit; S0.1–S0.2 for evolve honesty.
+
+**Out of scope:** codegen, effect simulation, multi-policy engines.
+
+**Done when:** S3.1–S3.5 green → **M2 product-complete** for first consumer happy path steps 1–6.
+
+**Status:** Active (M2 **Done** — post-M2 expansion)  
+
+**Known thin edge (honest for Person):** `evaluate_policy` sample subject is **Age-only** — follow-up **pm2-1** for multi-property bags.
+
+---
+
+### ── Checkpoint: M2 closed ──
+
+**✅ Closed 2026-07-12.**
+
+- Slices 0–3 + honesty/debugger polish complete.  
+- Remaining work is **post-M2**: multi-property evaluate sample, affordances, naming cleanup, first effect when pulled, T2 dogfood — not “finish V2→V3”.
+
+---
+
+### Slice 4 — First effect execution (optional, post-M2)
+
+**Story:** One action effect runs for real (not only analyzed).
+
+| ID | Task | Exit check |
+|----|------|------------|
+| **S4.0** | Choose **one** effect: `AssignEffect` *or* `StageTransitionEffect` | Written decision |
+| **S4.1** | Spike: runtime subject model (CLR record mutation vs domain instance) | Spike note; no parallel VM |
+| **S4.2** | Lower or apply one effect through generic ops / Interpreter | One e2e test |
+| **S4.3** | Direct API helper + optional MCP later | Call site + test |
+
+**Pull trigger:** First-customer product needs mutable behavior, not only guards.  
+**Status:** ⬜ **Deferred** (post-M2 pull)  
+
+---
+
+### Slice 5 — Relationship (optional)
+
+**Story:** Second entity + relationship authorable and queryable; only if product needs it.
+
+| ID | Task | Exit check |
+|----|------|------------|
+| **S5.1** | Direct API: two entities + relationship; analysis clean | Test |
+| **S5.2** | MCP already has `add_relationship` — smoke with second entity | Smoke |
+| **S5.3** | DE relationship navigation only if policy needs it | Lower + VM or fail closed |
+
+**Pull trigger:** Canonical slice needs link (e.g. Order→Customer).  
+**Status:** ⬜ **Deferred** (post-M2 pull)  
+
+---
+
+## 4. Explicitly out of this finish plan
+
+| Item | Where it lives |
+|------|----------------|
+| Actor / claims / UAC | WP9 |
+| Full effect catalog execution | After Slice 4 pattern proven |
+| Contract/interface codegen | WP9 |
+| Validation module revive | Review WP-H keep/kill |
+| Poly.Text / orphan cleanup | Review WP-H (do not block slices) |
+| Multi-host Introspection | Trust ADR deferred |
+| T2 product domain + generated modules | Trust ADR — **after** M2 + generation loop |
+| DSL export/import | Deferred (first-v3-consumer) |
+| Fail-closed all VM POC nodes | Review WP-E — pull when a slice hits them |
+| **Flaky `VmDebugger_StepOver_TraversesStatements`** | [`simple-agent-tasks/vs-fix-vmdebugger-stepover-locals.md`](simple-agent-tasks/vs-fix-vmdebugger-stepover-locals.md) — CaptureResult re-reads dirty ArrayPool slots |
+| **Rename V3\* product identifiers** | [`../post-v2-delete-naming-cleanup.md`](../post-v2-delete-naming-cleanup.md) — after M2 / idle; not mixed with feature slices |
+
+---
+
+## 5. Suggested calendar (agent / human)
+
+| Order | Focus | Parallel OK? |
+|-------|--------|--------------|
+| ✅ | Slices 0–3 + M2 checkpoint | **Complete** — 1175 tests green |
+| 1 | **pm2-1** multi-property evaluate sample bag | Post-M2 agent leverage |
+| 2 | **pm2-2** add_policy → evaluate_policy affordance | Tiny UX |
+| 3 | Optional **0.1d** remove-zero-match | Anytime |
+| 4 | **Naming cleanup** R0–R1 | Idle tree — [`../post-v2-delete-naming-cleanup.md`](../post-v2-delete-naming-cleanup.md) |
+| 5 | **Slice 4** first effect | Named product scenario only |
+
+**Simple agents:** execute only from [`simple-agent-tasks/vs-README.md`](simple-agent-tasks/vs-README.md) (`vs-s0-*` … `vs-s3-*`). Older `ws8-*` files are optional reference; **this document owns slice exit criteria**.
+
+---
+
+## 6. Tracking table
+
+| Slice | Status | Notes |
+|-------|--------|-------|
+| 0 Honesty | ✅ **Done** | Optional: 0.1d |
+| 1 Structure | ✅ **Done** | **Person** pinned |
+| 2 Policy API | ✅ **Done** | Direct API VM policy e2e |
+| 3 Policy MCP | ✅ **Done** | add/evaluate/smoke; Age sample |
+| **M2** | ✅ **Done** | First consumer vertical slice |
+| polish-dbg / 0.2a | ✅ **Done** | Suite 1175 green |
+| pm2-1 | ✅ **Done** | Multi-property evaluate via `McpSubjectBag` (8 props) + JSON `properties` arg |
+| pm2-2 | ⬜ | add_policy → evaluate_policy affordance |
+| **MCP gaps** | 📋 **[Plan: `mcp-tool-surface-expansion.md`](mcp-tool-surface-expansion.md)** | ~14 new tools across 4 phases (actions, effects, remove, policy depth) |
+| 4 First effect | ⬜ Deferred | Named scenario |
+| 5 Relationship | ⬜ Pull | |
+| Naming cleanup | ⬜ | post-v2-delete-naming-cleanup |
+
+**M2 product-complete.** Next: post-M2 MCP tool gaps (Phase 1: action/effect tools), pm2-1, pm2-2, or naming cleanup when idle.
+
+> **V2 is dead. Finish V3 by shipping one honest vertical path at a time: honesty → structure → policy on direct API → policy on MCP → then optional effects/links — never breadth before the active slice is fully green.**

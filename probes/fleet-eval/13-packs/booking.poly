@@ -1,0 +1,15 @@
+domain Booking
+
+Confirmation: enum { Pending, Confirmed, Cancelled }
+
+Reservation: entity {
+  Code: Text required length(6, 20) unique
+  Status: Confirmation default(Pending)
+  PartySize: Number range(1, 20)
+  TotalAmount: Number range(0, 5000)
+  CheckIn: Date
+  CheckOut: Date
+  CreatedAt: DateTime
+  Notes: Text column("NOTES", "VARCHAR2(500)")
+  IsWalkIn: Boolean
+}

@@ -1,5 +1,3 @@
-using Poly.Interpretation.AbstractSyntaxTree;
-
 namespace Poly.Tests.Interpretation;
 
 /// <summary>
@@ -7,8 +5,7 @@ namespace Poly.Tests.Interpretation;
 /// </summary>
 public class NodeIdTests {
     [Test]
-    public async Task NodeId_SameValue_AreEqual()
-    {
+    public async Task NodeId_SameValue_AreEqual() {
         // Arrange
         var fromPosition = NodeId.FromPosition(1, 2);
         var fromParse = NodeId.Parse("node_1_2");
@@ -23,8 +20,7 @@ public class NodeIdTests {
     }
 
     [Test]
-    public async Task NodeId_DifferentValues_AreNotEqual()
-    {
+    public async Task NodeId_DifferentValues_AreNotEqual() {
         // Arrange
         var left = NodeId.FromPosition(1, 2);
         var right = NodeId.FromPosition(1, 3);

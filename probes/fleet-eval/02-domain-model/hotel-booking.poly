@@ -1,0 +1,129 @@
+domain HotelBooking
+
+// Hotel booking system: exercises the full shipped DSL surface through the
+// batch evolution path (parse -> Add* changes -> DomainEvolution from empty).
+
+BookingStatus: enum {
+  Pending
+  Confirmed
+  CheckedIn
+  Completed
+  Cancelled
+}
+
+RoomType: enum {
+  Standard
+  Deluxe
+  Suite
+}
+
+Hotel: entity table("HOTEL") {
+  Name: Text required length(2, 80)
+  StarRating: Number range(1, 5)
+  rooms: many Room
+  bookings: many Booking
+
+  IsLuxury: policy { StarRating >= 4 }
+  HasSuites: policy { any rooms where Type is "Suite" }
+  AllRoomsReady: policy { all rooms where Status is "Ready" }
+  NoPendingBookings: policy { none bookings where Status is "Pending" }
+  BookingCount: policy { count bookings > 0 }
+  HasOpenBooking: policy { any bookings where Status is "CheckedIn" }
+
+  when bookings Confirmed as booking {
+    assign Name to booking GuestName
+  }
+}
+
+Room: entity {
+  Number: Text unique pattern("^R\\d{3}$")
+  Type: RoomType default(Standard)
+  Status: Text default("Ready")
+  hotel: Hotel
+  bookings: many Booking
+
+  IsReady: policy { Status is "Ready" }
+
+  Available: stage {
+    entry { assign Status to "Ready" }
+    exit  { assign Status to "Occupied" }
+    Book: action (guest: Text) {
+      create in bookings { GuestName: guest }
+      transition to Occupied
+    }
+  }
+  Occupied: stage {
+    Clean: action {
+      assign Status to "Clean"
+      transition to Available
+    }
+  }
+}
+
+Guest: entity {
+  Name: Text required
+  Email: Text unique
+  memberSince: Date default(today)
+  bookings: many Booking
+
+  HasActiveBooking: policy { any bookings where Status is "CheckedIn" }
+  NoCancellations: policy { none bookings where Status is "Cancelled" }
+
+  CheckOut: action {
+    for bookings as b where b in CheckedIn invoke b.Complete()
+  }
+}
+
+Booking: entity {
+  Reference: Text default(guid)
+  GuestName: Text required
+  Nights: Number range(1, 30) default(1)
+  Status: BookingStatus default(Pending)
+  hotel: Hotel
+  room: Room
+  guest: Guest
+  invoice: Invoice
+
+  IsLongStay: policy { Nights >= 7 }
+  HasInvoice: policy { invoice exists }
+
+
+  Pending: stage {
+    Confirm: action
+      require IsLongStay
+    {
+      assign Status to Confirmed
+      create Invoice { Amount: Nights * 100 }
+      transition to Confirmed
+    }
+  }
+  Confirmed: stage {
+    entry { assign Status to Confirmed }
+    CheckIn: action {
+      assign Status to CheckedIn
+      transition to CheckedIn
+    }
+    Bill: action {
+      invoke invoice.Pay()
+    }
+  }
+  CheckedIn: stage {
+    Complete: action {
+      assign Status to Completed
+      transition to Completed
+    }
+  }
+  Cancelled: stage {}
+  Completed: stage {}
+}
+
+Invoice: entity {
+  Amount: Number range(0, 100000)
+  Status: Text default("Unpaid")
+  booking: Booking
+
+  IsPaid: policy { Status is "Paid" }
+  Pay: action {
+    assign Status to "Paid"
+  }
+}

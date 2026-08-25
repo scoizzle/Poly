@@ -1,0 +1,16 @@
+domain FleetF6BinderUnknown
+// F6: a binder-rooted invoke arg referencing an unknown target property passes
+// analysis (InferBinderExpressionType -> Unknown; no other pass validates binder
+// root references in invoke args) -> CS1061 in the export.
+Target: entity {
+  Count: Number default(0)
+  Bump: action (n: Number) {
+    assign Count to n
+  }
+}
+Source: entity {
+  targets: many Target
+  Fan: action {
+    for targets as target invoke target.Bump(n: target Title)
+  }
+}

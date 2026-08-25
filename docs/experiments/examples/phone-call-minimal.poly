@@ -1,0 +1,57 @@
+// ============================================================
+// Poly DSL — Minimal Phone Call
+// No relationships, no value types, no actors, no subscriptions.
+// Just a phone call and its lifecycle.
+// ============================================================
+
+domain PhoneCall
+
+Call: entity {
+  callerNumber: Text required
+  calleeNumber: Text required
+  startTime: DateTime
+  answeredTime: DateTime
+  endTime: DateTime
+  durationSeconds: Number
+  isRecording: Boolean
+  outcome: Text
+
+  Dialing: stage {
+    entry { assign startTime to DateTime.Now }
+
+    Connect: action { transition to Ringing }
+    Fail: action {
+      assign outcome to "failed"
+      transition to Ended
+    }
+  }
+
+  Ringing: stage {
+    Answer: action {
+      assign answeredTime to DateTime.Now
+      transition to Connected
+    }
+    Busy: action {
+      assign outcome to "failed"
+      transition to Ended
+    }
+    Ignore: action {
+      assign outcome to "canceled"
+      transition to Ended
+    }
+  }
+
+  Connected: stage {
+    HangUp: action {
+      assign endTime to DateTime.Now
+      assign outcome to "completed"
+      assign durationSeconds to (endTime - startTime).totalSeconds
+      transition to Ended
+    }
+    ToggleRecording: action {
+      assign isRecording to not isRecording
+    }
+  }
+
+  Ended: stage { }
+}

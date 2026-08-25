@@ -1,0 +1,17 @@
+domain FleetF10InvokeEnumLiteral
+// F10: enum-string invoke args pass analysis (Compatible(Text,Enum) is true and
+// member validity is never checked in the invoke path) AND the invoke lowering
+// never qualifies the literal to an enum member (unlike assign/create-in) —
+// even a VALID member breaks the export.
+MemberStatus: enum { Active Suspended Closed }
+Svc: entity {
+  Status: MemberStatus
+  SetStatus: action (status: MemberStatus) {
+    assign Status to status
+  }
+}
+Caller: entity {
+  service: Svc
+  A1: action { invoke service.SetStatus(status: "Active") }
+  A2: action { invoke service.SetStatus(status: "Bogus") }
+}

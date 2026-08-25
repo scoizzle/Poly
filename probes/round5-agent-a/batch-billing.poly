@@ -1,0 +1,77 @@
+domain Round5BatchBilling
+
+// Batch billing run: an invoice fan-outs charges to each line item.
+// Stresses: fail-fast require gate, stage-membership predicate, binder args,
+// composition (for + create in + assign + transition), nested for, and two
+// suspect edges: type-mismatched for args (BadType) and fan-out invoking a
+// typed (entity-returning) action (Typed).
+
+LineItem: entity {
+  Qty: Number
+  Amount: Number default(0)
+  Status: Text default("open")
+  Chargeable: policy { Amount > 0 }
+  IsOpen: policy { Status is "open" }
+  Active: stage { }
+  Draft: stage { }
+  taxItems: many TaxItem
+
+  Mark: action (amount: Number)
+    require Chargeable
+    require IsOpen
+  {
+    assign Amount to amount
+    assign Status to "marked"
+  }
+
+  ApplyTaxes: action {
+    for taxItems as tax invoke tax.Apply()
+  }
+
+  CreateCopy: action -> LineItem {
+    create LineItem { Qty: Qty Amount: Amount }
+  }
+}
+
+TaxItem: entity {
+  Rate: Number default(1)
+  Applied: Boolean default(false)
+  Active: stage { }
+
+  Apply: action {
+    assign Applied to true
+  }
+}
+
+Payment: entity {
+  Note: Text default("")
+}
+
+Invoice: entity {
+  Total: Number default(0)
+  lines: many LineItem
+  payments: many Payment
+  Open: stage { }
+  Done: stage { }
+
+  Go: action (flag: Number) {
+    for lines as line where line Chargeable invoke line.Mark(amount: line Amount + 1)
+    for lines as line where line in Active invoke line.Mark(amount: 5)
+    if (flag == 1) {
+      for lines as line invoke line.ApplyTaxes()
+    }
+    create in payments { Note: "batch" }
+    assign Total to Total + 1
+    transition to Done
+  }
+
+  BadType: action {
+    // Text (Status) into a Number param (amount) — is this rejected at analysis?
+    for lines as line where line Chargeable invoke line.Mark(amount: line Status)
+  }
+
+  Typed: action {
+    // Fan-out invoking an entity-returning action from a void action.
+    for lines as line invoke line.CreateCopy()
+  }
+}

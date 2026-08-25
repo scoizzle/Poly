@@ -1,5 +1,3 @@
-using Poly.Interpretation.AbstractSyntaxTree;
-using Poly.Interpretation.AbstractSyntaxTree.Arithmetic;
 using Poly.Interpretation.Mermaid;
 using Poly.Tests.TestHelpers;
 
@@ -16,8 +14,7 @@ public class MermaidAstVisualizationTests {
     /// Test simple arithmetic expression visualization.
     /// </summary>
     [Test]
-    public async Task SimpleExpression_TwoPlusThree_GeneratesMermaidDiagram()
-    {
+    public async Task SimpleExpression_TwoPlusThree_GeneratesMermaidDiagram() {
         // Arrange
         var ast = new Add(Wrap(2), Wrap(3));
         var generator = new MermaidAstGenerator();
@@ -36,8 +33,7 @@ public class MermaidAstVisualizationTests {
     /// Test complex nested expression visualization.
     /// </summary>
     [Test]
-    public async Task ComplexExpression_NestedOperations_ShowsStructure()
-    {
+    public async Task ComplexExpression_NestedOperations_ShowsStructure() {
         // Arrange: (2 + 3) * 4
         var add = new Add(Wrap(2), Wrap(3));
         var multiply = new Multiply(add, Wrap(4));
@@ -57,8 +53,7 @@ public class MermaidAstVisualizationTests {
     /// Test visualization with semantic analysis metadata.
     /// </summary>
     [Test]
-    public async Task WithAnalysis_GeneratesValidDiagram()
-    {
+    public async Task WithAnalysis_GeneratesValidDiagram() {
         // Arrange
         var ast = new Add(Wrap(2), Wrap(3));
         var analysisResult = ast.AnalyzeNode();
@@ -76,8 +71,7 @@ public class MermaidAstVisualizationTests {
     /// Test parameter visualization in expression.
     /// </summary>
     [Test]
-    public async Task WithParameter_ShowsParameterNode()
-    {
+    public async Task WithParameter_ShowsParameterNode() {
         // Arrange
         var x = new Parameter("x", TypeReference.To<int>());
         var ast = new Add(x, Wrap(10));
@@ -95,8 +89,7 @@ public class MermaidAstVisualizationTests {
     /// Test unary operation visualization.
     /// </summary>
     [Test]
-    public async Task UnaryOperation_NegateExpression_ShowsCorrectly()
-    {
+    public async Task UnaryOperation_NegateExpression_ShowsCorrectly() {
         // Arrange: -(2 + 3)
         var add = new Add(Wrap(2), Wrap(3));
         var negate = new UnaryMinus(add);
@@ -114,8 +107,7 @@ public class MermaidAstVisualizationTests {
     /// Test conditional expression visualization.
     /// </summary>
     [Test]
-    public async Task Conditional_TernaryOperator_ShowsThreeBranches()
-    {
+    public async Task Conditional_TernaryOperator_ShowsThreeBranches() {
         // Arrange: true ? 42 : 0
         var ast = new Conditional(Wrap(true), Wrap(42), Wrap(0));
         var generator = new MermaidAstGenerator();
@@ -134,8 +126,7 @@ public class MermaidAstVisualizationTests {
     /// Test left-to-right flow direction.
     /// </summary>
     [Test]
-    public async Task DirectionParameter_LeftToRight_GeneratesLRGraph()
-    {
+    public async Task DirectionParameter_LeftToRight_GeneratesLRGraph() {
         // Arrange
         var ast = new Add(Wrap(2), Wrap(3));
         var generator = new MermaidAstGenerator();
@@ -152,8 +143,7 @@ public class MermaidAstVisualizationTests {
     /// Demonstrates end-to-end: text -> tokens -> AST -> Mermaid diagram.
     /// </summary>
     [Test]
-    public async Task ArithmeticParser_ComplexExpression_GeneratesCompleteDiagram()
-    {
+    public async Task ArithmeticParser_ComplexExpression_GeneratesCompleteDiagram() {
         // Arrange: Parse "(2 + 3) * 4 - 1"
         var lexer = new ArithmeticLexer("(2 + 3) * 4 - 1");
         var tokens = lexer.Tokenize();
@@ -182,8 +172,7 @@ public class MermaidAstVisualizationTests {
     /// Test that generated Mermaid is valid by checking basic structure.
     /// </summary>
     [Test]
-    public async Task MermaidOutput_BasicStructure_IsWellFormed()
-    {
+    public async Task MermaidOutput_BasicStructure_IsWellFormed() {
         // Arrange
         var ast = new Multiply(new Add(Wrap(1), Wrap(2)), Wrap(3));
         var generator = new MermaidAstGenerator();
@@ -208,8 +197,7 @@ public class MermaidAstVisualizationTests {
     /// Test visualization of deeply nested expression.
     /// </summary>
     [Test]
-    public async Task DeeplyNested_MultiLevel_HandlesCorrectly()
-    {
+    public async Task DeeplyNested_MultiLevel_HandlesCorrectly() {
         // Arrange: ((1 + 2) * (3 + 4)) - 5
         var add1 = new Add(Wrap(1), Wrap(2));
         var add2 = new Add(Wrap(3), Wrap(4));
@@ -234,8 +222,7 @@ public class MermaidAstVisualizationTests {
     /// Test coalesce operator visualization.
     /// </summary>
     [Test]
-    public async Task CoalesceOperator_NullCoalescing_ShowsValueAndDefault()
-    {
+    public async Task CoalesceOperator_NullCoalescing_ShowsValueAndDefault() {
         // Arrange: x ?? 42
         var x = new Parameter("x", TypeReference.To<int?>());
         var ast = new Coalesce(x, Wrap(42));
@@ -254,8 +241,7 @@ public class MermaidAstVisualizationTests {
     /// Test type cast visualization.
     /// </summary>
     [Test]
-    public async Task TypeCast_IntToDouble_ShowsCastOperation()
-    {
+    public async Task TypeCast_IntToDouble_ShowsCastOperation() {
         // Arrange: (double)42
         var ast = new TypeCast(Wrap(42), TypeReference.To<double>());
         var generator = new MermaidAstGenerator();
@@ -280,14 +266,12 @@ public class MermaidAstVisualizationTests {
         private readonly string _input;
         private int _position;
 
-        public ArithmeticLexer(string input)
-        {
+        public ArithmeticLexer(string input) {
             _input = input;
             _position = 0;
         }
 
-        public List<Token> Tokenize()
-        {
+        public List<Token> Tokenize() {
             var tokens = new List<Token>();
             while (_position < _input.Length) {
                 if (char.IsWhiteSpace(_input[_position])) {
@@ -327,22 +311,19 @@ public class MermaidAstVisualizationTests {
         private readonly List<Token> _tokens;
         private int _current;
 
-        public ArithmeticParser(List<Token> tokens)
-        {
+        public ArithmeticParser(List<Token> tokens) {
             _tokens = tokens;
             _current = 0;
         }
 
-        public Node Parse()
-        {
+        public Node Parse() {
             var result = ParseExpression();
             if (_tokens[_current].Type != TokenType.End)
                 throw new InvalidOperationException("Unexpected token");
             return result;
         }
 
-        private Node ParseExpression()
-        {
+        private Node ParseExpression() {
             var left = ParseTerm();
             while (_tokens[_current].Type is TokenType.Plus or TokenType.Minus) {
                 var op = _tokens[_current].Type;
@@ -353,8 +334,7 @@ public class MermaidAstVisualizationTests {
             return left;
         }
 
-        private Node ParseTerm()
-        {
+        private Node ParseTerm() {
             var left = ParseFactor();
             while (_tokens[_current].Type is TokenType.Multiply or TokenType.Divide) {
                 var op = _tokens[_current].Type;
@@ -365,8 +345,7 @@ public class MermaidAstVisualizationTests {
             return left;
         }
 
-        private Node ParseFactor()
-        {
+        private Node ParseFactor() {
             var token = _tokens[_current];
             if (token.Type == TokenType.LeftParen) {
                 _current++;

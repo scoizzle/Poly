@@ -5,20 +5,18 @@ namespace Poly.Tests.Introspection;
 
 public class ClrTypeDefinitionTests {
     [Test]
-    public async Task Int32Type_HasCorrectProperties()
-    {
+    public async Task Int32Type_HasCorrectProperties() {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var intType = registry.GetTypeDefinition<int>();
 
         await Assert.That(intType.Name).IsEqualTo("Int32");
         await Assert.That(intType.Namespace).IsEqualTo("System");
         await Assert.That(intType.FullName).IsEqualTo("System.Int32");
-        await Assert.That(((ITypeDefinition)intType).ReflectedType).IsEqualTo(typeof(int));
+        await Assert.That(((ITypeDefinition)intType).GetRuntimeType()).IsEqualTo(typeof(int));
     }
 
     [Test]
-    public async Task Int32Type_HasMembers()
-    {
+    public async Task Int32Type_HasMembers() {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var intType = registry.GetTypeDefinition<int>();
 
@@ -31,8 +29,7 @@ public class ClrTypeDefinitionTests {
     }
 
     [Test]
-    public async Task Int32Type_HasMethods()
-    {
+    public async Task Int32Type_HasMethods() {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var intType = registry.GetTypeDefinition<int>();
 
@@ -44,8 +41,7 @@ public class ClrTypeDefinitionTests {
     }
 
     [Test]
-    public async Task GetMember_ReturnsCorrectMember()
-    {
+    public async Task GetMember_ReturnsCorrectMember() {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var intType = registry.GetTypeDefinition<int>();
 
@@ -56,8 +52,7 @@ public class ClrTypeDefinitionTests {
     }
 
     [Test]
-    public async Task GetMember_ReturnsNullForNonExistentMember()
-    {
+    public async Task GetMember_ReturnsNullForNonExistentMember() {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var intType = registry.GetTypeDefinition<int>();
 
@@ -67,8 +62,7 @@ public class ClrTypeDefinitionTests {
     }
 
     [Test]
-    public async Task GenericType_HasCorrectProperties()
-    {
+    public async Task GenericType_HasCorrectProperties() {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var listType = registry.GetTypeDefinition<List<int>>();
 
@@ -78,8 +72,7 @@ public class ClrTypeDefinitionTests {
     }
 
     [Test]
-    public async Task GenericType_HasMembers()
-    {
+    public async Task GenericType_HasMembers() {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var listType = registry.GetTypeDefinition<List<int>>();
 
@@ -92,8 +85,7 @@ public class ClrTypeDefinitionTests {
     }
 
     [Test]
-    public async Task NestedType_HasCorrectProperties()
-    {
+    public async Task NestedType_HasCorrectProperties() {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var nestedType = registry.GetTypeDefinition<TestOuterClass.TestNestedClass>();
 
@@ -102,8 +94,7 @@ public class ClrTypeDefinitionTests {
     }
 
     [Test]
-    public async Task ToString_ReturnsFullName()
-    {
+    public async Task ToString_ReturnsFullName() {
         var registry = ClrTypeDefinitionRegistry.Shared;
         var intType = registry.GetTypeDefinition<int>();
 

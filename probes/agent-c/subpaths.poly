@@ -1,0 +1,38 @@
+domain SubscriptionPaths
+
+Subscriber: entity {
+  Status: Text
+  count: Number default(0)
+  first: Target
+  targets: many Target
+
+  when first Bogus {
+    assign Status to "bogus_fired"
+  }
+  when any targets Active {
+    assign Status to "any_active"
+  }
+  when all targets Completed {
+    assign Status to "all_done"
+  }
+  when targets Active {
+    assign count to count + 1
+  }
+  when targets Active {
+    assign Status to "dup_active"
+  }
+  when targets Active as t {
+    assign Status to t sub Nested
+  }
+}
+
+Target: entity {
+  sub: Nested
+  Nested: Text
+  Active: stage { }
+  Completed: stage { }
+}
+
+Nested: entity {
+  Deep: Text
+}

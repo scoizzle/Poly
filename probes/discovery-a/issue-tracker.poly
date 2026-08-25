@@ -1,0 +1,66 @@
+domain IssueTracker
+
+Tribe: entity {
+  TeamName: Text
+  engineers: many Engineer
+
+  HasActiveEngineer: policy { any engineers where Active is true }
+  AllEngineersActive: policy { all engineers where Active is true }
+  NoInactiveEngineers: policy { none engineers where Active is false }
+  EngineerCount: policy { count engineers > 3 }
+  ZeroFocused: policy { count engineers where Focused is true == 0 }
+
+  StandDownAll: action {
+    invoke all engineers.StandDown
+  }
+  RallyAny: action {
+    invoke any engineers.Rally
+  }
+  RallyFocused: action {
+    invoke any engineers.Rally() where Focused is true
+  }
+}
+
+Engineer: entity {
+  Name: Text
+  Active: Text
+  Focused: Text
+  team: Tribe
+  issues: many Issue
+
+  InBlueTeam: policy { team TeamName is "Blue" }
+  AssignedToTeam: policy { team exists }
+  NoTeam: policy { not team exists }
+
+  StandDown: action {
+    assign Active to "false"
+  }
+  Rally: action {
+    assign Focused to "true"
+  }
+  Notify: action (message: Text) {
+    assign Active to message
+  }
+}
+
+Issue: entity {
+  Title: Text
+  Priority: Number
+  Status: Text
+  Blocked: Text
+  reporter: Engineer
+
+  HighPriority: policy { Priority > 5 }
+  HasReporter: policy { reporter exists }
+  FromBlueTeam: policy { reporter team TeamName is "Blue" }
+  CloseStale: policy { Priority > 7 }
+
+  Open: stage {
+    Submit: action {
+      invoke reporter.Notify(message: "assigned")
+      transition to Active
+    }
+  }
+  Active: stage {}
+  Closed: stage {}
+}

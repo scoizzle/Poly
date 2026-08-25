@@ -1,0 +1,106 @@
+domain Round5RejectEdges
+
+// One place for every `for` rejection shape the guide promises (DMEFF007 and
+// friends). A probe is "good" when each of these fails at parse/analysis with
+// a clear diagnostic; anything that exports 0/0 or crashes is a finding.
+
+Customer: entity {
+  profile: one Profile      // OneToOne — `for` must be rejected
+  orders: many Order        // OneToMany — `for` is allowed here
+  account: Account          // OneToOne (default)
+
+  ForOneToOne: action {
+    for profile as p invoke p.Notify()
+  }
+
+  ForSingularDefault: action {
+    for account as a invoke a.Notify()
+  }
+}
+
+Profile: entity {
+  Tier: Text default("basic")
+
+  Notify: action {
+    assign Tier to "notified"
+  }
+}
+
+Account: entity {
+  Balance: Number default(0)
+
+  Notify: action {
+    assign Balance to Balance + 1
+  }
+}
+
+Order: entity {
+  Status: Text default("open")
+  lines: many OrderLine
+  Open: stage { }
+  Closed: stage { }
+
+  // Missing predicate policy — must be rejected.
+  BadPolicyPredicate: action {
+    for lines as line where line NoSuchPolicy invoke line.Tag()
+  }
+
+  // Predicate stage that doesn't exist on the target — must be rejected.
+  BadStagePredicate: action {
+    for lines as line where line MissingStage invoke line.Tag()
+  }
+
+  // Stage-membership predicate on a target with NO stages — must be rejected.
+  StageOnStagelessTarget: action {
+    for lines as line where line in Active invoke line.Tag()
+  }
+
+  // Missing action on target — must be rejected.
+  BadTargetAction: action {
+    for lines as line where line IsOpen invoke line.NoSuchAction()
+  }
+
+  // Missing required param — must be rejected.
+  MissingParam: action {
+    for lines as line invoke line.Tag()
+  }
+
+  // Unknown param — must be rejected.
+  UnknownParam: action {
+    for lines as line invoke line.Tag(extra: 1)
+  }
+
+  // Binder collision with a caller policy — must be rejected.
+  line: policy { Status is "open" }
+  BinderCollidesPolicy: action {
+    for lines as line invoke line.Tag(flag: 1)
+  }
+}
+
+OrderLine: entity {
+  Qty: Number default(1)
+  IsOpen: policy { Qty > 0 }
+  Active: stage { }
+
+  Tag: action (flag: Number) {
+    assign Qty to Qty + flag
+  }
+}
+
+// Reverse-side `for`: the relationship `bins` is authored on Warehouse
+// (Warehouse -> Bin); Bin must NOT be able to iterate it (DMEFF007).
+Bin: entity {
+  Qty: Number default(0)
+
+  WhereAmI: action {
+    for bins as bin invoke bin.Open()
+  }
+
+  Open: action {
+    assign Qty to Qty
+  }
+}
+
+Warehouse: entity {
+  bins: many Bin
+}

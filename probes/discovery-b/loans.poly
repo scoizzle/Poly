@@ -1,0 +1,37 @@
+domain DiscoveryLoans
+
+LoanStatus: enum {
+  Active,
+  Closed
+}
+
+Loan: entity {
+  DueDate: Date
+  ReferenceDate: Date
+  CheckedOutAt: DateTime
+  ReturnedAt: DateTime
+  CreatedAt: DateTime default(now)
+  Extensions: Number default(0)
+  Status: LoanStatus default(Active)
+  IsOverdue: policy { DueDate < ReferenceDate }
+  IsDueSoon: policy { DueDate - 7 <= ReferenceDate }
+  IsDueNext: policy { DueDate + 14 > ReferenceDate }
+
+  Active: stage {
+    entry { assign CheckedOutAt to now }
+    Renew: action {
+      assign DueDate to DueDate + 14
+      assign Extensions to Extensions + 1
+    }
+    RenewShort: action {
+      assign DueDate to DueDate - 14
+    }
+    Return: action {
+      assign ReturnedAt to now
+      transition to Returned
+    }
+  }
+  Returned: stage {
+    exit { assign ReturnedAt to now }
+  }
+}

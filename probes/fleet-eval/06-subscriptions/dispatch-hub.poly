@@ -1,0 +1,79 @@
+domain FleetDispatch
+
+// Real system: a regional dispatch hub tracks a fleet of delivery trucks.
+// Each truck runs a lifecycle; the hub reacts with stage-scoped and
+// entity-level subscriptions using any/all/Each quantifiers, peer binders,
+// and multi-stage lists.
+
+Truck: entity {
+  Code: Text
+  LoadWeight: Number default(0)
+
+  Idle: stage {
+    Assign: action {
+      transition to Loading
+    }
+  }
+  Loading: stage {
+    Depart: action {
+      transition to OnRoute
+    }
+  }
+  OnRoute: stage {
+    Deliver: action {
+      transition to Back
+    }
+  }
+  Back: stage {
+    Reservice: action {
+      transition to Loading
+    }
+  }
+}
+
+DispatchHub: entity {
+  Name: Text
+  HubStatus: Text default("idle")
+  LastTruckCode: Text default("")
+  ActiveCount: Number default(0)
+  AllBackCount: Number default(0)
+  trucks: many Truck
+
+  Open: stage {
+    // Stage-scoped any: once at least one linked truck is OnRoute.
+    when any trucks OnRoute {
+      assign HubStatus to "dispatching"
+    }
+    // Stage-scoped all: only when EVERY linked truck is Back.
+    when all trucks Back {
+      assign AllBackCount to AllBackCount + 1
+    }
+    // Stage-scoped Each with a peer binder.
+    when trucks OnRoute as truck {
+      assign LastTruckCode to truck Code
+    }
+    // Stage-scoped Each, multi-stage list, same binder.
+    when trucks OnRoute, Back as truck {
+      assign ActiveCount to ActiveCount + 1
+    }
+    Close: action {
+      transition to Closed
+    }
+  }
+  Closed: stage {
+    Reopen: action {
+      transition to Open
+    }
+  }
+
+  // Entity-level always-active subscriptions.
+  when any trucks Back as truck {
+    assign HubStatus to "anyBack"
+  }
+  when all trucks Back as truck {
+    assign HubStatus to "allBack"
+  }
+  when trucks OnRoute, Back as truck {
+    assign LastTruckCode to truck Code
+  }
+}

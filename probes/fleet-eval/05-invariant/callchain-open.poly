@@ -1,0 +1,20 @@
+domain CallChainOpen
+
+// Call chain whose callee assigns from a one-sided (open-ended) property range.
+// Exercises ValidateCallChainPostconditions with a postcondition ValueRange that
+// has a null bound — does the analyzer handle one-sided envelopes, or does it
+// dereference a null bound?
+
+Vault: entity {
+  Spent: Number range(0, 1000)
+  Budget: Number range(100, )
+
+  UseBudget: action {
+    // postcondition envelope: [100, null) — open-ended upper bound
+    assign Spent to Budget
+  }
+
+  Approve: action {
+    invoke UseBudget
+  }
+}

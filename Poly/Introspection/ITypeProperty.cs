@@ -5,5 +5,4 @@ namespace Poly.Introspection;
 /// Properties may have getter/setter accessors and optional index parameters.
 /// </summary>
 public interface ITypeProperty : ITypeMember {
-    // Inherits all from ITypeMember; no additional members needed for properties
 }

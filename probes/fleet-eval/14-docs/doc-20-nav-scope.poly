@@ -1,0 +1,14 @@
+domain DocNavScope
+
+// §4: same navigation name on different source entities is allowed
+OrderLine: entity {
+  order: Order
+}
+
+Note: entity {
+  order: Order
+}
+
+Order: entity {
+  Total: Number default(0)
+}

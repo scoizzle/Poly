@@ -1,0 +1,9 @@
+domain DocDmeff009
+
+// §6: -> EntityType rejected when no create produces it (DMEFF009)
+Order: entity {
+  Total: Number default(0)
+  Frob: action -> Order {
+    assign Total to 5
+  }
+}

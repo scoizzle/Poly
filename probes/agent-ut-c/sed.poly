@@ -1,0 +1,52 @@
+domain Sed
+
+LineStatus: enum {
+  Live,
+  Deleted,
+}
+
+Line: entity {
+  LineNo: Number range(1, )
+  Body: Text
+  Status: LineStatus default(Live)
+  doc: Document
+
+  SubstituteText: action (text: Text) {
+    assign Body to text
+  }
+  Delete: action {
+    assign Status to Deleted
+  }
+}
+
+Document: entity {
+  Title: Text required
+  lines: many Line
+
+  HasBadLines: policy { any lines where Body is "bad" }
+  AllClean: policy { all lines where Body is not "bad" }
+
+  // sed '1,3s/foo/bar/' — substitute on address range 1..3
+  SubstituteRange: action {
+    invoke all lines.SubstituteText(text: "bar") where LineNo >= 1 and LineNo <= 3
+  }
+
+  // sed '/bad/d' — delete lines matching a pattern
+  DeleteBad: action {
+    invoke all lines.Delete where Body is "bad"
+  }
+
+  // sed '/bad/d' when no line matches is a no-op in sed; here `all` fails
+  DeleteBadNoMatch: action {
+    invoke all lines.Delete where Body is "baz"
+  }
+
+  Raw: stage {
+    ApplyEdit: action {
+      invoke all lines.SubstituteText(text: "edited") where LineNo >= 1 and LineNo <= 3
+      transition to Edited
+    }
+  }
+  Edited: stage {}
+}
+

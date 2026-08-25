@@ -1,0 +1,10 @@
+domain DocDecimalAssign
+
+Order: entity {
+  Total: Number default(0)
+  Discounted: Number default(0)
+
+  Apply: action {
+    assign Discounted to Total * 0.9
+  }
+}

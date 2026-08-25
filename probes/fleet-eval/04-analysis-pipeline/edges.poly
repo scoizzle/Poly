@@ -1,0 +1,39 @@
+domain EdgeProbe
+
+// Edge/reliability probe: warning-only surfaces (cycles, orphans, authoring
+// hints) plus a sparse entity. Analysis warnings must not break the 0/0
+// export gate (they are advisory), and empty/sparse shapes must not crash
+// any pass.
+
+A: entity {
+  bs: many B
+  c: C
+}
+
+B: entity {
+  cs: many C
+}
+
+C: entity {
+  aRefs: many A
+}
+
+Leaf: entity {
+  parent: Root
+}
+
+Root: entity {
+}
+
+Sparse: entity {
+  Flag: Boolean
+}
+
+Holder: entity {
+  IsReady: Boolean
+  Flag: Boolean
+  Ready: policy { IsReady is true }
+  Act: action {
+    assign Flag to true
+  }
+}

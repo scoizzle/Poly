@@ -1,0 +1,10 @@
+domain DocMissing2
+
+Token: entity { Lexeme: Text required Kind: Text required }
+
+Parser: entity {
+  tokens: many Token
+  Lex: action {
+    create in tokens { Kind: "Keyword" }
+  }
+}

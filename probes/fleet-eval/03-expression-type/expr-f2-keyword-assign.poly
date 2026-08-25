@@ -1,0 +1,10 @@
+domain FleetF2KeywordAssign
+// F2: runtime keywords in assign RHS are never type-checked (Unknown bypass);
+// the export adapts the keyword to the TARGET's CLR type and fails CS0029.
+E: entity {
+  OpenedAt: Date
+  Qty: Number
+  A1: action { assign OpenedAt to guid }   // Date = Guid.NewGuid()
+  A2: action { assign Qty to now }         // Number = DateOnly.FromDateTime(...)
+  A3: action { assign OpenedAt to now }    // valid sibling — compiles
+}

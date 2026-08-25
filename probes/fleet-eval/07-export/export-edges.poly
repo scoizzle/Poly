@@ -1,0 +1,106 @@
+domain FleetEvalExportEdges
+
+// Order-fulfillment system stressing the edges of the export:
+// enum create-in initializers (both authoring forms), defaulted-prop
+// overrides through create/create-in, cross-entity OneToOne invoke,
+// require-not guards, quantifier subscriptions, and for-invoke inside
+// a non-void (-> EntityType) action.
+
+Priority: enum {
+  High
+  Med
+  Low
+}
+
+OrderState: enum {
+  Open
+  Packed
+  InTransit
+  Delivered
+}
+
+Customer: entity {
+  Name: Text required
+  Status: Text default("new")
+  Notify: action (msg: Text) {
+    assign Status to msg
+  }
+}
+
+OrderLine: entity {
+  Sku: Text required
+  Qty: Number range(0, 100)
+  Priority: Priority default(Med)
+  Weight: Number default(10)
+  order: Order
+
+  Open: stage {
+    Mark: action (extra: Number) {
+      assign Qty to Qty + extra
+    }
+    Pack: action {
+      transition to Packed
+    }
+  }
+  Packed: stage { }
+  InTransit: stage { }
+  Delivered: stage { }
+}
+
+Order: entity {
+  Total: Number default(0)
+  Status: OrderState default(Open)
+  customer: Customer
+  lines: many OrderLine
+
+  IsEmpty: policy { Total == 0 }
+
+  AddLine: action (sku: Text, qty: Number, prio: Priority) {
+    create in lines { Sku: sku  Qty: qty  Priority: prio }
+  }
+
+  AddLineLiteralEnum: action {
+    create in lines { Sku: "ABC"  Priority: High }
+    create in lines { Sku: "DEF"  Priority: "Med" }
+  }
+
+  AddLineWeightOverride: action (w: Number) {
+    create in lines { Sku: "GHI"  Weight: w }
+  }
+
+  NotifyCustomer: action (m: Text) {
+    invoke customer.Notify(msg: m)
+  }
+
+  Ship: action
+    require not IsEmpty
+  {
+    transition to Packed
+  }
+
+  Open: stage {
+    Submit: action {
+      transition to Packed
+    }
+  }
+  Packed: stage { }
+  InTransit: stage { }
+  Delivered: stage { }
+
+  when lines Delivered {
+    assign Total to Total + 1
+  }
+
+  when lines InTransit as line {
+    assign Total to line Qty
+  }
+}
+
+FulfillmentCenter: entity {
+  orders: many Order
+
+  ProcessToDone: action -> Order {
+    for orders as order where order in Open invoke order.Submit()
+    create in orders { Total: 50 }
+  }
+}

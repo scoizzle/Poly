@@ -1,0 +1,15 @@
+domain FleetEvalIsolatedTwoCreates
+
+// Two `create` effects of the same entity type in one action — the
+// exporter names both locals identically.
+
+Label: entity {
+  Body: Text
+}
+
+Tag: entity {
+  MakeTwo: action {
+    create Label { Body: "a" }
+    create Label { Body: "b" }
+  }
+}

@@ -1,0 +1,14 @@
+domain DocOneToManyInvoke
+
+// §6: invoke Rel.Action on OneToMany rejected (needs for)
+Item: entity {
+  Mark: action { }
+}
+
+Order: entity {
+  items: many Item
+
+  Go: action {
+    invoke items.Mark()
+  }
+}

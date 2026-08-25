@@ -1,0 +1,27 @@
+domain TypeAbuseAssign
+
+Color: enum { Red, Green, Blue }
+
+Thing: entity {
+  Name: Text
+  Count: Number
+  Color: Color
+  When: Date
+  WhenAt: DateTime
+  Flag: Boolean
+
+  Draft: stage {
+    entry { assign Count to "five" }
+  }
+
+  SetTextToNum: action { assign Name to 42 }
+  SetNumToText: action { assign Count to "hello" }
+  SetTextConcatNum: action { assign Name to Name + 5 }
+  SetNumConcatNum: action { assign Count to Count + "x" }
+  SetEnumArith: action { assign Count to Color + 1 }
+  SetBoolToNum: action { assign Flag to 1 }
+  SetDateNumArith: action { assign Count to When + 1 }
+  SetDateStrArith: action { assign Count to When + "day" }
+  SetTextToBool: action { assign Name to true }
+  SetTextIsExpr: action { assign Name to Count > 5 }
+}

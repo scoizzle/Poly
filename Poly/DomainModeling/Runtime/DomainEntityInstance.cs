@@ -1,0 +1,698 @@
+using Poly.DomainModeling.Analysis;
+using Poly.DomainModeling.Dispatch;
+using Poly.DomainModeling.Lowering;
+using Poly.DomainModeling.Ontology;
+using Poly.Interpretation;
+using Poly.Interpretation.Analysis.Semantics;
+
+using Action = Poly.DomainModeling.Ontology.Action;
+using Prim = Poly.Introspection.PrimitiveType;
+
+namespace Poly.DomainModeling.Runtime;
+
+public sealed partial record DomainEntityInstance {
+    private readonly Dictionary<string, object?> _values;
+    private readonly TypeDefinitionNodeAnalyzer _typeDefAnalyzer;
+    private readonly List<DomainEntityInstance> _createdChildren = [];
+    private bool _isExecutingSubscription;
+    private int _invokeDepth;
+    private int _transitionDepth;
+    private TypeDefinitionNodeAnalyzer? _bindingTypeProvider;
+    /// <summary>Max nested <see cref="InvokeAction"/> depth (self-invoke / re-entrancy).</summary>
+    public const int MaxInvokeDepth = 16;
+    /// <summary>Max nested <see cref="TransitionStage"/> depth (OnEntry/OnExit re-entrancy).</summary>
+    public const int MaxTransitionDepth = 16;
+    internal DomainInstanceStore? Store { get; set; }
+
+    private QuantifierPreprocessRewrite? _quantifierRewrite;
+    private QuantifierPreprocessRewrite QuantifierRewrite =>
+        _quantifierRewrite ??= new(this);
+
+    private DomainEntityInstance(
+        Entity entity,
+        Dictionary<string, object?> values,
+        TypeDefinitionNodeAnalyzer typeDefAnalyzer,
+        string? currentStage,
+        Domain? domain = null) {
+        Entity = entity;
+        _values = values;
+        _typeDefAnalyzer = typeDefAnalyzer;
+        CurrentStage = currentStage;
+        Domain = domain;
+    }
+
+    /// <summary>The domain model this instance belongs to (null for standalone instances).</summary>
+    public Domain? Domain { get; }
+
+    /// <summary>The domain entity definition this instance was created from.</summary>
+    public Entity Entity { get; }
+
+    private const string CurrentStageBagKey = "CurrentStage";
+
+    /// <summary>The current lifecycle stage, if the entity defines stages.
+    /// Backed by the property bag so VM Assignment of CurrentStage (the same
+    /// tree emit consumes) updates the field the rest of the runtime reads.</summary>
+    public string? CurrentStage {
+        get => _values.TryGetValue(CurrentStageBagKey, out var v) ? v as string : null;
+        private set {
+            if (value is null) _values.Remove(CurrentStageBagKey);
+            else _values[CurrentStageBagKey] = value;
+        }
+    }
+
+    /// <summary>Child instances created by <see cref="CreateEntityInstance"/> effects.</summary>
+    public IReadOnlyList<DomainEntityInstance> CreatedChildren => _createdChildren;
+
+
+    /// <summary>
+    /// Creates a new instance of <paramref name="entity"/> with the given
+    /// property values. Validates that all provided property names exist on
+    /// the entity, applies default values for missing properties, and sets
+    /// the initial stage (first defined stage, if any).
+    /// </summary>
+    /// <param name="entity">The domain entity definition.</param>
+    /// <param name="propertyValues">Optional initial property values. Missing
+    /// properties get their default value (or <c>null</c>).</param>
+    /// <returns>A validated <see cref="DomainEntityInstance"/>.</returns>
+    /// <exception cref="ArgumentException">When a property name does not exist
+    /// on the entity or a required property is missing with no default.</exception>
+    public static DomainEntityInstance Create(
+        Entity entity,
+        IReadOnlyDictionary<string, object?>? propertyValues = null,
+        Domain? domain = null) {
+        ArgumentNullException.ThrowIfNull(entity);
+
+        // Relationships are entity-owned navigations. When a domain is provided, resolve
+        // the canonical entity instance from the domain so the instance always carries the
+        // same node identity analysis ran on (the legacy 3-arg Domain ctor redistributes
+        // relationships onto entity copies). Falls back to the passed entity when the name
+        // is not present — preserves standalone semantics.
+        if (domain is not null) {
+            var canonical = domain.Types.OfType<Entity>().FirstOrDefault(e =>
+                string.Equals(e.Name, entity.Name, StringComparison.Ordinal));
+            if (canonical is not null)
+                entity = canonical;
+        }
+
+        var entityPropNames = new HashSet<string>(
+            entity.Properties.Select(p => p.Name),
+            StringComparer.Ordinal);
+
+        // Validate provided property names
+        if (propertyValues is not null) {
+            foreach (var key in propertyValues.Keys) {
+                if (!entityPropNames.Contains(key))
+                    throw new ArgumentException(
+                        $"Property '{key}' does not exist on entity '{entity.Name}'. " +
+                        $"Available: {string.Join(", ", entityPropNames)}.");
+            }
+        }
+
+        // Build values dictionary — apply provided values, then defaults
+        var values = new Dictionary<string, object?>(StringComparer.Ordinal);
+        foreach (var prop in entity.Properties) {
+            if (propertyValues is not null && propertyValues.TryGetValue(prop.Name, out var v)) {
+                values[prop.Name] = v;
+            }
+            else if (prop.Constraints.OfType<DefaultValueConstraint>().FirstOrDefault() is { } defaultValue) {
+                values[prop.Name] = EvaluateDefaultValue(defaultValue.Expression, prop.Type.TypeName, domain);
+            }
+            else {
+                values[prop.Name] = null; // default for unspecified properties
+            }
+        }
+
+        var typeDefAnalyzer = BuildTypeDefAnalyzer(entity, domain: domain);
+
+        // Enforce constraints at creation, matching the C# export's Create factory guards.
+        // The runtime previously accepted out-of-range/pattern-violating/empty-required
+        // values silently while the export rejected them — a divergence (round-1 C-F3).
+        var validationError = ValidateConstraints(entity, values);
+        if (validationError is not null)
+            throw new InvalidOperationException(validationError);
+
+        // Initial stage: first declared stage name (factory shape; not a semantic rediscovery).
+        var currentStage = entity.Stages.FirstOrDefault()?.Name;
+
+        var instance = new DomainEntityInstance(entity, values, typeDefAnalyzer, currentStage, domain);
+        ApplyInitialStageEntryEffects(instance);
+        return instance;
+    }
+
+    /// <summary>
+    /// Validates required/range/length/pattern constraints against the to-be-stored values,
+    /// mirroring the C# export's <c>Create</c> factory guards. Returns the first violation
+    /// message, or null when the values are valid. (Unique is store-aware and not checked here.)
+    /// </summary>
+    private static string? ValidateConstraints(
+        Entity entity,
+        IReadOnlyDictionary<string, object?> values) {
+        foreach (var prop in entity.Properties) {
+            values.TryGetValue(prop.Name, out var v);
+            foreach (var constraint in prop.Constraints) {
+                switch (constraint) {
+                    case RequiredConstraint:
+                        if (IsText(prop) && string.IsNullOrEmpty(v as string))
+                            return $"'{prop.Name}' is required.";
+                        if (v is null && IsNullableDomainTypeName(prop.Type.TypeName))
+                            return $"'{prop.Name}' is required.";
+                        break;
+                    case RangeConstraint r:
+                        if (v is IConvertible num && v is not bool and not string && v is not Guid and not DateTime and not DateOnly) {
+                            var dv = Convert.ToDecimal(num);
+                            if (r.Minimum is not null && dv < Convert.ToDecimal(r.Minimum))
+                                return $"'{prop.Name}' must be >= {r.Minimum}.";
+                            if (r.Maximum is not null && dv > Convert.ToDecimal(r.Maximum))
+                                return $"'{prop.Name}' must be <= {r.Maximum}.";
+                        }
+                        break;
+                    case LengthConstraint lc:
+                        if (v is string s) {
+                            if (s.Length < lc.MinLength)
+                                return $"'{prop.Name}' must be at least {lc.MinLength} characters.";
+                            if (lc.MaxLength < int.MaxValue && s.Length > lc.MaxLength)
+                                return $"'{prop.Name}' must be at most {lc.MaxLength} characters.";
+                        }
+                        break;
+                    case PatternConstraint pc:
+                        if (v is string ps && !Regex.IsMatch(ps, pc.Pattern))
+                            return $"'{prop.Name}' does not match the required pattern.";
+                        break;
+                }
+            }
+        }
+        return null;
+    }
+
+    private static bool IsText(Property prop) =>
+        prop.Type.TypeName is "Text" or "String";
+
+    private static bool IsNullableDomainTypeName(string typeName) =>
+        typeName is "Text" or "String"
+        || typeName is not ("Number" or "Int" or "Int64" or "Int32" or "Boolean"
+            or "Bool" or "DateTime" or "Timestamp" or "Date" or "DateOnly"
+            or "Time" or "TimeOnly" or "Duration" or "TimeSpan" or "Uuid" or "Guid"
+            or "Decimal" or "Float" or "Double");
+
+    /// <summary>
+    /// Applies the first stage's entry effects at creation time, matching the export's
+    /// constructor (DomainToCSharpExporter applies the initial stage's entry effects in
+    /// the ctor). Without this, a property initialized by the first stage's <c>entry</c>
+    /// block (status stamps, IsOpen flags, timestamps) is null at runtime but set in the
+    /// export — divergent initial state.
+    /// </summary>
+    private static void ApplyInitialStageEntryEffects(DomainEntityInstance instance) {
+        var firstStage = instance.Entity.Stages.FirstOrDefault();
+        if (firstStage?.OnEntryEffects is not { Count: > 0 })
+            return;
+
+        var analysis = instance.Domain is not null
+            ? RuntimeAnalysisCache.GetOrAnalyze(instance.Domain)
+            : null;
+        var loweringContext = new LoweringContext(
+            new Parameter("entity", new TypeReference(instance.Entity.Name)),
+            Analysis: analysis,
+            Domain: instance.Domain);
+        var entryPass = new EffectLoweringPass(instance.Entity, loweringContext);
+        foreach (var effect in firstStage.OnEntryEffects) {
+            // The export ctor lowers first-stage entry effects with transitions disabled —
+            // mirror that: run assign/create effects but skip stage transitions (a nested
+            // transition in the initial entry would otherwise recurse at Create).
+            if (effect is StageTransitionEffect) continue;
+            instance.ExecuteEffect(effect, entryPass, instance._typeDefAnalyzer);
+        }
+    }
+
+    /// <summary>
+    /// Evaluates a DSL default expression to a concrete runtime value, adapted to
+    /// the target property's CLR type when known (discovery round5 F1–F3).
+    /// The runtime stores enum-typed properties as strings, so an enum member name
+    /// (e.g. <c>default(Active)</c>) lowers to its name string; <c>now</c>/<c>today</c>/<c>guid</c>
+    /// evaluate at creation time. Matches the C# export's defaulted optional ctor params.
+    /// </summary>
+    private object? EvaluateDefaultValue(DomainExpression expr, string? propTypeName = null) =>
+        EvaluateDefaultValue(expr, propTypeName, Domain);
+
+    private static object? EvaluateDefaultValue(DomainExpression expr, string? propTypeName, Domain? domain) => expr switch {
+        Literal lit => lit.Value,
+        Now => propTypeName is "DateTime" or "Timestamp"
+            ? DateTime.UtcNow
+            : DateOnly.FromDateTime(DateTime.UtcNow),
+        Today => propTypeName is "DateTime" or "Timestamp"
+            ? DateTime.Today
+            : DateOnly.FromDateTime(DateTime.Today),
+        PropertyAccess pa => pa.Name switch {
+            "Now" or "UtcNow" => propTypeName is "DateTime" or "Timestamp"
+                ? DateTime.UtcNow
+                : DateOnly.FromDateTime(DateTime.UtcNow),
+            "Today" => propTypeName is "DateTime" or "Timestamp"
+                ? DateTime.Today
+                : DateOnly.FromDateTime(DateTime.Today),
+            "Guid" => propTypeName is "Text" or "String"
+                ? Guid.NewGuid().ToString()
+                : Guid.NewGuid(),
+            _ => pa.Name // enum member name — runtime stores enum values as strings
+        },
+        _ => throw new InvalidOperationException(
+            $"Cannot evaluate default expression of type '{expr.GetType().Name}'.")
+    };
+
+    /// <summary>
+    /// Action resolution missed. Distinguish a genuinely-unknown action from one
+    /// that exists but is stage-scoped to a different stage than the current one —
+    /// the latter is reported precisely ("only available in stage 'X'") instead of
+    /// the misleading "not found on entity", matching the export's guard message.
+    /// </summary>
+    private ActionInvocationResult ReportUnresolvedAction(string actionName, AnalysisResult? runtimeAnalysis) {
+        string? stageName = null;
+        if (Domain is not null && runtimeAnalysis is not null) {
+            var arm = runtimeAnalysis.GetActionResolution(Domain, Entity);
+            if (arm is not null) {
+                foreach (var (stage, actions) in arm.StageActions) {
+                    if (actions.ContainsKey(actionName)) {
+                        stageName = stage;
+                        break;
+                    }
+                }
+            }
+        }
+        else {
+            stageName = Entity.Stages
+                .FirstOrDefault(s => s.Actions.Any(a =>
+                    string.Equals(a.Name, actionName, StringComparison.Ordinal)))
+                ?.Name;
+        }
+        return stageName is not null
+            ? ActionInvocationResult.StageRequired(Entity.Name, actionName, stageName)
+            : ActionInvocationResult.Missing(Entity.Name, actionName);
+    }
+
+    /// <summary>
+    /// Reads a property value, coercing to <typeparamref name="T"/>.
+    /// </summary>
+    public T? GetProperty<T>(string name) {
+        if (!_values.TryGetValue(name, out var value))
+            throw new ArgumentException($"Property '{name}' not found on entity '{Entity.Name}'.");
+        return value is T t ? t : default;
+    }
+
+    /// <summary>
+    /// Sets a property value. Validates that the property exists on the entity.
+    /// </summary>
+    public void SetProperty(string name, object? value) {
+        if (!_values.ContainsKey(name))
+            throw new ArgumentException(
+                $"Property '{name}' does not exist on entity '{Entity.Name}'. " +
+                $"Available: {string.Join(", ", _values.Keys)}.");
+        if (Store is not null) {
+            var previous = _values[name];
+            _values[name] = value;
+            try {
+                Store.RejectUniqueCollision(this, except: this);
+            }
+            catch {
+                _values[name] = previous;
+                throw;
+            }
+            return;
+        }
+        _values[name] = value;
+    }
+
+    internal bool TryGetRaw(string name, out object? value) =>
+        _values.TryGetValue(name, out value);
+
+    /// <summary>
+    /// Evaluates <paramref name="policy"/> against this instance using the
+    /// VM (direct AST lowering — canonical path). Returns <c>true</c> if the
+    /// policy's guard expression is satisfied.
+    ///
+    /// <para>Collection quantifiers (any/all/none/count) are preprocessed before
+    /// lowering — evaluated against the current store's linked instances
+    /// and replaced with literal results. This keeps the VM lowering path
+    /// quantifier-free while enabling store-aware policy evaluation.</para>
+    /// </summary>
+    public bool EvaluatePolicy(Policy policy) {
+        ArgumentNullException.ThrowIfNull(policy);
+
+        // Preprocess quantifiers: resolve against store, replace with literals.
+        var expr = PreprocessQuantifiers(policy.Expression);
+
+        var entityParam = new Parameter("entity", new TypeReference(Entity.Name));
+        var pass = new DomainExpressionLoweringPass(new LoweringContext(
+            entityParam,
+            PropertyTypeResolver: EffectLoweringPass.BuildPropertyTypeResolver(Entity)));
+        var lowered = pass.Lower(expr, entityParam);
+
+        var compiled = Interpreter.CompileChecked(lowered, _typeDefAnalyzer);
+        using var exec = Interpreter.Execute(compiled,
+            s => s.SetArgs(new object?[] { this }));
+        return exec.Result.GetValue<bool>();
+    }
+
+    /// <summary>
+    /// Attempts to call <paramref name="actionName"/> on this instance.
+    /// Evaluates all guard policies, then executes each effect in sequence.
+    ///
+    /// <para><b>Action pipeline order:</b></para>
+    /// <list type="number">
+    ///   <item>Resolve action by name — fail if not found.</item>
+    ///   <item>Evaluate action-level guard policies (<see cref="Policy"/>).</item>
+    ///   <item>Evaluate current-stage guard policies.</item>
+    ///   <item>Evaluate entity-level guard policies.</item>
+    ///   <item>Execute each effect in declaration order:
+    ///     <list type="bullet">
+    ///       <item><b>VM-compiled</b> (<see cref="AssignEffect"/>, <see cref="CompositeEffect"/>, <see cref="ConditionalEffect"/>, <see cref="StageTransitionEffect"/>) → lowered to Syntax AST → compiled via <see cref="Interpreter.Compile"/> → executed via VM. StageTransition is Assignment of CurrentStage + Invoke Notify on This.</item>
+    ///       <item><b>Direct-execution</b> (<see cref="CreateEntityInstance"/>, <see cref="ForEachInvokeEffect"/>) → mutates instance state directly via EffectExecutor. Self-invoke and singular cross-entity invoke lower to <c>Invoke(Member(…))</c>.</item>
+    ///     </list>
+    ///   </item>
+    ///   <item>On <see cref="StageTransitionEffect"/>: lowered tree sets stage then <c>Invoke(Member(This, "Notify"))</c> (store fan-out in finally).</item>
+    /// </list>
+    ///
+    /// <para><b>VM-executable effects</b> (<see cref="AssignEffect"/>,
+    /// <see cref="CompositeEffect"/>, <see cref="ConditionalEffect"/>) are
+    /// lowered to Syntax AST, compiled, and executed via the VM.</para>
+    ///
+    /// <para><b>Direct-execution effects</b> (<see cref="CreateEntityInstance"/>)
+    /// mutate the instance directly. <see cref="StageTransitionEffect"/> and
+    /// invoke (self, cross-entity, for-each) share the lowered tree with emit.</para>
+    /// </summary>
+    /// <param name="actionName">Name of the action to invoke.</param>
+    /// <param name="args">Optional parameter values injected into the property
+    /// bag during execution. Each key-value pair is available as a property
+    /// in policy guards and assign RHS expressions. Values are cleaned up
+    /// after the action completes.</param>
+    public ActionInvocationResult InvokeAction(string actionName,
+        IReadOnlyDictionary<string, object?>? args = null) {
+        // E6.2: Depth-limited re-entrancy for nested invoke (self-call / OnEntry cycles).
+        if (_invokeDepth >= MaxInvokeDepth)
+            return ActionInvocationResult.InvokeDepthExceeded(actionName, MaxInvokeDepth);
+
+        var injectedKeys = new List<string>();
+        _invokeDepth++;
+        try {
+            return InvokeActionInternal(actionName, args, injectedKeys);
+        }
+        finally {
+            _invokeDepth--;
+            foreach (var key in injectedKeys)
+                _values.Remove(key);
+        }
+    }
+
+    /// <summary>
+    /// Core action execution after args have been injected into <see cref="_values"/>.
+    /// Domain-bound: catalog/helpers only; missing action map or stage structure throws.
+    /// Standalone: structural entity/stage lookup only (reduced contract).
+    /// </summary>
+    private ActionInvocationResult InvokeActionInternal(
+        string actionName,
+        IReadOnlyDictionary<string, object?>? args,
+        List<string> injectedKeys) {
+        AnalysisResult? runtimeAnalysis = null;
+        Action? action;
+
+        if (Domain is not null) {
+            runtimeAnalysis = RuntimeAnalysisCache.GetOrAnalyze(Domain);
+            // Fail closed: domain-bound dispatch requires catalog action map (no scan).
+            if (runtimeAnalysis.GetActionResolution(Domain, Entity) is null)
+                throw new InvalidOperationException(
+                    $"Runtime dispatch requires {nameof(DomainCatalogMetadata)} action map for entity '{Entity.Name}' in domain '{Domain.Name}'.");
+            runtimeAnalysis.TryResolveAction(Domain, Entity, CurrentStage, actionName, out action);
+        }
+        else {
+            // Standalone reduced contract — structural SA only (see type remarks).
+            action = ResolveStandaloneAction(actionName);
+        }
+
+        if (action is null)
+            return ReportUnresolvedAction(actionName, runtimeAnalysis);
+
+        var declared = action.Parameters
+            .Select(p => p.Name)
+            .ToHashSet(StringComparer.Ordinal);
+        if (args is { Count: > 0 }) {
+            foreach (var key in args.Keys) {
+                if (!declared.Contains(key))
+                    return ActionInvocationResult.InvalidArguments(actionName,
+                        $"Unknown argument '{key}' for action '{actionName}'.");
+            }
+        }
+        foreach (var param in action.Parameters) {
+            if (args is null || !args.ContainsKey(param.Name))
+                return ActionInvocationResult.InvalidArguments(actionName,
+                    $"Missing argument '{param.Name}' for action '{actionName}'.");
+        }
+        if (args is { Count: > 0 }) {
+            foreach (var kv in args) {
+                _values[kv.Key] = kv.Value;
+                injectedKeys.Add(kv.Key);
+            }
+        }
+
+        // ── Evaluate all guard policies ─────────────────────────
+        var failures = new List<string>();
+        foreach (var guard in action.Policies)
+            if (!EvaluatePolicy(guard)) failures.Add(guard.Name);
+
+        if (failures.Count > 0)
+            return ActionInvocationResult.Blocked(actionName, failures);
+
+        Stage? stage = null;
+        if (runtimeAnalysis is not null && CurrentStage is not null) {
+            if (!runtimeAnalysis.TryGetStage(Entity, CurrentStage, out stage) || stage is null)
+                throw new InvalidOperationException(
+                    $"Stage '{CurrentStage}' not resolvable for entity '{Entity.Name}' during action dispatch.");
+        }
+        else if (Domain is null && CurrentStage is not null) {
+            // Standalone reduced contract: stage policies from Entity.Stages only.
+            stage = Entity.Stages.FirstOrDefault(
+                s => string.Equals(s.Name, CurrentStage, StringComparison.Ordinal));
+        }
+        if (stage is not null)
+            foreach (var guard in stage.Policies) {
+                if (action.Policies.Any(p => string.Equals(p.Name, $"not_{guard.Name}", StringComparison.Ordinal)))
+                    continue;
+                if (!EvaluatePolicy(guard)) failures.Add(guard.Name);
+            }
+
+        if (failures.Count > 0)
+            return ActionInvocationResult.Blocked(actionName, failures);
+
+        foreach (var guard in Entity.Policies) {
+            // Skip entity-level policies that are inverted by an action-level
+            // "require not PolicyName" guard (synthetic not_PolicyName).
+            // Otherwise the entity-level guard would redundantly block the action
+            // even though the action explicitly opted out via "require not".
+            if (action.Policies.Any(p => string.Equals(p.Name, $"not_{guard.Name}", StringComparison.Ordinal)))
+                continue;
+            if (!EvaluatePolicy(guard)) failures.Add(guard.Name);
+        }
+
+        if (failures.Count > 0)
+            return ActionInvocationResult.Blocked(actionName, failures);
+
+        // ── Execute effects ─────────────────────────────────────
+        var subjectParam = new Parameter("entity", new TypeReference(Entity.Name));
+        var loweringContext = new LoweringContext(
+            subjectParam,
+            Analysis: runtimeAnalysis,
+            Domain: Domain,
+            SourceStageName: CurrentStage);
+        var effectPass = new EffectLoweringPass(Entity, loweringContext);
+        // Action parameters are injected into _values for the call duration, but are not
+        // entity schema properties. Compile with an action-scoped type def so PropertyAccess
+        // to parameter names resolves (otherwise Member passthrough assigns the whole bag).
+        var effectTypeProvider = action.Parameters.Count > 0
+            ? BuildActionScopedTypeDefAnalyzer(action)
+            : _typeDefAnalyzer;
+        var previousBindingProvider = _bindingTypeProvider;
+        _bindingTypeProvider = effectTypeProvider;
+        try {
+            var createdBefore = _createdChildren.Count;
+            foreach (var effect in action.Effects) {
+                ExecuteEffect(effect, effectPass, effectTypeProvider);
+            }
+
+            // P3: declared -> Entity return = last child created this invoke of that type.
+            DomainEntityInstance? resultInstance = null;
+            string? resultTypeName = null;
+            if (action.Result.Members.Count > 0) {
+                resultTypeName = action.Result.Members[0].Type.TypeName;
+                for (var i = _createdChildren.Count - 1; i >= createdBefore; i--) {
+                    if (string.Equals(_createdChildren[i].Entity.Name, resultTypeName, StringComparison.Ordinal)) {
+                        resultInstance = _createdChildren[i];
+                        break;
+                    }
+                }
+                if (resultInstance is null) {
+                    return ActionInvocationResult.MissingReturn(actionName, resultTypeName);
+                }
+            }
+
+            return ActionInvocationResult.Ok(actionName, CurrentStage, resultInstance, resultTypeName);
+        }
+        finally {
+            _bindingTypeProvider = previousBindingProvider;
+        }
+    }
+
+    /// <summary>
+    /// Evaluates a list of <see cref="PropertyBinding"/> expressions against the
+    /// current instance's property bag and returns the results as a dictionary.
+    /// Each binding's expression is lowered, compiled, and executed via the VM.
+    /// Returns null when <paramref name="bindings"/> is empty.
+    /// </summary>
+    private IReadOnlyDictionary<string, object?>? EvaluateParameterBindings(
+        IReadOnlyList<PropertyBinding> bindings) {
+        if (bindings is null || bindings.Count == 0) return null;
+
+        var result = new Dictionary<string, object?>(StringComparer.Ordinal);
+        var subjectParam = new Parameter("entity", new TypeReference(Entity.Name));
+
+        foreach (var binding in bindings) {
+            var loweringPass = new DomainExpressionLoweringPass(new LoweringContext(new Parameter("entity")));
+            var lowered = loweringPass.Lower(binding.Expression, subjectParam);
+            var compiled = Interpreter.Compile(lowered, _bindingTypeProvider ?? _typeDefAnalyzer);
+            using var exec = Interpreter.Execute(compiled,
+                s => s.SetArgs(new object?[] { this }));
+            result[binding.PropertyName] = exec.Result.GetValue<object>();
+        }
+
+        return result.Count > 0 ? result : null;
+    }
+
+    /// <summary>
+    /// Executes a single effect. VM-executable effects go through
+    /// lowering → compile → execute; direct-execution effects mutate
+    /// the instance in place.
+    /// </summary>
+    private void ExecuteEffect(
+        Effect effect,
+        EffectLoweringPass effectPass,
+        TypeDefinitionNodeAnalyzer typeProvider) {
+        // Store-aware quantifiers / path-prefix / Rel exists must resolve before
+        // Syntax lowering — same honesty as EvaluatePolicy (no bag pass-through).
+        var prepared = PreprocessEffectExpressions(effect);
+
+        // A composite/conditional containing remaining direct-execution sub-effects
+        // (create/create-in) must run each sub-effect through this dispatcher —
+        // those still cannot lower on the runtime path. StageTransition and
+        // invoke now lower.
+        if ((prepared is ConditionalEffect or CompositeEffect)
+            && ContainsDirectExecutionEffect(prepared)) {
+            ExecuteStructured(prepared, effectPass, typeProvider);
+            return;
+        }
+
+        var lowered = effectPass.TryLowerVmNode(prepared);
+        if (lowered is not null) {
+            var compiled = Interpreter.CompileChecked(lowered, DomainResultTypeProvider.Wrap(typeProvider));
+            using var exec = Interpreter.Execute(compiled,
+                s => s.SetArgs(new object?[] { this }));
+            if (exec.Result.Value is DomainResult { IsSuccess: false } failed)
+                throw new InvalidOperationException(failed.ErrorMessage ?? "invoke failed.");
+            return;
+        }
+
+        EffectExecutor.Run(this, effectPass, typeProvider, prepared);
+    }
+
+    /// <summary>
+    /// Executes a composite/conditional structurally: evaluates the branch condition (via
+    /// the VM) and routes each sub-effect through <see cref="ExecuteEffect"/> so both
+    /// VM-executable (assign, stage transition, invoke) and remaining direct-execution (create) effects run.
+    /// </summary>
+    private void ExecuteStructured(
+        Effect effect,
+        EffectLoweringPass effectPass,
+        TypeDefinitionNodeAnalyzer typeProvider) {
+        switch (effect) {
+            case CompositeEffect c:
+                foreach (var sub in c.Effects)
+                    ExecuteEffect(sub, effectPass, typeProvider);
+                break;
+            case ConditionalEffect cond:
+                var condition = cond.Condition;
+                var entityParam = new Parameter("entity", new TypeReference(Entity.Name));
+                var pass = new DomainExpressionLoweringPass(new LoweringContext(
+                    entityParam,
+                    PropertyTypeResolver: EffectLoweringPass.BuildPropertyTypeResolver(Entity)));
+                var lowered = pass.Lower(condition, entityParam);
+                var compiled = Interpreter.CompileChecked(lowered, DomainResultTypeProvider.Wrap(typeProvider));
+                bool taken;
+                using (var exec = Interpreter.Execute(compiled,
+                           s => s.SetArgs(new object?[] { this }))) {
+                    taken = exec.Result.GetValue<bool>();
+                }
+                var branch = taken ? cond.ThenEffects : (cond.ElseEffects ?? []);
+                foreach (var sub in branch)
+                    ExecuteEffect(sub, effectPass, typeProvider);
+                break;
+            default:
+                ExecuteEffect(effect, effectPass, typeProvider);
+                break;
+        }
+    }
+
+    /// <summary>True when an effect tree contains a remaining direct-execution effect
+    /// (create/create-in) that the VM path would silently drop. Invoke lowers.</summary>
+    private static bool ContainsDirectExecutionEffect(Effect effect) => effect switch {
+        CreateEntityInstance or CreateEntityInRelationshipEffect => true,
+        CompositeEffect c => c.Effects.Any(ContainsDirectExecutionEffect),
+        ConditionalEffect c => (c.ThenEffects?.Any(ContainsDirectExecutionEffect) ?? false)
+            || (c.ElseEffects?.Any(ContainsDirectExecutionEffect) ?? false),
+        _ => false
+    };
+
+    /// <summary>
+    /// Rewrites effect expression trees so store-dependent forms become literals
+    /// (or fail closed) before VM lowering.
+    /// </summary>
+    private Effect PreprocessEffectExpressions(Effect effect) => effect switch {
+        AssignEffect a => a with { Value = PreprocessRuntimeKeyword(a.Value, (a.Target as PropertyAccess)?.Name) },
+        ConditionalEffect c => c with {
+            Condition = PreprocessQuantifiers(c.Condition),
+            ThenEffects = c.ThenEffects.Select(PreprocessEffectExpressions).ToList(),
+            ElseEffects = c.ElseEffects?.Select(PreprocessEffectExpressions).ToList()
+        },
+        CompositeEffect c => c with {
+            Effects = c.Effects.Select(PreprocessEffectExpressions).ToList()
+        },
+        CreateEntityInstance cei => cei with {
+            Initializers = cei.Initializers
+                .Select(i => i with { Expression = PreprocessQuantifiers(i.Expression) })
+                .ToList()
+        },
+        CreateEntityInRelationshipEffect cir => cir with {
+            Initializers = cir.Initializers
+                .Select(i => i with { Expression = PreprocessQuantifiers(i.Expression) })
+                .ToList()
+        },
+        InvokeActionEffect iae => iae with {
+            ParameterBindings = iae.ParameterBindings
+                .Select(b => b with { Expression = PreprocessQuantifiers(b.Expression) })
+                .ToList()
+        },
+        // `for` arguments are binder-rooted (item Qty) — PreprocessQuantifiers would treat
+        // the binder root as a relationship and fail. The binder is bound per-target in
+        // ExecuteForEachInvoke; args carry no store quantifiers (analysis restricts roots).
+        ForEachInvokeEffect efe => efe,
+        _ => effect
+    };
+
+    /// <summary>Rewrites an assign RHS runtime keyword (now/today/guid) into a literal via the
+    /// type-aware <see cref="EvaluateDefaultValue"/> — the shared VM lowering emits
+    /// <c>DateOnly.FromDateTime(...)</c> for such RHS, which the runtime VM cannot execute.</summary>
+    private DomainExpression PreprocessRuntimeKeyword(DomainExpression value, string? targetPropName) {
+        var propType = Entity.Properties.FirstOrDefault(p =>
+            string.Equals(p.Name, targetPropName, StringComparison.Ordinal))?.Type.TypeName;
+        // Pack-owned clock nodes (Now/Today) resolve through the ambient default registry —
+        // core never names pack IR.
+        if (value is Now or Today)
+            return DomainExpression.Literal(EvaluateDefaultValue(value, propType));
+        if (value is PropertyAccess { Name: var name } && name is "Now" or "UtcNow" or "Today" or "Guid")
+            return DomainExpression.Literal(EvaluateDefaultValue(value, propType));
+        return PreprocessQuantifiers(value);
+    }
+}

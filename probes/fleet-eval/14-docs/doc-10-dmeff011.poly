@@ -1,0 +1,20 @@
+domain DocDmeff011
+
+// §0.3: required coverage (DMEFF011) — back-reference nav is exempt
+Patron: entity {
+  loans: many Loan
+
+  CheckOut: action (book: Book) {
+    create in loans { book: book }
+  }
+}
+
+Book: entity {
+  Title: Text required
+}
+
+Loan: entity {
+  book: Book
+  borrower: Patron required
+  Active: stage { }
+}

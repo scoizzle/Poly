@@ -1,0 +1,29 @@
+domain DegenerateEmpty
+
+EmptyEntity: entity { }
+
+Container: entity {
+  Prop: Text
+  child: Child
+  children: many Child
+
+  EmptyStage: stage { }
+
+  Noop: action { }
+
+  EmptyCreate: action {
+    create Child { }
+  }
+
+  EmptyCreateIn: action {
+    create in children { }
+  }
+
+  OnlyTransition: action {
+    transition to EmptyStage
+  }
+}
+
+Child: entity {
+  Code: Text
+}

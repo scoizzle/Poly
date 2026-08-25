@@ -1,0 +1,25 @@
+domain InvokeArgs
+
+Item: entity {
+  Status: Text
+  Score: Number default(0)
+
+  A: stage {
+    set: action (s: Text, n: Number) {
+      assign Status to s
+      assign Score to n
+    }
+    tooFew: action {
+      invoke set(s: "x")
+    }
+    tooMany: action {
+      invoke set(s: "x", n: 5, extra: 9)
+    }
+    selfArgs: action (m: Text) {
+      assign Status to m
+      invoke selfArgs(m: "again")
+      transition to B
+    }
+  }
+  B: stage { entry { assign Status to "in_b" } }
+}

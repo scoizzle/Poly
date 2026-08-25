@@ -1,0 +1,15 @@
+domain DegenerateEntryTransition
+
+Order: entity {
+  Status: Text
+
+  Draft: stage {
+    Start: action { transition to Active }
+  }
+  Active: stage {
+    entry { transition to Done }
+  }
+  Done: stage {
+    entry { assign Status to "in_done" }
+  }
+}

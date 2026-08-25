@@ -1,0 +1,12 @@
+domain DocIdSmell
+
+// §0.1: Text property named *Id/*Code/*Isbn on an entity that already has a
+// relationship to that type triggers a diagnostic
+Book: entity {
+  Title: Text required
+}
+
+Loan: entity {
+  book: Book
+  BookIsbn: Text
+}

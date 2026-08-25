@@ -1,0 +1,145 @@
+domain HotelBooking
+
+GuestStatus: enum {
+  Regular,
+  VIP,
+  Blacklisted,
+}
+
+BookingStatus: enum {
+  Draft,
+  Confirmed,
+  Cancelled,
+}
+
+Guest: entity table("GUESTS") {
+  FullName: Text required length(2, 100)
+  Email: Text unique pattern("^[^@]+@[^@]+$")
+  Tier: GuestStatus default(Regular)
+  Status: Text default("active")
+  bookings: many Booking
+  profile: owned GuestProfile
+
+  HasOpenBooking: policy { any bookings where Status is "confirmed" }
+  AllDone: policy { all bookings where Status is "completed" }
+  NoCancellations: policy { none bookings where Status is "cancelled" }
+  TotalBookings: policy { count bookings > 0 }
+  NotBanned: policy { not (Status is "banned") }
+  BigSpender: policy { count bookings where Total > 1000 >= 1 }
+  HasBookings: policy { bookings exists }
+
+  when any bookings Cancelled {
+    assign Status to "churned"
+  }
+  when all bookings Completed as b {
+    assign Status to b Code
+  }
+
+  Register: action {
+    assign Status to "active"
+  }
+
+  BookRoom: action -> Booking {
+    create in bookings { Code: "B1" Status: "draft" }
+  }
+
+  ChargeVips: action {
+    for bookings as b where b PositiveTotal invoke b.MarkBilled()
+  }
+
+  RateProfile: action (floor: Number) {
+    invoke profile.SetFloor(floor: floor)
+  }
+}
+
+GuestProfile: entity {
+  PreferredFloor: Number range(0, 99)
+  Notes: Text column("NOTES", "VARCHAR2(500)")
+  guest: Guest
+
+  SetFloor: action (floor: Number) {
+    assign PreferredFloor to floor
+  }
+}
+
+Booking: entity {
+  Code: Text required column("BOOK_CODE")
+  Total: Number range(0, 100000)
+  Status: Text default("draft")
+  guest: Guest
+  room: Room
+
+  PositiveTotal: policy { Total > 0 }
+  HighValue: policy { Total >= 500 }
+  HasRoom: policy { room exists }
+
+  Draft: stage {
+    entry {
+      assign Status to "draft"
+    }
+    exit {
+      assign Status to "confirmed"
+    }
+
+    Confirm: action
+      require PositiveTotal
+      require not CancelledPolicy
+    {
+      assign Status to "confirmed"
+      transition to Confirmed
+    }
+
+    Cancel: action {
+      if (Total > 0) {
+        assign Status to "cancelled"
+      } else {
+        assign Status to "void"
+      }
+      transition to Cancelled
+    }
+  }
+
+  Confirmed: stage {
+    when room Available {
+      assign Status to "ready"
+    }
+
+    CheckIn: action {
+      if (Total >= 500) {
+        assign Status to "vip-checkin"
+      } else if (room exists) {
+        assign Status to "checkin"
+      } else {
+        assign Status to "no-room"
+      }
+      transition to Completed
+    }
+  }
+  Completed: stage {}
+  Cancelled: stage {}
+
+  CancelledPolicy: policy { Status is "cancelled" }
+  MarkBilled: action {
+    assign Status to "billed"
+  }
+  ApplyRate: action (rate: Number) {
+    assign Total to rate
+  }
+}
+
+Room: entity {
+  Number: Text required
+  Rate: Number range(0, 9999)
+  Status: Text default("available")
+  bookings: many Booking
+
+  Available: stage {
+    SetRate: action (newRate: Number) {
+      assign Rate to newRate
+    }
+  }
+  Occupied: stage {
+    entry { assign Status to "occupied" }
+  }
+  Maintenance: stage {}
+}

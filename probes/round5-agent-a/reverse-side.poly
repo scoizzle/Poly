@@ -1,0 +1,20 @@
+domain Round5ReverseSide
+
+// Reverse-side `for`: `bins` is authored on Warehouse (Warehouse -> Bin).
+// Bin iterating `bins` must be rejected (DMEFF007 — caller must be source).
+
+Bin: entity {
+  Qty: Number default(0)
+
+  WhereAmI: action {
+    for bins as bin invoke bin.Open()
+  }
+
+  Open: action {
+    assign Qty to Qty
+  }
+}
+
+Warehouse: entity {
+  bins: many Bin
+}

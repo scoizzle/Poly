@@ -1,0 +1,9 @@
+domain DiscoveryCreateInitMin
+
+AuditEvent: entity {
+  RecordedOn: Date default(today)
+  Count: Number default(0)
+  Log: action {
+    create AuditEvent { Count: 5 }
+  }
+}

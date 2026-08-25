@@ -1,0 +1,9 @@
+domain GuideS4
+Patron: entity {
+  fines: many Fine
+  when loans Overdue {
+    create Fine { Amount: 5; Reason: "Overdue" }
+  }
+}
+Loan: entity { }
+Fine: entity { Amount: Number Reason: Text }

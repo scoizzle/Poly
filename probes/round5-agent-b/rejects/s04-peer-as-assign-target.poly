@@ -1,0 +1,15 @@
+domain S04PeerAsAssignTarget
+Order: entity {
+  Code: Text
+  Draft: stage {}
+  Active: stage {}
+}
+AssignToPeer: entity {
+  Status: Text default("")
+  orders: many Order
+  Draft: stage {
+    when orders Active as order {
+      assign order Code to "nope"
+    }
+  }
+}

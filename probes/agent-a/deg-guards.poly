@@ -1,0 +1,42 @@
+domain DegenerateGuards
+
+Machine: entity {
+  Status: Text
+  Count: Number
+
+  Never: policy { false }
+  Always: policy { true }
+  CountNonNeg: policy { Count >= 0 }
+
+  Fail: action
+    require Never
+  {
+    assign Status to "ran"
+  }
+
+  Pass: action
+    require Always
+  {
+    assign Status to "ran"
+  }
+
+  SelfContradict: action
+    require Always
+    require not Always
+  {
+    assign Status to "ran"
+  }
+
+  DoublyBlocked: action
+    require Never
+    require not Never
+  {
+    assign Status to "ran"
+  }
+
+  UnrelatedGuard: action
+    require CountNonNeg
+  {
+    assign Status to "ran"
+  }
+}

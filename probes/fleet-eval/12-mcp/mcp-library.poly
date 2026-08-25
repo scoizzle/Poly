@@ -1,0 +1,49 @@
+domain Library
+
+Patron: entity {
+  Name: Text required
+  Status: Text default("Active")
+  GoodStanding: policy { Status is "Active" }
+  loans: many Loan
+  fines: many Fine
+
+  when loans Overdue as loan {
+    create Fine { Amount: (loan Amount) Reason: "Overdue" }
+  }
+
+  CheckOut: action (book: Book) -> Loan
+    require GoodStanding
+  {
+    create in loans { book: book }
+  }
+}
+
+Book: entity {
+  Title: Text required
+  Isbn: Text unique
+  Copies: Number range(0, 1000) default(1)
+}
+
+Loan: entity {
+  book: Book
+  Amount: Number range(0, 500) default(0)
+  Active: stage {
+    MarkOverdue: action { transition to Overdue }
+  }
+  Overdue: stage {
+    Return: action {
+      assign Amount to 0
+      transition to Returned
+    }
+  }
+  Returned: stage {}
+}
+
+Fine: entity {
+  Amount: Number range(0, 500) default(0)
+  Reason: Text
+  Resolved: stage {
+    Resolve: action { transition to Paid }
+  }
+  Paid: stage {}
+}

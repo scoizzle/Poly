@@ -1,0 +1,6 @@
+domain DocDecimalLiteral
+
+Order: entity {
+  Total: Number default(0)
+  D: policy { Total >= 0.5 }
+}

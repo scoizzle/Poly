@@ -21,10 +21,12 @@ graph TB
 ## Example 2: Complex Expression ((2 + 3) * 4 - 1)
 
 ```csharp
-var lexer = new ArithmeticLexer("(2 + 3) * 4 - 1");
-var tokens = lexer.Tokenize();
-var parser = new ArithmeticParser(tokens);
-var ast = parser.Parse();
+var ast = new Subtract(
+    new Multiply(
+        new Add(new Constant(2), new Constant(3)),
+        new Constant(4)),
+    new Constant(1));
+
 var generator = new MermaidAstGenerator();
 var mermaid = generator.Generate(ast);
 ```
@@ -104,3 +106,13 @@ graph TB
   - `RL` - Right to Left
 
 - **With Analysis**: Pass an `AnalysisResult` to the constructor for enhanced output with semantic information.
+
+```csharp
+var analysis = new AnalyzerBuilder()
+    .UseTypeResolver()
+    .Build()
+    .Analyze(ast);
+
+var generator = new MermaidAstGenerator(analysis);
+var mermaid = generator.Generate(ast, direction: "LR");
+```

@@ -1,0 +1,6 @@
+domain DocIntArith
+
+Order: entity {
+  Total: Number default(0)
+  Discounted: policy { Total * 2 >= 5 }
+}

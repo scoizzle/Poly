@@ -1,0 +1,10 @@
+domain FleetF11NullAssign
+// F11: Null is universally "Compatible" in the type analyzer, so assigning null
+// to a non-nullable value-typed property passes analysis -> CS0037 in the export
+// (and a CS0472 always-false warning for `Qty is null`).
+E: entity {
+  Qty: Number
+  DueDate: Date
+  A1: action { assign Qty to null }
+  A2: action { assign DueDate to null }
+}

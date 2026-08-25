@@ -1,0 +1,61 @@
+domain DocPolicies
+
+// §8 policies — expression grammar, subject-first reads, quantifiers, count
+// Subject-first examples from the guide, authored on the nav source entity.
+Customer: entity {
+  Age: Number default(0)
+  Tier: Text
+  Status: Text
+  IsActive: Boolean
+  Suspended: Boolean
+  orders: many Order
+  notes: many Note
+  assignee: Assignee
+  certificate: Certificate
+  account: Account
+
+  IsAdult: policy { Age >= 18 }
+  CanProcess: policy { IsActive is true and Tier is "VIP" }
+  NotSuspended: policy { not Suspended }
+  Compound: policy { Age >= 18 and (Tier is "VIP" or Status is "active") }
+  // subject-first path-prefix (bool prop)
+  AssigneeActive: policy { assignee Active }
+  // subject-first path-prefix (compare)
+  AccountTier: policy { account Tier is "Gold" }
+  // presence / absence
+  HasAssignee: policy { assignee exists }
+  NoCertificate: policy { not certificate exists }
+  // multi-predicate where
+  BigAccount: policy { account where Status is "Active" and CreditLimit >= 1000 }
+  // Q3' quantifiers
+  HasPriority: policy { any orders where Priority > 5 }
+  AllHigh: policy { all orders where Total > 100 }
+  NoRush: policy { none notes where NeedsFollowUp is true }
+  OpenCount: policy { count orders where Status is "Open" > 0 }
+  TotalCount: policy { count orders > 5 }
+}
+
+Order: entity {
+  Priority: Number default(0)
+  Total: Number default(0)
+  Status: Text
+  customer: Customer
+}
+
+Note: entity {
+  NeedsFollowUp: Boolean
+}
+
+Assignee: entity {
+  Active: Boolean
+}
+
+Certificate: entity {
+  Code: Text
+}
+
+Account: entity {
+  Tier: Text
+  Status: Text
+  CreditLimit: Number
+}

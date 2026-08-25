@@ -1,0 +1,22 @@
+domain DiscoveryDateEdges
+
+Ticket: entity {
+  OpenedAt: DateTime
+  ClosedAt: DateTime
+  TargetDate: Date
+  ReferenceDate: Date
+
+  IsScheduled: policy { TargetDate >= ReferenceDate }
+  DueWithinWeek: policy { TargetDate - 7 <= ReferenceDate }
+  ClosedAfterOpen: policy { ClosedAt > OpenedAt }
+
+  Open: stage {
+    Schedule: action {
+      assign TargetDate to ReferenceDate + 14
+      assign OpenedAt to now
+    }
+    Close: action {
+      assign ClosedAt to now
+    }
+  }
+}

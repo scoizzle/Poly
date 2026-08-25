@@ -1,0 +1,82 @@
+domain Round5Loanbook
+
+// Library loan book: multi-hop path-prefix (to-one), Q3' quantifiers, Rel exists,
+// count arithmetic, store-dependent require gates.
+
+Book: entity {
+  Title: Text required
+  Author: Text
+  PageCount: Number range(0, )
+  Genre: Text
+}
+
+Patron: entity {
+  Name: Text required
+  VIP: Boolean default(false)
+  loans: many Loan
+
+  // Q3' quantifiers over the collection nav
+  HasBigLoan: policy { any loans where Total > 100 }
+  AllOpen: policy { all loans where Status is "Open" }
+  NoOverdue: policy { none loans where Status is "Overdue" }
+  OpenCount: policy { count loans where Status is "Open" > 0 }
+  Count5: policy { count loans > 5 }
+  DoubleCount: policy { count loans * 2 > 10 }
+  // quantifier body with nested to-one hop
+  AnyClassic: policy { any loans where book Title is "Classic" }
+  // or inside quantifier body, parenthesized (guide: body is an and-chain)
+  AnyBigOrClassic: policy { any loans where (Total > 100 or book Title is "Classic") }
+}
+
+Loan: entity {
+  Total: Number range(0, )
+  Status: Text default("Open")
+  book: Book
+  borrower: Patron
+
+  // to-one path-prefix (single-hop)
+  IsClassic: policy { book Title is "Classic" }
+  LongBook: policy { book PageCount > 100 }
+  // Rel exists on to-one
+  HasBook: policy { book exists }
+  NoBorrower: policy { not borrower exists }
+
+  Pending: stage {
+    markClassic: action require IsClassic {
+      assign Status to "classic"
+    }
+  }
+  Active: stage {
+    entry {
+      if (book Title is "Classic") {
+        assign Status to "active_classic"
+      } else {
+        assign Status to "active_modern"
+      }
+    }
+  }
+}
+
+ReturnReceipt: entity {
+  loan: Loan
+  note: Text
+
+  // multi-hop to-one path-prefix (to-one -> to-one -> property)
+  ClassicLoan: policy { loan book Title is "Classic" }
+  LongMultiHop: policy { loan book PageCount > 100 }
+  // single-hop Rel exists / not exists (guide forms)
+  HasLoan: policy { loan exists }
+  NoLoan: policy { not loan exists }
+
+  // path-prefix in require gate, if condition, and assign RHS
+  file: action {
+    if (loan book Title is "Classic") {
+      assign note to "filed_classic"
+    } else {
+      assign note to "filed_modern"
+    }
+  }
+  register: action require ClassicLoan {
+    assign note to loan book Title
+  }
+}

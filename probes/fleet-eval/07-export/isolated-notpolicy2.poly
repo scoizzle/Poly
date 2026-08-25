@@ -1,0 +1,16 @@
+domain FleetEvalIsolatedNotPolicy2
+
+// Non-complementary policy named `not_Paid` — exposes the `not_`-prefix
+// strip misfire: `require not_Paid` must gate on the policy's OWN body.
+
+Account: entity {
+  Amount: Number
+  Paid: policy { Amount > 0 }
+  not_Paid: policy { Amount <= 100 }
+
+  Settle: action
+    require not_Paid
+  {
+    assign Amount to 0
+  }
+}

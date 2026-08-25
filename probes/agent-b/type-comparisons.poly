@@ -1,0 +1,25 @@
+domain TypeAbuseComparisons
+
+MemberStatus: enum { Active, Suspended, Closed }
+
+Member: entity {
+  Name: Text
+  Age: Number
+  Joined: Date
+  JoinedAt: DateTime
+  IsActive: Boolean
+  Status: MemberStatus
+
+  PolicyNumEqText: policy { Age == "18" }
+  PolicyTextEqBool: policy { Name == true }
+  PolicyStatusEqNum: policy { Status == 5 }
+  PolicyTextEqNum: policy { Name == 5 }
+  PolicyDateLtNum: policy { Joined < 5 }
+  PolicyDateGtNum: policy { Joined > 2024 }
+  PolicyNumEqBool: policy { Age == true }
+  PolicyStatusIsNum: policy { Status is 5 }
+  PolicyTextIsBool: policy { Name is true }
+  PolicyNotNonBool: policy { not Age }
+  PolicyNumIsTrue: policy { Age is true }
+  PolicyStatusIsBool: policy { Status is false }
+}

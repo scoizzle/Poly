@@ -1,0 +1,11 @@
+domain OpenRangeCodegen
+
+// Open-ended range constraint with NO writers (property never assigned in any
+// action): ComputeVerifiedRanges marks it verified, so storage/transport project
+// the "verified envelope". What do the CHECK constraint and [Range] attribute
+// look like when the envelope's null bound was converted to 0?
+
+Account: entity {
+  Balance: Number range(100, )
+  Score: Number range(, 50)
+}

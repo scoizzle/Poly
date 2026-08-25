@@ -1,0 +1,91 @@
+domain FleetExprLibrary
+
+// Clean library system — every expression correctly typed.
+// Exercises: enum defaults + members, policies (arithmetic, comparison, boolean),
+// assign (incl. date arithmetic + runtime keywords), if/else, self invoke,
+// cross-entity invoke, for fan-out with binder args, create-in with enum members.
+
+MemberStatus: enum {
+  Active
+  Suspended
+  Closed
+}
+
+BookGenre: enum {
+  Fiction
+  Nonfiction
+  Reference
+}
+
+Member: entity {
+  Name: Text required
+  Status: MemberStatus default(Active)
+  Age: Number range(0, 120) default(0)
+  TotalFines: Number range(0, 1000) default(0)
+  ActiveLoans: Number default(0)
+  MaxLoans: Number default(10)
+  loans: many Loan
+
+  IsAdult: policy { Age >= 18 }
+  GoodStanding: policy { Status is not "Suspended" }
+  AtLimit: policy { ActiveLoans >= MaxLoans }
+
+  CheckOut: action (bookTitle: Text)
+    require GoodStanding
+    require not AtLimit
+  {
+    assign ActiveLoans to ActiveLoans + 1
+    create in loans { Title: bookTitle Status: "Active" }
+  }
+}
+
+Book: entity {
+  Title: Text required
+  Genre: BookGenre default(Fiction)
+  Copies: Number range(1, 100) default(1)
+  IsPopular: policy { Copies > 5 and Genre is "Fiction" }
+}
+
+Loan: entity {
+  Title: Text required
+  DueDate: Date
+  CreatedAt: DateTime default(now)
+  ReturnedAt: DateTime
+  ReferenceDate: Date default(today)
+  RenewalCount: Number default(0)
+  Status: MemberStatus
+  book: Book
+  member: Member
+
+  IsLongLoan: policy { DueDate >= ReferenceDate }
+  Active: stage {
+    Renew: action {
+      assign DueDate to DueDate + 30
+      assign RenewalCount to RenewalCount + 1
+    }
+    Return: action {
+      assign ReturnedAt to now
+      assign Status to "Closed"
+      transition to Done
+    }
+  }
+  Done: stage { }
+}
+
+Library: entity {
+  Code: Text default(guid)
+  loans: many Loan
+
+  MarkLong: action (days: Number) {
+    for loans as loan where loan IsLongLoan invoke loan.Renew()
+    for loans as loan invoke loan.Renew()
+  }
+
+  Compute: action (n: Number) -> Loan {
+    if (n > 0 and n < 100) {
+      create in loans { Title: "rush" Status: "Active" }
+    } else {
+      create in loans { Title: "normal" Status: "Closed" }
+    }
+  }
+}

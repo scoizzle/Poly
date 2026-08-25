@@ -1,0 +1,235 @@
+// =============================================================================
+// Library Checkout System — Poly DSL Domain Model
+//
+// Three concerns, cleanly separated:
+//   • Book — catalog entry (static definition, no lifecycle)
+//   • Patron — user profile with borrowing lifecycle (Active → Suspended → Closed)
+//   • Loan — transactional record carrying the check-out → overdue → returned
+//     lifecycle. The Loan connects a Book (by ISBN) to a Patron.
+//   • Fine — monetary penalty tied to a patron
+//
+// Showcases Phase 1a/1b surface:
+//   • Entities with rich constraints  |  • Actions with parameters, require
+//   • Policies with arithmetic, nav   |    gates, conditional, create in,
+//     reads, collection quantifiers   |    invoke, delete
+//   • Lifecycle stages with entry/exit | • Cross-entity subscriptions (when)
+//     effects and actions              | • Navigation properties (N1: one-to-many)
+//   • First-class enum types           |
+// =============================================================================
+
+domain Library
+uses temporal
+
+// ── Enum Types ─────────────────────────────────────────────────
+
+Genre: enum {
+  Fiction,
+  NonFiction,
+  Reference,
+}
+
+PatronStatus: enum {
+  Active,
+  Suspended,
+  Closed,
+}
+
+FineStatus: enum {
+  Unpaid,
+  Resolved,
+}
+
+PremiumTier: enum {
+  Silver,
+  Gold,
+  Platinum,
+}
+
+
+// =============================================================================
+// Book — catalog entry. A static definition with no lifecycle or actions.
+// Books are identified by ISBN and represent the "what" of a library.
+// =============================================================================
+
+Book: entity {
+  Title: Text required
+  Author: Text required
+  ISBN: Text unique length(10, 17)
+  Pages: Number range(1, 10000)
+  Genre: Genre
+}
+
+
+// =============================================================================
+// Patron — library user with borrowing privileges and account lifecycle.
+// =============================================================================
+
+Patron: entity {
+  Name: Text required
+  Email: Text unique pattern("^[^@]+@[^@]+$")
+  MemberSince: Date default(Today)
+  Status: PatronStatus default(Active)
+  MaxItems: Number range(0, 20) required
+  CurrentBorrowCount: Number
+  OutstandingFines: Number
+
+  // ── Navigation Properties ──────────────────────────────────────────────────
+  loans: many Loan
+  fines: many Fine
+
+  // ── Policies ───────────────────────────────────────────────────────────────
+  GoodStanding: policy { Status is "Active" }
+  AtLimit: policy { CurrentBorrowCount >= MaxItems }
+  HasFines: policy { OutstandingFines > 0 }
+  HasOverdueLoans: policy { any loans where Status is "Overdue" }
+  AccountInGoodStanding: policy {
+    Status is "Active" and OutstandingFines == 0
+  }
+
+  // ── Active — can borrow ────────────────────────────────────────────────────
+  Active: stage {
+    CheckOut: action (book: Book) -> Loan
+      require GoodStanding
+      require not AtLimit
+      require not HasFines
+    {
+      // create in loans sets borrower: this implicitly (Principle 0.3).
+      assign CurrentBorrowCount to CurrentBorrowCount + 1
+      create in loans { book: book }
+    }
+
+    Suspend: action {
+      assign Status to "Suspended"
+      assign CurrentBorrowCount to 0
+      transition to Suspended
+    }
+
+    CloseAccount: action { transition to Closed }
+  }
+
+  // Entity-level subscription — fires regardless of Patron's current stage
+  when loans Overdue {
+    create Fine { Amount: 5 Reason: "Overdue item" }
+    assign OutstandingFines to OutstandingFines + 5
+  }
+
+  when loans Returned {
+    assign CurrentBorrowCount to CurrentBorrowCount - 1
+  }
+
+  when fines Resolved {
+    assign OutstandingFines to OutstandingFines - 5
+  }
+
+  // ── Suspended — borrowing frozen ───────────────────────────────────────────
+  Suspended: stage {
+    entry { assign MaxItems to 0 }
+    exit  { assign MaxItems to 5 }
+    Reinstate: action
+      require not HasOverdueLoans
+    {
+      assign Status to "Active"
+      transition to Active
+    }
+  }
+
+  // ── Closed — account terminated ────────────────────────────────────────────
+  Closed: stage { }
+}
+
+
+// =============================================================================
+// Loan — a single borrowing event. Represents one book checked out by one patron.
+// This is where the real lifecycle lives: Active → Overdue → Returned.
+// =============================================================================
+
+Loan: entity {
+  Status: Text
+  CheckedOutAt: DateTime
+  DueDate: DateTime
+  ReturnedAt: DateTime
+  TimesRenewed: Number
+
+  // Connected through relationships, not strings (Principle 0.1).
+  book: Book
+  // Set implicitly by create in loans (Principle 0.3).
+  borrower: Patron
+
+  // Transactional record owns the lifecycle (Principle 0.2).
+
+  // ── Active — currently borrowed and not yet overdue ────────────────────────
+  Active: stage {
+    entry { assign CheckedOutAt to Now }
+    Renew: action {
+      assign DueDate to CheckedOutAt + 14 Days
+      assign TimesRenewed to TimesRenewed + 1
+    }
+    Return: action {
+      assign ReturnedAt to Now
+      transition to Returned
+    }
+  }
+
+  // ── Overdue — beyond due date; fines applied at patron level via subscription ──
+  Overdue: stage {
+    entry { assign CheckedOutAt to Now }
+  }
+
+  // ── Returned — resolved ─────────────────────────────────────────────────────
+  Returned: stage { }
+}
+
+
+// =============================================================================
+// Fine — monetary penalty for overdue, lost, or damaged items
+// =============================================================================
+
+Fine: entity {
+  Amount: Number required
+  Reason: Text
+  DateIssued: DateTime default(Now)
+  Paid: Boolean
+
+  // The patron who owes this fine
+  patron: Patron
+
+  // ── Unpaid — penalty is active ─────────────────────────────────────────────
+  Unpaid: stage {
+    Pay: action {
+      if (Amount <= 0) {
+        assign Paid to true
+      } else {
+        assign Paid to true
+      }
+      transition to Resolved
+    }
+    Waive: action {
+      assign Amount to 0
+      assign Paid to true
+      transition to Resolved
+    }
+  }
+
+  // ── Resolved — paid or waived ──────────────────────────────────────────────
+  Resolved: stage {
+    entry { assign Paid to true }
+  }
+}
+
+
+// =============================================================================
+// PremiumPatron — independent loyalty profile, not a subtype of Patron
+// =============================================================================
+
+PremiumPatron: entity {
+  Name: Text required
+  Email: Text unique pattern("^[^@]+@[^@]+$")
+  RewardPoints: Number
+  Tier: PremiumTier default(Silver)
+  PriorityAccess: Boolean
+
+  IsLoyal: policy { RewardPoints >= 100 }
+  HasPriority: policy { PriorityAccess is true }
+  UnlimitedItems: policy { Tier is "Platinum" or PriorityAccess is true }
+}
+

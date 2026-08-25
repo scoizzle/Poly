@@ -1,0 +1,27 @@
+domain PolicyGate
+
+// A policy authored purely as a reusable fan-out PREDICATE (where line IsLarge)
+// or comparison helper becomes an always-on invariant for EVERY action on the
+// entity. Two mutually-exclusive predicates on one entity -> every action is
+// "unsatisfiable". Is that intended, or a modeling trap?
+
+OrderLine: entity {
+  Qty: Number range(0, 100)
+  IsLarge: policy { Qty > 50 }
+  IsSmall: policy { Qty <= 40 }
+
+  Mark: action (delta: Number) {
+    assign Qty to Qty + delta
+  }
+
+  Reset: action {
+    assign Qty to 0
+  }
+}
+
+Order: entity {
+  lines: many OrderLine
+  Sweep: action {
+    for lines as line where line IsLarge invoke line.Mark(delta: 5)
+  }
+}

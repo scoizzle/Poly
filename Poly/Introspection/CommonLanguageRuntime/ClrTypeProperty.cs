@@ -7,16 +7,19 @@ namespace Poly.Introspection.CommonLanguageRuntime;
 /// indexer properties (with parameters). Instances are immutable and safe for concurrent reads.
 /// </summary>
 [DebuggerDisplay("{MemberType} {DeclaringType}.{Name}")]
-internal sealed class ClrTypeProperty : ClrTypeMember, ITypeProperty {
+internal sealed class ClrTypeProperty : ClrPropertyMember {
     private readonly Lazy<ClrTypeDefinition> _memberType;
     private readonly ClrTypeDefinition _declaringType;
     private readonly PropertyInfo _propertyInfo;
     private readonly IEnumerable<ClrParameter>? _parameters;
     private readonly string _name;
-    private readonly bool _isStatic;
+    private readonly LifetimeModifier _lifetimeModifier;
+    private readonly AccessModifier _accessModifier;
 
-    public ClrTypeProperty(Lazy<ClrTypeDefinition> memberType, ClrTypeDefinition declaringType, IEnumerable<ClrParameter>? parameters, PropertyInfo propertyInfo)
-    {
+    private readonly bool _isReadOnly;
+    private readonly bool _hasInitSetter;
+
+    public ClrTypeProperty(Lazy<ClrTypeDefinition> memberType, ClrTypeDefinition declaringType, IEnumerable<ClrParameter>? parameters, PropertyInfo propertyInfo) {
         ArgumentNullException.ThrowIfNull(memberType);
         ArgumentNullException.ThrowIfNull(declaringType);
         ArgumentNullException.ThrowIfNull(propertyInfo);
@@ -26,8 +29,17 @@ internal sealed class ClrTypeProperty : ClrTypeMember, ITypeProperty {
         _parameters = parameters;
         _propertyInfo = propertyInfo;
         _name = propertyInfo.Name;
-        _isStatic = (propertyInfo.GetGetMethod(nonPublic: true)?.IsStatic ?? false) ||
-                    (propertyInfo.GetSetMethod(nonPublic: true)?.IsStatic ?? false);
+        _lifetimeModifier = propertyInfo.GetGetMethod(nonPublic: true)?.IsStatic == true ||
+                            propertyInfo.GetSetMethod(nonPublic: true)?.IsStatic == true
+            ? LifetimeModifier.Static
+            : LifetimeModifier.Instance;
+        _accessModifier = ClrAccessModifierResolver.Resolve(propertyInfo);
+
+        var setMethod = propertyInfo.GetSetMethod(nonPublic: true);
+        _isReadOnly = setMethod is null;
+        _hasInitSetter = setMethod?.ReturnParameter
+            .GetRequiredCustomModifiers()
+            .Contains(typeof(IsExternalInit)) == true;
     }
 
     /// <summary>
@@ -43,7 +55,7 @@ internal sealed class ClrTypeProperty : ClrTypeMember, ITypeProperty {
     /// <summary>
     /// Gets the index parameters for an indexer property, or null for regular properties.
     /// </summary>
-    public override IEnumerable<ClrParameter>? Parameters => _parameters;
+    public override IEnumerable<ClrParameter> Parameters => _parameters ?? [];
 
     /// <summary>
     /// Gets the property name.
@@ -55,10 +67,59 @@ internal sealed class ClrTypeProperty : ClrTypeMember, ITypeProperty {
     /// </summary>
     public PropertyInfo PropertyInfo => _propertyInfo;
 
+
+    /// <summary>
+    /// Gets the property visibility.
+    /// </summary>
+    public override AccessModifier AccessModifier => _accessModifier;
+
     /// <summary>
     /// Gets whether this property's getter or setter is static.
     /// </summary>
-    public override bool IsStatic => _isStatic;
+    public override LifetimeModifier LifetimeModifier => _lifetimeModifier;
+
+    public override Mutability Mutability {
+        get {
+            var m = Mutability.Mutable;
+            if (_hasInitSetter) m |= Mutability.ReadOnlyAfterInit;
+            return m;
+        }
+    }
+
+    /// <summary>
+    /// Returns <c>true</c> when the property has a readable getter.
+    /// </summary>
+    public new bool CanRead => base.CanRead;
+
+    /// <summary>
+    /// Returns <c>true</c> when the property has a writable setter (not init-only).
+    /// </summary>
+    public new bool CanWrite => !_isReadOnly && !_hasInitSetter;
+
+    /// <summary>
+    /// Returns <c>true</c> when the property has an init-only setter.
+    /// </summary>
+    public new bool CanInitialize => _hasInitSetter;
 
     public override string ToString() => $"{MemberTypeDefinition} {DeclaringTypeDefinition}.{Name}{(_parameters is null ? string.Empty : $"[{string.Join(", ", _parameters)}]")}";
+
+    public override Expression? EmitRead(Expression? instance) {
+        if (IsStatic || instance is not null) {
+            var typedInst = IsStatic ? null : System.Linq.Expressions.Expression.Convert(instance!, _propertyInfo.DeclaringType!);
+            var access = System.Linq.Expressions.Expression.Property(typedInst, _propertyInfo);
+            return _propertyInfo.PropertyType.IsValueType
+                ? System.Linq.Expressions.Expression.Convert(access, typeof(object))
+                : access;
+        }
+        return null;
+    }
+
+    public override Expression? EmitWrite(Expression? instance, Expression value) {
+        if (_isReadOnly) return null;
+        var typedInst = IsStatic ? null : System.Linq.Expressions.Expression.Convert(instance!, _propertyInfo.DeclaringType!);
+        var val = System.Linq.Expressions.Expression.Convert(value, _propertyInfo.PropertyType);
+        var assign = System.Linq.Expressions.Expression.Assign(
+            System.Linq.Expressions.Expression.Property(typedInst, _propertyInfo), val);
+        return IsStatic ? assign : System.Linq.Expressions.Expression.Block(assign, instance!);
+    }
 }

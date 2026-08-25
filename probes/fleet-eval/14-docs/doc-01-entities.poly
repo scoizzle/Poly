@@ -1,0 +1,28 @@
+domain DocEntities
+
+// §2 enum types — bare identifiers, trailing comma allowed
+Color: enum {
+  Red,
+  Green,
+  Blue,
+}
+
+MemberStatus: enum {
+  Active
+  Suspended
+  Closed
+}
+
+// §3 + §11 constraints + annotations + enum-typed property with default
+Item: entity table("INVENTORY") {
+  Name: Text required
+  Email: Text unique
+  Age: Number range(0, 150)
+  Qty: Number range(0, )
+  Code: Text length(2, 10)
+  Zip: Text pattern("^\\d{5}$")
+  Status: MemberStatus default(Active)
+  FavColor: Color default(Red)
+  ProdCode: Text column("CODE", "VARCHAR2(20)")
+  ProdName: Text column("PROD_NAME") required
+}

@@ -1,0 +1,9 @@
+domain DiscoveryDateRejects
+
+A: entity {
+  StartDate: Date
+  EndDate: Date
+  OpenedAt: DateTime
+  BadDefault: Date default(now)
+  BadGuidDefault: Number default(guid)
+}

@@ -1,0 +1,12 @@
+domain DegenerateActionCollide2
+
+Order: entity {
+  Status: Text
+
+  Submit: action { assign Status to "entity" }
+
+  Draft: stage {
+    Submit: action { assign Status to "draft" }
+  }
+  Active: stage { }
+}

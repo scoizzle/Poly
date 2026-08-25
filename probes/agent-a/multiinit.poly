@@ -1,0 +1,10 @@
+domain DiscoveryMultiInit
+
+AuditEvent: entity {
+  OccurredAt: DateTime
+  RecordedOn: Date
+  Label: Text
+  Log: action {
+    create AuditEvent { OccurredAt: now Label: "x" }
+  }
+}

@@ -1,17 +1,12 @@
 using Poly.Tests.TestHelpers;
-using System.Linq.Expressions;
 
-using Poly.Interpretation;
 using Expr = System.Linq.Expressions.Expression;
-using Poly.Interpretation.AbstractSyntaxTree;
 
 namespace Poly.Tests.Interpretation;
 
-public class TypeCastTests
-{
+public class TypeCastTests {
     [Test]
-    public async Task TypeCast_IntToDouble_ReturnsDouble()
-    {
+    public async Task TypeCast_IntToDouble_ReturnsDouble() {
         // Arrange
         var node = new TypeCast(Wrap(42), TypeReference.To<double>());
 
@@ -25,8 +20,7 @@ public class TypeCastTests
     }
 
     [Test]
-    public async Task TypeCast_DoubleToInt_ReturnsInt()
-    {
+    public async Task TypeCast_DoubleToInt_ReturnsInt() {
         // Arrange
         var node = new TypeCast(Wrap(3.14), TypeReference.To<int>());
 
@@ -40,8 +34,7 @@ public class TypeCastTests
     }
 
     [Test]
-    public async Task TypeCast_LongToInt_ReturnsInt()
-    {
+    public async Task TypeCast_LongToInt_ReturnsInt() {
         // Arrange
         var node = new TypeCast(Wrap(9999L), TypeReference.To<int>());
 
@@ -55,8 +48,7 @@ public class TypeCastTests
     }
 
     [Test]
-    public async Task TypeCast_WithParameter_EvaluatesCorrectly()
-    {
+    public async Task TypeCast_WithParameter_EvaluatesCorrectly() {
         // Arrange
         var param = new Parameter("value", TypeReference.To<int>());
         var node = new TypeCast(param, TypeReference.To<double>());
@@ -70,8 +62,7 @@ public class TypeCastTests
     }
 
     [Test]
-    public async Task TypeCast_StringToObject_WorksCorrectly()
-    {
+    public async Task TypeCast_StringToObject_WorksCorrectly() {
         // Arrange
         var node = new TypeCast(Wrap("hello"), TypeReference.To<object>());
 
@@ -85,8 +76,7 @@ public class TypeCastTests
     }
 
     [Test]
-    public async Task TypeCast_ObjectToString_WorksCorrectly()
-    {
+    public async Task TypeCast_ObjectToString_WorksCorrectly() {
         // Arrange
         var obj = (object)"world";
         var node = new TypeCast(Wrap(obj), TypeReference.To<string>());
@@ -101,8 +91,7 @@ public class TypeCastTests
     }
 
     [Test]
-    public async Task TypeCast_NullableToNonNullable_WorksCorrectly()
-    {
+    public async Task TypeCast_NullableToNonNullable_WorksCorrectly() {
         // Arrange
         var node = new TypeCast(Wrap(42 as int?), TypeReference.To<int>());
 
@@ -116,8 +105,7 @@ public class TypeCastTests
     }
 
     [Test]
-    public async Task TypeCast_NonNullableToNullable_WorksCorrectly()
-    {
+    public async Task TypeCast_NonNullableToNullable_WorksCorrectly() {
         // Arrange
         var node = new TypeCast(Wrap(42), TypeReference.To<int?>());
 
@@ -131,8 +119,7 @@ public class TypeCastTests
     }
 
     [Test]
-    public async Task TypeCast_GetTypeDefinition_ReturnsTargetType()
-    {
+    public async Task TypeCast_GetTypeDefinition_ReturnsTargetType() {
         // Arrange
         var node = new TypeCast(Wrap(42), TypeReference.To<double>());
 
@@ -144,8 +131,7 @@ public class TypeCastTests
     }
 
     [Test]
-    public async Task TypeCast_ToString_ReturnsExpectedFormat()
-    {
+    public async Task TypeCast_ToString_ReturnsExpectedFormat() {
         // Arrange
         var node = new TypeCast(Wrap(42), TypeReference.To<double>());
 
@@ -157,9 +143,97 @@ public class TypeCastTests
     }
 
     [Test]
-    public async Task TypeCast_WithNullArguments_ThrowsArgumentNullException()
-    {
+    public async Task TypeCast_WithNullArguments_ThrowsArgumentNullException() {
         // Act & Assert
         await Assert.That(() => new TypeCast(null!, TypeReference.To<double>())).Throws<ArgumentNullException>();
+    }
+
+    [Test]
+    public async Task TypeIs_ObjectAgainstString_ReturnsTrue() {
+        // Arrange
+        var value = Wrap((object)"hello");
+        var node = new TypeIs(value, TypeReference.To<string>());
+
+        // Act
+        var expr = node.BuildExpression();
+        var compiled = Expr.Lambda<Func<bool>>(expr).Compile();
+        var result = compiled();
+
+        // Assert
+        await Assert.That(result).IsTrue();
+    }
+
+    [Test]
+    public async Task TypeIs_ObjectAgainstInt_ReturnsFalse() {
+        // Arrange
+        var value = Wrap((object)"hello");
+        var node = new TypeIs(value, TypeReference.To<int>());
+
+        // Act
+        var expr = node.BuildExpression();
+        var compiled = Expr.Lambda<Func<bool>>(expr).Compile();
+        var result = compiled();
+
+        // Assert
+        await Assert.That(result).IsFalse();
+    }
+
+    [Test]
+    public async Task TypeAs_ObjectToString_ReturnsStringValue() {
+        // Arrange
+        var value = Wrap((object)"hello");
+        var node = new TypeAs(value, TypeReference.To<string>());
+
+        // Act
+        var expr = node.BuildExpression();
+        var compiled = Expr.Lambda<Func<string?>>(expr).Compile();
+        var result = compiled();
+
+        // Assert
+        await Assert.That(result).IsEqualTo("hello");
+    }
+
+    [Test]
+    public async Task TypeAs_ObjectToString_WithIncompatibleValue_ReturnsNull() {
+        // Arrange
+        var value = Wrap((object)42);
+        var node = new TypeAs(value, TypeReference.To<string>());
+
+        // Act
+        var expr = node.BuildExpression();
+        var compiled = Expr.Lambda<Func<string?>>(expr).Compile();
+        var result = compiled();
+
+        // Assert
+        await Assert.That(result).IsNull();
+    }
+
+    [Test]
+    public async Task TypeAs_ObjectToNonNullableValueType_ReturnsNullableValue() {
+        // Arrange
+        var value = Wrap((object)42);
+        var node = new TypeAs(value, TypeReference.To<int>());
+
+        // Act
+        var expr = node.BuildExpression();
+        var compiled = Expr.Lambda<Func<int?>>(expr).Compile();
+        var result = compiled();
+
+        // Assert
+        await Assert.That(result).IsEqualTo(42);
+    }
+
+    [Test]
+    public async Task TypeOperations_Extensions_IsAndAs_CreateExpectedNodes() {
+        // Arrange
+        var operand = Wrap((object)"hello");
+
+        // Act
+        var isNode = operand.Is(TypeReference.To<string>());
+        var asNode = operand.As(TypeReference.To<string>());
+
+        // Assert
+        await Assert.That(isNode.TargetTypeReference).IsTypeOf<TypeReference>();
+        await Assert.That(asNode.TargetTypeReference).IsTypeOf<TypeReference>();
     }
 }

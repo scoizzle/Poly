@@ -1,0 +1,12 @@
+domain FleetF7DecimalLiteral
+// F7: decimal literals lex as Number tokens but DslExpressionParser falls back to
+// Literal("0.9") (string) when long.TryParse fails — so decimal arithmetic and
+// decimal comparisons are REJECTED at analysis as Text, contradicting the guide's
+// shipped `Total * 0.9` example. The DSL effectively supports integer literals only.
+E: entity {
+  Total: Number default(0)
+  Fine: Number default(0)
+  Apply: action { assign Total to Total * 0.9 }
+  Add: action { assign Fine to Fine + 0.5 }
+  Big: policy { Total > 0.5 }
+}

@@ -1,0 +1,13 @@
+domain Warehouse
+
+Sku: enum { A1, B2, C3 }
+
+Item: entity table("INVENTORY_ITEMS") {
+  Sku: Sku
+  Name: Text required
+  QtyOnHand: Number range(0, )
+  MaxAllowed: Number range(0, 100000)
+  ReceivedAt: DateTime
+  NextCountDue: Date
+  active: Boolean
+}

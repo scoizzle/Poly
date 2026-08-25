@@ -1,0 +1,19 @@
+domain S03NestedPeerPath
+Order: entity {
+  Code: Text
+  items: many Item
+  Draft: stage {}
+  Active: stage {}
+}
+Item: entity {
+  Code: Text
+}
+NestedPeer: entity {
+  Status: Text default("")
+  orders: many Order
+  Draft: stage {
+    when orders Active as order {
+      assign Status to order item Code
+    }
+  }
+}

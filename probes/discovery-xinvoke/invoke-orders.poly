@@ -1,0 +1,49 @@
+domain DiscoveryInvoke
+
+Order: entity {
+  Total: Number default(0)
+  PaidAmount: Number default(0)
+  invoice: Invoice
+  items: many Item
+
+  Open: stage {
+    Pay: action (amount: Number) {
+      assign Total to amount
+      invoke invoice.Settle(amount: amount)
+      transition to Paid
+    }
+    Ship: action {
+      for items as item invoke item.Mark()
+      for items as item where item IsUrgent invoke item.MarkUrgent(level: 5)
+      transition to Shipped
+    }
+    Cancel: action {
+      transition to Cancelled
+    }
+  }
+  Paid: stage { }
+  Shipped: stage { }
+  Cancelled: stage { }
+}
+
+Invoice: entity {
+  Amount: Number default(0)
+
+  Settle: action (amount: Number) {
+    assign Amount to amount
+  }
+}
+
+Item: entity {
+  Marked: Number default(0)
+  Urgent: Number default(0)
+  IsUrgent: policy { Urgent > 0 }
+
+  Mark: action {
+    assign Marked to Marked + 1
+  }
+
+  MarkUrgent: action (level: Number) {
+    assign Urgent to level
+  }
+}

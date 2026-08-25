@@ -1,0 +1,35 @@
+domain DocGuideExamples
+
+// §0.4 exact example — subscription creating an entity (semicolon-separated init)
+Patron: entity {
+  fines: many Fine
+
+  when loans Overdue {
+    create Fine { Amount: 5; Reason: "Overdue" }
+  }
+}
+
+Loan: entity {
+  borrower: Patron
+  Active: stage { }
+  Overdue: stage { }
+  Returned: stage { }
+}
+
+Fine: entity {
+  Amount: Number default(0)
+  Reason: Text
+}
+
+// §6 self-invoke with args (all params required)
+Order: entity {
+  Status: Text
+  Validate: action (status: Text) {
+    assign Status to status
+  }
+  Submit: action {
+    invoke Validate(status: "ready")
+    transition to Active
+  }
+  Active: stage { }
+}

@@ -1,0 +1,11 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "poly-local": {
+      "type": "local",
+      // Or ["bun", "x", "my-mcp-command"]
+      "command": ["dotnet", "run", "--project", "./Poly.Mcp/Poly.Mcp.csproj"],
+      "enabled": true
+    }
+  }
+}

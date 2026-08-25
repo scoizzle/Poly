@@ -1,0 +1,29 @@
+domain FleetEvalInventory
+
+Color: enum {
+  Red
+  Green
+  Blue
+}
+
+Item: entity {
+  Sku: Text required length(3, 10)
+  Qty: Number range(0, 100)
+  Label: Text default("unset")
+  Color: Color default(Red)
+  Category: Text default("gen")
+  CreatedOn: Date default(now)
+  UpdatedAt: DateTime default(today)
+  ExternalId: Text default(guid)
+  Active: Boolean default(true)
+
+  Draft: stage {
+    SetQty: action (qty: Number) {
+      assign Qty to qty
+    }
+    BadRange: action (qty: Number) {
+      assign Qty to qty + 200
+    }
+  }
+  Done: stage { }
+}

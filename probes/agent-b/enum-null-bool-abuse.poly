@@ -1,0 +1,30 @@
+domain TypeAbuseEnumNullBool
+
+Color: enum { Red, Green, Blue }
+
+Thing: entity {
+  Name: Text
+  Count: Number
+  Color: Color
+  Flag: Boolean
+  EnumDefaultOnText: Text default(Red)
+  EnumDefaultOnNum: Number default(Green)
+  EnumDefaultOnBool: Boolean default(Blue)
+  BoolDefaultOnEnum: Color default(true)
+  NumDefaultOnEnum: Color default(5)
+  StrDefaultOnEnum: Color default("hello")
+  NullCompare: policy { Name == null }
+  NullIsCompare: policy { Name is null }
+  NotNullCompare: policy { Count != null }
+  FlagIsTrue: policy { Flag is true }
+  CountIsTrue: policy { Count is true }
+
+  Draft: stage {
+    entry { assign Color to "NotAMember" }
+  }
+  SetEnumNonMember: action { assign Color to "Purple" }
+  SetEnumBareNonMember: action { assign Color to Purple }
+  SetEnumFromNum: action { assign Color to 7 }
+  SetBoolToStr: action { assign Flag to "yes" }
+  SetNumToBool: action { assign Count to true }
+}

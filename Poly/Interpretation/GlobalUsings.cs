@@ -1,3 +1,2 @@
-global using Poly.Interpretation.AbstractSyntaxTree;
-global using Poly.Interpretation.AbstractSyntaxTree.TypeDefinitions;
+global using Poly.Ast.Nodes;
 global using Poly.Introspection;

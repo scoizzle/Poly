@@ -1,0 +1,71 @@
+domain MilestoneQuantifiers
+
+// Real system: a project with tasks; a milestone releases when ALL tasks are
+// Done (entity-level always-active), blocks when ANY task is Blocked (stage-scoped),
+// and tracks each task completion (Each). Stresses entity-level vs stage-scoped
+// placement parity and dispatch-plan parity.
+
+Task: entity {
+  Code: Text
+  Priority: Number default(0)
+
+  Todo: stage {
+    Begin: action {
+      transition to Doing
+    }
+  }
+  Doing: stage {
+    Block: action {
+      transition to Blocked
+    }
+    Finish: action {
+      transition to Done
+    }
+  }
+  Blocked: stage {
+    Unblock: action {
+      transition to Doing
+    }
+  }
+  Done: stage {
+  }
+}
+
+Project: entity {
+  Name: Text
+  Status: Text default("starting")
+  LastTaskCode: Text default("")
+  BlockedByCode: Text default("")
+  DoneCount: Number default(0)
+  tasks: many Task
+
+  Planning: stage {
+    AddTask: action (code: Text) {
+      create in tasks { Code: code }
+    }
+    Begin: action {
+      transition to Building
+    }
+  }
+  Building: stage {
+    // Stage-scoped any + peer binder: fires while subscriber is in Building.
+    when any tasks Blocked as task {
+      assign BlockedByCode to task Code
+    }
+  }
+  Released: stage {
+  }
+
+  // Entity-level always-active all: fires only when EVERY linked task is Done.
+  when all tasks Done {
+    assign Status to "allDone"
+  }
+  // Entity-level Each (notification-only).
+  when tasks Done {
+    assign DoneCount to DoneCount + 1
+  }
+  // Entity-level peer-dependent Each with multi-stage list.
+  when tasks Done, Blocked as task {
+    assign LastTaskCode to task Code
+  }
+}

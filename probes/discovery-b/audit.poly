@@ -1,0 +1,25 @@
+domain DiscoveryAudit
+
+Severity: enum {
+  Info,
+  Warn,
+  Critical
+}
+
+AuditEvent: entity {
+  OccurredAt: DateTime default(now)
+  RecordedOn: Date default(today)
+  ReferenceId: Text default(guid)
+  Label: Text default("init")
+  Count: Number default(0)
+  Severity: Severity default(Info)
+  BadDateNow: Date default(now)
+  BadDateTimeToday: DateTime default(today)
+  BadDateLiteral: Date default("2024-01-01")
+  BadDateNumber: Date default(0)
+  BadGuidOnDate: Date default(guid)
+  Stamp: action {
+    assign OccurredAt to now
+    assign RecordedOn to today
+  }
+}

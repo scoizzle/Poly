@@ -1,0 +1,13 @@
+domain DocReverse2
+
+// §6: reverse-side invoke — caller (Order) is TARGET of 'orders', not source
+Customer: entity {
+  orders: many Order
+  Notify: action { }
+}
+
+Order: entity {
+  Go: action {
+    invoke orders.Notify()
+  }
+}

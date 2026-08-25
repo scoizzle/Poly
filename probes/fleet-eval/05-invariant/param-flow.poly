@@ -1,0 +1,32 @@
+domain ParamFlow
+
+// Focused probe on the verified/declared envelope distinction: writers whose value
+// range analysis cannot compute (unconstrained action param, division) versus
+// provably-bounded writers. Question: does an UNKNOWN envelope mark a property
+// "verified" for storage CHECK / transport [Range] derivation?
+
+Bin: entity {
+  Qty: Number range(0, 1000)
+  Balance: Number range(0, 5000)
+  Rate: Number range(1, 10)
+
+  Adjust: action (delta: Number) {
+    // unconstrained param -> postcondition envelope UNKNOWN
+    assign Qty to delta
+  }
+
+  Halve: action {
+    // division -> Eval has no Divide case -> envelope UNKNOWN
+    assign Balance to Balance / 2
+  }
+
+  Boost: action (factor: Number) {
+    // multiplication of bounded range -> envelope computable ([0, 1000] * [1, ?])
+    assign Qty to Qty * factor
+  }
+
+  Clamp: action {
+    // provably in-range: literal
+    assign Qty to 42
+  }
+}

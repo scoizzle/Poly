@@ -1,0 +1,10 @@
+ARG SOURCE_FILE=sieve.rs
+FROM rust:1-slim-bookworm AS build
+ARG SOURCE_FILE
+WORKDIR /src
+COPY $SOURCE_FILE source.rs
+RUN rustc -O -C target-cpu=native -o /app source.rs
+
+FROM debian:bookworm-slim
+COPY --from=build /app /
+ENTRYPOINT ["/app"]

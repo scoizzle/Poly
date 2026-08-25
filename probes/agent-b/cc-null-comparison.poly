@@ -1,0 +1,8 @@
+domain NullComparisonDivergence
+
+T: entity {
+  Name: Text
+  IsNull: policy { Name == null }
+  IsNullIs: policy { Name is null }
+  IsNotNull: policy { Name != null }
+}

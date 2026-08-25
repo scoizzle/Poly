@@ -1,0 +1,13 @@
+domain DocCreateInToOnePlain
+
+Order: entity {
+  invoice: Invoice
+  Finalize: action {
+    create in invoice { Amount: 100 }
+  }
+  Total: Number default(0)
+}
+
+Invoice: entity {
+  Amount: Number default(0)
+}

@@ -1,5 +1,3 @@
-using Poly.Interpretation.AbstractSyntaxTree;
-using Poly.Interpretation.AbstractSyntaxTree.Arithmetic;
 using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.Interpretation;
@@ -7,11 +5,9 @@ namespace Poly.Tests.Interpretation;
 /// <summary>
 /// Unit tests for Parameter AST nodes and their LINQ expression compilation.
 /// </summary>
-public class ParameterNodeTests
-{
+public class ParameterNodeTests {
     [Test]
-    public async Task Parameter_IntType_CompilesAndExecutesWithValue()
-    {
+    public async Task Parameter_IntType_CompilesAndExecutesWithValue() {
         // Arrange
         var param = new Parameter("x", TypeReference.To<int>());
 
@@ -24,8 +20,7 @@ public class ParameterNodeTests
     }
 
     [Test]
-    public async Task Parameter_StringType_CompilesAndExecutesWithValue()
-    {
+    public async Task Parameter_StringType_CompilesAndExecutesWithValue() {
         // Arrange
         var param = new Parameter("name", TypeReference.To<string>());
 
@@ -38,8 +33,7 @@ public class ParameterNodeTests
     }
 
     [Test]
-    public async Task Parameter_DoubleType_CompilesAndExecutesWithValue()
-    {
+    public async Task Parameter_DoubleType_CompilesAndExecutesWithValue() {
         // Arrange
         var param = new Parameter("value", TypeReference.To<double>());
 
@@ -52,8 +46,7 @@ public class ParameterNodeTests
     }
 
     [Test]
-    public async Task Parameter_BoolType_CompilesAndExecutesWithValue()
-    {
+    public async Task Parameter_BoolType_CompilesAndExecutesWithValue() {
         // Arrange
         var param = new Parameter("flag", TypeReference.To<bool>());
 
@@ -66,8 +59,7 @@ public class ParameterNodeTests
     }
 
     [Test]
-    public async Task Parameter_MultipleParameters_CompilesAndExecutes()
-    {
+    public async Task Parameter_MultipleParameters_CompilesAndExecutes() {
         // Arrange
         var x = new Parameter("x", TypeReference.To<int>());
         var y = new Parameter("y", TypeReference.To<int>());
@@ -81,8 +73,7 @@ public class ParameterNodeTests
     }
 
     [Test]
-    public async Task Parameter_WithoutTypeHint_CompilesAsObject()
-    {
+    public async Task Parameter_WithoutTypeHint_CompilesAsObject() {
         // Arrange
         var param = new Parameter("value");
 
@@ -95,8 +86,7 @@ public class ParameterNodeTests
     }
 
     [Test]
-    public async Task Parameter_SameParameterTwice_ReturnsSameExpression()
-    {
+    public async Task Parameter_SameParameterTwice_ReturnsSameExpression() {
         // Arrange
         var param = new Parameter("x", TypeReference.To<int>());
         var node = new Add(param, param);

@@ -1,0 +1,7 @@
+domain DegenerateNavDup
+
+Host: entity {
+  child: Child
+  child: Child
+}
+Child: entity { }

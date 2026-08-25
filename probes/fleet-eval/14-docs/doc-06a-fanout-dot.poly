@@ -1,0 +1,18 @@
+domain DocFanoutDot
+
+Line: entity {
+  Qty: Number default(0)
+  IsEligible: policy { Qty > 0 }
+  Mark: action (amount: Number) {
+    assign Qty to amount
+  }
+}
+
+Order: entity {
+  items: many Line
+
+  Go: action {
+    // §6 guide documents: invoke item.Mark(amount: item.Qty)  [dotted binder arg]
+    for items as item where item IsEligible invoke item.Mark(amount: item.Qty)
+  }
+}

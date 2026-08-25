@@ -1,0 +1,95 @@
+domain DiscoveryFulfillment
+
+Customer: entity {
+  Name: Text required
+  vip: Boolean default(false)
+  totalSpend: Number default(0)
+  loyaltyTier: Text default("Bronze")
+
+  // Stage-scoped subscription: only while the customer is in Active stage
+  Active: stage {
+    entry {
+      assign Status to "customer_active"
+    }
+    when orders Delivered {
+      assign totalSpend to totalSpend + 10
+    }
+    // Stage-scoped with peer binder
+    when orders Shipped as ord {
+      assign lastShipCode to ord Code
+    }
+    placeOrder: action (total: Number) {
+      create in orders { Total: total }
+    }
+  }
+
+  // Entity-level subscription (always active)
+  when orders Cancelled {
+    assign cancellations to cancellations + 1
+  }
+
+  // entity-level policy
+  IsVip: policy { vip is true }
+  HasSpend: policy { totalSpend >= 100 }
+
+  status: Text default("none")
+  lastShipCode: Text
+  cancellations: Number default(0)
+  orders: many Order
+  Status: Text
+}
+
+Order: entity {
+  Total: Number range(0, )
+  Code: Text
+  customer: Customer
+
+  Pending: stage {
+    entry {
+      assign Status to "pending"
+    }
+    submit: action
+      require HasSpend
+    {
+      assign Status to "submitted"
+      transition to Paid
+    }
+    cancel: action {
+      assign Status to "cancelled"
+      transition to Cancelled
+    }
+  }
+  Paid: stage {
+    entry {
+      if (Total > 100) {
+        assign Priority to "high"
+      } else {
+        assign Priority to "normal"
+      }
+      assign Status to "paid"
+    }
+    exit {
+      if (Total > 50) {
+        assign Priority to "exit_high"
+      }
+    }
+    ship: action {
+      transition to Shipped
+    }
+  }
+  Shipped: stage {
+    entry {
+      assign Code to Status
+    }
+  }
+  Delivered: stage {
+    exit {
+      assign Status to "delivered"
+    }
+  }
+  Cancelled: stage { }
+
+  Priority: Text
+  Status: Text
+  HasSpend: policy { Total >= 100 }
+}

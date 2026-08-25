@@ -1,0 +1,73 @@
+domain WarehouseQuantifiers
+
+// Real system: warehouse bins receive linked orders. A bin is "allDone" only
+// when EVERY linked order is Completed; it reacts to the first Active order
+// (any); and tracks per-order transitions (Each). Stresses all four §7 axes:
+// quantifiers (any/all/Each), peer binder + multi-stage lists, notification-only,
+// entity-level always-active, and duplicate same Rel+Stage subscriptions.
+
+Order: entity {
+  Code: Text
+  Total: Number default(0)
+
+  New: stage {
+    Start: action {
+      transition to Active
+    }
+  }
+  Active: stage {
+    Complete: action {
+      transition to Completed
+    }
+  }
+  Completed: stage {
+  }
+}
+
+Bin: entity {
+  Status: Text default("empty")
+  LastCode: Text default("")
+  SeenCode: Text default("")
+  Count: Number default(0)
+  TriggerCount: Number default(0)
+  orders: many Order
+
+  New: stage {
+    AddOrder: action (code: Text) {
+      create in orders { Code: code }
+    }
+  }
+  Full: stage {
+    Ship: action {
+      transition to Shipped
+    }
+    // Stage-scoped all + peer binder: only when EVERY linked order Completed.
+    when all orders Completed as order {
+      assign Status to "allDone"
+      assign LastCode to order Code
+    }
+    // Stage-scoped any: once at least one linked order is Active.
+    when any orders Active {
+      assign Status to "activeSeen"
+    }
+    // Default Each: per matching transition.
+    when orders Completed {
+      assign Count to Count + 1
+    }
+    // Multi-stage list, same binder for both stages.
+    when orders Active, Completed as order {
+      assign SeenCode to order Code
+    }
+    // Notification-only (no binder).
+    when orders Completed {
+      assign TriggerCount to TriggerCount + 1
+    }
+  }
+  Shipped: stage {
+  }
+
+  // Entity-level (always-active) subscription with peer binder.
+  when orders Completed as order {
+    assign Status to "entityLevelDone"
+  }
+}

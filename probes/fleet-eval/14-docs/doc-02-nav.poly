@@ -1,0 +1,30 @@
+domain DocNav
+
+// §4 navigation properties — one / many / owned / many owned
+Customer: entity {
+  orders: many Order
+  profile: one Profile
+  passport: owned Passport
+  lineItems: many owned LineItem
+}
+
+Order: entity {
+  customer: Customer
+  invoice: Invoice
+}
+
+Profile: entity {
+  City: Text
+}
+
+Passport: entity {
+  Number: Text
+}
+
+LineItem: entity {
+  Qty: Number default(0)
+}
+
+Invoice: entity {
+  Amount: Number default(0)
+}

@@ -1,5 +1,3 @@
-using System;
-
 using BenchmarkDotNet.Attributes;
 
 namespace Poly.Benchmarks;

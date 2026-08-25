@@ -1,0 +1,66 @@
+domain KeywordSoup
+
+Tone: enum {
+  Create,
+  Stage,
+  In,
+  Red,
+  _default,
+}
+
+Action: entity {
+  Text: Number
+  Number: Text
+  Assign: Text
+  Transition: Text
+  When: Text
+  Not: Text
+  count: Number
+  any: Text
+  Status: Text
+  has_2nd_Flag: Boolean
+}
+
+Order: entity {
+  total: Number
+  status: Text
+  items: many Line
+  profile: owned Profile
+
+  Ready: stage {
+    Act: action
+      require not Blocked
+    {
+      assign total to 5
+    }
+  }
+
+  Go: action (limit: Number) {
+    if (limit > 0) {
+      assign status to "go"
+    } else if (total > 10) {
+      assign status to "partial"
+    } else {
+      assign status to "noop"
+    }
+  }
+
+  Blocked: policy { status is "blocked" }
+}
+
+Line: entity {
+  qty: Number
+  order: Order
+
+  Draft: stage {
+    Mark: action {
+      assign qty to qty + 1
+    }
+  }
+  Shipped: stage {}
+}
+
+Profile: entity {
+  label: Text
+  order: Order
+}

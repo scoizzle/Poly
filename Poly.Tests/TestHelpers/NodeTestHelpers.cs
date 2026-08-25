@@ -1,8 +1,9 @@
 using Poly.Interpretation;
-using Poly.Interpretation.AbstractSyntaxTree;
-using Poly.Interpretation.Analysis;
+using Poly.Interpretation.Analysis.ConstantFolding;
+using Poly.Interpretation.Analysis.ControlFlow;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Interpretation.LinqExpressions;
+using Poly.Interpretation.Vm;
 
 using Expr = System.Linq.Expressions.Expression;
 using Exprs = System.Linq.Expressions;
@@ -12,17 +13,33 @@ namespace Poly.Tests.TestHelpers;
 /// <summary>
 /// Helper methods for testing Node-based expressions using the analyzer and code generation pattern.
 /// </summary>
-public static class NodeTestHelpers {
-    /// <summary>
-    /// Creates a standard analyzer for testing that performs semantic analysis passes.
-    /// </summary>
-    public static Analyzer CreateTestAnalyzer()
-    {
-        return new AnalyzerBuilder()
-            .UseTypeResolver()
-            .UseMemberResolver()
+public static class AnalyzerBuilderExtensions {
+    extension(AnalyzerBuilder builder) {
+        public AnalyzerBuilder UseAllAnalyzers() => builder
+            .UseThisReferenceContext()
+            .UseTypeAndMemberResolver()
             .UseVariableScopeValidator()
-            .Build();
+            .UseSideEffectAnalysis()
+            .UseJumpTargetResolution()
+            .UseConstantFolding()
+            .UseControlFlowAnalysis()
+            .UseValueRepresentationAnalysis()
+            .UseCallSiteCatalog()
+            .UseLambdaReturnTypeResolution()
+            .UseDefiniteAssignmentAnalysis()
+            ;
+
+    }
+}
+
+public static class NodeTestHelpers {
+    private static readonly Analyzer _analyzer = new AnalyzerBuilder().UseAllAnalyzers().Build();
+
+    /// <summary>
+    /// Analyzes a node using the standard test analyzer pipeline.
+    /// </summary>
+    public static AnalysisResult AnalyzeNode(this Node node) {
+        return _analyzer.Analyze(node);
     }
 
     /// <summary>
@@ -30,12 +47,10 @@ public static class NodeTestHelpers {
     /// </summary>
     /// <param name="node">The node to transform.</param>
     /// <returns>A LINQ Expression representation.</returns>
-    public static Expr BuildExpression(this Node node)
-    {
-        var analyzer = CreateTestAnalyzer();
-        var analysisResult = analyzer.Analyze(node);
+    public static Expr BuildExpression(this Node node) {
+        var analysisResult = node.AnalyzeNode();
         var generator = new LinqExpressionGenerator(analysisResult);
-        return generator.Compile(node);
+        return generator.Compile(node).Expression;
     }
 
     /// <summary>
@@ -46,27 +61,22 @@ public static class NodeTestHelpers {
     /// <returns>Tuple of expression and generated parameter expressions.</returns>
     public static (Expr Expression, Exprs.ParameterExpression[] Parameters) BuildExpressionWithParameters(
         this Node node,
-        params (Parameter param, Type clrType)[] parameters)
-    {
-        var analyzer = CreateTestAnalyzer();
+        params (Parameter param, Type clrType)[] parameters) {
 
-        // Pre-register parameter types with a custom action before analysis
-        var analysisResult = analyzer
-            .With(ctx => {
-                foreach (var (param, clrType) in parameters) {
-                    var typeDef = ctx.TypeDefinitions.GetTypeDefinition(clrType);
-                    if (typeDef != null) {
-                        ctx.SetResolvedType(param, typeDef);
-                    }
+        // Pre-register parameter types with a setup action before analysis
+        var analysisResult = _analyzer.Analyze(node, setup: ctx => {
+            foreach (var (param, clrType) in parameters) {
+                var typeDef = ctx.TypeDefinitions.GetTypeDefinition(clrType);
+                if (typeDef != null) {
+                    ctx.SetResolvedType(param, typeDef);
                 }
-            })
-            .Analyze(node);
+            }
+        });
 
         var generator = new LinqExpressionGenerator(analysisResult);
-        var expression = generator.Compile(node);
-
-        // Get parameters that were generated during compilation
-        var generatedParams = generator.GetParameters().ToArray();
+        var compilation = generator.Compile(node);
+        var expression = compilation.Expression;
+        var generatedParams = compilation.Parameters.ToArray();
 
         // Build a mapping of parameter names to generated expressions
         var paramMap = new Dictionary<string, Exprs.ParameterExpression>();
@@ -94,18 +104,25 @@ public static class NodeTestHelpers {
     /// Compiles a node into a delegate, registering provided parameters and using emitted parameter expressions.
     /// </summary>
     public static TDelegate CompileLambda<TDelegate>(this Node node, params (Parameter param, Type clrType)[] parameters)
-        where TDelegate : Delegate
-    {
+        where TDelegate : Delegate {
         var (expression, parameterExpressions) = node.BuildExpressionWithParameters(parameters);
         return (TDelegate)System.Linq.Expressions.Expression.Lambda(expression, parameterExpressions).Compile();
     }
 
+    // ── New primitive pipeline helpers ──────────────────────────────
+
     /// <summary>
-    /// Analyzes a node using the standard test analyzer pipeline.
+    /// Compile a node using the standard VM interpretation pipeline.
     /// </summary>
-    public static AnalysisResult AnalyzeNode(this Node node)
-    {
-        var analyzer = CreateTestAnalyzer();
-        return analyzer.Analyze(node);
+    public static VmProgram CompileWithPrimitives(this Node node, CompilationMode mode = CompilationMode.Normal) =>
+        Interpreter.Compile(node, mode);
+
+    /// <summary>
+    /// Execute a node via the standard VM interpretation pipeline end-to-end,
+    /// returning the result.
+    /// </summary>
+    public static InterpreterResult ExecWithPrimitives(this Node node) {
+        using var exec = Interpreter.Execute(node.CompileWithPrimitives());
+        return exec.Result;
     }
 }

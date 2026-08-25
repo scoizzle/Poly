@@ -1,0 +1,93 @@
+domain FleetEvalLibrary
+
+// Library lending system — stresses entity/action/policy/stage codegen,
+// for-invoke fan-out, subscriptions, enum-typed + defaulted props,
+// create/create-in factories, and action guards.
+
+MemberStatus: enum {
+  Active
+  Suspended
+  Closed
+}
+
+BookCondition: enum {
+  Good
+  Worn
+  Damaged
+}
+
+Book: entity {
+  Title: Text required
+  Author: Text
+  Condition: BookCondition default(Good)
+  PageCount: Number range(0, )
+  Isbn: Text unique
+}
+
+Fine: entity {
+  Amount: Number range(0, )
+  Reason: Text required
+}
+
+Patron: entity {
+  Name: Text required
+  Email: Text unique
+  Status: MemberStatus default(Active)
+  MaxItems: Number default(5)
+  fines: many Fine
+  loans: many Loan
+
+  IsActive: policy { Status is "Active" }
+
+  CheckOut: action (book: Book, due: Date)
+    require IsActive
+  {
+    create in loans { book: book  DueDate: due }
+  }
+
+  CheckIn: action (book: Book) {
+    for loans as loan where loan in Active invoke loan.ReturnToShelf()
+  }
+
+  FlagOverdueLoans: action {
+    for loans as loan where loan IsOverdue invoke loan.MarkOverdue(amount: loan Total)
+  }
+
+  when loans Overdue {
+    create in fines { Amount: 5  Reason: "overdue" }
+  }
+
+  when loans Returned as loan {
+    assign Status to "Closed"
+  }
+}
+
+Loan: entity {
+  DueDate: Date required
+  GraceDate: Date
+  Total: Number default(0)
+  Renewals: Number default(0)
+  CreatedAt: DateTime default(now)
+  book: Book
+  borrower: Patron
+
+  IsOverdue: policy { DueDate < GraceDate }
+
+  Active: stage {
+    entry { assign Total to 1 }
+    Renew: action (days: Number) {
+      assign DueDate to DueDate + days
+      assign Renewals to Renewals + 1
+    }
+    ReturnToShelf: action {
+      transition to Returned
+    }
+  }
+  Overdue: stage {
+    MarkOverdue: action (amount: Number) {
+      assign Total to amount
+      transition to Returned
+    }
+  }
+  Returned: stage { }
+}

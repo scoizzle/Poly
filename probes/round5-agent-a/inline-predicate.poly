@@ -1,0 +1,22 @@
+domain Round5InlinePredicate
+
+// Inline predicate expressions are NOT shipped — a `for` predicate must be a
+// named policy or stage membership. This probe checks the parse/analyze
+// diagnostic quality for `where line Qty > 0` (bare property as policy name).
+
+OrderLine: entity {
+  Qty: Number default(1)
+  Active: stage { }
+
+  Tag: action (flag: Number) {
+    assign Qty to Qty + flag
+  }
+}
+
+Order: entity {
+  lines: many OrderLine
+
+  InlinePredicate: action {
+    for lines as line where line Qty > 0 invoke line.Tag(flag: 1)
+  }
+}

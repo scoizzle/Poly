@@ -1,0 +1,6 @@
+domain D
+
+Item: entity {
+  Total: Number
+  NotSmall: policy { not (Total > 0) }
+}

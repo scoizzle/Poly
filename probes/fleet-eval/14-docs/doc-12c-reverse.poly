@@ -1,0 +1,15 @@
+domain DocReverse
+
+// §6: reverse-side invoke rejected (caller is relationship target)
+Customer: entity {
+  orders: many Order
+  Notify: action { }
+}
+
+Order: entity {
+  customer: Customer
+
+  Go: action {
+    invoke customer.Notify()
+  }
+}

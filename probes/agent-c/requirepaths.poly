@@ -1,0 +1,32 @@
+domain RequirePaths
+
+Item: entity {
+  Status: Text
+  Score: Number default(0)
+  children: many Child
+
+  Go: policy { Status is "ready" }
+  AtLimit: policy { count children > 3 }
+
+  A: stage {
+    gone: action
+      require not NonExistentPolicy
+    {
+      assign Status to "gone"
+      transition to B
+    }
+    quant: action
+      require AtLimit
+    {
+      assign Status to "quant_ok"
+    }
+  }
+  B: stage {
+    entry { assign Status to "in_b" }
+  }
+}
+
+Child: entity {
+  Name: Text
+  parent: Item
+}

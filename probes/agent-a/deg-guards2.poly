@@ -1,0 +1,21 @@
+domain DegenerateGuards2
+
+Machine: entity {
+  Status: Text
+  Count: Number
+
+  Never: policy { false }
+  Always: policy { true }
+
+  Escape: action
+    require not Never
+  {
+    assign Status to "escaped"
+  }
+
+  Pass: action
+    require Always
+  {
+    assign Status to "ran"
+  }
+}

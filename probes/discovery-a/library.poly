@@ -1,0 +1,76 @@
+domain Library
+
+Patron: entity {
+  Name: Text
+  Status: Text
+  loans: many Loan
+  holds: many Hold
+  fines: many Fine
+
+  HasOpenFine: policy { any fines where Status is "Open" }
+  AllLoansReturned: policy { all loans where Status is "Returned" }
+  NoPendingHolds: policy { none holds where Status is "Pending" }
+  PendingHoldCount: policy { count holds where Status is "Pending" > 0 }
+  HoldsLimit: policy { count holds < 5 }
+  NoOpenFines: policy { count fines where Status is "Open" == 0 }
+
+  NotifyOverdue: action {
+    invoke any loans.NotifyOverdue
+  }
+  MarkAllReturned: action {
+    invoke all loans.MarkReturned
+  }
+  RemindPending: action {
+    invoke any holds.Remind() where Status is "Pending"
+  }
+  BulkFine: action {
+    invoke any loans.LoanFine(amount: 5) where Status is "Overdue"
+  }
+}
+
+Loan: entity {
+  Code: Text
+  Status: Text
+  book: Book
+  patron: Patron
+
+  IsClassic: policy { book Title is "Classic" }
+  HasPatron: policy { patron exists }
+  NotReturned: policy { Status is not "Returned" }
+
+  Active: stage {
+    NotifyOverdue: action {
+      assign Status to "notified"
+    }
+    MarkReturned: action {
+      assign Status to "Returned"
+      transition to Returned
+    }
+    LoanFine: action (amount: Number) {
+      assign Status to "fined"
+    }
+  }
+  Overdue: stage {}
+  Returned: stage {}
+}
+
+Hold: entity {
+  Status: Text
+  book: Book
+  patron: Patron
+
+  Remind: action {
+    assign Status to "reminded"
+  }
+}
+
+Fine: entity {
+  Amount: Number
+  Status: Text
+  patron: Patron
+}
+
+Book: entity {
+  Title: Text
+  Catalog: stage {}
+}

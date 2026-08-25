@@ -1,0 +1,4 @@
+domain ReviewDur
+T: entity {
+  D: Duration default(now)
+}

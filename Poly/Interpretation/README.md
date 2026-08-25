@@ -1,419 +1,397 @@
-# Poly Interpretation System
+# Poly.Interpretation
 
-A fluent, strongly-typed AST analysis and code generation system for .NET that compiles expression trees to System.Linq.Expressions for optimal runtime performance.
+Semantic analysis and VM execution for programs expressed as `Poly.Syntax.Nodes` ASTs.
 
-## Overview
+**Platform map:** [`docs/CORE.md`](../../docs/CORE.md) — boundaries, node replacement, direct AST→VM (read before inventing parallel paths).
 
-The Interpretation system provides:
+The module turns a syntax tree into a runnable program: analysis passes attach metadata and diagnostics, then the direct AST-to-VM-ABI emitter produces an executable delegate. Per [VM as canonical semantics](../../docs/decisions/2026-06-08-vm-as-canonical-semantics.md), this path is the **authoritative behavior** for the platform — not the legacy LINQ expression generator or removed tree-walker.
 
-- **AST Foundation**: Composable node types for building abstract syntax trees
-- **Semantic Analysis**: Type inference, member resolution, and scope validation
-- **Code Generation**: Transform analyzed AST to System.Linq.Expressions
-- **Type Safety**: Compile-time and semantic verification of all operations
-- **Diagnostic Reporting**: Collect errors, warnings, and hints during analysis
+---
 
-## Architecture
+## Module boundaries
 
-### Two-Phase Design
+| Direction | Module | Relationship |
+|-----------|--------|--------------|
+| In | `Poly.Syntax` | AST node types, `Analyzer` / `AnalysisContext` |
+| In | `Poly.Introspection` | CLR type definitions, member resolution helpers |
+| Out | `Poly.Validation` | May depend on Interpretation for rule evaluation |
+| Out | `Poly.Synthesis` | Uses VM to validate macros |
+| No | `Poly.Synthesis` | Interpretation must not depend on Synthesis |
+
+Domain constructs lower to generic VM opcodes — no domain opcodes in this module ([domain-lowering boundary](../../docs/decisions/2026-06-08-domain-lowering-boundary.md)).
+
+---
+
+## What this module does
+
+1. **Analyze** — Run ordered `INodeAnalyzer` passes; produce `AnalysisResult` (metadata + diagnostics).
+2. **Compile** — `DirectVmAbiEmitter` lowers the analyzed AST directly to a compiled `Action<VmState>` delegate (`VmProgram`). No intermediate primitive flattening.
+3. **Execute** — Run the delegate on `VmState`; `InterpretResult` applies value-representation rules at the API boundary.
+
+---
+
+## Canonical pipeline
 
 ```
-AST Construction
-    ↓
-[Analysis Phase]
-    - TypeResolver: Infer and validate types
-    - MemberResolver: Resolve property/method access
-    - ScopeValidator: Track variables and detect errors
-    ↓
-AnalysisResult (with metadata)
-    ↓
-[Generation Phase]
-    - LinqExpressionGenerator: Transform to Expression<T>
-    ↓
-Compiled Delegate (optimized IL)
+  AST (Syntax/Nodes)
+       │
+       ▼
+  AnalyzerBuilder  ──►  AnalysisResult
+  (13 passes)            metadata + diagnostics
+       │
+       ▼
+  DirectVmAbiEmitter ──►  VmProgram
+  (direct AST-to-ABI      (delegate, StepNodes, DebugInfo)
+   lowering, no
+   primitive expansion)
+       │
+       ▼
+  Interpreter.Execute  ──►  ExecutionResult / InterpretResult
 ```
 
-### Analysis Phase
+The cached standard pipeline lives in `Interpreter.cs`. Pass order and metadata contracts are documented in [`Analysis/README.md`](Analysis/README.md).
 
-The analysis system validates and annotates AST nodes with semantic information:
+Direct AST lowering is the sole compilation path. No primitive flattening or expansion step is used — the `DirectVmAbiEmitter` walks the analyzed AST directly and emits `System.Linq.Expressions` trees targeting the VM ABI (`VmState`, ring registers, 2-value frame model, heap).
+
+---
+
+## Entry point: `Interpreter`
+
+`Interpreter` is the supported façade for analyze → compile → execute. It owns a singleton `Analyzer` with the full pass list.
 
 ```csharp
-var analyzer = new AnalyzerBuilder()
-    .UseTypeResolver()              // Resolves types for all nodes
-    .UseMemberResolver()            // Resolves properties, methods, indexers
-    .UseVariableScopeValidator()    // Validates variable declarations
-    .Build();
+using Poly.Interpretation;
+using Poly.Interpretation.Vm;
 
-var result = analyzer.Analyze(astNode);
+var node = /* Syntax.Nodes.Expression or Block */;
 
-// Check for errors
-if (result.Context.Diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error))
+// Analyze only
+AnalysisResult analysis = Interpreter.Analyze(node);
+
+// Analyze + compile (reuses cached analyzer)
+VmProgram program = Interpreter.Compile(node);
+
+// Or compile from a prior analysis (no re-analysis)
+VmProgram program2 = Interpreter.Compile(node, analysis);
+
+// One-shot: analyze, compile, execute; returns raw long on stack
+long raw = Interpreter.Execute(node);
+
+// Full control: configure VmState (trace, heap, args) before run
+using ExecutionResult exec = Interpreter.Execute(program, state => {
+    state.MaxLoopIterations = 100_000_000;
+    state.Trace = myTraceWriter;  // optional µop trace
+});
+int value = exec.GetValue<int>();   // uses RootValueKind — heap vs scalar
+long handle = exec.RawValue;
+```
+
+`VmProgram` carries optional `RootValueKind` (from value-representation analysis) and `CallSites` (portable call catalog). Lambda bodies compile to separate delegates in `VmProgram.Functions`.
+
+---
+
+## Directory map
+
+| Directory | Role | Detail |
+|-----------|------|--------|
+| [`Analysis/`](Analysis/) | Semantic analysis passes | [`Analysis/README.md`](Analysis/README.md) — pass registry, ordering, diagnostics |
+| [`Vm/`](Vm/) | Compile primitives → delegate; runtime state | [`Vm/README.md`](Vm/README.md) — `ProgramCompiler`, stack/heap ABI |
+| [`CSharp/`](CSharp/) | C# source emission from AST | Secondary backend; not canonical semantics |
+| [`LinqExpressions/`](LinqExpressions/) | LINQ expression trees from AST | Test/reference path; migration to VM ongoing (see tracker INT-003) |
+| [`Mermaid/`](Mermaid/) | Mermaid diagrams from AST | Visualization only |
+
+Root files: `Interpreter.cs` (pipeline + execute), `ExecutionResult.cs`, `InterpreterResult.cs`.
+
+---
+
+## Standard analysis pipeline (12 passes)
+
+Registered in `Interpreter._analyzer` in this order. **Do not reorder** without updating [`Analysis/README.md`](Analysis/README.md) and tests.
+
+| # | Extension | Purpose |
+|---|-----------|---------|
+| 1 | `.UseTypeAndMemberResolver()` | Resolved types and members |
+| 2 | `.UseVariableScopeValidator()` | Scopes and variable lifetime |
+| 3 | `.UseSideEffectAnalysis()` | Purity, elision, assignment-use |
+| 4 | `.UseThisReferenceContext()` | `this` type in member bodies |
+| 5 | `.UseJumpTargetResolution()` | Break / continue / goto targets |
+| 6 | `.UseControlFlowAnalysis()` | CFG, reachability, loop metadata |
+| 7 | `.UseValueRepresentationAnalysis()` | Stack scalar / bool / heap ref / void |
+| 8 | `.UseCallSiteCatalog()` | Module call-site table + per-node indices |
+| 9 | `.UseConstantFolding()` | Constant propagation and folding |
+| 10 | `.UseDefiniteAssignmentAnalysis()` | Definite assignment |
+| 11 | `.UseLambdaReturnTypeResolution()` | Lambda return types |
+| 12 | `.UseExceptionRegionAnalysis()` | Try/catch/using region table |
+
+Custom pipelines: build your own `Analyzer` via `AnalyzerBuilder` (same extensions).
+
+---
+
+## Direct AST Lowering
+
+The sole compilation path is `DirectVmAbiEmitter` which walks the analyzed AST and emits
+`System.Linq.Expressions` trees targeting the VM ABI (`VmState`, ring registers for temporaries,
+2-value frame model for user variables and call linkage, heap for objects). No primitive
+flattening or expansion step exists — the AST is the canonical lowering target.
+
+See [`Vm/README.md`](Vm/README.md) for the ABI model and emitter details.
+
+### Frame ABI (CallStack)
+
+The call stack uses a linked frame model with a 2-word header:
+
+```
+[...argN-1..arg0] [previousFP] [savedSP] [local0..localM-1]
+                   ^-- frame header (2 words)                ^-- SP
+```
+
+- **`previousFP`**: Frame pointer of the caller (-1 for root frame).
+- **`savedSP`**: Stack pointer just before the header was pushed.
+- **Argument/local counts** are known at compile time — not stored on the stack.
+
+`CallStack.AllocateFrame()` pushes the header and reserves local space.
+`CallStack.DeallocateFrame()` restores the stack pointer and pops the frame.
+The `CallStackFrame` record provides typed span accessors (`GetLocals`, `GetArguments`)
+and indexers (`GetLocal`, `GetArgument`) for debug hooks and resume.
+
+### Ring Registers
+
+The emitter uses a ring register discipline during compilation: values flow through
+`_r0.._rN` local variables allocated inline during the AST walk. Unlike the old
+primitive path, there is no global pre-pass (`RingAllocator`) — ring assignment
+happens during the AST walk. The result is equivalent: the CLR JIT can enregister
+ring locals.
+
+### Compilation Modes
+
+| Mode | Debug Hooks | PC Tracking | Use Case |
+|------|-------------|-------------|----------|
+| `Normal` (default) | Enabled | Enabled | Development, debugging, testing |
+| `NoDebug` | Disabled | Disabled | Production, benchmarks, maximum speed |
+
+---
+
+## Value Representation
+
+The VM uses a uniform `long` representation on the evaluation stack, but the
+[`ValueRepresentationAnalyzer`](Analysis/Semantics/ValueRepresentationPass.cs)
+classifies every expression by how its value should be interpreted:
+
+| Kind | Description | Example |
+|------|-------------|---------|
+| `StackScalar` | Numeric value stored directly (int, long, float, etc.) | `2 + 3` |
+| `Bool` | Boolean (1 = true, 0 = false) | `a == b` |
+| `HeapRef` | Heap handle; the slot holds an index into `VmState.Heap` | `new Person()` |
+| `Void` | Statement/produces no value | `if (x) { }` |
+| `Unknown` | Could not be determined statically | Runtime dispatch |
+
+The `RootValueKind` on `VmProgram` tells `InterpreterResult` how to correctly
+marshal the program's top-level result — whether to dereference a heap handle
+or return the raw scalar.
+
+---
+
+## µop-level Tracing
+
+Every µop compiled in `Normal` or `Debug` mode carries a `SourceName` label.
+At compile time, `TraceBefore` inserts a `VmTrace.LogUop(pc, text, sp, fb, state)`
+call inside each µop's expression — **~1 ns overhead** when `state.Trace` is null
+(the default).
+
+Enable tracing by setting `state.Trace` to any `TextWriter`:
+
+```csharp
+using var exec = Interpreter.Execute(program, state => {
+    state.Trace = Console.Error;  // or StringWriter, etc.
+});
+```
+
+`CommentOp("; text")` markers alias section boundaries in the µop list for
+readability and generate zero code. Test files use `TestTraceWriter` which
+routes to `Console.Error` — visible in TUnit via `--show-stderr`.
+Active in all build configurations.
+
+---
+
+## Stepping and Debugging
+
+`VmDebugger` provides high-level step-over and continue for interactive
+debugging sessions. It attaches via `VmState.DebugHook` and uses a background
+thread to execute the program:
+
+```csharp
+using var dbg = new VmDebugger(program);
+var r1 = dbg.Start();         // pause at first statement
+var r2 = dbg.StepOver();      // advance one statement
+dbg.Continue();               // run to completion
+```
+
+The debugger is "always loaded, zero overhead when idle": during normal execution
+the hook checks a `volatile bool` and returns immediately. `StepOver` sets a flag
+so the next hook invocation blocks and signals back — the program runs at full
+speed when nobody is stepping.
+
+For lower-level control, use `VmState.DebugInterrupt` (invoked before each µop
+with the full `VmState`) or `VmState.DebugHook` (invoked before each AST node
+with a locals span and heap reference).
+
+---
+
+## Suspend / Resume
+
+The VM supports suspend-and-resume for breakpoints and await-like scenarios:
+
+```csharp
+// First execution suspends
+using var exec = Interpreter.Execute(program);
+if (exec.IsSuspended)
 {
-    foreach (var diag in result.Context.Diagnostics)
-    {
-        Console.WriteLine($"[{diag.Severity}] {diag.Message}");
-    }
-    return;
+    // Inspect state, modify variables, etc.
+    var state = exec.State;
+
+    // Resume with new arguments
+    using var resumed = exec.Resume(args);
 }
 ```
 
-**Available Passes:**
-- **`TypeResolver`**: Infers types for constants, variables, operations, member/method access, blocks
-- **`MemberResolver`**: Resolves properties, methods, and indexers; validates access
-- **`ScopeValidator`**: Validates variable declarations, detects undeclared variables and shadowing
+Key mechanics:
+- `VmState.Status` transitions `Running → Suspended → Resuming → Running`
+- The preamble re-reads `VmState.FramePos` and dispatches to the correct
+  program counter on resume.
+- `CurrentAstNode` and `CurrentNodeId` track the suspend point symbolically.
 
-### Generation Phase
+---
 
-The `LinqExpressionGenerator` transforms analyzed AST into System.Linq.Expressions:
+## Exception Handling
 
-```csharp
-var generator = new LinqExpressionGenerator(analysisResult);
+Structured exception handling uses native CLR `Expression.TryCatchFinally`
+directly — no side tables or handler dispatching:
 
-// Compile to Expression tree
-Expression expr = generator.Compile(astNode);
+| AST Node | CLR Mapping |
+|----------|-------------|
+| `TryCatchFinally` | `Expression.TryCatch(Try(body), Catch(...), Finally(body))` |
+| `ThrowStatement` | `Expression.Throw(...)` |
+| `UsingStatement` | Lowered to try/finally with dispose |
 
-// Or create a compiled delegate directly
-var param = new Parameter("x", TypeReference.To<int>());
-var compiled = generator.CompileAsDelegate(astNode, param) 
-    as Func<int, int>;
+The `ExceptionRegionAnalyzer` pass builds a region table (`ExceptionRegionMetadata`)
+listing all protected ranges, handler types, and catch variable names. The emitter
+consumes this to produce the correct nesting of `Try`/`Catch`/`Finally` expressions.
 
-int result = compiled(42);
-```
+---
 
-## AST Node Types
+## Secondary backends
 
-### Core Nodes
+These read the **AST directly** and are not the conformance target for new features:
 
-**`Constant`**: Literal values
-```csharp
-new Constant(42)
-new Constant("hello")
-new Constant(3.14)
-```
+- **LINQ** — `LinqExpressionGenerator`; parity tests still exist for some scenarios.
+- **C#** — `CSharpGenerator`; codegen and pretty-printing.
+- **Mermaid** — `MermaidAstGenerator`; docs and debugging.
 
-**`Parameter`**: Lambda parameters with optional type hints
-```csharp
-new Parameter("x")
-new Parameter("name", TypeReference.To<string>())
-```
+New language semantics should land in analysis → direct lowering → `DirectVmAbiEmitter` first.
 
-**`Variable`**: Named references in block scopes
-```csharp
-var x = new Variable("counter");
-var assign = new Assignment(x, new Constant(0));
-var increment = new Assignment(x, new Add(x, new Constant(1)));
-```
+---
 
-**`Block`**: Statement sequences with local scope
-```csharp
-var x = new Variable("temp");
-var block = new Block(
-    [new Assignment(x, new Constant(10)), new Multiply(x, new Constant(2))],
-    [x]  // Variables in scope
-);
-```
+## Working with ExecutionResult
 
-### Operators
-
-**Arithmetic**: `Add`, `Subtract`, `Multiply`, `Divide`, `Modulo`, `UnaryMinus`
+`ExecutionResult` owns the `VmState` and exposes both the value and the state:
 
 ```csharp
-new Add(new Constant(10), new Constant(20))
-new Multiply(param, new Constant(2))
-new UnaryMinus(param)
-```
+using var result = Interpreter.Execute(program, state => {
+    state.SetArgs(42, "hello");
+});
 
-**Comparison**: `GreaterThan`, `GreaterThanOrEqual`, `LessThan`, `LessThanOrEqual`
+// Typed value extraction (respects RootValueKind)
+int number = result.GetValue<int>();      // 42
+string text = result.GetValue<string>();  // "hello"
 
-```csharp
-new GreaterThan(age, new Constant(18))
-new LessThanOrEqual(price, new Constant(100.0))
-```
+// Raw access
+long raw = result.RawValue;
 
-**Equality**: `Equal`, `NotEqual`
+// State inspection (heap, stack, trace)
+VmState state = result.State;
+var heapObj = state.Heap.Get(handle);
 
-```csharp
-new Equal(status, new Constant("active"))
-new NotEqual(count, new Constant(0))
-```
-
-**Boolean**: `And`, `Or`, `Not`
-
-```csharp
-new And(isAdult, hasLicense)
-new Or(isVip, isPlatinum)
-new Not(isExpired)
-```
-
-**Conditional**: `Conditional`, `Coalesce`
-
-```csharp
-// age > 18 ? "adult" : "minor"
-new Conditional(
-    new GreaterThan(age, new Constant(18)),
-    new Constant("adult"),
-    new Constant("minor")
-)
-
-// name ?? "Unknown"
-new Coalesce(name, new Constant("Unknown"))
-```
-
-**Member Access**: `MemberAccess`, `IndexAccess`, `MethodInvocation`
-
-```csharp
-new MemberAccess(person, "Name")
-new IndexAccess(array, new Constant(0))
-new MethodInvocation(text, "ToUpper")
-```
-
-**Type Operations**: `TypeCast`, `TypeReference`
-
-```csharp
-new TypeCast(value, TypeReference.To<string>())
-```
-
-**Control Flow**: `Assignment`
-
-```csharp
-new Assignment(variable, new Constant(42))
-```
-
-## Quick Start
-
-### Basic Arithmetic Expression
-
-```csharp
-using Poly.Interpretation.AbstractSyntaxTree;
-using Poly.Interpretation.Analysis;
-using Poly.Interpretation.LinqExpressions;
-using System.Linq.Expressions;
-
-// Build AST: (10 + 20) * 2
-var add = new Add(new Constant(10), new Constant(20));
-var multiply = new Multiply(add, new Constant(2));
-
-// Analyze
-var analyzer = new AnalyzerBuilder()
-    .UseTypeResolver()
-    .Build();
-var result = analyzer.Analyze(multiply);
-
-// Generate
-var generator = new LinqExpressionGenerator(result);
-var expr = generator.Compile(multiply);
-
-// Compile and execute
-var lambda = Expression.Lambda<Func<int>>(expr);
-int value = lambda.Compile()();  // 60
-```
-
-### Using Parameters
-
-```csharp
-// AST: x * 2 + 10
-var x = new Parameter("x", TypeReference.To<int>());
-var expr = new Add(
-    new Multiply(x, new Constant(2)),
-    new Constant(10)
-);
-
-// Analyze
-var analyzer = new AnalyzerBuilder()
-    .UseTypeResolver()
-    .Build();
-var result = analyzer.Analyze(expr);
-
-// Generate delegate
-var generator = new LinqExpressionGenerator(result);
-var compiled = (Func<int, int>)generator.CompileAsDelegate(expr, x);
-
-int value = compiled(5);  // 20
-```
-
-### Conditional Logic
-
-```csharp
-// age > 18 ? "adult" : "minor"
-var age = new Parameter("age", TypeReference.To<int>());
-var condition = new GreaterThan(age, new Constant(18));
-var ast = new Conditional(
-    condition,
-    new Constant("adult"),
-    new Constant("minor")
-);
-
-var analyzer = new AnalyzerBuilder()
-    .UseTypeResolver()
-    .Build();
-var result = analyzer.Analyze(ast);
-
-var generator = new LinqExpressionGenerator(result);
-var compiled = (Func<int, string>)generator.CompileAsDelegate(ast, age);
-
-Console.WriteLine(compiled(25));  // "adult"
-Console.WriteLine(compiled(10));  // "minor"
-```
-
-### Block with Variables
-
-```csharp
-// { var x = 10; x * 2 }
-var x = new Variable("x");
-var assignment = new Assignment(x, new Constant(10));
-var multiply = new Multiply(x, new Constant(2));
-var block = new Block([assignment, multiply], [x]);
-
-var analyzer = new AnalyzerBuilder()
-    .UseTypeResolver()
-    .UseVariableScopeValidator()
-    .Build();
-var result = analyzer.Analyze(block);
-
-var generator = new LinqExpressionGenerator(result);
-var expr = generator.Compile(block);
-
-var lambda = Expression.Lambda<Func<int>>(expr);
-int value = lambda.Compile()();  // 20
-```
-
-### Member Access
-
-```csharp
-// text.Length
-var text = new Parameter("text", TypeReference.To<string>());
-var length = new MemberAccess(text, "Length");
-
-var analyzer = new AnalyzerBuilder()
-    .UseTypeResolver()
-    .UseMemberResolver()
-    .Build();
-var result = analyzer.Analyze(length);
-
-var generator = new LinqExpressionGenerator(result);
-var compiled = (Func<string, int>)generator.CompileAsDelegate(length, text);
-
-Console.WriteLine(compiled("hello"));  // 5
-```
-
-## Test Helpers
-
-For convenience in tests, use the helper extension methods from `Poly.Tests.TestHelpers`:
-
-```csharp
-// Wrap constant values
-var five = Wrap(5);
-var pi = Wrap(3.14);
-
-// BuildExpression - analyze and generate in one step
-var expr = new Add(Wrap(10), Wrap(20)).BuildExpression();
-var result = Expression.Lambda<Func<int>>(expr).Compile()();  // 30
-
-// BuildExpressionWithParameters - pre-register parameter types
-var x = new Parameter("x");
-var expr = new Multiply(x, Wrap(2))
-    .BuildExpressionWithParameters((x, typeof(int)));
-
-// CompileLambda - build, generate, and compile in one step
-var compiled = new Add(Wrap(10), Wrap(20))
-    .CompileLambda<Func<int>>();
-var result = compiled();  // 30
-```
-
-## Diagnostics
-
-The analyzer collects diagnostics during analysis:
-
-```csharp
-var result = analyzer.Analyze(ast);
-
-// Check for errors
-if (result.Context.Diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error))
+// Resumption after suspension
+if (result.IsSuspended)
 {
-    foreach (var diag in result.Context.Diagnostics)
-    {
-        Console.WriteLine($"[{diag.Severity}] {diag.Message}");
-    }
+    using var resumed = result.Resume(moreArgs);
+    Console.WriteLine(resumed.GetValue<string>());
 }
 ```
 
-**Diagnostic Severities:**
-- `Error`: Critical issues preventing compilation
-- `Warning`: Potential problems (e.g., variable shadowing)
-- `Information`: Informational messages
-- `Hint`: Suggestions for improvements
+### InterpreterResult Values
 
-## Scope and Variables
+`InterpreterResult` is a discriminated union via `ResultKind`:
 
-Variables have lexical scope within blocks:
+| Kind | Meaning | Value |
+|------|---------|-------|
+| `Void` | Statement completed, no value | `null` |
+| `Value` | Expression produced a value | The value |
+| `Return` | Return signal | Optional return value |
+| `Break` | Break from loop | Optional label |
+| `Continue` | Continue loop iteration | Optional label |
+| `Throw` | Exception thrown | The `Exception` |
+| `Suspend` | Execution suspended | Optional reason string |
 
-```csharp
-// Valid: variable declared in block scope
-var x = new Variable("x");
-var block = new Block([new Assignment(x, new Constant(10))], [x]);
+Use `GetValue<T>()` for typed extraction — it handles conversions from `long`
+to `bool`, `int`, `short`, `byte`, and `object` automatically.
 
-// Invalid: variable used without declaration
-var y = new Variable("y");
-var ref = y;  // Error: y not in scope
-```
+---
 
-**Scope Rules:**
-- Variables must be declared in the block's variable list
-- Variables are only visible within their declaring block
-- Inner blocks can shadow outer variables
-- References must match declarations (by name)
+## Extending the Pipeline
 
-## AST Traversal
+### Adding a New Analysis Pass
 
-All nodes implement `IEnumerable<Node>` via the `Children` property:
+1. Create a class implementing `INodeAnalyzer` in `Interpretation/Analysis/Semantics/` (or the appropriate subdirectory).
+2. Implement `PassName`, `Dependencies`, and `Analyze()`. Use `context.SetMetadata()` and `context.ReportDiagnostic()` for outputs.
+3. Add an extension method on `AnalyzerBuilder` in the same file.
+4. Register it in `Interpreter.cs` (in the `AnalyzerBuilder` chain) and update the pass table in this README and `Analysis/README.md`.
+5. Add tests in `Poly.Tests/Interpretation/`.
 
-```csharp
-public static void VisitAllNodes(Node node, Action<Node> visit)
-{
-    visit(node);
-    foreach (var child in node.Children)
-    {
-        VisitAllNodes(child, visit);
-    }
-}
-```
+### Adding a New Primitive
 
-## Performance
+Primitives are defined in `Poly/Syntax/Primitives/Primitives.cs`. Add the record
+with a `StackEffect` override, then add the `case` arm in `DirectVmAbiEmitter`
+to emit the LINQ Expression. Add emit tests in `Poly.Tests/Interpretation/`.
 
-Expression trees compile to optimized IL via `Expression.Lambda<T>().Compile()`:
+---
 
-- **Native execution speed** after compilation
-- **One-time compilation cost** amortized over many calls
-- **Zero reflection overhead** at execution time
-- **Cache compiled delegates** for repeated use
+## Testing and docs
 
-```csharp
-var compiled = lambda.Compile();  // Once
-for (int i = 0; i < 1_000_000; i++)
-{
-    var result = compiled(i);  // Native speed
-}
-```
+| Resource | Use |
+|----------|-----|
+| `Poly.Tests/Interpretation/` | VM correctness, direct lowering, integration tests |
+| [`docs/plans/archive/interpretation/`](../../docs/plans/archive/interpretation/README.md) | **Archived** pre-direct-ABI plans (do not execute) |
+| [`docs/plans/v2-to-v3/master-roadmap.md`](../../docs/plans/v2-to-v3/master-roadmap.md) | Active product planning (DomainModeling V2→V3) |
+| [`docs/interpretation-system-architecture-review.md`](../../docs/interpretation-system-architecture-review.md) | Holistic architecture review (living doc) |
+| [`docs/decisions/`](../../docs/decisions/) | ADRs: VM, primitives-as-IR, EH, serialization, sandboxing |
 
-## Testing
+Build and test (from repo root):
 
-383 tests validate:
-- Type resolution for all operators
-- Member resolution for properties and methods
-- Variable scope tracking and shadowing
-- Numeric type promotion
-- Complex nested expressions
-- Block expressions with variables
-- Diagnostic reporting
-
-Run tests:
 ```bash
-dotnet test Poly.Tests/Poly.Tests.csproj
+dotnet build Poly.Benchmarks/Poly.Benchmarks.csproj
+dotnet run --project Poly.Tests/Poly.Tests.csproj
 ```
 
-## Future Enhancements
+---
 
-- **Control flow analysis**: Reachability and definite assignment
-- **Constant folding**: Compile-time evaluation of constants
-- **Optimization passes**: Dead code elimination, expression simplification
-- **Additional generators**: IL emission, source code generation
-- **Incremental analysis**: LSP integration for real-time validation
+## Common AST surface
+
+Syntax types Interpretation most often compiles:
+
+- **Core:** `Constant`, `Parameter`, `Variable`, `Block`
+- **Calls:** `Member`, `Invoke`, `IndexAccess`, `New`, `Lambda`
+- **Operators:** `Add`, `Subtract`, `Multiply`, `Divide`, `Equal`, comparisons, `And` / `Or` / `Not`, bitwise/shift
+- **Control flow:** `Conditional`, `IfStatement`, loops, `Return`, `BreakStatement`, `ContinueStatement`, `GotoStatement`, `TryCatchFinally`, `UsingStatement`, `SwitchStatement`
+- **Types:** `TypeCast`, `TypeIs`, `TypeAs`, `TypeReference`
+
+Full taxonomy: `Poly/Syntax/Nodes/`.
+
+---
+
+## Before changing this module
+
+1. Read relevant entries in [`docs/decisions/`](../../docs/decisions/) (especially VM, primitives IR, domain lowering).
+2. If you change pass order in `Interpreter.cs`, update [`Analysis/README.md`](Analysis/README.md).
+3. If you add a primitive, follow [`Vm/README.md`](Vm/README.md) “Adding a New Primitive” and extend `Poly/Syntax/Primitives/`.
+4. Keep `AGENTS.md` Interpretation section aligned when pipeline or boundaries shift.

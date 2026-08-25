@@ -1,0 +1,32 @@
+domain Find
+
+FsKind: enum {
+  File,
+  Directory,
+  Symlink,
+}
+
+FsNode: entity {
+  Name: Text required
+  Kind: FsKind required
+  SizeBytes: Number range(0, )
+  ModifiedDaysAgo: Number range(0, )
+  Deleted: Boolean default(false)
+
+  children: many FsNode
+  parent: FsNode
+
+  IsBig: policy { SizeBytes > 1024 }
+  IsRecent: policy { ModifiedDaysAgo <= 7 }
+  IsDir: policy { Kind is "Directory" }
+  NotHidden: policy { not (Name is ".git") }
+
+  Delete: action {
+    assign Deleted to true
+  }
+
+  Prune: action {
+    invoke all children.Delete where Kind is "Directory"
+  }
+}
+

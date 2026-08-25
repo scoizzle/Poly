@@ -1,0 +1,6 @@
+ARG SOURCE_FILE=sieve.deno.js
+FROM denoland/deno:alpine
+ARG SOURCE_FILE
+WORKDIR /app
+COPY $SOURCE_FILE source.js
+ENTRYPOINT ["deno", "run", "--allow-hrtime", "/app/source.js"]

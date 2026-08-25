@@ -1,7 +1,7 @@
 namespace Poly.Introspection;
 
 /// <summary>
-/// Provides <see cref="ITypeDefinition"/> instances by name, runtime <see cref="Type"/>, or <see cref="PrimitiveTypeId"/>.
+/// Provides <see cref="ITypeDefinition"/> instances by name, runtime <see cref="Type"/>, or <see cref="PrimitiveType"/>.
 /// Implementations may compose other providers and should be safe for concurrent use.
 /// </summary>
 public interface ITypeDefinitionProvider {
@@ -18,11 +18,10 @@ public interface ITypeDefinitionProvider {
     ITypeDefinition? GetTypeDefinition(Type type);
 
     /// <summary>
-    /// Resolves a type definition by <see cref="PrimitiveTypeId"/>.
+    /// Resolves a type definition by <see cref="PrimitiveType"/>.
     /// Returns null when the primitive type is not supported.
     /// </summary>
-    ITypeDefinition? GetTypeDefinition(PrimitiveTypeId primitiveTypeId)
-    {
+    ITypeDefinition? GetTypeDefinition(PrimitiveType primitiveTypeId) {
         var clrType = primitiveTypeId.GetClrType();
         return clrType is not null ? GetTypeDefinition(clrType) : null;
     }
@@ -32,8 +31,7 @@ public interface ITypeDefinitionProvider {
     /// </summary>
     /// <param name="name">Fully-qualified type name to resolve.</param>
     /// <exception cref="ArgumentException">Thrown when the name is null/whitespace or the type cannot be resolved.</exception>
-    Lazy<ITypeDefinition> GetDeferredTypeDefinitionResolver(string name)
-    {
+    Lazy<ITypeDefinition> GetDeferredTypeDefinitionResolver(string name) {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         return new Lazy<ITypeDefinition>(
             () => GetTypeDefinition(name)

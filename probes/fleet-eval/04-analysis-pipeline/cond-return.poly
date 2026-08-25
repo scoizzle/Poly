@@ -1,0 +1,19 @@
+domain CondReturn2
+
+Order: entity {
+  Total: Number default(0)
+  Code: Text default("")
+}
+
+Customer: entity {
+  orders: many Order
+  Rush: Boolean default(false)
+
+  Place: action -> Order {
+    if (Rush is true) {
+      create in orders { Code: "rush" }
+    } else {
+      create in orders { Code: "normal" }
+    }
+  }
+}

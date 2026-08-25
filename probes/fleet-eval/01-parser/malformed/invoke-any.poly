@@ -1,0 +1,13 @@
+domain D
+
+Order: entity {
+  items: many Line
+
+  Go: action {
+    invoke any items.Mark()
+  }
+}
+
+Line: entity {
+  Mark: action { }
+}

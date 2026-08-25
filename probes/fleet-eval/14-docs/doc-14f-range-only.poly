@@ -1,0 +1,5 @@
+domain DocRangeOnly
+
+Order: entity {
+  Rate: Number range(0.01, 1.0)
+}

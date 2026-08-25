@@ -1,0 +1,7 @@
+domain AP
+Box: entity {
+  Start: Number
+  setq: action (qty: Number) {
+    assign Start to qty
+  }
+}

@@ -1,8 +1,3 @@
-using System.Linq.Expressions;
-
-using Poly.Interpretation;
-using Poly.Interpretation.AbstractSyntaxTree;
-using Poly.Interpretation.AbstractSyntaxTree.Arithmetic;
 using Poly.Tests.TestHelpers;
 
 using Expr = System.Linq.Expressions.Expression;
@@ -11,8 +6,7 @@ namespace Poly.Tests.Interpretation;
 
 public class BlockTests {
     [Test]
-    public async Task Block_WithSingleExpression_ReturnsValue()
-    {
+    public async Task Block_WithSingleExpression_ReturnsValue() {
         // Arrange
         var node = new Block(Wrap(42));
 
@@ -26,8 +20,7 @@ public class BlockTests {
     }
 
     [Test]
-    public async Task Block_WithMultipleExpressions_ReturnsLastValue()
-    {
+    public async Task Block_WithMultipleExpressions_ReturnsLastValue() {
         // Arrange
         var node = new Block(Wrap(10), Wrap(20), Wrap(99));
 
@@ -41,12 +34,11 @@ public class BlockTests {
     }
 
     [Test]
-    public async Task Block_WithVariableDeclaration_WorksCorrectly()
-    {
+    public async Task Block_WithVariableDeclaration_WorksCorrectly() {
         // Arrange - block with a variable that's assigned and used
         var varNode = new Variable("x");
         var assignNode = new Assignment(varNode, Wrap(50));
-        var node = new Block([assignNode, varNode], new[] { varNode });
+        var node = new Block([assignNode, varNode], [varNode]);
 
         // Act
         var expr = node.BuildExpression();
@@ -58,8 +50,7 @@ public class BlockTests {
     }
 
     [Test]
-    public async Task Block_WithArithmeticSequence_EvaluatesCorrectly()
-    {
+    public async Task Block_WithArithmeticSequence_EvaluatesCorrectly() {
         // Arrange
         var node = new Block(
             Wrap(10),
@@ -77,8 +68,7 @@ public class BlockTests {
     }
 
     [Test]
-    public async Task Block_WithConditionalInside_WorksCorrectly()
-    {
+    public async Task Block_WithConditionalInside_WorksCorrectly() {
         // Arrange
         var conditional = new Conditional(True, Wrap(55), Wrap(0));
         var node = new Block(conditional);
@@ -93,8 +83,7 @@ public class BlockTests {
     }
 
     [Test]
-    public async Task Block_WithDifferentTypes_ReturnsLastExpressionType()
-    {
+    public async Task Block_WithDifferentTypes_ReturnsLastExpressionType() {
         // Arrange
         var node = new Block(
             Wrap("hello"),
@@ -111,8 +100,7 @@ public class BlockTests {
     }
 
     [Test]
-    public async Task Block_GetTypeDefinition_ReturnsLastExpressionType()
-    {
+    public async Task Block_GetTypeDefinition_ReturnsLastExpressionType() {
         // Arrange
         var node = new Block(Wrap(10), Wrap(20));
 
@@ -124,8 +112,7 @@ public class BlockTests {
     }
 
     [Test]
-    public async Task Block_ToString_ReturnsExpectedFormat()
-    {
+    public async Task Block_ToString_ReturnsExpectedFormat() {
         // Arrange
         var node = new Block(Wrap(42));
 
@@ -137,22 +124,21 @@ public class BlockTests {
     }
 
     [Test]
-    public async Task Block_WithEmptyExpressions_ThrowsArgumentException()
-    {
-        // Act & Assert
-        await Assert.That(() => new Block(Array.Empty<Node>())).Throws<ArgumentException>();
+    public async Task Block_WithEmptyExpressions_IsAllowed() {
+        // A4: Empty blocks are now allowed (codegen needs zero-entity OnModelCreating)
+        var block = new Block(Array.Empty<Node>());
+        await Assert.That(block.Nodes).IsEmpty();
+        await Assert.That(block.Variables).IsEmpty();
     }
 
     [Test]
-    public async Task Block_WithNullExpressions_ThrowsArgumentNullException()
-    {
+    public async Task Block_WithNullExpressions_ThrowsArgumentNullException() {
         // Act & Assert
         await Assert.That(() => new Block((Node[])null!)).Throws<ArgumentNullException>();
     }
 
     [Test]
-    public async Task Block_WithNullVariables_ThrowsArgumentNullException()
-    {
+    public async Task Block_WithNullVariables_ThrowsArgumentNullException() {
         // Act & Assert
         await Assert.That(() => new Block((IEnumerable<Node>)null!, [Wrap(42)])).Throws<ArgumentNullException>();
     }

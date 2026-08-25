@@ -1,0 +1,113 @@
+### ═══════════════════════════════════════════════════════════
+###  Library REST API — Generated
+###
+###  Start the server:
+###    dotnet run --project path/to/project --urls "https://localhost:5001"
+###
+###  Then click "Send Request" above any request below.
+### ═══════════════════════════════════════════════════════════
+
+### ──────────── Books ────────────
+
+### List all books
+GET https://localhost:5001/api/books
+
+### Get book by ISBN
+GET https://localhost:5001/api/books/example-value
+
+### Create a new book
+POST https://localhost:5001/api/books
+Content-Type: application/json
+
+{
+    "Author": "sample",
+    "Genre": "Fiction",
+    "ISBN": "example-isbn",
+    "Pages": 0,
+    "Title": "sample"
+}
+
+### ──────────── Patrons ────────────
+
+### List all patrons
+GET https://localhost:5001/api/patrons
+
+### Get patron by Email
+GET https://localhost:5001/api/patrons/example-value
+
+### Create a new patron
+POST https://localhost:5001/api/patrons
+Content-Type: application/json
+
+{
+    "CurrentBorrowCount": 0,
+    "Email": "example-email",
+    "MaxItems": 0,
+    "Name": "sample",
+    "OutstandingFines": 0
+}
+
+### Action: CheckOut
+POST https://localhost:5001/api/patrons/example-value/checkOut
+Content-Type: application/json
+
+{
+    "bookId": "example-book-id"
+}
+
+### Action: Suspend
+POST https://localhost:5001/api/patrons/example-value/suspend
+
+### Action: CloseAccount
+POST https://localhost:5001/api/patrons/example-value/closeAccount
+
+### Action: Reinstate
+POST https://localhost:5001/api/patrons/example-value/reinstate
+
+### ──────────── Loans ────────────
+
+### List loans for patron
+GET https://localhost:5001/api/patrons/example-value/loans
+
+### Get loan by id for patron
+GET https://localhost:5001/api/patrons/example-value/loans/1
+
+### Action: Renew
+POST https://localhost:5001/api/patrons/example-value/loans/1/renew
+
+### Action: Return
+POST https://localhost:5001/api/patrons/example-value/loans/1/return
+
+### ──────────── Fines ────────────
+
+### List fines for patron
+GET https://localhost:5001/api/patrons/example-value/fines
+
+### Get fine by id for patron
+GET https://localhost:5001/api/patrons/example-value/fines/1
+
+### Action: Pay
+POST https://localhost:5001/api/patrons/example-value/fines/1/pay
+
+### Action: Waive
+POST https://localhost:5001/api/patrons/example-value/fines/1/waive
+
+### ──────────── PremiumPatrons ────────────
+
+### List all premiumPatrons
+GET https://localhost:5001/api/premiumPatrons
+
+### Get premiumPatron by Email
+GET https://localhost:5001/api/premiumPatrons/example-value
+
+### Create a new premiumPatron
+POST https://localhost:5001/api/premiumPatrons
+Content-Type: application/json
+
+{
+    "Email": "example-email",
+    "Name": "sample",
+    "PriorityAccess": false,
+    "RewardPoints": 0
+}
+

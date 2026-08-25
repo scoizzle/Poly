@@ -1,22 +1,16 @@
-using System.Text;
-
-using Poly.Interpretation.AbstractSyntaxTree;
-using Poly.Interpretation.AbstractSyntaxTree.Arithmetic;
-using Poly.Interpretation.AbstractSyntaxTree.Boolean;
-using Poly.Interpretation.AbstractSyntaxTree.Comparison;
-using Poly.Interpretation.AbstractSyntaxTree.Equality;
-using Poly.Interpretation.Analysis;
 using Poly.Interpretation.Analysis.Semantics;
-using Poly.Introspection;
 
 namespace Poly.Interpretation.Mermaid;
 
-/// <summary>
-/// Generates Mermaid flowchart diagrams from analyzed AST nodes for visualization purposes.
-/// </summary>
+/// <summary>Generates Mermaid flowchart diagrams from analyzed AST nodes for
+/// visualization. Output can be rendered in GitHub Markdown, VS Code extensions,
+/// or any Mermaid-compatible renderer.</summary>
 /// <remarks>
-/// This class produces Mermaid markdown syntax that can be rendered in documentation,
-/// GitHub/GitLab, or VS Code extensions to visualize the structure of abstract syntax trees.
+/// <para>Produces <c>graph TB</c> (top-to-bottom) flowcharts with labeled edges
+/// showing child relationships (left, right, body, condition, etc.). Leaf nodes
+/// use rounded rectangles; internal nodes use sharp rectangles.</para>
+/// <para>When an <see cref="AnalysisResult"/> is provided, type information is
+/// included in node labels for richer visualization.</para>
 /// </remarks>
 public sealed class MermaidAstGenerator {
     private readonly AnalysisResult? _analysisResult;
@@ -24,22 +18,19 @@ public sealed class MermaidAstGenerator {
     private readonly HashSet<string> _visitedEdges;
     private readonly StringBuilder _scratch;
 
-    /// <summary>
-    /// Initializes a new instance without analysis metadata.
-    /// </summary>
-    public MermaidAstGenerator()
-    {
+    /// <summary>Creates a generator without analysis metadata. Node labels will
+    /// show only AST node types and values without type information.</summary>
+    public MermaidAstGenerator() {
         _output = new StringBuilder();
         _visitedEdges = new HashSet<string>();
         _scratch = new StringBuilder();
     }
 
-    /// <summary>
-    /// Initializes a new instance with semantic analysis results for enhanced output.
-    /// </summary>
-    /// <param name="analysisResult">The semantic analysis result containing type information.</param>
-    public MermaidAstGenerator(AnalysisResult analysisResult)
-    {
+    /// <summary>Creates a generator with semantic analysis results for
+    /// type-enriched output.</summary>
+    /// <param name="analysisResult">The semantic analysis result containing
+    /// type resolution information for enhanced node labels.</param>
+    public MermaidAstGenerator(AnalysisResult analysisResult) {
         ArgumentNullException.ThrowIfNull(analysisResult);
         _analysisResult = analysisResult;
         _output = new StringBuilder();
@@ -47,14 +38,16 @@ public sealed class MermaidAstGenerator {
         _scratch = new StringBuilder();
     }
 
-    /// <summary>
-    /// Generates a Mermaid flowchart diagram from an AST node.
-    /// </summary>
-    /// <param name="node">The root node to visualize.</param>
-    /// <param name="direction">The flow direction: TB (top-bottom), LR (left-right), etc.</param>
-    /// <returns>Mermaid markdown syntax as a string.</returns>
-    public string Generate(Node node, string direction = "TB")
-    {
+    /// <summary>Generates a Mermaid flowchart diagram from an AST node.
+    /// The output is a directed graph with labeled edges showing AST child
+    /// relationships (left, right, body, condition, etc.). Leaf nodes use
+    /// rounded rectangles; internal nodes use sharp rectangles.</summary>
+    /// <param name="node">The root AST node to visualize.</param>
+    /// <param name="direction">The flow direction: TB (top-bottom, default),
+    /// LR (left-right), BT (bottom-top), RL (right-left).</param>
+    /// <returns>A Mermaid flowchart string (without <c>```mermaid</c> fences)
+    /// suitable for embedding in Markdown documents.</returns>
+    public string Generate(Node node, string direction = "TB") {
         ArgumentNullException.ThrowIfNull(node);
 
         _output.Clear();
@@ -80,13 +73,11 @@ public sealed class MermaidAstGenerator {
         return _output.ToString();
     }
 
-    private List<Parameter> CollectParameterNodes(Node node)
-    {
+    private List<Parameter> CollectParameterNodes(Node node) {
         var parameters = new List<Parameter>();
         var visited = new HashSet<Node>();
 
-        void Visit(Node n)
-        {
+        void Visit(Node n) {
             if (!visited.Add(n)) {
                 return; // Already visited
             }
@@ -105,8 +96,7 @@ public sealed class MermaidAstGenerator {
         return parameters;
     }
 
-    private string GenerateNode(Node node)
-    {
+    private string GenerateNode(Node node) {
         var nodeId = GetNodeId(node);
 
         // Skip definition for Parameter nodes as they were already defined at the beginning
@@ -140,8 +130,7 @@ public sealed class MermaidAstGenerator {
         return nodeId;
     }
 
-    private void AppendNodeDefinition(Node node, string nodeId, NodeShape shape)
-    {
+    private void AppendNodeDefinition(Node node, string nodeId, NodeShape shape) {
         _scratch.Clear();
         // Add type information to label if available
         if (_analysisResult != null) {
@@ -193,8 +182,7 @@ public sealed class MermaidAstGenerator {
         _output.AppendLine();
     }
 
-    private void AddStyleAnnotations(string nodeId, Node node)
-    {
+    private void AddStyleAnnotations(string nodeId, Node node) {
         if (_analysisResult == null) {
             return;
         }
@@ -239,14 +227,12 @@ public sealed class MermaidAstGenerator {
         }
     }
 
-    private string GetNodeId(Node node)
-    {
+    private string GetNodeId(Node node) {
         // Use the node's stable NodeId instead of auto-generated counter
         return node.Id.Value;
     }
 
-    private void AppendNodeLabel(StringBuilder builder, Node node)
-    {
+    private void AppendNodeLabel(StringBuilder builder, Node node) {
         switch (node) {
             // Leaf nodes with values
             case Constant constant:
@@ -260,6 +246,23 @@ public sealed class MermaidAstGenerator {
             case Variable variable:
                 builder.Append("Variable ");
                 builder.Append(variable.Name);
+                break;
+            case ThisReference:
+                builder.Append("This");
+                break;
+            case PropertyGetterDefinitionNode:
+                builder.Append("Property Getter");
+                break;
+            case PropertySetterDefinitionNode setter:
+                builder.Append("Property Setter");
+                if (setter.ValueParameter != null) {
+                    builder.Append(" (");
+                    builder.Append(setter.ValueParameter.Name);
+                    builder.Append(')');
+                }
+                break;
+            case PropertyInitializerDefinitionNode:
+                builder.Append("Property Initializer");
                 break;
 
             // Binary arithmetic
@@ -326,17 +329,29 @@ public sealed class MermaidAstGenerator {
                 builder.Append("Cast to ");
                 builder.Append(cast.TargetTypeReference);
                 break;
-            case MemberAccess member:
+            case TypeIs typeIs:
+                builder.Append("Type Is ");
+                builder.Append(typeIs.TargetTypeReference);
+                break;
+            case TypeAs typeAs:
+                builder.Append("Type As ");
+                builder.Append(typeAs.TargetTypeReference);
+                break;
+            case Member member:
                 builder.Append("Member Access .");
                 builder.Append(member.MemberName);
                 break;
             case IndexAccess:
                 builder.Append("Index Access");
                 break;
-            case MethodInvocation method:
+            case Invoke method:
                 builder.Append("Method Call ");
-                builder.Append(method.MethodName);
+                if (method.Delegate is Member ma)
+                    builder.Append(ma.MemberName);
                 builder.Append("()");
+                break;
+            case New:
+                builder.Append("New");
                 break;
 
             // Control flow
@@ -371,7 +386,7 @@ public sealed class MermaidAstGenerator {
             case ContinueStatement:
                 builder.Append("Continue");
                 break;
-            case ReturnStatement:
+            case Return:
                 builder.Append("Return");
                 break;
             case GotoStatement goto_:
@@ -402,11 +417,10 @@ public sealed class MermaidAstGenerator {
         }
     }
 
-    private NodeShape GetNodeShape(Node node)
-    {
+    private NodeShape GetNodeShape(Node node) {
         return node switch {
             // Leaf nodes - rounded rectangles
-            Constant or Parameter or Variable => NodeShape.RoundedRectangle,
+            Constant or Parameter or Variable or ThisReference => NodeShape.RoundedRectangle,
 
             // Conditionals - rhombus
             Conditional or IfStatement or SwitchStatement => NodeShape.Rhombus,
@@ -419,66 +433,76 @@ public sealed class MermaidAstGenerator {
         };
     }
 
-    private IEnumerable<(Node Child, string EdgeLabel)> GetChildren(Node node)
-    {
+    private IEnumerable<(Node Child, string EdgeLabel)> GetChildren(Node node) {
         return node switch {
             // Binary operations
-            Add add => new[] { (add.LeftHandValue, "left"), (add.RightHandValue, "right") },
-            Subtract sub => new[] { (sub.LeftHandValue, "left"), (sub.RightHandValue, "right") },
-            Multiply mul => new[] { (mul.LeftHandValue, "left"), (mul.RightHandValue, "right") },
-            Divide div => new[] { (div.LeftHandValue, "left"), (div.RightHandValue, "right") },
-            Modulo mod => new[] { (mod.LeftHandValue, "left"), (mod.RightHandValue, "right") },
+            Add add => [(add.LeftHandValue, "left"), (add.RightHandValue, "right")],
+            Subtract sub => [(sub.LeftHandValue, "left"), (sub.RightHandValue, "right")],
+            Multiply mul => [(mul.LeftHandValue, "left"), (mul.RightHandValue, "right")],
+            Divide div => [(div.LeftHandValue, "left"), (div.RightHandValue, "right")],
+            Modulo mod => [(mod.LeftHandValue, "left"), (mod.RightHandValue, "right")],
 
-            Equal eq => new[] { (eq.LeftHandValue, "left"), (eq.RightHandValue, "right") },
-            NotEqual neq => new[] { (neq.LeftHandValue, "left"), (neq.RightHandValue, "right") },
-            LessThan lt => new[] { (lt.LeftHandValue, "left"), (lt.RightHandValue, "right") },
-            LessThanOrEqual lte => new[] { (lte.LeftHandValue, "left"), (lte.RightHandValue, "right") },
-            GreaterThan gt => new[] { (gt.LeftHandValue, "left"), (gt.RightHandValue, "right") },
-            GreaterThanOrEqual gte => new[] { (gte.LeftHandValue, "left"), (gte.RightHandValue, "right") },
+            Equal eq => [(eq.LeftHandValue, "left"), (eq.RightHandValue, "right")],
+            NotEqual neq => [(neq.LeftHandValue, "left"), (neq.RightHandValue, "right")],
+            LessThan lt => [(lt.LeftHandValue, "left"), (lt.RightHandValue, "right")],
+            LessThanOrEqual lte => [(lte.LeftHandValue, "left"), (lte.RightHandValue, "right")],
+            GreaterThan gt => [(gt.LeftHandValue, "left"), (gt.RightHandValue, "right")],
+            GreaterThanOrEqual gte => [(gte.LeftHandValue, "left"), (gte.RightHandValue, "right")],
 
-            And and => new[] { (and.LeftHandValue, "left"), (and.RightHandValue, "right") },
-            Or or => new[] { (or.LeftHandValue, "left"), (or.RightHandValue, "right") },
+            And and => [(and.LeftHandValue, "left"), (and.RightHandValue, "right")],
+            Or or => [(or.LeftHandValue, "left"), (or.RightHandValue, "right")],
 
-            Coalesce coalesce => new[] { (coalesce.LeftHandValue, "value"), (coalesce.RightHandValue, "default") },
+            Coalesce coalesce => [(coalesce.LeftHandValue, "value"), (coalesce.RightHandValue, "default")],
 
             // Unary operations
-            UnaryMinus minus => new[] { (minus.Operand, "") },
-            Not not => new[] { (not.Value, "") },
+            UnaryMinus minus => [(minus.Operand, "")],
+            Not not => [(not.Value, "")],
 
             // Conditional
-            Conditional cond => new[] {
+            Conditional cond => [
                 (cond.Condition, "condition"),
                 (cond.IfTrue, "true"),
                 (cond.IfFalse, "false")
-            },
+            ],
 
             // Type operations
-            TypeCast cast => new[] { (cast.Operand, "") },
+            TypeCast cast => [(cast.Operand, "")],
+            TypeIs typeIs => [(typeIs.Operand, "")],
+            TypeAs typeAs => [(typeAs.Operand, "")],
 
             // Member access
-            MemberAccess member => new[] { (member.Value, "") },
+            Member member => [(member.Value, "")],
             IndexAccess index => new[] { (index.Value, "target") }
                 .Concat(index.Arguments.Select((arg, i) => (arg, $"index{i}"))),
 
             // Method invocation
-            MethodInvocation method => method.Target != null
-                ? new[] { (method.Target, "target") }.Concat(
-                    method.Arguments.Select((arg, i) => (arg, $"arg{i}")))
-                : method.Arguments.Select((arg, i) => (arg, $"arg{i}")),
+            Invoke method => new[] { (method.Delegate, "method") }
+                .Concat(method.Arguments.Select((arg, i) => ((Node)arg, $"arg{i}"))),
+
+            // Constructor invocation
+            New @new => new[] { (@new.Type, "type") }
+                .Concat(@new.Arguments.Select((arg, i) => ((Node)arg, $"arg{i}"))),
+
+            PropertyGetterDefinitionNode getter when getter.Body != null => [(getter.Body, "body")],
+            PropertySetterDefinitionNode setter => new[] { ((Node)setter.ValueParameter!, "value") }
+                .Where(static pair => pair.Item1 is not null)
+                .Concat(setter.Body is null ? Array.Empty<(Node, string)>() : [(setter.Body, "body")]),
+            PropertyInitializerDefinitionNode initializer =>
+                initializer.Value is null ? [] : [(initializer.Value, "value")],
 
             // Block
             Block block => block.Nodes.Select((n, i) => (n, $"{i}")),
 
             // Assignment
-            Assignment assign => new[] { (assign.Destination, "target"), (assign.Value, "value") },
+            Assignment assign => [(assign.Destination, "target"), (assign.Value, "value")],
 
             // Control flow
             IfStatement ifStmt => ifStmt.ElseBranch != null
                 ? new[] { (ifStmt.Condition, "condition"), (ifStmt.ThenBranch, "then"), (ifStmt.ElseBranch, "else") }
-                : new[] { (ifStmt.Condition, "condition"), (ifStmt.ThenBranch, "then") },
+                : [(ifStmt.Condition, "condition"), (ifStmt.ThenBranch, "then")],
 
-            WhileLoop whileLoop => new[] { (whileLoop.Condition, "condition"), (whileLoop.Body, "body") },
-            DoWhileLoop doWhile => new[] { (doWhile.Body, "body"), (doWhile.Condition, "condition") },
+            WhileLoop whileLoop => [(whileLoop.Condition, "condition"), (whileLoop.Body, "body")],
+            DoWhileLoop doWhile => [(doWhile.Body, "body"), (doWhile.Condition, "condition")],
 
             ForLoop forLoop => new[] {
                 (forLoop.Initializer!, "init"),
@@ -487,16 +511,33 @@ public sealed class MermaidAstGenerator {
                 (forLoop.Body, "body")
             }.Where(x => x.Item1 != null!),
 
-            ReturnStatement ret => ret.Value != null ? new[] { (ret.Value, "") } : Array.Empty<(Node, string)>(),
-            ThrowStatement throw_ => new[] { (throw_.Exception, "") },
+            Return ret => ret.Value != null ? [(ret.Value, "")] : Array.Empty<(Node, string)>(),
+            ThrowStatement throw_ => [(throw_.Exception, "")],
+
+            // Exception handling
+            TryCatchFinally tcf => new[] {
+                (tcf.TryBlock, "try")
+            }.Concat(tcf.CatchClauses?.Select((c, i) => ((Node)c.Body, $"catch{i}")) ?? [])
+             .Concat(tcf.FinallyBlock is not null ? [(tcf.FinallyBlock, "finally")] : []),
+
+            // Switch
+            SwitchStatement switchStmt => new[] {
+                (switchStmt.Value, "value")
+            }.Concat(switchStmt.Cases.SelectMany((c, i) => new[] { (c.Pattern, $"case{i}_pattern"), (c.Body, $"case{i}_body") }))
+             .Concat(switchStmt.DefaultCase is not null ? [(switchStmt.DefaultCase, "default")] : []),
+
+            // Using
+            UsingStatement usingStmt => new[] {
+                (usingStmt.Resource, "resource"),
+                (usingStmt.Body, "body")
+            },
 
             // Default: no children
             _ => Array.Empty<(Node, string)>()
         };
     }
 
-    private static void AppendValue(StringBuilder builder, object? value)
-    {
+    private static void AppendValue(StringBuilder builder, object? value) {
         switch (value) {
             case null:
                 builder.Append("null");
@@ -520,8 +561,7 @@ public sealed class MermaidAstGenerator {
         }
     }
 
-    private static void AppendTypeName(StringBuilder builder, ITypeDefinition type)
-    {
+    private static void AppendTypeName(StringBuilder builder, ITypeDefinition type) {
         var name = type.Name ?? "Unknown";
 
         var index = name.IndexOf('`');

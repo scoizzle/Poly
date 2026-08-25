@@ -1,0 +1,7 @@
+domain ReviewTime2
+T: entity {
+  Started: Time
+  Set: action {
+    assign Started to now
+  }
+}

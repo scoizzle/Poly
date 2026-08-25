@@ -1,0 +1,5 @@
+domain DocAnnos
+
+Item: entity table("A") table("B") {
+  Code: Text column("X") column("Y")
+}

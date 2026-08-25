@@ -1,0 +1,39 @@
+domain FindEncoded
+
+FsKind: enum {
+  File,
+  Directory,
+  Symlink,
+}
+
+Directory: entity {
+  Name: Text required
+  files: many File
+  subdirs: many Directory
+
+  IsBigDir: policy { count files > 100 }
+
+  Prune: action {
+    invoke all files.Delete where SizeBytes > 1024
+  }
+}
+
+File: entity {
+  Name: Text required
+  Kind: FsKind default(File)
+  SizeBytes: Number range(0, )
+  ModifiedDaysAgo: Number range(0, )
+  Deleted: Boolean default(false)
+  dir: Directory
+
+  IsBig: policy { SizeBytes > 1024 }
+  IsTiny: policy { SizeBytes < 100 }
+  IsRecent: policy { ModifiedDaysAgo <= 7 }
+  IsOld: policy { ModifiedDaysAgo > 30 }
+  NotHidden: policy { not (Name is ".git") }
+
+  Delete: action {
+    assign Deleted to true
+  }
+}
+

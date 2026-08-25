@@ -1,0 +1,22 @@
+domain DocSpaceInit
+
+Patron: entity {
+  fines: many Fine
+  loans: many Loan
+
+  when loans Overdue {
+    create Fine { Amount: 5 Reason: "Overdue" }
+  }
+}
+
+Loan: entity {
+  borrower: Patron
+  Active: stage { }
+  Overdue: stage { }
+  Returned: stage { }
+}
+
+Fine: entity {
+  Amount: Number default(0)
+  Reason: Text
+}

@@ -1,0 +1,72 @@
+domain LaundryService
+
+// Real system: a laundry service processes customer orders through a
+// lifecycle. A subscription on order delivery CREATES a receipt record
+// (guide §0.4 cross-entity side-effect pattern), stresses entity-level
+// peer binders, and multi-stage any/all lists.
+
+Order: entity {
+  Code: Text
+  Items: Number default(1)
+  Total: Number default(0)
+
+  Received: stage {
+    StartWash: action {
+      transition to Washing
+    }
+  }
+  Washing: stage {
+    StartDry: action {
+      transition to Drying
+    }
+  }
+  Drying: stage {
+    Complete: action {
+      transition to Ready
+    }
+  }
+  Ready: stage {
+    Deliver: action {
+      transition to Delivered
+    }
+  }
+  Delivered: stage {
+  }
+}
+
+Receipt: entity {
+  Code: Text required
+  Amount: Number required
+}
+
+Customer: entity {
+  Name: Text
+  Status: Text default("new")
+  LastReceiptCode: Text default("")
+  DeliveredCount: Number default(0)
+  orders: many Order
+
+  Active: stage {
+    // Guide §0.4 canonical: create a cross-entity record on stage signal.
+    when orders Delivered as order {
+      create Receipt { Code: "R-" Amount: order Total }
+    }
+    // Each with multi-stage list + binder.
+    when orders Washing, Ready as order {
+      assign LastReceiptCode to order Code
+    }
+    // Any over a multi-stage list.
+    when any orders Delivered, Ready {
+      assign Status to "readyOrDelivered"
+    }
+    // All over a multi-stage list: every linked order in (Ready OR Delivered).
+    when all orders Ready, Delivered {
+      assign Status to "allFinished"
+    }
+  }
+
+  // Entity-level: always-active all with peer binder.
+  when all orders Delivered as order {
+    assign DeliveredCount to DeliveredCount + 1
+  }
+}

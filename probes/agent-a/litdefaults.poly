@@ -1,0 +1,9 @@
+domain DiscoveryLitDefaults
+
+AuditEvent: entity {
+  BadDateLiteral: Date default("2024-01-01")
+  BadDateNumber: Date default(0)
+  GoodDateToday: Date default(today)
+  GoodDateTimeNow: DateTime default(now)
+  BadDateTimeLiteral: DateTime default("2024-01-01")
+}

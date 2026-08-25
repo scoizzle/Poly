@@ -1,0 +1,24 @@
+domain EnumLiteral
+
+TokenKind: enum { Keyword, Identifier, Numeric }
+
+Lexer: entity {
+  tokens: many Token
+  lex: action {
+    create in tokens { Lexeme: "let" Kind: Keyword }
+  }
+  lexString: action {
+    create in tokens { Lexeme: "let" Kind: "Keyword" }
+  }
+  makeToken: action -> Token {
+    create Token { Lexeme: "x" Kind: Identifier }
+  }
+  makeTokenString: action -> Token {
+    create Token { Lexeme: "x" Kind: "Identifier" }
+  }
+}
+
+Token: entity {
+  Kind: TokenKind
+  Lexeme: Text required
+}

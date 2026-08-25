@@ -1,12 +1,13 @@
 using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
 
+using PrimitiveType = Poly.Introspection.PrimitiveType;
+
 namespace Poly.Tests.Introspection;
 
 public class TypeDefinitionProviderCollectionTests {
     [Test]
-    public async Task GetTypeDefinition_ReturnsFromFirstProvider()
-    {
+    public async Task GetTypeDefinition_ReturnsFromFirstProvider() {
         var mockProvider1 = new MockTypeDefinitionProvider();
         var mockProvider2 = new MockTypeDefinitionProvider();
         var collection = new TypeDefinitionProviderCollection();
@@ -22,8 +23,7 @@ public class TypeDefinitionProviderCollectionTests {
     }
 
     [Test]
-    public async Task GetTypeDefinition_ReturnsNullIfNoProviderHasType()
-    {
+    public async Task GetTypeDefinition_ReturnsNullIfNoProviderHasType() {
         var mockProvider1 = new MockTypeDefinitionProvider();
         var mockProvider2 = new MockTypeDefinitionProvider();
         var collection = new TypeDefinitionProviderCollection();
@@ -36,8 +36,7 @@ public class TypeDefinitionProviderCollectionTests {
     }
 
     [Test]
-    public async Task AddProvider_AddsProviderToCollection()
-    {
+    public async Task AddProvider_AddsProviderToCollection() {
         var collection = new TypeDefinitionProviderCollection();
         var provider = new MockTypeDefinitionProvider();
 
@@ -49,8 +48,7 @@ public class TypeDefinitionProviderCollectionTests {
     }
 
     [Test]
-    public async Task GetTypeDefinition_ReturnsFromFirstProviderWhenMultipleHaveSameType()
-    {
+    public async Task GetTypeDefinition_ReturnsFromFirstProviderWhenMultipleHaveSameType() {
         var mockProvider1 = new MockTypeDefinitionProvider();
         var mockProvider2 = new MockTypeDefinitionProvider();
         var collection = new TypeDefinitionProviderCollection();
@@ -71,8 +69,7 @@ public class TypeDefinitionProviderCollectionTests {
     }
 
     [Test]
-    public async Task FindMatchingMethodOverloads_SingleOverload_ReturnsMethod()
-    {
+    public async Task FindMatchingMethodOverloads_SingleOverload_ReturnsMethod() {
         var registry = new ClrTypeDefinitionRegistry();
         var stringType = registry.GetTypeDefinition<string>();
 
@@ -83,8 +80,7 @@ public class TypeDefinitionProviderCollectionTests {
     }
 
     [Test]
-    public async Task FindMatchingMethodOverloads_MultipleOverloads_ReturnsBestMatch()
-    {
+    public async Task FindMatchingMethodOverloads_MultipleOverloads_ReturnsBestMatch() {
         var registry = new ClrTypeDefinitionRegistry();
         var stringType = registry.GetTypeDefinition<string>();
         var charType = registry.GetTypeDefinition<char>();
@@ -96,8 +92,7 @@ public class TypeDefinitionProviderCollectionTests {
     }
 
     [Test]
-    public async Task FindMatchingMethodOverloads_NoMatch_ReturnsEmpty()
-    {
+    public async Task FindMatchingMethodOverloads_NoMatch_ReturnsEmpty() {
         var registry = new ClrTypeDefinitionRegistry();
         var stringType = registry.GetTypeDefinition<string>();
 
@@ -107,8 +102,7 @@ public class TypeDefinitionProviderCollectionTests {
     }
 
     [Test]
-    public async Task PrimitiveTypeIdAndTypeCategory_AreExposedForClrTypes()
-    {
+    public async Task PrimitiveTypeIdAndTypeCategory_AreExposedForClrTypes() {
         var registry = new ClrTypeDefinitionRegistry();
 
         // Test primitive types
@@ -118,19 +112,19 @@ public class TypeDefinitionProviderCollectionTests {
         ITypeDefinition listType = registry.GetTypeDefinition(typeof(List<int>));
 
         // int should be primitive
-        await Assert.That(intType.PrimitiveTypeId).IsEqualTo(PrimitiveTypeId.Int32);
+        await Assert.That(intType.PrimitiveType).IsEqualTo(PrimitiveType.Int32);
         await Assert.That(intType.TypeCategory).IsEqualTo(TypeCategory.Primitive | TypeCategory.Numeric | TypeCategory.Integer | TypeCategory.Signed);
 
         // string should be primitive
-        await Assert.That(stringType.PrimitiveTypeId).IsEqualTo(PrimitiveTypeId.String);
+        await Assert.That(stringType.PrimitiveType).IsEqualTo(PrimitiveType.String);
         await Assert.That(stringType.TypeCategory).IsEqualTo(TypeCategory.Primitive | TypeCategory.Text);
 
         // DateTime should be primitive
-        await Assert.That(dateTimeType.PrimitiveTypeId).IsEqualTo(PrimitiveTypeId.DateTime);
+        await Assert.That(dateTimeType.PrimitiveType).IsEqualTo(PrimitiveType.DateTime);
         await Assert.That(dateTimeType.TypeCategory).IsEqualTo(TypeCategory.Primitive | TypeCategory.Temporal);
 
         // List<int> should not be primitive
-        await Assert.That(listType.PrimitiveTypeId).IsNull();
+        await Assert.That(listType.PrimitiveType).IsNull();
         await Assert.That(listType.TypeCategory).IsEqualTo(TypeCategory.Collection);
     }
 
@@ -138,43 +132,41 @@ public class TypeDefinitionProviderCollectionTests {
     private class MockTypeDefinition(string name) : ITypeDefinition {
         public string Name { get; } = name;
         public string? Namespace => null;
+        public AccessModifier AccessModifier => AccessModifier.Public;
         public IEnumerable<ITypeMember> Members => [];
-        public Type ReflectedType => typeof(object);
         public ITypeDefinition? BaseType => null;
         public IEnumerable<ITypeDefinition> Interfaces => [];
         public IEnumerable<IParameter> GenericParameters => [];
-        public PrimitiveTypeId? PrimitiveTypeId => null;
+        public PrimitiveType? PrimitiveType => null;
         public TypeCategory TypeCategory => TypeCategory.None;
 
         public IEnumerable<ITypeMember> GetMembers(string name) => Enumerable.Empty<ITypeMember>();
-        public bool IsAssignableTo(ITypeDefinition targetType) => throw new NotImplementedException();
+        public bool IsAssignableTo(ITypeDefinition targetType) => false;
 
-        public bool TryGetMethod(string name, IEnumerable<Type> parameterTypes, out ITypeMethod? method)
-        {
-            throw new NotImplementedException();
+        public bool TryGetMethod(string name, IEnumerable<Type> parameterTypes, out ITypeMethod? method) {
+            method = null;
+            return false;
         }
 
         public string? Tag { get; set; }
         public IEnumerable<ITypeField> Fields => [];
         public IEnumerable<ITypeProperty> Properties => [];
         public IEnumerable<ITypeMethod> Methods => [];
+        public IEnumerable<ITypeConstructor> Constructors => [];
     }
 
     private class MockTypeDefinitionProvider : ITypeDefinitionProvider {
         private readonly Dictionary<string, ITypeDefinition> _types = [];
 
-        public void AddType(string name, ITypeDefinition type)
-        {
+        public void AddType(string name, ITypeDefinition type) {
             _types[name] = type;
         }
 
-        public ITypeDefinition? GetTypeDefinition(string name)
-        {
+        public ITypeDefinition? GetTypeDefinition(string name) {
             return _types.TryGetValue(name, out var type) ? type : null;
         }
 
-        public ITypeDefinition? GetTypeDefinition(Type type)
-        {
+        public ITypeDefinition? GetTypeDefinition(Type type) {
             throw new NotImplementedException();
         }
     }

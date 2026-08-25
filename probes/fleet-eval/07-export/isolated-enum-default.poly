@@ -1,0 +1,15 @@
+domain FleetEvalIsolatedEnumDefault
+
+// Enum default authored as a string literal (the guide documents
+// `default(MemberName)`; a quoted member is the sibling form).
+
+Level: enum {
+  A
+  B
+  C
+}
+
+Box: entity {
+  Level: Level default("A")
+  Label: Text required
+}

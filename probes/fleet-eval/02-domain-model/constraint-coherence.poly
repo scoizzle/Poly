@@ -1,0 +1,50 @@
+domain ConstraintCoherence
+
+// Constraints & defaults coherence through the batch path: joint constraints that
+// are jointly satisfiable, open length, negative/open ranges, enum + dynamic
+// defaults, and parameter-to-constrained-property flow.
+
+Sku: enum { Alpha, Beta, Gamma }
+
+Vendor: entity {
+  Code: Text unique pattern("^V\\d{4}$")
+  Rating: Number range(1, 5) default(3)
+  Balance: Number range(-500, 1000) default(0)
+  Kind: Sku default(Beta)
+  Label: Text length(3, ) default("AAA")
+  createdAt: DateTime default(now)
+  memberSince: Date default(today)
+  uid: Text default(guid)
+
+  Positive: policy { Balance > 0 }
+  HighRating: policy { Rating >= 4 }
+  InGoodStanding: policy { Balance > 0 and Rating >= 3 }
+
+  adjust: action (delta: Number) {
+    assign Balance to Balance + delta
+  }
+  setLabel: action (value: Text) {
+    assign Label to value
+  }
+  setCode: action (value: Text) {
+    assign Code to value
+  }
+  reset: action {
+    assign Balance to 0
+    assign Label to "AAA"
+  }
+}
+
+Customer: entity {
+  Name: Text required length(2, 60)
+  Age: Number range(0, 150) default(18)
+  Zip: Text pattern("^\\d{5}(-\\d{4})?$")
+  vendor: Vendor
+
+  IsAdult: policy { Age >= 18 }
+  HasVendor: policy { vendor exists }
+
+  ageUp: action (years: Number) {
+    assign Age to Age + years
+  }
+}

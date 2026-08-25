@@ -1,0 +1,15 @@
+domain D
+
+Item: entity {
+  Status: Text
+  Positive: policy { Total > 0 }
+  Blocked: policy { Status is "blocked" }
+
+  Go: action
+    require Positive
+    require not Blocked
+  {
+    assign Status to "done"
+  }
+  Total: Number
+}

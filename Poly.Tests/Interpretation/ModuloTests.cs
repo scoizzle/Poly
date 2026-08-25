@@ -1,18 +1,12 @@
 using Poly.Tests.TestHelpers;
-using System.Linq.Expressions;
 
-using Poly.Interpretation;
 using Expr = System.Linq.Expressions.Expression;
-using Poly.Interpretation.AbstractSyntaxTree;
-using Poly.Interpretation.AbstractSyntaxTree.Arithmetic;
 
 namespace Poly.Tests.Interpretation;
 
-public class ModuloTests
-{
+public class ModuloTests {
     [Test]
-    public async Task Modulo_WithIntegers_ReturnsRemainder()
-    {
+    public async Task Modulo_WithIntegers_ReturnsRemainder() {
         // Arrange
         var node = new Modulo(Wrap(17), Wrap(5));
 
@@ -26,8 +20,7 @@ public class ModuloTests
     }
 
     [Test]
-    public async Task Modulo_WithExactDivision_ReturnsZero()
-    {
+    public async Task Modulo_WithExactDivision_ReturnsZero() {
         // Arrange
         var node = new Modulo(Wrap(20), Wrap(5));
 
@@ -41,8 +34,7 @@ public class ModuloTests
     }
 
     [Test]
-    public async Task Modulo_WithDoubles_ReturnsRemainder()
-    {
+    public async Task Modulo_WithDoubles_ReturnsRemainder() {
         // Arrange
         var node = new Modulo(Wrap(5.5), Wrap(2.0));
 
@@ -56,8 +48,7 @@ public class ModuloTests
     }
 
     [Test]
-    public async Task Modulo_WithParameters_EvaluatesCorrectly()
-    {
+    public async Task Modulo_WithParameters_EvaluatesCorrectly() {
         // Arrange
         var param1 = new Parameter("a", TypeReference.To<int>());
         var param2 = new Parameter("b", TypeReference.To<int>());
@@ -72,8 +63,7 @@ public class ModuloTests
     }
 
     [Test]
-    public async Task Modulo_WithNegativeNumbers_ReturnsCorrectRemainder()
-    {
+    public async Task Modulo_WithNegativeNumbers_ReturnsCorrectRemainder() {
         // Arrange
         var node = new Modulo(Wrap(-17), Wrap(5));
 
@@ -87,8 +77,7 @@ public class ModuloTests
     }
 
     [Test]
-    public async Task Modulo_GetTypeDefinition_ReturnsNumericType()
-    {
+    public async Task Modulo_GetTypeDefinition_ReturnsNumericType() {
         // Arrange
         var node = new Modulo(Wrap(17), Wrap(5));
 
@@ -100,8 +89,7 @@ public class ModuloTests
     }
 
     [Test]
-    public async Task Modulo_ToString_ReturnsExpectedFormat()
-    {
+    public async Task Modulo_ToString_ReturnsExpectedFormat() {
         // Arrange
         var node = new Modulo(Wrap(17), Wrap(5));
 
@@ -113,8 +101,7 @@ public class ModuloTests
     }
 
     [Test]
-    public async Task Modulo_WithNullArguments_ThrowsArgumentNullException()
-    {
+    public async Task Modulo_WithNullArguments_ThrowsArgumentNullException() {
         // Act & Assert
         await Assert.That(() => new Modulo(null!, Wrap(5))).Throws<ArgumentNullException>();
     }

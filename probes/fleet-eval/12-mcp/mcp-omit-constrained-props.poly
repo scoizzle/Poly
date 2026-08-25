@@ -1,0 +1,12 @@
+domain OmitConstrainedProps
+
+Box: entity {
+  Code: Text pattern("^[A-Z]{2}[0-9]{3}$")
+}
+
+Pallet: entity {
+  boxes: many Box
+  Load: action -> Box {
+    create in boxes { }
+  }
+}

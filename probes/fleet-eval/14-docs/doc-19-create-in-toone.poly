@@ -1,0 +1,15 @@
+domain DocCreateInToOne
+
+// Guide §6/§0.3: create in Rel { ... } — is a to-one nav a valid create-in target?
+Order: entity {
+  invoice: Invoice
+  Finalize: action -> Invoice {
+    assign Total to 100
+    create in invoice { Amount: 100 }
+  }
+  Total: Number default(0)
+}
+
+Invoice: entity {
+  Amount: Number default(0)
+}

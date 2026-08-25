@@ -1,0 +1,31 @@
+domain Permissions
+
+FileEntry: entity {
+  Name: Text required
+  Mode: Number range(0, 511) default(420)
+  IsSetuid: Boolean default(false)
+  GroupName: Text
+
+  OwnerRead: policy { Mode >= 256 }
+  OwnerWrite: policy { Mode - (Mode / 256) * 256 >= 128 }
+  OwnerExecute: policy { Mode - (Mode / 128) * 128 >= 64 }
+  GroupRead: policy { Mode - (Mode / 64) * 64 >= 32 }
+  GroupWrite: policy { Mode - (Mode / 32) * 32 >= 16 }
+  GroupExecute: policy { Mode - (Mode / 16) * 16 >= 8 }
+  WorldRead: policy { Mode - (Mode / 8) * 8 >= 4 }
+  WorldWrite: policy { Mode - (Mode / 4) * 4 >= 2 }
+  WorldExecute: policy { Mode - (Mode / 2) * 2 >= 1 }
+  WorldWritable: policy { Mode - (Mode / 4) * 4 >= 2 }
+  ValidMode: policy { Mode >= 0 and Mode <= 511 }
+  IsPubliclyReadable: policy { Mode - (Mode / 8) * 8 >= 4 }
+
+  Chmod: action (mode: Number)
+    require ValidMode
+  {
+    assign Mode to mode
+  }
+
+  Chown: action (group: Text) {
+    assign GroupName to group
+  }
+}

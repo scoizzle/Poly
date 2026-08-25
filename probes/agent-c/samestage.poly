@@ -1,0 +1,28 @@
+domain SameStageTrans
+
+Item: entity {
+  Status: Text
+  Counter: Number default(0)
+
+  Active: stage {
+    entry {
+      assign Counter to Counter + 1
+      assign Status to "entered_active"
+    }
+    exit {
+      assign Status to "exited_active"
+    }
+    refresh: action {
+      transition to Active
+    }
+    ReEnter: action {
+      assign Status to "inactive"
+      transition to Active
+    }
+  }
+  Done: stage {
+    finish: action {
+      transition to Done
+    }
+  }
+}

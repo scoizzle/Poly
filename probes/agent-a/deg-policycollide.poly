@@ -1,0 +1,8 @@
+domain DegeneratePolicyCollide
+
+Order: entity {
+  Total: Number
+
+  SameAsPolicy: action { assign Total to 1 }
+  SameAsPolicy: policy { Total > 0 }
+}

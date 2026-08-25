@@ -1,87 +1,64 @@
-# Copilot Instructions for the Poly Workspace
+# GitHub Copilot Instructions for Poly
 
-These instructions help AI coding agents work productively in this .NET solution. Focus on concrete project patterns and commands established in this repo.
+**AGENTS.md is the single source of truth.**
 
-## Overview & Architecture
-- **Goal:** Define a common shared abstraction layer and interface into varying type systems for supporting dynamic code generation and execution in other components of this project. Fluent, strongly-typed domain modeling for validation, serialization, and future codegen.
-- **Primary library:** `Poly/` — core DSL and engines for Data Modeling, Interpretation, Introspection, Text, and Validation.
-- **Examples/benchmarks:** `Poly.Benchmarks/` — runnable sample scenarios (e.g., `FluentBuilderExample.cs`).
-- **Tests:** `Poly.Tests/` — unit tests for core components.
-- **Key builders & flow:**
-  - `DataModelBuilder` → collects types and relationships.
-  - `DataTypeBuilder` → defines a type, properties, and rules.
-  - `PropertyBuilder` → sets property types and constraints.
-  - `RelationshipBuilder` → creates `HasOne/HasMany` and `WithOne/WithMany` relationships.
-- **Serialization:** Portable JSON for models; see `DomainModeling/DataModelPropertyPolymorphicJsonTypeResolver.cs` for custom polymorphic handling.
- - **Module boundaries (critical):** One-way dependencies are enforced.
-   - `Interpretation` depends on `Introspection` interfaces.
-   - `Validation` depends on `Interpretation` (rules and evaluation consume the DSL).
-   - `Introspection` must not depend on `Interpretation`.
-   - The only exception is CLR-specific implementations under [Poly/Introspection/CommonLanguageRuntime](Poly/Introspection/CommonLanguageRuntime), which provide concrete types but do not introduce reverse dependencies.
+All architectural guidelines, module boundaries, placement rules, coding style, test conventions, and key decisions for this repository are defined in the root [AGENTS.md](../../AGENTS.md) file.
 
-## Build & Run
-- **Workspace tasks (preferred):** Use VS Code tasks defined by the workspace.
-  - Build: Task `build` runs `dotnet build` on [Poly.Benchmarks/Poly.Benchmarks.csproj](Poly.Benchmarks/Poly.Benchmarks.csproj).
-  - Publish: Task `publish` runs `dotnet publish` for benchmarks.
-  - Watch+Run: Task `watch` runs `dotnet watch run --project` on benchmarks.
-- **CLI examples:**
-  - Build: `dotnet build Poly.Benchmarks/Poly.Benchmarks.csproj`
-  - Run sample: `dotnet run --project Poly.Benchmarks/Poly.Benchmarks.csproj`
+## Instructions for Copilot
 
-## Conventions & Patterns
-- **Fluent builders:** Prefer builder methods for types/properties/relationships rather than constructing DTOs directly.
-  - Example in [Poly.Benchmarks/FluentBuilderExample.cs](Poly.Benchmarks/FluentBuilderExample.cs).
-- **Constraints:** Property constraints live under [Poly/Validation/Constraints](Poly/Validation/Constraints). Add via `WithConstraint()` or `WithConstraints()`.
-- **Rules:** Type-level rules in [Poly/Validation/Rules](Poly/Validation/Rules). Attach via `DataTypeBuilder.AddRule()`.
-- **Relationships:** Define with `HasOne`/`HasMany` then refine with `WithOne`/`WithMany` and source/target constraints.
-- **Interpretation/Operators:** The DSL includes operators under [Poly/Interpretation/Operators](Poly/Interpretation/Operators) (e.g., invocation). Extend by following existing operator structure.
-- **Introspection:** Interfaces for type definitions are under [Poly/Introspection](Poly/Introspection) to abstract the modeling layer.
-- **Extensions:** Shared helpers under [Poly/Extensions](Poly/Extensions) (e.g., enumerable/dictionary utilities).
- - **Dependency discipline:** When adding new APIs:
-   - Place shared abstractions in `Introspection`.
-   - Keep evaluators and operator logic in `Interpretation`, consuming `Introspection` only.
-   - Implement constraints and rules in `Validation`, consuming `Interpretation`.
-   - Avoid circular or cross-layer references; validate new files adhere to the one-way boundary above.
+- You **MUST** treat `AGENTS.md` as the authoritative document.
+- Before making any non-trivial changes (especially anything related to domain modeling, analysis, interpretation, lowering, or new features), you should read or re-read the relevant sections of `AGENTS.md`.
+- The contents of this file (`copilot-instructions.md`) are secondary. They exist only to reinforce that `AGENTS.md` takes precedence.
+- When in doubt about architecture, file placement, or conventions, defer to `AGENTS.md`.
 
-## Testing
-- Tests live in [Poly.Tests](Poly.Tests). Use standard `dotnet test` or run the test project directly:
+## Key Sections in AGENTS.md
 
-```bash
-dotnet run --project Poly.Tests/Poly.Tests.csproj
-```
+Pay particular attention to:
+- Module boundaries (one-way dependencies)
+- Placement Rules table
+- Contract Interface Generation rules
+- Key Architectural Decisions section (including the V2 → V3 immutable core decision)
+- Coding Style guidelines
 
-- Add tests alongside feature changes; mirror the builder-first style.
+## DSL Guide Maintenance
 
-## Serialization & JSON
-- Models serialize to JSON with clear `Types`, `Properties`, and `Relationships` sections.
-- When adding new constraint or rule types, ensure JSON shape stays consistent and update resolvers if polymorphism is involved.
+**`Poly.Mcp/Docs/poly-dsl-guide.md` must be updated whenever the DSL surface changes.**
 
-## Adding New Modeling Features
-- **New constraint:** Implement in [Poly/Validation/Constraints](Poly/Validation/Constraints) and integrate via `PropertyBuilder`.
-- **New rule:** Implement in [Poly/Validation/Rules](Poly/Validation/Rules) and expose through `DataTypeBuilder.AddRule()`.
-- **New operator:** Add under [Poly/Interpretation/Operators](Poly/Interpretation/Operators), ensuring compatibility with `InterpretationContext`.
-- **New relationship types:** Extend `Relationship` in [Poly/DomainModeling/Relationship.cs](Poly/DomainModeling/Relationship.cs) and builder methods in `DataTypeBuilder`.
+This includes:
+- Adding or removing a parser keyword or syntax construct
+- Adding or removing a Phase 1a/1b effect type
+- Changing constraint syntax (`range`, `length`, `pattern`, etc.)
+- Changing relationship declaration syntax (N1 nav properties)
+- Adding or removing lifecycle stage syntax (`entry`/`exit`, `when` subscriptions)
+- Adding, removing, or renaming an MCP tool that authors DSL
 
-## Coding Style
-- Keep changes minimal and aligned to existing fluent APIs.
-- Avoid inline comments unless explicitly required; follow method naming and builder chaining patterns present in the repo.
-- **Region blocks:** Do not use C# `#region`/`#endregion` directives. They are code noise and add no value; rely on clear class structure and method organization instead.
+Before merging any change that affects what `apply_dsl` accepts or what `export_dsl` emits,
+verify the guide at `Poly.Mcp/Docs/poly-dsl-guide.md` is still accurate.
+The smoke test `GetDslGuide_ReturnsProductSurface` will catch drift, but the
+maintainer must update the guide content proactively.
 
-## Useful References
-- High-level intro and examples: [README.md](README.md)
-- Core modeling: [Poly/DomainModeling](Poly/DomainModeling)
-- Validation: [Poly/Validation](Poly/Validation)
-- Interpretation DSL: [Poly/Interpretation](Poly/Interpretation)
-- Benchmarks/samples: [Poly.Benchmarks](Poly.Benchmarks)
-- Tests: [Poly.Tests](Poly.Tests)
+This ensures consistent behavior across all AI tools the maintainer uses (Copilot, OpenCode, Grok, etc.).
 
-## Agent Tips
-- Prefer enhancing builder flows over raw object instantiation.
-- Reuse constraint and rule primitives; do not duplicate logic.
-- Validate by running benchmarks or tests after changes using workspace tasks.
- - Favor extending existing subsystems over bespoke implementations:
-   - For evaluation semantics, add operators/concepts under `Interpretation/Operators` using `InterpretationContext` rather than simulating evaluation elsewhere.
-   - For validation, add constraints/rules under `Validation` consuming `Interpretation` outputs; avoid standalone validators outside the rule/constraint framework.
-   - For type abstractions, place interfaces in `Introspection` and avoid reverse dependencies.
+## Deep / phenomenal review
 
-If any sections are unclear or incomplete, please comment with specific paths or scenarios to refine these instructions.
+For an **adversarial correctness and contract** review of a diff (findings only; follow-ups in docs), follow:
+
+**[`docs/agent/phenomenal-review.md`](../../docs/agent/phenomenal-review.md)**
+
+Assume the code is wrong until evidence says otherwise. Prefer split-context multi-pass when this session also wrote the change.  
+Project skill wrapper: [`.github/skills/phenomenal-review/SKILL.md`](../skills/phenomenal-review/SKILL.md).  
+This is **not** the pre-ship fix loop below.
+
+## Pre-Ship Review Gate
+
+Before marking any task or slice as complete, you **must** execute the
+**[uncommitted-change review gate](../../AGENTS.md#pre-ship-review-gate)** defined in AGENTS.md.
+
+The process:
+1. Run `git diff --stat HEAD` then `git diff HEAD` to audit dirty files.
+2. Categorize findings by severity: 🔴 Structure, 🟠 Contract, 🟡 Edge case, ⚪ Hygiene.
+3. For every 🔴/🟠 finding, verify **three-layer defense**: parse-time rejects, analyze-time catches, runtime fails loud.
+4. **Fail-closed:** Empty sets, missing matches, invalid configs — fail loud, no vacuous success.
+5. Apply the smallest fix, re-review, and only ship when the tree is clean and all 🔴🟠 are resolved.
+
+Full task definition: [`docs/plans/v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md`](../../docs/plans/v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md)

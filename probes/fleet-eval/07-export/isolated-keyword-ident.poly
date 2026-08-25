@@ -1,0 +1,8 @@
+domain FleetEvalIsolatedKeywordIdent
+
+// Valid DSL identifiers that are C# reserved words. The export must
+// @-escape (or analysis must reject) — raw emission cannot compile.
+
+namespace: entity {
+  event: Text
+}

@@ -1,0 +1,12 @@
+domain FleetEvalIsolatedCreateAction
+
+// Isolated probe: an action named `Create` (valid DSL identifier)
+// colliding with the exporter's generated static Create factory.
+
+Thing: entity {
+  Name: Text default("n")
+
+  Create: action {
+    assign Name to "made"
+  }
+}

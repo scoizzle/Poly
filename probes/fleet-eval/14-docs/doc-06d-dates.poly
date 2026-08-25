@@ -1,0 +1,17 @@
+domain DocDates
+
+// §8 shipped-surface boundaries claim:
+//   - now/today/guid authorable in default(...) and assign RHS
+//   - "Expressions are type-checked at analysis ... default(today) on a Number property rejected"
+Sub: entity {
+  CreatedAt: DateTime default(now)
+  ActiveSince: Date default(today)
+  RenewedAt: DateTime
+  ExternalId: Text default(guid)
+
+  Active: stage {
+    Renew: action {
+      assign RenewedAt to now
+    }
+  }
+}

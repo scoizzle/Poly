@@ -1,0 +1,25 @@
+domain RecursiveInvoke
+
+Item: entity {
+  Status: Text
+  Depth: Number default(0)
+
+  A: stage {
+    tick: action {
+      assign Depth to Depth + 1
+      invoke tick
+      transition to B
+    }
+  }
+  B: stage {
+    entry { assign Status to "in_b" }
+    bounce: action {
+      invoke flip
+    }
+    flip: action {
+      invoke bounce
+      transition to C
+    }
+  }
+  C: stage { }
+}

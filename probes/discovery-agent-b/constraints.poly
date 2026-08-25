@@ -1,0 +1,35 @@
+domain Warehouse
+
+Sku: enum { Alpha, Beta }
+
+Bin: entity {
+  Code: Text length(2, 6) required
+  Zone: Text pattern("^[A-Z][0-9]$")
+  Capacity: Number range(0, 100)
+  MinFill: Number range(0, )
+  MaxFill: Number range(, 1000)
+  Kind: Sku default(Alpha)
+  Restock: action (qty: Number) {
+    assign Capacity to qty
+  }
+}
+
+Item: entity {
+  SKU: Text required
+  Name: Text length(3, 20)
+  Category: Text pattern("^[A-Z]{2}$")
+  Count: Number range(1, 99)
+  Floor: Number range(0, )
+  Ceil: Number range(, 500)
+  status: Text
+  bins: many Bin
+  stock: action (qty: Number) -> Bin {
+    create in bins { Code: "AB" Capacity: qty }
+  }
+  seedBin: action -> Bin {
+    create Bin { Code: "XY" Capacity: 5 }
+  }
+  addItem: action (name: Text) {
+    create Item { SKU: "A1" Name: "abc" Count: 5 }
+  }
+}

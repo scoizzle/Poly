@@ -1,0 +1,85 @@
+domain Clinic
+
+MemberStatus: enum {
+  Standard
+  Gold
+  Platinum
+}
+
+Patient: entity table("CLINIC_PATIENT") {
+  Name: Text required column("FULL_NAME") length(2, 100)
+  Status: MemberStatus default(Standard)
+  LastApptCode: Text default("")
+  Age: Number range(0, 150)
+  bookings: many Appointment
+  record: owned MedicalRecord
+
+  IsVip: policy { Status is "Gold" or Status is "Platinum" }
+
+  Notify: action (message: Text) {
+    assign LastApptCode to message
+  }
+
+  Book: action (code: Text) -> Appointment
+    require IsVip
+  {
+    create in bookings { Code: code }
+  }
+
+  Amend: action {
+    invoke record.Append(note: "amended")
+  }
+
+  Registered: stage {
+    when bookings Completed as appt {
+      assign LastApptCode to appt Code
+    }
+  }
+  Active: stage {
+    entry { assign LastApptCode to "entered-active" }
+  }
+
+  when all bookings Completed {
+    assign LastApptCode to "allDone"
+  }
+}
+
+Appointment: entity {
+  Code: Text required
+  patient: Patient
+
+  Scheduled: stage {
+    Start: action {
+      transition to Completed
+    }
+  }
+  Completed: stage {
+  }
+  Cancelled: stage {
+  }
+}
+
+MedicalRecord: entity {
+  Notes: Text default("")
+  Reference: Text
+
+  Append: action (note: Text) {
+    assign Notes to note
+  }
+}
+
+Department: entity {
+  Name: Text required
+  patients: many Patient
+
+  HasManyPatients: policy { count patients > 5 }
+
+  Admin: stage {
+    Sweep: action
+      require HasManyPatients
+    {
+      for patients as p where p IsVip invoke p.Notify(message: "vip")
+      for patients as p where p in Active invoke p.Notify(message: "active")
+    }
+  }
+}

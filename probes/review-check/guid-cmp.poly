@@ -1,0 +1,6 @@
+domain ReviewGuidCmp
+T: entity {
+  A: Uuid
+  B: Uuid
+  Cmp: policy { A > B }
+}

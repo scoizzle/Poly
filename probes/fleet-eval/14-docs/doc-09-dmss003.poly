@@ -1,0 +1,15 @@
+domain DocDmss003
+
+// §7: any/all on a singular relationship rejected (DMSS003)
+Customer: entity {
+  profile: Profile
+
+  when any profile Active {
+    assign Status to "x"
+  }
+  Status: Text
+}
+
+Profile: entity {
+  Active: stage { }
+}

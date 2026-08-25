@@ -1,0 +1,44 @@
+domain EdgeCases
+
+Color: enum {
+  Red,
+  Green,
+  Blue
+}
+
+Box: entity {
+  Label: Text required length(2, 20)
+  Code: Text pattern("^[A-Z]{2}[0-9]{3}$")
+  Qty: Number range(0, 150) default(0)
+  Color: Color default(Red)
+  CreatedAt: DateTime default(now)
+  RefId: Text default(guid)
+
+  Stock: stage {
+    entry { assign Status to "stocked" }
+    exit  { assign Status to "left" }
+    Add: action (delta: Number) {
+      assign Qty to Qty + delta
+    }
+  }
+  Status: Text default("new")
+}
+
+Pallet: entity {
+  boxes: many Box
+  Label: Text required
+
+  Load: action -> Box {
+    create in boxes { Label: "BX" Code: "AB123" }
+  }
+}
+
+Hold: entity {
+  Code: Text unique
+  Active: stage {
+    Release: action { transition to Released }
+  }
+  Released: stage {
+    Reopen: action { transition to Active }
+  }
+}

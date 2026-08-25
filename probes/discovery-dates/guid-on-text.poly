@@ -1,0 +1,4 @@
+domain DiscoveryGuid
+A: entity {
+  ExternalId: Text default(guid)
+}

@@ -1,0 +1,8 @@
+domain FleetEvalIsolatedDomainResultName
+
+// An entity named `DomainResult` collides with the generated scaffolding
+// record struct DomainResult / DomainResult<T>.
+
+DomainResult: entity {
+  Value: Text
+}

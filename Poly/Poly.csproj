@@ -5,9 +5,11 @@
         <Nullable>enable</Nullable>
         <ImplicitUsings>enable</ImplicitUsings>
         <LangVersion>latest</LangVersion>
+        <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
         <OutputType>Library</OutputType>
         <SynchReleaseVersion>false</SynchReleaseVersion>
         <RootNamespace>Poly</RootNamespace>
+        
         <GeneratePackageOnBuild>False</GeneratePackageOnBuild>
         <PackageId>Poly</PackageId>
         <Authors>Scot 'Scoizzle' Murphy</Authors>
@@ -26,4 +28,12 @@
         <PackageVersion>1.0.1</PackageVersion>
         <Version>1.0</Version>
     </PropertyGroup>
+
+    <ItemGroup>
+        <!-- Enables smoke / integration tests in Poly.Tests to reach internal RISC VM types during development and transition.
+             No effect on public API surface or packaged consumers. -->
+        <InternalsVisibleTo Include="Poly.Tests" />
+        <InternalsVisibleTo Include="Poly.Mcp" />
+        <InternalsVisibleTo Include="Poly.DslCompiler" />
+    </ItemGroup>
 </Project>

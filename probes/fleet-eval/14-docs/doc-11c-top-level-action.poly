@@ -1,0 +1,6 @@
+domain DocTopLevelAction
+
+Token: entity { Lexeme: Text required Kind: Text required }
+Lex: action {
+  create in tokens { Lexeme: "let" Kind: Keyword }
+}

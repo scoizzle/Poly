@@ -1,0 +1,10 @@
+domain FleetF3DateParamArith
+// F3: date + number arithmetic is accepted for ANY operand shape, but the AddDays
+// rewrite keys on PropertyAccess only — a date PARAMETER operand reaches the
+// export as DateOnly + long (CS0019).
+E: entity {
+  DueDate: Date
+  Set: action (d: Date) {
+    assign DueDate to d + 30
+  }
+}

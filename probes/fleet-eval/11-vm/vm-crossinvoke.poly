@@ -1,0 +1,31 @@
+domain FleetVmCrossInvoke
+
+Invoice: entity {
+  Amount: Number default(0)
+  Amount2: Number default(0)
+
+  Settle: action (amount: Number) {
+    assign Amount to amount
+  }
+  SettleLiteral: action (amount: Number) {
+    assign Amount2 to amount
+  }
+}
+
+Order: entity {
+  Total: Number default(0)
+  invoice: Invoice
+
+  Open: stage {
+    PayWithParam: action (amount: Number) {
+      assign Total to amount
+      invoke invoice.Settle(amount: amount)
+      transition to Paid
+    }
+    PayWithLiteral: action (amount: Number) {
+      invoke invoice.SettleLiteral(amount: 100)
+      transition to Paid
+    }
+  }
+  Paid: stage { }
+}

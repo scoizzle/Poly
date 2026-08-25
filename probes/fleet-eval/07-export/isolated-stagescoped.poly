@@ -1,0 +1,24 @@
+domain FleetEvalIsolatedStageScoped
+
+// Stage-scoped subscription: the `when` handler must fire only while the
+// subscriber is in the declaring stage (runtime: NotifyTransition resolves
+// the plan from CurrentStage).
+
+Device: entity {
+  node: Node
+  LastSeen: Text default("never")
+  Online: stage {
+    Heartbeat: action {
+      transition to Flapping
+    }
+    when node Online as n {
+      assign LastSeen to n Beat
+    }
+  }
+  Flapping: stage { }
+}
+
+Node: entity {
+  Beat: Text
+  Online: stage { }
+}

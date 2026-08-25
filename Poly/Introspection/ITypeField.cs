@@ -5,5 +5,4 @@ namespace Poly.Introspection;
 /// Fields are storage locations with a type and no parameters.
 /// </summary>
 public interface ITypeField : ITypeMember {
-    // Inherits all from ITypeMember; no additional members needed for fields
 }

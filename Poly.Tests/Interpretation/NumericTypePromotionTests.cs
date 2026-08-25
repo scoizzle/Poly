@@ -1,18 +1,12 @@
 using Poly.Tests.TestHelpers;
-using System.Linq.Expressions;
 
-using Poly.Interpretation;
 using Expr = System.Linq.Expressions.Expression;
-using Poly.Interpretation.AbstractSyntaxTree;
-using Poly.Interpretation.AbstractSyntaxTree.Arithmetic;
 
 namespace Poly.Tests.Interpretation;
 
-public class NumericTypePromotionTests
-{
+public class NumericTypePromotionTests {
     [Test]
-    public async Task NumericTypePromotion_Add_IntAndDouble_ReturnsDouble()
-    {
+    public async Task NumericTypePromotion_Add_IntAndDouble_ReturnsDouble() {
         // Arrange
         var node = new Add(Wrap(10), Wrap(3.14));
 
@@ -26,8 +20,7 @@ public class NumericTypePromotionTests
     }
 
     [Test]
-    public async Task NumericTypePromotion_Multiply_FloatAndInt_ReturnsFloat()
-    {
+    public async Task NumericTypePromotion_Multiply_FloatAndInt_ReturnsFloat() {
         // Arrange
         var node = new Multiply(Wrap(2.5f), Wrap(4));
 
@@ -41,8 +34,7 @@ public class NumericTypePromotionTests
     }
 
     [Test]
-    public async Task NumericTypePromotion_Subtract_LongAndInt_ReturnsLong()
-    {
+    public async Task NumericTypePromotion_Subtract_LongAndInt_ReturnsLong() {
         // Arrange
         var node = new Subtract(Wrap(100L), Wrap(30));
 
@@ -56,8 +48,7 @@ public class NumericTypePromotionTests
     }
 
     [Test]
-    public async Task NumericTypePromotion_Divide_DecimalAndInt_ReturnsDecimal()
-    {
+    public async Task NumericTypePromotion_Divide_DecimalAndInt_ReturnsDecimal() {
         // Arrange
         var node = new Divide(Wrap(100m), Wrap(4));
 
@@ -71,8 +62,7 @@ public class NumericTypePromotionTests
     }
 
     [Test]
-    public async Task NumericTypePromotion_Modulo_DoubleAndFloat_ReturnsDouble()
-    {
+    public async Task NumericTypePromotion_Modulo_DoubleAndFloat_ReturnsDouble() {
         // Arrange
         var node = new Modulo(Wrap(10.0), Wrap(3.0f));
 
@@ -86,8 +76,7 @@ public class NumericTypePromotionTests
     }
 
     [Test]
-    public async Task NumericTypePromotion_Add_TwoInts_ReturnsInt()
-    {
+    public async Task NumericTypePromotion_Add_TwoInts_ReturnsInt() {
         // Arrange
         var node = new Add(Wrap(10), Wrap(20));
 
@@ -101,8 +90,7 @@ public class NumericTypePromotionTests
     }
 
     [Test]
-    public async Task NumericTypePromotion_Add_ByteAndShort_ReturnsInt()
-    {
+    public async Task NumericTypePromotion_Add_ByteAndShort_ReturnsInt() {
         // Arrange
         var node = new Add(Wrap((byte)5), Wrap((short)10));
 
@@ -116,8 +104,7 @@ public class NumericTypePromotionTests
     }
 
     [Test]
-    public async Task NumericTypePromotion_Multiply_UIntAndLong_ReturnsLong()
-    {
+    public async Task NumericTypePromotion_Multiply_UIntAndLong_ReturnsLong() {
         // Arrange
         var node = new Multiply(Wrap(5u), Wrap(10L));
 
@@ -131,8 +118,7 @@ public class NumericTypePromotionTests
     }
 
     [Test]
-    public async Task NumericTypePromotion_Add_ULongAndInt_ReturnsULong()
-    {
+    public async Task NumericTypePromotion_Add_ULongAndInt_ReturnsULong() {
         // Arrange
         var node = new Add(Wrap(100UL), Wrap(50));
 
@@ -146,11 +132,10 @@ public class NumericTypePromotionTests
     }
 
     [Test]
-    public async Task NumericTypePromotion_Add_WithParameters_PromotesCorrectly()
-    {
+    public async Task NumericTypePromotion_Add_WithParameters_PromotesCorrectly() {
         // Arrange
-        var param1 = new Parameter("a", new TypeReference("System.Int32"));
-        var param2 = new Parameter("b", new TypeReference("System.Double"));
+        var param1 = new Parameter("a", TypeReference.To<int>());
+        var param2 = new Parameter("b", TypeReference.To<double>());
         var node = new Add(param1, param2);
 
         // Act

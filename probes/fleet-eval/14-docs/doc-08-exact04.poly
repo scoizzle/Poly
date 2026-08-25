@@ -1,0 +1,10 @@
+domain DocExact04
+
+// §0.4 exact guide example (verbatim)
+Patron: entity {
+  fines: many Fine
+
+  when loans Overdue {
+    create Fine { Amount: 5; Reason: "Overdue" }
+  }
+}

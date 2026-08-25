@@ -1,0 +1,18 @@
+domain DocInvokeQuant
+
+// §8 line ~707: "Invoke effect (invoke ActionName ... quantifiers any/all; filter where)"
+Line: entity {
+  Qty: Number default(0)
+  Mark: action (amount: Number) {
+    assign Qty to amount
+  }
+}
+
+Order: entity {
+  items: many Line
+
+  Go: action {
+    invoke any items.Mark(amount: 5)
+    invoke all items.Mark(amount: 5)
+  }
+}

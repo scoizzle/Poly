@@ -1,0 +1,14 @@
+domain DateVsStringAndArith
+
+T: entity {
+  When: Date
+  Count: Number
+  P1: policy { When == "2024-01-01" }
+  P2: policy { When < "2025-01-01" }
+  P3: policy { When > 5 }
+  Draft: stage {
+    DateAdd: action { assign When to When + 1 }
+    SetBool: action { assign Name to true }
+  }
+  Name: Text
+}

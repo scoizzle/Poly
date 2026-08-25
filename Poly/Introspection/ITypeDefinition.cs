@@ -23,6 +23,11 @@ public interface ITypeDefinition {
     string? Namespace { get; }
 
     /// <summary>
+    /// Gets the visibility of the type.
+    /// </summary>
+    AccessModifier AccessModifier { get; }
+
+    /// <summary>
     /// Gets the fully-qualified name combining <see cref="Namespace"/> and <see cref="Name"/>.
     /// </summary>
     string FullName => Namespace != null ? $"{Namespace}.{Name}" : Name;
@@ -66,15 +71,15 @@ public interface ITypeDefinition {
     IEnumerable<ITypeMethod> Methods { get; }
 
     /// <summary>
-    /// Gets the underlying reflected runtime type, when available.
+    /// Gets all constructors defined on the type.
     /// </summary>
-    Type ReflectedType { get; }
+    IEnumerable<ITypeConstructor> Constructors { get; }
 
     /// <summary>
     /// Gets the primitive type identifier if this type is a primitive type, null otherwise.
     /// Primitive types are the atomic building blocks from which all other types are composed.
     /// </summary>
-    PrimitiveTypeId? PrimitiveTypeId { get; }
+    PrimitiveType? PrimitiveType { get; }
 
     /// <summary>
     /// Gets the type categories that apply to this type.

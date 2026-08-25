@@ -1,0 +1,19 @@
+domain ChainTrans
+
+Item: entity {
+  Status: Text
+
+  A: stage {
+    go: action {
+      transition to B
+      transition to C
+    }
+  }
+  B: stage {
+    entry { assign Status to "in_b" }
+  }
+  C: stage {
+    entry { assign Status to "in_c" }
+  }
+  D: stage { }
+}

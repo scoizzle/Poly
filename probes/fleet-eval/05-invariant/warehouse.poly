@@ -1,0 +1,69 @@
+domain FleetWarehouse
+
+// Warehouse stock management (real system): bins carry stock under range/length/
+// pattern constraints; requests flow from bins; actions assign (incl. param flow
+// and conditional assigns), chain via self-invoke, and fan out over requests with
+// a named-policy predicate + binder arg. Exercises the invariant/constraint slice:
+// postcondition narrowing (sequential + conditional), call-chain propagation, and
+// cross-entity for-invoke with policy predicates.
+
+Bin: entity {
+  Code: Text length(4, 8)
+  Zone: Text pattern("^[A-Z]{2}-[0-9]{2}$")
+  Qty: Number range(0, 500)
+  MaxQty: Number range(1, 500)
+  ReorderPoint: Number range(0, 100)
+
+  LowOnStock: policy { Qty <= ReorderPoint }
+
+  Restock: action (amount: Number) {
+    assign Qty to Qty + amount
+  }
+
+  Sell: action (amount: Number) {
+    assign Qty to Qty - amount
+  }
+
+  SafeSell: action (amount: Number)
+    require LowOnStock
+  {
+    assign Qty to Qty - amount
+  }
+
+  TopUp: action {
+    // conditional assign: then-branch pins to a literal, else-branch bounded arithmetic
+    if (Qty < 100) {
+      assign Qty to 100
+    } else {
+      assign Qty to Qty - 10
+    }
+  }
+
+  Replenish: action {
+    invoke Restock(amount: 20)
+    invoke Sell(amount: 5)
+  }
+
+  requests: many Request
+
+  Sweep: action {
+    for requests as request where request IsLarge invoke request.Settle(bonus: 5)
+  }
+}
+
+Request: entity {
+  Sku: Text length(3, 12)
+  Qty: Number range(1, 100)
+  bin: Bin
+
+  IsLarge: policy { Qty > 50 }
+
+  Settle: action (bonus: Number) {
+    assign Qty to Qty + bonus
+  }
+
+  Finalize: action {
+    invoke Settle(bonus: 5)
+    invoke Settle(bonus: 10)
+  }
+}

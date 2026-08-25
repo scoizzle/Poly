@@ -491,8 +491,10 @@ public static partial class DirectVmAbiEmitter {
     /// Generic instance-method dispatch for Invoke(Member) whose resolved
     /// <see cref="ITypeMethod"/> has no MethodInfo (AST type defs). Looks up
     /// <paramref name="methodName"/> on the live object's type by name and
-    /// arity (public + non-public instance). Fail-closed if the instance is
-    /// null or the method is missing.
+    /// arity (public + non-public instance). If missing, looks for
+    /// <c>InvokeNamed(string, object?[])</c> and calls it with the method
+    /// name plus args. Fail-closed if the instance is null or neither method
+    /// is present.
     /// </summary>
     private static object? InvokeInstanceMethod(object instance, string methodName, object?[] args) {
         if (instance is null)
@@ -512,11 +514,30 @@ public static partial class DirectVmAbiEmitter {
             break;
         }
 
-        if (match is null)
-            throw new InvalidOperationException(
-                $"Type '{instanceType.Name}' does not define method '{methodName}' with {args.Length} parameter(s).");
+        if (match is not null)
+            return match.Invoke(instance, args);
 
-        return match.Invoke(instance, args);
+        // AST methods with no CLR MethodInfo (e.g. domain actions): optional
+        // InvokeNamed(string, object?[]) dispatcher. Generic — no domain types.
+        MethodInfo? invokeNamed = null;
+        foreach (var candidate in instanceType.GetMethods(flags)) {
+            if (candidate.Name != "InvokeNamed")
+                continue;
+            var ps = candidate.GetParameters();
+            if (ps.Length != 2)
+                continue;
+            if (ps[0].ParameterType != typeof(string))
+                continue;
+            if (ps[1].ParameterType != typeof(object[]))
+                continue;
+            invokeNamed = candidate;
+            break;
+        }
+        if (invokeNamed is not null)
+            return invokeNamed.Invoke(instance, [methodName, args]);
+
+        throw new InvalidOperationException(
+            $"Type '{instanceType.Name}' does not define method '{methodName}' with {args.Length} parameter(s).");
     }
 
 }

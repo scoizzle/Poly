@@ -138,7 +138,7 @@ Pass order and registry: `Poly/Interpretation/Analysis/README.md`. Authoring gui
 | Façade | `Poly/Interpretation/Interpreter.cs` |
 | Runtime | `VmState`, `VmProgram`, heap/ring ABI under `Poly/Interpretation/Vm/` |
 
-No intermediate primitive flattening step. Inputs are the AST plus analysis metadata (including replacements). **Principle:** keep the emitter a generic compiler of known nodes — fix upstream (lower / analyze / replace), do not patch the ABI for one scenario.
+No intermediate primitive flattening step. Inputs are the AST plus analysis metadata (including replacements). **Principle:** keep the emitter a generic compiler of known nodes — fix upstream (lower / analyze / replace), do not patch the ABI for one scenario. Known-member `MethodInfo` / `PropertyInfo` / `ConstructorInfo`: `Ref` / `Ref<T>` (`Poly/Interpretation/Vm/Ref.cs`), never `typeof(T).GetMethod(...)`. Exception: `Expression<Func<T>>` cannot close over a ref struct, so `ReadOnlySpan<T>` constructors stay `GetConstructor`.
 
 ### 3.4 Domain expression lowering
 
@@ -208,6 +208,7 @@ Folder `Libraries/` holds in-assembly seeds (Temporal, storage facets). Vendor p
 
 | Need | Use | Do **not** invent |
 |------|-----|-------------------|
+| Compile-time `MethodInfo` / `PropertyInfo` / `ConstructorInfo` for a known member | `Ref.Method` / `Ref.Constructor` / `Ref<T>.Method` / `Ref<T>.Property` / `Ref<T>.Indexer` (`Poly/Interpretation/Vm/Ref.cs`) | `typeof(T).GetMethod(...)` / `GetProperty` by string or `BindingFlags` |
 | Rewrite or desugar AST | `SetNodeReplacement` / `INodeAnalyzer` | Product-local full-tree rewriter; emitter patches |
 | Facts about a node | `IAnalysisMetadata` on `AnalysisContext` | Parallel side tables outside the metadata store |
 | Resolve types / members | `ITypeDefinitionProvider` + `AnalysisContext.TypeDefinitions` | Ad-hoc reflection; second type registry; emitter method-lookup fallbacks |

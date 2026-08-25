@@ -16,7 +16,7 @@ delegates for fast execution via `DirectVmAbiEmitter`.
 | `Closure.cs` | Closure representation (function index + captured values) |
 | `FunctionEntry.cs` | Function metadata (start PC, arg slots, local count) |
 | `VmTrace.cs` | µop-level tracing infrastructure (gated by `state.Trace != null`) |
-| `Ref.cs` | Safe reflection helpers using expression-tree-based MemberInfo lookups |
+| `Ref.cs` | Compile-time `MemberInfo` lookups (`Ref.Method`, `Ref<T>.Property`, …). Use these; do not add `typeof(T).GetMethod(...)` |
 | `VmValueMarshaller.cs` | Converts between `VmState` representation and CLR types |
 
 ## Pipeline

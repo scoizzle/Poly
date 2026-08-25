@@ -67,7 +67,7 @@ public class VmCorrectnessTests {
 
         // LINQ path (reference)
         var linqParam = Expr.Parameter(typeof(InvokeTarget), "inst");
-        var linqCall = Expr.Call(linqParam, typeof(InvokeTarget).GetMethod(nameof(InvokeTarget.Triple))!);
+        var linqCall = Expr.Call(linqParam, Ref<InvokeTarget>.Method(t => t.Triple()));
         var linqLambda = Expr.Lambda<Func<InvokeTarget, long>>(Expr.Convert(linqCall, typeof(long)), linqParam);
         var linqResult = linqLambda.Compile()(target);
 
@@ -86,7 +86,7 @@ public class VmCorrectnessTests {
         var vmResult = vmExec.Result.GetValue<long>();
 
         var linqParam = Expr.Parameter(typeof(InvokeTarget), "inst");
-        var linqCall = Expr.Call(linqParam, typeof(InvokeTarget).GetMethod(nameof(InvokeTarget.Add))!,
+        var linqCall = Expr.Call(linqParam, Ref<InvokeTarget>.Method(t => t.Add(0)),
             Expr.Constant(5));
         var linqLambda = Expr.Lambda<Func<InvokeTarget, long>>(Expr.Convert(linqCall, typeof(long)), linqParam);
         var linqResult = linqLambda.Compile()(target);

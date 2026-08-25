@@ -53,6 +53,11 @@ public static partial class DirectVmAbiEmitter {
     private static readonly MethodInfo IDisposableDispose =
         Ref<IDisposable>.Method(d => d.Dispose());
     private static readonly MethodInfo SetStackPointer = Ref<ValueStack>.Method(s => s.SetStackPointer(0));
+    // Expression<Func<T>> cannot close over a ref struct (CS9244).
+    private static readonly ConstructorInfo ReadOnlySpanLongArrayCtor =
+        typeof(ReadOnlySpan<long>).GetConstructor([typeof(long[])])!;
+    private static readonly ConstructorInfo ReadOnlySpanLongSliceCtor =
+        typeof(ReadOnlySpan<long>).GetConstructor([typeof(long[]), typeof(int), typeof(int)])!;
 
     public static VmProgram Emit(
         Node root,
@@ -119,9 +124,9 @@ public static partial class DirectVmAbiEmitter {
         var body = CompileNode(node, ctx);
         int localCount = ctx.CurrentLocalCount;
         Expression spanExpr = localCount == 0
-            ? New(typeof(ReadOnlySpan<long>).GetConstructor([typeof(long[])])!,
+            ? New(ReadOnlySpanLongArrayCtor,
                 NewArrayBounds(typeof(long), Constant(0)))
-            : New(typeof(ReadOnlySpan<long>).GetConstructor([typeof(long[]), typeof(int), typeof(int)])!,
+            : New(ReadOnlySpanLongSliceCtor,
                 ctx.SlotsLocal, ctx.FramePosLocal, Constant(localCount));
         var invoke = Block(
             Assign(Property(ctx.State, nameof(VmState.CurrentAstNode)), Constant(node)),
@@ -231,6 +236,7 @@ public static partial class DirectVmAbiEmitter {
                 ctor = clrCtor.ConstructorInfo;
         }
         if (ctor is null && targetType is not null) {
+            // Runtime Type from analysis — not a compile-time known member.
             if (n.Arguments.Length == 0) {
                 ctor = targetType.GetConstructor(Type.EmptyTypes);
             }

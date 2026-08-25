@@ -900,6 +900,7 @@ public class C99ParserInterpreterTests {
         where TDelegate : Delegate {
         var reader = new C99TokenReader(source);
         var fn = new C99Parser(reader, useGrammarDispatch).ParseFunction();
+        // Invoke arity is TDelegate-specific; Ref cannot name a single lambda for every delegate.
         var invokeMethod = typeof(TDelegate).GetMethod("Invoke")
             ?? throw new InvalidOperationException($"Delegate type {typeof(TDelegate).Name} does not expose an Invoke method.");
 

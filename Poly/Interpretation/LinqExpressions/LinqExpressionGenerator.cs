@@ -19,6 +19,9 @@ namespace Poly.Interpretation.LinqExpressions;
 /// use this path for cross-validation.</para>
 /// </remarks>
 public sealed partial class LinqExpressionGenerator {
+    private static readonly System.Reflection.MethodInfo BitOperationsPopCount =
+        Ref.Method((Expression<Func<ulong, int>>)(v => System.Numerics.BitOperations.PopCount(v)));
+
     private readonly AnalysisResult _analysisResult;
 
     /// <summary>Holds the compiled LINQ Expression and the set of parameters
@@ -270,7 +273,7 @@ public sealed partial class LinqExpressionGenerator {
             ShiftLeft sl => Expression.LeftShift(CompileNode(sl.LeftHandValue, context), CompileNode(sl.RightHandValue, context)),
             ShiftRight sr => Expression.RightShift(CompileNode(sr.LeftHandValue, context), CompileNode(sr.RightHandValue, context)),
             PopCount pc => Expression.Call(null,
-                typeof(System.Numerics.BitOperations).GetMethod(nameof(System.Numerics.BitOperations.PopCount), [typeof(ulong)])!,
+                BitOperationsPopCount,
                 Expression.Convert(CompileNode(pc.Operand, context), typeof(ulong))),
             SuspendNode sn => CompileNode(sn.Inner, context),
             _ => throw new InvalidOperationException($"Unsupported node type: {node.GetType().Name}")

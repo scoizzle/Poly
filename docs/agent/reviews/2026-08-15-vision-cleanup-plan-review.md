@@ -1,5 +1,7 @@
 # Vision cleanup plan — 2026-08-15
 
+**Status (2026-08-25):** Findings below are unchanged. Issue 4 correctly described `LowerStageTransitions` gating invoke / for-invoke / create at review time. As of PRs 21–24, that flag no longer gates StageTransition, self-invoke, cross-entity invoke, or for-invoke — only create / create-in. The invoke-gating claim is historically true and currently stale.
+
 - **Target**: paths `docs/plans/domainmodeling-vision-cleanup-2026-08-15.md` vs current `HEAD` + dirty tree (plan claims, not a code diff)
 - **Mode**: standard
 - **Issue counts**: 5 bugs, 8 suggestions, 4 nits

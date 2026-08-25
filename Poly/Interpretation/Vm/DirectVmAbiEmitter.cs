@@ -531,7 +531,14 @@ public static partial class DirectVmAbiEmitter {
     private static Expression? TryEmitStringConcat(
         Node left, Node right, Expression leftVal, Expression rightVal,
         Func<Expression, Expression, BinaryExpression> factory, AbiCtx ctx) {
-        if (factory != Add || !(IsStringValue(ctx, left) || IsStringValue(ctx, right)))
+        if (factory != Add)
+            return null;
+        bool ls = IsStringValue(ctx, left);
+        bool rs = IsStringValue(ctx, right);
+        if (ls ^ rs)
+            throw new InvalidOperationException(
+                "VM compile rejected: string concatenation requires both operands to be strings.");
+        if (!ls)
             return null;
         var lo = HeapValueToObject(leftVal, ctx);
         var ro = HeapValueToObject(rightVal, ctx);

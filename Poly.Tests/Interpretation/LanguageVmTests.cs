@@ -193,6 +193,67 @@ public class LanguageVmTests {
     }
 
     [Test]
+    public async Task Add_StringAndNumber_CompileRejected() {
+        await Assert.That(() =>
+            Interpreter.Compile(new Add(new Constant("x"), new Constant(1L)))
+        ).Throws<InvalidOperationException>();
+    }
+
+    [Test]
+    public async Task Comment_OnlyInBlock_IsVoid() {
+        using var exec = Interpreter.Execute(Interpreter.Compile(new Block([new Comment("note")])));
+        await Assert.That(exec.Result.IsVoid).IsTrue();
+    }
+
+    [Test]
+    public async Task Coalesce_EmptyString_KeepsLeft() {
+        var node = new Coalesce(new Constant(""), new Constant("fallback"));
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<string>()).IsEqualTo("");
+    }
+
+    [Test]
+    public async Task Coalesce_NonNullableZero_KeepsZero() {
+        var node = new Coalesce(new Constant(0), new Constant(99));
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(0L);
+    }
+
+    [Test]
+    public async Task TypeCast_PrimitiveTypeReference_Int32() {
+        var node = new TypeCast(new Constant(42L), new PrimitiveTypeReference(PrimitiveType.Int32));
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<int>()).IsEqualTo(42);
+    }
+
+    [Test]
+    public async Task NestedLambda_InnerParamDifferentName_CallsThrough() {
+        var innerP = new Parameter("y", TypeReference.To<long>());
+        var inner = new Lambda([innerP], new Add(innerP, new Constant(1L)));
+        var outerP = new Parameter("x", TypeReference.To<long>());
+        var outer = new Lambda([outerP], new Invoke(inner, outerP));
+        var node = new Invoke(outer, new Constant(41L));
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(42L);
+    }
+
+    [Test]
+    public async Task Lambda_ArityMismatch_CompileRejected() {
+        var p = new Parameter("x", TypeReference.To<long>());
+        var lambda = new Lambda([p], p);
+        await Assert.That(() =>
+            Interpreter.Compile(new Invoke(lambda, new Constant(1L), new Constant(2L)))
+        ).Throws<InvalidOperationException>();
+    }
+
+    [Test]
+    public async Task Subtract_IntAndDouble_Promotes() {
+        var node = new Subtract(new Constant(10), new Constant(2.5));
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<double>()).IsEqualTo(7.5);
+    }
+
+    [Test]
     public async Task Return_Value_ExitsBlock() {
         var node = new Block([
             new Return(new Constant(7L)),

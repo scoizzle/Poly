@@ -494,6 +494,15 @@ public static partial class DirectVmAbiEmitter {
         Node node, AbiCtx outerCtx, List<Capture> result,
         HashSet<Variable> seenVars, HashSet<Parameter> seenParams,
         HashSet<Parameter>? ownParams) {
+        if (node is Lambda nested) {
+            var nestedOwn = ownParams is null
+                ? new HashSet<Parameter>(nested.Parameters, ReferenceEqualityComparer.Instance)
+                : new HashSet<Parameter>(ownParams, ReferenceEqualityComparer.Instance);
+            foreach (var np in nested.Parameters)
+                nestedOwn.Add(np);
+            FindCapturesRecursive(nested.Body, outerCtx, result, seenVars, seenParams, nestedOwn);
+            return;
+        }
         if (node is Variable v && seenVars.Add(v)) {
             if (outerCtx.TryGetVariable(v, out _))
                 result.Add(new Capture(v, null));

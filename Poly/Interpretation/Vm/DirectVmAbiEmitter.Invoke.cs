@@ -179,6 +179,9 @@ public static partial class DirectVmAbiEmitter {
         }
 
         if (invoke.Delegate is Lambda lambda) {
+            if (invoke.Arguments.Length > 0 && invoke.Arguments.Length != lambda.Parameters.Count)
+                throw new InvalidOperationException(
+                    $"VM compile rejected: lambda has {lambda.Parameters.Count} parameter(s) but invoke has {invoke.Arguments.Length} argument(s).");
             var ownParams = new HashSet<Parameter>(lambda.Parameters, ReferenceEqualityComparer.Instance);
             DeclareFreeParameters(lambda.Body, ctx, ownParams);
             foreach (var arg in invoke.Arguments) {

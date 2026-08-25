@@ -67,6 +67,10 @@ public class ForEachLoopTests {
         var result = Expr.Lambda<Func<int>>(expr).Compile()();
 
         await Assert.That(result).IsEqualTo(5);
+
+        var program = Interpreter.Compile(node);
+        using var exec = Interpreter.Execute(program);
+        await Assert.That(exec.Result.GetValue<long>()).IsEqualTo(5L);
     }
 
     [Test]
@@ -91,6 +95,10 @@ public class ForEachLoopTests {
         var result = Expr.Lambda<Func<int>>(expr).Compile()();
 
         await Assert.That(result).IsEqualTo(103);
+
+        var program = Interpreter.Compile(node);
+        using var exec = Interpreter.Execute(program);
+        await Assert.That(exec.Result.GetValue<long>()).IsEqualTo(103L);
     }
 
     [Test]
@@ -105,6 +113,8 @@ public class ForEachLoopTests {
 
         await Assert.That(() => Expr.Lambda<Func<int>>(expr).Compile())
             .Throws<InvalidOperationException>();
+
+        await Assert.That(() => Interpreter.Compile(node)).Throws<InvalidOperationException>();
     }
 
     [Test]
@@ -131,6 +141,10 @@ public class ForEachLoopTests {
         var result = Expr.Lambda<Func<int>>(expr).Compile()();
 
         await Assert.That(result).IsEqualTo(4);
+
+        var program = Interpreter.Compile(node);
+        using var exec = Interpreter.Execute(program);
+        await Assert.That(exec.Result.GetValue<long>()).IsEqualTo(4L);
     }
 
     [Test]
@@ -157,5 +171,9 @@ public class ForEachLoopTests {
         var result = Expr.Lambda<Func<int>>(expr).Compile()();
 
         await Assert.That(result).IsEqualTo(6);
+
+        var program = Interpreter.Compile(node);
+        using var exec = Interpreter.Execute(program);
+        await Assert.That(exec.Result.GetValue<long>()).IsEqualTo(6L);
     }
 }

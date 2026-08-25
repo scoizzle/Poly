@@ -1,3 +1,4 @@
+using Poly.Interpretation;
 using Poly.Tests.TestHelpers;
 
 using Expr = System.Linq.Expressions.Expression;
@@ -23,6 +24,8 @@ public class BlockScopeTests {
 
         // Assert - inner block returns 50, but outer scope still has its variable at 100
         await Assert.That(result).IsEqualTo(50);
+        using var exec = Interpreter.Execute(Interpreter.Compile(outerBlock));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(50L);
     }
 
     [Test]
@@ -44,6 +47,8 @@ public class BlockScopeTests {
 
         // Assert
         await Assert.That(result).IsEqualTo(50);
+        using var exec = Interpreter.Execute(Interpreter.Compile(outerBlock));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(50L);
     }
 
     [Test]
@@ -64,6 +69,8 @@ public class BlockScopeTests {
 
         // Assert - last expression should be var2 = 20
         await Assert.That(result).IsEqualTo(20);
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(20L);
     }
 
     [Test]
@@ -82,6 +89,8 @@ public class BlockScopeTests {
 
         // Assert
         await Assert.That(result).IsEqualTo(150);
+        using var exec = Interpreter.Execute(Interpreter.Compile(outerBlock));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(150L);
     }
 
     [Test]
@@ -105,5 +114,7 @@ public class BlockScopeTests {
 
         // Assert - should return last block's value
         await Assert.That(result).IsEqualTo(20);
+        using var exec = Interpreter.Execute(Interpreter.Compile(combined));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(20L);
     }
 }

@@ -1,3 +1,4 @@
+using Poly.Interpretation;
 using Poly.Tests.TestHelpers;
 
 using Expr = System.Linq.Expressions.Expression;
@@ -17,6 +18,8 @@ public class TypeCastTests {
 
         // Assert
         await Assert.That(result).IsEqualTo(42.0);
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<double>()).IsEqualTo(42.0);
     }
 
     [Test]
@@ -31,6 +34,8 @@ public class TypeCastTests {
 
         // Assert
         await Assert.That(result).IsEqualTo(3);
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<int>()).IsEqualTo(3);
     }
 
     [Test]
@@ -45,6 +50,8 @@ public class TypeCastTests {
 
         // Assert
         await Assert.That(result).IsEqualTo(9999);
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<int>()).IsEqualTo(9999);
     }
 
     [Test]
@@ -59,6 +66,9 @@ public class TypeCastTests {
 
         // Assert
         await Assert.That(result).IsEqualTo(42.0);
+        var program = Interpreter.Compile(node);
+        using var exec = Interpreter.Execute(program, s => s.SetArgs(42));
+        await Assert.That(exec.GetValue<double>()).IsEqualTo(42.0);
     }
 
     [Test]
@@ -73,6 +83,8 @@ public class TypeCastTests {
 
         // Assert
         await Assert.That(result).IsEqualTo("hello");
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<object>()).IsEqualTo("hello");
     }
 
     [Test]
@@ -88,6 +100,8 @@ public class TypeCastTests {
 
         // Assert
         await Assert.That(result).IsEqualTo("world");
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<string>()).IsEqualTo("world");
     }
 
     [Test]
@@ -102,6 +116,8 @@ public class TypeCastTests {
 
         // Assert
         await Assert.That(result).IsEqualTo(42);
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<int>()).IsEqualTo(42);
     }
 
     [Test]
@@ -116,6 +132,9 @@ public class TypeCastTests {
 
         // Assert
         await Assert.That(result).IsEqualTo(42);
+        await Assert.That(() => {
+            using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        }).Throws<InvalidCastException>();
     }
 
     [Test]
@@ -161,6 +180,8 @@ public class TypeCastTests {
 
         // Assert
         await Assert.That(result).IsTrue();
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<bool>()).IsTrue();
     }
 
     [Test]
@@ -176,6 +197,8 @@ public class TypeCastTests {
 
         // Assert
         await Assert.That(result).IsFalse();
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<bool>()).IsFalse();
     }
 
     [Test]
@@ -191,6 +214,8 @@ public class TypeCastTests {
 
         // Assert
         await Assert.That(result).IsEqualTo("hello");
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<string>()).IsEqualTo("hello");
     }
 
     [Test]
@@ -206,6 +231,8 @@ public class TypeCastTests {
 
         // Assert
         await Assert.That(result).IsNull();
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<object>()).IsNull();
     }
 
     [Test]
@@ -221,6 +248,7 @@ public class TypeCastTests {
 
         // Assert
         await Assert.That(result).IsEqualTo(42);
+        await Assert.That(() => Interpreter.Compile(node)).Throws<InvalidOperationException>();
     }
 
     [Test]

@@ -121,4 +121,84 @@ public class LanguageVmTests {
         using var exec = Interpreter.Execute(Interpreter.Compile(node));
         await Assert.That(exec.GetValue<string>()).IsEqualTo("hi");
     }
+
+    [Test]
+    public async Task New_Exception_IsHeapObject() {
+        var node = new New(TypeReference.To<InvalidOperationException>(), new Constant("boom"));
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        var ex = exec.GetValue<InvalidOperationException>();
+        await Assert.That(ex).IsNotNull();
+        await Assert.That(ex!.Message).IsEqualTo("boom");
+    }
+
+    [Test]
+    public async Task NewArray_Object_IsHeapArray() {
+        var node = new NewArray(TypeReference.To<object>(), new Constant(3L));
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        var arr = exec.GetValue<Array>();
+        await Assert.That(arr).IsNotNull();
+        await Assert.That(arr!.Length).IsEqualTo(3);
+    }
+
+    [Test]
+    public async Task IndexAccess_Array_ReturnsElement() {
+        var arr = new Variable("arr", new Constant(new long[] { 10, 20, 30 }));
+        var node = new Block(arr, new IndexAccess(arr, new Constant(1)));
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(20L);
+    }
+
+    [Test]
+    public async Task Conditional_PicksBranch() {
+        var node = new Conditional(new Constant(true), new Constant(1L), new Constant(2L));
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(1L);
+    }
+
+    [Test]
+    public async Task Coalesce_NullTakesRight() {
+        var node = new Coalesce(new Constant(null), new Constant("fallback"));
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<string>()).IsEqualTo("fallback");
+    }
+
+    [Test]
+    public async Task Parameter_SetArgs_ReturnsArg() {
+        var p = new Parameter("x", TypeReference.To<long>());
+        var program = Interpreter.Compile(p);
+        using var exec = Interpreter.Execute(program, s => s.SetArgs(9L));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(9L);
+    }
+
+    [Test]
+    public async Task BitwiseAnd_Mask() {
+        var node = new BitwiseAnd(new Constant(0b1100L), new Constant(0b1010L));
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(0b1000L);
+    }
+
+    [Test]
+    public async Task Switch_MatchingCase_Only() {
+        var taken = new Variable("taken");
+        var node = new Block([
+            new Assignment(taken, new Constant(0L)),
+            new SwitchStatement(
+                new Constant(2L),
+                [new SwitchCase(new Constant(2L), new Assignment(taken, new Constant(1L)))],
+                new Assignment(taken, new Constant(9L))),
+            taken
+        ], [taken]);
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(1L);
+    }
+
+    [Test]
+    public async Task Return_Value_ExitsBlock() {
+        var node = new Block([
+            new Return(new Constant(7L)),
+            new Constant(99L)
+        ]);
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(7L);
+    }
 }

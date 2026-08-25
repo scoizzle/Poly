@@ -4,7 +4,9 @@ Generic **language VM** for programs expressed as `Poly.Ast` Syntax trees. Domai
 
 **Platform map:** [`docs/CORE.md`](../../docs/CORE.md) — boundaries, node replacement, direct AST→VM (read before inventing parallel paths).
 
-Analyze → `Interpreter.Compile` (fail-closed on analysis errors) → `DirectVmAbiEmitter` → `VmState`. Per [VM as canonical semantics](../../docs/decisions/2026-06-08-vm-as-canonical-semantics.md), this path is the **authoritative behavior**. LINQ and C# emit are projections, never oracles.
+Analyze → `Interpreter.Compile` (fail-closed on analysis errors) → `DirectVmAbiEmitter` → `VmState`. Per [VM as canonical semantics](../../docs/decisions/2026-06-08-vm-as-canonical-semantics.md), this path is the **authoritative behavior**.
+
+The LINQ expression path (`BuildExpression` / `LinqExpressionGenerator`) is a **programmatic semantic checker** for that VM: the same Syntax tree must evaluate to the same result, and the expression tree is inspectable when debugging the custom VM. It is not a second language and not a replacement for `Interpreter.Compile`. C# emit is a projection of the same trees.
 
 ---
 
@@ -97,7 +99,7 @@ long handle = exec.RawValue;
 | [`Analysis/`](Analysis/) | Semantic analysis passes | [`Analysis/README.md`](Analysis/README.md) — pass registry, ordering, diagnostics |
 | [`Vm/`](Vm/) | Compile primitives → delegate; runtime state | [`Vm/README.md`](Vm/README.md) — `ProgramCompiler`, stack/heap ABI |
 | [`CSharp/`](CSharp/) | C# source emission from AST | Secondary backend; not canonical semantics |
-| [`LinqExpressions/`](LinqExpressions/) | LINQ expression trees from AST | Test/reference path; migration to VM ongoing (see tracker INT-003) |
+| [`LinqExpressions/`](LinqExpressions/) | LINQ expression trees from AST | Semantic parity + inspectable execution for the VM (not a second engine) |
 | [`Mermaid/`](Mermaid/) | Mermaid diagrams from AST | Visualization only |
 
 Root files: `Interpreter.cs` (pipeline + execute), `ExecutionResult.cs`, `InterpreterResult.cs`.

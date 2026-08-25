@@ -1,3 +1,4 @@
+using Poly.Interpretation;
 using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.Interpretation;
@@ -22,6 +23,9 @@ public class ConditionalNodeTests {
 
         // Assert
         await Assert.That(result).IsEqualTo(42);
+
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(42L);
     }
 
     [Test]
@@ -39,6 +43,9 @@ public class ConditionalNodeTests {
 
         // Assert
         await Assert.That(result).IsEqualTo(99);
+
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(99L);
     }
 
     [Test]
@@ -54,6 +61,12 @@ public class ConditionalNodeTests {
         // Assert
         await Assert.That(compiled(true)).IsEqualTo("yes");
         await Assert.That(compiled(false)).IsEqualTo("no");
+
+        var program = Interpreter.Compile(node);
+        using (var exec = Interpreter.Execute(program, s => s.SetArgs(true)))
+            await Assert.That(exec.GetValue<string>()).IsEqualTo("yes");
+        using (var exec = Interpreter.Execute(program, s => s.SetArgs(false)))
+            await Assert.That(exec.GetValue<string>()).IsEqualTo("no");
     }
 
     [Test]
@@ -70,6 +83,12 @@ public class ConditionalNodeTests {
         // Assert
         await Assert.That(compiled(10)).IsEqualTo(10);
         await Assert.That(compiled(3)).IsEqualTo(0);
+
+        var program = Interpreter.Compile(node);
+        using (var exec = Interpreter.Execute(program, s => s.SetArgs(10)))
+            await Assert.That(exec.GetValue<long>()).IsEqualTo(10L);
+        using (var exec = Interpreter.Execute(program, s => s.SetArgs(3)))
+            await Assert.That(exec.GetValue<long>()).IsEqualTo(0L);
     }
 
     [Test]
@@ -91,6 +110,9 @@ public class ConditionalNodeTests {
 
         // Assert
         await Assert.That(result).IsEqualTo(1);
+
+        using var exec = Interpreter.Execute(Interpreter.Compile(outer));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(1L);
     }
 
     // Coalesce Tests
@@ -106,6 +128,9 @@ public class ConditionalNodeTests {
 
         // Assert
         await Assert.That(result).IsEqualTo(42);
+
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(42L);
     }
 
     [Test]
@@ -120,6 +145,9 @@ public class ConditionalNodeTests {
 
         // Assert
         await Assert.That(result).IsEqualTo(10);
+
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(10L);
     }
 
     [Test]
@@ -135,6 +163,14 @@ public class ConditionalNodeTests {
         await Assert.That(compiled(null)).IsEqualTo(100);
         await Assert.That(compiled(50)).IsEqualTo(50);
         await Assert.That(compiled(0)).IsEqualTo(0);
+
+        var program = Interpreter.Compile(node);
+        using (var exec = Interpreter.Execute(program, s => s.SetArgs(new object?[] { null })))
+            await Assert.That(exec.GetValue<long>()).IsEqualTo(100L);
+        using (var exec = Interpreter.Execute(program, s => s.SetArgs(50)))
+            await Assert.That(exec.GetValue<long>()).IsEqualTo(50L);
+        using (var exec = Interpreter.Execute(program, s => s.SetArgs(0)))
+            await Assert.That(exec.GetValue<long>()).IsEqualTo(100L);
     }
 
     [Test]
@@ -150,6 +186,9 @@ public class ConditionalNodeTests {
 
         // Assert
         await Assert.That(result).IsEqualTo(42);
+
+        using var exec = Interpreter.Execute(Interpreter.Compile(outer));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(42L);
     }
 
     // UnaryMinus Tests
@@ -165,6 +204,9 @@ public class ConditionalNodeTests {
 
         // Assert
         await Assert.That(result).IsEqualTo(-42);
+
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(-42L);
     }
 
     [Test]
@@ -179,6 +221,9 @@ public class ConditionalNodeTests {
 
         // Assert
         await Assert.That(result).IsEqualTo(10);
+
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(10L);
     }
 
     [Test]
@@ -193,6 +238,12 @@ public class ConditionalNodeTests {
         // Assert
         await Assert.That(compiled(5)).IsEqualTo(-5);
         await Assert.That(compiled(-8)).IsEqualTo(8);
+
+        var program = Interpreter.Compile(node);
+        using (var exec = Interpreter.Execute(program, s => s.SetArgs(5)))
+            await Assert.That(exec.GetValue<long>()).IsEqualTo(-5L);
+        using (var exec = Interpreter.Execute(program, s => s.SetArgs(-8)))
+            await Assert.That(exec.GetValue<long>()).IsEqualTo(8L);
     }
 
     [Test]
@@ -207,6 +258,9 @@ public class ConditionalNodeTests {
 
         // Assert
         await Assert.That(result).IsEqualTo(-3.14);
+
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<double>()).IsEqualTo(-3.14);
     }
 
     [Test]
@@ -222,5 +276,8 @@ public class ConditionalNodeTests {
 
         // Assert
         await Assert.That(result).IsEqualTo(5);
+
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(5L);
     }
 }

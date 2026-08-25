@@ -1,3 +1,4 @@
+using Poly.Interpretation;
 using Poly.Tests.TestHelpers;
 
 using Expr = System.Linq.Expressions.Expression;
@@ -17,6 +18,9 @@ public class CoalesceTests {
 
         // Assert
         await Assert.That(result).IsEqualTo(42);
+
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(42L);
     }
 
     [Test]
@@ -31,6 +35,9 @@ public class CoalesceTests {
 
         // Assert
         await Assert.That(result).IsEqualTo(100);
+
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(100L);
     }
 
     [Test]
@@ -45,6 +52,12 @@ public class CoalesceTests {
         // Assert
         await Assert.That(compiled(50)).IsEqualTo(50);
         await Assert.That(compiled(null)).IsEqualTo(99);
+
+        var program = Interpreter.Compile(node);
+        using (var exec = Interpreter.Execute(program, s => s.SetArgs(50)))
+            await Assert.That(exec.GetValue<long>()).IsEqualTo(50L);
+        using (var exec = Interpreter.Execute(program, s => s.SetArgs(new object?[] { null })))
+            await Assert.That(exec.GetValue<long>()).IsEqualTo(99L);
     }
 
     [Test]
@@ -62,6 +75,9 @@ public class CoalesceTests {
 
         // Assert
         await Assert.That(result).IsEqualTo(10);
+
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(10L);
     }
 
     [Test]
@@ -76,6 +92,9 @@ public class CoalesceTests {
 
         // Assert
         await Assert.That(result).IsEqualTo("default");
+
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<string>()).IsEqualTo("default");
     }
 
     [Test]

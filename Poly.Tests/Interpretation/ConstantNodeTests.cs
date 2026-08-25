@@ -1,3 +1,4 @@
+using Poly.Interpretation;
 using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.Interpretation;
@@ -18,6 +19,8 @@ public class ConstantNodeTests {
 
         // Assert
         await Assert.That(result).IsEqualTo(42);
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(42L);
     }
 
     [Test]
@@ -32,6 +35,8 @@ public class ConstantNodeTests {
 
         // Assert
         await Assert.That(result).IsEqualTo("hello");
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<string>()).IsEqualTo("hello");
     }
 
     [Test]
@@ -46,6 +51,8 @@ public class ConstantNodeTests {
 
         // Assert
         await Assert.That(result).IsEqualTo(3.14);
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<double>()).IsEqualTo(3.14);
     }
 
     [Test]
@@ -60,6 +67,8 @@ public class ConstantNodeTests {
 
         // Assert
         await Assert.That(result).IsTrue();
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<bool>()).IsTrue();
     }
 
     [Test]
@@ -74,6 +83,8 @@ public class ConstantNodeTests {
 
         // Assert
         await Assert.That(result).IsFalse();
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<bool>()).IsFalse();
     }
 
     [Test]
@@ -88,6 +99,8 @@ public class ConstantNodeTests {
 
         // Assert
         await Assert.That(result).IsNull();
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<object>()).IsNull();
     }
 
     [Test]
@@ -102,6 +115,8 @@ public class ConstantNodeTests {
 
         // Assert
         await Assert.That(result).IsEqualTo(99.99m);
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<decimal>()).IsEqualTo(99.99m);
     }
 
     [Test]
@@ -117,6 +132,8 @@ public class ConstantNodeTests {
 
         // Assert
         await Assert.That(result).IsEqualTo(expected);
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<DateTime>()).IsEqualTo(expected);
     }
 
     [Test]
@@ -133,5 +150,8 @@ public class ConstantNodeTests {
         // Assert
         await Assert.That(result).IsEqualTo(expected);
         await Assert.That(result.Count).IsEqualTo(3);
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<List<int>>()).IsEqualTo(expected);
+        await Assert.That(exec.GetValue<List<int>>()!.Count).IsEqualTo(3);
     }
 }

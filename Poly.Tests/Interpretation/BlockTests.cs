@@ -1,3 +1,4 @@
+using Poly.Interpretation;
 using Poly.Tests.TestHelpers;
 
 using Expr = System.Linq.Expressions.Expression;
@@ -17,6 +18,8 @@ public class BlockTests {
 
         // Assert
         await Assert.That(result).IsEqualTo(42);
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(42L);
     }
 
     [Test]
@@ -31,6 +34,8 @@ public class BlockTests {
 
         // Assert
         await Assert.That(result).IsEqualTo(99);
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(99L);
     }
 
     [Test]
@@ -47,6 +52,8 @@ public class BlockTests {
 
         // Assert
         await Assert.That(result).IsEqualTo(50);
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(50L);
     }
 
     [Test]
@@ -65,6 +72,8 @@ public class BlockTests {
 
         // Assert
         await Assert.That(result).IsEqualTo(100);
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(100L);
     }
 
     [Test]
@@ -80,6 +89,8 @@ public class BlockTests {
 
         // Assert
         await Assert.That(result).IsEqualTo(55);
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(55L);
     }
 
     [Test]
@@ -97,6 +108,8 @@ public class BlockTests {
 
         // Assert
         await Assert.That(result).IsEqualTo(42);
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(42L);
     }
 
     [Test]

@@ -10,7 +10,7 @@ Other indexes must **mirror** this file (or link here) — do not invent a secon
 
 ```text
 DONE:    gpure (2026-08-07 + follow-ups 08-08); mcp-minify (2026-08-08 + follow-ups); grammar-revision (2026-08-09: v2 engine + DSL cutover + printer + review fixes); dead-dual cleanup (2026-08-09: Validation + Text.Matching deleted); domainmodeling vision-cleanup slices 1–3 (2026-08-17: one door, session.Analyze, Comment not emit-meaning); emit-session CompileMode seed-only (2026-08-24: HTTP host only via uses http / Load(HttpLibrary); bag-gated emit); host-ABI StageTransition (PR 21); host-ABI self-invoke (PR 22); host-ABI cross-entity invoke (PR 23); host-ABI for-invoke (PR 24); rewrite-to-master (PR 26)
-CURRENT: interpretation-language-engine (ile-0 compile door + ile-1 shrink/honor landed; ile-2 LINQ-only oracles remaining)
+CURRENT: interpretation-language-engine (ile-0/1 landed; ile-2 same-tree VM↔LINQ dual-oracle in; remaining ABI mismatches in ile-2)
 ADMIT:   parallel (exclusive files)
 THEN:    create/create-in; MCP mut-safety; Grammar wrap-up; V3 naming
 PARKED:  pack-2 IDomainPack; mut-safety; e2e-*; pack-host “packs extend Grammar tables”; session four-slot Meaning/Emit

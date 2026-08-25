@@ -1,3 +1,4 @@
+using Poly.Interpretation;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Introspection;
 using Poly.Tests.TestHelpers;
@@ -44,6 +45,11 @@ public class NewNodeTests {
 
         await Assert.That(result.Name).IsEqualTo("default");
         await Assert.That(result.Count).IsEqualTo(-1);
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        var vmResult = exec.GetValue<Widget>();
+        await Assert.That(vmResult).IsNotNull();
+        await Assert.That(vmResult!.Name).IsEqualTo("default");
+        await Assert.That(vmResult.Count).IsEqualTo(-1);
     }
 
     [Test]
@@ -68,6 +74,11 @@ public class NewNodeTests {
 
         await Assert.That(result.Name).IsEqualTo("beta");
         await Assert.That(result.Count).IsEqualTo(42);
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        var vmResult = exec.GetValue<Widget>();
+        await Assert.That(vmResult).IsNotNull();
+        await Assert.That(vmResult!.Name).IsEqualTo("beta");
+        await Assert.That(vmResult.Count).IsEqualTo(42);
     }
 
     [Test]

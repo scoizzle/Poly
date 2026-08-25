@@ -1,6 +1,6 @@
 # Interpretation as a generic language VM (`ile-*`)
 
-**Status:** CURRENT — ile-0 and ile-1 landed; ile-2 (LINQ-only Interpretation tests) remaining  
+**Status:** CURRENT — ile-0/1 landed; ile-2 dual-oracle in (remaining VM↔LINQ mismatches listed in ile-2)  
 **Owning stream:** Interpretation only (`Poly/Interpretation/`, `Poly.Tests/Interpretation/`, CORE/Interpretation docs). **Do not mix** DomainModeling create/create-in, MCP, Grammar.  
 **Prerequisite:** F1–F22 stabilization on `cleanup/interpretation-stabilization-review` (closed).  
 **Authority:** VM is canonical semantics ([ADR](../../decisions/2026-06-08-vm-as-canonical-semantics.md)). Domain lowers to generic ops ([ADR](../../decisions/2026-06-08-domain-lowering-boundary.md)). Shipped ⊆ executable.

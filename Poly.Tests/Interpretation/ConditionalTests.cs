@@ -1,3 +1,4 @@
+using Poly.Interpretation;
 using Poly.Tests.TestHelpers;
 
 using Expr = System.Linq.Expressions.Expression;
@@ -17,6 +18,9 @@ public class ConditionalTests {
 
         // Assert
         await Assert.That(result).IsEqualTo(42);
+
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(42L);
     }
 
     [Test]
@@ -31,6 +35,9 @@ public class ConditionalTests {
 
         // Assert
         await Assert.That(result).IsEqualTo(99);
+
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(99L);
     }
 
     [Test]
@@ -45,6 +52,12 @@ public class ConditionalTests {
         // Assert
         await Assert.That(compiled(true)).IsEqualTo(10);
         await Assert.That(compiled(false)).IsEqualTo(20);
+
+        var program = Interpreter.Compile(node);
+        using (var exec = Interpreter.Execute(program, s => s.SetArgs(true)))
+            await Assert.That(exec.GetValue<long>()).IsEqualTo(10L);
+        using (var exec = Interpreter.Execute(program, s => s.SetArgs(false)))
+            await Assert.That(exec.GetValue<long>()).IsEqualTo(20L);
     }
 
     [Test]
@@ -60,6 +73,9 @@ public class ConditionalTests {
 
         // Assert
         await Assert.That(result).IsEqualTo(5);
+
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(5L);
     }
 
     [Test]

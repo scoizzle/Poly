@@ -62,6 +62,23 @@ public sealed partial record DomainEntityInstance {
         Entity entity,
         IEnumerable<Property>? extraProperties = null,
         Domain? domain = null) {
+        var analyzer = new TypeDefinitionNodeAnalyzer();
+        var ctx = AnalysisContext.CreateDefault();
+        analyzer.Analyze(ctx, BuildTypeDefNode(entity, extraProperties, domain));
+        if (domain is not null) {
+            foreach (var other in domain.Types.OfType<Entity>()) {
+                if (string.Equals(other.Name, entity.Name, StringComparison.Ordinal))
+                    continue;
+                analyzer.Analyze(ctx, BuildTypeDefNode(other, extraProperties: null, domain));
+            }
+        }
+        return analyzer;
+    }
+
+    private static TypeDefinitionNode BuildTypeDefNode(
+        Entity entity,
+        IEnumerable<Property>? extraProperties,
+        Domain? domain) {
         var propDefs = new List<PropertyDefinitionNode>();
         var seen = new HashSet<string>(StringComparer.Ordinal);
 
@@ -134,16 +151,11 @@ public sealed partial record DomainEntityInstance {
                 Body: new Block([])));
         }
 
-        var typeDefNode = new TypeDefinitionNode(
+        return new TypeDefinitionNode(
             Name: entity.Name,
             Properties: [.. propDefs],
             Methods: [.. methods],
             Namespace: null);
-
-        var analyzer = new TypeDefinitionNodeAnalyzer();
-        var ctx = AnalysisContext.CreateDefault();
-        analyzer.Analyze(ctx, typeDefNode);
-        return analyzer;
     }
 
     /// <summary>

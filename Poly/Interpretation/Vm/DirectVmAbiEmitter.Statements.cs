@@ -102,7 +102,8 @@ public static partial class DirectVmAbiEmitter {
                     Convert(ctx.RingVar(instanceSlot), typeof(int)));
 
             var memberTypeDef = resolved.MemberTypeDefinition;
-            var clrMemberType = memberTypeDef.GetRuntimeType();
+            var clrMemberType = memberTypeDef.GetRuntimeType()
+                ?? memberTypeDef.PrimitiveType?.GetClrType();
             Expression writeValue;
             if (clrMemberType is not null
                 && clrMemberType.IsValueType
@@ -412,7 +413,21 @@ public static partial class DirectVmAbiEmitter {
             paramIdx = ctx.DeclareParameter(p);
         }
         int slot = ctx.AllocSlot();
-        return Assign(ctx.RingVar(slot), ctx.ParameterRead(paramIdx));
+        // Root SetArgs({ this }) lives in InstanceHandle so locals cannot wipe it.
+        // Nested lambda parameters use the frame / inline map.
+        Expression value = paramIdx == 0 && ctx.ParamSlotOffset == 0 && !ctx.HasInlineParameters
+            ? ctx.InstanceHandle
+            : ctx.ParameterRead(paramIdx);
+        return Assign(ctx.RingVar(slot), value);
+    }
+
+    /// <summary>
+    /// Domain programs bind the instance via <c>SetArgs({ this })</c> at slot 0.
+    /// ThisReference is that handle — not the ABI null sentinel 0.
+    /// </summary>
+    private static Expression EmitThis(AbiCtx ctx) {
+        int slot = ctx.AllocSlot();
+        return Assign(ctx.RingVar(slot), ctx.InstanceHandle);
     }
 
     private static Expression EmitLambda(Lambda lambda, AbiCtx ctx) {
@@ -519,9 +534,9 @@ public static partial class DirectVmAbiEmitter {
     }
 
     /// <summary>
-    /// ForEachLoop: enumerate a heap <see cref="System.Collections.IEnumerable"/>,
-    /// bind each Current onto the loop variable as a heap handle, run the body.
-    /// Continue jumps to MoveNext; break leaves the loop. Enumerator is disposed.
+    /// ForEachLoop: walk a heap <see cref="System.Collections.IList"/>, bind each
+    /// item onto the loop variable as a heap handle, run the body. Non-IList
+    /// (including null) fails loud via <c>AsIListOrThrow</c> — no silent empty.
     /// </summary>
     private static Expression EmitForEachLoop(ForEachLoop fel, AbiCtx ctx) {
         var breakLabel = Label("foreach_break");
@@ -544,12 +559,11 @@ public static partial class DirectVmAbiEmitter {
         var bodyExpr = CompileNode(fel.Body, ctx);
         ctx.RingDepth = bodyDepth;
 
-        var empty = Constant(Array.Empty<object>(), typeof(System.Collections.IList));
         var loop = Loop(
             Block(
-                IfThen(GreaterThanOrEqual(index, Convert(Property(list, IListCount), typeof(int))),
+                IfThen(GreaterThanOrEqual(index, Call(null, IListCountOfInfo, list)),
                     Goto(breakLabel)),
-                Assign(current, Property(list, IListItem, index)),
+                Assign(current, Call(null, IListItemAtInfo, list, index)),
                 ctx.VariableWrite(fel.LoopVariable,
                     Convert(Call(ctx.HeapLocal, HeapAllocate, current), typeof(long))),
                 bodyExpr,
@@ -567,10 +581,7 @@ public static partial class DirectVmAbiEmitter {
             foldCol,
             Assign(colObj, Call(ctx.HeapLocal, HeapUnsafeGet,
                 Convert(ctx.RingVar(colSlot), typeof(int)))),
-            Assign(list, Condition(
-                TypeIs(colObj, typeof(System.Collections.IList)),
-                Convert(colObj, typeof(System.Collections.IList)),
-                empty)),
+            Assign(list, Call(null, AsIListOrThrowInfo, colObj)),
             Assign(index, Constant(0)),
             loop);
     }

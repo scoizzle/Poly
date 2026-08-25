@@ -11,13 +11,11 @@ namespace Poly.DomainModeling.Lowering;
 /// <see cref="DomainExpressionLoweringPass"/> for expression-heavy effects
 /// like <see cref="AssignEffect"/> and <see cref="ConditionalEffect"/>.
 ///
-/// <para>Store effects other than <see cref="StageTransitionEffect"/> and
-/// invoke (<see cref="CreateEntityInstance"/>, <see cref="ForEachInvokeEffect"/>)
-/// still produce <c>null</c> from <see cref="Route"/> on the runtime path
-/// and are handled by EffectExecutor. StageTransition and invoke (self,
-/// cross-entity, for-each) are handwritten IR on both runtime and emit —
-/// not host-ABI nodes. <c>LowerStageTransitions</c> still gates create /
-/// create-in.</para>
+/// <para>Create / create-in still produce <c>null</c> from <see cref="Route"/>
+/// on the runtime path and are handled by EffectExecutor. StageTransition and
+/// invoke (self, cross-entity, for-each) are handwritten IR on both runtime
+/// and emit — not host-ABI nodes. <c>LowerStageTransitions</c> still gates
+/// create / create-in.</para>
 ///
 /// <para>When <see cref="Analysis"/> is set, lowering reads pre-computed
 /// <see cref="IAnalysisMetadata"/> instead of re-scanning domain collections.
@@ -379,8 +377,8 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
 
         var invokeCall = new Invoke(new Member(loopVar, e.ActionName), [.. args]);
 
-        // Fail-fast + zero-matches-fail, with or without a predicate.
-        // Same Variable instances for VM identity (C# generator keys on Name).
+        // Fail-fast + zero-matches-fail. Same Variable instances for VM identity.
+        // Variable-as-statement is `var x = expr` for C# emit.
         var matchedVar = new Variable($"matched{seq}", new Constant(false));
         var resultVar = new Variable($"result{seq}", invokeCall);
         var loopBody = new List<Node>();

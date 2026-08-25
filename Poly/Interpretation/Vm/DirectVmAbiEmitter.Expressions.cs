@@ -380,7 +380,13 @@ public static partial class DirectVmAbiEmitter {
                     HeapUnsafeGet,
                     Convert(ctx.RingVar(instanceSlot), typeof(int)));
             }
-            return EmitResolvedMember(resolved, instanceObj, d, ctx, Block(instanceExpr, fold));
+            var prelude = Block(
+                instanceExpr, fold,
+                IfThen(
+                    Equal(instanceObj, Constant(null, typeof(object))),
+                    Throw(New(InvalidOperationExceptionStringCtor,
+                        Constant($"Member '{m.MemberName}' requires a non-null instance.")))));
+            return EmitResolvedMember(resolved, instanceObj, d, ctx, prelude);
         }
 
         // No metadata — fallback passthrough
@@ -433,16 +439,11 @@ public static partial class DirectVmAbiEmitter {
     /// (reference types and non-numeric value types like DateTime/DateOnly/Guid)
     /// is boxed and allocated on the heap, returning a heap handle.</summary>
     private static Expression ConvertMemberResult(Expression readCall, ITypeMember resolved, AbiCtx ctx) {
-        // Try to determine if the member type is a value type via CLR metadata.
-        var memberTypeDef = resolved.MemberTypeDefinition;
-        if (memberTypeDef is ClrTypeDefinition clrDef) {
-            var clrType = clrDef.RuntimeType;
-            if (clrType.IsValueType && AbiValueTypes.IsLongRepresentable(clrType)) {
-                // Unbox: (long)(T)(object?)readCall
-                return Convert(Convert(readCall, clrType), typeof(long));
-            }
+        var clrType = resolved.MemberTypeDefinition.GetRuntimeType()
+            ?? resolved.MemberTypeDefinition.PrimitiveType?.GetClrType();
+        if (clrType is not null && clrType.IsValueType && AbiValueTypes.IsLongRepresentable(clrType)) {
+            return Convert(Convert(readCall, clrType), typeof(long));
         }
-        // Reference type (or non-long value type): box/allocate on heap and return handle
         var handle = Call(ctx.HeapLocal,
             HeapAllocate,
             readCall);

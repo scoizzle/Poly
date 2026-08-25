@@ -1,24 +1,26 @@
 namespace Poly.DomainModeling.Runtime;
 
 /// <summary>
-/// VM target for the shared <c>DomainResult</c> tree (Failure guard, IsSuccess
-/// fail-fast after invoke). Generated C# has its own <c>DomainResult</c> that
-/// returns a result object; this type throws on <see cref="Failure"/> and
-/// returns a live instance from <see cref="Success"/> so the same tree is
-/// fail-closed when the VM runs it. Same tree, different <c>DomainResult</c>
-/// — like Notify on This.
+/// Shared <c>DomainResult</c> tree for VM and generated C#.
+/// <see cref="Success"/> / <see cref="Failure"/> return an object with
+/// <see cref="IsSuccess"/>; they do not throw. Canonical fail-closed shape:
+/// <c>if (!result.IsSuccess) return result</c> is live on both paths;
+/// <c>ExecuteEffect</c> throws when a VM program returns a failed result
+/// (foreach zero-match, per-item invoke Failure from <c>InvokeNamed</c>).
+/// Missing actions still throw from <c>InvokeNamed</c> (not a result object).
 /// </summary>
 public sealed class DomainResult {
     public bool IsSuccess { get; }
     public string? ErrorMessage { get; }
+    public object? Value { get; }
 
-    private DomainResult(bool isSuccess, string? errorMessage) {
+    private DomainResult(bool isSuccess, string? errorMessage, object? value) {
         IsSuccess = isSuccess;
         ErrorMessage = errorMessage;
+        Value = value;
     }
 
-    public static DomainResult Success() => new(true, null);
+    public static DomainResult Success(object? value = null) => new(true, null, value);
 
-    public static DomainResult Failure(string message) =>
-        throw new InvalidOperationException(message);
+    public static DomainResult Failure(string message) => new(false, message, null);
 }

@@ -590,6 +590,8 @@ public sealed partial record DomainEntityInstance {
             var compiled = Interpreter.CompileChecked(lowered, DomainResultTypeProvider.Wrap(typeProvider));
             using var exec = Interpreter.Execute(compiled,
                 s => s.SetArgs(new object?[] { this }));
+            if (exec.Result.Value is DomainResult { IsSuccess: false } failed)
+                throw new InvalidOperationException(failed.ErrorMessage ?? "invoke failed.");
             return;
         }
 

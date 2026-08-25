@@ -139,8 +139,17 @@ public static partial class DirectVmAbiEmitter {
                 Convert(ctx.RingVar(astInstanceSlot), typeof(int)));
             var argObjs = new Expression[invoke.Arguments.Length];
             for (int i = 0; i < invoke.Arguments.Length; i++) {
-                argObjs[i] = Call(ctx.HeapLocal, HeapUnsafeGet,
-                    Convert(ctx.RingVar(astArgSlots[i]), typeof(int)));
+                var arg = invoke.Arguments[i];
+                var argKind = ctx.Analysis?.GetValueRepresentation(arg);
+                bool scalar = argKind is ValueRepresentationKind.StackScalar
+                    or ValueRepresentationKind.Bool
+                    || arg is Poly.Ast.Nodes.Add or Poly.Ast.Nodes.Subtract
+                    or Poly.Ast.Nodes.Multiply or Poly.Ast.Nodes.Divide or Poly.Ast.Nodes.Modulo
+                    || arg is Constant { Value: long or int or bool or byte or short or sbyte };
+                argObjs[i] = scalar
+                    ? Convert(ctx.RingVar(astArgSlots[i]), typeof(object))
+                    : Call(ctx.HeapLocal, HeapUnsafeGet,
+                        Convert(ctx.RingVar(astArgSlots[i]), typeof(int)));
             }
 
             var invokeCall = Call(
@@ -170,8 +179,11 @@ public static partial class DirectVmAbiEmitter {
                     Convert(Convert(invokeCall, returnClr), typeof(long))));
             }
             else {
+                // Resolved non-void AST method, or unresolved member (method is null).
+                // InvokeNamed returns DomainResult / policy bool / null. BoxToAbi maps
+                // bool to 0/1 and null to 0 (same as the old unresolved assign-0).
                 astBody.Add(Assign(ctx.RingVar(astSlot),
-                    Convert(Call(ctx.HeapLocal, HeapAllocate, invokeCall), typeof(long))));
+                    Call(null, BoxToAbiInfo, ctx.HeapLocal, invokeCall)));
             }
             return Block(astBody);
         }
@@ -544,6 +556,32 @@ public static partial class DirectVmAbiEmitter {
         throw new InvalidOperationException(
             $"Type '{instanceType.Name}' does not define method '{methodName}' with {args.Length} parameter(s).");
     }
+
+    private static System.Collections.IList AsIListOrThrow(object? collection) {
+        if (collection is System.Collections.IList list)
+            return list;
+        throw new InvalidOperationException(
+            collection is null
+                ? "foreach collection is null."
+                : $"foreach collection type '{collection.GetType().Name}' is not IList.");
+    }
+
+    private static int IListCountOf(System.Collections.IList list) => list.Count;
+
+    private static object? IListItemAt(System.Collections.IList list, int index) => list[index];
+
+    private static long BoxToAbi(Heap heap, object? value) => value switch {
+        null => 0L,
+        bool b => b ? 1L : 0L,
+        byte b => b,
+        sbyte sb => sb,
+        short s => s,
+        ushort us => us,
+        int i => i,
+        uint ui => ui,
+        long l => l,
+        _ => heap.Allocate(value)
+    };
 
     private static object? InvokeAndUnwrap(MethodInfo method, object instance, object?[] args) {
         try {

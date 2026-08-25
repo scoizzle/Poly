@@ -8,8 +8,14 @@ namespace Poly.DomainModeling.Runtime;
 public sealed partial record DomainEntityInstance {
     /// <summary>
     /// VM protocol for AST methods with no CLR MethodInfo: dispatch by name to
-    /// <see cref="InvokeAction"/>. Args map to the action's parameter names in
-    /// declaration order. Re-entrancy / <c>_invokeDepth</c> stays with InvokeAction.
+    /// <see cref="InvokeAction"/>. Returns <see cref="DomainResult"/> — Success
+    /// carries <see cref="ActionInvocationResult.ResultInstance"/> as
+    /// <see cref="DomainResult.Value"/> so the <c>-&gt; Entity</c> instance is
+    /// not dropped; Failure is an object so
+    /// <c>if (!result.IsSuccess) return result</c> is live. Missing actions throw.
+    /// Outer <see cref="InvokeAction"/> still owns the public
+    /// <see cref="ActionInvocationResult"/>. Re-entrancy / <c>_invokeDepth</c>
+    /// stays with InvokeAction.
     /// </summary>
     internal object? InvokeNamed(string name, object?[] args) {
         ArgumentException.ThrowIfNullOrEmpty(name);
@@ -41,13 +47,13 @@ public sealed partial record DomainEntityInstance {
 
         var result = InvokeAction(name, mapped);
         if (!result.Succeeded) {
-            throw new InvalidOperationException(
+            return DomainResult.Failure(
                 result.ErrorMessage
                 ?? (result.FailedGuards.Count > 0
                     ? $"invoke '{name}' blocked by guards: {string.Join(", ", result.FailedGuards)}"
                     : $"invoke '{name}' failed."));
         }
-        return DomainResult.Success();
+        return DomainResult.Success(result.ResultInstance);
     }
 
     private Action? ResolveActionForNamedInvoke(string name) {

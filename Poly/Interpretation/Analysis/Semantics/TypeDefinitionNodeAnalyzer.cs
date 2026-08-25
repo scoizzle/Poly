@@ -294,6 +294,12 @@ internal sealed class AstPropertyDefinition(PropertyDefinitionNode node, AstType
     public string Name => _node.Name;
     public ITypeDefinition MemberTypeDefinition => _memberType.Value;
     public ITypeDefinition DeclaringTypeDefinition => _declaring;
+
+    internal ITypeDefinition? TryGetCollectionElementType() =>
+        _node.MemberType is CollectionTypeReference col
+            ? _declaring.ResolveType(col.ElementType)
+            : null;
+
     public IEnumerable<IParameter> Parameters => _node.IndexParameters is null ? [] : _declaring.MapParameters(_node.IndexParameters);
 
     public AccessModifier AccessModifier => _node.AccessModifier;
@@ -523,6 +529,7 @@ internal static class AstTypeReferenceResolver {
             UnionTypeReference union => ResolveUnion(union, provider, clr),
             TypeDefinitionReference tdr => tdr.TypeDefinition,
             ClrTypeReference clrRef => provider.GetTypeDefinition(clrRef.RuntimeType) ?? clr.GetTypeDefinition<object>(),
+            TypeReference tr => provider.GetTypeDefinition(tr.TypeName) ?? clr.GetTypeDefinition<object>(),
             _ => clr.GetTypeDefinition<object>()
         };
     }

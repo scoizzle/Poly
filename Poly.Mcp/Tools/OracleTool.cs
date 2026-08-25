@@ -360,7 +360,7 @@ internal sealed class OracleTool {
 
     // ── S0: simulate_policy ────────────────────────────────────
 
-    [McpServerTool(Name = "simulate_policy"), Description("Simulates a DSL policy expression against a sample subject properties bag — no session required. Returns {'result': true/false} from the VM evaluation path, matching the same engine used by add(kind: policy) + evaluate_policy.")]
+    [McpServerTool(Name = "simulate_policy"), Description("Expression oracle: VM-evaluates a DSL expression fragment against a local property bag. Not named-policy simulate, not evaluate_policy, and not session-backed — no DomainSession; types are inferred onto a synthetic Entity(\"Subject\"). Returns {'result': true/false}. Related/nav expressions fail closed without a store.")]
     public static DomainToolResponse SimulatePolicy(
         [Description("DSL expression fragment, e.g. `Age >= 18`.")] string expression,
         [Description("JSON object of property values, e.g. \"{\\\"Age\\\":25,\\\"Status\\\":\\\"Active\\\"}\"")] string propertiesJson) {

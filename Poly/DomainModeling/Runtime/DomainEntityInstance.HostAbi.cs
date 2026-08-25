@@ -140,10 +140,12 @@ public sealed partial record DomainEntityInstance {
     }
 
     /// <summary>
-    /// Host ABI for lowered <see cref="CallExternal"/> Notify after a stage
+    /// Instance method invoked from the lowered StageTransition tree
+    /// (<c>Invoke(Member(This, "Notify"), stageName)</c>) after a stage
     /// assignment. Store subscription fan-out only — does not re-run exit/entry
     /// (those belong in the lowered tree). Skips when executing a subscription
-    /// (cascade is store-owned) or when no store is attached.
+    /// (cascade is store-owned) or when no store is attached. Not a CallExternal
+    /// host ABI.
     /// </summary>
     public void Notify(string targetStageName) {
         if (Store is not null && !_isExecutingSubscription)
@@ -386,7 +388,7 @@ public sealed partial record DomainEntityInstance {
             new Parameter("entity", new TypeReference(peer.Entity.Name)));
         var compiled = Interpreter.Compile(lowered, peer._typeDefAnalyzer);
         using var exec = Interpreter.Execute(compiled,
-            s => s.SetArgs(new object?[] { peer._values }));
+            s => s.SetArgs(new object?[] { peer }));
         return exec.Result.GetValue<object>();
     }
 
@@ -430,7 +432,7 @@ public sealed partial record DomainEntityInstance {
                 new Parameter("entity", new TypeReference(Entity.Name)));
             var compiled = Interpreter.Compile(lowered, initializerTypeProvider);
             using var exec = Interpreter.Execute(compiled,
-                s => s.SetArgs(new object?[] { _values }));
+                s => s.SetArgs(new object?[] { this }));
             initialValues[binding.PropertyName] = exec.Result.GetValue<object>();
         }
 

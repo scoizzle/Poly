@@ -1,6 +1,6 @@
 # Pipeline status
 
-**Updated:** 2026-08-24
+**Updated:** 2026-08-25
 **Authority:** this file is the **sole CURRENT/DONE truth** for agent suite admission.  
 Other indexes must **mirror** this file (or link here) — do not invent a second CURRENT line.
 
@@ -10,7 +10,7 @@ Other indexes must **mirror** this file (or link here) — do not invent a secon
 
 ```text
 DONE:    gpure (2026-08-07 + follow-ups 08-08); mcp-minify (2026-08-08 + follow-ups); grammar-revision (2026-08-09: v2 engine + DSL cutover + printer + review fixes); dead-dual cleanup (2026-08-09: Validation + Text.Matching deleted); domainmodeling vision-cleanup slices 1–3 (2026-08-17: one door, session.Analyze, Comment not emit-meaning); emit-session CompileMode seed-only (2026-08-24: HTTP host only via uses http / Load(HttpLibrary); bag-gated emit)
-CURRENT: host-ABI CallExternal (first slice in progress: StageTransition Assignment + CallExternal Notify on runtime and emit. Remaining store effects still EffectExecutor.)
+CURRENT: host-ABI (first slice in progress: StageTransition Assignment + Invoke Notify on This, runtime and emit. Remaining store effects still EffectExecutor.)
 ADMIT:   host-ABI
 THEN:    host-ABI remaining store effects (create / create-in / invoke / for-invoke)
 PARKED:  pack-2 IDomainPack; mut-safety; e2e-*; pack-host “packs extend Grammar tables”; session four-slot Meaning/Emit
@@ -32,7 +32,7 @@ opencode run --dir . --auto --title pack-1-1 --agent build "Assigned: docs/plans
 | **mcp-minify** | ✅ **DONE** 2026-08-08 (+ follow-ups same day) | Catalog 46→24; DSL-only expressions; unified `add`/`remove`; follow-ups closed. |
 | **grammar-revision** | ✅ **DONE** 2026-08-09 | v2 engine (`Grammar<TToken, TTokenKind>`, examine/consume, longest-match, stateless printer) + DSL cutover; review B1–B3/N1–N3/C1 closed. Executed directly (not via plan-suite) — see [`../grammar-revision.md`](../grammar-revision.md) |
 | **emit-session** | ✅ **DONE** 2026-08-24 (CompileMode honesty) | Libraries add `INodeAnalyzer`. Spell closed. Emit reads bags, not `CompileMode`. CompileMode.All/Db seed persistence only; HTTP host requires `uses http` (catalog id `http`) or `Load(HttpLibrary)`. Remaining lies: TemporalLibrary Meaning unused; RuntimeAnalysisCache core-catalog reopen. |
-| **host-ABI** | **CURRENT** 2026-08-24 | First slice: StageTransition lowers to Assignment + `CallExternal("Notify")` on runtime and emit. Create/invoke/for still EffectExecutor. |
+| **host-ABI** | **CURRENT** 2026-08-25 | First slice: StageTransition lowers to Assignment + `Invoke(Member(This, "Notify"))` on runtime and emit. Not a host-ABI node. Create/invoke/for still EffectExecutor. Sequential transitions stale SourceStageName. |
 | **pack-host** | Parked (phase 1 shipped; **extension model superseded**) | TokenWriter + binders done. “Packs extend Grammar tables” is not the product contract — extension is analysis passes. pack-2 `IDomainPack` parked. |
 | **gcyc** | Parked (first admit shipped) | [`gcyc-README.md`](./gcyc-README.md) — remaining G4 unparse is THEN, not CURRENT |
 | **grammar wrap-up** | Parked | LeftAssoc live-fold — not a prereq of pack-1 TokenWriter |

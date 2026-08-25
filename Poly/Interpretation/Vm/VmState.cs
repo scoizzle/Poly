@@ -290,13 +290,6 @@ public sealed class VmState : IDisposable {
     /// Uses a free-list to recycle handles of freed objects.</summary>
     public Heap Heap { get; } = new();
 
-    /// <summary>
-    /// Optional host object for <see cref="CallExternal"/> dispatch.
-    /// Looked up by method name at execution time. Null is fail-closed:
-    /// a CallExternal node throws if Host is unset.
-    /// </summary>
-    public object? Host { get; set; }
-
     /// <summary>Optional trace writer for µop-level logging.
     /// When set, the compiled delegate emits trace lines before each µop.
     /// Null by default — zero overhead when null (single branch check).</summary>
@@ -375,7 +368,7 @@ public sealed class VmState : IDisposable {
 
     /// <summary>Seeds top-level arguments on the value stack. Reference-type
     /// values are allocated on the heap and their handles placed in the
-    /// parameter slots so that <c>LoadSlot</c>/<c>CallExternalDirect</c>
+    /// parameter slots so that <c>LoadSlot</c>
     /// resolve correctly.</summary>
     /// <remarks>Call <em>before</em> <c>Interpreter.Execute</c>, after the
     /// program has been loaded. The number and order of arguments must match

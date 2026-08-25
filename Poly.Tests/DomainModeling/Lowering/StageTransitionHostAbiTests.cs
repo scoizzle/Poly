@@ -24,7 +24,7 @@ public class StageTransitionHostAbiTests {
     }
 
     [Test]
-    public async Task StageTransition_RuntimeContext_LowersToAssignmentAndCallExternal() {
+    public async Task StageTransition_RuntimeContext_LowersToAssignmentAndInvokeNotify() {
         var entity = CreatePersonEntity();
         var context = new LoweringContext(
             new Parameter("entity", new TypeReference(entity.Name)),
@@ -42,10 +42,11 @@ public class StageTransitionHostAbiTests {
                 Value: Constant { Value: "Active" }
             })).IsTrue();
         await Assert.That(nodes.Any(n =>
-            n is CallExternal { MethodName: "Notify" } ce
-            && ce.Arguments is [Constant { Value: "Active" }])).IsTrue();
+            n is Invoke {
+                Delegate: Member { MemberName: "Notify" }
+            } inv && inv.Arguments is [Constant { Value: "Active" }])).IsTrue();
         await Assert.That(nodes.Any(n => n is TryCatchFinally {
-            FinallyBlock: CallExternal { MethodName: "Notify" }
+            FinallyBlock: Invoke { Delegate: Member { MemberName: "Notify" } }
         })).IsTrue();
     }
 
@@ -103,7 +104,7 @@ public class StageTransitionHostAbiTests {
         var cs = new CSharpGenerator().Generate(lowered!);
 
         await Assert.That(cs).Contains("CurrentStage = PersonStage.Active");
-        await Assert.That(cs).Contains("Notify(\"Active\")");
+        await Assert.That(cs).Contains("this.Notify(\"Active\")");
         await Assert.That(cs).DoesNotContain("/*");
         await Assert.That(cs).DoesNotContain("throw");
     }

@@ -112,6 +112,9 @@ public sealed class Printer<TToken, TTokenKind>
                 onContent?.Invoke(ctx);
                 return;
 
+            case NotFollowedBy<TToken, TTokenKind>:
+                return;
+
             case Balanced<TToken, TTokenKind> b:
                 ctx.Emit(b.Open);
                 onContent?.Invoke(ctx);

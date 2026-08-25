@@ -26,6 +26,9 @@ public class GrammarRefAndLeftAssocTests {
         await Assert.That(r.Consumed).IsEqualTo(3);
         await Assert.That(r.Tokens[0].Kind).IsEqualTo(TestKind.Number);
         await Assert.That(r.Tokens[2].Kind).IsEqualTo(TestKind.Number);
+        await Assert.That(r.Children.Count).IsEqualTo(2);
+        await Assert.That(r.Children[0].PatternName).IsEqualTo("num");
+        await Assert.That(r.Children[1].Tokens[0].Text).IsEqualTo("2");
     }
 
     [Test]
@@ -42,6 +45,10 @@ public class GrammarRefAndLeftAssocTests {
         await Assert.That(r.Consumed).IsEqualTo(7);
         await Assert.That(r.Tokens[0].Kind).IsEqualTo(TestKind.LBrace);
         await Assert.That(r.Tokens[^1].Kind).IsEqualTo(TestKind.RBrace);
+        await Assert.That(r.Children.Count).IsEqualTo(1);
+        await Assert.That(r.Children[0].PatternName).IsEqualTo("nested");
+        await Assert.That(r.Children[0].Children[0].PatternName).IsEqualTo("nested");
+        await Assert.That(r.Children[0].Children[0].Children[0].PatternName).IsEqualTo("atom");
     }
 
     [Test]
@@ -90,6 +97,10 @@ public class GrammarRefAndLeftAssocTests {
         await Assert.That(r.Tokens[3].Kind).IsEqualTo(TestKind.Star);
         await Assert.That(r.Tokens[5].Kind).IsEqualTo(TestKind.Plus);
         await Assert.That(r.Tokens[6].Kind).IsEqualTo(TestKind.Number);
+        await Assert.That(r.Children.Count).IsEqualTo(4);
+        await Assert.That(r.Operators.Count).IsEqualTo(3);
+        await Assert.That(r.Operators[1].Kind).IsEqualTo(TestKind.Star);
+        await Assert.That(r.Children[3].Tokens[0].Text).IsEqualTo("4");
     }
 
     [Test]

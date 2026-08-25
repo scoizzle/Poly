@@ -125,9 +125,12 @@ public sealed class JsonGrammarTests {
         var result = matcher.TryMatch("value");
         await Assert.That(result).IsNotNull();
         await Assert.That(result!.PatternName).IsEqualTo("string");
+        await Assert.That(result.RuleName).IsEqualTo("value");
         await Assert.That(result.Consumed).IsEqualTo(1);
         await Assert.That(result.Tokens[0].Kind).IsEqualTo(JsonKind.String);
         await Assert.That(result.Tokens[0].Text).IsEqualTo("hello world");
+        await Assert.That(result.Children).IsEmpty();
+        await Assert.That(result.Operators).IsEmpty();
     }
 
     [Test]
@@ -182,6 +185,7 @@ public sealed class JsonGrammarTests {
         await Assert.That(result.Consumed).IsEqualTo(2);
         await Assert.That(result.Tokens[0].Kind).IsEqualTo(JsonKind.LBrace);
         await Assert.That(result.Tokens[1].Kind).IsEqualTo(JsonKind.RBrace);
+        await Assert.That(result.Children).IsEmpty();
     }
 
     [Test]

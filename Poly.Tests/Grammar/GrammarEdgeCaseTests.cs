@@ -127,6 +127,52 @@ public sealed class GrammarEdgeCaseTests {
         await Assert.That(r.Consumed).IsEqualTo(1); // just EndOfFile
     }
 
+    // ── 6b. Repeat items are true longest-match (not first in sort / element count) ──
+    [Test]
+    public async Task Repeat_ItemLongestMatch_NotDeclaredElementCount() {
+        var g = new GrammarBuilder<CharToken, CharKind>()
+            .Define("digit")
+            .Pattern("d").Kind(CharKind.Digit).Commit()
+            .Define("item")
+            .Pattern("fixed").Kind(CharKind.Letter).Kind(CharKind.Digit).Kind(CharKind.Digit).Commit()
+            .Pattern("greedy").Kind(CharKind.Letter).Repeat("digit", min: 1, max: 5).Commit()
+            .Define("list")
+            .Pattern("items").Repeat("item", min: 1).Commit()
+            .Build();
+
+        // Sort prefers "fixed" (3 elements vs 2). Longest-match prefers "greedy" (4 tokens).
+        var r = new Matcher<CharToken, CharKind>(g, new CharReader("a123")).TryMatch("list");
+        await Assert.That(r).IsNotNull();
+        await Assert.That(r!.Consumed).IsEqualTo(4);
+        await Assert.That(r.Children.Count).IsEqualTo(1);
+        await Assert.That(r.Children[0].PatternName).IsEqualTo("greedy");
+    }
+
+    private enum CharKind { Letter, Digit, Plus, Star, EndOfStream }
+
+    private readonly record struct CharToken(CharKind Kind, char Char) : IToken<CharKind>;
+
+    private sealed class CharReader : BufferedTokenReader<CharToken, CharKind> {
+        private readonly string _text;
+        private int _pos;
+
+        public CharReader(string text) => _text = text;
+
+        protected override CharToken ScanNextToken() {
+            if (_pos >= _text.Length)
+                return new CharToken(CharKind.EndOfStream, '\0');
+            var c = _text[_pos++];
+            return c switch {
+                '+' => new CharToken(CharKind.Plus, c),
+                '*' => new CharToken(CharKind.Star, c),
+                _ when char.IsDigit(c) => new CharToken(CharKind.Digit, c),
+                _ => new CharToken(CharKind.Letter, c),
+            };
+        }
+
+        public override bool EndOfStream(CharKind kind) => kind == CharKind.EndOfStream;
+    }
+
     // ── 7. Repeat zero items ──
     [Test]
     public async Task Repeat_EmptyBody_ReturnsZeroTokens() {

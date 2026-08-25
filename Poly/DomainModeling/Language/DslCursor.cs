@@ -9,13 +9,13 @@ namespace Poly.DomainModeling.Language;
 /// This is the single cursor for both the expression parser and the structure parser.
 /// </summary>
 public class DslCursor : IDslParseCursor {
-    private readonly DslTokenReader _reader;
+    private readonly ITokenReader<DslToken, DslTokenKind> _reader;
     private readonly Matcher<DslToken, DslTokenKind> _matcher;
     private bool _inWhereBody;
 
-    public DslCursor(DslTokenReader reader, Matcher<DslToken, DslTokenKind> matcher) {
-        _reader = reader;
-        _matcher = matcher;
+    public DslCursor(ITokenReader<DslToken, DslTokenKind> reader, Matcher<DslToken, DslTokenKind> matcher) {
+        _reader = reader ?? throw new ArgumentNullException(nameof(reader));
+        _matcher = matcher ?? throw new ArgumentNullException(nameof(matcher));
     }
 
     /// <summary>
@@ -26,6 +26,8 @@ public class DslCursor : IDslParseCursor {
     public DslCursor(DslTokenReader reader, Func<DslTokenReader, Matcher<DslToken, DslTokenKind>> matcherFactory)
         : this(reader, matcherFactory(reader)) {
     }
+
+    public Grammar<DslToken, DslTokenKind> Grammar => _matcher.Grammar;
 
     public DslToken Current => _reader.Peek(0);
 
@@ -83,6 +85,7 @@ public interface IDslParseCursor {
     string ExpectIdentifier(DslTokenKind kind, string context);
     bool PeekIs(DslTokenKind kind);
     DslToken Peek(int n = 1);
+    Grammar<DslToken, DslTokenKind> Grammar { get; }
     MatchResult<DslToken, DslTokenKind>? MatchRule(string ruleName);
     void Consume(MatchResult<DslToken, DslTokenKind> match);
     Exception Error(string message);

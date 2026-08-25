@@ -44,10 +44,11 @@ public sealed class Grammar<TToken, TTokenKind>
 
     /// <summary>
     /// Returns all patterns registered under <paramref name="ruleName"/>, sorted by
-    /// first-token kind then element count descending. Lenient for unknown rules
-    /// (empty list) — the matcher validates rule names before matching (N3) so
-    /// <see cref="Repeat{TToken,TTokenKind}"/> keeps zero-many-on-unknown semantics
-    /// while typo'd rule references fail at the source.
+    /// first-token kind then element count descending (tie-break enumeration only —
+    /// the matcher still longest-matches, including Repeat items). Lenient for
+    /// unknown rules (empty list) — the matcher validates rule names before matching
+    /// (N3) so <see cref="Repeat{TToken,TTokenKind}"/> keeps zero-many-on-unknown
+    /// semantics while typo'd rule references fail at the source.
     /// </summary>
     public IReadOnlyList<Pattern<TToken, TTokenKind>> GetPatterns(string ruleName) =>
         _rules.TryGetValue(ruleName, out var list) ? list : [];

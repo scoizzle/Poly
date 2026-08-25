@@ -89,3 +89,12 @@ public sealed record Balanced<TToken, TTokenKind>(TTokenKind Open, TTokenKind Cl
 public sealed record Any<TToken, TTokenKind> : IPatternElement<TToken, TTokenKind>
     where TToken : struct, IToken<TTokenKind>
     where TTokenKind : struct;
+
+/// <summary>
+/// Zero-width negative lookahead: succeeds when the token at this position is
+/// not <paramref name="Kind"/> (including end-of-stream). Consumes nothing.
+/// </summary>
+public sealed record NotFollowedBy<TToken, TTokenKind>(TTokenKind Kind)
+    : IPatternElement<TToken, TTokenKind>
+    where TToken : struct, IToken<TTokenKind>
+    where TTokenKind : struct;

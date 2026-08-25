@@ -190,6 +190,11 @@ public sealed class PatternBuilder<TToken, TTokenKind>
         return this;
     }
 
+    public PatternBuilder<TToken, TTokenKind> NotFollowedBy(TTokenKind kind) {
+        _elements.Add(new NotFollowedBy<TToken, TTokenKind>(kind));
+        return this;
+    }
+
     /// <summary>Registers this pattern on the builder; ready for the next pattern in the same rule.</summary>
     public RuleBuilder<TToken, TTokenKind> Commit() {
         _builder.AddPattern(_ruleName, new Pattern<TToken, TTokenKind>(_name, _elements, _priority));

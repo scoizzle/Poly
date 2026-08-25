@@ -231,24 +231,47 @@ public static class DslGrammar {
             .Pattern("today", priority: 1).Predicate(IsTodayIdentifier, "today").Commit()
             .Pattern("duration").Value(DslTokenKind.Number, "amount").Predicate(IsDurationUnitToken, "unit").Commit()
             .Pattern("ident").Value(DslTokenKind.Identifier).Commit()
+            .Pattern("quant-where", priority: 2)
+                .Predicate(IsQuantifierToken, "quant").Value(DslTokenKind.Identifier, "rel")
+                .Predicate(IsWhereIdent, "where").Ref("expr-and").Commit()
+            .Pattern("count-bare", priority: 2)
+                .Predicate(IsCountToken, "quant").Value(DslTokenKind.Identifier, "rel").Commit()
+            .Pattern("exists", priority: 1)
+                .Value(DslTokenKind.Identifier, "rel").Predicate(IsExistsIdent, "exists").Commit()
+            .Pattern("where-nav", priority: 1)
+                .Value(DslTokenKind.Identifier, "rel").Predicate(IsWhereIdent, "where").Ref("expr-and").Commit()
+            .Pattern("path-is-not", priority: 1)
+                .Predicate(IsPathHopIdent, "rel").Predicate(IsPathHopIdent, "prop")
+                .NotFollowedBy(DslTokenKind.Colon).Repeat("path-hop")
+                .Kind(DslTokenKind.Is).Kind(DslTokenKind.Not).Ref("expr-primary").Commit()
+            .Pattern("path-cmp", priority: 1)
+                .Predicate(IsPathHopIdent, "rel").Predicate(IsPathHopIdent, "prop")
+                .NotFollowedBy(DslTokenKind.Colon).Repeat("path-hop")
+                .Predicate(IsCompareToken, "op").Ref("expr-primary").Commit()
+            .Pattern("path")
+                .Predicate(IsPathHopIdent, "rel").Predicate(IsPathHopIdent, "prop")
+                .NotFollowedBy(DslTokenKind.Colon).Repeat("path-hop").Commit()
+        .Define("path-hop")
+            .Pattern("hop").Predicate(IsPathHopIdent, "hop").NotFollowedBy(DslTokenKind.Colon).Commit()
         .Define("expr-add")
             .Pattern("chain").LeftAssoc("expr-mul", DslTokenKind.Plus, DslTokenKind.Minus).Commit()
         .Define("expr-mul")
             .Pattern("chain").LeftAssoc("expr-primary", DslTokenKind.Star, DslTokenKind.Slash).Commit()
-        .Define("expr-or-op")
-            .Pattern("or").Kind(DslTokenKind.Or).Commit()
-        .Define("expr-and-op")
-            .Pattern("and").Kind(DslTokenKind.And).Commit()
-        .Define("expr-not-op")
-            .Pattern("not").Kind(DslTokenKind.Not).Commit()
-        .Define("expr-add-op")
-            .Pattern("plus").Kind(DslTokenKind.Plus).Commit()
-            .Pattern("minus").Kind(DslTokenKind.Minus).Commit()
-        .Define("expr-mul-op")
-            .Pattern("star").Kind(DslTokenKind.Star).Commit()
-            .Pattern("slash").Kind(DslTokenKind.Slash).Commit()
-        .Define("expr-compare-op")
-            .Pattern("op").Predicate(IsCompareToken, "compare-op").Commit()
+        .Define("expr-live")
+            .Pattern("top").Ref("expr-live-or").Commit()
+        .Define("expr-live-or")
+            .Pattern("chain").LeftAssoc("expr-live-and", DslTokenKind.Or).Commit()
+        .Define("expr-live-and")
+            .Pattern("chain").LeftAssoc("expr-live-not", DslTokenKind.And).Commit()
+        .Define("expr-live-not")
+            .Pattern("not").Kind(DslTokenKind.Not).Ref("expr-add").Commit()
+            .Pattern("pass-through").NotFollowedBy(DslTokenKind.Not).Ref("expr-live-compare").Commit()
+        .Define("expr-live-compare")
+            .Pattern("bare").Ref("expr-add").Commit()
+            .Pattern("is-not", priority: 1)
+                .Ref("expr-add").Kind(DslTokenKind.Is).Kind(DslTokenKind.Not).Ref("expr-add").Commit()
+            .Pattern("with-op")
+                .Ref("expr-add").Predicate(IsCompareToken, "compare-op").Ref("expr-add").Commit()
         .Define("effect")
             .Pattern("transition")
                 .Kind(DslTokenKind.Transition).Kind(DslTokenKind.To).Value(DslTokenKind.Identifier).Commit()
@@ -270,12 +293,32 @@ public static class DslGrammar {
             .Pattern("true").Kind(DslTokenKind.True).Commit()
             .Pattern("false").Kind(DslTokenKind.False).Commit()
             .Pattern("null").Kind(DslTokenKind.Null).Commit()
-            .Pattern("group").Kind(DslTokenKind.LParen).Ref("expr").Kind(DslTokenKind.RParen).Commit()
+            .Pattern("group").Balanced(DslTokenKind.LParen, DslTokenKind.RParen).Commit()
             .Pattern("not").Kind(DslTokenKind.Not).Ref("expr-add").Commit()
             .Pattern("now", priority: 1).Predicate(IsNowIdentifier, "now").Commit()
             .Pattern("today", priority: 1).Predicate(IsTodayIdentifier, "today").Commit()
             .Pattern("duration").Value(DslTokenKind.Number, "amount").Predicate(IsDurationUnitToken, "unit").Commit()
             .Pattern("ident").Value(DslTokenKind.Identifier).Commit()
+            .Pattern("quant-where", priority: 2)
+                .Predicate(IsQuantifierToken, "quant").Value(DslTokenKind.Identifier, "rel")
+                .Predicate(IsWhereIdent, "where").Ref("expr-live-and").Commit()
+            .Pattern("count-bare", priority: 2)
+                .Predicate(IsCountToken, "quant").Value(DslTokenKind.Identifier, "rel").Commit()
+            .Pattern("exists", priority: 1)
+                .Value(DslTokenKind.Identifier, "rel").Predicate(IsExistsIdent, "exists").Commit()
+            .Pattern("where-nav", priority: 1)
+                .Value(DslTokenKind.Identifier, "rel").Predicate(IsWhereIdent, "where").Ref("expr-live-and").Commit()
+            .Pattern("path-is-not", priority: 1)
+                .Predicate(IsPathHopIdent, "rel").Predicate(IsPathHopIdent, "prop")
+                .NotFollowedBy(DslTokenKind.Colon).Repeat("path-hop")
+                .Kind(DslTokenKind.Is).Kind(DslTokenKind.Not).Ref("expr-primary").Commit()
+            .Pattern("path-cmp", priority: 1)
+                .Predicate(IsPathHopIdent, "rel").Predicate(IsPathHopIdent, "prop")
+                .NotFollowedBy(DslTokenKind.Colon).Repeat("path-hop")
+                .Predicate(IsCompareToken, "op").Ref("expr-primary").Commit()
+            .Pattern("path")
+                .Predicate(IsPathHopIdent, "rel").Predicate(IsPathHopIdent, "prop")
+                .NotFollowedBy(DslTokenKind.Colon).Repeat("path-hop").Commit()
         .Define("date-operation")
             .Pattern("add")
                 .Ref("expr-primary").Kind(DslTokenKind.Plus)
@@ -297,4 +340,31 @@ public static class DslGrammar {
 
     internal static bool IsDurationUnitToken(DslToken t) =>
         t.Kind == DslTokenKind.Identifier && DurationForm.TryGetUnit(t.Text, out _);
+
+    internal static bool IsExistsIdent(DslToken t) =>
+        t.Kind == DslTokenKind.Identifier
+        && string.Equals(t.Text, "exists", StringComparison.OrdinalIgnoreCase);
+
+    internal static bool IsWhereIdent(DslToken t) =>
+        t.Kind == DslTokenKind.Identifier
+        && string.Equals(t.Text, "where", StringComparison.OrdinalIgnoreCase);
+
+    internal static bool IsQuantifierToken(DslToken t) =>
+        t.Kind == DslTokenKind.Identifier && IsQuantifierKeyword(t.Text);
+
+    internal static bool IsCountToken(DslToken t) =>
+        t.Kind == DslTokenKind.Identifier
+        && string.Equals(t.Text, "count", StringComparison.OrdinalIgnoreCase);
+
+    internal static bool IsPathHopIdent(DslToken t) =>
+        t.Kind == DslTokenKind.Identifier
+        && !IsExistsIdent(t)
+        && !IsWhereIdent(t)
+        && !IsQuantifierToken(t);
+
+    internal static bool IsQuantifierKeyword(string text) =>
+        string.Equals(text, "any", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(text, "all", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(text, "none", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(text, "count", StringComparison.OrdinalIgnoreCase);
 }

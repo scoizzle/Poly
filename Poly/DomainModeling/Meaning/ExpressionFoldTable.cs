@@ -7,7 +7,8 @@ namespace Poly.DomainModeling.Meaning;
 
 /// <summary>
 /// (rule, pattern) → expression IR. Held by a domain session; Grammar stays IR-free.
-/// Patterns that need follow-on RD (ident, group, not) are not registered.
+/// Group / not / ident-continuations are table-dispatched in the parser; this
+/// table folds closed primaries (literals, bare ident).
 /// </summary>
 public sealed class ExpressionFoldTable {
     private readonly Dictionary<(string Rule, string Pattern), Func<MatchResult<DslToken, DslTokenKind>, DomainExpression>> _folds =
@@ -20,11 +21,13 @@ public sealed class ExpressionFoldTable {
         table.Register("expr-primary", "true", _ => DomainExpression.Literal(true));
         table.Register("expr-primary", "false", _ => DomainExpression.Literal(false));
         table.Register("expr-primary", "null", _ => DomainExpression.Literal(null));
+        table.Register("expr-primary", "ident", m => DomainExpression.Property(Text(m)));
         table.Register("expr-primary-no-not", "number", FoldNumber);
         table.Register("expr-primary-no-not", "string", m => DomainExpression.Literal(Text(m)));
         table.Register("expr-primary-no-not", "true", _ => DomainExpression.Literal(true));
         table.Register("expr-primary-no-not", "false", _ => DomainExpression.Literal(false));
         table.Register("expr-primary-no-not", "null", _ => DomainExpression.Literal(null));
+        table.Register("expr-primary-no-not", "ident", m => DomainExpression.Property(Text(m)));
         return table;
     }
 

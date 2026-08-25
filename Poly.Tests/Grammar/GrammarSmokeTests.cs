@@ -86,6 +86,12 @@ public class GrammarSmokeTests {
         await Assert.That(match.Tokens[0].Char).IsEqualTo('1');
         await Assert.That(match.Tokens[1].Char).IsEqualTo('+');
         await Assert.That(match.Tokens[4].Char).IsEqualTo('3');
+        await Assert.That(match.RuleName).IsEqualTo("expr");
+        await Assert.That(match.Children.Count).IsEqualTo(3);
+        await Assert.That(match.Operators.Count).IsEqualTo(2);
+        await Assert.That(match.Operators[0].Char).IsEqualTo('+');
+        await Assert.That(match.Children[0].RuleName).IsEqualTo("term");
+        await Assert.That(match.Children[2].Tokens[0].Char).IsEqualTo('3');
     }
 
     [Test]
@@ -217,10 +223,10 @@ public class GrammarSmokeTests {
         await Assert.That(match).IsNull();
     }
 
-    // ── Capture seam exists but is empty (forward-compatible) ──
+    // ── Leaf with no named Value/Predicate holes has empty Captures ──
 
     [Test]
-    public async Task MatchResult_Captures_IsEmptySeam() {
+    public async Task MatchResult_Captures_EmptyWhenPatternHasNoNamedHoles() {
         var g = BuildGrammar();
         var m = new Matcher<CharToken, CharKind>(g, new CharReader("1"));
 
@@ -228,5 +234,8 @@ public class GrammarSmokeTests {
 
         await Assert.That(match).IsNotNull();
         await Assert.That(match!.Captures).IsEmpty();
+        await Assert.That(match.Children).IsEmpty();
+        await Assert.That(match.Operators).IsEmpty();
+        await Assert.That(match.RuleName).IsEqualTo("term");
     }
 }

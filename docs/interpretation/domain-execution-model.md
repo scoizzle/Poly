@@ -97,14 +97,17 @@ For effects that map directly to Syntax AST nodes. The effect is lowered, compil
 | `AssignEffect` | `Assignment(target, value)` | Target and value lowered via `DomainExpressionLoweringPass` |
 | `CompositeEffect` | `Block(nodes)` | Sub-effects lowered recursively; direct-execution children filtered out; empty → `Block([Constant(0L)])` |
 | `ConditionalEffect` | `IfStatement(cond, thenBlock, elseBlock?)` | Then/else effects lowered recursively; same empty-block fallback |
+| `StageTransitionEffect` | Assignment of `CurrentStage` + `CallExternal("Notify", stageName)` (plus inlined exit/entry when they lower) | Same tree on runtime and emit. Host is `VmState.Host` (`DomainEntityInstance.Notify`). Not an EffectExecutor arm. |
 
 ```csharp
 // DomainEntityInstance.ExecuteEffect — VM-compiled path
 var lowered = effectPass.TryLowerVmNode(effect);
 if (lowered is not null) {
     var compiled = Interpreter.Compile(lowered, typeProvider);
-    using var exec = Interpreter.Execute(compiled,
-        s => s.SetArgs(new object?[] { _values }));
+    using var exec = Interpreter.Execute(compiled, s => {
+        s.SetArgs(new object?[] { _values });
+        s.Host = this;
+    });
     return;
 }
 ```
@@ -115,7 +118,6 @@ For effects that mutate `DomainEntityInstance` state directly. The lowering pass
 
 | Effect | Action | Notes |
 |--------|--------|-------|
-| `StageTransitionEffect` | `TransitionStage(name, notifyStore: true)` | Sets `CurrentStage`; notifies `DomainInstanceStore` for subscription fan-out |
 | `CreateEntityInstance` | `CreateChildInstance(create)` | Creates via factory, adds to `_createdChildren`, optionally auto-links via `RelationshipName` |
 | `CreateEntityInRelationshipEffect` | `ExecuteCreateInRelationship(createIn)` | Creates instance and links via the named relationship |
 | `InvokeActionEffect` | `ExecuteInvokeEffect(invoke)` | See §5 cross-entity invoke |
@@ -128,10 +130,7 @@ For effects that mutate `DomainEntityInstance` state directly. The lowering pass
 ```csharp
 // DomainEntityInstance.EffectExecutor — dispatch base, named by effect subtype
 private sealed class EffectExecutor : EffectDispatch<object?> {
-    protected override object? StageTransition(StageTransitionEffect t) {
-        _instance.TransitionStage(t.TargetStage.StageName, notifyStore: true);
-        return null;
-    }
+    // StageTransitionEffect must lower — EffectExecutor throws if reached.
     protected override object? InvokeAction(InvokeActionEffect i) {
         _instance.ExecuteInvokeEffect(i);
         return null;
@@ -150,7 +149,8 @@ ExecuteEffect(effect)
   │   ├─ AssignEffect  → Assignment
   │   ├─ CompositeEffect → Block
   │   ├─ ConditionalEffect → IfStatement
-  │   └─ (all others) → null
+  │   ├─ StageTransitionEffect → CurrentStage Assignment + CallExternal Notify
+  │   └─ (create / invoke / for) → null
   │
   ├─ returned Node ≠ null
   │   → Interpreter.Compile(lowered)
@@ -159,7 +159,6 @@ ExecuteEffect(effect)
   └─ returned null
       → EffectExecutor.Run(instance, pass, provider, effect)
         │
-        ├─ StageTransitionEffect   → TransitionStage(...)
         ├─ CreateEntityInstance    → CreateChildInstance(...)
         ├─ CreateEntityInRelationship → ExecuteCreateInRelationship(...)
         └─ InvokeActionEffect      → ExecuteInvokeEffect(...)
@@ -454,7 +453,7 @@ This is the runtime counterpart of `StageSubscription` declarations in the DSL.
 |------|---------|---------|
 | **Quantifier lowering** | Preprocessed out before lowering (dual path) — the Syntax AST and VM have no store-aware nodes | Store-aware lowering node or dedicated Syntax AST extension; fix goes in Syntax/VM, not lowering |
 | **Relationship navigation** | Lowered as `Member(Param, relName)` — semantically works via VM's unresolved-Member fallback | Dedicated navigation Syntax node with explicit semantics; fix goes in Syntax AST |
-| **Direct-execution effects in lowering** | Recorded as `Comment("Cannot lower: StageTransitionEffect")` nodes — the VM skips them via no-op. Information is preserved in the AST for future lowering improvements. | Over time, each effect type gets lowering support and the `Comment` nodes naturally disappear. |
+| **Direct-execution effects in lowering** | Create / create-in / invoke / for-invoke still return `null` on the runtime path (EffectExecutor). StageTransition lowers to Assignment + `CallExternal` (not Comment). | Remaining store effects share the same lowered tree on runtime and emit. |
 | **VM quantifier eval** | Per-target re-lowering + compile is expensive for large collections | Cached lowering or batch evaluation in VM |
 | **ParameterAccess in DSL** | Product spelling is a **bare identifier** (`PropertyAccess`) — analysis/lowering/bindings/runtime treat an in-scope action-parameter name as a parameter (`paramEnv`); there is no distinct `param` keyword or `@param` form | L3 — no separate parameter authoring syntax |
 

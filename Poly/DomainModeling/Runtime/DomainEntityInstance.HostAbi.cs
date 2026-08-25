@@ -12,7 +12,8 @@ namespace Poly.DomainModeling.Runtime;
 
 public sealed partial record DomainEntityInstance {
     /// <summary>
-    /// Dispatches direct-execution effects using <see cref="EffectDispatch{TResult}"/>.
+    /// Dispatches remaining direct-execution effects using <see cref="EffectDispatch{TResult}"/>.
+    /// Product arms are create and create-in only; invoke, stage, and for throw.
     /// Named by the Effect subtype, not by the pattern (no Visit*).
     /// </summary>
     private sealed class EffectExecutor : EffectDispatch<object?> {
@@ -57,12 +58,11 @@ public sealed partial record DomainEntityInstance {
     }
 
     /// <summary>
-    /// Instance method invoked from the lowered StageTransition tree
+    /// Real instance method invoked from the lowered StageTransition tree
     /// (<c>Invoke(Member(This, "Notify"), stageName)</c>) after a stage
     /// assignment. Store subscription fan-out only — does not re-run exit/entry
     /// (those belong in the lowered tree). Skips when executing a subscription
-    /// (cascade is store-owned) or when no store is attached. Not a CallExternal
-    /// host ABI.
+    /// (cascade is store-owned) or when no store is attached.
     /// </summary>
     public void Notify(string targetStageName) {
         if (Store is not null && !_isExecutingSubscription)
@@ -70,37 +70,17 @@ public sealed partial record DomainEntityInstance {
     }
 
     /// <summary>
-    /// Transitions to a target stage. Execution order:
-    /// <list type="number">
-    ///   <item>OnExit effects on the current stage (before any state change).</item>
-    ///   <item>Set <see cref="CurrentStage"/> to <paramref name="targetStageName"/>.</item>
-    ///   <item>OnEntry effects on the target stage (stage already set — partial-entry state
-    ///     possible if an effect throws).</item>
-    ///   <item>Notify store subscribers (in a <c>finally</c> block — fires even if OnEntry throws).</item>
-    /// </list>
-    /// Store notification fires when:
-    /// <list type="bullet">
-    ///   <item><paramref name="notifyStore"/> is <c>true</c>,</item>
-    ///   <item><c>Store</c> is set,</item>
-    ///   <item>we are <b>not</b> inside a <see cref="ExecuteSubscriptionEffects"/> call
-    ///     (subscription-triggered transitions cascade through <see cref="DomainInstanceStore.NotifyTransition"/>
-    ///     recursion, not through a second store call).</item>
-    /// </list>
+    /// Leftover helper for nested OnEntry/OnExit depth bounding and test callers.
+    /// Action <see cref="StageTransitionEffect"/> must lower via <see cref="ExecuteEffect"/>;
+    /// this is not the shipped action path.
+    /// When the helper runs, order is OnExit (current stage), set
+    /// <see cref="CurrentStage"/>, OnEntry (target; partial-entry if an effect throws),
+    /// then store notify in <c>finally</c>. Notify fires when <paramref name="notifyStore"/>
+    /// is true, <c>Store</c> is set, and we are not inside
+    /// <see cref="ExecuteSubscriptionEffects"/> (subscription cascades through
+    /// <see cref="DomainInstanceStore.NotifyTransition"/>, not a second store call).
+    /// Nested same-instance transitions are bounded by <see cref="MaxTransitionDepth"/>.
     /// </summary>
-    /// <remarks>
-    /// <b>Stage policy vs action hierarchy:</b> Stage-scoped policies are evaluated only on the
-    /// <b>current</b> stage (not the parent chain), while <see cref="InvokeAction"/> walks the
-    /// parent chain for actions. This asymmetry exists because effective-policy computation
-    /// is performed by analyzers (walking the hierarchy), while runtime scenario gating is
-    /// still a per-stage concern.
-    ///
-    /// <b>OnEntry re-entrancy:</b> Nested same-instance transitions (e.g. OnEntry →
-    /// another <c>TransitionStage</c>) are bounded by <see cref="MaxTransitionDepth"/>
-    /// (default 16). Exceeding it throws <see cref="InvalidOperationException"/>.
-    /// Partial stage application is possible if a nested throw occurs after
-    /// <c>CurrentStage</c> was already updated. Store subscription fan-out remains
-    /// separately bounded by <see cref="DomainInstanceStore"/> cascade <c>maxDepth</c>.
-    /// </remarks>
     internal void TransitionStage(string targetStageName, bool notifyStore = true) {
         if (!Entity.Stages.Any(s => string.Equals(s.Name, targetStageName, StringComparison.Ordinal)))
             return;
@@ -131,7 +111,6 @@ public sealed partial record DomainEntityInstance {
                 Analysis: analysis,
                 Domain: Domain);
 
-            // ── Run OnExit effects on the current stage ────────────
             if (previousStageName is not null) {
                 var prevStage = ResolveTransitionStage(analysis, previousStageName);
                 if (prevStage?.OnExitEffects is { Count: > 0 }) {
@@ -141,12 +120,8 @@ public sealed partial record DomainEntityInstance {
                 }
             }
 
-            // ── Set new stage ──────────────────────────────────────
             CurrentStage = targetStageName;
 
-            // ── Run OnEntry effects on the target stage ────────────
-            // Notify subscribers runs in a finally block so it fires even if
-            // OnEntry effects throw (the stage is already set).
             try {
                 var targetStage = ResolveTransitionStage(analysis, targetStageName);
                 if (targetStage?.OnEntryEffects is { Count: > 0 }) {
@@ -167,9 +142,9 @@ public sealed partial record DomainEntityInstance {
     }
 
     /// <summary>
-    /// Nested <see cref="StageTransitionEffect"/> in entry/exit must recurse through
-    /// <see cref="TransitionStage"/> so depth, intermediate exits, and OnEntry chains
-    /// stay on the runtime helper. Flattening them into one VM tree skips the bound.
+    /// Nested entry/exit <see cref="StageTransitionEffect"/> recurses through
+    /// <see cref="TransitionStage"/> for depth bounding and test callers.
+    /// Action-level stage transitions must lower via <see cref="ExecuteEffect"/>.
     /// </summary>
     private void RunTransitionEffect(Effect effect, EffectLoweringPass pass, bool notifyStore) {
         if (effect is StageTransitionEffect nested) {

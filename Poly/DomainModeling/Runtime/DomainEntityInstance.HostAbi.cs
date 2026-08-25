@@ -51,64 +51,9 @@ public sealed partial record DomainEntityInstance {
             throw new InvalidOperationException(
                 "InvokeActionEffect must lower to Ast; EffectExecutor is not the shipped path.");
 
-        protected override object? ForEachInvoke(ForEachInvokeEffect efe) {
-            _instance.ExecuteForEachInvoke(efe);
-            return null;
-        }
-    }
-
-    /// <summary>
-    /// Executes a <see cref="ForEachInvokeEffect"/>: fetch every outbound linked record on
-    /// the relationship (fail if none), apply the named-policy / stage predicate, and invoke
-    /// the action on each matching record — fail-fast on the first failure.
-    /// </summary>
-    private void ExecuteForEachInvoke(ForEachInvokeEffect efe) {
-        var targets = GetOutboundRelatedInstances(efe.RelationshipName);
-        if (targets.Count == 0) {
+        protected override object? ForEachInvoke(ForEachInvokeEffect efe) =>
             throw new InvalidOperationException(
-                $"for '{efe.RelationshipName}.{efe.ActionName}' matched zero targets.");
-        }
-
-        var matched = false;
-        foreach (var target in targets) {
-            if (!ForEachPredicateMatches(efe.Predicate, target)) continue;
-            matched = true;
-
-            // Bind the binder name to the current target so args like `line Qty` resolve.
-            var boundBindings = efe.ParameterBindings
-                .Select(b => b with { Expression = BindPeerInExpression(b.Expression, efe.BinderName, target) })
-                .ToList();
-            var args = EvaluateParameterBindings(boundBindings);
-
-            var result = target.InvokeAction(efe.ActionName, args);
-            if (!result.Succeeded) {
-                throw new InvalidOperationException(
-                    $"for '{efe.RelationshipName}.{efe.ActionName}' failed on a '{target.Entity.Name}' record: " +
-                    (result.ErrorMessage ?? "action failed."));
-            }
-        }
-        if (!matched) {
-            throw new InvalidOperationException(
-                $"for '{efe.RelationshipName}.{efe.ActionName}' matched zero targets after predicate.");
-        }
-    }
-
-    private bool ForEachPredicateMatches(ForEachPredicate? predicate, DomainEntityInstance target) {
-        switch (predicate) {
-            case null:
-                return true;
-            case ForEachNamedPolicy { PolicyName: var policyName }:
-                var policy = target.Entity.Policies.FirstOrDefault(p =>
-                    string.Equals(p.Name, policyName, StringComparison.Ordinal));
-                if (policy is null)
-                    throw new InvalidOperationException(
-                        $"ForEachInvoke predicate policy '{policyName}' does not exist on entity '{target.Entity.Name}'.");
-                return target.EvaluatePolicy(policy);
-            case ForEachStageMembership { StageName: var stageName }:
-                return string.Equals(target.CurrentStage, stageName, StringComparison.Ordinal);
-            default:
-                throw new InvalidOperationException($"Unsupported ForEachInvoke predicate '{predicate.GetType().Name}'.");
-        }
+                "ForEachInvokeEffect must lower to Ast; EffectExecutor is not the shipped path.");
     }
 
     /// <summary>

@@ -265,6 +265,9 @@ public static partial class DirectVmAbiEmitter {
         private readonly List<VariableLayout> _variableLayouts = new();
         public IReadOnlyList<VariableLayout> VariableLayouts => _variableLayouts;
 
+        public bool IsDeclared(Variable v) =>
+            _variableRegisters.ContainsKey(v) || TryGetVariable(v, out _);
+
         public bool TryGetVariable(Variable v, out int slot) {
             foreach (var scope in _scopeStack) {
                 if (scope.TryGetValue(v, out slot))

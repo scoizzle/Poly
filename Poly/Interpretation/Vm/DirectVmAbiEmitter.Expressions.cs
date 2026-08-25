@@ -600,6 +600,17 @@ public static partial class DirectVmAbiEmitter {
     /// closure capture array (if this is a captured upvalue).
     /// Leaving the value on the ring for expression chaining.</summary>
     private static Expression EmitVariable(Variable v, AbiCtx ctx) {
+        // Statement form `var x = expr` (C# generator prints a declaration).
+        // First encounter declares and writes; later reads ignore Value.
+        if (v.Value is not null && !ctx.IsDeclared(v)) {
+            ctx.DeclareVariable(v);
+            int d = ctx.RingDepth;
+            var init = CompileNode(v.Value, ctx);
+            int slot = ctx.RingDepth - 1;
+            var fold = FoldResultToSlot(ref slot, d, ctx);
+            return Block(init, fold, ctx.VariableWrite(v, ctx.RingVar(slot)), ctx.RingVar(slot));
+        }
+
         // Check capture (upvalue) first — used inside lambda bodies
         if (ctx.TryGetCapture(v, out int capIndex)) {
             int slot = ctx.AllocSlot();

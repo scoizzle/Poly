@@ -14,10 +14,10 @@ namespace Poly.DomainModeling.Lowering;
 /// <para>Store effects other than <see cref="StageTransitionEffect"/> and
 /// invoke (<see cref="CreateEntityInstance"/>, <see cref="ForEachInvokeEffect"/>)
 /// still produce <c>null</c> from <see cref="Route"/> on the runtime path
-/// and are handled by EffectExecutor. StageTransition, self-invoke, and
-/// singular cross-entity invoke are handwritten IR on both runtime and emit
-/// — not host-ABI nodes. <c>LowerStageTransitions</c> still gates create /
-/// for-invoke.</para>
+/// and are handled by EffectExecutor. StageTransition and invoke (self,
+/// cross-entity, for-each) are handwritten IR on both runtime and emit —
+/// not host-ABI nodes. <c>LowerStageTransitions</c> still gates create /
+/// create-in.</para>
 ///
 /// <para>When <see cref="Analysis"/> is set, lowering reads pre-computed
 /// <see cref="IAnalysisMetadata"/> instead of re-scanning domain collections.
@@ -212,7 +212,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     /// entry effects (in try), post-transition notification nodes, then
     /// <c>Invoke(Member(Subject, "Notify"), stageName)</c> in finally.
     /// Not a host-ABI node. Not gated on <see cref="LoweringContext.LowerStageTransitions"/>
-    /// — that flag still gates create / for-invoke.
+    /// — that flag still gates create / create-in.
     /// </summary>
     protected override Node? StageTransition(StageTransitionEffect t) {
         if (!_entity.Stages.Any(s =>
@@ -303,7 +303,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     /// linked-target guard that returns <c>DomainResult.Failure</c> before deref
     /// (never a bare NRE). Not gated on
     /// <see cref="LoweringContext.LowerStageTransitions"/> — that flag still
-    /// gates create / for-invoke. OneToMany fan-out uses the for-each lowering.
+    /// gates create / create-in. OneToMany fan-out uses the for-each lowering.
     /// </summary>
     protected override Node? InvokeAction(InvokeActionEffect i) {
         var args = new List<Node>();
@@ -338,23 +338,26 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     /// (<c>x.CurrentStage == TargetStage.X</c>) on the target entity.
     /// </summary>
     protected override Node? ForEachInvoke(ForEachInvokeEffect e) {
-        if (!_lowerStageTransitions) return null;
-
         var relName = e.RelationshipName;
         var navMember = new Member(Subject, DomainToCSharpExporter.ToPascalCase(relName));
 
+        var seq = _forEachInvokeSequence++;
+        var loopVar = new Variable($"target{seq}");
+
         // Predicate → a `continue` guard inside the loop (no LINQ dependency in the
         // standalone export): named policy → target's bool method; stage membership →
-        // target.CurrentStage == TargetStage.X. Uses the same target{seq} name as the loop.
+        // CurrentStage (string on runtime, enum on emit). Same loop Variable instance
+        // so the VM can bind Current onto it.
         Node? predicateGuard = null;
         if (e.Predicate is not null) {
-            var targetVar = new Variable($"target{_forEachInvokeSequence}");
             Node predicateExpr = e.Predicate switch {
                 ForEachNamedPolicy p => (Node)new Invoke(
-                    new Member(new Variable(targetVar.Name), p.PolicyName)),
+                    new Member(loopVar, p.PolicyName)),
                 ForEachStageMembership s => new Equal(
-                    new Member(new Variable(targetVar.Name), "CurrentStage"),
-                    new Member(new NamedTypeReference(TargetStageEnumTypeName(relName)), s.StageName)),
+                    new Member(loopVar, "CurrentStage"),
+                    _useThisReference || _stageEnumTypeName is not null
+                        ? new Member(new NamedTypeReference(TargetStageEnumTypeName(relName)), s.StageName)
+                        : new Constant(s.StageName)),
                 _ => throw new NotSupportedException($"Unsupported ForEachInvoke predicate '{e.Predicate.GetType().Name}'."),
             };
             predicateGuard = new IfStatement(
@@ -364,8 +367,6 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
 
         // Lower the invoke arguments with the binder mapped to the loop variable, so
         // `invoke x.Mark(amount: x Qty)` references the current record.
-        var seq = _forEachInvokeSequence++;
-        var loopVar = new Variable($"target{seq}");
         var mergedParams = new Dictionary<string, Node>(StringComparer.Ordinal);
         if (_context.Parameters is not null)
             foreach (var kv in _context.Parameters)
@@ -379,12 +380,13 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         var invokeCall = new Invoke(new Member(loopVar, e.ActionName), [.. args]);
 
         // Fail-fast + zero-matches-fail, with or without a predicate.
+        // Same Variable instances for VM identity (C# generator keys on Name).
         var matchedVar = new Variable($"matched{seq}", new Constant(false));
-        var resultVar = new Variable($"result{seq}");
+        var resultVar = new Variable($"result{seq}", invokeCall);
         var loopBody = new List<Node>();
         if (predicateGuard is not null) loopBody.Add(predicateGuard);
         loopBody.Add(new Assignment(matchedVar, new Constant(true)));
-        loopBody.Add(new Variable(resultVar.Name, invokeCall));
+        loopBody.Add(resultVar);
         loopBody.Add(new IfStatement(new Poly.Ast.Nodes.Not(new Member(resultVar, "IsSuccess")),
             new Block([new Return(resultVar)])));
         var loop = new ForEachLoop(loopVar, navMember, new Block(loopBody));

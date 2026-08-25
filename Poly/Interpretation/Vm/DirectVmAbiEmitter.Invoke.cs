@@ -155,12 +155,19 @@ public static partial class DirectVmAbiEmitter {
             var astBody = new List<Expression>(astArgExprs.Count + 3) { astInstanceExpr };
             astBody.AddRange(astArgExprs);
 
-            bool isVoid = method is null
-                || method.MemberTypeDefinition.GetRuntimeType() == typeof(void)
-                || string.Equals(method.MemberTypeDefinition.Name, "void", StringComparison.Ordinal);
+            var returnClr = method?.MemberTypeDefinition.GetRuntimeType();
+            bool isVoid = method is not null
+                && (returnClr == typeof(void)
+                    || string.Equals(method.MemberTypeDefinition.Name, "void", StringComparison.Ordinal));
             if (isVoid) {
                 astBody.Add(invokeCall);
                 astBody.Add(Assign(ctx.RingVar(astSlot), Constant(0L)));
+            }
+            else if (returnClr is not null
+                && returnClr.IsValueType
+                && AbiValueTypes.IsLongRepresentable(returnClr)) {
+                astBody.Add(Assign(ctx.RingVar(astSlot),
+                    Convert(Convert(invokeCall, returnClr), typeof(long))));
             }
             else {
                 astBody.Add(Assign(ctx.RingVar(astSlot),

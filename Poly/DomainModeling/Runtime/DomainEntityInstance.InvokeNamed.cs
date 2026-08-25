@@ -1,4 +1,6 @@
 using Poly.DomainModeling.Analysis;
+using Poly.DomainModeling.Ontology;
+
 using Action = Poly.DomainModeling.Ontology.Action;
 
 namespace Poly.DomainModeling.Runtime;
@@ -14,9 +16,17 @@ public sealed partial record DomainEntityInstance {
         args ??= [];
 
         var action = ResolveActionForNamedInvoke(name);
-        if (action is null)
+        if (action is null) {
+            var policy = ResolvePolicyForNamedInvoke(name);
+            if (policy is not null) {
+                if (args.Length != 0)
+                    throw new InvalidOperationException(
+                        $"Policy '{name}' does not take arguments.");
+                return EvaluatePolicy(policy);
+            }
             throw new InvalidOperationException(
                 $"Action '{name}' not found on entity '{Entity.Name}'.");
+        }
 
         IReadOnlyDictionary<string, object?>? mapped = null;
         if (action.Parameters.Count > 0) {
@@ -37,7 +47,7 @@ public sealed partial record DomainEntityInstance {
                     ? $"invoke '{name}' blocked by guards: {string.Join(", ", result.FailedGuards)}"
                     : $"invoke '{name}' failed."));
         }
-        return result.ResultInstance;
+        return DomainResult.Success();
     }
 
     private Action? ResolveActionForNamedInvoke(string name) {
@@ -47,5 +57,13 @@ public sealed partial record DomainEntityInstance {
             return action;
         }
         return ResolveStandaloneAction(name);
+    }
+
+    private Policy? ResolvePolicyForNamedInvoke(string name) {
+        foreach (var policy in EnumerateTypeDefPolicies(Entity)) {
+            if (string.Equals(policy.Name, name, StringComparison.Ordinal))
+                return policy;
+        }
+        return null;
     }
 }

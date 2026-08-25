@@ -52,6 +52,10 @@ public static partial class DirectVmAbiEmitter {
         (Expression<Func<ulong, int>>)(v => System.Numerics.BitOperations.PopCount(v)));
     private static readonly MethodInfo IDisposableDispose =
         Ref<IDisposable>.Method(d => d.Dispose());
+    private static readonly PropertyInfo IListCount =
+        Ref<System.Collections.IList>.Property(l => (object)l.Count);
+    private static readonly PropertyInfo IListItem =
+        Ref<System.Collections.IList>.Indexer(l => l[0]);
     private static readonly MethodInfo SetStackPointer = Ref<ValueStack>.Method(s => s.SetStackPointer(0));
     // Expression<Func<T>> cannot close over a ref struct (CS9244).
     private static readonly ConstructorInfo ReadOnlySpanLongArrayCtor =
@@ -158,7 +162,7 @@ public static partial class DirectVmAbiEmitter {
             LessThanOrEqual n => SpillToRing(EmitComparisonValue(n.LeftHandValue, n.RightHandValue, LessThanOrEqual, ctx), ctx),
             GreaterThan n => SpillToRing(EmitComparisonValue(n.LeftHandValue, n.RightHandValue, GreaterThan, ctx), ctx),
             GreaterThanOrEqual n => SpillToRing(EmitComparisonValue(n.LeftHandValue, n.RightHandValue, GreaterThanOrEqual, ctx), ctx),
-            Variable v => SpillToRing(CompileValue(v, ctx), ctx),
+            Variable v => EmitVariable(v, ctx),
             Default d => SpillToRing(CompileValue(d, ctx), ctx),
             ThisReference _ => SpillToRing(CompileValue(new Default(), ctx), ctx),
             ParameterReference pr => SpillToRing(CompileValue(pr, ctx), ctx),

@@ -518,21 +518,61 @@ public static partial class DirectVmAbiEmitter {
         return Block(stmts);
     }
 
-    /// <summary>ForEachLoop: compile the body (POC — real enumeration requires CLR interop).</summary>
+    /// <summary>
+    /// ForEachLoop: enumerate a heap <see cref="System.Collections.IEnumerable"/>,
+    /// bind each Current onto the loop variable as a heap handle, run the body.
+    /// Continue jumps to MoveNext; break leaves the loop. Enumerator is disposed.
+    /// </summary>
     private static Expression EmitForEachLoop(ForEachLoop fel, AbiCtx ctx) {
         var breakLabel = Label("foreach_break");
         var continueLabel = Label("foreach_continue");
         ctx.PushLoopScope(breakLabel, continueLabel);
+        ctx.PushScope();
+        ctx.DeclareVariable(fel.LoopVariable);
 
+        int d = ctx.RingDepth;
         var collectionExpr = CompileNode(fel.Collection, ctx);
+        int colSlot = ctx.RingDepth - 1;
+        var foldCol = FoldResultToSlot(ref colSlot, d, ctx);
+
+        var list = Variable(typeof(System.Collections.IList), "_list");
+        var index = Variable(typeof(int), "_i");
+        var current = Variable(typeof(object), "_cur");
+        var colObj = Variable(typeof(object), "_col");
 
         int bodyDepth = ctx.RingDepth;
         var bodyExpr = CompileNode(fel.Body, ctx);
         ctx.RingDepth = bodyDepth;
 
+        var empty = Constant(Array.Empty<object>(), typeof(System.Collections.IList));
+        var loop = Loop(
+            Block(
+                IfThen(GreaterThanOrEqual(index, Convert(Property(list, IListCount), typeof(int))),
+                    Goto(breakLabel)),
+                Assign(current, Property(list, IListItem, index)),
+                ctx.VariableWrite(fel.LoopVariable,
+                    Convert(Call(ctx.HeapLocal, HeapAllocate, current), typeof(long))),
+                bodyExpr,
+                Label(continueLabel),
+                Assign(index, Add(index, Constant(1)))),
+            breakLabel);
+
         ctx.PopLoopScope();
-        ctx.RingDepth = 0;
-        return Block(collectionExpr, bodyExpr);
+        ctx.PopScope();
+        ctx.RingDepth = d;
+
+        return Block(
+            [list, index, current, colObj],
+            collectionExpr,
+            foldCol,
+            Assign(colObj, Call(ctx.HeapLocal, HeapUnsafeGet,
+                Convert(ctx.RingVar(colSlot), typeof(int)))),
+            Assign(list, Condition(
+                TypeIs(colObj, typeof(System.Collections.IList)),
+                Convert(colObj, typeof(System.Collections.IList)),
+                empty)),
+            Assign(index, Constant(0)),
+            loop);
     }
 
     /// <summary>Goto statement: jump to a named label.</summary>

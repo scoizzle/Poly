@@ -21,6 +21,8 @@ public sealed partial record DomainEntityInstance : IDictionary<string, object?>
                 return stored;
             if (TryGetOneToOneNavigation(key, out var nav))
                 return nav;
+            if (TryGetCollectionNavigation(key, out var col))
+                return col;
             return _values[key];
         }
         set => _values[key] = value;
@@ -29,7 +31,9 @@ public sealed partial record DomainEntityInstance : IDictionary<string, object?>
     void IDictionary<string, object?>.Add(string key, object? value) => _values.Add(key, value);
 
     bool IDictionary<string, object?>.ContainsKey(string key) =>
-        _values.ContainsKey(key) || TryGetOneToOneNavigation(key, out _);
+        _values.ContainsKey(key)
+        || TryGetOneToOneNavigation(key, out _)
+        || TryGetCollectionNavigation(key, out _);
 
     bool IDictionary<string, object?>.Remove(string key) => _values.Remove(key);
 
@@ -37,6 +41,8 @@ public sealed partial record DomainEntityInstance : IDictionary<string, object?>
         if (_values.TryGetValue(key, out value))
             return true;
         if (TryGetOneToOneNavigation(key, out value))
+            return true;
+        if (TryGetCollectionNavigation(key, out value))
             return true;
         value = null;
         return false;

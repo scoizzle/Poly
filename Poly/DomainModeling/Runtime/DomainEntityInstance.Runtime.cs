@@ -59,11 +59,26 @@ public sealed partial record DomainEntityInstance {
     /// with the given schema properties (and optional extra action parameters).
     /// </summary>
     private static TypeDefinitionNodeAnalyzer BuildTypeDefAnalyzer(
-        string entityName,
-        IEnumerable<Property> properties,
+        Entity entity,
         IEnumerable<Property>? extraProperties = null,
-        IEnumerable<Action>? actions = null,
-        IEnumerable<Relationship>? navigations = null) {
+        Domain? domain = null) {
+        var analyzer = new TypeDefinitionNodeAnalyzer();
+        var ctx = AnalysisContext.CreateDefault();
+        analyzer.Analyze(ctx, BuildTypeDefNode(entity, extraProperties, domain));
+        if (domain is not null) {
+            foreach (var other in domain.Types.OfType<Entity>()) {
+                if (string.Equals(other.Name, entity.Name, StringComparison.Ordinal))
+                    continue;
+                analyzer.Analyze(ctx, BuildTypeDefNode(other, extraProperties: null, domain));
+            }
+        }
+        return analyzer;
+    }
+
+    private static TypeDefinitionNode BuildTypeDefNode(
+        Entity entity,
+        IEnumerable<Property>? extraProperties,
+        Domain? domain) {
         var propDefs = new List<PropertyDefinitionNode>();
         var seen = new HashSet<string>(StringComparer.Ordinal);
 
@@ -77,7 +92,7 @@ public sealed partial record DomainEntityInstance {
             }
         }
 
-        AddProps(properties);
+        AddProps(entity.Properties);
         if (extraProperties is not null)
             AddProps(extraProperties);
         if (seen.Add("CurrentStage")) {
@@ -87,17 +102,22 @@ public sealed partial record DomainEntityInstance {
                 Getter: new PropertyGetterDefinitionNode()));
         }
 
-        if (navigations is not null) {
-            foreach (var nav in navigations) {
-                if (nav.Cardinality is not RelationshipCardinality.OneToOne)
-                    continue;
-                var pascal = DomainToCSharpExporter.ToPascalCase(nav.Name);
-                if (!seen.Add(pascal))
-                    continue;
+        foreach (var nav in NavigationsFor(entity, domain)) {
+            var pascal = DomainToCSharpExporter.ToPascalCase(nav.Name);
+            if (!seen.Add(pascal))
+                continue;
+            if (nav.Cardinality is RelationshipCardinality.OneToOne) {
                 propDefs.Add(new PropertyDefinitionNode(
                     pascal,
                     new TypeReference(nav.Target.TypeName),
                     DefaultValue: new Constant(null!),
+                    Getter: new PropertyGetterDefinitionNode()));
+            }
+            else if (nav.Cardinality is RelationshipCardinality.OneToMany
+                or RelationshipCardinality.ManyToMany) {
+                propDefs.Add(new PropertyDefinitionNode(
+                    pascal,
+                    new CollectionTypeReference(new TypeReference(nav.Target.TypeName)),
                     Getter: new PropertyGetterDefinitionNode()));
             }
         }
@@ -110,34 +130,33 @@ public sealed partial record DomainEntityInstance {
                     new PrimitiveTypeReference(Prim.String))],
                 Body: new Block([]))
         };
-        // Empty bodies: analysis resolves Member(entity, action) as ITypeMethod.
+        // Empty bodies: analysis resolves Member(entity, action/policy) as ITypeMethod.
         // VM does not inline them; InvokeNamed / generated C# owns the implementation.
-        // Include stage actions — they are methods on This, same as entity.Actions
-        // (C# export emits both). Duplicate names keep the first stub.
         var methodNames = new HashSet<string>(StringComparer.Ordinal) { "Notify" };
-        if (actions is not null) {
-            foreach (var action in actions) {
-                if (!methodNames.Add(action.Name))
-                    continue;
-                methods.Add(new MethodDefinitionNode(
-                    action.Name,
-                    new TypeReference("void"),
-                    Parameters: [.. action.Parameters.Select(p =>
-                        new Parameter(p.Name, MapDomainTypeToAstNode(p.Type)))],
-                    Body: new Block([])));
-            }
+        foreach (var action in EnumerateTypeDefActions(entity)) {
+            if (!methodNames.Add(action.Name))
+                continue;
+            methods.Add(new MethodDefinitionNode(
+                action.Name,
+                TypeReference.To<DomainResult>(),
+                Parameters: [.. action.Parameters.Select(p =>
+                    new Parameter(p.Name, MapDomainTypeToAstNode(p.Type)))],
+                Body: new Block([])));
+        }
+        foreach (var policy in EnumerateTypeDefPolicies(entity)) {
+            if (!methodNames.Add(policy.Name))
+                continue;
+            methods.Add(new MethodDefinitionNode(
+                policy.Name,
+                new PrimitiveTypeReference(Prim.Boolean),
+                Body: new Block([])));
         }
 
-        var typeDefNode = new TypeDefinitionNode(
-            Name: entityName,
+        return new TypeDefinitionNode(
+            Name: entity.Name,
             Properties: [.. propDefs],
             Methods: [.. methods],
             Namespace: null);
-
-        var analyzer = new TypeDefinitionNodeAnalyzer();
-        var ctx = AnalysisContext.CreateDefault();
-        analyzer.Analyze(ctx, typeDefNode);
-        return analyzer;
     }
 
     /// <summary>
@@ -146,8 +165,7 @@ public sealed partial record DomainEntityInstance {
     /// </summary>
     private TypeDefinitionNodeAnalyzer BuildActionScopedTypeDefAnalyzer(
         Action action) =>
-        BuildTypeDefAnalyzer(Entity.Name, Entity.Properties, action.Parameters,
-            EnumerateTypeDefActions(Entity), NavigationsFor(Entity, Domain));
+        BuildTypeDefAnalyzer(Entity, action.Parameters, Domain);
 
     /// <summary>
     /// Source-entity navigations. Prefer the domain's copy of the entity
@@ -174,6 +192,15 @@ public sealed partial record DomainEntityInstance {
         foreach (var stage in entity.Stages) {
             foreach (var action in stage.Actions)
                 yield return action;
+        }
+    }
+
+    private static IEnumerable<Policy> EnumerateTypeDefPolicies(Entity entity) {
+        foreach (var policy in entity.Policies)
+            yield return policy;
+        foreach (var stage in entity.Stages) {
+            foreach (var policy in stage.Policies)
+                yield return policy;
         }
     }
 
@@ -236,6 +263,38 @@ public sealed partial record DomainEntityInstance {
                 $"Relationship '{match.Name}' has {related.Count} linked instances; " +
                 "singular cross-entity invoke requires exactly one target.");
         value = related.Count == 0 ? null : related[0];
+        return true;
+    }
+
+    /// <summary>
+    /// IDictionary read of a collection nav (OneToMany / ManyToMany): all linked
+    /// targets (empty list when unlinked — foreach zero-match, not NRE).
+    /// For-invoke analysis still requires OneToMany; this matches lowering's
+    /// collection-nav predicate so a ManyToMany member read is not a miss.
+    /// </summary>
+    internal bool TryGetCollectionNavigation(string key, out object? value) {
+        value = null;
+        Relationship? match = null;
+        foreach (var nav in NavigationsFor(Entity, Domain)) {
+            if (nav.Cardinality is not (RelationshipCardinality.OneToMany
+                or RelationshipCardinality.ManyToMany))
+                continue;
+            if (!string.Equals(DomainToCSharpExporter.ToPascalCase(nav.Name), key, StringComparison.Ordinal))
+                continue;
+            match = nav;
+            break;
+        }
+        if (match is null)
+            return false;
+
+        if (Store is null || Domain is null) {
+            value = new List<DomainEntityInstance>();
+            return true;
+        }
+
+        value = Store.GetRelatedInstances(match.Name, this)
+            .Where(t => string.Equals(t.Entity.Name, match.Target.TypeName, StringComparison.Ordinal))
+            .ToList();
         return true;
     }
 

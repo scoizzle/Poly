@@ -52,6 +52,16 @@ public static partial class DirectVmAbiEmitter {
         (Expression<Func<ulong, int>>)(v => System.Numerics.BitOperations.PopCount(v)));
     private static readonly MethodInfo IDisposableDispose =
         Ref<IDisposable>.Method(d => d.Dispose());
+    private static readonly ConstructorInfo InvalidOperationExceptionStringCtor =
+        Ref.Constructor(() => new InvalidOperationException(""));
+    private static readonly MethodInfo AsIListOrThrowInfo =
+        Ref.Method((Expression<Func<object?, System.Collections.IList>>)(c => AsIListOrThrow(c)));
+    private static readonly MethodInfo IListCountOfInfo =
+        Ref.Method((Expression<Func<System.Collections.IList, int>>)(l => IListCountOf(l)));
+    private static readonly MethodInfo IListItemAtInfo =
+        Ref.Method((Expression<Func<System.Collections.IList, int, object?>>)((l, i) => IListItemAt(l, i)));
+    private static readonly MethodInfo BoxToAbiInfo =
+        Ref.Method((Expression<Func<Heap, object?, long>>)((h, v) => BoxToAbi(h, v)));
     private static readonly MethodInfo SetStackPointer = Ref<ValueStack>.Method(s => s.SetStackPointer(0));
     // Expression<Func<T>> cannot close over a ref struct (CS9244).
     private static readonly ConstructorInfo ReadOnlySpanLongArrayCtor =
@@ -83,6 +93,7 @@ public static partial class DirectVmAbiEmitter {
                     Constant(InterpreterStatus.Resuming)),
                 Property(ctx.State, nameof(VmState.FramePos)),
                 Constant(0))));
+        body.Add(Assign(ctx.InstanceHandle, ArrayAccess(ctx.SlotsLocal, ctx.FramePosLocal)));
 
         if (mode != CompilationMode.NoDebug) {
             body.Add(Assign(ctx.ProgramCounter, Constant(0)));
@@ -158,9 +169,9 @@ public static partial class DirectVmAbiEmitter {
             LessThanOrEqual n => SpillToRing(EmitComparisonValue(n.LeftHandValue, n.RightHandValue, LessThanOrEqual, ctx), ctx),
             GreaterThan n => SpillToRing(EmitComparisonValue(n.LeftHandValue, n.RightHandValue, GreaterThan, ctx), ctx),
             GreaterThanOrEqual n => SpillToRing(EmitComparisonValue(n.LeftHandValue, n.RightHandValue, GreaterThanOrEqual, ctx), ctx),
-            Variable v => SpillToRing(CompileValue(v, ctx), ctx),
+            Variable v => EmitVariable(v, ctx),
             Default d => SpillToRing(CompileValue(d, ctx), ctx),
-            ThisReference _ => SpillToRing(CompileValue(new Default(), ctx), ctx),
+            ThisReference _ => EmitThis(ctx),
             ParameterReference pr => SpillToRing(CompileValue(pr, ctx), ctx),
             NullForgiving n => SpillToRing(CompileValue(n, ctx), ctx),
             TypeAs t => SpillToRing(CompileValue(t, ctx), ctx),
@@ -413,7 +424,7 @@ public static partial class DirectVmAbiEmitter {
             And n => EmitLogicalAndValue(n, ctx),
             Or n => EmitLogicalOrValue(n, ctx),
             Default _ => Constant(0L),
-            ThisReference _ => Constant(0L),
+            ThisReference _ => SpillRingRead(EmitThis(ctx), ctx),
             ParameterReference _ => Constant(0L),
             NullForgiving n => CompileValue(n.Operand, ctx),
             TypeAs ta => CompileValue(ta.Operand, ctx),

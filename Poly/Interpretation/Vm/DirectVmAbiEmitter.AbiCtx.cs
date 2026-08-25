@@ -36,6 +36,8 @@ public static partial class DirectVmAbiEmitter {
             _locals.Add(HeapLocal);
             FramePosLocal = Variable(typeof(int), "_fp");
             _locals.Add(FramePosLocal);
+            InstanceHandle = Variable(typeof(long), "_this");
+            _locals.Add(InstanceHandle);
             SavedSp = Variable(typeof(int), "_savedSp");
             _locals.Add(SavedSp);
             ResultLocal = Variable(typeof(long), "_result");
@@ -55,6 +57,7 @@ public static partial class DirectVmAbiEmitter {
         public ParameterExpression SlotsLocal { get; }
         public ParameterExpression HeapLocal { get; }
         public ParameterExpression FramePosLocal { get; }
+        public ParameterExpression InstanceHandle { get; }
         public ParameterExpression SavedSp { get; }
         public ParameterExpression ResultLocal { get; }
         public LabelTarget EntryLabel { get; }
@@ -265,6 +268,9 @@ public static partial class DirectVmAbiEmitter {
         private readonly List<VariableLayout> _variableLayouts = new();
         public IReadOnlyList<VariableLayout> VariableLayouts => _variableLayouts;
 
+        public bool IsDeclared(Variable v) =>
+            _variableRegisters.ContainsKey(v) || TryGetVariable(v, out _);
+
         public bool TryGetVariable(Variable v, out int slot) {
             foreach (var scope in _scopeStack) {
                 if (scope.TryGetValue(v, out slot))
@@ -312,6 +318,8 @@ public static partial class DirectVmAbiEmitter {
         }
 
         public void ClearInlineParameters() => _inlineParameterMap = null;
+
+        public bool HasInlineParameters => _inlineParameterMap is not null;
 
         private readonly Stack<(LabelTarget breakLabel, LabelTarget continueLabel)> _loopScopes = new();
 

@@ -95,7 +95,12 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
         AnalysisContext context,
         ForEachLoop foreachLoop) {
         var collectionType = ResolveNodeType(context, foreachLoop.Collection);
-        var elementType = collectionType?.GetElementType();
+        ITypeDefinition? elementType = null;
+        if (foreachLoop.Collection is Member member
+            && context.GetResolvedMember(member) is AstPropertyDefinition astProp) {
+            elementType = astProp.TryGetCollectionElementType();
+        }
+        elementType ??= collectionType?.GetElementType();
 
         if (elementType != null) {
             context.SetResolvedType(foreachLoop.LoopVariable, elementType);

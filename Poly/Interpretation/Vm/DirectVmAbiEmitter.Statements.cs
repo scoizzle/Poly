@@ -102,7 +102,8 @@ public static partial class DirectVmAbiEmitter {
                     Convert(ctx.RingVar(instanceSlot), typeof(int)));
 
             var memberTypeDef = resolved.MemberTypeDefinition;
-            var clrMemberType = memberTypeDef.GetRuntimeType();
+            var clrMemberType = memberTypeDef.GetRuntimeType()
+                ?? memberTypeDef.PrimitiveType?.GetClrType();
             Expression writeValue;
             if (clrMemberType is not null
                 && clrMemberType.IsValueType
@@ -412,7 +413,21 @@ public static partial class DirectVmAbiEmitter {
             paramIdx = ctx.DeclareParameter(p);
         }
         int slot = ctx.AllocSlot();
-        return Assign(ctx.RingVar(slot), ctx.ParameterRead(paramIdx));
+        // Root SetArgs({ this }) lives in InstanceHandle so locals cannot wipe it.
+        // Nested lambda parameters use the frame / inline map.
+        Expression value = paramIdx == 0 && ctx.ParamSlotOffset == 0 && !ctx.HasInlineParameters
+            ? ctx.InstanceHandle
+            : ctx.ParameterRead(paramIdx);
+        return Assign(ctx.RingVar(slot), value);
+    }
+
+    /// <summary>
+    /// Domain programs bind the instance via <c>SetArgs({ this })</c> at slot 0.
+    /// ThisReference is that handle — not the ABI null sentinel 0.
+    /// </summary>
+    private static Expression EmitThis(AbiCtx ctx) {
+        int slot = ctx.AllocSlot();
+        return Assign(ctx.RingVar(slot), ctx.InstanceHandle);
     }
 
     private static Expression EmitLambda(Lambda lambda, AbiCtx ctx) {
@@ -518,21 +533,57 @@ public static partial class DirectVmAbiEmitter {
         return Block(stmts);
     }
 
-    /// <summary>ForEachLoop: compile the body (POC — real enumeration requires CLR interop).</summary>
+    /// <summary>
+    /// ForEachLoop: walk a heap <see cref="System.Collections.IList"/>, bind each
+    /// item onto the loop variable as a heap handle, run the body. Non-IList
+    /// (including null) fails loud via <c>AsIListOrThrow</c> — no silent empty.
+    /// </summary>
     private static Expression EmitForEachLoop(ForEachLoop fel, AbiCtx ctx) {
         var breakLabel = Label("foreach_break");
         var continueLabel = Label("foreach_continue");
         ctx.PushLoopScope(breakLabel, continueLabel);
+        ctx.PushScope();
+        ctx.DeclareVariable(fel.LoopVariable);
 
+        int d = ctx.RingDepth;
         var collectionExpr = CompileNode(fel.Collection, ctx);
+        int colSlot = ctx.RingDepth - 1;
+        var foldCol = FoldResultToSlot(ref colSlot, d, ctx);
+
+        var list = Variable(typeof(System.Collections.IList), "_list");
+        var index = Variable(typeof(int), "_i");
+        var current = Variable(typeof(object), "_cur");
+        var colObj = Variable(typeof(object), "_col");
 
         int bodyDepth = ctx.RingDepth;
         var bodyExpr = CompileNode(fel.Body, ctx);
         ctx.RingDepth = bodyDepth;
 
+        var loop = Loop(
+            Block(
+                IfThen(GreaterThanOrEqual(index, Call(null, IListCountOfInfo, list)),
+                    Goto(breakLabel)),
+                Assign(current, Call(null, IListItemAtInfo, list, index)),
+                ctx.VariableWrite(fel.LoopVariable,
+                    Convert(Call(ctx.HeapLocal, HeapAllocate, current), typeof(long))),
+                bodyExpr,
+                Label(continueLabel),
+                Assign(index, Add(index, Constant(1)))),
+            breakLabel);
+
         ctx.PopLoopScope();
-        ctx.RingDepth = 0;
-        return Block(collectionExpr, bodyExpr);
+        ctx.PopScope();
+        ctx.RingDepth = d;
+
+        return Block(
+            [list, index, current, colObj],
+            collectionExpr,
+            foldCol,
+            Assign(colObj, Call(ctx.HeapLocal, HeapUnsafeGet,
+                Convert(ctx.RingVar(colSlot), typeof(int)))),
+            Assign(list, Call(null, AsIListOrThrowInfo, colObj)),
+            Assign(index, Constant(0)),
+            loop);
     }
 
     /// <summary>Goto statement: jump to a named label.</summary>

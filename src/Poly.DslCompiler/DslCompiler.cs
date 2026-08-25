@@ -9,14 +9,16 @@ using Poly.Packs.SqlServer;
 namespace Poly.DslCompiler;
 
 /// <summary>
-/// Controls which artifacts the DslCompiler generates.
+/// Controls which seed extension ids the DslCompiler loads when source lists no <c>uses</c>.
+/// CompileMode never invents a process door; HTTP host files require <c>uses http</c>
+/// (or an honest seed of that catalog id) and the HTTP analysis bag.
 /// </summary>
 public enum CompileMode {
-    /// <summary>Entity type definitions only (current behavior).</summary>
+    /// <summary>Entity type definitions only (language seed).</summary>
     Entities,
-    /// <summary>Entity types + EF Core DbContext.</summary>
+    /// <summary>Language seed plus persistence (vendor from <see cref="DbmsPack"/>).</summary>
     Db,
-    /// <summary>Entity types + EF Core DbContext + Minimal API Program.cs + demo.http.</summary>
+    /// <summary>Same persistence seed as <see cref="Db"/>. Does not seed <c>http</c>.</summary>
     All,
 }
 
@@ -88,7 +90,7 @@ public sealed class DslCompiler {
     /// <summary>
     /// Compiles .poly. One session: seed (or source <c>uses</c>) plus
     /// <see cref="Load"/> libraries. <paramref name="dbms"/> seeds the vendor
-    /// id and selects the Minimal API provider in <c>--mode all</c>.
+    /// id and selects the Minimal API provider when the HTTP bag is present.
     /// </summary>
     public CompileResult Compile(string polyText, CompileMode mode, DbmsPack dbms) =>
         CompileCore(polyText, mode, dbms, _extraLibraries);
@@ -213,6 +215,8 @@ public sealed class DslCompiler {
     /// <summary>
     /// One session for parse, analyze, and artifacts. Source <c>uses</c> wins
     /// over the DBMS seed; <paramref name="extraLibraries"/> are always loaded.
+    /// CompileMode never seeds <c>http</c> — that id arrives via source <c>uses</c>
+    /// or an extra library with that catalog id.
     /// </summary>
     private static DomainSession OpenCompileSession(
         string polyText,
@@ -233,8 +237,6 @@ public sealed class DslCompiler {
             && !ids.Exists(id => id is "sqlite" or "sqlserver" or "mysql" or "persistence")
             && seen.Add("persistence"))
             ids.Add("persistence");
-        if (mode == CompileMode.All && seen.Add("http"))
-            ids.Add("http");
         return DomainSession.ForExtensions(ids, catalog);
     }
 

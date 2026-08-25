@@ -196,6 +196,34 @@ public sealed class EmitSessionContractTests {
     }
 
     [Test]
+    public async Task Compile_ModeAll_WithoutUsesHttp_DoesNotEmitProgramFile() {
+        var result = new Compiler().Compile(CatalogSqlite, CompileMode.All);
+        await Assert.That(result.Success).IsTrue();
+        await Assert.That(result.Files!.Any(f => f.FileName == "Item.cs")).IsTrue();
+        await Assert.That(result.Files!.Any(f => f.FileName == "CatalogDbContext.cs")).IsTrue();
+        await Assert.That(result.Files!.Any(f => f.FileName == "Program.cs")).IsFalse();
+        await Assert.That(result.Files!.Any(f => f.FileName == "demo.http")).IsFalse();
+    }
+
+    [Test]
+    public async Task Compile_ModeAll_LanguageOnly_SeedsPersistence_EmitsDbContextNotProgram() {
+        var result = new Compiler().Compile(CatalogLanguageOnly, CompileMode.All);
+        await Assert.That(result.Success).IsTrue();
+        await Assert.That(result.Files!.Any(f => f.FileName == "CatalogDbContext.cs")).IsTrue();
+        await Assert.That(result.Files!.Any(f => f.FileName == "Program.cs")).IsFalse();
+    }
+
+    [Test]
+    public async Task Compile_LoadHttpLibrary_WithoutUsesHttp_EmitsProgramFile() {
+        var result = new Compiler()
+            .Load(new HttpLibrary())
+            .Compile(CatalogLanguageOnly, CompileMode.All);
+        await Assert.That(result.Success).IsTrue();
+        await Assert.That(result.Files!.Any(f => f.FileName == "Program.cs")).IsTrue();
+        await Assert.That(result.Files!.Any(f => f.FileName == "demo.http")).IsTrue();
+    }
+
+    [Test]
     public async Task ParseNow_WithTemporal_LowersToUtcNowMember_WithoutMeaningTable() {
         var (session, domain, _) = AnalyzePoly(TemporalNowPolicy);
         await Assert.That(session.Meaning.Lowering.Handlers).IsEmpty();

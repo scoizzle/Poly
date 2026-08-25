@@ -51,7 +51,7 @@ if (inputPath is null) {
     Console.Error.WriteLine("  DbContext when sqlite/sqlserver/persistence; Program.cs when http.");
     Console.Error.WriteLine("  --mode entities    Seed language only (default)");
     Console.Error.WriteLine("  --mode db          Seed persistence (vendor from --dbms)");
-    Console.Error.WriteLine("  --mode all          Seed persistence + http");
+    Console.Error.WriteLine("  --mode all          Seed persistence (same as db); Program.cs only with uses http");
     Console.Error.WriteLine("  --dbms generic     Core generic SQL column types (default)");
     Console.Error.WriteLine("  --dbms sqlite      SQLite affinities (first shippable pack; no server required)");
     Console.Error.WriteLine("  --dbms sqlserver   SQL Server column types");

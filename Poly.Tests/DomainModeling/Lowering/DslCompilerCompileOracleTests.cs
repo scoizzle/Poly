@@ -41,6 +41,9 @@ public class DslCompilerCompileOracleTests {
         }
         """;
 
+    private static Compiler CompilerWithHttpHost() =>
+        new Compiler().Load(new Poly.DslCompiler.HttpLibrary());
+
     private static List<MetadataReference> GatherReferences() {
         var byName = new Dictionary<string, MetadataReference>(StringComparer.OrdinalIgnoreCase);
 
@@ -74,7 +77,7 @@ public class DslCompilerCompileOracleTests {
     }
 
     private static async Task AssertSolutionCompiles(string? polyText = null) {
-        var result = new Compiler().Compile(polyText ?? Dsl, CompileMode.All, DbmsPack.Sqlite);
+        var result = CompilerWithHttpHost().Compile(polyText ?? Dsl, CompileMode.All, DbmsPack.Sqlite);
         if (!result.Success)
             throw new InvalidOperationException(
                 $"DslCompiler failed: {string.Join("; ", result.Errors ?? [])}");
@@ -164,7 +167,7 @@ public class DslCompilerCompileOracleTests {
 
             ChargeOrder: bind Billing Charge to Pay request
             """;
-        var result = new Compiler().Compile(poly, CompileMode.All, DbmsPack.Sqlite);
+        var result = CompilerWithHttpHost().Compile(poly, CompileMode.All, DbmsPack.Sqlite);
         await Assert.That(result.Success).IsTrue();
 
         var order = result.Files!.Single(f => f.FileName == "Order.cs").Source;

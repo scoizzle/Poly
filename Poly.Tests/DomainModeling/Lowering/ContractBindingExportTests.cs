@@ -14,6 +14,9 @@ namespace Poly.Tests.DomainModeling.Lowering;
 /// than a bodyless local implementation. The binding is never dropped by export.
 /// </summary>
 public class ContractBindingExportTests {
+    private static Compiler CompilerWithHttpHost() =>
+        new Compiler().Load(new Poly.DslCompiler.HttpLibrary());
+
     /// <summary>A billing domain whose Ledger.Charge action projects to the Billing contract
     /// endpoint (pack-3b producer). The child's Ledger entity must never surface in export.</summary>
     private static Domain BillingSource() =>
@@ -65,7 +68,7 @@ public class ContractBindingExportTests {
     [Test]
     public async Task BoundAction_Export_InvokesAdapterThroughBinding() {
         var poly = new DomainDslPrinter().Print(FilledParent());
-        var result = new Compiler().Compile(poly, CompileMode.All, DbmsPack.Sqlite);
+        var result = CompilerWithHttpHost().Compile(poly, CompileMode.All, DbmsPack.Sqlite);
 
         await Assert.That(result.Success).IsTrue();
         var files = result.Files!;
@@ -103,7 +106,7 @@ public class ContractBindingExportTests {
         if (!result.Succeeded) throw new InvalidOperationException("Domain evolution failed");
 
         var poly = new DomainDslPrinter().Print(result.Root!);
-        var compiled = new Compiler().Compile(poly, CompileMode.All, DbmsPack.Sqlite);
+        var compiled = CompilerWithHttpHost().Compile(poly, CompileMode.All, DbmsPack.Sqlite);
         await Assert.That(compiled.Success).IsTrue();
 
         var types = compiled.Files!.Single(f => f.FileName == "Poly.Types.cs").Source;
@@ -116,7 +119,7 @@ public class ContractBindingExportTests {
     [Test]
     public async Task BoundAction_Export_MethodBodyNotSilentSuccess() {
         var poly = new DomainDslPrinter().Print(FilledParent());
-        var result = new Compiler().Compile(poly, CompileMode.All, DbmsPack.Sqlite);
+        var result = CompilerWithHttpHost().Compile(poly, CompileMode.All, DbmsPack.Sqlite);
 
         await Assert.That(result.Success).IsTrue();
         var order = result.Files!.Single(f => f.FileName == "Order.cs").Source;

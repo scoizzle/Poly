@@ -26,6 +26,9 @@ public class SqlitePackTests {
         }
         """;
 
+    private static Compiler CompilerWithHttpHost() =>
+        new Compiler().Load(new Poly.DslCompiler.HttpLibrary());
+
     private static Domain ParseDomain(string poly) {
         var ctx = ExtensionCatalog.Core.Authoring;
         var changes = new PolyDslParser(poly, ctx).Parse();
@@ -115,7 +118,7 @@ public class SqlitePackTests {
         var domain = ParseDomain("""
             domain Test
             Item: entity {
-              Code: Text column("CODE", "VARCHAR2(20)")
+              Code: Text column(\"CODE\", \"VARCHAR2(20)\")
             }
             """);
         var ctx = SessionBuilder.CreateEmpty().Load(new TemporalLibrary()).Load(new StorageFacetLibrary()).Load(new SqliteLibrary()).Build();
@@ -246,7 +249,7 @@ public class SqlitePackTests {
         // G6.R.1: CompileMode.All production IR wire-up smoke.
         // Verifies both DbContext and Program.cs emit through the
         // GenerateCompilationUnit + CSharpGenerator production path.
-        var compiler = new Compiler();
+        var compiler = CompilerWithHttpHost();
         var result = compiler.Compile(SampleDomain, CompileMode.All, DbmsPack.Sqlite);
         await Assert.That(result.Success).IsTrue();
 
@@ -298,7 +301,7 @@ public class SqlitePackTests {
     public async Task DslCompiler_AllMode_Sqlite_EmitsUseSqliteAndEnsureCreated() {
         // --mode all --dbms sqlite must emit UseSqlite + EnsureCreatedAsync
         // (matches the shipped demo Program.cs), not the generic InMemory fallback.
-        var compiler = new Compiler();
+        var compiler = CompilerWithHttpHost();
         var sqlite = compiler.Compile(SampleDomain, CompileMode.All, DbmsPack.Sqlite);
         await Assert.That(sqlite.Success).IsTrue();
         var sqliteProg = sqlite.Files!.Single(f => f.FileName == "Program.cs").Source;
@@ -318,7 +321,7 @@ public class SqlitePackTests {
         // The POST endpoint + seed code construct root entities via Entity.Create(...)
         // — collection navs are ctor params (IEnumerable<T>) but omitted from ESM;
         // the generators must append Enumerable.Empty<T>() or the call is CS7036.
-        var compiler = new Compiler();
+        var compiler = CompilerWithHttpHost();
         var result = compiler.Compile("""
             domain Demo
             Token: entity { Kind: Text }
@@ -339,7 +342,7 @@ public class SqlitePackTests {
         // The DTO mirrors the entity's CREATE signature (from ESM.ConstructorParameters).
         // A scalar enum-typed prop (Genre) is part of that signature — the old
         // `_entities.Any(...)` filter would have EXCLUDED it (Genre is not an entity).
-        var compiler = new Compiler();
+        var compiler = CompilerWithHttpHost();
         var result = compiler.Compile("""
             domain Demo
             Genre: enum { Fiction, NonFiction }
@@ -365,7 +368,7 @@ public class SqlitePackTests {
         // property (assign Stock to amount) carries an IMPLICIT [Range] on its action DTO —
         // not declared in the DSL, but proven by the action's own effects. The endpoint
         // enforces the target's envelope at the API boundary.
-        var compiler = new Compiler();
+        var compiler = CompilerWithHttpHost();
         var result = compiler.Compile("""
             domain Demo
             Book: entity {
@@ -382,7 +385,7 @@ public class SqlitePackTests {
         await Assert.That(prog).Contains("public record RestockDto");
         await Assert.That(prog).Contains("[Range(0, 1000)]\n    public long amount { get; init; }");
         // An action with no constrained target emits no [Range] on its params.
-        var compiler2 = new Compiler();
+        var compiler2 = CompilerWithHttpHost();
         var result2 = compiler2.Compile("""
             domain Demo
             Book: entity {
@@ -405,12 +408,12 @@ public class SqlitePackTests {
         // Entity create DTOs carry the property's DECLARED constraints; action DTOs
         // derive them IMPLICITLY from the effects (a param assigned into a constrained
         // property inherits that property's envelope, merged by intersection).
-        var compiler = new Compiler();
+        var compiler = CompilerWithHttpHost();
         var result = compiler.Compile("""
             domain Demo
             Book: entity {
               Title: Text required length(2, 50)
-              Code: Text pattern("^[A-Z]{2}-[0-9]{3}$")
+              Code: Text pattern(\"^[A-Z]{2}-[0-9]{3}$\")
               Pages: Number range(1, 10000)
 
               Rename: action (value: Text) {
@@ -439,7 +442,7 @@ public class SqlitePackTests {
     public async Task DslCompiler_ActionDto_EnumTypedParamDeclaresAllowedUnion() {
         // Transport: an enum-typed action parameter's DTO member declares the enum union
         // via [EnumDataType(typeof(EnumName))] — the same propagation as the create DTO.
-        var compiler = new Compiler();
+        var compiler = CompilerWithHttpHost();
         var result = compiler.Compile("""
             domain Demo
             Genre: enum { Fiction, NonFiction }
@@ -459,7 +462,7 @@ public class SqlitePackTests {
 
     [Test]
     public async Task DslCompiler_DemoHttp_BodyMatchesDtoFromConstructorMetadata() {
-        var compiler = new Compiler();
+        var compiler = CompilerWithHttpHost();
         var result = compiler.Compile("""
             domain Demo
             Item: entity { Name: Text Qty: Number }
@@ -477,7 +480,7 @@ public class SqlitePackTests {
         // Hardening: an open range bound (range(0, )) must stay open through the verified
         // envelope. Convert.ToDouble(null) returns 0 (not null), which previously collapsed
         // the max to 0 — emitting a bogus CHECK `qty <= 0` and [Range(0, 0)].
-        var compiler = new Compiler();
+        var compiler = CompilerWithHttpHost();
         var result = compiler.Compile("""
             domain Demo
             Item: entity { Qty: Number range(0, ) }
@@ -500,7 +503,7 @@ public class SqlitePackTests {
         // no single provable envelope. The old code intersected the branch ranges — amount
         // would get [Range(0, 10)] (Bonus ∩ Stock) and falsely reject amount=100 which is
         // valid via the vip==2 branch (Stock accepts up to 1000). Fail-closed: no [Range].
-        var compiler = new Compiler();
+        var compiler = CompilerWithHttpHost();
         var result = compiler.Compile("""
             domain Demo
             Book: entity {
@@ -528,7 +531,7 @@ public class SqlitePackTests {
     public async Task ActionDto_CreateInInitializer_PropagatesTargetRange() {
         // Hardening: a param that flows into a created related entity's constrained property
         // (create in lines { Qty: qty }) inherits the target's range on the action DTO.
-        var compiler = new Compiler();
+        var compiler = CompilerWithHttpHost();
         var result = compiler.Compile("""
             domain Demo
             Order: entity {

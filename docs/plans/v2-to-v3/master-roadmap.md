@@ -1,7 +1,7 @@
 # DomainModeling product roadmap (milestones)
 
 **Status:** Active (milestones index)  
-**Last Updated:** 2026-08-08  
+**Last Updated:** 2026-08-24  
 **Purpose:** High-level milestone status only.  
 **Day-to-day work:** **one admitted suite**. **CURRENT truth:** [`../simple-agent-tasks/PIPELINE-STATUS.md`](../simple-agent-tasks/PIPELINE-STATUS.md) (Agent pick below must match).  
 **Completed suites (archived):** [`domainmodeling-completed-2026-08`](../archive/domainmodeling-completed-2026-08/README.md) (`qe` · `vs` · `spe` · `das` · `dacr` · `apm` · `dar` · `dau`) · infra under bar [`infrastructure-pass-NEXT.md`](../infrastructure-pass-NEXT.md)
@@ -47,22 +47,22 @@ MCP / direct API as thin consumers
 | 18 | Q4 aggregates / date ops | query · absorption P1 | **Parked / lower priority** — dates not the next ship bet |
 | 19 | Infra Bar B / RestApiSurface / StorageAccess | infra NEXT | **Pull** |
 | 20 | E5 micro-tools / dogfood | effect · dogfood | **Parked** until admitted |
-| 21 | E3 / L\* / events | effect · expansion | **Pull / post–P3 / never** |
+| 21 | E3 / L* / events | effect · expansion | **Pull / post–P3 / never** |
 
 ### Agent pick (one line)
 
 ```text
-DONE:    … p3/p2; GI; E1; gpure (2026-08-07); mcp-minify (2026-08-08); vision-cleanup 1–3 (2026-08-17)
-CURRENT: emit-session
+DONE:    … p3/p2; GI; E1; gpure (2026-08-07); mcp-minify (2026-08-08); vision-cleanup 1–3 (2026-08-17); emit-session CompileMode seed-only (2026-08-24)
+CURRENT: emit-session (CompileMode is seed-only. Remaining: TemporalLibrary Meaning table unused; RuntimeAnalysisCache core-catalog reopen ignores vendor maps.)
 ADMIT:   emit-session
 THEN:    host-ABI CallExternal (one lowering)
 PARKED:  mut-safety; p1 as new sugar; pack-host dialect host; outbox lock
 PULL:    E5; EF codegen; naming cleanup
 ```
 
-**Honest product claim today:** Path-prefix multi-hop; exists/where/Q3′; peer/entity when; catalog; action `-> Entity` returns. **Grammar:** product parse is Grammar-table-guided (Option A expr ladder + effect heads; printer deferred). **MCP:** DSL-only expressions; unified `add`/`remove` + `apply_dsl`. **No** temporal DSL authoring until p1.
+**Honest product claim today:** Path-prefix multi-hop; exists/where/Q3′; peer/entity when; catalog; action `-> Entity` returns. **Grammar:** product parse is Grammar-table-guided (Option A expr ladder + effect heads; printer deferred). **MCP:** DSL-only expressions; unified `add`/`remove` + `apply_dsl`. CompileMode seeds persistence only; HTTP host is `uses http`. **No** temporal DSL authoring until p1.
 
-**Focus (2026-08-08):** Status monopath + dead-dual inventory; admit **mut-safety** when ready. CURRENT: [`../simple-agent-tasks/PIPELINE-STATUS.md`](../simple-agent-tasks/PIPELINE-STATUS.md).
+**Focus (2026-08-24):** emit-session honesty. CURRENT: [`../simple-agent-tasks/PIPELINE-STATUS.md`](../simple-agent-tasks/PIPELINE-STATUS.md).
 ---
 
 ## Archived material

@@ -18,13 +18,6 @@ internal sealed class SideEffectAnalyzer : INodeAnalyzer {
     private static readonly ElisionMetadata Elidable = new(true);
     public void Analyze(AnalysisContext context, Node node) {
         if (node is Block block) {
-            // Most optimum path for Blocks (the high-fanout case for DCE):
-            // - Direct indexed loops over concrete collections (no IEnumerable.Children overhead).
-            // - Call this.Analyze on direct children exactly once (proper recursion + subtree processing).
-            // - Accumulate block-level hasSideEffects and perform elision decisions in the *same* pass.
-            // - No generic AnalyzeChildren, no second walk, no ComputeHasSideEffects.
-
-            // Process declared variables (they may contain expressions that need analysis).
             foreach (var v in block.Variables) {
                 if (v != null && context.ShouldAnalyze(v)) {
                     Analyze(context, v);
@@ -47,8 +40,6 @@ internal sealed class SideEffectAnalyzer : INodeAnalyzer {
                 var childKind = childMeta?.Kind ?? SideEffectKind.External;
                 blockKind = ClassifyWorst(blockKind, childKind);
 
-                // Track whether an Assignment's value is used by the enclosing block.
-                // Non-last Assignments in a Block never have their value consumed.
                 if (child is Assignment) {
                     context.SetMetadata(child, new AssignmentValueUsedMetadata(i == n - 1));
                 }
@@ -67,7 +58,6 @@ internal sealed class SideEffectAnalyzer : INodeAnalyzer {
             context.SetMetadata(node, new SideEffectMetadata(blockKind));
         }
         else {
-            // For all other nodes: aggregate children's side effect kinds.
             SideEffectKind kind = ClassifyIntrinsic(node);
             this.AnalyzeChildren(context, node);
             foreach (var child in node.Children) {
@@ -90,8 +80,6 @@ internal sealed class SideEffectAnalyzer : INodeAnalyzer {
             var opts2 = context.Settings.Get<SideEffectAnalysisOptions>() ?? SideEffectAnalysisOptions.Default;
             bool emitDiags2 = opts2.EmitElisionDiagnostics;
 
-            // Mark loop control subexpressions (initializer, increment for ForLoop) as elidable
-            // if they are pure and their value is unused in the loop context.
             if (node is ForLoop forLoop) {
                 var initMeta = forLoop.Initializer is not null ? context.GetMetadata<SideEffectMetadata>(forLoop.Initializer) : null;
                 if (initMeta is not null && (initMeta.Kind == SideEffectKind.Pure || initMeta.Kind == SideEffectKind.Read)) {
@@ -113,15 +101,9 @@ internal sealed class SideEffectAnalyzer : INodeAnalyzer {
                             "DEAD_CODE_ELIDABLE");
                     }
                 }
-                // Condition's value is used for control flow; do not mark the condition
-                // expression itself as elidable (though its internal pure unused subparts
-                // can still be elided during its own compilation).
             }
             else if (node is ForEachLoop forEach) {
-                // Collection's value is used to drive the iteration; do not mark as elidable.
             }
-            // WhileLoop / DoWhileLoop have no initializer/increment parts whose values are
-            // discarded independently of control.
         }
     }
 
@@ -143,6 +125,7 @@ internal sealed class SideEffectAnalyzer : INodeAnalyzer {
         WhileLoop or DoWhileLoop or ForLoop or ForEachLoop => SideEffectKind.Write,
         IfStatement or SwitchStatement or ThrowStatement => SideEffectKind.External,
         Invoke => SideEffectKind.External,
+        CallExternal => SideEffectKind.External,
         Await => SideEffectKind.External,
         TryCatchFinally or UsingStatement => SideEffectKind.External,
         BreakStatement or ContinueStatement or GotoStatement or LabelDeclaration => SideEffectKind.Write,

@@ -72,7 +72,6 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
                 ? ResolveNodeType(context, swt.Cases[0].Body)
                 : swt.DefaultCase is not null ? ResolveNodeType(context, swt.DefaultCase) : null,
             Await aw => ResolveNodeType(context, aw.Operand),
-            CallExternal => context.TypeDefinitions.GetTypeDefinition(typeof(void)),
             _ => null
         };
     }

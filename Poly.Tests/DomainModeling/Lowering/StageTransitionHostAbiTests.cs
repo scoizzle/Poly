@@ -35,7 +35,7 @@ public class StageTransitionHostAbiTests {
 
         await Assert.That(lowered).IsNotNull();
         await Assert.That(lowered).IsTypeOf<Block>();
-        var nodes = ((Block)lowered!).Nodes.ToList();
+        var nodes = Flatten(lowered!).ToList();
         await Assert.That(nodes.Any(n =>
             n is Assignment {
                 Destination: Member { MemberName: "CurrentStage" },
@@ -44,6 +44,9 @@ public class StageTransitionHostAbiTests {
         await Assert.That(nodes.Any(n =>
             n is CallExternal { MethodName: "Notify" } ce
             && ce.Arguments is [Constant { Value: "Active" }])).IsTrue();
+        await Assert.That(nodes.Any(n => n is TryCatchFinally {
+            FinallyBlock: CallExternal { MethodName: "Notify" }
+        })).IsTrue();
     }
 
     [Test]
@@ -103,5 +106,23 @@ public class StageTransitionHostAbiTests {
         await Assert.That(cs).Contains("Notify(\"Active\")");
         await Assert.That(cs).DoesNotContain("/*");
         await Assert.That(cs).DoesNotContain("throw");
+    }
+
+    private static IEnumerable<Node> Flatten(Node node) {
+        yield return node;
+        switch (node) {
+            case Block b:
+                foreach (var child in b.Nodes)
+                    foreach (var n in Flatten(child))
+                        yield return n;
+                break;
+            case TryCatchFinally t:
+                foreach (var n in Flatten(t.TryBlock))
+                    yield return n;
+                if (t.FinallyBlock is not null)
+                    foreach (var n in Flatten(t.FinallyBlock))
+                        yield return n;
+                break;
+        }
     }
 }

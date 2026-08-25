@@ -37,7 +37,7 @@ Domain constructs lower to generic VM opcodes — no domain opcodes in this modu
        │
        ▼
   AnalyzerBuilder  ──►  AnalysisResult
-  (13 passes)            metadata + diagnostics
+  (14 passes)            metadata + diagnostics
        │
        ▼
   DirectVmAbiEmitter ──►  VmProgram

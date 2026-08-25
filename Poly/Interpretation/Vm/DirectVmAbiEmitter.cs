@@ -113,12 +113,13 @@ public static partial class DirectVmAbiEmitter {
         ctx.LeaveActivation();
         body.Add(Label(ctx.ExitLabel));
 
-        var rootKind = analysis.GetMetadata<ValueRepresentationMetadata>(root)?.Kind;
+        var rootMeta = analysis.GetMetadata<ValueRepresentationMetadata>(root);
         var delegateExpr = Lambda<Action<VmState>>(Block(ctx.Locals, body), ctx.State);
         var del = delegateExpr.Compile();
         int registerScratchSize = ctx.MaxRingDepth;
         var debugInfo = new VmDebugInfo(ctx.VariableLayouts);
-        return new VmProgram(del, registerScratchSize, RootValueKind: rootKind,
+        return new VmProgram(del, registerScratchSize, RootValueKind: rootMeta?.Kind,
+            RootClrType: rootMeta?.ClrType,
             StepNodes: ctx.StepNodes, DebugInfo: debugInfo,
             RegisterCount: ctx.RegisterCount);
     }

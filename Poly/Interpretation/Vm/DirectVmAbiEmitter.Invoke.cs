@@ -568,6 +568,8 @@ public static partial class DirectVmAbiEmitter {
         int i => i,
         uint ui => ui,
         long l => l,
+        ulong ul => (long)ul,
+        char c => c,
         float f => BitConverter.DoubleToInt64Bits(f),
         double d => BitConverter.DoubleToInt64Bits(d),
         _ => heap.Allocate(value)

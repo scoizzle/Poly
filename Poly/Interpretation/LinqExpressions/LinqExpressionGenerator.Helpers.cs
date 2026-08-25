@@ -42,7 +42,8 @@ public sealed partial class LinqExpressionGenerator {
             compiledNodes.Add(Expression.Label(returnLabel, Expression.Default(returnLabel.Type)));
         }
 
-        return Expression.Block(variables, compiledNodes);
+        var allVariables = variables.Concat(blockContext.HoistedVariables).Distinct().ToArray();
+        return Expression.Block(allVariables, compiledNodes);
     }
 
     /// <summary>
@@ -274,6 +275,23 @@ public sealed partial class LinqExpressionGenerator {
         }
 
         return context.DeclareVariable(variable, CreateVariableExpression(variable));
+    }
+
+    /// <summary>
+    /// Statement form <c>var x = expr</c>: assign <see cref="Variable.Value"/> on first
+    /// encounter (same as VM <c>EmitVariable</c>). Later reads ignore Value.
+    /// </summary>
+    private Expression CompileVariableUse(Variable variable, CompilationContext context) {
+        if (variable.Value is not null && !context.TryGetVariable(variable, out _)) {
+            var param = CompileVariable(variable, context);
+            context.HoistVariable(param);
+            var init = CompileNode(variable.Value, context);
+            if (init.Type != param.Type)
+                init = Expression.Convert(init, param.Type);
+            return Expression.Assign(param, init);
+        }
+
+        return CompileVariable(variable, context);
     }
 
     /// <summary>

@@ -39,7 +39,8 @@ public sealed record ValueRepresentationMetadata(
 /// Post-order traversal: children are classified first, then the parent
 /// node's representation is derived from its children's types.
 ///
-/// Placement: after <c>ControlFlowAnalysis</c>, before <c>ConstantFolding</c>.
+/// Placement: after <c>ControlFlowAnalysis</c> (standard pipeline:
+/// ConstantFolding → ControlFlow → ValueRepresentation).
 /// </summary>
 internal sealed class ValueRepresentationAnalyzer : INodeAnalyzer {
     public const string Id = "ValueRepresentation";
@@ -148,10 +149,7 @@ internal sealed class ValueRepresentationAnalyzer : INodeAnalyzer {
 
     private static (ValueRepresentationKind Kind, Type? ClrType) ClassifyConstant(Constant c) {
         if (c.Value is null)
-            // Null is represented as the 0L sentinel on the VM evaluation stack.
-            // Classify as StackScalar to prevent interpretResult from attempting
-            // a heap handle dereference on the 0L value.
-            return (ValueRepresentationKind.StackScalar, null);
+            return (ValueRepresentationKind.HeapRef, null);
         if (c.Value is bool)
             return (ValueRepresentationKind.Bool, typeof(bool));
         if (c.Value is string)

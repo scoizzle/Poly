@@ -590,8 +590,12 @@ public sealed class CSharpGenerator {
         }
         sb.Append(')');
         if (method.Body is Block { Nodes: [Return r] }) {
+            if (r.Value is null) {
+                sb.AppendLine(" { return; }");
+                return;
+            }
             sb.Append(" => ");
-            WriteExpression(sb, r.Value ?? new Constant(0L));
+            WriteExpression(sb, r.Value);
             sb.AppendLine(";");
             return;
         }

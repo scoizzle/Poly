@@ -169,28 +169,28 @@ public static class Interpreter {
         // Use ValueRepresentationMetadata from analysis when available to
         // correctly distinguish heap handles from raw scalars (fixes INT-002).
         var rootKind = state.Program.RootValueKind;
+        var clr = state.Program.RootClrType;
 
-        if (rootKind == PrimValueKind.StackScalar || rootKind == PrimValueKind.Bool)
-            return InterpreterResult.FromValue(raw);
-
-        if (rootKind == PrimValueKind.HeapRef) {
-            if (handle >= 0 && handle < state.Heap.Count) {
-                var heapObj = state.Heap.UnsafeGet(handle);
-                return InterpreterResult.FromValue(heapObj);
-            }
+        if (rootKind == PrimValueKind.StackScalar || rootKind == PrimValueKind.Bool) {
+            if (clr == typeof(double) || clr == typeof(float))
+                return InterpreterResult.FromValue(BitConverter.Int64BitsToDouble(raw));
             return InterpreterResult.FromValue(raw);
         }
 
-        // Fallback heuristic (void, unknown, or no metadata):
-        // Only dereference when the handle looks like a valid heap index.
-        // Handle 0 is never a valid heap entry (first alloc starts at 0 but
-        // is freed on null; 0 and 1 are always bool/scalar results).
-        // After ANA-FIX-003, the standard pipeline always provides
-        // RootValueKind for expression roots, so this path is only hit
-        // for void-program terminations or external caller paths.
-        if (handle >= 2 && handle < state.Heap.Count) {
+        if (rootKind == PrimValueKind.HeapRef) {
+            if (raw == 0L)
+                return InterpreterResult.FromValue(null);
+            if (handle > 0 && handle < state.Heap.Count)
+                return InterpreterResult.FromValue(state.Heap.UnsafeGet(handle));
+            return InterpreterResult.FromValue(raw);
+        }
+
+        if (raw == 0L)
+            return InterpreterResult.FromValue(raw);
+        if (handle > 0 && handle < state.Heap.Count) {
             var heapObj = state.Heap.UnsafeGet(handle);
-            return InterpreterResult.FromValue(heapObj);
+            if (heapObj is not null)
+                return InterpreterResult.FromValue(heapObj);
         }
 
         return InterpreterResult.FromValue(raw);

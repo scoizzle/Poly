@@ -372,6 +372,21 @@ public class CSharpGeneratorTests {
     }
 
     [Test]
+    public async Task Generate_VoidMethodSingleReturn_DoesNotRewriteToZero() {
+        var node = new TypeDefinitionNode(
+            Name: "Gate",
+            Methods: [
+                new MethodDefinitionNode(
+                    "Run",
+                    new NamedTypeReference("void"),
+                    Body: new Block(Return.Void))
+            ]);
+        var result = new CSharpGenerator().Generate(node);
+        await Assert.That(result).Contains(" { return; }");
+        await Assert.That(result.Contains("return 0")).IsFalse();
+    }
+
+    [Test]
     public async Task Generate_Throw_ProducesThrow() {
         var result = new CSharpGenerator().Generate(new ThrowStatement(new New(TypeReference.To<Exception>())));
         await Assert.That(result).IsEqualTo("throw new System.Exception();");

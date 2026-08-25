@@ -277,6 +277,7 @@ public static partial class DirectVmAbiEmitter {
         var bodyExpr = CompileNode(wl.Body, ctx);
         ctx.RingDepth = d;
         var loopBody = Block(
+            EmitLoopIterationGuard(ctx),
             IfThen(Not(test), Goto(breakLabel)),
             bodyExpr,
             Label(continueLabel));
@@ -284,6 +285,19 @@ public static partial class DirectVmAbiEmitter {
         ctx.PopLoopScope();
         ctx.RingDepth = d;
         return result;
+    }
+
+    private static Expression EmitLoopIterationGuard(AbiCtx ctx) {
+        var max = Property(ctx.State, nameof(VmState.MaxLoopIterations));
+        var ticks = Property(ctx.State, nameof(VmState.LoopTicks));
+        return IfThen(
+            GreaterThanOrEqual(max, Constant(0L)),
+            Block(
+                Assign(ticks, Add(ticks, Constant(1L))),
+                IfThen(
+                    GreaterThan(ticks, max),
+                    Throw(New(InvalidOperationExceptionStringCtor,
+                        Constant("MaxLoopIterations exceeded."))))));
     }
 
     private static Expression EmitDoWhileLoop(DoWhileLoop dwl, AbiCtx ctx) {
@@ -296,6 +310,7 @@ public static partial class DirectVmAbiEmitter {
         var test = CompileConditionAsBool(dwl.Condition, ctx);
         ctx.RingDepth = d;
         var loopBody = Block(
+            EmitLoopIterationGuard(ctx),
             bodyExpr,
             Label(continueLabel),
             IfThen(Not(test), Goto(breakLabel)));
@@ -408,7 +423,7 @@ public static partial class DirectVmAbiEmitter {
 
     /// <summary>
     /// Domain programs bind the instance via <c>SetArgs({ this })</c> at slot 0.
-    /// ThisReference is that handle — not the ABI null sentinel 0.
+    /// After SetArgs, ThisReference is that handle. Unset slot 0 is ABI null 0.
     /// </summary>
     private static Expression EmitThis(AbiCtx ctx) {
         int slot = ctx.AllocSlot();
@@ -506,6 +521,7 @@ public static partial class DirectVmAbiEmitter {
         ctx.RingDepth = d;
 
         var loopBody = new List<Expression> {
+            EmitLoopIterationGuard(ctx),
             IfThen(Not(test), Goto(breakLabel)),
             bodyExpr,
             Label(continueLabel)
@@ -544,6 +560,7 @@ public static partial class DirectVmAbiEmitter {
 
         var loop = Loop(
             Block(
+                EmitLoopIterationGuard(ctx),
                 IfThen(Not(Call(enumerator, EnumeratorMoveNext)),
                     Goto(breakLabel)),
                 ctx.VariableWrite(fel.LoopVariable,
@@ -613,11 +630,14 @@ public static partial class DirectVmAbiEmitter {
         return typeof(Exception);
     }
 
-    /// <summary>Return statement: write value to frame slot, set SP, jump to exit.</summary>
+    /// <summary>Return statement: write value to frame slot, set SP, jump to exit.
+    /// A null <see cref="Return.Value"/> is a void return (no slot write).</summary>
     private static Expression EmitReturn(Return ret, AbiCtx ctx) {
+        if (ret.Value is null)
+            return Goto(ctx.ExitLabel);
+
         int d = ctx.RingDepth;
-        var retVal = ret.Value ?? throw new InvalidOperationException("Return with null value");
-        var valueExpr = CompileNode(retVal, ctx);
+        var valueExpr = CompileNode(ret.Value, ctx);
         int resultSlot = ctx.RingDepth - 1;
         var fold = FoldResultToSlot(ref resultSlot, d, ctx);
 

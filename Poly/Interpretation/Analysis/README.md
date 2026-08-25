@@ -7,37 +7,45 @@ Each pass implements `INodeAnalyzer` and is registered via an extension method o
 
 | Pass | Extension Method | Produces Metadata | Diagnostics |
 |------|-----------------|-------------------|-------------|
+| `TypeDefinitionNodeAnalyzer` | `.UseTypeDefinitionNodeAnalyzer()` | `TypeDefinitionMetadata`; also an `ITypeDefinitionProvider` | (none; miss throws on resolve) |
+| `ThisReferenceContextAnalyzer` | `.UseThisReferenceContext()` | `this` resolved type on `ThisReference` | `TH0001` (static body) |
 | `TypeAndMemberResolver` | `.UseTypeAndMemberResolver()` | Resolved types + resolved members | Structural failures (missing members) |
 | `ScopeValidator` | `.UseVariableScopeValidator()` | `VariableAnalysisMetadata` (block scopes, escapes) | Scoping errors |
 | `SideEffectAnalyzer` | `.UseSideEffectAnalysis()` | `SideEffectMetadata`, `ElisionMetadata`, `AssignmentValueUsedMetadata` | `DEAD_CODE_ELIDABLE` |
-| `ThisReferenceContextAnalyzer` | `.UseThisReferenceContext()` | `this` resolved type on `ThisReference` | `TH0001`, `TH0002` |
 | `JumpTargetAnalyzer` | `.UseJumpTargetResolution()` | `ResolvedJumpTarget` (break/continue/goto targets) | `JT0001`-`JT0004` |
+| `ConstantFoldingPass` | `.UseConstantFolding()` | `ConstantValueMetadata`, node replacement | (none) |
 | `ControlFlowAnalysisPass` | `.UseControlFlowAnalysis()` | `ControlFlowMetadata`, `InfiniteLoopMetadata`, `MustExecuteMetadata` | `CF0001`-`CF0013` |
 | `ValueRepresentationAnalyzer` | `.UseValueRepresentationAnalysis()` | `ValueRepresentationMetadata` (stack scalar, bool, heap ref, void, unknown) | (none) |
 | `CallSiteCatalogAnalyzer` | `.UseCallSiteCatalog()` | `CallSiteCatalogMetadata`, `CallSiteIndexMetadata` | (none) |
-| `ConstantFoldingPass` | `.UseConstantFolding()` | `ConstantValueMetadata`, node replacement | (none) |
 | `DefiniteAssignmentAnalyzer` | `.UseDefiniteAssignmentAnalysis()` | `DefiniteAssignmentMetadata` | (none) |
 | `LambdaReturnTypeAnalyzer` | `.UseLambdaReturnTypeResolution()` | Resolved Lambda types | (none) |
 | `ExceptionRegionAnalyzer` | `.UseExceptionRegionAnalysis()` | `ExceptionRegionMetadata`, `InProtectedRegionMetadata` | (none) |
+| `SyntaxTypeCompatibilityAnalyzer` | `.UseSyntaxTypeCompatibility()` | (none) | `VmTypeCompatibility` |
 
 ## Pass Ordering
 
-```
- 1. TypeAndMemberResolver         (types must be resolved first — everything depends on them)
- 2. ScopeValidator                (variable scopes must be known before side-effect analysis)
- 3. SideEffectAnalyzer            (purity/elision feeds into CFG and constant folding)
- 4. ThisReferenceContext          (this-reference resolution for diagnostics)
- 5. JumpTargetAnalyzer            (jump targets needed before CFG and expansion)
- 6. ControlFlowAnalysisPass       (CFG depends on resolved jump targets)
- 7. ValueRepresentationAnalyzer   (value kind classification — pre-CF fold)
- 8. CallSiteCatalogAnalyzer       (call site indexing — depends on type resolution)
- 9. ConstantFoldingPass           (post-CFG for constant-condition branch elimination)
-10. DefiniteAssignmentAnalyzer    (post-CFG for merging assignment facts)
-11. LambdaReturnTypeAnalyzer      (post-type-resolution for lambda return type refinement)
-12. ExceptionRegionAnalyzer       (EH region table — depends on CFG + definite assignment)
+Matches `Interpreter._analyzer` (`Interpreter.cs`). Direct AST-to-VM-ABI lowering; no primitive expansion.
 
-The standard pipeline uses direct AST-to-VM-ABI lowering (no primitive expansion pass).
-See `Interpreter.cs` for the exact pass list.
+```
+ 1. TypeDefinitionNodeAnalyzer      (AST type defs available before this/members)
+ 2. ThisReferenceContext            (root this is legal SetArgs slot 0; TH0001 in static bodies)
+ 3. TypeAndMemberResolver           (depends on This)
+ 4. ScopeValidator                  (variable scopes before side-effect analysis)
+ 5. SideEffectAnalyzer              (purity/elision feeds CFG and constant folding)
+ 6. JumpTargetAnalyzer              (jump targets before CFG)
+ 7. ConstantFoldingPass             (constant-condition facts before CFG)
+ 8. ControlFlowAnalysisPass         (depends on jump targets + constant folding)
+ 9. ValueRepresentationAnalyzer     (after CFG)
+10. CallSiteCatalogAnalyzer
+11. DefiniteAssignmentAnalyzer      (post-CFG assignment facts)
+12. LambdaReturnTypeAnalyzer
+13. ExceptionRegionAnalyzer
+14. SyntaxTypeCompatibilityAnalyzer (fail-closed on incompatible ops)
+```
+
+Ad-hoc test pipelines may omit `TypeDefinitionNodeAnalyzer`. This/TypeAndMember do not declare it as a hard `Dependencies` entry so CLR-only trees still analyze.
+
+**Oracle:** A shipped Syntax node's runtime meaning is proven by `Interpreter.Compile` (and execute) on that tree. CFG analysis or `BuildExpression()` / LINQ alone is not the oracle.
 
 ## Sub-directories
 
@@ -116,11 +124,11 @@ Circular dependencies cause a build-time exception.
 
 ### Pass Ordering Rules
 
-1. Type/member resolution must come first — all passes depend on resolved types.
+1. TypeDefinitionNode (when present) before This/TypeAndMember so AST types exist.
 2. Variable scoping must precede side-effect analysis.
 3. Jump targets must be resolved before CFG construction.
-4. CFG must be built before post-CFG passes (constant folding, definite assignment, EH).
-5. Exception region analysis is always last — it depends on CFG and definite assignment.
+4. Constant folding runs before CFG; ValueRepresentation, definite assignment, and EH run after CFG.
+5. SyntaxTypeCompatibility is last on the standard Interpreter pipeline.
 
 ---
 

@@ -147,7 +147,7 @@ public class ThisReferenceTests {
     }
 
     [Test]
-    public async Task Analyze_ThisReferenceOutsideMemberBody_ProducesDiagnostic() {
+    public async Task Analyze_RootProgramThisReference_IsLegal() {
         var thisReference = new ThisReference();
 
         var analysis = new AnalyzerBuilder()
@@ -155,10 +155,8 @@ public class ThisReferenceTests {
             .UseTypeAndMemberResolver()
             .Build()
             .Analyze(thisReference);
-        var diagnostics = analysis.Diagnostics.Where(static diagnostic => diagnostic.Code == "TH0002").ToArray();
-        var resolvedType = analysis.GetResolvedType(thisReference);
 
-        await Assert.That(diagnostics.Length).IsEqualTo(1);
-        await Assert.That(resolvedType).IsNull();
+        await Assert.That(analysis.Diagnostics.Any(static d => d.Code is "TH0001" or "TH0002")).IsFalse();
+        await Assert.That(analysis.GetResolvedType(thisReference)).IsNull();
     }
 }

@@ -21,19 +21,19 @@ Owning stream: Interpretation (exclusive files under `Poly/Interpretation/` and 
 
 ## Suggestions
 
-- [ ] **F13** — Root-program `ThisReference`: legal SetArgs this, or do not emit This on that path. Test SetArgs(instance)+locals+This.
-- [ ] **F14** — `InterpreterResult.GetValue<T>`: kind-aware (null vs 0L vs double bits).
-- [ ] **F15** — `MaxLoopIterations`: emit checks or delete the API.
-- [ ] **F16** — Void `Return`: VM exit without value; C# must not rewrite to `0`.
-- [ ] **F17** — LINQ `CompileVariable` must honor `Variable.Value`, or LINQ is not an oracle for Variable-as-statement.
-- [ ] **F18** — `Heap.Set` free-list occupancy (public API; no product caller today).
-- [ ] **F19** — `Analysis/README.md` pass order vs `Interpreter._analyzer`.
-- [ ] **F20** — `SetArgs` marshal table (sibling of F8).
+- [x] **F13** — Root-program `ThisReference` is legal SetArgs slot 0 (no TH0002). Test SetArgs(instance)+locals+This.
+- [x] **F14** — `InterpreterResult.GetValue<T>`: null payload, long→double/float bitcast, 0L stays 0L.
+- [x] **F15** — `MaxLoopIterations` emitted in While/DoWhile/For/ForEach headers (`LoopTicks`). `-1` unlimited. Throws `"MaxLoopIterations exceeded."`
+- [x] **F16** — Void `Return`: VM `Goto(ExitLabel)` with no slot write. C# method body `{ return; }` not `=> 0`.
+- [x] **F17** — LINQ `CompileVariableUse` assigns `Variable.Value` on first encounter.
+- [x] **F18** — `Heap.Set`/`UnsafeSet` recycle only live→null; already-free handle throws.
+- [x] **F19** — `Analysis/README.md` pass order matches `Interpreter._analyzer` (incl. TypeDefinitionNode + SyntaxTypeCompatibility).
+- [x] **F20** — `SetArgs`/`ToRing` marshal table aligned with `BoxToAbi` (incl. float/double bits).
 
 ## Process
 
-- [ ] **F21** — Gate: Interpretation control-flow tests that only `BuildExpression()` or CFG-analyze must not be the sole oracle for a shipped Syntax node. Prefer `Interpreter.Compile` on the same tree.
-- [ ] **F22** — Nits F21/F22 in the review (ThisReference comment vs `ThisReference_ReturnsZero`; `Word.IsHandle` negative vs Heap positive).
+- [x] **F21** — Gate recorded in `Analysis/README.md`: shipped Syntax node meaning is proven by `Interpreter.Compile` on the same tree; CFG/`BuildExpression`/LINQ alone is not the oracle.
+- [x] **F22** — `EmitThis` comment: after SetArgs, This is that handle; unset slot 0 is ABI null 0. `Word.IsHandle => Value > 0`.
 
 ## Out of scope here
 

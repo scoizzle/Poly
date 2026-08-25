@@ -113,7 +113,8 @@ public sealed partial record DomainEntityInstance {
                     DefaultValue: new Constant(null!),
                     Getter: new PropertyGetterDefinitionNode()));
             }
-            else if (nav.Cardinality is RelationshipCardinality.OneToMany) {
+            else if (nav.Cardinality is RelationshipCardinality.OneToMany
+                or RelationshipCardinality.ManyToMany) {
                 propDefs.Add(new PropertyDefinitionNode(
                     pascal,
                     new CollectionTypeReference(new TypeReference(nav.Target.TypeName)),
@@ -266,14 +267,17 @@ public sealed partial record DomainEntityInstance {
     }
 
     /// <summary>
-    /// IDictionary read of a OneToMany nav property: all linked targets
-    /// (empty list when unlinked — foreach zero-match, not NRE).
+    /// IDictionary read of a collection nav (OneToMany / ManyToMany): all linked
+    /// targets (empty list when unlinked — foreach zero-match, not NRE).
+    /// For-invoke analysis still requires OneToMany; this matches lowering's
+    /// collection-nav predicate so a ManyToMany member read is not a miss.
     /// </summary>
     internal bool TryGetCollectionNavigation(string key, out object? value) {
         value = null;
         Relationship? match = null;
         foreach (var nav in NavigationsFor(Entity, Domain)) {
-            if (nav.Cardinality is not RelationshipCardinality.OneToMany)
+            if (nav.Cardinality is not (RelationshipCardinality.OneToMany
+                or RelationshipCardinality.ManyToMany))
                 continue;
             if (!string.Equals(DomainToCSharpExporter.ToPascalCase(nav.Name), key, StringComparison.Ordinal))
                 continue;

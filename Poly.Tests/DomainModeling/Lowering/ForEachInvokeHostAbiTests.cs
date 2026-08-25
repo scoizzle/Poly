@@ -110,4 +110,25 @@ public class ForEachInvokeHostAbiTests {
         await Assert.That(tgt1.GetProperty<object>("Status")).IsEqualTo("done");
         await Assert.That(tgt2.GetProperty<object>("Status")).IsEqualTo("done");
     }
+
+    [Test]
+    public async Task CollectionNav_ManyToMany_IDictionaryReturnsLinkedTargets() {
+        var target = new Entity("Target", [], [], [], []);
+        var source = new Entity("Source", [], [], [], []);
+        var rel = new Relationship("Peers",
+            new DomainTypeReference("Source"), new DomainTypeReference("Target"),
+            RelationshipCardinality.ManyToMany, []);
+        var domain = DomainTestFactory.Create("Test", [source, target], [rel]);
+        var store = new DomainInstanceStore();
+        var tgt = DomainEntityInstance.Create(target, domain: domain);
+        var src = DomainEntityInstance.Create(source, domain: domain);
+        store.Add(tgt); store.Add(src);
+        store.Link("Peers", src, tgt);
+
+        IDictionary<string, object?> bag = src;
+        var col = bag["Peers"] as System.Collections.IList;
+        await Assert.That(col).IsNotNull();
+        await Assert.That(col!.Count).IsEqualTo(1);
+        await Assert.That(col[0]).IsSameReferenceAs(tgt);
+    }
 }

@@ -299,7 +299,11 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     /// <c>Invoke(Member(Subject, actionName), args)</c> on both runtime and emit.
     /// Singular cross-entity invoke is <c>this.Rel.Action(args)</c> with a
     /// linked-target guard that returns <c>DomainResult.Failure</c> before deref
-    /// (never a bare NRE). Not gated on
+    /// (never a bare NRE). Self / singular cross-entity do not wrap
+    /// <c>if (!result.IsSuccess) return result</c> — that is for-invoke's loop
+    /// (and C# method bodies). Nested Failure is discarded like C#
+    /// <c>this.Foo();</c>. Fail-fast on every invoke belongs here, not in
+    /// <c>InvokeNamed</c>. Not gated on
     /// <see cref="LoweringContext.LowerStageTransitions"/> — that flag still
     /// gates create / create-in. OneToMany fan-out uses the for-each lowering.
     /// </summary>

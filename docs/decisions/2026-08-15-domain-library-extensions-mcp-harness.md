@@ -64,10 +64,11 @@ Interpretation is the backbone of that simulate (and of cataloged algorithms). D
 
 ### 5. Host ABI stays tiny
 
-Store and clocks are `CallExternal` (or equivalent): create, link, notify, outbound, time/id. Everything else is Syntax. No `OpCode.CheckPolicy` / `StageTransition`.
+Remaining store and clocks (`Create` / create-in / time/id) are `CallExternal` (or equivalent). Notify, stage, and invoke are Syntax — not host-ABI `CallExternal`. No `OpCode.CheckPolicy` / `StageTransition`.
 
 ## Consequences
 
+- 2026-08-25: §5’s CallExternal list is create/time only. Stage, Notify, self/cross-entity invoke, and for-invoke already lower to Syntax (`Assignment` + `Invoke(Member(This, "Notify"))`, `Invoke(Member(This, action))`, fail-fast `ForEachLoop`). Do not read “store and clocks” as covering those.
 - Agents edit Domain and extensions. They do not choose an execution path.
 - New DomainExpression / Effect kinds require a real lowered node in the same change.
 - New product doors are libraries, not core compiler special cases.

@@ -53,16 +53,16 @@ MCP / direct API as thin consumers
 
 ```text
 DONE:    … p3/p2; GI; E1; gpure (2026-08-07); mcp-minify (2026-08-08); vision-cleanup 1–3 (2026-08-17); emit-session CompileMode seed-only (2026-08-24)
-CURRENT: host-ABI CallExternal (first slice in progress: StageTransition Assignment + Notify)
+CURRENT: host-ABI (self-invoke on This — in progress / this PR)
 ADMIT:   host-ABI
-THEN:    host-ABI remaining store effects (create / create-in / invoke / for-invoke)
+THEN:    host-ABI remaining store effects (create / create-in / for-invoke / cross-entity invoke)
 PARKED:  mut-safety; p1 as new sugar; pack-host dialect host; outbox lock
 PULL:    E5; EF codegen; naming cleanup
 ```
 
 **Honest product claim today:** Path-prefix multi-hop; exists/where/Q3′; peer/entity when; catalog; action `→ Entity` returns. **Grammar:** product parse is Grammar-table-guided (Option A expr ladder + effect heads; printer deferred). **MCP:** DSL-only expressions; unified `add`/`remove` + `apply_dsl`. CompileMode seeds persistence only; HTTP host is `uses http`. **No** temporal DSL authoring until p1.
 
-**Focus (2026-08-24):** host-ABI first slice (StageTransition). CURRENT: [`../simple-agent-tasks/PIPELINE-STATUS.md`](../simple-agent-tasks/PIPELINE-STATUS.md).
+**Focus (2026-08-25):** host-ABI self-invoke on This. First slice DONE (StageTransition, PR 21). CURRENT: [`../simple-agent-tasks/PIPELINE-STATUS.md`](../simple-agent-tasks/PIPELINE-STATUS.md).
 ---
 
 ## Archived material

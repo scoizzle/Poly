@@ -123,6 +123,21 @@ public class InvalidProgramTests {
     }
 
     [Test]
+    public async Task Invoke_AfterReassignFromLambdaToInt_AnalysisErrorAndCompileRejects() {
+        var f = new Variable("f");
+        var x = new Parameter("x", TypeReference.To<long>());
+        var node = new Block([
+            new Assignment(f, new Lambda([x], new Add(x, new Constant(1L)))),
+            new Assignment(f, new Constant(1L)),
+            new Invoke(f)
+        ], [f]);
+        await AssertAnalysisThenCompileRejects(
+            node,
+            "Invoke",
+            SyntaxTypeCompatibilityAnalyzer.DiagnosticCode);
+    }
+
+    [Test]
     public async Task Invoke_OfIntVariable_AnalysisErrorAndCompileRejects() {
         var n = new Variable("n");
         var node = new Block([
@@ -137,10 +152,11 @@ public class InvalidProgramTests {
 
     [Test]
     public async Task Invoke_OfIndexAccess_AnalysisErrorAndCompileRejects() {
-        var arr = new Variable("arr", new Constant(new long[] { 1L }));
-        var node = new Block(
-            arr,
-            new Invoke(new IndexAccess(arr, new Constant(0L))));
+        var arr = new Variable("arr");
+        var node = new Block([
+            new Assignment(arr, new Constant(new long[] { 1L })),
+            new Invoke(new IndexAccess(arr, new Constant(0L)))
+        ], [arr]);
         await AssertAnalysisThenCompileRejects(
             node,
             "Invoke",
@@ -166,6 +182,85 @@ public class InvalidProgramTests {
         await AssertCompileOrExecuteRejectsReadable(
             new IndexAccess(new Constant(1L), new Constant(0L)),
             "index");
+    }
+
+    [Test]
+    public async Task Assignment_LongThenString_AnalysisErrorAndCompileRejects() {
+        var x = new Variable("x");
+        var node = new Block([
+            new Assignment(x, new Constant(1L)),
+            new Assignment(x, new Constant("hi")),
+            x
+        ], [x]);
+        await AssertAnalysisThenCompileRejects(
+            node,
+            "incompatible",
+            SyntaxTypeCompatibilityAnalyzer.DiagnosticCode);
+    }
+
+    [Test]
+    public async Task Assignment_StringThenLong_AnalysisErrorAndCompileRejects() {
+        var x = new Variable("x");
+        var node = new Block([
+            new Assignment(x, new Constant("hi")),
+            new Assignment(x, new Constant(1L)),
+            x
+        ], [x]);
+        await AssertAnalysisThenCompileRejects(
+            node,
+            "incompatible",
+            SyntaxTypeCompatibilityAnalyzer.DiagnosticCode);
+    }
+
+    [Test]
+    public async Task Assignment_BoolThenLong_AnalysisErrorAndCompileRejects() {
+        var x = new Variable("x");
+        var node = new Block([
+            new Assignment(x, new Constant(true)),
+            new Assignment(x, new Constant(1L)),
+            x
+        ], [x]);
+        await AssertAnalysisThenCompileRejects(
+            node,
+            "incompatible",
+            SyntaxTypeCompatibilityAnalyzer.DiagnosticCode);
+    }
+
+    [Test]
+    public async Task Assignment_IntThenDouble_AnalysisErrorAndCompileRejects() {
+        var x = new Variable("x");
+        var node = new Block([
+            new Assignment(x, new Constant(1)),
+            new Assignment(x, new Constant(2.0)),
+            x
+        ], [x]);
+        await AssertAnalysisThenCompileRejects(
+            node,
+            "incompatible",
+            SyntaxTypeCompatibilityAnalyzer.DiagnosticCode);
+    }
+
+    [Test]
+    public async Task IfElse_LongThenString_AnalysisErrorAndCompileRejects() {
+        var x = new Variable("x");
+        var node = new Block([
+            new IfStatement(
+                new Constant(true),
+                new Assignment(x, new Constant(1L)),
+                new Assignment(x, new Constant("hi"))),
+            x
+        ], [x]);
+        await AssertAnalysisThenCompileRejects(
+            node,
+            "incompatible",
+            SyntaxTypeCompatibilityAnalyzer.DiagnosticCode);
+    }
+
+    [Test]
+    public async Task Assignment_UndeclaredVariable_AnalysisErrorAndCompileRejects() {
+        var x = new Variable("x");
+        var node = new Block(new Assignment(x, new Constant(1L)));
+        await AssertAnalysisThenCompileRejects(node, "not declared", expectedCode: null);
     }
 
     [Test]

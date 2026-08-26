@@ -257,42 +257,24 @@ public sealed partial class LinqExpressionGenerator {
             return Expression.Variable(runtimeType, variable.Name);
         }
 
-        if (variable.Initializer is Constant { Value: not null } constant) {
-            return Expression.Variable(constant.Value.GetType(), variable.Name);
-        }
-
         return Expression.Variable(typeof(object), variable.Name);
     }
 
     /// <summary>
-    /// Compiles a variable reference by resolving it from the nearest lexical scope, or by
-    /// declaring a new local variable expression in the current scope when the variable represents
-    /// a writable local introduced by the surrounding construct.
+    /// Compiles a variable reference by resolving it from the nearest lexical scope.
+    /// Undeclared variables fail closed; declare on <see cref="Block.Variables"/> or foreach.
     /// </summary>
     private ParameterExpression CompileVariable(Variable variable, CompilationContext context) {
         if (context.TryGetVariable(variable, out var existing)) {
             return existing;
         }
 
-        return context.DeclareVariable(variable, CreateVariableExpression(variable));
+        throw new InvalidOperationException(
+            $"Variable '{variable.Name}' is not declared in this scope");
     }
 
-    /// <summary>
-    /// Statement form <c>var x = expr</c>: assign <see cref="Variable.Initializer"/> on first
-    /// encounter (same as VM <c>EmitVariable</c>). Later reads ignore Initializer.
-    /// </summary>
-    private Expression CompileVariableUse(Variable variable, CompilationContext context) {
-        if (variable.Initializer is not null && !context.TryGetVariable(variable, out _)) {
-            var param = CompileVariable(variable, context);
-            context.HoistVariable(param);
-            var init = CompileNode(variable.Initializer, context);
-            if (init.Type != param.Type)
-                init = Expression.Convert(init, param.Type);
-            return Expression.Assign(param, init);
-        }
-
-        return CompileVariable(variable, context);
-    }
+    private Expression CompileVariableUse(Variable variable, CompilationContext context) =>
+        CompileVariable(variable, context);
 
     /// <summary>
     /// Compiles an index access such as <c>target[index]</c>.

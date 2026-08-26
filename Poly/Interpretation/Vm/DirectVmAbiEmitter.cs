@@ -168,7 +168,7 @@ public static partial class DirectVmAbiEmitter {
         if (ctx.DebugHookProp is null) return CompileNode(node, ctx);
         var stores = ctx.EmitScopeStores();
         var body = CompileNode(node, ctx);
-        int localCount = ctx.CurrentLocalCount;
+        int localCount = ctx.FrameSlotHighWater;
         Expression spanExpr = localCount == 0
             ? New(ReadOnlySpanLongArrayCtor,
                 NewArrayBounds(typeof(long), Constant(0)))

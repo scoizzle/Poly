@@ -120,8 +120,11 @@ public class LanguageVmTests {
 
     [Test]
     public async Task IndexAccess_Array_ReturnsElement() {
-        var arr = new Variable("arr", new Constant(new long[] { 10, 20, 30 }));
-        var node = new Block(arr, new IndexAccess(arr, new Constant(1)));
+        var arr = new Variable("arr");
+        var node = new Block([
+            new Assignment(arr, new Constant(new long[] { 10, 20, 30 })),
+            new IndexAccess(arr, new Constant(1))
+        ], [arr]);
         using var exec = Interpreter.Execute(Interpreter.Compile(node));
         await Assert.That(exec.GetValue<long>()).IsEqualTo(20L);
     }

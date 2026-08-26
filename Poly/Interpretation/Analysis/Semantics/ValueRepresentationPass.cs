@@ -104,7 +104,7 @@ internal sealed class ValueRepresentationAnalyzer : INodeAnalyzer {
             ShiftRight => ClassifyWithResolvedType(context, node, ValueRepresentationKind.StackScalar),
             New => (ValueRepresentationKind.HeapRef, null),
             NewArray => (ValueRepresentationKind.HeapRef, null),
-            Lambda => (ValueRepresentationKind.HeapRef, null),
+            Lambda l => ClassifyLambda(context, l),
             TypeAs => (ValueRepresentationKind.HeapRef, null),
             TypeCast tc => ClassifyTypeCast(context, tc),
             TypeOf => (ValueRepresentationKind.HeapRef, typeof(Type)),
@@ -230,6 +230,14 @@ internal sealed class ValueRepresentationAnalyzer : INodeAnalyzer {
 
         // All other reference types (arrays, objects) go on the heap
         return (ValueRepresentationKind.HeapRef, c.Value.GetType());
+    }
+
+    private static (ValueRepresentationKind Kind, Type? ClrType) ClassifyLambda(
+        AnalysisContext context, Lambda lambda) {
+        var resolved = ClassifyFromResolvedType(context, lambda);
+        return resolved.Kind == ValueRepresentationKind.Unknown
+            ? (ValueRepresentationKind.HeapRef, null)
+            : resolved;
     }
 
     private static (ValueRepresentationKind Kind, Type? ClrType) ClassifyInvoke(

@@ -382,22 +382,23 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         var invokeCall = new Invoke(new Member(loopVar, e.ActionName), [.. args]);
 
         // Fail-fast + zero-matches-fail. Same Variable instances for VM identity.
-        // Variable-as-statement is `var x = expr` for C# emit.
-        var matchedVar = new Variable($"matched{seq}", new Constant(false));
-        var resultVar = new Variable($"result{seq}", invokeCall);
+        var matchedVar = new Variable($"matched{seq}");
+        var resultVar = new Variable($"result{seq}");
         var loopBody = new List<Node>();
         if (predicateGuard is not null) loopBody.Add(predicateGuard);
         loopBody.Add(new Assignment(matchedVar, new Constant(true)));
-        loopBody.Add(resultVar);
+        loopBody.Add(new Assignment(resultVar, invokeCall));
         loopBody.Add(new IfStatement(new Poly.Ast.Nodes.Not(new Member(resultVar, "IsSuccess")),
             new Block([new Return(resultVar)])));
-        var loop = new ForEachLoop(loopVar, navMember, new Block(loopBody));
+        var loop = new ForEachLoop(loopVar, navMember, new Block(loopBody, [resultVar]));
         var zeroCheck = new IfStatement(
             new Poly.Ast.Nodes.Not(matchedVar),
             new Block([new Return(new Invoke(
                 new Member(new TypeReference("DomainResult"), "Failure"),
                 new Constant($"for {relName}.{e.ActionName} matched zero targets.")))]));
-        return new Block([matchedVar, loop, zeroCheck]);
+        return new Block(
+            [new Assignment(matchedVar, new Constant(false)), loop, zeroCheck],
+            [matchedVar]);
     }
 
     /// <summary>Resolves the stage enum CLR name for a target entity of a relationship
@@ -427,47 +428,52 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     /// </summary>
     protected override Node? Composite(CompositeEffect c) {
         var nodes = new List<Node>();
+        var variables = new List<Node>();
         foreach (var sub in c.Effects) {
             var lowered = Route(sub);
             if (lowered is null)
                 throw new InvalidOperationException(
                     $"Cannot lower effect '{DescribeEffect(sub)}' to a Syntax AST node.");
-            CollectNode(nodes, lowered);
+            CollectNode(nodes, variables, lowered);
         }
-        return new Block(nodes);
+        return new Block(nodes, variables);
     }
 
     protected override Node? Conditional(ConditionalEffect c) {
         var condition = _expressionPass.Lower(c.Condition, Subject);
         var thenNodes = new List<Node>();
+        var thenVars = new List<Node>();
         foreach (var sub in c.ThenEffects) {
             var lowered = Route(sub);
             if (lowered is null)
                 throw new InvalidOperationException(
                     $"Cannot lower effect '{DescribeEffect(sub)}' to a Syntax AST node.");
-            CollectNode(thenNodes, lowered);
+            CollectNode(thenNodes, thenVars, lowered);
         }
 
         if (c.ElseEffects is not { Count: > 0 })
-            return new IfStatement(condition, new Block(thenNodes));
+            return new IfStatement(condition, new Block(thenNodes, thenVars));
 
         var elseNodes = new List<Node>();
+        var elseVars = new List<Node>();
         foreach (var sub in c.ElseEffects) {
             var lowered = Route(sub);
             if (lowered is null)
                 throw new InvalidOperationException(
                     $"Cannot lower effect '{DescribeEffect(sub)}' to a Syntax AST node.");
-            CollectNode(elseNodes, lowered);
+            CollectNode(elseNodes, elseVars, lowered);
         }
 
-        return new IfStatement(condition, new Block(thenNodes), new Block(elseNodes));
+        return new IfStatement(condition, new Block(thenNodes, thenVars), new Block(elseNodes, elseVars));
     }
 
-    /// <summary>Adds a lowered node to a list. Flattens Block children.</summary>
-    private static void CollectNode(List<Node> nodes, Node? lowered) {
+    /// <summary>Adds a lowered node to a list. Flattens Block children, keeping declarations.</summary>
+    private static void CollectNode(List<Node> nodes, List<Node> variables, Node? lowered) {
         if (lowered is null) return;
-        if (lowered is Block b)
+        if (lowered is Block b) {
             nodes.AddRange(b.Nodes);
+            variables.AddRange(b.Variables);
+        }
         else
             nodes.Add(lowered);
     }
@@ -495,25 +501,22 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         //         if (!fineResult.IsSuccess) throw ...;
         //         var fine = fineResult.Value;
         var targetName = DomainToCSharpExporter.ToCamelCase(targetEntity.Name);
-        var resultVar = $"{targetName}Result";
+        var resultVar = new Variable($"{targetName}Result");
+        var targetVar = new Variable(targetName);
         var nds = new List<Node>();
 
-        // var fineResult = Fine.Create(...);
-        nds.Add(new Variable(resultVar, createCall));
+        nds.Add(new Assignment(resultVar, createCall));
 
-        // if (!fineResult.IsSuccess) throw new InvalidOperationException(fineResult.ErrorMessage);
         nds.Add(new IfStatement(
-            new Ast.Nodes.Not(new Member(new Variable(resultVar), "IsSuccess")),
+            new Ast.Nodes.Not(new Member(resultVar, "IsSuccess")),
             new Block(new Node[] {
                 new ThrowStatement(
                     new New(
                         new NamedTypeReference("InvalidOperationException"),
-                        new Member(new Variable(resultVar), "ErrorMessage")))
+                        new Member(resultVar, "ErrorMessage")))
             })));
 
-        // var fine = fineResult.Value;
-        nds.Add(new Variable(targetName,
-            new Member(new Variable(resultVar), "Value")));
+        nds.Add(new Assignment(targetVar, new Member(resultVar, "Value")));
 
         // Bound initializers for non-constructor props are applied as post-create
         // assignments. Defaulted props are NOT ctor params here, but their overrides
@@ -528,11 +531,11 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
             if (targetProp is null) continue;
             if (targetProp.Constraints.Any(c => c is DefaultValueConstraint)) continue;
             nds.Add(new Assignment(
-                new Member(new Variable(targetName), targetProp.Name),
+                new Member(targetVar, targetProp.Name),
                 LowerEnumAwareValue(init.Expression, targetProp.Type, Subject)));
         }
 
-        return new Block(nds);
+        return new Block(nds, [resultVar, targetVar]);
     }
 
     /// <summary>
@@ -601,13 +604,12 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         // so positional order matches the signature. When none are bound, omit (C# default).
         AppendDefaultedPropArgs(args, initMap, targetEntity);
 
-        var localName = DomainToCSharpExporter.ToCamelCase(targetEntity.Name);
+        var local = new Variable(DomainToCSharpExporter.ToCamelCase(targetEntity.Name));
         var blockNodes = new List<Node> {
-            new Variable(localName,
-                new Invoke(new Member(Subject, methodName), [.. args]))
+            new Assignment(local, new Invoke(new Member(Subject, methodName), [.. args]))
         };
 
-        return new Block(blockNodes);
+        return new Block(blockNodes, [local]);
     }
 
     // ── Runtime default expression helpers ─────────────────

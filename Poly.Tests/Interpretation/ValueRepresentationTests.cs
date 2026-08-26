@@ -229,13 +229,23 @@ public class ValueRepresentationTests {
     }
 
     [Test]
-    public async Task Lambda_Node_IsHeapRefAndResolvedObject() {
+    public async Task Lambda_Node_IsHeapRefFunctionTypeNotBodyType() {
         var lambda = new Lambda([], new Constant(true));
         var result = AnalyzerWithPass.Analyze(lambda);
         var meta = result.GetMetadata<ValueRepresentationMetadata>(lambda);
         await Assert.That(meta).IsNotNull();
         await Assert.That(meta!.Kind).IsEqualTo(ValueRepresentationKind.HeapRef);
-        await Assert.That(result.GetResolvedType(lambda)!.GetRuntimeType()).IsEqualTo(typeof(object));
+        await Assert.That(meta.ClrType).IsEqualTo(typeof(Func<bool>));
+        await Assert.That(result.GetResolvedType(lambda)!.GetRuntimeType()).IsEqualTo(typeof(Func<bool>));
+    }
+
+    [Test]
+    public async Task Lambda_WithParameter_IsFuncOfParamAndYield() {
+        var x = new Parameter("x", TypeReference.To<long>());
+        var lambda = new Lambda([x], new Add(x, new Constant(1L)));
+        var result = AnalyzerWithPass.Analyze(lambda);
+        await Assert.That(result.GetResolvedType(lambda)!.GetRuntimeType())
+            .IsEqualTo(typeof(Func<long, long>));
     }
 
     [Test]

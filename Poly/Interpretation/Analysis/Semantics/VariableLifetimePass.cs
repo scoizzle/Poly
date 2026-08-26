@@ -78,32 +78,17 @@ internal sealed class ScopeValidator : INodeAnalyzer {
                 break;
 
             case Variable variable:
-                if (variable.Initializer is not null
-                    && !state.Meta.VariableDeclarationScope.ContainsKey(variable)) {
-                    if (state.ScopeStack.Count > 0)
-                        RegisterVariable(context, state, variable, state.ScopeStack[^1]);
-                    else {
-                        RegisterScopedVariable(context, state, variable);
-                        state.Meta.VariableDeclarationScope[variable] = variable;
-                    }
-                }
-                else {
-                    ValidateVariableReference(context, state, variable);
-                }
+                ValidateVariableReference(context, state, variable);
                 AnalyzeChildrenWithState(context, state, node);
                 break;
 
             case Assignment assignment when assignment.Destination is Variable v:
-                if (!state.VariablesByName.TryGetValue(v.Name, out var stack) || stack.Count == 0)
-                    RegisterScopedVariable(context, state, v);
-                else
-                    ValidateVariableReference(context, state, v);
+                AnalyzeChildrenWithState(context, state, node);
                 if (state.VariablesByName.TryGetValue(v.Name, out var countStack) && countStack.Count > 0) {
                     var decl = countStack.Peek();
                     state.Meta.AssignmentCount.TryGetValue(decl, out var count);
                     state.Meta.AssignmentCount[decl] = count + 1;
                 }
-                AnalyzeChildrenWithState(context, state, node);
                 break;
 
             case Invoke invoke:

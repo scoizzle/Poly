@@ -3,8 +3,8 @@ namespace Poly.Interpretation.Analysis;
 /// <summary>
 /// Walks each <see cref="Lambda"/> and records free <see cref="Variable"/> /
 /// <see cref="Parameter"/> bindings in tree-walk order. A <see cref="Variable"/>
-/// with a sticky <c>Initializer</c> is a local only when declared by the lambda
-/// (block variables or a declare-init statement), not when used as a capture.
+/// is a local only when declared by the lambda (<see cref="Block.Variables"/> or
+/// a foreach loop variable), not when used as a capture.
 /// </summary>
 internal static class LambdaCaptureCollector {
     public static void Attach(AnalysisContext context, Node root, VariableAnalysisMetadata meta) {
@@ -48,10 +48,6 @@ internal static class LambdaCaptureCollector {
             foreach (var v in block.Variables) {
                 if (v is Variable variable)
                     declared.Add(variable);
-            }
-            foreach (var stmt in block.Nodes) {
-                if (stmt is Variable declaredVar && declaredVar.Initializer is not null)
-                    declared.Add(declaredVar);
             }
         }
         if (node is ForEachLoop fe)

@@ -126,8 +126,9 @@ public class ControlFlowAnalysisTests {
     [Test]
     public async Task ForLoop_HasProperStructure() {
         // Arrange: for loop with all components
-        var init = new Variable("i", Wrap(0));
-        var condition = new Variable("i");
+        var i = new Variable("i");
+        var init = new Assignment(i, Wrap(0));
+        var condition = i;
         var increment = Wrap(1);
         var body = Wrap(2);
 

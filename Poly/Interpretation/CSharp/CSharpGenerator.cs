@@ -10,6 +10,8 @@ namespace Poly.Interpretation.CSharp;
 /// pattern matching) and is formatted with standard indentation.</remarks>
 public sealed class CSharpGenerator {
     private readonly AnalysisResult? _analysisResult;
+    private readonly Stack<HashSet<string>> _declScopes = new();
+    private bool _fuseUndeclaredName;
 
     /// <summary>Creates a generator without analysis metadata. Some type-aware
     /// features (e.g. resolved member names) may be unavailable.</summary>
@@ -30,9 +32,11 @@ public sealed class CSharpGenerator {
     /// <returns>Formatted C# source code.</returns>
     public string Generate(Node node) {
         ArgumentNullException.ThrowIfNull(node);
-        var sb = new StringBuilder();
-        WriteStatement(sb, node, 0);
-        return sb.ToString().TrimEnd();
+        return WithDeclScope(() => {
+            var sb = new StringBuilder();
+            WriteStatement(sb, node, 0);
+            return sb.ToString().TrimEnd();
+        });
     }
 
     /// <summary>Generates C# source code for a complete compilation unit.</summary>
@@ -40,34 +44,37 @@ public sealed class CSharpGenerator {
     /// <returns>Formatted C# source code.</returns>
     public string Generate(CompilationUnitNode unit) {
         ArgumentNullException.ThrowIfNull(unit);
-        var sb = new StringBuilder();
-        sb.AppendLine("#nullable enable");
-        sb.AppendLine();
-        foreach (var usingNs in unit.Usings) {
-            sb.Append("using ");
-            sb.Append(usingNs);
-            sb.AppendLine(";");
-        }
-        sb.AppendLine();
-        if (unit.Namespace != null) {
-            sb.Append("namespace ");
-            sb.Append(unit.Namespace);
-            sb.AppendLine(";");
+        return WithDeclScope(() => {
+            var sb = new StringBuilder();
+            sb.AppendLine("#nullable enable");
             sb.AppendLine();
-        }
-        // Emit top-level statements BEFORE type definitions (C# top-level statement order)
-        if (unit.TopLevelStatements != null) {
-            foreach (var stmt in unit.TopLevelStatements) {
-                WriteStatement(sb, stmt, 0);
-                sb.AppendLine();
+            foreach (var usingNs in unit.Usings) {
+                sb.Append("using ");
+                sb.Append(usingNs);
+                sb.AppendLine(";");
             }
             sb.AppendLine();
-        }
-        foreach (var typeDef in unit.Types) {
-            WriteStatement(sb, typeDef, 0);
-            sb.AppendLine();
-        }
-        return sb.ToString().TrimEnd();
+            if (unit.Namespace != null) {
+                sb.Append("namespace ");
+                sb.Append(unit.Namespace);
+                sb.AppendLine(";");
+                sb.AppendLine();
+            }
+            if (unit.TopLevelStatements != null) {
+                _fuseUndeclaredName = true;
+                foreach (var stmt in unit.TopLevelStatements) {
+                    WriteStatement(sb, stmt, 0);
+                    sb.AppendLine();
+                }
+                _fuseUndeclaredName = false;
+                sb.AppendLine();
+            }
+            foreach (var typeDef in unit.Types) {
+                WriteStatement(sb, typeDef, 0);
+                sb.AppendLine();
+            }
+            return sb.ToString().TrimEnd();
+        });
     }
 
     /// <summary>Generates C# source code for a collection of type definitions.</summary>
@@ -85,23 +92,49 @@ public sealed class CSharpGenerator {
     /// <returns>Formatted C# source code.</returns>
     public string Generate(IReadOnlyList<TypeDefinitionNode> typeDefs, IReadOnlyList<Node>? testStatements) {
         ArgumentNullException.ThrowIfNull(typeDefs);
-        var sb = new StringBuilder();
-        sb.AppendLine("#nullable enable");
-        sb.AppendLine("using System;");
-        sb.AppendLine("using System.Collections.Generic;");
-        sb.AppendLine();
-        if (testStatements is not null) {
-            foreach (var stmt in testStatements) {
-                WriteStatement(sb, stmt, 0);
+        return WithDeclScope(() => {
+            var sb = new StringBuilder();
+            sb.AppendLine("#nullable enable");
+            sb.AppendLine("using System;");
+            sb.AppendLine("using System.Collections.Generic;");
+            sb.AppendLine();
+            if (testStatements is not null) {
+                _fuseUndeclaredName = true;
+                foreach (var stmt in testStatements) {
+                    WriteStatement(sb, stmt, 0);
+                    sb.AppendLine();
+                }
+                _fuseUndeclaredName = false;
                 sb.AppendLine();
             }
-            sb.AppendLine();
+            foreach (var typeDef in typeDefs) {
+                WriteStatement(sb, typeDef, 0);
+                sb.AppendLine();
+            }
+            return sb.ToString().TrimEnd();
+        });
+    }
+
+    private string WithDeclScope(Func<string> generate) {
+        _declScopes.Clear();
+        _fuseUndeclaredName = false;
+        _declScopes.Push(new HashSet<string>(StringComparer.Ordinal));
+        try {
+            return generate();
         }
-        foreach (var typeDef in typeDefs) {
-            WriteStatement(sb, typeDef, 0);
-            sb.AppendLine();
+        finally {
+            _declScopes.Clear();
+            _fuseUndeclaredName = false;
         }
-        return sb.ToString().TrimEnd();
+    }
+
+    private bool DeclaredHere(string name) =>
+        _declScopes.Count > 0 && _declScopes.Peek().Contains(name);
+
+    private void MarkDeclared(string name) {
+        if (_declScopes.Count == 0)
+            _declScopes.Push(new HashSet<string>(StringComparer.Ordinal));
+        _declScopes.Peek().Add(name);
     }
 
     private static void WriteDefaultValue(StringBuilder sb, Node? typeRef) {
@@ -143,6 +176,11 @@ public sealed class CSharpGenerator {
                 return;
             case FieldDefinitionNode field:
                 WriteFieldDefinition(sb, field, indent);
+                return;
+            case Assignment assign:
+                Indent(sb, indent);
+                WriteAssignment(sb, assign);
+                sb.AppendLine(";");
                 return;
             case Block block:
                 WriteBlock(sb, block, indent);
@@ -210,12 +248,7 @@ public sealed class CSharpGenerator {
                 return;
             case Variable variable:
                 Indent(sb, indent);
-                sb.Append("var ");
-                sb.Append(variable.Name);
-                if (variable.Initializer != null) {
-                    sb.Append(" = ");
-                    WriteExpression(sb, variable.Initializer);
-                }
+                WriteExpression(sb, variable);
                 sb.AppendLine(";");
                 return;
             case Comment c:
@@ -237,17 +270,178 @@ public sealed class CSharpGenerator {
             return;
         }
         sb.AppendLine("{");
+        _declScopes.Push(new HashSet<string>(StringComparer.Ordinal));
+        var fuse = new HashSet<Variable>(ReferenceEqualityComparer.Instance);
         foreach (var v in block.Variables) {
-            WriteStatement(sb, v, indent + 1);
+            if (v is not Variable variable)
+                continue;
+            int assignIndex = -1;
+            for (int i = 0; i < block.Nodes.Count; i++) {
+                if (block.Nodes[i] is Assignment a && ReferenceEquals(a.Destination, variable)) {
+                    assignIndex = i;
+                    break;
+                }
+            }
+            if (assignIndex >= 0 && !MentionsVariableBefore(block, variable, assignIndex))
+                fuse.Add(variable);
+            else {
+                Indent(sb, indent + 1);
+                WriteDeclaredLocal(sb, variable, block);
+            }
         }
         for (int i = 0; i < block.Nodes.Count; i++) {
             var node = block.Nodes[i];
-            if (i == block.Nodes.Count - 1 || _analysisResult == null || !_analysisResult.CanElide(node)) {
-                WriteStatement(sb, node, indent + 1);
+            if (i != block.Nodes.Count - 1 && _analysisResult != null && _analysisResult.CanElide(node))
+                continue;
+            if (node is Assignment a
+                && a.Destination is Variable dest
+                && fuse.Remove(dest)
+                && !MentionsVariableBefore(block, dest, i)) {
+                Indent(sb, indent + 1);
+                sb.Append("var ");
+                sb.Append(dest.Name);
+                sb.Append(" = ");
+                WriteExpression(sb, a.Value);
+                sb.AppendLine(";");
+                MarkDeclared(dest.Name);
+                continue;
             }
+            WriteStatement(sb, node, indent + 1);
         }
+        _declScopes.Pop();
         Indent(sb, indent);
         sb.AppendLine("}");
+    }
+
+    private void WriteAssignment(StringBuilder sb, Assignment assign) {
+        if (assign.Destination is Variable dest
+            && _fuseUndeclaredName
+            && !DeclaredHere(dest.Name)) {
+            sb.Append("var ");
+            sb.Append(dest.Name);
+            MarkDeclared(dest.Name);
+        }
+        else {
+            WriteExpression(sb, assign.Destination);
+        }
+        sb.Append(" = ");
+        WriteExpression(sb, assign.Value);
+    }
+
+    private static bool MentionsVariableBefore(Block block, Variable variable, int exclusiveEnd) {
+        for (int i = 0; i < exclusiveEnd; i++) {
+            if (MentionsVariable(block.Nodes[i], variable))
+                return true;
+        }
+        return false;
+    }
+
+    private static bool MentionsVariable(Node node, Variable variable) {
+        if (ReferenceEquals(node, variable))
+            return true;
+        if (node is Assignment a && ReferenceEquals(a.Destination, variable))
+            return true;
+        foreach (var child in node.Children) {
+            if (child is not null && MentionsVariable(child, variable))
+                return true;
+        }
+        return false;
+    }
+
+    private void WriteDeclaredLocal(StringBuilder sb, Variable variable, Block block) {
+        var typeName = TypeNameForVariable(variable, block);
+        sb.Append("var ");
+        sb.Append(variable.Name);
+        sb.Append(" = default(");
+        sb.Append(typeName);
+        sb.AppendLine(");");
+        MarkDeclared(variable.Name);
+    }
+
+    private string TypeNameForVariable(Variable variable, Block block) {
+        var td = _analysisResult?.GetResolvedType(variable);
+        if (td is not null) {
+            var runtime = td.GetRuntimeType();
+            if (runtime is not null)
+                return ToCSharpTypeName(runtime);
+            if (td.PrimitiveType is { } prim)
+                return prim.GetCSharpKeyword();
+            if (!string.IsNullOrEmpty(td.Name))
+                return td.Name.Replace('`', '_');
+        }
+        var inferred = InferTypeNameFromFirstAssignment(block, variable);
+        return inferred ?? "object";
+    }
+
+    private static string? InferTypeNameFromFirstAssignment(Node node, Variable variable) {
+        if (node is Assignment a && ReferenceEquals(a.Destination, variable))
+            return InferTypeNameFromValue(a.Value);
+        foreach (var child in node.Children) {
+            if (child is null)
+                continue;
+            var inferred = InferTypeNameFromFirstAssignment(child, variable);
+            if (inferred is not null)
+                return inferred;
+        }
+        return null;
+    }
+
+    private static string? InferTypeNameFromValue(Node value) => value switch {
+        Constant { Value: not null } c => ToCSharpTypeName(c.Value.GetType()),
+        New n => TypeRefName(n.Type),
+        NewArray arr => (TypeRefName(arr.ElementType) ?? "object") + "[]",
+        TypeCast tc => TypeRefName(tc.TargetTypeReference),
+        TypeAs ta => TypeRefName(ta.TargetTypeReference),
+        _ => null
+    };
+
+    private static string? TypeRefName(Node? type) => type switch {
+        PrimitiveTypeReference p => p.PrimitiveId.GetCSharpKeyword() + (p.IsNullable ? "?" : ""),
+        NamedTypeReference n when n.TypeArguments is { Count: > 0 } args =>
+            n.TypeName + "<" + string.Join(", ", args.Select(a => TypeRefName(a) ?? "object")) + ">",
+        NamedTypeReference n => n.TypeName,
+        TypeReference t => t.TypeName,
+        OptionalTypeReference o => (TypeRefName(o.InnerType) ?? "object") + "?",
+        CollectionTypeReference { Kind: CollectionKind.Array } c =>
+            (TypeRefName(c.ElementType) ?? "object") + "[]",
+        CollectionTypeReference c =>
+            (c.Kind == CollectionKind.Set ? "ISet<" : "List<")
+            + (TypeRefName(c.ElementType) ?? "object") + ">",
+        _ => null
+    };
+
+    private static string ToCSharpTypeName(Type type) {
+        if (type.IsArray) {
+            var elem = type.GetElementType();
+            return elem is null ? "object[]" : $"{ToCSharpTypeName(elem)}[]";
+        }
+        var nullable = Nullable.GetUnderlyingType(type);
+        if (nullable is not null)
+            return $"{ToCSharpTypeName(nullable)}?";
+        if (type.IsGenericType) {
+            var raw = type.Name;
+            var tick = raw.IndexOf('`');
+            var head = tick >= 0 ? raw[..tick] : raw;
+            var args = type.GetGenericArguments().Select(ToCSharpTypeName);
+            return $"{head}<{string.Join(", ", args)}>";
+        }
+        return Type.GetTypeCode(type) switch {
+            TypeCode.Boolean => "bool",
+            TypeCode.Byte => "byte",
+            TypeCode.SByte => "sbyte",
+            TypeCode.Int16 => "short",
+            TypeCode.UInt16 => "ushort",
+            TypeCode.Int32 => "int",
+            TypeCode.UInt32 => "uint",
+            TypeCode.Int64 => "long",
+            TypeCode.UInt64 => "ulong",
+            TypeCode.Single => "float",
+            TypeCode.Double => "double",
+            TypeCode.Decimal => "decimal",
+            TypeCode.Char => "char",
+            TypeCode.String => "string",
+            _ => type.Name
+        };
     }
 
     private void WriteIfStatement(StringBuilder sb, IfStatement ifStmt, int indent) {
@@ -304,13 +498,13 @@ public sealed class CSharpGenerator {
         sb.Append("while (");
         WriteExpression(sb, whileLoop.Condition);
         sb.AppendLine(")");
-        WriteStatement(sb, whileLoop.Body, whileLoop.Body is Block ? indent : indent + 1);
+        WriteBracedBody(sb, whileLoop.Body, indent);
     }
 
     private void WriteDoWhileLoop(StringBuilder sb, DoWhileLoop doWhile, int indent) {
         Indent(sb, indent);
         sb.AppendLine("do");
-        WriteStatement(sb, doWhile.Body, doWhile.Body is Block ? indent : indent + 1);
+        WriteBracedBody(sb, doWhile.Body, indent);
         Indent(sb, indent);
         sb.Append("while (");
         WriteExpression(sb, doWhile.Condition);
@@ -332,7 +526,7 @@ public sealed class CSharpGenerator {
             WriteExpression(sb, forLoop.Increment);
         }
         sb.AppendLine(")");
-        WriteStatement(sb, forLoop.Body, forLoop.Body is Block ? indent : indent + 1);
+        WriteBracedBody(sb, forLoop.Body, indent);
     }
 
     private void WriteForEachLoop(StringBuilder sb, ForEachLoop forEach, int indent) {
@@ -342,7 +536,7 @@ public sealed class CSharpGenerator {
         sb.Append(" in ");
         WriteExpression(sb, forEach.Collection);
         sb.AppendLine(")");
-        WriteStatement(sb, forEach.Body, forEach.Body is Block ? indent : indent + 1);
+        WriteBracedBody(sb, forEach.Body, indent);
     }
 
     private void WriteSwitchStatement(StringBuilder sb, SwitchStatement switchStmt, int indent) {
@@ -413,11 +607,12 @@ public sealed class CSharpGenerator {
     private void WriteUsingStatement(StringBuilder sb, UsingStatement usingStmt, int indent) {
         Indent(sb, indent);
         sb.Append("using (");
-        if (usingStmt.Resource is Variable v && v.Initializer != null) {
+        if (usingStmt.Resource is Assignment { Destination: Variable v } a) {
             sb.Append("var ");
             sb.Append(v.Name);
+            MarkDeclared(v.Name);
             sb.Append(" = ");
-            WriteExpression(sb, v.Initializer);
+            WriteExpression(sb, a.Value);
         }
         else {
             WriteExpression(sb, usingStmt.Resource);
@@ -932,9 +1127,7 @@ public sealed class CSharpGenerator {
                 sb.Append(')');
                 return;
             case Assignment assign:
-                WriteExpression(sb, assign.Destination);
-                sb.Append(" = ");
-                WriteExpression(sb, assign.Value);
+                WriteAssignment(sb, assign);
                 return;
             case Member member:
                 if (member.Value is ParameterReference) {
@@ -1001,21 +1194,7 @@ public sealed class CSharpGenerator {
                 WriteLambda(sb, lambda);
                 return;
             case Block block:
-                sb.Append('{');
-                if (block.Nodes.Count == 0 && block.Variables.Count == 0) {
-                    sb.Append(' ');
-                }
-                else {
-                    for (int i = 0; i < block.Nodes.Count; i++) {
-                        var n = block.Nodes[i];
-                        if (i == block.Nodes.Count - 1 || _analysisResult == null || !_analysisResult.CanElide(n)) {
-                            sb.Append(' ');
-                            WriteStatement(sb, n, 0);
-                        }
-                    }
-                    sb.Append(' ');
-                }
-                sb.Append('}');
+                WriteBlock(sb, block, 0);
                 return;
             case BitwiseAnd bitwiseAnd:
                 WriteBinary(sb, bitwiseAnd.LeftHandValue, " & ", bitwiseAnd.RightHandValue);

@@ -464,8 +464,11 @@ public class InterpreterLanguageGotchaTests {
 
     [Test]
     public async Task IndexAccess_OutOfRange_Throws() {
-        var arr = new Variable("arr", new Constant(new long[] { 10, 20 }));
-        var node = new Block(arr, new IndexAccess(arr, new Constant(9L)));
+        var arr = new Variable("arr");
+        var node = new Block([
+            new Assignment(arr, new Constant(new long[] { 10, 20 })),
+            new IndexAccess(arr, new Constant(9L))
+        ], [arr]);
         await Assert.That(() => {
             using var exec = Interpreter.Execute(Interpreter.Compile(node));
         }).Throws<IndexOutOfRangeException>();

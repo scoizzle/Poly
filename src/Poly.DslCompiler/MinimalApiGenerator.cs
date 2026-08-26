@@ -105,6 +105,20 @@ public sealed class MinimalApiGenerator {
     private readonly string BuilderVar = "builder";
     private readonly string AppVar = "app";
 
+    private static Assignment Init(string name, Node value) =>
+        new(new Variable(name), value);
+
+    private static Block Stmts(IEnumerable<Node> nodes) {
+        var list = nodes as IList<Node> ?? nodes.ToList();
+        var locals = new List<Node>();
+        var seen = new HashSet<Variable>(ReferenceEqualityComparer.Instance);
+        foreach (var n in list) {
+            if (n is Assignment { Destination: Variable v } && seen.Add(v))
+                locals.Add(v);
+        }
+        return new Block(list, locals);
+    }
+
     private static string Pluralize(string name) => name + "s";
     private static string ToCamelCase(string name) => DomainTypeMapping.ToCamelCase(name);
     private static string Pascalize(string name) => DomainTypeMapping.ToPascalCase(name);
@@ -158,7 +172,7 @@ public sealed class MinimalApiGenerator {
         var topLevelStatements = new List<Node>();
 
         // ── Builder setup (Issue 9: CreateBuilder(args) not args.Clone) ──
-        topLevelStatements.Add(new Variable(BuilderVar,
+        topLevelStatements.Add(Init(BuilderVar,
             new Invoke(new Member(new TypeReference("WebApplication"), "CreateBuilder"),
                 new Variable("args"))));
 
@@ -190,24 +204,19 @@ public sealed class MinimalApiGenerator {
         });
 
         // ── Build + seed ──
-        topLevelStatements.Add(new Variable(AppVar,
+        topLevelStatements.Add(Init(AppVar,
             new Invoke(new Member(new TypeReference(BuilderVar), "Build"))));
 
-        // Issue 10: using (var scope = app.Services.CreateScope()) { ... }
-        var scopeVar = new Variable("scope",
-            new Invoke(new Member(
-                new Member(new TypeReference(AppVar), "Services"),
-                "CreateScope")));
-        var dbVar = new Variable("db",
-            new Invoke(
-                new Member(
-                    new Member(new Variable("scope"), "ServiceProvider"),
-                    "GetRequiredService")) {
-                TypeArguments = [new TypeReference(dbContextName)]
-            });
-
-        // SQLite needs the schema created before seeding (matches demo).
-        var scopeBody = new List<Node> { dbVar };
+        var dbVar = new Variable("db");
+        var scopeBody = new List<Node> {
+            new Assignment(dbVar,
+                new Invoke(
+                    new Member(
+                        new Member(new Variable("scope"), "ServiceProvider"),
+                        "GetRequiredService")) {
+                    TypeArguments = [new TypeReference(dbContextName)]
+                })
+        };
         if (_dbms == DbmsPack.Sqlite) {
             scopeBody.Add(new Await(
                 new Invoke(
@@ -216,8 +225,12 @@ public sealed class MinimalApiGenerator {
                         "EnsureCreatedAsync"))));
         }
         scopeBody.Add(new Await(new Invoke(new Variable("SeedAsync"), new Variable("db"))));
-        topLevelStatements.Add(new UsingStatement(scopeVar,
-            new Block(scopeBody, Array.Empty<Node>())));
+        topLevelStatements.Add(new UsingStatement(
+            Init("scope",
+                new Invoke(new Member(
+                    new Member(new TypeReference(AppVar), "Services"),
+                    "CreateScope"))),
+            new Block(scopeBody, [dbVar])));
 
         // ── Endpoints ──
         foreach (var entity in _entities.Where(e => GetStorageEntity(e).IsRoot))
@@ -358,7 +371,7 @@ public sealed class MinimalApiGenerator {
         var bodyNodes = new List<Node>();
 
         // var result = Entity.Create(...)
-        bodyNodes.Add(new Variable(resultVarName,
+        bodyNodes.Add(Init(resultVarName,
             new Invoke(new Member(new TypeReference(entity.Name), "Create"), [.. createArgs])));
 
         // if (!result.IsSuccess) return Results.Conflict(new { error = result.ErrorMessage });
@@ -411,7 +424,7 @@ public sealed class MinimalApiGenerator {
             new Member(new TypeReference(AppVar), "MapPost"),
             new Constant(route),
             new Lambda([dtoParam, dbParam],
-                new Block(expressions: bodyNodes, variables: Array.Empty<Node>()))));
+                Stmts(bodyNodes))));
     }
 
     /// <summary>Builds Syntax IR for child entity list/detail endpoints (matching string oracle).</summary>
@@ -446,8 +459,8 @@ public sealed class MinimalApiGenerator {
             new Member(new TypeReference(AppVar), "MapGet"),
             new Constant(listRoute),
             new Lambda([parentKeyP, dbP],
-                new Block(expressions: new Node[] {
-                    new Variable("parent",
+                Stmts([
+                    Init("parent",
                         new Await(new Invoke(
                             new Member(new Member(new TypeReference("db"), pluralParent), "FindAsync"),
                             new Variable(parentKey)))),
@@ -457,7 +470,7 @@ public sealed class MinimalApiGenerator {
                     new Await(new Invoke(new Member(collCall, "LoadAsync"))),
                     new Return(new Invoke(new Member(new TypeReference("Results"), "Ok"),
                         new Member(new Variable("parent"), pascalRel)))
-                }, variables: Array.Empty<Node>()))));
+                ]))));
 
         if (!isCollection)
             return;
@@ -470,7 +483,7 @@ public sealed class MinimalApiGenerator {
 
         if (childKeyPropName != null && backRefName != null && parentKeyPropName != null) {
             var eParam2 = new Parameter("e");
-            detailBody.Add(new Variable("child",
+            detailBody.Add(Init("child",
                 new Await(
                     new Invoke(
                         new Member(
@@ -493,7 +506,7 @@ public sealed class MinimalApiGenerator {
                                 new Variable(childKeyParam)))))));
         }
         else {
-            detailBody.Add(new Variable("parent",
+            detailBody.Add(Init("parent",
                 new Await(new Invoke(
                     new Member(new Member(new TypeReference("db"), pluralParent), "FindAsync"),
                     new Variable(parentKey)))));
@@ -506,7 +519,7 @@ public sealed class MinimalApiGenerator {
                     "Collection"),
                 new Lambda([colParam], new Member(colParam, pascalRel)));
             detailBody.Add(new Await(new Invoke(new Member(detailCollCall, "LoadAsync"))));
-            detailBody.Add(new Variable("child",
+            detailBody.Add(Init("child",
                 new Invoke(new Member(new Member(new Variable("parent"), pascalRel), "FirstOrDefault"))));
         }
         detailBody.Add(new IfStatement(new Equal(new Variable("child"), new Constant(null!)),
@@ -518,7 +531,7 @@ public sealed class MinimalApiGenerator {
             new Member(new TypeReference(AppVar), "MapGet"),
             new Constant(detailRoute),
             new Lambda([parentKeyP, childKeyP, dbP],
-                new Block(expressions: detailBody, variables: Array.Empty<Node>()))));
+                Stmts(detailBody))));
     }
 
     /// <summary>Builds Syntax IR for action endpoints with try/catch, result switch, and entity-ref lookups.</summary>
@@ -554,12 +567,12 @@ public sealed class MinimalApiGenerator {
                 actionParams.Add(new Parameter("db", new TypeReference(dbContextName)));
 
                 // Parent + entity lookup + membership check
-                preActionNodes.Add(new Variable("parentEntity",
+                preActionNodes.Add(Init("parentEntity",
                     new Await(new Invoke(new Member(new Member(new TypeReference("db"), Pluralize(pEntity.Name)), "FindAsync"), new Variable(pKeyName)))));
                 preActionNodes.Add(new IfStatement(new Equal(new Variable("parentEntity"), new Constant(null!)),
                     new Block(new Return(new Invoke(new Member(new TypeReference("Results"), "NotFound"), new Constant($"{pEntity.Name} not found"))))));
                 if (isCollection) {
-                    preActionNodes.Add(new Variable("entity",
+                    preActionNodes.Add(Init("entity",
                         new Await(new Invoke(new Member(new Member(new TypeReference("db"), pluralName), "FindAsync"), new Variable(childKeyParam)))));
                     preActionNodes.Add(new IfStatement(new Equal(new Variable("entity"), new Constant(null!)),
                         new Block(new Return(new Invoke(new Member(new TypeReference("Results"), "NotFound"), new Constant($"{entity.Name} not found"))))));
@@ -577,7 +590,7 @@ public sealed class MinimalApiGenerator {
                     var parEntry = new Invoke(new Member(new TypeReference("db"), "Entry"), new Variable("parentEntity"));
                     var parRef = new Invoke(new Member(parEntry, "Reference"), new Lambda([new Parameter("e")], new Member(new Variable("e"), pascalRel)));
                     preActionNodes.Add(new Await(new Invoke(new Member(parRef, "LoadAsync"))));
-                    preActionNodes.Add(new Variable("entity", new Member(new Variable("parentEntity"), pascalRel)));
+                    preActionNodes.Add(Init("entity", new Member(new Variable("parentEntity"), pascalRel)));
                     preActionNodes.Add(new IfStatement(new Equal(new Variable("entity"), new Constant(null!)),
                         new Block(new Return(new Invoke(new Member(new TypeReference("Results"), "NotFound"), new Constant($"{entity.Name} not found"))))));
                 }
@@ -590,7 +603,7 @@ public sealed class MinimalApiGenerator {
                     actionParams.Add(new Parameter("dto", new TypeReference($"{Pascalize(ia.Name)}Dto")));
                 actionParams.Add(new Parameter("db", new TypeReference(dbContextName)));
 
-                preActionNodes.Add(new Variable("entity",
+                preActionNodes.Add(Init("entity",
                     new Await(new Invoke(new Member(new Member(new TypeReference("db"), pluralName), "FindAsync"), new Variable(keyName)))));
                 preActionNodes.Add(new IfStatement(new Equal(new Variable("entity"), new Constant(null!)),
                     new Block(new Return(new Invoke(new Member(new TypeReference("Results"), "NotFound"), new Constant($"{entity.Name} not found"))))));
@@ -609,7 +622,7 @@ public sealed class MinimalApiGenerator {
             foreach (var param in ia.Parameters) {
                 if (param.IsEntityRef) {
                     var lv = ToCamelCase(param.DomainType);
-                    tryBody.Add(new Variable(lv, new Await(new Invoke(
+                    tryBody.Add(Init(lv, new Await(new Invoke(
                         new Member(new Member(new TypeReference("db"), Pluralize(param.DomainType)), "FindAsync"),
                         new Member(new Variable("dto"), $"{param.Name}Id")))));
                     tryBody.Add(new IfStatement(new Equal(new Variable(lv), new Constant(null!)),
@@ -618,7 +631,7 @@ public sealed class MinimalApiGenerator {
                 }
                 else invokeArgs.Add(new Member(new Variable("dto"), param.Name));
             }
-            tryBody.Add(new Variable("result",
+            tryBody.Add(Init("result",
                 invokeArgs.Count > 0
                     ? new Invoke(new Member(new Variable("entity"), ia.Name), [.. invokeArgs])
                     : new Invoke(new Member(new Variable("entity"), ia.Name))));
@@ -645,14 +658,14 @@ public sealed class MinimalApiGenerator {
 
             var bodyNodes = new List<Node>(preActionNodes);
             bodyNodes.Add(new TryCatchFinally(
-                new Block(expressions: tryBody, variables: Array.Empty<Node>()),
+                Stmts(tryBody),
                 CatchClauses: [new CatchClause(new NamedTypeReference("Exception"), null, catchBody)]));
 
             statements.Add(new Invoke(
                 new Member(new TypeReference(AppVar), "MapPost"),
                 new Constant(actionRoute),
                 new Lambda([.. actionParams],
-                    new Block(expressions: bodyNodes, variables: Array.Empty<Node>()))));
+                    Stmts(bodyNodes))));
         }
     }
 
@@ -969,7 +982,7 @@ public sealed class MinimalApiGenerator {
                 }
 
                 var dtoVar = ToCamelCase(entity.Name);
-                bodyNodes.Add(new Variable($"{dtoVar}Result",
+                bodyNodes.Add(Init($"{dtoVar}Result",
                     new Invoke(new Member(new TypeReference(entity.Name), "Create"), [.. createArgs])));
                 bodyNodes.Add(new IfStatement(
                     new Member(new Variable($"{dtoVar}Result"), "IsSuccess"),
@@ -986,7 +999,7 @@ public sealed class MinimalApiGenerator {
             "SeedAsync",
             new TypeReference("Task"),
             Parameters: [new Parameter("db", new TypeReference(dbContextName))],
-            Body: new Block(bodyNodes, []),
+            Body: Stmts(bodyNodes),
             IsStatic: true,
             IsAsync: true
         ));

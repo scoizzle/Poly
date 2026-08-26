@@ -75,6 +75,11 @@ public static partial class DirectVmAbiEmitter {
                 return count;
             }
         }
+
+        /// <summary>Monotonic frame slot high-water. Debug-hook spans must cover this,
+        /// not live <see cref="CurrentLocalCount"/>, because sequential inner blocks
+        /// reuse neither slot 0 nor a dense 0..live-1 prefix.</summary>
+        public int FrameSlotHighWater => _nextFrameSlot;
         public int StepCounter { get; set; }
 
         public LabelTarget RegisterOrGetResumeLabel(int step) {
@@ -172,6 +177,7 @@ public static partial class DirectVmAbiEmitter {
         private readonly Stack<Dictionary<Variable, int>> _scopeStack = new();
         private readonly Dictionary<Variable, int> _variableRegisters = new(ReferenceEqualityComparer.Instance);
         private readonly Stack<List<Variable>> _scopeVars = new();
+        private int _nextFrameSlot;
         private const int MaxRegisterCount = 32;
         private int _registerCount;
         private readonly List<ParameterExpression> _regVars;
@@ -228,7 +234,7 @@ public static partial class DirectVmAbiEmitter {
         public void DeclareVariable(Variable v) {
             if (_scopeStack.Count == 0)
                 throw new InvalidOperationException("No active scope");
-            int slot = _scopeStack.Peek().Count;
+            int slot = _nextFrameSlot++;
             _scopeStack.Peek()[v] = slot;
             int regIdx = -1;
             while (regIdx < 0) {

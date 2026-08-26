@@ -25,6 +25,7 @@ They do **not** represent current priorities, committed roadmap items, or active
 |-----|------|
 | [**domain-plugin-extension-platform.md**](domain-plugin-extension-platform.md) | Future research: C# extension packs for DSL facets (e.g. `column("…")`), analysis, target export — **not** active work |
 | [**isa-decompiler-agent-experiment.md**](isa-decompiler-agent-experiment.md) | Speculative: grammar-driven ISA lifting → Poly.Ast → analysis structuring → VM-executable decompilation for agents — **not** active work |
+| [**variable-assignment-union-types.md**](variable-assignment-union-types.md) | Mixed assigns fail closed on net10. Future: deduce a C# 15 / .NET 11 type union from the assignment set when that TFM is product — **not** `object`, not now |
 
 ## Related directories
 

@@ -18,14 +18,14 @@ Owning stream: Interpretation only.
 
 - [x] Stored closures late-bind: analysis records free bindings; emit shares a heap `long[1]` cell (inline `Invoke(Lambda)` and `Invoke(fn)` agree).
 - [x] Capture matrix: non-`long` ABI words, stored capture+args, stored parameter, loop/foreach last-value, re-invoke, declare-init, branch create.
-- [x] `Invoke(Variable)` / `Invoke(Parameter)` take the assigned lambda body's value kind. No `UpvalueCell` wrapper. Sticky `Initializer` is a capture when the name is already in scope. Debugger presents `cell[0]` for captured slots.
+- [x] `Invoke(Variable)` / `Invoke(Parameter)` take the assigned lambda body's value kind. No `UpvalueCell` wrapper. Debugger presents `cell[0]` for captured slots.
 - [x] `Assignment` / `Switch` / `TryCatchFinally` / valued `Return` value kinds on the **tested** siblings (root `Block`, immediate `Invoke(Lambda)`). See reopenings below.
 
 ## Open
 
-- Nested frame-slot aliasing (inner/outer `FrameOffset` 0) still open.
-- Declare-init as `Assignment` (~50 sites) parked.
-- Capture-analysis review F1–F9 closed (siblings listed in [`2026-08-25-interpretation-capture-analysis-followups.md`](./2026-08-25-interpretation-capture-analysis-followups.md)). Nested `FrameOffset` 0 and declare-init-as-`Assignment` remain parked.
+- [x] Nested frame-slot aliasing: `DeclareVariable` uses a monotonic frame slot, not `scope.Count` (inner/outer no longer share `FrameOffset` 0).
+- [x] Declare-init as `Assignment`: `Variable` is binding only; declare on `Block.Variables` / foreach; write is `Assignment`; C# `var x = e` is printer fusion.
+- Capture-analysis review F1–F9 closed (siblings listed in [`2026-08-25-interpretation-capture-analysis-followups.md`](./2026-08-25-interpretation-capture-analysis-followups.md)).
 
 ## Process
 

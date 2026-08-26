@@ -101,6 +101,7 @@ public sealed partial class DomainToCSharpExporter {
 
         // Collect all nodes: require guards first, then effects
         var nodes = new List<Node>();
+        var locals = new List<Node>();
 
         // Emit stage guard for stage-scoped actions.
         // Returns DomainResult[<T>].Failure("'CheckOut' requires stage 'Active' on entity 'Patron'.")
@@ -155,6 +156,7 @@ public sealed partial class DomainToCSharpExporter {
         // Append the effects body
         if (effectsBody is Block block) {
             nodes.AddRange(block.Nodes);
+            locals.AddRange(block.Variables);
         }
         else if (effectsBody is not null) {
             nodes.Add(effectsBody);
@@ -184,7 +186,13 @@ public sealed partial class DomainToCSharpExporter {
                 if (last is Return) {
                     // Already wrapped — leave as-is.
                 }
-                else if (last is Syntactic.Assignment or Syntactic.Invoke
+                else if (last is Syntactic.Assignment a) {
+                    nodes.Add(new Return(
+                        new Invoke(
+                            new Member(actionResultType, "Success"),
+                            [a.Destination])));
+                }
+                else if (last is Syntactic.Invoke
                          or Syntactic.Member or Syntactic.Constant
                          or Syntactic.New or Syntactic.UnaryMinus
                          or Syntactic.Not or Syntactic.Add or Syntactic.Subtract
@@ -193,13 +201,6 @@ public sealed partial class DomainToCSharpExporter {
                         new Invoke(
                             new Member(actionResultType, "Success"),
                             [last]));
-                }
-                else if (last is Variable { Initializer: not null } v) {
-                    // var x = expr → return DomainResult<T>.Success(expr)
-                    nodes[lastIdx] = new Return(
-                        new Invoke(
-                            new Member(actionResultType, "Success"),
-                            [v.Initializer]));
                 }
                 else {
                     // Non-returnable last node — structural error (still throw)
@@ -223,7 +224,7 @@ public sealed partial class DomainToCSharpExporter {
         }
 
         // Block is a sequence; an empty action body is an empty block.
-        return new Block(nodes);
+        return new Block(nodes, locals);
     }
 
     // ── Lowering helpers ────────────────────────────────────────
@@ -252,7 +253,7 @@ public sealed partial class DomainToCSharpExporter {
             new Member(new TypeReference($"{contract.Name}Adapters"), endpoint.Name),
             new Variable(binding.LocalParameterName));
         return effectsBody is Block block
-            ? new Block([call, .. block.Nodes])
+            ? new Block([call, .. block.Nodes], block.Variables)
             : new Block([call]);
     }
 

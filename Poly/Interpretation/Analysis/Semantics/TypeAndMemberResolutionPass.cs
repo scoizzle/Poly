@@ -25,8 +25,7 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
             Constant c => context.TypeDefinitions.GetTypeDefinition(c.Value?.GetType() ?? typeof(object)),
             ThisReference @this => ResolveThisReferenceType(context, @this),
             Parameter p => ResolveParameterType(context, p),
-            Variable v => context.GetResolvedType(v)
-                ?? (v.Initializer is null ? null : ResolveNodeType(context, v.Initializer)),
+            Variable v => context.GetResolvedType(v),
             Add add => ResolveNumericArithmeticType(context, add.LeftHandValue, add.RightHandValue),
             Subtract sub => ResolveNumericArithmeticType(context, sub.LeftHandValue, sub.RightHandValue),
             Multiply mul => ResolveNumericArithmeticType(context, mul.LeftHandValue, mul.RightHandValue),
@@ -58,7 +57,7 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
             Block block => ResolveBlockType(context, block),
             Assignment assign => ResolveAssignmentType(context, assign),
             ForEachLoop foreachLoop => ResolveForEachLoopType(context, foreachLoop),
-            Lambda => context.TypeDefinitions.GetTypeDefinition(typeof(object)),
+            Lambda lambda => ResolveLambdaType(context, lambda),
             NullForgiving nf => ResolveNodeType(context, nf.Operand),
             IfStatement => null,
             BitwiseAnd ba => ResolveArithmeticType(context, ba.LeftHandValue, ba.RightHandValue),
@@ -287,6 +286,8 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
                 context.SetMetadata(variable, new StoredLambdaMetadata(assignedLambda));
             else if (context.GetMetadata<StoredLambdaMetadata>(assignment.Value) is { } produced)
                 context.SetMetadata(variable, produced);
+            else
+                context.Metadata.Remove<StoredLambdaMetadata>(variable);
         }
 
         return valueType;
@@ -310,11 +311,6 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
                         context.SetMetadata(v, produced);
                     break;
                 }
-            }
-            if (resolved == null && v.Initializer is not null) {
-                resolved = ResolveNodeType(context, v.Initializer);
-                if (v.Initializer is Lambda initLambda)
-                    context.SetMetadata(v, new StoredLambdaMetadata(initLambda));
             }
             if (resolved != null) {
                 context.SetResolvedType(v, resolved);
@@ -360,6 +356,40 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
         }
         return null;
     }
+
+    /// <summary>A <see cref="Lambda"/> produces a closure, not the body result.
+    /// Tag it as <c>Func&lt;…&gt;</c> / <c>Action&lt;…&gt;</c> from parameter types
+    /// plus the body's yield type (what <c>Invoke</c> of that value returns).</summary>
+    private static ITypeDefinition? ResolveLambdaType(AnalysisContext context, Lambda lambda) {
+        var paramClr = new Type[lambda.Parameters.Count];
+        for (int i = 0; i < paramClr.Length; i++) {
+            paramClr[i] = RuntimeTypeOf(context, lambda.Parameters[i]) ?? typeof(object);
+        }
+        var yieldType = ResolveYieldType(context, lambda.Body);
+        var yieldClr = yieldType?.GetRuntimeType();
+        Type delType;
+        try {
+            if (yieldClr is null || yieldClr == typeof(void)) {
+                delType = paramClr.Length == 0
+                    ? typeof(Action)
+                    : System.Linq.Expressions.Expression.GetActionType(paramClr);
+            }
+            else {
+                var funcArgs = new Type[paramClr.Length + 1];
+                paramClr.CopyTo(funcArgs, 0);
+                funcArgs[^1] = yieldClr;
+                delType = System.Linq.Expressions.Expression.GetFuncType(funcArgs);
+            }
+        }
+        catch (ArgumentException) {
+            return context.TypeDefinitions.GetTypeDefinition(typeof(object));
+        }
+        return context.TypeDefinitions.GetTypeDefinition(delType);
+    }
+
+    private static Type? RuntimeTypeOf(AnalysisContext context, Node node) =>
+        ResolveNodeType(context, node)?.GetRuntimeType()
+        ?? context.GetResolvedType(node)?.GetRuntimeType();
 
     private static ITypeDefinition? ResolveParameterType(AnalysisContext context, Parameter parameter) {
         if (parameter.TypeReference is not null) {

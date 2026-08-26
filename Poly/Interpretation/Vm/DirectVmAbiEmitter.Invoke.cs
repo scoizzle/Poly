@@ -515,7 +515,7 @@ public static partial class DirectVmAbiEmitter {
     private static Expression WithInterrupt(Expression body, AbiCtx ctx, int step) {
         if (ctx.DebugHookProp is null) return body;
 
-        int localCount = ctx.CurrentLocalCount;
+        int localCount = ctx.FrameSlotHighWater;
 
         // Build the hook invocation expression only when the hook is non-null.
         // Emit: if (state.DebugHook != null) { snapshot + invoke }

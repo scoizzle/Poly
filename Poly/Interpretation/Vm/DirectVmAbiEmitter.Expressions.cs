@@ -653,25 +653,11 @@ public static partial class DirectVmAbiEmitter {
     /// closure capture array (if this is a captured upvalue).
     /// Leaving the value on the ring for expression chaining.</summary>
     private static Expression EmitVariable(Variable v, AbiCtx ctx) {
-        // Capture wins over a sticky Initializer: the same Variable node is
-        // both declare-init in the outer frame and a free use in a lambda body.
         if (ctx.TryGetCapture(v, out int capIndex)) {
             int slot = ctx.AllocSlot();
             return Assign(ctx.RingVar(slot), EmitCaptureCellValue(ctx, capIndex));
         }
 
-        // Statement form `var x = expr` (C# generator prints a declaration).
-        // First encounter declares and writes; later reads ignore Value.
-        if (v.Initializer is not null && !ctx.IsDeclared(v)) {
-            ctx.DeclareVariable(v);
-            int d = ctx.RingDepth;
-            var init = CompileNode(v.Initializer, ctx);
-            int slot = ctx.RingDepth - 1;
-            var fold = FoldResultToSlot(ref slot, d, ctx);
-            Expression cellInit = ctx.NeedsCell(v) ? EmitUpvalueCellInit(v, ctx) : Empty();
-            return Block(init, fold, cellInit, ctx.VariableWrite(v, ctx.RingVar(slot)), ctx.RingVar(slot));
-        }
-        // Local variable on value stack — read via compile-time frame offset
         int slot2 = ctx.AllocSlot();
         return Assign(ctx.RingVar(slot2), ctx.VariableRead(v));
     }

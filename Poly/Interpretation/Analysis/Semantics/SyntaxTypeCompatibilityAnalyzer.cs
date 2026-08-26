@@ -79,8 +79,11 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
             case Or or:
                 CheckBooleanOperands(context, or.LeftHandValue, or.RightHandValue);
                 break;
-            case Assignment { Destination: Member dest } a:
-                CheckAssign(context, dest, a.Value);
+            case Assignment a:
+                if (a.Destination is Member dest)
+                    CheckAssign(context, dest, a.Value);
+                if (a.Destination is Variable v)
+                    CheckVariableAssign(context, v, a);
                 break;
             case Invoke inv:
                 CheckInvokeTarget(context, inv);
@@ -146,6 +149,50 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
             $"Invoke target must be a member, lambda, or stored closure, got {invoke.Delegate.GetType().Name}");
     }
 
+    private void CheckVariableAssign(AnalysisContext context, Variable variable, Assignment assignment) {
+        var rhsMeta = context.GetMetadata<ValueRepresentationMetadata>(assignment.Value);
+        if (rhsMeta is null || rhsMeta.Kind is ValueRepresentationKind.Unknown or ValueRepresentationKind.Void)
+            return;
+
+        var rhsType = rhsMeta.ClrType;
+        if (rhsType is not null && CategoryOf(rhsType) is Cat.Null)
+            return;
+
+        var prior = context.GetMetadata<VariableAssignedTypeMetadata>(variable);
+        if (prior is null) {
+            context.SetMetadata(variable, new VariableAssignedTypeMetadata(rhsType, rhsMeta.Kind));
+            return;
+        }
+
+        if (prior.Kind != rhsMeta.Kind) {
+            Report(context, assignment,
+                $"cannot assign '{TypeLabel(rhsType, rhsMeta.Kind)}' to variable '{variable.Name}' (incompatible with prior '{TypeLabel(prior.ClrType, prior.Kind)}')");
+            return;
+        }
+
+        if (prior.ClrType is null || rhsType is null || prior.ClrType == rhsType)
+            return;
+
+        if (IsIeeeScalar(prior.ClrType) != IsIeeeScalar(rhsType)) {
+            Report(context, assignment,
+                $"cannot assign '{rhsType.Name}' to variable '{variable.Name}' (incompatible with prior '{prior.ClrType.Name}')");
+            return;
+        }
+
+        var pc = CategoryOf(prior.ClrType);
+        var rc = CategoryOf(rhsType);
+        if (pc is Cat.Unknown || rc is Cat.Unknown || !Compatible(pc, prior.ClrType, rc, rhsType)) {
+            Report(context, assignment,
+                $"cannot assign '{rhsType.Name}' to variable '{variable.Name}' (incompatible with prior '{prior.ClrType.Name}')");
+        }
+    }
+
+    private static string TypeLabel(Type? type, ValueRepresentationKind kind) =>
+        type?.Name ?? kind.ToString();
+
+    private static bool IsIeeeScalar(Type type) =>
+        type == typeof(float) || type == typeof(double);
+
     private void CheckAssign(AnalysisContext context, Member destination, Node value) {
         var target = ClrTypeOf(context, destination);
         var rhs = ClrTypeOf(context, value);
@@ -193,3 +240,10 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
         return false;
     }
 }
+
+/// <summary>First assignment's representation for a <see cref="Variable"/> in this analysis.
+/// Later writes must be slot-compatible or <see cref="SyntaxTypeCompatibilityAnalyzer"/> errors.</summary>
+internal sealed record VariableAssignedTypeMetadata(
+    Type? ClrType,
+    ValueRepresentationKind Kind
+) : IAnalysisMetadata;

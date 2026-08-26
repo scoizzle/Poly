@@ -178,41 +178,30 @@ public sealed partial class DomainToCSharpExporter {
         }
 
         var bodyNodes = new List<Node>();
-        var localResultName = $"{ToCamelCase(targetTypeName)}Result";
-        var localName = ToCamelCase(targetTypeName);
+        var localResult = new Variable($"{ToCamelCase(targetTypeName)}Result");
+        var local = new Variable(ToCamelCase(targetTypeName));
 
-        // var loanResult = Loan.Create(book: book, borrower: this, ...);
-        bodyNodes.Add(new Variable(localResultName,
+        bodyNodes.Add(new Assignment(localResult,
             new Invoke(
                 new Member(targetType, "Create"),
                 [.. createArgs])));
 
-        // Unwrap: the Create factory now returns DomainResult<T>, and it may
-        // reject invalid inputs via constraint checks. Since CreateNav methods
-        // are only called from action bodies with controlled defaults, a
-        // failure here is a programmer error — assert fast.
         bodyNodes.Add(new IfStatement(
             new Syntactic.Not(
-                new Member(
-                    new Variable(localResultName), "IsSuccess")),
+                new Member(localResult, "IsSuccess")),
             new Block([
                 new ThrowStatement(
                     new New(
                         new NamedTypeReference("InvalidOperationException"),
-                        new Member(
-                            new Variable(localResultName), "ErrorMessage")))
+                        new Member(localResult, "ErrorMessage")))
             ])));
 
-        // var loan = loanResult.Value;
-        bodyNodes.Add(new Variable(localName,
-            new Member(
-                new Variable(localResultName), "Value")));
+        bodyNodes.Add(new Assignment(local, new Member(localResult, "Value")));
 
-        // _loans.Add(loan);
         bodyNodes.Add(new Invoke(
             new Member(
                 new Member(new ThisReference(), fieldName), "Add"),
-            [new Variable(localName)]));
+            [local]));
 
         // Subscription registration: loan.RegisterPatronOverdueSubscriber(this)
         // One registration per stage — multiple subscriptions on the same relation+stage
@@ -224,20 +213,19 @@ public sealed partial class DomainToCSharpExporter {
                 .Select(g => g.First())) {
                 bodyNodes.Add(new Invoke(
                     new Member(
-                        new Variable(localName),
+                        local,
                         $"Register{info.SourceEntity.Name}{info.StageName}Subscriber"),
                     [new ThisReference()]));
             }
         }
 
-        // return loan;
-        bodyNodes.Add(new Return(new Variable(localName)));
+        bodyNodes.Add(new Return(local));
 
         methods.Add(new MethodDefinitionNode(
             methodName,
             targetType,
             Parameters: methodParams.Count > 0 ? methodParams : null,
-            Body: new Block(bodyNodes),
+            Body: new Block(bodyNodes, [localResult, local]),
             AccessModifier: AccessModifier.Private
         ));
     }

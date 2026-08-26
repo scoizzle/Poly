@@ -502,7 +502,7 @@ public sealed partial class DomainToCSharpExporter {
                     var targetStageEnumName = metadata.GetStructure(info.TargetEntity)
                         ?.StageEnumTypeName ?? $"{info.TargetEntity.Name}Stage";
                     var linkedVar = new Variable("linkedTarget");
-                    var matchedVar = new Variable("linkedMatched", new Constant(false));
+                    var matchedVar = new Variable("linkedMatched");
                     var gateLoop = new ForEachLoop(
                         linkedVar,
                         new Member(new ThisReference(), ToPascalCase(info.Relationship.Name)),
@@ -517,7 +517,9 @@ public sealed partial class DomainToCSharpExporter {
                     var emptyCheck = new IfStatement(
                         new Poly.Ast.Nodes.Not(matchedVar),
                         new Block([new Return()]));
-                    handlerBody = new Block([matchedVar, gateLoop, emptyCheck, handlerBody]);
+                    handlerBody = new Block(
+                        [new Assignment(matchedVar, new Constant(false)), gateLoop, emptyCheck, handlerBody],
+                        [matchedVar]);
                 }
 
                 methods.Add(new MethodDefinitionNode(

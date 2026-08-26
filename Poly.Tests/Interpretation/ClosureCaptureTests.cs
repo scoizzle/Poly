@@ -211,14 +211,14 @@ public class ClosureCaptureTests {
 
     [Test]
     public async Task Stored_DeclareInitVariable_MutateAfterStore() {
-        var captured = new Variable("captured", new Constant(1L));
+        var captured = new Variable("captured");
         var fn = new Variable("fn");
         var node = new Block([
-            captured,
+            new Assignment(captured, new Constant(1L)),
             new Assignment(fn, new Lambda([], captured)),
             new Assignment(captured, new Constant(2L)),
             new Invoke(fn)
-        ], [fn]);
+        ], [captured, fn]);
         using var exec = Interpreter.Execute(Interpreter.Compile(node));
         await Assert.That(exec.RawValue).IsEqualTo(2L);
     }
@@ -326,11 +326,14 @@ public class ClosureCaptureTests {
     [Test]
     public async Task InnerDeclareInit_SameNameAsOuter_IsOwnLocal() {
         var outer = new Variable("x");
-        var inner = new Variable("x", new Constant(1L));
+        var inner = new Variable("x");
         var fn = new Variable("fn");
         var node = new Block([
             new Assignment(outer, new Constant(9L)),
-            new Assignment(fn, new Lambda([], new Block([inner, inner]))),
+            new Assignment(fn, new Lambda([], new Block([
+                new Assignment(inner, new Constant(1L)),
+                inner
+            ], [inner]))),
             new Invoke(fn)
         ], [outer, fn]);
         using var exec = Interpreter.Execute(Interpreter.Compile(node));

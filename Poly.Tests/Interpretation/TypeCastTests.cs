@@ -1,4 +1,5 @@
 using Poly.Interpretation;
+using Poly.Tests.Introspection;
 using Poly.Tests.TestHelpers;
 
 using Expr = System.Linq.Expressions.Expression;
@@ -132,9 +133,8 @@ public class TypeCastTests {
 
         // Assert
         await Assert.That(result).IsEqualTo(42);
-        await Assert.That(() => {
-            using var exec = Interpreter.Execute(Interpreter.Compile(node));
-        }).Throws<InvalidCastException>();
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.Result.HasValue).IsTrue();
     }
 
     [Test]
@@ -233,6 +233,30 @@ public class TypeCastTests {
         await Assert.That(result).IsNull();
         using var exec = Interpreter.Execute(Interpreter.Compile(node));
         await Assert.That(exec.GetValue<object>()).IsNull();
+    }
+
+    [Test]
+    public async Task TypeCast_ImplicitOperator_DoubleToMeters() {
+        var node = new TypeCast(Wrap(2.5), TypeReference.To<TypeCompatibilityTests.Meters>());
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<TypeCompatibilityTests.Meters>().Value).IsEqualTo(2.5);
+    }
+
+    [Test]
+    public async Task TypeCast_ExplicitOperator_MetersToDouble() {
+        var node = new TypeCast(
+            Wrap(new TypeCompatibilityTests.Meters(2.5)),
+            TypeReference.To<double>());
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<double>()).IsEqualTo(2.5);
+    }
+
+    [Test]
+    public async Task TypeCast_ImplicitOperator_DateTimeToDateTimeOffset() {
+        var stamp = new DateTime(2026, 8, 26, 12, 0, 0, DateTimeKind.Utc);
+        var node = new TypeCast(Wrap(stamp), TypeReference.To<DateTimeOffset>());
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<DateTimeOffset>()).IsEqualTo(new DateTimeOffset(stamp));
     }
 
     [Test]

@@ -164,6 +164,19 @@ public class InvalidProgramTests {
     }
 
     [Test]
+    public async Task TypeCast_StringToInt_AnalysisErrorAndCompileRejects() {
+        var text = new Variable("text");
+        var node = new Block([
+            new Assignment(text, new Constant("42")),
+            new TypeCast(text, TypeReference.To<int>())
+        ], [text]);
+        await AssertAnalysisThenCompileRejects(
+            node,
+            "cannot convert",
+            SyntaxTypeCompatibilityAnalyzer.DiagnosticCode);
+    }
+
+    [Test]
     public async Task Assignment_ToConstant_CompileRejects() {
         await AssertCompileRejectsReadable(
             new Assignment(new Constant(1), new Constant(2)),
@@ -280,6 +293,64 @@ public class InvalidProgramTests {
         await AssertCompileRejectsReadable(
             new Invoke(new Lambda([p], p), new Constant(1L), new Constant(2L)),
             "lambda");
+    }
+
+    [Test]
+    public async Task StoredLambda_ZeroArgsIntoArity1_AnalysisErrorAndCompileRejects() {
+        var fn = new Variable("fn");
+        var x = new Parameter("x", TypeReference.To<long>());
+        var node = new Block([
+            new Assignment(fn, new Lambda([x], new Add(x, new Constant(1L)))),
+            new Invoke(fn)
+        ], [fn]);
+        await AssertAnalysisThenCompileRejects(
+            node,
+            "parameter(s)",
+            SyntaxTypeCompatibilityAnalyzer.DiagnosticCode);
+    }
+
+    [Test]
+    public async Task StoredLambda_TooFewArgs_AnalysisErrorAndCompileRejects() {
+        var fn = new Variable("fn");
+        var a = new Parameter("a", TypeReference.To<long>());
+        var b = new Parameter("b", TypeReference.To<long>());
+        var node = new Block([
+            new Assignment(fn, new Lambda([a, b], new Add(a, b))),
+            new Invoke(fn, new Constant(1L))
+        ], [fn]);
+        await AssertAnalysisThenCompileRejects(
+            node,
+            "parameter(s)",
+            SyntaxTypeCompatibilityAnalyzer.DiagnosticCode);
+    }
+
+    [Test]
+    public async Task StoredLambda_TooManyArgs_AnalysisErrorAndCompileRejects() {
+        var fn = new Variable("fn");
+        var x = new Parameter("x", TypeReference.To<long>());
+        var node = new Block([
+            new Assignment(fn, new Lambda([x], x)),
+            new Invoke(fn, new Constant(1L), new Constant(2L))
+        ], [fn]);
+        await AssertAnalysisThenCompileRejects(
+            node,
+            "parameter(s)",
+            SyntaxTypeCompatibilityAnalyzer.DiagnosticCode);
+    }
+
+    [Test]
+    public async Task Assignment_UntypedThenLong_AnalysisErrorAndCompileRejects() {
+        var src = new Variable("src");
+        var dest = new Variable("dest");
+        var node = new Block([
+            new Assignment(dest, src),
+            new Assignment(dest, new Constant(1L)),
+            dest
+        ], [src, dest]);
+        await AssertAnalysisThenCompileRejects(
+            node,
+            "incompatible",
+            SyntaxTypeCompatibilityAnalyzer.DiagnosticCode);
     }
 
     [Test]

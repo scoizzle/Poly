@@ -327,6 +327,10 @@ public static partial class DirectVmAbiEmitter {
     }
 
     private static Expression EmitInvokeIndirect(Invoke invoke, AbiCtx ctx) {
+        if (ctx.Analysis?.GetMetadata<StoredLambdaMetadata>(invoke.Delegate) is { } stored
+            && invoke.Arguments.Length != stored.Lambda.Parameters.Count)
+            throw new InvalidOperationException(
+                $"VM compile rejected: lambda has {stored.Lambda.Parameters.Count} parameter(s) but invoke has {invoke.Arguments.Length} argument(s).");
         var targetExpr = CompileNode(invoke.Delegate, ctx);
         int targetSlot = ctx.RingDepth - 1;
         var argExprs = new List<Expression>();
@@ -645,7 +649,7 @@ public static partial class DirectVmAbiEmitter {
             value = raw != 0L;
         else if (source is not null && source.IsValueType && AbiValueTypes.IsLongRepresentable(source))
             value = System.Convert.ChangeType(raw, source);
-        else if (source is not null && !source.IsValueType)
+        else if (source is not null)
             value = raw == 0L ? null : heap.UnsafeGet((int)raw);
         else if (!target.IsValueType)
             value = raw == 0L ? null : heap.UnsafeGet((int)raw);
@@ -658,6 +662,12 @@ public static partial class DirectVmAbiEmitter {
             return 0L;
         }
 
+        if (target.IsInstanceOfType(value))
+            return BoxToAbi(heap, value);
+
+        if (TryInvokeDiscoveredConversion(value, target, out var converted))
+            return BoxToAbi(heap, converted);
+
         if (target == typeof(double) || target == typeof(float))
             return BitConverter.DoubleToInt64Bits(System.Convert.ToDouble(value));
         if (target == typeof(bool))
@@ -666,8 +676,19 @@ public static partial class DirectVmAbiEmitter {
             var truncated = Math.Truncate(System.Convert.ToDouble(value));
             return System.Convert.ToInt64(System.Convert.ChangeType(truncated, target));
         }
-        var converted = target.IsInstanceOfType(value) ? value : System.Convert.ChangeType(value, target);
-        return BoxToAbi(heap, converted);
+        return BoxToAbi(heap, System.Convert.ChangeType(value, target));
+    }
+
+    private static bool TryInvokeDiscoveredConversion(object value, Type target, [NotNullWhen(true)] out object? converted) {
+        var registry = ClrTypeDefinitionRegistry.Shared;
+        var dest = registry.GetTypeDefinition(target);
+        var src = registry.GetTypeDefinition(value.GetType());
+        if (dest.GetConversionFrom(src) is { Method: ClrMethod method }) {
+            converted = method.MethodInfo.Invoke(null, [value]);
+            return converted is not null;
+        }
+        converted = null;
+        return false;
     }
 
     private static long UnboxNullableToLong(Heap heap, long handle) {

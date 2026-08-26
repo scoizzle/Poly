@@ -80,6 +80,22 @@ public class ClosureCaptureTests {
     }
 
     [Test]
+    public async Task Stored_TwoClosuresShareOneCapture_SeesLatest() {
+        var captured = new Variable("captured");
+        var fn1 = new Variable("fn1");
+        var fn2 = new Variable("fn2");
+        var node = new Block([
+            new Assignment(captured, new Constant(1L)),
+            new Assignment(fn1, new Lambda([], captured)),
+            new Assignment(fn2, new Lambda([], captured)),
+            new Assignment(captured, new Constant(10L)),
+            new Add(new Invoke(fn1), new Invoke(fn2))
+        ], [captured, fn1, fn2]);
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.RawValue).IsEqualTo(20L);
+    }
+
+    [Test]
     public async Task Stored_TwoCaptures_AddAfterMutate() {
         var a = new Variable("a");
         var b = new Variable("b");

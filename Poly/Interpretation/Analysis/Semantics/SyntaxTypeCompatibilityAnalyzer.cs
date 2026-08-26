@@ -88,6 +88,9 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
             case Invoke inv:
                 CheckInvokeTarget(context, inv);
                 break;
+            case TypeCast tc:
+                CheckTypeCast(context, tc);
+                break;
         }
 
         this.AnalyzeChildren(context, node);
@@ -134,13 +137,17 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
     }
 
     private void CheckInvokeTarget(AnalysisContext context, Invoke invoke) {
-        if (invoke.Delegate is Member or Lambda)
+        if (invoke.Delegate is Member)
             return;
+        if (invoke.Delegate is Lambda lambda) {
+            CheckInvokeArity(context, invoke, lambda, allowZeroArgsAsSetArgs: true);
+            return;
+        }
         if (invoke.Delegate is Variable or Parameter) {
-            if (context.GetMetadata<StoredLambdaMetadata>(invoke.Delegate) is not null)
+            if (context.GetMetadata<StoredLambdaMetadata>(invoke.Delegate) is { } stored) {
+                CheckInvokeArity(context, invoke, stored.Lambda, allowZeroArgsAsSetArgs: false);
                 return;
-            if (context.GetResolvedMember(invoke) is not null)
-                return;
+            }
             Report(context, invoke,
                 $"Invoke target must be a member, lambda, or stored closure, got {invoke.Delegate.GetType().Name}");
             return;
@@ -149,16 +156,41 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
             $"Invoke target must be a member, lambda, or stored closure, got {invoke.Delegate.GetType().Name}");
     }
 
+    private void CheckInvokeArity(AnalysisContext context, Invoke invoke, Lambda lambda, bool allowZeroArgsAsSetArgs) {
+        int nParams = lambda.Parameters.Count;
+        int nArgs = invoke.Arguments.Length;
+        if (allowZeroArgsAsSetArgs && nArgs == 0)
+            return;
+        if (nArgs == nParams)
+            return;
+        Report(context, invoke,
+            $"lambda has {nParams} parameter(s) but invoke has {nArgs} argument(s)");
+    }
+
     private void CheckVariableAssign(AnalysisContext context, Variable variable, Assignment assignment) {
         var rhsMeta = context.GetMetadata<ValueRepresentationMetadata>(assignment.Value);
-        if (rhsMeta is null || rhsMeta.Kind is ValueRepresentationKind.Unknown or ValueRepresentationKind.Void)
+        if (rhsMeta is null)
             return;
+        if (rhsMeta.Kind is ValueRepresentationKind.Void) {
+            Report(context, assignment,
+                $"cannot assign void to variable '{variable.Name}'");
+            return;
+        }
+
+        var prior = context.GetMetadata<VariableAssignedTypeMetadata>(variable);
+        if (rhsMeta.Kind is ValueRepresentationKind.Unknown) {
+            if (prior is null)
+                context.SetMetadata(variable, new VariableAssignedTypeMetadata(null, rhsMeta.Kind));
+            else if (prior.Kind is not ValueRepresentationKind.Unknown)
+                Report(context, assignment,
+                    $"cannot assign '{TypeLabel(rhsMeta.ClrType, rhsMeta.Kind)}' to variable '{variable.Name}' (incompatible with prior '{TypeLabel(prior.ClrType, prior.Kind)}')");
+            return;
+        }
 
         var rhsType = rhsMeta.ClrType;
         if (rhsType is not null && CategoryOf(rhsType) is Cat.Null)
             return;
 
-        var prior = context.GetMetadata<VariableAssignedTypeMetadata>(variable);
         if (prior is null) {
             context.SetMetadata(variable, new VariableAssignedTypeMetadata(rhsType, rhsMeta.Kind));
             return;
@@ -171,6 +203,11 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
         }
 
         if (prior.ClrType is null || rhsType is null || prior.ClrType == rhsType)
+            return;
+
+        var destDef = context.TypeDefinitions.GetTypeDefinition(prior.ClrType);
+        var srcDef = context.TypeDefinitions.GetTypeDefinition(rhsType);
+        if (destDef is not null && srcDef is not null && destDef.IsAssignableFrom(srcDef))
             return;
 
         if (IsIeeeScalar(prior.ClrType) != IsIeeeScalar(rhsType)) {
@@ -197,13 +234,49 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
         var target = ClrTypeOf(context, destination);
         var rhs = ClrTypeOf(context, value);
         if (target is null || rhs is null) return;
+        var destDef = context.TypeDefinitions.GetTypeDefinition(target);
+        var srcDef = context.TypeDefinitions.GetTypeDefinition(rhs);
+        if (destDef is not null && srcDef is not null && destDef.IsAssignableFrom(srcDef))
+            return;
         var tc = CategoryOf(target);
         var rc = CategoryOf(rhs);
         if (tc is Cat.Unknown or Cat.Null || rc is Cat.Unknown or Cat.Null) return;
-        if (tc is Cat.Enum && rc is Cat.Text) return; // enum values stored as strings
-        if (!Compatible(tc, target, rc, rhs))
+        if (tc is Cat.Enum && rc is Cat.Text) return;
+        if (!Compatible(tc, target, rc, rhs, destThenSource: true))
             Report(context, destination,
                 $"cannot assign '{rhs.Name}' to '{destination.MemberName}' (type '{target.Name}')");
+    }
+
+    private void CheckTypeCast(AnalysisContext context, TypeCast typeCast) {
+        var source = ClrTypeOf(context, typeCast.Operand);
+        var dest = ClrTypeOf(context, typeCast);
+        if (source is null || dest is null || source == dest)
+            return;
+
+        var destDef = context.TypeDefinitions.GetTypeDefinition(dest);
+        var srcDef = context.TypeDefinitions.GetTypeDefinition(source);
+        if (destDef is not null && srcDef is not null) {
+            if (destDef.IsAssignableFrom(srcDef))
+                return;
+            if (destDef.GetConversionFrom(srcDef) is not null)
+                return;
+            if (srcDef.IsAssignableFrom(destDef))
+                return;
+        }
+
+        var sc = CategoryOf(source);
+        var dc = CategoryOf(dest);
+        if (sc is Cat.Unknown or Cat.Null || dc is Cat.Unknown or Cat.Null)
+            return;
+        if (sc is Cat.Number && dc is Cat.Number)
+            return;
+        if (dc is Cat.Enum && sc is Cat.Number)
+            return;
+        if (sc is Cat.Enum && dc is Cat.Number)
+            return;
+
+        Report(context, typeCast,
+            $"cannot convert '{source.Name}' to '{dest.Name}'");
     }
 
     private void Report(AnalysisContext context, Node node, string message) =>
@@ -228,17 +301,33 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
         return Cat.Unknown;
     }
 
-    private static bool Compatible(Cat lc, Type left, Cat rc, Type right) {
-        if (lc == rc) return true;
+    private static bool Compatible(Cat lc, Type left, Cat rc, Type right, bool destThenSource = false) {
+        if (lc == rc && lc is not Cat.Date) return true;
+        if (lc == rc && lc is Cat.Date) {
+            bool leftTs = IsClrTimestamp(left);
+            bool rightTs = IsClrTimestamp(right);
+            bool leftCal = left == typeof(DateOnly);
+            bool rightCal = right == typeof(DateOnly);
+            if (leftTs == rightTs && leftCal == rightCal)
+                return true;
+            if (leftCal && rightCal)
+                return true;
+            if (leftTs && rightTs)
+                return true;
+            if ((leftCal || leftTs) && (rightCal || rightTs)) {
+                if (!destThenSource)
+                    return true;
+                return leftTs && rightCal;
+            }
+            return false;
+        }
         if (lc is Cat.Enum && rc is Cat.Text) return true;
         if (rc is Cat.Enum && lc is Cat.Text) return true;
-        if (lc is Cat.Date && rc is Cat.Date) {
-            bool leftDateTime = left == typeof(DateTime) || left == typeof(DateTimeOffset);
-            bool rightDateTime = right == typeof(DateTime) || right == typeof(DateTimeOffset);
-            return leftDateTime == rightDateTime;
-        }
         return false;
     }
+
+    private static bool IsClrTimestamp(Type type) =>
+        type == typeof(DateTime) || type == typeof(DateTimeOffset);
 }
 
 /// <summary>First assignment's representation for a <see cref="Variable"/> in this analysis.

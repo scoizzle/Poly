@@ -14,10 +14,13 @@ internal sealed class ClrTypeDefinition : IClrTypeDefinition {
     private readonly Lazy<IReadOnlyList<ClrConstructor>> _constructors;
     private readonly Lazy<IReadOnlyList<ClrTypeMember>> _members;
 
+    private readonly ClrTypeDefinitionRegistry _provider;
+
     public ClrTypeDefinition(Type type, ClrTypeDefinitionRegistry provider) {
         ArgumentNullException.ThrowIfNull(type);
         ArgumentNullException.ThrowIfNull(provider);
 
+        _provider = provider;
         RuntimeType = type;
         BaseType = GetBaseTypeResolver(type, provider);
         Interfaces = GetInterfacesResolver(type, provider);
@@ -76,6 +79,36 @@ internal sealed class ClrTypeDefinition : IClrTypeDefinition {
     IEnumerable<IParameter> ITypeDefinition.GenericParameters => GenericParameters; PrimitiveType? ITypeDefinition.PrimitiveType => GetPrimitiveTypeId(RuntimeType);
     TypeCategory ITypeDefinition.TypeCategory => GetTypeCategory(RuntimeType);
     public override string ToString() => FullName;
+
+    internal ClrMethod? FindConversionFrom(ClrTypeDefinition source, ConversionOperatorKind kind) {
+        ArgumentNullException.ThrowIfNull(source);
+        var name = kind is ConversionOperatorKind.Implicit ? "op_Implicit" : "op_Explicit";
+        var from = source.RuntimeType;
+        var to = RuntimeType;
+        const BindingFlags flags = BindingFlags.Public | BindingFlags.Static | BindingFlags.FlattenHierarchy;
+        foreach (var declaring in new[] { from, to }) {
+            foreach (var method in declaring.GetMethods(flags)) {
+                if (!method.IsSpecialName || method.Name != name)
+                    continue;
+                var parameters = method.GetParameters();
+                if (parameters.Length != 1
+                    || method.ReturnType != to
+                    || parameters[0].ParameterType != from)
+                    continue;
+                return CreateMethod(method);
+            }
+        }
+        return null;
+    }
+
+    private ClrMethod CreateMethod(MethodInfo methodInfo) {
+        var declaringType = methodInfo.DeclaringType == RuntimeType
+            ? this
+            : _provider.GetTypeDefinition(methodInfo.DeclaringType!);
+        var returnType = _provider.GetDeferredTypeDefinitionResolver(methodInfo.ReturnType);
+        var parameters = methodInfo.GetParameters().Select(pi => ConstructParameter(_provider, pi));
+        return new ClrMethod(returnType, declaringType, parameters, methodInfo);
+    }
 
     private static readonly BindingFlags MemberSearchCriteria = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static;
     private static readonly BindingFlags DeclaredMemberSearchCriteria = MemberSearchCriteria | BindingFlags.DeclaredOnly;

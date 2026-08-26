@@ -146,7 +146,7 @@ Read surrounding source with `read_file` (or equivalent); the hunk alone is not 
 
 ### 3.2a Sibling-path check (mandatory for dual-path / fallback work)
 
-When a change fixes or claims a semantic (policy resolve, stage lookup, SA fall-through, fail-closed throw, etc.), **list every code path that implements that same semantic** — e.g. metadata-primary **and** residual scan, analyze-present **and** analyze-absent, entity-level **and** stage-level.
+When a change fixes or claims a semantic (policy resolve, stage lookup, SA fall-through, fail-closed throw, etc.), **list every code path that implements that same semantic** — e.g. metadata-primary **and** residual scan, analyze-present **and** analyze-absent, entity-level **and** stage-level, **immediate `Invoke(Lambda)` vs stored `Invoke(fn)`**, analyze-time vs emit-time.
 
 For each sibling path:
 

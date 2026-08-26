@@ -1,4 +1,5 @@
 using Poly.DomainModeling.Ontology;
+using Poly.Introspection;
 
 using Action = Poly.DomainModeling.Ontology.Action;
 using Add = Poly.DomainModeling.Ontology.Add;
@@ -192,7 +193,7 @@ internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
                 var targetCategory = CategoryOf(paramType, enumTypes);
                 if (inferred.Category is not TypeCategory.Unknown
                     && targetCategory is not TypeCategory.Unknown
-                    && !Compatible(inferred, new TypeInfo(targetCategory, paramType))) {
+                    && !Compatible(context, inferred, new TypeInfo(targetCategory, paramType), assigning: true)) {
                     Report(context, binding.Expression,
                         $"type mismatch in argument '{binding.PropertyName}' of invoke '{actionName}': " +
                         $"cannot assign '{Describe(inferred)}' to '{paramType}'");
@@ -446,7 +447,7 @@ internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
         if (right.Category is TypeCategory.Enum && cmp.Left is Literal { Value: string s2 })
             CheckEnumMember(context, cmp.Left, right.TypeName!, s2, enumTypes);
 
-        if (!Compatible(left, right))
+        if (!Compatible(context, left, right))
             Report(context, cmp,
                 $"comparison between incompatible types '{Describe(left)}' and '{Describe(right)}'");
 
@@ -480,7 +481,7 @@ internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
         // enum member validity for the RHS
         if (targetCategory is TypeCategory.Enum && value is Literal { Value: string s })
             CheckEnumMember(context, value, targetTypeName, s, enumTypes);
-        if (!Compatible(inferred, new TypeInfo(targetCategory, targetTypeName)))
+        if (!Compatible(context, inferred, new TypeInfo(targetCategory, targetTypeName), assigning: true))
             Report(context, value,
                 $"type mismatch in {what}: cannot assign '{Describe(inferred)}' to '{targetTypeName}'");
     }
@@ -500,7 +501,7 @@ internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
                 return;
             case Literal lit:
                 var inferred = InferType(expr, null, null, enumTypes);
-                if (!Compatible(inferred, new TypeInfo(targetCategory, propTypeName)))
+                if (!Compatible(context, inferred, new TypeInfo(targetCategory, propTypeName), assigning: true))
                     Report(context, expr,
                         $"default value of type '{Describe(inferred)}' is not compatible with property type '{propTypeName}'");
                 return;
@@ -644,7 +645,12 @@ internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
         _ => "unknown",
     };
 
-    private static bool Compatible(TypeInfo left, TypeInfo right) {
+    /// <param name="assigning">
+    /// When true, <paramref name="left"/> is the source and <paramref name="right"/> is the
+    /// target. Prefer <see cref="ITypeDefinition.IsAssignableFrom"/> (Date ⊆ DateTime,
+    /// implicit conversion operators).
+    /// </param>
+    private static bool Compatible(AnalysisContext context, TypeInfo left, TypeInfo right, bool assigning = false) {
         if (left.Category is TypeCategory.Unknown || right.Category is TypeCategory.Unknown)
             return true;
         if (left.Category is TypeCategory.Null)
@@ -654,16 +660,44 @@ internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
         if (left.Category is TypeCategory.Enum && right.Category is TypeCategory.Enum)
             return string.Equals(left.TypeName, right.TypeName, StringComparison.Ordinal);
         if (left.Category is TypeCategory.Enum && right.Category is TypeCategory.Text)
-            return true; // member validity checked separately
+            return true;
         if (right.Category is TypeCategory.Enum && left.Category is TypeCategory.Text)
             return true;
-        if (left.Category is TypeCategory.Date && right.Category is TypeCategory.Date) {
-            // Date/DateOnly vs DateTime/Timestamp differ in CLR type — incompatible.
-            bool leftDateTime = left.TypeName is "DateTime" or "Timestamp";
-            bool rightDateTime = right.TypeName is "DateTime" or "Timestamp";
-            return leftDateTime == rightDateTime;
+
+        var srcDef = ResolveTypeDefinition(context, left);
+        var destDef = ResolveTypeDefinition(context, right);
+        if (srcDef is not null && destDef is not null) {
+            if (destDef.IsAssignableFrom(srcDef))
+                return true;
+            if (!assigning && srcDef.IsAssignableFrom(destDef))
+                return true;
+            if (assigning)
+                return false;
         }
+
         return left.Category == right.Category;
+    }
+
+    private static ITypeDefinition? ResolveTypeDefinition(AnalysisContext context, TypeInfo info) {
+        if (info.TypeName is null)
+            return null;
+        var clr = info.TypeName switch {
+            "Date" or "DateOnly" => typeof(DateOnly),
+            "DateTime" or "Timestamp" => typeof(DateTime),
+            "Time" or "TimeOnly" => typeof(TimeOnly),
+            "Duration" or "TimeSpan" or "duration" => typeof(TimeSpan),
+            "Text" or "String" => typeof(string),
+            "Number" or "Int" or "Int64" => typeof(long),
+            "Int32" => typeof(int),
+            "Boolean" or "Bool" => typeof(bool),
+            "Guid" or "Uuid" => typeof(Guid),
+            "Decimal" => typeof(decimal),
+            "Float" or "Double" => typeof(double),
+            _ => null
+        };
+        return clr is not null
+            ? context.TypeDefinitions.GetTypeDefinition(clr)
+            : context.TypeDefinitions.GetTypeDefinition(info.TypeName);
     }
 
     private static void Report(AnalysisContext context, Node where, string message) =>

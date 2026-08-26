@@ -2,6 +2,19 @@ using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.Introspection;
 
+/// <summary>User-defined conversion operator from a source type to a destination type.</summary>
+public enum ConversionOperatorKind {
+    Implicit,
+    Explicit
+}
+
+/// <summary>
+/// A conversion operator discovered on a type definition.
+/// <see cref="Method"/> is the operator to invoke; CLR <c>Methods</c> omit
+/// <c>IsSpecialName</c> members, so this is the discovery door.
+/// </summary>
+public readonly record struct ConversionOperator(ConversionOperatorKind Kind, ITypeMethod Method);
+
 public static class TypeDefinitionExtensions {
     extension(ITypeDefinition typeDefinition) {
         /// <summary>
@@ -102,8 +115,13 @@ public static class TypeDefinitionExtensions {
         public bool IsAssignableFrom(ITypeDefinition other) {
             ArgumentNullException.ThrowIfNull(other);
             if (typeDefinition == other) return true;
-            if (typeDefinition is ClrTypeDefinition clrTypeDef && other is ClrTypeDefinition otherClrTypeDef)
-                return clrTypeDef.RuntimeType.IsAssignableFrom(otherClrTypeDef.RuntimeType);
+            // Date/DateOnly is a calendar-date subset of DateTime (midnight instant).
+            // CLR DateOnly is not a subtype of DateTime — this is domain/temporal assignability.
+            if (typeDefinition.TypeCategory.IsDateTime && other.TypeCategory.IsDateOnly)
+                return true;
+            if (typeDefinition is ClrTypeDefinition clrTypeDef && other is ClrTypeDefinition otherClrTypeDef
+                && clrTypeDef.RuntimeType.IsAssignableFrom(otherClrTypeDef.RuntimeType))
+                return true;
 
             var current = other.BaseType;
             while (current != null) {
@@ -113,7 +131,7 @@ public static class TypeDefinitionExtensions {
 
             if (other.Interfaces.Any(i => typeDefinition == i)) return true;
 
-            return false;
+            return typeDefinition.GetConversionFrom(other)?.Kind is ConversionOperatorKind.Implicit;
         }
 
         /// <summary>
@@ -122,6 +140,46 @@ public static class TypeDefinitionExtensions {
         public bool IsAssignableTo(ITypeDefinition other) {
             ArgumentNullException.ThrowIfNull(other);
             return other.IsAssignableFrom(typeDefinition);
+        }
+
+        /// <summary>
+        /// User-defined conversion from <paramref name="source"/> to this type, if any.
+        /// Implicit is preferred when both exist. Inheritance and Date ⊆ DateTime are
+        /// not conversion operators — use <see cref="IsAssignableFrom"/>.
+        /// CLR conversion operators live outside <see cref="ITypeDefinition.Methods"/>
+        /// (those omit <c>IsSpecialName</c>); this is the shared discovery API.
+        /// </summary>
+        public ConversionOperator? GetConversionFrom(ITypeDefinition source) {
+            ArgumentNullException.ThrowIfNull(source);
+            if (typeDefinition is ClrTypeDefinition destClr && source is ClrTypeDefinition sourceClr) {
+                if (destClr.FindConversionFrom(sourceClr, ConversionOperatorKind.Implicit) is { } implicitMethod)
+                    return new ConversionOperator(ConversionOperatorKind.Implicit, implicitMethod);
+                if (destClr.FindConversionFrom(sourceClr, ConversionOperatorKind.Explicit) is { } explicitMethod)
+                    return new ConversionOperator(ConversionOperatorKind.Explicit, explicitMethod);
+                return null;
+            }
+
+            if (FindModeledConversion(source, typeDefinition, implicitName: true) is { } modeledImplicit)
+                return new ConversionOperator(ConversionOperatorKind.Implicit, modeledImplicit);
+            if (FindModeledConversion(source, typeDefinition, implicitName: false) is { } modeledExplicit)
+                return new ConversionOperator(ConversionOperatorKind.Explicit, modeledExplicit);
+            return null;
+        }
+
+        private static ITypeMethod? FindModeledConversion(ITypeDefinition from, ITypeDefinition to, bool implicitName) {
+            var name = implicitName ? "op_Implicit" : "op_Explicit";
+            foreach (var candidate in new[] { from, to }) {
+                foreach (var method in candidate.Methods) {
+                    if (!string.Equals(method.Name, name, StringComparison.Ordinal))
+                        continue;
+                    var parameters = method.Parameters.ToArray();
+                    if (parameters.Length == 1
+                        && method.MemberTypeDefinition == to
+                        && parameters[0].ParameterTypeDefinition == from)
+                        return method;
+                }
+            }
+            return null;
         }
 
         /// <summary>

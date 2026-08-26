@@ -30,6 +30,7 @@ Common members include:
 - `ReflectedType`
 - `Members`
 - `GetMembers(string name)`
+- `IsAssignableFrom` / `GetConversionFrom` (conversion operators are not in `Methods`)
 
 ### ITypeMember
 

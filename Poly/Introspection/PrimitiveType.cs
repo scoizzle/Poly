@@ -74,10 +74,10 @@ public static class PrimitiveTypeExtensions {
         PrimitiveType.String => TypeCategory.Primitive | TypeCategory.Text,
         PrimitiveType.Char => TypeCategory.Primitive | TypeCategory.Text,
 
-        PrimitiveType.DateTime => TypeCategory.Primitive | TypeCategory.Temporal,
-        PrimitiveType.DateOnly => TypeCategory.Primitive | TypeCategory.Temporal,
-        PrimitiveType.TimeOnly => TypeCategory.Primitive | TypeCategory.Temporal,
-        PrimitiveType.TimeSpan => TypeCategory.Primitive | TypeCategory.Temporal,
+        PrimitiveType.DateTime => TypeCategory.Primitive | TypeCategory.DateTime,
+        PrimitiveType.DateOnly => TypeCategory.Primitive | TypeCategory.DateOnly,
+        PrimitiveType.TimeOnly => TypeCategory.Primitive | TypeCategory.TimeOfDay,
+        PrimitiveType.TimeSpan => TypeCategory.Primitive | TypeCategory.Duration,
 
         PrimitiveType.Guid => TypeCategory.Primitive | TypeCategory.Identifier,
         PrimitiveType.ByteArray => TypeCategory.Primitive | TypeCategory.Binary,

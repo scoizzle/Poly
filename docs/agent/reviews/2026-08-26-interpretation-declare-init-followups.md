@@ -29,4 +29,4 @@ From [`2026-08-25-interpretation-capture-analysis-followups.md`](./2026-08-25-in
 
 ## Open
 
-None. Never-assigned locals with no inferable RHS still print `default(object)` (VM slot 0). That tree is declare-without-write; C# `object` vs ABI `long` only if the local is read untyped.
+- [ ] Never-assigned locals with no inferable RHS still print `default(object)` (VM slot 0). That tree is declare-without-write; C# `object` vs ABI `long` only if the local is read untyped. Not a merge blocker.

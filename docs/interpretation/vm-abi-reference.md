@@ -112,6 +112,8 @@ The `CallStack` class provides typed accessors:
 3. Set `state.ClosureHandle` for closure calls
 4. Invoke the callee delegate (for external methods or compiled function bodies)
 
+Stored-closure heap layout: `object[]` at the handle, `[0] = lambda index (boxed long)`, `[1..] = upvalue cells (`long[1]`). Function-table bodies read and write `cell[0]`. The enclosing frame stores a heap handle to the same cell in the captured variable's slot.
+
 ### Callee Responsibilities
 1. Allocate frame header (push previousFP + savedSP)
 2. Reserve local slots

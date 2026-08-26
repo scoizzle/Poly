@@ -165,12 +165,7 @@ public static partial class DirectVmAbiEmitter {
             var valueExpr = CompileNode(a.Value, ctx);
             int valSlot = ctx.RingDepth - 1;
             var foldVal = FoldResultToSlot(ref valSlot, d, ctx);
-            var closureArr = Convert(
-                ArrayAccess(ctx.HeapRawSlots, Convert(ctx.ClosureHandle, typeof(int))),
-                typeof(object[]));
-            var store = Assign(
-                ArrayAccess(closureArr, Constant(capIndex + 1)),
-                Convert(ctx.RingVar(valSlot), typeof(object)));
+            var store = Assign(EmitCaptureCellValue(ctx, capIndex), ctx.RingVar(valSlot));
             ctx.RingDepth = valSlot + 1;
             return Block(valueExpr, foldVal, store);
         }
@@ -189,7 +184,9 @@ public static partial class DirectVmAbiEmitter {
         foreach (var v in block.Variables) {
             if (v is Variable variable) {
                 ctx.DeclareVariable(variable);
-                varInitExprs.Add(Assign(ctx.VariableRead(variable), Constant(0L)));
+                varInitExprs.Add(ctx.NeedsCell(variable)
+                    ? EmitUpvalueCellInit(variable, ctx)
+                    : Assign(ctx.VariableRead(variable), Constant(0L)));
             }
         }
         var stmtExprs = new List<Expression>();
@@ -413,14 +410,7 @@ public static partial class DirectVmAbiEmitter {
     private static Expression EmitParameter(Parameter p, AbiCtx ctx) {
         int slot = ctx.AllocSlot();
         if (ctx.TryGetCapture(p, out int capIndex)) {
-            var closureHandle = ctx.ClosureHandle;
-            var closureArr = Convert(
-                ArrayAccess(ctx.HeapRawSlots, Convert(closureHandle, typeof(int))),
-                typeof(object[]));
-            var captured = Convert(
-                ArrayAccess(closureArr, Constant(capIndex + 1)),
-                typeof(long));
-            return Assign(ctx.RingVar(slot), captured);
+            return Assign(ctx.RingVar(slot), EmitCaptureCellValue(ctx, capIndex));
         }
         return Assign(ctx.RingVar(slot), ParameterValue(p, ctx));
     }
@@ -445,26 +435,67 @@ public static partial class DirectVmAbiEmitter {
         return Assign(ctx.RingVar(slot), ctx.InstanceHandle);
     }
 
+    private static Expression EmitCaptureCell(AbiCtx ctx, int capIndex) =>
+        Convert(
+            ArrayAccess(
+                Convert(ArrayAccess(ctx.HeapRawSlots, Convert(ctx.ClosureHandle, typeof(int))), typeof(object[])),
+                Constant(capIndex + 1)),
+            typeof(long[]));
+
+    private static Expression EmitCaptureCellValue(AbiCtx ctx, int capIndex) =>
+        ArrayAccess(EmitCaptureCell(ctx, capIndex), Constant(0));
+
+    private static Expression EmitUpvalueCellInit(Variable v, AbiCtx ctx) {
+        ctx.MarkCellBacked(v);
+        var cellVar = Variable(typeof(long[]), "_upvalue");
+        return Block(
+            [cellVar],
+            Assign(cellVar, NewArrayBounds(typeof(long), Constant(1))),
+            Assign(ArrayAccess(cellVar, Constant(0)), Constant(0L)),
+            ctx.VariableWriteRaw(v,
+                Convert(Call(ctx.HeapLocal, HeapAllocate, Convert(cellVar, typeof(object))), typeof(long))));
+    }
+
     private static Expression EmitLambda(Lambda lambda, AbiCtx ctx) {
         if (lambda.LambdaIndex < 0)
             throw new InvalidOperationException("Lambda.LambdaIndex not set during lambda collection");
         var captures = FindCaptures(lambda.Body, ctx, lambda.Parameters);
         int arrLen = 1 + captures.Count;
         var closureArrVar = Variable(typeof(object[]), "_closureArr");
+        var locals = new List<ParameterExpression> { closureArrVar };
         var body = new List<Expression>();
         body.Add(Assign(closureArrVar, NewArrayBounds(typeof(object), Constant(arrLen))));
         body.Add(Assign(ArrayAccess(closureArrVar, Constant(0)),
             Convert(Constant((long)lambda.LambdaIndex), typeof(object))));
         for (int i = 0; i < captures.Count; i++) {
-            var cap = captures[i];
+            var cellVar = Variable(typeof(long[]), $"_upvalue{i}");
+            locals.Add(cellVar);
+            body.Add(EmitLoadOrCreateUpvalueCell(captures[i], ctx, cellVar));
             body.Add(Assign(ArrayAccess(closureArrVar, Constant(1 + i)),
-                Convert(ReadCaptureSource(cap, ctx), typeof(object))));
+                Convert(cellVar, typeof(object))));
         }
         var handle = Call(ctx.HeapLocal, HeapAllocate,
             Convert(closureArrVar, typeof(object)));
         int slot = ctx.AllocSlot();
         body.Add(Assign(ctx.RingVar(slot), Convert(handle, typeof(long))));
-        return Block([closureArrVar], body);
+        return Block(locals, body);
+    }
+
+    private static Expression EmitLoadOrCreateUpvalueCell(
+        Capture cap, AbiCtx ctx, ParameterExpression cellVar) {
+        if (ctx.TryGetCapture(cap.Binding, out int capIndex))
+            return Assign(cellVar, EmitCaptureCell(ctx, capIndex));
+        if (cap.Variable is { } v) {
+            if (!ctx.IsCellBacked(v))
+                throw new InvalidOperationException(
+                    $"VM compile rejected: captured variable '{v.Name}' has no upvalue cell.");
+            return Assign(cellVar, Convert(
+                ArrayAccess(ctx.HeapRawSlots, Convert(ctx.VariableReadRaw(v), typeof(int))),
+                typeof(long[])));
+        }
+        return Block(
+            Assign(cellVar, NewArrayBounds(typeof(long), Constant(1))),
+            Assign(ArrayAccess(cellVar, Constant(0)), ReadCaptureSource(cap, ctx)));
     }
 
     private static void DeclareFreeParameters(Node node, AbiCtx ctx, HashSet<Parameter> ownParams) {
@@ -561,7 +592,7 @@ public static partial class DirectVmAbiEmitter {
             return;
         }
         if (node is Variable v && seenVars.Add(v)) {
-            if (outerCtx.TryGetVariable(v, out _))
+            if (outerCtx.TryGetVariable(v, out _) || outerCtx.TryGetCapture(v, out _))
                 result.Add(new Capture(v, null));
             return;
         }
@@ -646,6 +677,9 @@ public static partial class DirectVmAbiEmitter {
         ctx.PushLoopScope(breakLabel, continueLabel, fel.Label);
         ctx.PushScope();
         ctx.DeclareVariable(fel.LoopVariable);
+        Expression loopVarCellInit = ctx.NeedsCell(fel.LoopVariable)
+            ? EmitUpvalueCellInit(fel.LoopVariable, ctx)
+            : Empty();
 
         int d = ctx.RingDepth;
         var collectionExpr = CompileNode(fel.Collection, ctx);
@@ -676,6 +710,7 @@ public static partial class DirectVmAbiEmitter {
 
         return Block(
             [enumerator, colObj],
+            loopVarCellInit,
             collectionExpr,
             foldCol,
             Assign(colObj, Call(ctx.HeapLocal, HeapUnsafeGet,

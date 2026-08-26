@@ -12,12 +12,16 @@ Owning stream: Interpretation only.
 - [x] Comment-only block is void; empty-string coalesce; non-nullable zero coalesce; PrimitiveTypeReference TypeCast; int−double promote.
 - [x] **U2** — `FoldCoalesce` no longer treats `0L` as empty; `0` is a value for non-nullable coalesce (matches emit).
 - [x] **U5** — `CompileFunctionBody` is the function-table entry for stored-lambda `Invoke(Variable)` / `Invoke(Parameter)`.
+- [x] **U1** — `ulong` is 64-bit bitcast into the ring (`unchecked (long)` / `(ulong)`). `ulong.MaxValue` round-trips via `GetValue<ulong>()`.
+- [x] **U3** — 0-arg `new` matches all-optional ctors and applies defaults; no matching ctor compile-rejects (no dummy `object[0]`). Value types with no ctor still `default(T)`.
+- [x] **U4** — Closure-path `Parameter` lookup falls back to same name (stored lambda + inline).
+
+- [x] Stored closures late-bind: captured `Variable`s share heap `long[1]` cells with the enclosing frame (inline `Invoke(Lambda)` and `Invoke(fn)` agree).
 
 ## Open
 
-- [ ] **U1** — `ulong` values that do not fit in signed `long` (`ulong.MaxValue`): define ABI (heap vs reject) and test.
-- [ ] **U3** — `new` all-optional ctor with 0 args; unresolved ctor fail-closed (no dummy `object[0]`).
-- [ ] **U4** — Closure-path `Parameter` identity vs same-name different instance (fuzz hides via inline).
+- Nested frame-slot aliasing (inner/outer `FrameOffset` 0) still open.
+- Declare-init as `Assignment` (~50 sites) parked.
 
 ## Process
 

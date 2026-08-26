@@ -217,4 +217,113 @@ public class LanguageVmTests {
         using var exec = Interpreter.Execute(Interpreter.Compile(node));
         await Assert.That(exec.GetValue<long>()).IsEqualTo(7L);
     }
+
+    [Test]
+    public async Task Lambda_SameNameDifferentParameterInstance_BindsAsOwn() {
+        var own = new Parameter("x", TypeReference.To<long>());
+        var other = new Parameter("x", TypeReference.To<long>());
+        var node = new Invoke(new Lambda([own], other), new Constant(7L));
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(7L);
+    }
+
+    [Test]
+    public async Task StoredLambda_SameNameDifferentParameterInstance_BindsAsOwn() {
+        var fn = new Variable("fn");
+        var own = new Parameter("x", TypeReference.To<long>());
+        var other = new Parameter("x", TypeReference.To<long>());
+        var node = new Block([
+            new Assignment(fn, new Lambda([own], other)),
+            new Invoke(fn, new Constant(7L))
+        ], [fn]);
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.RawValue).IsEqualTo(7L);
+    }
+
+    [Test]
+    public async Task ULong_MaxValue_RoundTripsAsBits() {
+        var node = new Constant(ulong.MaxValue);
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.RawValue).IsEqualTo(unchecked((long)ulong.MaxValue));
+        await Assert.That(exec.GetValue<ulong>()).IsEqualTo(ulong.MaxValue);
+    }
+
+    [Test]
+    public async Task ULong_SmallValue_IsUnsigned() {
+        var node = new Constant(150UL);
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<ulong>()).IsEqualTo(150UL);
+    }
+
+    [Test]
+    public async Task SetArgs_ULongMaxValue_RoundTrips() {
+        var p = new Parameter("x", TypeReference.To<ulong>());
+        var program = Interpreter.Compile(p);
+        using var exec = Interpreter.Execute(program, s => s.SetArgs(ulong.MaxValue));
+        await Assert.That(exec.GetValue<ulong>()).IsEqualTo(ulong.MaxValue);
+    }
+
+    [Test]
+    public async Task StoredClosure_MutateAfterStore_SeesLatestValue() {
+        var captured = new Variable("captured");
+        var fn = new Variable("fn");
+        var node = new Block([
+            new Assignment(captured, new Constant(1L)),
+            new Assignment(fn, new Lambda([], captured)),
+            new Assignment(captured, new Constant(2L)),
+            new Invoke(fn)
+        ], [captured, fn]);
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.RawValue).IsEqualTo(2L);
+    }
+
+    [Test]
+    public async Task StoredClosure_Write_IsVisibleToOuter() {
+        var captured = new Variable("captured");
+        var fn = new Variable("fn");
+        var node = new Block([
+            new Assignment(captured, new Constant(1L)),
+            new Assignment(fn, new Lambda([], new Assignment(captured, new Constant(2L)))),
+            new Invoke(fn),
+            captured
+        ], [captured, fn]);
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.RawValue).IsEqualTo(2L);
+    }
+
+    [Test]
+    public async Task TwoStoredClosures_ShareUpvalue() {
+        var captured = new Variable("captured");
+        var reader = new Variable("reader");
+        var writer = new Variable("writer");
+        var node = new Block([
+            new Assignment(captured, new Constant(1L)),
+            new Assignment(reader, new Lambda([], captured)),
+            new Assignment(writer, new Lambda([], new Assignment(captured, new Constant(3L)))),
+            new Invoke(writer),
+            new Invoke(reader)
+        ], [captured, reader, writer]);
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.RawValue).IsEqualTo(3L);
+    }
+
+    [Test]
+    public async Task NestedStoredClosure_SharesOuterUpvalue() {
+        var captured = new Variable("captured");
+        var inner = new Variable("inner");
+        var outer = new Variable("outer");
+        var resultFn = new Variable("resultFn");
+        var node = new Block([
+            new Assignment(captured, new Constant(1L)),
+            new Assignment(outer, new Lambda([], new Block([
+                new Assignment(inner, new Lambda([], captured)),
+                inner
+            ], [inner]))),
+            new Assignment(captured, new Constant(4L)),
+            new Assignment(resultFn, new Invoke(outer)),
+            new Invoke(resultFn)
+        ], [captured, outer, resultFn]);
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.RawValue).IsEqualTo(4L);
+    }
 }

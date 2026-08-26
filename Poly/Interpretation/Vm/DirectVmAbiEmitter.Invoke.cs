@@ -190,13 +190,13 @@ public static partial class DirectVmAbiEmitter {
                         ctx.DeclareParameter(p);
             }
 
-            // Trivial inline: no captures → compile body directly in the caller's
-            // context.  Skip when the lambda has parameters but Invoke has no
-            // argument expressions (SetArgs pattern): those parameters live in
-            // value-stack slots and need ParamSlotOffset/FramePos setup from the
-            // frame path so locals don't overwrite them on EmitScopeStores.
-            if (FindCaptures(lambda.Body, ctx, lambda.Parameters).Count == 0
-                && !(lambda.Parameters.Count > 0 && invoke.Arguments.Length == 0)) {
+            // Compile the body in the caller's context so captured Variables
+            // read/write the same upvalue cells as the enclosing frame.
+            // Skip when the lambda has parameters but Invoke has no argument
+            // expressions (SetArgs pattern): those parameters live in
+            // value-stack slots and need ParamSlotOffset/FramePos setup from
+            // the frame path so locals don't overwrite them on EmitScopeStores.
+            if (!(lambda.Parameters.Count > 0 && invoke.Arguments.Length == 0)) {
                 return EmitInlineInvoke(lambda, invoke, ctx);
             }
 
@@ -207,13 +207,6 @@ public static partial class DirectVmAbiEmitter {
             int savedNextParamSlot = ctx.SaveAndResetParamSlots();
             foreach (var param in lambda.Parameters)
                 ctx.DeclareParameter(param);
-
-            // 1. Compile the Lambda node — allocates closure on heap, result on ring
-            var closureExpr = EmitLambda(lambda, ctx);
-            var invokeCaptures = FindCaptures(lambda.Body, ctx, lambda.Parameters);
-            for (int i = 0; i < invokeCaptures.Count; i++)
-                ctx.DeclareCapture(invokeCaptures[i].Binding, i);
-            int closureSlot = ctx.RingDepth - 1;
 
             // 2. Compile arguments — each goes on ring
             var argExprs = new List<Expression>();
@@ -235,11 +228,6 @@ public static partial class DirectVmAbiEmitter {
             preBody.Add(Assign(invokeSp, spProp));
             for (int k = 0; k < saveDepth; k++)
                 preBody.Add(Assign(ArrayAccess(regSlots, Add(invokeSp, Constant(k))), ctx.RingVar(k)));
-
-            // 4. Set state.ClosureHandle from the closure slot
-            preBody.Add(Assign(
-                Property(ctx.State, nameof(VmState.ClosureHandle)),
-                Convert(ctx.RingVar(closureSlot), typeof(int))));
 
             // 5. Push arguments from ring to value stack with optional 2-word frame header.
             // When there are explicit Invoke arguments, push a 2-word header (PreviousFP,
@@ -327,7 +315,7 @@ public static partial class DirectVmAbiEmitter {
             ctx.ParamSlotOffset = savedParamOffset;  // restore
             ctx.RestoreParamSlots(savedNextParamSlot);  // restore outer param slot counter
             ctx.PopScope();
-            return Block([invokeSp, callSp, invokeResult], closureExpr, Block(argExprs),
+            return Block([invokeSp, callSp, invokeResult], Block(argExprs),
                 Block(preBody.Concat(postBody)));
         }
 
@@ -438,7 +426,8 @@ public static partial class DirectVmAbiEmitter {
     /// <summary>
     /// Compile a lambda body as a standalone <c>Action&lt;VmState&gt;</c> delegate.
     /// Parameters are read from value-stack slots.
-    /// Captured variables are read from/written to <c>heap[state.ClosureHandle][captureIndex]</c>.
+    /// Captured bindings are read from/written to upvalue cells in
+    /// <c>heap[state.ClosureHandle][captureIndex + 1]</c> (<c>long[1]</c>).
     /// </summary>
     private static Action<VmState> CompileFunctionBody(
         Node body,
@@ -446,13 +435,15 @@ public static partial class DirectVmAbiEmitter {
         List<Capture> captures,
         Action<VmState>[] functionTable,
         CompilationMode mode,
-        AnalysisResult analysis) {
+        AnalysisResult analysis,
+        HashSet<object> capturedBindings) {
 
         var fnCtx = new AbiCtx();
         fnCtx.FunctionTableExpr = Constant(functionTable);
         fnCtx.Mode = mode;
         fnCtx.Analysis = analysis;
         fnCtx.IsCompiledFunctionBody = true;
+        fnCtx.CapturedBindings = capturedBindings;
         var bodyExprs = new List<Expression>();
 
         bodyExprs.Add(Label(fnCtx.EntryLabel));
@@ -694,7 +685,7 @@ public static partial class DirectVmAbiEmitter {
         int i => i,
         uint ui => ui,
         long l => l,
-        ulong ul => (long)ul,
+        ulong ul => unchecked((long)ul),
         char c => c,
         float f => BitConverter.DoubleToInt64Bits(f),
         double d => BitConverter.DoubleToInt64Bits(d),

@@ -288,22 +288,21 @@ public static partial class DirectVmAbiEmitter {
             ArrayAccess(SlotsLocal, Add(FramePosLocal, Constant(varIndex)));
 
         public Expression VariableRead(Variable v) {
-            if (_variableRegisters.TryGetValue(v, out int regIdx))
-                return _regVars[regIdx];
-            if (TryGetVariable(v, out int slotIndex))
-                return VariableRead(slotIndex);
-            throw new InvalidOperationException($"Variable '{v.Name}' not declared in any scope");
+            var raw = VariableReadRaw(v);
+            if (!IsCellBacked(v))
+                return raw;
+            return ArrayAccess(
+                Convert(ArrayAccess(HeapRawSlots, Convert(raw, typeof(int))), typeof(long[])),
+                Constant(0));
         }
 
         public Expression VariableWrite(int varIndex, Expression value) =>
             Assign(VariableRead(varIndex), value);
 
         public Expression VariableWrite(Variable v, Expression value) {
-            if (_variableRegisters.TryGetValue(v, out int regIdx))
-                return Assign(_regVars[regIdx], value);
-            if (TryGetVariable(v, out int slotIndex))
-                return VariableWrite(slotIndex, value);
-            throw new InvalidOperationException($"Variable '{v.Name}' not declared in any scope");
+            if (IsCellBacked(v))
+                return Assign(VariableRead(v), value);
+            return VariableWriteRaw(v, value);
         }
 
         public Expression ParameterRead(int paramIndex) =>
@@ -388,8 +387,18 @@ public static partial class DirectVmAbiEmitter {
         private readonly List<Type?> _rootParameterClrTypes = [];
         public IReadOnlyList<Type?> RootParameterClrTypes => _rootParameterClrTypes;
 
-        public bool TryGetParameterSlot(Parameter p, out int slot) =>
-            _parameters.TryGetValue(p, out slot);
+        public bool TryGetParameterSlot(Parameter p, out int slot) {
+            if (_parameters.TryGetValue(p, out slot))
+                return true;
+            foreach (var (param, s) in _parameters) {
+                if (param.Name == p.Name) {
+                    slot = s;
+                    return true;
+                }
+            }
+            slot = 0;
+            return false;
+        }
 
         public int SaveAndResetParamSlots() {
             int saved = _nextParamSlot;
@@ -399,14 +408,52 @@ public static partial class DirectVmAbiEmitter {
 
         public void RestoreParamSlots(int saved) => _nextParamSlot = saved;
 
+        public HashSet<object> CapturedBindings { get; set; } = new(ReferenceEqualityComparer.Instance);
+
+        private readonly HashSet<object> _cellBacked = new(ReferenceEqualityComparer.Instance);
+
+        public bool NeedsCell(Variable v) => CapturedBindings.Contains(v);
+
+        public bool IsCellBacked(Variable v) => _cellBacked.Contains(v);
+
+        public void MarkCellBacked(Variable v) => _cellBacked.Add(v);
+
+        public Expression VariableReadRaw(Variable v) {
+            if (_variableRegisters.TryGetValue(v, out int regIdx))
+                return _regVars[regIdx];
+            if (TryGetVariable(v, out int slotIndex))
+                return VariableRead(slotIndex);
+            throw new InvalidOperationException($"Variable '{v.Name}' not declared in any scope");
+        }
+
+        public Expression VariableWriteRaw(Variable v, Expression value) {
+            if (_variableRegisters.TryGetValue(v, out int regIdx))
+                return Assign(_regVars[regIdx], value);
+            if (TryGetVariable(v, out int slotIndex))
+                return VariableWrite(slotIndex, value);
+            throw new InvalidOperationException($"Variable '{v.Name}' not declared in any scope");
+        }
+
         private readonly Dictionary<object, int> _capturedBindings = new(ReferenceEqualityComparer.Instance);
 
         public void DeclareCapture(object binding, int captureIndex) {
             _capturedBindings[binding] = captureIndex;
         }
 
-        public bool TryGetCapture(object binding, out int captureIndex) =>
-            _capturedBindings.TryGetValue(binding, out captureIndex);
+        public bool TryGetCapture(object binding, out int captureIndex) {
+            if (_capturedBindings.TryGetValue(binding, out captureIndex))
+                return true;
+            if (binding is Parameter p) {
+                foreach (var (key, idx) in _capturedBindings) {
+                    if (key is Parameter cap && cap.Name == p.Name) {
+                        captureIndex = idx;
+                        return true;
+                    }
+                }
+            }
+            captureIndex = 0;
+            return false;
+        }
 
         private readonly List<Node?> _stepNodes = new();
         public IReadOnlyList<Node> StepNodes => _stepNodes.ToArray().Where(n => n is not null).Select(n => n!).ToList().AsReadOnly();

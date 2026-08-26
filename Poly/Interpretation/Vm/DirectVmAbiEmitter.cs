@@ -34,8 +34,8 @@ namespace Poly.Interpretation.Vm;
 /// </remarks>
 public static partial class DirectVmAbiEmitter {
     /// <summary>
-    /// Describes a captured variable: the <see cref="Variable"/> node and its
-    /// slot index in the <em>outer</em> (capturing) scope's value stack.
+    /// Describes a captured binding. Stored closures share a heap <c>long[1]</c>
+    /// cell with the enclosing frame so later writes are visible (late-bind).
     /// </summary>
     private sealed record Capture(Variable? Variable, Parameter? Parameter) {
         public object Binding => (object?)Variable ?? Parameter!;
@@ -89,12 +89,19 @@ public static partial class DirectVmAbiEmitter {
 
         var lambdas = new List<Lambda>();
         CollectLambdas(root, lambdas);
+        var capturedBindings = new HashSet<object>(ReferenceEqualityComparer.Instance);
+        foreach (var lam in lambdas) {
+            foreach (var cap in FindBodyCaptures(lam))
+                capturedBindings.Add(cap.Binding);
+        }
+        ctx.CapturedBindings = capturedBindings;
         var functionTable = new Action<VmState>[lambdas.Count];
         ctx.FunctionTableExpr = Constant(functionTable);
         for (int i = 0; i < lambdas.Count; i++) {
             var lam = lambdas[i];
             functionTable[i] = CompileFunctionBody(
-                lam.Body, lam.Parameters, FindBodyCaptures(lam), functionTable, mode, analysis);
+                lam.Body, lam.Parameters, FindBodyCaptures(lam), functionTable, mode, analysis,
+                capturedBindings);
         }
 
         body.Add(Label(ctx.EntryLabel));
@@ -268,20 +275,8 @@ public static partial class DirectVmAbiEmitter {
             if (resolved is ClrConstructor clrCtor)
                 ctor = clrCtor.ConstructorInfo;
         }
-        if (ctor is null && targetType is not null) {
-            // Runtime Type from analysis — not a compile-time known member.
-            if (n.Arguments.Length == 0) {
-                ctor = targetType.GetConstructor(Type.EmptyTypes);
-            }
-            else {
-                ctor = targetType.GetConstructors()
-                    .FirstOrDefault(c => {
-                        var ps = c.GetParameters();
-                        int required = ps.Count(p => !p.HasDefaultValue);
-                        return n.Arguments.Length >= required && n.Arguments.Length <= ps.Length;
-                    });
-            }
-        }
+        if (ctor is null && targetType is not null)
+            ctor = MatchConstructor(targetType, n.Arguments.Length);
         if (ctor is not null) {
             int d = ctx.RingDepth;
             var argExprs = new List<Expression>();
@@ -321,19 +316,26 @@ public static partial class DirectVmAbiEmitter {
             ctx.RingDepth = slot + 1;
             return Block(argExprs.Concat([Assign(ctx.RingVar(slot), Convert(handle, typeof(long)))]));
         }
-        if (targetType is not null && n.Arguments.Length == 0) {
-            Expression defaultObj = targetType.IsValueType
-                ? Convert(Constant(0L), typeof(object))
-                : Constant(null, typeof(object));
+        if (targetType is { IsValueType: true } && n.Arguments.Length == 0) {
+            var boxedDefault = Convert(Default(targetType), typeof(object));
             int slot2 = ctx.AllocSlot();
-            var handle2 = Call(ctx.HeapLocal, HeapAllocate, defaultObj);
+            var handle2 = Call(ctx.HeapLocal, HeapAllocate, boxedDefault);
             return Assign(ctx.RingVar(slot2), Convert(handle2, typeof(long)));
         }
-        int slot3 = ctx.AllocSlot();
-        var placeholder = NewArrayBounds(typeof(object), Constant(0));
-        var handle3 = Call(ctx.HeapLocal, HeapAllocate,
-            Convert(placeholder, typeof(object)));
-        return Assign(ctx.RingVar(slot3), Convert(handle3, typeof(long)));
+        var typeName = targetType?.Name ?? n.Type.ToString();
+        throw new InvalidOperationException(
+            $"VM compile rejected: no matching constructor for {typeName} with {n.Arguments.Length} argument(s).");
+    }
+
+    private static ConstructorInfo? MatchConstructor(Type targetType, int argumentCount) {
+        return targetType.GetConstructors()
+            .Where(c => {
+                var ps = c.GetParameters();
+                int required = ps.Count(p => !p.HasDefaultValue && !p.IsOptional);
+                return argumentCount >= required && argumentCount <= ps.Length;
+            })
+            .OrderBy(c => c.GetParameters().Length)
+            .FirstOrDefault();
     }
 
     private static Expression EmitNewArray(NewArray n, AbiCtx ctx) {
@@ -423,7 +425,7 @@ public static partial class DirectVmAbiEmitter {
             case sbyte sb: result = sb; return true;
             case ushort us: result = us; return true;
             case uint ui: result = ui; return true;
-            case ulong ul: result = (long)ul; return true;
+            case ulong ul: result = unchecked((long)ul); return true;
             case char c: result = c; return true;
             default: result = 0; return false;
         }

@@ -661,22 +661,13 @@ public static partial class DirectVmAbiEmitter {
             var init = CompileNode(v.Initializer, ctx);
             int slot = ctx.RingDepth - 1;
             var fold = FoldResultToSlot(ref slot, d, ctx);
-            return Block(init, fold, ctx.VariableWrite(v, ctx.RingVar(slot)), ctx.RingVar(slot));
+            Expression cellInit = ctx.NeedsCell(v) ? EmitUpvalueCellInit(v, ctx) : Empty();
+            return Block(init, fold, cellInit, ctx.VariableWrite(v, ctx.RingVar(slot)), ctx.RingVar(slot));
         }
 
-        // Check capture (upvalue) first — used inside lambda bodies
         if (ctx.TryGetCapture(v, out int capIndex)) {
             int slot = ctx.AllocSlot();
-            // Read from heap[ state.ClosureHandle ][ capIndex + 1 ]
-            // The closure array is object[] stored at the handle in heap raw slots.
-            var closureHandle = ctx.ClosureHandle;
-            var closureArr = Convert(
-                ArrayAccess(ctx.HeapRawSlots, Convert(closureHandle, typeof(int))),
-                typeof(object[]));
-            var captured = Convert(
-                ArrayAccess(closureArr, Constant(capIndex + 1)),
-                typeof(long));
-            return Assign(ctx.RingVar(slot), captured);
+            return Assign(ctx.RingVar(slot), EmitCaptureCellValue(ctx, capIndex));
         }
         // Local variable on value stack — read via compile-time frame offset
         int slot2 = ctx.AllocSlot();

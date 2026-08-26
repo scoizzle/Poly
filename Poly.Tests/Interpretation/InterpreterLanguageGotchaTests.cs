@@ -207,7 +207,7 @@ public class InterpreterLanguageGotchaTests {
     }
 
     [Test]
-    public async Task Invoke_StoredClosure_SnapshotsCapturesAtCreation() {
+    public async Task Invoke_StoredClosure_LateBindsCaptures() {
         var captured = new Variable("captured");
         var fn = new Variable("fn");
         var lambda = new Lambda([], captured);
@@ -218,7 +218,7 @@ public class InterpreterLanguageGotchaTests {
             new Invoke(fn)
         ], [captured, fn]);
         using var exec = Interpreter.Execute(Interpreter.Compile(node));
-        await Assert.That(exec.RawValue).IsEqualTo(1L);
+        await Assert.That(exec.RawValue).IsEqualTo(2L);
     }
 
     [Test]

@@ -73,6 +73,9 @@ public readonly record struct InterpreterResult {
             if (typeof(T) == typeof(int)) return (T)(object)(int)l;
             if (typeof(T) == typeof(short)) return (T)(object)(short)l;
             if (typeof(T) == typeof(byte)) return (T)(object)(byte)l;
+            if (typeof(T) == typeof(uint)) return (T)(object)unchecked((uint)l);
+            if (typeof(T) == typeof(ulong)) return (T)(object)unchecked((ulong)l);
+            if (typeof(T) == typeof(ushort)) return (T)(object)unchecked((ushort)l);
             if (typeof(T) == typeof(double)) return (T)(object)BitConverter.Int64BitsToDouble(l);
             if (typeof(T) == typeof(float)) return (T)(object)(float)BitConverter.Int64BitsToDouble(l);
         }

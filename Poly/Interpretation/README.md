@@ -8,6 +8,8 @@ Analyze → `Interpreter.Compile` (fail-closed on analysis errors) → `DirectVm
 
 The LINQ expression path (`BuildExpression` / `LinqExpressionGenerator`) is a **programmatic semantic checker** for that VM: the same Syntax tree must evaluate to the same result, and the expression tree is inspectable when debugging the custom VM. It is not a second language and not a replacement for `Interpreter.Compile`. C# emit is a projection of the same trees.
 
+Stored `Invoke(Variable)` / `Invoke(Parameter)` closures **late-bind**. A captured `Variable` is a heap `long[1]` cell shared with the enclosing frame, so writes after the lambda is stored are visible at invoke (and writes inside the closure are visible outside). Immediate `Invoke(Lambda)` compiles the body in the caller frame against the same cells. Parameters cannot be assigned, so a captured `Parameter` is copied into a cell at closure creation.
+
 ---
 
 ## Module boundaries

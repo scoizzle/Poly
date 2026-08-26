@@ -66,14 +66,17 @@ public readonly record struct InterpreterResult {
     /// <c>short</c>, and <c>byte</c> in addition to direct casts.</returns>
     public T? GetValue<T>() {
         if (!HasValue) return default!;
+        if (Value is null) return default!;
         if (Value is T t) return t;
         if (Value is long l) {
             if (typeof(T) == typeof(bool)) return (T)(object)(l != 0L);
             if (typeof(T) == typeof(int)) return (T)(object)(int)l;
             if (typeof(T) == typeof(short)) return (T)(object)(short)l;
             if (typeof(T) == typeof(byte)) return (T)(object)(byte)l;
+            if (typeof(T) == typeof(double)) return (T)(object)BitConverter.Int64BitsToDouble(l);
+            if (typeof(T) == typeof(float)) return (T)(object)(float)BitConverter.Int64BitsToDouble(l);
         }
-        if (typeof(T) == typeof(object)) return (T)Value!;
+        if (typeof(T) == typeof(object)) return (T)Value;
         return (T)Convert.ChangeType(Value, typeof(T))!;
     }
 

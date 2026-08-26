@@ -11,7 +11,7 @@ namespace Poly.Tests.DomainModeling.Lowering;
 /// </summary>
 public class PolicyVmEvaluationTests {
     private record Person(string Name, int Age);
-    private record Order(string Status, decimal Total);
+    private record Order(string Status, long Total);
     private record Product(string Name, int Stock);
 
     [Test]
@@ -212,18 +212,14 @@ public class PolicyVmEvaluationTests {
     [Test]
     public async Task PropertyName_Mismatch_GivesIncorrectResult() {
         // Policy references "Years" (not "Age") but subject has property "Age".
-        // The VM reads "Years" from the record, but records don't have "Years".
-        // This should produce a wrong/zero result — documenting that names must match.
+        // Unresolved member reads fail closed at emit.
         var policy = new Policy("Adult",
             DomainExpression.GreaterThanOrEqual(
                 DomainExpression.Property("Years"), // does NOT match Person.Age
                 DomainExpression.Literal(18)));
 
-        // Compiles but evaluates incorrectly because "Years" is not a property
-        var fn = policy.CompileVMPredicate<Person>();
-        // A nonexistent property reads as 0 (default long), so 0 >= 18 is false
-        await Assert.That(fn(new Person("Adult", 25))).IsFalse();
-        await Assert.That(fn(new Person("Child", 5))).IsFalse();
+        await Assert.That(() => policy.CompileVMPredicate<Person>())
+            .Throws<InvalidOperationException>();
     }
 
     // 2.5: Domain-attached policy on canonical Person entity

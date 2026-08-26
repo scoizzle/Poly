@@ -57,14 +57,13 @@ public class ValueRepresentationTests {
     }
 
     [Test]
-    public async Task NullConstant_IsStackScalar() {
-        // Null is represented as 0L sentinel on the VM stack
+    public async Task NullConstant_IsHeapRef() {
         var node = new Constant(null);
         var result = AnalyzerWithPass.Analyze(node);
         var meta = result.GetMetadata<ValueRepresentationMetadata>(node);
 
         await Assert.That(meta).IsNotNull();
-        await Assert.That(meta!.Kind).IsEqualTo(ValueRepresentationKind.StackScalar);
+        await Assert.That(meta!.Kind).IsEqualTo(ValueRepresentationKind.HeapRef);
     }
 
     [Test]

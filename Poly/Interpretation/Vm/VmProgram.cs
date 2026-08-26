@@ -29,8 +29,10 @@ public sealed record VmProgram(
     int MaxActiveLocalsDepth,
     IReadOnlyList<Action<VmState>>? Functions = null,
     ValueRepresentationKind? RootValueKind = null,
+    Type? RootClrType = null,
     IReadOnlyList<CallSiteEntry>? CallSites = null,
     IReadOnlyList<Node>? StepNodes = null,
     object? DebugInfo = null,
-    int RegisterCount = 8
+    int RegisterCount = 8,
+    IReadOnlyList<Type?>? RootParameterClrTypes = null
 );

@@ -13,6 +13,9 @@ public sealed class Analyzer {
         _analyzers = analyzers;
     }
 
+    /// <summary>Registration order after <see cref="AnalyzerBuilder"/> topological insert.</summary>
+    internal IReadOnlyList<string> PassNames => [.. _analyzers.Select(static a => a.PassName)];
+
     /// <summary>
     /// Options that control analysis behavior (including early exit).
     /// </summary>

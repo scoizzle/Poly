@@ -1,10 +1,12 @@
 # Poly.Interpretation
 
-Semantic analysis and VM execution for programs expressed as `Poly.Syntax.Nodes` ASTs.
+Generic **language VM** for programs expressed as `Poly.Ast` Syntax trees. DomainModeling is a client that lowers into this language.
 
 **Platform map:** [`docs/CORE.md`](../../docs/CORE.md) — boundaries, node replacement, direct AST→VM (read before inventing parallel paths).
 
-The module turns a syntax tree into a runnable program: analysis passes attach metadata and diagnostics, then the direct AST-to-VM-ABI emitter produces an executable delegate. Per [VM as canonical semantics](../../docs/decisions/2026-06-08-vm-as-canonical-semantics.md), this path is the **authoritative behavior** for the platform — not the legacy LINQ expression generator or removed tree-walker.
+Analyze → `Interpreter.Compile` (fail-closed on analysis errors) → `DirectVmAbiEmitter` → `VmState`. Per [VM as canonical semantics](../../docs/decisions/2026-06-08-vm-as-canonical-semantics.md), this path is the **authoritative behavior**.
+
+The LINQ expression path (`BuildExpression` / `LinqExpressionGenerator`) is a **programmatic semantic checker** for that VM: the same Syntax tree must evaluate to the same result, and the expression tree is inspectable when debugging the custom VM. It is not a second language and not a replacement for `Interpreter.Compile`. C# emit is a projection of the same trees.
 
 ---
 
@@ -18,7 +20,7 @@ The module turns a syntax tree into a runnable program: analysis passes attach m
 | Out | `Poly.Synthesis` | Uses VM to validate macros |
 | No | `Poly.Synthesis` | Interpretation must not depend on Synthesis |
 
-Domain constructs lower to generic VM opcodes — no domain opcodes in this module ([domain-lowering boundary](../../docs/decisions/2026-06-08-domain-lowering-boundary.md)).
+Domain constructs lower to generic Syntax nodes — no domain opcodes or domain types in this module ([domain-lowering boundary](../../docs/decisions/2026-06-08-domain-lowering-boundary.md)).
 
 ---
 
@@ -37,7 +39,7 @@ Domain constructs lower to generic VM opcodes — no domain opcodes in this modu
        │
        ▼
   AnalyzerBuilder  ──►  AnalysisResult
-  (13 passes)            metadata + diagnostics
+  (14 passes)            metadata + diagnostics
        │
        ▼
   DirectVmAbiEmitter ──►  VmProgram
@@ -97,33 +99,18 @@ long handle = exec.RawValue;
 | [`Analysis/`](Analysis/) | Semantic analysis passes | [`Analysis/README.md`](Analysis/README.md) — pass registry, ordering, diagnostics |
 | [`Vm/`](Vm/) | Compile primitives → delegate; runtime state | [`Vm/README.md`](Vm/README.md) — `ProgramCompiler`, stack/heap ABI |
 | [`CSharp/`](CSharp/) | C# source emission from AST | Secondary backend; not canonical semantics |
-| [`LinqExpressions/`](LinqExpressions/) | LINQ expression trees from AST | Test/reference path; migration to VM ongoing (see tracker INT-003) |
+| [`LinqExpressions/`](LinqExpressions/) | LINQ expression trees from AST | Semantic parity + inspectable execution for the VM (not a second engine) |
 | [`Mermaid/`](Mermaid/) | Mermaid diagrams from AST | Visualization only |
 
 Root files: `Interpreter.cs` (pipeline + execute), `ExecutionResult.cs`, `InterpreterResult.cs`.
 
 ---
 
-## Standard analysis pipeline (12 passes)
+## Standard analysis pipeline
 
-Registered in `Interpreter._analyzer` in this order. **Do not reorder** without updating [`Analysis/README.md`](Analysis/README.md) and tests.
+`Interpreter._analyzer` is 14 passes. **Built order** (after `AnalyzerBuilder` topological insert) is asserted by `StandardAnalyzer_PassNames_MatchInterpreterPipeline` and listed in [`Analysis/README.md`](Analysis/README.md). Do not copy a `Use*` registration list here — insert order ≠ registration order.
 
-| # | Extension | Purpose |
-|---|-----------|---------|
-| 1 | `.UseTypeAndMemberResolver()` | Resolved types and members |
-| 2 | `.UseVariableScopeValidator()` | Scopes and variable lifetime |
-| 3 | `.UseSideEffectAnalysis()` | Purity, elision, assignment-use |
-| 4 | `.UseThisReferenceContext()` | `this` type in member bodies |
-| 5 | `.UseJumpTargetResolution()` | Break / continue / goto targets |
-| 6 | `.UseControlFlowAnalysis()` | CFG, reachability, loop metadata |
-| 7 | `.UseValueRepresentationAnalysis()` | Stack scalar / bool / heap ref / void |
-| 8 | `.UseCallSiteCatalog()` | Module call-site table + per-node indices |
-| 9 | `.UseConstantFolding()` | Constant propagation and folding |
-| 10 | `.UseDefiniteAssignmentAnalysis()` | Definite assignment |
-| 11 | `.UseLambdaReturnTypeResolution()` | Lambda return types |
-| 12 | `.UseExceptionRegionAnalysis()` | Try/catch/using region table |
-
-Custom pipelines: build your own `Analyzer` via `AnalyzerBuilder` (same extensions).
+`Interpreter.Compile` fails closed on every `DiagnosticSeverity.Error`. Use `Analyze` to inspect diagnostics without emitting.
 
 ---
 
@@ -164,10 +151,10 @@ ring locals.
 
 ### Compilation Modes
 
-| Mode | Debug Hooks | PC Tracking | Use Case |
-|------|-------------|-------------|----------|
-| `Normal` (default) | Enabled | Enabled | Development, debugging, testing |
-| `NoDebug` | Disabled | Disabled | Production, benchmarks, maximum speed |
+| Mode | Debug Hooks | PC Tracking | Loop-tick sandbox | Use Case |
+|------|-------------|-------------|-------------------|----------|
+| `Normal` (default) | Enabled | Enabled | Enabled | Development, debugging, testing |
+| `NoDebug` | Disabled | Disabled | Omitted | Production, benchmarks, maximum speed |
 
 ---
 
@@ -231,9 +218,12 @@ the hook checks a `volatile bool` and returns immediately. `StepOver` sets a fla
 so the next hook invocation blocks and signals back — the program runs at full
 speed when nobody is stepping.
 
-For lower-level control, use `VmState.DebugInterrupt` (invoked before each µop
-with the full `VmState`) or `VmState.DebugHook` (invoked before each AST node
-with a locals span and heap reference).
+`VmState.DebugHook` is the live integration: Normal-mode `CompileStatement` invokes
+it before each statement (root, and each `Block` child). Loop/if/try bodies are
+hooked only when those bodies are themselves `Block`s. `CompilationMode.NoDebug`
+omits the hook entirely. `CurrentAstNode` is written only when a hook is attached.
+
+`VmState.DebugInterrupt` is unused by the emitter (kept on `VmState` only).
 
 ---
 
@@ -380,7 +370,7 @@ dotnet run --project Poly.Tests/Poly.Tests.csproj
 Syntax types Interpretation most often compiles:
 
 - **Core:** `Constant`, `Parameter`, `Variable`, `Block`
-- **Calls:** `Member`, `Invoke`, `IndexAccess`, `New`, `Lambda`
+- **Calls:** `Member`, `Invoke` (`Lambda`, stored `Variable`/`Parameter` closures, or `Member`), `IndexAccess`, `New`, `Lambda`
 - **Operators:** `Add`, `Subtract`, `Multiply`, `Divide`, `Equal`, comparisons, `And` / `Or` / `Not`, bitwise/shift
 - **Control flow:** `Conditional`, `IfStatement`, loops, `Return`, `BreakStatement`, `ContinueStatement`, `GotoStatement`, `TryCatchFinally`, `UsingStatement`, `SwitchStatement`
 - **Types:** `TypeCast`, `TypeIs`, `TypeAs`, `TypeReference`

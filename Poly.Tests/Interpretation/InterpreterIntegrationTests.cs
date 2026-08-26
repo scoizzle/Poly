@@ -1,3 +1,4 @@
+using Poly.Interpretation;
 using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.Interpretation;
@@ -23,6 +24,8 @@ public class InterpreterIntegrationTests {
 
         // Assert
         await Assert.That(result).IsEqualTo(27);
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<int>()).IsEqualTo(27);
     }
 
     [Test]
@@ -37,6 +40,13 @@ public class InterpreterIntegrationTests {
         await Assert.That(compiled(5)).IsEqualTo(20);    // (5 * 2) + 10 = 20
         await Assert.That(compiled(0)).IsEqualTo(10);    // (0 * 2) + 10 = 10
         await Assert.That(compiled(-3)).IsEqualTo(4);    // (-3 * 2) + 10 = 4
+        var program = Interpreter.Compile(node);
+        using var exec5 = Interpreter.Execute(program, s => s.SetArgs(5));
+        await Assert.That(exec5.GetValue<int>()).IsEqualTo(20);
+        using var exec0 = Interpreter.Execute(program, s => s.SetArgs(0));
+        await Assert.That(exec0.GetValue<int>()).IsEqualTo(10);
+        using var execNeg = Interpreter.Execute(program, s => s.SetArgs(-3));
+        await Assert.That(execNeg.GetValue<int>()).IsEqualTo(4);
     }
 
     [Test]
@@ -53,6 +63,13 @@ public class InterpreterIntegrationTests {
         await Assert.That(compiled(2, 3, 4)).IsEqualTo(20);   // (2 + 3) * 4 = 20
         await Assert.That(compiled(5, 5, 2)).IsEqualTo(20);   // (5 + 5) * 2 = 20
         await Assert.That(compiled(1, 1, 10)).IsEqualTo(20);  // (1 + 1) * 10 = 20
+        var program = Interpreter.Compile(node);
+        using var exec1 = Interpreter.Execute(program, s => s.SetArgs(2, 3, 4));
+        await Assert.That(exec1.GetValue<int>()).IsEqualTo(20);
+        using var exec2 = Interpreter.Execute(program, s => s.SetArgs(5, 5, 2));
+        await Assert.That(exec2.GetValue<int>()).IsEqualTo(20);
+        using var exec3 = Interpreter.Execute(program, s => s.SetArgs(1, 1, 10));
+        await Assert.That(exec3.GetValue<int>()).IsEqualTo(20);
     }
 
     [Test]
@@ -69,6 +86,13 @@ public class InterpreterIntegrationTests {
         await Assert.That(compiled(15)).IsEqualTo(30);    // 15 > 10: true -> 15 * 2 = 30
         await Assert.That(compiled(5)).IsEqualTo(10);     // 5 > 10: false -> 5 + 5 = 10
         await Assert.That(compiled(10)).IsEqualTo(15);    // 10 > 10: false -> 10 + 5 = 15
+        var program = Interpreter.Compile(node);
+        using var exec15 = Interpreter.Execute(program, s => s.SetArgs(15));
+        await Assert.That(exec15.GetValue<int>()).IsEqualTo(30);
+        using var exec5 = Interpreter.Execute(program, s => s.SetArgs(5));
+        await Assert.That(exec5.GetValue<int>()).IsEqualTo(10);
+        using var exec10 = Interpreter.Execute(program, s => s.SetArgs(10));
+        await Assert.That(exec10.GetValue<int>()).IsEqualTo(15);
     }
 
     [Test]
@@ -85,6 +109,8 @@ public class InterpreterIntegrationTests {
 
         // Assert
         await Assert.That(result).IsEqualTo(15.0);    // (5 + 2.5) * 2 = 15.0
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<double>()).IsEqualTo(15.0);
     }
 
     [Test]
@@ -101,6 +127,11 @@ public class InterpreterIntegrationTests {
         await Assert.That(compiled(null)).IsEqualTo(15);    // (null ?? 10) + 5 = 15
         await Assert.That(compiled(20)).IsEqualTo(25);      // (20 ?? 10) + 5 = 25
         await Assert.That(compiled(0)).IsEqualTo(5);        // (0 ?? 10) + 5 = 5
+        var program = Interpreter.Compile(node);
+        using var execNull = Interpreter.Execute(program, s => s.SetArgs([null]));
+        await Assert.That(execNull.GetValue<int>()).IsEqualTo(15);
+        using var exec20 = Interpreter.Execute(program, s => s.SetArgs(20));
+        await Assert.That(exec20.GetValue<int>()).IsEqualTo(25);
     }
 
     [Test]
@@ -117,6 +148,8 @@ public class InterpreterIntegrationTests {
 
         // Assert
         await Assert.That(result).IsEqualTo(30);
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<int>()).IsEqualTo(30);
     }
 
     [Test]
@@ -135,6 +168,13 @@ public class InterpreterIntegrationTests {
         await Assert.That(compiled(25)).IsEqualTo(100);    // 25 > 10 && 25 > 20
         await Assert.That(compiled(15)).IsEqualTo(50);     // 15 > 10 && 15 <= 20
         await Assert.That(compiled(5)).IsEqualTo(0);       // 5 <= 10
+        var program = Interpreter.Compile(node);
+        using var exec25 = Interpreter.Execute(program, s => s.SetArgs(25));
+        await Assert.That(exec25.GetValue<int>()).IsEqualTo(100);
+        using var exec15 = Interpreter.Execute(program, s => s.SetArgs(15));
+        await Assert.That(exec15.GetValue<int>()).IsEqualTo(50);
+        using var exec5 = Interpreter.Execute(program, s => s.SetArgs(5));
+        await Assert.That(exec5.GetValue<int>()).IsEqualTo(0);
     }
 
     [Test]
@@ -152,6 +192,8 @@ public class InterpreterIntegrationTests {
 
         // Assert
         await Assert.That(result).IsEqualTo(30);
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<int>()).IsEqualTo(30);
     }
 
     [Test]
@@ -169,6 +211,8 @@ public class InterpreterIntegrationTests {
 
         // Assert
         await Assert.That(result).IsEqualTo(25);
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<int>()).IsEqualTo(25);
     }
 
     [Test]
@@ -192,6 +236,13 @@ public class InterpreterIntegrationTests {
         await Assert.That(compiled(5, 1, 6)).IsEqualTo(1);     // 25 - 24 = 1
         await Assert.That(compiled(4, 1, 3)).IsEqualTo(4);     // 16 - 12 = 4
         await Assert.That(compiled(10, 2, 5)).IsEqualTo(60);   // 100 - 40 = 60
+        var program = Interpreter.Compile(node);
+        using var exec1 = Interpreter.Execute(program, s => s.SetArgs(5, 1, 6));
+        await Assert.That(exec1.GetValue<int>()).IsEqualTo(1);
+        using var exec2 = Interpreter.Execute(program, s => s.SetArgs(4, 1, 3));
+        await Assert.That(exec2.GetValue<int>()).IsEqualTo(4);
+        using var exec3 = Interpreter.Execute(program, s => s.SetArgs(10, 2, 5));
+        await Assert.That(exec3.GetValue<int>()).IsEqualTo(60);
     }
 
     [Test]
@@ -206,6 +257,8 @@ public class InterpreterIntegrationTests {
 
         // Assert
         await Assert.That(result).IsEqualTo("Hello World");
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<string>()).IsEqualTo("Hello World");
     }
 
     [Test]
@@ -220,5 +273,10 @@ public class InterpreterIntegrationTests {
         // Assert
         await Assert.That(compiled("Alice")).IsEqualTo("Hello, Alice");
         await Assert.That(compiled("Bob")).IsEqualTo("Hello, Bob");
+        var program = Interpreter.Compile(node);
+        using var execA = Interpreter.Execute(program, s => s.SetArgs("Alice"));
+        await Assert.That(execA.GetValue<string>()).IsEqualTo("Hello, Alice");
+        using var execB = Interpreter.Execute(program, s => s.SetArgs("Bob"));
+        await Assert.That(execB.GetValue<string>()).IsEqualTo("Hello, Bob");
     }
 }

@@ -19,7 +19,8 @@ public sealed record DebugResult(
     Node Node,
     IReadOnlyList<(string Name, long Value)> Locals,
     bool IsCompleted = false,
-    bool IsSuspend = false
+    bool IsSuspend = false,
+    Exception? Fault = null
 );
 
 /// <summary>
@@ -54,6 +55,7 @@ public sealed class VmDebugger : IDisposable {
     private readonly ManualResetEvent _completed = new(false);  // set when delegate finishes
     private volatile bool _stepRequested;   // set by StepOver, read by hook
     private volatile bool _disposed;
+    private volatile Exception? _executionException;
 
     /// <summary>Named local variables at the last statement boundary.
     /// Updated after each <see cref="StepOver"/> or <see cref="Continue"/>.
@@ -75,6 +77,10 @@ public sealed class VmDebugger : IDisposable {
     /// Check before calling <see cref="StepOver"/> to avoid waiting.</summary>
     public bool IsCompleted => _completed.WaitOne(0);
 
+    /// <summary>Exception thrown by the compiled delegate, or null if it
+    /// completed normally or has not finished.</summary>
+    public Exception? ExecutionException => _executionException;
+
     /// <summary>Creates a new VM debugger for the given compiled program.
     /// Optionally accepts a pre-existing <see cref="VmState"/> for stateful
     /// debugging sessions (e.g. after a suspend).</summary>
@@ -93,6 +99,8 @@ public sealed class VmDebugger : IDisposable {
     /// </summary>
     public DebugResult Start(CancellationToken ct = default) {
         ObjectDisposedException.ThrowIf(_disposed, this);
+        if (_execution is not null)
+            throw new InvalidOperationException("VM debugger has already been started.");
         _state.Status = InterpreterStatus.Running;
         _state.Registers ??= new long[256];
         _state.DebugHook = DebugHookHandler;
@@ -103,11 +111,11 @@ public sealed class VmDebugger : IDisposable {
 
         _execution = Task.Run(() => {
             try { _program.Delegate(_state); }
+            catch (Exception ex) { _executionException = ex; }
             finally { _completed.Set(); _hookReady.Set(); }
-        }, ct);
+        });
 
-        // Wait for the first hook to fire — it will because _stepRequested is set
-        WaitHandle.WaitAny([_hookReady, _completed]);
+        WaitForBoundary(ct);
         if (_completed.WaitOne(0))
             return CaptureCompleted();
         return CaptureResult();
@@ -120,14 +128,14 @@ public sealed class VmDebugger : IDisposable {
     /// </summary>
     public DebugResult StepOver(CancellationToken ct = default) {
         ObjectDisposedException.ThrowIf(_disposed, this);
+        EnsureStarted();
 
         _stepRequested = true;
 
         // Release the hook if it was blocked from the previous step
         _stepRelease.Set();
 
-        // Wait for the hook to fire at the next statement boundary
-        WaitHandle.WaitAny([_hookReady, _completed]);
+        WaitForBoundary(ct);
 
         if (_completed.WaitOne(0))
             return CaptureCompleted();
@@ -140,6 +148,7 @@ public sealed class VmDebugger : IDisposable {
     /// </summary>
     public DebugResult Continue(CancellationToken ct = default) {
         ObjectDisposedException.ThrowIf(_disposed, this);
+        EnsureStarted();
 
         // Clear step flag — hook runs free from now on
         _stepRequested = false;
@@ -147,19 +156,33 @@ public sealed class VmDebugger : IDisposable {
         // Release any currently-blocked hook
         _stepRelease.Set();
 
-        // Wait for completion or suspend
-        var handles = new WaitHandle[] { _completed, _hookReady };
-        while (!ct.IsCancellationRequested) {
-            int which = WaitHandle.WaitAny(handles);
+        var handles = ct.CanBeCanceled
+            ? new WaitHandle[] { _completed, _hookReady, ct.WaitHandle }
+            : new WaitHandle[] { _completed, _hookReady };
+        while (true) {
+            WaitHandle.WaitAny(handles);
             ct.ThrowIfCancellationRequested();
             if (_completed.WaitOne(0))
                 return CaptureCompleted();
             if (_state.Status == InterpreterStatus.Suspended)
                 return CaptureResult();
-            // _hookReady was set (stale from a previous step) — ignore
         }
-        ct.ThrowIfCancellationRequested();
-        return CaptureResult();
+    }
+
+    private void EnsureStarted() {
+        if (_execution is null)
+            throw new InvalidOperationException("VM debugger has not been started.");
+    }
+
+    private void WaitForBoundary(CancellationToken ct) {
+        var handles = ct.CanBeCanceled
+            ? new WaitHandle[] { _hookReady, _completed, ct.WaitHandle }
+            : new WaitHandle[] { _hookReady, _completed };
+        WaitHandle.WaitAny(handles);
+        if (ct.IsCancellationRequested) {
+            _stepRelease.Set();
+            ct.ThrowIfCancellationRequested();
+        }
     }
 
     // ── Hook ─────────────────────────────────────────────────
@@ -204,7 +227,8 @@ public sealed class VmDebugger : IDisposable {
         var r = new DebugResult(
             Node: _state.CurrentAstNode ?? new Constant(0L),
             Locals: CurrentLocals,
-            IsCompleted: true);
+            IsCompleted: true,
+            Fault: _executionException);
         CurrentNode = r.Node;
         return r;
     }
@@ -228,13 +252,12 @@ public sealed class VmDebugger : IDisposable {
         if (debugInfo is null || debugInfo.Variables.Count == 0)
             return Array.Empty<(string, long)>();
         var result = new (string, long)[debugInfo.Variables.Count];
-        int count = Math.Min(debugInfo.Variables.Count, localsSpan.Length);
-        for (int i = 0; i < count; i++) {
+        for (int i = 0; i < debugInfo.Variables.Count; i++) {
             var v = debugInfo.Variables[i];
-            result[i] = (v.Name, localsSpan[v.FrameOffset]);
+            result[i] = (v.Name, (uint)v.FrameOffset < (uint)localsSpan.Length
+                ? localsSpan[v.FrameOffset]
+                : 0L);
         }
-        for (int i = count; i < debugInfo.Variables.Count; i++)
-            result[i] = (debugInfo.Variables[i].Name, 0L);
         return result;
     }
 

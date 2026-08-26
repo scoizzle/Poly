@@ -100,20 +100,12 @@ public static partial class DirectVmAbiEmitter {
                         return Block(fullBody);
                     }
                     if (resultType.IsValueType) {
-                        if (AbiValueTypes.IsLongRepresentable(resultType)) {
-                            fullBody.Add(Assign(ctx.RingVar(slot), Convert(callExpr, typeof(long))));
-                        }
-                        else {
-                            fullBody.Add(Assign(ctx.RingVar(slot),
-                                Convert(Call(ctx.HeapLocal, HeapAllocate,
-                                    Convert(callExpr, typeof(object))), typeof(long))));
-                        }
+                        fullBody.Add(Assign(ctx.RingVar(slot),
+                            ConvertClrToRing(callExpr, resultType, ctx)));
                         return Block(fullBody);
                     }
-                    // Reference type return: allocate on heap
                     fullBody.Add(Assign(ctx.RingVar(slot),
-                        Convert(Call(ctx.HeapLocal, HeapAllocate,
-                            Convert(callExpr, typeof(object))), typeof(long))));
+                        ConvertClrToRing(Convert(callExpr, typeof(object)), resultType, ctx)));
                     return Block(fullBody);
                 }
             }
@@ -179,9 +171,7 @@ public static partial class DirectVmAbiEmitter {
                     Convert(Convert(invokeCall, returnClr), typeof(long))));
             }
             else {
-                // Resolved non-void AST method, or unresolved member (method is null).
-                // InvokeNamed returns DomainResult / policy bool / null. BoxToAbi maps
-                // bool to 0/1 and null to 0 (same as the old unresolved assign-0).
+                // CLR/AST invoke result → ring via BoxToAbi (bool 0/1, null 0, refs handles).
                 astBody.Add(Assign(ctx.RingVar(astSlot),
                     Call(null, BoxToAbiInfo, ctx.HeapLocal, invokeCall)));
             }
@@ -189,13 +179,23 @@ public static partial class DirectVmAbiEmitter {
         }
 
         if (invoke.Delegate is Lambda lambda) {
+            if (invoke.Arguments.Length > 0 && invoke.Arguments.Length != lambda.Parameters.Count)
+                throw new InvalidOperationException(
+                    $"VM compile rejected: lambda has {lambda.Parameters.Count} parameter(s) but invoke has {invoke.Arguments.Length} argument(s).");
+            var ownParams = new HashSet<Parameter>(lambda.Parameters, ReferenceEqualityComparer.Instance);
+            DeclareFreeParameters(lambda.Body, ctx, ownParams);
+            foreach (var arg in invoke.Arguments) {
+                if (arg is Parameter p && !ownParams.Contains(p) && ownParams.All(op => op.Name != p.Name))
+                    if (!ctx.TryGetParameterSlot(p, out _))
+                        ctx.DeclareParameter(p);
+            }
 
             // Trivial inline: no captures → compile body directly in the caller's
             // context.  Skip when the lambda has parameters but Invoke has no
             // argument expressions (SetArgs pattern): those parameters live in
             // value-stack slots and need ParamSlotOffset/FramePos setup from the
             // frame path so locals don't overwrite them on EmitScopeStores.
-            if (FindCaptures(lambda.Body, ctx).Count == 0
+            if (FindCaptures(lambda.Body, ctx, lambda.Parameters).Count == 0
                 && !(lambda.Parameters.Count > 0 && invoke.Arguments.Length == 0)) {
                 return EmitInlineInvoke(lambda, invoke, ctx);
             }
@@ -210,6 +210,9 @@ public static partial class DirectVmAbiEmitter {
 
             // 1. Compile the Lambda node — allocates closure on heap, result on ring
             var closureExpr = EmitLambda(lambda, ctx);
+            var invokeCaptures = FindCaptures(lambda.Body, ctx, lambda.Parameters);
+            for (int i = 0; i < invokeCaptures.Count; i++)
+                ctx.DeclareCapture(invokeCaptures[i].Binding, i);
             int closureSlot = ctx.RingDepth - 1;
 
             // 2. Compile arguments — each goes on ring
@@ -328,8 +331,76 @@ public static partial class DirectVmAbiEmitter {
                 Block(preBody.Concat(postBody)));
         }
 
-        throw new NotSupportedException(
-            $"DirectVmAbiEmitter: Invoke not supported for delegate type {invoke.Delegate.GetType().Name}");
+        if (invoke.Delegate is Poly.Ast.Nodes.Variable or Poly.Ast.Nodes.Parameter)
+            return EmitInvokeIndirect(invoke, ctx);
+
+        throw new InvalidOperationException(
+            $"VM compile rejected: Invoke target must be a member or lambda, got {invoke.Delegate.GetType().Name}.");
+    }
+
+    private static Expression EmitInvokeIndirect(Invoke invoke, AbiCtx ctx) {
+        var targetExpr = CompileNode(invoke.Delegate, ctx);
+        int targetSlot = ctx.RingDepth - 1;
+        var argExprs = new List<Expression>();
+        int[] argSlots = new int[invoke.Arguments.Length];
+        for (int i = 0; i < invoke.Arguments.Length; i++) {
+            argExprs.Add(CompileNode(invoke.Arguments[i], ctx));
+            argSlots[i] = ctx.RingDepth - 1;
+        }
+        var argInits = new Expression[invoke.Arguments.Length];
+        for (int i = 0; i < invoke.Arguments.Length; i++)
+            argInits[i] = ctx.RingVar(argSlots[i]);
+        int outSlot = ctx.AllocSlot();
+        ctx.RingDepth = outSlot + 1;
+        var call = Assign(ctx.RingVar(outSlot),
+            Call(null, InvokeHeapClosureInfo,
+                ctx.State,
+                ctx.RingVar(targetSlot),
+                ctx.FunctionTableExpr!,
+                NewArrayInit(typeof(long), argInits)));
+        var seq = new List<Expression>(argExprs.Count + 2) { targetExpr };
+        seq.AddRange(argExprs);
+        seq.Add(call);
+        return Block(seq);
+    }
+
+    private static long InvokeHeapClosure(VmState state, long handle, Action<VmState>[] table, long[] args) {
+        if (handle <= 0)
+            throw new InvalidOperationException("VM: invoke of null.");
+        var obj = state.Heap.UnsafeGet((int)handle);
+        if (obj is not object[] closure || closure.Length < 1 || closure[0] is not long idxL)
+            throw new InvalidOperationException("VM: invoke target is not a closure.");
+        int idx = (int)idxL;
+        if ((uint)idx >= (uint)table.Length || table[idx] is null)
+            throw new InvalidOperationException("VM: invalid closure index.");
+
+        var stack = state.Stack;
+        int callSp = stack.StackPointer;
+        int header = 2;
+        int n = Math.Max(1, args.Length);
+        int need = callSp + header + n;
+        if (need > stack.RawSlots.Length)
+            throw new InvalidOperationException("VM: value stack overflow.");
+        stack.SetStackPointer(need);
+        var slots = stack.RawSlots;
+        slots[callSp] = state.FramePos;
+        slots[callSp + 1] = callSp;
+        for (int i = 0; i < args.Length; i++)
+            slots[callSp + header + i] = args[i];
+
+        int savedFp = state.FramePos;
+        int savedClosure = state.ClosureHandle;
+        state.FramePos = callSp + header;
+        state.ClosureHandle = (int)handle;
+        try {
+            table[idx](state);
+            return slots[callSp + header];
+        }
+        finally {
+            state.FramePos = savedFp;
+            state.ClosureHandle = savedClosure;
+            stack.SetStackPointer(callSp);
+        }
     }
 
     /// <summary>Inline a small lambda with no captures and a single-expression body.
@@ -340,7 +411,7 @@ public static partial class DirectVmAbiEmitter {
         var argExprs = new Expression[invoke.Arguments.Length];
         for (int i = 0; i < invoke.Arguments.Length; i++) {
             argExprs[i] = CompileNode(invoke.Arguments[i], ctx);
-            ctx.MapInlineParameter(i, ctx.RingDepth - 1);
+            ctx.MapInlineParameter(lambda.Parameters[i], ctx.RingDepth - 1);
         }
         var bodyExpr = CompileNode(lambda.Body, ctx);
         ctx.ClearInlineParameters();
@@ -374,25 +445,23 @@ public static partial class DirectVmAbiEmitter {
         IReadOnlyList<Parameter> parameters,
         List<Capture> captures,
         Action<VmState>[] functionTable,
-        CompilationMode mode) {
+        CompilationMode mode,
+        AnalysisResult analysis) {
 
         var fnCtx = new AbiCtx();
         fnCtx.FunctionTableExpr = Constant(functionTable);
         fnCtx.Mode = mode;
+        fnCtx.Analysis = analysis;
+        fnCtx.IsCompiledFunctionBody = true;
         var bodyExprs = new List<Expression>();
 
-        // Preamble
         bodyExprs.Add(Label(fnCtx.EntryLabel));
         bodyExprs.Add(Assign(fnCtx.SlotsLocal, fnCtx.SlotsInitExpression));
         bodyExprs.Add(Assign(fnCtx.HeapLocal, fnCtx.HeapInitExpression));
         bodyExprs.Add(Assign(fnCtx.Registers,
             Coalesce(fnCtx.Registers, NewArrayBounds(typeof(long), Constant(256)))));
         bodyExprs.Add(Assign(fnCtx.FramePosLocal,
-            Condition(
-                Equal(Property(fnCtx.State, nameof(VmState.Status)),
-                    Constant(InterpreterStatus.Resuming)),
-                Property(fnCtx.State, nameof(VmState.FramePos)),
-                Constant(0))));
+            Property(fnCtx.State, nameof(VmState.FramePos))));
 
         if (mode != CompilationMode.NoDebug) {
             fnCtx.DebugHookProp = Property(fnCtx.State, nameof(VmState.DebugHook));
@@ -400,7 +469,7 @@ public static partial class DirectVmAbiEmitter {
 
         // Register captures so EmitVariable/EmitAssignment can route to heap reads
         for (int i = 0; i < captures.Count; i++)
-            fnCtx.DeclareCapture(captures[i].Variable, i);
+            fnCtx.DeclareCapture(captures[i].Binding, i);
 
         // Declare parameters as value-stack variables (mapped to _slots[_fp + idx])
         fnCtx.PushScope();
@@ -503,6 +572,9 @@ public static partial class DirectVmAbiEmitter {
     private static readonly MethodInfo InvokeInstanceMethodInfo =
         Ref.Method((Expression<Func<object, string, object?[], object?>>)((instance, name, args) =>
             InvokeInstanceMethod(instance, name, args)));
+    private static readonly MethodInfo InvokeHeapClosureInfo =
+        typeof(DirectVmAbiEmitter).GetMethod(nameof(InvokeHeapClosure),
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!;
 
     /// <summary>
     /// Generic instance-method dispatch for Invoke(Member) whose resolved
@@ -557,18 +629,60 @@ public static partial class DirectVmAbiEmitter {
             $"Type '{instanceType.Name}' does not define method '{methodName}' with {args.Length} parameter(s).");
     }
 
-    private static System.Collections.IList AsIListOrThrow(object? collection) {
-        if (collection is System.Collections.IList list)
-            return list;
+    private static System.Collections.IEnumerator GetEnumeratorOrThrow(object? collection) {
+        if (collection is null)
+            throw new InvalidOperationException("foreach collection is null.");
+        if (collection is System.Collections.IEnumerable enumerable)
+            return enumerable.GetEnumerator();
         throw new InvalidOperationException(
-            collection is null
-                ? "foreach collection is null."
-                : $"foreach collection type '{collection.GetType().Name}' is not IList.");
+            $"foreach collection type '{collection.GetType().Name}' is not IEnumerable.");
     }
 
-    private static int IListCountOf(System.Collections.IList list) => list.Count;
+    private static long ConvertAbi(Heap heap, long raw, Type? source, Type target) {
+        object? value;
+        if (source == typeof(double) || source == typeof(float))
+            value = BitConverter.Int64BitsToDouble(raw);
+        else if (source == typeof(bool))
+            value = raw != 0L;
+        else if (source is not null && source.IsValueType && AbiValueTypes.IsLongRepresentable(source))
+            value = System.Convert.ChangeType(raw, source);
+        else if (source is not null && !source.IsValueType)
+            value = raw == 0L ? null : heap.UnsafeGet((int)raw);
+        else if (!target.IsValueType)
+            value = raw == 0L ? null : heap.UnsafeGet((int)raw);
+        else
+            value = raw;
 
-    private static object? IListItemAt(System.Collections.IList list, int index) => list[index];
+        if (value is null) {
+            if (target.IsValueType)
+                throw new InvalidCastException($"Cannot convert null to '{target}'.");
+            return 0L;
+        }
+
+        if (target == typeof(double) || target == typeof(float))
+            return BitConverter.DoubleToInt64Bits(System.Convert.ToDouble(value));
+        if (target == typeof(bool))
+            return System.Convert.ToBoolean(value) ? 1L : 0L;
+        if (target.IsValueType && AbiValueTypes.IsLongRepresentable(target)) {
+            var truncated = Math.Truncate(System.Convert.ToDouble(value));
+            return System.Convert.ToInt64(System.Convert.ChangeType(truncated, target));
+        }
+        var converted = target.IsInstanceOfType(value) ? value : System.Convert.ChangeType(value, target);
+        return BoxToAbi(heap, converted);
+    }
+
+    private static long UnboxNullableToLong(Heap heap, long handle) {
+        if (handle == 0L) return 0L;
+        var obj = heap.UnsafeGet((int)handle);
+        if (obj is null) return 0L;
+        return System.Convert.ToInt64(obj);
+    }
+
+    private static long TypeAsAbi(Heap heap, long raw, Type target) {
+        if (raw == 0L) return 0L;
+        var obj = heap.UnsafeGet((int)raw);
+        return obj is not null && target.IsInstanceOfType(obj) ? raw : 0L;
+    }
 
     private static long BoxToAbi(Heap heap, object? value) => value switch {
         null => 0L,
@@ -580,6 +694,10 @@ public static partial class DirectVmAbiEmitter {
         int i => i,
         uint ui => ui,
         long l => l,
+        ulong ul => (long)ul,
+        char c => c,
+        float f => BitConverter.DoubleToInt64Bits(f),
+        double d => BitConverter.DoubleToInt64Bits(d),
         _ => heap.Allocate(value)
     };
 

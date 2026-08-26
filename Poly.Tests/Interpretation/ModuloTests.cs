@@ -1,3 +1,4 @@
+using Poly.Interpretation;
 using Poly.Tests.TestHelpers;
 
 using Expr = System.Linq.Expressions.Expression;
@@ -17,6 +18,8 @@ public class ModuloTests {
 
         // Assert
         await Assert.That(result).IsEqualTo(2);
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(2L);
     }
 
     [Test]
@@ -31,6 +34,8 @@ public class ModuloTests {
 
         // Assert
         await Assert.That(result).IsEqualTo(0);
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(0L);
     }
 
     [Test]
@@ -45,6 +50,8 @@ public class ModuloTests {
 
         // Assert
         await Assert.That(result).IsEqualTo(1.5);
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<double>()).IsEqualTo(1.5);
     }
 
     [Test]
@@ -60,6 +67,9 @@ public class ModuloTests {
 
         // Assert
         await Assert.That(result).IsEqualTo(2);
+        var program = Interpreter.Compile(node);
+        using var exec = Interpreter.Execute(program, s => s.SetArgs(17, 5));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(2L);
     }
 
     [Test]
@@ -74,18 +84,8 @@ public class ModuloTests {
 
         // Assert
         await Assert.That(result).IsEqualTo(-2);
-    }
-
-    [Test]
-    public async Task Modulo_GetTypeDefinition_ReturnsNumericType() {
-        // Arrange
-        var node = new Modulo(Wrap(17), Wrap(5));
-
-        // Act - build to trigger semantic analysis
-        _ = node.BuildExpression();
-
-        // Assert
-        await Assert.That(node).IsNotNull();
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(-2L);
     }
 
     [Test]

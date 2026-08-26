@@ -10,7 +10,7 @@ public sealed class Heap {
     /// <summary>Next free handle index. Starts at 1 so handle 0 remains the
     /// ABI null / falsy sentinel (never allocated to a live object).</summary>
     private int _count = 1;
-    private readonly Stack<int> _freeSlots = [];
+    private readonly HashSet<int> _freeSlots = [];
 
     /// <summary>Total number of allocated slots (including free-list recycled slots).</summary>
     public int Count => _count;
@@ -24,7 +24,10 @@ public sealed class Heap {
     /// <param name="value">The object to store (may be null).</param>
     /// <returns>A non-zero handle that can be used to retrieve the object.</returns>
     public int Allocate(object? value) {
-        if (_freeSlots.TryPop(out int freeHandle)) {
+        if (value is null) return 0;
+        if (_freeSlots.Count > 0) {
+            int freeHandle = _freeSlots.First();
+            _freeSlots.Remove(freeHandle);
             _objects[freeHandle] = value;
             return freeHandle;
         }
@@ -63,9 +66,7 @@ public sealed class Heap {
             throw new ArgumentOutOfRangeException(nameof(handle), "Handle 0 is reserved for null");
         if ((uint)handle >= (uint)_count)
             throw new ArgumentOutOfRangeException(nameof(handle), "Invalid heap handle");
-        _objects[handle] = value;
-        if (value is null)
-            _freeSlots.Push(handle);
+        Recycle(handle, value);
     }
 
     /// <summary>Unsafe get — skips bounds checking. Only use when the handle
@@ -79,9 +80,16 @@ public sealed class Heap {
     /// <param name="handle">The heap handle.</param>
     /// <param name="value">The new object value.</param>
     public void UnsafeSet(int handle, object? value) {
+        Recycle(handle, value);
+    }
+
+    private void Recycle(int handle, object? value) {
+        if (_freeSlots.Contains(handle))
+            throw new InvalidOperationException($"Heap handle {handle} is already free.");
+        bool wasLive = _objects[handle] is not null;
         _objects[handle] = value;
-        if (value is null && handle != 0)
-            _freeSlots.Push(handle);
+        if (value is null && wasLive)
+            _freeSlots.Add(handle);
     }
 
     /// <summary>Clears all objects and resets the free-list. Handle 0 remains

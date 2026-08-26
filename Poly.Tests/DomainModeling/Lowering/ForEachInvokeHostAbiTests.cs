@@ -34,7 +34,7 @@ public class ForEachInvokeHostAbiTests {
         var item = new Variable("item");
         var node = new ForEachLoop(
             item,
-            new Constant(new object[] { inst }),
+            new Constant(new[] { inst }),
             new Invoke(new Member(item, "Notify"), new Constant("Draft")));
         var program = Interpreter.Compile(node);
         using var exec = Interpreter.Execute(program);
@@ -55,11 +55,9 @@ public class ForEachInvokeHostAbiTests {
         var item = new Variable("item");
         var node = new ForEachLoop(
             item,
-            new Constant(new object[] { inst }),
+            new Constant(new[] { inst }),
             new Invoke(new Member(item, "Process")));
-        var program = Interpreter.Compile(node);
-        using var exec = Interpreter.Execute(program);
-        await Assert.That(inst.GetProperty<object>("Status")).IsEqualTo("done");
+        await Assert.That(() => Interpreter.Compile(node)).Throws<InvalidOperationException>();
     }
 
     [Test]

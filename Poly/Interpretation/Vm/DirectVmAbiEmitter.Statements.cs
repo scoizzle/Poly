@@ -131,8 +131,8 @@ public static partial class DirectVmAbiEmitter {
         }
 
         if (a.Destination is not Variable destVar) {
-            throw new NotSupportedException(
-                $"Assignment destination must be a Variable or IndexAccess, got {a.Destination.GetType().Name}");
+            throw new InvalidOperationException(
+                $"VM compile rejected: assignment destination must be a Variable, Member, or IndexAccess, got {a.Destination.GetType().Name}.");
         }
 
         if (a.Value is NewArray newArr && newArr.Length is Constant lenConst
@@ -231,67 +231,53 @@ public static partial class DirectVmAbiEmitter {
         var valueExpr = CompileNode(sw.Value, ctx);
         int valSlot = ctx.RingDepth - 1;
         var foldVal = FoldResultToSlot(ref valSlot, d, ctx);
-        ctx.RingDepth = valSlot + 1;
-
-        Expression defExpr;
-        int defSlot;
-        if (sw.DefaultCase != null) {
-            int defDepth = ctx.RingDepth;
-            defExpr = CompileNode(sw.DefaultCase, ctx);
-            ctx.RingDepth = defDepth + 1;
-            defSlot = defDepth;
-        }
-        else {
-            defSlot = ctx.AllocSlot();
-            defExpr = Assign(ctx.RingVar(defSlot), Constant(0L));
-        }
-
-        var compiledCases = new (Expression pExpr, int pSlot, Expression bExpr, int bSlot)[sw.Cases.Count];
-        for (int i = 0; i < sw.Cases.Count; i++) {
-            var c = sw.Cases[i];
-            int pDepth = ctx.RingDepth;
-            var pExpr = CompileNode(c.Pattern, ctx);
-            ctx.RingDepth = pDepth + 1;
-            int pSlot = pDepth;
-            int bDepth = ctx.RingDepth;
-            var bExpr = CompileNode(c.Body, ctx);
-            ctx.RingDepth = bDepth + 1;
-            int bSlot = bDepth;
-            compiledCases[i] = (pExpr, pSlot, bExpr, bSlot);
-        }
-
-        Expression resultExpr = ctx.RingVar(defSlot);
-        for (int i = sw.Cases.Count - 1; i >= 0; i--) {
-            var (_, pSlot, _, bSlot) = compiledCases[i];
-            resultExpr = Condition(
-                Expression.Equal(ctx.RingVar(valSlot), ctx.RingVar(pSlot)),
-                ctx.RingVar(bSlot),
-                resultExpr
-            );
-        }
+        int savedDepth = valSlot + 1;
+        ctx.RingDepth = savedDepth;
 
         int outSlot = ctx.AllocSlot();
-        ctx.RingDepth = outSlot + 1;
-        var allExprs = new List<Expression> { valueExpr, defExpr };
-        foreach (var (pExpr, _, bExpr, _) in compiledCases) {
-            allExprs.Add(pExpr);
-            allExprs.Add(bExpr);
+        ctx.RingDepth = savedDepth;
+
+        Expression rest;
+        if (sw.DefaultCase != null) {
+            var defBody = CompileNode(sw.DefaultCase, ctx);
+            int defSlot = ctx.RingDepth - 1;
+            rest = Block(defBody, Assign(ctx.RingVar(outSlot), ctx.RingVar(defSlot)));
         }
-        allExprs.Add(foldVal);
-        allExprs.Add(Assign(ctx.RingVar(outSlot), resultExpr));
-        return Block(allExprs);
+        else {
+            rest = Assign(ctx.RingVar(outSlot), Constant(0L));
+        }
+
+        for (int i = sw.Cases.Count - 1; i >= 0; i--) {
+            ctx.RingDepth = savedDepth;
+            var c = sw.Cases[i];
+            var pExpr = CompileNode(c.Pattern, ctx);
+            int pSlot = ctx.RingDepth - 1;
+            ctx.RingDepth = savedDepth;
+            var bExpr = CompileNode(c.Body, ctx);
+            int bSlot = ctx.RingDepth - 1;
+            rest = Block(
+                pExpr,
+                IfThenElse(
+                    Equal(ctx.RingVar(valSlot), ctx.RingVar(pSlot)),
+                    Block(bExpr, Assign(ctx.RingVar(outSlot), ctx.RingVar(bSlot))),
+                    rest));
+        }
+
+        ctx.RingDepth = outSlot + 1;
+        return Block(valueExpr, foldVal, rest, ctx.RingVar(outSlot));
     }
 
     private static Expression EmitWhileLoop(WhileLoop wl, AbiCtx ctx) {
         int d = ctx.RingDepth;
         var breakLabel = Label("wl_break");
         var continueLabel = Label("wl_continue");
-        ctx.PushLoopScope(breakLabel, continueLabel);
+        ctx.PushLoopScope(breakLabel, continueLabel, wl.Label);
         var test = CompileConditionAsBool(wl.Condition, ctx);
         ctx.RingDepth = d;
         var bodyExpr = CompileNode(wl.Body, ctx);
         ctx.RingDepth = d;
         var loopBody = Block(
+            EmitLoopIterationGuard(ctx),
             IfThen(Not(test), Goto(breakLabel)),
             bodyExpr,
             Label(continueLabel));
@@ -301,16 +287,32 @@ public static partial class DirectVmAbiEmitter {
         return result;
     }
 
+    private static Expression EmitLoopIterationGuard(AbiCtx ctx) {
+        if (ctx.Mode == CompilationMode.NoDebug)
+            return Empty();
+        var max = Property(ctx.State, nameof(VmState.MaxLoopIterations));
+        var ticks = Property(ctx.State, nameof(VmState.LoopTicks));
+        return IfThen(
+            GreaterThanOrEqual(max, Constant(0L)),
+            Block(
+                Assign(ticks, Add(ticks, Constant(1L))),
+                IfThen(
+                    GreaterThan(ticks, max),
+                    Throw(New(InvalidOperationExceptionStringCtor,
+                        Constant("MaxLoopIterations exceeded."))))));
+    }
+
     private static Expression EmitDoWhileLoop(DoWhileLoop dwl, AbiCtx ctx) {
         int d = ctx.RingDepth;
         var breakLabel = Label("dwl_break");
         var continueLabel = Label("dwl_continue");
-        ctx.PushLoopScope(breakLabel, continueLabel);
+        ctx.PushLoopScope(breakLabel, continueLabel, dwl.Label);
         var bodyExpr = CompileNode(dwl.Body, ctx);
         ctx.RingDepth = d;
         var test = CompileConditionAsBool(dwl.Condition, ctx);
         ctx.RingDepth = d;
         var loopBody = Block(
+            EmitLoopIterationGuard(ctx),
             bodyExpr,
             Label(continueLabel),
             IfThen(Not(test), Goto(breakLabel)));
@@ -350,7 +352,7 @@ public static partial class DirectVmAbiEmitter {
         }
         var catchBlocks = new List<CatchBlock>();
         foreach (var clause in tcf.CatchClauses) {
-            var exType = typeof(Exception);
+            var exType = ResolveCatchClrType(clause.ExceptionType, ctx);
             var exParam = Parameter(exType, clause.VariableName ?? "ex");
             ctx.PushScope();
             Variable? synthetic = null;
@@ -409,21 +411,34 @@ public static partial class DirectVmAbiEmitter {
     }
 
     private static Expression EmitParameter(Parameter p, AbiCtx ctx) {
-        if (!ctx.TryGetParameterSlot(p, out int paramIdx)) {
-            paramIdx = ctx.DeclareParameter(p);
-        }
         int slot = ctx.AllocSlot();
-        // Root SetArgs({ this }) lives in InstanceHandle so locals cannot wipe it.
-        // Nested lambda parameters use the frame / inline map.
-        Expression value = paramIdx == 0 && ctx.ParamSlotOffset == 0 && !ctx.HasInlineParameters
-            ? ctx.InstanceHandle
-            : ctx.ParameterRead(paramIdx);
-        return Assign(ctx.RingVar(slot), value);
+        if (ctx.TryGetCapture(p, out int capIndex)) {
+            var closureHandle = ctx.ClosureHandle;
+            var closureArr = Convert(
+                ArrayAccess(ctx.HeapRawSlots, Convert(closureHandle, typeof(int))),
+                typeof(object[]));
+            var captured = Convert(
+                ArrayAccess(closureArr, Constant(capIndex + 1)),
+                typeof(long));
+            return Assign(ctx.RingVar(slot), captured);
+        }
+        return Assign(ctx.RingVar(slot), ParameterValue(p, ctx));
+    }
+
+    private static Expression ParameterValue(Parameter p, AbiCtx ctx) {
+        if (ctx.TryGetInlineParameter(p, out int ringSlot))
+            return ctx.RingVar(ringSlot);
+        if (!ctx.TryGetParameterSlot(p, out int paramIdx))
+            paramIdx = ctx.DeclareParameter(p);
+        if (paramIdx == 0 && ctx.ParamSlotOffset == 0 && !ctx.HasInlineParameters
+            && !ctx.IsCompiledFunctionBody)
+            return ctx.InstanceHandle;
+        return ctx.ParameterRead(paramIdx);
     }
 
     /// <summary>
     /// Domain programs bind the instance via <c>SetArgs({ this })</c> at slot 0.
-    /// ThisReference is that handle — not the ABI null sentinel 0.
+    /// After SetArgs, ThisReference is that handle. Unset slot 0 is ABI null 0.
     /// </summary>
     private static Expression EmitThis(AbiCtx ctx) {
         int slot = ctx.AllocSlot();
@@ -433,9 +448,7 @@ public static partial class DirectVmAbiEmitter {
     private static Expression EmitLambda(Lambda lambda, AbiCtx ctx) {
         if (lambda.LambdaIndex < 0)
             throw new InvalidOperationException("Lambda.LambdaIndex not set during lambda collection");
-        var captures = FindCaptures(lambda.Body, ctx);
-        for (int i = 0; i < captures.Count; i++)
-            ctx.DeclareCapture(captures[i].Variable, i);
+        var captures = FindCaptures(lambda.Body, ctx, lambda.Parameters);
         int arrLen = 1 + captures.Count;
         var closureArrVar = Variable(typeof(object[]), "_closureArr");
         var body = new List<Expression>();
@@ -445,7 +458,7 @@ public static partial class DirectVmAbiEmitter {
         for (int i = 0; i < captures.Count; i++) {
             var cap = captures[i];
             body.Add(Assign(ArrayAccess(closureArrVar, Constant(1 + i)),
-                Convert(ctx.VariableRead(cap.Variable), typeof(object))));
+                Convert(ReadCaptureSource(cap, ctx), typeof(object))));
         }
         var handle = Call(ctx.HeapLocal, HeapAllocate,
             Convert(closureArrVar, typeof(object)));
@@ -454,42 +467,130 @@ public static partial class DirectVmAbiEmitter {
         return Block([closureArrVar], body);
     }
 
-    private static List<Capture> FindCaptures(Node body, AbiCtx outerCtx) {
+    private static void DeclareFreeParameters(Node node, AbiCtx ctx, HashSet<Parameter> ownParams) {
+        if (node is Parameter p
+            && !ownParams.Contains(p)
+            && ownParams.All(op => op.Name != p.Name)
+            && !ctx.TryGetParameterSlot(p, out _))
+            ctx.DeclareParameter(p);
+        foreach (var child in node.Children) {
+            if (child is not null)
+                DeclareFreeParameters(child, ctx, ownParams);
+        }
+    }
+
+    private static List<Capture> FindBodyCaptures(Lambda lambda) {
+        var declared = new HashSet<Variable>(ReferenceEqualityComparer.Instance);
+        CollectDeclaredLocals(lambda.Body, declared);
         var result = new List<Capture>();
-        var seen = new HashSet<Variable>(ReferenceEqualityComparer.Instance);
-        FindCapturesRecursive(body, outerCtx, result, seen);
+        var seenVars = new HashSet<Variable>(ReferenceEqualityComparer.Instance);
+        var seenParams = new HashSet<Parameter>(ReferenceEqualityComparer.Instance);
+        var ownParams = new HashSet<Parameter>(lambda.Parameters, ReferenceEqualityComparer.Instance);
+        FindBodyCapturesRecursive(lambda.Body, result, seenVars, seenParams, ownParams, declared);
         return result;
     }
 
-    private static void FindCapturesRecursive(
-        Node node, AbiCtx outerCtx, List<Capture> result, HashSet<Variable> seen) {
-        if (node is Variable v && seen.Add(v)) {
-            if (outerCtx.TryGetVariable(v, out int slotIndex)) {
-                result.Add(new Capture(v, slotIndex));
+    private static void CollectDeclaredLocals(Node node, HashSet<Variable> declared) {
+        if (node is Lambda)
+            return;
+        if (node is Block block) {
+            foreach (var v in block.Variables) {
+                if (v is Variable variable)
+                    declared.Add(variable);
             }
+        }
+        if (node is ForEachLoop fe)
+            declared.Add(fe.LoopVariable);
+        if (node is Variable declaredVar && declaredVar.Initializer is not null)
+            declared.Add(declaredVar);
+        foreach (var child in node.Children) {
+            if (child is not null)
+                CollectDeclaredLocals(child, declared);
+        }
+    }
+
+    private static void FindBodyCapturesRecursive(
+        Node node, List<Capture> result,
+        HashSet<Variable> seenVars, HashSet<Parameter> seenParams,
+        HashSet<Parameter> ownParams, HashSet<Variable> declared) {
+        if (node is Lambda nested) {
+            var nestedOwn = new HashSet<Parameter>(ownParams, ReferenceEqualityComparer.Instance);
+            foreach (var np in nested.Parameters)
+                nestedOwn.Add(np);
+            FindBodyCapturesRecursive(nested.Body, result, seenVars, seenParams, nestedOwn, declared);
+            return;
+        }
+        if (node is Variable v && seenVars.Add(v) && !declared.Contains(v)) {
+            result.Add(new Capture(v, null));
+            return;
+        }
+        if (node is Parameter p && seenParams.Add(p)) {
+            if (!ownParams.Contains(p) && ownParams.All(op => op.Name != p.Name))
+                result.Add(new Capture(null, p));
             return;
         }
         foreach (var child in node.Children) {
             if (child is not null)
-                FindCapturesRecursive(child, outerCtx, result, seen);
+                FindBodyCapturesRecursive(child, result, seenVars, seenParams, ownParams, declared);
         }
     }
 
-    /// <summary>Break statement: jump to current loop's break label.</summary>
-    private static Expression EmitBreakStatement(BreakStatement bs, AbiCtx ctx) {
-        var labels = ctx.CurrentLoopLabels;
-        if (labels == null)
-            throw new InvalidOperationException("Break outside loop");
-        return Goto(labels.Value.breakLabel);
+    private static List<Capture> FindCaptures(
+        Node body, AbiCtx outerCtx, IReadOnlyList<Parameter>? lambdaParameters = null) {
+        var result = new List<Capture>();
+        var seenVars = new HashSet<Variable>(ReferenceEqualityComparer.Instance);
+        var seenParams = new HashSet<Parameter>(ReferenceEqualityComparer.Instance);
+        var ownParams = lambdaParameters is null
+            ? null
+            : new HashSet<Parameter>(lambdaParameters, ReferenceEqualityComparer.Instance);
+        FindCapturesRecursive(body, outerCtx, result, seenVars, seenParams, ownParams);
+        return result;
     }
 
-    /// <summary>Continue statement: jump to current loop's continue label.</summary>
-    private static Expression EmitContinueStatement(ContinueStatement cs, AbiCtx ctx) {
-        var labels = ctx.CurrentLoopLabels;
-        if (labels == null)
-            throw new InvalidOperationException("Continue outside loop");
-        return Goto(labels.Value.continueLabel);
+    private static void FindCapturesRecursive(
+        Node node, AbiCtx outerCtx, List<Capture> result,
+        HashSet<Variable> seenVars, HashSet<Parameter> seenParams,
+        HashSet<Parameter>? ownParams) {
+        if (node is Lambda nested) {
+            var nestedOwn = ownParams is null
+                ? new HashSet<Parameter>(nested.Parameters, ReferenceEqualityComparer.Instance)
+                : new HashSet<Parameter>(ownParams, ReferenceEqualityComparer.Instance);
+            foreach (var np in nested.Parameters)
+                nestedOwn.Add(np);
+            FindCapturesRecursive(nested.Body, outerCtx, result, seenVars, seenParams, nestedOwn);
+            return;
+        }
+        if (node is Variable v && seenVars.Add(v)) {
+            if (outerCtx.TryGetVariable(v, out _))
+                result.Add(new Capture(v, null));
+            return;
+        }
+        if (node is Parameter p && seenParams.Add(p)) {
+            bool isOwn = ownParams is not null
+                && (ownParams.Contains(p) || ownParams.Any(op => op.Name == p.Name));
+            if (!isOwn)
+                result.Add(new Capture(null, p));
+            return;
+        }
+        foreach (var child in node.Children) {
+            if (child is not null)
+                FindCapturesRecursive(child, outerCtx, result, seenVars, seenParams, ownParams);
+        }
     }
+
+    private static Expression ReadCaptureSource(Capture cap, AbiCtx ctx) {
+        if (cap.Variable is not null)
+            return ctx.VariableRead(cap.Variable);
+        return ParameterValue(cap.Parameter!, ctx);
+    }
+
+    /// <summary>Break statement: jump to the named loop, or the innermost if unlabeled.</summary>
+    private static Expression EmitBreakStatement(BreakStatement bs, AbiCtx ctx) =>
+        Goto(ctx.ResolveLoopLabels(bs.Label).breakLabel);
+
+    /// <summary>Continue statement: jump to the named loop's continue, or the innermost if unlabeled.</summary>
+    private static Expression EmitContinueStatement(ContinueStatement cs, AbiCtx ctx) =>
+        Goto(ctx.ResolveLoopLabels(cs.Label).continueLabel);
 
     /// <summary>
     /// ForLoop: lower to { init; while(condition) { body; increment; } }
@@ -498,7 +599,7 @@ public static partial class DirectVmAbiEmitter {
     private static Expression EmitForLoop(ForLoop fl, AbiCtx ctx) {
         var breakLabel = Label("for_break");
         var continueLabel = Label("for_continue");
-        ctx.PushLoopScope(breakLabel, continueLabel);
+        ctx.PushLoopScope(breakLabel, continueLabel, fl.Label);
 
         var stmts = new List<Expression>();
         if (fl.Initializer != null)
@@ -521,11 +622,12 @@ public static partial class DirectVmAbiEmitter {
         ctx.RingDepth = d;
 
         var loopBody = new List<Expression> {
+            EmitLoopIterationGuard(ctx),
             IfThen(Not(test), Goto(breakLabel)),
-            bodyExpr
+            bodyExpr,
+            Label(continueLabel)
         };
         if (incrementExpr != null) loopBody.Add(incrementExpr);
-        loopBody.Add(Label(continueLabel));
 
         stmts.Add(Loop(Block(loopBody), breakLabel));
         ctx.PopLoopScope();
@@ -534,14 +636,14 @@ public static partial class DirectVmAbiEmitter {
     }
 
     /// <summary>
-    /// ForEachLoop: walk a heap <see cref="System.Collections.IList"/>, bind each
-    /// item onto the loop variable as a heap handle, run the body. Non-IList
-    /// (including null) fails loud via <c>AsIListOrThrow</c> — no silent empty.
+    /// ForEachLoop: walk a heap <see cref="System.Collections.IEnumerable"/>,
+    /// bind each Current onto the loop variable via <c>BoxToAbi</c>, run the body.
+    /// Null / non-enumerable fails loud. Enumerator is disposed when IDisposable.
     /// </summary>
     private static Expression EmitForEachLoop(ForEachLoop fel, AbiCtx ctx) {
         var breakLabel = Label("foreach_break");
         var continueLabel = Label("foreach_continue");
-        ctx.PushLoopScope(breakLabel, continueLabel);
+        ctx.PushLoopScope(breakLabel, continueLabel, fel.Label);
         ctx.PushScope();
         ctx.DeclareVariable(fel.LoopVariable);
 
@@ -550,9 +652,7 @@ public static partial class DirectVmAbiEmitter {
         int colSlot = ctx.RingDepth - 1;
         var foldCol = FoldResultToSlot(ref colSlot, d, ctx);
 
-        var list = Variable(typeof(System.Collections.IList), "_list");
-        var index = Variable(typeof(int), "_i");
-        var current = Variable(typeof(object), "_cur");
+        var enumerator = Variable(typeof(System.Collections.IEnumerator), "_en");
         var colObj = Variable(typeof(object), "_col");
 
         int bodyDepth = ctx.RingDepth;
@@ -561,14 +661,13 @@ public static partial class DirectVmAbiEmitter {
 
         var loop = Loop(
             Block(
-                IfThen(GreaterThanOrEqual(index, Call(null, IListCountOfInfo, list)),
+                EmitLoopIterationGuard(ctx),
+                IfThen(Not(Call(enumerator, EnumeratorMoveNext)),
                     Goto(breakLabel)),
-                Assign(current, Call(null, IListItemAtInfo, list, index)),
                 ctx.VariableWrite(fel.LoopVariable,
-                    Convert(Call(ctx.HeapLocal, HeapAllocate, current), typeof(long))),
+                    Call(null, BoxToAbiInfo, ctx.HeapLocal, Property(enumerator, EnumeratorCurrent))),
                 bodyExpr,
-                Label(continueLabel),
-                Assign(index, Add(index, Constant(1)))),
+                Label(continueLabel)),
             breakLabel);
 
         ctx.PopLoopScope();
@@ -576,14 +675,17 @@ public static partial class DirectVmAbiEmitter {
         ctx.RingDepth = d;
 
         return Block(
-            [list, index, current, colObj],
+            [enumerator, colObj],
             collectionExpr,
             foldCol,
             Assign(colObj, Call(ctx.HeapLocal, HeapUnsafeGet,
                 Convert(ctx.RingVar(colSlot), typeof(int)))),
-            Assign(list, Call(null, AsIListOrThrowInfo, colObj)),
-            Assign(index, Constant(0)),
-            loop);
+            Assign(enumerator, Call(null, GetEnumeratorOrThrowInfo, colObj)),
+            TryFinally(
+                loop,
+                IfThen(
+                    TypeIs(enumerator, typeof(IDisposable)),
+                    Call(Convert(enumerator, typeof(IDisposable)), IDisposableDispose))));
     }
 
     /// <summary>Goto statement: jump to a named label.</summary>
@@ -598,18 +700,45 @@ public static partial class DirectVmAbiEmitter {
         return Block(Label(label), CompileNode(ld.Statement, ctx));
     }
 
-    /// <summary>UsingStatement: lower to try/finally with Dispose call.</summary>
+    /// <summary>UsingStatement: try/finally Dispose when the resource is IDisposable.</summary>
     private static Expression EmitUsingStatement(UsingStatement us, AbiCtx ctx) {
+        int d = ctx.RingDepth;
         var resourceExpr = CompileNode(us.Resource, ctx);
+        int resSlot = ctx.RingDepth - 1;
         var bodyExpr = CompileNode(us.Body, ctx);
-        return Block(resourceExpr, TryFinally(bodyExpr, Empty()));
+        ctx.RingDepth = d;
+        var resObj = Variable(typeof(object), "_using");
+        return Block(
+            [resObj],
+            resourceExpr,
+            Assign(resObj, Call(ctx.HeapLocal, HeapUnsafeGet,
+                Convert(ctx.RingVar(resSlot), typeof(int)))),
+            TryFinally(
+                bodyExpr,
+                IfThen(
+                    TypeIs(resObj, typeof(IDisposable)),
+                    Call(Convert(resObj, typeof(IDisposable)), IDisposableDispose))));
     }
 
-    /// <summary>Return statement: write value to frame slot, set SP, jump to exit.</summary>
+    private static Type ResolveCatchClrType(Node? exceptionType, AbiCtx ctx) {
+        if (exceptionType is null) return typeof(Exception);
+        if (exceptionType is ClrTypeReference ctr
+            && typeof(Exception).IsAssignableFrom(ctr.RuntimeType))
+            return ctr.RuntimeType;
+        var rt = ctx.Analysis?.GetResolvedType(exceptionType)?.GetRuntimeType();
+        if (rt is not null && typeof(Exception).IsAssignableFrom(rt))
+            return rt;
+        return typeof(Exception);
+    }
+
+    /// <summary>Return statement: write value to frame slot, set SP, jump to exit.
+    /// A null <see cref="Return.Value"/> is a void return (no slot write).</summary>
     private static Expression EmitReturn(Return ret, AbiCtx ctx) {
+        if (ret.Value is null)
+            return Goto(ctx.ExitLabel);
+
         int d = ctx.RingDepth;
-        var retVal = ret.Value ?? throw new InvalidOperationException("Return with null value");
-        var valueExpr = CompileNode(retVal, ctx);
+        var valueExpr = CompileNode(ret.Value, ctx);
         int resultSlot = ctx.RingDepth - 1;
         var fold = FoldResultToSlot(ref resultSlot, d, ctx);
 

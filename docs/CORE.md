@@ -33,7 +33,7 @@ MCP harness: agent supplies context → simulate that same operation AST
 | Shipped ⊆ lowerable | A construct is shipped only if it lowers to a complete, legal Syntax AST. Gaps stay in `docs/plans/`, not in the parser or guide |
 | Always-legal **operations** | Each named operation is a full tree (no `Comment` / `null` / host walk as shipped meaning). Runtime and emit consume the same trees |
 | AST is the symbolic primary | Do not reintroduce a parallel “primitive IR” for product paths |
-| VM is canonical execution of a **program** (operation or algorithm) | LINQ path is secondary (oracle / reference), not a second product engine. Do not grow a domain-side interpreter beside it |
+| VM is canonical execution of a **program** (operation or algorithm) | `Poly.Interpretation` is a **generic language VM** for Syntax trees. DomainModeling is a client that lowers into that language. `Interpreter.Compile` fails closed on analysis errors. The LINQ expression path is a **same-tree semantic checker** (and inspectable execution) for the VM — not a second language. C# emit is a projection. |
 | Domain lowers to **generic** ops | No domain-specific VM opcodes. StageTransition is type-def + Assignment + `Invoke(Member(This, "Notify"))`. Self-invoke is `Invoke(Member(This, action))`. Cross-entity invoke is `this.Rel.Action(args)` with a `DomainResult.Failure` linked-target guard. For-invoke is a fail-fast `ForEachLoop` over a **OneToMany** collection nav (`if (!result.IsSuccess) return result`, zero-match `DomainResult.Failure`). Self/cross-entity lowering does not wrap `IsSuccess`. Remaining store/clocks (`Create` / create-in / time) still dual-path |
 | Product doors are **opt-in extensions** | REST and the like load via `uses`. CLI flags seed ids only. Core seed does not emit a host |
 | MCP is the **interactive harness** | Author, inspect, simulate by supplied context. Not the `DomainSession`. Not the customer API |
@@ -88,7 +88,7 @@ Use these. If you think you need a parallel facility, stop and re-read this sect
 | Pass contract | `INodeAnalyzer` — post-order walk, `TryBeginAnalyzerVisit`, dependencies |
 | Facts on nodes | `IAnalysisMetadata` via `context.SetMetadata` / `GetMetadata<T>` |
 | Semantic passes | `Poly/Interpretation/Analysis/` (types, scopes, CFG, side effects, folding, …) |
-| Standard entry | `Interpreter.Analyze` / `Interpreter.Compile` (cached full pass list) |
+| Standard entry | `Interpreter.Analyze` / `Interpreter.Compile` (cached full pass list; **Compile fails closed** on `DiagnosticSeverity.Error`) |
 
 **Principle:** Facts about a program live on nodes via analysis metadata. Do not attach parallel side tables or re-walk the tree outside the pass model for work that belongs in a pass.
 
@@ -137,6 +137,8 @@ Pass order and registry: `Poly/Interpretation/Analysis/README.md`. Authoring gui
 | Emitter | `Poly/Interpretation/Vm/DirectVmAbiEmitter.cs` |
 | Façade | `Poly/Interpretation/Interpreter.cs` |
 | Runtime | `VmState`, `VmProgram`, heap/ring ABI under `Poly/Interpretation/Vm/` |
+
+Interpretation is the execution engine for Syntax programs (script = expression/`Block`; types = `TypeDefinitionNode` as analysis input). DomainModeling must not appear in the emitter/ABI. Dishonest passthroughs (`Await`, unresolved `ParameterReference`, `Comment` as `0`) are compile-reject or no-ops — not host escapes.
 
 No intermediate primitive flattening step. Inputs are the AST plus analysis metadata (including replacements). **Principle:** keep the emitter a generic compiler of known nodes — fix upstream (lower / analyze / replace), do not patch the ABI for one scenario. Known-member `MethodInfo` / `PropertyInfo` / `ConstructorInfo`: `Ref` / `Ref<T>` (`Poly/Interpretation/Vm/Ref.cs`), never `typeof(T).GetMethod(...)`. Exception: `Expression<Func<T>>` cannot close over a ref struct, so `ReadOnlySpan<T>` constructors stay `GetConstructor`.
 

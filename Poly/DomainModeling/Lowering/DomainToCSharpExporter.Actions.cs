@@ -194,12 +194,12 @@ public sealed partial class DomainToCSharpExporter {
                             new Member(actionResultType, "Success"),
                             [last]));
                 }
-                else if (last is Variable { Value: not null } v) {
+                else if (last is Variable { Initializer: not null } v) {
                     // var x = expr → return DomainResult<T>.Success(expr)
                     nodes[lastIdx] = new Return(
                         new Invoke(
                             new Member(actionResultType, "Success"),
-                            [v.Value]));
+                            [v.Initializer]));
                 }
                 else {
                     // Non-returnable last node — structural error (still throw)

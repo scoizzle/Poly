@@ -165,4 +165,24 @@ public class LinqExpressionGeneratorTests {
         await Assert.That(compilation.Expression).IsTypeOf<Exprs.ParameterExpression>();
     }
 
+    [Test]
+    public async Task Compile_VariableWithValue_AssignsOnDeclare() {
+        var x = new Variable("x", new Constant(41));
+        var node = new Block(x, new Add(x, new Constant(1)));
+        var analysis = node.AnalyzeNode();
+        var generator = new LinqExpressionGenerator(analysis);
+        var result = Expr.Lambda<Func<int>>(generator.Compile(node).Expression).Compile()();
+        await Assert.That(result).IsEqualTo(42);
+    }
+
+    [Test]
+    public async Task Compile_VariableWithValue_AssignmentDoesNotReapplyInitializer() {
+        var x = new Variable("x", new Constant(1));
+        var node = new Block(x, new Assignment(x, new Constant(10)), x);
+        var analysis = node.AnalyzeNode();
+        var generator = new LinqExpressionGenerator(analysis);
+        var result = Expr.Lambda<Func<int>>(generator.Compile(node).Expression).Compile()();
+        await Assert.That(result).IsEqualTo(10);
+    }
+
 }

@@ -3,9 +3,9 @@ namespace Poly.Interpretation.Vm;
 /// <summary>Represents a single word of data in the VM's call stack.
 /// A <see cref="Word"/> wraps a <see cref="long"/> value and provides
 /// implicit conversions to/from <c>int</c> and <c>long</c>.</summary>
-/// <remarks>Negative values are interpreted as heap handles
-/// (<see cref="IsHandle"/>). This is the fundamental storage unit
-/// in the frame-based ABI.</remarks>
+/// <remarks>Positive values may be heap handles
+/// (<see cref="IsHandle"/>). Handle 0 is the ABI null sentinel.
+/// This is the fundamental storage unit in the frame-based ABI.</remarks>
 public record struct Word(long Value) {
     /// <summary>Implicitly converts an <c>int</c> to a <c>Word</c>.</summary>
     public static implicit operator Word(int value) => new(value);
@@ -21,9 +21,9 @@ public record struct Word(long Value) {
     /// <summary>Implicitly converts a <c>Word</c> to a <c>long</c>.</summary>
     public static implicit operator long(Word word) => word.Value;
 
-    /// <summary>True when the value is negative, indicating this word
-    /// is a heap handle rather than a scalar value.</summary>
-    public bool IsHandle => Value < 0;
+    /// <summary>True when the value is a live heap handle (positive).
+    /// Handle 0 is the ABI null sentinel, not a live object.</summary>
+    public bool IsHandle => Value > 0;
 
     private const long IntMaxValue = int.MaxValue;
 }
@@ -322,17 +322,16 @@ public sealed class VmState : IDisposable {
     /// <see cref="DebugInterrupt"/> and has zero emitted overhead when null.</summary>
     public Action<Node, ReadOnlySpan<long>, Heap>? DebugHook { get; set; }
 
-    /// <summary>Maximum number of loop iterations before the VM forcefully
-    /// terminates execution as a safety guard. Set to -1 (default) for
-    /// unlimited iterations. Useful for sandboxing untrusted code.
-    /// Each loop header increments a counter; when the counter exceeds
-    /// this limit, execution is suspended.</summary>
+    /// <summary>Maximum number of loop iterations before the VM throws.
+    /// Set to -1 (default) for unlimited iterations. Honored only in
+    /// <see cref="CompilationMode.Normal"/>: each loop header increments
+    /// <see cref="LoopTicks"/> and throws when the count exceeds this limit.
+    /// <see cref="CompilationMode.NoDebug"/> does not emit the check.</summary>
     public long MaxLoopIterations { get; set; } = -1;
 
-    /// <summary>Per-loop iteration counters used to enforce
-    /// <see cref="MaxLoopIterations"/>. Allocated lazily by the
-    /// compiled delegate when loop limits are active.</summary>
-    public long[]? LoopCounters { get; set; }
+    /// <summary>Total loop-header visits this execution. Reset with the state.
+    /// Compared against <see cref="MaxLoopIterations"/> when that limit is &gt;= 0.</summary>
+    public long LoopTicks { get; set; }
 
     // ── Closure/function call frame state ────────────────────────
 
@@ -378,21 +377,35 @@ public sealed class VmState : IDisposable {
     /// and their handles stored on the stack.</param>
     public void SetArgs(params IEnumerable<object?> args) {
         var slots = Stack.RawSlots;
+        var types = Program.RootParameterClrTypes;
         foreach (var (i, arg) in args.Index()) {
-            slots[i] = arg switch {
-                null => 0L,
-                long l => l,
-                int iVal => iVal,
-                bool b => b ? 1L : 0L,
-                short s => s,
-                byte bVal => bVal,
-                _ => Heap.Allocate(arg)
-            };
+            if (types is not null && i < types.Count && types[i] is Type pt
+                && Nullable.GetUnderlyingType(pt) is not null)
+                slots[i] = arg is null ? 0L : Heap.Allocate(arg);
+            else
+                slots[i] = ToRing(arg);
         }
     }
 
+    internal long ToRing(object? arg) => arg switch {
+        null => 0L,
+        bool b => b ? 1L : 0L,
+        byte b => b,
+        sbyte sb => sb,
+        short s => s,
+        ushort us => us,
+        int iVal => iVal,
+        uint ui => ui,
+        long l => l,
+        ulong ul => (long)ul,
+        char c => c,
+        float f => BitConverter.DoubleToInt64Bits(f),
+        double d => BitConverter.DoubleToInt64Bits(d),
+        _ => Heap.Allocate(arg)
+    };
+
     /// <summary>Resets the VM state to its initial condition, clearing the
-    /// stack, heap, loop counters, and current node tracking. Does not
+    /// stack, heap, loop ticks, and current node tracking. Does not
     /// change the <see cref="Program"/> reference. Useful for reusing a
     /// <see cref="VmState"/> across multiple executions of the same program.</summary>
     public void Reset() {
@@ -401,7 +414,7 @@ public sealed class VmState : IDisposable {
         FramePos = 0;
         Stack.Reset();
         Heap.Clear();
-        LoopCounters = null;
+        LoopTicks = 0;
         CurrentAstNode = null;
         CurrentNodeId = null;
     }

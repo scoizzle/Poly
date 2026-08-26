@@ -212,9 +212,9 @@ public sealed class CSharpGenerator {
                 Indent(sb, indent);
                 sb.Append("var ");
                 sb.Append(variable.Name);
-                if (variable.Value != null) {
+                if (variable.Initializer != null) {
                     sb.Append(" = ");
-                    WriteExpression(sb, variable.Value);
+                    WriteExpression(sb, variable.Initializer);
                 }
                 sb.AppendLine(";");
                 return;
@@ -413,11 +413,11 @@ public sealed class CSharpGenerator {
     private void WriteUsingStatement(StringBuilder sb, UsingStatement usingStmt, int indent) {
         Indent(sb, indent);
         sb.Append("using (");
-        if (usingStmt.Resource is Variable v && v.Value != null) {
+        if (usingStmt.Resource is Variable v && v.Initializer != null) {
             sb.Append("var ");
             sb.Append(v.Name);
             sb.Append(" = ");
-            WriteExpression(sb, v.Value);
+            WriteExpression(sb, v.Initializer);
         }
         else {
             WriteExpression(sb, usingStmt.Resource);
@@ -590,8 +590,12 @@ public sealed class CSharpGenerator {
         }
         sb.Append(')');
         if (method.Body is Block { Nodes: [Return r] }) {
+            if (r.Value is null) {
+                sb.AppendLine(" { return; }");
+                return;
+            }
             sb.Append(" => ");
-            WriteExpression(sb, r.Value ?? new Constant(0L));
+            WriteExpression(sb, r.Value);
             sb.AppendLine(";");
             return;
         }

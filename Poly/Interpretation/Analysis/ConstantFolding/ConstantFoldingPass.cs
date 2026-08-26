@@ -58,14 +58,14 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
             Not not => FoldUnaryBoolean(context, not.Value, a => !a, parameterValues),
 
             // Comparison operations
-            GreaterThan gt => FoldComparison(context, gt.LeftHandValue, gt.RightHandValue, (a, b) => Compare(a, b) > 0, parameterValues),
-            GreaterThanOrEqual gte => FoldComparison(context, gte.LeftHandValue, gte.RightHandValue, (a, b) => Compare(a, b) >= 0, parameterValues),
-            LessThan lt => FoldComparison(context, lt.LeftHandValue, lt.RightHandValue, (a, b) => Compare(a, b) < 0, parameterValues),
-            LessThanOrEqual lte => FoldComparison(context, lte.LeftHandValue, lte.RightHandValue, (a, b) => Compare(a, b) <= 0, parameterValues),
+            GreaterThan gt => FoldComparison(context, gt.LeftHandValue, gt.RightHandValue, (a, b) => IeeeCompare(a, b, (x, y) => x > y), parameterValues),
+            GreaterThanOrEqual gte => FoldComparison(context, gte.LeftHandValue, gte.RightHandValue, (a, b) => IeeeCompare(a, b, (x, y) => x >= y), parameterValues),
+            LessThan lt => FoldComparison(context, lt.LeftHandValue, lt.RightHandValue, (a, b) => IeeeCompare(a, b, (x, y) => x < y), parameterValues),
+            LessThanOrEqual lte => FoldComparison(context, lte.LeftHandValue, lte.RightHandValue, (a, b) => IeeeCompare(a, b, (x, y) => x <= y), parameterValues),
 
-            // Equality operations
-            Equal eq => FoldEquality(context, eq.LeftHandValue, eq.RightHandValue, object.Equals, parameterValues),
-            NotEqual neq => FoldEquality(context, neq.LeftHandValue, neq.RightHandValue, (a, b) => !object.Equals(a, b), parameterValues),
+            // Equality operations — IEEE == for float/double (NaN != NaN), object.Equals otherwise.
+            Equal eq => FoldEquality(context, eq.LeftHandValue, eq.RightHandValue, IeeeEquals, parameterValues),
+            NotEqual neq => FoldEquality(context, neq.LeftHandValue, neq.RightHandValue, (a, b) => !IeeeEquals(a, b), parameterValues),
 
             // Conditional with constant condition
             Conditional cond => FoldConditional(context, cond, parameterValues),
@@ -468,13 +468,6 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
         if (!leftValue.HasValue)
             return FoldResult.NotFoldable;
 
-        // In the Poly ABI, 0L is the "falsy/null" sentinel — Coalesce treats it as empty.
-        if (leftValue.Value is long lv && lv == 0L) {
-            var rightValue = GetConstantValue(context, coalesce.RightHandValue, parameterValues);
-            return rightValue.HasValue ? FoldResult.Success(rightValue.Value) : FoldResult.NotFoldable;
-        }
-
-        // Non-zero, non-null value — result is left
         if (leftValue.Value != null) {
             return FoldResult.Success(leftValue.Value);
         }
@@ -634,12 +627,27 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
         _ => null
     };
 
+    private static bool IeeeEquals(object? a, object? b) {
+        if (a is not null && b is not null
+            && (a is double or float || b is double or float)
+            && TryConvertToDouble(a, out var da) && TryConvertToDouble(b, out var db))
+            return da == db;
+        return object.Equals(a, b);
+    }
+
+    private static bool IeeeCompare(object a, object b, Func<double, double, bool> op) {
+        if (a is double or float || b is double or float) {
+            if (TryConvertToDouble(a, out var da) && TryConvertToDouble(b, out var db))
+                return op(da, db);
+        }
+        return op(Compare(a, b), 0);
+    }
+
     private static int Compare(object a, object b) {
         if (a is IComparable ca && b is IComparable cb && a.GetType() == b.GetType()) {
             return ca.CompareTo(cb);
         }
 
-        // Try numeric comparison with conversion
         if (TryConvertToDouble(a, out var da) && TryConvertToDouble(b, out var db)) {
             return da.CompareTo(db);
         }

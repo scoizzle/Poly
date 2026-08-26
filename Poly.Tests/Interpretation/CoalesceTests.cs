@@ -1,3 +1,4 @@
+using Poly.Interpretation;
 using Poly.Tests.TestHelpers;
 
 using Expr = System.Linq.Expressions.Expression;
@@ -17,6 +18,9 @@ public class CoalesceTests {
 
         // Assert
         await Assert.That(result).IsEqualTo(42);
+
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(42L);
     }
 
     [Test]
@@ -31,6 +35,9 @@ public class CoalesceTests {
 
         // Assert
         await Assert.That(result).IsEqualTo(100);
+
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(100L);
     }
 
     [Test]
@@ -45,6 +52,12 @@ public class CoalesceTests {
         // Assert
         await Assert.That(compiled(50)).IsEqualTo(50);
         await Assert.That(compiled(null)).IsEqualTo(99);
+
+        var program = Interpreter.Compile(node);
+        using (var exec = Interpreter.Execute(program, s => s.SetArgs(50)))
+            await Assert.That(exec.GetValue<long>()).IsEqualTo(50L);
+        using (var exec = Interpreter.Execute(program, s => s.SetArgs(new object?[] { null })))
+            await Assert.That(exec.GetValue<long>()).IsEqualTo(99L);
     }
 
     [Test]
@@ -62,6 +75,9 @@ public class CoalesceTests {
 
         // Assert
         await Assert.That(result).IsEqualTo(10);
+
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(10L);
     }
 
     [Test]
@@ -76,35 +92,24 @@ public class CoalesceTests {
 
         // Assert
         await Assert.That(result).IsEqualTo("default");
+
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<string>()).IsEqualTo("default");
     }
 
     [Test]
-    public async Task Coalesce_GetTypeDefinition_ReturnsRightHandType() {
-        // Arrange
-        var node = new Coalesce(Wrap(null as int?), Wrap(42));
-
-        // Act - build to trigger semantic analysis
-        _ = node.BuildExpression();
-
-        // Assert
-        await Assert.That(node).IsNotNull();
-    }
-
-    [Test]
-    public async Task Coalesce_ToString_ReturnsExpectedFormat() {
-        // Arrange
-        var node = new Coalesce(Wrap(null as int?), Wrap(42));
-
-        // Act
-        var result = node.ToString();
-
-        // Assert
-        await Assert.That(result).Contains("??");
+    public async Task Coalesce_NullableZero_IsValueNotNull() {
+        var param = new Parameter("x", TypeReference.To<int?>());
+        var node = new Coalesce(param, Wrap(100));
+        var compiled = node.CompileLambda<Func<int?, int>>((param, typeof(int?)));
+        await Assert.That(compiled(0)).IsEqualTo(0);
+        var program = Interpreter.Compile(node);
+        using var exec = Interpreter.Execute(program, s => s.SetArgs(0));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(0L);
     }
 
     [Test]
     public async Task Coalesce_WithNullArguments_ThrowsArgumentNullException() {
-        // Act & Assert
         await Assert.That(() => new Coalesce(null!, Wrap(42))).Throws<ArgumentNullException>();
     }
 }

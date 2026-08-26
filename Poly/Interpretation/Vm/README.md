@@ -91,11 +91,10 @@ Uses a background thread with blocking hooks. Zero overhead when not stepping.
 
 | Hook | Signature | When Called | Overhead When Null |
 |------|-----------|-------------|-------------------|
-| `DebugInterrupt` | `Action<VmState>?` | Before each µop (Normal mode) | Single null check |
-| `DebugHook` | `Action<Node, ReadOnlySpan<long>, Heap>?` | Before each AST node (Normal mode) | Single null check |
+| `DebugHook` | `Action<Node, ReadOnlySpan<long>, Heap>?` | Before each statement in Normal mode (`CompileStatement`) | Single null check |
+| `DebugInterrupt` | `Action<VmState>?` | **Not emitted** | n/a |
 
-`DebugHook` is preferred for new code — it's simpler and provides direct access
-to the current node, locals span, and heap.
+`DebugHook` fires for the program root and each `Block` child. Nested `If`/`While`/`Try` bodies are statement-hooked only when those bodies are `Block`s. `NoDebug` does not emit the hook.
 
 ## Value Marshalling
 

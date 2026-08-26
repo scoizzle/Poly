@@ -197,11 +197,9 @@ public class VmCorrectnessTests {
     }
 
     [Test]
-    public async Task BinOp_MixedTypes_StringAndLong_NoCrash() {
+    public async Task BinOp_MixedTypes_StringAndLong_CompileRejected() {
         var body = new Equal(new Constant(0L), new Constant("hello"));
-        var prog = Compile(body);
-        using var exec = Interpreter.Execute(prog);
-        await Assert.That(exec.State.Stack.StackPointer).IsEqualTo(1);
+        await Assert.That(() => Compile(body)).Throws<InvalidOperationException>();
     }
 
     [Test]
@@ -233,18 +231,11 @@ public class VmCorrectnessTests {
     // ═══════════════════════════════════════════════════════════════
 
     [Test]
-    public async Task Regression_BoolChainInArithmetic_NoCrash() {
-        // Found during random-expression fuzzing: the LINQ path throws on
-        // Multiply(Equal(a,b), Equal(c,d)) because Expression.Multiply
-        // forbids bool operands.  The VM path handles it silently (treats
-        // all values as uniform longs).  This test verifies the VM doesn't
-        // crash or produce garbage — the result may differ from LINQ, but
-        // the VM must still produce a deterministic 0/1.
+    public async Task Regression_BoolChainInArithmetic_CompileRejected() {
         var body = new SN.Multiply(
-            new Equal(new Constant(5L), new Constant(5L)),     // 1
-            new Equal(new Constant(3L), new Constant(4L)));    // 0 → 1 * 0 = 0
-        var (_, r) = ExecVm(body);
-        await Assert.That(r).IsEqualTo(0L);
+            new Equal(new Constant(5L), new Constant(5L)),
+            new Equal(new Constant(3L), new Constant(4L)));
+        await Assert.That(() => Compile(body)).Throws<InvalidOperationException>();
     }
 
     [Test]
@@ -257,13 +248,7 @@ public class VmCorrectnessTests {
         // property access on bare parameters.
         var e = new Parameter("entity");  // NO TypeReference
         var body = new Member(e, "Age");
-        var prog = Compile(body);
-        using var exec = Interpreter.Execute(prog, s => s.SetArgs(new PersonRecord("Test", 25)));
-        // The Member access may emit a Nop (no resolved type), return 0, or
-        // leave the stack in an unexpected state.  The important contract is
-        // that the VM does not crash — the caller is responsible for providing
-        // type info.
-        await Assert.That(exec.State.Stack.StackPointer).IsGreaterThan(0);
+        await Assert.That(() => Compile(body)).Throws<InvalidOperationException>();
     }
 
     [Test]
@@ -346,9 +331,14 @@ public class VmCorrectnessTests {
         var linqRaw = linqDel.DynamicInvoke(args);
         long linqVal = NormalizeLongResult(linqRaw);
 
-        // VM path — same args
-        var (_, vmVal) = ExecVm(lowered, s => s.SetArgs(args));
-        await Assert.That(vmVal).IsEqualTo(linqVal);
+        // VM path — same args. Illegal trees fail closed (language VM); fuzz skips those.
+        try {
+            var (_, vmVal) = ExecVm(lowered, s => s.SetArgs(args));
+            await Assert.That(vmVal).IsEqualTo(linqVal);
+        }
+        catch (InvalidOperationException ex) when (ex.Message.StartsWith("VM compile rejected", StringComparison.Ordinal)) {
+            return;
+        }
     }
 
     /// <summary>Normalize a CLR result value to the VM's long representation.</summary>

@@ -59,6 +59,10 @@ public class InvokeMemberInstanceTests {
                     new TypeReference("void"),
                     Parameters: [new Parameter("stageName",
                         new PrimitiveTypeReference(Poly.Introspection.PrimitiveType.String))],
+                    Body: new Block([])),
+                new MethodDefinitionNode(
+                    "Bounce",
+                    new TypeReference("void"),
                     Body: new Block([]))
             ]);
         var analyzer = new TypeDefinitionNodeAnalyzer();

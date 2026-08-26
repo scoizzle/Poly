@@ -63,7 +63,7 @@ internal sealed class ScopeValidator : INodeAnalyzer {
                 AnalyzeForEachLoop(context, state, forEachLoop);
                 break;
 
-            case Variable variable when variable.Value == null:
+            case Variable variable when variable.Initializer == null:
                 ValidateVariableReference(context, state, variable);
                 AnalyzeChildrenWithState(context, state, node);
                 break;

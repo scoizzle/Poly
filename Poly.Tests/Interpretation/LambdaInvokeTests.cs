@@ -1,3 +1,4 @@
+using Poly.Interpretation;
 using Poly.Tests.TestHelpers;
 
 using Expr = System.Linq.Expressions.Expression;
@@ -16,6 +17,8 @@ public class LambdaInvokeTests {
         var result = compiled()();
 
         await Assert.That(result).IsEqualTo(42);
+        using var exec = Interpreter.Execute(Interpreter.Compile(new Invoke(lambda)));
+        await Assert.That(exec.GetValue<int>()).IsEqualTo(42);
     }
 
     [Test]
@@ -27,6 +30,8 @@ public class LambdaInvokeTests {
         var result = compiled()(7);
 
         await Assert.That(result).IsEqualTo(7);
+        using var exec = Interpreter.Execute(Interpreter.Compile(new Invoke(lambda, Wrap(7))));
+        await Assert.That(exec.GetValue<int>()).IsEqualTo(7);
     }
 
     [Test]
@@ -39,6 +44,8 @@ public class LambdaInvokeTests {
         var result = compiled()(3, 4);
 
         await Assert.That(result).IsEqualTo(7);
+        using var exec = Interpreter.Execute(Interpreter.Compile(new Invoke(lambda, Wrap(3), Wrap(4))));
+        await Assert.That(exec.GetValue<int>()).IsEqualTo(7);
     }
 
     // Lambda return scoping
@@ -62,6 +69,12 @@ public class LambdaInvokeTests {
         await Assert.That(compiled(5)).IsTrue();
         await Assert.That(compiled(-3)).IsFalse();
         await Assert.That(compiled(0)).IsFalse();
+        using var execPos = Interpreter.Execute(Interpreter.Compile(new Invoke(innerLambda, Wrap(5))));
+        await Assert.That(execPos.GetValue<bool>()).IsTrue();
+        using var execNeg = Interpreter.Execute(Interpreter.Compile(new Invoke(innerLambda, Wrap(-3))));
+        await Assert.That(execNeg.GetValue<bool>()).IsFalse();
+        using var execZero = Interpreter.Execute(Interpreter.Compile(new Invoke(innerLambda, Wrap(0))));
+        await Assert.That(execZero.GetValue<bool>()).IsFalse();
     }
 
     // Invoke
@@ -76,6 +89,8 @@ public class LambdaInvokeTests {
         var result = Expr.Lambda<Func<int>>(expr).Compile()();
 
         await Assert.That(result).IsEqualTo(15);
+        using var exec = Interpreter.Execute(Interpreter.Compile(invoke));
+        await Assert.That(exec.GetValue<int>()).IsEqualTo(15);
     }
 
     [Test]
@@ -89,6 +104,11 @@ public class LambdaInvokeTests {
 
         await Assert.That(compiled(9)).IsEqualTo(10);
         await Assert.That(compiled(0)).IsEqualTo(1);
+        var program = Interpreter.Compile(invoke);
+        using var exec9 = Interpreter.Execute(program, s => s.SetArgs(9));
+        await Assert.That(exec9.GetValue<int>()).IsEqualTo(10);
+        using var exec0 = Interpreter.Execute(program, s => s.SetArgs(0));
+        await Assert.That(exec0.GetValue<int>()).IsEqualTo(1);
     }
 
     [Test]
@@ -102,6 +122,11 @@ public class LambdaInvokeTests {
 
         await Assert.That(compiled(10)).IsEqualTo(15);
         await Assert.That(compiled(0)).IsEqualTo(5);
+        var program = Interpreter.Compile(invoke);
+        using var exec10 = Interpreter.Execute(program, s => s.SetArgs(10));
+        await Assert.That(exec10.GetValue<int>()).IsEqualTo(15);
+        using var exec0 = Interpreter.Execute(program, s => s.SetArgs(0));
+        await Assert.That(exec0.GetValue<int>()).IsEqualTo(5);
     }
 
     // InvokeWith extension
@@ -116,6 +141,8 @@ public class LambdaInvokeTests {
         var result = Expr.Lambda<Func<int>>(expr).Compile()();
 
         await Assert.That(result).IsEqualTo(107);
+        using var exec = Interpreter.Execute(Interpreter.Compile(invoke));
+        await Assert.That(exec.GetValue<int>()).IsEqualTo(107);
     }
 
     // Return statement in a plain block (no lambda) - regression for return-label injection
@@ -132,5 +159,10 @@ public class LambdaInvokeTests {
 
         await Assert.That(compiled(true)).IsTrue();
         await Assert.That(compiled(false)).IsFalse();
+        var program = Interpreter.Compile(block);
+        using var execTrue = Interpreter.Execute(program, s => s.SetArgs(true));
+        await Assert.That(execTrue.GetValue<bool>()).IsTrue();
+        using var execFalse = Interpreter.Execute(program, s => s.SetArgs(false));
+        await Assert.That(execFalse.GetValue<bool>()).IsFalse();
     }
 }

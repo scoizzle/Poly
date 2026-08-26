@@ -529,7 +529,7 @@ internal static class AstTypeReferenceResolver {
             UnionTypeReference union => ResolveUnion(union, provider, clr),
             TypeDefinitionReference tdr => tdr.TypeDefinition,
             ClrTypeReference clrRef => provider.GetTypeDefinition(clrRef.RuntimeType) ?? clr.GetTypeDefinition<object>(),
-            TypeReference tr => provider.GetTypeDefinition(tr.TypeName) ?? clr.GetTypeDefinition<object>(),
+            TypeReference tr => ResolveByName(tr.TypeName, provider, clr),
             _ => clr.GetTypeDefinition<object>()
         };
     }
@@ -579,17 +579,26 @@ internal static class AstTypeReferenceResolver {
         return clr.GetTypeDefinition(nullableType);
     }
 
-    private static ClrTypeDefinition ResolveCollection(CollectionTypeReference col, ITypeDefinitionProvider provider, ClrTypeDefinitionRegistry clr) {
-        var elementType = Resolve(col.ElementType, provider);
-        var elementClrType = elementType.GetRuntimeTypeOrThrow();
+    private static ITypeDefinition ResolveByName(
+        string name, ITypeDefinitionProvider provider, ClrTypeDefinitionRegistry clr) {
+        if (string.Equals(name, "void", StringComparison.OrdinalIgnoreCase))
+            return clr.GetTypeDefinition(typeof(void));
+        return provider.GetTypeDefinition(name)
+            ?? throw new InvalidOperationException($"Type '{name}' not found.");
+    }
 
+    private static ITypeDefinition ResolveCollection(CollectionTypeReference col, ITypeDefinitionProvider provider, ClrTypeDefinitionRegistry clr) {
+        var elementType = Resolve(col.ElementType, provider);
+        if (elementType is AstTypeDefinition or AstCollectionTypeDefinition)
+            return new AstCollectionTypeDefinition(elementType, col.Kind);
+
+        var elementClrType = elementType.GetRuntimeTypeOrThrow();
         var collectionClrType = col.Kind switch {
             CollectionKind.Array => elementClrType.MakeArrayType(),
             CollectionKind.List => typeof(List<>).MakeGenericType(elementClrType),
             CollectionKind.Set => typeof(HashSet<>).MakeGenericType(elementClrType),
             _ => typeof(IEnumerable<>).MakeGenericType(elementClrType)
         };
-
         return clr.GetTypeDefinition(collectionClrType);
     }
 
@@ -616,4 +625,57 @@ internal static class AstTypeReferenceResolver {
         var allSameRuntimeType = optionTypes.All(type => type.GetRuntimeTypeOrThrow() == firstRuntimeType);
         return allSameRuntimeType ? optionTypes[0] : clr.GetTypeDefinition<object>();
     }
+}
+
+internal sealed class AstCollectionTypeDefinition : ITypeDefinition, IClrTypeDefinition {
+    private readonly AstCollectionItemProperty _item;
+
+    public AstCollectionTypeDefinition(ITypeDefinition element, CollectionKind kind) {
+        ElementType = element;
+        Kind = kind;
+        _item = new AstCollectionItemProperty(this, element);
+    }
+
+    public ITypeDefinition ElementType { get; }
+    public CollectionKind Kind { get; }
+    public string Name => Kind == CollectionKind.Array ? $"{ElementType.Name}[]" : $"List<{ElementType.Name}>";
+    public string? Namespace => null;
+    public AccessModifier AccessModifier => AccessModifier.Public;
+    public ITypeDefinition? BaseType => null;
+    public IEnumerable<ITypeDefinition> Interfaces => [];
+    public IEnumerable<IParameter> GenericParameters => [];
+    public IEnumerable<ITypeMember> Members => [_item];
+    public IEnumerable<ITypeField> Fields => [];
+    public IEnumerable<ITypeProperty> Properties => [_item];
+    public IEnumerable<ITypeMethod> Methods => [];
+    public IEnumerable<ITypeConstructor> Constructors => [];
+    public PrimitiveType? PrimitiveType => null;
+    public TypeCategory TypeCategory => TypeCategory.Collection;
+    public Type RuntimeType => typeof(System.Collections.IList);
+}
+
+internal sealed class AstCollectionItemProperty : ITypeProperty {
+    public AstCollectionItemProperty(ITypeDefinition declaring, ITypeDefinition element) {
+        DeclaringTypeDefinition = declaring;
+        MemberTypeDefinition = element;
+        Parameters = [
+            new AstIndexParameter(ClrTypeDefinitionRegistry.Shared.GetTypeDefinition<int>())
+        ];
+    }
+
+    public string Name => "Item";
+    public ITypeDefinition MemberTypeDefinition { get; }
+    public ITypeDefinition DeclaringTypeDefinition { get; }
+    public IEnumerable<IParameter> Parameters { get; }
+    public AccessModifier AccessModifier => AccessModifier.Public;
+    public LifetimeModifier LifetimeModifier => LifetimeModifier.Instance;
+    public Mutability Mutability => Mutability.Mutable;
+}
+
+internal sealed class AstIndexParameter(ITypeDefinition type) : IParameter {
+    public int Position => 0;
+    public string Name => "index";
+    public ITypeDefinition ParameterTypeDefinition { get; } = type;
+    public bool IsOptional => false;
+    public object? DefaultValue => null;
 }

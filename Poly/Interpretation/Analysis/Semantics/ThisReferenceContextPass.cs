@@ -6,7 +6,8 @@ internal sealed class ThisReferenceContextAnalyzer : INodeAnalyzer {
     public string[] Dependencies => [];
     public void Analyze(AnalysisContext context, Node node) {
         if (node is ThisReference thisReference && context.GetResolvedType(thisReference) is null) {
-            context.ReportDiagnostic(thisReference, DiagnosticSeverity.Error, "'this' can only be used inside an instance member body.", "TH0002");
+            // Root-program this is SetArgs slot 0 (legal). Static member
+            // bodies still report TH0001 via AnnotateBody.
             this.AnalyzeChildren(context, node);
             return;
         }

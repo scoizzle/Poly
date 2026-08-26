@@ -122,9 +122,18 @@ public sealed partial class LinqExpressionGenerator {
             return false;
         }
 
+        private readonly List<ParameterExpression> _hoistedVariables = [];
+
+        public IEnumerable<ParameterExpression> HoistedVariables => _hoistedVariables;
+
         public ParameterExpression DeclareVariable(Variable variable, ParameterExpression expression) {
             _localVariables[variable] = expression;
             return expression;
+        }
+
+        public void HoistVariable(ParameterExpression expression) {
+            if (!_hoistedVariables.Contains(expression))
+                _hoistedVariables.Add(expression);
         }
 
         public ParameterExpression DeclareParameter(Parameter parameter, ParameterExpression expression, bool export) {
@@ -215,7 +224,7 @@ public sealed partial class LinqExpressionGenerator {
         }
         return node switch {
             Constant constant => Expression.Constant(constant.Value),
-            Variable variable => CompileVariable(variable, context),
+            Variable variable => CompileVariableUse(variable, context),
             Parameter parameter => CompileParameter(parameter, context),
             Add add => CompileBinaryArithmetic(add.LeftHandValue, add.RightHandValue, Expression.Add, context),
             Subtract sub => CompileBinaryArithmetic(sub.LeftHandValue, sub.RightHandValue, Expression.Subtract, context),

@@ -9,13 +9,11 @@ using PrimValueKind = Poly.Interpretation.Analysis.Semantics.ValueRepresentation
 namespace Poly.Interpretation;
 
 /// <summary>
-/// Standard analysis pipeline for VM execution.
+/// Language VM: analyze, compile, and execute <c>Poly.Ast</c> programs.
+/// DomainModeling is a client that lowers into this language — not a VM concern.
 ///
-/// Bundles interpretation-level analysis passes. The primary compilation path
-/// is now direct AST-to-VM-ABI lowering (no primitive expansion).
-/// Many passes remain useful for semantics, metadata, and diagnostics.
-///
-/// The <see cref="Analyzer"/> is built once and cached; subsequent calls reuse it.
+/// Direct AST-to-VM-ABI lowering is the sole compilation path.
+/// <see cref="Compile(Node, CompilationMode)"/> fails closed on analysis errors.
 /// </summary>
 public static class Interpreter {
     private static readonly Analyzer _analyzer = new AnalyzerBuilder()
@@ -50,56 +48,47 @@ public static class Interpreter {
         _analyzer.Analyze(node);
 
     /// <summary>
-    /// Analyze and compile using a custom type definition provider.
-    /// Enables custom type definitions to be used during analysis.
-    /// to be used during analysis without modifying the standard provider stack.
+    /// Analyze and compile a Syntax program. Analysis errors fail closed.
     /// </summary>
     public static VmProgram Compile(Node node, ITypeDefinitionProvider typeDefinitions, CompilationMode mode = CompilationMode.Normal) {
         var analysis = _analyzer.Analyze(node, typeDefinitions: typeDefinitions);
+        FailLoudOnAnalysisErrors(analysis);
         return DirectVmAbiEmitter.Emit(node, analysis, mode);
     }
 
-    /// <summary>
-    /// Compile, failing loud on interpretation type-compatibility errors. Used by the
-    /// DSL runtime paths (policy evaluation, effect execution) so the runtime rejects
-    /// incompatible operations at compile time instead of silently coercing. The raw
-    /// <see cref="Compile(Node, ITypeDefinitionProvider, CompilationMode)"/> stays
-    /// lenient for direct VM/robustness callers.
-    /// </summary>
-    public static VmProgram CompileChecked(Node node, ITypeDefinitionProvider typeDefinitions, CompilationMode mode = CompilationMode.Normal) {
-        var analysis = _analyzer.Analyze(node, typeDefinitions: typeDefinitions);
-        FailLoudOnTypeErrors(analysis);
-        return DirectVmAbiEmitter.Emit(node, analysis, mode);
-    }
+    /// <summary>Alias of <see cref="Compile(Node, ITypeDefinitionProvider, CompilationMode)"/>.</summary>
+    public static VmProgram CompileChecked(Node node, ITypeDefinitionProvider typeDefinitions, CompilationMode mode = CompilationMode.Normal) =>
+        Compile(node, typeDefinitions, mode);
 
     /// <summary>
-    /// Analyze and compile using the primary direct AST-to-VM-ABI lowering path.
-    /// This is the supported way to produce a runnable <see cref="VmProgram"/>.
+    /// Analyze and compile a Syntax program. Analysis errors fail closed.
+    /// This is the language-VM compile door.
     /// </summary>
     public static VmProgram Compile(Node node, CompilationMode mode = CompilationMode.Normal) {
         var analysis = _analyzer.Analyze(node);
+        FailLoudOnAnalysisErrors(analysis);
         return DirectVmAbiEmitter.Emit(node, analysis, mode);
     }
 
     /// <summary>
-    /// The interpretation type-compatibility pass rejects incompatible operations
-    /// (Text vs Number comparison, non-numeric arithmetic, non-Boolean <c>not</c>).
-    /// The DSL runtime must fail loud on those instead of silently coercing garbage.
+    /// Illegal programs do not emit. Call <see cref="Analyze"/> to inspect diagnostics
+    /// without compiling.
     /// </summary>
-    private static void FailLoudOnTypeErrors(AnalysisResult analysis) {
+    private static void FailLoudOnAnalysisErrors(AnalysisResult analysis) {
         foreach (var d in analysis.Diagnostics) {
             if (d.Severity != DiagnosticSeverity.Error) continue;
-            if (d.Code == Analysis.Semantics.SyntaxTypeCompatibilityAnalyzer.DiagnosticCode) {
-                throw new InvalidOperationException($"VM compile rejected: {d.Message}");
-            }
+            throw new InvalidOperationException($"VM compile rejected: {d.Message}");
         }
     }
 
     /// <summary>
-    /// Compile a previously-analyzed node using the direct AST-to-ABI emitter.
+    /// Compile a previously-analyzed node. Analysis errors on
+    /// <paramref name="analysis"/> fail closed.
     /// </summary>
-    public static VmProgram Compile(Node node, AnalysisResult analysis, CompilationMode mode = CompilationMode.Normal) =>
-        DirectVmAbiEmitter.Emit(node, analysis, mode);
+    public static VmProgram Compile(Node node, AnalysisResult analysis, CompilationMode mode = CompilationMode.Normal) {
+        FailLoudOnAnalysisErrors(analysis);
+        return DirectVmAbiEmitter.Emit(node, analysis, mode);
+    }
 
     /// <summary>
     /// Analyze, compile, and execute <paramref name="node"/>, returning the
@@ -172,28 +161,28 @@ public static class Interpreter {
         // Use ValueRepresentationMetadata from analysis when available to
         // correctly distinguish heap handles from raw scalars (fixes INT-002).
         var rootKind = state.Program.RootValueKind;
+        var clr = state.Program.RootClrType;
 
-        if (rootKind == PrimValueKind.StackScalar || rootKind == PrimValueKind.Bool)
-            return InterpreterResult.FromValue(raw);
-
-        if (rootKind == PrimValueKind.HeapRef) {
-            if (handle >= 0 && handle < state.Heap.Count) {
-                var heapObj = state.Heap.UnsafeGet(handle);
-                return InterpreterResult.FromValue(heapObj);
-            }
+        if (rootKind == PrimValueKind.StackScalar || rootKind == PrimValueKind.Bool) {
+            if (clr == typeof(double) || clr == typeof(float))
+                return InterpreterResult.FromValue(BitConverter.Int64BitsToDouble(raw));
             return InterpreterResult.FromValue(raw);
         }
 
-        // Fallback heuristic (void, unknown, or no metadata):
-        // Only dereference when the handle looks like a valid heap index.
-        // Handle 0 is never a valid heap entry (first alloc starts at 0 but
-        // is freed on null; 0 and 1 are always bool/scalar results).
-        // After ANA-FIX-003, the standard pipeline always provides
-        // RootValueKind for expression roots, so this path is only hit
-        // for void-program terminations or external caller paths.
-        if (handle >= 2 && handle < state.Heap.Count) {
+        if (rootKind == PrimValueKind.HeapRef) {
+            if (raw == 0L)
+                return InterpreterResult.FromValue(null);
+            if (handle > 0 && handle < state.Heap.Count)
+                return InterpreterResult.FromValue(state.Heap.UnsafeGet(handle));
+            return InterpreterResult.FromValue(raw);
+        }
+
+        if (raw == 0L)
+            return InterpreterResult.FromValue(raw);
+        if (handle > 0 && handle < state.Heap.Count) {
             var heapObj = state.Heap.UnsafeGet(handle);
-            return InterpreterResult.FromValue(heapObj);
+            if (heapObj is not null)
+                return InterpreterResult.FromValue(heapObj);
         }
 
         return InterpreterResult.FromValue(raw);

@@ -1,6 +1,8 @@
 using System.Linq.Expressions;
 using System.Reflection;
 
+using Poly.Analysis;
+using Poly.Interpretation.Analysis;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Introspection.CommonLanguageRuntime;
 
@@ -459,7 +461,7 @@ public static partial class DirectVmAbiEmitter {
     private static Expression EmitLambda(Lambda lambda, AbiCtx ctx) {
         if (lambda.LambdaIndex < 0)
             throw new InvalidOperationException("Lambda.LambdaIndex not set during lambda collection");
-        var captures = FindCaptures(lambda.Body, ctx, lambda.Parameters);
+        var captures = FindBodyCaptures(lambda, ctx.Analysis);
         int arrLen = 1 + captures.Count;
         var closureArrVar = Variable(typeof(object[]), "_closureArr");
         var locals = new List<ParameterExpression> { closureArrVar };
@@ -510,103 +512,13 @@ public static partial class DirectVmAbiEmitter {
         }
     }
 
-    private static List<Capture> FindBodyCaptures(Lambda lambda) {
-        var declared = new HashSet<Variable>(ReferenceEqualityComparer.Instance);
-        CollectDeclaredLocals(lambda.Body, declared);
-        var result = new List<Capture>();
-        var seenVars = new HashSet<Variable>(ReferenceEqualityComparer.Instance);
-        var seenParams = new HashSet<Parameter>(ReferenceEqualityComparer.Instance);
-        var ownParams = new HashSet<Parameter>(lambda.Parameters, ReferenceEqualityComparer.Instance);
-        FindBodyCapturesRecursive(lambda.Body, result, seenVars, seenParams, ownParams, declared);
-        return result;
-    }
-
-    private static void CollectDeclaredLocals(Node node, HashSet<Variable> declared) {
-        if (node is Lambda)
-            return;
-        if (node is Block block) {
-            foreach (var v in block.Variables) {
-                if (v is Variable variable)
-                    declared.Add(variable);
-            }
-        }
-        if (node is ForEachLoop fe)
-            declared.Add(fe.LoopVariable);
-        if (node is Variable declaredVar && declaredVar.Initializer is not null)
-            declared.Add(declaredVar);
-        foreach (var child in node.Children) {
-            if (child is not null)
-                CollectDeclaredLocals(child, declared);
-        }
-    }
-
-    private static void FindBodyCapturesRecursive(
-        Node node, List<Capture> result,
-        HashSet<Variable> seenVars, HashSet<Parameter> seenParams,
-        HashSet<Parameter> ownParams, HashSet<Variable> declared) {
-        if (node is Lambda nested) {
-            var nestedOwn = new HashSet<Parameter>(ownParams, ReferenceEqualityComparer.Instance);
-            foreach (var np in nested.Parameters)
-                nestedOwn.Add(np);
-            FindBodyCapturesRecursive(nested.Body, result, seenVars, seenParams, nestedOwn, declared);
-            return;
-        }
-        if (node is Variable v && seenVars.Add(v) && !declared.Contains(v)) {
-            result.Add(new Capture(v, null));
-            return;
-        }
-        if (node is Parameter p && seenParams.Add(p)) {
-            if (!ownParams.Contains(p) && ownParams.All(op => op.Name != p.Name))
-                result.Add(new Capture(null, p));
-            return;
-        }
-        foreach (var child in node.Children) {
-            if (child is not null)
-                FindBodyCapturesRecursive(child, result, seenVars, seenParams, ownParams, declared);
-        }
-    }
-
-    private static List<Capture> FindCaptures(
-        Node body, AbiCtx outerCtx, IReadOnlyList<Parameter>? lambdaParameters = null) {
-        var result = new List<Capture>();
-        var seenVars = new HashSet<Variable>(ReferenceEqualityComparer.Instance);
-        var seenParams = new HashSet<Parameter>(ReferenceEqualityComparer.Instance);
-        var ownParams = lambdaParameters is null
-            ? null
-            : new HashSet<Parameter>(lambdaParameters, ReferenceEqualityComparer.Instance);
-        FindCapturesRecursive(body, outerCtx, result, seenVars, seenParams, ownParams);
-        return result;
-    }
-
-    private static void FindCapturesRecursive(
-        Node node, AbiCtx outerCtx, List<Capture> result,
-        HashSet<Variable> seenVars, HashSet<Parameter> seenParams,
-        HashSet<Parameter>? ownParams) {
-        if (node is Lambda nested) {
-            var nestedOwn = ownParams is null
-                ? new HashSet<Parameter>(nested.Parameters, ReferenceEqualityComparer.Instance)
-                : new HashSet<Parameter>(ownParams, ReferenceEqualityComparer.Instance);
-            foreach (var np in nested.Parameters)
-                nestedOwn.Add(np);
-            FindCapturesRecursive(nested.Body, outerCtx, result, seenVars, seenParams, nestedOwn);
-            return;
-        }
-        if (node is Variable v && seenVars.Add(v)) {
-            if (outerCtx.TryGetVariable(v, out _) || outerCtx.TryGetCapture(v, out _))
-                result.Add(new Capture(v, null));
-            return;
-        }
-        if (node is Parameter p && seenParams.Add(p)) {
-            bool isOwn = ownParams is not null
-                && (ownParams.Contains(p) || ownParams.Any(op => op.Name == p.Name));
-            if (!isOwn)
-                result.Add(new Capture(null, p));
-            return;
-        }
-        foreach (var child in node.Children) {
-            if (child is not null)
-                FindCapturesRecursive(child, outerCtx, result, seenVars, seenParams, ownParams);
-        }
+    private static List<Capture> FindBodyCaptures(Lambda lambda, AnalysisResult? analysis) {
+        var bindings = analysis?.GetMetadata<LambdaCaptureMetadata>(lambda)?.Bindings
+            ?? LambdaCaptureCollector.Collect(lambda);
+        var fromAnalysis = new List<Capture>(bindings.Count);
+        foreach (var b in bindings)
+            fromAnalysis.Add(new Capture(b.Variable, b.Parameter));
+        return fromAnalysis;
     }
 
     private static Expression ReadCaptureSource(Capture cap, AbiCtx ctx) {

@@ -82,6 +82,9 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
             case Assignment { Destination: Member dest } a:
                 CheckAssign(context, dest, a.Value);
                 break;
+            case Invoke inv:
+                CheckInvokeTarget(context, inv);
+                break;
         }
 
         this.AnalyzeChildren(context, node);
@@ -125,6 +128,22 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
         if (lc is not Cat.Boolean || rc is not Cat.Boolean)
             Report(context, leftNode,
                 $"'and'/'or' requires Boolean operands (got '{left.Name}' and '{right.Name}')");
+    }
+
+    private void CheckInvokeTarget(AnalysisContext context, Invoke invoke) {
+        if (invoke.Delegate is Member or Lambda)
+            return;
+        if (invoke.Delegate is Variable or Parameter) {
+            if (context.GetMetadata<StoredLambdaMetadata>(invoke.Delegate) is not null)
+                return;
+            if (context.GetResolvedMember(invoke) is not null)
+                return;
+            Report(context, invoke,
+                $"Invoke target must be a member, lambda, or stored closure, got {invoke.Delegate.GetType().Name}");
+            return;
+        }
+        Report(context, invoke,
+            $"Invoke target must be a member, lambda, or stored closure, got {invoke.Delegate.GetType().Name}");
     }
 
     private void CheckAssign(AnalysisContext context, Member destination, Node value) {

@@ -323,7 +323,7 @@ public static partial class DirectVmAbiEmitter {
             return EmitInvokeIndirect(invoke, ctx);
 
         throw new InvalidOperationException(
-            $"VM compile rejected: Invoke target must be a member or lambda, got {invoke.Delegate.GetType().Name}.");
+            $"VM compile rejected: Invoke target must be a member, lambda, or stored closure, got {invoke.Delegate.GetType().Name}.");
     }
 
     private static Expression EmitInvokeIndirect(Invoke invoke, AbiCtx ctx) {
@@ -358,6 +358,10 @@ public static partial class DirectVmAbiEmitter {
         var obj = state.Heap.UnsafeGet((int)handle);
         if (obj is not object[] closure || closure.Length < 1 || closure[0] is not long idxL)
             throw new InvalidOperationException("VM: invoke target is not a closure.");
+        for (int u = 1; u < closure.Length; u++) {
+            if (closure[u] is not long[] { Length: >= 1 })
+                throw new InvalidOperationException("VM: closure upvalue is not a cell.");
+        }
         int idx = (int)idxL;
         if ((uint)idx >= (uint)table.Length || table[idx] is null)
             throw new InvalidOperationException("VM: invalid closure index.");
@@ -516,9 +520,13 @@ public static partial class DirectVmAbiEmitter {
         // Build the hook invocation expression only when the hook is non-null.
         // Emit: if (state.DebugHook != null) { snapshot + invoke }
         var stmts = new List<Expression>();
+        var flush = ctx.EmitScopeStores();
+        if (flush.Count > 0)
+            stmts.Add(Block(flush));
 
         // Create a ReadOnlySpan<long> directly over _slots[_fb .. _fb + localCount].
         // This is a zero-allocation slice — no buffer copy needed.
+        // Cell-backed slots hold heap handles; VmDebugger.GetLocals derefs cell[0].
         Expression spanExpr = localCount == 0
             ? New(ReadOnlySpanLongArrayCtor,
                 NewArrayBounds(typeof(long), Constant(0)))

@@ -1,6 +1,7 @@
 using System.Linq.Expressions;
 using System.Reflection;
 
+using Poly.Interpretation.Analysis;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Introspection.CommonLanguageRuntime;
 
@@ -34,8 +35,9 @@ namespace Poly.Interpretation.Vm;
 /// </remarks>
 public static partial class DirectVmAbiEmitter {
     /// <summary>
-    /// Describes a captured binding. Stored closures share a heap <c>long[1]</c>
-    /// cell with the enclosing frame so later writes are visible (late-bind).
+    /// Describes a captured binding. Analysis records free bindings per
+    /// <see cref="Lambda"/>; stored closures share a heap <c>long[1]</c>
+    /// cell with the enclosing frame so later writes are visible.
     /// </summary>
     private sealed record Capture(Variable? Variable, Parameter? Parameter) {
         public object Binding => (object?)Variable ?? Parameter!;
@@ -90,9 +92,18 @@ public static partial class DirectVmAbiEmitter {
         var lambdas = new List<Lambda>();
         CollectLambdas(root, lambdas);
         var capturedBindings = new HashSet<object>(ReferenceEqualityComparer.Instance);
-        foreach (var lam in lambdas) {
-            foreach (var cap in FindBodyCaptures(lam))
-                capturedBindings.Add(cap.Binding);
+        var captureMeta = analysis.GetMetadata<VariableAnalysisMetadata>(root);
+        if (captureMeta is not null) {
+            foreach (var v in captureMeta.CapturedVariables)
+                capturedBindings.Add(v);
+            foreach (var p in captureMeta.CapturedParameters)
+                capturedBindings.Add(p);
+        }
+        else {
+            foreach (var lam in lambdas) {
+                foreach (var cap in FindBodyCaptures(lam, analysis))
+                    capturedBindings.Add(cap.Binding);
+            }
         }
         ctx.CapturedBindings = capturedBindings;
         var functionTable = new Action<VmState>[lambdas.Count];
@@ -100,7 +111,7 @@ public static partial class DirectVmAbiEmitter {
         for (int i = 0; i < lambdas.Count; i++) {
             var lam = lambdas[i];
             functionTable[i] = CompileFunctionBody(
-                lam.Body, lam.Parameters, FindBodyCaptures(lam), functionTable, mode, analysis,
+                lam.Body, lam.Parameters, FindBodyCaptures(lam, analysis), functionTable, mode, analysis,
                 capturedBindings);
         }
 

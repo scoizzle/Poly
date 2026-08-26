@@ -8,7 +8,18 @@ internal record VariableAnalysisMetadata(
     Dictionary<Block, ScopeVertex> ScopeVertices,
     Dictionary<Variable, Node> VariableDeclarationScope,
     Dictionary<Variable, int> AssignmentCount,
-    HashSet<Variable> EscapedVariables
+    HashSet<Variable> EscapedVariables,
+    HashSet<Variable> CapturedVariables,
+    HashSet<Parameter> CapturedParameters
+) : IAnalysisMetadata;
+
+/// <summary>One free binding of a <see cref="Lambda"/>, in tree-walk order.</summary>
+internal readonly record struct LambdaCaptureBinding(Variable? Variable, Parameter? Parameter);
+
+/// <summary>Free variables/parameters of a <see cref="Lambda"/>, in walk order.
+/// Emit uses this so stored closures and function-table bodies agree.</summary>
+internal sealed record LambdaCaptureMetadata(
+    IReadOnlyList<LambdaCaptureBinding> Bindings
 ) : IAnalysisMetadata;
 
 internal record ScopeVertex(Block Block, ScopeVertex? Parent, HashSet<Variable> Declared);
@@ -32,7 +43,9 @@ internal sealed class ScopeValidator : INodeAnalyzer {
                 ScopeVertices: [],
                 VariableDeclarationScope: [],
                 AssignmentCount: [],
-                EscapedVariables: []
+                EscapedVariables: [],
+                CapturedVariables: new(ReferenceEqualityComparer.Instance),
+                CapturedParameters: new(ReferenceEqualityComparer.Instance)
             ),
             ScopeStack: [],
             VariablesByName: []
@@ -42,6 +55,7 @@ internal sealed class ScopeValidator : INodeAnalyzer {
         context.SetMetadata(node, state.Meta);
 
         AnalyzeNode(context, state, node);
+        LambdaCaptureCollector.Attach(context, node, state.Meta);
     }
 
     /// <summary>Analyze child nodes using the current state, NOT creating fresh
@@ -63,8 +77,19 @@ internal sealed class ScopeValidator : INodeAnalyzer {
                 AnalyzeForEachLoop(context, state, forEachLoop);
                 break;
 
-            case Variable variable when variable.Initializer == null:
-                ValidateVariableReference(context, state, variable);
+            case Variable variable:
+                if (variable.Initializer is not null
+                    && !state.Meta.VariableDeclarationScope.ContainsKey(variable)) {
+                    if (state.ScopeStack.Count > 0)
+                        RegisterVariable(context, state, variable, state.ScopeStack[^1]);
+                    else {
+                        RegisterScopedVariable(context, state, variable);
+                        state.Meta.VariableDeclarationScope[variable] = variable;
+                    }
+                }
+                else {
+                    ValidateVariableReference(context, state, variable);
+                }
                 AnalyzeChildrenWithState(context, state, node);
                 break;
 

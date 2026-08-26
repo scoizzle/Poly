@@ -220,7 +220,7 @@ public class DirectVmAbiEmitterTests {
             new Assignment(offset, new Constant(10)),
             invoke
         ], [offset]);
-        // Parameter x=32, capture offset=10 (real value at creation). 32+10 = 42
+        // Parameter x=32, capture offset=10 (live cell). 32+10 = 42
         await Assert.That(ExecDirect(code)).IsEqualTo(42);
     }
 

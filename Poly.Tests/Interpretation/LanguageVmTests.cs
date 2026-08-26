@@ -157,6 +157,30 @@ public class LanguageVmTests {
     }
 
     [Test]
+    public async Task Block_LastAssignment_GetValueNotHandleUnwrap() {
+        var x = new Variable("x");
+        var node = new Block([
+            new Constant("alloc-a"),
+            new Constant("alloc-b"),
+            new Assignment(x, new Constant(7L))
+        ], [x]);
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.Result.Kind).IsEqualTo(InterpreterResult.ResultKind.Value);
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(7L);
+    }
+
+    [Test]
+    public async Task Block_LastIfStatement_IsVoid() {
+        var x = new Variable("x");
+        var node = new Block([
+            new Assignment(x, new Constant(1L)),
+            new IfStatement(new Constant(true), new Constant(2L))
+        ], [x]);
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.Result.IsVoid).IsTrue();
+    }
+
+    [Test]
     public async Task Comment_OnlyInBlock_IsVoid() {
         using var exec = Interpreter.Execute(Interpreter.Compile(new Block([new Comment("note")])));
         await Assert.That(exec.Result.IsVoid).IsTrue();

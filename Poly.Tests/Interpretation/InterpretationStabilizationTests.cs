@@ -447,17 +447,17 @@ public class InterpretationStabilizationTests {
             TypeDefinitionNodeAnalyzer.Id,
             ThisReferenceContextAnalyzer.Id,
             TypeAndMemberResolver.Id,
+            LambdaReturnTypeAnalyzer.Id,
             ScopeValidator.Id,
             SideEffectAnalyzer.Id,
             ConstantFoldingPass.Id,
             JumpTargetAnalyzer.Id,
             ControlFlowAnalysisPass.Id,
             ExceptionRegionAnalyzer.Id,
-            DefiniteAssignmentAnalyzer.Id,
             ValueRepresentationAnalyzer.Id,
             SyntaxTypeCompatibilityAnalyzer.Id,
             CallSiteCatalogAnalyzer.Id,
-            LambdaReturnTypeAnalyzer.Id,
+            DefiniteAssignmentAnalyzer.Id,
         ];
         await Assert.That(string.Join(",", Interpreter.Analyzer.PassNames)).IsEqualTo(string.Join(",", expected));
     }

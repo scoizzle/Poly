@@ -3,7 +3,7 @@ namespace Poly.Interpretation.Vm;
 /// <summary>
 /// Describes a single user variable's name and its offset within the frame.
 /// </summary>
-public sealed record VariableLayout(string Name, int FrameOffset);
+public sealed record VariableLayout(string Name, int FrameOffset, bool IsUpvalueCell = false);
 
 /// <summary>
 /// Debug information collected during lowering. Stored in <see cref="VmProgram.DebugInfo"/>.
@@ -193,7 +193,7 @@ public sealed class VmDebugger : IDisposable {
         // Pass-through: if nobody's stepping, return immediately.
         if (!_stepRequested) return;
 
-        CurrentLocals = GetLocals(_program, localsSpan);
+        CurrentLocals = GetLocals(_program, localsSpan, heap);
         CurrentNode = node;
 
         // Someone wants to step — signal that we're at a boundary and block
@@ -245,18 +245,21 @@ public sealed class VmDebugger : IDisposable {
 
     // ── Static helpers (also usable standalone) ────────────────
 
-    /// <summary>Named local resolution from compile-time debug info.</summary>
+    /// <summary>Named local resolution from compile-time debug info.
+    /// Upvalue cells store a heap handle in the slot; <paramref name="heap"/>
+    /// is used to present <c>cell[0]</c> instead of the handle.</summary>
     public static IReadOnlyList<(string Name, long Value)> GetLocals(
-        VmProgram program, ReadOnlySpan<long> localsSpan) {
+        VmProgram program, ReadOnlySpan<long> localsSpan, Heap? heap = null) {
         var debugInfo = program.DebugInfo as VmDebugInfo;
         if (debugInfo is null || debugInfo.Variables.Count == 0)
             return Array.Empty<(string, long)>();
         var result = new (string, long)[debugInfo.Variables.Count];
         for (int i = 0; i < debugInfo.Variables.Count; i++) {
             var v = debugInfo.Variables[i];
-            result[i] = (v.Name, (uint)v.FrameOffset < (uint)localsSpan.Length
+            long raw = (uint)v.FrameOffset < (uint)localsSpan.Length
                 ? localsSpan[v.FrameOffset]
-                : 0L);
+                : 0L;
+            result[i] = (v.Name, DecodeLocal(v, raw, heap));
         }
         return result;
     }
@@ -271,10 +274,17 @@ public sealed class VmDebugger : IDisposable {
         var result = new (string, long)[debugInfo.Variables.Count];
         for (int i = 0; i < debugInfo.Variables.Count; i++) {
             var v = debugInfo.Variables[i];
-            result[i] = (v.Name, (fp + v.FrameOffset < slots.Length)
-                ? slots[fp + v.FrameOffset] : 0L);
+            long raw = (fp + v.FrameOffset < slots.Length)
+                ? slots[fp + v.FrameOffset] : 0L;
+            result[i] = (v.Name, DecodeLocal(v, raw, state.Heap));
         }
         return result;
+    }
+
+    private static long DecodeLocal(VariableLayout layout, long raw, Heap? heap) {
+        if (!layout.IsUpvalueCell || heap is null || raw <= 0 || raw >= heap.Count)
+            return raw;
+        return heap.Get((int)raw) is long[] { Length: >= 1 } cell ? cell[0] : raw;
     }
 
     /// <summary>Human-readable frame summary.</summary>

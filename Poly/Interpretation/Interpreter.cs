@@ -25,10 +25,10 @@ public static class Interpreter {
         .UseJumpTargetResolution()
         .UseConstantFolding()
         .UseControlFlowAnalysis()
-        .UseValueRepresentationAnalysis()
-        .UseCallSiteCatalog()
         .UseDefiniteAssignmentAnalysis()
         .UseLambdaReturnTypeResolution()
+        .UseValueRepresentationAnalysis()
+        .UseCallSiteCatalog()
         .UseExceptionRegionAnalysis()
         .UseSyntaxTypeCompatibility()
         // Direct AST-to-ABI lowering is the primary path.
@@ -163,6 +163,9 @@ public static class Interpreter {
         var rootKind = state.Program.RootValueKind;
         var clr = state.Program.RootClrType;
 
+        if (rootKind == PrimValueKind.Void)
+            return InterpreterResult.Void;
+
         if (rootKind == PrimValueKind.StackScalar || rootKind == PrimValueKind.Bool) {
             if (clr == typeof(double) || clr == typeof(float))
                 return InterpreterResult.FromValue(BitConverter.Int64BitsToDouble(raw));
@@ -172,8 +175,11 @@ public static class Interpreter {
         if (rootKind == PrimValueKind.HeapRef) {
             if (raw == 0L)
                 return InterpreterResult.FromValue(null);
-            if (handle > 0 && handle < state.Heap.Count)
-                return InterpreterResult.FromValue(state.Heap.UnsafeGet(handle));
+            if (handle > 0 && handle < state.Heap.Count) {
+                var heapObj = state.Heap.UnsafeGet(handle);
+                if (heapObj is not null)
+                    return InterpreterResult.FromValue(heapObj);
+            }
             return InterpreterResult.FromValue(raw);
         }
 

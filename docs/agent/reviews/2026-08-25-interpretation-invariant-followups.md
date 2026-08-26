@@ -16,12 +16,16 @@ Owning stream: Interpretation only.
 - [x] **U3** — 0-arg `new` matches all-optional ctors and applies defaults; no matching ctor compile-rejects (no dummy `object[0]`). Value types with no ctor still `default(T)`.
 - [x] **U4** — Closure-path `Parameter` lookup falls back to same name (stored lambda + inline).
 
-- [x] Stored closures late-bind: captured `Variable`s share heap `long[1]` cells with the enclosing frame (inline `Invoke(Lambda)` and `Invoke(fn)` agree).
+- [x] Stored closures late-bind: analysis records free bindings; emit shares a heap `long[1]` cell (inline `Invoke(Lambda)` and `Invoke(fn)` agree).
+- [x] Capture matrix: non-`long` ABI words, stored capture+args, stored parameter, loop/foreach last-value, re-invoke, declare-init, branch create.
+- [x] `Invoke(Variable)` / `Invoke(Parameter)` take the assigned lambda body's value kind. No `UpvalueCell` wrapper. Sticky `Initializer` is a capture when the name is already in scope. Debugger presents `cell[0]` for captured slots.
+- [x] `Assignment` / `Switch` / `TryCatchFinally` / valued `Return` value kinds on the **tested** siblings (root `Block`, immediate `Invoke(Lambda)`). See reopenings below.
 
 ## Open
 
 - Nested frame-slot aliasing (inner/outer `FrameOffset` 0) still open.
 - Declare-init as `Assignment` (~50 sites) parked.
+- Capture-analysis review F1–F9 closed (siblings listed in [`2026-08-25-interpretation-capture-analysis-followups.md`](./2026-08-25-interpretation-capture-analysis-followups.md)). Nested `FrameOffset` 0 and declare-init-as-`Assignment` remain parked.
 
 ## Process
 

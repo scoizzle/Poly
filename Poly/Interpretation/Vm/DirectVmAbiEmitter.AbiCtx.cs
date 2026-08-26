@@ -244,13 +244,13 @@ public static partial class DirectVmAbiEmitter {
             }
             if (regIdx < 0) {
                 _scopeVars.Peek().Add(v);
-                _variableLayouts.Add(new VariableLayout(v.Name, slot));
+                _variableLayouts.Add(new VariableLayout(v.Name, slot, NeedsCell(v)));
                 return;
             }
             _regUsed[regIdx] = true;
             _variableRegisters[v] = regIdx;
             _scopeVars.Peek().Add(v);
-            _variableLayouts.Add(new VariableLayout(v.Name, slot));
+            _variableLayouts.Add(new VariableLayout(v.Name, slot, NeedsCell(v)));
         }
 
         private void GrowRegisterFile() {

@@ -18,10 +18,10 @@ public class TypeIsVmTests {
         .UseJumpTargetResolution()
         .UseConstantFolding()
         .UseControlFlowAnalysis()
+        .UseLambdaReturnTypeResolution()
         .UseValueRepresentationAnalysis()
         .UseCallSiteCatalog()
         .UseDefiniteAssignmentAnalysis()
-        .UseLambdaReturnTypeResolution()
         .UseExceptionRegionAnalysis()
         // .UsePrimitiveExpansion() — deprecated/non-critical
         .Build();

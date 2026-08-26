@@ -106,10 +106,45 @@ public class InvalidProgramTests {
     }
 
     [Test]
-    public async Task Invoke_NonCallableConstant_CompileRejects() {
-        await AssertCompileRejectsReadable(
+    public async Task Invoke_NonCallableConstant_AnalysisErrorAndCompileRejects() {
+        await AssertAnalysisThenCompileRejects(
             new Invoke(new Constant(42)),
-            "Invoke");
+            "Invoke",
+            SyntaxTypeCompatibilityAnalyzer.DiagnosticCode);
+    }
+
+    [Test]
+    public async Task Invoke_OfInvoke_AnalysisErrorAndCompileRejects() {
+        var inner = new Invoke(new Lambda([], new Constant(1L)));
+        await AssertAnalysisThenCompileRejects(
+            new Invoke(inner),
+            "Invoke",
+            SyntaxTypeCompatibilityAnalyzer.DiagnosticCode);
+    }
+
+    [Test]
+    public async Task Invoke_OfIntVariable_AnalysisErrorAndCompileRejects() {
+        var n = new Variable("n");
+        var node = new Block([
+            new Assignment(n, new Constant(1L)),
+            new Invoke(n)
+        ], [n]);
+        await AssertAnalysisThenCompileRejects(
+            node,
+            "Invoke",
+            SyntaxTypeCompatibilityAnalyzer.DiagnosticCode);
+    }
+
+    [Test]
+    public async Task Invoke_OfIndexAccess_AnalysisErrorAndCompileRejects() {
+        var arr = new Variable("arr", new Constant(new long[] { 1L }));
+        var node = new Block(
+            arr,
+            new Invoke(new IndexAccess(arr, new Constant(0L))));
+        await AssertAnalysisThenCompileRejects(
+            node,
+            "Invoke",
+            SyntaxTypeCompatibilityAnalyzer.DiagnosticCode);
     }
 
     [Test]
@@ -131,6 +166,17 @@ public class InvalidProgramTests {
         await AssertCompileOrExecuteRejectsReadable(
             new IndexAccess(new Constant(1L), new Constant(0L)),
             "index");
+    }
+
+    [Test]
+    public async Task Lambda_CapturesUndeclaredVariable_AnalysisErrorAndCompileRejects() {
+        var captured = new Variable("captured");
+        var fn = new Variable("fn");
+        var node = new Block([
+            new Assignment(fn, new Lambda([], captured)),
+            new Invoke(fn)
+        ], [fn]);
+        await AssertAnalysisThenCompileRejects(node, "not declared", expectedCode: null);
     }
 
     [Test]

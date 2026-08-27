@@ -1,5 +1,4 @@
 using Poly.DomainModeling.Ontology;
-using Poly.Introspection;
 
 using Action = Poly.DomainModeling.Ontology.Action;
 using Add = Poly.DomainModeling.Ontology.Add;
@@ -597,14 +596,29 @@ internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
         Dictionary<string, string>? parameters,
         Dictionary<string, EnumType> enumTypes) {
         var dateType = InferType(dateOp.Date, props, parameters, enumTypes);
-        var calendar = dateOp.Date is Now or Today or DateOperation
+        var dateLike = dateOp.Date is Now or Today or DateOperation
             || dateType.TypeName is "Date" or "DateOnly" or "DateTime" or "Timestamp";
-        if (dateType.Category is TypeCategory.Unknown && !calendar)
+        var timeLike = dateType.TypeName is "Time" or "TimeOnly";
+        if (dateType.Category is TypeCategory.Unknown && !dateLike && !timeLike)
             return;
-        if (!calendar) {
+        if (!dateLike && !timeLike) {
             Report(context, dateOp,
                 $"temporal offset requires a date left operand (got '{Describe(dateType)}'); " +
                 "a duration needs a date or clock node ('Now'/'Today') to offset");
+            return;
+        }
+
+        var clockTyped = dateOp.Date is Now
+            || dateType.TypeName is "DateTime" or "Timestamp" or "Time" or "TimeOnly";
+        if (DurationForm.IsClockResolution(dateOp.Kind) && !clockTyped) {
+            Report(context, dateOp,
+                $"clock-resolution duration ({DurationForm.Spell(dateOp.Kind)}) requires Now, DateTime, or Time " +
+                $"(got '{Describe(dateType)}'); Date/Today have no time of day");
+        }
+        else if (DurationForm.IsCalendarResolution(dateOp.Kind) && timeLike) {
+            Report(context, dateOp,
+                $"calendar duration ({DurationForm.Spell(dateOp.Kind)}) requires a date or DateTime " +
+                $"(got '{Describe(dateType)}'); Time has no calendar date");
         }
     }
 
@@ -647,10 +661,9 @@ internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
 
     /// <param name="assigning">
     /// When true, <paramref name="left"/> is the source and <paramref name="right"/> is the
-    /// target. Prefer <see cref="ITypeDefinition.IsAssignableFrom"/> (Date ⊆ DateTime,
-    /// implicit conversion operators).
+    /// target. Catalog names: Date onto DateTime is a widen; DateTime onto Date is not.
     /// </param>
-    private static bool Compatible(AnalysisContext context, TypeInfo left, TypeInfo right, bool assigning = false) {
+    private static bool Compatible(AnalysisContext _, TypeInfo left, TypeInfo right, bool assigning = false) {
         if (left.Category is TypeCategory.Unknown || right.Category is TypeCategory.Unknown)
             return true;
         if (left.Category is TypeCategory.Null)
@@ -664,41 +677,34 @@ internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
         if (right.Category is TypeCategory.Enum && left.Category is TypeCategory.Text)
             return true;
 
-        var srcDef = ResolveTypeDefinition(context, left);
-        var destDef = ResolveTypeDefinition(context, right);
-        if (srcDef is not null && destDef is not null) {
-            if (destDef.IsAssignableFrom(srcDef))
+        if (assigning) {
+            if (IsDateTimeName(right.TypeName) && IsDateName(left.TypeName))
                 return true;
-            if (!assigning && srcDef.IsAssignableFrom(destDef))
-                return true;
-            if (assigning)
+            if (IsDateName(right.TypeName) && IsDateTimeName(left.TypeName))
                 return false;
         }
 
-        return left.Category == right.Category;
+        return left.Category == right.Category
+            || string.Equals(CanonicalName(left.TypeName), CanonicalName(right.TypeName), StringComparison.Ordinal);
     }
 
-    private static ITypeDefinition? ResolveTypeDefinition(AnalysisContext context, TypeInfo info) {
-        if (info.TypeName is null)
-            return null;
-        var clr = info.TypeName switch {
-            "Date" or "DateOnly" => typeof(DateOnly),
-            "DateTime" or "Timestamp" => typeof(DateTime),
-            "Time" or "TimeOnly" => typeof(TimeOnly),
-            "Duration" or "TimeSpan" or "duration" => typeof(TimeSpan),
-            "Text" or "String" => typeof(string),
-            "Number" or "Int" or "Int64" => typeof(long),
-            "Int32" => typeof(int),
-            "Boolean" or "Bool" => typeof(bool),
-            "Guid" or "Uuid" => typeof(Guid),
-            "Decimal" => typeof(decimal),
-            "Float" or "Double" => typeof(double),
-            _ => null
-        };
-        return clr is not null
-            ? context.TypeDefinitions.GetTypeDefinition(clr)
-            : context.TypeDefinitions.GetTypeDefinition(info.TypeName);
-    }
+    private static string? CanonicalName(string? typeName) => typeName switch {
+        "String" => "Text",
+        "Bool" => "Boolean",
+        "Int" or "Int64" => "Number",
+        "DateOnly" => "Date",
+        "Timestamp" => "DateTime",
+        "TimeOnly" => "Time",
+        "TimeSpan" or "duration" => "Duration",
+        "Guid" => "Uuid",
+        _ => typeName
+    };
+
+    private static bool IsDateName(string? typeName) =>
+        CanonicalName(typeName) is "Date";
+
+    private static bool IsDateTimeName(string? typeName) =>
+        CanonicalName(typeName) is "DateTime";
 
     private static void Report(AnalysisContext context, Node where, string message) =>
         context.ReportError(where, message, DomainModelDiagnosticCodes.SemanticTypeCompatibility);

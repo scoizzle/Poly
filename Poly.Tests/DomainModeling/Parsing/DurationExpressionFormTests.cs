@@ -50,6 +50,31 @@ public class DurationExpressionFormTests {
     }
 
     [Test]
+    [Arguments("5 ms", DurationUnit.Milliseconds)]
+    [Arguments("5 Milliseconds", DurationUnit.Milliseconds)]
+    [Arguments("5 Seconds", DurationUnit.Seconds)]
+    [Arguments("5 Minutes", DurationUnit.Minutes)]
+    [Arguments("5 Hours", DurationUnit.Hours)]
+    [Arguments("5 Days", DurationUnit.Days)]
+    [Arguments("5 Weeks", DurationUnit.Weeks)]
+    [Arguments("5 Months", DurationUnit.Months)]
+    [Arguments("5 Years", DurationUnit.Years)]
+    [Arguments("1 Millisecond", DurationUnit.Milliseconds)]
+    [Arguments("1 Second", DurationUnit.Seconds)]
+    [Arguments("1 Minute", DurationUnit.Minutes)]
+    [Arguments("1 Hour", DurationUnit.Hours)]
+    [Arguments("1 Week", DurationUnit.Weeks)]
+    [Arguments("1 Year", DurationUnit.Years)]
+    public async Task Duration_CommonUnits_Form_Parses(string spelling, DurationUnit unit) {
+        var expr = DslExpressionFragment.ParseExpressionFragment(spelling, DurationInputs());
+
+        await Assert.That(expr).IsTypeOf<Duration>();
+        var duration = (Duration)expr;
+        await Assert.That(duration.Amount).IsEqualTo(spelling.StartsWith("1 ", StringComparison.Ordinal) ? 1L : 5L);
+        await Assert.That(duration.Unit).IsEqualTo(unit);
+    }
+
+    [Test]
     public async Task Now_Minus_12Days_BecomesDateOperation() {
         var expr = DslExpressionFragment.ParseExpressionFragment("Now - 12 Days", TemporalInputs());
 
@@ -68,6 +93,62 @@ public class DurationExpressionFormTests {
         await Assert.That(invoke.Arguments.Length).IsEqualTo(1);
         await Assert.That(invoke.Arguments[0]).IsTypeOf<Constant>();
         await Assert.That(((Constant)invoke.Arguments[0]).Value).IsEqualTo(-12L);
+    }
+
+    [Test]
+    public async Task Now_Minus_50Ms_BecomesDateOperation_AddMilliseconds() {
+        var expr = DslExpressionFragment.ParseExpressionFragment("Now - 50 ms", TemporalInputs());
+
+        await Assert.That(expr).IsTypeOf<DateOperation>();
+        var dateOp = (DateOperation)expr;
+        await Assert.That(dateOp.Kind).IsEqualTo(DateOperationKind.AddMilliseconds);
+        await Assert.That(((Literal)dateOp.Offset).Value).IsEqualTo(-50L);
+
+        var lowered = Pass.Lower(expr, new ParameterReference());
+        await Assert.That(((Member)((Invoke)lowered).Delegate).MemberName).IsEqualTo("AddMilliseconds");
+        await Assert.That(((Constant)((Invoke)lowered).Arguments[0]).Value).IsEqualTo(-50L);
+    }
+
+    [Test]
+    public async Task Now_Minus_2Hours_BecomesDateOperation_AddHours() {
+        var expr = DslExpressionFragment.ParseExpressionFragment("Now - 2 Hours", TemporalInputs());
+
+        await Assert.That(expr).IsTypeOf<DateOperation>();
+        var dateOp = (DateOperation)expr;
+        await Assert.That(dateOp.Date).IsTypeOf<Now>();
+        await Assert.That(dateOp.Kind).IsEqualTo(DateOperationKind.AddHours);
+        await Assert.That(((Literal)dateOp.Offset).Value).IsEqualTo(-2L);
+
+        var lowered = Pass.Lower(expr, new ParameterReference());
+        await Assert.That(((Member)((Invoke)lowered).Delegate).MemberName).IsEqualTo("AddHours");
+        await Assert.That(((Constant)((Invoke)lowered).Arguments[0]).Value).IsEqualTo(-2L);
+    }
+
+    [Test]
+    public async Task Now_Plus_2Weeks_LowersToAddDays_Scaled() {
+        var expr = DslExpressionFragment.ParseExpressionFragment("Now + 2 Weeks", TemporalInputs());
+
+        await Assert.That(expr).IsTypeOf<DateOperation>();
+        var dateOp = (DateOperation)expr;
+        await Assert.That(dateOp.Kind).IsEqualTo(DateOperationKind.AddWeeks);
+        await Assert.That(((Literal)dateOp.Offset).Value).IsEqualTo(2L);
+
+        var lowered = Pass.Lower(expr, new ParameterReference());
+        await Assert.That(((Member)((Invoke)lowered).Delegate).MemberName).IsEqualTo("AddDays");
+        await Assert.That(((Constant)((Invoke)lowered).Arguments[0]).Value).IsEqualTo(14L);
+    }
+
+    [Test]
+    public async Task Today_Plus_1Year_BecomesDateOperation_AddYears() {
+        var expr = DslExpressionFragment.ParseExpressionFragment("Today + 1 Year", TemporalInputs());
+
+        await Assert.That(expr).IsTypeOf<DateOperation>();
+        var dateOp = (DateOperation)expr;
+        await Assert.That(dateOp.Date).IsTypeOf<Today>();
+        await Assert.That(dateOp.Kind).IsEqualTo(DateOperationKind.AddYears);
+
+        var lowered = Pass.Lower(expr, new ParameterReference());
+        await Assert.That(((Member)((Invoke)lowered).Delegate).MemberName).IsEqualTo("AddYears");
     }
 
     [Test]

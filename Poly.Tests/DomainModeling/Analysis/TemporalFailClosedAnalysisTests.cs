@@ -64,6 +64,7 @@ public class TemporalFailClosedAnalysisTests {
     public async Task DatePlusDate_TwoDateProperties_Policy_ReportsArithmeticError() {
         var result = Evolve("""
             domain T
+            uses temporal
             Item: entity {
               Started: Date
               Finished: Date
@@ -177,7 +178,7 @@ public class TemporalFailClosedAnalysisTests {
 
         await Assert.That(analysis.Diagnostics.Any(d =>
             d.Severity == DiagnosticSeverity.Error
-            && d.Message.Contains("date left operand", StringComparison.OrdinalIgnoreCase))).IsTrue();
+            && d.Message.Contains("calendar duration", StringComparison.OrdinalIgnoreCase))).IsTrue();
     }
 
     [Test]
@@ -207,11 +208,64 @@ public class TemporalFailClosedAnalysisTests {
     }
 
     [Test]
+    public async Task DatePlusHours_ReportsClockResolutionError() {
+        var result = Evolve("""
+            domain T
+            uses temporal
+            Item: entity {
+              Started: Date
+              Bad: policy { Started + 2 Hours > Started }
+            }
+            """, ExtensionCatalog.Core.Language);
+
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(Errors(result).Any(e =>
+            e.Contains("clock-resolution", StringComparison.OrdinalIgnoreCase))).IsTrue();
+    }
+
+    [Test]
+    public async Task DateTimePlusHours_Succeeds() {
+        var result = Evolve("""
+            domain T
+            uses temporal
+            Item: entity {
+              OpenedAt: DateTime
+              Soon: policy { OpenedAt + 2 Hours > OpenedAt }
+            }
+            """, ExtensionCatalog.Core.Language);
+
+        await Assert.That(result.Succeeded).IsTrue();
+    }
+
+    [Test]
+    public async Task TimePlusHours_ConstructedIr_Succeeds() {
+        var item = new Entity("Item",
+            [
+                new Property("Opens", new DomainTypeReference("Time"), []),
+            ],
+            [],
+            [new Policy("Later", DomainExpression.GreaterThan(
+                new DateOperation(
+                    DomainExpression.Property("Opens"),
+                    DomainExpression.Literal(2L, new DomainTypeReference("Number")),
+                    DateOperationKind.AddHours),
+                DomainExpression.Property("Opens")))],
+            []);
+        var analysis = DomainModelAnalyzer.Analyze(
+            DomainTestFactory.Create("T", [
+                new PrimitiveType("Time", Poly.Introspection.TypeCategory.Primitive | Poly.Introspection.TypeCategory.TimeOfDay, []),
+                item,
+            ], []) with { Extensions = [ExtensionCatalog.TemporalId] });
+
+        await Assert.That(analysis.Diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error)).IsFalse();
+    }
+
+    [Test]
     public async Task Now_WithoutTemporalPack_PolicyReference_ReportsUnknownProperty() {
         var result = Evolve("""
             domain T
             Item: entity {
-              Expiry: Date
+              Expiry: Text
               IsExpired: policy { Expiry < Now }
             }
             """);

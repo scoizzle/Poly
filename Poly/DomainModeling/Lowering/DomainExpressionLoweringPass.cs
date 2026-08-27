@@ -309,10 +309,22 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Node
         var date = Route(d.Date);
         var offset = Route(d.Offset);
         return d.Kind switch {
+            DateOperationKind.AddMilliseconds => new Invoke(new Member(date, "AddMilliseconds"), offset),
+            DateOperationKind.AddSeconds => new Invoke(new Member(date, "AddSeconds"), offset),
+            DateOperationKind.AddMinutes => new Invoke(new Member(date, "AddMinutes"), offset),
+            DateOperationKind.AddHours => new Invoke(new Member(date, "AddHours"), offset),
             DateOperationKind.AddDays => new Invoke(new Member(date, "AddDays"), offset),
+            DateOperationKind.AddWeeks => new Invoke(new Member(date, "AddDays"), ScaleOffset(offset, 7)),
             DateOperationKind.AddMonths => new Invoke(new Member(date, "AddMonths"), offset),
+            DateOperationKind.AddYears => new Invoke(new Member(date, "AddYears"), offset),
             DateOperationKind.DiffDays => new Invoke(new Member(date, "Subtract"), offset),
             _ => throw new NotSupportedException($"DateOperation kind '{d.Kind}' is not supported."),
         };
     }
+
+    private static Node ScaleOffset(Node offset, int factor) => offset switch {
+        Constant { Value: long n } => new Constant(n * factor),
+        Constant { Value: int n } => new Constant(n * factor),
+        _ => new SN.Multiply(offset, new Constant((long)factor)),
+    };
 }

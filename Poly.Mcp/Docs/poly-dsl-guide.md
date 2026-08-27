@@ -783,9 +783,9 @@ against the target entity; reverse-side / self-rel / ManyToMany / OneToOne rejec
 #### Temporal Clock Dates (`Now`, `Today`, durations)
 
 The **temporal library** (loaded by the product language default — MCP sessions and `ExtensionCatalog.Core.Language`)
-ships clock date values and relative date arithmetic in expressions. These spellings parse to
-`Now` / `Today` / `DateOperation` IR, pass analysis, round-trip through `export_dsl`, and are
-authorable in **assign RHS and policy comparisons**:
+owns the **Date**, **Time**, **DateTime**, and **Duration** catalog types, clock date values, and
+relative date arithmetic. These spellings parse to `Now` / `Today` / `DateOperation` IR, pass
+analysis, round-trip through `export_dsl`, and are authorable in **assign RHS and policy comparisons**:
 
 ```poly
 Renew: action {
@@ -801,18 +801,22 @@ Replenished: policy { DueDate + 14 Days > ExpiryDate }
 |------|---------|-------|
 | `Now` | Current UTC timestamp (clock read) | Exact spelling `Now`; folds to clock IR |
 | `Today` | Current calendar date (clock read) | Exact spelling `Today`; folds to clock IR |
-| `N Days` / `N Months` | Relative duration | Singular and plural accepted (`Day`, `Days`, `Month`, `Months`); exact PascalCase |
-| `DateExpr + N Days` / `DateExpr - N Months` | Offset a date by a duration | `DateOperation` — `Now`, `Today`, or a `Date` property can be the left operand |
+| `N Seconds` / `Minutes` / `Hours` / `Days` / `Weeks` / `Months` / `Years` | Relative duration | Singular and plural accepted; exact PascalCase. Milliseconds also as `ms` |
+
+| `DateExpr ± N <unit>` | Offset a date/time by a duration | `Now`, `Today`, or a Date/DateTime/Time property on the left |
+
+Clock-resolution units (`Milliseconds`/`ms`, `Seconds`, `Minutes`, `Hours`) apply to `Now`, `DateTime`, and `Time`. Calendar units (`Days`, `Weeks`, `Months`, `Years`) apply to `Now`, `Today`, `Date`, and `DateTime`. `Date`/`Today` + hours (or finer) is rejected at analysis; `Time` + days (or coarser) is rejected.
 
 **Fail-closed (parse):** unknown units (`12 fortnights`) are a **parse error** — never a
 vacuous `DateOperation` and never a dropped unit. A bare `Number + Days` with no temporal left
 operand is rejected at analysis, never a silent numeric constant. `Date + Date` (clock nodes
 or two `Date` properties) is rejected at analysis.
 
-**Fail-closed (library not loaded):** without the temporal library, `Now` stays a plain `PropertyAccess`
-(never a clock read), temporal authoring (`Now - 12 Days`, `5 Days`) fails at parse, and
-`DateOperation` printing throws. Product sessions load Temporal via `uses temporal`
-(or the SDK/MCP seed). A unit that does not list Temporal does not get clock meaning.
+**Fail-closed (library not loaded):** without the temporal library, `Date` / `Time` / `DateTime` /
+`Duration` are unknown catalog types, `Now` stays a plain `PropertyAccess` (never a clock read),
+temporal authoring (`Now - 12 Days`, `5 Days`) fails at parse, and `DateOperation` printing throws.
+Product sessions load Temporal via `uses temporal` (or the SDK/MCP seed). A unit that does not
+list Temporal does not get clock meaning or temporal primitives.
 
 **Create-time defaults and assign-to-clock are shipped.** `default(Today)` / `default(Now)`
 and `assign Prop to Today` / `assign Prop to Now` evaluate at instance create / invoke

@@ -1,4 +1,5 @@
 using Poly.DomainModeling.Evolution;
+using Poly.DomainModeling.Libraries.Temporal;
 
 namespace Poly.DomainModeling.Ontology.Bootstrap;
 
@@ -6,7 +7,8 @@ namespace Poly.DomainModeling.Ontology.Bootstrap;
 /// Entry point for constructing bootstrapped domain models.
 ///
 /// <c>DomainFactory.Create("Orders")</c> returns a domain pre-populated with
-/// the canonical built-in primitive types (Boolean, Number, Text, Date, etc.)
+/// the canonical built-in primitive types (Boolean, Number, Text, Uuid, Binary),
+/// product language <c>uses temporal</c> (Date, Time, DateTime, Duration),
 /// and valid analysis state.
 ///
 /// This is the primary bootstrap surface for tests, MCP sessions, and direct API consumers.
@@ -68,7 +70,9 @@ public static class DomainFactory {
     }
 
     private static Domain ApplyBuiltins(Domain empty) {
-        var changes = CanonicalBuiltInTypeCatalog.CreateChanges();
+        var changes = CanonicalBuiltInTypeCatalog.CreateChanges().ToList();
+        if (empty.Extensions.Contains(ExtensionCatalog.TemporalId, StringComparer.Ordinal))
+            changes.AddRange(TemporalTypeCatalog.CreateChanges());
         var result = new DomainEvolution(empty).Apply(changes);
         return result.Succeeded
             ? result.Root

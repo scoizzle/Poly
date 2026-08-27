@@ -73,4 +73,36 @@ public sealed class DomainExtensionTests {
         var domain = DomainFactory.Create("Orders");
         await Assert.That(domain.Extensions).Contains("temporal");
     }
+
+    [Test]
+    public async Task Parse_DateType_WithoutTemporal_UnknownType() {
+        var poly = """
+            domain T
+            Item: entity { Due: Date }
+            """;
+        var changes = new PolyDslParser(poly).Parse();
+        var result = new DomainEvolution(new Domain("T", [])).Apply(changes);
+
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(result.Analysis.Diagnostics.Any(d =>
+            d.Message.Contains("unknown type 'Date'", StringComparison.Ordinal))).IsTrue();
+    }
+
+    [Test]
+    public async Task Parse_DateType_WithUsesTemporal_SeedsTemporalPrimitives() {
+        var poly = """
+            domain T
+            uses temporal
+            Item: entity { Due: Date }
+            """;
+        var changes = new PolyDslParser(poly).Parse();
+        var result = new DomainEvolution(new Domain("T", [])).Apply(changes);
+
+        await Assert.That(result.Succeeded).IsTrue();
+        var names = result.Root!.Types.OfType<PrimitiveType>().Select(p => p.Name).ToHashSet();
+        await Assert.That(names).Contains("Date");
+        await Assert.That(names).Contains("DateTime");
+        await Assert.That(names).Contains("Time");
+        await Assert.That(names).Contains("Duration");
+    }
 }

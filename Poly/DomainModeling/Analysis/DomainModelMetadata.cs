@@ -17,6 +17,18 @@ public sealed record ResolvedTypeReferenceMetadata(DomainType Type) : IAnalysisM
 /// </summary>
 public sealed record OwnerEntityMetadata(Entity Owner) : IAnalysisMetadata;
 
+/// <summary>
+/// Library-stamped assign conversion: lowering emits
+/// <c>Invoke(Member(value, MethodName), static-member args)</c>. Temporal uses
+/// this for Date onto DateTime (<c>ToDateTime(TimeOnly.MinValue)</c>).
+/// </summary>
+public sealed record AssignedMemberConversionArgument(string TypeName, string MemberName);
+
+public sealed record AssignedMemberConversionMetadata(
+    string MethodName,
+    IReadOnlyList<AssignedMemberConversionArgument> Arguments
+) : IAnalysisMetadata;
+
 public sealed record RelationshipLookupMetadata(
     IReadOnlyDictionary<string, IReadOnlyDictionary<string, Relationship>> BySourceEntity
 ) : IAnalysisMetadata {

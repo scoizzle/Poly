@@ -201,6 +201,7 @@ public class ExpressionTypeAnalysisTests {
     public async Task DateArithmetic_DatePlusNumber_Succeeds() {
         var result = Parse("""
             domain Test
+            uses temporal
             Loan: entity {
               DueDate: Date
               IsDueSoon: policy { DueDate + 7 > DueDate }
@@ -260,6 +261,7 @@ public class ExpressionTypeAnalysisTests {
     public async Task Assign_DatePropToDateTimeProp_Succeeds() {
         var result = Parse("""
             domain Test
+            uses temporal
             Loan: entity {
               DueDate: DateTime
               Start: Date
@@ -273,6 +275,7 @@ public class ExpressionTypeAnalysisTests {
     public async Task Assign_TodayToDateTimeProp_Succeeds() {
         var result = Parse("""
             domain Test
+            uses temporal
             Loan: entity {
               DueDate: DateTime
               Stamp: action { assign DueDate to today }
@@ -285,6 +288,7 @@ public class ExpressionTypeAnalysisTests {
     public async Task Assign_DateTimePropToDateProp_Rejected() {
         var result = Parse("""
             domain Test
+            uses temporal
             Loan: entity {
               DueDate: DateTime
               Start: Date

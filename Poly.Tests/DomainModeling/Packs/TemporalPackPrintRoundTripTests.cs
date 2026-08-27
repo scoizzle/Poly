@@ -132,6 +132,18 @@ public sealed class TemporalPackPrintRoundTripTests {
         await Assert.That(printer.PrintTestExpression(
             new DateOperation(new Today(), DomainExpression.Literal(-3L), DateOperationKind.AddMonths)))
             .IsEqualTo("Today - 3 Months");
+        await Assert.That(printer.PrintTestExpression(
+            new DateOperation(new Now(), DomainExpression.Literal(-50L), DateOperationKind.AddMilliseconds)))
+            .IsEqualTo("Now - 50 Milliseconds");
+        await Assert.That(printer.PrintTestExpression(
+            new DateOperation(new Now(), DomainExpression.Literal(-2L), DateOperationKind.AddHours)))
+            .IsEqualTo("Now - 2 Hours");
+        await Assert.That(printer.PrintTestExpression(
+            new DateOperation(DomainExpression.Property("DueDate"), DomainExpression.Literal(2), DateOperationKind.AddWeeks)))
+            .IsEqualTo("DueDate + 2 Weeks");
+        await Assert.That(printer.PrintTestExpression(
+            new DateOperation(new Today(), DomainExpression.Literal(1L), DateOperationKind.AddYears)))
+            .IsEqualTo("Today + 1 Years");
     }
 
     [Test]

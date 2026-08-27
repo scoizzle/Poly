@@ -284,6 +284,43 @@ public class DomainExpressionLoweringPassTests {
     }
 
     [Test]
+    public async Task DateOperation_AddHours_LowersToInvoke() {
+        var expr = new DateOperation(
+            DomainExpression.Property("OpenedAt"),
+            DomainExpression.Literal(2),
+            DateOperationKind.AddHours);
+
+        var result = Pass.Lower(expr, Subject);
+
+        await Assert.That(((Member)((Invoke)result).Delegate).MemberName).IsEqualTo("AddHours");
+    }
+
+    [Test]
+    public async Task DateOperation_AddWeeks_LowersToAddDaysScaled() {
+        var expr = new DateOperation(
+            DomainExpression.Property("DueDate"),
+            DomainExpression.Literal(2L),
+            DateOperationKind.AddWeeks);
+
+        var result = Pass.Lower(expr, Subject);
+
+        await Assert.That(((Member)((Invoke)result).Delegate).MemberName).IsEqualTo("AddDays");
+        await Assert.That(((Constant)((Invoke)result).Arguments[0]).Value).IsEqualTo(14L);
+    }
+
+    [Test]
+    public async Task DateOperation_AddYears_LowersToInvoke() {
+        var expr = new DateOperation(
+            DomainExpression.Property("StartDate"),
+            DomainExpression.Literal(1),
+            DateOperationKind.AddYears);
+
+        var result = Pass.Lower(expr, Subject);
+
+        await Assert.That(((Member)((Invoke)result).Delegate).MemberName).IsEqualTo("AddYears");
+    }
+
+    [Test]
     public async Task DateOperation_DiffDays_LowersToInvoke() {
         var expr = new DateOperation(
             DomainExpression.Property("EndDate"),

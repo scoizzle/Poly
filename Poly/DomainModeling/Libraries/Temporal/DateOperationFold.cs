@@ -14,11 +14,9 @@ public sealed class DateOperationFold : IBinaryExpressionFold {
             return null;
 
         var offset = isPlus ? d.Amount : -d.Amount;
-        var kind = d.Unit switch {
-            DurationUnit.Days => DateOperationKind.AddDays,
-            DurationUnit.Months => DateOperationKind.AddMonths,
-            _ => throw new NotSupportedException($"Duration unit '{d.Unit}' cannot fold to a date operation."),
-        };
-        return new DateOperation(left, DomainExpression.Literal(offset, new DomainTypeReference("Number")), kind);
+        return new DateOperation(
+            left,
+            DomainExpression.Literal(offset, new DomainTypeReference("Number")),
+            DurationForm.ToKind(d.Unit));
     }
 }

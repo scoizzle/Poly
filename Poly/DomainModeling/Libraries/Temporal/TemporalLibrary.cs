@@ -1,7 +1,8 @@
 namespace Poly.DomainModeling.Libraries.Temporal;
 
 /// <summary>
-/// Temporal concepts (clocks, duration units) on existing expression shapes.
+/// Temporal concepts: Date/Time/DateTime/Duration catalog types (seeded when this
+/// library is imported), clocks, and duration units on existing expression shapes.
 /// Loaded via <see cref="ExtensionCatalog"/>; meaning is session-scoped.
 /// </summary>
 public sealed class TemporalLibrary : IDomainLibrary {

@@ -2,7 +2,7 @@ using Poly.DomainModeling.Ontology;
 
 namespace Poly.DomainModeling.Libraries.Temporal;
 
-public enum DurationUnit { Days, Months }
+public enum DurationUnit { Milliseconds, Seconds, Minutes, Hours, Days, Weeks, Months, Years }
 
 /// <summary>
 /// A parsed duration amount + unit (e.g. <c>12 days</c>), produced by the temporal

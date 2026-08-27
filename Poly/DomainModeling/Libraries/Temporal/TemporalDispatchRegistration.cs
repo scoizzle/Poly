@@ -109,7 +109,7 @@ internal sealed class TodayLoweringHandler : IExpressionDispatchHandler<Node> {
     }
 }
 
-/// <summary>Lowering: <c>DateOperation</c> → <c>date.AddDays/AddMonths/Subtract(offset)</c>.</summary>
+/// <summary>Lowering: <c>DateOperation</c> → <c>date.AddSeconds/…/AddYears</c> (weeks → <c>AddDays</c> × 7).</summary>
 internal sealed class DateOperationLoweringHandler : IExpressionDispatchHandler<Node> {
     public Type ExpressionType => typeof(DateOperation);
 
@@ -121,13 +121,25 @@ internal sealed class DateOperationLoweringHandler : IExpressionDispatchHandler<
         var date = route(d.Date);
         var offset = route(d.Offset);
         result = d.Kind switch {
+            DateOperationKind.AddMilliseconds => new Invoke(new Member(date, "AddMilliseconds"), offset),
+            DateOperationKind.AddSeconds => new Invoke(new Member(date, "AddSeconds"), offset),
+            DateOperationKind.AddMinutes => new Invoke(new Member(date, "AddMinutes"), offset),
+            DateOperationKind.AddHours => new Invoke(new Member(date, "AddHours"), offset),
             DateOperationKind.AddDays => new Invoke(new Member(date, "AddDays"), offset),
+            DateOperationKind.AddWeeks => new Invoke(new Member(date, "AddDays"), ScaleOffset(offset, 7)),
             DateOperationKind.AddMonths => new Invoke(new Member(date, "AddMonths"), offset),
+            DateOperationKind.AddYears => new Invoke(new Member(date, "AddYears"), offset),
             DateOperationKind.DiffDays => new Invoke(new Member(date, "Subtract"), offset),
             _ => throw new NotSupportedException($"DateOperation kind '{d.Kind}' is not supported."),
         };
         return true;
     }
+
+    private static Node ScaleOffset(Node offset, int factor) => offset switch {
+        Constant { Value: long n } => new Constant(n * factor),
+        Constant { Value: int n } => new Constant(n * factor),
+        _ => new Poly.Ast.Nodes.Multiply(offset, new Constant((long)factor)),
+    };
 }
 
 /// <summary>Lowering: a bare <c>Duration</c> is an unresolved temporal specialization — fail loud.</summary>

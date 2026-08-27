@@ -195,14 +195,15 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
             // pass (Add/Subtract) so it applies in every context — nothing more here.
         }
 
+        if (_analysis?.GetMetadata<AssignedMemberConversionMetadata>(a) is { } conversion) {
+            value = new Invoke(
+                new Member(value, conversion.MethodName),
+                [.. conversion.Arguments.Select(arg =>
+                    new Member(new NamedTypeReference(arg.TypeName), arg.MemberName))]);
+        }
+
         return new Assignment(target, value);
     }
-
-    /// <summary>Returns true when the domain type name maps to a date/time CLR type.</summary>
-    private static bool IsDateTimeDomainType(string typeName) => typeName switch {
-        "DateTime" or "Timestamp" or "Date" or "DateOnly" => true,
-        _ => false,
-    };
 
     /// <summary>
     /// Lowers a stage transition to generic Syntax AST on both runtime and emit:

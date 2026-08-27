@@ -192,7 +192,7 @@ Module README: `Poly/Introspection/README.md`.
 
 | Extension job | Loads when | Emits a process door? |
 |---------------|------------|------------------------|
-| Meaning (`temporal`) | `uses temporal` (SDK seed if source lists no `uses`) | no |
+| Meaning (`temporal`) | `uses temporal` (SDK seed if source lists no `uses`). Owns Date/Time/DateTime/Duration catalog types and Date→DateTime assign conversion. | no |
 | Persistence (`storage`, `sqlite`, …) | listed / compiler seed | no |
 | Product host (REST / HTTP, …) | **only** if listed | **yes** — binds already-lowered operations |
 

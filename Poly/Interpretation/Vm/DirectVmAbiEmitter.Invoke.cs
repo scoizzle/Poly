@@ -48,23 +48,15 @@ public static partial class DirectVmAbiEmitter {
                     var methodParams = methodInfo.GetParameters();
                     var methodArgs = new Expression[methodParams.Length];
                     int baseIdx = isStatic ? 0 : 1;
-                    for (int i = 0; i < methodParams.Length; i++) {
-                        int slotIdx = i < invoke.Arguments.Length ? argSlots[i] : d + baseIdx + i;
-                        var ringVal = ctx.RingVar(slotIdx);
-                        var paramType = methodParams[i].ParameterType;
-                        if (paramType.IsValueType) {
-                            methodArgs[i] = AbiValueTypes.IsLongRepresentable(paramType)
-                                ? Convert(ringVal, paramType)
-                                : Convert(
-                                    Call(ctx.HeapLocal, HeapUnsafeGet,
-                                        Convert(ringVal, typeof(int))),
-                                    paramType);
-                        }
-                        else {
-                            methodArgs[i] = Convert(
-                                Call(ctx.HeapLocal, HeapUnsafeGet,
-                                    Convert(ringVal, typeof(int))),
-                                paramType);
+                    if (TryPackEnumerableArgs(methodParams, invoke, argSlots, ctx, out var packed)) {
+                        methodArgs[0] = packed;
+                    }
+                    else {
+                        for (int i = 0; i < methodParams.Length; i++) {
+                            int slotIdx = i < invoke.Arguments.Length ? argSlots[i] : d + baseIdx + i;
+                            var ringVal = ctx.RingVar(slotIdx);
+                            var argNode = i < invoke.Arguments.Length ? invoke.Arguments[i] : null;
+                            methodArgs[i] = ConvertRingToClr(ringVal, methodParams[i].ParameterType, argNode, ctx);
                         }
                     }
 
@@ -324,6 +316,35 @@ public static partial class DirectVmAbiEmitter {
 
         throw new InvalidOperationException(
             $"VM compile rejected: Invoke target must be a member, lambda, or stored closure, got {invoke.Delegate.GetType().Name}.");
+    }
+
+    /// <summary>
+    /// Packs N compiled arguments into a <c>string[]</c> (or element array) when
+    /// the callee takes a single array / <see cref="IEnumerable{T}"/> parameter.
+    /// Used for flattened <c>String.Concat</c>.
+    /// </summary>
+    private static bool TryPackEnumerableArgs(
+        ParameterInfo[] methodParams,
+        Invoke invoke,
+        int[] argSlots,
+        AbiCtx ctx,
+        out Expression packed) {
+        packed = null!;
+        if (methodParams.Length != 1 || invoke.Arguments.Length <= 1)
+            return false;
+        var paramType = methodParams[0].ParameterType;
+        Type? elementType = paramType.IsArray
+            ? paramType.GetElementType()
+            : paramType.IsGenericType && paramType.GetGenericTypeDefinition() == typeof(IEnumerable<>)
+                ? paramType.GetGenericArguments()[0]
+                : null;
+        if (elementType is null)
+            return false;
+        var elems = new Expression[invoke.Arguments.Length];
+        for (var i = 0; i < invoke.Arguments.Length; i++)
+            elems[i] = ConvertRingToClr(ctx.RingVar(argSlots[i]), elementType, invoke.Arguments[i], ctx);
+        packed = NewArrayInit(elementType, elems);
+        return true;
     }
 
     private static Expression EmitInvokeIndirect(Invoke invoke, AbiCtx ctx) {
@@ -641,54 +662,21 @@ public static partial class DirectVmAbiEmitter {
             $"foreach collection type '{collection.GetType().Name}' is not IEnumerable.");
     }
 
-    private static long ConvertAbi(Heap heap, long raw, Type? source, Type target) {
-        object? value;
-        if (source == typeof(double) || source == typeof(float))
-            value = BitConverter.Int64BitsToDouble(raw);
-        else if (source == typeof(bool))
-            value = raw != 0L;
-        else if (source is not null && source.IsValueType && AbiValueTypes.IsLongRepresentable(source))
-            value = System.Convert.ChangeType(raw, source);
-        else if (source is not null)
-            value = raw == 0L ? null : heap.UnsafeGet((int)raw);
-        else if (!target.IsValueType)
-            value = raw == 0L ? null : heap.UnsafeGet((int)raw);
-        else
-            value = raw;
-
+    private static long CastAbi(Heap heap, long raw, Type target) {
+        if (raw == 0L) {
+            if (target.IsValueType)
+                throw new InvalidCastException($"Cannot convert null to '{target}'.");
+            return 0L;
+        }
+        var value = heap.UnsafeGet((int)raw);
         if (value is null) {
             if (target.IsValueType)
                 throw new InvalidCastException($"Cannot convert null to '{target}'.");
             return 0L;
         }
-
         if (target.IsInstanceOfType(value))
-            return BoxToAbi(heap, value);
-
-        if (TryInvokeDiscoveredConversion(value, target, out var converted))
-            return BoxToAbi(heap, converted);
-
-        if (target == typeof(double) || target == typeof(float))
-            return BitConverter.DoubleToInt64Bits(System.Convert.ToDouble(value));
-        if (target == typeof(bool))
-            return System.Convert.ToBoolean(value) ? 1L : 0L;
-        if (target.IsValueType && AbiValueTypes.IsLongRepresentable(target)) {
-            var truncated = Math.Truncate(System.Convert.ToDouble(value));
-            return System.Convert.ToInt64(System.Convert.ChangeType(truncated, target));
-        }
-        return BoxToAbi(heap, System.Convert.ChangeType(value, target));
-    }
-
-    private static bool TryInvokeDiscoveredConversion(object value, Type target, [NotNullWhen(true)] out object? converted) {
-        var registry = ClrTypeDefinitionRegistry.Shared;
-        var dest = registry.GetTypeDefinition(target);
-        var src = registry.GetTypeDefinition(value.GetType());
-        if (dest.GetConversionFrom(src) is { Method: ClrMethod method }) {
-            converted = method.MethodInfo.Invoke(null, [value]);
-            return converted is not null;
-        }
-        converted = null;
-        return false;
+            return raw;
+        throw new InvalidCastException($"Cannot convert '{value.GetType()}' to '{target}'.");
     }
 
     private static long UnboxNullableToLong(Heap heap, long handle) {

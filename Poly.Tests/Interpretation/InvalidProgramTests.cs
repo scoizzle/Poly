@@ -2,6 +2,7 @@ using Poly.Analysis;
 using Poly.Interpretation;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Introspection;
+using Poly.Tests.Introspection;
 
 namespace Poly.Tests.Interpretation;
 
@@ -335,6 +336,35 @@ public class InvalidProgramTests {
         await AssertAnalysisThenCompileRejects(
             node,
             "parameter(s)",
+            SyntaxTypeCompatibilityAnalyzer.DiagnosticCode);
+    }
+
+    [Test]
+    public async Task Assignment_DateOnlyThenDateTime_AnalysisErrorAndCompileRejects() {
+        var x = new Variable("x");
+        var node = new Block([
+            new Assignment(x, new Constant(new DateOnly(2026, 8, 26))),
+            new Assignment(x, new Constant(new DateTime(2026, 8, 26, 15, 0, 0))),
+            x
+        ], [x]);
+        await AssertAnalysisThenCompileRejects(
+            node,
+            "incompatible",
+            SyntaxTypeCompatibilityAnalyzer.DiagnosticCode);
+    }
+
+    [Test]
+    public async Task Assignment_DateTimeToDateOnlyMember_AnalysisErrorAndCompileRejects() {
+        var host = new Variable("host");
+        var node = new Block([
+            new Assignment(host, new New(TypeReference.To<TypeCompatibilityTests.ConversionHost>())),
+            new Assignment(
+                new Member(host, "Start"),
+                new Constant(new DateTime(2026, 8, 26, 15, 0, 0)))
+        ], [host]);
+        await AssertAnalysisThenCompileRejects(
+            node,
+            "cannot assign",
             SyntaxTypeCompatibilityAnalyzer.DiagnosticCode);
     }
 

@@ -1,3 +1,5 @@
+using Poly.Introspection.CommonLanguageRuntime;
+
 namespace Poly.Interpretation.Analysis.Semantics;
 
 public static class SyntaxTypeCompatibilityAnalyzerExtensions {
@@ -57,16 +59,25 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
                 CheckComparison(context, gte.LeftHandValue, gte.RightHandValue);
                 break;
             case Add add:
-                CheckArithmetic(context, add.LeftHandValue, add.RightHandValue, isAdd: true);
+                CheckArithmetic(context, add, add.LeftHandValue, add.RightHandValue, ArithmeticKind.Add);
                 break;
             case Subtract sub:
-                CheckArithmetic(context, sub.LeftHandValue, sub.RightHandValue, isAdd: false);
+                CheckArithmetic(context, sub, sub.LeftHandValue, sub.RightHandValue, ArithmeticKind.Subtract);
                 break;
             case Multiply mul:
-                CheckArithmetic(context, mul.LeftHandValue, mul.RightHandValue, isAdd: false);
+                CheckArithmetic(context, mul, mul.LeftHandValue, mul.RightHandValue, ArithmeticKind.Multiply);
                 break;
             case Divide div:
-                CheckArithmetic(context, div.LeftHandValue, div.RightHandValue, isAdd: false);
+                CheckArithmetic(context, div, div.LeftHandValue, div.RightHandValue, ArithmeticKind.Divide);
+                break;
+            case Modulo mod:
+                CheckArithmetic(context, mod, mod.LeftHandValue, mod.RightHandValue, ArithmeticKind.Modulo);
+                break;
+            case TypeAs typeAs:
+                CheckTypeAs(context, typeAs);
+                break;
+            case New created:
+                CheckNew(context, created);
                 break;
             case Not not:
                 var operand = ClrTypeOf(context, not.Value);
@@ -81,12 +92,13 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
                 break;
             case Assignment a:
                 if (a.Destination is Member dest)
-                    CheckAssign(context, dest, a.Value);
+                    CheckAssign(context, a, dest);
                 if (a.Destination is Variable v)
                     CheckVariableAssign(context, v, a);
                 break;
             case Invoke inv:
                 CheckInvokeTarget(context, inv);
+                RewriteInvokeArgumentConversions(context, inv);
                 break;
             case TypeCast tc:
                 CheckTypeCast(context, tc);
@@ -108,20 +120,71 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
                 $"comparison between incompatible types '{left.Name}' and '{right.Name}'");
     }
 
-    private void CheckArithmetic(AnalysisContext context, Node leftNode, Node rightNode, bool isAdd) {
+    private enum ArithmeticKind { Add, Subtract, Multiply, Divide, Modulo }
+
+    private void CheckArithmetic(
+        AnalysisContext context, Node parent, Node leftNode, Node rightNode, ArithmeticKind kind) {
         var left = ClrTypeOf(context, leftNode);
         var right = ClrTypeOf(context, rightNode);
         if (left is null || right is null) return;
         var lc = CategoryOf(left);
         var rc = CategoryOf(right);
         if (lc is Cat.Unknown or Cat.Null || rc is Cat.Unknown or Cat.Null) return;
-        // numeric + numeric, or date + number (AddDays lowering), or string + string (concat)
-        bool ok = (lc is Cat.Number && rc is Cat.Number)
-                  || (lc is Cat.Date && rc is Cat.Number)
-                  || (isAdd && lc is Cat.Text && rc is Cat.Text);
+
+        if (kind is ArithmeticKind.Add && lc is Cat.Text && rc is Cat.Text) {
+            if (!RewriteStringConcat(context, parent, leftNode, rightNode))
+                Report(context, leftNode, "string concatenation could not be resolved to String.Concat");
+            return;
+        }
+
+        if (left == typeof(decimal) || right == typeof(decimal)) {
+            if (!RewriteDecimalArithmetic(context, parent, leftNode, rightNode, kind))
+                Report(context, leftNode,
+                    $"decimal arithmetic could not be resolved ({kind})");
+            return;
+        }
+
+        if ((lc is Cat.Date && rc is Cat.Number)
+            && kind is ArithmeticKind.Add or ArithmeticKind.Subtract) {
+            if (!RewriteDateOffset(context, parent, leftNode, rightNode, negate: kind is ArithmeticKind.Subtract))
+                Report(context, leftNode,
+                    $"temporal offset requires a date type with AddDays (got '{left.Name}')");
+            return;
+        }
+
+        bool ok = lc is Cat.Number && rc is Cat.Number;
         if (!ok)
             Report(context, leftNode,
                 $"arithmetic operand is not numeric (got '{left.Name}' and '{right.Name}')");
+    }
+
+    private void CheckTypeAs(AnalysisContext context, TypeAs typeAs) {
+        var target = ClrTypeOf(context, typeAs)
+            ?? (typeAs.TargetTypeReference is ClrTypeReference ctr ? ctr.RuntimeType : null);
+        if (target is null)
+            return;
+        if (target.IsValueType)
+            Report(context, typeAs,
+                $"'as' cannot target value type '{target.Name}'");
+    }
+
+    private void CheckNew(AnalysisContext context, New created) {
+        if (context.GetResolvedMember(created) is ITypeConstructor)
+            return;
+        var typeDef = context.GetResolvedType(created)
+            ?? context.GetResolvedType(created.Type);
+        if (created.Arguments.Length == 0
+            && typeDef is IClrTypeDefinition { RuntimeType.IsValueType: true }) {
+            var replacement = new Default(created.Type);
+            context.SetResolvedType(replacement, typeDef);
+            var (kind, clr) = RepresentationOf(typeDef);
+            context.SetMetadata(replacement, new ValueRepresentationMetadata(kind, clr));
+            Replace(context, created, replacement);
+            return;
+        }
+        var name = typeDef?.Name ?? created.Type.ToString();
+        Report(context, created,
+            $"no matching constructor for '{name}' with {created.Arguments.Length} argument(s)");
     }
 
     private void CheckBooleanOperands(AnalysisContext context, Node leftNode, Node rightNode) {
@@ -207,8 +270,10 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
 
         var destDef = context.TypeDefinitions.GetTypeDefinition(prior.ClrType);
         var srcDef = context.TypeDefinitions.GetTypeDefinition(rhsType);
-        if (destDef is not null && srcDef is not null && destDef.IsAssignableFrom(srcDef))
+        if (destDef is not null && srcDef is not null && destDef.IsAssignableFrom(srcDef)) {
+            RewriteAssignmentConversion(context, assignment, destDef, srcDef);
             return;
+        }
 
         if (IsIeeeScalar(prior.ClrType) != IsIeeeScalar(rhsType)) {
             Report(context, assignment,
@@ -218,7 +283,7 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
 
         var pc = CategoryOf(prior.ClrType);
         var rc = CategoryOf(rhsType);
-        if (pc is Cat.Unknown || rc is Cat.Unknown || !Compatible(pc, prior.ClrType, rc, rhsType)) {
+        if (pc is Cat.Unknown || rc is Cat.Unknown || !Compatible(pc, prior.ClrType, rc, rhsType, destThenSource: true)) {
             Report(context, assignment,
                 $"cannot assign '{rhsType.Name}' to variable '{variable.Name}' (incompatible with prior '{prior.ClrType.Name}')");
         }
@@ -230,14 +295,16 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
     private static bool IsIeeeScalar(Type type) =>
         type == typeof(float) || type == typeof(double);
 
-    private void CheckAssign(AnalysisContext context, Member destination, Node value) {
+    private void CheckAssign(AnalysisContext context, Assignment assignment, Member destination) {
         var target = ClrTypeOf(context, destination);
-        var rhs = ClrTypeOf(context, value);
+        var rhs = ClrTypeOf(context, assignment.Value);
         if (target is null || rhs is null) return;
         var destDef = context.TypeDefinitions.GetTypeDefinition(target);
         var srcDef = context.TypeDefinitions.GetTypeDefinition(rhs);
-        if (destDef is not null && srcDef is not null && destDef.IsAssignableFrom(srcDef))
+        if (destDef is not null && srcDef is not null && destDef.IsAssignableFrom(srcDef)) {
+            RewriteAssignmentConversion(context, assignment, destDef, srcDef);
             return;
+        }
         var tc = CategoryOf(target);
         var rc = CategoryOf(rhs);
         if (tc is Cat.Unknown or Cat.Null || rc is Cat.Unknown or Cat.Null) return;
@@ -250,33 +317,432 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
     private void CheckTypeCast(AnalysisContext context, TypeCast typeCast) {
         var source = ClrTypeOf(context, typeCast.Operand);
         var dest = ClrTypeOf(context, typeCast);
-        if (source is null || dest is null || source == dest)
-            return;
-
-        var destDef = context.TypeDefinitions.GetTypeDefinition(dest);
-        var srcDef = context.TypeDefinitions.GetTypeDefinition(source);
+        var destDef = typeCast.TargetTypeReference is ClrTypeReference destClr
+                ? context.TypeDefinitions.GetTypeDefinition(destClr.RuntimeType)
+                : typeCast.TargetTypeReference is PrimitiveTypeReference primRef
+                    && primRef.PrimitiveId.GetClrType() is { } primClr
+                    ? context.TypeDefinitions.GetTypeDefinition(primClr)
+                : context.GetResolvedType(typeCast.TargetTypeReference)
+                    ?? context.GetResolvedType(typeCast)
+                    ?? (dest is not null ? context.TypeDefinitions.GetTypeDefinition(dest) : null);
+        var srcDef = context.GetResolvedType(typeCast.Operand)
+            ?? (source is not null ? context.TypeDefinitions.GetTypeDefinition(source) : null);
         if (destDef is not null && srcDef is not null) {
-            if (destDef.IsAssignableFrom(srcDef))
+            if (RewriteOperatorConversion(context, typeCast, typeCast.Operand, destDef, srcDef, implicitOnly: false))
                 return;
-            if (destDef.GetConversionFrom(srcDef) is not null)
+            if (destDef.IsAssignableFrom(srcDef))
                 return;
             if (srcDef.IsAssignableFrom(destDef))
                 return;
+            var srcCat = source is not null ? CategoryOf(source) : Cat.Unknown;
+            var destCat = dest is not null ? CategoryOf(dest)
+                : destDef is IClrTypeDefinition cd ? CategoryOf(cd.RuntimeType) : Cat.Unknown;
+            if ((srcCat is Cat.Number && destCat is Cat.Number)
+                || (srcCat is Cat.Enum && destCat is Cat.Number)
+                || (srcCat is Cat.Number && destCat is Cat.Enum)) {
+                if (TryRewriteNumericConvert(context, typeCast, typeCast.Operand, destDef, srcDef))
+                    return;
+            }
         }
+        if (source is null || dest is null || source == dest)
+            return;
 
         var sc = CategoryOf(source);
         var dc = CategoryOf(dest);
         if (sc is Cat.Unknown or Cat.Null || dc is Cat.Unknown or Cat.Null)
             return;
-        if (sc is Cat.Number && dc is Cat.Number)
+        if (sc is Cat.Number && dc is Cat.Number) {
+            if (destDef is not null && srcDef is not null
+                && TryRewriteNumericConvert(context, typeCast, typeCast.Operand, destDef, srcDef))
+                return;
+            Report(context, typeCast,
+                $"cannot convert '{source.Name}' to '{dest.Name}'");
             return;
+        }
         if (dc is Cat.Enum && sc is Cat.Number)
             return;
-        if (sc is Cat.Enum && dc is Cat.Number)
+        if (sc is Cat.Enum && dc is Cat.Number) {
+            if (destDef is not null && srcDef is not null
+                && TryRewriteNumericConvert(context, typeCast, typeCast.Operand, destDef, srcDef))
+                return;
+            Report(context, typeCast,
+                $"cannot convert '{source.Name}' to '{dest.Name}'");
             return;
+        }
 
         Report(context, typeCast,
             $"cannot convert '{source.Name}' to '{dest.Name}'");
+    }
+
+    private void RewriteInvokeArgumentConversions(AnalysisContext context, Invoke invoke) {
+        if (context.GetResolvedMember(invoke) is not ITypeMethod method)
+            return;
+        var parameters = method.Parameters.ToArray();
+        if (parameters.Length == 0 || invoke.Arguments.Length == 0)
+            return;
+        var newArgs = new Node[invoke.Arguments.Length];
+        var changed = false;
+        for (var i = 0; i < invoke.Arguments.Length; i++) {
+            var arg = invoke.Arguments[i];
+            newArgs[i] = arg;
+            if (i >= parameters.Length)
+                continue;
+            var destDef = parameters[i].ParameterTypeDefinition;
+            var srcDef = context.GetResolvedType(arg)
+                ?? (ClrTypeOf(context, arg) is { } clr
+                    ? context.TypeDefinitions.GetTypeDefinition(clr)
+                    : null);
+            if (destDef is null || srcDef is null || !destDef.IsAssignableFrom(srcDef))
+                continue;
+            if (TryConversionInvoke(context, arg, destDef, srcDef, implicitOnly: true) is not { } converted)
+                continue;
+            newArgs[i] = converted;
+            changed = true;
+        }
+        if (!changed)
+            return;
+        var rewritten = invoke with { Arguments = newArgs };
+        context.SetResolvedMember(rewritten, method);
+        Replace(context, invoke, rewritten);
+    }
+
+    private static void RewriteAssignmentConversion(
+        AnalysisContext context,
+        Assignment assignment,
+        ITypeDefinition destDef,
+        ITypeDefinition srcDef) {
+        if (TryConversionInvoke(context, assignment.Value, destDef, srcDef, implicitOnly: true) is not { } converted)
+            return;
+        Replace(context, assignment, assignment with { Value = converted });
+    }
+
+    private static bool RewriteOperatorConversion(
+        AnalysisContext context,
+        Node original,
+        Node value,
+        ITypeDefinition destDef,
+        ITypeDefinition srcDef,
+        bool implicitOnly) {
+        if (TryConversionInvoke(context, value, destDef, srcDef, implicitOnly) is not { } converted)
+            return false;
+        Replace(context, original, converted);
+        return true;
+    }
+
+    private static Invoke? TryConversionInvoke(
+        AnalysisContext context,
+        Node value,
+        ITypeDefinition destDef,
+        ITypeDefinition srcDef,
+        bool implicitOnly) {
+        if (destDef is IClrTypeDefinition destClr
+            && srcDef is IClrTypeDefinition srcClr
+            && destClr.RuntimeType.IsAssignableFrom(srcClr.RuntimeType))
+            return null;
+        if (destDef.GetConversionFrom(srcDef) is not { } conversion)
+            return null;
+        if (implicitOnly && conversion.Kind is not ConversionOperatorKind.Implicit)
+            return null;
+        var method = conversion.Method;
+        var extras = method.Parameters.ToArray();
+        Invoke invoke;
+        if (method.IsStatic) {
+            if (extras.Length != 1)
+                return null;
+            var typeRef = TypeRef(method.DeclaringTypeDefinition);
+            var member = new Member(typeRef, method.Name);
+            invoke = new Invoke(member, value);
+            StampConversion(context, typeRef, member, invoke, method);
+        }
+        else {
+            if (extras.Length != 0)
+                return null;
+            var member = new Member(value, method.Name);
+            invoke = new Invoke(member);
+            StampConversion(context, value, member, invoke, method);
+        }
+        return invoke;
+    }
+
+    private static bool RewriteStringConcat(
+        AnalysisContext context, Node parent, Node left, Node right) {
+        var stringDef = context.TypeDefinitions.GetTypeDefinition(typeof(string));
+        if (stringDef is null)
+            return false;
+        var parts = new List<Node>();
+        CollectStringConcatParts(context, left, parts);
+        CollectStringConcatParts(context, right, parts);
+        if (parts.Count < 2)
+            return false;
+        ITypeMethod? method;
+        if (parts.Count <= 4) {
+            var argTypes = Enumerable.Repeat(stringDef, parts.Count);
+            method = stringDef.FindMatchingMethodOverloads("Concat", argTypes).FirstOrDefault();
+        }
+        else {
+            method = FindConcatEnumerable(stringDef);
+        }
+        method ??= FindConcatEnumerable(stringDef);
+        if (method is null)
+            return false;
+        var invoke = StampStaticInvoke(context, method, [.. parts]);
+        Replace(context, parent, invoke);
+        return true;
+    }
+
+    private static void CollectStringConcatParts(AnalysisContext context, Node node, List<Node> parts) {
+        var effective = context.GetNodeReplacement(node) ?? node;
+        if (IsStringConcatInvoke(effective) && effective is Invoke concat) {
+            foreach (var arg in concat.Arguments)
+                CollectStringConcatParts(context, arg, parts);
+            return;
+        }
+        if (effective is Add add
+            && ClrTypeOf(context, add.LeftHandValue) is { } lt
+            && ClrTypeOf(context, add.RightHandValue) is { } rt
+            && CategoryOf(lt) is Cat.Text
+            && CategoryOf(rt) is Cat.Text) {
+            CollectStringConcatParts(context, add.LeftHandValue, parts);
+            CollectStringConcatParts(context, add.RightHandValue, parts);
+            return;
+        }
+        parts.Add(node);
+    }
+
+    private static bool IsStringConcatInvoke(Node node) =>
+        node is Invoke { Delegate: Member { MemberName: "Concat", Value: ClrTypeReference { RuntimeType: var t } } }
+        && t == typeof(string);
+
+    private static ITypeMethod? FindConcatEnumerable(ITypeDefinition stringDef) {
+        ITypeMethod? enumerable = null;
+        foreach (var method in stringDef.Methods) {
+            if (!method.IsStatic || !string.Equals(method.Name, "Concat", StringComparison.Ordinal))
+                continue;
+            var parameters = method.Parameters.ToArray();
+            if (parameters.Length != 1)
+                continue;
+            var paramType = parameters[0].ParameterTypeDefinition.GetRuntimeType();
+            if (paramType == typeof(string[]))
+                return method;
+            if (paramType == typeof(IEnumerable<string>))
+                enumerable = method;
+        }
+        return enumerable;
+    }
+
+    private static bool RewriteDecimalArithmetic(
+        AnalysisContext context, Node parent, Node left, Node right, ArithmeticKind kind) {
+        var decimalDef = context.TypeDefinitions.GetTypeDefinition(typeof(decimal));
+        if (decimalDef is null)
+            return false;
+        var name = kind switch {
+            ArithmeticKind.Add => "Add",
+            ArithmeticKind.Subtract => "Subtract",
+            ArithmeticKind.Multiply => "Multiply",
+            ArithmeticKind.Divide => "Divide",
+            ArithmeticKind.Modulo => "Remainder",
+            _ => null
+        };
+        if (name is null)
+            return false;
+        var leftArg = CoerceTo(context, left, decimalDef) ?? left;
+        var rightArg = CoerceTo(context, right, decimalDef) ?? right;
+        var leftType = context.GetResolvedType(leftArg)
+            ?? context.TypeDefinitions.GetTypeDefinition(typeof(decimal));
+        var rightType = context.GetResolvedType(rightArg)
+            ?? context.TypeDefinitions.GetTypeDefinition(typeof(decimal));
+        if (leftType is null || rightType is null)
+            return false;
+        var method = decimalDef.FindMatchingMethodOverloads(name, [leftType, rightType]).FirstOrDefault()
+            ?? decimalDef.FindMatchingMethodOverloads(name, [decimalDef, decimalDef]).FirstOrDefault();
+        if (method is null)
+            return false;
+        var invoke = StampStaticInvoke(context, method, leftArg, rightArg);
+        Replace(context, parent, invoke);
+        return true;
+    }
+
+    private static bool RewriteDateOffset(
+        AnalysisContext context, Node parent, Node date, Node offset, bool negate) {
+        var dateDef = context.GetResolvedType(date)
+            ?? (ClrTypeOf(context, date) is { } clr
+                ? context.TypeDefinitions.GetTypeDefinition(clr)
+                : null);
+        if (dateDef is null)
+            return false;
+        var method = dateDef.Methods.FirstOrDefault(m =>
+            string.Equals(m.Name, "AddDays", StringComparison.Ordinal)
+            && m.Parameters.Count() == 1);
+        if (method is null)
+            return false;
+        var paramType = method.Parameters.First().ParameterTypeDefinition;
+        Node amount = offset;
+        if (negate) {
+            amount = new UnaryMinus(offset);
+            var offsetType = context.GetResolvedType(offset)
+                ?? (ClrTypeOf(context, offset) is { } ot
+                    ? context.TypeDefinitions.GetTypeDefinition(ot)
+                    : null);
+            if (offsetType is not null)
+                context.SetResolvedType(amount, offsetType);
+            if (context.GetMetadata<ValueRepresentationMetadata>(offset) is { } vr)
+                context.SetMetadata(amount, vr);
+        }
+        var coerced = CoerceTo(context, amount, paramType) ?? amount;
+        var member = new Member(date, method.Name);
+        var invoke = new Invoke(member, coerced);
+        StampConversion(context, date, member, invoke, method);
+        Replace(context, parent, invoke);
+        return true;
+    }
+
+    private static bool TryRewriteNumericConvert(
+        AnalysisContext context, Node original, Node value, ITypeDefinition destDef, ITypeDefinition srcDef) {
+        var destClr = destDef.GetRuntimeType() ?? (destDef as IClrTypeDefinition)?.RuntimeType;
+        var srcClr = srcDef.GetRuntimeType() ?? (srcDef as IClrTypeDefinition)?.RuntimeType;
+        if (destClr is null)
+            return false;
+        var underlying = Nullable.GetUnderlyingType(destClr) ?? destClr;
+        if (ConvertMethodName(underlying) is not { } name)
+            return false;
+        var convertDef = context.TypeDefinitions.GetTypeDefinition(typeof(Convert));
+        if (convertDef is null)
+            return false;
+        Node source = value;
+        var sourceDef = srcDef;
+        if (srcClr is not null && IsIeeeFloating(srcClr) && IsIntegerType(underlying)) {
+            var doubleDef = context.TypeDefinitions.GetTypeDefinition(typeof(double));
+            var mathDef = context.TypeDefinitions.GetTypeDefinition(typeof(Math));
+            if (doubleDef is null || mathDef is null)
+                return false;
+            if (srcClr != typeof(double)) {
+                var toDouble = convertDef.FindMatchingMethodOverloads("ToDouble", [srcDef]).FirstOrDefault();
+                if (toDouble is null)
+                    return false;
+                source = StampStaticInvoke(context, toDouble, value);
+                sourceDef = doubleDef;
+            }
+            var truncate = mathDef.FindMatchingMethodOverloads("Truncate", [doubleDef]).FirstOrDefault();
+            if (truncate is null)
+                return false;
+            source = StampStaticInvoke(context, truncate, source);
+            sourceDef = doubleDef;
+        }
+        var method = convertDef.FindMatchingMethodOverloads(name, [sourceDef]).FirstOrDefault();
+        if (method is null)
+            return false;
+        var invoke = StampStaticInvoke(context, method, source);
+        if (!underlying.IsValueType || destClr == underlying) {
+            Replace(context, original, invoke);
+            return true;
+        }
+        var nullableDef = context.TypeDefinitions.GetTypeDefinition(destClr);
+        if (nullableDef is not null
+            && TryConversionInvoke(context, invoke, nullableDef, method.MemberTypeDefinition, implicitOnly: true)
+                is { } boxed) {
+            Replace(context, original, boxed);
+            return true;
+        }
+        Replace(context, original, invoke);
+        return true;
+    }
+
+    private static void Replace(AnalysisContext context, Node original, Node replacement) {
+        context.SetNodeReplacement(original, replacement);
+        if (context.GetResolvedType(replacement) is { } resolved)
+            context.SetResolvedType(original, resolved);
+        if (context.GetMetadata<ValueRepresentationMetadata>(replacement) is { } vr)
+            context.SetMetadata(original, vr);
+    }
+
+    private static bool IsIeeeFloating(Type type) =>
+        type == typeof(double) || type == typeof(float);
+
+    private static bool IsIntegerType(Type type) =>
+        type == typeof(int) || type == typeof(long) || type == typeof(short) || type == typeof(byte)
+        || type == typeof(sbyte) || type == typeof(uint) || type == typeof(ulong) || type == typeof(ushort)
+        || type == typeof(char);
+
+    private static Node? CoerceTo(AnalysisContext context, Node value, ITypeDefinition destDef) {
+        var srcDef = context.GetResolvedType(value)
+            ?? (ClrTypeOf(context, value) is { } clr
+                ? context.TypeDefinitions.GetTypeDefinition(clr)
+                : null);
+        if (srcDef is null)
+            return null;
+        if (destDef is IClrTypeDefinition d && srcDef is IClrTypeDefinition s
+            && d.RuntimeType.IsAssignableFrom(s.RuntimeType))
+            return value;
+        if (TryConversionInvoke(context, value, destDef, srcDef, implicitOnly: true) is { } conv)
+            return conv;
+        var destClr = destDef.GetRuntimeType() ?? (destDef as IClrTypeDefinition)?.RuntimeType;
+        if (destClr is not null && ConvertMethodName(destClr) is { } name) {
+            var convertDef = context.TypeDefinitions.GetTypeDefinition(typeof(Convert));
+            var method = convertDef?.FindMatchingMethodOverloads(name, [srcDef]).FirstOrDefault();
+            if (method is not null)
+                return StampStaticInvoke(context, method, value);
+        }
+        return destDef.IsAssignableFrom(srcDef) ? value : null;
+    }
+
+    private static Invoke StampStaticInvoke(AnalysisContext context, ITypeMethod method, params Node[] args) {
+        var typeRef = TypeRef(method.DeclaringTypeDefinition);
+        var member = new Member(typeRef, method.Name);
+        var invoke = new Invoke(member, args);
+        StampConversion(context, typeRef, member, invoke, method);
+        return invoke;
+    }
+
+    private static string? ConvertMethodName(Type dest) {
+        if (dest == typeof(double)) return "ToDouble";
+        if (dest == typeof(float)) return "ToSingle";
+        if (dest == typeof(decimal)) return "ToDecimal";
+        if (dest == typeof(int)) return "ToInt32";
+        if (dest == typeof(long)) return "ToInt64";
+        if (dest == typeof(short)) return "ToInt16";
+        if (dest == typeof(byte)) return "ToByte";
+        if (dest == typeof(sbyte)) return "ToSByte";
+        if (dest == typeof(uint)) return "ToUInt32";
+        if (dest == typeof(ulong)) return "ToUInt64";
+        if (dest == typeof(ushort)) return "ToUInt16";
+        if (dest == typeof(char)) return "ToChar";
+        if (dest == typeof(bool)) return "ToBoolean";
+        return null;
+    }
+
+    private static Node TypeRef(ITypeDefinition def) =>
+        def is IClrTypeDefinition clr
+            ? new ClrTypeReference(clr.RuntimeType)
+            : new TypeDefinitionReference(def);
+
+    private static void StampConversion(
+        AnalysisContext context,
+        Node typeOrInstance,
+        Member member,
+        Invoke invoke,
+        ITypeMethod method) {
+        context.SetResolvedType(typeOrInstance, method.DeclaringTypeDefinition);
+        context.SetResolvedMember(member, method);
+        context.SetResolvedMember(invoke, method);
+        var (kind, clr) = RepresentationOf(method.MemberTypeDefinition);
+        context.SetMetadata(invoke, new ValueRepresentationMetadata(kind, clr));
+        context.SetMetadata(member, new ValueRepresentationMetadata(kind, clr));
+    }
+
+    private static (ValueRepresentationKind Kind, Type? ClrType) RepresentationOf(ITypeDefinition typeDef) {
+        if (typeDef is not IClrTypeDefinition clrType)
+            return (ValueRepresentationKind.HeapRef, null);
+        var rt = clrType.RuntimeType;
+        if (Nullable.GetUnderlyingType(rt) is not null)
+            return (ValueRepresentationKind.HeapRef, rt);
+        if (rt == typeof(bool))
+            return (ValueRepresentationKind.Bool, rt);
+        if (rt.IsValueType || rt.IsPrimitive) {
+            return AbiValueTypes.IsLongRepresentable(rt)
+                ? (ValueRepresentationKind.StackScalar, rt)
+                : (ValueRepresentationKind.HeapRef, rt);
+        }
+        return (ValueRepresentationKind.HeapRef, rt);
     }
 
     private void Report(AnalysisContext context, Node node, string message) =>
@@ -303,24 +769,8 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
 
     private static bool Compatible(Cat lc, Type left, Cat rc, Type right, bool destThenSource = false) {
         if (lc == rc && lc is not Cat.Date) return true;
-        if (lc == rc && lc is Cat.Date) {
-            bool leftTs = IsClrTimestamp(left);
-            bool rightTs = IsClrTimestamp(right);
-            bool leftCal = left == typeof(DateOnly);
-            bool rightCal = right == typeof(DateOnly);
-            if (leftTs == rightTs && leftCal == rightCal)
-                return true;
-            if (leftCal && rightCal)
-                return true;
-            if (leftTs && rightTs)
-                return true;
-            if ((leftCal || leftTs) && (rightCal || rightTs)) {
-                if (!destThenSource)
-                    return true;
-                return leftTs && rightCal;
-            }
-            return false;
-        }
+        if (lc == rc && lc is Cat.Date)
+            return left == right || (IsClrTimestamp(left) && IsClrTimestamp(right));
         if (lc is Cat.Enum && rc is Cat.Text) return true;
         if (rc is Cat.Enum && lc is Cat.Text) return true;
         return false;

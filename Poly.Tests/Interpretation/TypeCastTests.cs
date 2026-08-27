@@ -238,7 +238,9 @@ public class TypeCastTests {
     [Test]
     public async Task TypeCast_ImplicitOperator_DoubleToMeters() {
         var node = new TypeCast(Wrap(2.5), TypeReference.To<TypeCompatibilityTests.Meters>());
-        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        var analysis = Interpreter.Analyze(node);
+        await Assert.That(analysis.GetNodeReplacement(node)).IsTypeOf<Invoke>();
+        using var exec = Interpreter.Execute(Interpreter.Compile(node, analysis));
         await Assert.That(exec.GetValue<TypeCompatibilityTests.Meters>().Value).IsEqualTo(2.5);
     }
 
@@ -247,7 +249,9 @@ public class TypeCastTests {
         var node = new TypeCast(
             Wrap(new TypeCompatibilityTests.Meters(2.5)),
             TypeReference.To<double>());
-        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        var analysis = Interpreter.Analyze(node);
+        await Assert.That(analysis.GetNodeReplacement(node)).IsTypeOf<Invoke>();
+        using var exec = Interpreter.Execute(Interpreter.Compile(node, analysis));
         await Assert.That(exec.GetValue<double>()).IsEqualTo(2.5);
     }
 

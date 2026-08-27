@@ -166,7 +166,7 @@ Domain concepts expand to **generic** Syntax nodes, not new opcodes. ADR: `docs/
 | Host runtime type without polluting core | `IClrType` + extensions — **not** a host type handle on every `ITypeDefinition` |
 | Wired into analysis | `AnalysisContext.TypeDefinitions` (default CLR shared registry) |
 | Consumer pass | `TypeAndMemberResolutionPass` stamps resolved type/member metadata |
-| Assignability / conversions | **Introspection owns discovery.** `ITypeDefinition.IsAssignableFrom` — identity, inheritance, interfaces, DateOnly ⊆ DateTime, and user-defined **implicit** conversion operators. `GetConversionFrom` returns `ConversionOperator` (kind + `ITypeMethod`); assignment uses implicit only; `TypeCast` accepts either. CLR `Methods` omit `IsSpecialName` — do not scan `op_Implicit` / `op_Explicit` in Interpretation or DomainModeling. |
+| Assignability / conversions | **Introspection owns discovery** of identity, inheritance, interfaces, and conversion operators (`GetConversionFrom`). Interpretation analysis **applies** conversions and operator-like shapes with `SetNodeReplacement` (`Invoke` of `op_Implicit` / `op_Explicit`, `Convert.To*`, `String.Concat`, `decimal.Add`, `AddDays`); the VM compiles that `Invoke` and does not look up operators or `ChangeType`. CLR `DateOnly` is not a subtype of `DateTime`. |
 
 **Principles**
 

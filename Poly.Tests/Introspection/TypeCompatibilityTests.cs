@@ -40,12 +40,12 @@ public class TypeCompatibilityTests {
     }
 
     [Test]
-    public async Task IsAssignableFrom_DateOnly_ToDateTime_ReturnsTrue() {
+    public async Task IsAssignableFrom_DateOnly_ToDateTime_ReturnsFalse() {
         var registry = new ClrTypeDefinitionRegistry();
         var dateTime = registry.GetTypeDefinition(typeof(DateTime));
         var dateOnly = registry.GetTypeDefinition(typeof(DateOnly));
-        await Assert.That(dateTime.IsAssignableFrom(dateOnly)).IsTrue();
-        await Assert.That(dateOnly.IsAssignableTo(dateTime)).IsTrue();
+        await Assert.That(dateTime.IsAssignableFrom(dateOnly)).IsFalse();
+        await Assert.That(dateOnly.IsAssignableTo(dateTime)).IsFalse();
     }
 
     [Test]
@@ -319,6 +319,12 @@ public class TypeCompatibilityTests {
         public double Value { get; }
         public static implicit operator Meters(double value) => new(value);
         public static explicit operator double(Meters meters) => meters.Value;
+    }
+
+    public sealed class ConversionHost {
+        public DateTime Due { get; set; }
+        public DateOnly Start { get; set; }
+        public Meters Length { get; set; }
     }
 
     [Test]

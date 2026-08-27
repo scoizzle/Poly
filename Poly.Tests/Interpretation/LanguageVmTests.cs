@@ -30,6 +30,24 @@ public class LanguageVmTests {
     }
 
     [Test]
+    public async Task Assignment_DoubleToMetersMember_UsesImplicitOperator() {
+        var host = new Variable("host");
+        var assignLength = new Assignment(new Member(host, "Length"), new Constant(2.5));
+        var node = new Block([
+            new Assignment(host, new New(TypeReference.To<Poly.Tests.Introspection.TypeCompatibilityTests.ConversionHost>())),
+            assignLength,
+            new Member(host, "Length")
+        ], [host]);
+        var analysis = Interpreter.Analyze(node);
+        var rewritten = analysis.GetNodeReplacement(assignLength) as Assignment;
+        await Assert.That(rewritten).IsNotNull();
+        await Assert.That(rewritten!.Value).IsTypeOf<Invoke>();
+        using var exec = Interpreter.Execute(Interpreter.Compile(node, analysis));
+        await Assert.That(exec.GetValue<Poly.Tests.Introspection.TypeCompatibilityTests.Meters>().Value)
+            .IsEqualTo(2.5);
+    }
+
+    [Test]
     public async Task TypeCast_IntToDouble_BitcastResult() {
         var node = new TypeCast(new Constant(42), TypeReference.To<double>());
         using var exec = Interpreter.Execute(Interpreter.Compile(node));
@@ -41,6 +59,65 @@ public class LanguageVmTests {
         var node = new TypeCast(new Constant(3.9), TypeReference.To<int>());
         using var exec = Interpreter.Execute(Interpreter.Compile(node));
         await Assert.That(exec.GetValue<int>()).IsEqualTo(3);
+    }
+
+    [Test]
+    public async Task Add_NestedStrings_FlattensToSingleConcat() {
+        var a = new Parameter("a", TypeReference.To<string>());
+        var b = new Parameter("b", TypeReference.To<string>());
+        var c = new Parameter("c", TypeReference.To<string>());
+        var d = new Parameter("d", TypeReference.To<string>());
+        var nested = new Add(new Add(a, b), new Add(c, d));
+        var analysis = Interpreter.Analyze(nested);
+        var rewritten = analysis.GetNodeReplacement(nested) as Invoke;
+        await Assert.That(rewritten).IsNotNull();
+        await Assert.That(rewritten!.Arguments.Length).IsEqualTo(4);
+        var program = Interpreter.Compile(nested, analysis);
+        using var exec = Interpreter.Execute(program, s => s.SetArgs("a", "b", "c", "d"));
+        await Assert.That(exec.GetValue<string>()).IsEqualTo("abcd");
+    }
+
+    [Test]
+    public async Task Add_FiveStrings_FlattensToEnumerableConcat() {
+        var w = new Parameter("w", TypeReference.To<string>());
+        var x = new Parameter("x", TypeReference.To<string>());
+        var y = new Parameter("y", TypeReference.To<string>());
+        var y2 = new Parameter("y2", TypeReference.To<string>());
+        var z = new Parameter("z", TypeReference.To<string>());
+        var node = new Add(new Add(new Add(w, x), y), new Add(y2, z));
+        var analysis = Interpreter.Analyze(node);
+        var rewritten = analysis.GetNodeReplacement(node) as Invoke;
+        await Assert.That(rewritten).IsNotNull();
+        await Assert.That(rewritten!.Arguments.Length).IsEqualTo(5);
+        var program = Interpreter.Compile(node, analysis);
+        using var exec = Interpreter.Execute(program, s => s.SetArgs("w", "x", "y", "y", "z"));
+        await Assert.That(exec.GetValue<string>()).IsEqualTo("wxyyz");
+    }
+
+    [Test]
+    public async Task Add_SameParameterRepeated_FlattensAndEvaluates() {
+        var name = new Parameter("name", TypeReference.To<string>());
+        var sep = new Parameter("sep", TypeReference.To<string>());
+        var node = new Add(new Add(name, sep), name);
+        var analysis = Interpreter.Analyze(node);
+        var rewritten = analysis.GetNodeReplacement(node) as Invoke;
+        await Assert.That(rewritten).IsNotNull();
+        await Assert.That(rewritten!.Arguments.Length).IsEqualTo(3);
+        await Assert.That(ReferenceEquals(rewritten.Arguments[0], rewritten.Arguments[2])).IsTrue();
+        var program = Interpreter.Compile(node, analysis);
+        using var exec = Interpreter.Execute(program, s => s.SetArgs("Ada", "-"));
+        await Assert.That(exec.GetValue<string>()).IsEqualTo("Ada-Ada");
+    }
+
+    [Test]
+    public async Task Add_DateTimePlusDays_RewritesToAddDays() {
+        var start = new DateTime(2026, 1, 1);
+        var add = new Add(new Constant(start), new Constant(14));
+        var analysis = Interpreter.Analyze(add);
+        var rewritten = analysis.GetNodeReplacement(add);
+        await Assert.That(rewritten).IsTypeOf<Invoke>();
+        using var exec = Interpreter.Execute(Interpreter.Compile(add, analysis));
+        await Assert.That(exec.GetValue<DateTime>()).IsEqualTo(new DateTime(2026, 1, 15));
     }
 
     [Test]

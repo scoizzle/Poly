@@ -115,10 +115,6 @@ public static class TypeDefinitionExtensions {
         public bool IsAssignableFrom(ITypeDefinition other) {
             ArgumentNullException.ThrowIfNull(other);
             if (typeDefinition == other) return true;
-            // Date/DateOnly is a calendar-date subset of DateTime (midnight instant).
-            // CLR DateOnly is not a subtype of DateTime — this is domain/temporal assignability.
-            if (typeDefinition.TypeCategory.IsDateTime && other.TypeCategory.IsDateOnly)
-                return true;
             if (typeDefinition is ClrTypeDefinition clrTypeDef && other is ClrTypeDefinition otherClrTypeDef
                 && clrTypeDef.RuntimeType.IsAssignableFrom(otherClrTypeDef.RuntimeType))
                 return true;
@@ -144,8 +140,8 @@ public static class TypeDefinitionExtensions {
 
         /// <summary>
         /// User-defined conversion from <paramref name="source"/> to this type, if any.
-        /// Implicit is preferred when both exist. Inheritance and Date ⊆ DateTime are
-        /// not conversion operators — use <see cref="IsAssignableFrom"/>.
+        /// Implicit is preferred when both exist. Inheritance is not a conversion
+        /// operator — use <see cref="IsAssignableFrom"/>.
         /// CLR conversion operators live outside <see cref="ITypeDefinition.Methods"/>
         /// (those omit <c>IsSpecialName</c>); this is the shared discovery API.
         /// </summary>

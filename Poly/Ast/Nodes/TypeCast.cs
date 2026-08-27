@@ -21,6 +21,8 @@ public sealed record TypeCast : Expression {
 
     public bool IsChecked { get; }
 
+    public override IEnumerable<Node?> Children => [Operand, TargetTypeReference];
+
     /// <inheritdoc />
     public override string ToString() => $"(({TargetTypeReference}){Operand})";
 

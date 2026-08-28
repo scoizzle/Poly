@@ -1,0 +1,258 @@
+domain Crm
+uses temporal
+
+Billing: contract external billing v1 {
+  ChargeRequest: value {
+    Amount: Number
+    Currency: Text
+  }
+  Charge: outbound operation ChargeRequest
+}
+
+Industry: enum { Technology, Healthcare, Finance, Other }
+
+Site: entity {
+  City: Text required
+  Region: Text
+}
+
+Product: entity {
+  Sku: Text unique required length(3, 32)
+  Name: Text required
+  ListPrice: Number range(0, 100000000) required
+}
+
+Lead: entity {
+  Name: Text required
+  Email: Text unique required pattern("^[^@]+@[^@]+$")
+  Company: Text required
+  account: Account
+  HasAccount: policy { account exists }
+  New: stage {
+    Convert: action
+      require HasAccount
+    {
+      transition to Converted
+    }
+    Disqualify: action { transition to Dead }
+  }
+  Converted: stage { }
+  Dead: stage { }
+}
+
+Account: entity {
+  Name: Text required
+  Industry: Industry
+  parent: Account
+  WonCount: Number default(0)
+  OpenPipeline: Number default(0)
+  hq: owned Site
+  contacts: many Contact
+  opportunities: many Opportunity
+  tickets: many Ticket
+  ClosedTickets: Number default(0)
+  HasHq: policy { hq exists }
+  IsUrban: policy { hq City is "Metropolis" }
+  Open: stage {
+    PlaceHq: action (city: Text, region: Text) -> Site {
+      create in hq { City: city Region: region }
+    }
+    AddContact: action (name: Text, email: Text) -> Contact {
+      create in contacts { Name: name Email: email }
+    }
+    ConvertLead: action (lead: Lead) -> Contact {
+      create in contacts { Name: lead Name Email: lead Email }
+    }
+    OpenDeal: action (title: Text, amount: Number) -> Opportunity {
+      create in opportunities { Title: title Amount: amount }
+    }
+    Archive: action { transition to Archived }
+    OpenTicket: action (subject: Text) -> Ticket {
+      create in tickets { Subject: subject }
+    }
+  }
+  Archived: stage {
+    Restore: action { transition to Open }
+  }
+  when opportunities Won {
+    assign WonCount to WonCount + 1
+  }
+  when tickets Closed {
+    assign ClosedTickets to ClosedTickets + 1
+  }
+  when opportunities Propose as deal {
+    assign OpenPipeline to OpenPipeline + deal Amount
+  }
+  when opportunities Won as deal {
+    assign OpenPipeline to OpenPipeline - deal Amount
+  }
+  when opportunities Lost as deal {
+    assign OpenPipeline to OpenPipeline - deal Amount
+  }
+}
+
+Contact: entity {
+  Name: Text required
+  Email: Text unique required pattern("^[^@]+@[^@]+$")
+  account: Account
+  Active: stage {
+    Retire: action { transition to Inactive }
+  }
+  Inactive: stage {
+    Reactivate: action { transition to Active }
+  }
+}
+
+Opportunity: entity {
+  Title: Text required
+  Amount: Number range(0, 100000000) required
+  CloseBy: Date default(Today)
+  Probability: Number range(0, 100) default(10)
+  account: Account
+  contact: Contact
+  activities: many Activity
+  lines: many Line
+  quotes: many Quote
+  HasAccount: policy { account exists }
+  HasLines: policy { count lines > 0 }
+  Qualify: stage {
+    entry { assign Probability to 10 }
+    Propose: action
+      require HasAccount
+    {
+      transition to Propose
+    }
+    Lose: action { transition to Lost }
+    Log: action (subject: Text) -> Activity {
+      create in activities { Subject: subject }
+    }
+    AddLine: action (sku: Product, qty: Number) -> Line {
+      assign Amount to Amount + qty * sku ListPrice
+      create in lines { product: sku Qty: qty UnitPrice: sku ListPrice }
+    }
+    QuoteDeal: action -> Quote {
+      create in quotes { Title: Title Amount: 0 }
+    }
+  }
+  Propose: stage {
+    entry { assign Probability to 40 }
+    Commit: action
+      require HasLines
+    {
+      transition to Commit
+    }
+    Lose: action { transition to Lost }
+    Log: action (subject: Text) -> Activity {
+      create in activities { Subject: subject }
+    }
+    AddLine: action (sku: Product, qty: Number) -> Line {
+      assign Amount to Amount + qty * sku ListPrice
+      create in lines { product: sku Qty: qty UnitPrice: sku ListPrice }
+    }
+  }
+  Commit: stage {
+    entry { assign Probability to 80 }
+    Win: action { transition to Won }
+    Capture: action (request: ChargeRequest) {
+      assign Amount to Amount
+    }
+    Lose: action { transition to Lost }
+    Log: action (subject: Text) -> Activity {
+      create in activities { Subject: subject }
+    }
+    AddLine: action (sku: Product, qty: Number) -> Line {
+      assign Amount to Amount + qty * sku ListPrice
+      create in lines { product: sku Qty: qty UnitPrice: sku ListPrice }
+    }
+  }
+  Won: stage {
+    entry { assign Probability to 100 }
+  }
+  Lost: stage {
+    entry { assign Probability to 0 }
+  }
+  CompleteOpenWork: action {
+    for activities as act where act in Open
+      invoke act.Complete
+  }
+}
+
+Activity: entity {
+  Subject: Text required
+  DueOn: Date default(Today)
+  opportunity: Opportunity
+  Open: stage {
+    Snooze: action {
+      assign DueOn to DueOn + 7
+    }
+    Complete: action { transition to Done }
+  }
+  Done: stage { }
+}
+
+Quote: entity {
+  Title: Text required
+  Amount: Number range(0, 100000000) required
+  opportunity: Opportunity
+  lines: many QuoteLine
+  Draft: stage {
+    AddLine: action (sku: Product, qty: Number) -> QuoteLine {
+      assign Amount to Amount + qty * sku ListPrice
+      create in lines { product: sku Qty: qty UnitPrice: sku ListPrice }
+    }
+    Present: action { transition to Presented }
+  }
+  Presented: stage {
+    Accept: action { transition to Accepted }
+    Reject: action { transition to Rejected }
+  }
+  Accepted: stage { }
+  Rejected: stage { }
+}
+
+Campaign: entity {
+  Name: Text required
+  members: many CampaignMember
+  Active: stage {
+    Enroll: action (who: Contact) -> CampaignMember {
+      create in members { contact: who }
+    }
+    End: action { transition to Ended }
+  }
+  Ended: stage { }
+}
+
+CampaignMember: entity {
+  contact: Contact
+  campaign: Campaign
+}
+
+Ticket: entity {
+  Subject: Text required
+  account: Account
+  New: stage {
+    Work: action { transition to Working }
+    Close: action { transition to Closed }
+  }
+  Working: stage {
+    Close: action { transition to Closed }
+  }
+  Closed: stage { }
+}
+
+Line: entity {
+  Qty: Number range(1, 10000) required
+  UnitPrice: Number range(0, 100000000) required
+  product: Product
+  opportunity: Opportunity
+}
+
+QuoteLine: entity {
+  Qty: Number range(1, 10000) required
+  UnitPrice: Number range(0, 100000000) required
+  product: Product
+  quote: Quote
+}
+
+ChargeDeal: bind Billing Charge to Capture request
+

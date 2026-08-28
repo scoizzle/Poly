@@ -299,7 +299,7 @@ public sealed class CSharpGenerator {
                 && !MentionsVariableBefore(block, dest, i)) {
                 Indent(sb, indent + 1);
                 sb.Append("var ");
-                sb.Append(dest.Name);
+                WriteIdent(sb, dest.Name);
                 sb.Append(" = ");
                 WriteExpression(sb, a.Value);
                 sb.AppendLine(";");
@@ -318,7 +318,7 @@ public sealed class CSharpGenerator {
             && _fuseUndeclaredName
             && !DeclaredHere(dest.Name)) {
             sb.Append("var ");
-            sb.Append(dest.Name);
+            WriteIdent(sb, dest.Name);
             MarkDeclared(dest.Name);
         }
         else {
@@ -351,7 +351,7 @@ public sealed class CSharpGenerator {
     private void WriteDeclaredLocal(StringBuilder sb, Variable variable, Block block) {
         var typeName = TypeNameForVariable(variable, block);
         sb.Append("var ");
-        sb.Append(variable.Name);
+        WriteIdent(sb, variable.Name);
         sb.Append(" = default(");
         sb.Append(typeName);
         sb.AppendLine(");");
@@ -996,10 +996,10 @@ public sealed class CSharpGenerator {
                 WriteConstant(sb, constant);
                 return;
             case Variable variable:
-                sb.Append(variable.Name);
+                WriteIdent(sb, variable.Name);
                 return;
             case Parameter parameter:
-                sb.Append(parameter.Name);
+                WriteIdent(sb, parameter.Name);
                 return;
             case ThisReference:
                 sb.Append("this");
@@ -1376,4 +1376,30 @@ public sealed class CSharpGenerator {
             sb.Append("    ");
         }
     }
+
+    /// <summary>
+    /// CRM dogfood: entity <c>Case</c> lowers locals to camelCase <c>case</c>, which is
+    /// a C# keyword. Prefix <c>@</c> so export compiles.
+    /// </summary>
+    private static void WriteIdent(StringBuilder sb, string name) {
+        if (CSharpKeywords.Contains(name))
+            sb.Append('@');
+        sb.Append(name);
+    }
+
+    private static readonly HashSet<string> CSharpKeywords = new(StringComparer.Ordinal) {
+        "abstract","as","base","bool","break","byte","case","catch","char","checked",
+        "class","const","continue","decimal","default","delegate","do","double","else",
+        "enum","event","explicit","extern","false","finally","fixed","float","for",
+        "foreach","goto","if","implicit","in","int","interface","internal","is","lock",
+        "long","namespace","new","null","object","operator","out","override","params",
+        "private","protected","public","readonly","ref","return","sbyte","sealed","short",
+        "sizeof","stackalloc","static","string","struct","switch","this","throw","true",
+        "try","typeof","uint","ulong","unchecked","unsafe","ushort","using","virtual",
+        "void","volatile","while","add","and","alias","ascending","args","async","await",
+        "by","descending","dynamic","equals","file","from","get","global","group","init",
+        "into","join","let","managed","nameof","nint","not","notnull","nuint","on",
+        "or","orderby","partial","record","remove","required","scoped","select","set",
+        "unmanaged","value","var","when","where","with","yield"
+    };
 }

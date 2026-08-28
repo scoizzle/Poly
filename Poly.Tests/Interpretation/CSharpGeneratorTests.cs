@@ -6,6 +6,12 @@ namespace Poly.Tests.Interpretation;
 
 public class CSharpGeneratorTests {
     [Test]
+    public async Task Generate_KeywordVariable_PrefixesAtSign() {
+        var result = new CSharpGenerator().Generate(new Variable("case"));
+        await Assert.That(result).IsEqualTo("@case;");
+    }
+
+    [Test]
     public async Task Generate_ConstantInt_ProducesLiteral() {
         var node = new Constant(42);
         var result = new CSharpGenerator().Generate(node);

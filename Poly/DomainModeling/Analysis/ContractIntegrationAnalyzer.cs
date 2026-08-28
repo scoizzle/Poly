@@ -175,8 +175,12 @@ internal sealed class ContractIntegrationAnalyzer : INodeAnalyzer {
 
     private static Action? FindActionOnAnyEntity(Domain domain, string actionName) {
         foreach (var type in domain.Types) {
-            if (type is Entity entity) {
-                var action = entity.Actions.FirstOrDefault(a =>
+            if (type is not Entity entity) continue;
+            var action = entity.Actions.FirstOrDefault(a =>
+                string.Equals(a.Name, actionName, StringComparison.Ordinal));
+            if (action is not null) return action;
+            foreach (var stage in entity.Stages) {
+                action = stage.Actions.FirstOrDefault(a =>
                     string.Equals(a.Name, actionName, StringComparison.Ordinal));
                 if (action is not null) return action;
             }

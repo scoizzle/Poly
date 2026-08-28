@@ -40,6 +40,9 @@ public sealed partial class DomainToCSharpExporter {
         string? SubscriberStageName = null
     );
 
+    private static string SubscriberRegistryFieldName(SubscriptionInfo info) =>
+        $"_{ToCamelCase(info.SourceEntity.Name)}{info.StageName}Subscribers";
+
     /// <summary>
     /// Builds Syntax AST type definitions for all entities and their stage enums
     /// in the given domain. Reads entity members directly from the domain model.
@@ -260,12 +263,14 @@ public sealed partial class DomainToCSharpExporter {
 
                 // Generate CreateNavName(args) factory method on the source entity
                 AddCreateNavMethod(entity, rel, domain!, subscriberSubs, fieldName, methods, metadata);
+                AddAttachNavMethod(entity, rel, subscriberSubs, fieldName, methods);
             }
             else {
                 // Singular nav: property with private setter (constructor param).
                 // Navs are optional references (set at link/create time, may be null
                 // at EF materialization) — emit nullable so the generated code has
                 // no non-nullable-uninitialized warnings (CS8618).
+                AddCreateSingularNavMethod(entity, rel, domain!, methods, metadata);
                 props.Add(new PropertyDefinitionNode(
                     pascalName, new OptionalTypeReference(targetType),
                     Getter: new PropertyGetterDefinitionNode(),
@@ -370,13 +375,15 @@ public sealed partial class DomainToCSharpExporter {
         // declare any/all/Each (or multiple Each) reactions on the same relation+stage,
         // each with a quantifier-disambiguated handler name.
         if (targetSubs is { Count: > 0 }) {
-            foreach (var group in targetSubs.GroupBy(i => (i.StageName, i.SourceEntity.Name))) {
-                var infos = group.ToList();
+            var groups = targetSubs
+                .GroupBy(i => (i.StageName, i.SourceEntity.Name))
+                .Select(g => g.ToList())
+                .ToList();
+            foreach (var infos in groups) {
                 var srcType = new NamedTypeReference(infos[0].SourceEntity.Name);
-                var fieldName = $"_{ToCamelCase(infos[0].StageName)}Subscribers";
+                var fieldName = SubscriberRegistryFieldName(infos[0]);
                 var paramName = "subscriber";
 
-                // private List<TA>? _DamagedSubscribers;
                 fields.Add(new FieldDefinitionNode(
                     fieldName,
                     new OptionalTypeReference(
@@ -385,7 +392,6 @@ public sealed partial class DomainToCSharpExporter {
                     AccessModifier: AccessModifier.Private
                 ));
 
-                // internal void RegisterDamagedSubscriber(TA sub) { … }
                 var fieldAcc = new Member(new ThisReference(), fieldName);
                 var registerBody = new Block([
                     new IfStatement(
@@ -407,33 +413,34 @@ public sealed partial class DomainToCSharpExporter {
                     Body: registerBody,
                     AccessModifier: AccessModifier.Internal
                 ));
+            }
 
-                // internal void NotifyDamagedSubscribers() {
-                //     if (_damagedSubscribers != null)
-                //         foreach (var sub in _damagedSubscribers) {
-                //             sub.WhenAnyPaymentCaptured();
-                //             sub.WhenAllPaymentCaptured();
-                //             sub.WhenEachPaymentCaptured(this);
-                //         }
-                // }
-                var notifyCalls = infos.Select(info => (Node)new Invoke(
-                    new Member(new Variable("sub"), handlerNames![info]),
-                    info.Subscription.PeerBinding is { Length: > 0 }
-                        ? [new ThisReference()]
-                        : [])).ToList();
-                var foreachBody = new Block(notifyCalls);
-                var notifyBody = new IfStatement(
-                    new NotEqual(
-                        new Member(new ThisReference(), fieldName),
-                        new Constant(null)),
-                    new ForEachLoop(
-                        new Variable("sub"),
-                        new Member(new ThisReference(), fieldName),
-                        foreachBody));
+            // One Notify{Stage}Subscribers per watched stage, fanning out every
+            // (source, stage) registry. Two subscribers on the same target stage
+            // (Student + Section on Enrollment.Dropped) used to emit duplicate
+            // _droppedSubscribers / NotifyDroppedSubscribers members.
+            foreach (var stageGroup in groups.GroupBy(infos => infos[0].StageName)) {
+                var notifyNodes = new List<Node>();
+                foreach (var infos in stageGroup) {
+                    var fieldName = SubscriberRegistryFieldName(infos[0]);
+                    var notifyCalls = infos.Select(info => (Node)new Invoke(
+                        new Member(new Variable("sub"), handlerNames![info]),
+                        info.Subscription.PeerBinding is { Length: > 0 }
+                            ? [new ThisReference()]
+                            : [])).ToList();
+                    notifyNodes.Add(new IfStatement(
+                        new NotEqual(
+                            new Member(new ThisReference(), fieldName),
+                            new Constant(null)),
+                        new ForEachLoop(
+                            new Variable("sub"),
+                            new Member(new ThisReference(), fieldName),
+                            new Block(notifyCalls))));
+                }
                 methods.Add(new MethodDefinitionNode(
-                    $"Notify{infos[0].StageName}Subscribers",
+                    $"Notify{stageGroup.Key}Subscribers",
                     new TypeReference("void"),
-                    Body: new Block([notifyBody]),
+                    Body: new Block(notifyNodes),
                     AccessModifier: AccessModifier.Internal
                 ));
             }
@@ -522,6 +529,35 @@ public sealed partial class DomainToCSharpExporter {
                         new Block([new Return()]));
                     handlerBody = new Block(
                         [new Assignment(matchedVar, new Constant(false)), gateLoop, emptyCheck, handlerBody],
+                        [matchedVar]);
+                }
+
+                // `when any Rel Stage` fires once when the linked set becomes non-empty
+                // in the watched stage (rising edge). Notify still runs per transition.
+                if (info.Subscription.Quantifier == StageSubscriptionQuantifier.Any
+                    && info.TargetEntity.Stages.Count > 0) {
+                    var targetStageEnumName = metadata.GetStructure(info.TargetEntity)
+                        ?.StageEnumTypeName ?? $"{info.TargetEntity.Name}Stage";
+                    var linkedVar = new Variable("linkedTarget");
+                    var matchedVar = new Variable("linkedMatched");
+                    var gateLoop = new ForEachLoop(
+                        linkedVar,
+                        new Member(new ThisReference(), ToPascalCase(info.Relationship.Name)),
+                        new Block([
+                            new IfStatement(
+                                new Equal(
+                                    new Member(linkedVar, "CurrentStage"),
+                                    new Member(new NamedTypeReference(targetStageEnumName), info.StageName)),
+                                new Block([
+                                    new Assignment(matchedVar,
+                                        new Syntactic.Add(matchedVar, new Constant(1L)))
+                                ]))
+                        ]));
+                    var notRisingEdge = new IfStatement(
+                        new NotEqual(matchedVar, new Constant(1L)),
+                        new Block([new Return()]));
+                    handlerBody = new Block(
+                        [new Assignment(matchedVar, new Constant(0L)), gateLoop, notRisingEdge, handlerBody],
                         [matchedVar]);
                 }
 

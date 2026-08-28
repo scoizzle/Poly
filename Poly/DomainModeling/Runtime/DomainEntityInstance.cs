@@ -588,8 +588,14 @@ public sealed partial record DomainEntityInstance {
             return null;
         }
 
-        EffectExecutor.Run(this, effectPass, typeProvider, prepared);
-        return null;
+        try {
+            EffectExecutor.Run(this, effectPass, typeProvider, prepared);
+            return null;
+        }
+        catch (InvalidOperationException ex) when (
+            ex.Message.StartsWith("Unique constraint violated", StringComparison.Ordinal)) {
+            return DomainResult.Failure(ex.Message);
+        }
     }
 
     /// <summary>

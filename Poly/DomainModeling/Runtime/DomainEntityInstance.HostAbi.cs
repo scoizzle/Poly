@@ -351,6 +351,10 @@ public sealed partial record DomainEntityInstance {
         foreach (var binding in initializers) {
             if (!scalarNames.Contains(binding.PropertyName))
                 continue;
+            if (TryEvalActionParamPath(binding.Expression, out var fromParam)) {
+                values[binding.PropertyName] = fromParam;
+                continue;
+            }
             var lowered = new DomainExpressionLoweringPass(new LoweringContext(new Parameter("entity"))).Lower(
                 binding.Expression,
                 new Parameter("entity", new TypeReference(Entity.Name)));
@@ -416,13 +420,19 @@ public sealed partial record DomainEntityInstance {
             .ToHashSet(StringComparer.Ordinal);
 
         foreach (var binding in createEffect.Initializers) {
-            var lowered = new DomainExpressionLoweringPass(new LoweringContext(new Parameter("entity"))).Lower(
-                binding.Expression,
-                new Parameter("entity", new TypeReference(Entity.Name)));
-            var compiled = Interpreter.Compile(lowered, initializerTypeProvider);
-            using var exec = Interpreter.Execute(compiled,
-                s => s.SetArgs(new object?[] { this }));
-            var value = exec.Result.GetValue<object>();
+            object? value;
+            if (TryEvalActionParamPath(binding.Expression, out var fromParam)) {
+                value = fromParam;
+            }
+            else {
+                var lowered = new DomainExpressionLoweringPass(new LoweringContext(new Parameter("entity"))).Lower(
+                    binding.Expression,
+                    new Parameter("entity", new TypeReference(Entity.Name)));
+                var compiled = Interpreter.Compile(lowered, initializerTypeProvider);
+                using var exec = Interpreter.Execute(compiled,
+                    s => s.SetArgs(new object?[] { this }));
+                value = exec.Result.GetValue<object>();
+            }
             if (scalarNames.Contains(binding.PropertyName))
                 initialValues[binding.PropertyName] = value;
             else if (singularNavs.Contains(binding.PropertyName))
@@ -437,7 +447,10 @@ public sealed partial record DomainEntityInstance {
         _createdChildren.Add(child);
 
         // BR.3.3: Auto-register child in the parent's store, if present.
-        Store?.Add(child);
+        if (Store is not null && !Store.TryAdd(child, out var addError)) {
+            _createdChildren.Remove(child);
+            throw new InvalidOperationException(addError);
+        }
 
         if (Store is not null) {
             foreach (var (navName, raw) in navValues) {
@@ -447,6 +460,7 @@ public sealed partial record DomainEntityInstance {
                 if (!ReferenceEquals(linked.Store, Store))
                     Store.Add(linked);
                 Store.Link(navName, child, linked);
+                TryLinkInverseCollection(linked, child);
             }
         }
 
@@ -467,9 +481,66 @@ public sealed partial record DomainEntityInstance {
                 }
             }
             Store.Link(createEffect.RelationshipName, this, child);
+            TryLinkCreateInBackReference(child);
         }
 
         return child;
+    }
+
+    /// <summary>
+    /// After a create-in to-one initializer (<c>section: offering</c>), also link the
+    /// peer's unique collection of this child type (<c>Section.enrollments</c>). Skip
+    /// when zero or several collections match — ambiguous inverses stay explicit.
+    /// </summary>
+    /// <summary>
+    /// <c>lead Name</c> in a create-in initializer: the first hop is an action
+    /// parameter holding a <see cref="DomainEntityInstance"/>, not a navigation
+    /// on this entity (CRM ConvertLead).
+    /// </summary>
+    private bool TryEvalActionParamPath(DomainExpression expr, out object? value) {
+        value = null;
+        if (expr is not RelationshipNavigation { TargetProperty: PropertyAccess leaf } nav)
+            return false;
+        if (!_values.TryGetValue(nav.RelationshipName, out var raw)
+            || raw is not DomainEntityInstance peer)
+            return false;
+        if (ContainsRelationshipNavigation(leaf))
+            return false;
+        peer.TryGetRaw(leaf.Name, out value);
+        return true;
+    }
+
+    private static bool ContainsRelationshipNavigation(DomainExpression expr) =>
+        expr is RelationshipNavigation
+        || expr.Children.OfType<DomainExpression>().Any(ContainsRelationshipNavigation);
+
+    /// <summary>
+    /// After <c>create in opportunities { … }</c>, bind the child's unique to-one
+    /// back to this source (<c>Opportunity.account</c>) so Rel-exists policies match
+    /// the C# auto-wired back-ref.
+    /// </summary>
+    private void TryLinkCreateInBackReference(DomainEntityInstance child) {
+        if (Store is null) return;
+        var backs = child.Entity.Navigations
+            .Where(n => n.Cardinality is not (RelationshipCardinality.OneToMany
+                or RelationshipCardinality.ManyToMany)
+                && string.Equals(n.Target.TypeName, Entity.Name, StringComparison.Ordinal))
+            .ToList();
+        if (backs.Count != 1)
+            return;
+        Store.Link(backs[0].Name, child, this);
+    }
+
+    private void TryLinkInverseCollection(DomainEntityInstance peer, DomainEntityInstance child) {
+        if (Store is null) return;
+        var inverses = peer.Entity.Navigations
+            .Where(n => n.Cardinality is RelationshipCardinality.OneToMany
+                or RelationshipCardinality.ManyToMany
+                && string.Equals(n.Target.TypeName, child.Entity.Name, StringComparison.Ordinal))
+            .ToList();
+        if (inverses.Count != 1)
+            return;
+        Store.Link(inverses[0].Name, peer, child);
     }
 
     /// <summary>

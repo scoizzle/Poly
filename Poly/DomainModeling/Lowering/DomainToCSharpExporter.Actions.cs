@@ -847,4 +847,24 @@ public sealed partial class DomainToCSharpExporter {
         }
         return count == 1 ? found : null;
     }
+
+    /// <summary>
+    /// Unique collection on <paramref name="peerEntity"/> whose target is
+    /// <paramref name="childEntityName"/> — the C# inverse of a create-in to-one
+    /// initializer (same rule as runtime <c>TryLinkInverseCollection</c>).
+    /// </summary>
+    internal static Relationship? FindInverseCollection(Entity peerEntity, string childEntityName) {
+        Relationship? found = null;
+        var count = 0;
+        foreach (var nav in peerEntity.Navigations) {
+            if (nav.Cardinality is not (RelationshipCardinality.OneToMany
+                or RelationshipCardinality.ManyToMany))
+                continue;
+            if (string.Equals(nav.Target.TypeName, childEntityName, StringComparison.Ordinal)) {
+                found = nav;
+                count++;
+            }
+        }
+        return count == 1 ? found : null;
+    }
 }

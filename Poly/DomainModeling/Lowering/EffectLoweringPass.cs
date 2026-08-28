@@ -58,7 +58,19 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         _sourceStageName = context.SourceStageName;
         _enumPropertyNames = context.EnumPropertyNames;
         _emitInstanceNotify = context.EmitInstanceNotify;
+        IReadOnlyDictionary<string, Node>? parameters = context.Parameters;
+        if (context.ActionParameterNames is { Count: > 0 }) {
+            var merged = parameters is null
+                ? new Dictionary<string, Node>(StringComparer.Ordinal)
+                : new Dictionary<string, Node>(parameters, StringComparer.Ordinal);
+            foreach (var name in context.ActionParameterNames) {
+                if (!merged.ContainsKey(name))
+                    merged[name] = new Parameter(name);
+            }
+            parameters = merged;
+        }
         _expressionPass = new DomainExpressionLoweringPass(context with {
+            Parameters = parameters,
             NavigationNameResolver = context.NavigationNameResolver ?? BuildNavigationNameResolver(entity, _domain, _analysis),
             IsCollectionNavigation = context.IsCollectionNavigation
                 ?? BuildIsCollectionNavigation(entity, _domain, _analysis),

@@ -1,0 +1,158 @@
+domain University
+uses temporal
+
+Term: enum { Fall, Spring, Summer }
+
+Instructor: entity {
+  Name: Text required
+  Email: Text unique required pattern("^[^@]+@[^@]+$")
+  Ready: stage {
+    GoOnLeave: action { transition to Leave }
+  }
+  Leave: stage {
+    Return: action { transition to Ready }
+  }
+}
+
+Course: entity {
+  Code: Text unique required length(3, 12)
+  Title: Text required
+}
+
+Student: entity {
+  Name: Text required
+  Email: Text unique required pattern("^[^@]+@[^@]+$")
+  MaxCredits: Number range(1, 24) default(18)
+  OpenCredits: Number default(0)
+  Holds: Number default(0)
+  Completions: Number default(0)
+  LastGrade: Number default(0)
+  enrollments: many Enrollment
+  AtLimit: policy { OpenCredits >= MaxCredits }
+  HasLoad: policy { count enrollments > 0 }
+  Active: stage {
+    Enroll: action (offering: Section) -> Enrollment
+      require not AtLimit
+    {
+      assign OpenCredits to OpenCredits + 3
+      create in enrollments { section: offering }
+    }
+    DropRegistered: action {
+      for enrollments as enr where enr in Registered
+        invoke enr.Drop
+    }
+    DropAllRegistered: action {
+      invoke DropRegistered
+    }
+    CompleteRegistered: action {
+      for enrollments as enr where enr in Registered
+        invoke enr.Complete
+    }
+    CompletePassing: action {
+      for enrollments as enr where enr IsPassing
+        invoke enr.Complete
+    }
+    Suspend: action { transition to Suspended }
+  }
+  Suspended: stage {
+    entry { assign Holds to Holds + 1 }
+    Reinstate: action { transition to Active }
+  }
+  when enrollments Dropped, Completed {
+    assign OpenCredits to OpenCredits - 3
+  }
+  when enrollments Completed as done {
+    assign Completions to Completions + 1
+    assign LastGrade to done Grade
+  }
+}
+
+Section: entity {
+  Cap: Number range(1, 200) required
+  SeatsTaken: Number default(0)
+  OfferingTerm: Term
+  course: Course
+  instructor: Instructor
+  enrollments: many Enrollment
+  waitlist: many WaitOffer
+  OfferedSeats: Number default(0)
+  WaitCleared: Number default(0)
+  AtCap: policy { SeatsTaken >= Cap }
+  HasInstructor: policy { instructor exists }
+  HasWaiters: policy { count waitlist > 0 }
+  Open: stage {
+    Close: action
+      require HasInstructor
+    {
+      transition to Closed
+    }
+    Queue: action (who: Student) -> WaitOffer {
+      create in waitlist { student: who }
+    }
+    StaffLeave: action
+      require HasInstructor
+    {
+      invoke instructor.GoOnLeave
+    }
+  }
+  Closed: stage {
+    Reopen: action { transition to Open }
+  }
+  when enrollments Registered {
+    assign SeatsTaken to SeatsTaken + 1
+  }
+  when enrollments Dropped {
+    assign SeatsTaken to SeatsTaken - 1
+  }
+  when any waitlist Offered {
+    assign OfferedSeats to OfferedSeats + 1
+  }
+  when all waitlist Cancelled {
+    assign WaitCleared to 1
+  }
+}
+
+WaitOffer: entity {
+  student: Student
+  section: Section
+  Queued: stage {
+    Seat: action { transition to Offered }
+    Cancel: action { transition to Cancelled }
+  }
+  Offered: stage {
+    Cancel: action { transition to Cancelled }
+  }
+  Cancelled: stage { }
+}
+
+Enrollment: entity {
+  EnrolledOn: Date default(Today)
+  DueDate: Date default(Today)
+  Grade: Number range(0, 100) default(0)
+  section: Section
+  student: Student
+  SectionFull: policy { section SeatsTaken >= 1 }
+  IsPassing: policy { Grade >= 70 }
+  Pending: stage {
+    Confirm: action
+      require not SectionFull
+    {
+      assign DueDate to EnrolledOn + 14
+      transition to Registered
+    }
+    Withdraw: action { transition to Dropped }
+  }
+  Registered: stage {
+    RecordGrade: action (score: Number) {
+      if (score >= 70) {
+        assign Grade to score
+      } else {
+        assign Grade to 0
+      }
+    }
+    Complete: action { transition to Completed }
+    Drop: action { transition to Dropped }
+  }
+  Completed: stage { }
+  Dropped: stage { }
+}

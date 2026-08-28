@@ -873,6 +873,38 @@ public class DomainToCSharpExporterTests {
     }
 
     [Test]
+    public async Task Export_TwoSubscribersOnSameTargetStage_EmitsOneNotifyAndDistinctFields() {
+        var (domain, analysis) = ParseAndAnalyze("""
+            domain Test
+            Ticket: entity {
+              Open: stage { Close: action { transition to Closed } }
+              Closed: stage { }
+            }
+            Desk: entity {
+              tickets: many Ticket
+              Ready: stage {
+                when tickets Closed { }
+              }
+            }
+            Queue: entity {
+              tickets: many Ticket
+              Ready: stage {
+                when tickets Closed { }
+              }
+            }
+            """);
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var ticket = types.First(t => t.Name == "Ticket");
+        var methods = ticket.Methods!.Select(m => m.Name).ToList();
+        await Assert.That(methods.Count(n => n == "NotifyClosedSubscribers")).IsEqualTo(1);
+        await Assert.That(methods.Contains("RegisterDeskClosedSubscriber")).IsTrue();
+        await Assert.That(methods.Contains("RegisterQueueClosedSubscriber")).IsTrue();
+        var fields = ticket.Fields!.Select(f => f.Name).ToHashSet(StringComparer.Ordinal);
+        await Assert.That(fields.Contains("_deskClosedSubscribers")).IsTrue();
+        await Assert.That(fields.Contains("_queueClosedSubscribers")).IsTrue();
+    }
+
+    [Test]
     public async Task Export_ForEachInvoke_FailFastLoopWithPredicates() {
         // `for Rel as x [where x.Policy | where x in Stage] invoke x.Action(args)` lowers
         // to a fail-fast loop over the nav: continue-guard predicate, binder-scoped args,

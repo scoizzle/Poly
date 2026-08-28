@@ -402,6 +402,21 @@ public sealed partial record DomainEntityInstance {
         /// </summary>
         private static object? EvaluatePathPrefixChain(
             RelationshipNavigation r, DomainEntityInstance source) {
+            // Action-parameter roots (ConvertLead's `lead Name`) live in the bag,
+            // not the store.
+            if (source.TryGetRaw(r.RelationshipName, out var bag)
+                && bag is DomainEntityInstance paramHop) {
+                if (r.TargetProperty is RelationshipNavigation nestedParam)
+                    return EvaluatePathPrefixChain(nestedParam, paramHop);
+                var paramPass = new DomainExpressionLoweringPass(new LoweringContext(new Parameter("entity")));
+                var paramLowered = paramPass.Lower(r.TargetProperty,
+                    new Parameter("entity", new TypeReference(paramHop.Entity.Name)));
+                var paramCompiled = Interpreter.Compile(paramLowered, paramHop._typeDefAnalyzer);
+                using var paramExec = Interpreter.Execute(paramCompiled,
+                    s => s.SetArgs(new object?[] { paramHop }));
+                return BoxPathPrefixLeaf(r.TargetProperty, paramExec.Result.GetValue<object>());
+            }
+
             var targets = source.GetOutboundRelatedInstances(r.RelationshipName);
             if (targets.Count == 0)
                 throw new InvalidOperationException(
@@ -422,7 +437,22 @@ public sealed partial record DomainEntityInstance {
             var compiled = Interpreter.Compile(lowered, hop._typeDefAnalyzer);
             using var exec = Interpreter.Execute(compiled,
                 s => s.SetArgs(new object?[] { hop }));
-            return exec.Result.GetValue<object>();
+            // VM bools are long 0/1 on the stack. Boxing them as Int64 made
+            // `require not` of a path-prefix comparison compile as Not(Int64).
+            return BoxPathPrefixLeaf(r.TargetProperty, exec.Result.GetValue<object>());
+        }
+
+        private static object? BoxPathPrefixLeaf(DomainExpression leaf, object? boxed) {
+            if (leaf is not (Ontology.Comparison or Ontology.And or Ontology.Or or Ontology.Not
+                or Ontology.Exists or Ontology.NotExists
+                or Ontology.AnyExpr or Ontology.AllExpr or Ontology.NoneExpr))
+                return boxed;
+            return boxed switch {
+                bool b => b,
+                long l => l != 0L,
+                int i => i != 0,
+                _ => boxed
+            };
         }
 
         protected override DomainExpression Exists(Exists e) {

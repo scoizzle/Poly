@@ -81,12 +81,20 @@ public sealed partial class DomainToCSharpExporter {
     /// }
     /// </code>
     /// </summary>
+    private static void AddCreateSingularNavMethod(
+        Entity entity,
+        Relationship rel,
+        Domain domain,
+        List<MethodDefinitionNode> methods,
+        INodeMetadataProvider metadata) =>
+        AddCreateNavMethod(entity, rel, domain, subscriberSubs: null, fieldName: null, methods, metadata);
+
     private static void AddCreateNavMethod(
         Entity entity,
         Relationship rel,
         Domain domain,
         List<SubscriptionInfo>? subscriberSubs,
-        string fieldName,
+        string? fieldName,
         List<MethodDefinitionNode> methods,
         INodeMetadataProvider metadata) {
         ArgumentNullException.ThrowIfNull(metadata);
@@ -119,7 +127,11 @@ public sealed partial class DomainToCSharpExporter {
 
         foreach (var parameter in parameterMetadata) {
             if (parameter.IsNavigation && parameter.IsBackReference) {
-                createArgs.Add(new ThisReference());
+                // Self-rel slot (Account.parent) is `this` only when *this* entity is
+                // that type. Contact.create-in account must not pass a Contact as Account.
+                createArgs.Add(string.Equals(entity.Name, targetEntity.Name, StringComparison.Ordinal)
+                    ? (Node)new ThisReference()
+                    : new Constant(null));
                 continue;
             }
 
@@ -204,10 +216,17 @@ public sealed partial class DomainToCSharpExporter {
 
         bodyNodes.Add(new Assignment(local, new Member(localResult, "Value")));
 
-        bodyNodes.Add(new Invoke(
-            new Member(
-                new Member(new ThisReference(), fieldName), "Add"),
-            [local]));
+        if (fieldName is not null) {
+            bodyNodes.Add(new Invoke(
+                new Member(
+                    new Member(new ThisReference(), fieldName), "Add"),
+                [local]));
+        }
+        else {
+            bodyNodes.Add(new Assignment(
+                new Member(new ThisReference(), pascalName),
+                local));
+        }
 
         // Subscription registration: loan.RegisterPatronOverdueSubscriber(this)
         // One registration per stage — multiple subscriptions on the same relation+stage
@@ -225,6 +244,29 @@ public sealed partial class DomainToCSharpExporter {
             }
         }
 
+        // create in { section: offering } — attach the child onto the peer's unique
+        // collection (Section.Enrollments) so generated C# matches the runtime inverse.
+        foreach (var parameter in parameterMetadata) {
+            if (!parameter.IsNavigation || parameter.IsCollection || parameter.IsBackReference)
+                continue;
+            if (autoWireBackRef is not null
+                && string.Equals(parameter.Name, autoWireBackRef.Name, StringComparison.Ordinal))
+                continue;
+            if (!lookup.Types.TryGetValue(parameter.Type.TypeName, out var peerType)
+                || peerType is not Entity peerEntity)
+                continue;
+            var inverse = FindInverseCollection(peerEntity, targetTypeName);
+            if (inverse is null) continue;
+            var peerVar = new Variable(ToCamelCase(parameter.Name));
+            bodyNodes.Add(new IfStatement(
+                new NotEqual(peerVar, new Constant(null)),
+                new Block([
+                    new Invoke(
+                        new Member(peerVar, $"Attach{ToPascalCase(inverse.Name)}"),
+                        [local])
+                ])));
+        }
+
         bodyNodes.Add(new Return(
             new Invoke(
                 new Member(
@@ -238,6 +280,42 @@ public sealed partial class DomainToCSharpExporter {
             Parameters: methodParams.Count > 0 ? methodParams : null,
             Body: new Block(bodyNodes, [localResult, local]),
             AccessModifier: AccessModifier.Private
+        ));
+    }
+
+    /// <summary>
+    /// Inverse of a create-in to-one initializer: add an already-constructed child
+    /// to this collection and register this entity's subscriptions on it.
+    /// </summary>
+    private static void AddAttachNavMethod(
+        Entity entity,
+        Relationship rel,
+        List<SubscriptionInfo>? subscriberSubs,
+        string fieldName,
+        List<MethodDefinitionNode> methods) {
+        var targetType = new NamedTypeReference(rel.Target.TypeName);
+        var child = new Parameter("child", targetType);
+        var body = new List<Node> {
+            new Invoke(
+                new Member(new Member(new ThisReference(), fieldName), "Add"),
+                [child])
+        };
+        if (subscriberSubs is { Count: > 0 }) {
+            foreach (var info in subscriberSubs
+                .Where(i => string.Equals(i.Relationship.Name, rel.Name, StringComparison.Ordinal))
+                .GroupBy(s => s.StageName)
+                .Select(g => g.First())) {
+                body.Add(new Invoke(
+                    new Member(child, $"Register{info.SourceEntity.Name}{info.StageName}Subscriber"),
+                    [new ThisReference()]));
+            }
+        }
+        methods.Add(new MethodDefinitionNode(
+            $"Attach{ToPascalCase(rel.Name)}",
+            new TypeReference("void"),
+            Parameters: [child],
+            Body: new Block(body),
+            AccessModifier: AccessModifier.Internal
         ));
     }
 

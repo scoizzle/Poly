@@ -503,7 +503,13 @@ Use case — reassign a child from one parent to another:
                 var isTarget = string.Equals(rel.Target.TypeName, entityName, StringComparison.Ordinal);
                 if (!isSource && !isTarget) continue;
 
-                var linked = state.InstanceStore.GetRelatedInstances(rel.Name, instance);
+                // Same relationship name can exist on two sources (Enrollment.section
+                // and WaitOffer.section). Scope peers to this relationship's types.
+                var linked = state.InstanceStore.GetRelatedInstances(rel.Name, instance)
+                    .Where(peer => isSource
+                        ? string.Equals(peer.Entity.Name, rel.Target.TypeName, StringComparison.Ordinal)
+                        : string.Equals(peer.Entity.Name, rel.Source.TypeName, StringComparison.Ordinal))
+                    .ToList();
                 if (linked.Count == 0) continue;
 
                 var ids = new List<string>(linked.Count);

@@ -1697,6 +1697,26 @@ public class DomainToCSharpExporterTests {
     }
 
     [Test]
+    public async Task Export_CollectionNav_IsOptionalEmptyCtorParam() {
+        // Warehouse dogfood: Dock.Create required IEnumerable<Pallet> even though
+        // receive uses create-in. Collection navs default to empty.
+        var (domain, analysis) = ParseAndAnalyze("""
+            domain Test
+            Pallet: entity { Qty: Number }
+            Dock: entity {
+              Name: Text required
+              pallets: many Pallet
+            }
+            """);
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var unit = new CompilationUnitNode([], null, types, null);
+        var cs = new CSharpGenerator().Generate(unit);
+
+        await Assert.That(cs).Contains("Create(string name, IEnumerable<Pallet>? pallets = null)");
+        await Assert.That(cs).Contains("pallets ?? new List<Pallet>()");
+    }
+
+    [Test]
     public async Task Export_DateArithmetic_CastsToIntForDateOnly() {
         // Code-review fix: `DueDate + 14` on a Date (DateOnly) property emitted
         // `AddDays(14L)`, but DateOnly.AddDays takes int — CS1503 (long→int). The

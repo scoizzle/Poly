@@ -290,10 +290,16 @@ public sealed partial class DomainToCSharpExporter {
                 var targetType = new NamedTypeReference(navParam.Type.TypeName);
                 var listType = new NamedTypeReference("List", TypeArguments: [targetType]);
                 var enumerableType = new NamedTypeReference("IEnumerable", TypeArguments: [targetType]);
-                ctorParams.Add(new Parameter(paramName, enumerableType));
+                ctorParams.Add(new Parameter(
+                    paramName,
+                    new OptionalTypeReference(enumerableType),
+                    DefaultValue: new Constant(null)));
                 ctorAssignments.Add(new Assignment(
                     new Member(new ThisReference(), fieldName),
-                    new New(listType, [new Parameter(paramName)])));
+                    new New(listType, [
+                        new Syntactic.Coalesce(
+                            new Parameter(paramName),
+                            new New(listType))])));
             }
             else {
                 // Singular nav (incl. back-reference): param + property assign.

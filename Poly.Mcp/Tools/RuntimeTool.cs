@@ -202,12 +202,23 @@ Thin wrapper around DomainEntityInstance.Create — no new runtime machinery.")]
                 Affordances: ["get_entity_detail"]);
         }
 
-        // Register under lock
-        var registered = McpSessionStore.TryModifyInstances(sessionId, st => {
-            st.InstanceStore ??= new DomainInstanceStore();
-            st.InstanceStore.Add(instance);
-            st.InstanceMap[instanceId] = instance;
-        });
+        // Register under lock. Unique collisions throw from the store — return a
+        // tool failure (Support dogfood: duplicate Handle crashed the MCP call).
+        bool registered;
+        try {
+            registered = McpSessionStore.TryModifyInstances(sessionId, st => {
+                st.InstanceStore ??= new DomainInstanceStore();
+                st.InstanceStore.Add(instance);
+                st.InstanceMap[instanceId] = instance;
+            });
+        }
+        catch (Exception ex) {
+            return new DomainToolResponse(
+                Success: false,
+                Message: $"Failed to create instance: {ex.Message}",
+                SessionId: sessionId,
+                Affordances: ["get_instance", "list_instances"]);
+        }
 
         if (!registered)
             return Failure_NotFound(sessionId);

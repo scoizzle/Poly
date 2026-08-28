@@ -1328,6 +1328,26 @@ public class McpSmokeTests {
     }
 
     [Test]
+    public async Task CreateInstance_DuplicateUnique_FailsLoud() {
+        var (sessionId, _) = McpSessionStore.Create("Support");
+        var dsl = DslTool.ApplyDsl(sessionId, """
+            domain Support
+            Agent: entity {
+              Handle: Text unique required
+            }
+            """);
+        await Assert.That(dsl.Success).IsTrue();
+
+        var first = RuntimeTool.CreateInstance(sessionId, "Agent", """{"Handle":"sam"}""");
+        await Assert.That(first.Success).IsTrue();
+
+        var dup = RuntimeTool.CreateInstance(sessionId, "Agent", """{"Handle":"sam"}""");
+        await Assert.That(dup.Success).IsFalse();
+        await Assert.That(dup.Message).Contains("Unique constraint");
+        await Assert.That(dup.Message).Contains("Handle");
+    }
+
+    [Test]
     public async Task CreateInstance_UnknownEntity_Fails() {
         var (sessionId, _) = McpSessionStore.Create("Test");
 

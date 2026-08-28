@@ -496,6 +496,10 @@ public sealed partial record DomainEntityInstance {
         var previousBindingProvider = _bindingTypeProvider;
         _bindingTypeProvider = effectTypeProvider;
         try {
+            var createError = PrevalidateUnconditionalCreates(action.Effects);
+            if (createError is not null)
+                return ActionInvocationResult.InvalidArguments(actionName, createError);
+
             var createdBefore = _createdChildren.Count;
             foreach (var effect in action.Effects) {
                 ExecuteEffect(effect, effectPass, effectTypeProvider);

@@ -385,6 +385,35 @@ public class ActionEntityReturnTests {
     }
 
     [Test]
+    public async Task InvokeAction_CreateInConstraintFail_DoesNotApplyPriorAssigns() {
+        var (domain, _) = Evolve("""
+            domain Parking
+            Permit: entity {
+              Plate: Text required pattern("^[A-Z0-9]{2,8}$")
+            }
+            Lot: entity {
+              Occupied: Number default(0)
+              permits: many Permit
+              Issue: action (plate: Text) {
+                assign Occupied to Occupied + 1
+                create in permits { Plate: plate }
+              }
+            }
+            """);
+        var lotEntity = domain.Types.OfType<Entity>().First(e => e.Name == "Lot");
+        var lot = DomainEntityInstance.Create(lotEntity, domain: domain);
+        var store = new DomainInstanceStore();
+        store.Add(lot);
+
+        var result = lot.InvokeAction("Issue",
+            new Dictionary<string, object?> { ["plate"] = "x" });
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(result.ErrorMessage).Contains("pattern");
+        await Assert.That(lot.GetProperty<object>("Occupied")).IsEqualTo(0L);
+        await Assert.That(lot.CreatedChildren).IsEmpty();
+    }
+
+    [Test]
     public async Task Analyze_CreateInWithCollectionNavBinding_ReportsUnknownProperty() {
         // A `many` collection nav is NOT a bindable initializer target (the exporter
         // emits empty collections for those) — binding it must still fail closed.

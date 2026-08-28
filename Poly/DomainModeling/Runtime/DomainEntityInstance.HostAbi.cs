@@ -298,6 +298,81 @@ public sealed partial record DomainEntityInstance {
     }
 
     /// <summary>
+    /// Parking dogfood: <c>assign Occupied + 1</c> then <c>create in</c> left Occupied
+    /// bumped when Plate failed the pattern. Unconditional create/create-in are
+    /// constraint-checked before any effect runs.
+    /// </summary>
+    private string? PrevalidateUnconditionalCreates(IReadOnlyList<Effect> effects) {
+        foreach (var effect in effects) {
+            switch (effect) {
+                case CompositeEffect composite: {
+                        var nested = PrevalidateUnconditionalCreates(composite.Effects);
+                        if (nested is not null)
+                            return nested;
+                        break;
+                    }
+                case CreateEntityInRelationshipEffect createIn: {
+                        if (Domain is null)
+                            break;
+                        var analysis = RuntimeAnalysisCache.GetOrAnalyze(Domain);
+                        var relationship = ResolveSourceRelationshipOrThrow(createIn.RelationshipName,
+                            $"Relationship '{createIn.RelationshipName}' not found in domain '{Domain.Name}'.");
+                        if (!analysis.TryGetEntity(Domain, relationship.Target.TypeName, out var target)
+                            || target is null)
+                            return $"Target entity '{relationship.Target.TypeName}' not found.";
+                        var err = PrevalidateCreateInitializers(createIn.Initializers, target);
+                        if (err is not null)
+                            return err;
+                        break;
+                    }
+                case CreateEntityInstance create: {
+                        if (Domain is null)
+                            break;
+                        var analysis = RuntimeAnalysisCache.GetOrAnalyze(Domain);
+                        if (!analysis.TryGetEntity(Domain, create.Type.TypeName, out var target)
+                            || target is null)
+                            return $"Entity type '{create.Type.TypeName}' not found in domain '{Domain.Name}'.";
+                        var err = PrevalidateCreateInitializers(create.Initializers, target);
+                        if (err is not null)
+                            return err;
+                        break;
+                    }
+            }
+        }
+
+        return null;
+    }
+
+    private string? PrevalidateCreateInitializers(
+        IReadOnlyList<PropertyBinding> initializers, Entity targetEntity) {
+        var values = new Dictionary<string, object?>(StringComparer.Ordinal);
+        var scalarNames = new HashSet<string>(
+            targetEntity.Properties.Select(p => p.Name), StringComparer.Ordinal);
+        foreach (var binding in initializers) {
+            if (!scalarNames.Contains(binding.PropertyName))
+                continue;
+            var lowered = new DomainExpressionLoweringPass(new LoweringContext(new Parameter("entity"))).Lower(
+                binding.Expression,
+                new Parameter("entity", new TypeReference(Entity.Name)));
+            var compiled = Interpreter.Compile(lowered, _bindingTypeProvider ?? _typeDefAnalyzer);
+            using var exec = Interpreter.Execute(compiled,
+                s => s.SetArgs(new object?[] { this }));
+            values[binding.PropertyName] = exec.Result.GetValue<object>();
+        }
+
+        foreach (var prop in targetEntity.Properties) {
+            if (values.ContainsKey(prop.Name))
+                continue;
+            if (prop.Constraints.OfType<DefaultValueConstraint>().FirstOrDefault() is { } def)
+                values[prop.Name] = EvaluateDefaultValue(def.Expression, prop.Type.TypeName, Domain);
+            else
+                values[prop.Name] = null;
+        }
+
+        return ValidateConstraints(targetEntity, values);
+    }
+
+    /// <summary>
     /// Creates a child entity instance from a <see cref="CreateEntityInstance"/>
     /// effect. Looks up the target entity by type name — first from the parent
     /// <see cref="Domain"/> if available, otherwise falls back to the current

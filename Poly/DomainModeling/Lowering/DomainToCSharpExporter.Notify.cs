@@ -186,14 +186,17 @@ public sealed partial class DomainToCSharpExporter {
                 new Member(targetType, "Create"),
                 [.. createArgs])));
 
+        var createResultType = new NamedTypeReference("DomainResult", TypeArguments: [targetType]);
         bodyNodes.Add(new IfStatement(
             new Syntactic.Not(
                 new Member(localResult, "IsSuccess")),
             new Block([
-                new ThrowStatement(
-                    new New(
-                        new NamedTypeReference("InvalidOperationException"),
-                        new Member(localResult, "ErrorMessage")))
+                new Return(
+                    new Invoke(
+                        new Member(createResultType, "Failure"),
+                        new Syntactic.Coalesce(
+                            new Member(localResult, "ErrorMessage"),
+                            new Constant(""))))
             ])));
 
         bodyNodes.Add(new Assignment(local, new Member(localResult, "Value")));
@@ -219,11 +222,16 @@ public sealed partial class DomainToCSharpExporter {
             }
         }
 
-        bodyNodes.Add(new Return(local));
+        bodyNodes.Add(new Return(
+            new Invoke(
+                new Member(
+                    new NamedTypeReference("DomainResult", TypeArguments: [targetType]),
+                    "Success"),
+                local)));
 
         methods.Add(new MethodDefinitionNode(
             methodName,
-            targetType,
+            new NamedTypeReference("DomainResult", TypeArguments: [targetType]),
             Parameters: methodParams.Count > 0 ? methodParams : null,
             Body: new Block(bodyNodes, [localResult, local]),
             AccessModifier: AccessModifier.Private

@@ -79,7 +79,7 @@ public sealed partial class DomainToCSharpExporter {
         var paramNames = new HashSet<string>(
             action.Parameters.Select(p => p.Name), StringComparer.Ordinal);
         var effectsBody = LowerActionToMethodBody(entity, action, paramNames, stageEnumTypeName,
-            postTransitionNodes, loweringSourceStage, domain, analysis);
+            postTransitionNodes, loweringSourceStage, domain, analysis, isVoid);
         effectsBody = PrependAdapterInvocation(domain, action, effectsBody);
         return BuildActionBodyWithGuards(action, entity, effectsBody, domain,
             guardSourceStage, stageEnumTypeName, isVoid, analysis);
@@ -390,9 +390,13 @@ public sealed partial class DomainToCSharpExporter {
         HashSet<string>? paramNames = null, string? stageEnumTypeName = null,
         IReadOnlyDictionary<string, IReadOnlyList<Node>>? postTransitionNodes = null,
         string? sourceStageName = null, Domain? domain = null,
-        INodeMetadataProvider? analysis = null) {
+        INodeMetadataProvider? analysis = null, bool isVoid = true) {
         if (action.Effects.Count == 0) return null;
         var enumProps = GetEnumPropertyNames(entity, domain, analysis);
+        Node actionResultType = isVoid
+            ? new NamedTypeReference("DomainResult")
+            : new NamedTypeReference("DomainResult",
+                TypeArguments: [MapDomainTypeRef(action.Result.Members[0].Type, domain, analysis)]);
         var context = new LoweringContext(
             new Parameter("entity", new TypeReference(entity.Name)),
             Analysis: analysis,
@@ -403,10 +407,33 @@ public sealed partial class DomainToCSharpExporter {
             PostTransitionNodes: postTransitionNodes,
             SourceStageName: sourceStageName,
             Domain: domain,
-            EnumPropertyNames: enumProps);
+            EnumPropertyNames: enumProps,
+            ActionResultType: actionResultType);
         var effectPass = new EffectLoweringPass(entity, context);
+        var probes = effectPass.LowerCreateInConstraintProbes(action.Effects);
         var composite = new CompositeEffect(action.Effects);
-        return effectPass.TryLowerVmNode(composite);
+        var lowered = effectPass.TryLowerVmNode(composite);
+        if (probes.Count == 0)
+            return lowered;
+        var nodes = new List<Node>();
+        var locals = new List<Node>();
+        foreach (var probe in probes) {
+            if (probe is Block pb) {
+                nodes.AddRange(pb.Nodes);
+                locals.AddRange(pb.Variables);
+            }
+            else {
+                nodes.Add(probe);
+            }
+        }
+        if (lowered is Block block) {
+            nodes.AddRange(block.Nodes);
+            locals.AddRange(block.Variables);
+        }
+        else if (lowered is not null) {
+            nodes.Add(lowered);
+        }
+        return new Block(nodes, locals);
     }
 
     internal static Node? LowerExpressionToMethodBody(

@@ -482,7 +482,8 @@ public class DomainToCSharpExporterTests {
 
         var checkOut = customer.Methods?.FirstOrDefault(m => m.Name == "CheckOut");
         await Assert.That(checkOut).IsNotNull();
-        var call = FindFirstInvoke(checkOut!.Body);
+        var call = FindAllInvokes(checkOut!.Body!).FirstOrDefault(i =>
+            i.Delegate is Member { MemberName: "CreateOrders" });
         await Assert.That(call).IsNotNull();
         await Assert.That(call!.Arguments.Length).IsEqualTo(paramCount);
     }
@@ -1714,6 +1715,34 @@ public class DomainToCSharpExporterTests {
 
         await Assert.That(cs).Contains("Create(string name, IEnumerable<Pallet>? pallets = null)");
         await Assert.That(cs).Contains("pallets ?? new List<Pallet>()");
+    }
+
+    [Test]
+    public async Task Export_CreateIn_ProbesConstraintsBeforePriorAssigns() {
+        var (domain, analysis) = ParseAndAnalyze("""
+            domain Hotel
+            Stay: entity {
+              Nights: Number range(1, 21) required
+            }
+            Guest: entity {
+              OpenStays: Number default(0)
+              stays: many Stay
+              Book: action (nights: Number) {
+                assign OpenStays to OpenStays + 1
+                create in stays { Nights: nights }
+              }
+            }
+            """);
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var unit = new CompilationUnitNode([], null, types, null);
+        var cs = new CSharpGenerator().Generate(unit);
+
+        var bookIdx = cs.IndexOf("public DomainResult Book(", StringComparison.Ordinal);
+        var probeIdx = cs.IndexOf("Stay.Create(nights)", bookIdx);
+        var assignIdx = cs.IndexOf("this.OpenStays = this.OpenStays + 1L", bookIdx);
+        await Assert.That(probeIdx).IsGreaterThan(bookIdx);
+        await Assert.That(assignIdx).IsGreaterThan(probeIdx);
+        await Assert.That(cs).DoesNotContain("throw new InvalidOperationException(stayResult.ErrorMessage)");
     }
 
     [Test]

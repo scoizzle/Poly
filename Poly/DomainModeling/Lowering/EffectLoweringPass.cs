@@ -1,7 +1,10 @@
+using Poly.Ast.Nodes;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Dispatch;
 using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Runtime;
+
+using Syntactic = Poly.Ast.Nodes;
 
 namespace Poly.DomainModeling.Lowering;
 
@@ -34,6 +37,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     private readonly IReadOnlyDictionary<string, string>? _enumPropertyNames;
     private readonly LoweringContext _context;
     private int _forEachInvokeSequence;
+    private int _createInProbeSequence;
 
     /// <summary>Pre-computed analysis metadata provider, when available.</summary>
     public INodeMetadataProvider? Analysis => _analysis;
@@ -612,12 +616,100 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         // so positional order matches the signature. When none are bound, omit (C# default).
         AppendDefaultedPropArgs(args, initMap, targetEntity);
 
+        var resultLocal = new Variable(DomainToCSharpExporter.ToCamelCase(targetEntity.Name) + "Result");
         var local = new Variable(DomainToCSharpExporter.ToCamelCase(targetEntity.Name));
+        var resultType = _context.ActionResultType ?? new NamedTypeReference("DomainResult");
         var blockNodes = new List<Node> {
-            new Assignment(local, new Invoke(new Member(Subject, methodName), [.. args]))
+            new Assignment(resultLocal, new Invoke(new Member(Subject, methodName), [.. args])),
+            new IfStatement(
+                new Syntactic.Not(new Member(resultLocal, "IsSuccess")),
+                new Block([
+                    new Return(
+                        new Invoke(
+                            new Member(resultType, "Failure"),
+                            new Syntactic.Coalesce(
+                                new Member(resultLocal, "ErrorMessage"),
+                                new Constant(""))))
+                ])),
+            new Assignment(local, new Member(resultLocal, "Value"))
         };
 
-        return new Block(blockNodes, [local]);
+        return new Block(blockNodes, [resultLocal, local]);
+    }
+
+    internal List<Node> LowerCreateInConstraintProbes(IReadOnlyList<Effect> effects) {
+        var nodes = new List<Node>();
+        CollectCreateInProbes(effects, nodes);
+        return nodes;
+    }
+
+    private void CollectCreateInProbes(IReadOnlyList<Effect> effects, List<Node> nodes) {
+        foreach (var effect in effects) {
+            switch (effect) {
+                case CompositeEffect composite:
+                    CollectCreateInProbes(composite.Effects, nodes);
+                    break;
+                case CreateEntityInRelationshipEffect cr:
+                    if (LowerCreateInProbe(cr) is { } probe)
+                        nodes.Add(probe);
+                    break;
+            }
+        }
+    }
+
+    private Block? LowerCreateInProbe(CreateEntityInRelationshipEffect cr) {
+        if (!_lowerStageTransitions || _domain is null || _analysis is null)
+            return null;
+
+        var resolvedTarget = _analysis.GetMetadata<ResolvedRelationshipTargetMetadata>(cr);
+        var relationship = resolvedTarget?.Relationship
+            ?? ResolveRelationship(cr.RelationshipName);
+        if (relationship is null) return null;
+        var targetEntity = resolvedTarget?.TargetEntity
+            ?? ResolveEntity(relationship.Target.TypeName);
+        if (targetEntity is null) return null;
+
+        var initMap = new Dictionary<string, DomainExpression>(StringComparer.Ordinal);
+        foreach (var init in cr.Initializers)
+            initMap[init.PropertyName] = init.Expression;
+
+        var args = new List<Node>();
+        var parameterMetadata = GetConstructorParameterOrder(targetEntity);
+        var autoWireBackRef = DomainToCSharpExporter.FindAutoWireBackReference(targetEntity, _entity.Name);
+        foreach (var parameter in parameterMetadata) {
+            if (parameter.IsCollection) continue;
+            if (parameter.IsBackReference
+                || (autoWireBackRef is not null
+                    && string.Equals(parameter.Name, autoWireBackRef.Name, StringComparison.Ordinal))) {
+                args.Add(Subject);
+                continue;
+            }
+            if (initMap.TryGetValue(parameter.Name, out var expr))
+                args.Add(LowerEnumAwareValue(expr, parameter.Type, Subject));
+            else
+                args.Add(DefaultForDomainType(parameter.Type, _domain, _analysis));
+        }
+        AppendDefaultedPropArgs(args, initMap, targetEntity);
+
+        var probe = new Variable($"probe{_createInProbeSequence++}");
+        var resultType = _context.ActionResultType ?? new NamedTypeReference("DomainResult");
+        var targetType = new NamedTypeReference(targetEntity.Name);
+        var errorMessage = new Syntactic.Coalesce(
+            new Member(probe, "ErrorMessage"),
+            new Constant(""));
+        return new Block(
+            [
+                new Assignment(probe, new Invoke(new Member(targetType, "Create"), [.. args])),
+                new IfStatement(
+                    new Syntactic.Not(new Member(probe, "IsSuccess")),
+                    new Block([
+                        new Return(
+                            new Invoke(
+                                new Member(resultType, "Failure"),
+                                errorMessage))
+                    ]))
+            ],
+            [probe]);
     }
 
     // ── Runtime default expression helpers ─────────────────

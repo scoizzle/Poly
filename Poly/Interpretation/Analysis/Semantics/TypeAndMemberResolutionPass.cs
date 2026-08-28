@@ -25,8 +25,7 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
             Constant c => context.TypeDefinitions.GetTypeDefinition(c.Value?.GetType() ?? typeof(object)),
             ThisReference @this => ResolveThisReferenceType(context, @this),
             Parameter p => ResolveParameterType(context, p),
-            Variable v => context.GetResolvedType(v)
-                ?? (v.Initializer is null ? null : ResolveNodeType(context, v.Initializer)),
+            Variable v => context.GetResolvedType(v),
             Add add => ResolveNumericArithmeticType(context, add.LeftHandValue, add.RightHandValue),
             Subtract sub => ResolveNumericArithmeticType(context, sub.LeftHandValue, sub.RightHandValue),
             Multiply mul => ResolveNumericArithmeticType(context, mul.LeftHandValue, mul.RightHandValue),
@@ -58,20 +57,22 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
             Block block => ResolveBlockType(context, block),
             Assignment assign => ResolveAssignmentType(context, assign),
             ForEachLoop foreachLoop => ResolveForEachLoopType(context, foreachLoop),
-            Lambda lambda => ResolveBlockType(context, lambda.Body is Block b ? b : new Block(lambda.Body)),
+            Lambda lambda => ResolveLambdaType(context, lambda),
             NullForgiving nf => ResolveNodeType(context, nf.Operand),
-            IfStatement ifStmt => ResolveNodeType(context, ifStmt.ThenBranch),
+            IfStatement => null,
             BitwiseAnd ba => ResolveArithmeticType(context, ba.LeftHandValue, ba.RightHandValue),
             BitwiseOr bor => ResolveArithmeticType(context, bor.LeftHandValue, bor.RightHandValue),
             BitwiseXor bx => ResolveArithmeticType(context, bx.LeftHandValue, bx.RightHandValue),
             ShiftLeft sl => ResolveArithmeticType(context, sl.LeftHandValue, sl.RightHandValue),
             ShiftRight sr => ResolveArithmeticType(context, sr.LeftHandValue, sr.RightHandValue),
             BitwiseNot bn => ResolveNodeType(context, bn.Operand),
-            UsingStatement us => ResolveNodeType(context, us.Body),
+            UsingStatement => null,
+            TryCatchFinally tcf => ResolveNodeType(context, tcf.TryBlock),
             SwitchStatement swt => swt.Cases.Count > 0
                 ? ResolveNodeType(context, swt.Cases[0].Body)
                 : swt.DefaultCase is not null ? ResolveNodeType(context, swt.DefaultCase) : null,
             Await aw => ResolveNodeType(context, aw.Operand),
+            Return r => r.Value is null ? null : ResolveNodeType(context, r.Value),
             _ => null
         };
     }
@@ -187,10 +188,21 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
                 context.SetResolvedType(memberAccess.Value, targetType);
             }
         }
-        else
-            if (invoke.Delegate is Lambda lambda) {
-                return ResolveNodeType(context, lambda.Body);
+        else if (invoke.Delegate is Lambda lambda) {
+            BindLambdaArguments(context, lambda, invoke.Arguments);
+            NoteProducedLambda(context, invoke, lambda.Body);
+            return ResolveNodeType(context, lambda.Body);
+        }
+        else if (invoke.Delegate is Variable or Parameter) {
+            if (context.GetMetadata<StoredLambdaMetadata>(invoke.Delegate) is { } stored) {
+                BindLambdaArguments(context, stored.Lambda, invoke.Arguments);
+                NoteProducedLambda(context, invoke, stored.Lambda.Body);
+                return ResolveNodeType(context, stored.Lambda.Body);
             }
+            var calleeType = ResolveNodeType(context, invoke.Delegate);
+            if (calleeType is not null)
+                return calleeType;
+        }
 
         foreach (var argument in invoke.Arguments) {
             var argumentType = ResolveNodeType(context, argument);
@@ -267,8 +279,15 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
         Assignment assignment) {
         var valueType = ResolveNodeType(context, assignment.Value);
 
-        if (assignment.Destination is Variable variable && valueType != null) {
-            context.SetResolvedType(variable, valueType);
+        if (assignment.Destination is Variable variable) {
+            if (valueType != null)
+                context.SetResolvedType(variable, valueType);
+            if (assignment.Value is Lambda assignedLambda)
+                context.SetMetadata(variable, new StoredLambdaMetadata(assignedLambda));
+            else if (context.GetMetadata<StoredLambdaMetadata>(assignment.Value) is { } produced)
+                context.SetMetadata(variable, produced);
+            else
+                context.Metadata.Remove<StoredLambdaMetadata>(variable);
         }
 
         return valueType;
@@ -286,11 +305,12 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
             for (int i = 0; i < n; i++) {
                 if (nodes[i] is Assignment a && ReferenceEquals(a.Destination, v)) {
                     resolved = ResolveNodeType(context, a.Value);
+                    if (a.Value is Lambda assignedLambda)
+                        context.SetMetadata(v, new StoredLambdaMetadata(assignedLambda));
+                    else if (context.GetMetadata<StoredLambdaMetadata>(a.Value) is { } produced)
+                        context.SetMetadata(v, produced);
                     break;
                 }
-            }
-            if (resolved == null && v.Initializer is not null) {
-                resolved = ResolveNodeType(context, v.Initializer);
             }
             if (resolved != null) {
                 context.SetResolvedType(v, resolved);
@@ -298,8 +318,78 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
         }
 
         if (n == 0) return null;
-        return ResolveNodeType(context, nodes[n - 1]);
+        return ResolveYieldType(context, block);
     }
+
+    private static ITypeDefinition? ResolveYieldType(AnalysisContext context, Node body) {
+        if (body is not Block block)
+            return ResolveNodeType(context, body);
+        if (block.Nodes.Count == 0)
+            return null;
+        var last = block.Nodes[^1];
+        var lastType = ResolveNodeType(context, last);
+        if (lastType is not null && !IsVoidYieldNode(last))
+            return lastType;
+        return FindValuedReturnType(context, block) ?? lastType;
+    }
+
+    private static bool IsVoidYieldNode(Node node) =>
+        node is Comment or IfStatement or WhileLoop or DoWhileLoop or ForLoop or ForEachLoop
+            or UsingStatement or BreakStatement or ContinueStatement or GotoStatement
+            or ThrowStatement
+        || node is Return { Value: null };
+
+    private static ITypeDefinition? FindValuedReturnType(AnalysisContext context, Node node) {
+        if (node is Lambda)
+            return null;
+        if (node is IfStatement ifStmt && ifStmt.Condition is Constant { Value: false })
+            return ifStmt.ElseBranch is null ? null : FindValuedReturnType(context, ifStmt.ElseBranch);
+        if (node is IfStatement ifTrue && ifTrue.Condition is Constant { Value: true })
+            return FindValuedReturnType(context, ifTrue.ThenBranch);
+        if (node is Return { Value: not null } ret)
+            return ResolveNodeType(context, ret.Value);
+        foreach (var child in node.Children) {
+            if (child is null) continue;
+            var found = FindValuedReturnType(context, child);
+            if (found is not null)
+                return found;
+        }
+        return null;
+    }
+
+    /// <summary>A <see cref="Lambda"/> produces a closure, not the body result.
+    /// Tag it as <c>Func&lt;…&gt;</c> / <c>Action&lt;…&gt;</c> from parameter types
+    /// plus the body's yield type (what <c>Invoke</c> of that value returns).</summary>
+    private static ITypeDefinition? ResolveLambdaType(AnalysisContext context, Lambda lambda) {
+        var paramClr = new Type[lambda.Parameters.Count];
+        for (int i = 0; i < paramClr.Length; i++) {
+            paramClr[i] = RuntimeTypeOf(context, lambda.Parameters[i]) ?? typeof(object);
+        }
+        var yieldType = ResolveYieldType(context, lambda.Body);
+        var yieldClr = yieldType?.GetRuntimeType();
+        Type delType;
+        try {
+            if (yieldClr is null || yieldClr == typeof(void)) {
+                delType = paramClr.Length == 0
+                    ? typeof(Action)
+                    : System.Linq.Expressions.Expression.GetActionType(paramClr);
+            }
+            else {
+                var funcArgs = new Type[paramClr.Length + 1];
+                paramClr.CopyTo(funcArgs, 0);
+                funcArgs[^1] = yieldClr;
+                delType = System.Linq.Expressions.Expression.GetFuncType(funcArgs);
+            }
+        }
+        catch (ArgumentException) {
+            return context.TypeDefinitions.GetTypeDefinition(typeof(object));
+        }
+        return context.TypeDefinitions.GetTypeDefinition(delType);
+    }
+
+    private static Type? RuntimeTypeOf(AnalysisContext context, Node node) =>
+        ResolveNodeType(context, node)?.GetRuntimeType()
+        ?? context.GetResolvedType(node)?.GetRuntimeType();
 
     private static ITypeDefinition? ResolveParameterType(AnalysisContext context, Parameter parameter) {
         if (parameter.TypeReference is not null) {
@@ -308,7 +398,60 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
 
         return null;
     }
+
+    private static void BindLambdaArguments(
+        AnalysisContext context, Lambda lambda, IReadOnlyList<Node> arguments) {
+        int n = Math.Min(lambda.Parameters.Count, arguments.Count);
+        for (int i = 0; i < n; i++) {
+            var arg = arguments[i];
+            var param = lambda.Parameters[i];
+            if (arg is Lambda argLambda)
+                context.SetMetadata(param, new StoredLambdaMetadata(argLambda));
+            else if (context.GetMetadata<StoredLambdaMetadata>(arg) is { } produced)
+                context.SetMetadata(param, produced);
+        }
+    }
+
+    private static void NoteProducedLambda(AnalysisContext context, Node invoke, Node body) {
+        var value = YieldNode(body);
+        if (value is Lambda lambda)
+            context.SetMetadata(invoke, new StoredLambdaMetadata(lambda));
+        else if (context.GetMetadata<StoredLambdaMetadata>(value) is { } produced)
+            context.SetMetadata(invoke, produced);
+    }
+
+    internal static Node YieldNode(Node body) {
+        if (body is not Block block || block.Nodes.Count == 0)
+            return body;
+        var last = block.Nodes[^1];
+        if (!IsVoidYieldNode(last))
+            return last;
+        var fromReturn = FindReturnValueNode(block);
+        return fromReturn ?? last;
+    }
+
+    private static Node? FindReturnValueNode(Node node) {
+        if (node is Lambda)
+            return null;
+        if (node is IfStatement ifStmt && ifStmt.Condition is Constant { Value: false })
+            return ifStmt.ElseBranch is null ? null : FindReturnValueNode(ifStmt.ElseBranch);
+        if (node is IfStatement ifTrue && ifTrue.Condition is Constant { Value: true })
+            return FindReturnValueNode(ifTrue.ThenBranch);
+        if (node is Return { Value: not null } ret)
+            return ret.Value;
+        foreach (var child in node.Children) {
+            if (child is null) continue;
+            var found = FindReturnValueNode(child);
+            if (found is not null)
+                return found;
+        }
+        return null;
+    }
 }
+
+/// <summary>The node holds or produces a stored <see cref="Lambda"/> (closure handle).
+/// Invoke uses the lambda body type; the binding itself is a heap ref.</summary>
+internal sealed record StoredLambdaMetadata(Lambda Lambda) : IAnalysisMetadata;
 
 public static class TypeResolutionMetadataExtensions {
     private sealed record TypeResolutionMetadata : IAnalysisMetadata {

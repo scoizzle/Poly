@@ -143,10 +143,6 @@ public static partial class DirectVmAbiEmitter {
         AbiCtx ctx) {
         var leftVal = CompileValue(left, ctx);
         var rightVal = CompileValue(right, ctx);
-        if (TryEmitStringConcat(left, right, leftVal, rightVal, factory, ctx) is { } concat)
-            return SpillToRing(concat, ctx);
-        if (TryEmitDecimalArithmetic(left, right, leftVal, rightVal, factory, ctx) is { } dec)
-            return SpillToRing(dec, ctx);
         if (IsDoubleValue(ctx, left) || IsDoubleValue(ctx, right))
             return SpillToRing(Call(BitConverterDoubleToInt64Bits,
                 factory(AsIeeeDouble(left, leftVal, ctx), AsIeeeDouble(right, rightVal, ctx))), ctx);
@@ -456,6 +452,23 @@ public static partial class DirectVmAbiEmitter {
         return Call(null, BoxToAbiInfo, ctx.HeapLocal, Convert(value, typeof(object)));
     }
 
+    private static Expression ConvertRingToClr(Expression ringVal, Type paramType, Node? source, AbiCtx ctx) {
+        if (paramType == typeof(double) || paramType == typeof(float)) {
+            var srcType = source is Constant c ? c.Value?.GetType()
+                : ctx.Analysis?.GetMetadata<ValueRepresentationMetadata>(source)?.ClrType;
+            if (srcType == typeof(double) || srcType == typeof(float))
+                return Convert(Call(BitConverterInt64BitsToDouble, ringVal), paramType);
+            return Convert(ringVal, paramType);
+        }
+        if (paramType == typeof(bool))
+            return NotEqual(ringVal, Constant(0L));
+        if (paramType.IsValueType && AbiValueTypes.IsLongRepresentable(paramType))
+            return Convert(ringVal, paramType);
+        return Convert(
+            Call(ctx.HeapLocal, HeapUnsafeGet, Convert(ringVal, typeof(int))),
+            paramType);
+    }
+
     /// <summary>TypeIs: check if the operand's heap object is assignable to the target type.</summary>
     private static Expression EmitTypeIs(TypeIs t, AbiCtx ctx) {
         int d = ctx.RingDepth;
@@ -520,7 +533,8 @@ public static partial class DirectVmAbiEmitter {
                 Call(null, TypeAsAbiInfo, ctx.HeapLocal, ctx.RingVar(slot), Constant(targetType, typeof(Type)))));
     }
 
-    /// <summary>TypeCast: convert the operand into the target CLR type, then re-box to the ring.</summary>
+    /// <summary>TypeCast after analysis rewrites: identity, reference downcast, or unbox.
+    /// Numeric and operator conversions are <c>Invoke</c> replacements.</summary>
     private static Expression EmitTypeCast(TypeCast t, AbiCtx ctx) {
         var targetType = ResolveClrType(t.TargetTypeReference, t, ctx)
             ?? throw new InvalidOperationException("VM compile rejected: TypeCast target type is unresolved.");
@@ -531,11 +545,13 @@ public static partial class DirectVmAbiEmitter {
         var operandExpr = CompileNode(t.Operand, ctx);
         int slot = ctx.RingDepth - 1;
         var fold = FoldResultToSlot(ref slot, d, ctx);
+        if (sourceType is null || sourceType == targetType || targetType.IsAssignableFrom(sourceType))
+            return Block(operandExpr, fold);
         return Block(
             operandExpr, fold,
             Assign(ctx.RingVar(slot),
-                Call(null, ConvertAbiInfo, ctx.HeapLocal, ctx.RingVar(slot),
-                    Constant(sourceType, typeof(Type)), Constant(targetType, typeof(Type)))));
+                Call(null, CastAbiInfo, ctx.HeapLocal, ctx.RingVar(slot),
+                    Constant(targetType, typeof(Type)))));
     }
 
     /// <summary>Default of the resolved type (0 / false / ABI null / heap default struct).</summary>
@@ -653,32 +669,11 @@ public static partial class DirectVmAbiEmitter {
     /// closure capture array (if this is a captured upvalue).
     /// Leaving the value on the ring for expression chaining.</summary>
     private static Expression EmitVariable(Variable v, AbiCtx ctx) {
-        // Statement form `var x = expr` (C# generator prints a declaration).
-        // First encounter declares and writes; later reads ignore Value.
-        if (v.Initializer is not null && !ctx.IsDeclared(v)) {
-            ctx.DeclareVariable(v);
-            int d = ctx.RingDepth;
-            var init = CompileNode(v.Initializer, ctx);
-            int slot = ctx.RingDepth - 1;
-            var fold = FoldResultToSlot(ref slot, d, ctx);
-            return Block(init, fold, ctx.VariableWrite(v, ctx.RingVar(slot)), ctx.RingVar(slot));
-        }
-
-        // Check capture (upvalue) first — used inside lambda bodies
         if (ctx.TryGetCapture(v, out int capIndex)) {
             int slot = ctx.AllocSlot();
-            // Read from heap[ state.ClosureHandle ][ capIndex + 1 ]
-            // The closure array is object[] stored at the handle in heap raw slots.
-            var closureHandle = ctx.ClosureHandle;
-            var closureArr = Convert(
-                ArrayAccess(ctx.HeapRawSlots, Convert(closureHandle, typeof(int))),
-                typeof(object[]));
-            var captured = Convert(
-                ArrayAccess(closureArr, Constant(capIndex + 1)),
-                typeof(long));
-            return Assign(ctx.RingVar(slot), captured);
+            return Assign(ctx.RingVar(slot), EmitCaptureCellValue(ctx, capIndex));
         }
-        // Local variable on value stack — read via compile-time frame offset
+
         int slot2 = ctx.AllocSlot();
         return Assign(ctx.RingVar(slot2), ctx.VariableRead(v));
     }

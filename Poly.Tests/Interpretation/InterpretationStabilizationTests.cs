@@ -342,17 +342,21 @@ public class InterpretationStabilizationTests {
     }
 
     [Test]
-    public async Task Vm_VariableWithValue_AssignsOnDeclare() {
-        var x = new Variable("x", new Constant(41L));
-        var node = new Block(x, new Add(x, new Constant(1L)));
+    public async Task Vm_Variable_FirstAssignmentIsTheWrite() {
+        var x = new Variable("x");
+        var node = new Block([new Assignment(x, new Constant(41L)), new Add(x, new Constant(1L))], [x]);
         using var exec = Interpreter.Execute(Interpreter.Compile(node));
         await Assert.That(exec.GetValue<long>()).IsEqualTo(42L);
     }
 
     [Test]
-    public async Task Vm_VariableWithValue_AssignmentDoesNotReapplyInitializer() {
-        var x = new Variable("x", new Constant(1L));
-        var node = new Block(x, new Assignment(x, new Constant(10L)), x);
+    public async Task Vm_Variable_LaterAssignmentDoesNotReplayFirstWrite() {
+        var x = new Variable("x");
+        var node = new Block([
+            new Assignment(x, new Constant(1L)),
+            new Assignment(x, new Constant(10L)),
+            x
+        ], [x]);
         using var exec = Interpreter.Execute(Interpreter.Compile(node));
         await Assert.That(exec.GetValue<long>()).IsEqualTo(10L);
     }
@@ -447,17 +451,17 @@ public class InterpretationStabilizationTests {
             TypeDefinitionNodeAnalyzer.Id,
             ThisReferenceContextAnalyzer.Id,
             TypeAndMemberResolver.Id,
+            LambdaReturnTypeAnalyzer.Id,
             ScopeValidator.Id,
             SideEffectAnalyzer.Id,
             ConstantFoldingPass.Id,
             JumpTargetAnalyzer.Id,
             ControlFlowAnalysisPass.Id,
             ExceptionRegionAnalyzer.Id,
-            DefiniteAssignmentAnalyzer.Id,
             ValueRepresentationAnalyzer.Id,
             SyntaxTypeCompatibilityAnalyzer.Id,
             CallSiteCatalogAnalyzer.Id,
-            LambdaReturnTypeAnalyzer.Id,
+            DefiniteAssignmentAnalyzer.Id,
         ];
         await Assert.That(string.Join(",", Interpreter.Analyzer.PassNames)).IsEqualTo(string.Join(",", expected));
     }

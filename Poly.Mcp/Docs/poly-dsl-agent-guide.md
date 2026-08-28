@@ -400,12 +400,15 @@ Replenished: policy { DueDate + 14 Days > ExpiryDate }
 |------|---------|
 | `Now` | Current UTC timestamp (exact spelling) |
 | `Today` | Current calendar date (exact spelling) |
-| `N Days` / `N Months` | Relative duration (singular `Day`/`Month` also accepted; exact PascalCase) |
-| `DateExpr + N Days` / `DateExpr - N Months` | Offset `Now`/`Today`/a `Date` property by a duration |
+| `N Seconds` / `Minutes` / `Hours` / `Days` / `Weeks` / `Months` / `Years` | Relative duration (singular also accepted; exact PascalCase). Milliseconds also as `ms` |
+| `DateExpr ± N <unit>` | Offset `Now`/`Today`/a Date, DateTime, or Time property |
+
+Clock-resolution units (`Milliseconds`/`ms`, `Seconds`/`Minutes`/`Hours`) require `Now`, DateTime, or Time. Calendar units (`Days`/`Weeks`/`Months`/`Years`) require a date or DateTime, not Time.
 
 **Fail-closed:** unknown units (`12 Fortnights`) are a parse error; a bare `Number + Days`
-with no temporal left operand is rejected at analysis; without the library `Now` stays a plain
-`PropertyAccess` (never a clock read) and temporal authoring fails at parse.
+with no temporal left operand is rejected at analysis; without the library Date/Time/DateTime/Duration
+are unknown types, `Now` stays a plain `PropertyAccess` (never a clock read), and temporal
+authoring fails at parse.
 
 **Create-time defaults and assign-to-clock are shipped.** `default(Today)` / `default(Now)`
 and `assign Prop to Today` / `assign Prop to Now` evaluate at create/invoke. Offsets

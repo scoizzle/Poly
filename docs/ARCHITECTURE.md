@@ -65,7 +65,7 @@ The AST is a forest of immutable C# record types. Nodes carry no semantic inform
 | File | Content |
 |---|---|
 | `Node.cs` | Base `abstract record Node` with `NodeId Id`, `Children` enumeration |
-| `NodeId.cs` | Stable `readonly record struct NodeId` — created from source position, GUID, or hash. Enables incremental analysis |
+| `NodeId.cs` | Stable `readonly record struct NodeId` — created from source position, GUID, or hash. Metadata key |
 | `NodeExtensions.cs` | Fluent construction API: `left.Add(right)`, `cond.Conditional(a,b)`, `x.Assign(value)` |
 | `Nodes/Operator.cs` | `abstract record Operator : Node` — marker for value-producing operations |
 | `Nodes/Constant.cs`, `Variable.cs`, `Parameter.cs` | Leaf value/reference nodes |
@@ -463,7 +463,7 @@ The domain model is an **immutable record graph** — the primary model for anal
 
 1. **Nodes are pure data records** — no semantics, no type info. All semantic resolution is the job of analysis passes (`INodeAnalyzer`).
 
-2. **`NodeId` provides stable identity** — enables incremental analysis by reusing metadata across parses.
+2. **`NodeId` provides stable identity** — metadata is keyed by node id.
 
 3. **The VM is the canonical semantics** — the compiled `Action<VmState>` delegate defines the authoritative meaning of a program. All other backends should produce equivalent behavior.
 

@@ -106,7 +106,7 @@ internal static class GenerationAssertions {
             foreach (var stmt in unit.TopLevelStatements) {
                 if (stmt is Invoke inv)
                     AddMethodNames(inv.ResolveMethodName(), names);
-                else if (stmt is Variable var && var.Initializer is Invoke varInv)
+                else if (stmt is Assignment { Destination: Variable, Value: Invoke varInv })
                     AddMethodNames(varInv.ResolveMethodName(), names);
             }
         }

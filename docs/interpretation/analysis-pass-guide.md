@@ -83,7 +83,6 @@ internal sealed class WidgetAnalyzer : INodeAnalyzer {
 | `SetResolvedType(node, type)` | Set the resolved type for a node |
 | `ReportDiagnostic(node, severity, message, code)` | Emit a diagnostic |
 | `ReportInformation(node, message, code)` | Emit an informational diagnostic |
-| `ShouldAnalyze(node)` | Check if a node should be analyzed (non-null, not replaced) |
 | `SetNodeReplacement(node, replacement)` | Replace a node with another (used by constant folding) |
 
 ## Step 3: Register the Pass

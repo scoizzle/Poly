@@ -201,6 +201,7 @@ public class ExpressionTypeAnalysisTests {
     public async Task DateArithmetic_DatePlusNumber_Succeeds() {
         var result = Parse("""
             domain Test
+            uses temporal
             Loan: entity {
               DueDate: Date
               IsDueSoon: policy { DueDate + 7 > DueDate }
@@ -254,6 +255,48 @@ public class ExpressionTypeAnalysisTests {
             """);
         await Assert.That(result.Succeeded).IsFalse();
         await Assert.That(HasError(result, "not a member of enum 'StockLevel'")).IsTrue();
+    }
+
+    [Test]
+    public async Task Assign_DatePropToDateTimeProp_Succeeds() {
+        var result = Parse("""
+            domain Test
+            uses temporal
+            Loan: entity {
+              DueDate: DateTime
+              Start: Date
+              Stamp: action { assign DueDate to Start }
+            }
+            """);
+        await Assert.That(result.Succeeded).IsTrue();
+    }
+
+    [Test]
+    public async Task Assign_TodayToDateTimeProp_Succeeds() {
+        var result = Parse("""
+            domain Test
+            uses temporal
+            Loan: entity {
+              DueDate: DateTime
+              Stamp: action { assign DueDate to today }
+            }
+            """);
+        await Assert.That(result.Succeeded).IsTrue();
+    }
+
+    [Test]
+    public async Task Assign_DateTimePropToDateProp_Rejected() {
+        var result = Parse("""
+            domain Test
+            uses temporal
+            Loan: entity {
+              DueDate: DateTime
+              Start: Date
+              Stamp: action { assign Start to DueDate }
+            }
+            """);
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(HasError(result, "type mismatch in assign to property 'Start'")).IsTrue();
     }
 
     [Test]

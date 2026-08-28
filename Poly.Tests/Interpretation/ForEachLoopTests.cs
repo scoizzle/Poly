@@ -109,9 +109,7 @@ public class ForEachLoopTests {
             loopItem
         );
 
-        var expr = node.BuildExpression();
-
-        await Assert.That(() => Expr.Lambda<Func<int>>(expr).Compile())
+        await Assert.That(() => node.BuildExpression())
             .Throws<InvalidOperationException>();
 
         await Assert.That(() => Interpreter.Compile(node)).Throws<InvalidOperationException>();

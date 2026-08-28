@@ -166,9 +166,9 @@ public class LinqExpressionGeneratorTests {
     }
 
     [Test]
-    public async Task Compile_VariableWithValue_AssignsOnDeclare() {
-        var x = new Variable("x", new Constant(41));
-        var node = new Block(x, new Add(x, new Constant(1)));
+    public async Task Compile_Variable_FirstAssignmentIsTheWrite() {
+        var x = new Variable("x");
+        var node = new Block([new Assignment(x, new Constant(41)), new Add(x, new Constant(1))], [x]);
         var analysis = node.AnalyzeNode();
         var generator = new LinqExpressionGenerator(analysis);
         var result = Expr.Lambda<Func<int>>(generator.Compile(node).Expression).Compile()();
@@ -176,9 +176,13 @@ public class LinqExpressionGeneratorTests {
     }
 
     [Test]
-    public async Task Compile_VariableWithValue_AssignmentDoesNotReapplyInitializer() {
-        var x = new Variable("x", new Constant(1));
-        var node = new Block(x, new Assignment(x, new Constant(10)), x);
+    public async Task Compile_Variable_LaterAssignmentDoesNotReplayFirstWrite() {
+        var x = new Variable("x");
+        var node = new Block([
+            new Assignment(x, new Constant(1)),
+            new Assignment(x, new Constant(10)),
+            x
+        ], [x]);
         var analysis = node.AnalyzeNode();
         var generator = new LinqExpressionGenerator(analysis);
         var result = Expr.Lambda<Func<int>>(generator.Compile(node).Expression).Compile()();

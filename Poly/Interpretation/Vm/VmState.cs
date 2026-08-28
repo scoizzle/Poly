@@ -397,7 +397,7 @@ public sealed class VmState : IDisposable {
         int iVal => iVal,
         uint ui => ui,
         long l => l,
-        ulong ul => (long)ul,
+        ulong ul => unchecked((long)ul),
         char c => c,
         float f => BitConverter.DoubleToInt64Bits(f),
         double d => BitConverter.DoubleToInt64Bits(d),

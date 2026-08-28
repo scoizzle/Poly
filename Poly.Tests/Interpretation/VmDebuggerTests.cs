@@ -341,6 +341,75 @@ public class VmDebuggerTests {
     }
 
     [Test]
+    public async Task VmDebugger_NestedBlocks_FrameOffsetsAreDistinct() {
+        var outer = new Variable("outer");
+        var inner = new Variable("inner");
+        var program = Interpreter.Compile(new Block([
+            new Assignment(outer, new Constant(1L)),
+            new Block([
+                new Assignment(inner, new Constant(2L)),
+                inner
+            ], [inner]),
+            outer
+        ], [outer]));
+        var info = program.DebugInfo as VmDebugInfo;
+        await Assert.That(info).IsNotNull();
+        var outerLayout = info!.Variables.First(v => v.Name == "outer");
+        var innerLayout = info.Variables.First(v => v.Name == "inner");
+        await Assert.That(outerLayout.FrameOffset).IsNotEqualTo(innerLayout.FrameOffset);
+        using var exec = Interpreter.Execute(program);
+        var locals = VmDebugger.GetLocals(exec.State);
+        await Assert.That(locals.First(l => l.Name == "outer").Value).IsEqualTo(1L);
+        await Assert.That(locals.First(l => l.Name == "inner").Value).IsEqualTo(2L);
+    }
+
+    [Test]
+    public async Task DebugHook_SequentialInnerBlocks_SpanCoversHighWaterSlot() {
+        var outer = new Variable("outer");
+        var a = new Variable("a");
+        var b = new Variable("b");
+        var program = Interpreter.Compile(new Block([
+            new Assignment(outer, new Constant(0L)),
+            new Block([
+                new Assignment(a, new Constant(1L)),
+                a
+            ], [a]),
+            new Block([
+                new Assignment(b, new Constant(2L)),
+                b
+            ], [b]),
+            outer
+        ], [outer]));
+        var info = program.DebugInfo as VmDebugInfo;
+        await Assert.That(info).IsNotNull();
+        var bLayout = info!.Variables.First(v => v.Name == "b");
+        await Assert.That(bLayout.FrameOffset).IsEqualTo(2);
+
+        IReadOnlyList<(string Name, long Value)>? innerBLocals = null;
+        Interpreter.Execute(program, s => s.DebugHook = (n, span, heap) => {
+            if (n is Variable v && ReferenceEquals(v, b))
+                innerBLocals = VmDebugger.GetLocals(program, span, heap);
+        });
+        await Assert.That(innerBLocals).IsNotNull();
+        await Assert.That(innerBLocals!.First(l => l.Name == "b").Value).IsEqualTo(2L);
+    }
+
+    [Test]
+    public async Task VmDebugger_GetLocals_CapturedVariable_IsCellValueNotHandle() {
+        var x = new Variable("x");
+        var fn = new Variable("fn");
+        var program = Interpreter.Compile(new Block([
+            new Assignment(x, new Constant(11L)),
+            new Assignment(fn, new Lambda([], x)),
+            x
+        ], [x, fn]));
+        using var exec = Interpreter.Execute(program);
+        var locals = VmDebugger.GetLocals(exec.State);
+        var xEntry = locals.First(l => l.Name == "x");
+        await Assert.That(xEntry.Value).IsEqualTo(11L);
+    }
+
+    [Test]
     public async Task VmDebugger_FormatCurrentFrame_NoNode_UsesQuestionMark() {
         var program = Interpreter.Compile(new Constant(1L), CompilationMode.NoDebug);
         using var exec = Interpreter.Execute(program);

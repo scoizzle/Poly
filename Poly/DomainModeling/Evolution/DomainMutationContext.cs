@@ -43,8 +43,7 @@ internal sealed class DomainMutationContext {
     public List<string> Extensions { get; }
 
     /// <summary>
-    /// Nodes that were modified during mutation (populated by Update* helpers and direct additions).
-    /// Used by DomainEvolution.GetAffectedNodes instead of a post-hoc switch over DomainChange subtypes.
+    /// Nodes replaced or added during this mutation batch (Update* helpers and direct additions).
     /// </summary>
     public List<Node> ModifiedNodes { get; } = new();
 

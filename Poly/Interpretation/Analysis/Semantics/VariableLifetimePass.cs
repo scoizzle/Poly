@@ -8,7 +8,18 @@ internal record VariableAnalysisMetadata(
     Dictionary<Block, ScopeVertex> ScopeVertices,
     Dictionary<Variable, Node> VariableDeclarationScope,
     Dictionary<Variable, int> AssignmentCount,
-    HashSet<Variable> EscapedVariables
+    HashSet<Variable> EscapedVariables,
+    HashSet<Variable> CapturedVariables,
+    HashSet<Parameter> CapturedParameters
+) : IAnalysisMetadata;
+
+/// <summary>One free binding of a <see cref="Lambda"/>, in tree-walk order.</summary>
+internal readonly record struct LambdaCaptureBinding(Variable? Variable, Parameter? Parameter);
+
+/// <summary>Free variables/parameters of a <see cref="Lambda"/>, in walk order.
+/// Emit uses this so stored closures and function-table bodies agree.</summary>
+internal sealed record LambdaCaptureMetadata(
+    IReadOnlyList<LambdaCaptureBinding> Bindings
 ) : IAnalysisMetadata;
 
 internal record ScopeVertex(Block Block, ScopeVertex? Parent, HashSet<Variable> Declared);
@@ -32,7 +43,9 @@ internal sealed class ScopeValidator : INodeAnalyzer {
                 ScopeVertices: [],
                 VariableDeclarationScope: [],
                 AssignmentCount: [],
-                EscapedVariables: []
+                EscapedVariables: [],
+                CapturedVariables: new(ReferenceEqualityComparer.Instance),
+                CapturedParameters: new(ReferenceEqualityComparer.Instance)
             ),
             ScopeStack: [],
             VariablesByName: []
@@ -42,13 +55,14 @@ internal sealed class ScopeValidator : INodeAnalyzer {
         context.SetMetadata(node, state.Meta);
 
         AnalyzeNode(context, state, node);
+        LambdaCaptureCollector.Attach(context, node, state.Meta);
     }
 
     /// <summary>Analyze child nodes using the current state, NOT creating fresh
     /// per-child state as <c>this.AnalyzeChildren</c> would.</summary>
     private void AnalyzeChildrenWithState(AnalysisContext context, ScopeState state, Node node) {
         foreach (var child in node.Children) {
-            if (child is not null && context.ShouldAnalyze(child))
+            if (child is not null)
                 AnalyzeNode(context, state, child);
         }
     }
@@ -63,22 +77,18 @@ internal sealed class ScopeValidator : INodeAnalyzer {
                 AnalyzeForEachLoop(context, state, forEachLoop);
                 break;
 
-            case Variable variable when variable.Initializer == null:
+            case Variable variable:
                 ValidateVariableReference(context, state, variable);
                 AnalyzeChildrenWithState(context, state, node);
                 break;
 
             case Assignment assignment when assignment.Destination is Variable v:
-                if (!state.VariablesByName.TryGetValue(v.Name, out var stack) || stack.Count == 0)
-                    RegisterScopedVariable(context, state, v);
-                else
-                    ValidateVariableReference(context, state, v);
+                AnalyzeChildrenWithState(context, state, node);
                 if (state.VariablesByName.TryGetValue(v.Name, out var countStack) && countStack.Count > 0) {
                     var decl = countStack.Peek();
                     state.Meta.AssignmentCount.TryGetValue(decl, out var count);
                     state.Meta.AssignmentCount[decl] = count + 1;
                 }
-                AnalyzeChildrenWithState(context, state, node);
                 break;
 
             case Invoke invoke:

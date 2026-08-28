@@ -3,7 +3,7 @@ namespace Poly.Ast;
 /// <summary>
 /// Represents a stable identifier for an AST node.
 /// Used as a dictionary key for metadata storage and caching.
-/// Ensures correct incremental analysis by providing node identity across parser runs.
+/// Identifies a node for metadata storage across analysis runs.
 /// </summary>
 public readonly record struct NodeId {
     private NodeId(string value) {
@@ -27,7 +27,7 @@ public readonly record struct NodeId {
 
     /// <summary>
     /// Creates a node identifier from source position.
-    /// Recommended for incremental analysis - same position yields same ID across parses.
+    /// Same position yields the same ID across parses.
     /// </summary>
     /// <param name="line">Source line number (1-based).</param>
     /// <param name="column">Source column number (1-based).</param>

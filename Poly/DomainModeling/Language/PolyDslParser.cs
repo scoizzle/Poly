@@ -1,7 +1,9 @@
 using System.Globalization;
 
 using Poly.DomainModeling.Evolution;
+using Poly.DomainModeling.Libraries.Temporal;
 using Poly.DomainModeling.Ontology;
+using Poly.DomainModeling.Ontology.Bootstrap;
 using Poly.DomainModeling.Ontology.Contract;
 using Poly.DomainModeling.Runtime;
 using Poly.Grammar;
@@ -53,6 +55,7 @@ public sealed class PolyDslParser : DslCursor {
 
     // Explicit parse inputs / annotation support
     private readonly AnnotationRegistry? _annotations;
+    private readonly DomainSession _session;
 
     private readonly record struct PendingRequire(
         string ActionName,
@@ -73,6 +76,7 @@ public sealed class PolyDslParser : DslCursor {
     public PolyDslParser(string text, DomainSession session)
         : base(new DslTokenReader(text), r => new Matcher<DslToken, DslTokenKind>(session.Language.Grammar, r)) {
         ArgumentNullException.ThrowIfNull(session);
+        _session = session;
         _annotations = session.Annotations;
         _expressions = new DslExpressionParser(this, session.ExpressionForms, session.Folds);
     }
@@ -129,12 +133,18 @@ public sealed class PolyDslParser : DslCursor {
     private void EnsurePrimitivesOnce(List<DomainChange> changes) {
         if (_primitivesAdded) return;
         _primitivesAdded = true;
-        foreach (var p in new[] { ("Text", TypeCategory.Text), ("Number", TypeCategory.Integer),
-            ("Boolean", TypeCategory.Boolean), ("DateTime", TypeCategory.DateTime),
-            ("Date", TypeCategory.Primitive | TypeCategory.Temporal) }) {
-            changes.Add(new AddPrimitiveTypeChange(p.Item1, p.Item2, []));
+        foreach (var change in CanonicalBuiltInTypeCatalog.CreateChanges())
+            changes.Add(change);
+        if (ImportsTemporal(changes)) {
+            foreach (var change in TemporalTypeCatalog.CreateChanges())
+                changes.Add(change);
         }
     }
+
+    private bool ImportsTemporal(List<DomainChange> changes) =>
+        _session.Extensions.Contains(ExtensionCatalog.TemporalId, StringComparer.Ordinal)
+        && !changes.OfType<AddDomainExtensionChange>().Any(c =>
+            string.Equals(c.ExtensionId, ExtensionCatalog.TemporalId, StringComparison.Ordinal));
 
     private void ParseEntity(List<DomainChange> changes) {
         var entityName = ExpectIdentifier(TokenKind.Identifier, "entity name");

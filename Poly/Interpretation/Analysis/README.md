@@ -10,7 +10,7 @@ Each pass implements `INodeAnalyzer` and is registered via an extension method o
 | `TypeDefinitionNodeAnalyzer` | `.UseTypeDefinitionNodeAnalyzer()` | `TypeDefinitionMetadata`; also an `ITypeDefinitionProvider` | (none; miss throws on resolve) |
 | `ThisReferenceContextAnalyzer` | `.UseThisReferenceContext()` | `this` resolved type on `ThisReference` | `TH0001` (static body) |
 | `TypeAndMemberResolver` | `.UseTypeAndMemberResolver()` | Resolved types + resolved members | Structural failures (missing members) |
-| `ScopeValidator` | `.UseVariableScopeValidator()` | `VariableAnalysisMetadata` (block scopes, escapes) | Scoping errors |
+| `ScopeValidator` | `.UseVariableScopeValidator()` | `VariableAnalysisMetadata` (block scopes, escapes, captured bindings), `LambdaCaptureMetadata` per `Lambda` | Scoping errors |
 | `SideEffectAnalyzer` | `.UseSideEffectAnalysis()` | `SideEffectMetadata`, `ElisionMetadata`, `AssignmentValueUsedMetadata` | `DEAD_CODE_ELIDABLE` |
 | `JumpTargetAnalyzer` | `.UseJumpTargetResolution()` | `ResolvedJumpTarget` (break/continue/goto targets) | `JT0001`-`JT0004` |
 | `ConstantFoldingPass` | `.UseConstantFolding()` | `ConstantValueMetadata`, node replacement | (none) |
@@ -18,7 +18,7 @@ Each pass implements `INodeAnalyzer` and is registered via an extension method o
 | `ValueRepresentationAnalyzer` | `.UseValueRepresentationAnalysis()` | `ValueRepresentationMetadata` (stack scalar, bool, heap ref, void, unknown) | (none) |
 | `CallSiteCatalogAnalyzer` | `.UseCallSiteCatalog()` | `CallSiteCatalogMetadata`, `CallSiteIndexMetadata` | (none) |
 | `DefiniteAssignmentAnalyzer` | `.UseDefiniteAssignmentAnalysis()` | `DefiniteAssignmentMetadata` | (none) |
-| `LambdaReturnTypeAnalyzer` | `.UseLambdaReturnTypeResolution()` | Resolved Lambda types | (none) |
+| `LambdaReturnTypeAnalyzer` | `.UseLambdaReturnTypeResolution()` | Invoke return types from lambda bodies (including stored closures); does not retarget the `Lambda` node itself | (none) |
 | `ExceptionRegionAnalyzer` | `.UseExceptionRegionAnalysis()` | `ExceptionRegionMetadata`, `InProtectedRegionMetadata` | (none) |
 | `SyntaxTypeCompatibilityAnalyzer` | `.UseSyntaxTypeCompatibility()` | (none) | `VmTypeCompatibility` |
 
@@ -30,17 +30,17 @@ Built order of `Interpreter.Analyzer` after `AnalyzerBuilder` topological insert
  1. TypeDefinitionNodeAnalyzer
  2. ThisReferenceContext            (root this is legal SetArgs slot 0; TH0001 in static bodies)
  3. TypeAndMemberResolver
- 4. ScopeValidator
- 5. SideEffectAnalyzer
- 6. ConstantFoldingPass             (inserted after SideEffect; before JumpTarget)
- 7. JumpTargetAnalyzer
- 8. ControlFlowAnalysisPass
- 9. ExceptionRegionAnalyzer
-10. DefiniteAssignmentAnalyzer
+ 4. LambdaReturnTypeAnalyzer        (Invoke body type; Lambda value stays heap/object)
+ 5. ScopeValidator
+ 6. SideEffectAnalyzer
+ 7. ConstantFoldingPass             (inserted after SideEffect; before JumpTarget)
+ 8. JumpTargetAnalyzer
+ 9. ControlFlowAnalysisPass
+10. ExceptionRegionAnalyzer
 11. ValueRepresentationAnalyzer
 12. SyntaxTypeCompatibilityAnalyzer
 13. CallSiteCatalogAnalyzer
-14. LambdaReturnTypeAnalyzer
+14. DefiniteAssignmentAnalyzer
 ```
 
 Ad-hoc test pipelines may omit `TypeDefinitionNodeAnalyzer`. This/TypeAndMember do not declare it as a hard `Dependencies` entry so CLR-only trees still analyze.
@@ -128,7 +128,7 @@ Circular dependencies cause a build-time exception.
 2. Variable scoping must precede side-effect analysis.
 3. Jump targets must be resolved before CFG construction.
 4. Constant folding runs before CFG; ValueRepresentation, definite assignment, and EH run after CFG.
-5. SyntaxTypeCompatibility and CallSiteCatalog run after ValueRepresentation; LambdaReturnType has no deps and lands last.
+5. LambdaReturnType runs immediately after TypeAndMember so Invoke nodes have body types before value representation. SyntaxTypeCompatibility and CallSiteCatalog run after ValueRepresentation.
 
 ---
 

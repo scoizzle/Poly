@@ -207,7 +207,7 @@ public class InterpreterLanguageGotchaTests {
     }
 
     [Test]
-    public async Task Invoke_StoredClosure_SnapshotsCapturesAtCreation() {
+    public async Task Invoke_StoredClosure_LateBindsCaptures() {
         var captured = new Variable("captured");
         var fn = new Variable("fn");
         var lambda = new Lambda([], captured);
@@ -218,7 +218,7 @@ public class InterpreterLanguageGotchaTests {
             new Invoke(fn)
         ], [captured, fn]);
         using var exec = Interpreter.Execute(Interpreter.Compile(node));
-        await Assert.That(exec.RawValue).IsEqualTo(1L);
+        await Assert.That(exec.RawValue).IsEqualTo(2L);
     }
 
     [Test]
@@ -464,8 +464,11 @@ public class InterpreterLanguageGotchaTests {
 
     [Test]
     public async Task IndexAccess_OutOfRange_Throws() {
-        var arr = new Variable("arr", new Constant(new long[] { 10, 20 }));
-        var node = new Block(arr, new IndexAccess(arr, new Constant(9L)));
+        var arr = new Variable("arr");
+        var node = new Block([
+            new Assignment(arr, new Constant(new long[] { 10, 20 })),
+            new IndexAccess(arr, new Constant(9L))
+        ], [arr]);
         await Assert.That(() => {
             using var exec = Interpreter.Execute(Interpreter.Compile(node));
         }).Throws<IndexOutOfRangeException>();

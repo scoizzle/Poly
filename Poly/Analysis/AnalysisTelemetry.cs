@@ -9,11 +9,9 @@ public sealed record AnalyzerPassTelemetry(
 
 public sealed record AnalysisTelemetry(
     IReadOnlyList<AnalyzerPassTelemetry> Passes,
-    TimeSpan TotalElapsed,
-    bool Incremental,
-    int InvalidatedNodeCount
+    TimeSpan TotalElapsed
 ) {
-    public static readonly AnalysisTelemetry Empty = new([], TimeSpan.Zero, Incremental: false, InvalidatedNodeCount: 0);
+    public static readonly AnalysisTelemetry Empty = new([], TimeSpan.Zero);
 }
 
 internal sealed class AnalysisTelemetryCollector {
@@ -21,7 +19,6 @@ internal sealed class AnalysisTelemetryCollector {
 
     public void RecordPass(string passName, TimeSpan elapsed) => _passes.Enqueue(new AnalyzerPassTelemetry(passName, elapsed));
 
-    public AnalysisTelemetry ToSnapshot(TimeSpan totalElapsed, bool incremental, int invalidatedNodeCount) {
-        return new AnalysisTelemetry([.. _passes], totalElapsed, incremental, invalidatedNodeCount);
-    }
+    public AnalysisTelemetry ToSnapshot(TimeSpan totalElapsed) =>
+        new([.. _passes], totalElapsed);
 }

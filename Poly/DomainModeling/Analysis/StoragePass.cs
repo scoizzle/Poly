@@ -19,9 +19,8 @@ internal sealed class StoragePass : INodeAnalyzer {
     public const string Id = "StoragePass";
     public string PassName => Id;
     public string[] Dependencies => [EffectTopologyPass.Id, OwnershipAggregatePass.Id, EntityStructureAnalyzer.Id];
-    // Note: standalone usage (new StoragePass() + priorAnalysis) bypasses the
-    // AnalyzerBuilder and thus avoids the Dependencies check. The runtime
-    // fallback to _analysis handles that case.
+    // Standalone `new StoragePass(..., analysis)` bypasses AnalyzerBuilder
+    // dependency checks; `_analysis` supplies bags the pipeline would have published.
 
     private readonly TypeMappingRegistry? _typeMaps;
     private readonly IReadOnlyList<IStorageConvention>? _conventions;
@@ -39,21 +38,19 @@ internal sealed class StoragePass : INodeAnalyzer {
         if (node is not Domain domain) return;
         if (context.HasStructuralFailure) return;
 
-        // The codegen pipeline invalidates all nodes (including domain), which means
-        // the AnalysisContext is fresh and inherits no metadata. Fall back to _analysis
-        // when context lookup fails — that's the prior domain analysis result.
+        // Pipeline: bags are on this context. Standalone: fall back to the completed
+        // domain analysis passed to the constructor.
         var topology = context.GetMetadata<EffectTopologyMetadata>(domain)?.Topology
             ?? _analysis?.GetMetadata<EffectTopologyMetadata>(domain)?.Topology;
         var aggregate = context.GetMetadata<OwnershipAggregateMetadata>(domain)?.Aggregate
             ?? _analysis?.GetMetadata<OwnershipAggregateMetadata>(domain)?.Aggregate;
 
-        // Fail closed: storage requires aggregate and topology metadata.
         if (aggregate == null || topology == null) {
             context.ReportDiagnostic(domain,
                 DiagnosticSeverity.Error,
                 "StoragePass requires EffectTopologyMetadata and OwnershipAggregateMetadata. " +
-                "These are produced by the domain analysis pipeline (EffectTopologyPass, OwnershipAggregatePass) " +
-                "and must be passed via priorAnalysis.",
+                "These are produced by EffectTopologyPass and OwnershipAggregatePass " +
+                "(pipeline) or a completed domain AnalysisResult (standalone).",
                 code: "StoragePass.MissingDependency");
             return;
         }

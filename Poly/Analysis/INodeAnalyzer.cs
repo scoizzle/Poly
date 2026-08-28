@@ -15,10 +15,10 @@ public interface INodeAnalyzer {
 public static class NodeAnalyzerExtensions {
     public static void AnalyzeChildren(this INodeAnalyzer analyzer, AnalysisContext context, Node node) {
         foreach (var child in node.Children) {
-            if (child is null || !context.ShouldAnalyze(child))
+            if (child is null)
                 continue;
 
-            analyzer.Analyze(context, child!);
+            analyzer.Analyze(context, child);
         }
     }
 
@@ -45,10 +45,10 @@ public static class NodeAnalyzerExtensions {
         T identity) {
         T result = identity;
         foreach (var child in node.Children) {
-            if (child is null || !context.ShouldAnalyze(child))
+            if (child is null)
                 continue;
 
-            T value = childSelector(context, child!);
+            T value = childSelector(context, child);
             result = combiner(result, value);
         }
         return result;
@@ -65,10 +65,10 @@ public static class NodeAnalyzerExtensions {
         Func<AnalysisContext, Node, bool> predicate)
         where TMetadata : class, IAnalysisMetadata {
         foreach (var child in node.Children) {
-            if (child is null || !context.ShouldAnalyze(child))
+            if (child is null)
                 continue;
 
-            if (predicate(context, child!))
+            if (predicate(context, child))
                 return true;
         }
         return false;

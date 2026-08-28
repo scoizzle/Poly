@@ -16,16 +16,14 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
     public const string Id = "DomainEffectAnalyzer";
     public string PassName => Id;
     // Lint-only: reads catalog types/resolved refs, RequiredProperties,
-    // DownstreamConstraints. No metadata publication.
+    // DownstreamConstraints, ActionInvariantMetadata. No metadata publication.
     public string[] Dependencies => [
         DomainCatalogPass.Id,
         RequiredPropertiesPass.Id,
         ConstraintPropagationAnalyzer.Id,
+        EffectInvariantAnalyzer.Id,
     ];
     public void Analyze(AnalysisContext context, Node node) {
-        if (!context.ShouldAnalyze(node)) {
-            return;
-        }
 
         if (node is Domain domain) {
             ValidateDomainEffects(context, domain);

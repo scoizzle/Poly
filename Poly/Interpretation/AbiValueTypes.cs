@@ -6,8 +6,9 @@ namespace Poly.Interpretation;
 /// the heap as boxed handles.
 ///
 /// The ring stores every value in a <c>long</c> slot. Integer primitives,
-/// bool, char, enums, and nullables of those are stored inline. Float and
-/// double use IEEE bit patterns. Decimal and non-numeric value types
+/// bool, char, enums, and nullables of those are stored inline. <c>ulong</c>
+/// uses unchecked 64-bit bitcast (so <c>ulong.MaxValue</c> round-trips).
+/// Float and double use IEEE bit patterns. Decimal and non-numeric value types
 /// (DateTime, DateOnly, TimeOnly, TimeSpan, Guid) live on the heap.
 /// </summary>
 public static class AbiValueTypes {

@@ -121,7 +121,8 @@ public class TypeDefinitionProviderCollectionTests {
 
         // DateTime should be primitive
         await Assert.That(dateTimeType.PrimitiveType).IsEqualTo(PrimitiveType.DateTime);
-        await Assert.That(dateTimeType.TypeCategory).IsEqualTo(TypeCategory.Primitive | TypeCategory.Temporal);
+        await Assert.That(dateTimeType.TypeCategory).IsEqualTo(TypeCategory.Primitive | TypeCategory.DateTime);
+        await Assert.That(dateTimeType.TypeCategory.IsDateTime).IsTrue();
 
         // List<int> should not be primitive
         await Assert.That(listType.PrimitiveType).IsNull();

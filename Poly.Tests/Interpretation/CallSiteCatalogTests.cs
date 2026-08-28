@@ -14,6 +14,7 @@ public class CallSiteCatalogTests {
             .UseJumpTargetResolution()
             .UseConstantFolding()
             .UseControlFlowAnalysis()
+            .UseLambdaReturnTypeResolution()
             .UseValueRepresentationAnalysis()
             .UseCallSiteCatalog()
             .Build()
@@ -119,6 +120,7 @@ public class CallSiteCatalogTests {
             .UseJumpTargetResolution()
             .UseConstantFolding()
             .UseControlFlowAnalysis()
+            .UseLambdaReturnTypeResolution()
             .UseValueRepresentationAnalysis()
             .UseCallSiteCatalog()
             .Build();

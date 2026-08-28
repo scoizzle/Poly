@@ -18,6 +18,7 @@ namespace Poly.Tests.DomainModeling.Lowering;
 public class DomainToCSharpExporterTests {
     private const string LibraryCheckoutDsl = """
         domain Library
+        uses temporal
 
         Genre: enum { Fiction, NonFiction, Reference }
         PatronStatus: enum { Active, Suspended, Closed }
@@ -1035,6 +1036,99 @@ public class DomainToCSharpExporterTests {
     }
 
     [Test]
+    public async Task Export_AssignDatePropToDateTimeProp_EmitsToDateTimeAndCompiles() {
+        const string dsl = """
+            domain DateWiden
+            uses temporal
+            Loan: entity {
+              DueDate: DateTime
+              Start: Date
+              Stamp: action { assign DueDate to Start }
+            }
+            """;
+        var (domain, analysis) = ParseAndAnalyze(dsl);
+        await AssertExportCompiles(domain, analysis);
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var csharp = new CSharpGenerator().Generate(types);
+        await Assert.That(csharp).Contains("ToDateTime");
+    }
+
+    [Test]
+    public async Task Export_DateOperation_OnDate_CompilesWithIntCast() {
+        const string dsl = """
+            domain T
+            uses temporal
+            Loan: entity {
+              DueDate: Date
+              ExtendWeeks: action { assign DueDate to DueDate + 2 Weeks }
+              ExtendYear: action { assign DueDate to DueDate + 1 Year }
+              ExtendDays: action { assign DueDate to DueDate + 14 Days }
+              Soon: policy { DueDate + 2 Weeks > DueDate }
+            }
+            """;
+        var (domain, analysis) = ParseAndAnalyze(dsl, ExtensionCatalog.Core.Language);
+        await Assert.That(analysis.HasErrors).IsFalse();
+        await AssertExportCompiles(domain, analysis);
+        var csharp = new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis));
+        await Assert.That(csharp).Contains("AddDays((int)14L)");
+        await Assert.That(csharp).Contains("AddYears((int)1L)");
+    }
+
+    [Test]
+    public async Task Export_DateOperation_OnDateTime_Compiles() {
+        const string dsl = """
+            domain T
+            uses temporal
+            Ticket: entity {
+              OpenedAt: DateTime
+              Defer: action { assign OpenedAt to OpenedAt + 3 Months }
+              Nudge: action { assign OpenedAt to OpenedAt + 2 Hours }
+            }
+            """;
+        var (domain, analysis) = ParseAndAnalyze(dsl, ExtensionCatalog.Core.Language);
+        await Assert.That(analysis.HasErrors).IsFalse();
+        await AssertExportCompiles(domain, analysis);
+        var csharp = new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis));
+        await Assert.That(csharp).Contains("AddMonths((int)3L)");
+        await Assert.That(csharp).Contains("AddHours(2L)");
+    }
+
+    [Test]
+    public async Task Export_AssignDateOperationToDateTime_EmitsToDateTimeAndCompiles() {
+        const string dsl = """
+            domain T
+            uses temporal
+            Loan: entity {
+              DueDate: DateTime
+              Start: Date
+              Stamp: action { assign DueDate to Start + 1 Days }
+            }
+            """;
+        var (domain, analysis) = ParseAndAnalyze(dsl, ExtensionCatalog.Core.Language);
+        await Assert.That(analysis.HasErrors).IsFalse();
+        await AssertExportCompiles(domain, analysis);
+        var csharp = new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis));
+        await Assert.That(csharp).Contains("ToDateTime");
+    }
+
+    [Test]
+    public async Task Export_AssignDateParameterToDateTime_EmitsToDateTimeAndCompiles() {
+        const string dsl = """
+            domain T
+            uses temporal
+            Loan: entity {
+              DueDate: DateTime
+              Stamp: action (start: Date) { assign DueDate to start }
+            }
+            """;
+        var (domain, analysis) = ParseAndAnalyze(dsl);
+        await Assert.That(analysis.HasErrors).IsFalse();
+        await AssertExportCompiles(domain, analysis);
+        var csharp = new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis));
+        await Assert.That(csharp).Contains("ToDateTime");
+    }
+
+    [Test]
     public async Task Export_Compiles_LibraryDomain() {
         // R6: the CS7036/CS1501 export class must fail in-suite, not at a consumer.
         var (domain, analysis) = ParseAndAnalyze(LibraryCheckoutDsl);
@@ -1049,6 +1143,7 @@ public class DomainToCSharpExporterTests {
         // `DateTime? ?? DateOnly`) and CS0029 (`assign Date to now`).
         const string dsl = """
             domain KeywordDefaults
+            uses temporal
 
             A: entity {
               ExternalId: Text default(Guid)
@@ -1592,6 +1687,7 @@ public class DomainToCSharpExporterTests {
         // so no cast is emitted there.
         var (domain, analysis) = ParseAndAnalyze("""
             domain Test
+            uses temporal
             Order: entity {
               DueDate: Date
               Draft: stage {
@@ -1784,6 +1880,7 @@ public class DomainToCSharpExporterTests {
         // expression lowering: `DueDate - 7` in a policy → `DueDate.AddDays((int)-7L)`.
         var (domain, analysis) = ParseAndAnalyze("""
             domain Test
+            uses temporal
             Loan: entity {
               DueDate: Date
               ReferenceDate: Date

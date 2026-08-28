@@ -1,6 +1,7 @@
 using System.Linq.Expressions;
 using System.Reflection;
 
+using Poly.Interpretation.Analysis;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Introspection.CommonLanguageRuntime;
 
@@ -34,8 +35,9 @@ namespace Poly.Interpretation.Vm;
 /// </remarks>
 public static partial class DirectVmAbiEmitter {
     /// <summary>
-    /// Describes a captured variable: the <see cref="Variable"/> node and its
-    /// slot index in the <em>outer</em> (capturing) scope's value stack.
+    /// Describes a captured binding. Analysis records free bindings per
+    /// <see cref="Lambda"/>; stored closures share a heap <c>long[1]</c>
+    /// cell with the enclosing frame so later writes are visible.
     /// </summary>
     private sealed record Capture(Variable? Variable, Parameter? Parameter) {
         public object Binding => (object?)Variable ?? Parameter!;
@@ -46,8 +48,7 @@ public static partial class DirectVmAbiEmitter {
     private static readonly MethodInfo HeapAllocate = Ref<Heap>.Method(h => h.Allocate(default!));
     private static readonly MethodInfo ObjectEquals = Ref.Method(
         (Expression<Func<object?, object?, bool>>)((a, b) => object.Equals(a, b)));
-    private static readonly MethodInfo StringConcat = Ref.Method(
-        (Expression<Func<object?, object?, string?>>)((a, b) => string.Concat(a, b)));
+
     private static readonly MethodInfo VmHeapCompare = Ref.Method(
         (Expression<Func<object?, object?, int>>)((a, b) => VmHeapComparison.Compare(a, b)));
     private static readonly MethodInfo BitOperationsPopCount = Ref.Method(
@@ -64,8 +65,8 @@ public static partial class DirectVmAbiEmitter {
         Ref<System.Collections.IEnumerator>.Property(e => e.Current);
     private static readonly MethodInfo BoxToAbiInfo =
         Ref.Method((Expression<Func<Heap, object?, long>>)((h, v) => BoxToAbi(h, v)));
-    private static readonly MethodInfo ConvertAbiInfo =
-        Ref.Method((Expression<Func<Heap, long, Type?, Type, long>>)((h, r, s, t) => ConvertAbi(h, r, s, t)));
+    private static readonly MethodInfo CastAbiInfo =
+        Ref.Method((Expression<Func<Heap, long, Type, long>>)((h, r, t) => CastAbi(h, r, t)));
     private static readonly MethodInfo TypeAsAbiInfo =
         Ref.Method((Expression<Func<Heap, long, Type, long>>)((h, r, t) => TypeAsAbi(h, r, t)));
     private static readonly MethodInfo UnboxNullableToLongInfo =
@@ -89,12 +90,28 @@ public static partial class DirectVmAbiEmitter {
 
         var lambdas = new List<Lambda>();
         CollectLambdas(root, lambdas);
+        var capturedBindings = new HashSet<object>(ReferenceEqualityComparer.Instance);
+        var captureMeta = analysis.GetMetadata<VariableAnalysisMetadata>(root);
+        if (captureMeta is not null) {
+            foreach (var v in captureMeta.CapturedVariables)
+                capturedBindings.Add(v);
+            foreach (var p in captureMeta.CapturedParameters)
+                capturedBindings.Add(p);
+        }
+        else {
+            foreach (var lam in lambdas) {
+                foreach (var cap in FindBodyCaptures(lam, analysis))
+                    capturedBindings.Add(cap.Binding);
+            }
+        }
+        ctx.CapturedBindings = capturedBindings;
         var functionTable = new Action<VmState>[lambdas.Count];
         ctx.FunctionTableExpr = Constant(functionTable);
         for (int i = 0; i < lambdas.Count; i++) {
             var lam = lambdas[i];
             functionTable[i] = CompileFunctionBody(
-                lam.Body, lam.Parameters, FindBodyCaptures(lam), functionTable, mode, analysis);
+                lam.Body, lam.Parameters, FindBodyCaptures(lam, analysis), functionTable, mode, analysis,
+                capturedBindings);
         }
 
         body.Add(Label(ctx.EntryLabel));
@@ -150,7 +167,7 @@ public static partial class DirectVmAbiEmitter {
         if (ctx.DebugHookProp is null) return CompileNode(node, ctx);
         var stores = ctx.EmitScopeStores();
         var body = CompileNode(node, ctx);
-        int localCount = ctx.CurrentLocalCount;
+        int localCount = ctx.FrameSlotHighWater;
         Expression spanExpr = localCount == 0
             ? New(ReadOnlySpanLongArrayCtor,
                 NewArrayBounds(typeof(long), Constant(0)))
@@ -268,20 +285,6 @@ public static partial class DirectVmAbiEmitter {
             if (resolved is ClrConstructor clrCtor)
                 ctor = clrCtor.ConstructorInfo;
         }
-        if (ctor is null && targetType is not null) {
-            // Runtime Type from analysis — not a compile-time known member.
-            if (n.Arguments.Length == 0) {
-                ctor = targetType.GetConstructor(Type.EmptyTypes);
-            }
-            else {
-                ctor = targetType.GetConstructors()
-                    .FirstOrDefault(c => {
-                        var ps = c.GetParameters();
-                        int required = ps.Count(p => !p.HasDefaultValue);
-                        return n.Arguments.Length >= required && n.Arguments.Length <= ps.Length;
-                    });
-            }
-        }
         if (ctor is not null) {
             int d = ctx.RingDepth;
             var argExprs = new List<Expression>();
@@ -321,19 +324,9 @@ public static partial class DirectVmAbiEmitter {
             ctx.RingDepth = slot + 1;
             return Block(argExprs.Concat([Assign(ctx.RingVar(slot), Convert(handle, typeof(long)))]));
         }
-        if (targetType is not null && n.Arguments.Length == 0) {
-            Expression defaultObj = targetType.IsValueType
-                ? Convert(Constant(0L), typeof(object))
-                : Constant(null, typeof(object));
-            int slot2 = ctx.AllocSlot();
-            var handle2 = Call(ctx.HeapLocal, HeapAllocate, defaultObj);
-            return Assign(ctx.RingVar(slot2), Convert(handle2, typeof(long)));
-        }
-        int slot3 = ctx.AllocSlot();
-        var placeholder = NewArrayBounds(typeof(object), Constant(0));
-        var handle3 = Call(ctx.HeapLocal, HeapAllocate,
-            Convert(placeholder, typeof(object)));
-        return Assign(ctx.RingVar(slot3), Convert(handle3, typeof(long)));
+        var typeName = targetType?.Name ?? n.Type.ToString();
+        throw new InvalidOperationException(
+            $"VM compile rejected: no matching constructor for {typeName} with {n.Arguments.Length} argument(s).");
     }
 
     private static Expression EmitNewArray(NewArray n, AbiCtx ctx) {
@@ -423,7 +416,7 @@ public static partial class DirectVmAbiEmitter {
             case sbyte sb: result = sb; return true;
             case ushort us: result = us; return true;
             case uint ui: result = ui; return true;
-            case ulong ul: result = (long)ul; return true;
+            case ulong ul: result = unchecked((long)ul); return true;
             case char c: result = c; return true;
             default: result = 0; return false;
         }
@@ -438,6 +431,8 @@ public static partial class DirectVmAbiEmitter {
     }
 
     private static Expression CompileValue(Node node, AbiCtx ctx) {
+        if (ctx.Analysis?.GetNodeReplacement(node) is { } replacement && replacement != node)
+            return CompileValue(replacement, ctx);
         return node switch {
             Constant c when TryValueToLong(c.Value, out _) || c.Value is double || c.Value is float
                 => EmitConstantValue(c),
@@ -530,10 +525,6 @@ public static partial class DirectVmAbiEmitter {
         AbiCtx ctx) {
         var leftVal = CompileValue(left, ctx);
         var rightVal = CompileValue(right, ctx);
-        if (TryEmitStringConcat(left, right, leftVal, rightVal, factory, ctx) is { } concat)
-            return concat;
-        if (TryEmitDecimalArithmetic(left, right, leftVal, rightVal, factory, ctx) is { } dec)
-            return dec;
         if (IsDoubleValue(ctx, left) || IsDoubleValue(ctx, right))
             return Call(BitConverterDoubleToInt64Bits,
                 factory(AsIeeeDouble(left, leftVal, ctx), AsIeeeDouble(right, rightVal, ctx)));
@@ -542,64 +533,10 @@ public static partial class DirectVmAbiEmitter {
         return factory(leftVal, rhs);
     }
 
-    private static Expression? TryEmitStringConcat(
-        Node left, Node right, Expression leftVal, Expression rightVal,
-        Func<Expression, Expression, BinaryExpression> factory, AbiCtx ctx) {
-        if (factory != Add)
-            return null;
-        bool ls = IsStringValue(ctx, left);
-        bool rs = IsStringValue(ctx, right);
-        if (ls ^ rs)
-            throw new InvalidOperationException(
-                "VM compile rejected: string concatenation requires both operands to be strings.");
-        if (!ls)
-            return null;
-        var lo = HeapValueToObject(leftVal, ctx);
-        var ro = HeapValueToObject(rightVal, ctx);
-        var concat = Call(StringConcat, lo, ro);
-        var handle = Call(ctx.HeapLocal,
-            HeapAllocate,
-            Convert(concat, typeof(object)));
-        return Convert(handle, typeof(long));
-    }
-
     private static Expression AsIeeeDouble(Node node, Expression ringVal, AbiCtx ctx) =>
         IsDoubleValue(ctx, node)
             ? Call(BitConverterInt64BitsToDouble, ringVal)
             : Convert(ringVal, typeof(double));
-
-    private static bool IsDecimalValue(AbiCtx ctx, Node node) {
-        if (node is Constant { Value: decimal }) return true;
-        var meta = ctx.Analysis?.GetMetadata<ValueRepresentationMetadata>(node);
-        return meta?.ClrType == typeof(decimal);
-    }
-
-    private static Expression? TryEmitDecimalArithmetic(
-        Node left, Node right, Expression leftVal, Expression rightVal,
-        Func<Expression, Expression, BinaryExpression> factory, AbiCtx ctx) {
-        if (!(IsDecimalValue(ctx, left) || IsDecimalValue(ctx, right)))
-            return null;
-        var l = AsDecimal(left, leftVal, ctx);
-        var r = AsDecimal(right, rightVal, ctx);
-        var computed = factory(l, r);
-        var handle = Call(ctx.HeapLocal, HeapAllocate, Convert(computed, typeof(object)));
-        return Convert(handle, typeof(long));
-    }
-
-    private static Expression AsDecimal(Node node, Expression ringVal, AbiCtx ctx) {
-        if (IsDecimalValue(ctx, node)) {
-            return Convert(
-                Call(ctx.HeapLocal, HeapUnsafeGet, Convert(ringVal, typeof(int))),
-                typeof(decimal));
-        }
-        return Convert(ringVal, typeof(decimal));
-    }
-
-    private static bool IsStringValue(AbiCtx ctx, Node node) {
-        var meta = ctx.Analysis?.GetMetadata<ValueRepresentationMetadata>(node);
-        if (meta?.ClrType == typeof(string)) return true;
-        return node is Constant { Value: string };
-    }
 
     private static Expression EmitNotValue(Not n, AbiCtx ctx) =>
         Condition(Equal(CompileValue(n.Value, ctx), Constant(0L)), Constant(1L), Constant(0L));

@@ -39,19 +39,19 @@ public sealed class VariableScope(VariableScope? parentScope = null) {
     }
 
     /// <summary>
-    /// Sets a variable in this scope, creating it if it doesn't exist.
+    /// Declares a variable in this scope, creating it if it doesn't exist.
     /// </summary>
     /// <param name="name">The name of the variable.</param>
-    /// <param name="value">The initial value for the variable, or <c>null</c> for uninitialized.</param>
     /// <returns>The variable that was set or created.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="name"/> is null or whitespace.</exception>
     /// <remarks>
     /// This method will create a new variable in this scope even if a variable with the same
-    /// name exists in a parent scope, implementing variable shadowing.
+    /// name exists in a parent scope, implementing variable shadowing. Writes are
+    /// <see cref="Assignment"/> nodes, not a value stored on the binding.
     /// </remarks>
-    public Variable SetVariable(string name, Node? value) {
+    public Variable SetVariable(string name) {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
-        return Variables.GetOrAdd(name, value, static (name, value) => new Variable(name, value));
+        return Variables.GetOrAdd(name, static n => new Variable(n));
     }
 
     /// <summary>

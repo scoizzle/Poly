@@ -150,14 +150,6 @@ public sealed class DomainSession {
         return files;
     }
 
-    /// <summary>Incrementally analyzes <paramref name="domain"/> with this session's pipeline.</summary>
-    public AnalysisResult Analyze(Domain domain, AnalysisResult priorAnalysis, IEnumerable<Node> invalidatedNodes) {
-        ArgumentNullException.ThrowIfNull(domain);
-        ArgumentNullException.ThrowIfNull(priorAnalysis);
-        ArgumentNullException.ThrowIfNull(invalidatedNodes);
-        return Analyzer.Analyze(domain, priorAnalysis, invalidatedNodes);
-    }
-
     internal static ExpressionFoldTable FoldsFor(ExpressionFormRegistry forms) {
         var folds = ExpressionFoldTable.Core();
         forms.ContributeFolds(folds);

@@ -142,12 +142,7 @@ public static class TemporalExpressionPrintBinders {
                     $"Cannot print DateOperation: offset is '{dOp.Offset.GetType().Name}', not a literal.");
             var isSubtract = offset < 0;
             var amount = isSubtract ? -offset : offset;
-            var unit = dOp.Kind switch {
-                DateOperationKind.AddDays => "Days",
-                DateOperationKind.AddMonths => "Months",
-                _ => throw new InvalidOperationException(
-                    $"Cannot print DateOperation: kind '{dOp.Kind}' has no DSL spelling."),
-            };
+            var unit = DurationForm.Spell(dOp.Kind);
 
             var pattern = isSubtract ? "sub" : "add";
             binding = new PrintMapping(

@@ -54,19 +54,33 @@ public class TemporalDispatchRegistryTests {
         await Assert.That(result).IsEqualTo("handled");
     }
 
+    private sealed class DummyTypeCheck : IExpressionTypeCheck {
+        public Type ExpressionType => typeof(Now);
+        public void Check(AnalysisContext context, DomainExpression expression, ExpressionTypeCheckScope scope) { }
+    }
+
+    private sealed class DummyDefaultResolver : IExpressionDefaultResolver {
+        public Type ExpressionType => typeof(Now);
+        public bool TryResolve(DomainExpression expression, string? propTypeName, out object? runtimeValue, out Node exportNode) {
+            runtimeValue = null;
+            exportNode = null!;
+            return false;
+        }
+    }
+
     [Test]
     public async Task ExpressionTypeCheckRegistry_Duplicate_Throws() {
         var registry = new ExpressionTypeCheckRegistry();
-        registry.Register(new NowDefaultCheck());
-        await AssertDuplicateThrows(() => registry.Register(new NowDefaultCheck()),
+        registry.Register(new DummyTypeCheck());
+        await AssertDuplicateThrows(() => registry.Register(new DummyTypeCheck()),
             "Duplicate expression type check for 'Now'");
     }
 
     [Test]
     public async Task DefaultResolverRegistry_Duplicate_Throws() {
         var registry = new ExpressionDefaultResolverRegistry();
-        registry.Register(new NowDefaultResolver());
-        await AssertDuplicateThrows(() => registry.Register(new NowDefaultResolver()),
+        registry.Register(new DummyDefaultResolver());
+        await AssertDuplicateThrows(() => registry.Register(new DummyDefaultResolver()),
             "Duplicate expression default resolver for 'Now'");
     }
 }

@@ -87,6 +87,22 @@ public class NewNodeTests {
     }
 
     [Test]
+    public async Task New_AllOptionalCtor_ZeroArgs_AppliesDefaults() {
+        var node = new New(TypeReference.To<AllOptional>());
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        var vmResult = exec.GetValue<AllOptional>();
+        await Assert.That(vmResult).IsNotNull();
+        await Assert.That(vmResult!.N).IsEqualTo(5);
+    }
+
+    [Test]
+    public async Task New_NoMatchingConstructor_CompileRejected() {
+        await Assert.That(() => Interpreter.Compile(new New(TypeReference.To<NeedsArg>())))
+            .Throws<InvalidOperationException>()
+            .WithMessageContaining("constructor");
+    }
+
+    [Test]
     public async Task New_ToString_UsesSourceLikeSyntax() {
         var node = new New(TypeReference.To<Widget>(), Wrap("gamma"), Wrap(7));
 
@@ -109,5 +125,15 @@ public class NewNodeTests {
         public string Name { get; }
 
         public int Count { get; }
+    }
+
+    private sealed class AllOptional {
+        public AllOptional(int n = 5) => N = n;
+        public int N { get; }
+    }
+
+    private sealed class NeedsArg {
+        public NeedsArg(int x) => X = x;
+        public int X { get; }
     }
 }

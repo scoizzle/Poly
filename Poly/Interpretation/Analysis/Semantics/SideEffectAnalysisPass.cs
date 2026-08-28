@@ -19,7 +19,7 @@ internal sealed class SideEffectAnalyzer : INodeAnalyzer {
     public void Analyze(AnalysisContext context, Node node) {
         if (node is Block block) {
             foreach (var v in block.Variables) {
-                if (v != null && context.ShouldAnalyze(v)) {
+                if (v != null) {
                     Analyze(context, v);
                 }
             }
@@ -33,7 +33,7 @@ internal sealed class SideEffectAnalyzer : INodeAnalyzer {
 
             for (int i = 0; i < n; i++) {
                 var child = nodes[i];
-                if (child is null || !context.ShouldAnalyze(child)) continue;
+                if (child is null) continue;
 
                 Analyze(context, child);
                 var childMeta = context.GetMetadata<SideEffectMetadata>(child);
@@ -75,8 +75,6 @@ internal sealed class SideEffectAnalyzer : INodeAnalyzer {
             }
             context.SetMetadata(node, new SideEffectMetadata(kind));
 
-            if (!context.ShouldAnalyze(node)) return;
-
             var opts2 = context.Settings.Get<SideEffectAnalysisOptions>() ?? SideEffectAnalysisOptions.Default;
             bool emitDiags2 = opts2.EmitElisionDiagnostics;
 
@@ -117,10 +115,6 @@ internal sealed class SideEffectAnalyzer : INodeAnalyzer {
         (SideEffectKind)int.Max((int)a, (int)b);
 
     private static SideEffectKind ClassifyIntrinsic(Node node) => node switch {
-        // Declare-init (`var x = e` as a block statement). Rvalue uses of the
-        // same node still carry Initializer; that over-approximates as Write (safe).
-        // Volatile *reads* are Member + VolatileAccess → Read, below.
-        Variable { Initializer: not null } => SideEffectKind.Write,
         Assignment => SideEffectKind.Write,
         SuspendNode => SideEffectKind.External,
         Return => SideEffectKind.Write,

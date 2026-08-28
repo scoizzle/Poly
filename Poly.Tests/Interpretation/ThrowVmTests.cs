@@ -28,8 +28,12 @@ public class ThrowVmTests {
 
     [Test]
     public async Task Throw_AfterLocal_TerminatesExecution() {
-        var varX = new Variable("x", new Constant(42));
-        var block = new Block([new ThrowStatement(new New(TypeReference.To<Exception>())), new Return(varX)], [varX]);
+        var varX = new Variable("x");
+        var block = new Block([
+            new Assignment(varX, new Constant(42)),
+            new ThrowStatement(new New(TypeReference.To<Exception>())),
+            new Return(varX)
+        ], [varX]);
         await Assert.That(() => { Interpreter.Execute(block); }).ThrowsExactly<Exception>();
     }
 }

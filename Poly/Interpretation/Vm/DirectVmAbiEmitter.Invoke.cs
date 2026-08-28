@@ -48,23 +48,15 @@ public static partial class DirectVmAbiEmitter {
                     var methodParams = methodInfo.GetParameters();
                     var methodArgs = new Expression[methodParams.Length];
                     int baseIdx = isStatic ? 0 : 1;
-                    for (int i = 0; i < methodParams.Length; i++) {
-                        int slotIdx = i < invoke.Arguments.Length ? argSlots[i] : d + baseIdx + i;
-                        var ringVal = ctx.RingVar(slotIdx);
-                        var paramType = methodParams[i].ParameterType;
-                        if (paramType.IsValueType) {
-                            methodArgs[i] = AbiValueTypes.IsLongRepresentable(paramType)
-                                ? Convert(ringVal, paramType)
-                                : Convert(
-                                    Call(ctx.HeapLocal, HeapUnsafeGet,
-                                        Convert(ringVal, typeof(int))),
-                                    paramType);
-                        }
-                        else {
-                            methodArgs[i] = Convert(
-                                Call(ctx.HeapLocal, HeapUnsafeGet,
-                                    Convert(ringVal, typeof(int))),
-                                paramType);
+                    if (TryPackEnumerableArgs(methodParams, invoke, argSlots, ctx, out var packed)) {
+                        methodArgs[0] = packed;
+                    }
+                    else {
+                        for (int i = 0; i < methodParams.Length; i++) {
+                            int slotIdx = i < invoke.Arguments.Length ? argSlots[i] : d + baseIdx + i;
+                            var ringVal = ctx.RingVar(slotIdx);
+                            var argNode = i < invoke.Arguments.Length ? invoke.Arguments[i] : null;
+                            methodArgs[i] = ConvertRingToClr(ringVal, methodParams[i].ParameterType, argNode, ctx);
                         }
                     }
 
@@ -190,13 +182,13 @@ public static partial class DirectVmAbiEmitter {
                         ctx.DeclareParameter(p);
             }
 
-            // Trivial inline: no captures → compile body directly in the caller's
-            // context.  Skip when the lambda has parameters but Invoke has no
-            // argument expressions (SetArgs pattern): those parameters live in
-            // value-stack slots and need ParamSlotOffset/FramePos setup from the
-            // frame path so locals don't overwrite them on EmitScopeStores.
-            if (FindCaptures(lambda.Body, ctx, lambda.Parameters).Count == 0
-                && !(lambda.Parameters.Count > 0 && invoke.Arguments.Length == 0)) {
+            // Compile the body in the caller's context so captured Variables
+            // read/write the same upvalue cells as the enclosing frame.
+            // Skip when the lambda has parameters but Invoke has no argument
+            // expressions (SetArgs pattern): those parameters live in
+            // value-stack slots and need ParamSlotOffset/FramePos setup from
+            // the frame path so locals don't overwrite them on EmitScopeStores.
+            if (!(lambda.Parameters.Count > 0 && invoke.Arguments.Length == 0)) {
                 return EmitInlineInvoke(lambda, invoke, ctx);
             }
 
@@ -207,13 +199,6 @@ public static partial class DirectVmAbiEmitter {
             int savedNextParamSlot = ctx.SaveAndResetParamSlots();
             foreach (var param in lambda.Parameters)
                 ctx.DeclareParameter(param);
-
-            // 1. Compile the Lambda node — allocates closure on heap, result on ring
-            var closureExpr = EmitLambda(lambda, ctx);
-            var invokeCaptures = FindCaptures(lambda.Body, ctx, lambda.Parameters);
-            for (int i = 0; i < invokeCaptures.Count; i++)
-                ctx.DeclareCapture(invokeCaptures[i].Binding, i);
-            int closureSlot = ctx.RingDepth - 1;
 
             // 2. Compile arguments — each goes on ring
             var argExprs = new List<Expression>();
@@ -235,11 +220,6 @@ public static partial class DirectVmAbiEmitter {
             preBody.Add(Assign(invokeSp, spProp));
             for (int k = 0; k < saveDepth; k++)
                 preBody.Add(Assign(ArrayAccess(regSlots, Add(invokeSp, Constant(k))), ctx.RingVar(k)));
-
-            // 4. Set state.ClosureHandle from the closure slot
-            preBody.Add(Assign(
-                Property(ctx.State, nameof(VmState.ClosureHandle)),
-                Convert(ctx.RingVar(closureSlot), typeof(int))));
 
             // 5. Push arguments from ring to value stack with optional 2-word frame header.
             // When there are explicit Invoke arguments, push a 2-word header (PreviousFP,
@@ -327,7 +307,7 @@ public static partial class DirectVmAbiEmitter {
             ctx.ParamSlotOffset = savedParamOffset;  // restore
             ctx.RestoreParamSlots(savedNextParamSlot);  // restore outer param slot counter
             ctx.PopScope();
-            return Block([invokeSp, callSp, invokeResult], closureExpr, Block(argExprs),
+            return Block([invokeSp, callSp, invokeResult], Block(argExprs),
                 Block(preBody.Concat(postBody)));
         }
 
@@ -335,10 +315,43 @@ public static partial class DirectVmAbiEmitter {
             return EmitInvokeIndirect(invoke, ctx);
 
         throw new InvalidOperationException(
-            $"VM compile rejected: Invoke target must be a member or lambda, got {invoke.Delegate.GetType().Name}.");
+            $"VM compile rejected: Invoke target must be a member, lambda, or stored closure, got {invoke.Delegate.GetType().Name}.");
+    }
+
+    /// <summary>
+    /// Packs N compiled arguments into a <c>string[]</c> (or element array) when
+    /// the callee takes a single array / <see cref="IEnumerable{T}"/> parameter.
+    /// Used for flattened <c>String.Concat</c>.
+    /// </summary>
+    private static bool TryPackEnumerableArgs(
+        ParameterInfo[] methodParams,
+        Invoke invoke,
+        int[] argSlots,
+        AbiCtx ctx,
+        out Expression packed) {
+        packed = null!;
+        if (methodParams.Length != 1 || invoke.Arguments.Length <= 1)
+            return false;
+        var paramType = methodParams[0].ParameterType;
+        Type? elementType = paramType.IsArray
+            ? paramType.GetElementType()
+            : paramType.IsGenericType && paramType.GetGenericTypeDefinition() == typeof(IEnumerable<>)
+                ? paramType.GetGenericArguments()[0]
+                : null;
+        if (elementType is null)
+            return false;
+        var elems = new Expression[invoke.Arguments.Length];
+        for (var i = 0; i < invoke.Arguments.Length; i++)
+            elems[i] = ConvertRingToClr(ctx.RingVar(argSlots[i]), elementType, invoke.Arguments[i], ctx);
+        packed = NewArrayInit(elementType, elems);
+        return true;
     }
 
     private static Expression EmitInvokeIndirect(Invoke invoke, AbiCtx ctx) {
+        if (ctx.Analysis?.GetMetadata<StoredLambdaMetadata>(invoke.Delegate) is { } stored
+            && invoke.Arguments.Length != stored.Lambda.Parameters.Count)
+            throw new InvalidOperationException(
+                $"VM compile rejected: lambda has {stored.Lambda.Parameters.Count} parameter(s) but invoke has {invoke.Arguments.Length} argument(s).");
         var targetExpr = CompileNode(invoke.Delegate, ctx);
         int targetSlot = ctx.RingDepth - 1;
         var argExprs = new List<Expression>();
@@ -370,6 +383,10 @@ public static partial class DirectVmAbiEmitter {
         var obj = state.Heap.UnsafeGet((int)handle);
         if (obj is not object[] closure || closure.Length < 1 || closure[0] is not long idxL)
             throw new InvalidOperationException("VM: invoke target is not a closure.");
+        for (int u = 1; u < closure.Length; u++) {
+            if (closure[u] is not long[] { Length: >= 1 })
+                throw new InvalidOperationException("VM: closure upvalue is not a cell.");
+        }
         int idx = (int)idxL;
         if ((uint)idx >= (uint)table.Length || table[idx] is null)
             throw new InvalidOperationException("VM: invalid closure index.");
@@ -438,7 +455,8 @@ public static partial class DirectVmAbiEmitter {
     /// <summary>
     /// Compile a lambda body as a standalone <c>Action&lt;VmState&gt;</c> delegate.
     /// Parameters are read from value-stack slots.
-    /// Captured variables are read from/written to <c>heap[state.ClosureHandle][captureIndex]</c>.
+    /// Captured bindings are read from/written to upvalue cells in
+    /// <c>heap[state.ClosureHandle][captureIndex + 1]</c> (<c>long[1]</c>).
     /// </summary>
     private static Action<VmState> CompileFunctionBody(
         Node body,
@@ -446,13 +464,15 @@ public static partial class DirectVmAbiEmitter {
         List<Capture> captures,
         Action<VmState>[] functionTable,
         CompilationMode mode,
-        AnalysisResult analysis) {
+        AnalysisResult analysis,
+        HashSet<object> capturedBindings) {
 
         var fnCtx = new AbiCtx();
         fnCtx.FunctionTableExpr = Constant(functionTable);
         fnCtx.Mode = mode;
         fnCtx.Analysis = analysis;
         fnCtx.IsCompiledFunctionBody = true;
+        fnCtx.CapturedBindings = capturedBindings;
         var bodyExprs = new List<Expression>();
 
         bodyExprs.Add(Label(fnCtx.EntryLabel));
@@ -520,14 +540,18 @@ public static partial class DirectVmAbiEmitter {
     private static Expression WithInterrupt(Expression body, AbiCtx ctx, int step) {
         if (ctx.DebugHookProp is null) return body;
 
-        int localCount = ctx.CurrentLocalCount;
+        int localCount = ctx.FrameSlotHighWater;
 
         // Build the hook invocation expression only when the hook is non-null.
         // Emit: if (state.DebugHook != null) { snapshot + invoke }
         var stmts = new List<Expression>();
+        var flush = ctx.EmitScopeStores();
+        if (flush.Count > 0)
+            stmts.Add(Block(flush));
 
         // Create a ReadOnlySpan<long> directly over _slots[_fb .. _fb + localCount].
         // This is a zero-allocation slice — no buffer copy needed.
+        // Cell-backed slots hold heap handles; VmDebugger.GetLocals derefs cell[0].
         Expression spanExpr = localCount == 0
             ? New(ReadOnlySpanLongArrayCtor,
                 NewArrayBounds(typeof(long), Constant(0)))
@@ -638,37 +662,21 @@ public static partial class DirectVmAbiEmitter {
             $"foreach collection type '{collection.GetType().Name}' is not IEnumerable.");
     }
 
-    private static long ConvertAbi(Heap heap, long raw, Type? source, Type target) {
-        object? value;
-        if (source == typeof(double) || source == typeof(float))
-            value = BitConverter.Int64BitsToDouble(raw);
-        else if (source == typeof(bool))
-            value = raw != 0L;
-        else if (source is not null && source.IsValueType && AbiValueTypes.IsLongRepresentable(source))
-            value = System.Convert.ChangeType(raw, source);
-        else if (source is not null && !source.IsValueType)
-            value = raw == 0L ? null : heap.UnsafeGet((int)raw);
-        else if (!target.IsValueType)
-            value = raw == 0L ? null : heap.UnsafeGet((int)raw);
-        else
-            value = raw;
-
+    private static long CastAbi(Heap heap, long raw, Type target) {
+        if (raw == 0L) {
+            if (target.IsValueType)
+                throw new InvalidCastException($"Cannot convert null to '{target}'.");
+            return 0L;
+        }
+        var value = heap.UnsafeGet((int)raw);
         if (value is null) {
             if (target.IsValueType)
                 throw new InvalidCastException($"Cannot convert null to '{target}'.");
             return 0L;
         }
-
-        if (target == typeof(double) || target == typeof(float))
-            return BitConverter.DoubleToInt64Bits(System.Convert.ToDouble(value));
-        if (target == typeof(bool))
-            return System.Convert.ToBoolean(value) ? 1L : 0L;
-        if (target.IsValueType && AbiValueTypes.IsLongRepresentable(target)) {
-            var truncated = Math.Truncate(System.Convert.ToDouble(value));
-            return System.Convert.ToInt64(System.Convert.ChangeType(truncated, target));
-        }
-        var converted = target.IsInstanceOfType(value) ? value : System.Convert.ChangeType(value, target);
-        return BoxToAbi(heap, converted);
+        if (target.IsInstanceOfType(value))
+            return raw;
+        throw new InvalidCastException($"Cannot convert '{value.GetType()}' to '{target}'.");
     }
 
     private static long UnboxNullableToLong(Heap heap, long handle) {
@@ -694,7 +702,7 @@ public static partial class DirectVmAbiEmitter {
         int i => i,
         uint ui => ui,
         long l => l,
-        ulong ul => (long)ul,
+        ulong ul => unchecked((long)ul),
         char c => c,
         float f => BitConverter.DoubleToInt64Bits(f),
         double d => BitConverter.DoubleToInt64Bits(d),

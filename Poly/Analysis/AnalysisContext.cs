@@ -1,3 +1,5 @@
+using System.Collections.Concurrent;
+
 namespace Poly.Analysis;
 
 using Poly.Introspection;
@@ -20,19 +22,8 @@ public sealed class AnalysisContext : INodeMetadataProvider {
             ? tpc
             : new TypeDefinitionProviderCollection(typeDefinitions);
         Metadata = new NodeMetadataStore();
-        Diagnostics = new Dictionary<NodeId, List<Diagnostic>>();
+        _diagnostics = new ConcurrentQueue<Diagnostic>();
         Settings = settings ?? AnalysisSettings.Default;
-    }
-
-    public AnalysisContext(ITypeDefinitionProvider typeDefinitions, AnalysisResult priorAnalysis, AnalysisSettings? settings = null) {
-        ArgumentNullException.ThrowIfNull(priorAnalysis);
-
-        TypeDefinitions = typeDefinitions is TypeDefinitionProviderCollection tpc
-            ? tpc
-            : new TypeDefinitionProviderCollection(typeDefinitions);
-        Metadata = new NodeMetadataStore(priorAnalysis.GetMetadataStore());
-        Diagnostics = priorAnalysis.GetDiagnosticsDictionary();
-        Settings = settings ?? priorAnalysis.SettingsUsed;
     }
 
     /// <summary>
@@ -40,10 +31,14 @@ public sealed class AnalysisContext : INodeMetadataProvider {
     /// </summary>
     public NodeMetadataStore Metadata { get; }
 
+    private readonly ConcurrentQueue<Diagnostic> _diagnostics;
+
     /// <summary>
-    /// Gets the diagnostics collected during analysis, keyed by node identifier.
+    /// Diagnostics reported during this analysis, in enqueue order.
     /// </summary>
-    public Dictionary<NodeId, List<Diagnostic>> Diagnostics { get; }
+    public IReadOnlyCollection<Diagnostic> Diagnostics => _diagnostics;
+
+    internal ConcurrentQueue<Diagnostic> DiagnosticQueue => _diagnostics;
 
     /// <summary>
     /// Gets run-level settings for this analysis execution.
@@ -64,39 +59,8 @@ public sealed class AnalysisContext : INodeMetadataProvider {
     public void ReportDiagnostic(Node node, DiagnosticSeverity severity, string message, string? code = null) {
         ArgumentNullException.ThrowIfNull(node);
         ArgumentNullException.ThrowIfNull(message);
-
-        if (!Diagnostics.TryGetValue(node.Id, out var bucket)) {
-            bucket = new List<Diagnostic>();
-            Diagnostics[node.Id] = bucket;
-        }
-
-        var isDuplicate = bucket.Any(d =>
-            d.Severity == severity &&
-            string.Equals(d.Code, code, StringComparison.Ordinal) &&
-            string.Equals(d.Message, message, StringComparison.Ordinal));
-
-        if (isDuplicate) {
-            return;
-        }
-
-        bucket.Add(new Diagnostic(node, severity, message, code));
+        _diagnostics.Enqueue(new Diagnostic(node, severity, message, code));
     }
-
-    /// <summary>
-    /// Reports an error diagnostic for the specified node.
-    /// </summary> <param name="node">The node associated with the error.</param>
-    /// <param name="message">The error message.</param>
-    /// <param name="code">An optional error code.</param>
-    public IReadOnlyList<Diagnostic> GetDiagnostics(NodeId nodeId) =>
-        Diagnostics.TryGetValue(nodeId, out var diagnostics) ? diagnostics : [];
-
-
-    /// <summary>
-    /// Clears diagnostics for the specified node id.
-    /// </summary>
-    /// <param name="nodeId">The node identifier for which to clear diagnostics.</param>
-    /// <returns>True if diagnostics were cleared; false if no diagnostics existed for the node id.</returns>
-    public bool ClearDiagnostics(NodeId nodeId) => Diagnostics.Remove(nodeId, out var bucket);
 
     /// <summary>
     /// Gets metadata of the specified type.
@@ -134,18 +98,20 @@ public sealed class AnalysisContext : INodeMetadataProvider {
 
     // === Early exit / interruption support ===
 
+    private int _structuralFailure;
+
     /// <summary>
     /// Gets whether a structural or reference-level failure has been reported.
     /// Analyzers and the pipeline can use this to decide whether to continue with expensive passes.
     /// </summary>
-    public bool HasStructuralFailure { get; private set; }
+    public bool HasStructuralFailure => Volatile.Read(ref _structuralFailure) != 0;
 
     /// <summary>
     /// Reports a structural or reference-level failure. This sets <see cref="HasStructuralFailure"/> to true.
     /// Later analyzers (or the pipeline itself) may choose to skip work when this is set, depending on <see cref="AnalysisOptions"/>.
     /// </summary>
     public void ReportStructuralFailure(Node node, string message, string? code = null) {
-        HasStructuralFailure = true;
+        Volatile.Write(ref _structuralFailure, 1);
         ReportDiagnostic(node, DiagnosticSeverity.Error, message, code);
     }
 

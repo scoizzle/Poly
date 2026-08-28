@@ -50,8 +50,6 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
     public string[] Dependencies => [EffectFactsPass.Id];
 
     public void Analyze(AnalysisContext context, Node node) {
-        if (!context.ShouldAnalyze(node))
-            return;
 
         if (node is Domain domain) {
             foreach (var type in domain.Types) {

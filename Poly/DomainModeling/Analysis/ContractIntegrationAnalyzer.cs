@@ -12,9 +12,6 @@ internal sealed class ContractIntegrationAnalyzer : INodeAnalyzer {
     public string PassName => Id;
     public string[] Dependencies => [];
     public void Analyze(AnalysisContext context, Node node) {
-        if (!context.ShouldAnalyze(node)) {
-            return;
-        }
 
         if (node is Domain domain) {
             ValidateDomain(context, domain);

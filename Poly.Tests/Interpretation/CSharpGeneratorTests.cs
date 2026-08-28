@@ -1,5 +1,6 @@
 using Poly.Interpretation.CSharp;
 using Poly.Introspection;
+using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.Interpretation;
 
@@ -37,7 +38,7 @@ public class CSharpGeneratorTests {
     public async Task Generate_Variable_ProducesVariableName() {
         var node = new Variable("x");
         var result = new CSharpGenerator().Generate(node);
-        await Assert.That(result).IsEqualTo("var x;");
+        await Assert.That(result).IsEqualTo("x;");
     }
 
     [Test]
@@ -245,10 +246,47 @@ public class CSharpGeneratorTests {
         var node = new Block([new Assignment(v, new Constant(5))], [v]);
         var result = new CSharpGenerator().Generate(node);
         var expected = "{" + Environment.NewLine +
-                       "    var x;" + Environment.NewLine +
-                       "    x = 5;" + Environment.NewLine +
+                       "    var x = 5;" + Environment.NewLine +
                        "}";
         await Assert.That(result).IsEqualTo(expected);
+    }
+
+    [Test]
+    public async Task Generate_BlockWithUnassignedVariable_DeclaresWithoutInit() {
+        var v = new Variable("x");
+        var node = new Block([new Constant(1)], [v]);
+        var result = new CSharpGenerator().Generate(node);
+        var expected = "{" + Environment.NewLine +
+                       "    var x = default(object);" + Environment.NewLine +
+                       "    1;" + Environment.NewLine +
+                       "}";
+        await Assert.That(result).IsEqualTo(expected);
+    }
+
+    [Test]
+    public async Task Generate_NestedFirstAssign_DeclareOnlyUsesResolvedType() {
+        var v = new Variable("x");
+        var node = new Block([
+            new IfStatement(new Constant(true), new Assignment(v, new Constant(1L))),
+            v
+        ], [v]);
+        var analysis = node.AnalyzeNode();
+        var result = new CSharpGenerator(analysis).Generate(node);
+        await Assert.That(result).Contains("var x = default(long);");
+        await Assert.That(result).Contains("x = 1L;");
+        await Assert.That(result).DoesNotContain("var x = 1L;");
+    }
+
+    [Test]
+    public async Task Generate_NestedFirstAssign_WithoutAnalysis_InfersConstantType() {
+        var v = new Variable("x");
+        var node = new Block([
+            new IfStatement(new Constant(true), new Assignment(v, new Constant(1L))),
+            v
+        ], [v]);
+        var result = new CSharpGenerator().Generate(node);
+        await Assert.That(result).Contains("var x = default(long);");
+        await Assert.That(result).Contains("x = 1L;");
     }
 
     [Test]
@@ -293,6 +331,40 @@ public class CSharpGeneratorTests {
                        "    i = i + 1;" + Environment.NewLine +
                        "}";
         await Assert.That(result).IsEqualTo(expected);
+    }
+
+    [Test]
+    public async Task Generate_WhileThenDirectAssign_DoesNotFuseVarInWhile() {
+        var x = new Variable("x");
+        var node = new Block([
+            new WhileLoop(new Constant(false), new Assignment(x, new Constant(1L))),
+            new Assignment(x, new Constant(2L)),
+            x
+        ], [x]);
+        var result = new CSharpGenerator().Generate(node);
+        await Assert.That(result).Contains("var x = default(long);");
+        await Assert.That(result).Contains("x = 1L;");
+        await Assert.That(result).Contains("x = 2L;");
+        await Assert.That(result).DoesNotContain("while (false) var");
+        await Assert.That(result).DoesNotContain("var x = 1L;");
+        await Assert.That(result).DoesNotContain("var x = 2L;");
+    }
+
+    [Test]
+    public async Task Generate_ForHeaderOfBlockLocal_DoesNotStealVarFusion() {
+        var i = new Variable("i");
+        var node = new Block([
+            new ForLoop(
+                new Assignment(i, new Constant(0L)),
+                new LessThan(i, new Constant(1L)),
+                new Assignment(i, new Add(i, new Constant(1L))),
+                new Block(new Constant(0L))),
+            i
+        ], [i]);
+        var result = new CSharpGenerator().Generate(node);
+        await Assert.That(result).Contains("var i = default(long);");
+        await Assert.That(result).Contains("for (i = 0L;");
+        await Assert.That(result).DoesNotContain("for (var i");
     }
 
     [Test]
@@ -653,7 +725,7 @@ public class CSharpGeneratorTests {
                 new TypeDefinitionNode("MyClass")
             ],
             TopLevelStatements: [
-                new Variable("builder", new Invoke(
+                new Assignment(new Variable("builder"), new Invoke(
                     new Member(new TypeReference("WebApplication"), "CreateBuilder")))
             ]
         );

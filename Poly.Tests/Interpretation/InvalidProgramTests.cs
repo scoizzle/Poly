@@ -2,6 +2,7 @@ using Poly.Analysis;
 using Poly.Interpretation;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Introspection;
+using Poly.Tests.Introspection;
 
 namespace Poly.Tests.Interpretation;
 
@@ -106,10 +107,74 @@ public class InvalidProgramTests {
     }
 
     [Test]
-    public async Task Invoke_NonCallableConstant_CompileRejects() {
-        await AssertCompileRejectsReadable(
+    public async Task Invoke_NonCallableConstant_AnalysisErrorAndCompileRejects() {
+        await AssertAnalysisThenCompileRejects(
             new Invoke(new Constant(42)),
-            "Invoke");
+            "Invoke",
+            SyntaxTypeCompatibilityAnalyzer.DiagnosticCode);
+    }
+
+    [Test]
+    public async Task Invoke_OfInvoke_AnalysisErrorAndCompileRejects() {
+        var inner = new Invoke(new Lambda([], new Constant(1L)));
+        await AssertAnalysisThenCompileRejects(
+            new Invoke(inner),
+            "Invoke",
+            SyntaxTypeCompatibilityAnalyzer.DiagnosticCode);
+    }
+
+    [Test]
+    public async Task Invoke_AfterReassignFromLambdaToInt_AnalysisErrorAndCompileRejects() {
+        var f = new Variable("f");
+        var x = new Parameter("x", TypeReference.To<long>());
+        var node = new Block([
+            new Assignment(f, new Lambda([x], new Add(x, new Constant(1L)))),
+            new Assignment(f, new Constant(1L)),
+            new Invoke(f)
+        ], [f]);
+        await AssertAnalysisThenCompileRejects(
+            node,
+            "Invoke",
+            SyntaxTypeCompatibilityAnalyzer.DiagnosticCode);
+    }
+
+    [Test]
+    public async Task Invoke_OfIntVariable_AnalysisErrorAndCompileRejects() {
+        var n = new Variable("n");
+        var node = new Block([
+            new Assignment(n, new Constant(1L)),
+            new Invoke(n)
+        ], [n]);
+        await AssertAnalysisThenCompileRejects(
+            node,
+            "Invoke",
+            SyntaxTypeCompatibilityAnalyzer.DiagnosticCode);
+    }
+
+    [Test]
+    public async Task Invoke_OfIndexAccess_AnalysisErrorAndCompileRejects() {
+        var arr = new Variable("arr");
+        var node = new Block([
+            new Assignment(arr, new Constant(new long[] { 1L })),
+            new Invoke(new IndexAccess(arr, new Constant(0L)))
+        ], [arr]);
+        await AssertAnalysisThenCompileRejects(
+            node,
+            "Invoke",
+            SyntaxTypeCompatibilityAnalyzer.DiagnosticCode);
+    }
+
+    [Test]
+    public async Task TypeCast_StringToInt_AnalysisErrorAndCompileRejects() {
+        var text = new Variable("text");
+        var node = new Block([
+            new Assignment(text, new Constant("42")),
+            new TypeCast(text, TypeReference.To<int>())
+        ], [text]);
+        await AssertAnalysisThenCompileRejects(
+            node,
+            "cannot convert",
+            SyntaxTypeCompatibilityAnalyzer.DiagnosticCode);
     }
 
     [Test]
@@ -134,11 +199,188 @@ public class InvalidProgramTests {
     }
 
     [Test]
+    public async Task Assignment_LongThenString_AnalysisErrorAndCompileRejects() {
+        var x = new Variable("x");
+        var node = new Block([
+            new Assignment(x, new Constant(1L)),
+            new Assignment(x, new Constant("hi")),
+            x
+        ], [x]);
+        await AssertAnalysisThenCompileRejects(
+            node,
+            "incompatible",
+            SyntaxTypeCompatibilityAnalyzer.DiagnosticCode);
+    }
+
+    [Test]
+    public async Task Assignment_StringThenLong_AnalysisErrorAndCompileRejects() {
+        var x = new Variable("x");
+        var node = new Block([
+            new Assignment(x, new Constant("hi")),
+            new Assignment(x, new Constant(1L)),
+            x
+        ], [x]);
+        await AssertAnalysisThenCompileRejects(
+            node,
+            "incompatible",
+            SyntaxTypeCompatibilityAnalyzer.DiagnosticCode);
+    }
+
+    [Test]
+    public async Task Assignment_BoolThenLong_AnalysisErrorAndCompileRejects() {
+        var x = new Variable("x");
+        var node = new Block([
+            new Assignment(x, new Constant(true)),
+            new Assignment(x, new Constant(1L)),
+            x
+        ], [x]);
+        await AssertAnalysisThenCompileRejects(
+            node,
+            "incompatible",
+            SyntaxTypeCompatibilityAnalyzer.DiagnosticCode);
+    }
+
+    [Test]
+    public async Task Assignment_IntThenDouble_AnalysisErrorAndCompileRejects() {
+        var x = new Variable("x");
+        var node = new Block([
+            new Assignment(x, new Constant(1)),
+            new Assignment(x, new Constant(2.0)),
+            x
+        ], [x]);
+        await AssertAnalysisThenCompileRejects(
+            node,
+            "incompatible",
+            SyntaxTypeCompatibilityAnalyzer.DiagnosticCode);
+    }
+
+    [Test]
+    public async Task IfElse_LongThenString_AnalysisErrorAndCompileRejects() {
+        var x = new Variable("x");
+        var node = new Block([
+            new IfStatement(
+                new Constant(true),
+                new Assignment(x, new Constant(1L)),
+                new Assignment(x, new Constant("hi"))),
+            x
+        ], [x]);
+        await AssertAnalysisThenCompileRejects(
+            node,
+            "incompatible",
+            SyntaxTypeCompatibilityAnalyzer.DiagnosticCode);
+    }
+
+    [Test]
+    public async Task Assignment_UndeclaredVariable_AnalysisErrorAndCompileRejects() {
+        var x = new Variable("x");
+        var node = new Block(new Assignment(x, new Constant(1L)));
+        await AssertAnalysisThenCompileRejects(node, "not declared", expectedCode: null);
+    }
+
+    [Test]
+    public async Task Lambda_CapturesUndeclaredVariable_AnalysisErrorAndCompileRejects() {
+        var captured = new Variable("captured");
+        var fn = new Variable("fn");
+        var node = new Block([
+            new Assignment(fn, new Lambda([], captured)),
+            new Invoke(fn)
+        ], [fn]);
+        await AssertAnalysisThenCompileRejects(node, "not declared", expectedCode: null);
+    }
+
+    [Test]
     public async Task Lambda_TooManyArgs_CompileRejects() {
         var p = new Parameter("x", TypeReference.To<long>());
         await AssertCompileRejectsReadable(
             new Invoke(new Lambda([p], p), new Constant(1L), new Constant(2L)),
             "lambda");
+    }
+
+    [Test]
+    public async Task StoredLambda_ZeroArgsIntoArity1_AnalysisErrorAndCompileRejects() {
+        var fn = new Variable("fn");
+        var x = new Parameter("x", TypeReference.To<long>());
+        var node = new Block([
+            new Assignment(fn, new Lambda([x], new Add(x, new Constant(1L)))),
+            new Invoke(fn)
+        ], [fn]);
+        await AssertAnalysisThenCompileRejects(
+            node,
+            "parameter(s)",
+            SyntaxTypeCompatibilityAnalyzer.DiagnosticCode);
+    }
+
+    [Test]
+    public async Task StoredLambda_TooFewArgs_AnalysisErrorAndCompileRejects() {
+        var fn = new Variable("fn");
+        var a = new Parameter("a", TypeReference.To<long>());
+        var b = new Parameter("b", TypeReference.To<long>());
+        var node = new Block([
+            new Assignment(fn, new Lambda([a, b], new Add(a, b))),
+            new Invoke(fn, new Constant(1L))
+        ], [fn]);
+        await AssertAnalysisThenCompileRejects(
+            node,
+            "parameter(s)",
+            SyntaxTypeCompatibilityAnalyzer.DiagnosticCode);
+    }
+
+    [Test]
+    public async Task StoredLambda_TooManyArgs_AnalysisErrorAndCompileRejects() {
+        var fn = new Variable("fn");
+        var x = new Parameter("x", TypeReference.To<long>());
+        var node = new Block([
+            new Assignment(fn, new Lambda([x], x)),
+            new Invoke(fn, new Constant(1L), new Constant(2L))
+        ], [fn]);
+        await AssertAnalysisThenCompileRejects(
+            node,
+            "parameter(s)",
+            SyntaxTypeCompatibilityAnalyzer.DiagnosticCode);
+    }
+
+    [Test]
+    public async Task Assignment_DateOnlyThenDateTime_AnalysisErrorAndCompileRejects() {
+        var x = new Variable("x");
+        var node = new Block([
+            new Assignment(x, new Constant(new DateOnly(2026, 8, 26))),
+            new Assignment(x, new Constant(new DateTime(2026, 8, 26, 15, 0, 0))),
+            x
+        ], [x]);
+        await AssertAnalysisThenCompileRejects(
+            node,
+            "incompatible",
+            SyntaxTypeCompatibilityAnalyzer.DiagnosticCode);
+    }
+
+    [Test]
+    public async Task Assignment_DateTimeToDateOnlyMember_AnalysisErrorAndCompileRejects() {
+        var host = new Variable("host");
+        var node = new Block([
+            new Assignment(host, new New(TypeReference.To<TypeCompatibilityTests.ConversionHost>())),
+            new Assignment(
+                new Member(host, "Start"),
+                new Constant(new DateTime(2026, 8, 26, 15, 0, 0)))
+        ], [host]);
+        await AssertAnalysisThenCompileRejects(
+            node,
+            "cannot assign",
+            SyntaxTypeCompatibilityAnalyzer.DiagnosticCode);
+    }
+
+    [Test]
+    public async Task Assignment_UntypedThenLong_AnalysisErrorAndCompileRejects() {
+        var src = new Variable("src");
+        var dest = new Variable("dest");
+        var node = new Block([
+            new Assignment(dest, src),
+            new Assignment(dest, new Constant(1L)),
+            dest
+        ], [src, dest]);
+        await AssertAnalysisThenCompileRejects(
+            node,
+            "incompatible",
+            SyntaxTypeCompatibilityAnalyzer.DiagnosticCode);
     }
 
     [Test]

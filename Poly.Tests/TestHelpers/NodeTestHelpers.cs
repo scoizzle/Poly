@@ -23,10 +23,10 @@ public static class AnalyzerBuilderExtensions {
             .UseJumpTargetResolution()
             .UseConstantFolding()
             .UseControlFlowAnalysis()
+            .UseDefiniteAssignmentAnalysis()
+            .UseLambdaReturnTypeResolution()
             .UseValueRepresentationAnalysis()
             .UseCallSiteCatalog()
-            .UseLambdaReturnTypeResolution()
-            .UseDefiniteAssignmentAnalysis()
             ;
 
     }

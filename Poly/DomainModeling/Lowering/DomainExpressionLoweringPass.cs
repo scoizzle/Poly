@@ -206,7 +206,7 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Node
             var rawArg = isSubtract ? (Node)new SN.UnaryMinus(right) : right;
             // DateOnly.AddDays takes int; DateTime.AddDays takes double (long widens implicitly).
             var typedArg = typeName is "Date" or "DateOnly"
-                ? new TypeCast(rawArg, new PrimitiveTypeReference(Prim.Int32))
+                ? Int32Offset(rawArg)
                 : rawArg;
             return new Invoke(new Member(left, "AddDays"), [typedArg]);
         }
@@ -308,11 +308,81 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Node
     protected override Node DateOperation(DateOperation d) {
         var date = Route(d.Date);
         var offset = Route(d.Offset);
-        return d.Kind switch {
-            DateOperationKind.AddDays => new Invoke(new Member(date, "AddDays"), offset),
-            DateOperationKind.AddMonths => new Invoke(new Member(date, "AddMonths"), offset),
-            DateOperationKind.DiffDays => new Invoke(new Member(date, "Subtract"), offset),
+        var family = ResolveDateClrFamily(d.Date);
+
+        if (family is DateClrFamily.TimeOnly
+            && d.Kind is DateOperationKind.AddSeconds or DateOperationKind.AddMilliseconds) {
+            var from = d.Kind is DateOperationKind.AddSeconds ? "FromSeconds" : "FromMilliseconds";
+            return new Invoke(
+                new Member(date, "Add"),
+                new Invoke(new Member(new NamedTypeReference("TimeSpan"), from), offset));
+        }
+
+        var (method, arg) = d.Kind switch {
+            DateOperationKind.AddMilliseconds => ("AddMilliseconds", offset),
+            DateOperationKind.AddSeconds => ("AddSeconds", offset),
+            DateOperationKind.AddMinutes => ("AddMinutes", offset),
+            DateOperationKind.AddHours => ("AddHours", offset),
+            DateOperationKind.AddDays => ("AddDays", offset),
+            DateOperationKind.AddWeeks => ("AddDays", ScaleOffset(offset, 7)),
+            DateOperationKind.AddMonths => ("AddMonths", offset),
+            DateOperationKind.AddYears => ("AddYears", offset),
+            DateOperationKind.DiffDays => ("Subtract", offset),
             _ => throw new NotSupportedException($"DateOperation kind '{d.Kind}' is not supported."),
         };
+
+        if (NeedsIntOffset(family, d.Kind))
+            arg = Int32Offset(arg);
+
+        return new Invoke(new Member(date, method), arg);
     }
+
+    private enum DateClrFamily { Unknown, DateOnly, DateTime, TimeOnly }
+
+    private DateClrFamily ResolveDateClrFamily(DomainExpression dateExpr) {
+        if (dateExpr is Now)
+            return DateClrFamily.DateTime;
+        if (dateExpr is Today)
+            return DateClrFamily.DateOnly;
+        if (DateOperandName(dateExpr) is { } name
+            && _propertyTypeResolver?.Invoke(name) is { } typeName)
+            return FamilyFromTypeName(typeName);
+        if (dateExpr is DateOperation nested)
+            return ResolveDateClrFamily(nested.Date);
+        return DateClrFamily.Unknown;
+    }
+
+    private static string? DateOperandName(DomainExpression dateExpr) => dateExpr switch {
+        PropertyAccess pa => pa.Name,
+        ParameterAccess pa => pa.Name,
+        _ => null,
+    };
+
+    private static DateClrFamily FamilyFromTypeName(string typeName) => typeName switch {
+        "Date" or "DateOnly" => DateClrFamily.DateOnly,
+        "DateTime" or "Timestamp" => DateClrFamily.DateTime,
+        "Time" or "TimeOnly" => DateClrFamily.TimeOnly,
+        _ => DateClrFamily.Unknown,
+    };
+
+    /// <summary>
+    /// DateOnly.AddDays/AddMonths/AddYears take int; DateTime.AddMonths/AddYears take int.
+    /// DateTime.AddDays (and clock Add*) take double — long widens. Cast wraps the scaled
+    /// or negated offset so the printer emits <c>(int)-14L</c>, not <c>(int)0L - 14L</c>.
+    /// </summary>
+    private static bool NeedsIntOffset(DateClrFamily family, DateOperationKind kind) {
+        if (kind is DateOperationKind.AddMonths or DateOperationKind.AddYears)
+            return family is not DateClrFamily.TimeOnly;
+        return family is DateClrFamily.DateOnly
+            && kind is DateOperationKind.AddDays or DateOperationKind.AddWeeks;
+    }
+
+    private static Node Int32Offset(Node rawArg) =>
+        new TypeCast(rawArg, new PrimitiveTypeReference(Prim.Int32));
+
+    private static Node ScaleOffset(Node offset, int factor) => offset switch {
+        Constant { Value: long n } => new Constant(n * factor),
+        Constant { Value: int n } => new Constant(n * factor),
+        _ => new SN.Multiply(offset, new Constant((long)factor)),
+    };
 }

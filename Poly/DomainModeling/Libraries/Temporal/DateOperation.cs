@@ -2,7 +2,17 @@ using Poly.DomainModeling.Ontology;
 
 namespace Poly.DomainModeling.Libraries.Temporal;
 
-public enum DateOperationKind { AddDays, AddMonths, DiffDays }
+public enum DateOperationKind {
+    AddMilliseconds,
+    AddSeconds,
+    AddMinutes,
+    AddHours,
+    AddDays,
+    AddWeeks,
+    AddMonths,
+    AddYears,
+    DiffDays
+}
 
 /// <summary>
 /// Resolved date arithmetic (<c>Now - 12 days</c>, <c>DueDate + 14 days</c>).

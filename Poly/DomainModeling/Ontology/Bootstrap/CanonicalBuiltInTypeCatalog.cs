@@ -14,13 +14,9 @@ public static class CanonicalBuiltInTypeCatalog {
     /// </summary>
     public static IReadOnlyList<(string Name, TypeCategory Category)> Definitions { get; } =
     [
-        ("Boolean",  TypeCategory.Primitive),
+        ("Boolean",  TypeCategory.Boolean),
         ("Number",   TypeCategory.Primitive | TypeCategory.Numeric),
         ("Text",     TypeCategory.Primitive | TypeCategory.Text),
-        ("Date",     TypeCategory.Primitive | TypeCategory.Temporal),
-        ("Time",     TypeCategory.Primitive | TypeCategory.Temporal),
-        ("DateTime", TypeCategory.Primitive | TypeCategory.Temporal | TypeCategory.Instant),
-        ("Duration", TypeCategory.Primitive | TypeCategory.Temporal),
         ("Uuid",     TypeCategory.Primitive | TypeCategory.Identifier),
         ("Binary",   TypeCategory.Primitive | TypeCategory.Binary),
     ];

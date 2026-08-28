@@ -40,6 +40,24 @@ public class TypeCompatibilityTests {
     }
 
     [Test]
+    public async Task IsAssignableFrom_DateOnly_ToDateTime_ReturnsFalse() {
+        var registry = new ClrTypeDefinitionRegistry();
+        var dateTime = registry.GetTypeDefinition(typeof(DateTime));
+        var dateOnly = registry.GetTypeDefinition(typeof(DateOnly));
+        await Assert.That(dateTime.IsAssignableFrom(dateOnly)).IsFalse();
+        await Assert.That(dateOnly.IsAssignableTo(dateTime)).IsFalse();
+    }
+
+    [Test]
+    public async Task IsAssignableFrom_DateTime_ToDateOnly_ReturnsFalse() {
+        var registry = new ClrTypeDefinitionRegistry();
+        var dateTime = registry.GetTypeDefinition(typeof(DateTime));
+        var dateOnly = registry.GetTypeDefinition(typeof(DateOnly));
+        await Assert.That(dateOnly.IsAssignableFrom(dateTime)).IsFalse();
+        await Assert.That(dateTime.IsAssignableTo(dateOnly)).IsFalse();
+    }
+
+    [Test]
     public async Task IsAssignableFrom_SameType_ReturnsTrue() {
         var registry = new ClrTypeDefinitionRegistry();
         var stringType = registry.GetTypeDefinition<string>();
@@ -248,6 +266,65 @@ public class TypeCompatibilityTests {
         var derivedType = (ITypeDefinition)registry.GetTypeDefinition(typeof(GenericLeaf<string>));
 
         await Assert.That(baseType.IsAssignableFrom(derivedType)).IsTrue();
+    }
+
+    [Test]
+    public async Task IsAssignableFrom_ImplicitConversionOperator_ReturnsTrue() {
+        var registry = new ClrTypeDefinitionRegistry();
+        var meters = registry.GetTypeDefinition(typeof(Meters));
+        var dbl = registry.GetTypeDefinition(typeof(double));
+        await Assert.That(meters.IsAssignableFrom(dbl)).IsTrue();
+        await Assert.That(dbl.IsAssignableTo(meters)).IsTrue();
+        var implicitOp = meters.GetConversionFrom(dbl);
+        await Assert.That(implicitOp?.Kind).IsEqualTo(ConversionOperatorKind.Implicit);
+        await Assert.That(implicitOp?.Method.Name).IsEqualTo("op_Implicit");
+        await Assert.That(implicitOp?.Method.IsStatic).IsTrue();
+    }
+
+    [Test]
+    public async Task IsAssignableFrom_ExplicitConversionOperator_ReturnsFalse() {
+        var registry = new ClrTypeDefinitionRegistry();
+        var meters = registry.GetTypeDefinition(typeof(Meters));
+        var dbl = registry.GetTypeDefinition(typeof(double));
+        await Assert.That(dbl.IsAssignableFrom(meters)).IsFalse();
+        await Assert.That(meters.IsAssignableTo(dbl)).IsFalse();
+        var explicitOp = dbl.GetConversionFrom(meters);
+        await Assert.That(explicitOp?.Kind).IsEqualTo(ConversionOperatorKind.Explicit);
+        await Assert.That(explicitOp?.Method.Name).IsEqualTo("op_Explicit");
+    }
+
+    [Test]
+    public async Task IsAssignableFrom_DateTime_ToDateTimeOffset_UsesImplicitOperator() {
+        var registry = new ClrTypeDefinitionRegistry();
+        var dateTime = registry.GetTypeDefinition(typeof(DateTime));
+        var offset = registry.GetTypeDefinition(typeof(DateTimeOffset));
+        await Assert.That(offset.IsAssignableFrom(dateTime)).IsTrue();
+        await Assert.That(dateTime.IsAssignableFrom(offset)).IsFalse();
+        await Assert.That(offset.GetConversionFrom(dateTime)?.Kind).IsEqualTo(ConversionOperatorKind.Implicit);
+        await Assert.That(offset.GetConversionFrom(dateTime)?.Method.Name).IsEqualTo("op_Implicit");
+        await Assert.That(dateTime.GetConversionFrom(offset)).IsNull();
+    }
+
+    [Test]
+    public async Task GetConversionFrom_UnrelatedTypes_ReturnsNull() {
+        var registry = new ClrTypeDefinitionRegistry();
+        var stringType = registry.GetTypeDefinition<string>();
+        var intType = registry.GetTypeDefinition<int>();
+        await Assert.That(stringType.GetConversionFrom(intType)).IsNull();
+        await Assert.That(intType.GetConversionFrom(stringType)).IsNull();
+    }
+
+    public readonly struct Meters {
+        public Meters(double value) => Value = value;
+        public double Value { get; }
+        public static implicit operator Meters(double value) => new(value);
+        public static explicit operator double(Meters meters) => meters.Value;
+    }
+
+    public sealed class ConversionHost {
+        public DateTime Due { get; set; }
+        public DateOnly Start { get; set; }
+        public Meters Length { get; set; }
     }
 
     [Test]

@@ -14,8 +14,6 @@ internal sealed class EffectFactsPass : INodeAnalyzer {
     public string[] Dependencies => [DomainCatalogPass.Id];
 
     public void Analyze(AnalysisContext context, Node node) {
-        if (!context.ShouldAnalyze(node))
-            return;
 
         if (node is Domain domain) {
             PublishDomain(context, domain);

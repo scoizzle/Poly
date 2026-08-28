@@ -112,6 +112,8 @@ The `CallStack` class provides typed accessors:
 3. Set `state.ClosureHandle` for closure calls
 4. Invoke the callee delegate (for external methods or compiled function bodies)
 
+Stored-closure heap layout: `object[]` at the handle, `[0] = lambda index (boxed long)`, `[1..] = `long[1]` cells. Function-table bodies read and write `cell[0]`. The enclosing frame stores a heap handle to the same cell in the captured variable's slot. Capture lists come from analysis (`LambdaCaptureMetadata`). `Invoke(Variable)` is typed as the lambda body's value kind so result unwrap uses `Bool` / `StackScalar` rather than treating ABI `1` as heap handle 1. `VariableLayout.IsUpvalueCell` tells `VmDebugger.GetLocals` to present `cell[0]`. Invoke fails closed if an upvalue slot is not a `long[1]`.
+
 ### Callee Responsibilities
 1. Allocate frame header (push previousFP + savedSP)
 2. Reserve local slots

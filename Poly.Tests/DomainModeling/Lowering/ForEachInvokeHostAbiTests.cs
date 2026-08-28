@@ -9,16 +9,16 @@ namespace Poly.Tests.DomainModeling.Lowering;
 public class ForEachInvokeHostAbiTests {
     [Test]
     public async Task VmForEach_OverObjectList_RunsBodyPerItem() {
-        var sum = new Variable("sum", new Constant(0L));
+        var sum = new Variable("sum");
         var item = new Variable("item");
         var node = new Block([
-            sum,
+            new Assignment(sum, new Constant(0L)),
             new ForEachLoop(
                 item,
                 new Constant(new object[] { "a", "b", "c" }),
                 new Assignment(sum, new Poly.Ast.Nodes.Add(sum, new Constant(1L)))),
             sum
-        ]);
+        ], [sum]);
         var program = Interpreter.Compile(node);
         using var exec = Interpreter.Execute(program);
         await Assert.That(exec.Result.GetValue<long>()).IsEqualTo(3L);

@@ -45,7 +45,10 @@ public sealed record ValueRepresentationMetadata(
 internal sealed class ValueRepresentationAnalyzer : INodeAnalyzer {
     public const string Id = "ValueRepresentation";
     public string PassName => Id;
-    public string[] Dependencies => [TypeAndMemberResolver.Id, ControlFlowAnalysisPass.Id];
+    public string[] Dependencies => [
+        TypeAndMemberResolver.Id,
+        ControlFlowAnalysisPass.Id,
+        LambdaReturnTypeAnalyzer.Id];
     public void Analyze(AnalysisContext context, Node node) {
         // Post-order: classify children first
         this.AnalyzeChildren(context, node);
@@ -65,11 +68,20 @@ internal sealed class ValueRepresentationAnalyzer : INodeAnalyzer {
             Block b => ClassifyBlock(context, b),
             IfStatement => (ValueRepresentationKind.Void, null),
             WhileLoop => (ValueRepresentationKind.Void, null),
+            DoWhileLoop => (ValueRepresentationKind.Void, null),
             ForLoop => (ValueRepresentationKind.Void, null),
             ForEachLoop => (ValueRepresentationKind.Void, null),
-            Return => (ValueRepresentationKind.Void, null),
+            Return r => r.Value is null
+                ? (ValueRepresentationKind.Void, null)
+                : PropagateChild(context, r.Value),
             ThrowStatement => (ValueRepresentationKind.Void, null),
-            Assignment => (ValueRepresentationKind.Void, null),
+            BreakStatement => (ValueRepresentationKind.Void, null),
+            ContinueStatement => (ValueRepresentationKind.Void, null),
+            GotoStatement => (ValueRepresentationKind.Void, null),
+            UsingStatement => (ValueRepresentationKind.Void, null),
+            Assignment a => PropagateChild(context, a.Value),
+            SwitchStatement sw => ClassifySwitch(sw, context),
+            TryCatchFinally tcf => PropagateChild(context, tcf.TryBlock),
             Equal => (ValueRepresentationKind.Bool, typeof(bool)),
             NotEqual => (ValueRepresentationKind.Bool, typeof(bool)),
             LessThan => (ValueRepresentationKind.Bool, typeof(bool)),
@@ -92,7 +104,7 @@ internal sealed class ValueRepresentationAnalyzer : INodeAnalyzer {
             ShiftRight => ClassifyWithResolvedType(context, node, ValueRepresentationKind.StackScalar),
             New => (ValueRepresentationKind.HeapRef, null),
             NewArray => (ValueRepresentationKind.HeapRef, null),
-            Lambda => (ValueRepresentationKind.HeapRef, null),
+            Lambda l => ClassifyLambda(context, l),
             TypeAs => (ValueRepresentationKind.HeapRef, null),
             TypeCast tc => ClassifyTypeCast(context, tc),
             TypeOf => (ValueRepresentationKind.HeapRef, typeof(Type)),
@@ -102,7 +114,7 @@ internal sealed class ValueRepresentationAnalyzer : INodeAnalyzer {
             TypeIs => (ValueRepresentationKind.Bool, typeof(bool)),
             IndexAccess ia => ClassifyIndexAccess(context, ia),
             Member ma => ClassifyMember(context, ma),
-            Invoke inv => ClassifyFromResolvedType(context, inv),
+            Invoke inv => ClassifyInvoke(context, inv),
             Coalesce coalesce => ClassifyCoalesce(context, coalesce),
             Conditional cond => ClassifyConditional(context, cond),
             NullForgiving nf => PropagateChild(context, nf.Operand),
@@ -220,6 +232,35 @@ internal sealed class ValueRepresentationAnalyzer : INodeAnalyzer {
         return (ValueRepresentationKind.HeapRef, c.Value.GetType());
     }
 
+    private static (ValueRepresentationKind Kind, Type? ClrType) ClassifyLambda(
+        AnalysisContext context, Lambda lambda) {
+        var resolved = ClassifyFromResolvedType(context, lambda);
+        return resolved.Kind == ValueRepresentationKind.Unknown
+            ? (ValueRepresentationKind.HeapRef, null)
+            : resolved;
+    }
+
+    private static (ValueRepresentationKind Kind, Type? ClrType) ClassifyInvoke(
+        AnalysisContext context, Invoke invoke) {
+        var resolved = ClassifyFromResolvedType(context, invoke);
+        if (resolved.Kind != ValueRepresentationKind.Unknown)
+            return resolved;
+        if (invoke.Delegate is Lambda lambda)
+            return PropagateChild(context, lambda.Body);
+        if (context.GetMetadata<StoredLambdaMetadata>(invoke.Delegate) is { } stored)
+            return PropagateChild(context, stored.Lambda.Body);
+        return resolved;
+    }
+
+    private static (ValueRepresentationKind Kind, Type? ClrType) ClassifySwitch(
+        SwitchStatement sw, AnalysisContext context) {
+        if (sw.Cases.Count > 0)
+            return PropagateChild(context, sw.Cases[0].Body);
+        if (sw.DefaultCase is not null)
+            return PropagateChild(context, sw.DefaultCase);
+        return (ValueRepresentationKind.StackScalar, typeof(long));
+    }
+
     private static (ValueRepresentationKind Kind, Type? ClrType) ClassifyFromResolvedType(
         AnalysisContext context, Node node) {
         var typeDef = context.GetResolvedType(node);
@@ -293,8 +334,68 @@ internal sealed class ValueRepresentationAnalyzer : INodeAnalyzer {
         AnalysisContext context, Block block) {
         if (block.Nodes.Count == 0)
             return (ValueRepresentationKind.Void, null);
-        var last = block.Nodes[^1];
-        return PropagateChild(context, last);
+        var last = PropagateChild(context, block.Nodes[^1]);
+        var fromReturn = FindValuedReturnKind(context, block);
+        if (fromReturn is null)
+            return last;
+        if (last.Kind == ValueRepresentationKind.Void)
+            return fromReturn.Value;
+        if (HasDominatingValuedReturn(block))
+            return fromReturn.Value;
+        return last;
+    }
+
+    /// <summary>Valued <see cref="Return"/> that can yield from this node.
+    /// Nested lambdas are skipped. <c>If(false, …)</c> then-branches are skipped;
+    /// <c>If(true, …)</c> uses the then-branch only.</summary>
+    private static (ValueRepresentationKind Kind, Type? ClrType)? FindValuedReturnKind(
+        AnalysisContext context, Node node) {
+        if (node is Lambda)
+            return null;
+        if (node is IfStatement ifStmt) {
+            if (ifStmt.Condition is Constant { Value: false })
+                return ifStmt.ElseBranch is null ? null : FindValuedReturnKind(context, ifStmt.ElseBranch);
+            if (ifStmt.Condition is Constant { Value: true })
+                return FindValuedReturnKind(context, ifStmt.ThenBranch);
+        }
+        if (node is Return { Value: not null } ret)
+            return PropagateChild(context, ret.Value);
+        foreach (var child in node.Children) {
+            if (child is null) continue;
+            var found = FindValuedReturnKind(context, child);
+            if (found is not null)
+                return found;
+        }
+        return null;
+    }
+
+    private static bool HasDominatingValuedReturn(Block block) {
+        foreach (var stmt in block.Nodes) {
+            if (stmt is Return { Value: not null })
+                return true;
+            if (stmt is IfStatement { Condition: Constant { Value: true } } ifTrue
+                && FindValuedReturnKindCheap(ifTrue.ThenBranch))
+                return true;
+        }
+        return false;
+    }
+
+    private static bool FindValuedReturnKindCheap(Node node) {
+        if (node is Lambda)
+            return false;
+        if (node is Return { Value: not null })
+            return true;
+        if (node is IfStatement ifStmt) {
+            if (ifStmt.Condition is Constant { Value: false })
+                return ifStmt.ElseBranch is not null && FindValuedReturnKindCheap(ifStmt.ElseBranch);
+            if (ifStmt.Condition is Constant { Value: true })
+                return FindValuedReturnKindCheap(ifStmt.ThenBranch);
+        }
+        foreach (var child in node.Children) {
+            if (child is not null && FindValuedReturnKindCheap(child))
+                return true;
+        }
+        return false;
     }
 
     private static (ValueRepresentationKind Kind, Type? ClrType) PropagateChild(

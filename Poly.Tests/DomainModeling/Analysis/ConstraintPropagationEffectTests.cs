@@ -507,6 +507,32 @@ public class ConstraintPropagationEffectTests {
     }
 
     [Test]
+    public async Task CallChain_StageScopedCallee_IsFound() {
+        var result = Parse("""
+            domain Test
+            Item: entity {
+              Qty: Number range(0, 90)
+              Boot: stage {
+                Bump: action { assign Qty to Qty + 10 }
+              }
+              Kick: action { invoke Bump }
+            }
+            """);
+        await Assert.That(result.Succeeded).IsTrue();
+        var entity = result.Root.Types.OfType<Entity>().Single(e => e.Name == "Item");
+        var kick = entity.Actions.Single(x => x.Name == "Kick");
+        var bump = entity.Stages.SelectMany(s => s.Actions).Single(x => x.Name == "Bump");
+        var kickInv = result.Analysis.GetActionInvariants(kick);
+        var bumpInv = result.Analysis.GetActionInvariants(bump);
+        await Assert.That(kickInv).IsNotNull();
+        await Assert.That(bumpInv).IsNotNull();
+        var bumpPost = bumpInv!.StageContexts().Single().Postconditions.Single();
+        var kickPost = kickInv!.StageContexts().Single().Postconditions
+            .Single(p => ReferenceEquals(p.Effect, bumpPost.Effect));
+        await Assert.That(kickPost.ValueRange!.Max).IsEqualTo(100d);
+    }
+
+    [Test]
     public async Task CallChain_InvokeArgumentBinding_FlowsParamRange() {
         // A invokes `B(x: amount)` where amount range(0, 200) and B does
         // `assign Total to x` with Total range(0, 100). The chained postcondition's net

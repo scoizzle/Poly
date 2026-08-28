@@ -457,8 +457,11 @@ public sealed partial record DomainEntityInstance {
                 if (raw is not DomainEntityInstance linked)
                     throw new InvalidOperationException(
                         $"Create-in initializer '{navName}' on '{targetEntity.Name}' must resolve to a linked instance.");
-                if (!ReferenceEquals(linked.Store, Store))
-                    Store.Add(linked);
+                if (!ReferenceEquals(linked.Store, Store)
+                    && !Store.TryAdd(linked, out var linkAddError)) {
+                    _createdChildren.Remove(child);
+                    throw new InvalidOperationException(linkAddError);
+                }
                 Store.Link(navName, child, linked);
                 TryLinkInverseCollection(linked, child);
             }

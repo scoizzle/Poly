@@ -302,8 +302,7 @@ internal sealed class DomainMutationContext {
 
         for (int i = 0; i < Types.Count; i++) {
             if (Types[i] is Entity e) {
-                var action = e.Actions.FirstOrDefault(a =>
-                    string.Equals(a.Name, actionName, StringComparison.Ordinal));
+                var action = DomainAnalysis.FindAction(e, actionName);
                 if (action is not null) return action;
             }
         }

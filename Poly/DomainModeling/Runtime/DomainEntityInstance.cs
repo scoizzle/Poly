@@ -545,12 +545,17 @@ public sealed partial record DomainEntityInstance {
         var subjectParam = new Parameter("entity", new TypeReference(Entity.Name));
 
         foreach (var binding in bindings) {
+            if (TryEvalActionParamPath(binding.Expression, out var fromParam)) {
+                result[binding.PropertyName] = fromParam;
+                continue;
+            }
             var loweringPass = new DomainExpressionLoweringPass(new LoweringContext(new Parameter("entity")));
             var lowered = loweringPass.Lower(binding.Expression, subjectParam);
             var compiled = Interpreter.Compile(lowered, _bindingTypeProvider ?? _typeDefAnalyzer);
             using var exec = Interpreter.Execute(compiled,
                 s => s.SetArgs(new object?[] { this }));
-            result[binding.PropertyName] = exec.Result.GetValue<object>();
+            result[binding.PropertyName] = BoxPathPrefixLeaf(
+                binding.Expression, exec.Result.GetValue<object>());
         }
 
         return result.Count > 0 ? result : null;

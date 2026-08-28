@@ -27,13 +27,8 @@ internal sealed class ConstraintPropagationAnalyzer : INodeAnalyzer {
     }
 
     private static void ValidateDomain(AnalysisContext context, Domain domain) {
-        foreach (var type in domain.Types) {
-            if (type is Entity entity) {
-                foreach (var action in entity.Actions) {
-                    AnalyzeAction(context, action, entity);
-                }
-            }
-        }
+        DomainAnalysis.ForEachEntity(domain, entity =>
+            DomainAnalysis.ForEachAction(entity, action => AnalyzeAction(context, action, entity)));
     }
 
     private static void AnalyzeAction(AnalysisContext context, Action action, Entity entity) {
@@ -81,8 +76,7 @@ internal sealed class ConstraintPropagationAnalyzer : INodeAnalyzer {
         List<Constraint> accumulated,
         HashSet<Effect> visited) {
 
-        var targetAction = entity.Actions.FirstOrDefault(a =>
-            string.Equals(a.Name, iae.ActionName, StringComparison.Ordinal));
+        var targetAction = DomainAnalysis.FindAction(entity, iae.ActionName);
         if (targetAction is null) return;
 
         foreach (var binding in iae.ParameterBindings) {
@@ -148,8 +142,7 @@ internal sealed class ConstraintPropagationAnalyzer : INodeAnalyzer {
                     CollectFromAssign(ae, param, entity, accumulated);
                     break;
                 case InvokeActionEffect iae:
-                    var nestedTarget = entity.Actions.FirstOrDefault(a =>
-                        string.Equals(a.Name, iae.ActionName, StringComparison.Ordinal));
+                    var nestedTarget = DomainAnalysis.FindAction(entity, iae.ActionName);
                     if (nestedTarget is not null) {
                         CollectFromAction(nestedTarget, param, entity, accumulated, visited);
                     }

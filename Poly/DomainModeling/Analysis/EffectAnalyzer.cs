@@ -836,10 +836,7 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
         }
 
         // Action must exist on the target (entity or stage actions).
-        var targetAction = targetEntity.Actions.FirstOrDefault(a =>
-                string.Equals(a.Name, efe.ActionName, StringComparison.Ordinal))
-            ?? targetEntity.Stages.SelectMany(s => s.Actions)
-                .FirstOrDefault(a => string.Equals(a.Name, efe.ActionName, StringComparison.Ordinal));
+        var targetAction = DomainAnalysis.FindAction(targetEntity, efe.ActionName);
         if (targetAction is null) {
             context.ReportError(
                 efe,
@@ -998,15 +995,7 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
             targetEntity = entity;
         }
 
-        var targetAction = targetEntity.Actions.FirstOrDefault(a =>
-            string.Equals(a.Name, iae.ActionName, StringComparison.Ordinal));
-        // Stage actions are invokable targets too (self-invoke on a stage action,
-        // or cross-entity invoke of a stage action by name).
-        if (targetAction is null) {
-            targetAction = targetEntity.Stages
-                .SelectMany(s => s.Actions)
-                .FirstOrDefault(a => string.Equals(a.Name, iae.ActionName, StringComparison.Ordinal));
-        }
+        var targetAction = DomainAnalysis.FindAction(targetEntity, iae.ActionName);
         if (targetAction is null) {
             context.ReportError(
                 iae,

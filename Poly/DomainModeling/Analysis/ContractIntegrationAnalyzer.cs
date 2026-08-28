@@ -137,7 +137,7 @@ internal sealed class ContractIntegrationAnalyzer : INodeAnalyzer {
                 DomainModelDiagnosticCodes.ContractIntegration);
         }
 
-        var action = FindActionOnAnyEntity(domain, binding.ActionName);
+        var action = DomainAnalysis.FindActionOnAnyEntity(domain, binding.ActionName);
         if (action is null) {
             context.ReportError(
                 binding,
@@ -173,18 +173,4 @@ internal sealed class ContractIntegrationAnalyzer : INodeAnalyzer {
         }
     }
 
-    private static Action? FindActionOnAnyEntity(Domain domain, string actionName) {
-        foreach (var type in domain.Types) {
-            if (type is not Entity entity) continue;
-            var action = entity.Actions.FirstOrDefault(a =>
-                string.Equals(a.Name, actionName, StringComparison.Ordinal));
-            if (action is not null) return action;
-            foreach (var stage in entity.Stages) {
-                action = stage.Actions.FirstOrDefault(a =>
-                    string.Equals(a.Name, actionName, StringComparison.Ordinal));
-                if (action is not null) return action;
-            }
-        }
-        return null;
-    }
 }

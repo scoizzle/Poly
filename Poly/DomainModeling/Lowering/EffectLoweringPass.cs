@@ -685,6 +685,11 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
                 case CompositeEffect composite:
                     CollectCreateInProbes(composite.Effects, nodes);
                     break;
+                case ConditionalEffect cond:
+                    CollectCreateInProbes(cond.ThenEffects, nodes);
+                    if (cond.ElseEffects is not null)
+                        CollectCreateInProbes(cond.ElseEffects, nodes);
+                    break;
                 case CreateEntityInRelationshipEffect cr:
                     if (LowerCreateInProbe(cr) is { } probe)
                         nodes.Add(probe);

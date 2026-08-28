@@ -20,6 +20,34 @@ internal static class DomainAnalysis {
     }
 
     /// <summary>
+    /// Resolves <paramref name="actionName"/> on <paramref name="entity"/>: entity-level
+    /// first, then any stage action of that name (same dispatch as invoke / bind).
+    /// </summary>
+    public static Action? FindAction(Entity entity, string actionName) {
+        var action = entity.Actions.FirstOrDefault(a =>
+            string.Equals(a.Name, actionName, StringComparison.Ordinal));
+        if (action is not null) return action;
+        foreach (var stage in entity.Stages) {
+            action = stage.Actions.FirstOrDefault(a =>
+                string.Equals(a.Name, actionName, StringComparison.Ordinal));
+            if (action is not null) return action;
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// First action of <paramref name="actionName"/> on any entity (entity-level or stage).
+    /// </summary>
+    public static Action? FindActionOnAnyEntity(Domain domain, string actionName) {
+        foreach (var type in domain.Types) {
+            if (type is not Entity entity) continue;
+            var action = FindAction(entity, actionName);
+            if (action is not null) return action;
+        }
+        return null;
+    }
+
+    /// <summary>
     /// Iterates all actions on <paramref name="entity"/>, including those on
     /// the entity directly and those on its stages.
     /// </summary>

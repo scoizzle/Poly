@@ -325,8 +325,7 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
             return;
         }
 
-        var target = entity.Actions.FirstOrDefault(a =>
-            string.Equals(a.Name, invoke.ActionName, StringComparison.Ordinal));
+        var target = DomainAnalysis.FindAction(entity, invoke.ActionName);
         if (target is null || !visited.Add(target)) return;
 
         var targetEnv = CloneEnv(env);
@@ -357,8 +356,7 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
             string.Equals(e.Name, relationship.Target.TypeName, StringComparison.Ordinal));
         if (targetEntity is null) return;
 
-        var targetAction = targetEntity.Actions.FirstOrDefault(a =>
-            string.Equals(a.Name, invoke.ActionName, StringComparison.Ordinal));
+        var targetAction = DomainAnalysis.FindAction(targetEntity, invoke.ActionName);
         if (targetAction is null || !visited.Add(targetAction)) return;
 
         // The target entity's environment: declared constraints, refined by its own
@@ -394,8 +392,7 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
             string.Equals(e.Name, relationship.Target.TypeName, StringComparison.Ordinal));
         if (targetEntity is null) return;
 
-        var targetAction = targetEntity.Actions.FirstOrDefault(a =>
-            string.Equals(a.Name, efe.ActionName, StringComparison.Ordinal));
+        var targetAction = DomainAnalysis.FindAction(targetEntity, efe.ActionName);
         if (targetAction is null || !visited.Add(targetAction)) return;
 
         // Target environment: declared constraints refined by its own preconditions and by

@@ -442,19 +442,6 @@ public sealed partial record DomainEntityInstance {
             return BoxPathPrefixLeaf(r.TargetProperty, exec.Result.GetValue<object>());
         }
 
-        private static object? BoxPathPrefixLeaf(DomainExpression leaf, object? boxed) {
-            if (leaf is not (Ontology.Comparison or Ontology.And or Ontology.Or or Ontology.Not
-                or Ontology.Exists or Ontology.NotExists
-                or Ontology.AnyExpr or Ontology.AllExpr or Ontology.NoneExpr))
-                return boxed;
-            return boxed switch {
-                bool b => b,
-                long l => l != 0L,
-                int i => i != 0,
-                _ => boxed
-            };
-        }
-
         protected override DomainExpression Exists(Exists e) {
             // Rel exists: store outbound-link presence when Target is a relationship name.
             // Fail closed without store (GetOutboundRelatedInstances). Empty links → false.
@@ -543,6 +530,23 @@ public sealed partial record DomainEntityInstance {
         using var exec = Interpreter.Execute(compiled,
             s => s.SetArgs(new object?[] { target }));
         return exec.Result.GetValue<bool>();
+    }
+
+    /// <summary>
+    /// VM bools are long 0/1 on the stack. Boxing them as Int64 made
+    /// <c>require not</c> of a path-prefix comparison compile as Not(Int64).
+    /// </summary>
+    private static object? BoxPathPrefixLeaf(DomainExpression leaf, object? boxed) {
+        if (leaf is not (Ontology.Comparison or Ontology.And or Ontology.Or or Ontology.Not
+            or Ontology.Exists or Ontology.NotExists
+            or Ontology.AnyExpr or Ontology.AllExpr or Ontology.NoneExpr))
+            return boxed;
+        return boxed switch {
+            bool b => b,
+            long l => l != 0L,
+            int i => i != 0,
+            _ => boxed
+        };
     }
 
     /// <summary>

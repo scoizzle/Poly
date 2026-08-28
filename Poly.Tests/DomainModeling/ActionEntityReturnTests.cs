@@ -385,6 +385,35 @@ public class ActionEntityReturnTests {
     }
 
     [Test]
+    public async Task InvokeAction_CreateInNavInitializerUniqueCollision_IsFailure() {
+        var (domain, _) = Evolve("""
+            domain Test
+            Book: entity { ISBN: Text unique required }
+            Patron: entity {
+              loans: many Loan
+              CheckOut: action (book: Book) {
+                create in loans { book: book }
+              }
+            }
+            Loan: entity { book: Book }
+            """);
+        var store = new DomainInstanceStore();
+        var bookE = domain.Types.OfType<Entity>().First(e => e.Name == "Book");
+        var patronE = domain.Types.OfType<Entity>().First(e => e.Name == "Patron");
+        var inStore = DomainEntityInstance.Create(bookE,
+            new Dictionary<string, object?> { ["ISBN"] = "978-1" }, domain);
+        var duplicate = DomainEntityInstance.Create(bookE,
+            new Dictionary<string, object?> { ["ISBN"] = "978-1" }, domain);
+        var patron = DomainEntityInstance.Create(patronE, domain: domain);
+        store.Add(inStore);
+        store.Add(patron);
+        var result = patron.InvokeAction("CheckOut",
+            new Dictionary<string, object?> { ["book"] = duplicate });
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(result.ErrorMessage).Contains("Unique");
+    }
+
+    [Test]
     public async Task InvokeAction_CreateInConstraintFail_DoesNotApplyPriorAssigns() {
         var (domain, _) = Evolve("""
             domain Parking

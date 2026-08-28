@@ -502,7 +502,10 @@ public sealed partial record DomainEntityInstance {
 
             var createdBefore = _createdChildren.Count;
             foreach (var effect in action.Effects) {
-                ExecuteEffect(effect, effectPass, effectTypeProvider);
+                var failed = ExecuteEffect(effect, effectPass, effectTypeProvider);
+                if (failed is { IsSuccess: false })
+                    return ActionInvocationResult.InvalidArguments(
+                        actionName, failed.ErrorMessage ?? "invoke failed.");
             }
 
             // P3: declared -> Entity return = last child created this invoke of that type.
@@ -558,7 +561,7 @@ public sealed partial record DomainEntityInstance {
     /// lowering → compile → execute; direct-execution effects mutate
     /// the instance in place.
     /// </summary>
-    private void ExecuteEffect(
+    private DomainResult? ExecuteEffect(
         Effect effect,
         EffectLoweringPass effectPass,
         TypeDefinitionNodeAnalyzer typeProvider) {
@@ -572,8 +575,7 @@ public sealed partial record DomainEntityInstance {
         // invoke now lower.
         if ((prepared is ConditionalEffect or CompositeEffect)
             && ContainsDirectExecutionEffect(prepared)) {
-            ExecuteStructured(prepared, effectPass, typeProvider);
-            return;
+            return ExecuteStructured(prepared, effectPass, typeProvider);
         }
 
         var lowered = effectPass.TryLowerVmNode(prepared);
@@ -582,11 +584,12 @@ public sealed partial record DomainEntityInstance {
             using var exec = Interpreter.Execute(compiled,
                 s => s.SetArgs(new object?[] { this }));
             if (exec.Result.Value is DomainResult { IsSuccess: false } failed)
-                throw new InvalidOperationException(failed.ErrorMessage ?? "invoke failed.");
-            return;
+                return failed;
+            return null;
         }
 
         EffectExecutor.Run(this, effectPass, typeProvider, prepared);
+        return null;
     }
 
     /// <summary>
@@ -594,15 +597,18 @@ public sealed partial record DomainEntityInstance {
     /// the VM) and routes each sub-effect through <see cref="ExecuteEffect"/> so both
     /// VM-executable (assign, stage transition, invoke) and remaining direct-execution (create) effects run.
     /// </summary>
-    private void ExecuteStructured(
+    private DomainResult? ExecuteStructured(
         Effect effect,
         EffectLoweringPass effectPass,
         TypeDefinitionNodeAnalyzer typeProvider) {
         switch (effect) {
             case CompositeEffect c:
-                foreach (var sub in c.Effects)
-                    ExecuteEffect(sub, effectPass, typeProvider);
-                break;
+                foreach (var sub in c.Effects) {
+                    var failed = ExecuteEffect(sub, effectPass, typeProvider);
+                    if (failed is not null)
+                        return failed;
+                }
+                return null;
             case ConditionalEffect cond:
                 var condition = cond.Condition;
                 var entityParam = new Parameter("entity", new TypeReference(Entity.Name));
@@ -617,12 +623,14 @@ public sealed partial record DomainEntityInstance {
                     taken = exec.Result.GetValue<bool>();
                 }
                 var branch = taken ? cond.ThenEffects : (cond.ElseEffects ?? []);
-                foreach (var sub in branch)
-                    ExecuteEffect(sub, effectPass, typeProvider);
-                break;
+                foreach (var sub in branch) {
+                    var failed = ExecuteEffect(sub, effectPass, typeProvider);
+                    if (failed is not null)
+                        return failed;
+                }
+                return null;
             default:
-                ExecuteEffect(effect, effectPass, typeProvider);
-                break;
+                return ExecuteEffect(effect, effectPass, typeProvider);
         }
     }
 

@@ -318,11 +318,9 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     /// <c>Invoke(Member(Subject, actionName), args)</c> on both runtime and emit.
     /// Singular cross-entity invoke is <c>this.Rel.Action(args)</c> with a
     /// linked-target guard that returns <c>DomainResult.Failure</c> before deref
-    /// (never a bare NRE). Self / singular cross-entity do not wrap
-    /// <c>if (!result.IsSuccess) return result</c> — that is for-invoke's loop
-    /// (and C# method bodies). Nested Failure is discarded like C#
-    /// <c>this.Foo();</c>. Fail-fast on every invoke belongs here, not in
-    /// <c>InvokeNamed</c>. Not gated on
+    /// (never a bare NRE). Kitchen dogfood: nested Failure must fail-fast
+    /// (<c>if (!result.IsSuccess) return result</c>) so later effects do not run.
+    /// Not gated on
     /// <see cref="LoweringContext.LowerStageTransitions"/> — that flag still
     /// gates create / create-in. OneToMany fan-out uses the for-each lowering.
     /// </summary>
@@ -343,11 +341,30 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
                 new Block([new Return(new Invoke(
                     new Member(new TypeReference("DomainResult"), "Failure"),
                     new Constant($"'{i.ActionName}' requires a linked '{i.TargetRelationship}' on entity '{_entity.Name}'.")))]));
-            return new Block([guard,
-                new Invoke(new Member(navMember, i.ActionName), [.. args])]);
+            var seq = _forEachInvokeSequence++;
+            var resultVar = new Variable($"invoke{seq}");
+            var invokeCall = new Invoke(new Member(navMember, i.ActionName), [.. args]);
+            return new Block([
+                guard,
+                new Assignment(resultVar, invokeCall),
+                new IfStatement(
+                    new Poly.Ast.Nodes.Not(new Member(resultVar, "IsSuccess")),
+                    new Block([new Return(resultVar)]))
+            ], [resultVar]);
         }
 
-        return new Invoke(new Member(Subject, i.ActionName), [.. args]);
+        return WrapInvokeResult(new Invoke(new Member(Subject, i.ActionName), [.. args]));
+    }
+
+    private Node WrapInvokeResult(Invoke invokeCall) {
+        var seq = _forEachInvokeSequence++;
+        var resultVar = new Variable($"invoke{seq}");
+        return new Block([
+            new Assignment(resultVar, invokeCall),
+            new IfStatement(
+                new Poly.Ast.Nodes.Not(new Member(resultVar, "IsSuccess")),
+                new Block([new Return(resultVar)]))
+        ], [resultVar]);
     }
 
     /// <summary>

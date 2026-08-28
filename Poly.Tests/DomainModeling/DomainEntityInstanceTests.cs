@@ -915,7 +915,9 @@ public class DomainEntityInstanceTests {
         var src = DomainEntityInstance.Create(source, domain: domain);
         store.Add(src);
 
-        await Assert.That(() => src.InvokeAction("RunAll")).Throws<InvalidOperationException>();
+        var zero = src.InvokeAction("RunAll");
+        await Assert.That(zero.Succeeded).IsFalse();
+        await Assert.That(zero.ErrorMessage).Contains("matched zero");
     }
 
     [Test]
@@ -960,7 +962,8 @@ public class DomainEntityInstanceTests {
         await Assert.That(good.GetProperty<long>("Qty")).IsEqualTo(5L);
         await Assert.That(bad.GetProperty<long>("Qty")).IsEqualTo(0L);
 
-        await Assert.That(() => src.InvokeAction("Run")).Throws<InvalidOperationException>();
+        var run = src.InvokeAction("Run");
+        await Assert.That(run.Succeeded).IsFalse();
         // Fail-fast: the failing record (bad, Qty=0) was never mutated — its Mark guard
         // failed before the assign. Rollback is a documented gap: a record invoked BEFORE
         // the failure keeps its mutation.

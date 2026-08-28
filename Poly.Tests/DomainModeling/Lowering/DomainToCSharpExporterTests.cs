@@ -1783,6 +1783,36 @@ public class DomainToCSharpExporterTests {
     }
 
     [Test]
+    public async Task Export_SingularInvoke_ReturnsNestedFailure() {
+        var (domain, analysis) = ParseAndAnalyze("""
+            domain Kitchen
+            Station: entity {
+              Ready: stage {
+                Fire: action { transition to Busy }
+              }
+              Busy: stage { }
+            }
+            Ticket: entity {
+              station: Station
+              Queued: stage {
+                Send: action {
+                  invoke station.Fire
+                  transition to Cooking
+                }
+              }
+              Cooking: stage { }
+            }
+            """);
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var unit = new CompilationUnitNode([], null, types, null);
+        var cs = new CSharpGenerator().Generate(unit);
+
+        await Assert.That(cs).Contains("if (!invoke");
+        await Assert.That(cs).Contains("this.Station.Fire()");
+        await Assert.That(cs).Contains("return invoke");
+    }
+
+    [Test]
     public async Task Export_DateArithmetic_CastsToIntForDateOnly() {
         // Code-review fix: `DueDate + 14` on a Date (DateOnly) property emitted
         // `AddDays(14L)`, but DateOnly.AddDays takes int — CS1503 (long→int). The

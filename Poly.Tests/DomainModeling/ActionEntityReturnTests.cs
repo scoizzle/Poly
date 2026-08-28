@@ -484,6 +484,50 @@ public class ActionEntityReturnTests {
     }
 
     [Test]
+    public async Task InvokeAction_CrossEntityInvoke_FailsFastWhenCalleeWrongStage() {
+        var (domain, _) = Evolve("""
+            domain Kitchen
+            Station: entity {
+              Name: Text required
+              Ready: stage {
+                Fire: action { transition to Busy }
+              }
+              Busy: stage {
+                Clear: action { transition to Ready }
+              }
+            }
+            Ticket: entity {
+              TableNo: Text required
+              station: Station
+              Queued: stage {
+                Send: action {
+                  invoke station.Fire
+                  transition to Cooking
+                }
+              }
+              Cooking: stage { }
+            }
+            """);
+        var stationEntity = domain.Types.OfType<Entity>().First(e => e.Name == "Station");
+        var ticketEntity = domain.Types.OfType<Entity>().First(e => e.Name == "Ticket");
+        var store = new DomainInstanceStore();
+        var station = DomainEntityInstance.Create(stationEntity,
+            new Dictionary<string, object?> { ["Name"] = "Grill" }, domain);
+        var ticket = DomainEntityInstance.Create(ticketEntity,
+            new Dictionary<string, object?> { ["TableNo"] = "12" }, domain);
+        store.Add(station);
+        store.Add(ticket);
+        store.Link("station", ticket, station);
+
+        await Assert.That(station.InvokeAction("Fire").Succeeded).IsTrue();
+        var send = ticket.InvokeAction("Send");
+        await Assert.That(send.Succeeded).IsFalse();
+        await Assert.That(send.ErrorMessage).Contains("only available in stage");
+        await Assert.That(ticket.CurrentStage).IsEqualTo("Queued");
+        await Assert.That(station.CurrentStage).IsEqualTo("Busy");
+    }
+
+    [Test]
     public async Task Analyze_CreateInWithCollectionNavBinding_ReportsUnknownProperty() {
         // A `many` collection nav is NOT a bindable initializer target (the exporter
         // emits empty collections for those) — binding it must still fail closed.

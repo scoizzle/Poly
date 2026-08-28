@@ -93,5 +93,6 @@ public sealed record LoweringContext(
     Func<string, string>? NavigationNameResolver = null,
     Func<string, bool>? IsCollectionNavigation = null,
     Func<string, string?>? PropertyTypeResolver = null,
-    Node? ActionResultType = null
+    Node? ActionResultType = null,
+    bool EmitInstanceNotify = true
 );

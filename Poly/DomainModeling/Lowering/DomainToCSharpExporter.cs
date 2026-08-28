@@ -660,20 +660,9 @@ public sealed partial class DomainToCSharpExporter {
             ));
         }
 
-        // No-op instance method: runtime Invoke(Member(This, "Notify")) binds to
-        // DomainEntityInstance.Notify (store fan-out). Generated C# already fans out
-        // via PostTransitionNodes / Notify{Stage}Subscribers, so this method exists
-        // so the shared tree compiles.
-        if (entity.Stages.Count > 0) {
-            methods.Add(new MethodDefinitionNode(
-                "Notify",
-                new TypeReference("void"),
-                Parameters: [new Parameter("stageName",
-                    new PrimitiveTypeReference(PrimType.String))],
-                Body: new Block([]),
-                AccessModifier: AccessModifier.Private
-            ));
-        }
+        // Store fan-out is DomainEntityInstance.Notify on the runtime path.
+        // Generated C# fans out via Notify{Stage}Subscribers; do not emit a
+        // no-op Notify(string) (Fleet dogfood).
 
         // ── InitializeSubscriptions — for post-load subscription wiring ──
         if (subscriberSubs is { Count: > 0 }) {

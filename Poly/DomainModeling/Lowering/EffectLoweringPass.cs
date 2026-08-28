@@ -36,6 +36,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     private readonly string? _sourceStageName;
     private readonly IReadOnlyDictionary<string, string>? _enumPropertyNames;
     private readonly LoweringContext _context;
+    private readonly bool _emitInstanceNotify;
     private int _forEachInvokeSequence;
     private int _createInProbeSequence;
 
@@ -56,6 +57,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         _postTransitionNodes = context.PostTransitionNodes;
         _sourceStageName = context.SourceStageName;
         _enumPropertyNames = context.EnumPropertyNames;
+        _emitInstanceNotify = context.EmitInstanceNotify;
         _expressionPass = new DomainExpressionLoweringPass(context with {
             NavigationNameResolver = context.NavigationNameResolver ?? BuildNavigationNameResolver(entity, _domain, _analysis),
             IsCollectionNavigation = context.IsCollectionNavigation
@@ -296,12 +298,17 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
             1 => tryNodes[0],
             _ => new Block(tryNodes)
         };
-        nodes.Add(new TryCatchFinally(
-            tryBody,
-            CatchClauses: null,
-            FinallyBlock: new Invoke(
-                new Member(Subject, "Notify"),
-                new Constant(t.TargetStage.StageName))));
+        if (_emitInstanceNotify) {
+            nodes.Add(new TryCatchFinally(
+                tryBody,
+                CatchClauses: null,
+                FinallyBlock: new Invoke(
+                    new Member(Subject, "Notify"),
+                    new Constant(t.TargetStage.StageName))));
+        }
+        else if (tryNodes.Count > 0) {
+            nodes.Add(tryBody);
+        }
 
         return nodes.Count == 1 ? nodes[0] : new Block(nodes);
     }

@@ -1746,6 +1746,26 @@ public class DomainToCSharpExporterTests {
     }
 
     [Test]
+    public async Task Export_OmitsEmptyNotifyMethod() {
+        var (domain, analysis) = ParseAndAnalyze("""
+            domain Fleet
+            Vehicle: entity {
+              InService: stage {
+                Retire: action { transition to Retired }
+              }
+              Retired: stage { }
+            }
+            """);
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var unit = new CompilationUnitNode([], null, types, null);
+        var cs = new CSharpGenerator().Generate(unit);
+
+        await Assert.That(cs).DoesNotContain("void Notify(string stageName)");
+        await Assert.That(cs).DoesNotContain("this.Notify(");
+        await Assert.That(cs).Contains("this.CurrentStage = VehicleStage.Retired");
+    }
+
+    [Test]
     public async Task Export_DateArithmetic_CastsToIntForDateOnly() {
         // Code-review fix: `DueDate + 14` on a Date (DateOnly) property emitted
         // `AddDays(14L)`, but DateOnly.AddDays takes int — CS1503 (long→int). The

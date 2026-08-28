@@ -408,7 +408,8 @@ public sealed partial class DomainToCSharpExporter {
             SourceStageName: sourceStageName,
             Domain: domain,
             EnumPropertyNames: enumProps,
-            ActionResultType: actionResultType);
+            ActionResultType: actionResultType,
+            EmitInstanceNotify: false);
         var effectPass = new EffectLoweringPass(entity, context);
         var probes = effectPass.LowerCreateInConstraintProbes(action.Effects);
         var composite = new CompositeEffect(action.Effects);

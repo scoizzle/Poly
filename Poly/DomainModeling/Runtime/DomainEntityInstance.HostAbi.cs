@@ -331,6 +331,15 @@ public sealed partial record DomainEntityInstance {
         // the parameter as an unresolved member passthrough (garbage value).
         var initializerTypeProvider = parentTypeProvider ?? _typeDefAnalyzer;
         var initialValues = new Dictionary<string, object?>(StringComparer.Ordinal);
+        var navValues = new Dictionary<string, object?>(StringComparer.Ordinal);
+        var scalarNames = new HashSet<string>(
+            targetEntity.Properties.Select(p => p.Name), StringComparer.Ordinal);
+        var singularNavs = targetEntity.Navigations
+            .Where(n => n.Cardinality is not (RelationshipCardinality.OneToMany
+                or RelationshipCardinality.ManyToMany))
+            .Select(n => n.Name)
+            .ToHashSet(StringComparer.Ordinal);
+
         foreach (var binding in createEffect.Initializers) {
             var lowered = new DomainExpressionLoweringPass(new LoweringContext(new Parameter("entity"))).Lower(
                 binding.Expression,
@@ -338,7 +347,15 @@ public sealed partial record DomainEntityInstance {
             var compiled = Interpreter.Compile(lowered, initializerTypeProvider);
             using var exec = Interpreter.Execute(compiled,
                 s => s.SetArgs(new object?[] { this }));
-            initialValues[binding.PropertyName] = exec.Result.GetValue<object>();
+            var value = exec.Result.GetValue<object>();
+            if (scalarNames.Contains(binding.PropertyName))
+                initialValues[binding.PropertyName] = value;
+            else if (singularNavs.Contains(binding.PropertyName))
+                navValues[binding.PropertyName] = value;
+            else
+                throw new ArgumentException(
+                    $"Property '{binding.PropertyName}' does not exist on entity '{targetEntity.Name}'. " +
+                    $"Available: {string.Join(", ", scalarNames)}.");
         }
 
         var child = Create(targetEntity, initialValues, Domain);
@@ -346,6 +363,17 @@ public sealed partial record DomainEntityInstance {
 
         // BR.3.3: Auto-register child in the parent's store, if present.
         Store?.Add(child);
+
+        if (Store is not null) {
+            foreach (var (navName, raw) in navValues) {
+                if (raw is not DomainEntityInstance linked)
+                    throw new InvalidOperationException(
+                        $"Create-in initializer '{navName}' on '{targetEntity.Name}' must resolve to a linked instance.");
+                if (!ReferenceEquals(linked.Store, Store))
+                    Store.Add(linked);
+                Store.Link(navName, child, linked);
+            }
+        }
 
         // P2.1 / P2′.3 / P2′′′.3: Auto-link child to creator if the effect specifies a relationship name.
         // Link direction: creator (this) = source, child = target.

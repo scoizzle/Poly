@@ -5,6 +5,8 @@ using System.Text.Json.Serialization;
 using ModelContextProtocol.Server;
 
 using Poly.DomainModeling.Analysis;
+using Poly.DomainModeling.Ontology;
+using Poly.DomainModeling.Runtime;
 using Poly.Mcp.Sessions;
 
 namespace Poly.Mcp.Tools;
@@ -27,6 +29,42 @@ internal sealed class RuntimeTool {
             Affordances: ["create_domain_session", "list_sessions"]);
 
     private static string NewInstanceId() => Guid.NewGuid().ToString("N");
+
+    private static Dictionary<string, object?>? BindEntityTypedActionArgs(
+        McpSessionState state,
+        DomainEntityInstance instance,
+        string actionName,
+        Dictionary<string, object?>? args) {
+        if (args is null || args.Count == 0)
+            return args;
+
+        Poly.DomainModeling.Ontology.Action? action = null;
+        if (instance.CurrentStage is { } stageName) {
+            var stage = instance.Entity.Stages.FirstOrDefault(s =>
+                string.Equals(s.Name, stageName, StringComparison.Ordinal));
+            action = stage?.Actions.FirstOrDefault(a =>
+                string.Equals(a.Name, actionName, StringComparison.Ordinal));
+        }
+        action ??= instance.Entity.Actions.FirstOrDefault(a =>
+            string.Equals(a.Name, actionName, StringComparison.Ordinal));
+        if (action is null)
+            return args;
+
+        var entityNames = state.Domain.Types.OfType<Entity>()
+            .Select(e => e.Name)
+            .ToHashSet(StringComparer.Ordinal);
+
+        foreach (var param in action.Parameters) {
+            if (!entityNames.Contains(param.Type.TypeName))
+                continue;
+            if (!args.TryGetValue(param.Name, out var raw) || raw is not string id)
+                continue;
+            if (state.InstanceMap.TryGetValue(id, out var linked))
+                args[param.Name] = linked;
+        }
+
+        return args;
+    }
 
     private static object? JsonElementToValue(JsonElement je) => je.ValueKind switch {
         JsonValueKind.Number when je.TryGetInt32(out var i) => (long)i,
@@ -580,6 +618,8 @@ declares -> EntityType and creates that type, returnTypeName + returnInstanceId.
             }
         }
 
+        args = BindEntityTypedActionArgs(state, instance, actionName, args);
+
         ActionInvocationResult result;
         try {
             result = instance.InvokeAction(actionName, args);
@@ -593,16 +633,19 @@ declares -> EntityType and creates that type, returnTypeName + returnInstanceId.
                 Affordances: ["get_instance", "list_instances"]);
         }
 
-        // Register any newly created children in session InstanceMap so they
-        // appear in list_instances and get_instance. Capture ids for P3 return.
+        // Register newly created children in InstanceMap (the invoked instance
+        // and any subscriber that ran create-in, e.g. Patron when a Loan goes Overdue).
         string? returnInstanceId = null;
-        if (result.Succeeded && instance.CreatedChildren.Count > 0) {
+        if (result.Succeeded) {
             var newChildren = new List<DomainEntityInstance>();
-            foreach (var child in instance.CreatedChildren) {
-                var alreadyRegistered = state.InstanceMap.Values
-                    .Any(v => ReferenceEquals(v, child));
-                if (!alreadyRegistered)
+            foreach (var owner in state.InstanceMap.Values) {
+                foreach (var child in owner.CreatedChildren) {
+                    if (state.InstanceMap.Values.Any(v => ReferenceEquals(v, child)))
+                        continue;
+                    if (newChildren.Any(c => ReferenceEquals(c, child)))
+                        continue;
                     newChildren.Add(child);
+                }
             }
 
             if (newChildren.Count > 0) {
@@ -610,7 +653,8 @@ declares -> EntityType and creates that type, returnTypeName + returnInstanceId.
                     foreach (var child in newChildren) {
                         var childId = NewInstanceId();
                         st.InstanceStore ??= new DomainInstanceStore();
-                        st.InstanceStore.Add(child);
+                        if (child.Store is null)
+                            st.InstanceStore.Add(child);
                         st.InstanceMap[childId] = child;
                         if (result.ResultInstance is not null
                             && ReferenceEquals(child, result.ResultInstance))

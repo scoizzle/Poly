@@ -2,6 +2,7 @@ using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Ontology;
+using Poly.DomainModeling.Runtime;
 
 using DmAction = Poly.DomainModeling.Ontology.Action;
 
@@ -349,6 +350,38 @@ public class ActionEntityReturnTests {
         await Assert.That(analysis.Diagnostics.Any(d =>
             d.Severity == DiagnosticSeverity.Error
             && d.Message.Contains("unknown property 'book'", StringComparison.Ordinal))).IsFalse();
+    }
+
+    [Test]
+    public async Task InvokeAction_CreateIn_BindsSingularNavInitializer() {
+        var (domain, _) = Evolve("""
+            domain CreateNavBinding
+            Book: entity { Title: Text }
+            Patron: entity {
+              loans: many Loan
+              CheckOut: action (book: Book) {
+                create in loans { book: book }
+              }
+            }
+            Loan: entity {
+              book: Book
+              borrower: Patron
+            }
+            """);
+        var store = new DomainInstanceStore();
+        var bookEntity = domain.Types.OfType<Entity>().First(e => e.Name == "Book");
+        var patronEntity = domain.Types.OfType<Entity>().First(e => e.Name == "Patron");
+        var book = DomainEntityInstance.Create(bookEntity,
+            new Dictionary<string, object?> { ["Title"] = "Dune" }, domain);
+        var patron = DomainEntityInstance.Create(patronEntity, domain: domain);
+        store.Add(book);
+        store.Add(patron);
+
+        var result = patron.InvokeAction("CheckOut",
+            new Dictionary<string, object?> { ["book"] = book });
+        await Assert.That(result.Succeeded).IsTrue();
+        var loan = patron.CreatedChildren.Single();
+        await Assert.That(store.GetRelatedInstances("book", loan).Single()).IsEqualTo(book);
     }
 
     [Test]

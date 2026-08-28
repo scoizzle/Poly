@@ -189,6 +189,10 @@ public sealed partial class DomainToCSharpExporter {
             // construction — no setters, no post-create assignment.
             var defaultValue = prop.Constraints.OfType<DefaultValueConstraint>().FirstOrDefault();
             var paramName = ToCamelCase(prop.Name);
+            // Gym dogfood: Visits default(0) AND Active entry { assign Visits to 0 }
+            // made a dead ctor param (assign param, then overwrite with entry).
+            if (entryAssignedProps.Contains(prop.Name))
+                continue;
             if (defaultValue is not null) {
                 var runtimeExpr = EffectLoweringPass.LowerDefaultExpression(
                     defaultValue.Expression, new NamedTypeReference(prop.Type.TypeName));
@@ -211,12 +215,6 @@ public sealed partial class DomainToCSharpExporter {
                 }
                 continue; // skip ctor param — handled as a trailing optional param
             }
-
-            // Prop assigned by the initial stage's entry effect: the ctor body already
-            // runs those effects (after setting CurrentStage), so it is body-initialized
-            // — NOT a ctor param (a param would be dead and written twice, e.g. StartedAt).
-            if (entryAssignedProps.Contains(prop.Name))
-                continue;
 
             // No default expression — full constructor param + assignment
             ctorParams.Add(new Parameter(paramName, propRef));

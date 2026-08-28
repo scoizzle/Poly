@@ -157,9 +157,12 @@ public sealed partial class DomainToCSharpExporter {
         // Defaulted props of the target become TRAILING optional method params (C#
         // optional params must be last) and are forwarded to Target.Create — so a
         // `create in { DefaultedProp: value }` override flows through construction.
+        var entryAssigned = metadata.GetStructure(targetEntity)?.EntryAssignedPropertyNames
+            ?? EntityStructureAnalyzer.ComputeEntryAssignedPropertyNames(targetEntity);
         foreach (var prop in targetEntity.Properties.OrderBy(p => p.Name)) {
             var defaultConstraint = prop.Constraints.OfType<DefaultValueConstraint>().FirstOrDefault();
             if (defaultConstraint is null) continue;
+            if (entryAssigned.Contains(prop.Name)) continue;
 
             var paramName = ToCamelCase(prop.Name);
             var mapped = MapDomainTypeRef(prop.Type, domain, metadata);

@@ -1813,6 +1813,27 @@ public class DomainToCSharpExporterTests {
     }
 
     [Test]
+    public async Task Export_EntryAssignedDefaultedProp_IsNotCtorParam() {
+        var (domain, analysis) = ParseAndAnalyze("""
+            domain Gym
+            Member: entity {
+              Email: Text required
+              Visits: Number default(0)
+              Active: stage {
+                entry { assign Visits to 0 }
+              }
+            }
+            """);
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var unit = new CompilationUnitNode([], null, types, null);
+        var cs = new CSharpGenerator().Generate(unit);
+
+        await Assert.That(cs).Contains("Create(string email)");
+        await Assert.That(cs).DoesNotContain("long visits = 0L");
+        await Assert.That(cs).Contains("this.Visits = 0L");
+    }
+
+    [Test]
     public async Task Export_DateArithmetic_CastsToIntForDateOnly() {
         // Code-review fix: `DueDate + 14` on a Date (DateOnly) property emitted
         // `AddDays(14L)`, but DateOnly.AddDays takes int — CS1503 (long→int). The

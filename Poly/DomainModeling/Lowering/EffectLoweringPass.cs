@@ -850,8 +850,11 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         List<Node> args,
         IReadOnlyDictionary<string, DomainExpression> initMap,
         Entity targetEntity) {
+        var entryAssigned = _analysis?.GetStructure(targetEntity)?.EntryAssignedPropertyNames
+            ?? EntityStructureAnalyzer.ComputeEntryAssignedPropertyNames(targetEntity);
         var defaultedProps = targetEntity.Properties
             .Where(p => p.Constraints.Any(c => c is DefaultValueConstraint))
+            .Where(p => !entryAssigned.Contains(p.Name))
             .OrderBy(p => p.Name)
             .ToList();
         if (!defaultedProps.Any(p => initMap.ContainsKey(p.Name)))

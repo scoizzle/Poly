@@ -302,12 +302,12 @@ public sealed partial class DomainToCSharpExporter {
                             new New(listType))])));
             }
             else {
-                // Singular nav (incl. back-reference): param + property assign.
-                // Nullable to match the property (navs may be unlinked at creation).
+                // Singular nav (incl. back-reference): optional (unlinked at create).
                 var pascalName = ToPascalCase(navParam.Name);
                 var propRef = new OptionalTypeReference(
                     MapDomainTypeRef(navParam.Type, domain, metadata));
-                ctorParams.Add(new Parameter(paramName, propRef));
+                ctorParams.Add(new Parameter(
+                    paramName, propRef, DefaultValue: new Constant(null)));
                 ctorAssignments.Add(new Assignment(
                     new Member(new ThisReference(), pascalName),
                     new Parameter(paramName)));

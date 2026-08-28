@@ -1766,6 +1766,23 @@ public class DomainToCSharpExporterTests {
     }
 
     [Test]
+    public async Task Export_SingularNav_IsOptionalCtorParam() {
+        var (domain, analysis) = ParseAndAnalyze("""
+            domain Campus
+            Advisor: entity { Name: Text required }
+            Student: entity {
+              Name: Text required
+              advisor: Advisor
+            }
+            """);
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var unit = new CompilationUnitNode([], null, types, null);
+        var cs = new CSharpGenerator().Generate(unit);
+
+        await Assert.That(cs).Contains("Create(string name, Advisor? advisor = null)");
+    }
+
+    [Test]
     public async Task Export_DateArithmetic_CastsToIntForDateOnly() {
         // Code-review fix: `DueDate + 14` on a Date (DateOnly) property emitted
         // `AddDays(14L)`, but DateOnly.AddDays takes int — CS1503 (long→int). The

@@ -414,6 +414,37 @@ public class ActionEntityReturnTests {
     }
 
     [Test]
+    public async Task InvokeAction_RequireRelExists_BlocksWhenUnlinked() {
+        var (domain, _) = Evolve("""
+            domain Campus
+            Advisor: entity { Name: Text required }
+            Student: entity {
+              Name: Text required
+              Meetings: Number default(0)
+              advisor: Advisor
+              HasAdvisor: policy { advisor exists }
+              Enrolled: stage {
+                Meet: action
+                  require HasAdvisor
+                {
+                  assign Meetings to Meetings + 1
+                }
+              }
+            }
+            """);
+        var studentEntity = domain.Types.OfType<Entity>().First(e => e.Name == "Student");
+        var student = DomainEntityInstance.Create(studentEntity,
+            new Dictionary<string, object?> { ["Name"] = "Alex" }, domain);
+        var store = new DomainInstanceStore();
+        store.Add(student);
+
+        var result = student.InvokeAction("Meet");
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(result.FailedGuards).Contains("HasAdvisor");
+        await Assert.That(student.GetProperty<object>("Meetings")).IsEqualTo(0L);
+    }
+
+    [Test]
     public async Task Analyze_CreateInWithCollectionNavBinding_ReportsUnknownProperty() {
         // A `many` collection nav is NOT a bindable initializer target (the exporter
         // emits empty collections for those) — binding it must still fail closed.

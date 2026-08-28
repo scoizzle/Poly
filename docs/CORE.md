@@ -85,8 +85,10 @@ Use these. If you think you need a parallel facility, stop and re-read this sect
 | Piece | Location |
 |-------|----------|
 | Framework | `Poly/Analysis/` — `AnalyzerBuilder`, `Analyzer`, `AnalysisContext`, `AnalysisResult`, `NodeMetadataStore` |
-| Pass contract | `INodeAnalyzer` — post-order walk, `TryBeginAnalyzerVisit`, dependencies |
+| Pass contract | `INodeAnalyzer` — post-order walk, `TryBeginAnalyzerVisit`, `Dependencies` |
+| Schedule | `AnalyzerBuilder` inserts by `Dependencies`; `Analyzer` awaits those named deps then runs the pass. Independent passes overlap. Each `Analyze` is a full walk |
 | Facts on nodes | `IAnalysisMetadata` via `context.SetMetadata` / `GetMetadata<T>` |
+| Diagnostics | Concurrent enqueue of `Diagnostic`; public `IReadOnlyCollection` on `AnalysisContext`, `IReadOnlyList` snapshot on `AnalysisResult` |
 | Semantic passes | `Poly/Interpretation/Analysis/` (types, scopes, CFG, side effects, folding, …) |
 | Standard entry | `Interpreter.Analyze` / `Interpreter.Compile` (cached full pass list; **Compile fails closed** on `DiagnosticSeverity.Error`) |
 
@@ -152,7 +154,7 @@ No intermediate primitive flattening step. Inputs are the AST plus analysis meta
 | Policy compile/eval | `DomainEntityInstance.EvaluatePolicy` → `DomainExpressionLoweringPass` → `Interpreter` — **VM-primary**; LINQ dual-oracle + CLR-subject wrapper `PolicyEvaluator` are test-only (`Poly.Tests/TestHelpers/`) |
 | Domain change | `DomainEvolution`…`Apply()` with analysis gate + rollback |
 
-Domain concepts expand to **generic** Syntax nodes, not new opcodes. ADR: `docs/decisions/2026-06-08-domain-lowering-boundary.md`. **StageTransition** lowers to handwritten IR on both runtime and emit: Assignment of `CurrentStage` plus `Invoke(Member(This, "Notify"), stageName)` in `finally`. **Self-invoke** is the same shape: `Invoke(Member(This, action), args)` — analysis sees the action on the type def; C# prints `this.Checkout()`; runtime `This` has no Checkout CLR method so `InvokeNamed` runs the action (Notify still hits the real CLR method first). **Cross-entity invoke** is `this.Rel.Action(args)` with a linked-target `DomainResult.Failure` guard. **For-invoke** is a fail-fast `ForEachLoop` over a **OneToMany** collection nav (analysis rejects ManyToMany / OneToOne; per-item `InvokeNamed` returns `DomainResult`; `if (!result.IsSuccess) return result`; zero-match `DomainResult.Failure`; `ExecuteEffect` throws on a failed program result). Runtime collection navs on the type def / IDictionary are OneToMany **and** ManyToMany so member reads match lowering's collection predicate. Self / singular cross-entity do not wrap `IsSuccess` — nested Failure is discarded like C# `this.Foo();`. Remaining store effects (create / create-in) still dual-path via EffectExecutor. Sequential transitions in one action still share stale `SourceStageName` at lowering time. New work must not add consumer-specific lowering flags or a parallel effect interpreter. Residual dual-path is debt — do not grow it.
+Domain concepts expand to **generic** Syntax nodes, not new opcodes. ADR: `docs/decisions/2026-06-08-domain-lowering-boundary.md`. **DateOperation** lowering resolves the date operand's CLR family (Now→DateTime, Today→DateOnly, property `Date`/`DateTime`/`Time`, nested ops): DateOnly day/week/month/year offsets int-cast; DateTime months/years int-cast; TimeOnly seconds/ms → `Add(TimeSpan.From*)`. **StageTransition** lowers to handwritten IR on both runtime and emit: Assignment of `CurrentStage` plus `Invoke(Member(This, "Notify"), stageName)` in `finally`. **Self-invoke** is the same shape: `Invoke(Member(This, action), args)` — analysis sees the action on the type def; C# prints `this.Checkout()`; runtime `This` has no Checkout CLR method so `InvokeNamed` runs the action (Notify still hits the real CLR method first). **Cross-entity invoke** is `this.Rel.Action(args)` with a linked-target `DomainResult.Failure` guard. **For-invoke** is a fail-fast `ForEachLoop` over a **OneToMany** collection nav (analysis rejects ManyToMany / OneToOne; per-item `InvokeNamed` returns `DomainResult`; `if (!result.IsSuccess) return result`; zero-match `DomainResult.Failure`; `ExecuteEffect` throws on a failed program result). Runtime collection navs on the type def / IDictionary are OneToMany **and** ManyToMany so member reads match lowering's collection predicate. Self / singular cross-entity do not wrap `IsSuccess` — nested Failure is discarded like C# `this.Foo();`. Remaining store effects (create / create-in) still dual-path via EffectExecutor. Sequential transitions in one action still share stale `SourceStageName` at lowering time. New work must not add consumer-specific lowering flags or a parallel effect interpreter. Residual dual-path is debt — do not grow it.
 
 ### 3.5 Introspection (types and members)
 
@@ -192,7 +194,7 @@ Module README: `Poly/Introspection/README.md`.
 
 | Extension job | Loads when | Emits a process door? |
 |---------------|------------|------------------------|
-| Meaning (`temporal`) | `uses temporal` (SDK seed if source lists no `uses`). Owns Date/Time/DateTime/Duration catalog types and Date→DateTime assign conversion. | no |
+| Meaning (`temporal`) | `uses temporal` (SDK seed if source lists no `uses`). Owns Date/Time/DateTime/Duration catalog types and Date-typed RHS→DateTime assign conversion (`ToDateTime`: Date/Today/Date-parameter/DateOperation, not Now). | no |
 | Persistence (`storage`, `sqlite`, …) | listed / compiler seed | no |
 | Product host (REST / HTTP, …) | **only** if listed | **yes** — binds already-lowered operations |
 

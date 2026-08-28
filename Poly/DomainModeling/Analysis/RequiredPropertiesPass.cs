@@ -19,8 +19,6 @@ internal sealed class RequiredPropertiesPass : INodeAnalyzer {
     public string[] Dependencies => [DomainCatalogPass.Id];
 
     public void Analyze(AnalysisContext context, Node node) {
-        if (!context.ShouldAnalyze(node))
-            return;
 
         if (node is Entity entity)
             PublishEntity(context, entity);

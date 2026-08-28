@@ -40,30 +40,21 @@ public sealed class DomainEvolution {
 
         var mutationIndex = ResolveMutationTargetIndex(priorAnalysis, session);
 
-        var (proposed, modifiedNodes, evalErrors) = ApplyChanges(_current, changes, mutationIndex);
+        var (proposed, _, evalErrors) = ApplyChanges(_current, changes, mutationIndex);
 
-        var analysis = priorAnalysis is null
-            ? ResolveSession(proposed, session).Analyze(proposed)
-            : ResolveSession(proposed, session).Analyze(proposed, priorAnalysis, modifiedNodes);
+        var analysis = ResolveSession(proposed, session).Analyze(proposed);
 
         // Integrate change history as first-class Information diagnostics *immediately*
         // after analysis, before any access to .Diagnostics. This ensures the EVOLUTION_STEP
         // infos are present in the materialized diagnostic list for both success and rejection paths.
         // This is the unified model: step history lives in the standard diagnostic stream.
         {
-            var diagnosticsDict = analysis.GetDiagnosticsDictionary();
             foreach (var change in changes) {
-                var infoDiag = new Diagnostic(
+                analysis.AddDiagnostic(new Diagnostic(
                     proposed,
                     DiagnosticSeverity.Information,
                     change.GetDescription(),
-                    "EVOLUTION_STEP");
-
-                if (!diagnosticsDict.TryGetValue(proposed.Id, out var bucket)) {
-                    bucket = new List<Diagnostic>();
-                    diagnosticsDict[proposed.Id] = bucket;
-                }
-                bucket.Add(infoDiag);
+                    "EVOLUTION_STEP"));
             }
         }
 
@@ -71,13 +62,12 @@ public sealed class DomainEvolution {
         // analysis diagnostic stream as first-class Error diagnostics so they appear
         // in FailureSummary, trace, and MCP responses.
         if (evalErrors.Count > 0) {
-            var diagnosticsDict = analysis.GetDiagnosticsDictionary();
             foreach (var err in evalErrors) {
-                if (!diagnosticsDict.TryGetValue(proposed.Id, out var bucket)) {
-                    bucket = new List<Diagnostic>();
-                    diagnosticsDict[proposed.Id] = bucket;
-                }
-                bucket.Add(new Diagnostic(proposed, DiagnosticSeverity.Error, err, "EVOLUTION_TARGET"));
+                analysis.AddDiagnostic(new Diagnostic(
+                    proposed,
+                    DiagnosticSeverity.Error,
+                    err,
+                    "EVOLUTION_TARGET"));
             }
         }
 

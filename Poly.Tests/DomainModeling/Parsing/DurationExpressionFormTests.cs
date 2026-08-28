@@ -152,6 +152,32 @@ public class DurationExpressionFormTests {
     }
 
     [Test]
+    public async Task Now_Plus_2Hours_Plus_3Minutes_NestsDateOperations() {
+        var expr = DslExpressionFragment.ParseExpressionFragment(
+            "Now + 2 Hours + 3 Minutes", TemporalInputs());
+
+        await Assert.That(expr).IsTypeOf<DateOperation>();
+        var outer = (DateOperation)expr;
+        await Assert.That(outer.Kind).IsEqualTo(DateOperationKind.AddMinutes);
+        await Assert.That(((Literal)outer.Offset).Value).IsEqualTo(3L);
+        await Assert.That(outer.Date).IsTypeOf<DateOperation>();
+        var inner = (DateOperation)outer.Date;
+        await Assert.That(inner.Kind).IsEqualTo(DateOperationKind.AddHours);
+        await Assert.That(((Literal)inner.Offset).Value).IsEqualTo(2L);
+        await Assert.That(inner.Date).IsTypeOf<Now>();
+
+        var lowered = Pass.Lower(expr, new ParameterReference());
+        await Assert.That(lowered).IsTypeOf<Invoke>();
+        var outerInvoke = (Invoke)lowered;
+        await Assert.That(((Member)outerInvoke.Delegate).MemberName).IsEqualTo("AddMinutes");
+        await Assert.That(((Constant)outerInvoke.Arguments[0]).Value).IsEqualTo(3L);
+        await Assert.That(((Member)outerInvoke.Delegate).Value).IsTypeOf<Invoke>();
+        var innerInvoke = (Invoke)((Member)outerInvoke.Delegate).Value;
+        await Assert.That(((Member)innerInvoke.Delegate).MemberName).IsEqualTo("AddHours");
+        await Assert.That(((Constant)innerInvoke.Arguments[0]).Value).IsEqualTo(2L);
+    }
+
+    [Test]
     public async Task Duration_LowercaseUnit_IsNotDuration() {
         await Assert.That(() => DslExpressionFragment.ParseExpressionFragment("12 days", DurationInputs()))
             .Throws<FormatException>();

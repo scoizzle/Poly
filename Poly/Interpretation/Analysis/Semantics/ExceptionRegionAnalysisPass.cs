@@ -82,6 +82,7 @@ internal sealed class ExceptionRegionAnalyzer : INodeAnalyzer {
     public const string Id = "ExceptionRegion";
     public string PassName => Id;
     public string[] Dependencies => [TypeAndMemberResolver.Id, ControlFlowAnalysisPass.Id];
+
     public void Analyze(AnalysisContext context, Node node) {
         // Get or create per-traversal state. Reuses existing state from parent
         // node traversal so ProtectedNodeIds and Regions are shared across the
@@ -98,15 +99,6 @@ internal sealed class ExceptionRegionAnalyzer : INodeAnalyzer {
         if (isRootEntry) {
             state.Regions.Clear();
             state.ProtectedNodeIds.Clear();
-            if (context.IsIncrementalAnalysisAvailable()) {
-                var prior = context.GetMetadata<ExceptionRegionMetadata>(null);
-                if (prior?.Regions is { Count: > 0 }) {
-                    state.Regions.AddRange(prior.Regions);
-                    foreach (var entry in prior.Regions)
-                        foreach (var id in entry.ProtectedNodeIds)
-                            state.ProtectedNodeIds.Add(id);
-                }
-            }
         }
 
         // Pre-order: process parent EH nodes before children

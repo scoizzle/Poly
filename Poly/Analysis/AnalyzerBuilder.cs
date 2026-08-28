@@ -3,10 +3,10 @@ namespace Poly.Analysis;
 /// <summary>
 /// Fluent builder for constructing <see cref="Analyzer"/> pipelines.
 ///
-/// Passes are automatically inserted in dependency order. A declared dependency
-/// that is not registered in the pipeline produces an error — it means the
-/// pipeline is incomplete and would produce wrong results.
-/// Circular dependencies throw at registration time.
+/// Passes are inserted after their last declared
+/// <see cref="INodeAnalyzer.Dependencies"/> name. A declared name that is not
+/// registered fails closed. Circular dependencies throw at registration time.
+/// <see cref="Analyzer"/> awaits those dependencies; independent passes overlap.
 /// </summary>
 public sealed class AnalyzerBuilder {
     private readonly OrderedDictionary<string, INodeAnalyzer> _entries = new(StringComparer.Ordinal);

@@ -87,14 +87,6 @@ public class ValidationFactsSplitTests {
     public async Task EffectAnalyzer_DoesNotWriteResolvedTargetMetadata() {
         // Boundary check: stripping EffectFactsPass leaves create-in without fact bag
         // while validate pack still runs if registered alone with deps.
-        var builder = new AnalyzerBuilder()
-            .AddAnalyzer(new StructuralDomainAnalyzer())
-            .AddAnalyzer(new DomainCatalogPass())
-            .AddAnalyzer(new RequiredPropertiesPass())
-            .AddAnalyzer(new ConstraintPropagationAnalyzer())
-            .AddAnalyzer(new EffectAnalyzer()); // lint only — no EffectFactsPass
-        var analyzer = builder.Build();
-
         var domain = ParseDomain("""
             domain Test
             Order: entity {
@@ -108,7 +100,10 @@ public class ValidationFactsSplitTests {
             }
             """);
 
-        var analysis = analyzer.Analyze(domain);
+        var context = AnalysisContext.CreateDefault();
+        new DomainCatalogPass().Analyze(context, domain);
+        new EffectAnalyzer().Analyze(context, domain);
+        var analysis = new AnalysisResult(context, AnalysisTelemetry.Empty);
         var order = domain.Types.OfType<Entity>().First(e => e.Name == "Order");
         var place = order.Actions.First(a => a.Name == "Place");
         var createIn = place.Effects.OfType<CreateEntityInRelationshipEffect>().First();

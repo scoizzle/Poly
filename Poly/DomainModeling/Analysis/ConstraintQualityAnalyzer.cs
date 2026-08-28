@@ -11,9 +11,6 @@ internal sealed class ConstraintQualityAnalyzer : INodeAnalyzer {
     // Reads DomainTypeLookupMetadata / ResolvedTypeReferenceMetadata.
     public string[] Dependencies => [DomainCatalogPass.Id];
     public void Analyze(AnalysisContext context, Node node) {
-        if (!context.ShouldAnalyze(node)) {
-            return;
-        }
 
         switch (node) {
             case Domain domain:

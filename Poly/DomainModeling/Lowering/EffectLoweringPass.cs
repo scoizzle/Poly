@@ -128,6 +128,13 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     internal static Func<string, string?> BuildPropertyTypeResolver(Entity entity) {
         var byName = entity.Properties.ToDictionary(
             p => p.Name, p => p.Type.TypeName, StringComparer.Ordinal);
+        foreach (var action in entity.Actions)
+            foreach (var p in action.Parameters)
+                byName.TryAdd(p.Name, p.Type.TypeName);
+        foreach (var stage in entity.Stages)
+            foreach (var action in stage.Actions)
+                foreach (var p in action.Parameters)
+                    byName.TryAdd(p.Name, p.Type.TypeName);
         return name => byName.TryGetValue(name, out var typeName) ? typeName : null;
     }
 

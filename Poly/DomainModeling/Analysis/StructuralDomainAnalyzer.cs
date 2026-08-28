@@ -11,10 +11,6 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
     public string PassName => Id;
     public string[] Dependencies => [];
     public void Analyze(AnalysisContext context, Node node) {
-        if (!context.ShouldAnalyze(node)) {
-            return;
-        }
-
         switch (node) {
             case Domain domain:
                 AnalyzeDomain(context, domain);

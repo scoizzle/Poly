@@ -31,7 +31,7 @@ public class EffectAnalyzerFailClosedTests {
     }
 
     private static List<Diagnostic> AllDiagnostics(AnalysisContext context) =>
-        context.Diagnostics.Values.SelectMany(v => v).ToList();
+        [.. context.Diagnostics];
 
     // ── F1: RLM fallback parity (catalog stripped) ─────────────
 

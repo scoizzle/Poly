@@ -4,7 +4,7 @@ namespace Poly.Ast;
 /// Base class for abstract syntax tree nodes.
 /// Nodes are pure data structures with no semantic responsibility.
 /// Type information is resolved by semantic analysis passes.
-/// Each node has a stable identifier for metadata storage and incremental analysis.
+/// Each node has a stable identifier for metadata storage.
 /// </summary>
 public abstract record Node {
     /// <summary>

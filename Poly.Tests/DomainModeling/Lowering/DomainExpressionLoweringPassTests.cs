@@ -309,6 +309,56 @@ public class DomainExpressionLoweringPassTests {
     }
 
     [Test]
+    public async Task DateOperation_AddWeeks_OnDate_ScalesThenIntCasts() {
+        var pass = new DomainExpressionLoweringPass(new LoweringContext(
+            new Parameter("entity"),
+            PropertyTypeResolver: n => n == "DueDate" ? "Date" : null));
+        var expr = new DateOperation(
+            DomainExpression.Property("DueDate"),
+            DomainExpression.Literal(2L),
+            DateOperationKind.AddWeeks);
+
+        var result = pass.Lower(expr, Subject);
+
+        await Assert.That(((Member)((Invoke)result).Delegate).MemberName).IsEqualTo("AddDays");
+        var arg = ((Invoke)result).Arguments[0];
+        await Assert.That(arg).IsTypeOf<TypeCast>();
+        var cast = (TypeCast)arg;
+        await Assert.That(cast.Operand).IsTypeOf<Constant>();
+        await Assert.That(((Constant)cast.Operand).Value).IsEqualTo(14L);
+        await Assert.That(cast.TargetTypeReference).IsTypeOf<PrimitiveTypeReference>();
+        await Assert.That(((PrimitiveTypeReference)cast.TargetTypeReference).PrimitiveId)
+            .IsEqualTo(Poly.Introspection.PrimitiveType.Int32);
+    }
+
+    [Test]
+    public async Task DateOperation_AddMilliseconds_OnTime_LowersToTimeSpanFromMilliseconds() {
+        var pass = new DomainExpressionLoweringPass(new LoweringContext(
+            new Parameter("entity"),
+            PropertyTypeResolver: n => n == "Opens" ? "Time" : null));
+        var expr = new DateOperation(
+            DomainExpression.Property("Opens"),
+            DomainExpression.Literal(50),
+            DateOperationKind.AddMilliseconds);
+
+        var result = pass.Lower(expr, Subject);
+
+        await Assert.That(result).IsTypeOf<Invoke>();
+        var add = (Invoke)result;
+        await Assert.That(((Member)add.Delegate).MemberName).IsEqualTo("Add");
+        await Assert.That(add.Arguments.Length).IsEqualTo(1);
+        await Assert.That(add.Arguments[0]).IsTypeOf<Invoke>();
+        var fromMs = (Invoke)add.Arguments[0];
+        await Assert.That(fromMs.Delegate).IsTypeOf<Member>();
+        var fromMember = (Member)fromMs.Delegate;
+        await Assert.That(fromMember.MemberName).IsEqualTo("FromMilliseconds");
+        await Assert.That(fromMember.Value).IsTypeOf<NamedTypeReference>();
+        await Assert.That(((NamedTypeReference)fromMember.Value).TypeName).IsEqualTo("TimeSpan");
+        await Assert.That(fromMs.Arguments.Length).IsEqualTo(1);
+        await Assert.That(((Constant)fromMs.Arguments[0]).Value).IsEqualTo(50);
+    }
+
+    [Test]
     public async Task DateOperation_AddYears_LowersToInvoke() {
         var expr = new DateOperation(
             DomainExpression.Property("StartDate"),

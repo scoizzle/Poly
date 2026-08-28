@@ -44,7 +44,8 @@ public class PassDependencyDeclarationTests {
             new EffectAnalyzer(),
             DomainCatalogPass.Id,
             RequiredPropertiesPass.Id,
-            ConstraintPropagationAnalyzer.Id);
+            ConstraintPropagationAnalyzer.Id,
+            EffectInvariantAnalyzer.Id);
         AssertDeclares(
             new CapabilityAnalyzer(),
             DomainCatalogPass.Id);
@@ -97,8 +98,8 @@ public class PassDependencyDeclarationTests {
             return i;
         }
 
-        // Catalog / structure / topology consumers after their publishers
-        await Assert.That(Index(StructuralDomainAnalyzer.Id)).IsLessThan(Index(DomainCatalogPass.Id));
+        // Catalog / structure / topology consumers after their publishers.
+        // Same-wave independents (Structural vs Catalog) are not ordered by telemetry.
         await Assert.That(Index(DomainCatalogPass.Id)).IsLessThan(Index(CapabilityAnalyzer.Id));
         await Assert.That(Index(DomainCatalogPass.Id)).IsLessThan(Index(EntityStructureAnalyzer.Id));
         await Assert.That(Index(EffectTopologyPass.Id)).IsLessThan(Index(OwnershipAggregatePass.Id));
@@ -109,6 +110,7 @@ public class PassDependencyDeclarationTests {
         await Assert.That(Index(RequiredPropertiesPass.Id)).IsLessThan(Index(EffectAnalyzer.Id));
         await Assert.That(Index(RequiredPropertiesPass.Id)).IsLessThan(Index(RuleCoverageAnalyzer.Id));
         await Assert.That(Index(EffectFactsPass.Id)).IsLessThan(Index(EffectAnalyzer.Id));
+        await Assert.That(Index(EffectInvariantAnalyzer.Id)).IsLessThan(Index(EffectAnalyzer.Id));
         await Assert.That(Index(CapabilityAnalyzer.Id)).IsLessThan(Index(SubscriptionAnalyzer.Id));
     }
 

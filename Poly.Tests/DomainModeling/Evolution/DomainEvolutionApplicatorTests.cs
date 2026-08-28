@@ -113,7 +113,7 @@ public class DomainEvolutionApplicatorTests {
         var customerInResult = result.Root.Types.OfType<Entity>().Single(e => e.Name == "Customer");
 
         // The untouched entity reuses the exact same record instance (shallow sharing for unchanged subtrees in the batch applicator)
-        // but carries the stable original NodeId — this is the key continuity guarantee for incremental analysis and UI.
+        // and keeps the original NodeId.
         await Assert.That(result.Succeeded).IsTrue();
         await Assert.That(customerInResult.Id).IsEqualTo(originalUntouchedId);
         await Assert.That(result.Root).IsNotSameReferenceAs(start); // the evolved Domain root is a distinct immutable value
@@ -531,13 +531,11 @@ public class DomainEvolutionApplicatorTests {
         await Assert.That(newEffect.Id).IsNotEqualTo(originalCreateEffectId);
         await Assert.That(newEffect.Id).IsNotEqualTo(originalDieId);
 
-        // Exercise the incremental analysis path with the second evolution (uses real GetAffectedNodes)
         var prior = result.Analysis;
-        // Apply another change using prior analysis — GetAffectedNodes now returns real nodes
         var addPolicyChange = new AddPolicyToEntityChange("Person", new Policy("TestPolicy", DomainExpression.Literal(true)));
-        var incrementalResult = new DomainEvolution(result.Root).Apply([addPolicyChange], prior);
-        await Assert.That(incrementalResult.Succeeded).IsTrue();
-        await Assert.That(incrementalResult.Trace.ErrorCount).IsEqualTo(0);
+        var next = new DomainEvolution(result.Root).Apply([addPolicyChange], prior);
+        await Assert.That(next.Succeeded).IsTrue();
+        await Assert.That(next.Trace.ErrorCount).IsEqualTo(0);
     }
 
     [Test]

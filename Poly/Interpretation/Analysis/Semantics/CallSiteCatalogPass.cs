@@ -65,6 +65,7 @@ internal sealed class CallSiteCatalogAnalyzer : INodeAnalyzer {
     public const string Id = "CallSiteCatalog";
     public string PassName => Id;
     public string[] Dependencies => [TypeAndMemberResolver.Id, ValueRepresentationAnalyzer.Id];
+
     public void Analyze(AnalysisContext context, Node node) {
         // Get or create per-traversal state. Reuses existing state from parent
         // node traversal so catalog is shared across the entire tree.
@@ -77,14 +78,8 @@ internal sealed class CallSiteCatalogAnalyzer : INodeAnalyzer {
         bool isRootEntry = state.Depth == 0;
         state.Depth++;
 
-        if (isRootEntry) {
+        if (isRootEntry)
             state.Catalog.Clear();
-            if (context.IsIncrementalAnalysisAvailable()) {
-                var prior = context.GetMetadata<CallSiteCatalogMetadata>(null);
-                if (prior?.Sites is { Count: > 0 })
-                    state.Catalog.AddRange(prior.Sites);
-            }
-        }
 
         // Post-order: process children first so metadata is available on children
         this.AnalyzeChildren(context, node);
@@ -156,15 +151,16 @@ internal sealed class CallSiteCatalogAnalyzer : INodeAnalyzer {
         }
     }
 
-    private static int AddEntry(CallSiteEntry entry, CallSiteCatalogState state) {
-        // Deduplicate: same identity → same index
-        var catalog = state.Catalog;
-        for (int i = 0; i < catalog.Count; i++) {
+    private static int AddEntry(CallSiteEntry entry, CallSiteCatalogState state) =>
+        AddEntry(entry, state.Catalog);
+
+    private static int AddEntry(CallSiteEntry entry, List<CallSiteEntry> catalog) {
+        for (var i = 0; i < catalog.Count; i++) {
             if (catalog[i].Identity == entry.Identity)
                 return i;
         }
 
-        int index = catalog.Count;
+        var index = catalog.Count;
         catalog.Add(entry);
         return index;
     }

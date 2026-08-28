@@ -29,7 +29,6 @@ The analysis framework is a pass pipeline. `AnalyzerBuilder` collects `INodeAnal
 | `Diagnostic` | Diagnostic record + severity helpers | 67 |
 | `NodeReplacementMetadata` | Node substitution for backends | 27 |
 | `SyntaxDiffUtil` | Generic tree diff (snapshot + compare) | 157 |
-| `IncrementalAnalysisAnalyzer` | Tree index + invalidation tracking | 161 |
 | `AnalyzerVisitTrackingAnalyzer` | Cycle guard registration | 35 |
 
 ## Changes Made (verified dead, not dormant)
@@ -80,7 +79,3 @@ The analysis framework is a pass pipeline. `AnalyzerBuilder` collects `INodeAnal
 
 **Why keep:** One consumer (`DomainDiffUtil`), but that consumer is in the evolution layer under active development. Replacing it with a domain-specific diff before the evolution layer stabilizes is premature.
 
-### `IncrementalAnalysisAnalyzer` duplicate walk
-**What it does:** Builds a tree index, then computes affected nodes via subtree-range index + manual stack traversal.
-
-**Why keep:** The subtree-range index and manual traversal serve different purposes. Both paths exist because invalidated nodes may not form a contiguous prefix. The `.ToHashSet()` dedup is a short-circuit union.

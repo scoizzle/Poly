@@ -15,7 +15,6 @@ internal sealed class SubscriptionAnalyzer : INodeAnalyzer {
     public string[] Dependencies => [DomainCatalogPass.Id, CapabilityAnalyzer.Id];
 
     public void Analyze(AnalysisContext context, Node node) {
-        if (!context.ShouldAnalyze(node)) return;
 
         if (node is Domain domain) {
             ValidateDomain(context, domain);

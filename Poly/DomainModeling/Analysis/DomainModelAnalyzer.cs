@@ -17,7 +17,6 @@ public static class DomainModelAnalyzer {
         IReadOnlyList<IStorageConvention>? conventions,
         IReadOnlyList<INodeAnalyzer>? extraAnalyzers = null) {
         var builder = new AnalyzerBuilder()
-            .UseIncrementalAnalysis()
             .UseDomainModelAnalysisPipeline(typeMaps, conventions);
         if (extraAnalyzers is not null) {
             foreach (var analyzer in extraAnalyzers) {
@@ -37,13 +36,6 @@ public static class DomainModelAnalyzer {
     public static AnalysisResult Analyze(Domain domain) {
         ArgumentNullException.ThrowIfNull(domain);
         return RuntimeAnalysisCache.Session(domain).Analyze(domain);
-    }
-
-    public static AnalysisResult Analyze(Domain domain, AnalysisResult priorAnalysis, IEnumerable<Node> invalidatedNodes) {
-        ArgumentNullException.ThrowIfNull(domain);
-        ArgumentNullException.ThrowIfNull(priorAnalysis);
-        ArgumentNullException.ThrowIfNull(invalidatedNodes);
-        return RuntimeAnalysisCache.Session(domain).Analyze(domain, priorAnalysis, invalidatedNodes);
     }
 
     /// <summary>

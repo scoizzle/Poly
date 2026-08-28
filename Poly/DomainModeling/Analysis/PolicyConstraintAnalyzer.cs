@@ -15,8 +15,6 @@ internal sealed class PolicyConstraintAnalyzer : INodeAnalyzer {
     // Lint-only: reads DomainTypeLookupMetadata; publishes no bags others read.
     public string[] Dependencies => [DomainCatalogPass.Id];
     public void Analyze(AnalysisContext context, Node node) {
-        if (!context.ShouldAnalyze(node))
-            return;
 
         if (node is Entity entity) {
             AnalyzeEntity(context, entity);

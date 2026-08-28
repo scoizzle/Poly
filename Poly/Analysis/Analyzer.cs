@@ -21,28 +21,21 @@ public sealed class Analyzer {
     /// </summary>
     public AnalysisOptions Options { get; init; } = AnalysisOptions.Default;
 
-    private AnalysisResult RunPasses(AnalysisContext context, Node root, bool incremental, int invalidatedNodeCount) {
-        // Each pass runs in its own task, but the tasks are chained by dependencies so that
-        // a pass only runs after all of its dependencies have completed.  This allows
-        // independent passes to run in parallel while still respecting the dependency order.
-        // This assumes _analyzers is a DAG (no cycles) and that all dependencies are present 
-        // in the list, and in the correct order. AnalyzerBuilder enforces this at construction time.
-
+    private AnalysisResult RunPasses(AnalysisContext context, Node root) {
         var collector = new AnalysisTelemetryCollector();
         var totalStart = Stopwatch.GetTimestamp();
-        var passes = new ConcurrentDictionary<string, Task>();
+        var passes = new ConcurrentDictionary<string, Task>(StringComparer.Ordinal);
 
         foreach (var analyzer in _analyzers) {
             passes[analyzer.PassName] = RunPassAsync(analyzer);
         }
 
         Task.WaitAll(passes.Values);
-        var telemetry = collector.ToSnapshot(Stopwatch.GetElapsedTime(totalStart), incremental, invalidatedNodeCount);
+        var telemetry = collector.ToSnapshot(Stopwatch.GetElapsedTime(totalStart));
         return new AnalysisResult(context, telemetry, Options);
 
         async Task RunPassAsync(INodeAnalyzer analyzer) {
-            var dependencies = analyzer.Dependencies.Select(e => passes[e]);
-            await Task.WhenAll(dependencies).ConfigureAwait(false);
+            await Task.WhenAll(analyzer.Dependencies.Select(name => passes[name])).ConfigureAwait(false);
 
             if (!context.ShouldContinue(Options))
                 return;
@@ -64,30 +57,6 @@ public sealed class Analyzer {
         ArgumentNullException.ThrowIfNull(root);
         var context = new AnalysisContext(typeDefinitions ?? Introspection.CommonLanguageRuntime.ClrTypeDefinitionRegistry.Shared, settings);
         setup?.Invoke(context);
-        return RunPasses(context, root, incremental: false, invalidatedNodeCount: 0);
-    }
-
-    /// <summary>
-    /// Analyzes the given root node incrementally.
-    /// </summary>
-    public AnalysisResult Analyze(Node root,
-        AnalysisResult priorAnalysis, IEnumerable<Node> invalidatedNodes,
-        ITypeDefinitionProvider? typeDefinitions = null,
-        Action<AnalysisContext>? setup = null,
-        AnalysisSettings? settings = null) {
-
-        ArgumentNullException.ThrowIfNull(root);
-        ArgumentNullException.ThrowIfNull(priorAnalysis);
-        ArgumentNullException.ThrowIfNull(invalidatedNodes);
-
-        if (!priorAnalysis.IsIncrementalAnalysisAvailable() || invalidatedNodes.Contains(root)) {
-            return Analyze(root, typeDefinitions, setup, settings);
-        }
-
-        var invalidated = invalidatedNodes.ToArray();
-        var context = new AnalysisContext(typeDefinitions ?? Introspection.CommonLanguageRuntime.ClrTypeDefinitionRegistry.Shared, priorAnalysis, settings);
-        context.SetInvalidatedNodesForIncrementalAnalysis(invalidated);
-        setup?.Invoke(context);
-        return RunPasses(context, root, incremental: true, invalidatedNodeCount: invalidated.Length);
+        return RunPasses(context, root);
     }
 }

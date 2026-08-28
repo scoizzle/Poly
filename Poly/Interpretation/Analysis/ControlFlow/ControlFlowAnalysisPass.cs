@@ -500,7 +500,7 @@ public sealed class ControlFlowAnalysisPass : INodeAnalyzer {
 
     private static bool AnyChild(AnalysisContext context, Node node, Func<AnalysisContext, Node, bool> predicate) {
         foreach (var child in node.Children) {
-            if (child is null || !context.ShouldAnalyze(child))
+            if (child is null)
                 continue;
             if (predicate(context, child!))
                 return true;

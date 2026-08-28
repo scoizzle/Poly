@@ -149,7 +149,7 @@ internal sealed class DefiniteAssignmentAnalyzer : INodeAnalyzer {
     private static void AnalyzeChildrenImpl(AnalysisContext context, Node node,
         Stack<HashSet<string>> scopeStack, ref HashSet<string> assigned) {
         foreach (var child in node.Children) {
-            if (child is null || !context.ShouldAnalyze(child))
+            if (child is null)
                 continue;
             AnalyzeImpl(context, child!, scopeStack, ref assigned);
         }

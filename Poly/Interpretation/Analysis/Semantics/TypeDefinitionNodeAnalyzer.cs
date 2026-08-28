@@ -17,7 +17,15 @@ public sealed class TypeDefinitionNodeAnalyzer : INodeAnalyzer, ITypeDefinitionP
     private readonly Dictionary<string, AstTypeDefinition> _types = new();
     private TypeDefinitionProviderCollection? _lastRegisteredCollection;
 
+    private sealed record TypeDefinitionScanMetadata : IAnalysisMetadata;
+
     public void Analyze(AnalysisContext context, Node node) {
+        if (context.GetMetadata<TypeDefinitionScanMetadata>(default) is null) {
+            _types.Clear();
+            _lastRegisteredCollection = null;
+            context.SetMetadata(default, new TypeDefinitionScanMetadata());
+        }
+
         if (node is TypeDefinitionNode typeDef) {
             if (context.TypeDefinitions != _lastRegisteredCollection) {
                 context.TypeDefinitions.Add(this);

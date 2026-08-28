@@ -36,9 +36,6 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
     public string[] Dependencies => [TypeAndMemberResolver.Id, ValueRepresentationAnalyzer.Id];
 
     public void Analyze(AnalysisContext context, Node node) {
-        if (!context.ShouldAnalyze(node))
-            return;
-
         switch (node) {
             case Equal eq:
                 CheckComparison(context, eq.LeftHandValue, eq.RightHandValue);

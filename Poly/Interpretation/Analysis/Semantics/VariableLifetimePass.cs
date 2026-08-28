@@ -62,7 +62,7 @@ internal sealed class ScopeValidator : INodeAnalyzer {
     /// per-child state as <c>this.AnalyzeChildren</c> would.</summary>
     private void AnalyzeChildrenWithState(AnalysisContext context, ScopeState state, Node node) {
         foreach (var child in node.Children) {
-            if (child is not null && context.ShouldAnalyze(child))
+            if (child is not null)
                 AnalyzeNode(context, state, child);
         }
     }

@@ -29,6 +29,12 @@ public sealed record AssignedMemberConversionMetadata(
     IReadOnlyList<AssignedMemberConversionArgument> Arguments
 ) : IAnalysisMetadata;
 
+/// <summary>
+/// Library-stamped expression type (catalog type name). Core inference reads this
+/// instead of naming library IR (<c>Now</c>, <c>DateOperation</c>, …).
+/// </summary>
+public sealed record CatalogTypedExpressionMetadata(string TypeName) : IAnalysisMetadata;
+
 public sealed record RelationshipLookupMetadata(
     IReadOnlyDictionary<string, IReadOnlyDictionary<string, Relationship>> BySourceEntity
 ) : IAnalysisMetadata {

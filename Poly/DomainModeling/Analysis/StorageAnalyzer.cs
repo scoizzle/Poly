@@ -40,9 +40,8 @@ public sealed class StorageAnalyzer {
         _typeMaps = typeMaps ?? new TypeMappingRegistry();
         _conventions = conventions ?? [];
 
-        // amu-w2-1: prefer the live pipeline bags (EntityStructureAnalyzer ran before
-        // StoragePass in the AnalyzerBuilder pipeline); fall back to priorAnalysis for
-        // standalone / codegen-pipeline usage where the context is fresh/invalidated.
+        // Prefer live pipeline bags; fall back to a completed AnalysisResult when
+        // StoragePass is constructed standalone with that result.
         var lookup = context?.GetTypeLookup(domain)
             ?? analysis?.GetTypeLookup(domain)
             ?? context?.GetTypeLookup()

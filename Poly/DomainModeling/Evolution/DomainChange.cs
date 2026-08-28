@@ -1,3 +1,4 @@
+using Poly.DomainModeling.Compile;
 using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Ontology.Contract;
 using Poly.DomainModeling.Runtime;
@@ -672,6 +673,14 @@ public sealed record AddDomainExtensionChange(
             return;
         }
         context.Extensions.Add(ExtensionId);
+        if (!string.Equals(ExtensionId, ExtensionCatalog.TemporalId, StringComparison.Ordinal))
+            return;
+        foreach (var def in TemporalTypeCatalog.Definitions) {
+            if (context.Types.Any(t => t is PrimitiveType p
+                && string.Equals(p.Name, def.Name, StringComparison.Ordinal)))
+                continue;
+            new AddPrimitiveTypeChange(def.Name, def.Category, []).ApplyTo(context);
+        }
     }
 
     internal override string GetDescription() => $"Add domain extension '{ExtensionId}'";

@@ -45,7 +45,7 @@ public sealed class DomainExtensionTests {
     }
 
     [Test]
-    public async Task WithSeed_WhenSourceOmitsUses_PrependsSdkDefaults() {
+    public async Task WithSeed_WhenSourceOmitsUses_StampsSdkDefaults() {
         var poly = """
             domain T
             Item: entity { Name: Text }
@@ -66,6 +66,28 @@ public sealed class DomainExtensionTests {
         var result = new DomainEvolution(start).Apply([new AddDomainExtensionChange("temporal")]);
 
         await Assert.That(result.Succeeded).IsFalse();
+    }
+
+    [Test]
+    public async Task AddDomainExtension_Temporal_SeedsTemporalPrimitives() {
+        var result = new DomainEvolution(new Domain("T", [])).Apply([new AddDomainExtensionChange("temporal")]);
+
+        await Assert.That(result.Succeeded).IsTrue();
+        var names = result.Root!.Types.OfType<PrimitiveType>().Select(p => p.Name).ToHashSet();
+        await Assert.That(names).Contains("Date");
+        await Assert.That(names).Contains("Time");
+        await Assert.That(names).Contains("DateTime");
+        await Assert.That(names).Contains("Duration");
+    }
+
+    [Test]
+    public async Task AddDomainExtension_Temporal_AfterCanonicalBuiltins_SeedsOneDate() {
+        var seeded = CanonicalBuiltInTypeCatalog.ApplyTo(new Domain("T", []));
+        var result = new DomainEvolution(seeded).Apply([new AddDomainExtensionChange("temporal")]);
+
+        await Assert.That(result.Succeeded).IsTrue();
+        var dates = result.Root!.Types.OfType<PrimitiveType>().Where(p => p.Name == "Date").ToList();
+        await Assert.That(dates.Count).IsEqualTo(1);
     }
 
     [Test]

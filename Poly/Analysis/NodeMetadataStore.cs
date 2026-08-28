@@ -4,12 +4,11 @@ namespace Poly.Analysis;
 
 /// <summary>
 /// Stores analysis metadata keyed by node identity and metadata type.
-/// Uses a two-level layout (NodeId → per-node bucket) so that invalidating a node is O(1)
+/// Uses a two-level layout (NodeId → per-node bucket) so clearing a node is O(1)
 /// regardless of how many other nodes are in the store.
 /// Each per-node bucket stores up to <see cref="InlineCapacity"/> entries in a flat array
 /// (linear scan, cache-friendly) and promotes to a dictionary only when that threshold is exceeded.
-/// <see cref="Set{TMetadata}"/> uses overwrite semantics so that incremental reruns of the same
-/// analysis pass are idempotent.
+/// <see cref="Set{TMetadata}"/> overwrites the same metadata type on a node.
 ///
 /// <para><b>Global (non-node) metadata.</b>
 /// Passing <c>null</c> for the <c>node</c> parameter stores the metadata under

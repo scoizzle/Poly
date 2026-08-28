@@ -11,9 +11,6 @@ internal sealed class RuleCoverageAnalyzer : INodeAnalyzer {
     // Reads RequiredPropertiesMetadata published by RequiredPropertiesPass.
     public string[] Dependencies => [RequiredPropertiesPass.Id];
     public void Analyze(AnalysisContext context, Node node) {
-        if (!context.ShouldAnalyze(node)) {
-            return;
-        }
 
         if (node is Domain domain) {
             ValidateDomain(context, domain);

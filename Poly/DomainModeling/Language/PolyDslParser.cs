@@ -143,7 +143,7 @@ public sealed class PolyDslParser : DslCursor {
 
     private bool ImportsTemporal(List<DomainChange> changes) =>
         _session.Extensions.Contains(ExtensionCatalog.TemporalId, StringComparer.Ordinal)
-        || changes.OfType<AddDomainExtensionChange>().Any(c =>
+        && !changes.OfType<AddDomainExtensionChange>().Any(c =>
             string.Equals(c.ExtensionId, ExtensionCatalog.TemporalId, StringComparison.Ordinal));
 
     private void ParseEntity(List<DomainChange> changes) {

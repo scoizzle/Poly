@@ -32,19 +32,6 @@ public class DomainModelAnalyzerContextTests {
     }
 
     [Test]
-    public async Task Analyze_Incremental_WithDomainTree_DoesNotThrow() {
-        var entity = new Entity("Widget", [NameProp], [], [], []);
-        var domain = DomainTestFactory.Create("Test", [entity], []);
-
-        var priorAnalysis = DomainModelAnalyzer.Analyze(domain);
-
-        var updatedDomain = DomainTestFactory.Create("Test", [entity], []);
-        var result = DomainModelAnalyzer.Analyze(updatedDomain, priorAnalysis, [updatedDomain]);
-
-        await Assert.That(result).IsNotNull();
-    }
-
-    [Test]
     public async Task Analyze_ProducesStorageMappingMetadata() {
         var domain = ParseDomain("""
             domain Test
@@ -83,7 +70,7 @@ public class DomainModelAnalyzerContextTests {
 
     [Test]
     public async Task Analyze_StorageMapping_PrefersEntityStructureBagForKeyAndStages() {
-        // amu-w2-1: through the full pipeline (no priorAnalysis), StoragePass must consume
+        // Through the full pipeline, StoragePass must consume
         // the EntityStructureMetadata bag published by EntityStructureAnalyzer — natural
         // key and stage facts surface on the storage model.
         var domain = ParseDomain("""

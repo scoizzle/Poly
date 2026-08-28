@@ -34,8 +34,10 @@ public static class DomainCompilation {
     }
 
     /// <summary>
-    /// If the change list already adds extensions, leave it. Otherwise prepend
-    /// <paramref name="seed"/> as additive extension facts.
+    /// If the change list already adds extensions, leave it. Otherwise append
+    /// <paramref name="seed"/> as additive extension facts so parser-seeded
+    /// temporal primitives exist before <see cref="AddDomainExtensionChange"/>
+    /// skip-if-exists type seeding.
     /// </summary>
     public static IReadOnlyList<DomainChange> WithSeed(
         IReadOnlyList<DomainChange> changes,
@@ -44,6 +46,6 @@ public static class DomainCompilation {
         ArgumentNullException.ThrowIfNull(seed);
         if (changes.OfType<AddDomainExtensionChange>().Any())
             return changes;
-        return [.. seed.Select(id => new AddDomainExtensionChange(id)), .. changes];
+        return [.. changes, .. seed.Select(id => new AddDomainExtensionChange(id))];
     }
 }

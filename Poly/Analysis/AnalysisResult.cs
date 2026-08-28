@@ -1,20 +1,21 @@
+using System.Collections.Concurrent;
+
 namespace Poly.Analysis;
 
 public sealed record AnalysisResult : INodeMetadataProvider {
     private readonly NodeMetadataStore _metadata;
-    private readonly Dictionary<NodeId, List<Diagnostic>> _diagnostics;
+    private readonly ConcurrentQueue<Diagnostic> _diagnostics;
     private readonly Lazy<IReadOnlyList<Diagnostic>> _allDiagnostics;
 
     public AnalysisResult(AnalysisContext context, AnalysisTelemetry telemetry, AnalysisOptions? options = null) {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(telemetry);
         _metadata = context.Metadata;
-        _diagnostics = context.Diagnostics;
+        _diagnostics = context.DiagnosticQueue;
         var diagnosticConfiguration = context.Settings.Get<AnalysisDiagnosticConfiguration>()
             ?? AnalysisDiagnosticConfiguration.Default;
         _allDiagnostics = new Lazy<IReadOnlyList<Diagnostic>>(() =>
             _diagnostics
-                .SelectMany(kvp => kvp.Value)
                 .Select(d => d with {
                     Severity = diagnosticConfiguration.NormalizeSeverity(d.Severity)
                 })
@@ -76,5 +77,9 @@ public sealed record AnalysisResult : INodeMetadataProvider {
     public TMetadata? GetMetadata<TMetadata>(Node? node) where TMetadata : class, IAnalysisMetadata => _metadata.Get<TMetadata>(node);
 
     internal NodeMetadataStore GetMetadataStore() => _metadata;
-    internal Dictionary<NodeId, List<Diagnostic>> GetDiagnosticsDictionary() => _diagnostics;
+
+    internal void AddDiagnostic(Diagnostic diagnostic) {
+        ArgumentNullException.ThrowIfNull(diagnostic);
+        _diagnostics.Enqueue(diagnostic);
+    }
 }

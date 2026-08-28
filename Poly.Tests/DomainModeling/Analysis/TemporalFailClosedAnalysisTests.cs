@@ -4,6 +4,8 @@ using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
 
+using DmAction = Poly.DomainModeling.Ontology.Action;
+
 namespace Poly.Tests.DomainModeling.Analysis;
 
 /// <summary>
@@ -32,6 +34,31 @@ public class TemporalFailClosedAnalysisTests {
             .Where(d => d.Severity == DiagnosticSeverity.Error)
             .Select(d => d.Message)
             .ToList();
+
+    private static DomainType[] TemporalPrimitives() =>
+        [.. TemporalTypeCatalog.Definitions.Select(static d => new PrimitiveType(d.Name, d.Category, []))];
+
+    private static AnalysisResult AnalyzeAssign(string targetType, string sourceType) {
+        var item = new Entity("Item",
+            [
+                new Property("Target", new DomainTypeReference(targetType), []),
+                new Property("Source", new DomainTypeReference(sourceType), []),
+            ],
+            [new DmAction("Stamp", InvocationResult.Void, [],
+                [new AssignEffect(DomainExpression.Property("Target"), DomainExpression.Property("Source"))],
+                [])],
+            [],
+            []);
+        return DomainModelAnalyzer.Analyze(
+            DomainTestFactory.Create("T", [.. TemporalPrimitives(), item], []) with {
+                Extensions = [ExtensionCatalog.TemporalId]
+            });
+    }
+
+    private static bool HasAssignMismatch(AnalysisResult analysis, string targetProperty) =>
+        analysis.Diagnostics.Any(d =>
+            d.Severity == DiagnosticSeverity.Error
+            && d.Message.Contains($"type mismatch in assign to property '{targetProperty}'", StringComparison.Ordinal));
 
     [Test]
     public async Task UnknownUnit_FortnightsInPolicyDocument_FailsClosedAtParse() {
@@ -235,6 +262,42 @@ public class TemporalFailClosedAnalysisTests {
             """, ExtensionCatalog.Core.Language);
 
         await Assert.That(result.Succeeded).IsTrue();
+    }
+
+    [Test]
+    public async Task Assign_DateFromTime_ConstructedIr_ReportsTypeMismatch() {
+        var analysis = AnalyzeAssign("Date", "Time");
+        await Assert.That(HasAssignMismatch(analysis, "Target")).IsTrue();
+    }
+
+    [Test]
+    public async Task Assign_TimeFromDate_ConstructedIr_ReportsTypeMismatch() {
+        var analysis = AnalyzeAssign("Time", "Date");
+        await Assert.That(HasAssignMismatch(analysis, "Target")).IsTrue();
+    }
+
+    [Test]
+    public async Task Assign_DateFromDuration_ConstructedIr_ReportsTypeMismatch() {
+        var analysis = AnalyzeAssign("Date", "Duration");
+        await Assert.That(HasAssignMismatch(analysis, "Target")).IsTrue();
+    }
+
+    [Test]
+    public async Task Assign_TimeFromTime_ConstructedIr_Succeeds() {
+        var analysis = AnalyzeAssign("Time", "Time");
+        await Assert.That(analysis.Diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error)).IsFalse();
+    }
+
+    [Test]
+    public async Task Assign_DateTimeFromDate_ConstructedIr_Succeeds() {
+        var analysis = AnalyzeAssign("DateTime", "Date");
+        await Assert.That(analysis.Diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error)).IsFalse();
+    }
+
+    [Test]
+    public async Task Assign_DateFromDateTime_ConstructedIr_ReportsTypeMismatch() {
+        var analysis = AnalyzeAssign("Date", "DateTime");
+        await Assert.That(HasAssignMismatch(analysis, "Target")).IsTrue();
     }
 
     [Test]

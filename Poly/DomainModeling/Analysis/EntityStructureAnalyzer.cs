@@ -19,7 +19,6 @@ internal sealed class EntityStructureAnalyzer : INodeAnalyzer {
     public string[] Dependencies => [DomainCatalogPass.Id];
 
     public void Analyze(AnalysisContext context, Node node) {
-        if (!context.ShouldAnalyze(node)) return;
 
         if (node is Domain domain) {
             AnalyzeDomain(context, domain);

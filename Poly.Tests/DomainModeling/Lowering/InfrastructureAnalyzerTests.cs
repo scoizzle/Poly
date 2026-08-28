@@ -768,8 +768,7 @@ public class InfrastructurePipelineTests {
         await Assert.That(behavior.Entities).IsNotEmpty();
         await Assert.That(aggregate).IsNotNull();
 
-        // Use the full domain analysis pipeline to produce all metadata,
-        // then verify StoragePass can consume priorAnalysis stand-alone.
+        // Full pipeline, then StoragePass can also consume that AnalysisResult stand-alone.
         var pipeline = new AnalyzerBuilder()
             .UseDomainModelAnalysisPipeline()
             .Build();
@@ -799,7 +798,7 @@ public class InfrastructurePipelineTests {
         var storage = context.GetMetadata<StorageMappingMetadata>(domain);
         await Assert.That(storage).IsNull();
 
-        await Assert.That(context.Diagnostics.SelectMany(d => d.Value).Any(d =>
+        await Assert.That(context.Diagnostics.Any(d =>
             d.Message.Contains("StoragePass requires"))).IsTrue();
     }
 }

@@ -97,14 +97,9 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
     // ── Preconditions ───────────────────────────────────────────
 
     internal static IReadOnlyList<Policy> CollectPreconditions(Action action, Entity entity, Stage? stage) {
-        var inverted = action.Policies
-            .Where(p => p.Name.StartsWith("not_", StringComparison.Ordinal))
-            .Select(p => p.Name.Substring(4))
-            .ToHashSet(StringComparer.Ordinal);
         return action.Policies
             .Where(p => !p.Name.StartsWith("not_", StringComparison.Ordinal))
             .Concat(stage?.Policies ?? [])
-            .Concat(entity.Policies.Where(p => !inverted.Contains(p.Name)))
             .ToList();
     }
 

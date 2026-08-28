@@ -56,12 +56,11 @@ internal sealed class CapabilityAnalyzer : INodeAnalyzer {
     private static void AnalyzeDomain(AnalysisContext context, Domain domain) {
         DomainAnalysis.ForEachEntity(domain, entity => {
             foreach (var action in entity.Actions) {
-                AnalyzeAction(context, action, domain, entity, entity.Policies);
+                AnalyzeAction(context, action, domain, entity, Array.Empty<Policy>());
             }
             foreach (var stage in entity.Stages) {
-                var stagePolicies = DomainEffectiveSurface.ComposeStagePolicies(entity.Policies, stage);
                 foreach (var action in stage.Actions) {
-                    AnalyzeAction(context, action, domain, entity, stagePolicies);
+                    AnalyzeAction(context, action, domain, entity, stage.Policies);
                 }
                 AnalyzeStage(context, stage, entity);
             }
@@ -71,7 +70,7 @@ internal sealed class CapabilityAnalyzer : INodeAnalyzer {
     private static void AnalyzeAction(AnalysisContext context, Action action) {
         var ownerEntity = context.GetMetadata<OwnerEntityMetadata>(action)?.Owner;
         Domain? domain = context.GetTypeLookup()?.Domain;
-        AnalyzeAction(context, action, domain, ownerEntity, ownerEntity?.Policies ?? Array.Empty<Policy>());
+        AnalyzeAction(context, action, domain, ownerEntity, Array.Empty<Policy>());
     }
 
     private static void AnalyzeAction(
@@ -138,8 +137,7 @@ internal sealed class CapabilityAnalyzer : INodeAnalyzer {
             .OfType<ActionCapabilityView>()
             .ToArray();
 
-        var entityPolicies = ownerEntity?.Policies ?? Array.Empty<Policy>();
-        var effectivePolicies = DomainEffectiveSurface.ComposeStagePolicies(entityPolicies, stage);
+        var effectivePolicies = DomainEffectiveSurface.ComposeStagePolicies(Array.Empty<Policy>(), stage);
 
         // Stage hierarchy not supported — effective actions are stage-local only.
         var view = new StageCapabilityView(

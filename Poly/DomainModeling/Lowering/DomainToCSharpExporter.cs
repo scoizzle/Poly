@@ -329,11 +329,10 @@ public sealed partial class DomainToCSharpExporter {
         }
 
         // ── Actions as void methods ───────────────────────────────
-        foreach (var action in entity.Actions)
-            AddActionMethod(entity, action, methods, stageEnumTypeName, postTransitionNodes, domain: domain, analysis: metadata);
-        foreach (var stage in entity.Stages)
-            foreach (var action in stage.Actions)
-                AddActionMethod(entity, action, methods, stageEnumTypeName, postTransitionNodes, stage.Name, domain, metadata);
+        // Same action name on multiple stages is one C# method that dispatches on
+        // CurrentStage. Emitting one method per stage produced illegal duplicate members
+        // (FieldService WorkOrder.Cancel on Draft/Scheduled/Blocked).
+        AddActionMethods(entity, methods, stageEnumTypeName, postTransitionNodes, domain, metadata);
 
         // ── Policies as bool methods ──────────────────────────────
         foreach (var policy in entity.Policies) {

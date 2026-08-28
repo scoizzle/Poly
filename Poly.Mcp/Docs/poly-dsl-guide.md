@@ -403,7 +403,9 @@ Active: stage {
 action-name ":" "action" ["(" param-name ":" Type ("," ...)? ")"] ["->" ret-type] ["require" ...] "{" effect* "}"
 ```
 
-Parameters (optional) appear **after** `: action`, keeping the uniform `Name: kind` member form (matches `export_dsl`):
+Parameters (optional) appear **after** `: action`, keeping the uniform `Name: kind` member form (matches `export_dsl`). Parameter names cannot be DSL keywords (`when`, `require`, `action`, `stage`, `policy`, `entity`).
+
+Same action name may appear on multiple stages; each stage's body and `require` gates are independent (effects are not copied onto earlier stages).
 
 ```poly
 Tag: action (value: Text) {
@@ -560,6 +562,8 @@ Nested invoke depth is limited (max 16); recursive cycles fail loud.
 ### Require Gates
 
 Require gates reference **named policies** defined on the entity.
+Named policies are predicates — they do **not** automatically gate every action.
+An action is blocked by a policy only when it lists `require PolicyName`.
 `require not PolicyName` negates the policy.
 
 ```poly
@@ -905,14 +909,14 @@ diverging:
   **error**; a derived expression that *can* fall outside (e.g. `assign Qty to Qty - 100`
   on `Qty: Number range(0, 100)`) is a **warning**. This covers `assign`, entry/exit
   effects, and `create`/`create in` initializers. The action's guard policies are
-  considered **additively**: a `require` gate (or always-on entity-level policy) that
+  considered **additively**: a `require` gate that
   narrows a property's value range is combined with the property's own constraints before
   judging the downstream violation — e.g. `assign Qty to Qty + 10` under
   `require Qty <= 80` on `Qty: Number range(0, 90)` is provably within range and produces
   no diagnostic.
 - **Invariant verification is per-stage-context and combinatory.** An action valid in
   multiple stages is analyzed once per stage: each stage's policies (plus the action's
-  require gates and entity policies) combine to a **net constraint per constraint type**
+  require gates) combine to a **net constraint per constraint type**
   (range, length, enum, … merged by intersection — the smaller maximum and the larger
   minimum win), and a downstream violation in **any** state the action can run is
   reported. Action **parameters** carry their own constraints into the effects that use

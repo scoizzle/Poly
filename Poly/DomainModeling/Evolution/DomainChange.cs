@@ -221,12 +221,14 @@ public sealed record RemoveActionChange(
 public sealed record AddEffectToActionChange(
     string EntityName,
     string ActionName,
-    Effect Effect
+    Effect Effect,
+    string? StageName = null
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
         context.RequireUpdate(
             context.AppendChildToAction(EntityName, ActionName, a => a.Effects,
-                (a, effects) => a with { Effects = effects }, Effect, searchStages: true),
+                (a, effects) => a with { Effects = effects }, Effect, searchStages: true,
+                stageName: StageName),
             $"Action '{ActionName}' on Entity '{EntityName}' not found — cannot add effect");
     }
 
@@ -268,20 +270,23 @@ public sealed record AddPolicyToStageChange(
 public sealed record AddPolicyToActionChange(
     string EntityName,
     string ActionName,
-    Policy Policy
+    Policy Policy,
+    string? StageName = null
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
-        var actionStatus = context.ResolveAction(EntityName, ActionName, searchStages: true, out _);
-        if (actionStatus == DomainMutationContext.ResolveStatus.AmbiguousAction) {
-            context.Errors.Add(
-                $"Action '{ActionName}' on Entity '{EntityName}' is ambiguous — cannot add policy '{Policy.Name}'.");
-            return;
+        if (StageName is null) {
+            var actionStatus = context.ResolveAction(EntityName, ActionName, searchStages: true, out _);
+            if (actionStatus == DomainMutationContext.ResolveStatus.AmbiguousAction) {
+                context.Errors.Add(
+                    $"Action '{ActionName}' on Entity '{EntityName}' is ambiguous — cannot add policy '{Policy.Name}'.");
+                return;
+            }
         }
 
         context.RequireUpdate(
             context.UpdateAction(EntityName, ActionName, a => a with {
                 Policies = a.Policies.Append(Policy).ToList()
-            }, searchStages: true),
+            }, searchStages: true, stageName: StageName),
             $"Action '{ActionName}' on Entity '{EntityName}' not found — cannot add policy '{Policy.Name}'");
     }
 
@@ -371,12 +376,14 @@ public sealed record RemovePolicyFromActionChange(
 public sealed record AddParameterToActionChange(
     string EntityName,
     string ActionName,
-    Property Parameter
+    Property Parameter,
+    string? StageName = null
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
         context.RequireUpdate(
             context.AppendChildToAction(EntityName, ActionName, a => a.Parameters,
-                (a, parameters) => a with { Parameters = parameters }, Parameter, searchStages: true),
+                (a, parameters) => a with { Parameters = parameters }, Parameter, searchStages: true,
+                stageName: StageName),
             $"Action '{ActionName}' on Entity '{EntityName}' not found — cannot add parameter '{Parameter.Name}'");
     }
 
@@ -520,11 +527,13 @@ public sealed record RemoveOnExitEffectFromStageChange(
 public sealed record SetActionResultChange(
     string EntityName,
     string ActionName,
-    InvocationResult Result
+    InvocationResult Result,
+    string? StageName = null
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
         context.RequireUpdate(
-            context.UpdateAction(EntityName, ActionName, a => a with { Result = Result }, searchStages: true),
+            context.UpdateAction(EntityName, ActionName, a => a with { Result = Result },
+                searchStages: true, stageName: StageName),
             $"Action '{ActionName}' on Entity '{EntityName}' not found — cannot set result");
     }
 

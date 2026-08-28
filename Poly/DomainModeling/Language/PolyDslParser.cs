@@ -316,7 +316,7 @@ public sealed class PolyDslParser : DslCursor {
                 }
                 var policyName = $"not_{pr.PolicyName}";
                 changes.Add(new AddPolicyToActionChange(_currentEntityName, pr.ActionName,
-                    new Policy(policyName, DomainExpression.Not(expr))));
+                    new Policy(policyName, DomainExpression.Not(expr)), StageName: pr.StageName));
             }
             else {
                 // require PolicyName
@@ -325,7 +325,7 @@ public sealed class PolyDslParser : DslCursor {
                         $"which is not defined on entity '{_currentEntityName}'.");
                 }
                 changes.Add(new AddPolicyToActionChange(_currentEntityName, pr.ActionName,
-                    new Policy(pr.PolicyName, expr)));
+                    new Policy(pr.PolicyName, expr), StageName: pr.StageName));
             }
         }
     }
@@ -601,13 +601,14 @@ public sealed class PolyDslParser : DslCursor {
             foreach (var (paramName, paramType) in paramList) {
                 changes.Add(new AddParameterToActionChange(
                     _currentEntityName, actionName,
-                    new Property(paramName, new DomainTypeReference(paramType), [])));
+                    new Property(paramName, new DomainTypeReference(paramType), []),
+                    StageName: stageName));
             }
         }
 
         if (actionResult is not null) {
             changes.Add(new SetActionResultChange(
-                _currentEntityName, actionName, actionResult));
+                _currentEntityName, actionName, actionResult, StageName: stageName));
         }
 
         Expect(TokenKind.LBrace);
@@ -619,7 +620,7 @@ public sealed class PolyDslParser : DslCursor {
         }
 
         foreach (var e in effects) {
-            changes.Add(new AddEffectToActionChange(_currentEntityName, actionName, e));
+            changes.Add(new AddEffectToActionChange(_currentEntityName, actionName, e, StageName: stageName));
         }
 
         Expect(TokenKind.RBrace);

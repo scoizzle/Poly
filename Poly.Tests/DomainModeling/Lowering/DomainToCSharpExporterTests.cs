@@ -1646,13 +1646,9 @@ public class DomainToCSharpExporterTests {
     }
 
     [Test]
-    public async Task Export_EntityLevelPolicy_GatesEveryAction_ExceptRequireNot() {
-        // Code-review fix: the runtime treats every entity-level policy as an always-on
-        // guard on every action invocation (DomainEntityInstance.InvokeAction). The export
-        // previously emitted such policies as inert bool methods and ran actions unchecked
-        // — a contract divergence (actions the runtime would block succeeded). Now every
-        // action is gated, and policies inverted by `require not` are skipped (both match
-        // the runtime).
+    public async Task Export_EntityLevelPolicy_IsPredicate_NotAlwaysOnGuard() {
+        // Named entity policies are reusable predicates. They gate an action only when
+        // that action `require`s them — Boot has no require, Skip has `require not`.
         var (domain, analysis) = ParseAndAnalyze("""
             domain Test
             Device: entity {
@@ -1669,14 +1665,35 @@ public class DomainToCSharpExporterTests {
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
-        // Boot: positive entity-level gate — fail when the policy is false.
-        await Assert.That(cs).Contains("if (!this.IsActive())");
-        await Assert.That(cs).Contains("return DomainResult.Failure(\"'Boot' blocked by policy 'IsActive'.\")");
-
-        // Skip: `require not IsActive` is emitted as its own guard (fail when the policy
-        // is true) and the entity-level gate is skipped — no redundant positive gate.
+        await Assert.That(cs).DoesNotContain("'Boot' blocked by policy 'IsActive'");
         await Assert.That(cs).Contains("if (this.IsActive())\n        {\n            return DomainResult.Failure(\"'Skip' blocked by policy 'IsActive'.\")");
-        await Assert.That(cs).DoesNotContain("if (!this.IsActive())\n        {\n            return DomainResult.Failure(\"'Skip' blocked by policy 'IsActive'.\")");
+        await Assert.That(cs).Contains("public bool IsActive()");
+    }
+
+    [Test]
+    public async Task Export_SameActionOnMultipleStages_EmitsOneMethod() {
+        var (domain, analysis) = ParseAndAnalyze("""
+            domain Test
+            Ticket: entity {
+              Draft: stage {
+                Cancel: action { transition to Closed }
+              }
+              Open: stage {
+                Cancel: action { transition to Closed }
+              }
+              Closed: stage { }
+            }
+            """);
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var unit = new CompilationUnitNode([], null, types, null);
+        var cs = new CSharpGenerator().Generate(unit);
+
+        var cancelDecls = System.Text.RegularExpressions.Regex.Matches(cs, @"public DomainResult Cancel\(\)");
+        await Assert.That(cancelDecls.Count).IsEqualTo(1);
+        await Assert.That(cs).Contains("TicketStage.Draft");
+        await Assert.That(cs).Contains("TicketStage.Open");
+        await Assert.That(cs).Contains("'Cancel' is not valid for the current stage");
+        await Assert.That(cs.Split("this.CurrentStage = TicketStage.Closed").Length - 1).IsEqualTo(2);
     }
 
     [Test]

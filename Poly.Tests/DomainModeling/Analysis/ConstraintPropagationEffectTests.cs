@@ -156,8 +156,8 @@ public class ConstraintPropagationEffectTests {
     }
 
     [Test]
-    public async Task Assign_EntityLevelPolicyNarrowsRange_NoWarning() {
-        // Entity-level policies are always-on gates — they narrow the range too.
+    public async Task Assign_EntityLevelPolicyWithoutRequire_DoesNotNarrowRange() {
+        // Named policies are predicates; without `require LowQty` the +10 can exceed 90.
         var result = Parse("""
             domain Test
             Item: entity {
@@ -167,7 +167,7 @@ public class ConstraintPropagationEffectTests {
             }
             """);
         await Assert.That(result.Succeeded).IsTrue();
-        await Assert.That(Messages(result, errors: false)).IsEmpty();
+        await Assert.That(Messages(result, errors: false).Any(m => m.Contains("can fall outside constraint range"))).IsTrue();
     }
 
     [Test]
@@ -471,9 +471,9 @@ public class ConstraintPropagationEffectTests {
 
     [Test]
     public async Task CallChain_InvokeCarriesCallerContextIntoCallee() {
-        // A invokes B inside `if (Qty <= 60)`. The call-chain context narrows Qty to [0, 60]
-        // (if-condition ∩ entity LowQty ≤ 80), so B's `Qty + 10` under A = [10, 70]; B's own
-        // direct context (entity policy only) gives [10, 90]. A's invariants must carry the
+        // A invokes B inside `if (Qty <= 60)`. The call-chain context narrows Qty to [0, 60],
+        // so B's `Qty + 10` under A = [10, 70]; B's own direct context (declared range only,
+        // LowQty is not `require`d) gives [10, 100]. A's invariants must carry the
         // call-chain-narrowed postcondition.
         var result = Parse("""
             domain Test
@@ -496,9 +496,9 @@ public class ConstraintPropagationEffectTests {
         await Assert.That(aInvariants).IsNotNull();
         await Assert.That(bInvariants).IsNotNull();
 
-        // B's own postcondition (direct): wide [10, 90].
+        // B's own postcondition (direct): wide [10, 100] without always-on LowQty.
         var bPost = bInvariants!.StageContexts().Single().Postconditions.Single();
-        await Assert.That(bPost.ValueRange!.Max).IsEqualTo(90d);
+        await Assert.That(bPost.ValueRange!.Max).IsEqualTo(100d);
 
         // A's call-chain postcondition for the same B assign: narrowed [10, 70].
         var aPost = aInvariants!.StageContexts().Single().Postconditions

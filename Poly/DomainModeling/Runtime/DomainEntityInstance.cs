@@ -479,19 +479,6 @@ public sealed partial record DomainEntityInstance {
         if (failures.Count > 0)
             return ActionInvocationResult.Blocked(actionName, failures);
 
-        foreach (var guard in Entity.Policies) {
-            // Skip entity-level policies that are inverted by an action-level
-            // "require not PolicyName" guard (synthetic not_PolicyName).
-            // Otherwise the entity-level guard would redundantly block the action
-            // even though the action explicitly opted out via "require not".
-            if (action.Policies.Any(p => string.Equals(p.Name, $"not_{guard.Name}", StringComparison.Ordinal)))
-                continue;
-            if (!EvaluatePolicy(guard)) failures.Add(guard.Name);
-        }
-
-        if (failures.Count > 0)
-            return ActionInvocationResult.Blocked(actionName, failures);
-
         // ── Execute effects ─────────────────────────────────────
         var subjectParam = new Parameter("entity", new TypeReference(Entity.Name));
         var loweringContext = new LoweringContext(

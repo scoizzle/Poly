@@ -164,11 +164,30 @@ internal sealed class DomainMutationContext {
         Func<Action, IReadOnlyList<T>> getChildren,
         Func<Action, IReadOnlyList<T>, Action> rebuild,
         T child,
-        bool searchStages = false) =>
+        bool searchStages = false,
+        string? stageName = null) =>
         UpdateAction(entityName, actionName,
-            a => rebuild(a, getChildren(a).Append(child).ToList()), searchStages);
+            a => rebuild(a, getChildren(a).Append(child).ToList()), searchStages, stageName);
 
-    public bool UpdateAction(string entityName, string actionName, Func<Action, Action> transform, bool searchStages = false) {
+    public bool UpdateAction(string entityName, string actionName, Func<Action, Action> transform,
+        bool searchStages = false, string? stageName = null) {
+        if (stageName is not null) {
+            return ReplaceInEntity(entityName,
+                e => e.Stages.Any(s =>
+                    string.Equals(s.Name, stageName, StringComparison.Ordinal)
+                    && s.Actions.Any(a => string.Equals(a.Name, actionName, StringComparison.Ordinal))),
+                e => e with {
+                    Stages = e.Stages.Select(s =>
+                        string.Equals(s.Name, stageName, StringComparison.Ordinal)
+                            ? s with {
+                                Actions = s.Actions.Select(a =>
+                                    string.Equals(a.Name, actionName, StringComparison.Ordinal)
+                                        ? transform(a) : a).ToList()
+                            }
+                            : s).ToList()
+                });
+        }
+
         // Try entity-level actions first
         if (ReplaceInEntity(entityName,
                 e => e.Actions.Any(a => string.Equals(a.Name, actionName, StringComparison.Ordinal)),
@@ -180,7 +199,10 @@ internal sealed class DomainMutationContext {
 
         if (!searchStages) return false;
 
-        // Fall back to stage-level actions
+        // Fall back to stage-level actions. Without StageName this updates every
+        // same-named action (legacy incremental API). Parser-authored stage
+        // actions must pass StageName so a second Cancel does not append onto
+        // the first stage's Cancel.
         return ReplaceInEntity(entityName,
             e => e.Stages.Any(s => s.Actions.Any(a => string.Equals(a.Name, actionName, StringComparison.Ordinal))),
             e => e with {

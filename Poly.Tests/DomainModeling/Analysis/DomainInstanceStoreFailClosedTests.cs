@@ -208,6 +208,21 @@ public class DomainInstanceStoreFailClosedTests {
     }
 
     [Test]
+    public async Task RuntimeAnalysisCache_ConcurrentGetOrAnalyze_DoesNotThrow() {
+        var domain = BuildDomainWithSubscriptions();
+        var errors = new System.Collections.Concurrent.ConcurrentBag<Exception>();
+        Parallel.For(0, 32, i => {
+            try {
+                _ = RuntimeAnalysisCache.GetOrAnalyze(domain);
+            }
+            catch (Exception ex) {
+                errors.Add(ex);
+            }
+        });
+        await Assert.That(errors).IsEmpty();
+    }
+
+    [Test]
     public async Task NotifyTransition_NoThrow_WhenDomainIsNull() {
         // Arrange: Create an instance without a Domain reference so no analysis
         // is available. Use two stages so the transition reaches NotifyTransition.

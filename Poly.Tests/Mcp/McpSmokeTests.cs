@@ -1348,6 +1348,48 @@ public class McpSmokeTests {
     }
 
     [Test]
+    public async Task InvokeAction_RequireRelExists_Unlinked_Blocks() {
+        var (sessionId, _) = McpSessionStore.Create("Billing");
+        var dsl = DslTool.ApplyDsl(sessionId, """
+            domain Billing
+            Customer: entity { Name: Text required }
+            Line: entity {
+              Sku: Text required
+              Open: stage {
+                Post: action { transition to Posted }
+              }
+              Posted: stage { }
+            }
+            Invoice: entity {
+              customer: Customer
+              lines: many Line
+              HasCustomer: policy { customer exists }
+              Open: stage {
+                Submit: action
+                  require HasCustomer
+                {
+                  for lines as line where line in Open
+                    invoke line.Post
+                  transition to Posted
+                }
+              }
+              Posted: stage { }
+            }
+            """);
+        await Assert.That(dsl.Success).IsTrue();
+
+        var create = RuntimeTool.CreateInstance(sessionId, "Invoice");
+        await Assert.That(create.Success).IsTrue();
+        var instanceId = ExtractInstanceId(
+            System.Text.Json.JsonSerializer.Serialize(create.Data));
+
+        var call = RuntimeTool.InvokeAction(sessionId, instanceId!, "Submit");
+        await Assert.That(call.Success).IsFalse();
+        await Assert.That(call.Message).Contains("HasCustomer");
+        await Assert.That(call.Message).DoesNotContain("same key");
+    }
+
+    [Test]
     public async Task CreateInstance_UnknownEntity_Fails() {
         var (sessionId, _) = McpSessionStore.Create("Test");
 

@@ -18,26 +18,28 @@ internal static class RuntimeAnalysisCache {
 
     public static DomainSession Session(Domain domain) {
         ArgumentNullException.ThrowIfNull(domain);
-        if (Cache.TryGetValue(domain, out var holder))
-            return holder.Session;
-
-        var ids = domain.Extensions.Where(ExtensionCatalog.Core.Contains).ToList();
-        var session = DomainSession.ForExtensions(ids);
-        Cache.Add(domain, new Holder { Session = session });
-        return session;
+        return GetHolder(domain).Session;
     }
 
     public static AnalysisResult GetOrAnalyze(Domain domain) {
         ArgumentNullException.ThrowIfNull(domain);
-        _ = Session(domain);
-        if (!Cache.TryGetValue(domain, out var holder))
-            throw new InvalidOperationException("Runtime session cache missed after Session().");
+        var holder = GetHolder(domain);
         if (holder.Analysis is not null)
             return holder.Analysis;
 
-        var analysis = holder.Session.Analyze(domain);
-        DomainModelAnalyzer.RequireCatalog(analysis, domain);
-        holder.Analysis = analysis;
-        return analysis;
+        lock (holder) {
+            if (holder.Analysis is not null)
+                return holder.Analysis;
+            var analysis = holder.Session.Analyze(domain);
+            DomainModelAnalyzer.RequireCatalog(analysis, domain);
+            holder.Analysis = analysis;
+            return analysis;
+        }
     }
+
+    private static Holder GetHolder(Domain domain) =>
+        Cache.GetValue(domain, static d => {
+            var ids = d.Extensions.Where(ExtensionCatalog.Core.Contains).ToList();
+            return new Holder { Session = DomainSession.ForExtensions(ids) };
+        });
 }

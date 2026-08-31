@@ -405,6 +405,8 @@ action-name ":" "action" ["(" param-name ":" Type ("," ...)? ")"] ["->" ret-type
 
 Parameters (optional) appear **after** `: action`, keeping the uniform `Name: kind` member form (matches `export_dsl`). Parameter names cannot be DSL keywords (`when`, `require`, `action`, `stage`, `policy`, `entity`).
 
+
+
 Same action name may appear on multiple stages; each stage's body and `require` gates are independent (effects are not copied onto earlier stages).
 
 ```poly
@@ -703,7 +705,8 @@ CanProcess: policy { isActive is true and role is "admin" }
 ```
 
 **Expressions are product DSL text only** — there is no JSON expression format. `add(kind: policy)`
-and `simulate_policy` take the same DSL fragment syntax as policy bodies here.
+and `oracle_expression` take the same DSL fragment syntax as policy bodies here. Named-policy
+evaluate is `create_instance` then `evaluate_policy(instanceId)`.
 
 ### Expression Grammar (Shipped in Phase 1a/1b)
 
@@ -822,13 +825,11 @@ temporal authoring (`Now - 12 Days`, `5 Days`) fails at parse, and `DateOperatio
 Product sessions load Temporal via `uses temporal` (or the SDK/MCP seed). A unit that does not
 list Temporal does not get clock meaning or temporal primitives.
 
-**Create-time defaults and assign-to-clock are shipped.** `default(Today)` / `default(Now)`
-and `assign Prop to Today` / `assign Prop to Now` evaluate at instance create / invoke
-(and the C# export emits a `??` coalesce). Offsets (`Now - 12 Days`) and **policy/VM**
-reads of `Now`/`Today` are **not** shipped: the fixed-clock `TimeProvider` seam is a
-blocked production gap (`simulate_policy` / the VM fail on static clock members,
-`DirectVmAbiEmitter: unsupported node type NamedTypeReference`). Author and round-trip
-those spellings; do not rely on policy evaluation of clock values.
+**Create-time defaults, assign-to-clock, and policy clock reads are shipped.** `default(Today)` /
+`default(Now)` and `assign Prop to Today` / `assign Prop to Now` evaluate at instance create /
+invoke (C# export emits a `??` coalesce). Policy/VM reads of `Now`/`Today` lower to
+`DateTime.UtcNow` / `DateOnly.FromDateTime(DateTime.UtcNow)` and execute on the VM.
+Offsets (`Now - 12 Days`) author, lower, and execute as `Add*` on that clock value.
 
 **Explicitly NOT shipped:** `schedule at` / `at <time>`, business days, and timezone (TZ)
 handling are out of scope — no `at 9am`, no business-day arithmetic, no TZ conversion.
@@ -840,11 +841,7 @@ handling are out of scope — no `at 9am`, no business-day arithmetic, no TZ con
 - Cross-entity writes (nav path as assign target) are banned.
 - **Path-prefix / owned / quantifier / Rel exists** require a store + links when the name is an outbound relationship. Ownership (`SourceOwnsTarget`) is a modeling flag; evaluation uses the same outbound links as path-prefix / many.
 
-  **Dual evaluation path (do not conflate):**
-  - **Store + link (product path):** `create_instance` → `link_instances` → `evaluate_policy(…, instanceId=…)` **or** action/entry/exit/`if` bodies on store-attached instances. Resolves **singular path-prefix** (including **to-one multi-hop** e.g. `loan book Title is "Classic"`), **Q3′ quantifiers**, and **`Rel exists` / `not Rel exists`** against store outbound links. **Fail closed:** missing store/domain metadata throws. Empty links: path-prefix throws; `Rel exists` → **false**; `not Rel exists` → **true**. Bare path-prefix on `many` is analysis-rejected (use `any`/`all`); multi-link at any hop throws at eval.
-  - **Standalone bag:** `evaluate_policy(age=…)` / `properties=…` — **local expressions only**. Non-relationship `Exists(PropertyAccess)` still bag-null-lowers; relationship-named `Rel exists` requires store (throws without it).
-
-  For agent workflows: use `instanceId` + store + link for path-prefix, owned, quantifiers, and relationship `exists`.
+  **Product evaluation path:** `create_instance` → `link_instances` (when the policy reads related data) → `evaluate_policy(entity, policy, instanceId)`. Same store-attached instances as `invoke_action`. Resolves **singular path-prefix** (including **to-one multi-hop** e.g. `loan book Title is "Classic"`), **Q3′ quantifiers**, and **`Rel exists` / `not Rel exists`** against store outbound links. **Fail closed:** missing `instanceId`, store, or domain metadata. Empty links: path-prefix throws; `Rel exists` → **false**; `not Rel exists` → **true**. Bare path-prefix on `many` is analysis-rejected (use `any`/`all`); multi-link at any hop throws at eval. `oracle_expression` is a fragment probe on a synthetic bag — not named-policy evaluate.
 
 **Shipped in the current product surface:**
 - Arithmetic (`+`, `-`, `*`, `/`) in expressions
@@ -853,10 +850,9 @@ handling are out of scope — no `at 9am`, no business-day arithmetic, no TZ con
 - Action parameters (`actionName: action (param: Type, ...)`)
 - `default` constraints and enum-typed properties
 - Owned navigation declaration (`rel: owned Entity`) + **to-one path-prefix** policy reads (single-hop and multi-hop chains; store + `link_instances` required)
-- Temporal clock dates (`Now`/`Today`, `N days`/`N months`, `DateExpr ± duration`) — authoring, analysis, and `export_dsl` round-trip shipped; runtime clock eval is the only residual gap (see the temporal section)
+- Temporal clock dates (`Now`/`Today`, `N days`/`N months`, `DateExpr ± duration`) — authoring, analysis, `export_dsl` round-trip, and VM execution (`DateTime.UtcNow` / `DateOnly.FromDateTime`)
 
 **Not yet shipped** (planned for future phases / residual gaps):
-- Date **runtime evaluation** — `Now`/`Today` clock reads parse, analyze, and round-trip (shipped), but executing them at runtime is blocked on the fixed-clock `TimeProvider` seam (`DirectVmAbiEmitter: unsupported node type NamedTypeReference`); authoring is not a gap, runtime evaluation is
 - **Product DSL for IR-only `OwnedAccess`** (nested value-doc shape) — path-prefix → `RelationshipNavigation` is the product authoring surface; do not treat bag `OwnedAccess` as a second policy product path
 - Dedicated many-owned policy demos beyond Q3′ quantifiers on plain `many` (ownership flag is unused at eval; use `any`/`all`/`none`/`count` on `many owned` the same way)
 
@@ -869,16 +865,10 @@ diverging:
   property write) and projected to storage. The C# export's `Create` factory does not
   emit a uniqueness check — export uniqueness is the generated unique index, not a
   constructor guard. Duplicate values fail loud at the in-memory store.
-- **`Now`/`Today`/`Guid` are authorable in `default(...)` and in assign RHS.** With the
-  temporal library (default in MCP `apply_dsl`), `default(Today)` / `default(Now)` parse as
-  clock IR and still **evaluate at create time** and in the C# export coalesce (same as
-  the lowercase keyword forms). In **policy bodies**, `Now`/`Today` are authorable only
-  with the pack — see the temporal section. A bare `now`/`guid` (lowercase runtime
-  keyword) in a policy is still rejected at analysis ("property does not exist");
-  `Now`/`Today` in a policy round-trip but their **policy/VM evaluation is not shipped**
-  (fixed-clock `TimeProvider` seam is a production blocker). Date-comparing policies
-  comparing two real properties (e.g. `DueDate < ReferenceDate`) remain the
-  runtime-evaluable form.
+- **`Now`/`Today`/`Guid` are authorable in `default(...)`, assign RHS, and policy bodies**
+  (with the temporal library, default in MCP `apply_dsl`). Policy/VM evaluation of `Now`/`Today`
+  executes as `DateTime.UtcNow` / `DateOnly.FromDateTime`. A bare lowercase `now`/`guid` in a
+  policy is still rejected at analysis ("property does not exist").
 - **`pattern(regex)` validates stored values at write time** (create/assign) — it is a
   constraint, not a query/read filter. Grep-style read-time matching against stored text
   is not expressible.
@@ -892,12 +882,9 @@ diverging:
   `invoke_action`) is the supported evaluation surface for Q3′ forms. Author store-
   dependent expressions only when you run through the store, or keep policies local to the
   record's own properties for the export.
-- **Relative date ordering is authorable but not runtime-evaluable.** Comparing a date
-  property to `Now`/`Today` (e.g. `ExpiryDate < Now`, `DueDate + 14 Days > ExpiryDate`) is
-  **shipped** for authoring — it parses, analyzes, and round-trips through `export_dsl` with
-  the temporal library (default). **Runtime evaluation of `Now`/`Today` is not shipped**: the
-  VM fails on static clock members (`NamedTypeReference`) until the fixed-clock `TimeProvider`
-  seam lands, so such policies cannot yet be exercised via `simulate_policy` / `invoke_action`.
+- **Relative date ordering is shipped.** Comparing a date property to `Now`/`Today`
+  (e.g. `ExpiryDate < Now`) parses, analyzes, round-trips, and evaluates on the VM
+  via `evaluate_policy` / `invoke_action`.
 - **Expressions are type-checked at analysis.** Wrong-typed comparisons, assigns,
   arithmetic, and defaults (e.g. `Name >= 18` on a `Text` property, `default(Today)` on
   a `Number` property) are rejected at authoring time — the export and runtime no longer
@@ -970,8 +957,8 @@ and lowering pipeline but are **not yet authorable in product DSL**:
 | Action parameters | ✅ | ✅ **shipped** | `actionName: action (param: Text) { ... }` |
 
 **Expression bodies are DSL text only** — JSON expression bags were retired with the catalog minify.
-`simulate_policy` is bag-only: relationship/owned path-prefix and relationship `exists` fail closed
-without a store (use create + link + `evaluate_policy`).
+Named-policy evaluate is store-only (`create_instance` + `evaluate_policy`). `oracle_expression`
+is a fragment probe: relationship/owned path-prefix and relationship `exists` fail closed without a store.
 
 ## 9. Supported Effect Summary
 
@@ -993,6 +980,7 @@ without a store (use create + link + `evaluate_policy`).
 |-----------|-----|
 | `actor` | Use `entity` instead |
 | `schedule`, `parallel` | Not product constructs |
+| Action `when Stage` | Not a runtime or emit gate. Place the action inside the stage body; subscriptions stay `when Rel Stage { … }` |
 
 | `relationship Name from A to B` | Use N1 nav properties instead |
 | `function` | Functions not supported |
@@ -1082,7 +1070,7 @@ Author a closed set as an **enum**, not a property constraint.
 `remove(kind, payload)` to delete one by identity.
 
 **Golden workflow:** `get_dsl_guide` → write `.poly` → `apply_dsl` → `get_domain_analysis` →
-oracle tools → iterate.
+`create_instance` → `evaluate_policy(instanceId)` / `invoke_action`.
 
 ## 13. Example (Round-Trip Safe)
 

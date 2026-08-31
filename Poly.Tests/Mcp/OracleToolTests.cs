@@ -4,7 +4,7 @@ using Poly.Mcp.Tools;
 namespace Poly.Tests.Mcp;
 
 /// <summary>
-/// Tests for OracleTool: describe_domain_element and simulate_policy.
+/// Tests for OracleTool: describe_domain_element and oracle_expression.
 /// </summary>
 public class OracleToolTests {
     [Test]
@@ -91,11 +91,11 @@ public class OracleToolTests {
         await Assert.That(json2).Contains("Invoice");
     }
 
-    // ── S0: simulate_policy tests ──────────────────────────────
+    // ── oracle_expression tests ──────────────────────────────
 
     [Test]
-    public async Task SimulatePolicy_AgeGte_PassesForAdult() {
-        var response = OracleTool.SimulatePolicy(
+    public async Task OracleExpression_AgeGte_PassesForAdult() {
+        var response = OracleTool.OracleExpression(
             "Age >= 18",
             @"{""Age"":25}");
 
@@ -105,8 +105,8 @@ public class OracleToolTests {
     }
 
     [Test]
-    public async Task SimulatePolicy_AgeGte_FailsForMinor() {
-        var response = OracleTool.SimulatePolicy(
+    public async Task OracleExpression_AgeGte_FailsForMinor() {
+        var response = OracleTool.OracleExpression(
             "Age >= 18",
             @"{""Age"":10}");
 
@@ -116,8 +116,8 @@ public class OracleToolTests {
     }
 
     [Test]
-    public async Task SimulatePolicy_And_Works() {
-        var response = OracleTool.SimulatePolicy(
+    public async Task OracleExpression_And_Works() {
+        var response = OracleTool.OracleExpression(
             "(Age >= 18) and (Active == true)",
             @"{""Age"":25,""Active"":true}");
 
@@ -127,27 +127,24 @@ public class OracleToolTests {
     }
 
     [Test]
-    public async Task SimulatePolicy_InvalidExpression_Fails() {
-        var response = OracleTool.SimulatePolicy("Age >=", @"{""Age"":25}");
+    public async Task OracleExpression_InvalidExpression_Fails() {
+        var response = OracleTool.OracleExpression("Age >=", @"{""Age"":25}");
 
         await Assert.That(response.Success).IsFalse();
     }
 
     [Test]
-    public async Task SimulatePolicy_EmptyProperties_Fails() {
-        var response = OracleTool.SimulatePolicy(
+    public async Task OracleExpression_EmptyProperties_Fails() {
+        var response = OracleTool.OracleExpression(
             "Age >= 18",
             @"{}");
 
         await Assert.That(response.Success).IsFalse();
     }
 
-    // ── G1: simulate_policy fail-closed on missing properties ──
-
     [Test]
-    public async Task SimulatePolicy_UnknownProperty_FailsClosed() {
-        // Expression references "NonExistent" which is not in the subject bag.
-        var response = OracleTool.SimulatePolicy(
+    public async Task OracleExpression_UnknownProperty_FailsClosed() {
+        var response = OracleTool.OracleExpression(
             "NonExistent == 1",
             @"{""Something"":5}");
 
@@ -159,15 +156,13 @@ public class OracleToolTests {
     // ── owned-2: relationship navigation in DSL expressions ──
 
     [Test]
-    public async Task SimulatePolicy_RelationshipDsl_WithoutStore_FailsClosed() {
-        // Relationship-nav DSL fragment parses, but evaluate without a store
-        // is fail-closed (no vacuous bag pass-through). Use create+link+evaluate_policy.
-        var response = OracleTool.SimulatePolicy(
+    public async Task OracleExpression_RelationshipDsl_WithoutStore_FailsClosed() {
+        var response = OracleTool.OracleExpression(
             "profile City is \"Metropolis\"",
             @"{""City"":""Metropolis""}");
 
         await Assert.That(response.Success).IsFalse();
-        await Assert.That(response.Message).Contains("Simulation failed");
+        await Assert.That(response.Message).Contains("Oracle failed");
     }
 
     [Test]

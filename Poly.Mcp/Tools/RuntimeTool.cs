@@ -229,7 +229,7 @@ Thin wrapper around DomainEntityInstance.Create — no new runtime machinery.")]
             Message: $"Instance '{instanceId}' of entity '{entityName}' created. Stage: '{instance.CurrentStage ?? "(none)"}'.",
             SessionId: sessionId,
             Data: new { instance = snapshot },
-            Affordances: ["get_instance", "invoke_action", "link_instances", "list_instances"]);
+            Affordances: ["get_instance", "invoke_action", "evaluate_policy", "link_instances", "list_instances"]);
     }
 
     // ── RT.2: link_instances ───────────────────────────────────
@@ -576,7 +576,9 @@ Use case — reassign a child from one parent to another:
     /// current stage (stage-scoped actions) or entity-level actions.
     ///
     /// The action pipeline: resolves action → evaluates guard policies →
-    /// executes effects (transition, assign, create, create-in, link, etc.).
+    /// executes effects (transition, assign, create, create-in, invoke, for-invoke, if).
+    /// Linking existing instances is <c>link_instances</c> / <c>unlink_instances</c>,
+    /// not an action effect.
     ///
     /// On success, returns the new stage (if a transition occurred). On failure,
     /// returns which guard policies blocked the action or why the action was not found.
@@ -590,7 +592,9 @@ Use case — reassign a child from one parent to another:
 The action pipeline:
 1. Resolve action from current stage or entity level
 2. Evaluate guard policies (action-level, stage-level, entity-level)
-3. Execute effects (transition, assign, create, create-in, link/unlink, delete)
+3. Execute effects (transition, assign, create, create-in, invoke, for-invoke, if)
+
+Link and unlink existing instances with the store tools link_instances and unlink_instances — those are not action effects.
 
 On stage transition, linked subscriber instances automatically fire their
 stage subscription effects (fan-out via DomainInstanceStore.NotifyTransition).

@@ -83,8 +83,8 @@ apply_dsl → create_instance → link_instances → invoke_action → evaluate_
 
 ### MCP Tools
 - Session management, DSL apply/export, evolve micro-tools
-- Oracle tools: `simulate_policy`, `describe_expression`, `lower_expression`
-- Runtime tools: `create_instance`, `link_instances`, `unlink_instances`, `invoke_action`, `get_instance`, `list_instances`, `evaluate_policy`
+- Oracle tools: `oracle_expression` (fragment probe), `describe_domain_element`
+- Runtime tools: `create_instance`, `link_instances`, `unlink_instances`, `invoke_action`, `get_instance`, `list_instances`, `evaluate_policy` (`instanceId` required)
 - `get_domain_analysis` with structured facts (root entities, action summary, storage boolean, aggregates, subscription plans)
 
 ## Current State (end of dogfood Wave 1)

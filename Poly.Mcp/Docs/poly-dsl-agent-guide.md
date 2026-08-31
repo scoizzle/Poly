@@ -277,7 +277,8 @@ CanProcess: policy { isActive is true and role is "admin" }
 ```
 
 **Expressions are product DSL text only** — there is no JSON expression format. `add(kind: policy)`
-and `simulate_policy` take the same DSL fragment syntax as policy bodies here.
+and `oracle_expression` take the same DSL fragment syntax as policy bodies here. Named-policy
+evaluate is `create_instance` then `evaluate_policy(instanceId)`.
 
 ### Expression Grammar (Shipped in Phase 1a/1b)
 
@@ -366,11 +367,7 @@ against the target entity; reverse-side / self-rel / ManyToMany / OneToOne rejec
 - Cross-entity writes (nav path as assign target) are banned.
 - **Related policies are authoring-complete and runtime-evaluable** — they parse, apply, and export correctly. To-one path-prefix, `Rel exists`, `Rel where`, and Q3′ quantifiers (`any`/`all`/`none`/`count`) are all **runtime-evaluable** via `evaluate_policy` when the instance has been added to a store with linked targets.
 
-  **Dual evaluation path:**
-  - `evaluate_policy(age=…)` or `evaluate_policy(properties=…)` → standalone, no store, evaluates local expressions only.
-  - `create_instance` → `link_instances(relationshipName=…)` → `evaluate_policy(entityName, policyName, instanceId=sourceId)` → **store-attached**, resolves cross-entity expressions (path-prefix, exists, where, Q3′ quantifiers) against linked targets.
-
-  For agent workflows: use the `instanceId` path when the policy reads related data.
+  **Product evaluation path:** `create_instance` → `link_instances` (when the policy reads related data) → `evaluate_policy(entityName, policyName, instanceId)`. There is no bag/age/properties mode on `evaluate_policy`.
 
 **Shipped in the current product surface:**
 - Arithmetic (`+`, `-`, `*`, `/`) in expressions
@@ -410,19 +407,15 @@ with no temporal left operand is rejected at analysis; without the library Date/
 are unknown types, `Now` stays a plain `PropertyAccess` (never a clock read), and temporal
 authoring fails at parse.
 
-**Create-time defaults and assign-to-clock are shipped.** `default(Today)` / `default(Now)`
-and `assign Prop to Today` / `assign Prop to Now` evaluate at create/invoke. Offsets
-(`Now - 12 Days`) and **policy/VM** clock reads are **not** shipped: the fixed-clock
-`TimeProvider` seam is a production blocker (`simulate_policy` / the VM fail on
-`NamedTypeReference`). Author and round-trip those spellings; do not rely on policy
-clock values.
+**Create-time defaults, assign-to-clock, and policy clock reads are shipped.** `default(Today)` /
+`default(Now)` and `assign Prop to Today` / `assign Prop to Now` evaluate at create/invoke.
+Policy/VM reads of `Now`/`Today` execute as `DateTime.UtcNow` / `DateOnly.FromDateTime`.
+Offsets (`Now - 12 Days`) lower to `Add*` on that clock value.
 
 **Explicitly NOT shipped:** `schedule at`/`at <time>`, business days, and timezone (TZ)
 handling are out of scope.
 
 **Not yet shipped** (planned for future phases):
-- Date **runtime evaluation** — `Now`/`Today` clock reads parse, analyze, and round-trip
-  (shipped), but executing them at runtime is blocked on the fixed-clock `TimeProvider` seam
 - Owned/nested access in expressions
 
 ### Expression Gaps — IR vs DSL
@@ -441,8 +434,8 @@ and lowering pipeline but are **not yet authorable in product DSL**:
 | Action parameters | ✅ | ✅ **shipped** | `actionName: action (param: Text) { ... }` |
 
 **Expression bodies are DSL text only** — JSON expression bags were retired with the catalog minify.
-`simulate_policy` is bag-only: relationship/owned path-prefix and relationship `exists` fail closed
-without a store (use create + link + `evaluate_policy`).
+Named-policy evaluate is store-only (`create_instance` + `evaluate_policy`). `oracle_expression`
+is a fragment probe: relationship/owned path-prefix and relationship `exists` fail closed without a store.
 
 ## 8. Supported Effect Summary
 
@@ -508,7 +501,7 @@ SetName: action (newName: Text) {
 `remove(kind, payload)` to delete one by identity.
 
 **Golden workflow:** `get_dsl_guide` → write `.poly` → `apply_dsl` → `get_domain_analysis` →
-oracle tools → iterate.
+`create_instance` → `evaluate_policy(instanceId)` / `invoke_action`.
 
 ## 11. Example (Round-Trip Safe)
 

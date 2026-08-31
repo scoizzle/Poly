@@ -391,13 +391,13 @@ public class McpSmokeTests {
 
         EvolveTool.Add(sessionId, "policy", """{"entityName":"Person","name":"Adult","expression":"Age >= 18"}""");
 
-        var adult = PolicyTool.EvaluatePolicy(sessionId, "Person", "Adult",
-            properties: "{\"Age\":25}");
+        var adultId = RequireInstance(sessionId, "Person", "{\"Age\":25}");
+        var adult = PolicyTool.EvaluatePolicy(sessionId, "Person", "Adult", adultId);
         await Assert.That(adult.Success).IsTrue();
         await Assert.That(adult.Message).Contains("true");
 
-        var minor = PolicyTool.EvaluatePolicy(sessionId, "Person", "Adult",
-            properties: "{\"Age\":15}");
+        var minorId = RequireInstance(sessionId, "Person", "{\"Age\":15}");
+        var minor = PolicyTool.EvaluatePolicy(sessionId, "Person", "Adult", minorId);
         await Assert.That(minor.Success).IsTrue();
         await Assert.That(minor.Message).Contains("false");
     }
@@ -407,9 +407,21 @@ public class McpSmokeTests {
         var (sessionId, _) = McpSessionStore.Create("Test");
         EvolveTool.Add(sessionId, "entity", """{"name":"Person"}""");
 
-        var response = PolicyTool.EvaluatePolicy(sessionId, "Person", "NonExistent", age: 25);
+        var response = PolicyTool.EvaluatePolicy(sessionId, "Person", "NonExistent", "unused");
         await Assert.That(response.Success).IsFalse();
         await Assert.That(response.Message).Contains("not found");
+    }
+
+    [Test]
+    public async Task EvaluatePolicy_MissingInstanceId_FailsClosed() {
+        var (sessionId, _) = McpSessionStore.Create("Test");
+        EvolveTool.Add(sessionId, "entity", """{"name":"Person"}""");
+        EvolveTool.Add(sessionId, "property", """{"entityName":"Person","name":"Age","typeName":"Number"}""");
+        EvolveTool.Add(sessionId, "policy", """{"entityName":"Person","name":"Adult","expression":"Age >= 18"}""");
+
+        var response = PolicyTool.EvaluatePolicy(sessionId, "Person", "Adult", "");
+        await Assert.That(response.Success).IsFalse();
+        await Assert.That(response.Message).Contains("instanceId is required");
     }
 
     [Test]
@@ -422,21 +434,18 @@ public class McpSmokeTests {
 
         EvolveTool.Add(sessionId, "policy", """{"entityName":"Order","name":"LargeActive","expression":"(Total > 100) and (Status == \"Active\")"}""");
 
-        // Pass with Total > 100 and Status == "Active"
         var pass = PolicyTool.EvaluatePolicy(sessionId, "Order", "LargeActive",
-            properties: "{\"Total\":200,\"Status\":\"Active\"}");
+            RequireInstance(sessionId, "Order", "{\"Total\":200,\"Status\":\"Active\"}"));
         await Assert.That(pass.Success).IsTrue();
         await Assert.That(pass.Message).Contains("true");
 
-        // Fail with Total <= 100
         var failTotal = PolicyTool.EvaluatePolicy(sessionId, "Order", "LargeActive",
-            properties: "{\"Total\":50,\"Status\":\"Active\"}");
+            RequireInstance(sessionId, "Order", "{\"Total\":50,\"Status\":\"Active\"}"));
         await Assert.That(failTotal.Success).IsTrue();
         await Assert.That(failTotal.Message).Contains("false");
 
-        // Fail with wrong Status
         var failStatus = PolicyTool.EvaluatePolicy(sessionId, "Order", "LargeActive",
-            properties: "{\"Total\":200,\"Status\":\"Cancelled\"}");
+            RequireInstance(sessionId, "Order", "{\"Total\":200,\"Status\":\"Cancelled\"}"));
         await Assert.That(failStatus.Success).IsTrue();
         await Assert.That(failStatus.Message).Contains("false");
     }
@@ -450,12 +459,12 @@ public class McpSmokeTests {
         EvolveTool.Add(sessionId, "policy", """{"entityName":"Product","name":"PositiveStock","expression":"Stock >= 0"}""");
 
         var pass = PolicyTool.EvaluatePolicy(sessionId, "Product", "PositiveStock",
-            properties: "{\"Stock\":10}");
+            RequireInstance(sessionId, "Product", "{\"Stock\":10}"));
         await Assert.That(pass.Success).IsTrue();
         await Assert.That(pass.Message).Contains("true");
 
         var fail = PolicyTool.EvaluatePolicy(sessionId, "Product", "PositiveStock",
-            properties: "{\"Stock\":-1}");
+            RequireInstance(sessionId, "Product", "{\"Stock\":-1}"));
         await Assert.That(fail.Success).IsTrue();
         await Assert.That(fail.Message).Contains("false");
     }
@@ -468,9 +477,8 @@ public class McpSmokeTests {
 
         EvolveTool.Add(sessionId, "policy", """{"entityName":"Person","name":"Adult","expression":"Age >= 18"}""");
 
-        // Providing a property that doesn't exist on the entity
-        var response = PolicyTool.EvaluatePolicy(sessionId, "Person", "Adult",
-            properties: "{\"NonExistent\":42}");
+        var response = RuntimeTool.CreateInstance(sessionId, "Person",
+            "{\"NonExistent\":42}");
         await Assert.That(response.Success).IsFalse();
         await Assert.That(response.Message).Contains("does not exist on entity");
     }
@@ -486,12 +494,12 @@ public class McpSmokeTests {
         EvolveTool.Add(sessionId, "policy", """{"entityName":"Flag","name":"IsEnabled","expression":"Enabled == true"}""");
 
         var pass = PolicyTool.EvaluatePolicy(sessionId, "Flag", "IsEnabled",
-            properties: "{\"Enabled\":true}");
+            RequireInstance(sessionId, "Flag", "{\"Enabled\":true}"));
         await Assert.That(pass.Success).IsTrue();
         await Assert.That(pass.Message).Contains("true");
 
         var fail = PolicyTool.EvaluatePolicy(sessionId, "Flag", "IsEnabled",
-            properties: "{\"Enabled\":false}");
+            RequireInstance(sessionId, "Flag", "{\"Enabled\":false}"));
         await Assert.That(fail.Success).IsTrue();
         await Assert.That(fail.Message).Contains("false");
     }
@@ -507,12 +515,12 @@ public class McpSmokeTests {
         EvolveTool.Add(sessionId, "policy", """{"entityName":"Item","name":"HighScore","expression":"Score >= 100"}""");
 
         var pass = PolicyTool.EvaluatePolicy(sessionId, "Item", "HighScore",
-            properties: "{\"Score\":100}");
+            RequireInstance(sessionId, "Item", "{\"Score\":100}"));
         await Assert.That(pass.Success).IsTrue();
         await Assert.That(pass.Message).Contains("true");
 
         var fail = PolicyTool.EvaluatePolicy(sessionId, "Item", "HighScore",
-            properties: "{\"Score\":99}");
+            RequireInstance(sessionId, "Item", "{\"Score\":99}"));
         await Assert.That(fail.Success).IsTrue();
         await Assert.That(fail.Message).Contains("false");
     }
@@ -548,53 +556,48 @@ public class McpSmokeTests {
         var r5 = EvolveTool.Add(sessionId, "policy", """{"entityName":"Person","name":"Always","expression":"true"}""");
         await Assert.That(r5.Success).IsTrue();
 
-        // Evaluate: Adult (Age >= 18)
         var pass = PolicyTool.EvaluatePolicy(sessionId, "Person", "Adult",
-            properties: "{\"Age\":25}");
+            RequireInstance(sessionId, "Person", "{\"Age\":25}"));
         await Assert.That(pass.Success).IsTrue();
         await Assert.That(pass.Message).Contains("true");
 
         var edge = PolicyTool.EvaluatePolicy(sessionId, "Person", "Adult",
-            properties: "{\"Age\":18}");
+            RequireInstance(sessionId, "Person", "{\"Age\":18}"));
         await Assert.That(edge.Success).IsTrue();
         await Assert.That(edge.Message).Contains("true");
 
         var fail = PolicyTool.EvaluatePolicy(sessionId, "Person", "Adult",
-            properties: "{\"Age\":15}");
+            RequireInstance(sessionId, "Person", "{\"Age\":15}"));
         await Assert.That(fail.Success).IsTrue();
         await Assert.That(fail.Message).Contains("false");
 
-        // Evaluate: IsActive (Active == true)
         var activePass = PolicyTool.EvaluatePolicy(sessionId, "Person", "IsActive",
-            properties: "{\"Active\":true, \"Age\":25}");
+            RequireInstance(sessionId, "Person", "{\"Active\":true, \"Age\":25}"));
         await Assert.That(activePass.Success).IsTrue();
         await Assert.That(activePass.Message).Contains("true");
 
         var activeFail = PolicyTool.EvaluatePolicy(sessionId, "Person", "IsActive",
-            properties: "{\"Active\":false, \"Age\":25}");
+            RequireInstance(sessionId, "Person", "{\"Active\":false, \"Age\":25}"));
         await Assert.That(activeFail.Success).IsTrue();
         await Assert.That(activeFail.Message).Contains("false");
 
-        // Evaluate: ActiveAdult (AND)
         var andPass = PolicyTool.EvaluatePolicy(sessionId, "Person", "ActiveAdult",
-            properties: "{\"Age\":25,\"Active\":true}");
+            RequireInstance(sessionId, "Person", "{\"Age\":25,\"Active\":true}"));
         await Assert.That(andPass.Success).IsTrue();
         await Assert.That(andPass.Message).Contains("true");
 
         var andFail = PolicyTool.EvaluatePolicy(sessionId, "Person", "ActiveAdult",
-            properties: "{\"Age\":25,\"Active\":false}");
+            RequireInstance(sessionId, "Person", "{\"Age\":25,\"Active\":false}"));
         await Assert.That(andFail.Success).IsTrue();
         await Assert.That(andFail.Message).Contains("false");
 
-        // Evaluate: NotAdult (NOT Age >= 18)
         var notPass = PolicyTool.EvaluatePolicy(sessionId, "Person", "NotAdult",
-            properties: "{\"Age\":15}");
+            RequireInstance(sessionId, "Person", "{\"Age\":15}"));
         await Assert.That(notPass.Success).IsTrue();
         await Assert.That(notPass.Message).Contains("true");
 
-        // Evaluate: Always (literal true)
         var always = PolicyTool.EvaluatePolicy(sessionId, "Person", "Always",
-            properties: "{\"Age\":0}");
+            RequireInstance(sessionId, "Person", "{\"Age\":0}"));
         await Assert.That(always.Success).IsTrue();
         await Assert.That(always.Message).Contains("true");
     }
@@ -766,8 +769,11 @@ public class McpSmokeTests {
         await Assert.That(entity).IsNotNull();
         await Assert.That(entity!.Properties.Count).IsEqualTo(2);
 
-        // Affordances should include get_entity_detail
+        // Affordances should include get_entity_detail and the named store harness
         await Assert.That(response.Affordances).Contains("get_entity_detail");
+        await Assert.That(response.Affordances).Contains("create_instance");
+        await Assert.That(response.Affordances).Contains("evaluate_policy");
+        await Assert.That(response.Affordances).Contains("invoke_action");
     }
 
     [Test]
@@ -1233,12 +1239,42 @@ public class McpSmokeTests {
         await Assert.That(dataJson).Contains("stage");
         // Should mention unsupported constructs
         await Assert.That(dataJson.ToLowerInvariant()).Contains("actor");
+        var guideProp = response.Data!.GetType().GetProperty("guide");
+        var guideBody = guideProp!.GetValue(response.Data) as string;
+        await Assert.That(guideBody).IsNotNull();
         // Should mention apply_dsl / MCP
         await Assert.That(dataJson).Contains("apply_dsl");
 
         // G′′.4: Anti-pattern guards — guide must not teach lab constructs
         await Assert.That(dataJson.Contains("require {")).IsFalse();
         await Assert.That(dataJson.Contains("require{")).IsFalse();
+    }
+
+    [Test]
+    public async Task GetDslGuide_GoldenWorkflow_NamesNamedStoreHarness() {
+        var response = DslTool.GetDslGuide();
+        await Assert.That(response.Success).IsTrue();
+
+        var guideProp = response.Data!.GetType().GetProperty("guide");
+        await Assert.That(guideProp).IsNotNull();
+        var guideBody = guideProp!.GetValue(response.Data) as string;
+        await Assert.That(guideBody).IsNotNull();
+
+        var marker = "**Golden workflow:**";
+        var idx = guideBody!.IndexOf(marker, StringComparison.Ordinal);
+        await Assert.That(idx).IsGreaterThanOrEqualTo(0);
+
+        var after = guideBody.Substring(idx);
+        var paraEnd = after.IndexOf("\n\n", StringComparison.Ordinal);
+        var snippet = paraEnd >= 0 ? after[..paraEnd] : after;
+
+        await Assert.That(snippet).Contains("create_instance");
+        await Assert.That(snippet).Contains("evaluate_policy(instanceId)");
+        await Assert.That(snippet).Contains("invoke_action");
+        await Assert.That(snippet.Contains("oracle", StringComparison.OrdinalIgnoreCase)).IsFalse();
+        await Assert.That(snippet.Contains("bag", StringComparison.OrdinalIgnoreCase)).IsFalse();
+        await Assert.That(snippet.Contains("clock", StringComparison.OrdinalIgnoreCase)).IsFalse();
+        await Assert.That(snippet.Contains("stage", StringComparison.OrdinalIgnoreCase)).IsFalse();
     }
 
     [Test]
@@ -1575,6 +1611,14 @@ public class McpSmokeTests {
     /// <summary>
     /// Extracts the instanceId from a JSON response containing an "instance" object.
     /// </summary>
+    private static string RequireInstance(string sessionId, string entityName, string? propertiesJson = null) {
+        var create = RuntimeTool.CreateInstance(sessionId, entityName, propertiesJson);
+        if (!create.Success)
+            throw new InvalidOperationException(create.Message);
+        var id = ExtractInstanceId(System.Text.Json.JsonSerializer.Serialize(create.Data));
+        return id ?? throw new InvalidOperationException("create_instance returned no instanceId.");
+    }
+
     private static string? ExtractInstanceId(string json) {
         using var doc = System.Text.Json.JsonDocument.Parse(json);
         if (doc.RootElement.TryGetProperty("instance", out var instance)
@@ -3674,5 +3718,31 @@ E: entity {{
         var invoke = RuntimeTool.InvokeAction(sessionId, counterId, "Increment");
         await Assert.That(invoke.Success).IsFalse();
         await Assert.That(invoke.Message).Contains("AtLimit");
+    }
+
+    [Test]
+    public async Task InvokeAction_Description_ListsOnlyShippedEffects() {
+        // Live MCP simulate text is the authoring instruction: list only effects
+        // that lower (transition, assign, create, create-in, invoke, for-invoke, if).
+        // link/unlink/delete are not Effect IR — linking is store tools.
+        var method = typeof(RuntimeTool).GetMethod(nameof(RuntimeTool.InvokeAction));
+        await Assert.That(method).IsNotNull();
+
+        var toolName = method!.GetCustomAttributes(inherit: false)
+            .Select(a => a.GetType().GetProperty("Name")?.GetValue(a) as string)
+            .FirstOrDefault(n => n is not null);
+        await Assert.That(toolName).IsEqualTo("invoke_action");
+
+        var description = method.GetCustomAttributes(inherit: false)
+            .OfType<System.ComponentModel.DescriptionAttribute>()
+            .FirstOrDefault()?.Description;
+        await Assert.That(description).IsNotNull();
+
+        await Assert.That(description!).Contains(
+            "transition, assign, create, create-in, invoke, for-invoke, if");
+        await Assert.That(description).Contains("link_instances");
+        await Assert.That(description).Contains("unlink_instances");
+        await Assert.That(description.Contains("link/unlink")).IsFalse();
+        await Assert.That(description.Contains("delete", StringComparison.OrdinalIgnoreCase)).IsFalse();
     }
 }

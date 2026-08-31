@@ -220,7 +220,7 @@ Infra suite (Groups 1–7 under bar): **complete** — [`plans/infrastructure-pa
 | DSL | `apply_dsl`, `export_dsl`, `get_dsl_guide` |
 | Policy | `add` kind=`policy`, `get_policy_expression`, `evaluate_policy` (+ `instanceId`) |
 | Runtime | `create_instance`, `link_instances`, `unlink_instances`, `get_instance`, `list_instances`, `invoke_action` |
-| Oracle | `simulate_policy` (DSL fragment), `describe_domain_element`, `export_domain_to_csharp` |
+| Oracle | `oracle_expression` (DSL fragment probe), `describe_domain_element`, `export_domain_to_csharp` |
 
 Full names: `Poly.Mcp/Tools/DomainTools.cs`, `RuntimeTool.cs`, `OracleTool.cs`.
 

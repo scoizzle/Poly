@@ -14,8 +14,9 @@ using Poly.Mcp.Sessions;
 namespace Poly.Mcp.Tools;
 
 /// <summary>
-/// Oracle tools: visibility, lowering, description, and simulation for domain expressions and elements.
-/// These tools are read-only — they never mutate session state.
+/// Oracle tools: visibility, lowering, description, and a DSL-fragment probe.
+/// These tools are read-only — they never mutate session state. Named-policy
+/// and named-action simulate is <c>evaluate_policy</c> / <c>invoke_action</c>.
 /// </summary>
 [McpServerToolType]
 internal sealed class OracleTool {
@@ -358,10 +359,10 @@ internal sealed class OracleTool {
         return new DomainToolResponse(Success: true, Message: sb.ToString(), SessionId: sessionId, Data: new DomainElementData("relationship", name, null, sb.ToString(), sb.ToString()), Affordances: ["get_entity_detail", "get_domain_overview"]);
     }
 
-    // ── S0: simulate_policy ────────────────────────────────────
+    // ── oracle_expression (fragment probe, not named-policy simulate)
 
-    [McpServerTool(Name = "simulate_policy"), Description("Expression oracle: VM-evaluates a DSL expression fragment against a local property bag. Not named-policy simulate, not evaluate_policy, and not session-backed — no DomainSession; types are inferred onto a synthetic Entity(\"Subject\"). Returns {'result': true/false}. Related/nav expressions fail closed without a store.")]
-    public static DomainToolResponse SimulatePolicy(
+    [McpServerTool(Name = "oracle_expression"), Description("Authoring probe: VM-evaluates a DSL expression fragment against a local property bag. Not named-policy evaluate and not invoke_action. No DomainSession; types are inferred onto a synthetic Entity(\"Subject\"). Returns {'result': true/false}. Related/nav expressions fail closed. For a named policy, create_instance then evaluate_policy.")]
+    public static DomainToolResponse OracleExpression(
         [Description("DSL expression fragment, e.g. `Age >= 18`.")] string expression,
         [Description("JSON object of property values, e.g. \"{\\\"Age\\\":25,\\\"Status\\\":\\\"Active\\\"}\"")] string propertiesJson) {
         // Parse expression
@@ -392,7 +393,7 @@ internal sealed class OracleTool {
                 Success: false,
                 Message: $"Expression references properties not present in the subject properties bag: [{string.Join(", ", missingProperties)}]. " +
                          "Provide values for these properties in the propertiesJson parameter.",
-                Affordances: ["add", "evaluate_policy", "get_entity_detail"]);
+                Affordances: ["add", "create_instance", "evaluate_policy"]);
         }
 
         try {
@@ -411,10 +412,10 @@ internal sealed class OracleTool {
             var result = instance.EvaluatePolicy(policy);
 
             var data = new { result };
-            return new DomainToolResponse(Success: true, Message: result ? "Expression passed (true)." : "Expression failed (false).", Data: data, Affordances: ["add", "evaluate_policy", "get_entity_detail"]);
+            return new DomainToolResponse(Success: true, Message: result ? "Expression passed (true)." : "Expression failed (false).", Data: data, Affordances: ["add", "create_instance", "evaluate_policy"]);
         }
         catch (Exception ex) {
-            return new DomainToolResponse(Success: false, Message: $"Simulation failed: {ex.Message}", Data: new { error = ex.Message }, Affordances: []);
+            return new DomainToolResponse(Success: false, Message: $"Oracle failed: {ex.Message}", Data: new { error = ex.Message }, Affordances: []);
         }
     }
 

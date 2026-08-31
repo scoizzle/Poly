@@ -1097,7 +1097,7 @@ Unknown kind or missing required field fails closed.")]
 /// <summary>
 /// Tools for inspecting and evaluating policy guards on domain entities.
 /// <c>get_policy_expression</c> is inspect-only; <c>evaluate_policy</c> runs the
-/// VM path against a local subject bag (not cross-entity related reads).
+/// VM path against a store instance from <c>create_instance</c>.
 /// </summary>
 [McpServerToolType]
 internal sealed class PolicyTool {
@@ -1145,19 +1145,14 @@ internal sealed class PolicyTool {
     }
 
     /// <summary>
-    /// Evaluates a policy's guard expression against a sample subject.
-    /// Provide <c>age</c> for simple Age-based policies, or <c>properties</c>
-    /// as a JSON object for multi-property entities (e.g. {"Status":"Active","Total":200}).
-    /// Returns the boolean result (true/false) from the VM.
+    /// Evaluates a named policy on a store instance from <c>create_instance</c>.
     /// </summary>
-    [McpServerTool(Name = "evaluate_policy"), Description("Evaluates a policy's guard expression against a sample subject. Provide 'age' for simple Age-based policies, or 'properties' as a JSON object for multi-property entities. To evaluate policies with cross-entity expressions (path-prefix, exists, where, Q3' quantifiers), first create and link instances via create_instance + link_instances(relationshipName), then pass the source instanceId. When instanceId is provided, age/properties are ignored (the store-attached instance supplies all values). Returns true if the policy passes, false otherwise.")]
+    [McpServerTool(Name = "evaluate_policy"), Description("Evaluates a named policy on a store instance. Create the subject with create_instance (and link_instances for cross-entity reads). instanceId is required — there is no bag/age/properties mode. Returns true if the policy passes, false otherwise.")]
     public static DomainToolResponse EvaluatePolicy(
         [Description("Session ID")] string sessionId,
         [Description("Name of the entity that has the policy")] string entityName,
         [Description("Name of the policy to evaluate")] string policyName,
-        [Description("Age value for the sample subject (convenience for Age-based policies)")] int? age = null,
-        [Description("JSON object of property values, e.g. \"{\\\"Status\\\":\\\"Active\\\",\\\"Total\\\":200}\"")] string? properties = null,
-        [Description("Optional instance ID from a previous create_instance call. When provided, evaluates against the store-attached instance (required for cross-entity expressions like Q3' quantifiers).")] string? instanceId = null) {
+        [Description("Instance ID from create_instance. Required.")] string instanceId) {
         if (!McpSessionStore.TryGet(sessionId, out var state))
             return new DomainToolResponse(
                 Success: false,
@@ -1182,58 +1177,30 @@ internal sealed class PolicyTool {
                 SessionId: sessionId,
                 Affordances: ["get_entity_detail"]);
 
-        // Parse subject values from tool arguments.
-        Dictionary<string, object?> subjectValues;
-        try {
-            subjectValues = new Dictionary<string, object?>(StringComparer.Ordinal);
-
-            if (properties is not null) {
-                var parsed = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(properties)
-                    ?? throw new ArgumentException("Failed to parse properties JSON.");
-                foreach (var (key, je) in parsed)
-                    subjectValues[key] = JsonElementToClrValue(je);
-            }
-            else if (age.HasValue) {
-                subjectValues["Age"] = (long)age.Value;
-            }
-        }
-        catch (Exception ex) {
+        if (string.IsNullOrWhiteSpace(instanceId))
             return new DomainToolResponse(
                 Success: false,
-                Message: $"Invalid subject: {ex.Message}",
+                Message: "instanceId is required. Create the subject with create_instance, then pass that id.",
                 SessionId: sessionId,
-                Affordances: ["get_entity_detail", "get_domain_overview"]);
-        }
+                Affordances: ["create_instance", "list_instances"]);
 
         bool result;
         try {
-            if (instanceId is not null) {
-                if (!state.InstanceMap.TryGetValue(instanceId, out var existingInstance))
-                    return new DomainToolResponse(
-                        Success: false,
-                        Message: $"Instance '{instanceId}' not found in session. Create it first via create_instance.",
-                        SessionId: sessionId,
-                        Affordances: ["create_instance", "list_instances"]);
+            if (!state.InstanceMap.TryGetValue(instanceId, out var existingInstance))
+                return new DomainToolResponse(
+                    Success: false,
+                    Message: $"Instance '{instanceId}' not found in session. Create it first via create_instance.",
+                    SessionId: sessionId,
+                    Affordances: ["create_instance", "list_instances"]);
 
-                if (!string.Equals(existingInstance.Entity.Name, entityName, StringComparison.Ordinal))
-                    return new DomainToolResponse(
-                        Success: false,
-                        Message: $"Instance '{instanceId}' is for entity '{existingInstance.Entity.Name}', not '{entityName}'.",
-                        SessionId: sessionId,
-                        Affordances: ["get_entity_detail", "list_instances"]);
+            if (!string.Equals(existingInstance.Entity.Name, entityName, StringComparison.Ordinal))
+                return new DomainToolResponse(
+                    Success: false,
+                    Message: $"Instance '{instanceId}' is for entity '{existingInstance.Entity.Name}', not '{entityName}'.",
+                    SessionId: sessionId,
+                    Affordances: ["get_entity_detail", "list_instances"]);
 
-                result = existingInstance.EvaluatePolicy(policy);
-            }
-            else {
-                // Bag path (no instanceId): still domain-bound so that
-                // relationship-named `Rel exists` / `not Rel exists` fail closed
-                // ("requires store") per guide §9 instead of lowering to a bag
-                // member access that fail-opens to true. Non-relationship Exists
-                // keeps bag-null lowering (TryEvaluateRelationshipPresence returns
-                // false for non-relationship names).
-                var instance = DomainEntityInstance.Create(entity, subjectValues, state.Domain);
-                result = instance.EvaluatePolicy(policy);
-            }
+            result = existingInstance.EvaluatePolicy(policy);
         }
         catch (Exception ex) {
             return new DomainToolResponse(
@@ -1243,7 +1210,7 @@ internal sealed class PolicyTool {
                 Affordances: ["get_policy_expression", "get_entity_detail"]);
         }
 
-        var data = new { policyName, entityName, age, properties, result };
+        var data = new { policyName, entityName, instanceId, result };
 
         return new DomainToolResponse(
             Success: true,
@@ -1254,21 +1221,6 @@ internal sealed class PolicyTool {
             Affordances: ["get_policy_expression", "get_entity_detail"]);
     }
 
-    // ── Private helpers ─────────────────────────────────────────
-
-    /// <summary>
-    /// Converts a JSON element to a CLR value for subject bag properties.
-    /// </summary>
-    private static object? JsonElementToClrValue(JsonElement je) => je.ValueKind switch {
-        System.Text.Json.JsonValueKind.Number when je.TryGetInt32(out var i) => (long)i,
-        System.Text.Json.JsonValueKind.Number when je.TryGetInt64(out var l) => l,
-        System.Text.Json.JsonValueKind.Number => (long)je.GetDecimal(),
-        System.Text.Json.JsonValueKind.True => true,
-        System.Text.Json.JsonValueKind.False => false,
-        System.Text.Json.JsonValueKind.String => je.GetString(),
-        System.Text.Json.JsonValueKind.Null => null,
-        _ => je.GetRawText()
-    };
 }
 
 /// <summary>
@@ -1419,7 +1371,7 @@ through the unified `add` / `remove` tools (kind + payload).")]
             Revision: state.Revision,
             Data: snapshot,
             Affordances: entityCount > 0
-                ? ["get_entity_detail", "get_domain_overview", "get_domain_analysis", "export_dsl", "apply_dsl"]
+                ? ["get_entity_detail", "get_domain_overview", "get_domain_analysis", "create_instance", "evaluate_policy", "invoke_action", "export_dsl", "apply_dsl"]
                 : ["get_domain_overview", "add"]);
     }
 
@@ -1470,7 +1422,7 @@ through the unified `add` / `remove` tools (kind + payload).")]
             Success: true,
             Message: "DSL syntax guide retrieved.",
             Data: new { guide = guideText },
-            Affordances: ["apply_dsl", "add", "simulate_policy"]
+            Affordances: ["apply_dsl", "add", "create_instance", "evaluate_policy", "invoke_action"]
         );
     }
 

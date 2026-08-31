@@ -1,7 +1,7 @@
 # MCP catalog minify + drop JSON expression tools
 
 **Date:** 2026-08-07  
-**Status:** **CURRENT** (admitted 2026-08-08) — suite M0–M6 executing; §10 boxes ticked as gate closes  
+**Status:** **DONE** 2026-08-08 — not CURRENT. Suite M0–M6 executed; follow-ups closed. CURRENT: [`simple-agent-tasks/PIPELINE-STATUS.md`](simple-agent-tasks/PIPELINE-STATUS.md).
 **Agent suite:** [`simple-agent-tasks/mcp-minify-README.md`](simple-agent-tasks/mcp-minify-README.md) (trivial-agent micro-tasks 0→G)  
 **Principle:** One product authoring surface (`.poly` DSL); thin MCP; fewer non-overlapping tools  
 **Related:**  

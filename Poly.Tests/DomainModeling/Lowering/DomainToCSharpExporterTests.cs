@@ -2214,6 +2214,173 @@ public class DomainToCSharpExporterTests {
     }
 
     [Test]
+    public async Task Export_ConditionalCreate_UntakenBranch_DoesNotUnguardedProbe() {
+        var (domain, analysis) = ParseAndAnalyze("""
+            domain Hotel
+            Stay: entity {
+              Nights: Number range(1, 21) required
+            }
+            Guest: entity {
+              OpenStays: Number default(0)
+              Book: action (nights: Number, confirm: Boolean) {
+                assign OpenStays to OpenStays + 1
+                if (confirm is true) {
+                  create Stay { Nights: nights }
+                }
+              }
+            }
+            """);
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var unit = new CompilationUnitNode([], null, types, null);
+        var cs = new CSharpGenerator().Generate(unit);
+
+        var bookIdx = cs.IndexOf("public DomainResult Book(", StringComparison.Ordinal);
+        var assignIdx = cs.IndexOf("this.OpenStays = this.OpenStays + 1L", bookIdx);
+        var probeIdx = cs.IndexOf("Stay.Create(nights)", bookIdx);
+        await Assert.That(bookIdx).IsGreaterThan(-1);
+        await Assert.That(assignIdx).IsGreaterThan(bookIdx);
+        await Assert.That(probeIdx).IsGreaterThan(bookIdx);
+        var bookPrefix = cs[bookIdx..probeIdx];
+        await Assert.That(bookPrefix.Contains("if (", StringComparison.Ordinal)).IsTrue();
+        await Assert.That(cs).DoesNotContain("throw new InvalidOperationException(stayResult.ErrorMessage)");
+    }
+
+    [Test]
+    public async Task Export_ConditionalCreate_TakenBranch_ProbesBeforePriorAssigns() {
+        var (domain, analysis) = ParseAndAnalyze("""
+            domain Hotel
+            Stay: entity {
+              Nights: Number range(1, 21) required
+            }
+            Guest: entity {
+              OpenStays: Number default(0)
+              Book: action (nights: Number, confirm: Boolean) {
+                assign OpenStays to OpenStays + 1
+                if (confirm is true) {
+                  create Stay { Nights: nights }
+                }
+              }
+            }
+            """);
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var unit = new CompilationUnitNode([], null, types, null);
+        var cs = new CSharpGenerator().Generate(unit);
+
+        var bookIdx = cs.IndexOf("public DomainResult Book(", StringComparison.Ordinal);
+        var probeIdx = cs.IndexOf("Stay.Create(nights)", bookIdx);
+        var assignIdx = cs.IndexOf("this.OpenStays = this.OpenStays + 1L", bookIdx);
+        await Assert.That(probeIdx).IsGreaterThan(bookIdx);
+        await Assert.That(assignIdx).IsGreaterThan(probeIdx);
+        var bookPrefix = cs[bookIdx..probeIdx];
+        await Assert.That(bookPrefix.Contains("if (", StringComparison.Ordinal)).IsTrue();
+        await Assert.That(cs).DoesNotContain("throw new InvalidOperationException(stayResult.ErrorMessage)");
+    }
+
+    [Test]
+    public async Task Export_ElseIfCreate_ProbesBeforePriorAssigns() {
+        var (domain, analysis) = ParseAndAnalyze("""
+            domain Hotel
+            Stay: entity {
+              Nights: Number range(1, 21) required
+            }
+            Guest: entity {
+              OpenStays: Number default(0)
+              Book: action (nights: Number, confirm: Boolean, wait: Boolean) {
+                assign OpenStays to OpenStays + 1
+                if (confirm is true) {
+                } else if (wait is true) {
+                  create Stay { Nights: nights }
+                }
+              }
+            }
+            """);
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var unit = new CompilationUnitNode([], null, types, null);
+        var cs = new CSharpGenerator().Generate(unit);
+
+        var bookIdx = cs.IndexOf("public DomainResult Book(", StringComparison.Ordinal);
+        var probeIdx = cs.IndexOf("Stay.Create(nights)", bookIdx);
+        var assignIdx = cs.IndexOf("this.OpenStays = this.OpenStays + 1L", bookIdx);
+        await Assert.That(probeIdx).IsGreaterThan(bookIdx);
+        await Assert.That(assignIdx).IsGreaterThan(probeIdx);
+        var bookPrefix = cs[bookIdx..probeIdx];
+        await Assert.That(bookPrefix.Contains("wait", StringComparison.Ordinal)).IsTrue();
+        await Assert.That(cs).DoesNotContain("throw new InvalidOperationException(stayResult.ErrorMessage)");
+    }
+
+    [Test]
+    public async Task Export_IfOnMutatedProperty_ProbeUsesPreAssignBag() {
+        // Documented miss: guarded probe condition is the pre-assign bag
+        // (this.OpenStays >= 1L before OpenStays is incremented).
+        var (domain, analysis) = ParseAndAnalyze("""
+            domain Hotel
+            Stay: entity {
+              Nights: Number range(1, 21) required
+            }
+            Guest: entity {
+              OpenStays: Number default(0)
+              Book: action (nights: Number) {
+                assign OpenStays to OpenStays + 1
+                if (OpenStays >= 1) {
+                  create Stay { Nights: nights }
+                }
+              }
+            }
+            """);
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var unit = new CompilationUnitNode([], null, types, null);
+        var cs = new CSharpGenerator().Generate(unit);
+
+        var bookIdx = cs.IndexOf("public DomainResult Book(", StringComparison.Ordinal);
+        var probeIdx = cs.IndexOf("Stay.Create(nights)", bookIdx);
+        var assignIdx = cs.IndexOf("this.OpenStays = this.OpenStays + 1L", bookIdx);
+        await Assert.That(probeIdx).IsGreaterThan(bookIdx);
+        await Assert.That(assignIdx).IsGreaterThan(probeIdx);
+        var bookPrefix = cs[bookIdx..probeIdx];
+        await Assert.That(bookPrefix.Contains("OpenStays", StringComparison.Ordinal)).IsTrue();
+        await Assert.That(cs).DoesNotContain("throw new InvalidOperationException(stayResult.ErrorMessage)");
+    }
+
+    [Test]
+    public async Task Export_TransitionTo_EntryAssignThenIllegalCreate_ProbesBeforeCurrentStage() {
+        var (domain, analysis) = ParseAndAnalyze("""
+            domain Hotel
+            Stay: entity {
+              Code: Text pattern("^[A-Z]{3}$") required
+            }
+            Guest: entity {
+              Flag: Number default(1)
+              Tag: Text default("bad")
+              OpenStays: Number default(0)
+              Draft: stage {
+                OpenIt: action { transition to Open }
+              }
+              Open: stage {
+                entry {
+                  assign OpenStays to OpenStays + 1
+                  if (Flag >= 1) {
+                    create Stay { Code: Tag }
+                  }
+                }
+              }
+            }
+            """);
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var unit = new CompilationUnitNode([], null, types, null);
+        var cs = new CSharpGenerator().Generate(unit);
+
+        var openItIdx = cs.IndexOf("public DomainResult OpenIt(", StringComparison.Ordinal);
+        var probeIdx = cs.IndexOf("Stay.Create(", openItIdx);
+        var stageIdx = cs.IndexOf("this.CurrentStage = GuestStage.Open", openItIdx);
+        var assignIdx = cs.IndexOf("this.OpenStays = this.OpenStays + 1L", openItIdx);
+        await Assert.That(openItIdx).IsGreaterThan(-1);
+        await Assert.That(probeIdx).IsGreaterThan(openItIdx);
+        await Assert.That(stageIdx).IsGreaterThan(probeIdx);
+        await Assert.That(assignIdx).IsGreaterThan(probeIdx);
+        await Assert.That(cs).DoesNotContain("throw new InvalidOperationException(stayResult.ErrorMessage)");
+    }
+
+    [Test]
     public async Task Export_ContactCreateInAccount_ProbePassesNullNotThis() {
         var (domain, analysis) = ParseAndAnalyze("""
             domain CrmTiny

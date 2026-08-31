@@ -9,6 +9,7 @@
 | **`docs/decisions/`** | Why (ADRs). Index: [`docs/decisions/README.md`](docs/decisions/README.md) |
 | **`docs/plans/`** | Execution work only — not evergreen rules |
 | **[`docs/agent/`](docs/agent/)** | Tool-agnostic agent protocols (review, etc.). Index: [`docs/agent/README.md`](docs/agent/README.md) |
+| **[`docs/plans/simple-agent-tasks/PIPELINE-STATUS.md`](docs/plans/simple-agent-tasks/PIPELINE-STATUS.md)** | Sole CURRENT/DONE for suite admission. Other plan indexes mirror or link here — do not invent a second CURRENT. |
 
 When a change alters a mechanism listed in CORE, update CORE in the same change. Significant cross-cutting choices get an ADR.
 

@@ -46,7 +46,53 @@ public sealed class MinimalApiGenerator {
             .Select(entity => new { entity.Name, Metadata = analysis.GetStructure(entity) })
             .Where(x => x.Metadata is not null)
             .ToDictionary(x => x.Name, x => x.Metadata!, StringComparer.Ordinal);
+        _actionDtoCollisions = new Lazy<HashSet<string>>(ComputeActionDtoCollisions);
     }
+
+    /// <summary>Plain action DTO names that must be entity-qualified: an action name
+    /// with parameters emitted more than once (stage-scoped actions are listed once
+    /// per declaring stage — CRM <c>Log</c>/<c>AddLine</c> on Opportunity's
+    /// Qualify/Propose/Commit stages — or the same name on several entities) or
+    /// colliding with an emitted <c>{Entity}Dto</c>. Lazy: the entity-DTO side needs
+    /// constructor metadata, which missing-metadata callers fail on at Generate time.</summary>
+    private readonly Lazy<HashSet<string>> _actionDtoCollisions;
+
+    private HashSet<string> ComputeActionDtoCollisions() {
+        var reserved = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var entity in _entities) {
+            if (!GetStorageEntity(entity).IsRoot) continue;
+            if (GetConstructorOrder(entity).All(p => p.IsNavigation)) continue;
+            reserved.Add($"{entity.Name}Dto");
+        }
+
+        var actionDtoCounts = new Dictionary<string, int>(StringComparer.Ordinal);
+        foreach (var entity in _entities) {
+            foreach (var ia in GetBehaviorActions(entity)) {
+                if (ia.Parameters.Count == 0) continue;
+                var name = $"{Pascalize(ia.Name)}Dto";
+                actionDtoCounts[name] = actionDtoCounts.GetValueOrDefault(name) + 1;
+            }
+        }
+
+        var collisions = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var (name, count) in actionDtoCounts) {
+            if (count > 1 || reserved.Contains(name))
+                collisions.Add(name);
+        }
+        return collisions;
+    }
+
+    /// <summary>Action DTO type name for an endpoint contract: <c>{Action}Dto</c>, or
+    /// <c>{Entity}{Action}Dto</c> when the plain name collides (see
+    /// <see cref="_actionDtoCollisions"/>) so Program.cs stays a single compilation unit.</summary>
+    private string GetActionDtoName(Entity entity, string actionName) {
+        var plain = $"{Pascalize(actionName)}Dto";
+        return _actionDtoCollisions.Value.Contains(plain) ? $"{entity.Name}{Pascalize(actionName)}Dto" : plain;
+    }
+
+    /// <summary>DTO type names already emitted into the current Program.cs unit — keeps
+    /// stage-scoped duplicate actions from emitting the same type twice (CS0101).</summary>
+    private readonly HashSet<string> _emittedDtoNames = new(StringComparer.Ordinal);
 
     private IReadOnlyList<BehaviorAction> GetBehaviorActions(Entity entity) =>
         _behaviorLookup.TryGetValue(entity.Name, out var beh) ? beh.Actions : [];
@@ -252,6 +298,7 @@ public sealed class MinimalApiGenerator {
         AppendSeedMethodStatements(topLevelStatements, dbContextName);
 
         // ── DTOs ──
+        _emittedDtoNames.Clear();
         foreach (var entity in _entities)
             BuildDtoTypes(dtoTypes, entity);
         // Action DTOs
@@ -563,7 +610,7 @@ public sealed class MinimalApiGenerator {
                 if (isCollection)
                     actionParams.Add(new Parameter(childKeyParam, new TypeReference(keyType)));
                 if (ia.Parameters.Count > 0)
-                    actionParams.Add(new Parameter("dto", new TypeReference($"{Pascalize(ia.Name)}Dto")));
+                    actionParams.Add(new Parameter("dto", new TypeReference(GetActionDtoName(entity, ia.Name))));
                 actionParams.Add(new Parameter("db", new TypeReference(dbContextName)));
 
                 // Parent + entity lookup + membership check
@@ -600,7 +647,7 @@ public sealed class MinimalApiGenerator {
                 actionRoute = $"{baseRoute}/{{{keyName}}}/{ToCamelCase(ia.Name).ToLowerInvariant()}";
                 actionParams.Add(new Parameter(keyName, new TypeReference(keyType)));
                 if (ia.Parameters.Count > 0)
-                    actionParams.Add(new Parameter("dto", new TypeReference($"{Pascalize(ia.Name)}Dto")));
+                    actionParams.Add(new Parameter("dto", new TypeReference(GetActionDtoName(entity, ia.Name))));
                 actionParams.Add(new Parameter("db", new TypeReference(dbContextName)));
 
                 preActionNodes.Add(Init("entity",
@@ -673,6 +720,10 @@ public sealed class MinimalApiGenerator {
     private void BuildActionDtoTypes(List<TypeDefinitionNode> dtoTypes, Entity entity) {
         foreach (var ia in GetBehaviorActions(entity)) {
             if (ia.Parameters.Count == 0) continue;
+            var dtoName = GetActionDtoName(entity, ia.Name);
+            // Stage-scoped actions are listed once per declaring stage; the same
+            // (entity, action) pair emits one DTO that every stage's endpoint binds.
+            if (!_emittedDtoNames.Add(dtoName)) continue;
             var domainAction = entity.Actions.FirstOrDefault(a =>
                 string.Equals(a.Name, ia.Name, StringComparison.Ordinal));
             var props = new List<PropertyDefinitionNode>();
@@ -703,7 +754,7 @@ public sealed class MinimalApiGenerator {
                 props.Add(prop);
             }
             dtoTypes.Add(new TypeDefinitionNode(
-                $"{Pascalize(ia.Name)}Dto",
+                GetActionDtoName(entity, ia.Name),
                 Properties: props,
                 Semantics: new TypeDefinitionSemantics(
                     TypeDefinitionMutability.Immutable,

@@ -12,9 +12,9 @@ namespace Poly.DomainModeling.Runtime;
 
 public sealed partial record DomainEntityInstance {
     /// <summary>
-    /// Dispatches remaining direct-execution effects using <see cref="EffectDispatch{TResult}"/>.
-    /// Product arms are create and create-in only; invoke, stage, and for throw.
-    /// Named by the Effect subtype, not by the pattern (no Visit*).
+    /// Residual dispatcher. All product arms throw: create / create-in execute
+    /// via CreateChildInstance / ExecuteCreateInRelationship (probes+Failure).
+    /// Invoke, stage, and for must lower to Ast.
     /// </summary>
     private sealed class EffectExecutor : EffectDispatch<object?> {
         private readonly DomainEntityInstance _instance;
@@ -40,13 +40,13 @@ public sealed partial record DomainEntityInstance {
             throw new InvalidOperationException(
                 "StageTransitionEffect must lower to Ast; EffectExecutor is not the shipped path.");
 
-        protected override object? CreateEntityInstance(CreateEntityInstance create) {
-            return _instance.CreateChildInstance(create, _typeProvider);
-        }
+        protected override object? CreateEntityInstance(CreateEntityInstance create) =>
+            throw new InvalidOperationException(
+                "CreateEntityInstance must not use EffectExecutor; probes+Failure and CreateChildInstance are the shipped path.");
 
-        protected override object? CreateEntityInRelationship(CreateEntityInRelationshipEffect createIn) {
-            return _instance.ExecuteCreateInRelationship(createIn, _typeProvider);
-        }
+        protected override object? CreateEntityInRelationship(CreateEntityInRelationshipEffect createIn) =>
+            throw new InvalidOperationException(
+                "CreateEntityInRelationship must not use EffectExecutor; probes+Failure and ExecuteCreateInRelationship are the shipped path.");
 
         protected override object? InvokeAction(InvokeActionEffect invoke) =>
             throw new InvalidOperationException(
@@ -115,8 +115,7 @@ public sealed partial record DomainEntityInstance {
                 var prevStage = ResolveTransitionStage(analysis, previousStageName);
                 if (prevStage?.OnExitEffects is { Count: > 0 }) {
                     var exitPass = new EffectLoweringPass(Entity, loweringContext);
-                    foreach (var effect in prevStage.OnExitEffects)
-                        RunTransitionEffect(effect, exitPass, notifyStore);
+                    RunTransitionEffectList(prevStage.OnExitEffects, exitPass, notifyStore);
                 }
             }
 
@@ -126,8 +125,7 @@ public sealed partial record DomainEntityInstance {
                 var targetStage = ResolveTransitionStage(analysis, targetStageName);
                 if (targetStage?.OnEntryEffects is { Count: > 0 }) {
                     var entryPass = new EffectLoweringPass(Entity, loweringContext);
-                    foreach (var effect in targetStage.OnEntryEffects)
-                        RunTransitionEffect(effect, entryPass, notifyStore);
+                    RunTransitionEffectList(targetStage.OnEntryEffects, entryPass, notifyStore);
                 }
             }
             finally {
@@ -147,11 +145,34 @@ public sealed partial record DomainEntityInstance {
     /// Action-level stage transitions must lower via <see cref="ExecuteEffect"/>.
     /// </summary>
     private void RunTransitionEffect(Effect effect, EffectLoweringPass pass, bool notifyStore) {
-        if (effect is StageTransitionEffect nested) {
-            TransitionStage(nested.TargetStage.StageName, notifyStore);
-            return;
+        RunTransitionEffectList([effect], pass, notifyStore);
+    }
+
+    /// <summary>
+    /// Nested <see cref="StageTransitionEffect"/> still recurses
+    /// <see cref="TransitionStage"/>. Mixed if+create in the same entry/exit
+    /// list compiles via <c>LowerActionBody</c> (ExecuteStructured was deleted).
+    /// </summary>
+    private void RunTransitionEffectList(
+        IReadOnlyList<Effect> effects, EffectLoweringPass pass, bool notifyStore) {
+        var batch = new List<Effect>();
+        void Flush() {
+            if (batch.Count == 0) return;
+            ThrowIfEffectListFailed(
+                ExecuteEffectList(batch, pass, _typeDefAnalyzer),
+                "stage entry/exit");
+            batch.Clear();
         }
-        ExecuteEffect(effect, pass, _typeDefAnalyzer);
+        foreach (var effect in effects) {
+            if (effect is StageTransitionEffect nested) {
+                Flush();
+                TransitionStage(nested.TargetStage.StageName, notifyStore);
+            }
+            else {
+                batch.Add(effect);
+            }
+        }
+        Flush();
     }
 
     /// <summary>
@@ -206,12 +227,13 @@ public sealed partial record DomainEntityInstance {
                 effectPass = new EffectLoweringPass(Entity, subjectParam);
             }
 
-            foreach (var effect in effects) {
-                var bound = peerBinding is { Length: > 0 }
+            var bound = effects.Select(effect => peerBinding is { Length: > 0 }
                     ? BindPeerInEffect(effect, peerBinding, peerInstance)
-                    : effect;
-                ExecuteEffect(bound, effectPass, _typeDefAnalyzer);
-            }
+                    : effect)
+                .ToList();
+            ThrowIfEffectListFailed(
+                ExecuteEffectList(bound, effectPass, _typeDefAnalyzer),
+                "subscription");
         }
         finally {
             _isExecutingSubscription = false;
@@ -298,15 +320,86 @@ public sealed partial record DomainEntityInstance {
     }
 
     /// <summary>
+    /// VM-called runtime factories for lowered create / create-in (body and probes).
+    /// Args: name (type or relationship), then property name/value pairs.
+    /// Probe does not register a child. Stay.Create is C# export only.
+    /// </summary>
+    private DomainResult RuntimeCreateFactory(string name, object?[] args) {
+        if (args.Length < 1 || args[0] is not string key || key.Length == 0)
+            return DomainResult.Failure("Create factory requires a type or relationship name.");
+        if ((args.Length - 1) % 2 != 0)
+            return DomainResult.Failure("Create factory arguments must be name/value pairs.");
+
+        var bindings = new List<PropertyBinding>();
+        for (var i = 1; i < args.Length; i += 2) {
+            if (args[i] is not string propName)
+                return DomainResult.Failure("Create factory property names must be strings.");
+            bindings.Add(new PropertyBinding(propName, DomainExpression.Literal(args[i + 1])));
+        }
+
+        if (name == "ProbeCreateByType") {
+            Entity? target;
+            if (Domain is not null) {
+                var analysis = RuntimeAnalysisCache.GetOrAnalyze(Domain);
+                if (!analysis.TryGetEntity(Domain, key, out target) || target is null)
+                    return DomainResult.Failure(
+                        $"Entity type '{key}' not found in domain '{Domain.Name}'.");
+            }
+            else {
+                target = Entity;
+            }
+            var err = PrevalidateCreateInitializers(bindings, target);
+            return err is null ? DomainResult.Success() : DomainResult.Failure(err);
+        }
+
+        try {
+            if (name == "CreateInNav") {
+                var child = ExecuteCreateInRelationship(
+                    new CreateEntityInRelationshipEffect(key, bindings),
+                    _bindingTypeProvider ?? _typeDefAnalyzer);
+                return DomainResult.Success(child);
+            }
+            var created = CreateChildInstance(
+                new CreateEntityInstance(new DomainTypeReference(key), bindings),
+                _bindingTypeProvider ?? _typeDefAnalyzer);
+            return DomainResult.Success(created);
+        }
+        catch (InvalidOperationException ex) {
+            return DomainResult.Failure(ex.Message);
+        }
+        catch (ArgumentException ex) {
+            return DomainResult.Failure(ex.Message);
+        }
+    }
+
+    /// <summary>
     /// Parking dogfood: <c>assign Occupied + 1</c> then <c>create in</c> left Occupied
-    /// bumped when Plate failed the pattern. Unconditional create/create-in are
-    /// constraint-checked before any effect runs.
+    /// bumped when Plate failed the pattern. Unconditional create/create-in and
+    /// creates on a taken <c>if</c> branch are constraint-checked before any effect runs.
+    /// Taken-ness is evaluated on the pre-effect bag: a condition that reads a
+    /// property assigned earlier in the same action is not re-eval'd, so that
+    /// assign still applies when the post-assign bag would take an illegal create.
+    /// Untaken then/else branches are not probed (illegal initializer on an untaken
+    /// branch must not fail the action).
     /// </summary>
     private string? PrevalidateUnconditionalCreates(IReadOnlyList<Effect> effects) {
         foreach (var effect in effects) {
             switch (effect) {
                 case CompositeEffect composite: {
                         var nested = PrevalidateUnconditionalCreates(composite.Effects);
+                        if (nested is not null)
+                            return nested;
+                        break;
+                    }
+                case ConditionalEffect cond: {
+                        // Only ifs that contain create/create-in. Taken-branch creates
+                        // fail closed before any prior assign. Untaken branch is not probed.
+                        if (!ContainsDirectExecutionEffect(cond))
+                            break;
+                        if (!TryEvalEffectCondition(PreprocessQuantifiers(cond.Condition), out var taken))
+                            return "Cannot evaluate if condition for create prevalidation.";
+                        var branch = taken ? cond.ThenEffects : (cond.ElseEffects ?? []);
+                        var nested = PrevalidateUnconditionalCreates(branch);
                         if (nested is not null)
                             return nested;
                         break;

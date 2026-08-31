@@ -19,7 +19,7 @@ Architectural rationale → **`docs/decisions/`**. Module maps → **`Poly/*/REA
 | **Pull ≠ CURRENT** | Available when admitted, not parallel debt. |
 | **DONE same PR** | Suite gate Done → update PIPELINE-STATUS + READY-TO-TASK + master-roadmap Agent pick together. |
 
-**CURRENT truth:** [`simple-agent-tasks/PIPELINE-STATUS.md`](simple-agent-tasks/PIPELINE-STATUS.md) — **`interpretation-language-engine (ile-0/1/2 VM↔LINQ parity gaps closed; ile-3 functions green)`**. ile-gate is not closed. Trunk is `master`. Do not restate a second queue here.  
+**CURRENT truth:** [`simple-agent-tasks/PIPELINE-STATUS.md`](simple-agent-tasks/PIPELINE-STATUS.md) — **CURRENT: `create/create-in`**. interpretation-language-engine DONE 2026-08-31 (ile-gate). Trunk is `master`. Do not restate a second queue here.  
 **Vision cleanup (slices 1–3 done; remaining duals parked):** [`domainmodeling-vision-cleanup-2026-08-16.md`](domainmodeling-vision-cleanup-2026-08-16.md). Session four-slot / pack-host Grammar.Extend **superseded** — libraries add `INodeAnalyzer`.  
 **Ready suites index:** [`simple-agent-tasks/READY-TO-TASK.md`](simple-agent-tasks/READY-TO-TASK.md)  
 **Milestones:** [`v2-to-v3/master-roadmap.md`](v2-to-v3/master-roadmap.md) (mirrors Agent pick)  
@@ -31,7 +31,8 @@ Architectural rationale → **`docs/decisions/`**. Module maps → **`Poly/*/REA
 
 | Suite | README | Plan | Status |
 |-------|--------|------|--------|
-| **interpretation-language-engine** | [`interpretation-language-engine-README.md`](simple-agent-tasks/interpretation-language-engine-README.md) | ile-0…ile-gate | **CURRENT** — see PIPELINE-STATUS. ile-gate not closed. |
+| **create/create-in** | — | host-ABI remaining store effects | **CURRENT** — see PIPELINE-STATUS. |
+| **interpretation-language-engine** | [`interpretation-language-engine-README.md`](simple-agent-tasks/interpretation-language-engine-README.md) | ile-0…ile-gate | ✅ DONE 2026-08-31 |
 | **gpure** | [`gpure-README.md`](simple-agent-tasks/gpure-README.md) | [`grammar-pure-end-state.md`](grammar-pure-end-state.md) | ✅ DONE 2026-08-07 |
 | **mcp-minify** | [`mcp-minify-README.md`](simple-agent-tasks/mcp-minify-README.md) | [`mcp-catalog-minify.md`](mcp-catalog-minify.md) | ✅ DONE 2026-08-08 |
 | **mut-safety** | [`mut-safety-README.md`](simple-agent-tasks/mut-safety-README.md) | [`mcp-mutation-safety.md`](mcp-mutation-safety.md) | Parked — `THEN` in PIPELINE-STATUS, not admit-next |
@@ -57,7 +58,7 @@ Queue (`THEN` / `PARKED` / `PULL`) lives only in [`PIPELINE-STATUS.md`](simple-a
 | [`live-demo-reliability-2026-08-13.md`](live-demo-reliability-2026-08-13.md) | Cut for “compile → run → HTTP” demos; warehouse/orders first |
 | [`live-pairing-demo-2026-08-13.md`](live-pairing-demo-2026-08-13.md) | Human + agent progressive authoring → `serve-poly.sh` |
 | [`contract-subdomain-2026-08-13.md`](contract-subdomain-2026-08-13.md) | Contract = used sub-domain; **executed 2026-08-13** |
-| [`pack-host-2026-08-13.md`](pack-host-2026-08-13.md) | **Grammar → pack surface → built-in packs**; proposed next admit = phase 1 (TokenWriter + print binders) |
+| [`pack-host-2026-08-13.md`](pack-host-2026-08-13.md) | **Not CURRENT.** Phase 1 shipped 2026-08-13; extension model superseded. CURRENT: [`simple-agent-tasks/PIPELINE-STATUS.md`](simple-agent-tasks/PIPELINE-STATUS.md). |
 | [`dict-sqlite-host-2026-08-30.md`](dict-sqlite-host-2026-08-30.md) | Dict + SQLite host (narrow bet). **Proposal — not CURRENT, not a suite.** Do not admit.
 | [`domainmodeling-simplification-2026-08-14.md`](domainmodeling-simplification-2026-08-14.md) | Deletion-first DomainModeling proposal (names, host-owned meaning, pass collapse). **Not CURRENT** |
 | [`grammar-cycle-2026-08-14.md`](grammar-cycle-2026-08-14.md) · [`gcyc-*`](simple-agent-tasks/gcyc-README.md) | Grammar as the parse/print cycle; delete RD/print hoops. **Not CURRENT** until admitted |
@@ -120,4 +121,4 @@ MCP guiding principles: [v2-to-v3/spikes/mcp-guiding-principles.md](v2-to-v3/spi
 | `docs/decisions/2026-06-08-vm-as-canonical-semantics.md` | VM sole engine |
 | `docs/decisions/2026-06-08-domain-lowering-boundary.md` | Domain → generic AST only |
 
-**CURRENT Interpretation work** is `interpretation-language-engine` (see PIPELINE-STATUS). Historical IR/VM plans: [`archive/interpretation/`](archive/interpretation/README.md).
+**CURRENT** is `create/create-in` (see PIPELINE-STATUS). interpretation-language-engine is DONE 2026-08-31. Historical IR/VM plans: [`archive/interpretation/`](archive/interpretation/README.md).

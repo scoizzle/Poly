@@ -487,6 +487,8 @@ public static partial class DirectVmAbiEmitter {
             StridedSetBits ssb => SpillRingRead(CompileNode(ssb, ctx), ctx),
             Assignment a => SpillRingRead(CompileNode(a, ctx), ctx),
             Comment => RejectCompile("Comment is not a VM value."),
+            NamedTypeReference or TypeReference or PrimitiveTypeReference or TypeDefinitionReference =>
+                RejectCompile("Type name is not a VM value; use it as a Member/Invoke/New receiver."),
             _ => throw new NotSupportedException(
                 $"CompileValue: unhandled {node.GetType().Name}")
         };

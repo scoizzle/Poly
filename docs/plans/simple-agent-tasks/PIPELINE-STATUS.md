@@ -9,10 +9,10 @@ Other indexes must **mirror** this file (or link here) — do not invent a secon
 ## Agent pick (one line)
 
 ```text
-DONE:    gpure (2026-08-07 + follow-ups 08-08); mcp-minify (2026-08-08 + follow-ups); grammar-revision (2026-08-09: v2 engine + DSL cutover + printer + review fixes); dead-dual cleanup (2026-08-09: Validation + Text.Matching deleted); domainmodeling vision-cleanup slices 1–3 (2026-08-17: one door, session.Analyze, Comment not emit-meaning); emit-session CompileMode seed-only (2026-08-24: HTTP host only via uses http / Load(HttpLibrary); bag-gated emit); host-ABI StageTransition (PR 21); host-ABI self-invoke (PR 22); host-ABI cross-entity invoke (PR 23); host-ABI for-invoke (PR 24); rewrite-to-master (PR 26)
-CURRENT: interpretation-language-engine (ile-0/1/2 VM↔LINQ parity gaps closed; ile-3 functions green)
+DONE:    gpure (2026-08-07 + follow-ups 08-08); mcp-minify (2026-08-08 + follow-ups); grammar-revision (2026-08-09: v2 engine + DSL cutover + printer + review fixes); dead-dual cleanup (2026-08-09: Validation + Text.Matching deleted); domainmodeling vision-cleanup slices 1–3 (2026-08-17: one door, session.Analyze, Comment not emit-meaning); emit-session CompileMode seed-only (2026-08-24: HTTP host only via uses http / Load(HttpLibrary); bag-gated emit); host-ABI StageTransition (PR 21); host-ABI self-invoke (PR 22); host-ABI cross-entity invoke (PR 23); host-ABI for-invoke (PR 24); rewrite-to-master (PR 26); interpretation-language-engine (ile-gate 2026-08-31)
+CURRENT: create/create-in
 ADMIT:   parallel (exclusive files)
-THEN:    create/create-in; MCP mut-safety; Grammar wrap-up; V3 naming
+THEN:    MCP mut-safety; Grammar wrap-up; V3 naming
 PARKED:  pack-2 IDomainPack; mut-safety; e2e-*; pack-host “packs extend Grammar tables”; session four-slot Meaning/Emit
 PULL:    E5; EF codegen; naming cleanup
 ```
@@ -33,7 +33,7 @@ opencode run --dir . --auto --title pack-1-1 --agent build "Assigned: docs/plans
 | **grammar-revision** | ✅ **DONE** 2026-08-09 | v2 engine (`Grammar<TToken, TTokenKind>`, examine/consume, longest-match, stateless printer) + DSL cutover; review B1–B3/N1–N3/C1 closed. Executed directly (not via plan-suite) — see [`../grammar-revision.md`](../grammar-revision.md) |
 | **emit-session** | ✅ **DONE** 2026-08-24 (CompileMode honesty) | Libraries add `INodeAnalyzer`. Spell closed. Emit reads bags, not `CompileMode`. CompileMode.All/Db seed persistence only; HTTP host requires `uses http` (catalog id `http`) or `Load(HttpLibrary)`. Remaining lies: TemporalLibrary Meaning unused; RuntimeAnalysisCache core-catalog reopen. |
 | **host-ABI** | Strong slice **DONE** (PRs 21–24) | StageTransition, self-invoke, cross-entity, for-invoke same-tree. Create / create-in still EffectExecutor — **not** the rewrite-to-master gate. |
-| **interpretation-language-engine** | **CURRENT** (ile-gate not closed) | [`interpretation-language-engine-README.md`](./interpretation-language-engine-README.md). ile-0/1/2/3 green; ile-gate (passthroughs / CORE+README / LanguageVmTests) still open. Do not invent a second CURRENT.
+| **interpretation-language-engine** | ✅ **DONE** 2026-08-31 | ile-0…ile-3 + ile-gate: no POC passthrough, `Compile` fail-closed, LanguageVmTests + LanguageSurfaceTests, CORE/README match. Plan: [`interpretation-language-engine-README.md`](./interpretation-language-engine-README.md). |
 | **rewrite-to-master** | ✅ **DONE** 2026-08-25 (PR 26) | Rewrite is `master`. Plan: [`rewrite-to-master-2026-08-25.md`](./rewrite-to-master-2026-08-25.md). New work from `master`; do not open work on the rewrite branch. |
 | **pack-host** | Parked (phase 1 shipped; **extension model superseded**) | TokenWriter + binders done. “Packs extend Grammar tables” is not the product contract — extension is analysis passes. pack-2 `IDomainPack` parked. |
 | **gcyc** | Parked (first admit shipped) | [`gcyc-README.md`](./gcyc-README.md) — remaining G4 unparse is THEN, not CURRENT |
@@ -63,3 +63,4 @@ opencode run --dir . --auto --title pack-1-1 --agent build "Assigned: docs/plans
 - **emit-session remaining lies:** TemporalLibrary does not register Meaning handlers (design: dispatch/type-check + `TemporalPass` vocabulary bag). `RuntimeAnalysisCache` / static `DomainModelAnalyzer.Analyze` reopen a core-catalog session (vendor maps ignored). CompileMode seed-only honesty is DONE via #20.
 - **host-ABI remaining lie (not a merge blocker):** create / create-in still EffectExecutor. `ExecuteStructured` remains until mixed if+create can lower. `LowerStageTransitions` still gates create (not StageTransition / self-invoke / cross-entity invoke / for-invoke). Sequential transitions stale SourceStageName.
 - **rewrite-to-master:** ✅ DONE PR 26. Product trunk is `master`. Parallel streams may run with exclusive file ownership (create/create-in; MCP mut-safety; Grammar wrap-up; V3 naming).
+- **interpretation-language-engine:** ✅ DONE 2026-08-31 (ile-gate). CURRENT is create/create-in (host-ABI remaining store effects).

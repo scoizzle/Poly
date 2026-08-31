@@ -13,7 +13,7 @@
 | Lens | State |
 |------|--------|
 | Product vertical (M1–M4, spawn-and-wire, Q1′/Q3′, link, SPE, DAS catalog monopath) | **Done** |
-| CURRENT (agent pick) | **`interpretation-language-engine`** — see [`simple-agent-tasks/PIPELINE-STATUS.md`](simple-agent-tasks/PIPELINE-STATUS.md). dogfood-wave-2 is archived. |
+| CURRENT (agent pick) | **`create/create-in`** — see [`simple-agent-tasks/PIPELINE-STATUS.md`](simple-agent-tasks/PIPELINE-STATUS.md). interpretation-language-engine DONE 2026-08-31. dogfood-wave-2 is archived. |
 | Feeling of “in the middle” | Many **parked / residual / structural** docs still look active; code is past most of them |
 
 If work feels multi-stream, the fix is **admission**, not more parallel suites.
@@ -111,9 +111,9 @@ Finished suites lived next to live indexes. **Mitigation:** archived under `arch
 
 ---
 
-## 6. Candidate next CURRENT (pick one)
+## 6. Candidate next CURRENT (disabled)
 
-Ranked for **customer outcome** and **low thrash** after 2026-08-04 focus note:
+**Do not admit from this table.** Sole CURRENT is [`simple-agent-tasks/PIPELINE-STATUS.md`](simple-agent-tasks/PIPELINE-STATUS.md). Historical candidates only (2026-08-04 ranking):
 
 | # | Admit as CURRENT | Size | Why |
 |---|------------------|------|-----|
@@ -153,7 +153,7 @@ Not required for product progress.
 ## Agent pick (live)
 
 ```text
-CURRENT: interpretation-language-engine (ile-0/1/2 VM↔LINQ parity gaps closed; ile-3 functions green)
+CURRENT: create/create-in
 ```
 
 This block must match [`simple-agent-tasks/PIPELINE-STATUS.md`](simple-agent-tasks/PIPELINE-STATUS.md). dogfood-wave-2 is archived. Do not admit work from this map.

@@ -30,25 +30,26 @@ internal sealed class RuntimeTool {
 
     private static string NewInstanceId() => Guid.NewGuid().ToString("N");
 
-    private static Dictionary<string, object?>? BindEntityTypedActionArgs(
+    /// <summary>
+    /// Binds entity-typed action args from MCP instance ids. Missing id is fail-closed
+    /// (does not leave a string for InvokeAction). Action resolution is
+    /// <see cref="DomainSemanticLookupExtensions.TryResolveAction"/> (stage-first + SA),
+    /// not FirstOrDefault.
+    /// </summary>
+    /// <returns>Error message, or null when bind succeeded (args may be mutated).</returns>
+    private static string? BindEntityTypedActionArgs(
         McpSessionState state,
         DomainEntityInstance instance,
         string actionName,
         Dictionary<string, object?>? args) {
         if (args is null || args.Count == 0)
-            return args;
+            return null;
 
-        Poly.DomainModeling.Ontology.Action? action = null;
-        if (instance.CurrentStage is { } stageName) {
-            var stage = instance.Entity.Stages.FirstOrDefault(s =>
-                string.Equals(s.Name, stageName, StringComparison.Ordinal));
-            action = stage?.Actions.FirstOrDefault(a =>
-                string.Equals(a.Name, actionName, StringComparison.Ordinal));
-        }
-        action ??= instance.Entity.Actions.FirstOrDefault(a =>
-            string.Equals(a.Name, actionName, StringComparison.Ordinal));
-        if (action is null)
-            return args;
+        var analysis = state.LatestAnalysis;
+        if (analysis is null
+            || !analysis.TryResolveAction(state.Domain, instance.Entity, instance.CurrentStage, actionName, out var action)
+            || action is null)
+            return null;
 
         var entityNames = state.Domain.Types.OfType<Entity>()
             .Select(e => e.Name)
@@ -57,13 +58,19 @@ internal sealed class RuntimeTool {
         foreach (var param in action.Parameters) {
             if (!entityNames.Contains(param.Type.TypeName))
                 continue;
-            if (!args.TryGetValue(param.Name, out var raw) || raw is not string id)
+            if (!args.TryGetValue(param.Name, out var raw) || raw is null)
                 continue;
-            if (state.InstanceMap.TryGetValue(id, out var linked))
-                args[param.Name] = linked;
+            if (raw is DomainEntityInstance)
+                continue;
+            if (raw is not string id) {
+                return $"Parameter '{param.Name}' must be an instance id.";
+            }
+            if (!state.InstanceMap.TryGetValue(id, out var linked))
+                return $"Instance '{id}' not found.";
+            args[param.Name] = linked;
         }
 
-        return args;
+        return null;
     }
 
     private static object? JsonElementToValue(JsonElement je) => je.ValueKind switch {
@@ -639,7 +646,12 @@ declares -> EntityType and creates that type, returnTypeName + returnInstanceId.
             }
         }
 
-        args = BindEntityTypedActionArgs(state, instance, actionName, args);
+        if (BindEntityTypedActionArgs(state, instance, actionName, args) is { } bindError)
+            return new DomainToolResponse(
+                Success: false,
+                Message: bindError,
+                SessionId: sessionId,
+                Affordances: ["create_instance", "list_instances"]);
 
         ActionInvocationResult result;
         try {

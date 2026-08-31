@@ -259,11 +259,14 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         IReadOnlyList<Effect> effects, List<Node> probeSink, List<Node> bodySink) {
         if (effects.Count == 0)
             return;
-        if (!_lowerStageTransitions && HasConditionalCreate(effects)) {
+        // CurrentStage is a prior mutation for inlined entry: probe if-only and
+        // unconditional create before the stage flip (runtime and C# export).
+        if (HasCreate(effects)) {
             var restore = _lowerRuntimeCreate;
-            _lowerRuntimeCreate = true;
+            if (!_lowerStageTransitions)
+                _lowerRuntimeCreate = true;
             try {
-                var probes = LowerCreateInConstraintProbes(effects);
+                var probes = LowerCreateInConstraintProbes(effects, priorMutation: true);
                 if (probes.Count > 0)
                     probeSink.Add(FlattenProbeBlocks(probes));
                 var body = TryLowerVmNode(new CompositeEffect(effects));
@@ -282,14 +285,8 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         }
     }
 
-    private static bool HasConditionalCreate(IReadOnlyList<Effect> effects) =>
-        effects.Any(ContainsConditionalCreateEffect);
-
-    private static bool ContainsConditionalCreateEffect(Effect effect) => effect switch {
-        ConditionalEffect c => ContainsCreateEffect(c),
-        CompositeEffect c => c.Effects.Any(ContainsConditionalCreateEffect),
-        _ => false
-    };
+    private static bool HasCreate(IReadOnlyList<Effect> effects) =>
+        effects.Any(ContainsCreateEffect);
 
     private static bool ContainsCreateEffect(Effect effect) => effect switch {
         CreateEntityInstance cei => true,
@@ -757,9 +754,9 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         return new Block(blockNodes, [resultLocal, local]);
     }
 
-    internal List<Node> LowerCreateInConstraintProbes(IReadOnlyList<Effect> effects) {
+    internal List<Node> LowerCreateInConstraintProbes(
+        IReadOnlyList<Effect> effects, bool priorMutation = false) {
         var nodes = new List<Node>();
-        var priorMutation = false;
         CollectCreateInProbes(effects, nodes, ref priorMutation);
         return nodes;
     }

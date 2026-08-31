@@ -2342,6 +2342,45 @@ public class DomainToCSharpExporterTests {
     }
 
     [Test]
+    public async Task Export_TransitionTo_EntryAssignThenIllegalCreate_ProbesBeforeCurrentStage() {
+        var (domain, analysis) = ParseAndAnalyze("""
+            domain Hotel
+            Stay: entity {
+              Code: Text pattern("^[A-Z]{3}$") required
+            }
+            Guest: entity {
+              Flag: Number default(1)
+              Tag: Text default("bad")
+              OpenStays: Number default(0)
+              Draft: stage {
+                OpenIt: action { transition to Open }
+              }
+              Open: stage {
+                entry {
+                  assign OpenStays to OpenStays + 1
+                  if (Flag >= 1) {
+                    create Stay { Code: Tag }
+                  }
+                }
+              }
+            }
+            """);
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var unit = new CompilationUnitNode([], null, types, null);
+        var cs = new CSharpGenerator().Generate(unit);
+
+        var openItIdx = cs.IndexOf("public DomainResult OpenIt(", StringComparison.Ordinal);
+        var probeIdx = cs.IndexOf("Stay.Create(", openItIdx);
+        var stageIdx = cs.IndexOf("this.CurrentStage = GuestStage.Open", openItIdx);
+        var assignIdx = cs.IndexOf("this.OpenStays = this.OpenStays + 1L", openItIdx);
+        await Assert.That(openItIdx).IsGreaterThan(-1);
+        await Assert.That(probeIdx).IsGreaterThan(openItIdx);
+        await Assert.That(stageIdx).IsGreaterThan(probeIdx);
+        await Assert.That(assignIdx).IsGreaterThan(probeIdx);
+        await Assert.That(cs).DoesNotContain("throw new InvalidOperationException(stayResult.ErrorMessage)");
+    }
+
+    [Test]
     public async Task Export_ContactCreateInAccount_ProbePassesNullNotThis() {
         var (domain, analysis) = ParseAndAnalyze("""
             domain CrmTiny

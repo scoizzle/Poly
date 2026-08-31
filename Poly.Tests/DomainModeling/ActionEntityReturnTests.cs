@@ -967,6 +967,39 @@ public class ActionEntityReturnTests {
     }
 
     [Test]
+    public async Task InvokeAction_TransitionTo_IfOnlyIllegalCreate_DoesNotFlipStage() {
+        var (domain, _) = Evolve("""
+            domain Hotel
+            Stay: entity {
+              Code: Text pattern("^[A-Z]{3}$") required
+            }
+            Guest: entity {
+              Flag: Number default(1)
+              Tag: Text default("bad")
+              Draft: stage {
+                OpenIt: action { transition to Open }
+              }
+              Open: stage {
+                entry {
+                  if (Flag >= 1) {
+                    create Stay { Code: Tag }
+                  }
+                }
+              }
+            }
+            """);
+        var guestEntity = domain.Types.OfType<Entity>().First(e => e.Name == "Guest");
+        var guest = DomainEntityInstance.Create(guestEntity, domain: domain);
+        var store = new DomainInstanceStore();
+        store.Add(guest);
+        var result = guest.InvokeAction("OpenIt");
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(result.ErrorMessage).Contains("Code");
+        await Assert.That(guest.CurrentStage).IsEqualTo("Draft");
+        await Assert.That(guest.CreatedChildren).IsEmpty();
+    }
+
+    [Test]
     public async Task InvokeAction_TransitionTo_EntryAssignThenIllegalCreate_DoesNotApplyEntryAssign() {
         var (domain, _) = Evolve("""
             domain Hotel

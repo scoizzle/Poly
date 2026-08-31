@@ -29,6 +29,9 @@ public static partial class DirectVmAbiEmitter {
                     int instanceSlot = -1;
                     Expression? instanceExpr = null;
                     if (!isStatic) {
+                        if (IsTypeNameReceiver(member.Value))
+                            throw new InvalidOperationException(
+                                $"Instance method '{member.MemberName}' cannot be invoked on a type name.");
                         instanceExpr = CompileNode(member.Value, ctx);
                         instanceSlot = ctx.RingDepth - 1;
                         var foldInst = FoldResultToSlot(ref instanceSlot, d, ctx);
@@ -105,6 +108,10 @@ public static partial class DirectVmAbiEmitter {
             // ITypeMethod without MethodInfo, or Member that analysis did not
             // resolve as a method: live instance by name+arity, then
             // InvokeNamed(string, object?[]). Fail-closed inside InvokeInstanceMethod.
+            if (IsTypeNameReceiver(member.Value))
+                throw new InvalidOperationException(
+                    $"Member '{member.MemberName}' on a type name is not a resolved static method.");
+
             int astDepth = ctx.RingDepth;
             var astInstanceExpr = CompileNode(member.Value, ctx);
             int astInstanceSlot = ctx.RingDepth - 1;

@@ -73,12 +73,17 @@ internal sealed class ClrTypeDefinitionRegistry : ITypeDefinitionProvider {
         }
 
         var clrType = Type.GetType(name) ?? ResolveLoadedAssemblyType(name);
+        if (clrType is null && Enum.TryParse<PrimitiveType>(name, ignoreCase: false, out var prim))
+            clrType = prim.GetClrType();
+        if (clrType is null && name.IndexOf('.', StringComparison.Ordinal) < 0)
+            clrType = Type.GetType("System." + name) ?? ResolveLoadedAssemblyType("System." + name);
         if (clrType is null) {
             return null;
         }
 
-        var created = new ClrTypeDefinition(clrType, this);
-        return _types.GetOrAdd(name, created);
+        var created = GetTypeDefinition(clrType);
+        _types.TryAdd(name, created);
+        return created;
     }
 
     private static Type? ResolveLoadedAssemblyType(string name) {

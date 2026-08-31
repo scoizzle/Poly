@@ -48,6 +48,12 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
             IndexAccess indexAccess => ResolveIndexAccessType(context, indexAccess),
             TypeDefinitionReference typeDefRef => typeDefRef.TypeDefinition,
             ClrTypeReference clrTypeRef => context.TypeDefinitions.GetTypeDefinition(clrTypeRef.RuntimeType),
+            NamedTypeReference named =>
+                context.TypeDefinitions.GetTypeDefinition(named.FullName)
+                ?? context.TypeDefinitions.GetTypeDefinition(named.TypeName),
+            PrimitiveTypeReference prim => prim.PrimitiveId.GetClrType() is { } clr
+                ? context.TypeDefinitions.GetTypeDefinition(clr)
+                : null,
             TypeReference typeRef => context.TypeDefinitions.GetTypeDefinition(typeRef.TypeName),
             TypeCast cast => ResolveNodeType(context, cast.TargetTypeReference),
             TypeIs => context.TypeDefinitions.GetTypeDefinition(typeof(bool)),

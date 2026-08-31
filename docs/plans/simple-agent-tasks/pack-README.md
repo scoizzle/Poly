@@ -5,7 +5,7 @@
 **Guide:** `Poly.Mcp/Docs/poly-dsl-guide.md` (core-only until 3a)  
 **Sequence:** DSL Grammar → pack surface → built-in packs  
 
-**Status:** Tasked 2026-08-13. Human asked to execute. Admit one phase at a time; fleet may overlap **only** inside a phase when file tables do not collide.
+**Status:** Parked — not CURRENT. Phase 1 shipped; extension model superseded. Authority: [`PIPELINE-STATUS.md`](./PIPELINE-STATUS.md).
 
 ---
 

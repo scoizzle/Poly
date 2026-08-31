@@ -363,7 +363,7 @@ public sealed partial record DomainEntityInstance {
     ///   <item>Execute each effect in declaration order:
     ///     <list type="bullet">
     ///       <item><b>VM-compiled</b> (<see cref="AssignEffect"/>, <see cref="CompositeEffect"/>, <see cref="ConditionalEffect"/>, <see cref="StageTransitionEffect"/>) → lowered to Syntax AST → compiled via <see cref="Interpreter.Compile"/> → executed via VM. StageTransition is Assignment of CurrentStage + Invoke Notify on This.</item>
-    ///       <item><b>Direct-execution</b> (<see cref="CreateEntityInstance"/>, <see cref="ForEachInvokeEffect"/>) → mutates via CreateChildInstance / create-in (probes+Failure, not EffectExecutor). Self-invoke and singular cross-entity invoke lower to <c>Invoke(Member(…))</c>.</item>
+    ///       <item><b>Create / create-in</b> → instance factories via InvokeNamed (guarded-probe + body for mixed if+create; not EffectExecutor). Self-invoke and singular cross-entity invoke lower to <c>Invoke(Member(…))</c>.</item>
     ///     </list>
     ///   </item>
     ///   <item>On <see cref="StageTransitionEffect"/>: lowered tree sets stage then <c>Invoke(Member(This, "Notify"))</c> (store fan-out in finally).</item>
@@ -373,9 +373,9 @@ public sealed partial record DomainEntityInstance {
     /// <see cref="CompositeEffect"/>, <see cref="ConditionalEffect"/>) are
     /// lowered to Syntax AST, compiled, and executed via the VM.</para>
     ///
-    /// <para><b>Direct-execution effects</b> (<see cref="CreateEntityInstance"/>)
-    /// mutate the instance directly. <see cref="StageTransitionEffect"/> and
-    /// invoke (self, cross-entity, for-each) share the lowered tree with emit.</para>
+    /// <para>Create / create-in share a lowered tree with emit (runtime factories
+    /// vs Stay.Create). <see cref="StageTransitionEffect"/> and invoke (self,
+    /// cross-entity, for-each) also share the lowered tree with emit.</para>
     /// </summary>
     /// <param name="actionName">Name of the action to invoke.</param>
     /// <param name="args">Optional parameter values injected into the property
@@ -501,11 +501,29 @@ public sealed partial record DomainEntityInstance {
                 return ActionInvocationResult.InvalidArguments(actionName, createError);
 
             var createdBefore = _createdChildren.Count;
-            foreach (var effect in action.Effects) {
-                var failed = ExecuteEffect(effect, effectPass, effectTypeProvider);
-                if (failed is { IsSuccess: false })
+            var preparedEffects = action.Effects.Select(PreprocessEffectExpressions).ToList();
+            if (preparedEffects.Exists(ContainsConditionalCreate)) {
+                // Mixed if+create: same guarded-probe + body tree as export.
+                // Runtime factories, not ExecuteStructured / EffectExecutor.
+                var tree = effectPass.LowerActionBody(preparedEffects);
+                if (tree is null)
+                    throw new InvalidOperationException(
+                        $"Cannot lower action '{actionName}' effects containing create.");
+                var compiledBody = Interpreter.CompileChecked(
+                    tree, DomainResultTypeProvider.Wrap(effectTypeProvider));
+                using var execBody = Interpreter.Execute(compiledBody,
+                    s => s.SetArgs(new object?[] { this }));
+                if (execBody.Result.Value is DomainResult { IsSuccess: false } failedBody)
                     return ActionInvocationResult.InvalidArguments(
-                        actionName, failed.ErrorMessage ?? "invoke failed.");
+                        actionName, failedBody.ErrorMessage ?? "invoke failed.");
+            }
+            else {
+                foreach (var effect in preparedEffects) {
+                    var failed = ExecuteEffect(effect, effectPass, effectTypeProvider);
+                    if (failed is { IsSuccess: false })
+                        return ActionInvocationResult.InvalidArguments(
+                            actionName, failed.ErrorMessage ?? "invoke failed.");
+                }
             }
 
             // P3: declared -> Entity return = last child created this invoke of that type.
@@ -574,18 +592,8 @@ public sealed partial record DomainEntityInstance {
         // Syntax lowering — same honesty as EvaluatePolicy (no bag pass-through).
         var prepared = PreprocessEffectExpressions(effect);
 
-        // A composite/conditional containing remaining direct-execution sub-effects
-        // (create/create-in) still cannot lower on the runtime path (LowerStageTransitions
-        // is off). Taken-branch creates are prevalidated before any effect runs so
-        // mixed if+create fail-closed matches export (Failure, prior assigns not applied).
-        // ExecuteStructured only performs the taken create after that gate.
-        if ((prepared is ConditionalEffect or CompositeEffect)
-            && ContainsDirectExecutionEffect(prepared)) {
-            return ExecuteStructured(prepared, effectPass, typeProvider);
-        }
-
-        // Leaf create / create-in: probe+Failure, not EffectExecutor. Mixed if+create
-        // hits this after ExecuteStructured takes the branch.
+        // Mixed if+create is compiled as probe+body in InvokeActionInternal (runtime
+        // factories). Leaf create / create-in still execute here when not lowered.
         if (prepared is CreateEntityInstance create) {
             try {
                 CreateChildInstance(create, typeProvider);
@@ -626,38 +634,6 @@ public sealed partial record DomainEntityInstance {
         }
     }
 
-    /// <summary>
-    /// Executes a composite/conditional structurally: evaluates the branch condition (via
-    /// the VM) and routes each sub-effect through <see cref="ExecuteEffect"/> so both
-    /// VM-executable (assign, stage transition, invoke) and remaining direct-execution (create) effects run.
-    /// </summary>
-    private DomainResult? ExecuteStructured(
-        Effect effect,
-        EffectLoweringPass effectPass,
-        TypeDefinitionNodeAnalyzer typeProvider) {
-        switch (effect) {
-            case CompositeEffect c:
-                foreach (var sub in c.Effects) {
-                    var failed = ExecuteEffect(sub, effectPass, typeProvider);
-                    if (failed is not null)
-                        return failed;
-                }
-                return null;
-            case ConditionalEffect cond:
-                if (!TryEvalEffectCondition(cond.Condition, out var taken))
-                    return DomainResult.Failure("Cannot evaluate if condition.");
-                var branch = taken ? cond.ThenEffects : (cond.ElseEffects ?? []);
-                foreach (var sub in branch) {
-                    var failed = ExecuteEffect(sub, effectPass, typeProvider);
-                    if (failed is not null)
-                        return failed;
-                }
-                return null;
-            default:
-                return ExecuteEffect(effect, effectPass, typeProvider);
-        }
-    }
-
     private static bool IsConstraintFailureMessage(string message) =>
         message.StartsWith("Unique constraint violated", StringComparison.Ordinal)
         || message.Contains(" is required.", StringComparison.Ordinal)
@@ -666,8 +642,8 @@ public sealed partial record DomainEntityInstance {
 
     /// <summary>
     /// Evaluates an <c>if</c> condition against the current bag (including injected
-    /// action parameters) the same way <see cref="ExecuteStructured"/> does.
-    /// Used to prevalidate creates on the taken branch before any effect mutates.
+    /// action parameters). Used to prevalidate creates on the taken branch before
+    /// any effect mutates.
     /// </summary>
     private bool TryEvalEffectCondition(DomainExpression condition, out bool taken) {
         taken = false;
@@ -689,13 +665,19 @@ public sealed partial record DomainEntityInstance {
         }
     }
 
-    /// <summary>True when an effect tree contains a remaining direct-execution effect
-    /// (create/create-in) that the VM path would silently drop. Invoke lowers.</summary>
+    /// <summary>True when an effect tree contains create / create-in.</summary>
     private static bool ContainsDirectExecutionEffect(Effect effect) => effect switch {
         CreateEntityInstance or CreateEntityInRelationshipEffect => true,
         CompositeEffect c => c.Effects.Any(ContainsDirectExecutionEffect),
         ConditionalEffect c => (c.ThenEffects?.Any(ContainsDirectExecutionEffect) ?? false)
             || (c.ElseEffects?.Any(ContainsDirectExecutionEffect) ?? false),
+        _ => false
+    };
+
+    /// <summary>True when an <c>if</c> branch contains create / create-in.</summary>
+    private static bool ContainsConditionalCreate(Effect effect) => effect switch {
+        ConditionalEffect c => ContainsDirectExecutionEffect(c),
+        CompositeEffect c => c.Effects.Any(ContainsConditionalCreate),
         _ => false
     };
 

@@ -298,6 +298,59 @@ public sealed partial record DomainEntityInstance {
     }
 
     /// <summary>
+    /// VM-called runtime factories for lowered create / create-in (body and probes).
+    /// Args: name (type or relationship), then property name/value pairs.
+    /// Probe does not register a child. Stay.Create is C# export only.
+    /// </summary>
+    private DomainResult RuntimeCreateFactory(string name, object?[] args) {
+        if (args.Length < 1 || args[0] is not string key || key.Length == 0)
+            return DomainResult.Failure("Create factory requires a type or relationship name.");
+        if ((args.Length - 1) % 2 != 0)
+            return DomainResult.Failure("Create factory arguments must be name/value pairs.");
+
+        var bindings = new List<PropertyBinding>();
+        for (var i = 1; i < args.Length; i += 2) {
+            if (args[i] is not string propName)
+                return DomainResult.Failure("Create factory property names must be strings.");
+            bindings.Add(new PropertyBinding(propName, DomainExpression.Literal(args[i + 1])));
+        }
+
+        if (name == "ProbeCreateByType") {
+            Entity? target;
+            if (Domain is not null) {
+                var analysis = RuntimeAnalysisCache.GetOrAnalyze(Domain);
+                if (!analysis.TryGetEntity(Domain, key, out target) || target is null)
+                    return DomainResult.Failure(
+                        $"Entity type '{key}' not found in domain '{Domain.Name}'.");
+            }
+            else {
+                target = Entity;
+            }
+            var err = PrevalidateCreateInitializers(bindings, target);
+            return err is null ? DomainResult.Success() : DomainResult.Failure(err);
+        }
+
+        try {
+            if (name == "CreateInNav") {
+                var child = ExecuteCreateInRelationship(
+                    new CreateEntityInRelationshipEffect(key, bindings),
+                    _bindingTypeProvider ?? _typeDefAnalyzer);
+                return DomainResult.Success(child);
+            }
+            var created = CreateChildInstance(
+                new CreateEntityInstance(new DomainTypeReference(key), bindings),
+                _bindingTypeProvider ?? _typeDefAnalyzer);
+            return DomainResult.Success(created);
+        }
+        catch (InvalidOperationException ex) {
+            return DomainResult.Failure(ex.Message);
+        }
+        catch (ArgumentException ex) {
+            return DomainResult.Failure(ex.Message);
+        }
+    }
+
+    /// <summary>
     /// Parking dogfood: <c>assign Occupied + 1</c> then <c>create in</c> left Occupied
     /// bumped when Plate failed the pattern. Unconditional create/create-in and
     /// creates on a taken <c>if</c> branch are constraint-checked before any effect runs.

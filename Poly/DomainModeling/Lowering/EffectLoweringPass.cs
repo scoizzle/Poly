@@ -14,11 +14,12 @@ namespace Poly.DomainModeling.Lowering;
 /// <see cref="DomainExpressionLoweringPass"/> for expression-heavy effects
 /// like <see cref="AssignEffect"/> and <see cref="ConditionalEffect"/>.
 ///
-/// <para>Create / create-in still produce <c>null</c> from <see cref="Route"/>
-/// on the runtime path; they execute via CreateChildInstance / ExecuteCreateInRelationship (not EffectExecutor). StageTransition and
-/// invoke (self, cross-entity, for-each) are handwritten IR on both runtime
-/// and emit — not host-ABI nodes. <c>LowerStageTransitions</c> still gates
-/// create / create-in.</para>
+/// <para>Create / create-in lower on both paths. Export
+/// (<c>LowerStageTransitions</c>) emits <c>Stay.Create</c> / <c>this.CreateNav</c>.
+/// Runtime emits instance factories (<c>CreateByType</c> / <c>CreateInNav</c> /
+/// <c>ProbeCreateByType</c>) that <c>InvokeNamed</c> runs — Stay.Create is C#-only.
+/// Mixed if+create is the same guarded-probe + body tree, not ExecuteStructured /
+/// EffectExecutor. StageTransition and invoke are handwritten IR on both paths.</para>
 ///
 /// <para>When <see cref="Analysis"/> is set, lowering reads pre-computed
 /// <see cref="IAnalysisMetadata"/> instead of re-scanning domain collections.
@@ -39,6 +40,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     private readonly bool _emitInstanceNotify;
     private int _forEachInvokeSequence;
     private int _createInProbeSequence;
+    private bool _lowerRuntimeCreate;
 
     /// <summary>Pre-computed analysis metadata provider, when available.</summary>
     public INodeMetadataProvider? Analysis => _analysis;
@@ -468,11 +470,10 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     }
 
     /// <summary>
-    /// Lowers a CompositeEffect. Every sub-effect must lower in emit mode —
-    /// a sub-effect that cannot be lowered (unknown create target, unresolved
-    /// relationship) is a fail-closed error, never a silent drop. The runtime
-    /// seam for mixed composites is <see cref="DomainEntityInstance.ExecuteStructured"/>,
-    /// not this pass.
+    /// Lowers a CompositeEffect. Every sub-effect must lower — a sub-effect that
+    /// cannot be lowered (unknown create target, unresolved relationship) is a
+    /// fail-closed error, never a silent drop. Mixed if+create lowers on the
+    /// runtime path via instance factories (not ExecuteStructured).
     /// </summary>
     protected override Node? Composite(CompositeEffect c) {
         var nodes = new List<Node>();
@@ -534,7 +535,12 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     /// When <see cref="_domain"/> is null or the target entity is not found, returns null.
     /// </summary>
     protected override Node? CreateEntityInstance(CreateEntityInstance cei) {
-        if (!_lowerStageTransitions) return null;
+        if (!_lowerStageTransitions) {
+            if (!_lowerRuntimeCreate) return null;
+            return LowerRuntimeFactoryCall(
+                "CreateByType", cei.Type.TypeName, cei.Initializers,
+                ResolveEntity(cei.Type.TypeName));
+        }
 
         var targetEntity = ResolveEntity(cei.Type.TypeName);
         if (targetEntity is null) return null;
@@ -610,7 +616,19 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     /// the auto-wired back-reference). Unspecified initializers default to null.
     /// </summary>
     protected override Node? CreateEntityInRelationship(CreateEntityInRelationshipEffect cr) {
-        if (!_lowerStageTransitions || _domain is null) return null;
+        if (!_lowerStageTransitions) {
+            if (!_lowerRuntimeCreate) return null;
+            if (_domain is null || _analysis is null) return null;
+            var runtimeTarget = _analysis.GetMetadata<ResolvedRelationshipTargetMetadata>(cr);
+            var runtimeRel = runtimeTarget?.Relationship ?? ResolveRelationship(cr.RelationshipName);
+            if (runtimeRel is null) return null;
+            var runtimeEntity = runtimeTarget?.TargetEntity
+                ?? ResolveEntity(runtimeRel.Target.TypeName);
+            return LowerRuntimeFactoryCall(
+                "CreateInNav", cr.RelationshipName, cr.Initializers, runtimeEntity);
+        }
+
+        if (_domain is null) return null;
 
         if (_analysis is null) {
             throw new InvalidOperationException(
@@ -689,6 +707,47 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         return nodes;
     }
 
+    /// <summary>
+    /// Guarded create probes (before prior assigns) plus the action body.
+    /// Same tree shape as export <c>LowerActionToMethodBody</c>; runtime factories
+    /// replace Stay.Create / this.CreateNav.
+    /// </summary>
+    internal Node? LowerActionBody(IReadOnlyList<Effect> effects) {
+        _lowerRuntimeCreate = true;
+        try {
+            return LowerActionBodyCore(effects);
+        }
+        finally {
+            _lowerRuntimeCreate = false;
+        }
+    }
+
+    private Node? LowerActionBodyCore(IReadOnlyList<Effect> effects) {
+        var probes = LowerCreateInConstraintProbes(effects);
+        var lowered = TryLowerVmNode(new CompositeEffect(effects));
+        if (probes.Count == 0)
+            return lowered;
+        var nodes = new List<Node>();
+        var locals = new List<Node>();
+        foreach (var probe in probes) {
+            if (probe is Block pb) {
+                nodes.AddRange(pb.Nodes);
+                locals.AddRange(pb.Variables);
+            }
+            else {
+                nodes.Add(probe);
+            }
+        }
+        if (lowered is Block block) {
+            nodes.AddRange(block.Nodes);
+            locals.AddRange(block.Variables);
+        }
+        else if (lowered is not null) {
+            nodes.Add(lowered);
+        }
+        return new Block(nodes, locals);
+    }
+
     private void CollectCreateInProbes(IReadOnlyList<Effect> effects, List<Node> nodes, ref bool priorMutation) {
         // Unconditional create / create-in (and composites of them) probe at method
         // start — same set as runtime PrevalidateUnconditionalCreates.
@@ -760,7 +819,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     }
 
     private Block? LowerCreateInProbe(CreateEntityInRelationshipEffect cr) {
-        if (!_lowerStageTransitions || _domain is null || _analysis is null)
+        if (_domain is null || _analysis is null)
             return null;
 
         var resolvedTarget = _analysis.GetMetadata<ResolvedRelationshipTargetMetadata>(cr);
@@ -770,6 +829,13 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         var targetEntity = resolvedTarget?.TargetEntity
             ?? ResolveEntity(relationship.Target.TypeName);
         if (targetEntity is null) return null;
+
+        if (!_lowerStageTransitions) {
+            if (!_lowerRuntimeCreate) return null;
+            var probe = LowerRuntimeFactoryCall(
+                "ProbeCreateByType", targetEntity.Name, cr.Initializers, targetEntity);
+            return probe as Block ?? new Block([probe]);
+        }
 
         var initMap = new Dictionary<string, DomainExpression>(StringComparer.Ordinal);
         foreach (var init in cr.Initializers)
@@ -804,12 +870,63 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     }
 
     private Block? LowerCreateEntityInstanceProbe(CreateEntityInstance cei) {
-        if (!_lowerStageTransitions || _domain is null)
-            return null;
         var targetEntity = ResolveEntity(cei.Type.TypeName);
         if (targetEntity is null) return null;
+        if (!_lowerStageTransitions) {
+            if (!_lowerRuntimeCreate) return null;
+            var probe = LowerRuntimeFactoryCall(
+                "ProbeCreateByType", targetEntity.Name, cei.Initializers, targetEntity);
+            return probe as Block ?? new Block([probe]);
+        }
+        if (_domain is null)
+            return null;
         var args = BuildConstructorArgs(cei.Initializers, targetEntity);
         return LowerCreateConstraintProbe(targetEntity, args);
+    }
+
+    /// <summary>
+    /// Runtime create / probe: <c>this.CreateByType/CreateInNav/ProbeCreateByType(name, prop, value, ...)</c>
+    /// with Failure unwrap. Values are cast to object so type-def optional slots match.
+    /// </summary>
+    private Node LowerRuntimeFactoryCall(
+        string methodName,
+        string nameArg,
+        IReadOnlyList<PropertyBinding> initializers,
+        Entity? targetEntity) {
+        var args = new List<Node> { new Constant(nameArg) };
+        foreach (var init in initializers) {
+            args.Add(new Constant(init.PropertyName));
+            var prop = targetEntity?.Properties.FirstOrDefault(p =>
+                string.Equals(p.Name, init.PropertyName, StringComparison.Ordinal));
+            Node value = prop is not null
+                ? LowerEnumAwareValue(init.Expression, prop.Type, Subject)
+                : _expressionPass.Lower(init.Expression, Subject);
+            args.Add(value);
+        }
+
+        var seq = _createInProbeSequence++;
+        var resultVar = new Variable($"create{seq}");
+        var resultType = _context.ActionResultType ?? new NamedTypeReference("DomainResult");
+        var locals = new List<Node> { resultVar };
+        var nodes = new List<Node> {
+            new Assignment(resultVar, new Invoke(new Member(Subject, methodName), [.. args])),
+            new IfStatement(
+                new Syntactic.Not(new Member(resultVar, "IsSuccess")),
+                new Block([
+                    new Return(
+                        new Invoke(
+                            new Member(resultType, "Failure"),
+                            new Syntactic.Coalesce(
+                                new Member(resultVar, "ErrorMessage"),
+                                new Constant(""))))
+                ]))
+        };
+        if (!methodName.StartsWith("Probe", StringComparison.Ordinal)) {
+            var valueVar = new Variable($"created{seq}");
+            locals.Add(valueVar);
+            nodes.Add(new Assignment(valueVar, new Member(resultVar, "Value")));
+        }
+        return new Block(nodes, locals);
     }
 
     private Block LowerCreateConstraintProbe(Entity targetEntity, List<Node> args) {

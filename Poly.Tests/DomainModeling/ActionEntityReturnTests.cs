@@ -685,7 +685,9 @@ public class ActionEntityReturnTests {
 
         var result = guest.InvokeAction("Book",
             new Dictionary<string, object?> { ["nights"] = 0L, ["confirm"] = true });
+        // Failure, not throw-after-mutate (EffectExecutor catch path).
         await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(result.ErrorMessage).Contains("Nights");
         await Assert.That(guest.GetProperty<object>("OpenStays")).IsEqualTo(0L);
         await Assert.That(guest.CreatedChildren).IsEmpty();
     }

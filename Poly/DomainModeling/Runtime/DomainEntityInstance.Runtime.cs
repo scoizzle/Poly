@@ -133,6 +133,33 @@ public sealed partial record DomainEntityInstance {
         // Empty bodies: analysis resolves Member(entity, action/policy) as ITypeMethod.
         // VM does not inline them; InvokeNamed / generated C# owns the implementation.
         var methodNames = new HashSet<string>(StringComparer.Ordinal) { "Notify" };
+        // Runtime factories for mixed if+create. Exact 0/1-pair overloads so
+        // Invoke types as DomainResult (IsSuccess resolves). Extra args still
+        // go to InvokeNamed. Stay.Create is C#-only.
+        var str = TypeReference.To<string>();
+        var i64 = TypeReference.To<long>();
+        var boolean = TypeReference.To<bool>();
+        var obj = TypeReference.To<object>();
+        Node[] valueTypes = [i64, str, boolean, obj];
+        foreach (var factory in new[] { "CreateByType", "CreateInNav", "ProbeCreateByType" }) {
+            methods.Add(new MethodDefinitionNode(
+                factory,
+                TypeReference.To<DomainResult>(),
+                Parameters: [new Parameter("name", str)],
+                Body: new Block([])));
+            methodNames.Add(factory);
+            for (var t = 0; t < valueTypes.Length; t++) {
+                methods.Add(new MethodDefinitionNode(
+                    factory,
+                    TypeReference.To<DomainResult>(),
+                    Parameters: [
+                        new Parameter("name", str),
+                        new Parameter("p0", str),
+                        new Parameter("v0", valueTypes[t])
+                    ],
+                    Body: new Block([])));
+            }
+        }
         foreach (var action in EnumerateTypeDefActions(entity)) {
             if (!methodNames.Add(action.Name))
                 continue;

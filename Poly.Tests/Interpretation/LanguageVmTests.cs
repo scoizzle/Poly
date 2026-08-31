@@ -1,5 +1,6 @@
 using Poly.Interpretation;
 using Poly.Introspection;
+using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.Tests.Interpretation;
 
@@ -543,6 +544,13 @@ public class LanguageVmTests {
     [Test]
     public async Task PrimitiveTypeReference_AsValue_CompileRejected() {
         await Assert.That(() => Interpreter.Compile(new PrimitiveTypeReference(PrimitiveType.Int32)))
+            .Throws<InvalidOperationException>();
+    }
+
+    [Test]
+    public async Task TypeDefinitionReference_AsValue_CompileRejected() {
+        ITypeDefinition stringType = ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(typeof(string));
+        await Assert.That(() => Interpreter.Compile(new TypeDefinitionReference(stringType)))
             .Throws<InvalidOperationException>();
     }
 

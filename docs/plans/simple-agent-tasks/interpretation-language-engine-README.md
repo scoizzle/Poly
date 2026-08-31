@@ -45,29 +45,29 @@ If a node cannot be given those semantics, **shrink the language** (fail at comp
 
 ---
 
-## Known lies vs a language VM (inventory 2026-08-25)
+## Closed honesty inventory (ile-1 / ile-gate, 2026-08-31)
 
-Dishonest emit (passthrough or dummy 0):
+Former passthrough / dummy-0 lies — **landed**:
 
-| Node | Today | Language-honest |
-|------|--------|-----------------|
-| `Comment` | ring `0` | No meaning: statement no-op, never a value (or reject as expression) |
-| `Await` | operand passthrough; XML claims GetAwaiter | Implement GetAwaiter().GetResult() **or** compile-reject |
-| `TypeAs` / `TypeCast` | operand passthrough | Real convert / type-as on ABI **or** compile-reject |
-| `ParameterReference` | always `0` | Resolve to the parameter **or** compile-reject |
-| `TypeOf` | C# only; VM `NotSupported` | Emit `typeof` handle **or** shrink |
-| `ThrowExpression` | C# only; VM `NotSupported` | Same as `ThrowStatement` producing a value **or** shrink |
-| `Default` | always `0` | Default of the resolved type (null handle vs 0 vs false) |
-| `CompilationUnitNode` / type-def as program | not an entry | Script entry remains a `Node`; type-defs are analysis inputs, not `Main` |
+| Node | VM now |
+|------|--------|
+| `Comment` | Statement no-op; compile-reject as a value (never dummy `0`) |
+| `Await` | Compile-reject (`Await is not executable on the VM`) |
+| `TypeAs` / `TypeCast` | Real ABI convert / type-as (unresolved target → compile-reject) |
+| `ParameterReference` | Compile-reject (not a VM value; bind a `Parameter`) |
+| `TypeOf` | Heap-allocate `Type` (unresolved → compile-reject) |
+| `ThrowExpression` | Same as `ThrowStatement` producing a value |
+| `Default` | 0 / false / ABI null / heap default of the resolved type |
+| `CompilationUnitNode` / type-def as program | Not script entry; compile-reject / not executable |
 
 API:
 
-| Lie | Fix |
-|-----|-----|
-| `Compile` ignores Errors; `CompileChecked` is the real compiler | One door |
-| ADR names `VmParityTests`; file is gone | Restore conformance suite as VM oracles |
-| Many Interpretation tests only `BuildExpression()` | F21 as enforcement, not a README sentence |
-| Emitter comment cites `DomainResult` | Generic “CLR/AST invoke result → BoxToAbi” |
+| Former lie | Now |
+|------------|-----|
+| `Compile` ignores Errors; `CompileChecked` is the real compiler | One door: `Compile` fail-closed; `CompileChecked` is an alias |
+| ADR names `VmParityTests`; file is gone | `LanguageVmTests` + `LanguageSurfaceTests` |
+| Many Interpretation tests only `BuildExpression()` | Language-meaning tests also `Interpreter.Compile` the same tree |
+| Emitter comment cites `DomainResult` | No `DomainResult` in Interpretation |
 
 ---
 

@@ -1597,6 +1597,61 @@ public class McpSmokeTests {
     }
 
     [Test]
+    public async Task InvokeAction_UnknownEntityInstanceId_FailsClosed() {
+        var (sessionId, _) = McpSessionStore.Create("Test");
+        var dsl = DslTool.ApplyDsl(sessionId, """
+            domain Lib
+            Book: entity { Title: Text }
+            Patron: entity {
+              CheckOut: action (book: Book) { }
+            }
+            """);
+        await Assert.That(dsl.Success).IsTrue();
+        var patron = RuntimeTool.CreateInstance(sessionId, "Patron");
+        await Assert.That(patron.Success).IsTrue();
+        McpSessionStore.TryGet(sessionId, out var st);
+        var patronId = st.InstanceMap.First(kvp => kvp.Value.Entity.Name == "Patron").Key;
+
+        var call = RuntimeTool.InvokeAction(sessionId, patronId, "CheckOut",
+            """{"book":"missing-id"}""");
+        await Assert.That(call.Success).IsFalse();
+        await Assert.That(call.Message).Contains("missing-id");
+        await Assert.That(call.Message).Contains("not found");
+        await Assert.That(call.Message).DoesNotContain("Action execution failed");
+    }
+
+    [Test]
+    public async Task InvokeAction_EntityInstanceId_BindsToInstance() {
+        var (sessionId, _) = McpSessionStore.Create("Test");
+        var dsl = DslTool.ApplyDsl(sessionId, """
+            domain Lib
+            Book: entity { Title: Text }
+            Patron: entity {
+              loans: many Loan
+              CheckOut: action (book: Book) {
+                create in loans { book: book }
+              }
+            }
+            Loan: entity { book: Book }
+            """);
+        await Assert.That(dsl.Success).IsTrue();
+        var book = RuntimeTool.CreateInstance(sessionId, "Book", """{"Title":"Dune"}""");
+        await Assert.That(book.Success).IsTrue();
+        var patron = RuntimeTool.CreateInstance(sessionId, "Patron");
+        await Assert.That(patron.Success).IsTrue();
+        McpSessionStore.TryGet(sessionId, out var st);
+        var bookId = st.InstanceMap.First(kvp => kvp.Value.Entity.Name == "Book").Key;
+        var patronId = st.InstanceMap.First(kvp => kvp.Value.Entity.Name == "Patron").Key;
+
+        var call = RuntimeTool.InvokeAction(sessionId, patronId, "CheckOut",
+            $$"""{"book":"{{bookId}}"}""");
+        await Assert.That(call.Success).IsTrue();
+        var loans = RuntimeTool.ListInstances(sessionId, "Loan");
+        await Assert.That(loans.Success).IsTrue();
+        await Assert.That(loans.Message).Contains("1 instance");
+    }
+
+    [Test]
     public async Task CreateInstance_WitStages_SetsInitialStage() {
         var (sessionId, _) = McpSessionStore.Create("Test");
         EvolveTool.Add(sessionId, "entity", """{"name":"Process"}""");

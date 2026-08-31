@@ -12,7 +12,7 @@ namespace Poly.DomainModeling.Analysis;
 /// <b>Composition rules:</b>
 /// <list type="bullet">
 /// <item><b>Effective policies at stage</b> = stage-local policies only.
-/// Named entity policies are predicates (`require` / `for where`), not always-on
+/// Named entity policies are predicates (<c>require</c> / <c>for where</c>), not always-on
 /// stage invariants. Action-scoped policies are not stage-effective.</item>
 /// <item><b>Effective actions at stage</b> = stage-local actions only.
 /// No stage-parent hierarchy; entity-level actions are resolved at runtime via
@@ -21,17 +21,6 @@ namespace Poly.DomainModeling.Analysis;
 /// </para>
 /// </summary>
 internal static class DomainEffectiveSurface {
-    public static IReadOnlyList<Policy> ComposeStagePolicies(
-        IReadOnlyList<Policy> entityPolicies,
-        Stage stage) {
-        if (entityPolicies.Count == 0 && stage.Policies.Count == 0)
-            return Array.Empty<Policy>();
-        if (entityPolicies.Count == 0)
-            return stage.Policies;
-        if (stage.Policies.Count == 0)
-            return entityPolicies;
-        List<Policy> combined = [.. entityPolicies, .. stage.Policies];
-        return combined;
-    }
-
+    public static IReadOnlyList<Policy> ComposeStagePolicies(Stage stage) =>
+        stage.Policies.Count == 0 ? Array.Empty<Policy>() : stage.Policies;
 }

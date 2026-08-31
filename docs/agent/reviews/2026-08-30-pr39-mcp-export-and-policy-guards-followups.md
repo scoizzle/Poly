@@ -21,11 +21,11 @@ Owning stream: DomainModeling export/runtime create paths, MCP policy evaluate, 
 
 ## Suggestions
 
-- [ ] **F5 (suggestion)** — Update `docs/CORE.md:157` and `DomainResult.cs:8-10`. Self/cross-entity wrap `IsSuccess` (`EffectLoweringPass.cs:362-378`); `ExecuteEffect` returns failed `DomainResult` (`DomainEntityInstance.cs:591-592`); `InvokeNamed` returns Failure (`DomainEntityInstance.InvokeNamed.cs:38`).
+- [x] **F5 (suggestion)** — Update `docs/CORE.md:157` and `DomainResult.cs:8-10`. Self/cross-entity wrap `IsSuccess` (`EffectLoweringPass.cs:362-378`); `ExecuteEffect` returns failed `DomainResult` (`DomainEntityInstance.cs:591-592`); `InvokeNamed` returns Failure (`DomainEntityInstance.InvokeNamed.cs:38`).
 
-- [ ] **F6 (suggestion)** — `docs/domainmodeling-capability-inventory.md:188` still marks bag-mode `evaluate_policy(age|properties=)` shipped. Bag mode is gone. Replace or mark removed.
+- [x] **F6 (suggestion)** — `docs/domainmodeling-capability-inventory.md:188` still marks bag-mode `evaluate_policy(age|properties=)` shipped. Bag mode is gone. Replace or mark removed.
 
-- [ ] **F7 (suggestion)** — `ComposeStagePolicies` concatenates entity policies (`DomainEffectiveSurface.cs:32-34`) while the type comment says stage-local only. Only caller passes `Array.Empty<Policy>()` (`CapabilityAnalyzer.cs:140`). Return `stage.Policies` only, or delete the helper.
+- [x] **F7 (suggestion)** — `ComposeStagePolicies` concatenates entity policies (`DomainEffectiveSurface.cs:32-34`) while the type comment says stage-local only. Only caller passes `Array.Empty<Policy>()` (`CapabilityAnalyzer.cs:140`). Return `stage.Policies` only, or delete the helper.
 
 - [ ] **F8 (suggestion)** — Unique is not in `ValidateConstraints` (`DomainEntityInstance.cs:147-184`) or export `Create`. Parking mutation-then-fail still holds for unique. Prevalidate unique against the store, or document it out of the Parking invariant. Test assign + duplicate unique create-in.
 

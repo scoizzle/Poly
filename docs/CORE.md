@@ -237,7 +237,7 @@ Folder `Libraries/` holds in-assembly seeds (Temporal, storage facets). Vendor p
 | Trust bar + first-customer strategy (T1–T3; product via domain + modules) | [`docs/decisions/2026-07-11-platform-trust-bar-and-dogfood.md`](decisions/2026-07-11-platform-trust-bar-and-dogfood.md) |
 | Why of a major choice | `docs/decisions/README.md` |
 | Domain = library; extensions = doors; MCP = harness | [`docs/decisions/2026-08-15-domain-library-extensions-mcp-harness.md`](decisions/2026-08-15-domain-library-extensions-mcp-harness.md) |
-| Active execution work | `docs/plans/v2-to-v3/master-roadmap.md` (Agent pick) · `docs/plans/README.md` (admission) · `docs/plans/domainmodeling-workstream-map.md` |
+| Active execution work | [`docs/plans/simple-agent-tasks/PIPELINE-STATUS.md`](plans/simple-agent-tasks/PIPELINE-STATUS.md) (sole CURRENT). Mirrors/orientation only — not Agent pick: `docs/plans/v2-to-v3/master-roadmap.md` · `docs/plans/README.md` · `docs/plans/domainmodeling-workstream-map.md` |
 | Module detail | `Poly/*/README.md`, `docs/interpretation/*` |
 | Introspection detail | `Poly/Introspection/README.md`, `docs/technical/introspection.md` |
 | Historical / may be stale | `docs/ARCHITECTURE.md` — prefer this file + module READMEs for truth |

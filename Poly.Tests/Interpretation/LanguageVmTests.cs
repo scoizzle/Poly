@@ -531,26 +531,26 @@ public class LanguageVmTests {
 
     [Test]
     public async Task NamedTypeReference_AsValue_CompileRejected() {
-        await Assert.That(() => Interpreter.Compile(new NamedTypeReference("DateTime")))
+        await Assert.That(() => Interpreter.Compile(new Add(new NamedTypeReference("DateTime"), new Constant(1L))))
             .Throws<InvalidOperationException>();
     }
 
     [Test]
     public async Task TypeReference_AsValue_CompileRejected() {
-        await Assert.That(() => Interpreter.Compile(TypeReference.To<string>()))
+        await Assert.That(() => Interpreter.Compile(new Add(TypeReference.To<string>(), new Constant(1L))))
             .Throws<InvalidOperationException>();
     }
 
     [Test]
     public async Task PrimitiveTypeReference_AsValue_CompileRejected() {
-        await Assert.That(() => Interpreter.Compile(new PrimitiveTypeReference(PrimitiveType.Int32)))
+        await Assert.That(() => Interpreter.Compile(new Add(new PrimitiveTypeReference(PrimitiveType.Int32), new Constant(1L))))
             .Throws<InvalidOperationException>();
     }
 
     [Test]
     public async Task TypeDefinitionReference_AsValue_CompileRejected() {
         ITypeDefinition stringType = ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(typeof(string));
-        await Assert.That(() => Interpreter.Compile(new TypeDefinitionReference(stringType)))
+        await Assert.That(() => Interpreter.Compile(new Add(new TypeDefinitionReference(stringType), new Constant(1L))))
             .Throws<InvalidOperationException>();
     }
 

@@ -1,8 +1,8 @@
 # DomainModeling workstream map
 
-**Date:** 2026-08-05  
+**Date:** 2026-08-31 (orientation only — not CURRENT)  
 **Purpose:** Name every live / parked / dead stream so “middle of many things” becomes one admitted CURRENT.  
-**Sources of truth:** [`README.md`](README.md) admission control · [`v2-to-v3/master-roadmap.md`](v2-to-v3/master-roadmap.md) Agent pick  
+**Sources of truth:** [`simple-agent-tasks/PIPELINE-STATUS.md`](simple-agent-tasks/PIPELINE-STATUS.md) is the sole CURRENT. This map is orientation inventory, not an Agent pick.  
 **Completed suites archive:** [`archive/domainmodeling-completed-2026-08/`](archive/domainmodeling-completed-2026-08/README.md)  
 **Rule:** **One primary implementation workstream at a time.** Proposals ≠ queues.
 
@@ -13,7 +13,7 @@
 | Lens | State |
 |------|--------|
 | Product vertical (M1–M4, spawn-and-wire, Q1′/Q3′, link, SPE, DAS catalog monopath) | **Done** |
-| CURRENT (agent pick) | **`dogfood-wave-2`** (S4→S5→S6) — admitted 2026-08-06 |
+| CURRENT (agent pick) | **`interpretation-language-engine`** — see [`simple-agent-tasks/PIPELINE-STATUS.md`](simple-agent-tasks/PIPELINE-STATUS.md). dogfood-wave-2 is archived. |
 | Feeling of “in the middle” | Many **parked / residual / structural** docs still look active; code is past most of them |
 
 If work feels multi-stream, the fix is **admission**, not more parallel suites.
@@ -153,10 +153,7 @@ Not required for product progress.
 ## Agent pick (live)
 
 ```text
-DONE:    (see §1 — M1–M4, qe, vs, spe, das, dacr, apm, dar, infra bar, …)
-CURRENT: dogfood-wave-2 — S4 peer binder → S5 entity-level when → S6 owned+exists+quantifiers
-ADMIT:   fix tasks only from wave-2 reports
-READY:   amu · p4 · coh (simple-agent-tasks/*-README) — admit after wave-2
-PARKED:  absorption P1/P2/…; DAU; grammar; naming V3*; E5; Q4
-PULL:    multi-hop / dates only if dogfood forces
+CURRENT: interpretation-language-engine (ile-0/1/2 VM↔LINQ parity gaps closed; ile-3 functions green)
 ```
+
+This block must match [`simple-agent-tasks/PIPELINE-STATUS.md`](simple-agent-tasks/PIPELINE-STATUS.md). dogfood-wave-2 is archived. Do not admit work from this map.

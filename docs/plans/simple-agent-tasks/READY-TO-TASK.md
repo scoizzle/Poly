@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-31  
 **Rule:** Trunk is `master`. Parallel streams with exclusive file ownership.  
-**CURRENT truth:** [`PIPELINE-STATUS.md`](./PIPELINE-STATUS.md) (only) — **CURRENT: `interpretation-language-engine (ile-0/1/2 VM↔LINQ parity gaps closed; ile-3 functions green)`**. ile-gate is not closed; do not invent a second CURRENT.
+**CURRENT truth:** [`PIPELINE-STATUS.md`](./PIPELINE-STATUS.md) (only) — **CURRENT: `create/create-in`**. interpretation-language-engine ile-gate closed 2026-08-31. Do not invent a second CURRENT.
 
 ---
 
@@ -10,7 +10,8 @@
 
 | Priority | Suite | Status |
 |----------|--------|--------|
-| CURRENT | [`interpretation-language-engine-README.md`](./interpretation-language-engine-README.md) | **CURRENT** — ile-0/1/2/3 green; ile-gate not closed. Mirror [`PIPELINE-STATUS.md`](./PIPELINE-STATUS.md). |
+| CURRENT | create/create-in | **CURRENT** — host-ABI remaining store effects. Mirror [`PIPELINE-STATUS.md`](./PIPELINE-STATUS.md). |
+| — | [`interpretation-language-engine-README.md`](./interpretation-language-engine-README.md) | ✅ DONE 2026-08-31 (ile-gate). |
 | — | [`gpure-README.md`](./gpure-README.md) | ✅ DONE 2026-08-07 |
 | — | [`mcp-minify-README.md`](./mcp-minify-README.md) | ✅ DONE 2026-08-08 |
 | — | emit-session | ✅ DONE 2026-08-24 (CompileMode seed-only honesty). Remaining lies: Temporal Meaning unused; RuntimeAnalysisCache core-catalog reopen. |

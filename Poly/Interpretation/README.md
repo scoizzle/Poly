@@ -112,7 +112,7 @@ Root files: `Interpreter.cs` (pipeline + execute), `ExecutionResult.cs`, `Interp
 
 `Interpreter._analyzer` is 14 passes. **Built order** (after `AnalyzerBuilder` topological insert) is asserted by `StandardAnalyzer_PassNames_MatchInterpreterPipeline` and listed in [`Analysis/README.md`](Analysis/README.md). Do not copy a `Use*` registration list here — insert order ≠ registration order.
 
-`Interpreter.Compile` fails closed on every `DiagnosticSeverity.Error`. Use `Analyze` to inspect diagnostics without emitting.
+`Interpreter.Compile` is the one compile door: it fails closed on every `DiagnosticSeverity.Error`. `CompileChecked` is an alias. Use `Analyze` to inspect diagnostics without emitting. `Await` and `ParameterReference` compile-reject. `Comment` is a statement no-op and compile-rejects as a value (never dummy `0`).
 
 ---
 
@@ -353,6 +353,8 @@ to emit the LINQ Expression. Add emit tests in `Poly.Tests/Interpretation/`.
 | Resource | Use |
 |----------|-----|
 | `Poly.Tests/Interpretation/` | VM correctness, direct lowering, integration tests |
+| `LanguageVmTests` | One `Interpreter.Compile` + execute or compile-reject per executable `CompileNodeInner` kind |
+| `LanguageSurfaceTests` | Inventory: Executable / CompileReject / AnalysisOnly for every `Poly.Ast` `Node` |
 | [`docs/plans/archive/interpretation/`](../../docs/plans/archive/interpretation/README.md) | **Archived** pre-direct-ABI plans (do not execute) |
 | [`docs/plans/v2-to-v3/master-roadmap.md`](../../docs/plans/v2-to-v3/master-roadmap.md) | Active product planning (DomainModeling V2→V3) |
 | [`docs/interpretation-system-architecture-review.md`](../../docs/interpretation-system-architecture-review.md) | Holistic architecture review (living doc) |
@@ -375,9 +377,11 @@ Syntax types Interpretation most often compiles:
 - **Calls:** `Member`, `Invoke` (`Lambda`, stored `Variable`/`Parameter` closures, or `Member`), `IndexAccess`, `New`, `Lambda`
 - **Operators:** `Add`, `Subtract`, `Multiply`, `Divide`, `Equal`, comparisons, `And` / `Or` / `Not`, bitwise/shift
 - **Control flow:** `Conditional`, `IfStatement`, loops, `Return`, `BreakStatement`, `ContinueStatement`, `GotoStatement`, `TryCatchFinally`, `UsingStatement`, `SwitchStatement`
-- **Types:** `TypeCast`, `TypeIs`, `TypeAs`, `TypeReference`
+- **Types:** `TypeCast`, `TypeIs`, `TypeAs`, `TypeOf`
+- **Shrink (compile-reject):** `Await`, `ParameterReference`, type names as values (`NamedTypeReference` / `TypeReference` / `ClrTypeReference` / `PrimitiveTypeReference` / `TypeDefinitionReference`)
+- **Comment:** statement no-op; not a VM value
 
-Full taxonomy: `Poly/Syntax/Nodes/`.
+Full taxonomy: `Poly/Ast/Nodes/`. Inventory: `LanguageSurfaceTests`.
 
 ---
 

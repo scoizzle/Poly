@@ -17,13 +17,15 @@ public class AnalyzerBuilderTests {
     }
 
     [Test]
-    public async Task Builder_WithExplicitEmptyProviderSet_DoesNotFallbackToShared() {
+    public async Task Builder_WithExplicitEmptyProviderSet_StillFallsBackToSharedClr() {
+        // CORE §3.5: custom providers always fall back to CLR so BCL names still resolve.
         var emptyProvider = new NoOpTypeDefinitionProvider();
         var node = new Constant(123);
         var result = new AnalyzerBuilder().UseThisReferenceContext()
             .UseTypeAndMemberResolver().Build().Analyze(node, typeDefinitions: emptyProvider);
 
-        await Assert.That(result.GetResolvedType(node)).IsNull();
+        await Assert.That(result.GetResolvedType(node)).IsNotNull();
+        await Assert.That(result.GetResolvedType(node)!.FullName).IsEqualTo("System.Int32");
     }
 
     private sealed class NoOpTypeDefinitionProvider : ITypeDefinitionProvider {

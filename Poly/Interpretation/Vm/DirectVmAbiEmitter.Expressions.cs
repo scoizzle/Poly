@@ -587,16 +587,6 @@ public static partial class DirectVmAbiEmitter {
                 typeof(long)));
     }
 
-    /// <summary>ParameterReference: resolve to the referenced Parameter node and emit it.</summary>
-    private static Expression EmitParameterReference(ParameterReference pr, AbiCtx ctx) {
-        // Try to resolve the referenced Parameter via analysis metadata.
-        // The DomainExpressionLoweringPass may produce Member(ParameterReference, ...)
-        // where ParameterReference aliases a concrete Parameter node from the lowering.
-        // Fall back to 0L if unresolvable.
-        int slot = ctx.AllocSlot();
-        return Assign(ctx.RingVar(slot), Constant(0L));
-    }
-
     /// <summary>StridedSetBits: bit-level strided set (handle, start, step, limit).</summary>
     private static Expression EmitStridedSetBits(StridedSetBits ssb, AbiCtx ctx) {
         int d = ctx.RingDepth;

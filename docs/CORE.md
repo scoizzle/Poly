@@ -140,7 +140,7 @@ Pass order and registry: `Poly/Interpretation/Analysis/README.md`. Authoring gui
 | Façade | `Poly/Interpretation/Interpreter.cs` |
 | Runtime | `VmState`, `VmProgram`, heap/ring ABI under `Poly/Interpretation/Vm/` |
 
-Interpretation is the execution engine for Syntax programs (script = expression/`Block`; types = `TypeDefinitionNode` as analysis input). DomainModeling must not appear in the emitter/ABI. Dishonest passthroughs (`Await`, unresolved `ParameterReference`, `Comment` as `0`) are compile-reject or no-ops — not host escapes. A type name (`NamedTypeReference` / `TypeReference`) is not a VM value; it is a static `Member`/`Invoke`/`New` receiver (`DateTime.UtcNow`).
+Interpretation is the execution engine for Syntax programs (script = expression/`Block`; types = `TypeDefinitionNode` as analysis input). DomainModeling must not appear in the emitter/ABI. `Interpreter.Compile` is the one compile door (fail-closed on analysis errors; `CompileChecked` is an alias). The standard analyzer is **14 passes**. `Await` and `ParameterReference` compile-reject. `Comment` is a statement no-op and compile-rejects as a value (never dummy `0`). A type name (`NamedTypeReference` / `TypeReference`) is not a VM value; it is a static `Member`/`Invoke`/`New` receiver (`DateTime.UtcNow`).
 
 No intermediate primitive flattening step. Inputs are the AST plus analysis metadata (including replacements). **Principle:** keep the emitter a generic compiler of known nodes — fix upstream (lower / analyze / replace), do not patch the ABI for one scenario. Known-member `MethodInfo` / `PropertyInfo` / `ConstructorInfo`: `Ref` / `Ref<T>` (`Poly/Interpretation/Vm/Ref.cs`), never `typeof(T).GetMethod(...)`. Exception: `Expression<Func<T>>` cannot close over a ref struct, so `ReadOnlySpan<T>` constructors stay `GetConstructor`.
 
@@ -237,7 +237,7 @@ Folder `Libraries/` holds in-assembly seeds (Temporal, storage facets). Vendor p
 | Trust bar + first-customer strategy (T1–T3; product via domain + modules) | [`docs/decisions/2026-07-11-platform-trust-bar-and-dogfood.md`](decisions/2026-07-11-platform-trust-bar-and-dogfood.md) |
 | Why of a major choice | `docs/decisions/README.md` |
 | Domain = library; extensions = doors; MCP = harness | [`docs/decisions/2026-08-15-domain-library-extensions-mcp-harness.md`](decisions/2026-08-15-domain-library-extensions-mcp-harness.md) |
-| Active execution work | `docs/plans/v2-to-v3/master-roadmap.md` (Agent pick) · `docs/plans/README.md` (admission) · `docs/plans/domainmodeling-workstream-map.md` |
+| Active execution work | [`docs/plans/simple-agent-tasks/PIPELINE-STATUS.md`](plans/simple-agent-tasks/PIPELINE-STATUS.md) (sole CURRENT). Mirrors/orientation only — not Agent pick: `docs/plans/v2-to-v3/master-roadmap.md` · `docs/plans/README.md` · `docs/plans/domainmodeling-workstream-map.md` |
 | Module detail | `Poly/*/README.md`, `docs/interpretation/*` |
 | Introspection detail | `Poly/Introspection/README.md`, `docs/technical/introspection.md` |
 | Historical / may be stale | `docs/ARCHITECTURE.md` — prefer this file + module READMEs for truth |

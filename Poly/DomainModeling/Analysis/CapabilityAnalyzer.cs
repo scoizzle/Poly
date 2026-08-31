@@ -14,7 +14,7 @@ public sealed record ActionCapabilityView(
 
 /// <summary>
 /// Canonical stage-effective surface. Composition rules live in
-/// <see cref="DomainEffectiveSurface"/> — entity+stage policies; stage-local actions.
+/// <see cref="DomainEffectiveSurface"/> — stage-local policies; stage-local actions.
 /// </summary>
 public sealed record StageCapabilityView(
     string StageName,
@@ -137,7 +137,7 @@ internal sealed class CapabilityAnalyzer : INodeAnalyzer {
             .OfType<ActionCapabilityView>()
             .ToArray();
 
-        var effectivePolicies = DomainEffectiveSurface.ComposeStagePolicies(Array.Empty<Policy>(), stage);
+        var effectivePolicies = DomainEffectiveSurface.ComposeStagePolicies(stage);
 
         // Stage hierarchy not supported — effective actions are stage-local only.
         var view = new StageCapabilityView(

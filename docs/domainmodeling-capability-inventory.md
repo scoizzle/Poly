@@ -185,7 +185,7 @@ Fail-closed: missing storage (db/all); missing behavior/aggregate (all) → `Inv
 
 | Mode | Path | Status |
 |------|------|--------|
-| Local bag | `evaluate_policy(age|properties=)` | ✅ |
+| Local bag | removed — `evaluate_policy` requires `instanceId` | — |
 | Store-attached | `create_instance` → `link_instances` → `evaluate_policy(…, instanceId=)` | ✅ |
 | Library | `DomainEntityInstance` + store | ✅ |
 

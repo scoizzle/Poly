@@ -1448,7 +1448,7 @@ public sealed class CSharpGenerator {
         "private","protected","public","readonly","ref","return","sbyte","sealed","short",
         "sizeof","stackalloc","static","string","struct","switch","this","throw","true",
         "try","typeof","uint","ulong","unchecked","unsafe","ushort","using","virtual",
-        "void","volatile","while","add","and","alias","ascending","args","async","await",
+        "void","volatile","while","add","and","alias","ascending","async","await",
         "by","descending","dynamic","equals","file","from","get","global","group","init",
         "into","join","let","managed","nameof","nint","not","notnull","nuint","on",
         "or","orderby","partial","record","remove","required","scoped","select","set",

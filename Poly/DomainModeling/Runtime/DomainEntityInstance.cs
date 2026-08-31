@@ -617,6 +617,12 @@ public sealed partial record DomainEntityInstance {
         // Syntax lowering — same honesty as EvaluatePolicy (no bag pass-through).
         var prepared = PreprocessEffectExpressions(effect);
 
+        if (prepared is AssignEffect assign) {
+            var uniqueFail = UniqueCollisionForAssign(assign, typeProvider);
+            if (uniqueFail is not null)
+                return uniqueFail;
+        }
+
         // Mixed if+create is compiled as probe+body in InvokeActionInternal (runtime
         // factories). Leaf create / create-in still execute here when not lowered.
         if (prepared is CreateEntityInstance create) {
@@ -666,11 +672,51 @@ public sealed partial record DomainEntityInstance {
         || message.Contains(" does not match the required pattern.", StringComparison.Ordinal);
 
     /// <summary>
+    /// Unique-before-mutate for VM <see cref="AssignEffect"/>: DictSetItem writes the
+    /// bag with no Store check. Proposed bag is checked here so a colliding assign
+    /// returns Failure without mutating.
+    /// </summary>
+    private DomainResult? UniqueCollisionForAssign(
+        AssignEffect assign, TypeDefinitionNodeAnalyzer typeProvider) {
+        if (Store is null)
+            return null;
+        if (assign.Target is not PropertyAccess propAccess)
+            return null;
+        var entityProp = Entity.Properties.FirstOrDefault(p =>
+            string.Equals(p.Name, propAccess.Name, StringComparison.Ordinal));
+        if (entityProp is null
+            || !entityProp.Constraints.OfType<UniqueConstraint>().Any())
+            return null;
+
+        object? value;
+        if (TryEvalActionParamPath(assign.Value, out var fromParam)) {
+            value = fromParam;
+        }
+        else {
+            var entityParam = new Parameter("entity", new TypeReference(Entity.Name));
+            var pass = new DomainExpressionLoweringPass(new LoweringContext(
+                entityParam,
+                PropertyTypeResolver: EffectLoweringPass.BuildPropertyTypeResolver(Entity)));
+            var lowered = pass.Lower(assign.Value, entityParam);
+            var compiled = Interpreter.Compile(lowered, _bindingTypeProvider ?? typeProvider);
+            using var exec = Interpreter.Execute(compiled,
+                s => s.SetArgs(new object?[] { this }));
+            value = exec.Result.GetValue<object>();
+        }
+
+        var proposed = new Dictionary<string, object?>(_values, StringComparer.Ordinal) {
+            [propAccess.Name] = value
+        };
+        var unique = Store.UniqueCollisionMessage(Entity, proposed, except: this, candidate: this);
+        return unique is null ? null : DomainResult.Failure(unique);
+    }
+
+    /// <summary>
     /// Evaluates an <c>if</c> condition against the current bag (including injected
     /// action parameters). Used to prevalidate creates on the taken branch before
     /// any effect mutates.
     /// </summary>
-    private bool TryEvalEffectCondition(DomainExpression condition, out bool taken) {
+        private bool TryEvalEffectCondition(DomainExpression condition, out bool taken) {
         taken = false;
         try {
             var entityParam = new Parameter("entity", new TypeReference(Entity.Name));

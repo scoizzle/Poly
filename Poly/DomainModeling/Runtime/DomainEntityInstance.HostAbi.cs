@@ -430,10 +430,32 @@ public sealed partial record DomainEntityInstance {
                             return err;
                         break;
                     }
+                case ConditionalEffect cond: {
+                        var taken = EvalEffectCondition(cond.Condition);
+                        var branch = taken ? cond.ThenEffects : (cond.ElseEffects ?? []);
+                        var nestedCond = PrevalidateUnconditionalCreates(branch);
+                        if (nestedCond is not null)
+                            return nestedCond;
+                        break;
+                    }
             }
         }
 
         return null;
+    }
+
+    private bool EvalEffectCondition(DomainExpression condition) {
+        var prepared = PreprocessQuantifiers(condition);
+        var entityParam = new Parameter("entity", new TypeReference(Entity.Name));
+        var pass = new DomainExpressionLoweringPass(new LoweringContext(
+            entityParam,
+            PropertyTypeResolver: EffectLoweringPass.BuildPropertyTypeResolver(Entity)));
+        var lowered = pass.Lower(prepared, entityParam);
+        var compiled = Interpreter.CompileChecked(
+            lowered, DomainResultTypeProvider.Wrap(_bindingTypeProvider ?? _typeDefAnalyzer));
+        using var exec = Interpreter.Execute(compiled,
+            s => s.SetArgs(new object?[] { this }));
+        return exec.Result.GetValue<bool>();
     }
 
     private string? PrevalidateCreateInitializers(

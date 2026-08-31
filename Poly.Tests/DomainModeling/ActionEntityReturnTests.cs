@@ -476,6 +476,97 @@ public class ActionEntityReturnTests {
     }
 
     [Test]
+    public async Task InvokeAction_AssignUniqueCollision_DoesNotMutate() {
+        var (domain, _) = Evolve("""
+            domain Parking
+            Permit: entity {
+              Plate: Text unique required
+              Relabel: action (plate: Text) {
+                assign Plate to plate
+              }
+            }
+            """);
+        var permitE = domain.Types.OfType<Entity>().First(e => e.Name == "Permit");
+        var store = new DomainInstanceStore();
+        var existing = DomainEntityInstance.Create(permitE,
+            new Dictionary<string, object?> { ["Plate"] = "ABC123" }, domain);
+        var other = DomainEntityInstance.Create(permitE,
+            new Dictionary<string, object?> { ["Plate"] = "XYZ999" }, domain);
+        store.Add(existing);
+        store.Add(other);
+
+        var result = other.InvokeAction("Relabel",
+            new Dictionary<string, object?> { ["plate"] = "ABC123" });
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(result.ErrorMessage).Contains("Unique");
+        await Assert.That(other.GetProperty<string>("Plate")).IsEqualTo("XYZ999");
+    }
+
+    [Test]
+    public async Task InvokeAction_ConditionalCreateUniqueCollision_DoesNotApplyPriorAssigns() {
+        var (domain, _) = Evolve("""
+            domain Parking
+            Permit: entity {
+              Plate: Text unique required
+            }
+            Lot: entity {
+              Occupied: Number default(0)
+              permits: many Permit
+              Issue: action (plate: Text) {
+                assign Occupied to Occupied + 1
+                if (plate != "") {
+                  create in permits { Plate: plate }
+                }
+              }
+            }
+            """);
+        var permitE = domain.Types.OfType<Entity>().First(e => e.Name == "Permit");
+        var lotE = domain.Types.OfType<Entity>().First(e => e.Name == "Lot");
+        var store = new DomainInstanceStore();
+        var existing = DomainEntityInstance.Create(permitE,
+            new Dictionary<string, object?> { ["Plate"] = "ABC123" }, domain);
+        var lot = DomainEntityInstance.Create(lotE, domain: domain);
+        store.Add(existing);
+        store.Add(lot);
+
+        var result = lot.InvokeAction("Issue",
+            new Dictionary<string, object?> { ["plate"] = "ABC123" });
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(result.ErrorMessage).Contains("Unique");
+        await Assert.That(lot.GetProperty<object>("Occupied")).IsEqualTo(0L);
+        await Assert.That(lot.CreatedChildren).IsEmpty();
+    }
+
+    [Test]
+    public async Task SetProperty_UniqueCollision_ThrowsBeforeMutate() {
+        var (domain, _) = Evolve("""
+            domain Parking
+            Permit: entity {
+              Plate: Text unique required
+            }
+            """);
+        var permitE = domain.Types.OfType<Entity>().First(e => e.Name == "Permit");
+        var store = new DomainInstanceStore();
+        var existing = DomainEntityInstance.Create(permitE,
+            new Dictionary<string, object?> { ["Plate"] = "ABC123" }, domain);
+        var other = DomainEntityInstance.Create(permitE,
+            new Dictionary<string, object?> { ["Plate"] = "XYZ999" }, domain);
+        store.Add(existing);
+        store.Add(other);
+
+        var thrown = false;
+        try {
+            other.SetProperty("Plate", "ABC123");
+        }
+        catch (InvalidOperationException ex) {
+            thrown = true;
+            await Assert.That(ex.Message).Contains("Unique");
+        }
+        await Assert.That(thrown).IsTrue();
+        await Assert.That(other.GetProperty<string>("Plate")).IsEqualTo("XYZ999");
+    }
+
+    [Test]
     public async Task InvokeAction_RequireRelExists_BlocksWhenUnlinked() {
         var (domain, _) = Evolve("""
             domain Campus

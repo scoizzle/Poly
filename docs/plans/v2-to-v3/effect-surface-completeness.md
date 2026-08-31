@@ -3,7 +3,7 @@
 **Date:** 2026-07-18  
 **Revised:** 2026-07-19 (**E6** post-change code review — uncommitted DSL gap closure; suite **1398**)  
 **Status:** E1 **shipped**; E2.1 create-in only; E3a/E3b cross-entity invoke with quantifiers+filter + **DMEFF007** shape gates **DSL+RT shipped**; E4 conditional **DSL+RT shipped**; action params **DSL+RT shipped**; Q1′ authoring **complete**; arithmetic/`equals`/`enum`/inheritance/`owned` **DSL shipped** (suite **1425**)  
-**Current pick:** E6 follow-ups (RT goldens + hygiene) **or** query **Q3′** decision — [`dsl-query-surface.md`](dsl-query-surface.md) §15
+**Not CURRENT.** Historical E* completeness map. CURRENT: [`../simple-agent-tasks/PIPELINE-STATUS.md`](../simple-agent-tasks/PIPELINE-STATUS.md). E6 / Q3′ are not the agent pick.
 
 
 

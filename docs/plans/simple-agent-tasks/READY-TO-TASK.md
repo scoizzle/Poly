@@ -1,8 +1,8 @@
 # Plans ready for agent micro-tasks
 
-**Date:** 2026-08-25  
+**Date:** 2026-08-31  
 **Rule:** Trunk is `master`. Parallel streams with exclusive file ownership.  
-**CURRENT truth:** [`PIPELINE-STATUS.md`](./PIPELINE-STATUS.md) (only) — **CURRENT: `(none)` — parallel streams from `master`**.
+**CURRENT truth:** [`PIPELINE-STATUS.md`](./PIPELINE-STATUS.md) (only) — **CURRENT: `interpretation-language-engine (ile-0/1/2 VM↔LINQ parity gaps closed; ile-3 functions green)`**. ile-gate is not closed; do not invent a second CURRENT.
 
 ---
 
@@ -10,18 +10,15 @@
 
 | Priority | Suite | Status |
 |----------|--------|--------|
+| CURRENT | [`interpretation-language-engine-README.md`](./interpretation-language-engine-README.md) | **CURRENT** — ile-0/1/2/3 green; ile-gate not closed. Mirror [`PIPELINE-STATUS.md`](./PIPELINE-STATUS.md). |
 | — | [`gpure-README.md`](./gpure-README.md) | ✅ DONE 2026-08-07 |
 | — | [`mcp-minify-README.md`](./mcp-minify-README.md) | ✅ DONE 2026-08-08 |
 | — | emit-session | ✅ DONE 2026-08-24 (CompileMode seed-only honesty). Remaining lies: Temporal Meaning unused; RuntimeAnalysisCache core-catalog reopen. |
 | — | rewrite-to-master | ✅ DONE PR 26. Trunk is `master`. Plan: [`rewrite-to-master-2026-08-25.md`](./rewrite-to-master-2026-08-25.md). |
-| parked | [`mut-safety-README.md`](./mut-safety-README.md) | After pack-host |
+| parked | [`mut-safety-README.md`](./mut-safety-README.md) | THEN in PIPELINE-STATUS — not admitted |
 | 3a | [`p1-README.md`](./p1-README.md) | After pack-2-gate |
 
-```bash
-copilot --agent plan-suite-until-done -p "Suite: mut-safety. Mode: until-done."
-```
-
-**Suggested admit order (historical):** gpure → mcp-minify → **mut-safety** → p1.
+Admit order lives only in [`PIPELINE-STATUS.md`](./PIPELINE-STATUS.md) (`THEN` / `PARKED`). Do not treat mut-safety as admit-next.
 
 ---
 

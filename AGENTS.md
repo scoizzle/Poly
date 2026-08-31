@@ -142,6 +142,7 @@ Layout sketch: `Poly/` (core library), `Poly.Tests/` (TUnit), `Poly.Benchmarks/`
 - **TFM:** `net10.0`, nullable enabled.
 - **Build:** `dotnet build Poly.Benchmarks/Poly.Benchmarks.csproj`
 - **Test:** `dotnet run --project Poly.Tests/Poly.Tests.csproj`
+- **`dotnet test --nologo` is invalid here** (Microsoft.Testing.Platform). A local `dotnet test` run needs `-p:NuGetAudit=false` because NU1903 on SQLitePCLRaw.lib.e_sqlite3 2.1.11 is warning-as-error on the default audit path. Do not weaken NuGet audit in the repo.
 - **Restart MCP after code changes:** `scripts/restart-poly-mcp.sh` (rebuild + kill the running `poly-local` server so opencode relaunches it with the new build). Required to serve exporter/runtime fixes through the MCP tools.
 - Work is **not complete** while the build is failing (unless the user explicitly blocks).
 - Add tests with feature changes.

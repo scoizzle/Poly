@@ -1,6 +1,6 @@
 # Poly Platform — Project Summary for Agents
 
-**Date:** 2026-07-26  
+**Date:** 2026-08-31  
 **Purpose:** Quick onboarding for any agent new to the Poly codebase.
 
 ---
@@ -45,19 +45,23 @@ From [`AGENTS.md`](../AGENTS.md) — always read before non-trivial changes:
 | `src/Poly.DslCompiler/` | CLI compiler (poly → C#) | `DslCompiler.cs`, `MinimalApiGenerator.cs`, `DbContextGenerator.cs` |
 | `src/Poly.Packs.Sqlite/` | Sqlite pack (type maps, conventions) | `SqliteDefaults.cs` |
 
+**CURRENT work:** [`plans/simple-agent-tasks/PIPELINE-STATUS.md`](plans/simple-agent-tasks/PIPELINE-STATUS.md) only. Do not invent a second CURRENT.
+
 ## Pipeline Flow
 
 ```
 .poly DSL → PolyDslParser → DomainEvolution (apply changes, gate by analysis)
-  → DomainModelAnalyzer.Analyze (18-pass analysis pipeline)
-    → metadata: topology, aggregate, behavior, storage, ...
-  → DslCompiler.Compile (emits _all.cs, DbContext.cs, Program.cs, demo.http)
+  → DomainSession.Analyze (metadata: topology, aggregate, behavior, storage, ...)
+  → lower per operation → Interpreter.Compile → VM
+  → DslCompiler.Compile (emits _all.cs, DbContext.cs, Program.cs, demo.http) when emitting
 ```
 
 MCP path:
 ```
-apply_dsl → create_instance → link_instances → invoke_action → evaluate_policy
+apply_dsl → create_instance → link_instances → invoke_action → evaluate_policy(instanceId)
 ```
+
+Bag-mode `evaluate_policy(age|properties=)` is **removed**. Named-policy evaluate requires a store instance (`instanceId`).
 
 ## What's Shipped (1637 tests passing)
 
@@ -119,4 +123,5 @@ Per discussion 2026-07-26, Poly is ~2 days from an end-to-end demo alpha. The ga
 
 - `AGENTS.md` — placement rules, principles, coding style
 - `docs/CORE.md` — module boundaries, pipeline maps, anti-reinvention rules
+- `docs/plans/simple-agent-tasks/PIPELINE-STATUS.md` — sole CURRENT/DONE for suite admission
 - `.github/copilot-instructions.md` — DSL guide maintenance rule

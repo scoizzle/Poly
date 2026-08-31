@@ -667,4 +667,94 @@ public class ActionEntityReturnTests {
         await Assert.That(openTicket.GetProperty<object>("Flag")).IsEqualTo(2L);
     }
 
+    [Test]
+    public async Task Invoke_NestedInvokeFailure_FailFastsBeforeLaterEffects() {
+        var (domain, analysis) = Evolve("""
+            domain Shop
+            Item: entity {
+              Name: Text
+              Draft: stage { }
+            }
+            Cart: entity {
+              items: many Item
+              Flag: Number default(0)
+              AlwaysFail: policy { Flag > 99 }
+              Prep: action require AlwaysFail { assign Flag to 1 }
+              Place: action -> Item {
+                invoke Prep
+                assign Flag to 2
+                create in items { Name: "x" }
+              }
+            }
+            """);
+        await Assert.That(analysis.HasErrors).IsFalse();
+
+        var store = new DomainInstanceStore();
+        var cartEntity = domain.Types.OfType<Entity>().Single(e => e.Name == "Cart");
+        var cart = DomainEntityInstance.Create(cartEntity, domain: domain);
+        store.Add(cart);
+
+        var result = cart.InvokeAction("Place");
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(cart.GetProperty<object>("Flag")).IsEqualTo(0L);
+        await Assert.That(cart.CreatedChildren).IsEmpty();
+        await Assert.That(result.ResultInstance).IsNull();
+    }
+
+    [Test]
+    public async Task Invoke_NestedInvokeSuccess_RunsLaterEffectsAndReturnsProducer() {
+        var (domain, analysis) = Evolve("""
+            domain Shop
+            Item: entity {
+              Name: Text
+              Draft: stage { }
+            }
+            Cart: entity {
+              items: many Item
+              Flag: Number default(0)
+              Prep: action { assign Flag to 1 }
+              Place: action -> Item {
+                invoke Prep
+                assign Flag to 2
+                create in items { Name: "x" }
+              }
+            }
+            """);
+        await Assert.That(analysis.HasErrors).IsFalse();
+
+        var store = new DomainInstanceStore();
+        var cartEntity = domain.Types.OfType<Entity>().Single(e => e.Name == "Cart");
+        var cart = DomainEntityInstance.Create(cartEntity, domain: domain);
+        store.Add(cart);
+
+        var result = cart.InvokeAction("Place");
+        await Assert.That(result.Succeeded).IsTrue();
+        await Assert.That(cart.GetProperty<object>("Flag")).IsEqualTo(2L);
+        await Assert.That(result.ResultTypeName).IsEqualTo("Item");
+        await Assert.That(result.ResultInstance).IsNotNull();
+        await Assert.That(result.ResultInstance!.Entity.Name).IsEqualTo("Item");
+        await Assert.That(result.ResultInstance.GetProperty<string>("Name")).IsEqualTo("x");
+    }
+
+    [Test]
+    public async Task Invoke_TypeMismatchArg_FailsWithoutMutating() {
+        var errors = EvolveExpectingError("""
+            domain Shop
+            Widget: entity {
+              Used: Number default(0)
+              Apply: action (item: Widget) { assign Used to Used + 1 }
+            }
+            Gadget: entity { Name: Text required }
+            Host: entity {
+              widget: Widget
+              Open: stage {
+                Run: action (gadget: Gadget) {
+                  invoke widget.Apply(item: gadget)
+                }
+              }
+            }
+            """);
+        await Assert.That(errors).Contains("type mismatch in argument 'item' of invoke 'Apply'");
+    }
+
 }

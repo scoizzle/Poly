@@ -140,13 +140,15 @@ public sealed partial record DomainEntityInstance {
     }
 
     /// <summary>
-    /// Validates required/range/length/pattern constraints against the to-be-stored values,
-    /// mirroring the C# export's <c>Create</c> factory guards. Returns the first violation
-    /// message, or null when the values are valid. (Unique is store-aware and not checked here.)
+    /// Validates required/range/length/pattern/unique constraints against the to-be-stored
+    /// values, mirroring the C# export's <c>Create</c> factory guards. Returns the first
+    /// violation message, or null when the values are valid. Unique is checked only when
+    /// <paramref name="store"/> is set — before any mutate, not after <c>TryAdd</c>.
     /// </summary>
     private static string? ValidateConstraints(
         Entity entity,
-        IReadOnlyDictionary<string, object?> values) {
+        IReadOnlyDictionary<string, object?> values,
+        DomainInstanceStore? store = null) {
         foreach (var prop in entity.Properties) {
             values.TryGetValue(prop.Name, out var v);
             foreach (var constraint in prop.Constraints) {
@@ -177,6 +179,14 @@ public sealed partial record DomainEntityInstance {
                     case PatternConstraint pc:
                         if (v is string ps && !Regex.IsMatch(ps, pc.Pattern))
                             return $"'{prop.Name}' does not match the required pattern.";
+                        break;
+                    case UniqueConstraint:
+                        if (store is not null && v is not null) {
+                            var unique = store.UniqueCollisionMessage(
+                                entity, values, except: null, candidate: null);
+                            if (unique is not null)
+                                return unique;
+                        }
                         break;
                 }
             }
@@ -307,16 +317,12 @@ public sealed partial record DomainEntityInstance {
                 $"Property '{name}' does not exist on entity '{Entity.Name}'. " +
                 $"Available: {string.Join(", ", _values.Keys)}.");
         if (Store is not null) {
-            var previous = _values[name];
-            _values[name] = value;
-            try {
-                Store.RejectUniqueCollision(this, except: this);
-            }
-            catch {
-                _values[name] = previous;
-                throw;
-            }
-            return;
+            var proposed = new Dictionary<string, object?>(_values, StringComparer.Ordinal) {
+                [name] = value
+            };
+            var unique = Store.UniqueCollisionMessage(Entity, proposed, except: this, candidate: this);
+            if (unique is not null)
+                throw new InvalidOperationException(unique);
         }
         _values[name] = value;
     }

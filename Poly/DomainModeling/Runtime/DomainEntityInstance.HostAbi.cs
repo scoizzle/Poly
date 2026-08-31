@@ -466,7 +466,7 @@ public sealed partial record DomainEntityInstance {
                 values[prop.Name] = null;
         }
 
-        return ValidateConstraints(targetEntity, values);
+        return ValidateConstraints(targetEntity, values, Store);
     }
 
     /// <summary>
@@ -535,6 +535,10 @@ public sealed partial record DomainEntityInstance {
                     $"Property '{binding.PropertyName}' does not exist on entity '{targetEntity.Name}'. " +
                     $"Available: {string.Join(", ", scalarNames)}.");
         }
+
+        var uniqueOrConstraint = ValidateConstraints(targetEntity, initialValues, Store);
+        if (uniqueOrConstraint is not null)
+            throw new InvalidOperationException(uniqueOrConstraint);
 
         var child = Create(targetEntity, initialValues, Domain);
         _createdChildren.Add(child);

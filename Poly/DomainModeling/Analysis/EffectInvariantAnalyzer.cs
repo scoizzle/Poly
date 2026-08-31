@@ -77,7 +77,7 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
             var merged = env.ToDictionary(kv => kv.Key, kv => (IReadOnlyList<Constraint>)kv.Value.Constraints, StringComparer.Ordinal);
             var postconditions = new List<EffectPostcondition>();
             var visited = new HashSet<Action>(ReferenceEqualityComparer.Instance) { action };
-            ApplyEffects(action.Effects, entity, action, env, paramEnv: null, visited, postconditions, domain);
+            ApplyEffects(action.Effects, entity, action, env, paramEnv: null, visited, postconditions, domain, stageName);
             contexts.Add(new ActionStageInvariant(stageName, preconditions, narrowed, merged, postconditions));
         }
         context.SetMetadata(action, new ActionInvariantMetadata(contexts));
@@ -272,7 +272,8 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
         IReadOnlyList<Effect> effects, Entity entity, Action action,
         Dictionary<string, AbstractValue> env,
         IReadOnlyDictionary<string, AbstractValue>? paramEnv,
-        HashSet<Action> visited, List<EffectPostcondition> result, Domain domain) {
+        HashSet<Action> visited, List<EffectPostcondition> result, Domain domain,
+        string? currentStage) {
         foreach (var effect in effects) {
             switch (effect) {
                 case AssignEffect { Target: PropertyAccess target } assign: {
@@ -291,18 +292,18 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
                 case ConditionalEffect cond:
                     var thenEnv = CloneEnv(env);
                     Refine(thenEnv, cond.Condition);
-                    ApplyEffects(cond.ThenEffects, entity, action, thenEnv, paramEnv, visited, result, domain);
+                    ApplyEffects(cond.ThenEffects, entity, action, thenEnv, paramEnv, visited, result, domain, currentStage);
                     if (cond.ElseEffects is not null) {
                         var elseEnv = CloneEnv(env);
                         RefineNegated(elseEnv, cond.Condition);
-                        ApplyEffects(cond.ElseEffects, entity, action, elseEnv, paramEnv, visited, result, domain);
+                        ApplyEffects(cond.ElseEffects, entity, action, elseEnv, paramEnv, visited, result, domain, currentStage);
                     }
                     break;
                 case CompositeEffect composite:
-                    ApplyEffects(composite.Effects, entity, action, env, paramEnv, visited, result, domain);
+                    ApplyEffects(composite.Effects, entity, action, env, paramEnv, visited, result, domain, currentStage);
                     break;
                 case InvokeActionEffect invoke:
-                    ApplyInvoke(invoke, entity, action, env, paramEnv, visited, result, domain);
+                    ApplyInvoke(invoke, entity, action, env, paramEnv, visited, result, domain, currentStage);
                     break;
                 case ForEachInvokeEffect efe:
                     ApplyForEachInvoke(efe, entity, action, env, paramEnv, visited, result, domain);
@@ -319,13 +320,14 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
         InvokeActionEffect invoke, Entity entity, Action action,
         Dictionary<string, AbstractValue> env,
         IReadOnlyDictionary<string, AbstractValue>? paramEnv,
-        HashSet<Action> visited, List<EffectPostcondition> result, Domain domain) {
+        HashSet<Action> visited, List<EffectPostcondition> result, Domain domain,
+        string? currentStage) {
         if (invoke.TargetRelationship is not null) {
             ApplyCrossEntityInvoke(invoke, entity, action, env, paramEnv, visited, result, domain);
             return;
         }
 
-        var target = DomainAnalysis.FindAction(entity, invoke.ActionName);
+        var target = DomainAnalysis.FindAction(entity, invoke.ActionName, currentStage);
         if (target is null || !visited.Add(target)) return;
 
         var targetEnv = CloneEnv(env);
@@ -339,7 +341,7 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
                 targetParams[binding.PropertyName] = Eval(binding.Expression, entity, action, env, paramEnv);
         }
 
-        ApplyEffects(target.Effects, entity, target, targetEnv, targetParams, visited, result, domain);
+        ApplyEffects(target.Effects, entity, target, targetEnv, targetParams, visited, result, domain, currentStage);
     }
 
     /// <summary>Cross-entity invoke: build the related entity's environment (declared
@@ -374,7 +376,7 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
                 targetParams[binding.PropertyName] = Eval(binding.Expression, entity, action, env, paramEnv);
         }
 
-        ApplyEffects(targetAction.Effects, targetEntity, targetAction, targetEnv, targetParams, visited, result, domain);
+        ApplyEffects(targetAction.Effects, targetEntity, targetAction, targetEnv, targetParams, visited, result, domain, currentStage: null);
     }
 
     /// <summary>Fan-out invoke (<c>for Rel as x [where x.Policy] invoke x.Action</c>): build
@@ -416,7 +418,7 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
                 targetParams[binding.PropertyName] = Eval(binding.Expression, entity, action, env, paramEnv);
         }
 
-        ApplyEffects(targetAction.Effects, targetEntity, targetAction, targetEnv, targetParams, visited, result, domain);
+        ApplyEffects(targetAction.Effects, targetEntity, targetAction, targetEnv, targetParams, visited, result, domain, currentStage: null);
     }
 
     private static Dictionary<string, AbstractValue> CloneEnv(Dictionary<string, AbstractValue> env) =>

@@ -637,4 +637,35 @@ public class ConstraintPropagationEffectTests {
         await Assert.That(Convert.ToDouble(net.Minimum)).IsEqualTo(0d);
         await Assert.That(Convert.ToDouble(net.Maximum)).IsEqualTo(100d);
     }
+    [Test]
+    public async Task CallChain_TwoStageCancels_EntityInvoke_DoesNotPickFirstStage() {
+        var result = Parse("""
+            domain Tickets
+            Ticket: entity {
+              Flag: Number default(0)
+              Draft: stage {
+                Cancel: action { assign Flag to 1 }
+                OpenIt: action { transition to Open }
+              }
+              Open: stage {
+                Cancel: action { assign Flag to 2 }
+              }
+              Closed: stage { }
+              Abort: action { invoke Cancel }
+            }
+            """);
+        await Assert.That(result.Succeeded).IsTrue();
+        var entity = result.Root.Types.OfType<Entity>().Single(e => e.Name == "Ticket");
+        var abort = entity.Actions.Single(x => x.Name == "Abort");
+        var abortInv = result.Analysis.GetActionInvariants(abort);
+        await Assert.That(abortInv).IsNotNull();
+
+        var draftCtx = abortInv!.StageContexts().Single(c => c.StageName == "Draft");
+        var openCtx = abortInv.StageContexts().Single(c => c.StageName == "Open");
+        var draftPost = draftCtx.Postconditions.Single(p => p.TargetProperty == "Flag");
+        var openPost = openCtx.Postconditions.Single(p => p.TargetProperty == "Flag");
+        await Assert.That(draftPost.ValueRange!.Max).IsEqualTo(1d);
+        await Assert.That(openPost.ValueRange!.Max).IsEqualTo(2d);
+    }
+
 }

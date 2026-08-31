@@ -546,23 +546,32 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
 
         // The Create factory now returns DomainResult<T> with constraint validation.
         // Unwrap: var fineResult = Fine.Create(...);
-        //         if (!fineResult.IsSuccess) throw ...;
+        //         if (!fineResult.IsSuccess) return Failure(...);
         //         var fine = fineResult.Value;
+        // Same Failure shape as create-in — do not throw after prior assigns.
         var targetName = DomainToCSharpExporter.ToCamelCase(targetEntity.Name);
         var resultVar = new Variable($"{targetName}Result");
         var targetVar = new Variable(targetName);
+        var resultType = _context.ActionResultType;
         var nds = new List<Node>();
 
         nds.Add(new Assignment(resultVar, createCall));
 
+        Node failureStmt = resultType is not null
+            ? new Return(
+                new Invoke(
+                    new Member(resultType, "Failure"),
+                    new Syntactic.Coalesce(
+                        new Member(resultVar, "ErrorMessage"),
+                        new Constant(""))))
+            : new ThrowStatement(
+                new New(
+                    new NamedTypeReference("InvalidOperationException"),
+                    new Member(resultVar, "ErrorMessage")));
+
         nds.Add(new IfStatement(
             new Ast.Nodes.Not(new Member(resultVar, "IsSuccess")),
-            new Block(new Node[] {
-                new ThrowStatement(
-                    new New(
-                        new NamedTypeReference("InvalidOperationException"),
-                        new Member(resultVar, "ErrorMessage")))
-            })));
+            new Block([failureStmt])));
 
         nds.Add(new Assignment(targetVar, new Member(resultVar, "Value")));
 
@@ -680,19 +689,21 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     }
 
     private void CollectCreateInProbes(IReadOnlyList<Effect> effects, List<Node> nodes) {
+        // Same set as runtime PrevalidateUnconditionalCreates: CompositeEffect +
+        // unconditional create / create-in. Do not walk ConditionalEffect — an
+        // illegal initializer on an untaken then-branch must not fail the action.
         foreach (var effect in effects) {
             switch (effect) {
                 case CompositeEffect composite:
                     CollectCreateInProbes(composite.Effects, nodes);
                     break;
-                case ConditionalEffect cond:
-                    CollectCreateInProbes(cond.ThenEffects, nodes);
-                    if (cond.ElseEffects is not null)
-                        CollectCreateInProbes(cond.ElseEffects, nodes);
-                    break;
                 case CreateEntityInRelationshipEffect cr:
                     if (LowerCreateInProbe(cr) is { } probe)
                         nodes.Add(probe);
+                    break;
+                case CreateEntityInstance cei:
+                    if (LowerCreateEntityInstanceProbe(cei) is { } createProbe)
+                        nodes.Add(createProbe);
                     break;
             }
         }
@@ -719,9 +730,16 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         var autoWireBackRef = DomainToCSharpExporter.FindAutoWireBackReference(targetEntity, _entity.Name);
         foreach (var parameter in parameterMetadata) {
             if (parameter.IsCollection) continue;
-            if (parameter.IsBackReference
-                || (autoWireBackRef is not null
-                    && string.Equals(parameter.Name, autoWireBackRef.Name, StringComparison.Ordinal))) {
+            if (parameter.IsBackReference) {
+                // Self-rel slot (Account.parent) is `this` only when *this* entity is
+                // that type. Contact.create-in account must not pass a Contact as Account.
+                args.Add(string.Equals(_entity.Name, targetEntity.Name, StringComparison.Ordinal)
+                    ? Subject
+                    : new Constant(null));
+                continue;
+            }
+            if (autoWireBackRef is not null
+                && string.Equals(parameter.Name, autoWireBackRef.Name, StringComparison.Ordinal)) {
                 args.Add(Subject);
                 continue;
             }
@@ -732,6 +750,19 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         }
         AppendDefaultedPropArgs(args, initMap, targetEntity);
 
+        return LowerCreateConstraintProbe(targetEntity, args);
+    }
+
+    private Block? LowerCreateEntityInstanceProbe(CreateEntityInstance cei) {
+        if (!_lowerStageTransitions || _domain is null)
+            return null;
+        var targetEntity = ResolveEntity(cei.Type.TypeName);
+        if (targetEntity is null) return null;
+        var args = BuildConstructorArgs(cei.Initializers, targetEntity);
+        return LowerCreateConstraintProbe(targetEntity, args);
+    }
+
+    private Block LowerCreateConstraintProbe(Entity targetEntity, List<Node> args) {
         var probe = new Variable($"probe{_createInProbeSequence++}");
         var resultType = _context.ActionResultType ?? new NamedTypeReference("DomainResult");
         var targetType = new NamedTypeReference(targetEntity.Name);

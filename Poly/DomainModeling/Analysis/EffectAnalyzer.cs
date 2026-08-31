@@ -48,7 +48,7 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
 
         DomainAnalysis.ForEachEntity(domain, entity => {
             foreach (var action in entity.Actions) {
-                ValidateEffects(context, action.Effects, action, entity, domain, lookup);
+                ValidateEffects(context, action.Effects, action, entity, domain, lookup, currentStage: null);
                 ValidateUnsatisfiedRequirements(context, action, entity, lookup);
                 ValidateActionParameterUsage(context, action);
                 ValidateActionReturnProducer(context, action, entity, domain, lookup);
@@ -56,10 +56,10 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
                 ValidateCallChainPostconditions(context, action, entity);
             }
             foreach (var stage in entity.Stages) {
-                ValidateEffects(context, stage.OnEntryEffects, null, entity, domain, lookup);
-                ValidateEffects(context, stage.OnExitEffects, null, entity, domain, lookup);
+                ValidateEffects(context, stage.OnEntryEffects, null, entity, domain, lookup, stage.Name);
+                ValidateEffects(context, stage.OnExitEffects, null, entity, domain, lookup, stage.Name);
                 foreach (var action in stage.Actions) {
-                    ValidateEffects(context, action.Effects, action, entity, domain, lookup);
+                    ValidateEffects(context, action.Effects, action, entity, domain, lookup, stage.Name);
                     ValidateUnsatisfiedRequirements(context, action, entity, lookup);
                     ValidateActionParameterUsage(context, action);
                     ValidateActionReturnProducer(context, action, entity, domain, lookup);
@@ -296,10 +296,11 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
         Action? action,
         Entity entity,
         Domain domain,
-        DomainTypeLookupMetadata lookup) {
+        DomainTypeLookupMetadata lookup,
+        string? currentStage) {
         // ── Per-effect validation ─────────────────────────────
         foreach (var effect in effects) {
-            ValidateEffect(context, effect, action, entity, domain, lookup);
+            ValidateEffect(context, effect, action, entity, domain, lookup, currentStage);
         }
     }
 
@@ -309,8 +310,9 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
         Action? action,
         Entity entity,
         Domain domain,
-        DomainTypeLookupMetadata lookup) =>
-        new EffectValidationDispatch(context, action, entity, domain, lookup).Route(effect);
+        DomainTypeLookupMetadata lookup,
+        string? currentStage) =>
+        new EffectValidationDispatch(context, action, entity, domain, lookup, currentStage).Route(effect);
 
     /// <summary>
     /// Per-effect validation routed through <see cref="EffectDispatch{TResult}"/>
@@ -324,7 +326,8 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
         Action? action,
         Entity entity,
         Domain domain,
-        DomainTypeLookupMetadata lookup)
+        DomainTypeLookupMetadata lookup,
+        string? currentStage)
         : EffectDispatch<object?> {
         protected override object? Default() => null;
 
@@ -344,7 +347,7 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
         }
 
         protected override object? InvokeAction(InvokeActionEffect e) {
-            ValidateInvokeAction(context, e, entity, domain);
+            ValidateInvokeAction(context, e, entity, domain, currentStage);
             return null;
         }
 
@@ -359,9 +362,9 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
         }
 
         protected override object? Conditional(ConditionalEffect e) {
-            ValidateEffects(context, e.ThenEffects, action, entity, domain, lookup);
+            ValidateEffects(context, e.ThenEffects, action, entity, domain, lookup, currentStage);
             if (e.ElseEffects is not null) {
-                ValidateEffects(context, e.ElseEffects, action, entity, domain, lookup);
+                ValidateEffects(context, e.ElseEffects, action, entity, domain, lookup, currentStage);
             }
             // DMEFF006: warn if the conditional contains direct-execution effects
             // that would be silently dropped by EffectLoweringPass
@@ -372,7 +375,7 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
         }
 
         protected override object? Composite(CompositeEffect e) {
-            ValidateEffects(context, e.Effects, action, entity, domain, lookup);
+            ValidateEffects(context, e.Effects, action, entity, domain, lookup, currentStage);
             // DMEFF006: warn if composite contains direct-execution effects
             // that would be silently dropped by EffectLoweringPass
             WarnNestedDirectEffects(context, "CompositeEffect", e.Effects);
@@ -836,7 +839,8 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
         }
 
         // Action must exist on the target (entity or stage actions).
-        var targetAction = DomainAnalysis.FindAction(targetEntity, efe.ActionName);
+        var targetAction = DomainAnalysis.FindAction(targetEntity, efe.ActionName)
+            ?? DomainAnalysis.FindAnyNamedAction(targetEntity, efe.ActionName);
         if (targetAction is null) {
             context.ReportError(
                 efe,
@@ -895,7 +899,8 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
     };
 
     private static void ValidateInvokeAction(
-        AnalysisContext context, InvokeActionEffect iae, Entity entity, Domain domain) {
+        AnalysisContext context, InvokeActionEffect iae, Entity entity, Domain domain,
+        string? currentStage) {
         // Fail-closed policy: reject ambiguous/unanalyzed shapes now; relax only when
         // analyzers can prove the edge case is safe (see guide + effect-surface plan).
         var hasRel = iae.TargetRelationship is not null;
@@ -995,7 +1000,10 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
             targetEntity = entity;
         }
 
-        var targetAction = DomainAnalysis.FindAction(targetEntity, iae.ActionName);
+        var dispatchStage = iae.TargetRelationship is null ? currentStage : null;
+        var targetAction = DomainAnalysis.FindAction(targetEntity, iae.ActionName, dispatchStage);
+        if (targetAction is null && dispatchStage is null)
+            targetAction = DomainAnalysis.FindAnyNamedAction(targetEntity, iae.ActionName);
         if (targetAction is null) {
             context.ReportError(
                 iae,

@@ -2152,4 +2152,143 @@ public class DomainToCSharpExporterTests {
             () => new DomainToCSharpExporter().Export(domain, analysis));
         await Assert.That(ex!.Message).Contains("Subscription dispatch plan metadata is missing");
     }
+
+    [Test]
+    public async Task Export_ConditionalCreateIn_DoesNotProbeUntakenBranch() {
+        var (domain, analysis) = ParseAndAnalyze("""
+            domain Hotel
+            Stay: entity {
+              Nights: Number range(1, 21) required
+            }
+            Guest: entity {
+              OpenStays: Number default(0)
+              stays: many Stay
+              Book: action (nights: Number, confirm: Boolean) {
+                if (confirm is true) {
+                  create in stays { Nights: nights }
+                }
+                assign OpenStays to OpenStays + 1
+              }
+            }
+            """);
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var unit = new CompilationUnitNode([], null, types, null);
+        var cs = new CSharpGenerator().Generate(unit);
+
+        var bookIdx = cs.IndexOf("public DomainResult Book(", StringComparison.Ordinal);
+        var assignIdx = cs.IndexOf("this.OpenStays = this.OpenStays + 1L", bookIdx);
+        var probeIdx = cs.IndexOf("Stay.Create(nights)", bookIdx);
+        await Assert.That(bookIdx).IsGreaterThan(-1);
+        await Assert.That(assignIdx).IsGreaterThan(bookIdx);
+        // Probe of the then-branch create-in must not run before the if (or at all
+        // at method scope). Stay.Create inside CreateStays is after Book.
+        if (probeIdx >= 0)
+            await Assert.That(probeIdx).IsGreaterThan(assignIdx);
+    }
+
+    [Test]
+    public async Task Export_Create_ProbesConstraintsBeforePriorAssigns() {
+        var (domain, analysis) = ParseAndAnalyze("""
+            domain Hotel
+            Stay: entity {
+              Nights: Number range(1, 21) required
+            }
+            Guest: entity {
+              OpenStays: Number default(0)
+              Book: action (nights: Number) {
+                assign OpenStays to OpenStays + 1
+                create Stay { Nights: nights }
+              }
+            }
+            """);
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var unit = new CompilationUnitNode([], null, types, null);
+        var cs = new CSharpGenerator().Generate(unit);
+
+        var bookIdx = cs.IndexOf("public DomainResult Book(", StringComparison.Ordinal);
+        var probeIdx = cs.IndexOf("Stay.Create(nights)", bookIdx);
+        var assignIdx = cs.IndexOf("this.OpenStays = this.OpenStays + 1L", bookIdx);
+        await Assert.That(probeIdx).IsGreaterThan(bookIdx);
+        await Assert.That(assignIdx).IsGreaterThan(probeIdx);
+        await Assert.That(cs).DoesNotContain("throw new InvalidOperationException(stayResult.ErrorMessage)");
+    }
+
+    [Test]
+    public async Task Export_ContactCreateInAccount_ProbePassesNullNotThis() {
+        var (domain, analysis) = ParseAndAnalyze("""
+            domain CrmTiny
+            Account: entity {
+              Name: Text required
+              parent: Account
+            }
+            Contact: entity {
+              Name: Text required
+              account: owned Account
+              OpenAccount: action (name: Text) {
+                create in account { Name: name }
+              }
+            }
+            """);
+        await Assert.That(analysis.HasErrors).IsFalse();
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var unit = new CompilationUnitNode([], null, types, null);
+        var cs = new CSharpGenerator().Generate(unit);
+
+        var openIdx = cs.IndexOf("public DomainResult OpenAccount(", StringComparison.Ordinal);
+        await Assert.That(openIdx).IsGreaterThan(-1);
+        var createAccountIdx = cs.IndexOf("private DomainResult<Account> CreateAccount(", StringComparison.Ordinal);
+        var openEnd = createAccountIdx > openIdx ? createAccountIdx : cs.Length;
+        var openCs = cs[openIdx..openEnd];
+        await Assert.That(openCs).DoesNotContain("Account.Create(name, this)");
+        await Assert.That(openCs).Contains("Account.Create(name, null)");
+        var errors = CompileExported(cs);
+        await Assert.That(errors).IsEmpty();
+    }
+
+    [Test]
+    public async Task Export_EntityInvokeOfStageCancels_CallsCancelNotFirstStageBody() {
+        var (domain, analysis) = ParseAndAnalyze("""
+            domain Tickets
+            Ticket: entity {
+              Flag: Number default(0)
+              Draft: stage {
+                Cancel: action { assign Flag to 1 }
+                OpenIt: action { transition to Open }
+              }
+              Open: stage {
+                Cancel: action { assign Flag to 2 }
+              }
+              Closed: stage { }
+              Abort: action { invoke Cancel }
+            }
+            """);
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var unit = new CompilationUnitNode([], null, types, null);
+        var cs = new CSharpGenerator().Generate(unit);
+
+        var abortIdx = cs.IndexOf("public DomainResult Abort(", StringComparison.Ordinal);
+        var cancelCall = cs.IndexOf("this.Cancel()", abortIdx);
+        await Assert.That(abortIdx).IsGreaterThan(-1);
+        await Assert.That(cancelCall).IsGreaterThan(abortIdx);
+        await Assert.That(cs).Contains("this.Flag = 1L");
+        await Assert.That(cs).Contains("this.Flag = 2L");
+    }
+
+
+    private static string[] CompileExported(string cs) {
+        var tree = CSharpSyntaxTree.ParseText("#nullable enable\n" + cs);
+        var references = ((string?)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES"))
+            ?.Split(Path.PathSeparator)
+            .Select(p => (MetadataReference)MetadataReference.CreateFromFile(p))
+            .ToArray() ?? [];
+        var compilation = CSharpCompilation.Create(
+            "Pr39Export",
+            [tree],
+            references,
+            new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+        return compilation.GetDiagnostics()
+            .Where(d => d.Severity == Microsoft.CodeAnalysis.DiagnosticSeverity.Error)
+            .Select(d => d.ToString())
+            .ToArray();
+    }
 }

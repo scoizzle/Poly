@@ -32,10 +32,11 @@ internal sealed class ConstraintPropagationAnalyzer : INodeAnalyzer {
     }
 
     private static void AnalyzeAction(AnalysisContext context, Action action, Entity entity) {
+        var currentStage = DomainAnalysis.StageNameOf(entity, action);
         foreach (var param in action.Parameters) {
             var visited = new HashSet<Effect>(ReferenceEqualityComparer.Instance);
             var constraints = new List<Constraint>();
-            CollectDownstreamConstraints(action.Effects, param, entity, constraints, visited);
+            CollectDownstreamConstraints(action.Effects, param, entity, constraints, visited, currentStage);
             if (constraints.Count > 0) {
                 context.SetMetadata(param, new DownstreamConstraintsMetadata(constraints.AsReadOnly()));
             }
@@ -47,19 +48,20 @@ internal sealed class ConstraintPropagationAnalyzer : INodeAnalyzer {
         Property param,
         Entity entity,
         List<Constraint> accumulated,
-        HashSet<Effect> visited) {
+        HashSet<Effect> visited,
+        string? currentStage) {
 
         foreach (var effect in effects) {
             if (!visited.Add(effect)) continue;
 
             switch (effect) {
                 case InvokeActionEffect iae:
-                    CollectFromInvokeAction(iae, param, entity, accumulated, visited);
+                    CollectFromInvokeAction(iae, param, entity, accumulated, visited, currentStage);
                     break;
                 case ConditionalEffect ce:
-                    CollectDownstreamConstraints(ce.ThenEffects, param, entity, accumulated, visited);
+                    CollectDownstreamConstraints(ce.ThenEffects, param, entity, accumulated, visited, currentStage);
                     if (ce.ElseEffects is not null) {
-                        CollectDownstreamConstraints(ce.ElseEffects, param, entity, accumulated, visited);
+                        CollectDownstreamConstraints(ce.ElseEffects, param, entity, accumulated, visited, currentStage);
                     }
                     break;
                 case AssignEffect ae:
@@ -74,10 +76,12 @@ internal sealed class ConstraintPropagationAnalyzer : INodeAnalyzer {
         Property param,
         Entity entity,
         List<Constraint> accumulated,
-        HashSet<Effect> visited) {
+        HashSet<Effect> visited,
+        string? currentStage) {
 
-        var targetAction = DomainAnalysis.FindAction(entity, iae.ActionName);
+        var targetAction = DomainAnalysis.FindAction(entity, iae.ActionName, currentStage);
         if (targetAction is null) return;
+        var nestedStage = DomainAnalysis.StageNameOf(entity, targetAction) ?? currentStage;
 
         foreach (var binding in iae.ParameterBindings) {
             if (!ExpressionReferencesParameter(binding.Expression, param.Name)) continue;
@@ -88,7 +92,7 @@ internal sealed class ConstraintPropagationAnalyzer : INodeAnalyzer {
                 accumulated.AddRange(targetParam.Constraints);
             }
 
-            CollectFromAction(targetAction, param, entity, accumulated, visited);
+            CollectFromAction(targetAction, param, entity, accumulated, visited, nestedStage);
         }
     }
 
@@ -132,7 +136,8 @@ internal sealed class ConstraintPropagationAnalyzer : INodeAnalyzer {
         Property param,
         Entity entity,
         List<Constraint> accumulated,
-        HashSet<Effect> visited) {
+        HashSet<Effect> visited,
+        string? currentStage) {
 
         foreach (var effect in target.Effects) {
             if (!visited.Add(effect)) continue;
@@ -142,15 +147,16 @@ internal sealed class ConstraintPropagationAnalyzer : INodeAnalyzer {
                     CollectFromAssign(ae, param, entity, accumulated);
                     break;
                 case InvokeActionEffect iae:
-                    var nestedTarget = DomainAnalysis.FindAction(entity, iae.ActionName);
+                    var nestedTarget = DomainAnalysis.FindAction(entity, iae.ActionName, currentStage);
                     if (nestedTarget is not null) {
-                        CollectFromAction(nestedTarget, param, entity, accumulated, visited);
+                        var nestedStage = DomainAnalysis.StageNameOf(entity, nestedTarget) ?? currentStage;
+                        CollectFromAction(nestedTarget, param, entity, accumulated, visited, nestedStage);
                     }
                     break;
                 case ConditionalEffect ce:
-                    CollectDownstreamConstraints(ce.ThenEffects, param, entity, accumulated, visited);
+                    CollectDownstreamConstraints(ce.ThenEffects, param, entity, accumulated, visited, currentStage);
                     if (ce.ElseEffects is not null) {
-                        CollectDownstreamConstraints(ce.ElseEffects, param, entity, accumulated, visited);
+                        CollectDownstreamConstraints(ce.ElseEffects, param, entity, accumulated, visited, currentStage);
                     }
                     break;
             }

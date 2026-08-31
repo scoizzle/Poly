@@ -363,7 +363,7 @@ public sealed partial record DomainEntityInstance {
     ///   <item>Execute each effect in declaration order:
     ///     <list type="bullet">
     ///       <item><b>VM-compiled</b> (<see cref="AssignEffect"/>, <see cref="CompositeEffect"/>, <see cref="ConditionalEffect"/>, <see cref="StageTransitionEffect"/>) → lowered to Syntax AST → compiled via <see cref="Interpreter.Compile"/> → executed via VM. StageTransition is Assignment of CurrentStage + Invoke Notify on This.</item>
-    ///       <item><b>Direct-execution</b> (<see cref="CreateEntityInstance"/>, <see cref="ForEachInvokeEffect"/>) → mutates instance state directly via EffectExecutor. Self-invoke and singular cross-entity invoke lower to <c>Invoke(Member(…))</c>.</item>
+    ///       <item><b>Direct-execution</b> (<see cref="CreateEntityInstance"/>, <see cref="ForEachInvokeEffect"/>) → mutates via CreateChildInstance / create-in (probes+Failure, not EffectExecutor). Self-invoke and singular cross-entity invoke lower to <c>Invoke(Member(…))</c>.</item>
     ///     </list>
     ///   </item>
     ///   <item>On <see cref="StageTransitionEffect"/>: lowered tree sets stage then <c>Invoke(Member(This, "Notify"))</c> (store fan-out in finally).</item>

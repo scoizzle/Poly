@@ -34,8 +34,8 @@ namespace Poly.DomainModeling.Lowering;
 /// </param>
 /// <param name="LowerStageTransitions">
 /// When true, create / create-in effects lower to C#-shaped Ast
-/// (factories, method calls). Defaults to false (runtime path keeps those on
-/// EffectExecutor). StageTransition and invoke (including for-invoke) always
+/// (factories, method calls). Defaults to false (runtime path executes them via
+/// CreateChildInstance / ExecuteCreateInRelationship, not EffectExecutor). StageTransition and invoke (including for-invoke) always
 /// lower — this flag does not gate them.
 /// </param>
 /// <param name="Domain">Optional domain reference for cross-entity type resolution.</param>

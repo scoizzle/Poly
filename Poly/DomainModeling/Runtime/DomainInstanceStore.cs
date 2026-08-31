@@ -282,20 +282,14 @@ public sealed class DomainInstanceStore {
                     t.CurrentStage is not null
                     && entry.StageNames.Any(sn =>
                         string.Equals(sn, t.CurrentStage, StringComparison.Ordinal)));
-                var othersMatched = allLinkedTargets.Count(t =>
-                    !ReferenceEquals(t, transitionedInstance)
-                    && t.CurrentStage is not null
-                    && entry.StageNames.Any(sn =>
-                        string.Equals(sn, t.CurrentStage, StringComparison.Ordinal)));
 
-                // Rising edge: Any fires when the set becomes non-empty; All fires
-                // when the last linked target enters. Level-triggered matchedCount
-                // re-fired on every later peer (University waitlist OfferedSeats).
+                // Any: fires once per transition of a linked target into a matching
+                // stage (the transitioned instance is always matched — the stage
+                // filter above guarantees it). All: fires once when every linked
+                // target is in a matching stage — the last one entering triggers it.
                 bool shouldFire = entry.Quantifier switch {
-                    StageSubscriptionQuantifier.Any => matchedCount >= 1 && othersMatched == 0,
-                    StageSubscriptionQuantifier.All =>
-                        matchedCount == allLinkedTargets.Count
-                        && othersMatched == allLinkedTargets.Count - 1,
+                    StageSubscriptionQuantifier.Any => matchedCount >= 1,
+                    StageSubscriptionQuantifier.All => matchedCount == allLinkedTargets.Count,
                     _ => false
                 };
 

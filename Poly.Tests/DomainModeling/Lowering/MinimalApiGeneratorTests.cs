@@ -414,4 +414,43 @@ public class MinimalApiGeneratorTests {
         var order = result.Files!.Single(f => f.FileName == "Order.cs").Source;
         await Assert.That(order).Contains("BillingAdapters.Charge(request)");
     }
+
+    [Test]
+    public async Task SharedActionName_QualifiesDtosPerEntity() {
+        // CRM seam: Log/AddLine exist on several entities AND on multiple stages of the
+        // same entity (stage-scoped actions are listed once per declaring stage). A plain
+        // {Action}Dto would emit duplicate type definitions in one Program.cs (CS0101);
+        // the generator qualifies colliding action DTOs as {Entity}{Action}Dto, emits
+        // one per (entity, action), and each endpoint binds its own.
+        var d = ParseDomain("""
+            domain T
+            Quote: entity {
+              Log: action (subject: Text) { }
+            }
+            Order: entity {
+              Log: action (subject: Text) { }
+            }
+            Opportunity: entity {
+              Draft: stage {
+                Log: action (subject: Text) { }
+                AddLine: action (sku: Text, qty: Number) { }
+              }
+              Open: stage {
+                Log: action (subject: Text) { }
+                AddLine: action (sku: Text, qty: Number) { }
+              }
+            }
+            """);
+        var unit = IrUnit(d);
+        await Assert.That(unit.FindType("QuoteLogDto")).IsNotNull();
+        await Assert.That(unit.FindType("OrderLogDto")).IsNotNull();
+        await Assert.That(unit.FindType("OpportunityLogDto")).IsNotNull();
+        await Assert.That(unit.FindType("OpportunityAddLineDto")).IsNotNull();
+        await Assert.That(unit.FindType("LogDto")).IsNull();
+        await Assert.That(unit.FindType("AddLineDto")).IsNull();
+        // One DTO per (entity, action) — stage-scoped duplicates collapse.
+        var types = unit.Types.Select(t => t.Name).ToList();
+        await Assert.That(types.Count(n => n == "OpportunityLogDto")).IsEqualTo(1);
+        await Assert.That(types.Count(n => n == "OpportunityAddLineDto")).IsEqualTo(1);
+    }
 }

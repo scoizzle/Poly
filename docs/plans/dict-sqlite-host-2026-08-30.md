@@ -26,9 +26,11 @@ Simulation cost is a second product, not missing SQLite or dummy dictionaries.
 Already true (do not rebuild):
 
 - `This` is dictionary-backed (`TypeDefinitionNodeAnalyzer` → `IDictionary<string, object?>`)
-- Create **call sites** are `SetCreateValue` + `CreateChild` on both paths (`LowerStageTransitions` / `EffectExecutor` are gone)
+- StageTransition / self-invoke / cross-entity / for-invoke lower to Syntax on the runtime path
 - Clocks lower to `DateTime.UtcNow` / `DateOnly.FromDateTime` (VM executes type-name static members)
 - Core `Poly/` has zero NuGet deps — SQLite **implementation** stays out of `Poly.dll`
+
+Still dual-path (do not grow; P1–P2 do not close this): create / create-in still go through `EffectExecutor` on runtime. Do not add `SetCreateValue`/`CreateChild` as a new host protocol — that is P3 after this bet, and the wrong shape (`Insert`+`Link`).
 
 ---
 

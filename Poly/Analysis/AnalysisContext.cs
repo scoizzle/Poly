@@ -18,9 +18,18 @@ public sealed class AnalysisContext : INodeMetadataProvider {
     /// Initializes a new instance with type definitions.
     /// </summary>
     public AnalysisContext(ITypeDefinitionProvider typeDefinitions, AnalysisSettings? settings = null) {
-        TypeDefinitions = typeDefinitions is TypeDefinitionProviderCollection tpc
-            ? tpc
-            : new TypeDefinitionProviderCollection(typeDefinitions);
+        ArgumentNullException.ThrowIfNull(typeDefinitions);
+        var clr = Introspection.CommonLanguageRuntime.ClrTypeDefinitionRegistry.Shared;
+        if (typeDefinitions is TypeDefinitionProviderCollection tpc) {
+            TypeDefinitions = tpc;
+            tpc.AddFallback(clr);
+        }
+        else if (ReferenceEquals(typeDefinitions, clr)) {
+            TypeDefinitions = new TypeDefinitionProviderCollection(clr);
+        }
+        else {
+            TypeDefinitions = new TypeDefinitionProviderCollection(typeDefinitions, clr);
+        }
         Metadata = new NodeMetadataStore();
         _diagnostics = new ConcurrentQueue<Diagnostic>();
         Settings = settings ?? AnalysisSettings.Default;

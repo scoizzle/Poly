@@ -64,6 +64,19 @@ public class DomainEntityInstanceTests {
     }
 
     [Test]
+    public async Task EvaluatePolicy_OccurredAtBeforeNow_ReturnsTrue() {
+        var occurred = new Property("OccurredAt", new DomainTypeReference("DateTime"), []);
+        var isPast = new Policy("IsPast",
+            DomainExpression.LessThanOrEqual(
+                DomainExpression.Property("OccurredAt"),
+                new Poly.DomainModeling.Libraries.Temporal.Now()));
+        var entity = new Entity("Event", [occurred], [], [isPast], []);
+        var instance = DomainEntityInstance.Create(entity,
+            new Dictionary<string, object?> { ["OccurredAt"] = DateTime.UtcNow.AddHours(-1) });
+        await Assert.That(instance.EvaluatePolicy(isPast)).IsTrue();
+    }
+
+    [Test]
     public async Task EvaluatePolicy_CoercesIntToLong() {
         var entity = CreatePersonEntity();
         // Store Age as int — coercion should handle it

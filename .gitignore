@@ -483,3 +483,7 @@ $RECYCLE.BIN/
 
 # C# language server cache
 *.lscache
+
+# Local generated artifacts (not product source)
+.tmp-*/
+*.db

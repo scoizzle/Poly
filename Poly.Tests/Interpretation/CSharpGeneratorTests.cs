@@ -6,6 +6,12 @@ namespace Poly.Tests.Interpretation;
 
 public class CSharpGeneratorTests {
     [Test]
+    public async Task Generate_KeywordVariable_PrefixesAtSign() {
+        var result = new CSharpGenerator().Generate(new Variable("case"));
+        await Assert.That(result).IsEqualTo("@case;");
+    }
+
+    [Test]
     public async Task Generate_ConstantInt_ProducesLiteral() {
         var node = new Constant(42);
         var result = new CSharpGenerator().Generate(node);
@@ -83,6 +89,17 @@ public class CSharpGeneratorTests {
     }
 
     [Test]
+    public async Task Generate_MultiplyOfSubtract_ParenthesizesSubtract() {
+        var node = new Divide(
+            new Multiply(
+                new Constant(100L),
+                new Subtract(new Constant(100L), new Parameter("pct"))),
+            new Constant(100L));
+        var result = new CSharpGenerator().Generate(node);
+        await Assert.That(result).IsEqualTo("100L * (100L - pct) / 100L;");
+    }
+
+    [Test]
     public async Task Generate_NestedArithmetic_ProducesCorrectOrder() {
         var node = new Add(new Multiply(new Constant(3), new Constant(4)), new Constant(5));
         var result = new CSharpGenerator().Generate(node);
@@ -121,6 +138,45 @@ public class CSharpGeneratorTests {
         var or = new CSharpGenerator().Generate(new Or(new Constant(true), new Constant(false)));
         await Assert.That(and).IsEqualTo("true && false;");
         await Assert.That(or).IsEqualTo("true || false;");
+    }
+
+    [Test]
+    public async Task Generate_MixedBitwiseLogical_ParenthesizesToCSpec() {
+        // C# binds & > ^ > | > && > ||. Distinct ranks must parenthesize any child
+        // that would be re-grouped by the C# parser.
+        var a = new Variable("a");
+        var b = new Variable("b");
+        var c = new Variable("c");
+
+        // |(&&) → (a && b) | c, not `a && b | c` (= a && (b | c) in C#).
+        await Assert.That(new CSharpGenerator().Generate(
+            new BitwiseOr(new And(a, b), c))).IsEqualTo("(a && b) | c;");
+
+        // ^(|) → a & b ^ (c | d), not `a & b ^ c | d` (= ((a & b) ^ c) | d).
+        await Assert.That(new CSharpGenerator().Generate(
+            new BitwiseXor(new BitwiseAnd(a, b), new BitwiseOr(c, new Variable("d")))))
+            .IsEqualTo("a & b ^ (c | d);");
+
+        // |(||) → (a || b) | c.
+        await Assert.That(new CSharpGenerator().Generate(
+            new BitwiseOr(new Or(a, b), c))).IsEqualTo("(a || b) | c;");
+
+        // &&(|) stays tight on the left: a | b && c (a | b binds first).
+        await Assert.That(new CSharpGenerator().Generate(
+            new And(new BitwiseOr(a, b), c))).IsEqualTo("a | b && c;");
+    }
+
+    [Test]
+    public async Task Generate_NestedLeftAssociativeShifts_ParenthesizesRightChild() {
+        var a = new Variable("a");
+        var b = new Variable("b");
+        var c = new Variable("c");
+        await Assert.That(new CSharpGenerator().Generate(
+            new ShiftLeft(a, new ShiftLeft(b, c)))).IsEqualTo("a << (b << c);");
+        await Assert.That(new CSharpGenerator().Generate(
+            new ShiftRight(a, new ShiftRight(b, c)))).IsEqualTo("a >> (b >> c);");
+        await Assert.That(new CSharpGenerator().Generate(
+            new ShiftLeft(new ShiftLeft(a, b), c))).IsEqualTo("a << b << c;");
     }
 
     [Test]

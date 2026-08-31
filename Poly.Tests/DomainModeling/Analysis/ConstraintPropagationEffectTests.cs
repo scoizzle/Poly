@@ -156,8 +156,8 @@ public class ConstraintPropagationEffectTests {
     }
 
     [Test]
-    public async Task Assign_EntityLevelPolicyNarrowsRange_NoWarning() {
-        // Entity-level policies are always-on gates — they narrow the range too.
+    public async Task Assign_EntityLevelPolicyWithoutRequire_DoesNotNarrowRange() {
+        // Named policies are predicates; without `require LowQty` the +10 can exceed 90.
         var result = Parse("""
             domain Test
             Item: entity {
@@ -167,7 +167,7 @@ public class ConstraintPropagationEffectTests {
             }
             """);
         await Assert.That(result.Succeeded).IsTrue();
-        await Assert.That(Messages(result, errors: false)).IsEmpty();
+        await Assert.That(Messages(result, errors: false).Any(m => m.Contains("can fall outside constraint range"))).IsTrue();
     }
 
     [Test]
@@ -471,9 +471,9 @@ public class ConstraintPropagationEffectTests {
 
     [Test]
     public async Task CallChain_InvokeCarriesCallerContextIntoCallee() {
-        // A invokes B inside `if (Qty <= 60)`. The call-chain context narrows Qty to [0, 60]
-        // (if-condition ∩ entity LowQty ≤ 80), so B's `Qty + 10` under A = [10, 70]; B's own
-        // direct context (entity policy only) gives [10, 90]. A's invariants must carry the
+        // A invokes B inside `if (Qty <= 60)`. The call-chain context narrows Qty to [0, 60],
+        // so B's `Qty + 10` under A = [10, 70]; B's own direct context (declared range only,
+        // LowQty is not `require`d) gives [10, 100]. A's invariants must carry the
         // call-chain-narrowed postcondition.
         var result = Parse("""
             domain Test
@@ -496,14 +496,40 @@ public class ConstraintPropagationEffectTests {
         await Assert.That(aInvariants).IsNotNull();
         await Assert.That(bInvariants).IsNotNull();
 
-        // B's own postcondition (direct): wide [10, 90].
+        // B's own postcondition (direct): wide [10, 100] without always-on LowQty.
         var bPost = bInvariants!.StageContexts().Single().Postconditions.Single();
-        await Assert.That(bPost.ValueRange!.Max).IsEqualTo(90d);
+        await Assert.That(bPost.ValueRange!.Max).IsEqualTo(100d);
 
         // A's call-chain postcondition for the same B assign: narrowed [10, 70].
         var aPost = aInvariants!.StageContexts().Single().Postconditions
             .Single(p => ReferenceEquals(p.Effect, bPost.Effect));
         await Assert.That(aPost.ValueRange!.Max).IsEqualTo(70d);
+    }
+
+    [Test]
+    public async Task CallChain_StageScopedCallee_IsFound() {
+        var result = Parse("""
+            domain Test
+            Item: entity {
+              Qty: Number range(0, 90)
+              Boot: stage {
+                Bump: action { assign Qty to Qty + 10 }
+              }
+              Kick: action { invoke Bump }
+            }
+            """);
+        await Assert.That(result.Succeeded).IsTrue();
+        var entity = result.Root.Types.OfType<Entity>().Single(e => e.Name == "Item");
+        var kick = entity.Actions.Single(x => x.Name == "Kick");
+        var bump = entity.Stages.SelectMany(s => s.Actions).Single(x => x.Name == "Bump");
+        var kickInv = result.Analysis.GetActionInvariants(kick);
+        var bumpInv = result.Analysis.GetActionInvariants(bump);
+        await Assert.That(kickInv).IsNotNull();
+        await Assert.That(bumpInv).IsNotNull();
+        var bumpPost = bumpInv!.StageContexts().Single().Postconditions.Single();
+        var kickPost = kickInv!.StageContexts().Single().Postconditions
+            .Single(p => ReferenceEquals(p.Effect, bumpPost.Effect));
+        await Assert.That(kickPost.ValueRange!.Max).IsEqualTo(100d);
     }
 
     [Test]
@@ -611,4 +637,35 @@ public class ConstraintPropagationEffectTests {
         await Assert.That(Convert.ToDouble(net.Minimum)).IsEqualTo(0d);
         await Assert.That(Convert.ToDouble(net.Maximum)).IsEqualTo(100d);
     }
+    [Test]
+    public async Task CallChain_TwoStageCancels_EntityInvoke_DoesNotPickFirstStage() {
+        var result = Parse("""
+            domain Tickets
+            Ticket: entity {
+              Flag: Number default(0)
+              Draft: stage {
+                Cancel: action { assign Flag to 1 }
+                OpenIt: action { transition to Open }
+              }
+              Open: stage {
+                Cancel: action { assign Flag to 2 }
+              }
+              Closed: stage { }
+              Abort: action { invoke Cancel }
+            }
+            """);
+        await Assert.That(result.Succeeded).IsTrue();
+        var entity = result.Root.Types.OfType<Entity>().Single(e => e.Name == "Ticket");
+        var abort = entity.Actions.Single(x => x.Name == "Abort");
+        var abortInv = result.Analysis.GetActionInvariants(abort);
+        await Assert.That(abortInv).IsNotNull();
+
+        var draftCtx = abortInv!.StageContexts().Single(c => c.StageName == "Draft");
+        var openCtx = abortInv.StageContexts().Single(c => c.StageName == "Open");
+        var draftPost = draftCtx.Postconditions.Single(p => p.TargetProperty == "Flag");
+        var openPost = openCtx.Postconditions.Single(p => p.TargetProperty == "Flag");
+        await Assert.That(draftPost.ValueRange!.Max).IsEqualTo(1d);
+        await Assert.That(openPost.ValueRange!.Max).IsEqualTo(2d);
+    }
+
 }

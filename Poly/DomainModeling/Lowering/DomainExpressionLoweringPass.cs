@@ -281,11 +281,18 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Node
         return null;
     }
 
-    // Collection quantifiers — authoring-only for now (need store-aware evaluation).
+    // Filtered any/all/none still need the store. Bare `count Rel` on the C# path
+    // is the in-memory collection length (University HasWaiters / HasLoad).
     protected override Node AnyExpr(AnyExpr a) => throw Q3NotSupported("any", a.RelationshipName);
     protected override Node AllExpr(AllExpr a) => throw Q3NotSupported("all", a.RelationshipName);
     protected override Node NoneExpr(NoneExpr n) => throw Q3NotSupported("none", n.RelationshipName);
-    protected override Node CountExpr(CountExpr c) => throw Q3NotSupported("count", c.RelationshipName);
+    protected override Node CountExpr(CountExpr c) {
+        if (c.Body is not null || !_useThisReference)
+            throw Q3NotSupported("count", c.RelationshipName);
+        return new Member(
+            new Member(_currentSubject, ResolveNavName(c.RelationshipName)),
+            "Count");
+    }
 
     private static Exception Q3NotSupported(string quantifier, string relName) =>
         new NotSupportedException(

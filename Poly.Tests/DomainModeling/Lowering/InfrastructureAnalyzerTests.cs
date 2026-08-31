@@ -349,7 +349,7 @@ public class InfrastructureAnalyzerTests {
 
         var go = behavior.Entities.First(e => e.Name == "Patron").Actions.First(a => a.Name == "Go");
         await Assert.That(go.StageName).IsEqualTo("Active");
-        await Assert.That(go.Policies).IsEquivalentTo(["EntityPolicy", "StagePolicy", "ActionPolicy"]);
+        await Assert.That(go.Policies).IsEquivalentTo(["StagePolicy", "ActionPolicy"]);
     }
 
     // ── Topology ──────────────────────────────────────────────

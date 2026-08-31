@@ -2,6 +2,7 @@ using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Ontology;
+using Poly.DomainModeling.Runtime;
 
 using DmAction = Poly.DomainModeling.Ontology.Action;
 
@@ -352,6 +353,210 @@ public class ActionEntityReturnTests {
     }
 
     [Test]
+    public async Task InvokeAction_CreateIn_BindsSingularNavInitializer() {
+        var (domain, _) = Evolve("""
+            domain CreateNavBinding
+            Book: entity { Title: Text }
+            Patron: entity {
+              loans: many Loan
+              CheckOut: action (book: Book) {
+                create in loans { book: book }
+              }
+            }
+            Loan: entity {
+              book: Book
+              borrower: Patron
+            }
+            """);
+        var store = new DomainInstanceStore();
+        var bookEntity = domain.Types.OfType<Entity>().First(e => e.Name == "Book");
+        var patronEntity = domain.Types.OfType<Entity>().First(e => e.Name == "Patron");
+        var book = DomainEntityInstance.Create(bookEntity,
+            new Dictionary<string, object?> { ["Title"] = "Dune" }, domain);
+        var patron = DomainEntityInstance.Create(patronEntity, domain: domain);
+        store.Add(book);
+        store.Add(patron);
+
+        var result = patron.InvokeAction("CheckOut",
+            new Dictionary<string, object?> { ["book"] = book });
+        await Assert.That(result.Succeeded).IsTrue();
+        var loan = patron.CreatedChildren.Single();
+        await Assert.That(store.GetRelatedInstances("book", loan).Single()).IsEqualTo(book);
+    }
+
+    [Test]
+    public async Task InvokeAction_CreateInNavInitializerUniqueCollision_IsFailure() {
+        var (domain, _) = Evolve("""
+            domain Test
+            Book: entity { ISBN: Text unique required }
+            Patron: entity {
+              loans: many Loan
+              CheckOut: action (book: Book) {
+                create in loans { book: book }
+              }
+            }
+            Loan: entity { book: Book }
+            """);
+        var store = new DomainInstanceStore();
+        var bookE = domain.Types.OfType<Entity>().First(e => e.Name == "Book");
+        var patronE = domain.Types.OfType<Entity>().First(e => e.Name == "Patron");
+        var inStore = DomainEntityInstance.Create(bookE,
+            new Dictionary<string, object?> { ["ISBN"] = "978-1" }, domain);
+        var duplicate = DomainEntityInstance.Create(bookE,
+            new Dictionary<string, object?> { ["ISBN"] = "978-1" }, domain);
+        var patron = DomainEntityInstance.Create(patronE, domain: domain);
+        store.Add(inStore);
+        store.Add(patron);
+        var result = patron.InvokeAction("CheckOut",
+            new Dictionary<string, object?> { ["book"] = duplicate });
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(result.ErrorMessage).Contains("Unique");
+    }
+
+    [Test]
+    public async Task InvokeAction_CreateInConstraintFail_DoesNotApplyPriorAssigns() {
+        var (domain, _) = Evolve("""
+            domain Parking
+            Permit: entity {
+              Plate: Text required pattern("^[A-Z0-9]{2,8}$")
+            }
+            Lot: entity {
+              Occupied: Number default(0)
+              permits: many Permit
+              Issue: action (plate: Text) {
+                assign Occupied to Occupied + 1
+                create in permits { Plate: plate }
+              }
+            }
+            """);
+        var lotEntity = domain.Types.OfType<Entity>().First(e => e.Name == "Lot");
+        var lot = DomainEntityInstance.Create(lotEntity, domain: domain);
+        var store = new DomainInstanceStore();
+        store.Add(lot);
+
+        var result = lot.InvokeAction("Issue",
+            new Dictionary<string, object?> { ["plate"] = "x" });
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(result.ErrorMessage).Contains("pattern");
+        await Assert.That(lot.GetProperty<object>("Occupied")).IsEqualTo(0L);
+        await Assert.That(lot.CreatedChildren).IsEmpty();
+    }
+
+    [Test]
+    public async Task InvokeAction_RequireRelExists_BlocksWhenUnlinked() {
+        var (domain, _) = Evolve("""
+            domain Campus
+            Advisor: entity { Name: Text required }
+            Student: entity {
+              Name: Text required
+              Meetings: Number default(0)
+              advisor: Advisor
+              HasAdvisor: policy { advisor exists }
+              Enrolled: stage {
+                Meet: action
+                  require HasAdvisor
+                {
+                  assign Meetings to Meetings + 1
+                }
+              }
+            }
+            """);
+        var studentEntity = domain.Types.OfType<Entity>().First(e => e.Name == "Student");
+        var student = DomainEntityInstance.Create(studentEntity,
+            new Dictionary<string, object?> { ["Name"] = "Alex" }, domain);
+        var store = new DomainInstanceStore();
+        store.Add(student);
+
+        var result = student.InvokeAction("Meet");
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(result.FailedGuards).Contains("HasAdvisor");
+        await Assert.That(student.GetProperty<object>("Meetings")).IsEqualTo(0L);
+    }
+
+    [Test]
+    public async Task InvokeAction_RequireCustomerExists_BlocksWhenUnlinked() {
+        var (domain, _) = Evolve("""
+            domain Billing
+            Customer: entity { Name: Text required }
+            Line: entity {
+              Sku: Text required
+              Open: stage {
+                Post: action { transition to Posted }
+              }
+              Posted: stage { }
+            }
+            Invoice: entity {
+              Total: Number default(0)
+              customer: Customer
+              lines: many Line
+              HasCustomer: policy { customer exists }
+              Open: stage {
+                Submit: action
+                  require HasCustomer
+                {
+                  for lines as line where line in Open
+                    invoke line.Post
+                  transition to Posted
+                }
+              }
+              Posted: stage { }
+            }
+            """);
+        var invoiceEntity = domain.Types.OfType<Entity>().First(e => e.Name == "Invoice");
+        var invoice = DomainEntityInstance.Create(invoiceEntity, domain: domain);
+        var store = new DomainInstanceStore();
+        store.Add(invoice);
+
+        var result = invoice.InvokeAction("Submit");
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(result.FailedGuards).Contains("HasCustomer");
+    }
+
+    [Test]
+    public async Task InvokeAction_CrossEntityInvoke_FailsFastWhenCalleeWrongStage() {
+        var (domain, _) = Evolve("""
+            domain Kitchen
+            Station: entity {
+              Name: Text required
+              Ready: stage {
+                Fire: action { transition to Busy }
+              }
+              Busy: stage {
+                Clear: action { transition to Ready }
+              }
+            }
+            Ticket: entity {
+              TableNo: Text required
+              station: Station
+              Queued: stage {
+                Send: action {
+                  invoke station.Fire
+                  transition to Cooking
+                }
+              }
+              Cooking: stage { }
+            }
+            """);
+        var stationEntity = domain.Types.OfType<Entity>().First(e => e.Name == "Station");
+        var ticketEntity = domain.Types.OfType<Entity>().First(e => e.Name == "Ticket");
+        var store = new DomainInstanceStore();
+        var station = DomainEntityInstance.Create(stationEntity,
+            new Dictionary<string, object?> { ["Name"] = "Grill" }, domain);
+        var ticket = DomainEntityInstance.Create(ticketEntity,
+            new Dictionary<string, object?> { ["TableNo"] = "12" }, domain);
+        store.Add(station);
+        store.Add(ticket);
+        store.Link("station", ticket, station);
+
+        await Assert.That(station.InvokeAction("Fire").Succeeded).IsTrue();
+        var send = ticket.InvokeAction("Send");
+        await Assert.That(send.Succeeded).IsFalse();
+        await Assert.That(send.ErrorMessage).Contains("only available in stage");
+        await Assert.That(ticket.CurrentStage).IsEqualTo("Queued");
+        await Assert.That(station.CurrentStage).IsEqualTo("Busy");
+    }
+
+    [Test]
     public async Task Analyze_CreateInWithCollectionNavBinding_ReportsUnknownProperty() {
         // A `many` collection nav is NOT a bindable initializer target (the exporter
         // emits empty collections for those) — binding it must still fail closed.
@@ -370,4 +575,96 @@ public class ActionEntityReturnTests {
             """);
         await Assert.That(message).Contains("unknown property 'links'");
     }
+    [Test]
+    public async Task InvokeAction_UntakenCreateInBranch_IgnoresIllegalInitializer() {
+        var (domain, _) = Evolve("""
+            domain Hotel
+            Stay: entity {
+              Nights: Number range(1, 21) required
+            }
+            Guest: entity {
+              OpenStays: Number default(0)
+              stays: many Stay
+              Book: action (nights: Number, confirm: Boolean) {
+                if (confirm is true) {
+                  create in stays { Nights: nights }
+                }
+                assign OpenStays to OpenStays + 1
+              }
+            }
+            """);
+        var guestEntity = domain.Types.OfType<Entity>().First(e => e.Name == "Guest");
+        var guest = DomainEntityInstance.Create(guestEntity, domain: domain);
+        var store = new DomainInstanceStore();
+        store.Add(guest);
+
+        var result = guest.InvokeAction("Book",
+            new Dictionary<string, object?> { ["nights"] = 0L, ["confirm"] = false });
+        await Assert.That(result.Succeeded).IsTrue();
+        await Assert.That(guest.GetProperty<object>("OpenStays")).IsEqualTo(1L);
+        await Assert.That(guest.CreatedChildren).IsEmpty();
+    }
+
+    [Test]
+    public async Task InvokeAction_CreateConstraintFail_DoesNotApplyPriorAssigns() {
+        var (domain, _) = Evolve("""
+            domain Hotel
+            Stay: entity {
+              Nights: Number range(1, 21) required
+            }
+            Guest: entity {
+              OpenStays: Number default(0)
+              Book: action (nights: Number) {
+                assign OpenStays to OpenStays + 1
+                create Stay { Nights: nights }
+              }
+            }
+            """);
+        var guestEntity = domain.Types.OfType<Entity>().First(e => e.Name == "Guest");
+        var guest = DomainEntityInstance.Create(guestEntity, domain: domain);
+        var store = new DomainInstanceStore();
+        store.Add(guest);
+
+        var result = guest.InvokeAction("Book",
+            new Dictionary<string, object?> { ["nights"] = 0L });
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(guest.GetProperty<object>("OpenStays")).IsEqualTo(0L);
+        await Assert.That(guest.CreatedChildren).IsEmpty();
+    }
+
+    [Test]
+    public async Task InvokeAction_EntityInvokeCancel_DispatchesCurrentStage() {
+        var (domain, _) = Evolve("""
+            domain Tickets
+            Ticket: entity {
+              Flag: Number default(0)
+              Draft: stage {
+                Cancel: action { assign Flag to 1 }
+                OpenIt: action { transition to Open }
+              }
+              Open: stage {
+                Cancel: action { assign Flag to 2 }
+              }
+              Closed: stage { }
+              Abort: action { invoke Cancel }
+            }
+            """);
+        var ticketEntity = domain.Types.OfType<Entity>().First(e => e.Name == "Ticket");
+        var store = new DomainInstanceStore();
+
+        var draftTicket = DomainEntityInstance.Create(ticketEntity, domain: domain);
+        store.Add(draftTicket);
+        var draftAbort = draftTicket.InvokeAction("Abort");
+        await Assert.That(draftAbort.Succeeded).IsTrue();
+        await Assert.That(draftTicket.GetProperty<object>("Flag")).IsEqualTo(1L);
+
+        var openTicket = DomainEntityInstance.Create(ticketEntity, domain: domain);
+        store.Add(openTicket);
+        var opened = openTicket.InvokeAction("OpenIt");
+        await Assert.That(opened.Succeeded).IsTrue();
+        var openAbort = openTicket.InvokeAction("Abort");
+        await Assert.That(openAbort.Succeeded).IsTrue();
+        await Assert.That(openTicket.GetProperty<object>("Flag")).IsEqualTo(2L);
+    }
+
 }

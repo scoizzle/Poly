@@ -16,6 +16,15 @@ public sealed class TypeDefinitionProviderCollection(params IEnumerable<ITypeDef
     }
 
     /// <summary>
+    /// Adds a provider at the bottom of the stack (last queried). No-op if already present.
+    /// </summary>
+    public void AddFallback(ITypeDefinitionProvider provider) {
+        ArgumentNullException.ThrowIfNull(provider);
+        if (!_providers.Contains(provider))
+            _providers.Add(provider);
+    }
+
+    /// <summary>
     /// Removes the first matching provider instance from the stack.
     /// </summary>
     /// <returns>True if the provider was found and removed.</returns>

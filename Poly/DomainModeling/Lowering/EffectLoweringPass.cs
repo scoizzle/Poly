@@ -1,7 +1,10 @@
+using Poly.Ast.Nodes;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Dispatch;
 using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Runtime;
+
+using Syntactic = Poly.Ast.Nodes;
 
 namespace Poly.DomainModeling.Lowering;
 
@@ -33,7 +36,9 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     private readonly string? _sourceStageName;
     private readonly IReadOnlyDictionary<string, string>? _enumPropertyNames;
     private readonly LoweringContext _context;
+    private readonly bool _emitInstanceNotify;
     private int _forEachInvokeSequence;
+    private int _createInProbeSequence;
 
     /// <summary>Pre-computed analysis metadata provider, when available.</summary>
     public INodeMetadataProvider? Analysis => _analysis;
@@ -52,7 +57,20 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         _postTransitionNodes = context.PostTransitionNodes;
         _sourceStageName = context.SourceStageName;
         _enumPropertyNames = context.EnumPropertyNames;
+        _emitInstanceNotify = context.EmitInstanceNotify;
+        IReadOnlyDictionary<string, Node>? parameters = context.Parameters;
+        if (context.ActionParameterNames is { Count: > 0 }) {
+            var merged = parameters is null
+                ? new Dictionary<string, Node>(StringComparer.Ordinal)
+                : new Dictionary<string, Node>(parameters, StringComparer.Ordinal);
+            foreach (var name in context.ActionParameterNames) {
+                if (!merged.ContainsKey(name))
+                    merged[name] = new Parameter(name);
+            }
+            parameters = merged;
+        }
         _expressionPass = new DomainExpressionLoweringPass(context with {
+            Parameters = parameters,
             NavigationNameResolver = context.NavigationNameResolver ?? BuildNavigationNameResolver(entity, _domain, _analysis),
             IsCollectionNavigation = context.IsCollectionNavigation
                 ?? BuildIsCollectionNavigation(entity, _domain, _analysis),
@@ -292,12 +310,17 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
             1 => tryNodes[0],
             _ => new Block(tryNodes)
         };
-        nodes.Add(new TryCatchFinally(
-            tryBody,
-            CatchClauses: null,
-            FinallyBlock: new Invoke(
-                new Member(Subject, "Notify"),
-                new Constant(t.TargetStage.StageName))));
+        if (_emitInstanceNotify) {
+            nodes.Add(new TryCatchFinally(
+                tryBody,
+                CatchClauses: null,
+                FinallyBlock: new Invoke(
+                    new Member(Subject, "Notify"),
+                    new Constant(t.TargetStage.StageName))));
+        }
+        else if (tryNodes.Count > 0) {
+            nodes.Add(tryBody);
+        }
 
         return nodes.Count == 1 ? nodes[0] : new Block(nodes);
     }
@@ -307,11 +330,9 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     /// <c>Invoke(Member(Subject, actionName), args)</c> on both runtime and emit.
     /// Singular cross-entity invoke is <c>this.Rel.Action(args)</c> with a
     /// linked-target guard that returns <c>DomainResult.Failure</c> before deref
-    /// (never a bare NRE). Self / singular cross-entity do not wrap
-    /// <c>if (!result.IsSuccess) return result</c> — that is for-invoke's loop
-    /// (and C# method bodies). Nested Failure is discarded like C#
-    /// <c>this.Foo();</c>. Fail-fast on every invoke belongs here, not in
-    /// <c>InvokeNamed</c>. Not gated on
+    /// (never a bare NRE). Kitchen dogfood: nested Failure must fail-fast
+    /// (<c>if (!result.IsSuccess) return result</c>) so later effects do not run.
+    /// Not gated on
     /// <see cref="LoweringContext.LowerStageTransitions"/> — that flag still
     /// gates create / create-in. OneToMany fan-out uses the for-each lowering.
     /// </summary>
@@ -332,11 +353,30 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
                 new Block([new Return(new Invoke(
                     new Member(new TypeReference("DomainResult"), "Failure"),
                     new Constant($"'{i.ActionName}' requires a linked '{i.TargetRelationship}' on entity '{_entity.Name}'.")))]));
-            return new Block([guard,
-                new Invoke(new Member(navMember, i.ActionName), [.. args])]);
+            var seq = _forEachInvokeSequence++;
+            var resultVar = new Variable($"invoke{seq}");
+            var invokeCall = new Invoke(new Member(navMember, i.ActionName), [.. args]);
+            return new Block([
+                guard,
+                new Assignment(resultVar, invokeCall),
+                new IfStatement(
+                    new Poly.Ast.Nodes.Not(new Member(resultVar, "IsSuccess")),
+                    new Block([new Return(resultVar)]))
+            ], [resultVar]);
         }
 
-        return new Invoke(new Member(Subject, i.ActionName), [.. args]);
+        return WrapInvokeResult(new Invoke(new Member(Subject, i.ActionName), [.. args]));
+    }
+
+    private Node WrapInvokeResult(Invoke invokeCall) {
+        var seq = _forEachInvokeSequence++;
+        var resultVar = new Variable($"invoke{seq}");
+        return new Block([
+            new Assignment(resultVar, invokeCall),
+            new IfStatement(
+                new Poly.Ast.Nodes.Not(new Member(resultVar, "IsSuccess")),
+                new Block([new Return(resultVar)]))
+        ], [resultVar]);
     }
 
     /// <summary>
@@ -506,23 +546,32 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
 
         // The Create factory now returns DomainResult<T> with constraint validation.
         // Unwrap: var fineResult = Fine.Create(...);
-        //         if (!fineResult.IsSuccess) throw ...;
+        //         if (!fineResult.IsSuccess) return Failure(...);
         //         var fine = fineResult.Value;
+        // Same Failure shape as create-in — do not throw after prior assigns.
         var targetName = DomainToCSharpExporter.ToCamelCase(targetEntity.Name);
         var resultVar = new Variable($"{targetName}Result");
         var targetVar = new Variable(targetName);
+        var resultType = _context.ActionResultType;
         var nds = new List<Node>();
 
         nds.Add(new Assignment(resultVar, createCall));
 
+        Node failureStmt = resultType is not null
+            ? new Return(
+                new Invoke(
+                    new Member(resultType, "Failure"),
+                    new Syntactic.Coalesce(
+                        new Member(resultVar, "ErrorMessage"),
+                        new Constant(""))))
+            : new ThrowStatement(
+                new New(
+                    new NamedTypeReference("InvalidOperationException"),
+                    new Member(resultVar, "ErrorMessage")));
+
         nds.Add(new IfStatement(
             new Ast.Nodes.Not(new Member(resultVar, "IsSuccess")),
-            new Block(new Node[] {
-                new ThrowStatement(
-                    new New(
-                        new NamedTypeReference("InvalidOperationException"),
-                        new Member(resultVar, "ErrorMessage")))
-            })));
+            new Block([failureStmt])));
 
         nds.Add(new Assignment(targetVar, new Member(resultVar, "Value")));
 
@@ -612,12 +661,127 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         // so positional order matches the signature. When none are bound, omit (C# default).
         AppendDefaultedPropArgs(args, initMap, targetEntity);
 
+        var resultLocal = new Variable(DomainToCSharpExporter.ToCamelCase(targetEntity.Name) + "Result");
         var local = new Variable(DomainToCSharpExporter.ToCamelCase(targetEntity.Name));
+        var resultType = _context.ActionResultType ?? new NamedTypeReference("DomainResult");
         var blockNodes = new List<Node> {
-            new Assignment(local, new Invoke(new Member(Subject, methodName), [.. args]))
+            new Assignment(resultLocal, new Invoke(new Member(Subject, methodName), [.. args])),
+            new IfStatement(
+                new Syntactic.Not(new Member(resultLocal, "IsSuccess")),
+                new Block([
+                    new Return(
+                        new Invoke(
+                            new Member(resultType, "Failure"),
+                            new Syntactic.Coalesce(
+                                new Member(resultLocal, "ErrorMessage"),
+                                new Constant(""))))
+                ])),
+            new Assignment(local, new Member(resultLocal, "Value"))
         };
 
-        return new Block(blockNodes, [local]);
+        return new Block(blockNodes, [resultLocal, local]);
+    }
+
+    internal List<Node> LowerCreateInConstraintProbes(IReadOnlyList<Effect> effects) {
+        var nodes = new List<Node>();
+        CollectCreateInProbes(effects, nodes);
+        return nodes;
+    }
+
+    private void CollectCreateInProbes(IReadOnlyList<Effect> effects, List<Node> nodes) {
+        // Same set as runtime PrevalidateUnconditionalCreates: CompositeEffect +
+        // unconditional create / create-in. Do not walk ConditionalEffect — an
+        // illegal initializer on an untaken then-branch must not fail the action.
+        foreach (var effect in effects) {
+            switch (effect) {
+                case CompositeEffect composite:
+                    CollectCreateInProbes(composite.Effects, nodes);
+                    break;
+                case CreateEntityInRelationshipEffect cr:
+                    if (LowerCreateInProbe(cr) is { } probe)
+                        nodes.Add(probe);
+                    break;
+                case CreateEntityInstance cei:
+                    if (LowerCreateEntityInstanceProbe(cei) is { } createProbe)
+                        nodes.Add(createProbe);
+                    break;
+            }
+        }
+    }
+
+    private Block? LowerCreateInProbe(CreateEntityInRelationshipEffect cr) {
+        if (!_lowerStageTransitions || _domain is null || _analysis is null)
+            return null;
+
+        var resolvedTarget = _analysis.GetMetadata<ResolvedRelationshipTargetMetadata>(cr);
+        var relationship = resolvedTarget?.Relationship
+            ?? ResolveRelationship(cr.RelationshipName);
+        if (relationship is null) return null;
+        var targetEntity = resolvedTarget?.TargetEntity
+            ?? ResolveEntity(relationship.Target.TypeName);
+        if (targetEntity is null) return null;
+
+        var initMap = new Dictionary<string, DomainExpression>(StringComparer.Ordinal);
+        foreach (var init in cr.Initializers)
+            initMap[init.PropertyName] = init.Expression;
+
+        var args = new List<Node>();
+        var parameterMetadata = GetConstructorParameterOrder(targetEntity);
+        var autoWireBackRef = DomainToCSharpExporter.FindAutoWireBackReference(targetEntity, _entity.Name);
+        foreach (var parameter in parameterMetadata) {
+            if (parameter.IsCollection) continue;
+            if (parameter.IsBackReference) {
+                // Self-rel slot (Account.parent) is `this` only when *this* entity is
+                // that type. Contact.create-in account must not pass a Contact as Account.
+                args.Add(string.Equals(_entity.Name, targetEntity.Name, StringComparison.Ordinal)
+                    ? Subject
+                    : new Constant(null));
+                continue;
+            }
+            if (autoWireBackRef is not null
+                && string.Equals(parameter.Name, autoWireBackRef.Name, StringComparison.Ordinal)) {
+                args.Add(Subject);
+                continue;
+            }
+            if (initMap.TryGetValue(parameter.Name, out var expr))
+                args.Add(LowerEnumAwareValue(expr, parameter.Type, Subject));
+            else
+                args.Add(DefaultForDomainType(parameter.Type, _domain, _analysis));
+        }
+        AppendDefaultedPropArgs(args, initMap, targetEntity);
+
+        return LowerCreateConstraintProbe(targetEntity, args);
+    }
+
+    private Block? LowerCreateEntityInstanceProbe(CreateEntityInstance cei) {
+        if (!_lowerStageTransitions || _domain is null)
+            return null;
+        var targetEntity = ResolveEntity(cei.Type.TypeName);
+        if (targetEntity is null) return null;
+        var args = BuildConstructorArgs(cei.Initializers, targetEntity);
+        return LowerCreateConstraintProbe(targetEntity, args);
+    }
+
+    private Block LowerCreateConstraintProbe(Entity targetEntity, List<Node> args) {
+        var probe = new Variable($"probe{_createInProbeSequence++}");
+        var resultType = _context.ActionResultType ?? new NamedTypeReference("DomainResult");
+        var targetType = new NamedTypeReference(targetEntity.Name);
+        var errorMessage = new Syntactic.Coalesce(
+            new Member(probe, "ErrorMessage"),
+            new Constant(""));
+        return new Block(
+            [
+                new Assignment(probe, new Invoke(new Member(targetType, "Create"), [.. args])),
+                new IfStatement(
+                    new Syntactic.Not(new Member(probe, "IsSuccess")),
+                    new Block([
+                        new Return(
+                            new Invoke(
+                                new Member(resultType, "Failure"),
+                                errorMessage))
+                    ]))
+            ],
+            [probe]);
     }
 
     // ── Runtime default expression helpers ─────────────────
@@ -734,8 +898,11 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         List<Node> args,
         IReadOnlyDictionary<string, DomainExpression> initMap,
         Entity targetEntity) {
+        var entryAssigned = _analysis?.GetStructure(targetEntity)?.EntryAssignedPropertyNames
+            ?? EntityStructureAnalyzer.ComputeEntryAssignedPropertyNames(targetEntity);
         var defaultedProps = targetEntity.Properties
             .Where(p => p.Constraints.Any(c => c is DefaultValueConstraint))
+            .Where(p => !entryAssigned.Contains(p.Name))
             .OrderBy(p => p.Name)
             .ToList();
         if (!defaultedProps.Any(p => initMap.ContainsKey(p.Name)))

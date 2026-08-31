@@ -1,3 +1,4 @@
+using Poly.DomainModeling.Libraries.Temporal;
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
 using Poly.Interpretation;
@@ -47,6 +48,22 @@ public class DomainExpressionVmExecutionTests {
     private InterpreterResult ExecuteDomain(DomainExpression expr, Node subject) {
         var node = Pass.Lower(expr, subject);
         return Execute(node);
+    }
+
+    [Test]
+    public async Task Now_LowersToDateTimeUtcNow_AndExecutes() {
+        var before = DateTime.UtcNow.AddSeconds(-2);
+        var result = ExecuteDomain(new Now());
+        var now = (DateTime)result.Value!;
+        var after = DateTime.UtcNow.AddSeconds(2);
+        await Assert.That(now.Kind).IsEqualTo(DateTimeKind.Utc);
+        await Assert.That(now >= before && now <= after).IsTrue();
+    }
+
+    [Test]
+    public async Task Today_LowersToDateOnlyFromUtcNow_AndExecutes() {
+        var result = ExecuteDomain(new Today());
+        await Assert.That(result.Value).IsEqualTo(DateOnly.FromDateTime(DateTime.UtcNow));
     }
 
     [Test]

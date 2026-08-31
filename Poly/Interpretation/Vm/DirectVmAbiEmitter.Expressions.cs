@@ -350,15 +350,26 @@ public static partial class DirectVmAbiEmitter {
 
     /// <summary>Member access via CLR reflection: resolve from analysis metadata
     /// and emit a property getter, field read, or method call.</summary>
+    private static bool IsTypeNameReceiver(Node node) => node is
+        NamedTypeReference or TypeReference or PrimitiveTypeReference or TypeDefinitionReference;
+
     private static Expression EmitMember(Member m, AbiCtx ctx) {
         int d = ctx.RingDepth;
+        var resolved = ctx.Analysis?.GetResolvedMember(m);
+
+        // Type-name receiver (`DateTime.UtcNow`): the left side is a type, not a value.
+        if (IsTypeNameReceiver(m.Value)) {
+            if (resolved?.LifetimeModifier != LifetimeModifier.Static)
+                throw new InvalidOperationException(
+                    $"Member '{m.MemberName}' on a type name must resolve as a static member.");
+            int slot = ctx.AllocSlot();
+            return EmitResolvedMember(resolved, null, slot, ctx, Empty());
+        }
+
         var instanceExpr = CompileNode(m.Value, ctx);
         int instanceSlot = ctx.RingDepth - 1;
         var fold = FoldResultToSlot(ref instanceSlot, d, ctx);
 
-        var resolved = ctx.Analysis?.GetResolvedMember(m);
-
-        // Static member — no instance needed
         if (resolved?.LifetimeModifier == LifetimeModifier.Static) {
             return EmitResolvedMember(resolved, null, d, ctx, Block(instanceExpr, fold));
         }

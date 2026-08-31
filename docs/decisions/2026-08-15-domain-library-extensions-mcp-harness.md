@@ -55,12 +55,12 @@ MCP is how agents **use Poly** in a conversation. It is not the domain session a
 |----------|----------------|
 | Hold a `DomainSession` + revision + scratch store | Invent domain or execution semantics |
 | Author (`apply_dsl` / evolve) and inspect (catalog, diagnostics) | Infer a `Main` or ship the customer API |
-| **Simulate** a named policy or action when the caller **supplies context** (bag, stage, args, links, clock) | Run “the domain”; use a second evaluator |
+| **Simulate** a named policy or action on a store instance (`create_instance` then `evaluate_policy(instanceId)` / `invoke_action`) | Run “the domain”; use a second evaluator; treat `oracle_expression` as named-policy simulate |
 | Return a fact diff or reject | Treat `Comment` / host-only effect dispatch as success |
 
-Simulate and product emit must agree. Context replaces the missing entry point: the agent names the operation and the world.
+Simulate and product emit must agree. The store instance replaces the missing entry point: the agent names the operation and supplies `create_instance` (+ `link_instances` when related).
 
-Interpretation is the backbone of that simulate (and of cataloged algorithms). Domain runtime is bag + store + **run this program**.
+Interpretation is the backbone of that simulate (and of cataloged algorithms). Domain runtime is store + **run this program**.
 
 ### 5. Host ABI stays tiny
 

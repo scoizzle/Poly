@@ -71,6 +71,44 @@ public class MultiHopPathPrefixPolicyTests {
     }
 
     [Test]
+    public async Task InvokeAction_RequireNot_PathPrefixComparison_UsesBooleanNotInt64() {
+        var (domain, _) = Evolve("""
+            domain PathNot
+            Section: entity {
+              SeatsTaken: Number default(0)
+              Open: stage {}
+            }
+            Enrollment: entity {
+              section: Section
+              SectionFull: policy { section SeatsTaken >= 1 }
+              Pending: stage {
+                Confirm: action require not SectionFull { transition to Registered }
+              }
+              Registered: stage {}
+            }
+            """);
+        var store = new DomainInstanceStore();
+        var sectionE = domain.Types.OfType<Entity>().Single(e => e.Name == "Section");
+        var enrollE = domain.Types.OfType<Entity>().Single(e => e.Name == "Enrollment");
+        var section = DomainEntityInstance.Create(sectionE, new Dictionary<string, object?>(), domain);
+        var enrollment = DomainEntityInstance.Create(enrollE, new Dictionary<string, object?>(), domain);
+        store.Add(section);
+        store.Add(enrollment);
+        store.Link("section", enrollment, section);
+
+        var ok = enrollment.InvokeAction("Confirm");
+        await Assert.That(ok.Succeeded).IsTrue();
+
+        var full = DomainEntityInstance.Create(enrollE, new Dictionary<string, object?>(), domain);
+        store.Add(full);
+        store.Link("section", full, section);
+        section.SetProperty("SeatsTaken", 1L);
+        var blocked = full.InvokeAction("Confirm");
+        await Assert.That(blocked.Succeeded).IsFalse();
+        await Assert.That(blocked.FailedGuards).Contains("not_SectionFull");
+    }
+
+    [Test]
     public async Task Analyze_ManyInMiddle_BarePathPrefix_ReportsError() {
         var changes = new PolyDslParser("""
             domain BadHop

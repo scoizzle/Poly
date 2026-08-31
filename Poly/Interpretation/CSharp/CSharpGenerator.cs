@@ -299,7 +299,7 @@ public sealed class CSharpGenerator {
                 && !MentionsVariableBefore(block, dest, i)) {
                 Indent(sb, indent + 1);
                 sb.Append("var ");
-                sb.Append(dest.Name);
+                WriteIdent(sb, dest.Name);
                 sb.Append(" = ");
                 WriteExpression(sb, a.Value);
                 sb.AppendLine(";");
@@ -318,7 +318,7 @@ public sealed class CSharpGenerator {
             && _fuseUndeclaredName
             && !DeclaredHere(dest.Name)) {
             sb.Append("var ");
-            sb.Append(dest.Name);
+            WriteIdent(sb, dest.Name);
             MarkDeclared(dest.Name);
         }
         else {
@@ -351,7 +351,7 @@ public sealed class CSharpGenerator {
     private void WriteDeclaredLocal(StringBuilder sb, Variable variable, Block block) {
         var typeName = TypeNameForVariable(variable, block);
         sb.Append("var ");
-        sb.Append(variable.Name);
+        WriteIdent(sb, variable.Name);
         sb.Append(" = default(");
         sb.Append(typeName);
         sb.AppendLine(");");
@@ -996,10 +996,10 @@ public sealed class CSharpGenerator {
                 WriteConstant(sb, constant);
                 return;
             case Variable variable:
-                sb.Append(variable.Name);
+                WriteIdent(sb, variable.Name);
                 return;
             case Parameter parameter:
-                sb.Append(parameter.Name);
+                WriteIdent(sb, parameter.Name);
                 return;
             case ThisReference:
                 sb.Append("this");
@@ -1297,14 +1297,66 @@ public sealed class CSharpGenerator {
     }
 
     private void WriteBinary(StringBuilder sb, Node left, string op, Node right) {
-        WriteBinaryOperand(sb, left);
+        WriteBinaryOperand(sb, left, op, isRight: false);
         sb.Append(op);
-        WriteBinaryOperand(sb, right);
+        WriteBinaryOperand(sb, right, op, isRight: true);
     }
 
-    private void WriteBinaryOperand(StringBuilder sb, Node node) {
-        if (node is Coalesce or Conditional) { sb.Append('('); WriteExpression(sb, node); sb.Append(')'); return; }
-        if (node is Or) { sb.Append('('); WriteExpression(sb, node); sb.Append(')'); return; }
+    private static int BinaryNodePrecedence(Node node) => node switch {
+        Multiply or Divide or Modulo => 9,
+        Add or Subtract => 8,
+        ShiftLeft or ShiftRight => 7,
+        LessThan or LessThanOrEqual or GreaterThan or GreaterThanOrEqual => 6,
+        Equal or NotEqual => 5,
+        BitwiseAnd => 4,
+        BitwiseXor => 3,
+        BitwiseOr => 2,
+        And => 1,
+        Or => 0,
+        Coalesce => -1,
+        Conditional => -2,
+        _ => 10
+    };
+
+    private static int BinaryOpPrecedence(string op) => op.Trim() switch {
+        "*" or "/" or "%" => 9,
+        "+" or "-" => 8,
+        "<<" or ">>" => 7,
+        "<" or "<=" or ">" or ">=" => 6,
+        "==" or "!=" => 5,
+        "&" => 4,
+        "^" => 3,
+        "|" => 2,
+        "&&" => 1,
+        "||" => 0,
+        "??" => -1,
+        _ => 10
+    };
+
+    private void WriteBinaryOperand(StringBuilder sb, Node node, string op, bool isRight) {
+        if (node is Coalesce or Conditional) {
+            sb.Append('(');
+            WriteExpression(sb, node);
+            sb.Append(')');
+            return;
+        }
+
+        var parentPrec = BinaryOpPrecedence(op);
+        var childPrec = BinaryNodePrecedence(node);
+        var trimmed = op.Trim();
+        var sameRank = childPrec == parentPrec;
+        // Left-assoc: parenthesize a same-rank right child (`a << (b << c)`).
+        // Right-assoc (`??`): parenthesize a same-rank left child.
+        var parenthesize = childPrec < parentPrec
+            || (sameRank && isRight && trimmed is not "??")
+            || (sameRank && !isRight && trimmed is "??");
+        if (parenthesize) {
+            sb.Append('(');
+            WriteExpression(sb, node);
+            sb.Append(')');
+            return;
+        }
+
         WriteExpression(sb, node);
     }
 
@@ -1376,4 +1428,30 @@ public sealed class CSharpGenerator {
             sb.Append("    ");
         }
     }
+
+    /// <summary>
+    /// CRM dogfood: entity <c>Case</c> lowers locals to camelCase <c>case</c>, which is
+    /// a C# keyword. Prefix <c>@</c> so export compiles.
+    /// </summary>
+    private static void WriteIdent(StringBuilder sb, string name) {
+        if (CSharpKeywords.Contains(name))
+            sb.Append('@');
+        sb.Append(name);
+    }
+
+    private static readonly HashSet<string> CSharpKeywords = new(StringComparer.Ordinal) {
+        "abstract","as","base","bool","break","byte","case","catch","char","checked",
+        "class","const","continue","decimal","default","delegate","do","double","else",
+        "enum","event","explicit","extern","false","finally","fixed","float","for",
+        "foreach","goto","if","implicit","in","int","interface","internal","is","lock",
+        "long","namespace","new","null","object","operator","out","override","params",
+        "private","protected","public","readonly","ref","return","sbyte","sealed","short",
+        "sizeof","stackalloc","static","string","struct","switch","this","throw","true",
+        "try","typeof","uint","ulong","unchecked","unsafe","ushort","using","virtual",
+        "void","volatile","while","add","and","alias","ascending","args","async","await",
+        "by","descending","dynamic","equals","file","from","get","global","group","init",
+        "into","join","let","managed","nameof","nint","not","notnull","nuint","on",
+        "or","orderby","partial","record","remove","required","scoped","select","set",
+        "unmanaged","value","var","when","where","with","yield"
+    };
 }

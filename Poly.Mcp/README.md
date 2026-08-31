@@ -1,6 +1,6 @@
 # Poly.Mcp — MCP Server for Poly Domain Modeling
 
-**Role:** interactive **harness** for agents using Poly. Holds a `DomainSession` (it is not that session). Author and inspect. Named-policy/action **simulate** (caller-supplied context; same lowered AST as emit) is the harness lock — **not** what `simulate_policy` does today. Not a product entry-point extension (REST is `uses http`). Not a second evaluator.
+**Role:** interactive **harness** for agents using Poly. Holds a `DomainSession` (it is not that session). Author and inspect. Named-policy/action **simulate** is `evaluate_policy(instanceId)` and `invoke_action` on store instances (same lowered AST as emit). `oracle_expression` is a fragment probe, not that lock. Not a product entry-point extension (REST is `uses http`). Not a second evaluator.
 
 Lock: [`docs/decisions/2026-08-15-domain-library-extensions-mcp-harness.md`](../docs/decisions/2026-08-15-domain-library-extensions-mcp-harness.md). Mechanisms: [`docs/CORE.md`](../docs/CORE.md) §3.6.
 
@@ -47,14 +47,14 @@ Tools live in `Poly.Mcp/Tools/` and use only `Poly.DomainModeling` types (no `Po
 
 | Tool | Class | Purpose |
 |------|-------|---------|
-| `evaluate_policy` | `PolicyTool` | VM-evaluates a named policy against a **local** subject bag |
+| `evaluate_policy` | `PolicyTool` | VM-evaluates a named policy on a **store instance** (`instanceId` required) |
 
 ### Oracle
 
 | Tool | Class | Purpose |
 |------|-------|---------|
 | `describe_domain_element` | `OracleTool` | Describes entity/stage/action/policy/relationship |
-| `simulate_policy` | `OracleTool` | Expression oracle: VM-evaluates a **DSL expression fragment** against a local property bag. **Not** named-policy simulate, **not** `evaluate_policy`, **not** session — synthetic `Entity("Subject")` |
+| `oracle_expression` | `OracleTool` | Fragment probe: VM-evaluates a **DSL expression fragment** against a local property bag. **Not** named-policy evaluate |
 | `export_domain_to_csharp` | `OracleTool` | Exports the domain session as C# record/class definitions |
 
 ### Runtime
@@ -66,7 +66,7 @@ Tools live in `Poly.Mcp/Tools/` and use only `Poly.DomainModeling` types (no `Po
 | `list_instances` | `RuntimeTool` | Lists runtime instances (skips deleted); optional entity filter |
 | `link_instances` | `RuntimeTool` | Links two instances via a relationship (store-aware) |
 | `unlink_instances` | `RuntimeTool` | Unlinks two instances via a relationship |
-| `invoke_action` | `RuntimeTool` | Invokes an action: guards → effects → stage transition → subscription fan-out |
+| `invoke_action` | `RuntimeTool` | Invokes an action: guards → shipped effects (transition, assign, create, create-in, invoke, for-invoke, if) → subscription fan-out. Link/unlink existing instances via `link_instances` / `unlink_instances` |
 
 ## Dual Authoring Path
 
@@ -128,7 +128,7 @@ Every MCP tool's **Name + Description + Success** must match actual behavior:
 | Only inspects metadata | Must be named/described as inspect/get/describe — **never** "evaluates via VM" |
 | Evaluation fails | `Success: false` (or explicit error), not success without a bool |
 
-**Current policy tools:** `get_policy_expression` (inspect-only, no VM), `add(kind: policy)` / `evaluate_policy` (VM eval of a **named** session policy against a local bag or store instance). `simulate_policy` is an **expression oracle** (DSL fragment + bag, no session, synthetic Subject) — **not** named-policy simulate and **not** `evaluate_policy`. All satisfy the invariant for what they actually do.
+**Current policy tools:** `get_policy_expression` (inspect-only, no VM), `evaluate_policy` (named session policy on a store `instanceId`). `oracle_expression` is an **expression oracle** (DSL fragment + bag, no session, synthetic Subject) — **not** named-policy evaluate. All satisfy the invariant for what they actually do.
 
 **DSL tools:** `apply_dsl` (parses .poly text → evolves empty domain → analysis gate → replaces session domain; revision+1; clears runtime instances; explicit HONESTY NOTES: action `when Stage` is not a separate runtime gate, subscriptions need RuntimeTool instances to fan out), `export_dsl` (printer round-trip, no side effects), `get_dsl_guide` (embedded product guide).
 
@@ -152,17 +152,16 @@ The **RuntimeTool** family closes the final feedback loop: agents can create ins
 - The **first defined stage** is the initial stage (if stages exist).
 - `invoke_action` resolves from the **current stage** first, then entity-level actions.
 - Guard policies (action-level, stage-level, entity-level) are evaluated before effects.
+- Shipped action effects: **transition, assign, create, create-in, invoke, for-invoke, if**. Linking existing instances is `link_instances` / `unlink_instances` — not action-body effects.
 - On **stage transition**: OnExit → set new stage → OnEntry → notify store subscribers.
 - Stage subscription fan-out happens automatically for linked subscriber instances.
   - Subscriptions fire when the relationship **TARGET** entity enters a matching stage (not the source).
   - Example: `when orders Active { ... }` on Customer fires when a linked Order enters its Active stage.
-- Deleted instances (`DeleteEntityInstance` effect) are marked `isDeleted: true`.
-- Calling actions on deleted instances is refused (returns error).
 
 ### Honesty
 
 - `create_instance` **writes** session instance state (creates + registers an instance).
 - `get_instance` / `list_instances` are **inspect** tools — they read state, no execution.
-- `invoke_action` uses the **same `DomainEntityInstance.InvokeAction` path** as the core library — VM for assign/conditionals, direct execution for transition/create/delete/link.
+- `invoke_action` uses the **same `DomainEntityInstance.InvokeAction` path** as the core library (lower → VM).
 - Successful `apply_dsl` / evolve replaces the domain root and **clears** prior runtime instances (they held the previous entity graph).
-- Related-policy expressions (`Rel.Prop`, `Rel exists`, `Rel where`) are **authorable** but not RT-evaluated by `evaluate_policy` / `simulate_policy` (local property bag only).
+- Related-policy expressions (`Rel.Prop`, `Rel exists`, `Rel where`) evaluate on store instances via `create_instance` + `link_instances` + `evaluate_policy`. `oracle_expression` is bag-only and fail-closed for those reads.

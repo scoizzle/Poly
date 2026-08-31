@@ -12,7 +12,8 @@ public sealed partial record DomainEntityInstance {
     /// carries <see cref="ActionInvocationResult.ResultInstance"/> as
     /// <see cref="DomainResult.Value"/> so the <c>-&gt; Entity</c> instance is
     /// not dropped; Failure is an object so
-    /// <c>if (!result.IsSuccess) return result</c> is live. Missing actions throw.
+    /// <c>if (!result.IsSuccess) return result</c> is live. Missing or
+    /// wrong-stage actions return Failure (Kitchen nested invoke).
     /// Outer <see cref="InvokeAction"/> still owns the public
     /// <see cref="ActionInvocationResult"/>. Re-entrancy / <c>_invokeDepth</c>
     /// stays with InvokeAction.
@@ -30,8 +31,12 @@ public sealed partial record DomainEntityInstance {
                         $"Policy '{name}' does not take arguments.");
                 return EvaluatePolicy(policy);
             }
-            throw new InvalidOperationException(
-                $"Action '{name}' not found on entity '{Entity.Name}'.");
+            AnalysisResult? analysis = Domain is not null
+                ? RuntimeAnalysisCache.GetOrAnalyze(Domain)
+                : null;
+            var unresolved = ReportUnresolvedAction(name, analysis);
+            return DomainResult.Failure(
+                unresolved.ErrorMessage ?? $"Action '{name}' not found on entity '{Entity.Name}'.");
         }
 
         IReadOnlyDictionary<string, object?>? mapped = null;

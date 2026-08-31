@@ -207,6 +207,8 @@ public static partial class DirectVmAbiEmitter {
             Default d => EmitDefault(d, ctx),
             ThisReference _ => EmitThis(ctx),
             ParameterReference => RejectCompile("ParameterReference is not a VM value; bind a Parameter."),
+            NamedTypeReference or TypeReference or PrimitiveTypeReference or TypeDefinitionReference =>
+                RejectCompile("Type name is not a VM value; use it as a Member/Invoke/New receiver."),
             NullForgiving n => SpillToRing(CompileValue(n, ctx), ctx),
             TypeAs t => EmitTypeAs(t, ctx),
             TypeCast t => EmitTypeCast(t, ctx),

@@ -68,9 +68,9 @@ public class CrossEntityInvokeHostAbiTests {
         var orch = DomainEntityInstance.Create(orchestrator, domain: domain);
         store.Add(orch);
 
-        await Assert.That(() => orch.InvokeAction("Run"))
-            .Throws<InvalidOperationException>()
-            .WithMessageContaining("requires a linked 'ServiceCall'");
+        var result = orch.InvokeAction("Run");
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(result.ErrorMessage).Contains("requires a linked 'ServiceCall'");
     }
 
     [Test]

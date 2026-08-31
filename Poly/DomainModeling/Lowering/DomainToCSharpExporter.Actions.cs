@@ -13,25 +13,40 @@ namespace Poly.DomainModeling.Lowering;
 public sealed partial class DomainToCSharpExporter {
     // ── Action method builder ───────────────────────────────────
 
+    private static void AddActionMethods(Entity entity, List<MethodDefinitionNode> methods,
+        string? stageEnumTypeName,
+        IReadOnlyDictionary<string, IReadOnlyList<Node>>? postTransitionNodes,
+        Domain? domain, INodeMetadataProvider? analysis) {
+        var variants = new List<(Action Action, string? SourceStage)>();
+        foreach (var action in entity.Actions)
+            variants.Add((action, null));
+        foreach (var stage in entity.Stages)
+            foreach (var action in stage.Actions)
+                variants.Add((action, stage.Name));
+
+        foreach (var group in variants.GroupBy(v => v.Action.Name, StringComparer.Ordinal)) {
+            var items = group.ToList();
+            if (items.Count == 1) {
+                var (action, source) = items[0];
+                AddActionMethod(entity, action, methods, stageEnumTypeName, postTransitionNodes,
+                    source, domain, analysis);
+                continue;
+            }
+
+            AddStageDispatchedActionMethod(entity, items, methods, stageEnumTypeName,
+                postTransitionNodes, domain, analysis);
+        }
+    }
+
     private static void AddActionMethod(Entity entity, Action action,
         List<MethodDefinitionNode> methods, string? stageEnumTypeName = null,
         IReadOnlyDictionary<string, IReadOnlyList<Node>>? postTransitionNodes = null,
         string? sourceStageName = null, Domain? domain = null,
         INodeMetadataProvider? analysis = null) {
-        var paramNames = new HashSet<string>(
-            action.Parameters.Select(p => p.Name), StringComparer.Ordinal);
-        var effectsBody = LowerActionToMethodBody(entity, action, paramNames, stageEnumTypeName,
-            postTransitionNodes, sourceStageName, domain, analysis);
-
-        // pack-3c-3: a bound action is a call. The exported method invokes the contract
-        // adapter (emitted per bound contract), never a bodyless local implementation —
-        // the binding must not be dropped by export.
-        effectsBody = PrependAdapterInvocation(domain, action, effectsBody);
-
-        // Build the full method body: require guards first, then effects
         var isVoid = action.Result is not { Members.Count: > 0 };
-        var body = BuildActionBodyWithGuards(action, entity, effectsBody, domain,
-            sourceStageName, stageEnumTypeName, isVoid, analysis);
+        var body = BuildFullActionBody(entity, action, stageEnumTypeName, postTransitionNodes,
+            loweringSourceStage: sourceStageName, guardSourceStage: sourceStageName,
+            domain, analysis, isVoid);
 
         // All actions return DomainResult (void) or DomainResult<T> (typed).
         // This lets callers pattern-match on IsSuccess without exceptions.
@@ -52,6 +67,88 @@ public sealed partial class DomainToCSharpExporter {
                 .Select(p => new Parameter(p.Name, MapDomainTypeRef(p.Type, domain, analysis)))
                 .ToList(),
             Body: body,
+            AccessModifier: AccessModifier.Public
+        ));
+    }
+
+    private static Block BuildFullActionBody(Entity entity, Action action,
+        string? stageEnumTypeName,
+        IReadOnlyDictionary<string, IReadOnlyList<Node>>? postTransitionNodes,
+        string? loweringSourceStage, string? guardSourceStage, Domain? domain,
+        INodeMetadataProvider? analysis, bool isVoid) {
+        var paramNames = new HashSet<string>(
+            action.Parameters.Select(p => p.Name), StringComparer.Ordinal);
+        var effectsBody = LowerActionToMethodBody(entity, action, paramNames, stageEnumTypeName,
+            postTransitionNodes, loweringSourceStage, domain, analysis, isVoid);
+        effectsBody = PrependAdapterInvocation(domain, action, effectsBody);
+        return BuildActionBodyWithGuards(action, entity, effectsBody, domain,
+            guardSourceStage, stageEnumTypeName, isVoid, analysis);
+    }
+
+    private static void AddStageDispatchedActionMethod(Entity entity,
+        List<(Action Action, string? SourceStage)> variants,
+        List<MethodDefinitionNode> methods, string? stageEnumTypeName,
+        IReadOnlyDictionary<string, IReadOnlyList<Node>>? postTransitionNodes,
+        Domain? domain, INodeMetadataProvider? analysis) {
+        var representative = variants[0].Action;
+        var paramSignature = string.Join(",", representative.Parameters.Select(p => p.Name));
+        foreach (var (action, _) in variants) {
+            var sig = string.Join(",", action.Parameters.Select(p => p.Name));
+            if (!string.Equals(sig, paramSignature, StringComparison.Ordinal))
+                throw new InvalidOperationException(
+                    $"Action '{action.Name}' on entity '{entity.Name}' has incompatible parameter lists across stages.");
+        }
+
+        var isVoid = representative.Result is not { Members.Count: > 0 };
+        Node actionResultType = isVoid
+            ? new NamedTypeReference("DomainResult")
+            : new NamedTypeReference("DomainResult",
+                TypeArguments: [MapDomainTypeRef(representative.Result!.Members[0].Type, domain, analysis)]);
+
+        var nodes = new List<Node>();
+        Action? entityLevel = null;
+        foreach (var (action, sourceStage) in variants) {
+            if (sourceStage is null) {
+                entityLevel = action;
+                continue;
+            }
+
+            if (stageEnumTypeName is null)
+                throw new InvalidOperationException(
+                    $"Action '{action.Name}' is stage-scoped on '{entity.Name}' but no stage enum was emitted.");
+
+            var branchBody = BuildFullActionBody(entity, action, stageEnumTypeName, postTransitionNodes,
+                loweringSourceStage: sourceStage, guardSourceStage: null, domain, analysis, isVoid);
+            nodes.Add(new IfStatement(
+                new Equal(
+                    new Member(new ThisReference(), "CurrentStage"),
+                    new Member(new NamedTypeReference(stageEnumTypeName), sourceStage)),
+                branchBody));
+        }
+
+        if (entityLevel is not null) {
+            nodes.AddRange(BuildFullActionBody(entity, entityLevel, stageEnumTypeName,
+                postTransitionNodes, loweringSourceStage: null, guardSourceStage: null,
+                domain, analysis, isVoid).Nodes);
+        }
+        else {
+            nodes.Add(new Return(
+                new Invoke(
+                    new Member(actionResultType, "Failure"),
+                    new Constant($"'{representative.Name}' is not valid for the current stage on entity '{entity.Name}'."))));
+        }
+
+        Node returnType = isVoid
+            ? new NamedTypeReference("DomainResult")
+            : actionResultType;
+
+        methods.Add(new MethodDefinitionNode(
+            representative.Name,
+            returnType,
+            Parameters: representative.Parameters
+                .Select(p => new Parameter(p.Name, MapDomainTypeRef(p.Type, domain, analysis)))
+                .ToList(),
+            Body: new Block(nodes),
             AccessModifier: AccessModifier.Public
         ));
     }
@@ -118,8 +215,9 @@ public sealed partial class DomainToCSharpExporter {
                 ])));
         }
 
-        // Emit require guard clauses referencing entity-level policy methods
-        // Returns DomainResult[<T>].Failure("'CheckOut' blocked by policy 'AtLimit'.")
+        // Emit require guard clauses. Named entity policies are predicates, not
+        // always-on invariants — they gate an action only when the action `require`s
+        // them (FieldService AtCapacity must not block ClockIn / GoOffDuty).
         foreach (var policy in action.Policies) {
             if (policy.Name.StartsWith("not_", StringComparison.Ordinal)) {
                 var realName = policy.Name.Substring(4);
@@ -138,19 +236,6 @@ public sealed partial class DomainToCSharpExporter {
                     new Block([FailureReturn(
                         $"'{action.Name}' blocked by policy '{policy.Name}'.")])));
             }
-        }
-
-        // Emit entity-level policy guards — the runtime treats every entity policy as an
-        // always-on guard on every action invocation (DomainEntityInstance.InvokeAction),
-        // skipping any policy the action inverts via `require not PolicyName`. Without
-        // this the export silently ran actions the runtime would block (contract parity).
-        foreach (var policy in entity.Policies) {
-            if (action.Policies.Any(p => string.Equals(p.Name, $"not_{policy.Name}", StringComparison.Ordinal)))
-                continue;
-            nodes.Add(new IfStatement(
-                new Syntactic.Not(new Invoke(new Member(new ThisReference(), policy.Name))),
-                new Block([FailureReturn(
-                    $"'{action.Name}' blocked by policy '{policy.Name}'.")])));
         }
 
         // Append the effects body
@@ -305,9 +390,13 @@ public sealed partial class DomainToCSharpExporter {
         HashSet<string>? paramNames = null, string? stageEnumTypeName = null,
         IReadOnlyDictionary<string, IReadOnlyList<Node>>? postTransitionNodes = null,
         string? sourceStageName = null, Domain? domain = null,
-        INodeMetadataProvider? analysis = null) {
+        INodeMetadataProvider? analysis = null, bool isVoid = true) {
         if (action.Effects.Count == 0) return null;
         var enumProps = GetEnumPropertyNames(entity, domain, analysis);
+        Node actionResultType = isVoid
+            ? new NamedTypeReference("DomainResult")
+            : new NamedTypeReference("DomainResult",
+                TypeArguments: [MapDomainTypeRef(action.Result.Members[0].Type, domain, analysis)]);
         var context = new LoweringContext(
             new Parameter("entity", new TypeReference(entity.Name)),
             Analysis: analysis,
@@ -318,10 +407,34 @@ public sealed partial class DomainToCSharpExporter {
             PostTransitionNodes: postTransitionNodes,
             SourceStageName: sourceStageName,
             Domain: domain,
-            EnumPropertyNames: enumProps);
+            EnumPropertyNames: enumProps,
+            ActionResultType: actionResultType,
+            EmitInstanceNotify: false);
         var effectPass = new EffectLoweringPass(entity, context);
+        var probes = effectPass.LowerCreateInConstraintProbes(action.Effects);
         var composite = new CompositeEffect(action.Effects);
-        return effectPass.TryLowerVmNode(composite);
+        var lowered = effectPass.TryLowerVmNode(composite);
+        if (probes.Count == 0)
+            return lowered;
+        var nodes = new List<Node>();
+        var locals = new List<Node>();
+        foreach (var probe in probes) {
+            if (probe is Block pb) {
+                nodes.AddRange(pb.Nodes);
+                locals.AddRange(pb.Variables);
+            }
+            else {
+                nodes.Add(probe);
+            }
+        }
+        if (lowered is Block block) {
+            nodes.AddRange(block.Nodes);
+            locals.AddRange(block.Variables);
+        }
+        else if (lowered is not null) {
+            nodes.Add(lowered);
+        }
+        return new Block(nodes, locals);
     }
 
     internal static Node? LowerExpressionToMethodBody(
@@ -728,6 +841,26 @@ public sealed partial class DomainToCSharpExporter {
             if (nav.Cardinality is RelationshipCardinality.OneToMany or RelationshipCardinality.ManyToMany)
                 continue;
             if (string.Equals(nav.Target.TypeName, sourceEntityName, StringComparison.Ordinal)) {
+                found = nav;
+                count++;
+            }
+        }
+        return count == 1 ? found : null;
+    }
+
+    /// <summary>
+    /// Unique collection on <paramref name="peerEntity"/> whose target is
+    /// <paramref name="childEntityName"/> — the C# inverse of a create-in to-one
+    /// initializer (same rule as runtime <c>TryLinkInverseCollection</c>).
+    /// </summary>
+    internal static Relationship? FindInverseCollection(Entity peerEntity, string childEntityName) {
+        Relationship? found = null;
+        var count = 0;
+        foreach (var nav in peerEntity.Navigations) {
+            if (nav.Cardinality is not (RelationshipCardinality.OneToMany
+                or RelationshipCardinality.ManyToMany))
+                continue;
+            if (string.Equals(nav.Target.TypeName, childEntityName, StringComparison.Ordinal)) {
                 found = nav;
                 count++;
             }

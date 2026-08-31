@@ -43,13 +43,31 @@ public sealed class DomainInstanceStore {
 
     /// <summary>Registers an instance. Called after creation.</summary>
     public void Add(DomainEntityInstance instance) {
+        if (!TryAdd(instance, out var error))
+            throw new InvalidOperationException(error);
+    }
+
+    /// <summary>
+    /// Registers an instance or returns the unique-collision message without throwing.
+    /// Create-in uses this so duplicate emails become action Failure, not an MCP crash.
+    /// </summary>
+    public bool TryAdd(DomainEntityInstance instance, out string? error) {
         ArgumentNullException.ThrowIfNull(instance);
-        RejectUniqueCollision(instance, except: null);
+        error = UniqueCollisionMessage(instance, except: null);
+        if (error is not null)
+            return false;
         instance.Store = this;
         _instances.Add(instance);
+        return true;
     }
 
     internal void RejectUniqueCollision(DomainEntityInstance candidate, DomainEntityInstance? except) {
+        var error = UniqueCollisionMessage(candidate, except);
+        if (error is not null)
+            throw new InvalidOperationException(error);
+    }
+
+    internal string? UniqueCollisionMessage(DomainEntityInstance candidate, DomainEntityInstance? except) {
         foreach (var prop in candidate.Entity.Properties) {
             if (!prop.Constraints.OfType<UniqueConstraint>().Any())
                 continue;
@@ -63,10 +81,10 @@ public sealed class DomainInstanceStore {
                 if (!other.TryGetRaw(prop.Name, out var otherValue))
                     continue;
                 if (Equals(otherValue, value))
-                    throw new InvalidOperationException(
-                        $"Unique constraint violated: '{prop.Name}' value is already used on another '{candidate.Entity.Name}'.");
+                    return $"Unique constraint violated: '{prop.Name}' value is already used on another '{candidate.Entity.Name}'.";
             }
         }
+        return null;
     }
 
     /// <summary>Removes an instance (e.g. after delete effect). Also drops its links.</summary>
@@ -264,10 +282,20 @@ public sealed class DomainInstanceStore {
                     t.CurrentStage is not null
                     && entry.StageNames.Any(sn =>
                         string.Equals(sn, t.CurrentStage, StringComparison.Ordinal)));
+                var othersMatched = allLinkedTargets.Count(t =>
+                    !ReferenceEquals(t, transitionedInstance)
+                    && t.CurrentStage is not null
+                    && entry.StageNames.Any(sn =>
+                        string.Equals(sn, t.CurrentStage, StringComparison.Ordinal)));
 
+                // Rising edge: Any fires when the set becomes non-empty; All fires
+                // when the last linked target enters. Level-triggered matchedCount
+                // re-fired on every later peer (University waitlist OfferedSeats).
                 bool shouldFire = entry.Quantifier switch {
-                    StageSubscriptionQuantifier.Any => matchedCount >= 1,
-                    StageSubscriptionQuantifier.All => matchedCount == allLinkedTargets.Count,
+                    StageSubscriptionQuantifier.Any => matchedCount >= 1 && othersMatched == 0,
+                    StageSubscriptionQuantifier.All =>
+                        matchedCount == allLinkedTargets.Count
+                        && othersMatched == allLinkedTargets.Count - 1,
                     _ => false
                 };
 

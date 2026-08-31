@@ -5,6 +5,8 @@ using System.Text.Json.Serialization;
 using ModelContextProtocol.Server;
 
 using Poly.DomainModeling.Analysis;
+using Poly.DomainModeling.Ontology;
+using Poly.DomainModeling.Runtime;
 using Poly.Mcp.Sessions;
 
 namespace Poly.Mcp.Tools;
@@ -27,6 +29,42 @@ internal sealed class RuntimeTool {
             Affordances: ["create_domain_session", "list_sessions"]);
 
     private static string NewInstanceId() => Guid.NewGuid().ToString("N");
+
+    private static Dictionary<string, object?>? BindEntityTypedActionArgs(
+        McpSessionState state,
+        DomainEntityInstance instance,
+        string actionName,
+        Dictionary<string, object?>? args) {
+        if (args is null || args.Count == 0)
+            return args;
+
+        Poly.DomainModeling.Ontology.Action? action = null;
+        if (instance.CurrentStage is { } stageName) {
+            var stage = instance.Entity.Stages.FirstOrDefault(s =>
+                string.Equals(s.Name, stageName, StringComparison.Ordinal));
+            action = stage?.Actions.FirstOrDefault(a =>
+                string.Equals(a.Name, actionName, StringComparison.Ordinal));
+        }
+        action ??= instance.Entity.Actions.FirstOrDefault(a =>
+            string.Equals(a.Name, actionName, StringComparison.Ordinal));
+        if (action is null)
+            return args;
+
+        var entityNames = state.Domain.Types.OfType<Entity>()
+            .Select(e => e.Name)
+            .ToHashSet(StringComparer.Ordinal);
+
+        foreach (var param in action.Parameters) {
+            if (!entityNames.Contains(param.Type.TypeName))
+                continue;
+            if (!args.TryGetValue(param.Name, out var raw) || raw is not string id)
+                continue;
+            if (state.InstanceMap.TryGetValue(id, out var linked))
+                args[param.Name] = linked;
+        }
+
+        return args;
+    }
 
     private static object? JsonElementToValue(JsonElement je) => je.ValueKind switch {
         JsonValueKind.Number when je.TryGetInt32(out var i) => (long)i,
@@ -164,12 +202,23 @@ Thin wrapper around DomainEntityInstance.Create — no new runtime machinery.")]
                 Affordances: ["get_entity_detail"]);
         }
 
-        // Register under lock
-        var registered = McpSessionStore.TryModifyInstances(sessionId, st => {
-            st.InstanceStore ??= new DomainInstanceStore();
-            st.InstanceStore.Add(instance);
-            st.InstanceMap[instanceId] = instance;
-        });
+        // Register under lock. Unique collisions throw from the store — return a
+        // tool failure (Support dogfood: duplicate Handle crashed the MCP call).
+        bool registered;
+        try {
+            registered = McpSessionStore.TryModifyInstances(sessionId, st => {
+                st.InstanceStore ??= new DomainInstanceStore();
+                st.InstanceStore.Add(instance);
+                st.InstanceMap[instanceId] = instance;
+            });
+        }
+        catch (Exception ex) {
+            return new DomainToolResponse(
+                Success: false,
+                Message: $"Failed to create instance: {ex.Message}",
+                SessionId: sessionId,
+                Affordances: ["get_instance", "list_instances"]);
+        }
 
         if (!registered)
             return Failure_NotFound(sessionId);
@@ -180,7 +229,7 @@ Thin wrapper around DomainEntityInstance.Create — no new runtime machinery.")]
             Message: $"Instance '{instanceId}' of entity '{entityName}' created. Stage: '{instance.CurrentStage ?? "(none)"}'.",
             SessionId: sessionId,
             Data: new { instance = snapshot },
-            Affordances: ["get_instance", "invoke_action", "link_instances", "list_instances"]);
+            Affordances: ["get_instance", "invoke_action", "evaluate_policy", "link_instances", "list_instances"]);
     }
 
     // ── RT.2: link_instances ───────────────────────────────────
@@ -454,7 +503,13 @@ Use case — reassign a child from one parent to another:
                 var isTarget = string.Equals(rel.Target.TypeName, entityName, StringComparison.Ordinal);
                 if (!isSource && !isTarget) continue;
 
-                var linked = state.InstanceStore.GetRelatedInstances(rel.Name, instance);
+                // Same relationship name can exist on two sources (Enrollment.section
+                // and WaitOffer.section). Scope peers to this relationship's types.
+                var linked = state.InstanceStore.GetRelatedInstances(rel.Name, instance)
+                    .Where(peer => isSource
+                        ? string.Equals(peer.Entity.Name, rel.Target.TypeName, StringComparison.Ordinal)
+                        : string.Equals(peer.Entity.Name, rel.Source.TypeName, StringComparison.Ordinal))
+                    .ToList();
                 if (linked.Count == 0) continue;
 
                 var ids = new List<string>(linked.Count);
@@ -521,7 +576,9 @@ Use case — reassign a child from one parent to another:
     /// current stage (stage-scoped actions) or entity-level actions.
     ///
     /// The action pipeline: resolves action → evaluates guard policies →
-    /// executes effects (transition, assign, create, create-in, link, etc.).
+    /// executes effects (transition, assign, create, create-in, invoke, for-invoke, if).
+    /// Linking existing instances is <c>link_instances</c> / <c>unlink_instances</c>,
+    /// not an action effect.
     ///
     /// On success, returns the new stage (if a transition occurred). On failure,
     /// returns which guard policies blocked the action or why the action was not found.
@@ -535,7 +592,9 @@ Use case — reassign a child from one parent to another:
 The action pipeline:
 1. Resolve action from current stage or entity level
 2. Evaluate guard policies (action-level, stage-level, entity-level)
-3. Execute effects (transition, assign, create, create-in, link/unlink, delete)
+3. Execute effects (transition, assign, create, create-in, invoke, for-invoke, if)
+
+Link and unlink existing instances with the store tools link_instances and unlink_instances — those are not action effects.
 
 On stage transition, linked subscriber instances automatically fire their
 stage subscription effects (fan-out via DomainInstanceStore.NotifyTransition).
@@ -580,6 +639,8 @@ declares -> EntityType and creates that type, returnTypeName + returnInstanceId.
             }
         }
 
+        args = BindEntityTypedActionArgs(state, instance, actionName, args);
+
         ActionInvocationResult result;
         try {
             result = instance.InvokeAction(actionName, args);
@@ -593,16 +654,19 @@ declares -> EntityType and creates that type, returnTypeName + returnInstanceId.
                 Affordances: ["get_instance", "list_instances"]);
         }
 
-        // Register any newly created children in session InstanceMap so they
-        // appear in list_instances and get_instance. Capture ids for P3 return.
+        // Register newly created children in InstanceMap (the invoked instance
+        // and any subscriber that ran create-in, e.g. Patron when a Loan goes Overdue).
         string? returnInstanceId = null;
-        if (result.Succeeded && instance.CreatedChildren.Count > 0) {
+        if (result.Succeeded) {
             var newChildren = new List<DomainEntityInstance>();
-            foreach (var child in instance.CreatedChildren) {
-                var alreadyRegistered = state.InstanceMap.Values
-                    .Any(v => ReferenceEquals(v, child));
-                if (!alreadyRegistered)
+            foreach (var owner in state.InstanceMap.Values) {
+                foreach (var child in owner.CreatedChildren) {
+                    if (state.InstanceMap.Values.Any(v => ReferenceEquals(v, child)))
+                        continue;
+                    if (newChildren.Any(c => ReferenceEquals(c, child)))
+                        continue;
                     newChildren.Add(child);
+                }
             }
 
             if (newChildren.Count > 0) {
@@ -610,7 +674,8 @@ declares -> EntityType and creates that type, returnTypeName + returnInstanceId.
                     foreach (var child in newChildren) {
                         var childId = NewInstanceId();
                         st.InstanceStore ??= new DomainInstanceStore();
-                        st.InstanceStore.Add(child);
+                        if (child.Store is null)
+                            st.InstanceStore.Add(child);
                         st.InstanceMap[childId] = child;
                         if (result.ResultInstance is not null
                             && ReferenceEquals(child, result.ResultInstance))

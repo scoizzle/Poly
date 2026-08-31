@@ -64,6 +64,19 @@ public class DomainEntityInstanceTests {
     }
 
     [Test]
+    public async Task EvaluatePolicy_OccurredAtBeforeNow_ReturnsTrue() {
+        var occurred = new Property("OccurredAt", new DomainTypeReference("DateTime"), []);
+        var isPast = new Policy("IsPast",
+            DomainExpression.LessThanOrEqual(
+                DomainExpression.Property("OccurredAt"),
+                new Poly.DomainModeling.Libraries.Temporal.Now()));
+        var entity = new Entity("Event", [occurred], [], [isPast], []);
+        var instance = DomainEntityInstance.Create(entity,
+            new Dictionary<string, object?> { ["OccurredAt"] = DateTime.UtcNow.AddHours(-1) });
+        await Assert.That(instance.EvaluatePolicy(isPast)).IsTrue();
+    }
+
+    [Test]
     public async Task EvaluatePolicy_CoercesIntToLong() {
         var entity = CreatePersonEntity();
         // Store Age as int — coercion should handle it
@@ -915,7 +928,9 @@ public class DomainEntityInstanceTests {
         var src = DomainEntityInstance.Create(source, domain: domain);
         store.Add(src);
 
-        await Assert.That(() => src.InvokeAction("RunAll")).Throws<InvalidOperationException>();
+        var zero = src.InvokeAction("RunAll");
+        await Assert.That(zero.Succeeded).IsFalse();
+        await Assert.That(zero.ErrorMessage).Contains("matched zero");
     }
 
     [Test]
@@ -960,7 +975,8 @@ public class DomainEntityInstanceTests {
         await Assert.That(good.GetProperty<long>("Qty")).IsEqualTo(5L);
         await Assert.That(bad.GetProperty<long>("Qty")).IsEqualTo(0L);
 
-        await Assert.That(() => src.InvokeAction("Run")).Throws<InvalidOperationException>();
+        var run = src.InvokeAction("Run");
+        await Assert.That(run.Succeeded).IsFalse();
         // Fail-fast: the failing record (bad, Qty=0) was never mutated — its Mark guard
         // failed before the assign. Rollback is a documented gap: a record invoked BEFORE
         // the failure keeps its mutation.

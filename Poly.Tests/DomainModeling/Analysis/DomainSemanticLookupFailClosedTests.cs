@@ -245,9 +245,9 @@ public class DomainSemanticLookupFailClosedTests {
 
         var policies = analysis.GetEffectivePolicies(domain, order, "Draft");
 
-        await Assert.That(policies.Count).IsEqualTo(2);
-        await Assert.That(policies.Select(p => p.Name)).Contains("Adult");
+        await Assert.That(policies.Count).IsEqualTo(1);
         await Assert.That(policies.Select(p => p.Name)).Contains("Active");
+        await Assert.That(policies.Select(p => p.Name)).DoesNotContain("Adult");
     }
 
     [Test]
@@ -322,9 +322,9 @@ public class DomainSemanticLookupFailClosedTests {
         var policies = analysis.GetEffectivePolicies(domain, order, "Draft");
         var cap = analysis.GetMetadata<StageCapabilityMetadata>(draft);
 
-        await Assert.That(policies.Count).IsEqualTo(2);
-        await Assert.That(policies.Select(p => p.Name)).Contains("Adult");
+        await Assert.That(policies.Count).IsEqualTo(1);
         await Assert.That(policies.Select(p => p.Name)).Contains("Active");
+        await Assert.That(policies.Select(p => p.Name)).DoesNotContain("Adult");
         await Assert.That(policies.Any(p => p.Name == "HasNote")).IsFalse();
         await Assert.That(cap).IsNotNull();
         await Assert.That(cap!.View.EffectivePolicies.Count).IsEqualTo(policies.Count);
@@ -413,7 +413,7 @@ public class DomainSemanticLookupFailClosedTests {
         var draft = order.Stages.First(s => s.Name == "Draft");
         var cap = analysis.GetMetadata<StageCapabilityMetadata>(draft);
 
-        await Assert.That(helperPolicies).IsEqualTo(2);
+        await Assert.That(helperPolicies).IsEqualTo(1);
         await Assert.That(helperActions).IsEqualTo(1);
         await Assert.That(cap!.View.EffectivePolicies.Count).IsEqualTo(helperPolicies);
         await Assert.That(cap.View.EffectiveActions.Count).IsEqualTo(helperActions);

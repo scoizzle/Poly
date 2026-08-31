@@ -42,9 +42,10 @@ public class SelfInvokeHostAbiTests {
 
         await Assert.That(loweredOff).IsNotNull();
         await Assert.That(loweredOn).IsNotNull();
-        await Assert.That(loweredOff).IsTypeOf<Invoke>();
-        await Assert.That(((Invoke)loweredOff!).Delegate).IsTypeOf<Member>();
-        await Assert.That(((Member)((Invoke)loweredOff!).Delegate).MemberName).IsEqualTo("Other");
+        var invoke = FindInvoke(loweredOff!);
+        await Assert.That(invoke).IsNotNull();
+        await Assert.That(invoke!.Delegate).IsTypeOf<Member>();
+        await Assert.That(((Member)invoke.Delegate).MemberName).IsEqualTo("Other");
         await Assert.That(off.TryLowerVmNode(
             new InvokeActionEffect("Other", [], TargetRelationship: "orders"))).IsNotNull();
     }
@@ -82,8 +83,18 @@ public class SelfInvokeHostAbiTests {
         var instance = DomainEntityInstance.Create(entity,
             new Dictionary<string, object?> { ["Status"] = "x" });
 
-        await Assert.That(() => instance.InvokeAction("Bounce"))
-            .Throws<InvalidOperationException>()
-            .WithMessageContaining("depth exceeded");
+        var bounceResult = instance.InvokeAction("Bounce");
+        await Assert.That(bounceResult.Succeeded).IsFalse();
+        await Assert.That(bounceResult.ErrorMessage).Contains("depth exceeded");
+    }
+
+    private static Invoke? FindInvoke(Node node) {
+        if (node is Invoke inv) return inv;
+        foreach (var child in node.Children) {
+            if (child is null) continue;
+            var found = FindInvoke(child);
+            if (found is not null) return found;
+        }
+        return null;
     }
 }

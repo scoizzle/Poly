@@ -115,8 +115,7 @@ public sealed partial record DomainEntityInstance {
                 var prevStage = ResolveTransitionStage(analysis, previousStageName);
                 if (prevStage?.OnExitEffects is { Count: > 0 }) {
                     var exitPass = new EffectLoweringPass(Entity, loweringContext);
-                    foreach (var effect in prevStage.OnExitEffects)
-                        RunTransitionEffect(effect, exitPass, notifyStore);
+                    RunTransitionEffectList(prevStage.OnExitEffects, exitPass, notifyStore);
                 }
             }
 
@@ -126,8 +125,7 @@ public sealed partial record DomainEntityInstance {
                 var targetStage = ResolveTransitionStage(analysis, targetStageName);
                 if (targetStage?.OnEntryEffects is { Count: > 0 }) {
                     var entryPass = new EffectLoweringPass(Entity, loweringContext);
-                    foreach (var effect in targetStage.OnEntryEffects)
-                        RunTransitionEffect(effect, entryPass, notifyStore);
+                    RunTransitionEffectList(targetStage.OnEntryEffects, entryPass, notifyStore);
                 }
             }
             finally {
@@ -147,11 +145,32 @@ public sealed partial record DomainEntityInstance {
     /// Action-level stage transitions must lower via <see cref="ExecuteEffect"/>.
     /// </summary>
     private void RunTransitionEffect(Effect effect, EffectLoweringPass pass, bool notifyStore) {
-        if (effect is StageTransitionEffect nested) {
-            TransitionStage(nested.TargetStage.StageName, notifyStore);
-            return;
+        RunTransitionEffectList([effect], pass, notifyStore);
+    }
+
+    /// <summary>
+    /// Nested <see cref="StageTransitionEffect"/> still recurses
+    /// <see cref="TransitionStage"/>. Mixed if+create in the same entry/exit
+    /// list compiles via <c>LowerActionBody</c> (ExecuteStructured was deleted).
+    /// </summary>
+    private void RunTransitionEffectList(
+        IReadOnlyList<Effect> effects, EffectLoweringPass pass, bool notifyStore) {
+        var batch = new List<Effect>();
+        void Flush() {
+            if (batch.Count == 0) return;
+            ExecuteEffectList(batch, pass, _typeDefAnalyzer);
+            batch.Clear();
         }
-        ExecuteEffect(effect, pass, _typeDefAnalyzer);
+        foreach (var effect in effects) {
+            if (effect is StageTransitionEffect nested) {
+                Flush();
+                TransitionStage(nested.TargetStage.StageName, notifyStore);
+            }
+            else {
+                batch.Add(effect);
+            }
+        }
+        Flush();
     }
 
     /// <summary>
@@ -206,12 +225,11 @@ public sealed partial record DomainEntityInstance {
                 effectPass = new EffectLoweringPass(Entity, subjectParam);
             }
 
-            foreach (var effect in effects) {
-                var bound = peerBinding is { Length: > 0 }
+            var bound = effects.Select(effect => peerBinding is { Length: > 0 }
                     ? BindPeerInEffect(effect, peerBinding, peerInstance)
-                    : effect;
-                ExecuteEffect(bound, effectPass, _typeDefAnalyzer);
-            }
+                    : effect)
+                .ToList();
+            ExecuteEffectList(bound, effectPass, _typeDefAnalyzer);
         }
         finally {
             _isExecutingSubscription = false;
@@ -354,6 +372,9 @@ public sealed partial record DomainEntityInstance {
     /// Parking dogfood: <c>assign Occupied + 1</c> then <c>create in</c> left Occupied
     /// bumped when Plate failed the pattern. Unconditional create/create-in and
     /// creates on a taken <c>if</c> branch are constraint-checked before any effect runs.
+    /// Taken-ness is evaluated on the pre-effect bag: a condition that reads a
+    /// property assigned earlier in the same action is not re-eval'd, so that
+    /// assign still applies when the post-assign bag would take an illegal create.
     /// Untaken then/else branches are not probed (illegal initializer on an untaken
     /// branch must not fail the action).
     /// </summary>

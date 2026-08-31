@@ -214,13 +214,13 @@ public sealed partial record DomainEntityInstance {
             Analysis: analysis,
             Domain: instance.Domain);
         var entryPass = new EffectLoweringPass(instance.Entity, loweringContext);
-        foreach (var effect in firstStage.OnEntryEffects) {
-            // The export ctor lowers first-stage entry effects with transitions disabled —
-            // mirror that: run assign/create effects but skip stage transitions (a nested
-            // transition in the initial entry would otherwise recurse at Create).
-            if (effect is StageTransitionEffect) continue;
-            instance.ExecuteEffect(effect, entryPass, instance._typeDefAnalyzer);
-        }
+        var entryEffects = firstStage.OnEntryEffects
+            .Where(e => e is not StageTransitionEffect)
+            .ToList();
+        if (entryEffects.Count == 0)
+            return;
+        // Mixed if+create must LowerActionBody (ExecuteStructured was deleted).
+        instance.ExecuteEffectList(entryEffects, entryPass, instance._typeDefAnalyzer);
     }
 
     /// <summary>
@@ -501,30 +501,10 @@ public sealed partial record DomainEntityInstance {
                 return ActionInvocationResult.InvalidArguments(actionName, createError);
 
             var createdBefore = _createdChildren.Count;
-            var preparedEffects = action.Effects.Select(PreprocessEffectExpressions).ToList();
-            if (preparedEffects.Exists(ContainsConditionalCreate)) {
-                // Mixed if+create: same guarded-probe + body tree as export.
-                // Runtime factories, not ExecuteStructured / EffectExecutor.
-                var tree = effectPass.LowerActionBody(preparedEffects);
-                if (tree is null)
-                    throw new InvalidOperationException(
-                        $"Cannot lower action '{actionName}' effects containing create.");
-                var compiledBody = Interpreter.CompileChecked(
-                    tree, DomainResultTypeProvider.Wrap(effectTypeProvider));
-                using var execBody = Interpreter.Execute(compiledBody,
-                    s => s.SetArgs(new object?[] { this }));
-                if (execBody.Result.Value is DomainResult { IsSuccess: false } failedBody)
-                    return ActionInvocationResult.InvalidArguments(
-                        actionName, failedBody.ErrorMessage ?? "invoke failed.");
-            }
-            else {
-                foreach (var effect in preparedEffects) {
-                    var failed = ExecuteEffect(effect, effectPass, effectTypeProvider);
-                    if (failed is { IsSuccess: false })
-                        return ActionInvocationResult.InvalidArguments(
-                            actionName, failed.ErrorMessage ?? "invoke failed.");
-                }
-            }
+            var failed = ExecuteEffectList(action.Effects, effectPass, effectTypeProvider);
+            if (failed is { IsSuccess: false })
+                return ActionInvocationResult.InvalidArguments(
+                    actionName, failed.ErrorMessage ?? "invoke failed.");
 
             // P3: declared -> Entity return = last child created this invoke of that type.
             DomainEntityInstance? resultInstance = null;
@@ -577,6 +557,37 @@ public sealed partial record DomainEntityInstance {
         }
 
         return result.Count > 0 ? result : null;
+    }
+
+    /// <summary>
+    /// Mixed if+create compiles guarded-probe + body (runtime factories). Leaf
+    /// effects stay on <see cref="ExecuteEffect"/>. Shared by InvokeAction,
+    /// first-stage OnEntry, subscription, and TransitionStage entry/exit.
+    /// </summary>
+    private DomainResult? ExecuteEffectList(
+        IReadOnlyList<Effect> effects,
+        EffectLoweringPass effectPass,
+        TypeDefinitionNodeAnalyzer typeProvider) {
+        var prepared = effects.Select(PreprocessEffectExpressions).ToList();
+        if (prepared.Exists(ContainsConditionalCreate)) {
+            var tree = effectPass.LowerActionBody(prepared);
+            if (tree is null)
+                throw new InvalidOperationException(
+                    "Cannot lower effects containing create.");
+            var compiled = Interpreter.CompileChecked(
+                tree, DomainResultTypeProvider.Wrap(typeProvider));
+            using var exec = Interpreter.Execute(compiled,
+                s => s.SetArgs(new object?[] { this }));
+            if (exec.Result.Value is DomainResult { IsSuccess: false } failed)
+                return failed;
+            return null;
+        }
+        foreach (var effect in prepared) {
+            var failed = ExecuteEffect(effect, effectPass, typeProvider);
+            if (failed is { IsSuccess: false })
+                return failed;
+        }
+        return null;
     }
 
     /// <summary>

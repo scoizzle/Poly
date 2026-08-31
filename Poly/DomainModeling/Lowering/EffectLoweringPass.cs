@@ -240,6 +240,24 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     /// Not a host-ABI node. Not gated on <see cref="LoweringContext.LowerStageTransitions"/>
     /// — that flag still gates create / create-in.
     /// </summary>
+    /// <summary>
+    /// Runtime action transitions inline OnEntry/OnExit. Mixed if+create in those
+    /// blocks needs instance factories (<c>_lowerRuntimeCreate</c>); export still
+    /// uses Stay.Create via <c>LowerStageTransitions</c>.
+    /// </summary>
+    private Node? RouteWithRuntimeCreate(Effect effect) {
+        if (_lowerStageTransitions)
+            return Route(effect);
+        var restore = _lowerRuntimeCreate;
+        _lowerRuntimeCreate = true;
+        try {
+            return Route(effect);
+        }
+        finally {
+            _lowerRuntimeCreate = restore;
+        }
+    }
+
     protected override Node? StageTransition(StageTransitionEffect t) {
         if (!_entity.Stages.Any(s =>
             string.Equals(s.Name, t.TargetStage.StageName, StringComparison.Ordinal)))
@@ -264,7 +282,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
                     string.Equals(s.Name, _sourceStageName, StringComparison.Ordinal));
             if (sourceStage is not null) {
                 foreach (var exitEffect in sourceStage.OnExitEffects) {
-                    var lowered = Route(exitEffect);
+                    var lowered = RouteWithRuntimeCreate(exitEffect);
                     if (lowered is not null)
                         nodes.Add(lowered);
                 }
@@ -295,7 +313,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
                 string.Equals(s.Name, t.TargetStage.StageName, StringComparison.Ordinal));
         if (targetStage is not null) {
             foreach (var entryEffect in targetStage.OnEntryEffects) {
-                var lowered = Route(entryEffect);
+                var lowered = RouteWithRuntimeCreate(entryEffect);
                 if (lowered is not null)
                     tryNodes.Add(lowered);
             }
@@ -784,7 +802,11 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
 
     private void CollectGuardedBranchProbes(ConditionalEffect cond, List<Node> nodes) {
         var thenProbes = new List<Node>();
-        var thenPrior = false;
+        // Nested else-if is a ConditionalEffect in ElseEffects. Runtime
+        // PrevalidateUnconditionalCreates recurses regardless of nested
+        // priorMutation; start then/else as already-mutating so those probes
+        // are collected (this walk is only entered after a prior mutation).
+        var thenPrior = true;
         CollectCreateInProbes(cond.ThenEffects, thenProbes, ref thenPrior);
         if (thenProbes.Count > 0) {
             var condition = _expressionPass.Lower(cond.Condition, Subject);
@@ -794,7 +816,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         if (cond.ElseEffects is not { Count: > 0 })
             return;
         var elseProbes = new List<Node>();
-        var elsePrior = false;
+        var elsePrior = true;
         CollectCreateInProbes(cond.ElseEffects, elseProbes, ref elsePrior);
         if (elseProbes.Count == 0)
             return;
@@ -901,7 +923,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
             Node value = prop is not null
                 ? LowerEnumAwareValue(init.Expression, prop.Type, Subject)
                 : _expressionPass.Lower(init.Expression, Subject);
-            args.Add(value);
+            args.Add(new TypeCast(value, TypeReference.To<object>()));
         }
 
         var seq = _createInProbeSequence++;

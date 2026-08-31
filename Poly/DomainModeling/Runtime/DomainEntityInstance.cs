@@ -220,7 +220,9 @@ public sealed partial record DomainEntityInstance {
         if (entryEffects.Count == 0)
             return;
         // Mixed if+create must LowerActionBody (ExecuteStructured was deleted).
-        instance.ExecuteEffectList(entryEffects, entryPass, instance._typeDefAnalyzer);
+        ThrowIfEffectListFailed(
+            instance.ExecuteEffectList(entryEffects, entryPass, instance._typeDefAnalyzer),
+            "first-stage OnEntry");
     }
 
     /// <summary>
@@ -557,6 +559,12 @@ public sealed partial record DomainEntityInstance {
         }
 
         return result.Count > 0 ? result : null;
+    }
+
+    private static void ThrowIfEffectListFailed(DomainResult? failed, string context) {
+        if (failed is { IsSuccess: false })
+            throw new InvalidOperationException(
+                failed.ErrorMessage ?? $"{context} failed.");
     }
 
     /// <summary>

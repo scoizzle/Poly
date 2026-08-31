@@ -754,6 +754,71 @@ public class ActionEntityReturnTests {
     }
 
     [Test]
+    public async Task InvokeAction_UntakenCreateBranch_FiveInitializers_DoesNotThrowIsSuccess() {
+        var (domain, _) = Evolve("""
+            domain Hotel
+            Stay: entity {
+              A: Number range(1, 9) required
+              B: Number range(1, 9) required
+              C: Number range(1, 9) required
+              D: Number range(1, 9) required
+              E: Number range(1, 9) required
+            }
+            Guest: entity {
+              Book: action (a: Number, b: Number, c: Number, d: Number, e: Number, confirm: Boolean) {
+                if (confirm is true) {
+                  create Stay { A: a B: b C: c D: d E: e }
+                }
+              }
+            }
+            """);
+        var guestEntity = domain.Types.OfType<Entity>().First(e => e.Name == "Guest");
+        var guest = DomainEntityInstance.Create(guestEntity, domain: domain);
+        var store = new DomainInstanceStore();
+        store.Add(guest);
+
+        var result = guest.InvokeAction("Book",
+            new Dictionary<string, object?> {
+                ["a"] = 0L, ["b"] = 0L, ["c"] = 0L, ["d"] = 0L, ["e"] = 0L, ["confirm"] = false
+            });
+        await Assert.That(result.Succeeded).IsTrue();
+        await Assert.That(guest.CreatedChildren).IsEmpty();
+    }
+
+    [Test]
+    public async Task InvokeAction_TakenCreateBranch_FiveInitializers_ConstraintFail_DoesNotThrowIsSuccess() {
+        var (domain, _) = Evolve("""
+            domain Hotel
+            Stay: entity {
+              A: Number range(1, 9) required
+              B: Number range(1, 9) required
+              C: Number range(1, 9) required
+              D: Number range(1, 9) required
+              E: Number range(1, 9) required
+            }
+            Guest: entity {
+              Book: action (a: Number, b: Number, c: Number, d: Number, e: Number, confirm: Boolean) {
+                if (confirm is true) {
+                  create Stay { A: a B: b C: c D: d E: e }
+                }
+              }
+            }
+            """);
+        var guestEntity = domain.Types.OfType<Entity>().First(e => e.Name == "Guest");
+        var guest = DomainEntityInstance.Create(guestEntity, domain: domain);
+        var store = new DomainInstanceStore();
+        store.Add(guest);
+
+        var result = guest.InvokeAction("Book",
+            new Dictionary<string, object?> {
+                ["a"] = 0L, ["b"] = 0L, ["c"] = 0L, ["d"] = 0L, ["e"] = 0L, ["confirm"] = true
+            });
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(result.ErrorMessage).IsNotNull();
+        await Assert.That(guest.CreatedChildren).IsEmpty();
+    }
+
+    [Test]
     public async Task InvokeAction_ElseIfCreateBranch_ConstraintFail_DoesNotApplyPriorAssigns() {
         var (domain, _) = Evolve("""
             domain Hotel
@@ -840,6 +905,37 @@ public class ActionEntityReturnTests {
     }
 
     [Test]
+    public async Task Create_OnEntryIfCreate_Illegal_DoesNotSucceedSilent() {
+        var (domain, _) = Evolve("""
+            domain Hotel
+            Stay: entity {
+              Code: Text pattern("^[A-Z]{3}$") required
+            }
+            Guest: entity {
+              Flag: Number default(1)
+              Tag: Text default("bad")
+              Draft: stage {
+                entry {
+                  if (Flag >= 1) {
+                    create Stay { Code: Tag }
+                  }
+                }
+              }
+            }
+            """);
+        var guestEntity = domain.Types.OfType<Entity>().First(e => e.Name == "Guest");
+        var thrown = false;
+        try {
+            DomainEntityInstance.Create(guestEntity, domain: domain);
+        }
+        catch (InvalidOperationException ex) {
+            thrown = true;
+            await Assert.That(ex.Message).Contains("Code");
+        }
+        await Assert.That(thrown).IsTrue();
+    }
+
+    [Test]
     public async Task TransitionStage_OnEntryIfCreate_DoesNotThrowCannotLower() {
         var (domain, _) = Evolve("""
             domain Hotel
@@ -868,6 +964,42 @@ public class ActionEntityReturnTests {
         await Assert.That(result.Succeeded).IsTrue();
         await Assert.That(guest.CreatedChildren.Count).IsEqualTo(1);
         await Assert.That(guest.CreatedChildren[0].Entity.Name).IsEqualTo("Stay");
+    }
+
+    [Test]
+    public async Task InvokeAction_TransitionTo_EntryAssignThenIllegalCreate_DoesNotApplyEntryAssign() {
+        var (domain, _) = Evolve("""
+            domain Hotel
+            Stay: entity {
+              Code: Text pattern("^[A-Z]{3}$") required
+            }
+            Guest: entity {
+              Flag: Number default(1)
+              Tag: Text default("bad")
+              OpenStays: Number default(0)
+              Draft: stage {
+                OpenIt: action { transition to Open }
+              }
+              Open: stage {
+                entry {
+                  assign OpenStays to OpenStays + 1
+                  if (Flag >= 1) {
+                    create Stay { Code: Tag }
+                  }
+                }
+              }
+            }
+            """);
+        var guestEntity = domain.Types.OfType<Entity>().First(e => e.Name == "Guest");
+        var guest = DomainEntityInstance.Create(guestEntity, domain: domain);
+        var store = new DomainInstanceStore();
+        store.Add(guest);
+        var result = guest.InvokeAction("OpenIt");
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(result.ErrorMessage).Contains("Code");
+        await Assert.That(guest.GetProperty<object>("OpenStays")).IsEqualTo(0L);
+        await Assert.That(guest.CurrentStage).IsEqualTo("Draft");
+        await Assert.That(guest.CreatedChildren).IsEmpty();
     }
 
     [Test]

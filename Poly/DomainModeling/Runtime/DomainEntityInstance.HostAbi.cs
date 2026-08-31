@@ -158,7 +158,9 @@ public sealed partial record DomainEntityInstance {
         var batch = new List<Effect>();
         void Flush() {
             if (batch.Count == 0) return;
-            ExecuteEffectList(batch, pass, _typeDefAnalyzer);
+            ThrowIfEffectListFailed(
+                ExecuteEffectList(batch, pass, _typeDefAnalyzer),
+                "stage entry/exit");
             batch.Clear();
         }
         foreach (var effect in effects) {
@@ -229,7 +231,9 @@ public sealed partial record DomainEntityInstance {
                     ? BindPeerInEffect(effect, peerBinding, peerInstance)
                     : effect)
                 .ToList();
-            ExecuteEffectList(bound, effectPass, _typeDefAnalyzer);
+            ThrowIfEffectListFailed(
+                ExecuteEffectList(bound, effectPass, _typeDefAnalyzer),
+                "subscription");
         }
         finally {
             _isExecutingSubscription = false;

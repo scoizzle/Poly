@@ -233,14 +233,6 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     }
 
     /// <summary>
-    /// Lowers a stage transition to generic Syntax AST on both runtime and emit:
-    /// source-stage exit effects (when known), CurrentStage assignment, target-stage
-    /// entry effects (in try), post-transition notification nodes, then
-    /// <c>Invoke(Member(Subject, "Notify"), stageName)</c> in finally.
-    /// Not a host-ABI node. Not gated on <see cref="LoweringContext.LowerStageTransitions"/>
-    /// — that flag still gates create / create-in.
-    /// </summary>
-    /// <summary>
     /// Runtime action transitions inline OnEntry/OnExit. Mixed if+create in those
     /// blocks needs instance factories (<c>_lowerRuntimeCreate</c>); export still
     /// uses Stay.Create via <c>LowerStageTransitions</c>.
@@ -258,6 +250,64 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         }
     }
 
+    /// <summary>
+    /// Mixed if+create in OnEntry/OnExit uses the same guarded-probe walk as
+    /// <see cref="LowerActionBodyCore"/>. Probes go to <paramref name="probeSink"/>
+    /// (before CurrentStage for entry); the body goes to <paramref name="bodySink"/>.
+    /// </summary>
+    private void AppendInlinedStageEffects(
+        IReadOnlyList<Effect> effects, List<Node> probeSink, List<Node> bodySink) {
+        if (effects.Count == 0)
+            return;
+        if (!_lowerStageTransitions && HasConditionalCreate(effects)) {
+            var restore = _lowerRuntimeCreate;
+            _lowerRuntimeCreate = true;
+            try {
+                var probes = LowerCreateInConstraintProbes(effects);
+                if (probes.Count > 0)
+                    probeSink.Add(FlattenProbeBlocks(probes));
+                var body = TryLowerVmNode(new CompositeEffect(effects));
+                if (body is not null)
+                    bodySink.Add(body);
+            }
+            finally {
+                _lowerRuntimeCreate = restore;
+            }
+            return;
+        }
+        foreach (var effect in effects) {
+            var lowered = RouteWithRuntimeCreate(effect);
+            if (lowered is not null)
+                bodySink.Add(lowered);
+        }
+    }
+
+    private static bool HasConditionalCreate(IReadOnlyList<Effect> effects) =>
+        effects.Any(ContainsConditionalCreateEffect);
+
+    private static bool ContainsConditionalCreateEffect(Effect effect) => effect switch {
+        ConditionalEffect c => ContainsCreateEffect(c),
+        CompositeEffect c => c.Effects.Any(ContainsConditionalCreateEffect),
+        _ => false
+    };
+
+    private static bool ContainsCreateEffect(Effect effect) => effect switch {
+        CreateEntityInstance cei => true,
+        CreateEntityInRelationshipEffect => true,
+        CompositeEffect c => c.Effects.Any(ContainsCreateEffect),
+        ConditionalEffect c => c.ThenEffects.Any(ContainsCreateEffect)
+            || (c.ElseEffects?.Any(ContainsCreateEffect) ?? false),
+        _ => false
+    };
+
+    /// <summary>
+    /// Lowers a stage transition to generic Syntax AST on both runtime and emit:
+    /// source-stage exit effects (when known), CurrentStage assignment, target-stage
+    /// entry effects (in try), post-transition notification nodes, then
+    /// <c>Invoke(Member(Subject, "Notify"), stageName)</c> in finally.
+    /// Not a host-ABI node. Not gated on <see cref="LoweringContext.LowerStageTransitions"/>
+    /// — that flag still gates create / create-in.
+    /// </summary>
     protected override Node? StageTransition(StageTransitionEffect t) {
         if (!_entity.Stages.Any(s =>
             string.Equals(s.Name, t.TargetStage.StageName, StringComparison.Ordinal)))
@@ -280,19 +330,25 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
             else
                 sourceStage = _entity.Stages.FirstOrDefault(s =>
                     string.Equals(s.Name, _sourceStageName, StringComparison.Ordinal));
-            if (sourceStage is not null) {
-                foreach (var exitEffect in sourceStage.OnExitEffects) {
-                    var lowered = RouteWithRuntimeCreate(exitEffect);
-                    if (lowered is not null)
-                        nodes.Add(lowered);
-                }
-            }
+            if (sourceStage is not null)
+                AppendInlinedStageEffects(sourceStage.OnExitEffects, nodes, nodes);
         }
 
-        // Set the target stage BEFORE the target's entry effects run — the runtime
-        // TransitionStage sets CurrentStage first, then runs entry effects, so a
-        // transition nested inside entry (entry of X → Y) must end at Y, not be
-        // overwritten by the outer assignment.
+        // Entry probes run BEFORE CurrentStage so a taken illegal create fails
+        // closed without flipping the stage. Entry body still runs after the
+        // assign (nested entry transition must end at Y).
+        var tryNodes = new List<Node>();
+        Stage? targetStage = null;
+        if (_analysis is not null)
+            _analysis.TryGetStage(_entity, t.TargetStage.StageName, out targetStage);
+        else
+            targetStage = _entity.Stages.FirstOrDefault(s =>
+                string.Equals(s.Name, t.TargetStage.StageName, StringComparison.Ordinal));
+        var entryProbes = new List<Node>();
+        if (targetStage is not null)
+            AppendInlinedStageEffects(targetStage.OnEntryEffects, entryProbes, tryNodes);
+        nodes.AddRange(entryProbes);
+
         Node stageValue = _useThisReference || _stageEnumTypeName is not null
             ? new Member(
                 new NamedTypeReference(_stageEnumTypeName ?? $"{_entity.Name}Stage"),
@@ -301,23 +357,6 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         nodes.Add(new Assignment(
             new Member(Subject, "CurrentStage"),
             stageValue));
-
-        // Entry + C# post-transition fan-out run inside try so Invoke Notify
-        // still fires in finally (TransitionStage notified the store in finally).
-        var tryNodes = new List<Node>();
-        Stage? targetStage = null;
-        if (_analysis is not null)
-            _analysis.TryGetStage(_entity, t.TargetStage.StageName, out targetStage);
-        else
-            targetStage = _entity.Stages.FirstOrDefault(s =>
-                string.Equals(s.Name, t.TargetStage.StageName, StringComparison.Ordinal));
-        if (targetStage is not null) {
-            foreach (var entryEffect in targetStage.OnEntryEffects) {
-                var lowered = RouteWithRuntimeCreate(entryEffect);
-                if (lowered is not null)
-                    tryNodes.Add(lowered);
-            }
-        }
 
         if (_postTransitionNodes is not null
             && _postTransitionNodes.TryGetValue(t.TargetStage.StageName, out var postNodes)) {

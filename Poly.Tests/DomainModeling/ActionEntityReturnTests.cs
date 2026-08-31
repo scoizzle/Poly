@@ -633,6 +633,64 @@ public class ActionEntityReturnTests {
     }
 
     [Test]
+    public async Task InvokeAction_UntakenCreateBranch_PriorAssignsStand() {
+        var (domain, _) = Evolve("""
+            domain Hotel
+            Stay: entity {
+              Nights: Number range(1, 21) required
+            }
+            Guest: entity {
+              OpenStays: Number default(0)
+              Book: action (nights: Number, confirm: Boolean) {
+                assign OpenStays to OpenStays + 1
+                if (confirm is true) {
+                  create Stay { Nights: nights }
+                }
+              }
+            }
+            """);
+        var guestEntity = domain.Types.OfType<Entity>().First(e => e.Name == "Guest");
+        var guest = DomainEntityInstance.Create(guestEntity, domain: domain);
+        var store = new DomainInstanceStore();
+        store.Add(guest);
+
+        var result = guest.InvokeAction("Book",
+            new Dictionary<string, object?> { ["nights"] = 0L, ["confirm"] = false });
+        await Assert.That(result.Succeeded).IsTrue();
+        await Assert.That(guest.GetProperty<object>("OpenStays")).IsEqualTo(1L);
+        await Assert.That(guest.CreatedChildren).IsEmpty();
+    }
+
+    [Test]
+    public async Task InvokeAction_TakenCreateBranch_ConstraintFail_DoesNotApplyPriorAssigns() {
+        var (domain, _) = Evolve("""
+            domain Hotel
+            Stay: entity {
+              Nights: Number range(1, 21) required
+            }
+            Guest: entity {
+              OpenStays: Number default(0)
+              Book: action (nights: Number, confirm: Boolean) {
+                assign OpenStays to OpenStays + 1
+                if (confirm is true) {
+                  create Stay { Nights: nights }
+                }
+              }
+            }
+            """);
+        var guestEntity = domain.Types.OfType<Entity>().First(e => e.Name == "Guest");
+        var guest = DomainEntityInstance.Create(guestEntity, domain: domain);
+        var store = new DomainInstanceStore();
+        store.Add(guest);
+
+        var result = guest.InvokeAction("Book",
+            new Dictionary<string, object?> { ["nights"] = 0L, ["confirm"] = true });
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(guest.GetProperty<object>("OpenStays")).IsEqualTo(0L);
+        await Assert.That(guest.CreatedChildren).IsEmpty();
+    }
+
+    [Test]
     public async Task InvokeAction_EntityInvokeCancel_DispatchesCurrentStage() {
         var (domain, _) = Evolve("""
             domain Tickets

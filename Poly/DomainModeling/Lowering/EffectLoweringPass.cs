@@ -15,7 +15,7 @@ namespace Poly.DomainModeling.Lowering;
 /// like <see cref="AssignEffect"/> and <see cref="ConditionalEffect"/>.
 ///
 /// <para>Create / create-in still produce <c>null</c> from <see cref="Route"/>
-/// on the runtime path and are handled by EffectExecutor. StageTransition and
+/// on the runtime path; they execute via CreateChildInstance / ExecuteCreateInRelationship (not EffectExecutor). StageTransition and
 /// invoke (self, cross-entity, for-each) are handwritten IR on both runtime
 /// and emit — not host-ABI nodes. <c>LowerStageTransitions</c> still gates
 /// create / create-in.</para>
@@ -684,29 +684,79 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
 
     internal List<Node> LowerCreateInConstraintProbes(IReadOnlyList<Effect> effects) {
         var nodes = new List<Node>();
-        CollectCreateInProbes(effects, nodes);
+        var priorMutation = false;
+        CollectCreateInProbes(effects, nodes, ref priorMutation);
         return nodes;
     }
 
-    private void CollectCreateInProbes(IReadOnlyList<Effect> effects, List<Node> nodes) {
-        // Same set as runtime PrevalidateUnconditionalCreates: CompositeEffect +
-        // unconditional create / create-in. Do not walk ConditionalEffect — an
-        // illegal initializer on an untaken then-branch must not fail the action.
+    private void CollectCreateInProbes(IReadOnlyList<Effect> effects, List<Node> nodes, ref bool priorMutation) {
+        // Unconditional create / create-in (and composites of them) probe at method
+        // start — same set as runtime PrevalidateUnconditionalCreates.
+        // ConditionalEffect is not probed unguarded (illegal then-branch on an
+        // untaken if must not fail the action). When a prior sibling already
+        // mutates (assign / create / invoke / transition), emit a condition-guarded
+        // probe so a taken illegal create returns Failure before those assigns.
         foreach (var effect in effects) {
             switch (effect) {
                 case CompositeEffect composite:
-                    CollectCreateInProbes(composite.Effects, nodes);
+                    CollectCreateInProbes(composite.Effects, nodes, ref priorMutation);
                     break;
                 case CreateEntityInRelationshipEffect cr:
                     if (LowerCreateInProbe(cr) is { } probe)
                         nodes.Add(probe);
+                    priorMutation = true;
                     break;
                 case CreateEntityInstance cei:
                     if (LowerCreateEntityInstanceProbe(cei) is { } createProbe)
                         nodes.Add(createProbe);
+                    priorMutation = true;
+                    break;
+                case ConditionalEffect cond:
+                    if (priorMutation)
+                        CollectGuardedBranchProbes(cond, nodes);
+                    priorMutation = true;
+                    break;
+                case AssignEffect or StageTransitionEffect or InvokeActionEffect or ForEachInvokeEffect:
+                    priorMutation = true;
                     break;
             }
         }
+    }
+
+    private void CollectGuardedBranchProbes(ConditionalEffect cond, List<Node> nodes) {
+        var thenProbes = new List<Node>();
+        var thenPrior = false;
+        CollectCreateInProbes(cond.ThenEffects, thenProbes, ref thenPrior);
+        if (thenProbes.Count > 0) {
+            var condition = _expressionPass.Lower(cond.Condition, Subject);
+            nodes.Add(new IfStatement(condition, FlattenProbeBlocks(thenProbes)));
+        }
+
+        if (cond.ElseEffects is not { Count: > 0 })
+            return;
+        var elseProbes = new List<Node>();
+        var elsePrior = false;
+        CollectCreateInProbes(cond.ElseEffects, elseProbes, ref elsePrior);
+        if (elseProbes.Count == 0)
+            return;
+        var elseCondition = _expressionPass.Lower(cond.Condition, Subject);
+        nodes.Add(new IfStatement(
+            new Syntactic.Not(elseCondition), FlattenProbeBlocks(elseProbes)));
+    }
+
+    private static Block FlattenProbeBlocks(List<Node> probes) {
+        var nodes = new List<Node>();
+        var locals = new List<Node>();
+        foreach (var probe in probes) {
+            if (probe is Block b) {
+                nodes.AddRange(b.Nodes);
+                locals.AddRange(b.Variables);
+            }
+            else {
+                nodes.Add(probe);
+            }
+        }
+        return new Block(nodes, locals);
     }
 
     private Block? LowerCreateInProbe(CreateEntityInRelationshipEffect cr) {

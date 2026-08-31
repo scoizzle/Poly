@@ -12,9 +12,9 @@ namespace Poly.DomainModeling.Runtime;
 
 public sealed partial record DomainEntityInstance {
     /// <summary>
-    /// Dispatches remaining direct-execution effects using <see cref="EffectDispatch{TResult}"/>.
-    /// Product arms are create and create-in only; invoke, stage, and for throw.
-    /// Named by the Effect subtype, not by the pattern (no Visit*).
+    /// Residual dispatcher. All product arms throw: create / create-in execute
+    /// via CreateChildInstance / ExecuteCreateInRelationship (probes+Failure).
+    /// Invoke, stage, and for must lower to Ast.
     /// </summary>
     private sealed class EffectExecutor : EffectDispatch<object?> {
         private readonly DomainEntityInstance _instance;
@@ -40,13 +40,13 @@ public sealed partial record DomainEntityInstance {
             throw new InvalidOperationException(
                 "StageTransitionEffect must lower to Ast; EffectExecutor is not the shipped path.");
 
-        protected override object? CreateEntityInstance(CreateEntityInstance create) {
-            return _instance.CreateChildInstance(create, _typeProvider);
-        }
+        protected override object? CreateEntityInstance(CreateEntityInstance create) =>
+            throw new InvalidOperationException(
+                "CreateEntityInstance must not use EffectExecutor; probes+Failure and CreateChildInstance are the shipped path.");
 
-        protected override object? CreateEntityInRelationship(CreateEntityInRelationshipEffect createIn) {
-            return _instance.ExecuteCreateInRelationship(createIn, _typeProvider);
-        }
+        protected override object? CreateEntityInRelationship(CreateEntityInRelationshipEffect createIn) =>
+            throw new InvalidOperationException(
+                "CreateEntityInRelationship must not use EffectExecutor; probes+Failure and ExecuteCreateInRelationship are the shipped path.");
 
         protected override object? InvokeAction(InvokeActionEffect invoke) =>
             throw new InvalidOperationException(
@@ -299,14 +299,29 @@ public sealed partial record DomainEntityInstance {
 
     /// <summary>
     /// Parking dogfood: <c>assign Occupied + 1</c> then <c>create in</c> left Occupied
-    /// bumped when Plate failed the pattern. Unconditional create/create-in are
-    /// constraint-checked before any effect runs.
+    /// bumped when Plate failed the pattern. Unconditional create/create-in and
+    /// creates on a taken <c>if</c> branch are constraint-checked before any effect runs.
+    /// Untaken then/else branches are not probed (illegal initializer on an untaken
+    /// branch must not fail the action).
     /// </summary>
     private string? PrevalidateUnconditionalCreates(IReadOnlyList<Effect> effects) {
         foreach (var effect in effects) {
             switch (effect) {
                 case CompositeEffect composite: {
                         var nested = PrevalidateUnconditionalCreates(composite.Effects);
+                        if (nested is not null)
+                            return nested;
+                        break;
+                    }
+                case ConditionalEffect cond: {
+                        // Only ifs that contain create/create-in. Taken-branch creates
+                        // fail closed before any prior assign. Untaken branch is not probed.
+                        if (!ContainsDirectExecutionEffect(cond))
+                            break;
+                        if (!TryEvalEffectCondition(PreprocessQuantifiers(cond.Condition), out var taken))
+                            return "Cannot evaluate if condition for create prevalidation.";
+                        var branch = taken ? cond.ThenEffects : (cond.ElseEffects ?? []);
+                        var nested = PrevalidateUnconditionalCreates(branch);
                         if (nested is not null)
                             return nested;
                         break;

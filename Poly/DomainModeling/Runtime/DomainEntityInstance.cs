@@ -575,12 +575,35 @@ public sealed partial record DomainEntityInstance {
         var prepared = PreprocessEffectExpressions(effect);
 
         // A composite/conditional containing remaining direct-execution sub-effects
-        // (create/create-in) must run each sub-effect through this dispatcher —
-        // those still cannot lower on the runtime path. StageTransition and
-        // invoke now lower.
+        // (create/create-in) still cannot lower on the runtime path (LowerStageTransitions
+        // is off). Taken-branch creates are prevalidated before any effect runs so
+        // mixed if+create fail-closed matches export (Failure, prior assigns not applied).
+        // ExecuteStructured only performs the taken create after that gate.
         if ((prepared is ConditionalEffect or CompositeEffect)
             && ContainsDirectExecutionEffect(prepared)) {
             return ExecuteStructured(prepared, effectPass, typeProvider);
+        }
+
+        // Leaf create / create-in: probe+Failure, not EffectExecutor. Mixed if+create
+        // hits this after ExecuteStructured takes the branch.
+        if (prepared is CreateEntityInstance create) {
+            try {
+                CreateChildInstance(create, typeProvider);
+                return null;
+            }
+            catch (InvalidOperationException ex) when (IsConstraintFailureMessage(ex.Message)) {
+                return DomainResult.Failure(ex.Message);
+            }
+        }
+
+        if (prepared is CreateEntityInRelationshipEffect createIn) {
+            try {
+                ExecuteCreateInRelationship(createIn, typeProvider);
+                return null;
+            }
+            catch (InvalidOperationException ex) when (IsConstraintFailureMessage(ex.Message)) {
+                return DomainResult.Failure(ex.Message);
+            }
         }
 
         var lowered = effectPass.TryLowerVmNode(prepared);
@@ -621,18 +644,8 @@ public sealed partial record DomainEntityInstance {
                 }
                 return null;
             case ConditionalEffect cond:
-                var condition = cond.Condition;
-                var entityParam = new Parameter("entity", new TypeReference(Entity.Name));
-                var pass = new DomainExpressionLoweringPass(new LoweringContext(
-                    entityParam,
-                    PropertyTypeResolver: EffectLoweringPass.BuildPropertyTypeResolver(Entity)));
-                var lowered = pass.Lower(condition, entityParam);
-                var compiled = Interpreter.CompileChecked(lowered, DomainResultTypeProvider.Wrap(typeProvider));
-                bool taken;
-                using (var exec = Interpreter.Execute(compiled,
-                           s => s.SetArgs(new object?[] { this }))) {
-                    taken = exec.Result.GetValue<bool>();
-                }
+                if (!TryEvalEffectCondition(cond.Condition, out var taken))
+                    return DomainResult.Failure("Cannot evaluate if condition.");
                 var branch = taken ? cond.ThenEffects : (cond.ElseEffects ?? []);
                 foreach (var sub in branch) {
                     var failed = ExecuteEffect(sub, effectPass, typeProvider);
@@ -642,6 +655,37 @@ public sealed partial record DomainEntityInstance {
                 return null;
             default:
                 return ExecuteEffect(effect, effectPass, typeProvider);
+        }
+    }
+
+    private static bool IsConstraintFailureMessage(string message) =>
+        message.StartsWith("Unique constraint violated", StringComparison.Ordinal)
+        || message.Contains(" is required.", StringComparison.Ordinal)
+        || message.Contains(" must be ", StringComparison.Ordinal)
+        || message.Contains(" does not match the required pattern.", StringComparison.Ordinal);
+
+    /// <summary>
+    /// Evaluates an <c>if</c> condition against the current bag (including injected
+    /// action parameters) the same way <see cref="ExecuteStructured"/> does.
+    /// Used to prevalidate creates on the taken branch before any effect mutates.
+    /// </summary>
+    private bool TryEvalEffectCondition(DomainExpression condition, out bool taken) {
+        taken = false;
+        try {
+            var entityParam = new Parameter("entity", new TypeReference(Entity.Name));
+            var pass = new DomainExpressionLoweringPass(new LoweringContext(
+                entityParam,
+                PropertyTypeResolver: EffectLoweringPass.BuildPropertyTypeResolver(Entity)));
+            var lowered = pass.Lower(condition, entityParam);
+            var compiled = Interpreter.CompileChecked(
+                lowered, DomainResultTypeProvider.Wrap(_bindingTypeProvider ?? _typeDefAnalyzer));
+            using var exec = Interpreter.Execute(compiled,
+                s => s.SetArgs(new object?[] { this }));
+            taken = exec.Result.GetValue<bool>();
+            return true;
+        }
+        catch (Exception) {
+            return false;
         }
     }
 

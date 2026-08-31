@@ -164,7 +164,7 @@ Not competing policy evaluators.
 - **Not** a merge of DomainExpression and Ast (intentional layers).  
 - **Not** a merge of domain analysis and program analysis (different objects).  
 - **Not** permission to delete LINQ without a parity replacement.  
-- **Not** CURRENT work — do not admit a “delete Validation” suite while mut-safety is the admit-next product stream **unless** human prioritizes cleanup.
+- **Not** CURRENT work — do not admit a “delete Validation” suite from this inventory. mut-safety is not admit-next; authority is [`simple-agent-tasks/PIPELINE-STATUS.md`](simple-agent-tasks/PIPELINE-STATUS.md).
 
 ---
 

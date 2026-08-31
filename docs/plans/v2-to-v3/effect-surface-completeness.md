@@ -9,7 +9,7 @@
 
 
 **Related:**  
-- [`dsl-query-surface.md`](dsl-query-surface.md) — **parallel** related **reads** (subject-first; §3.1 reads OK / writes banned) · [`qe-README.md`](simple-agent-tasks/qe-README.md)
+- [`dsl-query-surface.md`](dsl-query-surface.md) — **parallel** related **reads** (subject-first; §3.1 reads OK / writes banned) · archived [`qe-README.md`](../archive/domainmodeling-completed-2026-08/v2-to-v3/simple-agent-tasks/qe-README.md)
 - [`mcp-phase3-oracle-surface.md`](mcp-phase3-oracle-surface.md) §6c RT · §6e SA  
 - [`mcp-tool-surface-expansion.md`](mcp-tool-surface-expansion.md) §0  
 - Product DSL: [`Poly.Mcp/Docs/poly-dsl-agent-guide.md`](../../../Poly.Mcp/Docs/poly-dsl-agent-guide.md)  
@@ -313,13 +313,13 @@ What you cannot write in DSL without this plan is the backlog order.
 
 ---
 
-## 9. Agent pick (right now)
+## 9. Agent pick (historical — not CURRENT)
 
-**Micro-tasks:** [`simple-agent-tasks/qe-README.md`](simple-agent-tasks/qe-README.md) — query suite **complete**; optional E1 hygiene only.
+**Not CURRENT.** Query suite is complete (archived [`qe-README.md`](../archive/domainmodeling-completed-2026-08/v2-to-v3/simple-agent-tasks/qe-README.md)). Agent pick is only [`../../simple-agent-tasks/PIPELINE-STATUS.md`](../../simple-agent-tasks/PIPELINE-STATUS.md).
 
 ```text
 DONE:    E1; E2.1/E2.1′; E3a/E3b; E4; params; E6 authoring; Q1′+Q3′; link_instances MCP
-CURRENT: dogfood OR E5 micro-tools (only with named pain)
+CURRENT: see simple-agent-tasks/PIPELINE-STATUS.md
 PULL:    E6.1 RT goldens; TRE runtime-or-hide; unlink MCP; L*
 LATER:   Host I/O; micro-catalog; link DSL keyword
 ```

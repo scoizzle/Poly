@@ -111,9 +111,9 @@ Finished suites lived next to live indexes. **Mitigation:** archived under `arch
 
 ---
 
-## 6. Candidate next CURRENT (pick one)
+## 6. Candidate next CURRENT (disabled)
 
-Ranked for **customer outcome** and **low thrash** after 2026-08-04 focus note:
+**Do not admit from this table.** Sole CURRENT is [`simple-agent-tasks/PIPELINE-STATUS.md`](simple-agent-tasks/PIPELINE-STATUS.md). Historical candidates only (2026-08-04 ranking):
 
 | # | Admit as CURRENT | Size | Why |
 |---|------------------|------|-----|

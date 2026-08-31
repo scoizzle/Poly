@@ -2,7 +2,7 @@
 
 **Date:** 2026-07-24 (revised)  
 **Purpose:** Single reference for what DomainModeling can actually do — by capability, with code references. Answers “are we building this or does it already ship?”  
-**Not a task queue.** Agent pick: [`plans/v2-to-v3/master-roadmap.md`](plans/v2-to-v3/master-roadmap.md). Completed suites: [`plans/archive/domainmodeling-completed-2026-08/`](plans/archive/domainmodeling-completed-2026-08/README.md).
+**Not CURRENT.** Not a task queue. Agent pick: [`plans/simple-agent-tasks/PIPELINE-STATUS.md`](plans/simple-agent-tasks/PIPELINE-STATUS.md). Completed suites: [`plans/archive/domainmodeling-completed-2026-08/`](plans/archive/domainmodeling-completed-2026-08/README.md).
 
 ---
 

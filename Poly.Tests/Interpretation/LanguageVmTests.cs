@@ -3,7 +3,7 @@ using Poly.Introspection;
 
 namespace Poly.Tests.Interpretation;
 
-/// <summary>Language-VM oracles: Interpreter.Compile on Syntax nodes, no DomainModeling.</summary>
+/// <summary>Language-VM oracles: Interpreter.Compile + execute (or compile-reject) per executable CompileNodeInner kind, no DomainModeling.</summary>
 public class LanguageVmTests {
     [Test]
     public async Task Comment_AsProgram_IsVoid() {
@@ -429,5 +429,365 @@ public class LanguageVmTests {
         ], [captured, outer, resultFn]);
         using var exec = Interpreter.Execute(Interpreter.Compile(node));
         await Assert.That(exec.RawValue).IsEqualTo(4L);
+    }
+
+    [Test]
+    public async Task Multiply_Longs() {
+        using var exec = Interpreter.Execute(Interpreter.Compile(new Multiply(new Constant(6L), new Constant(7L))));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(42L);
+    }
+
+    [Test]
+    public async Task Divide_Longs() {
+        using var exec = Interpreter.Execute(Interpreter.Compile(new Divide(new Constant(20L), new Constant(4L))));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(5L);
+    }
+
+    [Test]
+    public async Task Modulo_Longs() {
+        using var exec = Interpreter.Execute(Interpreter.Compile(new Modulo(new Constant(17L), new Constant(5L))));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(2L);
+    }
+
+    [Test]
+    public async Task BitwiseOr_Bits() {
+        using var exec = Interpreter.Execute(Interpreter.Compile(new BitwiseOr(new Constant(6L), new Constant(3L))));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(7L);
+    }
+
+    [Test]
+    public async Task BitwiseXor_Bits() {
+        using var exec = Interpreter.Execute(Interpreter.Compile(new BitwiseXor(new Constant(6L), new Constant(3L))));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(5L);
+    }
+
+    [Test]
+    public async Task ShiftLeft_Bits() {
+        using var exec = Interpreter.Execute(Interpreter.Compile(new ShiftLeft(new Constant(3L), new Constant(2L))));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(12L);
+    }
+
+    [Test]
+    public async Task ShiftRight_Bits() {
+        using var exec = Interpreter.Execute(Interpreter.Compile(new ShiftRight(new Constant(12L), new Constant(2L))));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(3L);
+    }
+
+    [Test]
+    public async Task Equal_MatchingLongs_IsTrue() {
+        using var exec = Interpreter.Execute(Interpreter.Compile(new Equal(new Constant(3L), new Constant(3L))));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(1L);
+    }
+
+    [Test]
+    public async Task NotEqual_DifferentLongs_IsTrue() {
+        using var exec = Interpreter.Execute(Interpreter.Compile(new NotEqual(new Constant(3L), new Constant(4L))));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(1L);
+    }
+
+    [Test]
+    public async Task LessThan_OrderedLongs_IsTrue() {
+        using var exec = Interpreter.Execute(Interpreter.Compile(new LessThan(new Constant(1L), new Constant(2L))));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(1L);
+    }
+
+    [Test]
+    public async Task LessThanOrEqual_EqualLongs_IsTrue() {
+        using var exec = Interpreter.Execute(Interpreter.Compile(new LessThanOrEqual(new Constant(2L), new Constant(2L))));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(1L);
+    }
+
+    [Test]
+    public async Task GreaterThan_OrderedLongs_IsTrue() {
+        using var exec = Interpreter.Execute(Interpreter.Compile(new GreaterThan(new Constant(5L), new Constant(2L))));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(1L);
+    }
+
+    [Test]
+    public async Task GreaterThanOrEqual_EqualLongs_IsTrue() {
+        using var exec = Interpreter.Execute(Interpreter.Compile(new GreaterThanOrEqual(new Constant(2L), new Constant(2L))));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(1L);
+    }
+
+    [Test]
+    public async Task Variable_AfterAssign_ReturnsValue() {
+        var x = new Variable("x");
+        var node = new Block([
+            new Assignment(x, new Constant(11L)),
+            x
+        ], [x]);
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(11L);
+    }
+
+    [Test]
+    public async Task ThisReference_SetArgsSlot0_ReturnsInstance() {
+        var instance = new object();
+        var program = Interpreter.Compile(new ThisReference());
+        using var exec = Interpreter.Execute(program, s => s.SetArgs(instance));
+        await Assert.That(exec.GetValue<object>()).IsSameReferenceAs(instance);
+    }
+
+    [Test]
+    public async Task NamedTypeReference_AsValue_CompileRejected() {
+        await Assert.That(() => Interpreter.Compile(new NamedTypeReference("DateTime")))
+            .Throws<InvalidOperationException>();
+    }
+
+    [Test]
+    public async Task TypeReference_AsValue_CompileRejected() {
+        await Assert.That(() => Interpreter.Compile(TypeReference.To<string>()))
+            .Throws<InvalidOperationException>();
+    }
+
+    [Test]
+    public async Task PrimitiveTypeReference_AsValue_CompileRejected() {
+        await Assert.That(() => Interpreter.Compile(new PrimitiveTypeReference(PrimitiveType.Int32)))
+            .Throws<InvalidOperationException>();
+    }
+
+    [Test]
+    public async Task NullForgiving_YieldsOperand() {
+        using var exec = Interpreter.Execute(Interpreter.Compile(new NullForgiving(new Constant(42L))));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(42L);
+    }
+
+    [Test]
+    public async Task Not_False_IsTrue() {
+        using var exec = Interpreter.Execute(Interpreter.Compile(new Not(new Constant(false))));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(1L);
+    }
+
+    [Test]
+    public async Task UnaryMinus_Long() {
+        using var exec = Interpreter.Execute(Interpreter.Compile(new UnaryMinus(new Constant(7L))));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(-7L);
+    }
+
+    [Test]
+    public async Task BitwiseNot_Long() {
+        using var exec = Interpreter.Execute(Interpreter.Compile(new BitwiseNot(new Constant(0L))));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(~0L);
+    }
+
+    [Test]
+    public async Task Conditional_TrueBranch() {
+        var node = new Conditional(new Constant(true), new Constant(1L), new Constant(2L));
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(1L);
+    }
+
+    [Test]
+    public async Task And_TrueTrue_IsTrue() {
+        using var exec = Interpreter.Execute(Interpreter.Compile(new And(new Constant(true), new Constant(true))));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(1L);
+    }
+
+    [Test]
+    public async Task Or_FalseTrue_IsTrue() {
+        using var exec = Interpreter.Execute(Interpreter.Compile(new Or(new Constant(false), new Constant(true))));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(1L);
+    }
+
+    [Test]
+    public async Task PopCount_SetBits() {
+        using var exec = Interpreter.Execute(Interpreter.Compile(new PopCount(new Constant(11L))));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(3L);
+    }
+
+    [Test]
+    public async Task TypeIs_StringIsString_IsTrue() {
+        var node = new TypeIs(new Constant("hello"), TypeReference.To<string>());
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.RawValue).IsEqualTo(1L);
+    }
+
+    [Test]
+    public async Task Member_StringLength() {
+        var node = new Member(new Constant("hi"), "Length");
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<int>()).IsEqualTo(2);
+    }
+
+    [Test]
+    public async Task WhileLoop_CountsToThree() {
+        var i = new Variable("i");
+        var node = new Block([
+            new Assignment(i, new Constant(0L)),
+            new WhileLoop(new LessThan(i, new Constant(3L)), new Assignment(i, new Add(i, new Constant(1L)))),
+            i
+        ], [i]);
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(3L);
+    }
+
+    [Test]
+    public async Task DoWhileLoop_RunsAtLeastOnce() {
+        var i = new Variable("i");
+        var node = new Block([
+            new Assignment(i, new Constant(0L)),
+            new DoWhileLoop(new Assignment(i, new Add(i, new Constant(1L))), new LessThan(i, new Constant(3L))),
+            i
+        ], [i]);
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(3L);
+    }
+
+    [Test]
+    public async Task ForLoop_CountsToFive() {
+        var i = new Variable("i");
+        var node = new Block([
+            new ForLoop(
+                new Assignment(i, new Constant(0L)),
+                new LessThan(i, new Constant(5L)),
+                new Assignment(i, new Add(i, new Constant(1L))),
+                new Constant(0L)),
+            i
+        ], [i]);
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(5L);
+    }
+
+    [Test]
+    public async Task ForEachLoop_SumsArray() {
+        var sum = new Variable("sum");
+        var item = new Variable("item");
+        var node = new Block([
+            new Assignment(sum, new Constant(0L)),
+            new ForEachLoop(item, new Constant(new long[] { 1L, 2L, 3L }), new Assignment(sum, new Add(sum, item))),
+            sum
+        ], [sum]);
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(6L);
+    }
+
+    [Test]
+    public async Task BreakStatement_ExitsWhile() {
+        var i = new Variable("i");
+        var node = new Block([
+            new Assignment(i, new Constant(0L)),
+            new WhileLoop(
+                new Constant(true),
+                new Block([
+                    new IfStatement(new Equal(i, new Constant(3L)), new BreakStatement()),
+                    new Assignment(i, new Add(i, new Constant(1L)))
+                ])),
+            i
+        ], [i]);
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(3L);
+    }
+
+    [Test]
+    public async Task ContinueStatement_SkipsWhileBody() {
+        var i = new Variable("i");
+        var seen = new Variable("seen");
+        var node = new Block([
+            new Assignment(i, new Constant(0L)),
+            new Assignment(seen, new Constant(0L)),
+            new WhileLoop(
+                new LessThan(i, new Constant(3L)),
+                new Block([
+                    new Assignment(i, new Add(i, new Constant(1L))),
+                    new IfStatement(new Equal(i, new Constant(2L)), new ContinueStatement()),
+                    new Assignment(seen, new Add(seen, new Constant(1L)))
+                ])),
+            seen
+        ], [i, seen]);
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(2L);
+    }
+
+    [Test]
+    public async Task Goto_AndLabel_SkipAssignment() {
+        var x = new Variable("x");
+        var node = new Block([
+            new Assignment(x, new Constant(10L)),
+            new GotoStatement("exit"),
+            new Assignment(x, new Constant(20L)),
+            new LabelDeclaration("exit", x)
+        ], [x]);
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(10L);
+    }
+
+    [Test]
+    public async Task ThrowStatement_ThrowsOperand() {
+        var node = new ThrowStatement(new New(TypeReference.To<InvalidOperationException>(), new Constant("vm")));
+        await Assert.That(() => {
+            using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        }).Throws<InvalidOperationException>();
+    }
+
+    [Test]
+    public async Task TryCatchFinally_CatchSetsFlag() {
+        var caught = new Variable("caught");
+        var node = new Block([
+            new Assignment(caught, new Constant(0L)),
+            new TryCatchFinally(
+                new ThrowStatement(new New(TypeReference.To<InvalidOperationException>())),
+                CatchClauses: [
+                    new CatchClause(TypeReference.To<InvalidOperationException>(), "ex", new Assignment(caught, new Constant(1L)))
+                ]),
+            caught
+        ], [caught]);
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(1L);
+    }
+
+    [Test]
+    public async Task UsingStatement_DisposesResource() {
+        var resource = new TrackingDisposable();
+        var node = new UsingStatement(new Constant(resource), new Constant(1L));
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(resource.Disposed).IsTrue();
+    }
+
+    [Test]
+    public async Task SuspendNode_Suspends() {
+        var program = Interpreter.Compile(new SuspendNode(new Constant(5L), "bp"));
+        using var exec = Interpreter.Execute(program);
+        await Assert.That(exec.IsSuspended).IsTrue();
+    }
+
+    [Test]
+    public async Task StridedSetBits_SetsWordBits() {
+        var arr = new Variable("arr");
+        var node = new Block([
+            new Assignment(arr, new NewArray(TypeReference.To<long>(), new Constant(2L))),
+            new StridedSetBits(arr, new Constant(4L), new Constant(2L), new Constant(8L)),
+            new IndexAccess(arr, new Constant(0L))
+        ], [arr]);
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(336L);
+    }
+
+    [Test]
+    public async Task IfStatement_ThenBranch_Runs() {
+        var x = new Variable("x");
+        var node = new Block([
+            new Assignment(x, new Constant(0L)),
+            new IfStatement(new Constant(true), new Assignment(x, new Constant(7L)), new Assignment(x, new Constant(9L))),
+            x
+        ], [x]);
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(7L);
+    }
+
+    [Test]
+    public async Task CompilationUnit_AsProgram_CompileRejected() {
+        await Assert.That(() => Interpreter.Compile(new CompilationUnitNode([], null, [], null)))
+            .Throws<Exception>();
+    }
+
+    [Test]
+    public async Task TypeDefinitionNode_AsProgram_NotExecutable() {
+        var node = new TypeDefinitionNode("Widget", "Sample");
+        await Assert.That(() => Interpreter.Compile(node)).Throws<Exception>();
+    }
+
+    private sealed class TrackingDisposable : IDisposable {
+        public bool Disposed { get; private set; }
+        public void Dispose() => Disposed = true;
     }
 }

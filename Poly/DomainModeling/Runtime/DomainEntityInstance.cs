@@ -140,13 +140,15 @@ public sealed partial record DomainEntityInstance {
     }
 
     /// <summary>
-    /// Validates required/range/length/pattern constraints against the to-be-stored values,
-    /// mirroring the C# export's <c>Create</c> factory guards. Returns the first violation
-    /// message, or null when the values are valid. (Unique is store-aware and not checked here.)
+    /// Validates required/range/length/pattern/unique constraints against the to-be-stored
+    /// values, mirroring the C# export's <c>Create</c> factory guards. Returns the first
+    /// violation message, or null when the values are valid. Unique is checked only when
+    /// <paramref name="store"/> is set — before any mutate, not after <c>TryAdd</c>.
     /// </summary>
     private static string? ValidateConstraints(
         Entity entity,
-        IReadOnlyDictionary<string, object?> values) {
+        IReadOnlyDictionary<string, object?> values,
+        DomainInstanceStore? store = null) {
         foreach (var prop in entity.Properties) {
             values.TryGetValue(prop.Name, out var v);
             foreach (var constraint in prop.Constraints) {
@@ -177,6 +179,14 @@ public sealed partial record DomainEntityInstance {
                     case PatternConstraint pc:
                         if (v is string ps && !Regex.IsMatch(ps, pc.Pattern))
                             return $"'{prop.Name}' does not match the required pattern.";
+                        break;
+                    case UniqueConstraint:
+                        if (store is not null && v is not null) {
+                            var unique = store.UniqueCollisionMessage(
+                                entity, values, except: null, candidate: null);
+                            if (unique is not null)
+                                return unique;
+                        }
                         break;
                 }
             }
@@ -307,16 +317,12 @@ public sealed partial record DomainEntityInstance {
                 $"Property '{name}' does not exist on entity '{Entity.Name}'. " +
                 $"Available: {string.Join(", ", _values.Keys)}.");
         if (Store is not null) {
-            var previous = _values[name];
-            _values[name] = value;
-            try {
-                Store.RejectUniqueCollision(this, except: this);
-            }
-            catch {
-                _values[name] = previous;
-                throw;
-            }
-            return;
+            var proposed = new Dictionary<string, object?>(_values, StringComparer.Ordinal) {
+                [name] = value
+            };
+            var unique = Store.UniqueCollisionMessage(Entity, proposed, except: this, candidate: this);
+            if (unique is not null)
+                throw new InvalidOperationException(unique);
         }
         _values[name] = value;
     }
@@ -503,10 +509,17 @@ public sealed partial record DomainEntityInstance {
                 return ActionInvocationResult.InvalidArguments(actionName, createError);
 
             var createdBefore = _createdChildren.Count;
+            var bagBefore = new Dictionary<string, object?>(_values, StringComparer.Ordinal);
+            var stageBefore = CurrentStage;
             var failed = ExecuteEffectList(action.Effects, effectPass, effectTypeProvider);
-            if (failed is { IsSuccess: false })
+            if (failed is { IsSuccess: false }) {
+                // Unique-before-mutate restore (PR 44 F2). Other constraint Failures
+                // keep prior assigns — PR 43 documented miss IfOnMutatedProperty.
+                if (failed.ErrorMessage is string msg && msg.Contains("Unique", StringComparison.Ordinal))
+                    RestoreActionState(bagBefore, stageBefore, createdBefore);
                 return ActionInvocationResult.InvalidArguments(
                     actionName, failed.ErrorMessage ?? "invoke failed.");
+            }
 
             // P3: declared -> Entity return = last child created this invoke of that type.
             DomainEntityInstance? resultInstance = null;
@@ -577,7 +590,8 @@ public sealed partial record DomainEntityInstance {
         EffectLoweringPass effectPass,
         TypeDefinitionNodeAnalyzer typeProvider) {
         var prepared = effects.Select(PreprocessEffectExpressions).ToList();
-        if (prepared.Exists(ContainsConditionalCreate)) {
+        if (prepared.Exists(ContainsConditionalCreate)
+            && !prepared.Exists(HasEffectDependentConditionalCreate)) {
             var tree = effectPass.LowerActionBody(prepared);
             if (tree is null)
                 throw new InvalidOperationException(
@@ -610,6 +624,19 @@ public sealed partial record DomainEntityInstance {
         // Store-aware quantifiers / path-prefix / Rel exists must resolve before
         // Syntax lowering — same honesty as EvaluatePolicy (no bag pass-through).
         var prepared = PreprocessEffectExpressions(effect);
+
+        if (prepared is AssignEffect assign) {
+            var uniqueFail = UniqueCollisionForAssign(assign, typeProvider);
+            if (uniqueFail is not null)
+                return uniqueFail;
+        }
+
+        // Unique-assign if/else, or effect-dependent mixed if+create (LowerActionBody
+        // skipped — probes would see the pre-assign bag and reject F2 OVER).
+        if ((prepared is ConditionalEffect or CompositeEffect)
+            && (ContainsUniqueAssign(prepared) || ContainsDirectExecutionEffect(prepared))) {
+            return ExecuteStructured(prepared, effectPass, typeProvider);
+        }
 
         // Mixed if+create is compiled as probe+body in InvokeActionInternal (runtime
         // factories). Leaf create / create-in still execute here when not lowered.
@@ -660,11 +687,51 @@ public sealed partial record DomainEntityInstance {
         || message.Contains(" does not match the required pattern.", StringComparison.Ordinal);
 
     /// <summary>
+    /// Unique-before-mutate for VM <see cref="AssignEffect"/>: DictSetItem writes the
+    /// bag with no Store check. Proposed bag is checked here so a colliding assign
+    /// returns Failure without mutating.
+    /// </summary>
+    private DomainResult? UniqueCollisionForAssign(
+        AssignEffect assign, TypeDefinitionNodeAnalyzer typeProvider) {
+        if (Store is null)
+            return null;
+        if (assign.Target is not PropertyAccess propAccess)
+            return null;
+        var entityProp = Entity.Properties.FirstOrDefault(p =>
+            string.Equals(p.Name, propAccess.Name, StringComparison.Ordinal));
+        if (entityProp is null
+            || !entityProp.Constraints.OfType<UniqueConstraint>().Any())
+            return null;
+
+        object? value;
+        if (TryEvalActionParamPath(assign.Value, out var fromParam)) {
+            value = fromParam;
+        }
+        else {
+            var entityParam = new Parameter("entity", new TypeReference(Entity.Name));
+            var pass = new DomainExpressionLoweringPass(new LoweringContext(
+                entityParam,
+                PropertyTypeResolver: EffectLoweringPass.BuildPropertyTypeResolver(Entity)));
+            var lowered = pass.Lower(assign.Value, entityParam);
+            var compiled = Interpreter.Compile(lowered, _bindingTypeProvider ?? typeProvider);
+            using var exec = Interpreter.Execute(compiled,
+                s => s.SetArgs(new object?[] { this }));
+            value = exec.Result.GetValue<object>();
+        }
+
+        var proposed = new Dictionary<string, object?>(_values, StringComparer.Ordinal) {
+            [propAccess.Name] = value
+        };
+        var unique = Store.UniqueCollisionMessage(Entity, proposed, except: this, candidate: this);
+        return unique is null ? null : DomainResult.Failure(unique);
+    }
+
+    /// <summary>
     /// Evaluates an <c>if</c> condition against the current bag (including injected
     /// action parameters). Used to prevalidate creates on the taken branch before
     /// any effect mutates.
     /// </summary>
-    private bool TryEvalEffectCondition(DomainExpression condition, out bool taken) {
+        private bool TryEvalEffectCondition(DomainExpression condition, out bool taken) {
         taken = false;
         try {
             var entityParam = new Parameter("entity", new TypeReference(Entity.Name));
@@ -699,6 +766,84 @@ public sealed partial record DomainEntityInstance {
         CompositeEffect c => c.Effects.Any(ContainsConditionalCreate),
         _ => false
     };
+
+    /// <summary>
+    /// True when an if+create condition reads the entity bag (PR 44 F2). Those
+    /// trees cannot LowerActionBody — probes use the pre-assign bag.
+    /// </summary>
+    private bool HasEffectDependentConditionalCreate(Effect effect) => effect switch {
+        ConditionalEffect c =>
+            (ContainsDirectExecutionEffect(c) && !ConditionIsEffectIndependent(c.Condition))
+            || (c.ThenEffects?.Any(HasEffectDependentConditionalCreate) ?? false)
+            || (c.ElseEffects?.Any(HasEffectDependentConditionalCreate) ?? false),
+        CompositeEffect c => c.Effects.Any(HasEffectDependentConditionalCreate),
+        _ => false
+    };
+
+    private bool ContainsUniqueAssign(Effect effect) => effect switch {
+        AssignEffect a => a.Target is PropertyAccess pa
+            && Entity.Properties.Any(p =>
+                string.Equals(p.Name, pa.Name, StringComparison.Ordinal)
+                && p.Constraints.OfType<UniqueConstraint>().Any()),
+        CompositeEffect c => c.Effects.Any(ContainsUniqueAssign),
+        ConditionalEffect c => (c.ThenEffects?.Any(ContainsUniqueAssign) ?? false)
+            || (c.ElseEffects?.Any(ContainsUniqueAssign) ?? false),
+        _ => false
+    };
+
+    private void RestoreActionState(
+        Dictionary<string, object?> bagBefore, string? stageBefore, int createdBefore) {
+        _values.Clear();
+        foreach (var (k, v) in bagBefore)
+            _values[k] = v;
+        CurrentStage = stageBefore;
+        while (_createdChildren.Count > createdBefore) {
+            var child = _createdChildren[^1];
+            _createdChildren.RemoveAt(_createdChildren.Count - 1);
+            Store?.Remove(child);
+        }
+    }
+
+    /// <summary>
+    /// Unique-assign if/else trees: evaluate the taken branch and run each
+    /// sub-effect through <see cref="ExecuteEffect"/> so UniqueCollisionForAssign
+    /// runs before DictSetItem.
+    /// </summary>
+    private DomainResult? ExecuteStructured(
+        Effect effect,
+        EffectLoweringPass effectPass,
+        TypeDefinitionNodeAnalyzer typeProvider) {
+        switch (effect) {
+            case CompositeEffect c:
+                foreach (var sub in c.Effects) {
+                    var failed = ExecuteEffect(sub, effectPass, typeProvider);
+                    if (failed is not null)
+                        return failed;
+                }
+                return null;
+            case ConditionalEffect cond:
+                var entityParam = new Parameter("entity", new TypeReference(Entity.Name));
+                var pass = new DomainExpressionLoweringPass(new LoweringContext(
+                    entityParam,
+                    PropertyTypeResolver: EffectLoweringPass.BuildPropertyTypeResolver(Entity)));
+                var lowered = pass.Lower(cond.Condition, entityParam);
+                var compiled = Interpreter.CompileChecked(lowered, DomainResultTypeProvider.Wrap(typeProvider));
+                bool taken;
+                using (var exec = Interpreter.Execute(compiled,
+                           s => s.SetArgs(new object?[] { this }))) {
+                    taken = exec.Result.GetValue<bool>();
+                }
+                var branch = taken ? cond.ThenEffects : (cond.ElseEffects ?? []);
+                foreach (var sub in branch) {
+                    var failed = ExecuteEffect(sub, effectPass, typeProvider);
+                    if (failed is not null)
+                        return failed;
+                }
+                return null;
+            default:
+                return ExecuteEffect(effect, effectPass, typeProvider);
+        }
+    }
 
     /// <summary>
     /// Rewrites effect expression trees so store-dependent forms become literals

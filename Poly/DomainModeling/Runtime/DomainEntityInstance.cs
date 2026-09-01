@@ -509,10 +509,14 @@ public sealed partial record DomainEntityInstance {
                 return ActionInvocationResult.InvalidArguments(actionName, createError);
 
             var createdBefore = _createdChildren.Count;
+            var bagBefore = new Dictionary<string, object?>(_values, StringComparer.Ordinal);
+            var stageBefore = CurrentStage;
             var failed = ExecuteEffectList(action.Effects, effectPass, effectTypeProvider);
-            if (failed is { IsSuccess: false })
+            if (failed is { IsSuccess: false }) {
+                RestoreActionState(bagBefore, stageBefore, createdBefore);
                 return ActionInvocationResult.InvalidArguments(
                     actionName, failed.ErrorMessage ?? "invoke failed.");
+            }
 
             // P3: declared -> Entity return = last child created this invoke of that type.
             DomainEntityInstance? resultInstance = null;
@@ -621,6 +625,13 @@ public sealed partial record DomainEntityInstance {
             var uniqueFail = UniqueCollisionForAssign(assign, typeProvider);
             if (uniqueFail is not null)
                 return uniqueFail;
+        }
+
+        // Unique assigns inside if/else (no create) must not lower as one VM tree.
+        if ((prepared is ConditionalEffect or CompositeEffect)
+            && ContainsUniqueAssign(prepared)
+            && !ContainsDirectExecutionEffect(prepared)) {
+            return ExecuteStructured(prepared, effectPass, typeProvider);
         }
 
         // Mixed if+create is compiled as probe+body in InvokeActionInternal (runtime
@@ -751,6 +762,71 @@ public sealed partial record DomainEntityInstance {
         CompositeEffect c => c.Effects.Any(ContainsConditionalCreate),
         _ => false
     };
+
+    private bool ContainsUniqueAssign(Effect effect) => effect switch {
+        AssignEffect a => a.Target is PropertyAccess pa
+            && Entity.Properties.Any(p =>
+                string.Equals(p.Name, pa.Name, StringComparison.Ordinal)
+                && p.Constraints.OfType<UniqueConstraint>().Any()),
+        CompositeEffect c => c.Effects.Any(ContainsUniqueAssign),
+        ConditionalEffect c => (c.ThenEffects?.Any(ContainsUniqueAssign) ?? false)
+            || (c.ElseEffects?.Any(ContainsUniqueAssign) ?? false),
+        _ => false
+    };
+
+    private void RestoreActionState(
+        Dictionary<string, object?> bagBefore, string? stageBefore, int createdBefore) {
+        _values.Clear();
+        foreach (var (k, v) in bagBefore)
+            _values[k] = v;
+        CurrentStage = stageBefore;
+        while (_createdChildren.Count > createdBefore) {
+            var child = _createdChildren[^1];
+            _createdChildren.RemoveAt(_createdChildren.Count - 1);
+            Store?.Remove(child);
+        }
+    }
+
+    /// <summary>
+    /// Unique-assign if/else trees: evaluate the taken branch and run each
+    /// sub-effect through <see cref="ExecuteEffect"/> so UniqueCollisionForAssign
+    /// runs before DictSetItem.
+    /// </summary>
+    private DomainResult? ExecuteStructured(
+        Effect effect,
+        EffectLoweringPass effectPass,
+        TypeDefinitionNodeAnalyzer typeProvider) {
+        switch (effect) {
+            case CompositeEffect c:
+                foreach (var sub in c.Effects) {
+                    var failed = ExecuteEffect(sub, effectPass, typeProvider);
+                    if (failed is not null)
+                        return failed;
+                }
+                return null;
+            case ConditionalEffect cond:
+                var entityParam = new Parameter("entity", new TypeReference(Entity.Name));
+                var pass = new DomainExpressionLoweringPass(new LoweringContext(
+                    entityParam,
+                    PropertyTypeResolver: EffectLoweringPass.BuildPropertyTypeResolver(Entity)));
+                var lowered = pass.Lower(cond.Condition, entityParam);
+                var compiled = Interpreter.CompileChecked(lowered, DomainResultTypeProvider.Wrap(typeProvider));
+                bool taken;
+                using (var exec = Interpreter.Execute(compiled,
+                           s => s.SetArgs(new object?[] { this }))) {
+                    taken = exec.Result.GetValue<bool>();
+                }
+                var branch = taken ? cond.ThenEffects : (cond.ElseEffects ?? []);
+                foreach (var sub in branch) {
+                    var failed = ExecuteEffect(sub, effectPass, typeProvider);
+                    if (failed is not null)
+                        return failed;
+                }
+                return null;
+            default:
+                return ExecuteEffect(effect, effectPass, typeProvider);
+        }
+    }
 
     /// <summary>
     /// Rewrites effect expression trees so store-dependent forms become literals

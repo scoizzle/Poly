@@ -394,7 +394,10 @@ public sealed partial record DomainEntityInstance {
                 case ConditionalEffect cond: {
                         // Only ifs that contain create/create-in. Taken-branch creates
                         // fail closed before any prior assign. Untaken branch is not probed.
+                        // Effect-dependent conditions skip prevalidate (PR 44 F2).
                         if (!ContainsDirectExecutionEffect(cond))
+                            break;
+                        if (!ConditionIsEffectIndependent(cond.Condition))
                             break;
                         if (!TryEvalEffectCondition(PreprocessQuantifiers(cond.Condition), out var taken))
                             return "Cannot evaluate if condition for create prevalidation.";
@@ -430,33 +433,28 @@ public sealed partial record DomainEntityInstance {
                             return err;
                         break;
                     }
-                case ConditionalEffect cond: {
-                        var taken = EvalEffectCondition(cond.Condition);
-                        var branch = taken ? cond.ThenEffects : (cond.ElseEffects ?? []);
-                        var nestedCond = PrevalidateUnconditionalCreates(branch);
-                        if (nestedCond is not null)
-                            return nestedCond;
-                        break;
-                    }
             }
         }
 
         return null;
     }
 
-    private bool EvalEffectCondition(DomainExpression condition) {
-        var prepared = PreprocessQuantifiers(condition);
-        var entityParam = new Parameter("entity", new TypeReference(Entity.Name));
-        var pass = new DomainExpressionLoweringPass(new LoweringContext(
-            entityParam,
-            PropertyTypeResolver: EffectLoweringPass.BuildPropertyTypeResolver(Entity)));
-        var lowered = pass.Lower(prepared, entityParam);
-        var compiled = Interpreter.CompileChecked(
-            lowered, DomainResultTypeProvider.Wrap(_bindingTypeProvider ?? _typeDefAnalyzer));
-        using var exec = Interpreter.Execute(compiled,
-            s => s.SetArgs(new object?[] { this }));
-        return exec.Result.GetValue<bool>();
+    private bool ConditionIsEffectIndependent(DomainExpression condition) =>
+        !ConditionReadsEntityProperty(condition);
+
+    private bool ConditionReadsEntityProperty(DomainExpression expr) {
+        if (expr is PropertyAccess pa)
+            return Entity.Properties.Any(p =>
+                string.Equals(p.Name, pa.Name, StringComparison.Ordinal));
+        if (expr is RelationshipNavigation)
+            return true;
+        foreach (var child in expr.Children) {
+            if (child is DomainExpression inner && ConditionReadsEntityProperty(inner))
+                return true;
+        }
+        return false;
     }
+
 
     private string? PrevalidateCreateInitializers(
         IReadOnlyList<PropertyBinding> initializers, Entity targetEntity) {

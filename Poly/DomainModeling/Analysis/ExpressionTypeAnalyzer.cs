@@ -195,6 +195,17 @@ internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
                         $"type mismatch in argument '{binding.PropertyName}' of invoke '{actionName}': " +
                         $"cannot assign '{Describe(inferred)}' to '{paramType}'");
                 }
+                // Entity type names (Widget, Gadget, …) resolve to Unknown CategoryOf, so
+                // the primitive-category check above misses entity-type mismatches.
+                // Reject when the inferred type is an entity (Unknown category with a known
+                // name) and it differs from the target parameter type.
+                if (inferred.Category is TypeCategory.Unknown
+                    && inferred.TypeName is { } argTypeName
+                    && !string.Equals(argTypeName, paramType, StringComparison.Ordinal)) {
+                    Report(context, binding.Expression,
+                        $"type mismatch in argument '{binding.PropertyName}' of invoke '{actionName}': " +
+                        $"cannot assign '{argTypeName}' to '{paramType}'");
+                }
             }
             WalkExpression(context, binding.Expression, callerProps, parameters, enumTypes);
         }

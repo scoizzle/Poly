@@ -385,10 +385,11 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     /// Self-invoke (no TargetRelationship) is handwritten IR like StageTransition:
     /// <c>Invoke(Member(Subject, actionName), args)</c> on both runtime and emit.
     /// Singular cross-entity invoke is <c>this.Rel.Action(args)</c> with a
-    /// linked-target guard that returns <c>DomainResult.Failure</c> before deref
+    /// linked-target guard that returns caller <c>DomainResult.Failure</c> before deref
     /// (never a bare NRE). Kitchen dogfood: nested Failure must fail-fast
-    /// (<c>if (!result.IsSuccess) return result</c>) so later effects do not run.
-    /// Not gated on
+    /// (<c>if (!result.IsSuccess) return caller.Failure(error)</c>) so later effects
+    /// do not run and C# export does not CS0029 across <c>DomainResult</c> /
+    /// <c>DomainResult&lt;T&gt;</c>. Not gated on
     /// <see cref="LoweringContext.LowerStageTransitions"/> — that flag still
     /// gates create / create-in. OneToMany fan-out uses the for-each lowering.
     /// </summary>
@@ -406,9 +407,8 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
             var navMember = new Member(Subject, DomainToCSharpExporter.ToPascalCase(i.TargetRelationship));
             var guard = new IfStatement(
                 new Equal(navMember, new Constant(null!)),
-                new Block([new Return(new Invoke(
-                    new Member(new TypeReference("DomainResult"), "Failure"),
-                    new Constant($"'{i.ActionName}' requires a linked '{i.TargetRelationship}' on entity '{_entity.Name}'.")))]));
+                new Block([ReturnCallerFailure(new Constant(
+                    $"'{i.ActionName}' requires a linked '{i.TargetRelationship}' on entity '{_entity.Name}'."))]));
             var seq = _forEachInvokeSequence++;
             var resultVar = new Variable($"invoke{seq}");
             var invokeCall = new Invoke(new Member(navMember, i.ActionName), [.. args]);
@@ -417,7 +417,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
                 new Assignment(resultVar, invokeCall),
                 new IfStatement(
                     new Poly.Ast.Nodes.Not(new Member(resultVar, "IsSuccess")),
-                    new Block([new Return(resultVar)]))
+                    new Block([ReturnCallerFailureFrom(resultVar)]))
             ], [resultVar]);
         }
 
@@ -431,9 +431,29 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
             new Assignment(resultVar, invokeCall),
             new IfStatement(
                 new Poly.Ast.Nodes.Not(new Member(resultVar, "IsSuccess")),
-                new Block([new Return(resultVar)]))
+                new Block([ReturnCallerFailureFrom(resultVar)]))
         ], [resultVar]);
     }
+
+    /// <summary>
+    /// Rewrap nested Failure as the caller action's <c>DomainResult</c> /
+    /// <c>DomainResult&lt;T&gt;</c> — same shape as create-in. Returning the callee
+    /// result object is CS0029 when the caller is a different DomainResult arity.
+    /// Runtime omits <see cref="LoweringContext.ActionResultType"/> and falls back
+    /// to untyped <c>DomainResult.Failure</c>, which <c>ExecuteEffect</c> already
+    /// fail-fasts on.
+    /// </summary>
+    private Node CallerResultType =>
+        _context.ActionResultType ?? new TypeReference("DomainResult");
+
+    private Return ReturnCallerFailure(Node errorMessage) =>
+        new(new Invoke(new Member(CallerResultType, "Failure"), errorMessage));
+
+    private Return ReturnCallerFailureFrom(Node resultVar) =>
+        ReturnCallerFailure(
+            new Syntactic.Coalesce(
+                new Member(resultVar, "ErrorMessage"),
+                new Constant("")));
 
     /// <summary>
     /// Lowers a <see cref="ForEachInvokeEffect"/> (the <c>for Rel as x [where x.Policy |
@@ -493,13 +513,12 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         loopBody.Add(new Assignment(matchedVar, new Constant(true)));
         loopBody.Add(new Assignment(resultVar, invokeCall));
         loopBody.Add(new IfStatement(new Poly.Ast.Nodes.Not(new Member(resultVar, "IsSuccess")),
-            new Block([new Return(resultVar)])));
+            new Block([ReturnCallerFailureFrom(resultVar)])));
         var loop = new ForEachLoop(loopVar, navMember, new Block(loopBody, [resultVar]));
         var zeroCheck = new IfStatement(
             new Poly.Ast.Nodes.Not(matchedVar),
-            new Block([new Return(new Invoke(
-                new Member(new TypeReference("DomainResult"), "Failure"),
-                new Constant($"for {relName}.{e.ActionName} matched zero targets.")))]));
+            new Block([ReturnCallerFailure(new Constant(
+                $"for {relName}.{e.ActionName} matched zero targets."))]));
         return new Block(
             [new Assignment(matchedVar, new Constant(false)), loop, zeroCheck],
             [matchedVar]);

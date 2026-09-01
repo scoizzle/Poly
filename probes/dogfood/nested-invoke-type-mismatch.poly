@@ -1,0 +1,44 @@
+domain NestedInvokeTypeMismatch
+uses temporal
+uses storage
+
+Widget: entity {
+  Used: Number default(0)
+  Ready: stage {
+    Use: action (item: Widget) {
+      assign Used to Used + 1
+    }
+  }
+  Spent: stage { }
+}
+
+Gadget: entity {
+  Name: Text required
+}
+
+Child: entity {
+  Flag: Number default(0)
+  Draft: stage {
+    Submit: action {
+      assign Flag to 1
+      transition to Active
+    }
+  }
+  Active: stage { }
+}
+
+Host: entity {
+  widget: Widget
+  child: Child
+  Open: stage {
+    Kick: action {
+      invoke child.Submit
+    }
+    Run: action (gadget: Gadget) {
+      invoke widget.Use(item: gadget)
+    }
+    UseSelf: action {
+      invoke widget.Use(item: widget)
+    }
+  }
+}

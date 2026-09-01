@@ -4,9 +4,9 @@ namespace Poly.DomainModeling.Runtime;
 /// Shared <c>DomainResult</c> tree for VM and generated C#.
 /// <see cref="Success"/> / <see cref="Failure"/> return an object with
 /// <see cref="IsSuccess"/>; they do not throw. Canonical fail-closed shape:
-/// <c>if (!result.IsSuccess) return result</c> is live on self-invoke,
-/// singular cross-entity, and for-invoke. <c>ExecuteEffect</c> returns the
-/// failed <c>DomainResult</c> when a VM program returns Failure (foreach
+/// <c>if (!result.IsSuccess) return caller.Failure(error)</c> is live on self-invoke,
+/// singular cross-entity, and for-invoke (rewrap as the caller DomainResult arity).
+/// <c>ExecuteEffect</c> returns the failed <c>DomainResult</c> when a VM program returns Failure (foreach
 /// zero-match, per-item invoke Failure from <c>InvokeNamed</c>).
 /// Missing or wrong-stage actions return Failure from <c>InvokeNamed</c>.
 /// </summary>

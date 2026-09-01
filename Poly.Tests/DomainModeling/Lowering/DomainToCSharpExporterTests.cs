@@ -934,7 +934,7 @@ public class DomainToCSharpExporterTests {
         await Assert.That(cs).Contains("if (!target0.IsPaid())");
         await Assert.That(cs).Contains("target0.Mark(target0.Qty)");
         await Assert.That(cs).Contains("target1.CurrentStage == LineStage.Active");
-        await Assert.That(cs).Contains("return result0;");
+        await Assert.That(cs).Contains("return DomainResult.Failure(result0.ErrorMessage ?? \"\");");
         await Assert.That(cs).Contains("matched zero targets");
         await Assert.That(cs).DoesNotContain("NotSupportedException");
     }
@@ -1841,7 +1841,7 @@ public class DomainToCSharpExporterTests {
 
         await Assert.That(cs).Contains("if (!invoke");
         await Assert.That(cs).Contains("this.Station.Fire()");
-        await Assert.That(cs).Contains("return invoke");
+        await Assert.That(cs).Contains("return DomainResult.Failure(invoke");
     }
 
     [Test]
@@ -2442,8 +2442,84 @@ public class DomainToCSharpExporterTests {
     }
 
 
+
+    [Test]
+    public async Task Export_NestedInvokeInProducerAction_CompilesWithoutCS0029() {
+        // Nested invoke fail-fast used to `return resultVar` (callee DomainResult),
+        // which CS0029s when the caller is DomainResult<T>. Rewrap as caller Failure.
+        var (domain, analysis) = ParseAndAnalyze("""
+            domain Kitchen
+            Dish: entity {
+              Name: Text
+              Draft: stage { }
+            }
+            Station: entity {
+              Heat: Number default(0)
+              CanFire: policy { Heat > 0 }
+              Fire: action require CanFire { assign Heat to Heat + 1 }
+            }
+            Ticket: entity {
+              station: Station
+              dishes: many Dish
+              Flag: Number default(0)
+              Prep: action { assign Flag to 1 }
+              Send: action -> Dish {
+                invoke Prep
+                invoke station.Fire
+                assign Flag to 2
+                create in dishes { Name: "soup" }
+              }
+            }
+            """);
+        await Assert.That(analysis.HasErrors).IsFalse();
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var unit = new CompilationUnitNode([], null, types, null);
+        var cs = new CSharpGenerator().Generate(unit);
+
+        await Assert.That(cs).Contains("public DomainResult<Dish> Send(");
+        await Assert.That(cs).Contains("return DomainResult<Dish>.Failure(invoke");
+        await Assert.That(cs).Contains("this.Prep()");
+        await Assert.That(cs).Contains("this.Station.Fire()");
+        var sendIdx = cs.IndexOf("public DomainResult<Dish> Send(", StringComparison.Ordinal);
+        var flagAssign = cs.IndexOf("this.Flag = 2L", sendIdx);
+        var failRewrap = cs.IndexOf("return DomainResult<Dish>.Failure(", sendIdx);
+        await Assert.That(failRewrap).IsGreaterThan(sendIdx);
+        await Assert.That(flagAssign).IsGreaterThan(failRewrap);
+        var errors = CompileExported(cs);
+        await Assert.That(errors).IsEmpty();
+    }
+
+    [Test]
+    public async Task Export_ForEachInvokeInProducerAction_RewrapsZeroMatchAsCallerResult() {
+        var (domain, analysis) = ParseAndAnalyze("""
+            domain Shop
+            Line: entity {
+              Qty: Number
+              Mark: action { assign Qty to Qty }
+              Draft: stage { }
+            }
+            Order: entity {
+              lines: many Line
+              Go: action -> Line {
+                for lines as line invoke line.Mark
+                create in lines { Qty: 1 }
+              }
+            }
+            """);
+        await Assert.That(analysis.HasErrors).IsFalse();
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var unit = new CompilationUnitNode([], null, types, null);
+        var cs = new CSharpGenerator().Generate(unit);
+
+        await Assert.That(cs).Contains("public DomainResult<Line> Go(");
+        await Assert.That(cs).Contains("return DomainResult<Line>.Failure(result");
+        await Assert.That(cs).Contains("return DomainResult<Line>.Failure(\"for lines.Mark matched zero targets.\")");
+        var errors = CompileExported(cs);
+        await Assert.That(errors).IsEmpty();
+    }
+
     private static string[] CompileExported(string cs) {
-        var tree = CSharpSyntaxTree.ParseText("#nullable enable\n" + cs);
+        var tree = CSharpSyntaxTree.ParseText("#nullable enable\nusing System.Collections.Generic;\n" + cs);
         var references = ((string?)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES"))
             ?.Split(Path.PathSeparator)
             .Select(p => (MetadataReference)MetadataReference.CreateFromFile(p))

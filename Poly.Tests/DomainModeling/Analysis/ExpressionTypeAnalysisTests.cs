@@ -377,6 +377,71 @@ public class ExpressionTypeAnalysisTests {
     }
 
     [Test]
+    public async Task Invoke_EntityTypeMismatch_Rejected() {
+        // Nested-invoke arg type seam: passing a Gadget to a Widget parameter
+        // must be rejected at analysis time (fail-closed, not silent mutation).
+        var result = Parse("""
+            domain Test
+            Widget: entity {
+              Used: Number default(0)
+              Apply: action (item: Widget) { assign Used to Used + 1 }
+            }
+            Gadget: entity { Name: Text required }
+            Host: entity {
+              widget: Widget
+              Open: stage {
+                Run: action (gadget: Gadget) {
+                  invoke widget.Apply(item: gadget)
+                }
+              }
+            }
+            """);
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(HasError(result, "type mismatch in argument 'item' of invoke 'Apply'")).IsTrue();
+    }
+
+    [Test]
+    public async Task Invoke_SameEntityType_Succeeds() {
+        var result = Parse("""
+            domain Test
+            Widget: entity {
+              Used: Number default(0)
+              Apply: action (item: Widget) { assign Used to Used + 1 }
+            }
+            Host: entity {
+              widget: Widget
+              Open: stage {
+                UseSelf: action {
+                  invoke widget.Apply(item: widget)
+                }
+              }
+            }
+            """);
+        await Assert.That(result.Succeeded).IsTrue();
+    }
+
+    [Test]
+    public async Task Invoke_EntityToPrimitiveMismatch_Rejected() {
+        var result = Parse("""
+            domain Test
+            Widget: entity {
+              Name: Text
+              SetName: action (name: Text) { assign Name to name }
+            }
+            Host: entity {
+              widget: Widget
+              Open: stage {
+                Run: action (w: Widget) {
+                  invoke widget.SetName(name: w)
+                }
+              }
+            }
+            """);
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(HasError(result, "type mismatch in argument 'name' of invoke 'SetName'")).IsTrue();
+    }
+
+    [Test]
     public async Task CreateIn_NonCatalogLookup_FallsBackGracefully() {
         // Round-5 F7: when the catalog lookup (DomainTypeLookupMetadata) is absent, create-in
         // target resolution must fall back to the plain expression walk without crashing —

@@ -513,7 +513,10 @@ public sealed partial record DomainEntityInstance {
             var stageBefore = CurrentStage;
             var failed = ExecuteEffectList(action.Effects, effectPass, effectTypeProvider);
             if (failed is { IsSuccess: false }) {
-                RestoreActionState(bagBefore, stageBefore, createdBefore);
+                // Unique-before-mutate restore (PR 44 F2). Other constraint Failures
+                // keep prior assigns — PR 43 documented miss IfOnMutatedProperty.
+                if (failed.ErrorMessage is string msg && msg.Contains("Unique", StringComparison.Ordinal))
+                    RestoreActionState(bagBefore, stageBefore, createdBefore);
                 return ActionInvocationResult.InvalidArguments(
                     actionName, failed.ErrorMessage ?? "invoke failed.");
             }
@@ -587,7 +590,8 @@ public sealed partial record DomainEntityInstance {
         EffectLoweringPass effectPass,
         TypeDefinitionNodeAnalyzer typeProvider) {
         var prepared = effects.Select(PreprocessEffectExpressions).ToList();
-        if (prepared.Exists(ContainsConditionalCreate)) {
+        if (prepared.Exists(ContainsConditionalCreate)
+            && !prepared.Exists(HasEffectDependentConditionalCreate)) {
             var tree = effectPass.LowerActionBody(prepared);
             if (tree is null)
                 throw new InvalidOperationException(
@@ -627,10 +631,10 @@ public sealed partial record DomainEntityInstance {
                 return uniqueFail;
         }
 
-        // Unique assigns inside if/else (no create) must not lower as one VM tree.
+        // Unique-assign if/else, or effect-dependent mixed if+create (LowerActionBody
+        // skipped — probes would see the pre-assign bag and reject F2 OVER).
         if ((prepared is ConditionalEffect or CompositeEffect)
-            && ContainsUniqueAssign(prepared)
-            && !ContainsDirectExecutionEffect(prepared)) {
+            && (ContainsUniqueAssign(prepared) || ContainsDirectExecutionEffect(prepared))) {
             return ExecuteStructured(prepared, effectPass, typeProvider);
         }
 
@@ -760,6 +764,19 @@ public sealed partial record DomainEntityInstance {
     private static bool ContainsConditionalCreate(Effect effect) => effect switch {
         ConditionalEffect c => ContainsDirectExecutionEffect(c),
         CompositeEffect c => c.Effects.Any(ContainsConditionalCreate),
+        _ => false
+    };
+
+    /// <summary>
+    /// True when an if+create condition reads the entity bag (PR 44 F2). Those
+    /// trees cannot LowerActionBody — probes use the pre-assign bag.
+    /// </summary>
+    private bool HasEffectDependentConditionalCreate(Effect effect) => effect switch {
+        ConditionalEffect c =>
+            (ContainsDirectExecutionEffect(c) && !ConditionIsEffectIndependent(c.Condition))
+            || (c.ThenEffects?.Any(HasEffectDependentConditionalCreate) ?? false)
+            || (c.ElseEffects?.Any(HasEffectDependentConditionalCreate) ?? false),
+        CompositeEffect c => c.Effects.Any(HasEffectDependentConditionalCreate),
         _ => false
     };
 

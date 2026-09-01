@@ -394,7 +394,10 @@ public sealed partial record DomainEntityInstance {
                 case ConditionalEffect cond: {
                         // Only ifs that contain create/create-in. Taken-branch creates
                         // fail closed before any prior assign. Untaken branch is not probed.
+                        // Effect-dependent conditions skip prevalidate (PR 44 F2).
                         if (!ContainsDirectExecutionEffect(cond))
+                            break;
+                        if (!ConditionIsEffectIndependent(cond.Condition))
                             break;
                         if (!TryEvalEffectCondition(PreprocessQuantifiers(cond.Condition), out var taken))
                             return "Cannot evaluate if condition for create prevalidation.";
@@ -436,6 +439,23 @@ public sealed partial record DomainEntityInstance {
         return null;
     }
 
+    private bool ConditionIsEffectIndependent(DomainExpression condition) =>
+        !ConditionReadsEntityProperty(condition);
+
+    private bool ConditionReadsEntityProperty(DomainExpression expr) {
+        if (expr is PropertyAccess pa)
+            return Entity.Properties.Any(p =>
+                string.Equals(p.Name, pa.Name, StringComparison.Ordinal));
+        if (expr is RelationshipNavigation)
+            return true;
+        foreach (var child in expr.Children) {
+            if (child is DomainExpression inner && ConditionReadsEntityProperty(inner))
+                return true;
+        }
+        return false;
+    }
+
+
     private string? PrevalidateCreateInitializers(
         IReadOnlyList<PropertyBinding> initializers, Entity targetEntity) {
         var values = new Dictionary<string, object?>(StringComparer.Ordinal);
@@ -466,7 +486,7 @@ public sealed partial record DomainEntityInstance {
                 values[prop.Name] = null;
         }
 
-        return ValidateConstraints(targetEntity, values);
+        return ValidateConstraints(targetEntity, values, Store);
     }
 
     /// <summary>
@@ -535,6 +555,10 @@ public sealed partial record DomainEntityInstance {
                     $"Property '{binding.PropertyName}' does not exist on entity '{targetEntity.Name}'. " +
                     $"Available: {string.Join(", ", scalarNames)}.");
         }
+
+        var uniqueOrConstraint = ValidateConstraints(targetEntity, initialValues, Store);
+        if (uniqueOrConstraint is not null)
+            throw new InvalidOperationException(uniqueOrConstraint);
 
         var child = Create(targetEntity, initialValues, Domain);
         _createdChildren.Add(child);

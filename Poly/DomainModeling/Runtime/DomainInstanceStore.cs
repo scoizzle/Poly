@@ -67,21 +67,38 @@ public sealed class DomainInstanceStore {
             throw new InvalidOperationException(error);
     }
 
-    internal string? UniqueCollisionMessage(DomainEntityInstance candidate, DomainEntityInstance? except) {
-        foreach (var prop in candidate.Entity.Properties) {
+    internal string? UniqueCollisionMessage(DomainEntityInstance candidate, DomainEntityInstance? except) =>
+        UniqueCollisionMessage(candidate.Entity, proposed: null, except: except, candidate: candidate);
+
+    /// <summary>
+    /// Store-aware unique check against a proposed bag (no instance mutate).
+    /// <paramref name="candidate"/> is skipped when present (self-assign).
+    /// </summary>
+    internal string? UniqueCollisionMessage(
+        Entity entity,
+        IReadOnlyDictionary<string, object?>? proposed,
+        DomainEntityInstance? except = null,
+        DomainEntityInstance? candidate = null) {
+        foreach (var prop in entity.Properties) {
             if (!prop.Constraints.OfType<UniqueConstraint>().Any())
                 continue;
-            if (!candidate.TryGetRaw(prop.Name, out var value) || value is null)
+            object? value;
+            if (proposed is not null) {
+                if (!proposed.TryGetValue(prop.Name, out value) || value is null)
+                    continue;
+            }
+            else if (candidate is null || !candidate.TryGetRaw(prop.Name, out value) || value is null) {
                 continue;
+            }
             foreach (var other in _instances) {
                 if (ReferenceEquals(other, except) || ReferenceEquals(other, candidate))
                     continue;
-                if (!string.Equals(other.Entity.Name, candidate.Entity.Name, StringComparison.Ordinal))
+                if (!string.Equals(other.Entity.Name, entity.Name, StringComparison.Ordinal))
                     continue;
                 if (!other.TryGetRaw(prop.Name, out var otherValue))
                     continue;
                 if (Equals(otherValue, value))
-                    return $"Unique constraint violated: '{prop.Name}' value is already used on another '{candidate.Entity.Name}'.";
+                    return $"Unique constraint violated: '{prop.Name}' value is already used on another '{entity.Name}'.";
             }
         }
         return null;

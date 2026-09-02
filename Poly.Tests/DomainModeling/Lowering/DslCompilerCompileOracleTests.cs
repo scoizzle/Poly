@@ -159,12 +159,12 @@ public class DslCompilerCompileOracleTests {
     }
 
     [Test]
-    [Arguments("probes/fleet-eval/09-transport/warehouse.poly")]
-    [Arguments("probes/fleet-eval/09-transport/orders.poly")]
-    [Arguments("probes/fleet-eval/09-transport/clinic.poly")]
-    [Arguments("probes/fleet-eval/12-mcp/mcp-library.poly")]
-    [Arguments("probes/dogfood/university.poly")]
-    [Arguments("probes/dogfood/crm.poly")]
+    [Arguments("docs/probes/fleet-eval/09-transport/warehouse.poly")]
+    [Arguments("docs/probes/fleet-eval/09-transport/orders.poly")]
+    [Arguments("docs/probes/fleet-eval/09-transport/clinic.poly")]
+    [Arguments("docs/probes/fleet-eval/12-mcp/mcp-library.poly")]
+    [Arguments("docs/probes/dogfood/university.poly")]
+    [Arguments("docs/probes/dogfood/crm.poly")]
     public async Task Compile_All_DemoDomains_EmitCompilableSolution(string relativePath) {
         var root = FindRepoRoot();
         var poly = await File.ReadAllTextAsync(Path.Combine(root, relativePath));

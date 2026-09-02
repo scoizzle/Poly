@@ -27,6 +27,8 @@ They do **not** represent current priorities, committed roadmap items, or active
 | [**isa-decompiler-agent-experiment.md**](isa-decompiler-agent-experiment.md) | Speculative: grammar-driven ISA lifting → Poly.Ast → analysis structuring → VM-executable decompilation for agents — **not** active work |
 | [**variable-assignment-union-types.md**](variable-assignment-union-types.md) | Mixed assigns fail closed on net10. Future: deduce a C# 15 / .NET 11 type union from the assignment set when that TFM is product — **not** `object`, not now |
 
+**Archived:** 2026-09-01 from `docs/experiments/`. Not product DSL — that is `Poly.Mcp/Docs/poly-dsl-guide.md`.
+
 ## Related directories
 
 - `docs/decisions/` — Decisions that *have* been formally made

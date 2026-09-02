@@ -1,24 +1,25 @@
 #!/usr/bin/env bash
 # Starts a discovery round: scaffolds the round's findings dir, runs a baseline
 # probe sweep (every probe through run-probe.sh — parse → export → Roslyn
-# compile-check), writes probes/findings/<round>/baseline.md, and prints the next
+# compile-check), writes docs/probes/findings/<round>/baseline.md, and prints the next
 # steps. Agent LAUNCH itself is an opencode coordinator action (Task tool) — this
 # script does the mechanical prep and ground-truth sweep.
 #
 # Usage: scripts/discovery-round.sh <round-name> [probe-glob ...]
-#   probe-glob defaults to probes/discovery-*/*.poly and probes/*.poly
+#   probe-glob defaults to docs/probes/**/*.poly
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 ROUND="${1:?usage: scripts/discovery-round.sh <round-name> [probe-glob ...]}"
-FIND="probes/findings/$ROUND"
+FIND="docs/probes/findings/$ROUND"
 mkdir -p "$FIND"
 
 if [ $# -gt 1 ]; then
   PROBES=()
   for g in "${@:2}"; do PROBES+=($g); done
 else
-  PROBES=(probes/discovery-*/*.poly probes/*.poly)
+  shopt -s globstar nullglob
+  PROBES=(docs/probes/**/*.poly)
 fi
 
 BASELINE="$FIND/baseline.md"
@@ -63,4 +64,4 @@ echo "== Baseline written: $BASELINE =="
 cat "$BASELINE"
 echo
 echo "== Next: launch agents per the 'Round coordinator' section of"
-echo "   docs/agent/poly-discovery-loop.md (findings dir: probes/findings/$ROUND) =="
+echo "   docs/agent/poly-discovery-loop.md (findings dir: docs/probes/findings/$ROUND) =="

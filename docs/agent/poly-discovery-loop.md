@@ -37,12 +37,12 @@ bare-identifier siblings late-rung. Add a regression test per form.
 
 ## Pipeline (the automated path — no MCP required)
 
-1. **Author 2–3 probe domains** under `probes/<your-agent>/<name>.poly`. Model a real,
+1. **Author 2–3 probe domains** under `docs/probes/<your-agent>/<name>.poly`. Model a real,
    well-known system (library, orders, issue tracker, hotel booking…) that stresses
    your slice. Read [`Poly.Mcp/Docs/poly-dsl-guide.md`](../../Poly.Mcp/Docs/poly-dsl-guide.md)
    first — author only shipped surface.
 2. **Parse + export + compile-check:**
-   `scripts/run-probe.sh probes/<your-agent>/<name>.poly`
+   `scripts/run-probe.sh docs/probes/<your-agent>/<name>.poly`
    → parse/analyze/export, then Roslyn compile-check (0 errors / 0 warnings required).
    A compile failure is a finding by itself (repro = the `.poly` + the error).
    **Late-rung sweep (round-5 P2):** the compile gate does NOT catch codegen-time
@@ -76,7 +76,7 @@ bare-identifier siblings late-rung. Add a regression test per form.
 
 ## Findings registry
 
-Append each finding to **`probes/findings/<your-agent>.md`** (create it) and include
+Append each finding to **`docs/probes/findings/<your-agent>.md`** (create it) and include
 the same findings in your final report. One block per finding:
 
 ```markdown
@@ -84,7 +84,7 @@ the same findings in your final report. One block per finding:
 - **Signal:** <compile-fail | divergence | guide-drift | silent-gap | fail-loud-but-sharp | modeling-trap>
 - **Severity:** 🔴 | 🟠 | 🟡
 - **Slice:** <your slice>
-- **Repro:** `probes/<your-agent>/<name>.poly` + the exact command / action sequence
+- **Repro:** `docs/probes/<your-agent>/<name>.poly` + the exact command / action sequence
 - **Expected:** what the DSL intent (and/or the guide) says should happen
 - **Actual:** what the export or runtime does
 - **Proposed patch (optional):** a small described fix or diff sketch — do not apply it
@@ -94,7 +94,7 @@ the same findings in your final report. One block per finding:
 
 - One line per finding: `[severity] slice: title — one-line repro + expected vs actual`.
 - Ranked: compile/divergence first, then silent gaps, then sharp/🟡.
-- Include paths to your `probes/findings/<your-agent>.md` and probe `.poly` files.
+- Include paths to your `docs/probes/findings/<your-agent>.md` and probe `.poly` files.
 - If you found nothing: say so explicitly with the probes you ran (empty is a valid,
   honest result — never pad).
 
@@ -114,7 +114,7 @@ One command starts a round and produces ground truth:
 scripts/discovery-round.sh <round-name>            # e.g. round2
 ```
 
-It scaffolds `probes/findings/<round>/` and writes `baseline.md` — a sweep of every
+It scaffolds `docs/probes/findings/<round>/` and writes `baseline.md` — a sweep of every
 probe through `run-probe.sh` (which probes compile 0/0, which fail). The failing
 probes are the round's compile-fail targets.
 
@@ -125,7 +125,7 @@ probes are the round's compile-fail targets.
    dates/defaults, constraints/create/enums, subscriptions/entry-exit/stage-scoping).
 3. **Launch agents:** one `general` subagent per slice, in parallel (Task tool), using
    the template below with `<ROUND>`, `<SLICE>`, and the slice's probe target filled in.
-4. **Triage:** merge the per-agent `probes/findings/<round>/<agent>.md`. Dedupe, rank
+4. **Triage:** merge the per-agent `docs/probes/findings/<round>/<agent>.md`. Dedupe, rank
    🔴 compile → 🟠 divergence/silent → 🟡 sharp. Spot-verify each with `run-probe.sh`.
 5. **Fix:** per finding, write one regression test → smallest fix → green (agents only
    propose patches; the coordinator applies them with the test-first loop).
@@ -138,8 +138,8 @@ probes are the round's compile-fail targets.
 
 > You are a Poly discovery agent. Read docs/agent/poly-discovery-loop.md FIRST and
 > follow it exactly, then Poly.Mcp/Docs/poly-dsl-guide.md. Round: `<ROUND>` (findings
-> to probes/findings/<ROUND>/<agent>.md). Your slice: `<SLICE>`.
-> Create probes/<agent>/ and author 2–3 probes exercising `<SLICE>`; run
+> to docs/probes/findings/<ROUND>/<agent>.md). Your slice: `<SLICE>`.
+> Create docs/probes/<agent>/ and author 2–3 probes exercising `<SLICE>`; run
 > scripts/run-probe.sh on each; statically review the export for compile-fail /
 > export-runtime divergence / silent gaps / guide drift; optionally verify runtime
 > via a throwaway TUnit test (delete it after). Return your ranked findings report.

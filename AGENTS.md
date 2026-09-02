@@ -7,7 +7,8 @@
 | **[`docs/CORE.md`](docs/CORE.md)** | Platform map: purpose, ownership, critical machinery, “use this / not that.” **Read before changing Syntax, Interpretation, Introspection, DomainModeling, or Poly.Mcp.** |
 | **This file** | Principles, placement, build/test, coding ops |
 | **`docs/decisions/`** | Why (ADRs). Index: [`docs/decisions/README.md`](docs/decisions/README.md) |
-| **`docs/plans/`** | Execution work only — not evergreen rules |
+| **`docs/plans/`** | Execution work only — not evergreen rules. DONE/executed material lives under `docs/plans/archive/` |
+| **`docs/probes/`** | Live probe fixtures (tests + discovery). Historical rounds: `docs/plans/archive/probes-2026-08/` |
 | **[`docs/agent/`](docs/agent/)** | Tool-agnostic agent protocols (review, etc.). Index: [`docs/agent/README.md`](docs/agent/README.md) |
 | **[`docs/plans/simple-agent-tasks/PIPELINE-STATUS.md`](docs/plans/simple-agent-tasks/PIPELINE-STATUS.md)** | Sole CURRENT/DONE for suite admission. Other plan indexes mirror or link here — do not invent a second CURRENT. |
 
@@ -111,7 +112,7 @@ The **Modeling Principles** in [`Poly.Mcp/Docs/poly-dsl-guide.md`](Poly.Mcp/Docs
 
 **Keep it in sync.** Any change to the parser, printer, or tokenizer that alters what DSL constructs are valid or emitted must update the guide in the same change. The smoke test `GetDslGuide_ReturnsProductSurface` will catch some drift, but guide content must be updated proactively — especially when adding/removing keywords, effect types, constraint syntax, or relationship forms.
 
-Do not let experimental or lab grammar docs (`docs/experiments/`) become the de-facto agent reference.
+Do not let experimental or lab grammar docs (`docs/plans/archive/experiments/`) become the de-facto agent reference.
 The product guide is the single source of truth for MCP `apply_dsl`.
 
 ---
@@ -127,7 +128,7 @@ The product guide is the single source of truth for MCP `apply_dsl`.
 | VM + direct AST→VM compile | `Poly/Interpretation/Vm/` (`DirectVmAbiEmitter`, `Interpreter` façade) |
 | Type/member model + CLR host | `Poly/Introspection/` |
 | Domain model, evolution, DE→AST | `Poly/DomainModeling/` |
-| Validation rules | **Deleted 2026-08-09** (dead-dual cleanup) — no product callers ever existed; domain constraints live under `DomainModeling/Constraints` + domain analysis. Kill list: [`docs/plans/dead-dual-inventory-2026-08-08.md`](docs/plans/dead-dual-inventory-2026-08-08.md) |
+| Validation rules | **Deleted 2026-08-09** (dead-dual cleanup) — no product callers ever existed; domain constraints live under `DomainModeling/Constraints` + domain analysis. Kill list: [`docs/plans/archive/completed-2026-08-late/dead-dual-inventory-2026-08-08.md`](docs/plans/archive/completed-2026-08-late/dead-dual-inventory-2026-08-08.md) |
 | Pattern-table grammar engine (parse/print ports) | `Poly/Grammar/` (`Poly.Grammar`) — product media; not `Poly.Text.Matching` |
 | MCP session + tools | `Poly.Mcp/` |
 | Shared helpers | `Poly/Extensions/` |

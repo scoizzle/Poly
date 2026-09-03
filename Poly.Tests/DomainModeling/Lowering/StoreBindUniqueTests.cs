@@ -137,6 +137,31 @@ public class StoreBindUniqueTests {
     }
 
     [Test]
+    public async Task ConditionalUniqueAssign_Runtime_LowersEnsureUniqueInsideIf() {
+        var (domain, analysis) = Evolve("""
+            domain Parking
+            Permit: entity {
+              Plate: Text unique required
+              Relabel: action (plate: Text) {
+                if (plate != "") {
+                  assign Plate to plate
+                }
+              }
+            }
+            """);
+        var entity = domain.Types.OfType<Entity>().First(e => e.Name == "Permit");
+        var action = entity.Actions.First(a => a.Name == "Relabel");
+        var pass = new EffectLoweringPass(entity, new LoweringContext(
+            new Parameter("entity", new TypeReference(entity.Name)),
+            Analysis: analysis,
+            Domain: domain));
+        var lowered = pass.LowerActionBody(action.Effects);
+        var cs = new CSharpGenerator().Generate(lowered!);
+        await Assert.That(cs).Contains("EnsureUnique");
+        await Assert.That(Flatten(lowered!).Any(n => n is IfStatement)).IsTrue();
+    }
+
+    [Test]
     public async Task UniqueAssign_WithoutStore_SucceedsWhenNoPeers() {
         var entity = PermitWithRelabel();
         var instance = DomainEntityInstance.Create(entity,
@@ -193,6 +218,12 @@ public class StoreBindUniqueTests {
                 if (ifStmt.ElseBranch is not null)
                     foreach (var n in Flatten(ifStmt.ElseBranch))
                         yield return n;
+                break;
+            case Assignment a:
+                foreach (var n in Flatten(a.Value))
+                    yield return n;
+                foreach (var n in Flatten(a.Destination))
+                    yield return n;
                 break;
             case Invoke inv:
                 foreach (var arg in inv.Arguments)

@@ -14,35 +14,49 @@ namespace Poly.Interpretation.Analysis.Semantics;
 public sealed class TypeDefinitionNodeAnalyzer : INodeAnalyzer, ITypeDefinitionProvider {
     public const string Id = "TypeDefinitionNode";
     public string PassName => Id;
-    private readonly Dictionary<string, AstTypeDefinition> _types = new();
-    private TypeDefinitionProviderCollection? _lastRegisteredCollection;
-
-    private sealed record TypeDefinitionScanMetadata : IAnalysisMetadata;
+    private AstTypeRegistry? _registry;
 
     public void Analyze(AnalysisContext context, Node node) {
-        if (context.GetMetadata<TypeDefinitionScanMetadata>(default) is null) {
-            _types.Clear();
-            _lastRegisteredCollection = null;
-            context.SetMetadata(default, new TypeDefinitionScanMetadata());
+        var registry = context.GetMetadata<AstTypeRegistry>(default);
+        if (registry is null) {
+            registry = new AstTypeRegistry();
+            context.SetMetadata(default, registry);
+            context.TypeDefinitions.Add(registry);
+            _registry = registry;
         }
 
         if (node is TypeDefinitionNode typeDef) {
-            if (context.TypeDefinitions != _lastRegisteredCollection) {
-                context.TypeDefinitions.Add(this);
-                _lastRegisteredCollection = context.TypeDefinitions;
-            }
-            var definition = new AstTypeDefinition(typeDef, this);
-            _types[typeDef.FullName] = definition;
-
-            // Store the type definition in context metadata for resolution
-            // by other passes (e.g. ThisReferenceContextPass) and for
-            // GetResolvedType queries.
+            var definition = new AstTypeDefinition(typeDef, context.TypeDefinitions);
+            registry.Add(definition);
             context.SetMetadata(node, new TypeDefinitionMetadata(definition));
         }
 
-        // Analyze children (properties, methods, etc.)
         this.AnalyzeChildren(context, node);
     }
+
+    public ITypeDefinition? GetTypeDefinition(string typeName) =>
+        _registry?.GetTypeDefinition(typeName);
+
+    public ITypeDefinition? GetTypeDefinition(Type type) =>
+        ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(type);
+
+    public IEnumerable<ITypeDefinition> GetTypeDefinitions() =>
+        _registry?.GetTypeDefinitions() ?? [];
+}
+
+/// <summary>
+/// Per-analysis AST type table. Lives on <see cref="AnalysisContext"/> so the
+/// shared <see cref="Interpreter.Analyzer"/> instance cannot leak or clear
+/// types across concurrent analyses.
+/// </summary>
+internal sealed class AstTypeRegistry : ITypeDefinitionProvider, IAnalysisMetadata {
+    private readonly Dictionary<string, AstTypeDefinition> _types = new(StringComparer.Ordinal);
+
+    public void Add(AstTypeDefinition definition) {
+        _types[definition.FullName] = definition;
+    }
+
+    public IEnumerable<ITypeDefinition> GetTypeDefinitions() => _types.Values;
 
     public ITypeDefinition? GetTypeDefinition(string typeName) {
         if (_types.TryGetValue(typeName, out var def))
@@ -59,15 +73,8 @@ public sealed class TypeDefinitionNodeAnalyzer : INodeAnalyzer, ITypeDefinitionP
         return match;
     }
 
-    public ITypeDefinition? GetTypeDefinition(Type type) {
-        // AST-based types don't map to CLR types directly
-        // Fall back to CLR registry for runtime types
-        return ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(type);
-    }
-
-    public IEnumerable<ITypeDefinition> GetTypeDefinitions() {
-        return _types.Values;
-    }
+    public ITypeDefinition? GetTypeDefinition(Type type) =>
+        ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(type);
 }
 
 /// <summary>Metadata associating a <see cref="TypeDefinitionNode"/> with its
@@ -542,9 +549,8 @@ internal static class AstTypeReferenceResolver {
         ITypeDefinitionProvider provider,
         ITypeDefinition? enclosing = null) {
         return TryResolve(typeNode, provider, enclosing)
-            ?? throw new ArgumentException(
-                $"Type with name '{TypeNameOf(typeNode)}' not found.",
-                nameof(typeNode));
+            ?? throw new InvalidOperationException(
+                $"Type with name '{TypeNameOf(typeNode)}' not found.");
     }
 
     public static ITypeDefinition? TryResolve(

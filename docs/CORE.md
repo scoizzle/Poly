@@ -21,12 +21,12 @@ Domain (facts + uses ids)
   → DomainSession (extensions loaded once: analyzers + maps)
   → session.Analyze (core pipeline + library INodeAnalyzer)  → concern bags
   → lower each action / policy / create / subscription → Syntax AST
-      (reads bags; invokes bound Store — EnsureUnique; later Create / CreateIn)
+      (lowering reads bags; the tree does not — it invokes bound Store)
   → session.Emit (entity C# project) + bag-gated host files (DbContext / HTTP)
 MCP harness: create_instance → evaluate_policy(instanceId) / invoke_action — same operation AST
 ```
 
-**Facts / bag / Store / bind** (words, not a framework): `Domain` is facts. Analysis publishes **concern bags**. A **surface** (`uses sqlite`) selects an implementation. **Store** is the named collaborator the operation AST invokes — scratch `DomainInstanceStore` today, later EF; **not** `IStorage` (that name is the mapping bag). **Bind** is caller-supplied. **Lower** reads bags and invokes Store; it does not re-walk `Domain` or Effect IR. **Project** prints that tree; **host files** are bag-gated adapters that *are* the bound implementations. Vocabulary: [`docs/decisions/2026-09-03-facts-concerns-bags-store-bind.md`](decisions/2026-09-03-facts-concerns-bags-store-bind.md).
+**Facts / bag / Store / bind** (words, not a framework): `Domain` is facts. Analysis publishes **concern bags**. A **surface** (`uses sqlite`) selects an implementation. **Lowering** reads bags to choose what to emit. The **product** is generic Syntax that **invokes bound collaborators** (Store: `EnsureUnique`, later `Create` / `CreateIn`) — the tree has no bag knowledge. Scratch `DomainInstanceStore` today, later EF; **not** `IStorage` (that name is the mapping bag). **Bind** is caller-supplied. **Project** prints that tree; **host files** consume bags because they *are* the bound implementations. Vocabulary: [`docs/decisions/2026-09-03-facts-concerns-bags-store-bind.md`](decisions/2026-09-03-facts-concerns-bags-store-bind.md).
 
 **Hard lines**
 

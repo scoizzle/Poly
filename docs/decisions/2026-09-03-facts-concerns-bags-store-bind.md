@@ -41,6 +41,7 @@ Use these words. Do not invent a framework catalog.
 | Be the program | Operation AST (**product**) | Name or read bags |
 | Print that program | Project | Consult bags to understand the action |
 | Bind / be the implementation | Store + host files (DbContext, Program.cs) | Re-walk `Domain` for operation meaning |
+| Simulate a named operation | MCP: run the **lowered program** with a bound Store | Execute Domain / Effect IR; assume the running program knows facts or bags |
 
 Constraint checks (required, pattern, range) can stay on the entity factory. Uniqueness and graph wiring belong on Store.
 
@@ -60,4 +61,5 @@ Not this slice: `Store.Create` / `CreateIn`, deleting `ExecuteStructured`, unify
 
 - Unique-inside-`if` compiles as one VM tree. Failure from nested `Return` must surface as `DomainResult`. If it does not, fix lower/VM result mapping — do not restore the walker.
 - The operation AST never names a bag type. If project needs `StorageMappingMetadata` to print an action body, the collaborator was not bound.
+- Simulation was fragile when it treated the executing program as still knowing the domain. Lowering already transformed facts into an implementation; simulate **that** (same tree as project), with Store bound. `UniqueCollisionForAssign` / `ExecuteStructured` were domain-execution beside the program.
 - Heuristic for later work: if emit of a Store job is hard, the host surface is wrong.

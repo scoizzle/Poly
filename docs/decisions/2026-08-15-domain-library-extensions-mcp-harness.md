@@ -58,7 +58,7 @@ MCP is how agents **use Poly** in a conversation. It is not the domain session a
 | **Simulate** a named policy or action on a store instance (`create_instance` then `evaluate_policy(instanceId)` / `invoke_action`) | Run “the domain”; use a second evaluator; treat `oracle_expression` as named-policy simulate |
 | Return a fact diff or reject | Treat `Comment` / host-only effect dispatch as success |
 
-Simulate and product emit must agree. The store instance replaces the missing entry point: the agent names the operation and supplies `create_instance` (+ `link_instances` when related).
+Simulate and product emit must agree. The executing program is the **lowered implementation** — it does not still know the domain model; lowering already consumed facts and bags. The store instance replaces the missing entry point: the agent names the operation and supplies `create_instance` (+ `link_instances` when related).
 
 Interpretation is the backbone of that simulate (and of cataloged algorithms). Domain runtime is store + **run this program**.
 

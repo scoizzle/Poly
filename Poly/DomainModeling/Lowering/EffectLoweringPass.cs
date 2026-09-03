@@ -18,8 +18,8 @@ namespace Poly.DomainModeling.Lowering;
 /// (<c>LowerStageTransitions</c>) emits <c>Stay.Create</c> / <c>this.CreateNav</c>.
 /// Runtime emits instance factories (<c>CreateByType</c> / <c>CreateInNav</c> /
 /// <c>ProbeCreateByType</c>) that <c>InvokeNamed</c> runs — Stay.Create is C#-only.
-/// Mixed if+create is the same guarded-probe + body tree, not ExecuteStructured /
-/// EffectExecutor. StageTransition and invoke are handwritten IR on both paths.</para>
+/// Mixed if+create is the same guarded-probe + body tree.
+/// StageTransition and invoke are handwritten IR on both paths.</para>
 ///
 /// <para>When <see cref="Analysis"/> is set, lowering reads pre-computed
 /// <see cref="IAnalysisMetadata"/> instead of re-scanning domain collections.

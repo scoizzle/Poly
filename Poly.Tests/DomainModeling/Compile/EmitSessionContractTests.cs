@@ -4,6 +4,7 @@ using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
 using Poly.DslCompiler;
+using Poly.Interpretation.Analysis.Semantics;
 using Poly.Packs.Sqlite;
 using Poly.Tests.TestHelpers;
 
@@ -141,6 +142,52 @@ public sealed class EmitSessionContractTests {
         var files = session.Emit(domain, analysis);
         await Assert.That(files.Any(f => f.FileName == "Item.cs")).IsTrue();
         await Assert.That(files.Any(f => f.FileName.EndsWith("DbContext.cs", StringComparison.Ordinal))).IsFalse();
+    }
+
+    [Test]
+    public async Task Emit_ProjectedTypesIncludingGenerics_AnalyzeWithoutFallback() {
+        const string poly = """
+            domain Hotel
+            uses temporal
+
+            Industry: enum { Hospitality, Manufacturing }
+
+            Stay: entity {
+              Guest: Text
+              Industry: Industry
+              Vacant: stage {
+                CheckIn: action { transition to Occupied }
+              }
+              Occupied: stage { }
+            }
+
+            Room: entity {
+              Number: Text
+              stays: many Stay
+              Book: action (guest: Text) -> Stay {
+                create in stays { Guest: guest }
+              }
+            }
+            """;
+
+        var (session, domain, analysis) = AnalyzePoly(poly);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
+        await Assert.That(types.Any(t => t.Name == "DomainResult" && t.GenericParameters is { Count: > 0 })).IsTrue();
+
+        var unit = new CompilationUnitNode([], null, types, null);
+        var interp = Interpretation.Interpreter.Analyzer.Analyze(unit);
+        await Assert.That(interp).IsNotNull();
+
+        var domainResultGeneric = types.Single(t => t.Name == "DomainResult" && t.GenericParameters is { Count: > 0 });
+        var resolvedGeneric = interp.GetMetadata<TypeDefinitionMetadata>(domainResultGeneric)?.TypeDefinition;
+        await Assert.That(resolvedGeneric).IsNotNull();
+        var valueType = resolvedGeneric!.Properties.Single(p => p.Name == "Value").MemberTypeDefinition;
+        await Assert.That(valueType.Name).IsEqualTo("T");
+
+        var files = session.Emit(domain, analysis);
+        await Assert.That(files.Any(f => f.FileName == "Room.cs")).IsTrue();
+        await Assert.That(files.Any(f => f.FileName == "Stay.cs")).IsTrue();
+        await Assert.That(files.Any(f => f.FileName == "Poly.Types.cs")).IsTrue();
     }
 
     [Test]

@@ -34,7 +34,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     private readonly bool _lowerStageTransitions;
     private readonly string? _stageEnumTypeName;
     private readonly IReadOnlyDictionary<string, IReadOnlyList<Node>>? _postTransitionNodes;
-    private readonly string? _sourceStageName;
+    private string? _sourceStageName;
     private readonly IReadOnlyDictionary<string, string>? _enumPropertyNames;
     private readonly LoweringContext _context;
     private readonly bool _emitInstanceNotify;
@@ -360,6 +360,8 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         else if (tryNodes.Count > 0) {
             nodes.Add(tryBody);
         }
+
+        _sourceStageName = t.TargetStage.StageName;
 
         return nodes.Count == 1 ? nodes[0] : new Block(nodes);
     }

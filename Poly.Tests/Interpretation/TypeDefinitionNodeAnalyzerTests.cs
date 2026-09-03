@@ -157,7 +157,7 @@ public class TypeDefinitionNodeAnalyzerTests {
 
         await Assert.That(resolved).IsNotNull();
         await Assert.That(() => resolved!.Properties.Single().MemberTypeDefinition)
-            .Throws<ArgumentException>()
+            .Throws<InvalidOperationException>()
             .WithMessageContaining("DoesNotExist");
     }
 

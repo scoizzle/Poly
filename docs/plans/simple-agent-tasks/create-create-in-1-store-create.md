@@ -1,7 +1,7 @@
 # create-create-in-1 — Store.Create / Store.CreateIn
 
 **Difficulty:** M  
-**Status:** `[ ]`  
+**Status:** `[x]`  
 **Prereq:** none (unique Store bind already on trunk of this stream)
 
 ## Objective
@@ -33,10 +33,10 @@ dotnet run --project Poly.Tests/Poly.Tests.csproj -p:NuGetAudit=false -- --treen
 dotnet run --project Poly.Tests/Poly.Tests.csproj -p:NuGetAudit=false
 ```
 
-- [ ] New lowering-shape + Store-link tests pass
-- [ ] Existing unique-in-if and create Failure-without-prior-mutate tests still pass (`ActionEntityReturnTests`, `StoreBindUniqueTests`)
-- [ ] Tree does not name `StorageMappingMetadata`
-- [ ] CORE / ADR only if the public Store job is new — parent already named it; update CORE if `DomainInstanceStore` public surface is a listed mechanism
+- [x] New lowering-shape + Store-link tests pass
+- [x] Existing unique-in-if and create Failure-without-prior-mutate tests still pass (`ActionEntityReturnTests`, `StoreBindUniqueTests`)
+- [x] Tree does not name `StorageMappingMetadata`
+- [x] CORE / ADR only if the public Store job is new — parent already named it; update CORE if `DomainInstanceStore` public surface is a listed mechanism
 
 ## File ownership
 
@@ -49,4 +49,4 @@ dotnet run --project Poly.Tests/Poly.Tests.csproj -p:NuGetAudit=false
 
 ## Status
 
-**Status:** Not Started
+**Status:** Done 2026-09-03

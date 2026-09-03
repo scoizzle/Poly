@@ -1,7 +1,7 @@
 # Simulate the lowered program (create/create-in remaining)
 
 **Date:** 2026-09-03  
-**Status:** CURRENT execution — not a new suite. Authority: [`simple-agent-tasks/PIPELINE-STATUS.md`](simple-agent-tasks/PIPELINE-STATUS.md) (`CURRENT: create/create-in`).  
+**Status:** DONE — simulate = Interpreter + bound Store. Authority: [`simple-agent-tasks/PIPELINE-STATUS.md`](simple-agent-tasks/PIPELINE-STATUS.md) (`CURRENT: (none)`).  
 **Suite README:** [`simple-agent-tasks/create-create-in-README.md`](simple-agent-tasks/create-create-in-README.md)  
 **Language lock:** [`decisions/2026-09-03-facts-concerns-bags-store-bind.md`](../decisions/2026-09-03-facts-concerns-bags-store-bind.md)  
 **Pre-ship:** [`v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md`](v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md)
@@ -90,10 +90,10 @@ Copy unique: tests grow more specific; production gets more generic. CORE + `doc
 
 ## Done
 
-- [ ] Runtime create / create-in (including inside `if`, relationship-coupled, unique-on-create) compile as one operation AST and run through `Interpreter`.
-- [ ] `ExecuteStructured` / `ExecuteEffect` walker gone.
-- [ ] No `CreateByType` / `CreateInNav` / `ProbeCreateByType` as shipped meaning.
-- [ ] Store-aware expressions in actions and named policies are Store calls in the tree (or documented lowering-time rewrite with a cited reason — not execute-time preprocess).
-- [ ] MCP simulate = bind + Interpreter. Tool descriptions match.
-- [ ] CORE, ADR consequences, `domain-execution-model.md` match the code.
-- [ ] `PIPELINE-STATUS` still `CURRENT: create/create-in` until the gate; then mark DONE in the **same** change as the gate.
+- [x] Runtime create / create-in (including inside `if`, relationship-coupled, unique-on-create) compile as one operation AST and run through `Interpreter`.
+- [x] `ExecuteStructured` / `ExecuteEffect` walker gone.
+- [x] No `CreateByType` / `CreateInNav` / `ProbeCreateByType` as shipped meaning.
+- [x] Store-aware expressions in actions and named policies are Store calls in the tree (or documented lowering-time rewrite with a cited reason — not execute-time preprocess).
+- [x] MCP simulate = bind + Interpreter. Tool descriptions match.
+- [x] CORE, ADR consequences, `domain-execution-model.md` match the code.
+- [x] `PIPELINE-STATUS` marked DONE in the same change as the gate.

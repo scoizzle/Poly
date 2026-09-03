@@ -1,7 +1,7 @@
 # create-create-in-3 — Unify create factories
 
 **Difficulty:** M  
-**Status:** `[ ]`  
+**Status:** `[x]`  
 **Prereq:** task 2
 
 ## Objective
@@ -28,9 +28,9 @@ One Store job family for create. Delete `CreateByType` / `CreateInNav` / `ProbeC
 dotnet run --project Poly.Tests/Poly.Tests.csproj -p:NuGetAudit=false
 ```
 
-- [ ] No shipped `CreateByType` / `CreateInNav` / `ProbeCreateByType`
-- [ ] Export goldens for `Stay.Create` still honest or updated with the documented print split
-- [ ] `rg CreateByType` / `CreateInNav` / `ProbeCreateByType` is tests-of-absence or gone
+- [x] No shipped `CreateByType` / `CreateInNav` / `ProbeCreateByType`
+- [x] Export goldens for `Stay.Create` still honest or updated with the documented print split
+- [x] `rg CreateByType` / `CreateInNav` / `ProbeCreateByType` is tests-of-absence or gone
 
 ## File ownership
 
@@ -42,4 +42,4 @@ dotnet run --project Poly.Tests/Poly.Tests.csproj -p:NuGetAudit=false
 
 ## Status
 
-**Status:** Not Started
+**Status:** Done 2026-09-03

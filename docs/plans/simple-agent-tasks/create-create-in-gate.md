@@ -1,7 +1,7 @@
 # create-create-in-gate — Simulate is the lowered program
 
 **Difficulty:** S  
-**Status:** `[ ]`  
+**Status:** `[x]`  
 **Prereq:** tasks 1–5 `[x]`
 
 ## Objective
@@ -27,10 +27,10 @@ dotnet run --project Poly.Tests/Poly.Tests.csproj -p:NuGetAudit=false
 
 ## Verification
 
-- [ ] Parent Done checklist complete
-- [ ] pr1 clean
-- [ ] Suite green
-- [ ] Agent pick updated in the same change
+- [x] Parent Done checklist complete
+- [x] pr1 clean
+- [x] Suite green
+- [x] Agent pick updated in the same change
 
 ## File ownership
 
@@ -41,4 +41,4 @@ dotnet run --project Poly.Tests/Poly.Tests.csproj -p:NuGetAudit=false
 
 ## Status
 
-**Status:** Not Started
+**Status:** Done 2026-09-03

@@ -384,9 +384,9 @@ public sealed partial record DomainEntityInstance {
 
         try {
             return name switch {
-                "ProbeCreate" or "ProbeCreateByType" => ProbeCreate(key, values),
-                "CreateIn" or "CreateInNav" => CreateIn(key, values),
-                "Create" or "CreateByType" => Create(key, values),
+                "ProbeCreate" => ProbeCreate(key, values),
+                "CreateIn" => CreateIn(key, values),
+                "Create" => Create(key, values),
                 _ => DomainResult.Failure($"Unknown create job '{name}'.")
             };
         }

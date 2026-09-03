@@ -158,21 +158,12 @@ public sealed class DomainSession {
     /// <summary>
     /// Runs interpretation analysis on lowered type definitions so the C# generator
     /// can use type-aware features (variable type resolution, DCE).
-    /// Falls back gracefully: analysis errors produce diagnostics but do not block emit.
     /// </summary>
     private static AnalysisResult? TryAnalyzeForEmit(IReadOnlyList<TypeDefinitionNode> allTypes) {
-        var analyzable = allTypes
-            .Where(t => t.GenericParameters is not { Count: > 0 })
-            .ToList();
-        if (analyzable.Count == 0)
+        if (allTypes.Count == 0)
             return null;
-        try {
-            var unit = new CompilationUnitNode([], null, analyzable, null);
-            return Interpretation.Interpreter.Analyzer.Analyze(unit);
-        }
-        catch {
-            return null;
-        }
+        var unit = new CompilationUnitNode([], null, allTypes, null);
+        return Interpretation.Interpreter.Analyzer.Analyze(unit);
     }
 
     internal static ExpressionFoldTable FoldsFor(ExpressionFormRegistry forms) {

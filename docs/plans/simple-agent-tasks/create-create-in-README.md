@@ -6,7 +6,7 @@
 **Pre-ship:** [`../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md`](../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md)  
 **Guide:** `Poly.Mcp/Docs/poly-dsl-guide.md`
 
-**Status:** CURRENT. Authority: [`PIPELINE-STATUS.md`](./PIPELINE-STATUS.md). Unique Store bind already shipped. Remaining work is simulate = lowered program + bound Store.
+**Status:** DONE. Authority: [`PIPELINE-STATUS.md`](./PIPELINE-STATUS.md). Simulate = lowered program + bound Store.
 
 Do not invent a second CURRENT. Do not admit mut-safety or dict-sqlite beside this.
 
@@ -34,12 +34,12 @@ See parent L1–L10. Short form:
 
 | ID | File | Size | Status |
 |----|------|------|--------|
-| **1** | [`create-create-in-1-store-create.md`](./create-create-in-1-store-create.md) | M | `[ ]` |
-| **2** | [`create-create-in-2-one-tree.md`](./create-create-in-2-one-tree.md) | M | `[ ]` |
-| **3** | [`create-create-in-3-unify-factories.md`](./create-create-in-3-unify-factories.md) | M | `[ ]` |
-| **4** | [`create-create-in-4-store-reads.md`](./create-create-in-4-store-reads.md) | M | `[ ]` |
-| **5** | [`create-create-in-5-mcp-simulate.md`](./create-create-in-5-mcp-simulate.md) | S | `[ ]` |
-| **G** | [`create-create-in-gate.md`](./create-create-in-gate.md) | S | `[ ]` |
+| **1** | [`create-create-in-1-store-create.md`](./create-create-in-1-store-create.md) | M | `[x]` |
+| **2** | [`create-create-in-2-one-tree.md`](./create-create-in-2-one-tree.md) | M | `[x]` |
+| **3** | [`create-create-in-3-unify-factories.md`](./create-create-in-3-unify-factories.md) | M | `[x]` |
+| **4** | [`create-create-in-4-store-reads.md`](./create-create-in-4-store-reads.md) | M | `[x]` |
+| **5** | [`create-create-in-5-mcp-simulate.md`](./create-create-in-5-mcp-simulate.md) | S | `[x]` |
+| **G** | [`create-create-in-gate.md`](./create-create-in-gate.md) | S | `[x]` |
 
 Start only the next `[ ]` whose prereq is `[x]`. One failing TUnit test before production edits. File ownership is exclusive.
 

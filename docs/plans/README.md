@@ -21,7 +21,7 @@ Architectural rationale → **`docs/decisions/`**. Module maps → **`Poly/*/REA
 | **Pull ≠ CURRENT** | Available when admitted, not parallel debt. |
 | **DONE same PR** | Suite gate Done → update PIPELINE-STATUS + READY-TO-TASK + master-roadmap Agent pick together. |
 
-**CURRENT truth:** [`simple-agent-tasks/PIPELINE-STATUS.md`](simple-agent-tasks/PIPELINE-STATUS.md) — **CURRENT: `create/create-in`**. Trunk is `master`. Do not restate a second queue here.  
+**CURRENT truth:** [`simple-agent-tasks/PIPELINE-STATUS.md`](simple-agent-tasks/PIPELINE-STATUS.md) — **CURRENT: `(none)`**. Trunk is `master`. Do not restate a second queue here.  
 **Ready suites index:** [`simple-agent-tasks/READY-TO-TASK.md`](simple-agent-tasks/READY-TO-TASK.md)  
 **Milestones:** [`v2-to-v3/master-roadmap.md`](v2-to-v3/master-roadmap.md) (mirrors Agent pick)  
 **Pre-ship (always-on):** [`v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md`](v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md)
@@ -32,7 +32,7 @@ Architectural rationale → **`docs/decisions/`**. Module maps → **`Poly/*/REA
 
 | Suite | README | Plan | Status |
 |-------|--------|------|--------|
-| **create/create-in** | [`create-create-in-README.md`](simple-agent-tasks/create-create-in-README.md) | [`create-create-in-simulate.md`](create-create-in-simulate.md) | **CURRENT** — unique Store bind shipped; remaining is simulate = Interpreter + bound Store. |
+| **create/create-in** | [`create-create-in-README.md`](simple-agent-tasks/create-create-in-README.md) | [`create-create-in-simulate.md`](create-create-in-simulate.md) | ✅ **DONE** 2026-09-03 — simulate = Interpreter + bound Store. |
 | **mut-safety** | [`mut-safety-README.md`](simple-agent-tasks/mut-safety-README.md) | [`mcp-mutation-safety.md`](mcp-mutation-safety.md) | Parked — `THEN` in PIPELINE-STATUS, not admit-next |
 | **p1** temporal | [`p1-README.md`](simple-agent-tasks/p1-README.md) | [`p1-temporal-design-lock.md`](p1-temporal-design-lock.md) | Parked until admitted |
 | **gcyc** | [`gcyc-README.md`](simple-agent-tasks/gcyc-README.md) | [`grammar-cycle-2026-08-14.md`](grammar-cycle-2026-08-14.md) | Parked — remaining G4 unparse |
@@ -114,4 +114,4 @@ MCP guiding principles: [v2-to-v3/spikes/mcp-guiding-principles.md](v2-to-v3/spi
 | `docs/decisions/2026-06-08-vm-as-canonical-semantics.md` | VM sole engine |
 | `docs/decisions/2026-06-08-domain-lowering-boundary.md` | Domain → generic AST only |
 
-**CURRENT** is `create/create-in` (see PIPELINE-STATUS). Historical IR/VM plans: [`archive/interpretation/`](archive/interpretation/README.md).
+**CURRENT** is `(none)` (see PIPELINE-STATUS). Historical IR/VM plans: [`archive/interpretation/`](archive/interpretation/README.md).

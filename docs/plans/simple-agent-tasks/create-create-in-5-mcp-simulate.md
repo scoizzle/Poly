@@ -1,7 +1,7 @@
 # create-create-in-5 — MCP simulate = bind + Interpreter
 
 **Difficulty:** S  
-**Status:** `[ ]`  
+**Status:** `[x]`  
 **Prereq:** task 4 (or 2 if store-reads still pending and MCP tests do not need Rel exists in the same action)
 
 ## Objective
@@ -29,9 +29,9 @@ dotnet run --project Poly.Tests/Poly.Tests.csproj -p:NuGetAudit=false -- --treen
 dotnet run --project Poly.Tests/Poly.Tests.csproj -p:NuGetAudit=false
 ```
 
-- [ ] create_instance + invoke_action create-in still registers a linked child in the session store
-- [ ] Unique collision is a tool Failure, not a crash
-- [ ] No Expando in product runtime
+- [x] create_instance + invoke_action create-in still registers a linked child in the session store
+- [x] Unique collision is a tool Failure, not a crash
+- [x] No Expando in product runtime
 
 ## File ownership
 
@@ -42,4 +42,4 @@ dotnet run --project Poly.Tests/Poly.Tests.csproj -p:NuGetAudit=false
 
 ## Status
 
-**Status:** Not Started
+**Status:** Done 2026-09-03

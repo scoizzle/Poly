@@ -1,7 +1,7 @@
 # create-create-in-4 — Store reads in the tree
 
 **Difficulty:** M  
-**Status:** `[ ]`  
+**Status:** `[x]`  
 **Prereq:** task 3
 
 ## Objective
@@ -30,9 +30,9 @@ dotnet run --project Poly.Tests/Poly.Tests.csproj -p:NuGetAudit=false -- --treen
 dotnet run --project Poly.Tests/Poly.Tests.csproj -p:NuGetAudit=false
 ```
 
-- [ ] No `PreprocessQuantifiers` on the simulate / invoke path
-- [ ] Missing Store / missing link fail closed
-- [ ] Create-then-exists in one action sees the child
+- [x] No `PreprocessQuantifiers` on the simulate / invoke path
+- [x] Missing Store / missing link fail closed
+- [x] Create-then-exists in one action sees the child
 
 ## File ownership
 
@@ -44,4 +44,4 @@ dotnet run --project Poly.Tests/Poly.Tests.csproj -p:NuGetAudit=false
 
 ## Status
 
-**Status:** Not Started
+**Status:** Done 2026-09-03

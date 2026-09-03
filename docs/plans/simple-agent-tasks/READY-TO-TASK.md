@@ -2,7 +2,7 @@
 
 **Date:** 2026-09-03  
 **Rule:** Trunk is `master`. Parallel streams with exclusive file ownership.  
-**CURRENT truth:** [`PIPELINE-STATUS.md`](./PIPELINE-STATUS.md) (only) — **CURRENT: `create/create-in`**. Do not invent a second CURRENT.
+**CURRENT truth:** [`PIPELINE-STATUS.md`](./PIPELINE-STATUS.md) (only) — **CURRENT: `(none)`**. Do not invent a second CURRENT.
 
 ---
 
@@ -10,7 +10,8 @@
 
 | Priority | Suite | Status |
 |----------|--------|--------|
-| CURRENT | create/create-in | **CURRENT** — simulate the lowered program. [`create-create-in-README.md`](./create-create-in-README.md) · parent [`../create-create-in-simulate.md`](../create-create-in-simulate.md). Mirror [`PIPELINE-STATUS.md`](./PIPELINE-STATUS.md). |
+| CURRENT | *(none)* | Next admit from PIPELINE-STATUS `THEN` / `ADMIT`. |
+| parked | create/create-in | ✅ **DONE** 2026-09-03 — simulate = Interpreter + bound Store. [`create-create-in-README.md`](./create-create-in-README.md) |
 | parked | [`mut-safety-README.md`](./mut-safety-README.md) | THEN in PIPELINE-STATUS — not admitted |
 | parked | [`gcyc-README.md`](./gcyc-README.md) | Remaining G4 unparse — THEN, not CURRENT |
 | parked | [`e2e-README.md`](./e2e-README.md) | Admit one wave |

@@ -30,7 +30,7 @@ A construct is shipped only if it lowers to that tree and program analysis of th
 
 AGENTS §5 (thinnest slice) may **shrink the language**. It may not ship a keyword whose implementation is optional.
 
-Residual dual-path in the tree (`EffectExecutor`, `ExecuteStructured`, preprocess-to-literal, compiler-always-MinimalAPI) is **debt**. Do not grow it. Do not call a path done because parse or one consumer worked.
+Residual dual-path in the tree (compiler-always-MinimalAPI; runtime vs C# create print until an EF Store) is **debt**. Do not grow it. Do not call a path done because parse or one consumer worked.
 
 ### 3. Opt-in extensions bind doors and projections
 

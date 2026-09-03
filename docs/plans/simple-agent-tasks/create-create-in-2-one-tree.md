@@ -1,7 +1,7 @@
 # create-create-in-2 — Always LowerActionBody
 
 **Difficulty:** M  
-**Status:** `[ ]`  
+**Status:** `[x]`  
 **Prereq:** task 1
 
 ## Objective
@@ -30,10 +30,10 @@ dotnet run --project Poly.Tests/Poly.Tests.csproj -p:NuGetAudit=false -- --treen
 dotnet run --project Poly.Tests/Poly.Tests.csproj -p:NuGetAudit=false
 ```
 
-- [ ] `ExecuteStructured` has no callers (or the type is gone)
-- [ ] Failure-without-prior-mutate still green
-- [ ] Sequential stage OnExit / SourceStageName tests still green
-- [ ] domain-execution-model matches
+- [x] `ExecuteStructured` has no callers (or the type is gone)
+- [x] Failure-without-prior-mutate still green
+- [x] Sequential stage OnExit / SourceStageName tests still green
+- [x] domain-execution-model matches
 
 ## File ownership
 
@@ -45,4 +45,4 @@ dotnet run --project Poly.Tests/Poly.Tests.csproj -p:NuGetAudit=false
 
 ## Status
 
-**Status:** Not Started
+**Status:** Done 2026-09-03

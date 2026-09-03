@@ -25,7 +25,8 @@ namespace Poly.DomainModeling.Lowering;
 ///
 /// <para>When <see cref="Analysis"/> is set, lowering reads pre-computed
 /// <see cref="IAnalysisMetadata"/> instead of re-scanning domain collections.
-/// Null-safe — falls back to re-scan when absent.</para>
+/// Null-safe — falls back to re-scan when absent. The emitted tree is generic
+/// Syntax (Store calls, Assignment, …); it does not carry bag types.</para>
 /// </summary>
 public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     private readonly Entity _entity;

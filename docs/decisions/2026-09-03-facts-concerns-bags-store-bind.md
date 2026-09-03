@@ -24,9 +24,9 @@ Use these words. Do not invent a framework catalog.
 | **Surface** | Opt-in door that *selects* an implementation (`uses sqlite` → persistence surface) |
 | **Store** | Named **collaborator** the operation AST invokes (`EnsureUnique`, later `Create` / `CreateIn`) |
 | **Bind** | Host supplies the collaborator (scratch `DomainInstanceStore`, later EF). Caller-supplied; **not** `Storage.Default`, not a DI container in the VM |
-| **Lower** | Operation → Syntax that **invokes bound collaborators** and **reads bags**; no Domain re-scan, no Effect-IR walk |
-| **Project** | C# print of that same tree |
-| **Host files** | Bag-gated adapters that *are* the bound implementations (DbContext, Program.cs) |
+| **Lower** | Operation → Syntax. The **process** reads bags (and facts only when a bag is absent). The **product** is generic Syntax that invokes bound collaborators — **no bag types, no bag metadata, no Domain re-scan in the tree**. No Effect-IR walk. |
+| **Project** | C# print of that same tree (still no bags) |
+| **Host files** | Bag-gated adapters that *are* the bound implementations (DbContext, Program.cs). Bags stay here, not in the operation AST. |
 
 **Storage** already means the mapping bag (`StorageModel` / `StorageColumn`). The collaborator is **Store**. Do not name it `IStorage`.
 
@@ -47,4 +47,5 @@ Not this slice: `Store.Create` / `CreateIn`, deleting `ExecuteStructured`, unify
 ## Consequences
 
 - Unique-inside-`if` compiles as one VM tree. Failure from nested `Return` must surface as `DomainResult`. If it does not, fix lower/VM result mapping — do not restore the walker.
+- The operation AST never names a bag type. If project needs `StorageMappingMetadata` to print an action body, the collaborator was not bound.
 - Heuristic for later work: if emit of a Store job is hard, the host surface is wrong.

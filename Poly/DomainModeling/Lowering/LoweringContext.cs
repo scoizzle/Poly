@@ -4,8 +4,9 @@ namespace Poly.DomainModeling.Lowering;
 
 /// <summary>
 /// Shared context for lowering passes. Bundles the subject (current-instance root),
-/// optional parameter map, and analysis metadata so lowering passes can consume
+/// optional parameter map, and analysis metadata so lowering **passes** can consume
 /// pre-computed bags instead of re-scanning <see cref="Domain"/> collections.
+/// The Syntax they emit does not carry bag types — bags are lowering input only.
 ///
 /// When <see cref="Analysis"/> is provided, lowering reads <see cref="IAnalysisMetadata"/>
 /// via <see cref="INodeMetadataProvider.GetMetadata{T}"/> (typically an

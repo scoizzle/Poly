@@ -20,7 +20,7 @@ namespace Poly.Tests.DomainModeling;
 public class UniversityDogfoodTests {
     private static string PolyText() {
         var root = FindRepoRoot();
-        return File.ReadAllText(Path.Combine(root, "probes/dogfood/university.poly"));
+        return File.ReadAllText(Path.Combine(root, "docs/probes/dogfood/university.poly"));
     }
 
     private static (Domain Domain, AnalysisResult Analysis) Evolve() {

@@ -1,6 +1,6 @@
 # Pipeline status
 
-**Updated:** 2026-08-31
+**Updated:** 2026-09-01
 **Authority:** this file is the **sole CURRENT/DONE truth** for agent suite admission.  
 Other indexes must **mirror** this file (or link here) — do not invent a second CURRENT line.
 
@@ -18,8 +18,7 @@ PULL:    E5; EF codegen; naming cleanup
 ```
 
 ```bash
-# Fleet dispatch (see pack-README.md):
-opencode run --dir . --auto --title pack-1-1 --agent build "Assigned: docs/plans/simple-agent-tasks/pack-1-1-token-writer.md"
+# Fleet dispatch (see pack-README.md). pack-1 is archived — assign a live parked task file.
 ```
 
 ---
@@ -30,17 +29,17 @@ opencode run --dir . --auto --title pack-1-1 --agent build "Assigned: docs/plans
 |-------|--------|-------|
 | **gpure** | ✅ **DONE** 2026-08-07 (+ follow-ups 2026-08-08) | Pure Grammar product path (Option A ladder + tables); S1–S5/N1–N4/P1 closed. |
 | **mcp-minify** | ✅ **DONE** 2026-08-08 (+ follow-ups same day) | Catalog 46→24; DSL-only expressions; unified `add`/`remove`; follow-ups closed. |
-| **grammar-revision** | ✅ **DONE** 2026-08-09 | v2 engine (`Grammar<TToken, TTokenKind>`, examine/consume, longest-match, stateless printer) + DSL cutover; review B1–B3/N1–N3/C1 closed. Executed directly (not via plan-suite) — see [`../grammar-revision.md`](../grammar-revision.md) |
+| **grammar-revision** | ✅ **DONE** 2026-08-09 | v2 engine (`Grammar<TToken, TTokenKind>`, examine/consume, longest-match, stateless printer) + DSL cutover; review B1–B3/N1–N3/C1 closed. Archived: [`../archive/completed-2026-08-late/grammar-revision.md`](../archive/completed-2026-08-late/grammar-revision.md) |
 | **emit-session** | ✅ **DONE** 2026-08-24 (CompileMode honesty) | Libraries add `INodeAnalyzer`. Spell closed. Emit reads bags, not `CompileMode`. CompileMode.All/Db seed persistence only; HTTP host requires `uses http` (catalog id `http`) or `Load(HttpLibrary)`. Remaining lies: TemporalLibrary Meaning unused; RuntimeAnalysisCache core-catalog reopen. |
 | **host-ABI** | Strong slice **DONE** (PRs 21–24) | StageTransition, self-invoke, cross-entity, for-invoke same-tree. Create / create-in still EffectExecutor — **not** the rewrite-to-master gate. |
-| **interpretation-language-engine** | ✅ **DONE** 2026-08-31 | ile-0…ile-3 + ile-gate: no POC passthrough, `Compile` fail-closed, LanguageVmTests + LanguageSurfaceTests, CORE/README match. Plan: [`interpretation-language-engine-README.md`](./interpretation-language-engine-README.md). |
-| **rewrite-to-master** | ✅ **DONE** 2026-08-25 (PR 26) | Rewrite is `master`. Plan: [`rewrite-to-master-2026-08-25.md`](./rewrite-to-master-2026-08-25.md). New work from `master`; do not open work on the rewrite branch. |
+| **interpretation-language-engine** | ✅ **DONE** 2026-08-31 | ile-0…ile-3 + ile-gate: no POC passthrough, `Compile` fail-closed, LanguageVmTests + LanguageSurfaceTests, CORE/README match. Plan: [`../archive/completed-2026-08-late/simple-agent-tasks/interpretation-language-engine-README.md`](../archive/completed-2026-08-late/simple-agent-tasks/interpretation-language-engine-README.md). |
+| **rewrite-to-master** | ✅ **DONE** 2026-08-25 (PR 26) | Rewrite is `master`. Plan: [`../archive/completed-2026-08-late/simple-agent-tasks/rewrite-to-master-2026-08-25.md`](../archive/completed-2026-08-late/simple-agent-tasks/rewrite-to-master-2026-08-25.md). New work from `master`; do not open work on the rewrite branch. |
 | **pack-host** | Parked (phase 1 shipped; **extension model superseded**) | TokenWriter + binders done. “Packs extend Grammar tables” is not the product contract — extension is analysis passes. pack-2 `IDomainPack` parked. |
 | **gcyc** | Parked (first admit shipped) | [`gcyc-README.md`](./gcyc-README.md) — remaining G4 unparse is THEN, not CURRENT |
 | **grammar wrap-up** | Parked | LeftAssoc live-fold — not a prereq of pack-1 TokenWriter |
 | **mut-safety** | Parked | Session lock + idempotent add + rollback DX |
 | **p1** temporal | Phase 3a after pack-2-gate | Patterns + binders on both primaries |
-| amu / p4 / coh / dogfood / GI / … | Archived | See `docs/plans/archive/` |
+| amu / p4 / coh / dogfood / GI / gpure / mcp-minify / ile / … | Archived | See [`../archive/`](../archive/) — latest bucket [`completed-2026-08-late`](../archive/completed-2026-08-late/README.md) |
 
 ---
 
@@ -48,12 +47,12 @@ opencode run --dir . --auto --title pack-1-1 --agent build "Assigned: docs/plans
 
 | Doc | Role |
 |-----|------|
-| [`rewrite-to-master-2026-08-25.md`](./rewrite-to-master-2026-08-25.md) | Merge rewrite onto master — ✅ DONE PR 26 |
+| [`../archive/completed-2026-08-late/simple-agent-tasks/rewrite-to-master-2026-08-25.md`](../archive/completed-2026-08-late/simple-agent-tasks/rewrite-to-master-2026-08-25.md) | Merge rewrite onto master — ✅ DONE PR 26 |
 | [`READY-TO-TASK.md`](./READY-TO-TASK.md) | Ready-suite index (mirrors this) |
 | [`../v2-to-v3/master-roadmap.md`](../v2-to-v3/master-roadmap.md) | Milestone index + Agent pick (mirrors this) |
 | [`../README.md`](../README.md) | Plans admission rules (points here for CURRENT) |
-| [`../dead-dual-inventory-2026-08-08.md`](../dead-dual-inventory-2026-08-08.md) | Validation / Text / second-evaluator kill list |
-| [`../grammar-revision.md`](../grammar-revision.md) | ✅ **DONE 2026-08-09** — v2 engine + DSL cutover + printer + review fixes closed |
+| [`../archive/completed-2026-08-late/dead-dual-inventory-2026-08-08.md`](../archive/completed-2026-08-late/dead-dual-inventory-2026-08-08.md) | Validation / Text / second-evaluator kill list (executed) |
+| [`../archive/completed-2026-08-late/grammar-revision.md`](../archive/completed-2026-08-late/grammar-revision.md) | ✅ **DONE 2026-08-09** — v2 engine + DSL cutover + printer + review fixes closed |
 
 ## Notes
 

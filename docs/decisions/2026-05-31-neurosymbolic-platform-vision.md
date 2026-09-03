@@ -137,7 +137,7 @@ The IR is the lowest level that is semantically complete: every IR `Module` has 
 
 Once IR is verified by the VM, every backend is a **deterministic projection** of the same canonical representation (C# source, µop listing, CFG visualization, domain-level trace). The model never generates per-language code.
 
-For the full three-level architecture, the IR design, and the lowering pipeline, see `docs/ARCHITECTURE.md` §3 and `docs/experiments/interpretation-compiler-framework-plan.md` (both also require updates for current direction).
+For the full three-level architecture, the IR design, and the lowering pipeline, see `docs/ARCHITECTURE.md` §3 and `docs/plans/archive/experiments/interpretation-compiler-framework-plan.md` (both also require updates for current direction).
 
 ### Analysis ↔ Interpreter Boundary
 

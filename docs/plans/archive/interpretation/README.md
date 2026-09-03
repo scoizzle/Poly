@@ -13,8 +13,10 @@
 | Domain boundary | Domain constructs lower to **generic** AST/opcodes (`2026-06-08-domain-lowering-boundary.md`) |
 | Decisions | `docs/decisions/2026-06-08-vm-as-canonical-semantics.md`, `2026-07-04-primitives-as-canonical-ir.md` (historical title; body is direct AST path), `Poly/Interpretation/README.md` |
 
-**Active product planning:** `docs/plans/v2-to-v3/simple-agent-tasks/vs-README.md` (M2 Done).  
+**Active product planning:** [`docs/plans/simple-agent-tasks/PIPELINE-STATUS.md`](../../simple-agent-tasks/PIPELINE-STATUS.md).  
 **Archived migration plans:** `docs/plans/archive/v2-to-v3-migration/`.
+
+**Also archived 2026-09-01** from `docs/` root: `SsaPhiImplementationPlan.md`, `jit-tier-plan.md`, `vm-decoupled-frames.md`, `vm-frame-layout.md`, `vm-performance-analysis.md`, `vm-trampoline-dispatch.md`, `neurosymbolic-process.md` / `.txt`, `interpretation-system-architecture-review.md`.
 
 ## What was archived
 

@@ -3,7 +3,7 @@
 **Date:** 2026-08-06  
 **Status:** **Parked research** — concepting only  
 **Product admit order after pipeline:** **P3 → P2** (this file is **not** in that queue)  
-**Parent vision:** [`domain-dsl-absorption-proposals.md`](domain-dsl-absorption-proposals.md) § P1 · experiment [`docs/experiments/DOMAIN-DSL-SPEC.md`](../experiments/DOMAIN-DSL-SPEC.md)
+**Parent vision:** [`domain-dsl-absorption-proposals.md`](domain-dsl-absorption-proposals.md) § P1 · experiment [`docs/plans/archive/experiments/DOMAIN-DSL-SPEC.md`](archive/experiments/DOMAIN-DSL-SPEC.md)
 
 ---
 

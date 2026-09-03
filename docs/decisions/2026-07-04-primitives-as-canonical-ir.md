@@ -59,5 +59,5 @@ trees targeting `VmState` directly — no intermediate primitive flattening or r
 - **Lowering discipline (2026-07-06)**: `ToPrimitives()` must not discard information. It is the point to *expand* known analysis metadata (exception regions, value representations, call sites, dataflow facts, etc.) alongside the primitives. The output (primitives + metadata) should minimize the need for later reconstruction. The AST remains the primary symbolic form; enriched primitives serve execution.
 - Expansion methods (`ToPrimitives()`) can be migrated incrementally to produce explicit slots,
   starting with expression nodes (`Add`, `Subtract`, etc.) and control flow (`IfStatement`).
-- The `docs/experiments/interpretation-compiler-framework-plan.md` is updated to reflect
+- The `docs/plans/archive/experiments/interpretation-compiler-framework-plan.md` is updated to reflect
   that the IR migration target is an enhanced primitive format, not a separate type system.

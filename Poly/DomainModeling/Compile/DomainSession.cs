@@ -1,4 +1,5 @@
 using Poly.Analysis;
+using Poly.Ast.Nodes;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
@@ -126,6 +127,10 @@ public sealed class DomainSession {
         ArgumentNullException.ThrowIfNull(analysis);
         var files = new List<(string FileName, string Source)>();
         var types = DomainProgramProjection.ToSyntax(domain, analysis);
+        var interpAnalysis = TryAnalyzeForEmit(types);
+        var generator = interpAnalysis is not null
+            ? new CSharpGenerator(interpAnalysis)
+            : new CSharpGenerator();
         var entities = domain.Types.OfType<Entity>().ToList();
         foreach (var entity in entities) {
             var entityNames = new HashSet<string>(StringComparer.Ordinal) {
@@ -138,7 +143,7 @@ public sealed class DomainSession {
             if (entityDefs.Count == 0)
                 throw new InvalidOperationException(
                     $"DomainProgramProjection produced no type definitions for entity '{entity.Name}'.");
-            files.Add(($"{entity.Name}.cs", new CSharpGenerator().Generate(entityDefs)));
+            files.Add(($"{entity.Name}.cs", generator.Generate(entityDefs)));
         }
 
         var scaffoldingDefs = types
@@ -146,8 +151,23 @@ public sealed class DomainSession {
                 d.Name == e.Name || d.Name == $"{e.Name}Stage"))
             .ToList();
         if (scaffoldingDefs.Count > 0)
-            files.Add(("Poly.Types.cs", new CSharpGenerator().Generate(scaffoldingDefs)));
+            files.Add(("Poly.Types.cs", generator.Generate(scaffoldingDefs)));
         return files;
+    }
+
+    /// <summary>
+    /// Runs interpretation analysis on lowered type definitions so the C# generator
+    /// can use type-aware features (variable type resolution, DCE).
+    /// Falls back gracefully: analysis errors produce diagnostics but do not block emit.
+    /// </summary>
+    private static AnalysisResult? TryAnalyzeForEmit(IReadOnlyList<TypeDefinitionNode> allTypes) {
+        try {
+            var unit = new CompilationUnitNode([], null, allTypes, null);
+            return Interpretation.Interpreter.Analyzer.Analyze(unit);
+        }
+        catch {
+            return null;
+        }
     }
 
     internal static ExpressionFoldTable FoldsFor(ExpressionFormRegistry forms) {

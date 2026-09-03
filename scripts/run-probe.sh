@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # Runs one probe domain through the automated discovery pipeline:
 #   parse/analyze -> export C# -> Roslyn compile-check
-# Usage: scripts/run-probe.sh probes/<name>.poly
+# Usage: scripts/run-probe.sh docs/probes/<name>.poly
 # Exits 0 only when the export compiles with 0 errors / 0 warnings.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-PROBE="${1:?usage: scripts/run-probe.sh probes/<name>.poly}"
+PROBE="${1:?usage: scripts/run-probe.sh docs/probes/<name>.poly}"
 [ -f "$PROBE" ] || { echo "probe not found: $PROBE" >&2; exit 1; }
 
 TMP="$(mktemp -d)"

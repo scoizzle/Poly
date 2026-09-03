@@ -28,11 +28,13 @@ Mark the task [x] and the slice README table. Stop at the slice gate for pr1.
 From repo root. `--auto` is required (unattended). One agent per task file.
 
 ```bash
-opencode run --dir . --auto --title pack-1-1 -- \
-  "You are fleet agent pack-1-1. $(cat docs/plans/simple-agent-tasks/pack-README.md | head -20)
-   Assigned task: docs/plans/simple-agent-tasks/pack-1-1-token-writer.md
+opencode run --dir . --auto --title pack-2-1 -- \
+  "You are fleet agent pack-2-1. $(cat docs/plans/simple-agent-tasks/pack-README.md | head -20)
+   Assigned task: docs/plans/simple-agent-tasks/pack-2-1-idomainpack.md
    Do only that task. Claim it, implement, verify, mark [x]."
 ```
+
+pack-1 (TokenWriter + binders) is archived under [`../archive/completed-2026-08-late/simple-agent-tasks/`](../archive/completed-2026-08-late/simple-agent-tasks/pack-1-README.md).
 
 Start only tasks in the **current wave** whose prereqs are `[x]`.
 

@@ -8,7 +8,7 @@
 
 These are capabilities the platform will need as it matures beyond the compiler pipeline and into a usable product. They're recorded here to avoid losing them, not because they're urgent.
 
-**Domain DSL/plugins:** Experimental research plan for extension packs (facets like `column("…")`, target exporters) lives in [`docs/experiments/domain-plugin-extension-platform.md`](../experiments/domain-plugin-extension-platform.md) — research later, not an execution queue.
+**Domain DSL/plugins:** Experimental research plan for extension packs (facets like `column("…")`, target exporters) lives in [`docs/plans/archive/experiments/domain-plugin-extension-platform.md`](archive/experiments/domain-plugin-extension-platform.md) — research later, not an execution queue.
 
 **Ship forms (post–Phase 3 product packaging):** Beyond C#/DLL artifacts, customers may primarily want **OCI container images from a registry** (pull-and-run) rather than orchestrating builds themselves. Ladder and notes: [`v2-to-v3/mcp-phase3-oracle-surface.md`](v2-to-v3/mcp-phase3-oracle-surface.md) §6d **L8**. Not current work.
 
@@ -98,6 +98,6 @@ The neurosymbolic vision says macros accumulate in a library and compose. But th
 
 ## Relationship to Current Work
 
-None of these block the IR pipeline (`docs/experiments/interpretation-compiler-framework-plan.md`). The pipeline is the foundation — having a working AST → IR → execute → generate loop makes all of the above concrete rather than speculative.
+None of these block the IR pipeline (`docs/plans/archive/experiments/interpretation-compiler-framework-plan.md`). The pipeline is the foundation — having a working AST → IR → execute → generate loop makes all of the above concrete rather than speculative.
 
 The one near-term action: an onboarding path (item 1) should ship alongside or immediately after the IR pipeline becomes default. A working compiler with no visible entry point is indistinguishable from a broken compiler.

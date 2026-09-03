@@ -6,7 +6,7 @@
 **Priority note (2026-08-04):** **P1 dates / temporal pack is not the preferred next ship.** Prefer dogfood of shipped SPE / peer / exists first; unpark P1 only when a real scenario forces temporal authoring.  
 **Unpark when:** Explicitly admit **one** P* (or a thin vertical that is only that P*) as the sole current suite; create `simple-agent-tasks/*` then.  
 **Do not:** start P1–P5 in parallel, treat dates as default CURRENT, re-open grammar re-base as a prerequisite, or treat this doc as CURRENT work.  
-**Source experiment:** [`docs/experiments/DOMAIN-DSL-SPEC.md`](../experiments/DOMAIN-DSL-SPEC.md)  
+**Source experiment:** [`docs/plans/archive/experiments/DOMAIN-DSL-SPEC.md`](archive/experiments/DOMAIN-DSL-SPEC.md)  
 **Product truth:** [`Poly.Mcp/Docs/poly-dsl-guide.md`](../../Poly.Mcp/Docs/poly-dsl-guide.md)  
 **Related:** [`CORE.md`](../CORE.md) · [`2026-06-08-domain-lowering-boundary.md`](../decisions/2026-06-08-domain-lowering-boundary.md) · [`2026-07-22-persistence-units-medium-facets-pack-syntax-export.md`](../decisions/2026-07-22-persistence-units-medium-facets-pack-syntax-export.md) · [`2026-06-phase4-dynamic-calculation-and-readonly-navigation.md`](../decisions/2026-06-phase4-dynamic-calculation-and-readonly-navigation.md) · SPE suite (complete) · store-aware `Rel exists` (shipped)
 

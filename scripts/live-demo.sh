@@ -5,7 +5,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-POLY="${1:-probes/fleet-eval/09-transport/warehouse.poly}"
+POLY="${1:-docs/probes/fleet-eval/09-transport/warehouse.poly}"
 [ -f "$POLY" ] || { echo "not found: $POLY" >&2; exit 1; }
 
 OUT="${TMPDIR:-/tmp}/poly-live-demo"

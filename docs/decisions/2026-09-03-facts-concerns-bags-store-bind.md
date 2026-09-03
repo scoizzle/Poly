@@ -55,7 +55,7 @@ Unique `AssignEffect` lowers to `Invoke(Member(This, "EnsureUnique"), property, 
 
 C# unique remains the persistence-surface concern (EF indexes from `StorageColumn.IsUnique`) until an EF Store exists. That split reuses the existing runtime-vs-export create split (`LowerStageTransitions`); it is not a new consumer flag. Residual dual-path is debt.
 
-Not this slice: `Store.Create` / `CreateIn`, deleting `ExecuteStructured`, unifying `Stay.Create` vs `CreateByType`.
+Not this slice: `Store.Create` / `CreateIn`, deleting `ExecuteStructured`, unifying `Stay.Create` vs `CreateByType`. That remaining CURRENT create/create-in work: [`docs/plans/create-create-in-simulate.md`](../plans/create-create-in-simulate.md).
 
 ## Consequences
 
@@ -63,3 +63,4 @@ Not this slice: `Store.Create` / `CreateIn`, deleting `ExecuteStructured`, unify
 - The operation AST never names a bag type. If project needs `StorageMappingMetadata` to print an action body, the collaborator was not bound.
 - Simulation was fragile when it treated the executing program as still knowing the domain. Lowering already transformed facts into an implementation; simulate **that** (same tree as project), with Store bound. `UniqueCollisionForAssign` / `ExecuteStructured` were domain-execution beside the program.
 - Heuristic for later work: if emit of a Store job is hard, the host surface is wrong.
+- Interpretation already simulates dictionary-backed types (`IDictionary<string, object>` indexer emit). Do not invent Expando as the sim subject. The remaining gap is DomainModeling still walking Effect IR beside that subject.

@@ -32,7 +32,7 @@ Architectural rationale → **`docs/decisions/`**. Module maps → **`Poly/*/REA
 
 | Suite | README | Plan | Status |
 |-------|--------|------|--------|
-| **create/create-in** | — | host-ABI remaining store effects | **CURRENT** — see PIPELINE-STATUS. |
+| **create/create-in** | [`create-create-in-README.md`](simple-agent-tasks/create-create-in-README.md) | [`create-create-in-simulate.md`](create-create-in-simulate.md) | **CURRENT** — unique Store bind shipped; remaining is simulate = Interpreter + bound Store. |
 | **mut-safety** | [`mut-safety-README.md`](simple-agent-tasks/mut-safety-README.md) | [`mcp-mutation-safety.md`](mcp-mutation-safety.md) | Parked — `THEN` in PIPELINE-STATUS, not admit-next |
 | **p1** temporal | [`p1-README.md`](simple-agent-tasks/p1-README.md) | [`p1-temporal-design-lock.md`](p1-temporal-design-lock.md) | Parked until admitted |
 | **gcyc** | [`gcyc-README.md`](simple-agent-tasks/gcyc-README.md) | [`grammar-cycle-2026-08-14.md`](grammar-cycle-2026-08-14.md) | Parked — remaining G4 unparse |

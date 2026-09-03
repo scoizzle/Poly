@@ -84,7 +84,9 @@ public class DomainExpressionLoweringPassTests {
         var inner = DomainExpression.Property("AvailableCopies");
         var expr = DomainExpression.RelationshipNav("Book", inner);
 
-        var result = Pass.Lower(expr, Subject);
+        var pass = new DomainExpressionLoweringPass(new LoweringContext(
+            Subject, UseThisReference: true));
+        var result = pass.Lower(expr, Subject);
 
         await Assert.That(result).IsTypeOf<Member>();
         var outer = (Member)result;

@@ -24,10 +24,6 @@ public sealed partial record DomainEntityInstance {
     public const int MaxTransitionDepth = 16;
     public DomainInstanceStore? Store { get; internal set; }
 
-    private QuantifierPreprocessRewrite? _quantifierRewrite;
-    private QuantifierPreprocessRewrite QuantifierRewrite =>
-        _quantifierRewrite ??= new(this);
-
     private DomainEntityInstance(
         Entity entity,
         Dictionary<string, object?> values,
@@ -328,32 +324,62 @@ public sealed partial record DomainEntityInstance {
     internal bool TryGetRaw(string name, out object? value) =>
         _values.TryGetValue(name, out value);
 
+    internal static string? ValidateCreateConstraints(
+        Entity entity,
+        IReadOnlyDictionary<string, object?> values,
+        DomainInstanceStore? store = null) =>
+        ValidateConstraints(entity, values, store);
+
+    internal void TrackCreatedChild(DomainEntityInstance child) =>
+        _createdChildren.Add(child);
+
+    internal void UntrackCreatedChild(DomainEntityInstance child) =>
+        _createdChildren.Remove(child);
+
+    internal Relationship ResolveCreateInRelationship(string relationshipName) =>
+        ResolveSourceRelationshipOrThrow(relationshipName,
+            Domain is null
+                ? $"Relationship '{relationshipName}' not found."
+                : $"Relationship '{relationshipName}' not found in domain '{Domain.Name}'.");
+
     /// <summary>
     /// Evaluates <paramref name="policy"/> against this instance using the
     /// VM (direct AST lowering — canonical path). Returns <c>true</c> if the
     /// policy's guard expression is satisfied.
-    ///
-    /// <para>Collection quantifiers (any/all/none/count) are preprocessed before
-    /// lowering — evaluated against the current store's linked instances
-    /// and replaced with literal results. This keeps the VM lowering path
-    /// quantifier-free while enabling store-aware policy evaluation.</para>
+    /// Store-aware expressions lower in-tree (nav Member reads / Store jobs).
     /// </summary>
     public bool EvaluatePolicy(Policy policy) {
         ArgumentNullException.ThrowIfNull(policy);
 
-        // Preprocess quantifiers: resolve against store, replace with literals.
-        var expr = PreprocessQuantifiers(policy.Expression);
+        var expr = policy.Expression;
 
         var entityParam = new Parameter("entity", new TypeReference(Entity.Name));
+        AnalysisResult? analysis = Domain is not null
+            ? RuntimeAnalysisCache.GetOrAnalyze(Domain)
+            : null;
         var pass = new DomainExpressionLoweringPass(new LoweringContext(
             entityParam,
-            PropertyTypeResolver: EffectLoweringPass.BuildPropertyTypeResolver(Entity)));
+            Analysis: analysis,
+            Domain: Domain,
+            PropertyTypeResolver: EffectLoweringPass.BuildPropertyTypeResolver(Entity),
+            NavigationNameResolver: EffectLoweringPass.BuildNavigationNameResolver(Entity, Domain, analysis),
+            IsCollectionNavigation: EffectLoweringPass.BuildIsCollectionNavigation(Entity, Domain, analysis),
+            IsRelationshipNavigation: EffectLoweringPass.BuildIsRelationshipNavigation(Entity, Domain, analysis),
+            SourceEntityName: Entity.Name));
         var lowered = pass.Lower(expr, entityParam);
 
         var compiled = Interpreter.CompileChecked(lowered, _typeDefAnalyzer);
         using var exec = Interpreter.Execute(compiled,
             s => s.SetArgs(new object?[] { this }));
-        return exec.Result.GetValue<bool>();
+        var boxed = BoxPathPrefixLeaf(expr, exec.Result.GetValue<object>());
+        return boxed switch {
+            bool b => b,
+            long l => l != 0L,
+            int i => i != 0,
+            null => false,
+            _ => throw new InvalidOperationException(
+                $"Policy '{policy.Name}' produced {boxed.GetType().Name}, not a boolean.")
+        };
     }
 
     /// <summary>
@@ -491,7 +517,10 @@ public sealed partial record DomainEntityInstance {
             subjectParam,
             Analysis: runtimeAnalysis,
             Domain: Domain,
-            SourceStageName: CurrentStage);
+            SourceStageName: CurrentStage,
+            ActionParameterNames: action.Parameters.Count > 0
+                ? action.Parameters.Select(p => p.Name).ToHashSet(StringComparer.Ordinal)
+                : null);
         var effectPass = new EffectLoweringPass(Entity, loweringContext);
         // Action parameters are injected into _values for the call duration, but are not
         // entity schema properties. Compile with an action-scoped type def so PropertyAccess
@@ -502,10 +531,6 @@ public sealed partial record DomainEntityInstance {
         var previousBindingProvider = _bindingTypeProvider;
         _bindingTypeProvider = effectTypeProvider;
         try {
-            var createError = PrevalidateUnconditionalCreates(action.Effects);
-            if (createError is not null)
-                return ActionInvocationResult.InvalidArguments(actionName, createError);
-
             var createdBefore = _createdChildren.Count;
             var bagBefore = new Dictionary<string, object?>(_values, StringComparer.Ordinal);
             var stageBefore = CurrentStage;
@@ -579,11 +604,8 @@ public sealed partial record DomainEntityInstance {
     }
 
     /// <summary>
-    /// <summary>
-    /// One operation AST when every effect lowers. Mixed if+create uses the
-    /// same guarded-probe + body tree as export. Unlowerable store-coupled
-    /// create still walks <see cref="ExecuteEffect"/>. Shared by InvokeAction,
-    /// first-stage OnEntry, subscription, and TransitionStage entry/exit.
+    /// One operation AST: every effect list lowers and runs through <see cref="Interpreter"/>.
+    /// Shared by InvokeAction, first-stage OnEntry, subscription, and TransitionStage entry/exit.
     /// </summary>
     private DomainResult? ExecuteEffectList(
         IReadOnlyList<Effect> effects,
@@ -593,139 +615,18 @@ public sealed partial record DomainEntityInstance {
         if (prepared.Count == 0)
             return null;
 
-        if (!prepared.Exists(HasEffectDependentConditionalCreate)
-            && !prepared.Exists(RequiresDirectExecution)
-            && (Domain is not null || !prepared.Exists(ContainsDirectExecutionEffect))) {
-            var tree = effectPass.LowerActionBody(prepared);
-            if (tree is null)
-                throw new InvalidOperationException(
-                    "Cannot lower a fully-lowerable effect list to a Syntax AST.");
-            var compiled = Interpreter.CompileChecked(
-                tree, DomainResultTypeProvider.Wrap(typeProvider));
-            using var exec = Interpreter.Execute(compiled,
-                s => s.SetArgs(new object?[] { this }));
-            if (exec.Result.Value is DomainResult { IsSuccess: false } failed)
-                return failed;
-            return null;
-        }
-
-        foreach (var effect in prepared) {
-            var failed = ExecuteEffect(effect, effectPass, typeProvider);
-            if (failed is { IsSuccess: false })
-                return failed;
-        }
-        return null;
-    }
-
-    /// <summary>
-    /// Executes a single effect. VM-executable effects go through
-    /// lowering → compile → execute; direct-execution effects mutate
-    /// the instance in place.
-    /// </summary>
-    private DomainResult? ExecuteEffect(
-        Effect effect,
-        EffectLoweringPass effectPass,
-        TypeDefinitionNodeAnalyzer typeProvider) {
-        // Store-aware quantifiers / path-prefix / Rel exists must resolve before
-        // Syntax lowering — same honesty as EvaluatePolicy (no bag pass-through).
-        var prepared = PreprocessEffectExpressions(effect);
-
-        if (prepared is ConditionalEffect or CompositeEffect
-            && (RequiresDirectExecution(prepared)
-                || ContainsDirectExecutionEffect(prepared))) {
-            return ExecuteStructured(prepared, effectPass, typeProvider);
-        }
-
-        // CreateEntityInstance with RelationshipName and create-in without domain
-        // stay on the direct execution path for store-coupled auto-linking.
-        if (prepared is CreateEntityInstance { RelationshipName: not null } create) {
-            try {
-                CreateChildInstance(create, typeProvider);
-                return null;
-            }
-            catch (InvalidOperationException ex) when (IsConstraintFailureMessage(ex.Message)) {
-                return DomainResult.Failure(ex.Message);
-            }
-        }
-
-        if (prepared is CreateEntityInRelationshipEffect createIn && Domain is null) {
+        var tree = effectPass.LowerActionBody(prepared);
+        if (tree is null)
             throw new InvalidOperationException(
-                "Cannot lower 'create in' effect without a domain to resolve relationship targets.");
-        }
-
-        var lowered = effectPass.TryLowerVmNode(prepared);
-        if (lowered is null)
-            throw new InvalidOperationException(
-                $"Effect '{prepared.GetType().Name}' did not lower to a Syntax AST node.");
-        var compiled = Interpreter.CompileChecked(lowered, DomainResultTypeProvider.Wrap(typeProvider));
+                "Cannot lower effect list to a Syntax AST.");
+        var compiled = Interpreter.CompileChecked(
+            tree, DomainResultTypeProvider.Wrap(typeProvider));
         using var exec = Interpreter.Execute(compiled,
             s => s.SetArgs(new object?[] { this }));
         if (exec.Result.Value is DomainResult { IsSuccess: false } failed)
             return failed;
         return null;
     }
-
-    private static bool IsConstraintFailureMessage(string message) =>
-        message.StartsWith("Unique constraint violated", StringComparison.Ordinal)
-        || message.Contains(" is required.", StringComparison.Ordinal)
-        || message.Contains(" must be ", StringComparison.Ordinal)
-        || message.Contains(" does not match the required pattern.", StringComparison.Ordinal);
-
-    /// <summary>
-    /// Evaluates an <c>if</c> condition against the current bag (including injected
-    /// action parameters). Used to prevalidate creates on the taken branch before
-    /// any effect mutates.
-    /// </summary>
-    private bool TryEvalEffectCondition(DomainExpression condition, out bool taken) {
-        taken = false;
-        try {
-            var entityParam = new Parameter("entity", new TypeReference(Entity.Name));
-            var pass = new DomainExpressionLoweringPass(new LoweringContext(
-                entityParam,
-                PropertyTypeResolver: EffectLoweringPass.BuildPropertyTypeResolver(Entity)));
-            var lowered = pass.Lower(condition, entityParam);
-            var compiled = Interpreter.CompileChecked(
-                lowered, DomainResultTypeProvider.Wrap(_bindingTypeProvider ?? _typeDefAnalyzer));
-            using var exec = Interpreter.Execute(compiled,
-                s => s.SetArgs(new object?[] { this }));
-            taken = exec.Result.GetValue<bool>();
-            return true;
-        }
-        catch (Exception) {
-            return false;
-        }
-    }
-
-    /// <summary>True when an effect tree contains create / create-in.</summary>
-    private static bool ContainsDirectExecutionEffect(Effect effect) => effect switch {
-        CreateEntityInstance or CreateEntityInRelationshipEffect => true,
-        CompositeEffect c => c.Effects.Any(ContainsDirectExecutionEffect),
-        ConditionalEffect c => (c.ThenEffects?.Any(ContainsDirectExecutionEffect) ?? false)
-            || (c.ElseEffects?.Any(ContainsDirectExecutionEffect) ?? false),
-        _ => false
-    };
-
-    /// <summary>True when an effect requires direct execution (not VM-lowerable).</summary>
-    private static bool RequiresDirectExecution(Effect effect) => effect switch {
-        CreateEntityInstance { RelationshipName: not null } => true,
-        CompositeEffect c => c.Effects.Any(RequiresDirectExecution),
-        ConditionalEffect c => (c.ThenEffects?.Any(RequiresDirectExecution) ?? false)
-            || (c.ElseEffects?.Any(RequiresDirectExecution) ?? false),
-        _ => false
-    };
-
-    /// <summary>
-    /// True when an if+create condition reads the entity bag (PR 44 F2). Those
-    /// trees cannot LowerActionBody — probes use the pre-assign bag.
-    /// </summary>
-    private bool HasEffectDependentConditionalCreate(Effect effect) => effect switch {
-        ConditionalEffect c =>
-            (ContainsDirectExecutionEffect(c) && !ConditionIsEffectIndependent(c.Condition))
-            || (c.ThenEffects?.Any(HasEffectDependentConditionalCreate) ?? false)
-            || (c.ElseEffects?.Any(HasEffectDependentConditionalCreate) ?? false),
-        CompositeEffect c => c.Effects.Any(HasEffectDependentConditionalCreate),
-        _ => false
-    };
 
     private void RestoreActionState(
         Dictionary<string, object?> bagBefore, string? stageBefore, int createdBefore) {
@@ -741,54 +642,13 @@ public sealed partial record DomainEntityInstance {
     }
 
     /// <summary>
-    /// Store-coupled create trees: evaluate the taken branch and run each
-    /// sub-effect through <see cref="ExecuteEffect"/>. Unique assign is in the
-    /// lowered tree (`EnsureUnique`); do not restore a unique prelude here.
-    /// </summary>
-    private DomainResult? ExecuteStructured(
-        Effect effect,
-        EffectLoweringPass effectPass,
-        TypeDefinitionNodeAnalyzer typeProvider) {
-        switch (effect) {
-            case CompositeEffect c:
-                foreach (var sub in c.Effects) {
-                    var failed = ExecuteEffect(sub, effectPass, typeProvider);
-                    if (failed is not null)
-                        return failed;
-                }
-                return null;
-            case ConditionalEffect cond:
-                var entityParam = new Parameter("entity", new TypeReference(Entity.Name));
-                var pass = new DomainExpressionLoweringPass(new LoweringContext(
-                    entityParam,
-                    PropertyTypeResolver: EffectLoweringPass.BuildPropertyTypeResolver(Entity)));
-                var lowered = pass.Lower(cond.Condition, entityParam);
-                var compiled = Interpreter.CompileChecked(lowered, DomainResultTypeProvider.Wrap(typeProvider));
-                bool taken;
-                using (var exec = Interpreter.Execute(compiled,
-                           s => s.SetArgs(new object?[] { this }))) {
-                    taken = exec.Result.GetValue<bool>();
-                }
-                var branch = taken ? cond.ThenEffects : (cond.ElseEffects ?? []);
-                foreach (var sub in branch) {
-                    var failed = ExecuteEffect(sub, effectPass, typeProvider);
-                    if (failed is not null)
-                        return failed;
-                }
-                return null;
-            default:
-                return ExecuteEffect(effect, effectPass, typeProvider);
-        }
-    }
-
-    /// <summary>
-    /// Rewrites effect expression trees so store-dependent forms become literals
-    /// (or fail closed) before VM lowering.
+    /// Rewrites runtime keywords (<c>now</c>/<c>today</c>/<c>guid</c>) on assign
+    /// values. Store-aware expressions lower in-tree (nav Member reads / Store jobs).
     /// </summary>
     private Effect PreprocessEffectExpressions(Effect effect) => effect switch {
         AssignEffect a => a with { Value = PreprocessRuntimeKeyword(a.Value, (a.Target as PropertyAccess)?.Name) },
         ConditionalEffect c => c with {
-            Condition = PreprocessQuantifiers(c.Condition),
+            Condition = c.Condition,
             ThenEffects = c.ThenEffects.Select(PreprocessEffectExpressions).ToList(),
             ElseEffects = c.ElseEffects?.Select(PreprocessEffectExpressions).ToList()
         },
@@ -797,17 +657,17 @@ public sealed partial record DomainEntityInstance {
         },
         CreateEntityInstance cei => cei with {
             Initializers = cei.Initializers
-                .Select(i => i with { Expression = PreprocessQuantifiers(i.Expression) })
+                .Select(i => i with { Expression = PreprocessRuntimeKeyword(i.Expression, i.PropertyName) })
                 .ToList()
         },
         CreateEntityInRelationshipEffect cir => cir with {
             Initializers = cir.Initializers
-                .Select(i => i with { Expression = PreprocessQuantifiers(i.Expression) })
+                .Select(i => i with { Expression = PreprocessRuntimeKeyword(i.Expression, i.PropertyName) })
                 .ToList()
         },
         InvokeActionEffect iae => iae with {
             ParameterBindings = iae.ParameterBindings
-                .Select(b => b with { Expression = PreprocessQuantifiers(b.Expression) })
+                .Select(b => b with { Expression = PreprocessRuntimeKeyword(b.Expression, null) })
                 .ToList()
         },
         // `for` arguments are binder-rooted (item Qty) — PreprocessQuantifiers would treat
@@ -829,6 +689,6 @@ public sealed partial record DomainEntityInstance {
             return DomainExpression.Literal(EvaluateDefaultValue(value, propType));
         if (value is PropertyAccess { Name: var name } && name is "Now" or "UtcNow" or "Today" or "Guid")
             return DomainExpression.Literal(EvaluateDefaultValue(value, propType));
-        return PreprocessQuantifiers(value);
+        return value;
     }
 }

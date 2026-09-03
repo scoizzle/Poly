@@ -147,14 +147,13 @@ internal sealed class RuntimeTool {
     /// </summary>
     [McpServerTool(Name = "create_instance"), Description(@"Creates a runtime instance of a domain entity and registers it in the session's instance store.
 
-The instance starts in the first defined stage (if stages exist) and is immediately
-available for action execution, policy evaluation, and stage subscriptions.
+The instance is dictionary-backed (Interpretation's IDictionary type-def path) and starts in the first defined stage (if stages exist). The store is bound so later invoke_action / evaluate_policy run the lowered operation AST — the same program emit would print.
 
 Use 'invoke_action' to invoke actions on the instance, 'get_instance' to inspect its
 current state, 'link_instances' to wire relationship edges between instances for
 cross-entity policy evaluation, and 'list_instances' to enumerate all instances.
 
-Thin wrapper around DomainEntityInstance.Create — no new runtime machinery.")]
+Allocates DomainEntityInstance, binds DomainInstanceStore — no second evaluator.")]
     public static DomainToolResponse CreateInstance(
         [Description("Session ID")] string sessionId,
         [Description("Name of the entity to instantiate")] string entityName,
@@ -596,10 +595,12 @@ Use case — reassign a child from one parent to another:
     /// </summary>
     [McpServerTool(Name = "invoke_action"), Description(@"Invokes an action on a runtime instance.
 
+Binds caller-supplied args onto the dictionary-backed instance and runs the lowered operation AST through Interpreter (same tree as emit) with the session Store bound.
+
 The action pipeline:
 1. Resolve action from current stage or entity level
 2. Evaluate guard policies (action-level, stage-level, entity-level)
-3. Execute effects (transition, assign, create, create-in, invoke, for-invoke, if)
+3. Execute the lowered program (transition, assign, create, create-in, invoke, for-invoke, if)
 
 Link and unlink existing instances with the store tools link_instances and unlink_instances — those are not action effects.
 

@@ -86,7 +86,7 @@ public sealed partial record DomainEntityInstance {
             foreach (var ep in source) {
                 if (!seen.Add(ep.Name))
                     continue;
-                var typeRef = MapDomainTypeToAstNode(ep.Type);
+                var typeRef = MapDomainTypeToAstNode(ep.Type, domain);
                 propDefs.Add(new PropertyDefinitionNode(ep.Name, typeRef,
                     Getter: new PropertyGetterDefinitionNode()));
             }
@@ -140,7 +140,10 @@ public sealed partial record DomainEntityInstance {
         };
         // Empty bodies: analysis resolves Member(entity, action/policy) as ITypeMethod.
         // VM does not inline them; InvokeNamed / generated C# owns the implementation.
-        var methodNames = new HashSet<string>(StringComparer.Ordinal) { "Notify", "EnsureUnique" };
+        var methodNames = new HashSet<string>(StringComparer.Ordinal) {
+            "Notify", "EnsureUnique", "AnyRelated", "AllRelated", "NoneRelated", "CountRelated",
+            "ExistsRelated", "GetRelatedOne", "LinkRelated"
+        };
         // Runtime factories for mixed if+create. 0/1-pair overloads plus 2–16
         // object-value pair overloads so Invoke types as DomainResult
         // (IsSuccess resolves) for any realistic initializer count.
@@ -160,7 +163,43 @@ public sealed partial record DomainEntityInstance {
                 ],
                 Body: new Block([])));
         }
-        foreach (var factory in new[] { "CreateByType", "CreateInNav", "ProbeCreateByType" }) {
+        methods.Add(new MethodDefinitionNode(
+            "ExistsRelated",
+            boolean,
+            Parameters: [new Parameter("relationshipName", str)],
+            Body: new Block([])));
+        methods.Add(new MethodDefinitionNode(
+            "GetRelatedOne",
+            obj,
+            Parameters: [new Parameter("relationshipName", str)],
+            Body: new Block([])));
+        methods.Add(new MethodDefinitionNode(
+            "LinkRelated",
+            new TypeReference("void"),
+            Parameters: [
+                new Parameter("relationshipName", str),
+                new Parameter("target", obj)
+            ],
+            Body: new Block([])));
+        foreach (var quantifier in new[] { "AnyRelated", "AllRelated", "NoneRelated" }) {
+            methods.Add(new MethodDefinitionNode(
+                quantifier,
+                boolean,
+                Parameters: [
+                    new Parameter("relationshipName", str),
+                    new Parameter("body", obj)
+                ],
+                Body: new Block([])));
+        }
+        methods.Add(new MethodDefinitionNode(
+            "CountRelated",
+            i64,
+            Parameters: [
+                new Parameter("relationshipName", str),
+                new Parameter("body", obj)
+            ],
+            Body: new Block([])));
+        foreach (var factory in new[] { "Create", "CreateIn", "ProbeCreate" }) {
             methods.Add(new MethodDefinitionNode(
                 factory,
                 TypeReference.To<DomainResult>(),
@@ -198,7 +237,7 @@ public sealed partial record DomainEntityInstance {
                 action.Name,
                 TypeReference.To<DomainResult>(),
                 Parameters: [.. action.Parameters.Select(p =>
-                    new Parameter(p.Name, MapDomainTypeToAstNode(p.Type)))],
+                    new Parameter(p.Name, MapDomainTypeToAstNode(p.Type, domain)))],
                 Body: new Block([])));
         }
         foreach (var policy in EnumerateTypeDefPolicies(entity)) {
@@ -411,110 +450,7 @@ public sealed partial record DomainEntityInstance {
         return result;
     }
 
-    // ── Collection quantifier preprocessing ──────────────────────────
-
-    /// <summary>
-    /// Walks an expression tree and evaluates collection quantifier nodes
-    /// (AnyExpr/AllExpr/NoneExpr/CountExpr) and to-one
-    /// <see cref="RelationshipNavigation"/> against the current store,
-    /// replacing them with literal results. Non-store nodes are
-    /// returned unchanged (or with preprocessed children for composites).
-    ///
-    /// <para>Fail-closed: missing <see cref="Store"/>, missing relationship
-    /// metadata, or missing outbound link throws
-    /// <see cref="InvalidOperationException"/> — no soft pass-through to bag
-    /// <c>Member</c> chains (no vacuous true/false).</para>
-    /// </summary>
-    private DomainExpression PreprocessQuantifiers(DomainExpression expr) =>
-        QuantifierRewrite.Route(expr);
-
-    /// <summary>
-    /// Store-aware quantifier / path-prefix / Rel-exists preprocessing (coh-d1 —
-    /// leaf override on the shared <see cref="DomainExpressionRewriteBase"/>;
-    /// composites recurse in the base). Fail-closed: missing store/relationship
-    /// metadata or missing outbound links throw (no vacuous true/false).
-    /// </summary>
-    private sealed class QuantifierPreprocessRewrite(DomainEntityInstance instance)
-        : DomainExpressionRewriteBase {
-        private readonly DomainEntityInstance _instance = instance;
-
-        protected override DomainExpression AnyExpr(AnyExpr e) =>
-            DomainExpression.Literal(_instance.EvaluateAnyExpr(e));
-        protected override DomainExpression AllExpr(AllExpr e) =>
-            DomainExpression.Literal(_instance.EvaluateAllExpr(e));
-        protected override DomainExpression NoneExpr(NoneExpr e) =>
-            DomainExpression.Literal(_instance.EvaluateNoneExpr(e));
-        protected override DomainExpression CountExpr(CountExpr e) =>
-            DomainExpression.Literal(_instance.EvaluateCountExpr(e));
-
-        protected override DomainExpression RelationshipNavigation(RelationshipNavigation r) {
-            // Singular path-prefix (to-one hops). Nested navs (loan book Title) hop
-            // on the linked target — not re-routed on the original instance (P2).
-            // Use quantifiers (any/all) for collections — never pick targets[0] silently.
-            var result = EvaluatePathPrefixChain(r, _instance);
-            return DomainExpression.Literal(result);
-        }
-
-        /// <summary>
-        /// Walk to-one path-prefix hops; evaluate the leaf expression on the final bag.
-        /// </summary>
-        private static object? EvaluatePathPrefixChain(
-            RelationshipNavigation r, DomainEntityInstance source) {
-            // Action-parameter roots (ConvertLead's `lead Name`) live in the bag,
-            // not the store.
-            if (source.TryGetRaw(r.RelationshipName, out var bag)
-                && bag is DomainEntityInstance paramHop) {
-                if (r.TargetProperty is RelationshipNavigation nestedParam)
-                    return EvaluatePathPrefixChain(nestedParam, paramHop);
-                var paramPass = new DomainExpressionLoweringPass(new LoweringContext(new Parameter("entity")));
-                var paramLowered = paramPass.Lower(r.TargetProperty,
-                    new Parameter("entity", new TypeReference(paramHop.Entity.Name)));
-                var paramCompiled = Interpreter.Compile(paramLowered, paramHop._typeDefAnalyzer);
-                using var paramExec = Interpreter.Execute(paramCompiled,
-                    s => s.SetArgs(new object?[] { paramHop }));
-                return BoxPathPrefixLeaf(r.TargetProperty, paramExec.Result.GetValue<object>());
-            }
-
-            var targets = source.GetOutboundRelatedInstances(r.RelationshipName);
-            if (targets.Count == 0)
-                throw new InvalidOperationException(
-                    $"No linked instances found for relationship '{r.RelationshipName}' on entity '{source.Entity.Name}'.");
-            if (targets.Count > 1)
-                throw new InvalidOperationException(
-                    $"Path-prefix on relationship '{r.RelationshipName}' requires exactly one linked target " +
-                    $"(found {targets.Count} on entity '{source.Entity.Name}'). Use any/all quantifiers for collections.");
-
-            var hop = targets[0];
-            if (r.TargetProperty is RelationshipNavigation nested)
-                return EvaluatePathPrefixChain(nested, hop);
-
-            // Leaf (comparison, property, etc.) on the final hop instance.
-            var pass = new DomainExpressionLoweringPass(new LoweringContext(new Parameter("entity")));
-            var lowered = pass.Lower(r.TargetProperty,
-                new Parameter("entity", new TypeReference(hop.Entity.Name)));
-            var compiled = Interpreter.Compile(lowered, hop._typeDefAnalyzer);
-            using var exec = Interpreter.Execute(compiled,
-                s => s.SetArgs(new object?[] { hop }));
-            // VM bools are long 0/1 on the stack. Boxing them as Int64 made
-            // `require not` of a path-prefix comparison compile as Not(Int64).
-            return BoxPathPrefixLeaf(r.TargetProperty, exec.Result.GetValue<object>());
-        }
-
-        protected override DomainExpression Exists(Exists e) {
-            // Rel exists: store outbound-link presence when Target is a relationship name.
-            // Fail closed without store (GetOutboundRelatedInstances). Empty links → false.
-            // Non-relationship targets keep bag-null lowering.
-            if (_instance.TryEvaluateRelationshipPresence(e.Target, out var present))
-                return DomainExpression.Literal(present);
-            return base.Exists(e);
-        }
-
-        protected override DomainExpression NotExists(NotExists e) {
-            if (_instance.TryEvaluateRelationshipPresence(e.Target, out var present))
-                return DomainExpression.Literal(!present);
-            return base.NotExists(e);
-        }
-    }
+    // ── Collection quantifier Store reads ─────────────────────────────────────
 
     /// <summary>
     /// When <paramref name="target"/> is a bare relationship name on this entity as source,
@@ -611,7 +547,7 @@ public sealed partial record DomainEntityInstance {
     /// Maps a domain type reference (e.g. "Text", "Number") to an AST type
     /// reference node suitable for <see cref="PropertyDefinitionNode"/>.
     /// </summary>
-    private static Node MapDomainTypeToAstNode(DomainTypeReference domainType) {
+    private static Node MapDomainTypeToAstNode(DomainTypeReference domainType, Domain? domain) {
         var typeName = domainType.TypeName;
         return typeName switch {
             "Text" => new PrimitiveTypeReference(Prim.String),
@@ -632,6 +568,9 @@ public sealed partial record DomainEntityInstance {
             "Decimal" => new PrimitiveTypeReference(Prim.Decimal),
             "Float" => new PrimitiveTypeReference(Prim.Float64),
             "Double" => new PrimitiveTypeReference(Prim.Float64),
+            _ when domain?.Types.OfType<Entity>().Any(e =>
+                string.Equals(e.Name, typeName, StringComparison.Ordinal)) == true
+                => new TypeReference(typeName),
             _ => new PrimitiveTypeReference(Prim.Structure)
         };
     }

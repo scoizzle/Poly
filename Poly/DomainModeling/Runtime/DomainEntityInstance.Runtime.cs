@@ -128,11 +128,19 @@ public sealed partial record DomainEntityInstance {
                 new TypeReference("void"),
                 Parameters: [new Parameter("stageName",
                     new PrimitiveTypeReference(Prim.String))],
+                Body: new Block([])),
+            new MethodDefinitionNode(
+                "EnsureUnique",
+                TypeReference.To<DomainResult>(),
+                Parameters: [
+                    new Parameter("propertyName", TypeReference.To<string>()),
+                    new Parameter("value", TypeReference.To<object>())
+                ],
                 Body: new Block([]))
         };
         // Empty bodies: analysis resolves Member(entity, action/policy) as ITypeMethod.
         // VM does not inline them; InvokeNamed / generated C# owns the implementation.
-        var methodNames = new HashSet<string>(StringComparer.Ordinal) { "Notify" };
+        var methodNames = new HashSet<string>(StringComparer.Ordinal) { "Notify", "EnsureUnique" };
         // Runtime factories for mixed if+create. 0/1-pair overloads plus 2–16
         // object-value pair overloads so Invoke types as DomainResult
         // (IsSuccess resolves) for any realistic initializer count.
@@ -142,6 +150,16 @@ public sealed partial record DomainEntityInstance {
         var boolean = TypeReference.To<bool>();
         var obj = TypeReference.To<object>();
         Node[] valueTypes = [i64, str, boolean, obj];
+        foreach (var vt in new Node[] { i64, str, boolean }) {
+            methods.Add(new MethodDefinitionNode(
+                "EnsureUnique",
+                TypeReference.To<DomainResult>(),
+                Parameters: [
+                    new Parameter("propertyName", str),
+                    new Parameter("value", vt)
+                ],
+                Body: new Block([])));
+        }
         foreach (var factory in new[] { "CreateByType", "CreateInNav", "ProbeCreateByType" }) {
             methods.Add(new MethodDefinitionNode(
                 factory,

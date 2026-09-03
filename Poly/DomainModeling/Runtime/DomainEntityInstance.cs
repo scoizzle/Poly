@@ -579,8 +579,10 @@ public sealed partial record DomainEntityInstance {
     }
 
     /// <summary>
-    /// Mixed if+create compiles guarded-probe + body (runtime factories). Leaf
-    /// effects stay on <see cref="ExecuteEffect"/>. Shared by InvokeAction,
+    /// <summary>
+    /// One operation AST when every effect lowers. Mixed if+create uses the
+    /// same guarded-probe + body tree as export. Unlowerable store-coupled
+    /// create still walks <see cref="ExecuteEffect"/>. Shared by InvokeAction,
     /// first-stage OnEntry, subscription, and TransitionStage entry/exit.
     /// </summary>
     private DomainResult? ExecuteEffectList(
@@ -588,12 +590,16 @@ public sealed partial record DomainEntityInstance {
         EffectLoweringPass effectPass,
         TypeDefinitionNodeAnalyzer typeProvider) {
         var prepared = effects.Select(PreprocessEffectExpressions).ToList();
-        if (prepared.Exists(ContainsConditionalCreate)
-            && !prepared.Exists(HasEffectDependentConditionalCreate)) {
+        if (prepared.Count == 0)
+            return null;
+
+        if (!prepared.Exists(HasEffectDependentConditionalCreate)
+            && !prepared.Exists(RequiresDirectExecution)
+            && (Domain is not null || !prepared.Exists(ContainsDirectExecutionEffect))) {
             var tree = effectPass.LowerActionBody(prepared);
             if (tree is null)
                 throw new InvalidOperationException(
-                    "Cannot lower effects containing create.");
+                    "Cannot lower a fully-lowerable effect list to a Syntax AST.");
             var compiled = Interpreter.CompileChecked(
                 tree, DomainResultTypeProvider.Wrap(typeProvider));
             using var exec = Interpreter.Execute(compiled,
@@ -602,6 +608,7 @@ public sealed partial record DomainEntityInstance {
                 return failed;
             return null;
         }
+
         foreach (var effect in prepared) {
             var failed = ExecuteEffect(effect, effectPass, typeProvider);
             if (failed is { IsSuccess: false })
@@ -704,13 +711,6 @@ public sealed partial record DomainEntityInstance {
         CompositeEffect c => c.Effects.Any(RequiresDirectExecution),
         ConditionalEffect c => (c.ThenEffects?.Any(RequiresDirectExecution) ?? false)
             || (c.ElseEffects?.Any(RequiresDirectExecution) ?? false),
-        _ => false
-    };
-
-    /// <summary>True when an <c>if</c> branch contains create / create-in.</summary>
-    private static bool ContainsConditionalCreate(Effect effect) => effect switch {
-        ConditionalEffect c => ContainsDirectExecutionEffect(c),
-        CompositeEffect c => c.Effects.Any(ContainsConditionalCreate),
         _ => false
     };
 

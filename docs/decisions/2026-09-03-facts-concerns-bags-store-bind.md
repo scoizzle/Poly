@@ -30,6 +30,18 @@ Use these words. Do not invent a framework catalog.
 
 **Storage** already means the mapping bag (`StorageModel` / `StorageColumn`). The collaborator is **Store**. Do not name it `IStorage`.
 
+**Duties** (who may know bags):
+
+| Duty | Owner | Must not |
+|------|-------|----------|
+| Hold facts | `Domain` | Encode persistence, HTTP, or Store |
+| Publish concern bags | Analysis | Execute or print operations |
+| Select an implementation | Surface (`uses sqlite`, `uses http`, …) | Rewrite operation trees |
+| Read bags; emit Syntax | Lowering (**process**) | Embed bag types in the tree; walk Effect IR |
+| Be the program | Operation AST (**product**) | Name or read bags |
+| Print that program | Project | Consult bags to understand the action |
+| Bind / be the implementation | Store + host files (DbContext, Program.cs) | Re-walk `Domain` for operation meaning |
+
 Constraint checks (required, pattern, range) can stay on the entity factory. Uniqueness and graph wiring belong on Store.
 
 Scratch `DomainInstanceStore` and a future EF Store implement the same Store jobs. Do not invent a third store.

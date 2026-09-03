@@ -1,5 +1,4 @@
 using Poly.DomainModeling.Analysis;
-using Poly.DomainModeling.Dispatch;
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
 using Poly.Interpretation;
@@ -11,52 +10,6 @@ using Prim = Poly.Introspection.PrimitiveType;
 namespace Poly.DomainModeling.Runtime;
 
 public sealed partial record DomainEntityInstance {
-    /// <summary>
-    /// Residual dispatcher. All product arms throw: create / create-in execute
-    /// via CreateChildInstance / ExecuteCreateInRelationship (probes+Failure).
-    /// Invoke, stage, and for must lower to Ast.
-    /// </summary>
-    private sealed class EffectExecutor : EffectDispatch<object?> {
-        private readonly DomainEntityInstance _instance;
-        private readonly EffectLoweringPass _effectPass;
-        private readonly TypeDefinitionNodeAnalyzer _typeProvider;
-
-        private EffectExecutor(DomainEntityInstance instance,
-            EffectLoweringPass effectPass, TypeDefinitionNodeAnalyzer typeProvider) {
-            _instance = instance;
-            _effectPass = effectPass;
-            _typeProvider = typeProvider;
-        }
-
-        protected override object? Default() => null;
-
-        public static void Run(DomainEntityInstance instance,
-            EffectLoweringPass effectPass, TypeDefinitionNodeAnalyzer typeProvider,
-            Effect effect) {
-            new EffectExecutor(instance, effectPass, typeProvider).Route(effect);
-        }
-
-        protected override object? StageTransition(StageTransitionEffect transition) =>
-            throw new InvalidOperationException(
-                "StageTransitionEffect must lower to Ast; EffectExecutor is not the shipped path.");
-
-        protected override object? CreateEntityInstance(CreateEntityInstance create) =>
-            throw new InvalidOperationException(
-                "CreateEntityInstance must not use EffectExecutor; probes+Failure and CreateChildInstance are the shipped path.");
-
-        protected override object? CreateEntityInRelationship(CreateEntityInRelationshipEffect createIn) =>
-            throw new InvalidOperationException(
-                "CreateEntityInRelationship must not use EffectExecutor; probes+Failure and ExecuteCreateInRelationship are the shipped path.");
-
-        protected override object? InvokeAction(InvokeActionEffect invoke) =>
-            throw new InvalidOperationException(
-                "InvokeActionEffect must lower to Ast; EffectExecutor is not the shipped path.");
-
-        protected override object? ForEachInvoke(ForEachInvokeEffect efe) =>
-            throw new InvalidOperationException(
-                "ForEachInvokeEffect must lower to Ast; EffectExecutor is not the shipped path.");
-    }
-
     /// <summary>
     /// Real instance method invoked from the lowered StageTransition tree
     /// (<c>Invoke(Member(This, "Notify"), stageName)</c>) after a stage

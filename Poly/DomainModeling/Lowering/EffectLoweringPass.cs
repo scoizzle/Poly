@@ -40,12 +40,6 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     private readonly bool _emitInstanceNotify;
     private int _forEachInvokeSequence;
     private int _createInProbeSequence;
-    private bool _lowerRuntimeCreate;
-
-    /// <summary>True when the lowering pass always lowers create/create-in
-    /// (runtime mode). False only during export when <c>LowerStageTransitions</c>
-    /// gates the create shape.</summary>
-    public bool AlwaysLowersCreate => _lowerRuntimeCreate;
 
     /// <summary>Pre-computed analysis metadata provider, when available.</summary>
     public INodeMetadataProvider? Analysis => _analysis;
@@ -60,7 +54,6 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         _analysis = context.Analysis;
         _useThisReference = context.UseThisReference;
         _lowerStageTransitions = context.LowerStageTransitions;
-        _lowerRuntimeCreate = !context.LowerStageTransitions;
         _stageEnumTypeName = context.StageEnumTypeName;
         _postTransitionNodes = context.PostTransitionNodes;
         _sourceStageName = context.SourceStageName;
@@ -594,7 +587,6 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     /// </summary>
     protected override Node? CreateEntityInstance(CreateEntityInstance cei) {
         if (!_lowerStageTransitions) {
-            if (!_lowerRuntimeCreate) return null;
             if (cei.RelationshipName is not null) return null;
             return LowerRuntimeFactoryCall(
                 "CreateByType", cei.Type.TypeName, cei.Initializers,
@@ -676,7 +668,6 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     /// </summary>
     protected override Node? CreateEntityInRelationship(CreateEntityInRelationshipEffect cr) {
         if (!_lowerStageTransitions) {
-            if (!_lowerRuntimeCreate) return null;
             if (_domain is null || _analysis is null) return null;
             var runtimeTarget = _analysis.GetMetadata<ResolvedRelationshipTargetMetadata>(cr);
             var runtimeRel = runtimeTarget?.Relationship ?? ResolveRelationship(cr.RelationshipName);
@@ -887,7 +878,6 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         if (targetEntity is null) return null;
 
         if (!_lowerStageTransitions) {
-            if (!_lowerRuntimeCreate) return null;
             var probe = LowerRuntimeFactoryCall(
                 "ProbeCreateByType", targetEntity.Name, cr.Initializers, targetEntity);
             return probe as Block ?? new Block([probe]);
@@ -929,7 +919,6 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         var targetEntity = ResolveEntity(cei.Type.TypeName);
         if (targetEntity is null) return null;
         if (!_lowerStageTransitions) {
-            if (!_lowerRuntimeCreate) return null;
             var probe = LowerRuntimeFactoryCall(
                 "ProbeCreateByType", targetEntity.Name, cei.Initializers, targetEntity);
             return probe as Block ?? new Block([probe]);

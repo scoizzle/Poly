@@ -19,6 +19,8 @@ namespace Poly.DomainModeling.Lowering;
 /// Runtime emits instance factories (<c>CreateByType</c> / <c>CreateInNav</c> /
 /// <c>ProbeCreateByType</c>) that <c>InvokeNamed</c> runs — Stay.Create is C#-only.
 /// Mixed if+create is the same guarded-probe + body tree.
+/// Unique assign on the runtime path wraps <c>EnsureUnique</c> then assign
+/// (Store bind). C# export keeps a bare Assignment (persistence indexes).
 /// StageTransition and invoke are handwritten IR on both paths.</para>
 ///
 /// <para>When <see cref="Analysis"/> is set, lowering reads pre-computed
@@ -228,7 +230,45 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
                     new Member(new NamedTypeReference(arg.TypeName), arg.MemberName))]);
         }
 
-        return new Assignment(target, value);
+        var assignment = new Assignment(target, value);
+        if (!_lowerStageTransitions
+            && a.Target is PropertyAccess uniqueTarget
+            && IsUniqueProperty(uniqueTarget.Name)) {
+            return WrapUniqueAssign(assignment.Destination, uniqueTarget.Name, value);
+        }
+        return assignment;
+    }
+
+    private bool IsUniqueProperty(string propertyName) {
+        if (_analysis is not null && _domain is not null) {
+            var storage = _analysis.GetMetadata<StorageMappingMetadata>(_domain);
+            if (storage is not null) {
+                var mapped = storage.Storage.Entities.FirstOrDefault(e =>
+                    string.Equals(e.Name, _entity.Name, StringComparison.Ordinal));
+                return mapped?.Columns.Any(c =>
+                    string.Equals(c.Name, propertyName, StringComparison.Ordinal) && c.IsUnique) == true;
+            }
+        }
+        return _entity.Properties.Any(p =>
+            string.Equals(p.Name, propertyName, StringComparison.Ordinal)
+            && p.Constraints.OfType<UniqueConstraint>().Any());
+    }
+
+    private Node WrapUniqueAssign(Node destination, string propertyName, Node value) {
+        var seq = _forEachInvokeSequence++;
+        var assignedVar = new Variable($"uniqueValue{seq}");
+        var checkVar = new Variable($"uniqueCheck{seq}");
+        return new Block([
+            new Assignment(assignedVar, value),
+            new Assignment(checkVar, new Invoke(
+                new Member(Subject, "EnsureUnique"),
+                new Constant(propertyName),
+                assignedVar)),
+            new IfStatement(
+                new Syntactic.Not(new Member(checkVar, "IsSuccess")),
+                new Block([ReturnCallerFailureFrom(checkVar)])),
+            new Assignment(destination, assignedVar)
+        ], [assignedVar, checkVar]);
     }
 
     private Node? RouteWithRuntimeCreate(Effect effect) =>

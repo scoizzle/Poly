@@ -1033,7 +1033,9 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
 
     /// <summary>
     /// Runtime create / probe: <c>this.Create/CreateIn/ProbeCreate(name, prop, value, ...)</c>
-    /// with Failure unwrap. Values are cast to object so type-def optional slots match.
+    /// with Failure unwrap. Entity-typed values are cast to object so the 1-pair
+    /// object slot matches; primitives stay unboxed so the VM still boxes them at
+    /// the object-parameter invoke (a TypeCast to object is a no-op on scalars).
     /// </summary>
     private Node LowerRuntimeFactoryCall(
         string methodName,
@@ -1049,7 +1051,9 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
             Node value = prop is not null
                 ? LowerEnumAwareValue(init.Expression, prop.Type, Subject)
                 : _expressionPass.Lower(init.Expression, Subject);
-            args.Add(new TypeCast(value, TypeReference.To<object>()));
+            args.Add(NeedsObjectSlotCast(targetEntity, prop, init.PropertyName, value)
+                ? new TypeCast(value, TypeReference.To<object>())
+                : value);
         }
 
         var seq = _createInProbeSequence++;
@@ -1082,6 +1086,25 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         }
         return new Block(nodes, locals);
     }
+
+    /// <summary>
+    /// Entity-typed create initializers (properties or singular navs) do not match
+    /// the long/string/bool 1-pair slots. Cast those values to object. Do not cast
+    /// primitives: TypeCast-to-object is a VM no-op on scalars and skips boxing.
+    /// </summary>
+    private bool NeedsObjectSlotCast(
+        Entity? targetEntity, Property? prop, string initName, Node value) {
+        if (value is Constant)
+            return false;
+        if (IsDomainEntityType(prop?.Type))
+            return true;
+        return targetEntity?.Navigations.Any(n =>
+            string.Equals(n.Name, initName, StringComparison.Ordinal)) == true;
+    }
+
+    private bool IsDomainEntityType(DomainTypeReference? type) =>
+        type is not null && _domain?.Types.OfType<Entity>().Any(e =>
+            string.Equals(e.Name, type.TypeName, StringComparison.Ordinal)) == true;
 
     private Block LowerCreateConstraintProbe(Entity targetEntity, List<Node> args) {
         var probe = new Variable($"probe{_createInProbeSequence++}");

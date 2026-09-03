@@ -175,7 +175,7 @@ public sealed class EmitSessionContractTests {
         await Assert.That(types.Any(t => t.Name == "DomainResult" && t.GenericParameters is { Count: > 0 })).IsTrue();
 
         var unit = new CompilationUnitNode([], null, types, null);
-        var interp = Interpretation.Interpreter.Analyzer.Analyze(unit);
+        var interp = Poly.Interpretation.Interpreter.Analyzer.Analyze(unit);
         await Assert.That(interp).IsNotNull();
 
         var domainResultGeneric = types.Single(t => t.Name == "DomainResult" && t.GenericParameters is { Count: > 0 });

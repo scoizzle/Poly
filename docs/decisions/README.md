@@ -25,7 +25,7 @@ These documents exist so that:
 
 ## Current Decisions
 
-- [2026-09-03: Facts, concern bags, and Store bind](2026-09-03-facts-concerns-bags-store-bind.md) — Domain is **facts**; analysis publishes **concern bags**; operation lowering **binds** bags and a named **Store** collaborator (`EnsureUnique`). Not `IStorage`. Residual create dual-path is debt.
+- [2026-09-03: Facts, concern bags, and Store bind](2026-09-03-facts-concerns-bags-store-bind.md) — Domain is **facts**; analysis publishes **concern bags**; operation lowering **binds** bags and a named **Store** collaborator (`EnsureUnique`, then `Create` / `CreateIn`). Not `IStorage`. Simulate the lowered program. Remaining create dual-path: [`docs/plans/create-create-in-simulate.md`](../plans/create-create-in-simulate.md).
 - [2026-08-15: Domain is a library; extensions bind doors; MCP is the harness](2026-08-15-domain-library-extensions-mcp-harness.md) — Domain lowers to legal **operations**, not a process. Product entry points are opt-in extensions. MCP simulates by supplied context. Shipped ⊆ lowerable.
 - [2026-08-14: Domain libraries, not packs](2026-08-14-domain-libraries.md) — Libraries load into a session/compile. Temporal is language default; annotations are optional; no module-initializer meaning.
 - [2026-08-10: Relationships as Entity-Owned Navigations (Synthesized Domain View)](2026-08-10-relationships-as-entity-owned-navigations.md) — Relationship = source-entity-owned navigation; `Domain.Relationships` is a computed flatten; the semantic view is analysis-synthesized from entity navs; back-references are derived. Supersedes the domain-wide relationship-name uniqueness model (scoped in the 2026-08-10 slice).

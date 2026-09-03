@@ -1,6 +1,6 @@
 # Plans ready for agent micro-tasks
 
-**Date:** 2026-09-01  
+**Date:** 2026-09-03  
 **Rule:** Trunk is `master`. Parallel streams with exclusive file ownership.  
 **CURRENT truth:** [`PIPELINE-STATUS.md`](./PIPELINE-STATUS.md) (only) — **CURRENT: `create/create-in`**. Do not invent a second CURRENT.
 
@@ -10,7 +10,7 @@
 
 | Priority | Suite | Status |
 |----------|--------|--------|
-| CURRENT | create/create-in | **CURRENT** — host-ABI remaining store effects. Mirror [`PIPELINE-STATUS.md`](./PIPELINE-STATUS.md). |
+| CURRENT | create/create-in | **CURRENT** — simulate the lowered program. [`create-create-in-README.md`](./create-create-in-README.md) · parent [`../create-create-in-simulate.md`](../create-create-in-simulate.md). Mirror [`PIPELINE-STATUS.md`](./PIPELINE-STATUS.md). |
 | parked | [`mut-safety-README.md`](./mut-safety-README.md) | THEN in PIPELINE-STATUS — not admitted |
 | parked | [`gcyc-README.md`](./gcyc-README.md) | Remaining G4 unparse — THEN, not CURRENT |
 | parked | [`e2e-README.md`](./e2e-README.md) | Admit one wave |

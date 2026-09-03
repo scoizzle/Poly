@@ -1,6 +1,6 @@
 # Pipeline status
 
-**Updated:** 2026-09-01
+**Updated:** 2026-09-03
 **Authority:** this file is the **sole CURRENT/DONE truth** for agent suite admission.  
 Other indexes must **mirror** this file (or link here) — do not invent a second CURRENT line.
 
@@ -31,7 +31,8 @@ PULL:    E5; EF codegen; naming cleanup
 | **mcp-minify** | ✅ **DONE** 2026-08-08 (+ follow-ups same day) | Catalog 46→24; DSL-only expressions; unified `add`/`remove`; follow-ups closed. |
 | **grammar-revision** | ✅ **DONE** 2026-08-09 | v2 engine (`Grammar<TToken, TTokenKind>`, examine/consume, longest-match, stateless printer) + DSL cutover; review B1–B3/N1–N3/C1 closed. Archived: [`../archive/completed-2026-08-late/grammar-revision.md`](../archive/completed-2026-08-late/grammar-revision.md) |
 | **emit-session** | ✅ **DONE** 2026-08-24 (CompileMode honesty) | Libraries add `INodeAnalyzer`. Spell closed. Emit reads bags, not `CompileMode`. CompileMode.All/Db seed persistence only; HTTP host requires `uses http` (catalog id `http`) or `Load(HttpLibrary)`. Remaining lies: TemporalLibrary Meaning unused; RuntimeAnalysisCache core-catalog reopen. |
-| **host-ABI** | Strong slice **DONE** (PRs 21–24) | StageTransition, self-invoke, cross-entity, for-invoke same-tree. Create / create-in still EffectExecutor — **not** the rewrite-to-master gate. |
+| **host-ABI** | Strong slice **DONE** (PRs 21–24) | StageTransition, self-invoke, cross-entity, for-invoke same-tree. Create / create-in remaining: Store bind — **not** the rewrite-to-master gate. |
+| **create/create-in** | **CURRENT** | Unique Store bind shipped. Remaining: simulate the lowered program. Plan: [`../create-create-in-simulate.md`](../create-create-in-simulate.md) · suite: [`create-create-in-README.md`](./create-create-in-README.md) |
 | **interpretation-language-engine** | ✅ **DONE** 2026-08-31 | ile-0…ile-3 + ile-gate: no POC passthrough, `Compile` fail-closed, LanguageVmTests + LanguageSurfaceTests, CORE/README match. Plan: [`../archive/completed-2026-08-late/simple-agent-tasks/interpretation-language-engine-README.md`](../archive/completed-2026-08-late/simple-agent-tasks/interpretation-language-engine-README.md). |
 | **rewrite-to-master** | ✅ **DONE** 2026-08-25 (PR 26) | Rewrite is `master`. Plan: [`../archive/completed-2026-08-late/simple-agent-tasks/rewrite-to-master-2026-08-25.md`](../archive/completed-2026-08-late/simple-agent-tasks/rewrite-to-master-2026-08-25.md). New work from `master`; do not open work on the rewrite branch. |
 | **pack-host** | Parked (phase 1 shipped; **extension model superseded**) | TokenWriter + binders done. “Packs extend Grammar tables” is not the product contract — extension is analysis passes. pack-2 `IDomainPack` parked. |
@@ -60,6 +61,6 @@ PULL:    E5; EF codegen; naming cleanup
 - **grammar-revision** ✅ DONE 2026-08-09: v2 engine + DSL cutover + printer + review fixes (B1–B3, N1–N3, C1).
 - Span-vs-fold `not`-in-chain pinned: `SpanVsFold_NotInChain_TableRejectsFoldAccepts` until wrap-up reconciles.
 - **emit-session remaining lies:** TemporalLibrary does not register Meaning handlers (design: dispatch/type-check + `TemporalPass` vocabulary bag). `RuntimeAnalysisCache` / static `DomainModelAnalyzer.Analyze` reopen a core-catalog session (vendor maps ignored). CompileMode seed-only honesty is DONE via #20.
-- **host-ABI remaining lie:** `EffectExecutor` deleted (all arms threw). Leaf creates now lower through VM via `InvokeNamed` runtime factories. `ExecuteStructured` remains for unique-assign if/else and store-coupled creates (`CreateEntityInstance` with `RelationshipName`). `LowerStageTransitions` still gates create shape (C# `Stay.Create` vs runtime `CreateByType`/`CreateInNav`). Sequential transitions SourceStageName **fixed** (updates after each transition). Emit path runs `Interpreter.Analyze` on the full projected unit (including `DomainResult<T>`); type-parameter / closed-generic / short-name resolve lives in Interpretation.
+- **host-ABI remaining lie:** `EffectExecutor` deleted. Unique assign binds Store (`EnsureUnique`) in one VM tree. Create / create-in still uses `CreateByType`/`CreateInNav` factories and `ExecuteStructured` for store-coupled / effect-dependent conditional create. Execute-time quantifier preprocess still rewrites store-aware expressions to literals. Sequential transitions SourceStageName **fixed**. Emit path runs `Interpreter.Analyze` on the full projected unit. **Fix plan (still CURRENT create/create-in, not a new suite):** [`../create-create-in-simulate.md`](../create-create-in-simulate.md).
 - **rewrite-to-master:** ✅ DONE PR 26. Product trunk is `master`. Parallel streams may run with exclusive file ownership (create/create-in; MCP mut-safety; Grammar wrap-up; V3 naming).
-- **interpretation-language-engine:** ✅ DONE 2026-08-31 (ile-gate). CURRENT is create/create-in (host-ABI remaining store effects).
+- **interpretation-language-engine:** ✅ DONE 2026-08-31 (ile-gate). CURRENT is create/create-in (simulate the lowered program + bound Store). Dictionary-backed `This` is already Interpretation’s type-def path — do not invent Expando.

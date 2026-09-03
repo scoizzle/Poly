@@ -632,9 +632,9 @@ public sealed partial record DomainEntityInstance {
         }
 
         // Unique-assign if/else, store-coupled creates (auto-linking), or
-        // effect-dependent conditionals containing creates — walk sub-effects individually
-        // because the lowered tree's Parameter nodes need bag access that only
-        // per-effect compile provides.
+        // conditional creates walk sub-effects individually. The conditional
+        // create path stays on ExecuteStructured until DomainResult.Failure
+        // propagation through nested VM Return nodes is verified end-to-end.
         if ((prepared is ConditionalEffect or CompositeEffect)
             && (ContainsUniqueAssign(prepared)
                 || RequiresDirectExecution(prepared)

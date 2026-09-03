@@ -192,7 +192,7 @@ Module README: `Poly/Introspection/README.md`.
 | Domain compile | `DomainSession` in `Poly/DomainModeling/` — MCP **holds** this; it is not the same type |
 | Libraries | `IDomainLibrary` (`Id` + `Register`); product slot is `SessionBuilder.AddAnalyzer`. `uses sqlite` publishes persistence bag → DbContext; `uses http` publishes HTTP bag → Program.cs. Entity C# is `session.Emit`. `CompileMode` only seeds ids |
 
-**MCP principle:** interactive harness for agents. Author, inspect, **simulate a named operation** on a store instance: `evaluate_policy(instanceId)` and `invoke_action`. Context is `create_instance` (+ `link_instances`), not a parallel bag evaluator. `oracle_expression` is a DSL-fragment probe — not named-policy simulate. Thin adapter — same lowered AST + `Interpreter` as emit. Scratch `DomainInstanceStore` is conversation state, not the production store. MCP is not a `uses` product host and not the customer API.
+**MCP principle:** interactive harness for agents. Author, inspect, **simulate a named operation** on a store instance: `evaluate_policy(instanceId)` and `invoke_action`. Simulate runs the **lowered implementation** (same Syntax tree as emit) with a bound Store — it does not execute the domain graph or Effect IR. Context is `create_instance` (+ `link_instances`), not a parallel bag evaluator. `oracle_expression` is a DSL-fragment probe — not named-policy simulate. Scratch `DomainInstanceStore` is conversation state, not the production store. MCP is not a `uses` product host and not the customer API. Residual domain-walk at runtime (`ExecuteStructured`, relationship-coupled create) is why simulation still diverges from emit.
 
 **Extensions:** `.poly` is one language. A `Domain` is facts (`uses` ids). A **`DomainSession`** loads those ids as analyzers (and type maps / folds they close over). It does not load a dialect. Spell is `DslGrammar.Core`. Another Poly domain is `ImportedContract`, not an extension id.
 
@@ -222,7 +222,7 @@ Folder `Libraries/` holds in-assembly seeds (Temporal, storage facets). Vendor p
 | Facts about a node | `IAnalysisMetadata` on `AnalysisContext` | Parallel side tables outside the metadata store |
 | Resolve types / members | `ITypeDefinitionProvider` + `AnalysisContext.TypeDefinitions` | Ad-hoc reflection; second type registry; emitter method-lookup fallbacks |
 | Stack host + custom types | `TypeDefinitionProviderCollection` | Hard-coding a single runtime into product modules |
-| Run a program / policy / action | `Interpreter` on the **lowered operation AST** | Second evaluator; `Comment` as success; MCP-only semantics |
+| Run a program / policy / action | `Interpreter` on the **lowered operation AST** (the implementation; no bag/domain knowledge in the tree) | Execute Domain / Effect IR; second evaluator; `Comment` as success; MCP-only semantics |
 | Simulate in a conversation | MCP tool + **caller-supplied context** + same AST | Infer `Main`; treat MCP as the product API |
 | Product entry point (REST, …) | Opt-in extension `uses` + `IArtifactContributor` | Core `Program.cs`; compiler flag that bypasses the catalog |
 | Domain mutation | `DomainEvolution`…`Apply` | In-place graph edits; resurrecting V2 |

@@ -42,6 +42,11 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     private int _createInProbeSequence;
     private bool _lowerRuntimeCreate;
 
+    /// <summary>True when the lowering pass always lowers create/create-in
+    /// (runtime mode). False only during export when <c>LowerStageTransitions</c>
+    /// gates the create shape.</summary>
+    public bool AlwaysLowersCreate => _lowerRuntimeCreate;
+
     /// <summary>Pre-computed analysis metadata provider, when available.</summary>
     public INodeMetadataProvider? Analysis => _analysis;
 
@@ -55,6 +60,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         _analysis = context.Analysis;
         _useThisReference = context.UseThisReference;
         _lowerStageTransitions = context.LowerStageTransitions;
+        _lowerRuntimeCreate = !context.LowerStageTransitions;
         _stageEnumTypeName = context.StageEnumTypeName;
         _postTransitionNodes = context.PostTransitionNodes;
         _sourceStageName = context.SourceStageName;
@@ -232,23 +238,8 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         return new Assignment(target, value);
     }
 
-    /// <summary>
-    /// Runtime action transitions inline OnEntry/OnExit. Mixed if+create in those
-    /// blocks needs instance factories (<c>_lowerRuntimeCreate</c>); export still
-    /// uses Stay.Create via <c>LowerStageTransitions</c>.
-    /// </summary>
-    private Node? RouteWithRuntimeCreate(Effect effect) {
-        if (_lowerStageTransitions)
-            return Route(effect);
-        var restore = _lowerRuntimeCreate;
-        _lowerRuntimeCreate = true;
-        try {
-            return Route(effect);
-        }
-        finally {
-            _lowerRuntimeCreate = restore;
-        }
-    }
+    private Node? RouteWithRuntimeCreate(Effect effect) =>
+        Route(effect);
 
     /// <summary>
     /// Mixed if+create in OnEntry/OnExit uses the same guarded-probe walk as
@@ -262,20 +253,12 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         // CurrentStage is a prior mutation for inlined entry: probe if-only and
         // unconditional create before the stage flip (runtime and C# export).
         if (HasCreate(effects)) {
-            var restore = _lowerRuntimeCreate;
-            if (!_lowerStageTransitions)
-                _lowerRuntimeCreate = true;
-            try {
-                var probes = LowerCreateInConstraintProbes(effects, priorMutation: true);
-                if (probes.Count > 0)
-                    probeSink.Add(FlattenProbeBlocks(probes));
-                var body = TryLowerVmNode(new CompositeEffect(effects));
-                if (body is not null)
-                    bodySink.Add(body);
-            }
-            finally {
-                _lowerRuntimeCreate = restore;
-            }
+            var probes = LowerCreateInConstraintProbes(effects, priorMutation: true);
+            if (probes.Count > 0)
+                probeSink.Add(FlattenProbeBlocks(probes));
+            var body = TryLowerVmNode(new CompositeEffect(effects));
+            if (body is not null)
+                bodySink.Add(body);
             return;
         }
         foreach (var effect in effects) {
@@ -610,6 +593,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     protected override Node? CreateEntityInstance(CreateEntityInstance cei) {
         if (!_lowerStageTransitions) {
             if (!_lowerRuntimeCreate) return null;
+            if (cei.RelationshipName is not null) return null;
             return LowerRuntimeFactoryCall(
                 "CreateByType", cei.Type.TypeName, cei.Initializers,
                 ResolveEntity(cei.Type.TypeName));
@@ -785,15 +769,8 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     /// Same tree shape as export <c>LowerActionToMethodBody</c>; runtime factories
     /// replace Stay.Create / this.CreateNav.
     /// </summary>
-    internal Node? LowerActionBody(IReadOnlyList<Effect> effects) {
-        _lowerRuntimeCreate = true;
-        try {
-            return LowerActionBodyCore(effects);
-        }
-        finally {
-            _lowerRuntimeCreate = false;
-        }
-    }
+    internal Node? LowerActionBody(IReadOnlyList<Effect> effects) =>
+        LowerActionBodyCore(effects);
 
     private Node? LowerActionBodyCore(IReadOnlyList<Effect> effects) {
         var probes = LowerCreateInConstraintProbes(effects);
@@ -978,7 +955,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
             Node value = prop is not null
                 ? LowerEnumAwareValue(init.Expression, prop.Type, Subject)
                 : _expressionPass.Lower(init.Expression, Subject);
-            args.Add(new TypeCast(value, TypeReference.To<object>()));
+            args.Add(value);
         }
 
         var seq = _createInProbeSequence++;

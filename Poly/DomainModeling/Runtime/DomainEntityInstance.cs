@@ -631,16 +631,20 @@ public sealed partial record DomainEntityInstance {
                 return uniqueFail;
         }
 
-        // Unique-assign if/else, or effect-dependent mixed if+create (LowerActionBody
-        // skipped — probes would see the pre-assign bag and reject F2 OVER).
+        // Unique-assign if/else, store-coupled creates (auto-linking), or
+        // effect-dependent conditionals containing creates — walk sub-effects individually
+        // because the lowered tree's Parameter nodes need bag access that only
+        // per-effect compile provides.
         if ((prepared is ConditionalEffect or CompositeEffect)
-            && (ContainsUniqueAssign(prepared) || ContainsDirectExecutionEffect(prepared))) {
+            && (ContainsUniqueAssign(prepared)
+                || RequiresDirectExecution(prepared)
+                || ContainsDirectExecutionEffect(prepared))) {
             return ExecuteStructured(prepared, effectPass, typeProvider);
         }
 
-        // Mixed if+create is compiled as probe+body in InvokeActionInternal (runtime
-        // factories). Leaf create / create-in still execute here when not lowered.
-        if (prepared is CreateEntityInstance create) {
+        // CreateEntityInstance with RelationshipName and create-in without domain
+        // stay on the direct execution path for store-coupled auto-linking.
+        if (prepared is CreateEntityInstance { RelationshipName: not null } create) {
             try {
                 CreateChildInstance(create, typeProvider);
                 return null;
@@ -650,34 +654,21 @@ public sealed partial record DomainEntityInstance {
             }
         }
 
-        if (prepared is CreateEntityInRelationshipEffect createIn) {
-            try {
-                ExecuteCreateInRelationship(createIn, typeProvider);
-                return null;
-            }
-            catch (InvalidOperationException ex) when (IsConstraintFailureMessage(ex.Message)) {
-                return DomainResult.Failure(ex.Message);
-            }
+        if (prepared is CreateEntityInRelationshipEffect createIn && Domain is null) {
+            throw new InvalidOperationException(
+                "Cannot lower 'create in' effect without a domain to resolve relationship targets.");
         }
 
         var lowered = effectPass.TryLowerVmNode(prepared);
-        if (lowered is not null) {
-            var compiled = Interpreter.CompileChecked(lowered, DomainResultTypeProvider.Wrap(typeProvider));
-            using var exec = Interpreter.Execute(compiled,
-                s => s.SetArgs(new object?[] { this }));
-            if (exec.Result.Value is DomainResult { IsSuccess: false } failed)
-                return failed;
-            return null;
-        }
-
-        try {
-            EffectExecutor.Run(this, effectPass, typeProvider, prepared);
-            return null;
-        }
-        catch (InvalidOperationException ex) when (
-            ex.Message.StartsWith("Unique constraint violated", StringComparison.Ordinal)) {
-            return DomainResult.Failure(ex.Message);
-        }
+        if (lowered is null)
+            throw new InvalidOperationException(
+                $"Effect '{prepared.GetType().Name}' did not lower to a Syntax AST node.");
+        var compiled = Interpreter.CompileChecked(lowered, DomainResultTypeProvider.Wrap(typeProvider));
+        using var exec = Interpreter.Execute(compiled,
+            s => s.SetArgs(new object?[] { this }));
+        if (exec.Result.Value is DomainResult { IsSuccess: false } failed)
+            return failed;
+        return null;
     }
 
     private static bool IsConstraintFailureMessage(string message) =>
@@ -757,6 +748,15 @@ public sealed partial record DomainEntityInstance {
         CompositeEffect c => c.Effects.Any(ContainsDirectExecutionEffect),
         ConditionalEffect c => (c.ThenEffects?.Any(ContainsDirectExecutionEffect) ?? false)
             || (c.ElseEffects?.Any(ContainsDirectExecutionEffect) ?? false),
+        _ => false
+    };
+
+    /// <summary>True when an effect requires direct execution (not VM-lowerable).</summary>
+    private static bool RequiresDirectExecution(Effect effect) => effect switch {
+        CreateEntityInstance { RelationshipName: not null } => true,
+        CompositeEffect c => c.Effects.Any(RequiresDirectExecution),
+        ConditionalEffect c => (c.ThenEffects?.Any(RequiresDirectExecution) ?? false)
+            || (c.ElseEffects?.Any(RequiresDirectExecution) ?? false),
         _ => false
     };
 

@@ -638,6 +638,10 @@ internal static class AstTypeReferenceResolver {
         ClrTypeDefinitionRegistry clr,
         ITypeDefinition? enclosing,
         bool allowTypeParameter) {
+        if (named.Namespace is null
+            && string.Equals(named.TypeName, "void", StringComparison.OrdinalIgnoreCase))
+            return clr.GetTypeDefinition(typeof(void));
+
         if (allowTypeParameter && enclosing is not null && named.Namespace is null) {
             foreach (var genericParameter in enclosing.GenericParameters) {
                 if (string.Equals(genericParameter.Name, named.TypeName, StringComparison.Ordinal))

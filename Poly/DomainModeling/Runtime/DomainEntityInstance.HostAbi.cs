@@ -23,6 +23,18 @@ public sealed partial record DomainEntityInstance {
     }
 
     /// <summary>
+    /// VM-callable Store bind for unique assign (Notify-shaped). Dictionary-backed
+    /// <c>This</c> cannot Member-read <see cref="Store"/>; the lowered tree invokes
+    /// this method. No Store bound means no peers — Success, then the assign proceeds.
+    /// </summary>
+    public DomainResult EnsureUnique(string propertyName, object? value) {
+        ArgumentException.ThrowIfNullOrEmpty(propertyName);
+        if (Store is null)
+            return DomainResult.Success();
+        return Store.EnsureUnique(this, propertyName, value);
+    }
+
+    /// <summary>
     /// Leftover helper for nested OnEntry/OnExit depth bounding and test callers.
     /// Action <see cref="StageTransitionEffect"/> must lower via <see cref="ExecuteEffect"/>;
     /// this is not the shipped action path.

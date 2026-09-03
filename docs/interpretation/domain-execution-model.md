@@ -32,14 +32,14 @@ The lowering pass should emit Syntax AST that mirrors how a C# developer would e
 |----------------|---------------|------------|
 | `PropertyAccess("Name")` | `entity.Name` | `Member(entity, "Name")` |
 | `RelationshipNavigation("customer", PropertyAccess("Tier"))` | `entity.customer.Tier` | `Member(Member(entity, "customer"), "Tier")` |
-| `AssignEffect(target, value)` | `target = value` | `Assignment(target, value)` |
+| `AssignEffect(target, value)` | `target = value` | `Assignment(target, value)`; unique properties wrap `EnsureUnique` then assign |
 | `ConditionalEffect(cond, then, else)` | `if (cond) { ... } else { ... }` | `IfStatement(cond, thenBlock, elseBlock?)` |
 | `CompositeEffect(stmts)` | `{ stmt1; stmt2; }` | `Block(nodes)` |
 | Self-invoke `InvokeActionEffect("Activate")` | `this.Activate()` | `Invoke(Member(This, "Activate"), args)` |
 | Cross-entity invoke | `this.customer.Activate()` | `this.Rel.Action(args)` with a `DomainResult.Failure` linked-target guard |
 | For-invoke | `foreach (var x in Rel) { x.Action(...); }` | Fail-fast `ForEachLoop` over a **OneToMany** collection nav |
 
-When a domain concept cannot be expressed in the current Syntax AST (e.g., store-aware collection operations for quantifiers), the fix goes into the Syntax AST or VM — not into lowering workarounds. Do not emit `Comment` as shipped meaning (§2d). Remaining store effects (create / create-in) still return `null` on the runtime path.
+When a domain concept cannot be expressed in the current Syntax AST (e.g., store-aware collection operations for quantifiers), the fix goes into the Syntax AST or VM — not into lowering workarounds. Do not emit `Comment` as shipped meaning (§2d). Unique assign binds Store via `EnsureUnique` (Notify-shaped). Remaining store effects (create / create-in) still return `null` on the runtime path for relationship-coupled create.
 
 ---
 

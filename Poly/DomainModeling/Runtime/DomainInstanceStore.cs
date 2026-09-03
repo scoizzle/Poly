@@ -61,6 +61,23 @@ public sealed class DomainInstanceStore {
         return true;
     }
 
+    /// <summary>
+    /// Per-property unique check against registered instances. Lowering invokes
+    /// this through <see cref="DomainEntityInstance.EnsureUnique"/> so a colliding
+    /// assign returns <see cref="DomainResult.Failure"/> without mutating.
+    /// Non-unique properties and null values are Success (no peers to collide).
+    /// </summary>
+    public DomainResult EnsureUnique(
+        DomainEntityInstance instance,
+        string propertyName,
+        object? value) {
+        ArgumentNullException.ThrowIfNull(instance);
+        ArgumentException.ThrowIfNullOrEmpty(propertyName);
+        var error = UniqueCollisionForProperty(
+            instance.Entity, propertyName, value, except: instance);
+        return error is null ? DomainResult.Success() : DomainResult.Failure(error);
+    }
+
     internal void RejectUniqueCollision(DomainEntityInstance candidate, DomainEntityInstance? except) {
         var error = UniqueCollisionMessage(candidate, except);
         if (error is not null)
@@ -90,16 +107,33 @@ public sealed class DomainInstanceStore {
             else if (candidate is null || !candidate.TryGetRaw(prop.Name, out value) || value is null) {
                 continue;
             }
-            foreach (var other in _instances) {
-                if (ReferenceEquals(other, except) || ReferenceEquals(other, candidate))
-                    continue;
-                if (!string.Equals(other.Entity.Name, entity.Name, StringComparison.Ordinal))
-                    continue;
-                if (!other.TryGetRaw(prop.Name, out var otherValue))
-                    continue;
-                if (Equals(otherValue, value))
-                    return $"Unique constraint violated: '{prop.Name}' value is already used on another '{entity.Name}'.";
-            }
+            var error = UniqueCollisionForProperty(entity, prop.Name, value, except ?? candidate);
+            if (error is not null)
+                return error;
+        }
+        return null;
+    }
+
+    private string? UniqueCollisionForProperty(
+        Entity entity,
+        string propertyName,
+        object? value,
+        DomainEntityInstance? except) {
+        if (value is null)
+            return null;
+        var prop = entity.Properties.FirstOrDefault(p =>
+            string.Equals(p.Name, propertyName, StringComparison.Ordinal));
+        if (prop is null || !prop.Constraints.OfType<UniqueConstraint>().Any())
+            return null;
+        foreach (var other in _instances) {
+            if (ReferenceEquals(other, except))
+                continue;
+            if (!string.Equals(other.Entity.Name, entity.Name, StringComparison.Ordinal))
+                continue;
+            if (!other.TryGetRaw(propertyName, out var otherValue))
+                continue;
+            if (Equals(otherValue, value))
+                return $"Unique constraint violated: '{propertyName}' value is already used on another '{entity.Name}'.";
         }
         return null;
     }

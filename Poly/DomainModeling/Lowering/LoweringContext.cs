@@ -35,8 +35,8 @@ namespace Poly.DomainModeling.Lowering;
 /// </param>
 /// <param name="LowerStageTransitions">
 /// When true, create / create-in lower to C# <c>Stay.Create</c> /
-/// <c>this.CreateNav</c>. Defaults to false: runtime lowers to instance
-/// factories (<c>CreateByType</c> / <c>CreateInNav</c>) that InvokeNamed runs.
+/// <c>this.CreateNav</c>. Defaults to false: runtime lowers to Store jobs
+/// (<c>Create</c> / <c>CreateIn</c>) that InvokeNamed runs.
 /// StageTransition and invoke (including for-invoke) always lower — this flag
 /// does not gate them.
 /// </param>
@@ -75,10 +75,18 @@ namespace Poly.DomainModeling.Lowering;
 /// to lower <c>Rel exists</c> to a <c>.Count != 0</c> check (runtime store-link
 /// presence) instead of a never-null <c>collection != null</c>.
 /// </param>
+/// <param name="IsRelationshipNavigation">
+/// Optional predicate answering whether a DSL name is an outbound relationship
+/// on the current subject. Runtime <c>Rel exists</c> becomes <c>ExistsRelated</c>.
+/// </param>
 /// <param name="PropertyTypeResolver">
 /// Optional mapper from a property name to its domain type name. Used to lower
 /// date arithmetic (<c>DueDate + 14</c> → <c>DueDate.AddDays(...)</c>) in every
 /// expression context (policies, if conditions, initializers), not just assign.
+/// </param>
+/// <param name="SourceEntityName">
+/// Optional current-subject entity type name. Runtime path-prefix uses it to
+/// TypeCast <c>GetRelatedOne</c> to the relationship target so leaf members resolve.
 /// </param>
 public sealed record LoweringContext(
     Node Subject,
@@ -94,7 +102,9 @@ public sealed record LoweringContext(
     IReadOnlyDictionary<string, string>? EnumPropertyNames = null,
     Func<string, string>? NavigationNameResolver = null,
     Func<string, bool>? IsCollectionNavigation = null,
+    Func<string, bool>? IsRelationshipNavigation = null,
     Func<string, string?>? PropertyTypeResolver = null,
     Node? ActionResultType = null,
-    bool EmitInstanceNotify = true
+    bool EmitInstanceNotify = true,
+    string? SourceEntityName = null
 );

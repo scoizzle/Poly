@@ -22,7 +22,8 @@ public sealed partial record DomainEntityInstance {
         ArgumentException.ThrowIfNullOrEmpty(name);
         args ??= [];
 
-        if (name is "CreateByType" or "CreateInNav" or "ProbeCreateByType")
+        if (name is "Create" or "CreateIn" or "ProbeCreate"
+            or "CreateByType" or "CreateInNav" or "ProbeCreateByType")
             return RuntimeCreateFactory(name, args);
 
         var action = ResolveActionForNamedInvoke(name);

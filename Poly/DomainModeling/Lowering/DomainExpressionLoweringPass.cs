@@ -1,3 +1,4 @@
+using Poly.Ast.Nodes;
 using Poly.DomainModeling.Dispatch;
 using Poly.DomainModeling.Ontology;
 
@@ -32,7 +33,10 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Node
     private readonly IReadOnlyDictionary<string, string>? _enumPropertyNames;
     private readonly Func<string, string>? _navigationNameResolver;
     private readonly Func<string, bool>? _isCollectionNavigation;
+    private readonly Func<string, bool>? _isRelationshipNavigation;
     private readonly Func<string, string?>? _propertyTypeResolver;
+    private readonly Domain? _domain;
+    private string? _sourceEntityName;
     private Node _currentSubject = null!;
 
     /// <param name="parameters">
@@ -59,7 +63,10 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Node
         _enumPropertyNames = context.EnumPropertyNames;
         _navigationNameResolver = context.NavigationNameResolver;
         _isCollectionNavigation = context.IsCollectionNavigation;
+        _isRelationshipNavigation = context.IsRelationshipNavigation;
         _propertyTypeResolver = context.PropertyTypeResolver;
+        _domain = context.Domain;
+        _sourceEntityName = context.SourceEntityName;
     }
 
     /// <summary>
@@ -119,12 +126,21 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Node
             return Route(rn.TargetProperty, parameterSubject);
         }
 
-        // Every hop in a path-prefix is a relationship navigation. To-one navs are
-        // nullable in the export; the runtime fail-closes on an unlinked hop (no vacuous
-        // true/false — EvaluatePathPrefixChain throws). Lower the hop to a deliberate,
-        // message-carrying InvalidOperationException via a throw-expression coalesce, so an
-        // unlinked navigation fails loud with the runtime's contract — never a bare
-        // null-forgiving deref (NRE) and never a silent false.
+        // Every hop in a path-prefix is a relationship navigation. C# export
+        // uses coalesce-throw on the pascal nav. Runtime binds Store via
+        // GetRelatedOne so unlinked / multi-link fail with the path-prefix
+        // contract, then TypeCast to the target entity so leaf members resolve.
+        if (!_useThisReference) {
+            var related = new Invoke(
+                new Member(_currentSubject, "GetRelatedOne"),
+                new Constant(rn.RelationshipName));
+            var targetName = ResolveRelationshipTarget(rn.RelationshipName);
+            Node typedHop = targetName is not null
+                ? new TypeCast(related, new TypeReference(targetName))
+                : related;
+            return Route(rn.TargetProperty, typedHop, targetName);
+        }
+
         var relMember = new Member(_currentSubject, ResolveNavName(rn.RelationshipName));
         Node hop = new Coalesce(relMember,
             new ThrowExpression(new New(
@@ -145,18 +161,29 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Node
         || expr.Children.OfType<DomainExpression>().Any(ContainsRelationshipNavigation);
 
     // --- Recurse into a new subject — helper to avoid confusion with Route(expr) ---
-    private Node Route(DomainExpression expr, Node subject) {
+    private Node Route(DomainExpression expr, Node subject, string? sourceEntityName = null) {
         var saved = _currentSubject;
+        var savedSource = _sourceEntityName;
         _currentSubject = subject;
+        if (sourceEntityName is not null)
+            _sourceEntityName = sourceEntityName;
         try { return Route(expr); }
-        finally { _currentSubject = saved; }
+        finally {
+            _currentSubject = saved;
+            _sourceEntityName = savedSource;
+        }
     }
 
     protected override Node Exists(Exists e) {
+        if (!_useThisReference && e.Target is PropertyAccess pa && IsRelationship(pa.Name)) {
+            return new Invoke(
+                new Member(_currentSubject, "ExistsRelated"),
+                new Constant(pa.Name));
+        }
         // Collection (`many`) relationship: the export's `collection != null` is
         // always true (ctor-initialized) while the runtime answers store-link
         // presence (false on empty) — lower to a real non-empty check instead.
-        if (e.Target is PropertyAccess pa && IsCollectionNav(pa.Name)) {
+        if (e.Target is PropertyAccess col && IsCollectionNav(col.Name)) {
             return new NotEqual(
                 new Member(Lower(e.Target, _currentSubject), "Count"),
                 new Constant(0));
@@ -165,7 +192,12 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Node
     }
 
     protected override Node NotExists(NotExists ne) {
-        if (ne.Target is PropertyAccess pa && IsCollectionNav(pa.Name)) {
+        if (!_useThisReference && ne.Target is PropertyAccess pa && IsRelationship(pa.Name)) {
+            return new SN.Not(new Invoke(
+                new Member(_currentSubject, "ExistsRelated"),
+                new Constant(pa.Name)));
+        }
+        if (ne.Target is PropertyAccess col && IsCollectionNav(col.Name)) {
             return new Equal(
                 new Member(Lower(ne.Target, _currentSubject), "Count"),
                 new Constant(0));
@@ -175,6 +207,19 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Node
 
     private bool IsCollectionNav(string name) =>
         _isCollectionNavigation?.Invoke(name) == true;
+
+    private bool IsRelationship(string name) =>
+        _isRelationshipNavigation?.Invoke(name) == true;
+
+    private string? ResolveRelationshipTarget(string relationshipName) {
+        if (_domain is null || _sourceEntityName is null)
+            return null;
+        var source = _domain.Types.OfType<Entity>().FirstOrDefault(e =>
+            string.Equals(e.Name, _sourceEntityName, StringComparison.Ordinal));
+        var rel = source?.Navigations.FirstOrDefault(n =>
+            string.Equals(n.Name, relationshipName, StringComparison.Ordinal));
+        return rel?.Target.TypeName;
+    }
 
     protected override Node Add(Add a) {
         var left = Lower(a.Left, _currentSubject);
@@ -281,18 +326,39 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Node
         return null;
     }
 
-    // Filtered any/all/none still need the store. Bare `count Rel` on the C# path
-    // is the in-memory collection length (University HasWaiters / HasLoad).
-    protected override Node AnyExpr(AnyExpr a) => throw Q3NotSupported("any", a.RelationshipName);
-    protected override Node AllExpr(AllExpr a) => throw Q3NotSupported("all", a.RelationshipName);
-    protected override Node NoneExpr(NoneExpr n) => throw Q3NotSupported("none", n.RelationshipName);
+    // Filtered any/all/none/count: runtime Store jobs (Notify-shaped). C# export
+    // keeps in-memory collection Count for bare `count Rel`; filtered still throws.
+    protected override Node AnyExpr(AnyExpr a) =>
+        _useThisReference
+            ? throw Q3NotSupported("any", a.RelationshipName)
+            : StoreQuantifier("AnyRelated", a.RelationshipName, a.Body);
+
+    protected override Node AllExpr(AllExpr a) =>
+        _useThisReference
+            ? throw Q3NotSupported("all", a.RelationshipName)
+            : StoreQuantifier("AllRelated", a.RelationshipName, a.Body);
+
+    protected override Node NoneExpr(NoneExpr n) =>
+        _useThisReference
+            ? throw Q3NotSupported("none", n.RelationshipName)
+            : StoreQuantifier("NoneRelated", n.RelationshipName, n.Body);
+
     protected override Node CountExpr(CountExpr c) {
-        if (c.Body is not null || !_useThisReference)
-            throw Q3NotSupported("count", c.RelationshipName);
-        return new Member(
-            new Member(_currentSubject, ResolveNavName(c.RelationshipName)),
-            "Count");
+        if (_useThisReference) {
+            if (c.Body is not null)
+                throw Q3NotSupported("count", c.RelationshipName);
+            return new Member(
+                new Member(_currentSubject, ResolveNavName(c.RelationshipName)),
+                "Count");
+        }
+        return StoreQuantifier("CountRelated", c.RelationshipName, c.Body);
     }
+
+    private Node StoreQuantifier(string job, string relationshipName, DomainExpression? body) =>
+        new Invoke(
+            new Member(_currentSubject, job),
+            new Constant(relationshipName),
+            new Constant(body));
 
     private static Exception Q3NotSupported(string quantifier, string relName) =>
         new NotSupportedException(

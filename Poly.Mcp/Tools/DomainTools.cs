@@ -1147,7 +1147,7 @@ internal sealed class PolicyTool {
     /// <summary>
     /// Evaluates a named policy on a store instance from <c>create_instance</c>.
     /// </summary>
-    [McpServerTool(Name = "evaluate_policy"), Description("Evaluates a named policy on a store instance. Create the subject with create_instance (and link_instances for cross-entity reads). instanceId is required — there is no bag/age/properties mode. Returns true if the policy passes, false otherwise.")]
+    [McpServerTool(Name = "evaluate_policy"), Description("Evaluates a named policy on a store instance. Create the subject with create_instance (and link_instances for cross-entity reads). instanceId is required — there is no bag/age/properties mode. Runs the lowered expression through Interpreter with the session Store bound. Returns true if the policy passes, false otherwise.")]
     public static DomainToolResponse EvaluatePolicy(
         [Description("Session ID")] string sessionId,
         [Description("Name of the entity that has the policy")] string entityName,

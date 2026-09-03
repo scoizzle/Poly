@@ -87,7 +87,7 @@ Both consume a `LoweringContext` that carries the current-instance `Subject` and
 
 ## 2. Dual-Path Effect Execution
 
-StageTransition, self-invoke, cross-entity invoke, and for-invoke **lower to the same Syntax AST on runtime and emit**. Create / create-in still dual-path: `null` on the runtime path (EffectExecutor); C# emit is gated on `LowerStageTransitions`. Do not grow EffectExecutor.
+All effects **lower to Syntax AST on both runtime and emit**. Create / create-in use different factory shapes: runtime lowers to `InvokeNamed("CreateByType"/"CreateInNav")` factories; C# emit uses `Stay.Create`/`this.CreateNav`. `EffectExecutor` is deleted. `ExecuteStructured` remains for unique-assign if/else and store-coupled creates (`CreateEntityInstance` with `RelationshipName`).
 
 ### 2a. VM-Compiled Path (Lowering → Compile → Execute)
 
@@ -111,16 +111,9 @@ if (lowered is not null) {
 }
 ```
 
-### 2b. Direct-Execution Path (Instance Mutation)
+### 2b. Direct-Execution Path (Residual)
 
-Remaining store effects that still return `null` from `TryLowerVmNode` on the runtime path. Dispatch falls through to `EffectExecutor`. Emit of create / create-in is gated on `LowerStageTransitions`. Do not implement create lowering on the runtime path here.
-
-| Effect | Action | Notes |
-|--------|--------|-------|
-| `CreateEntityInstance` | `CreateChildInstance(create)` | Creates via factory, adds to `_createdChildren`, optionally auto-links via `RelationshipName` |
-| `CreateEntityInRelationshipEffect` | `ExecuteCreateInRelationship(createIn)` | Creates instance and links via the named relationship |
-
-StageTransition, InvokeAction, and ForEachInvoke **must lower**. EffectExecutor throws if they reach it. `ExecuteInvokeEffect` does not exist.
+`CreateEntityInstance` with `RelationshipName` stays on the direct path for store-coupled auto-linking validation (source/target checks). All other effects lower through VM.
 
 > **Removed 2026-08-10:** `DeleteEntityInstance`, `LinkRelationshipEffect`, `UnlinkRelationshipEffect`,
 > and `TransitionRelationshipEffect` were deleted. Linking existing instances is `DomainInstanceStore.Link`
@@ -128,23 +121,9 @@ StageTransition, InvokeAction, and ForEachInvoke **must lower**. EffectExecutor 
 > Effect IR.
 
 ```csharp
-private sealed class EffectExecutor : EffectDispatch<object?> {
-    protected override object? StageTransition(StageTransitionEffect t) =>
-        throw new InvalidOperationException(
-            "StageTransitionEffect must lower to Ast; EffectExecutor is not the shipped path.");
-    protected override object? InvokeAction(InvokeActionEffect i) =>
-        throw new InvalidOperationException(
-            "InvokeActionEffect must lower to Ast; EffectExecutor is not the shipped path.");
-    protected override object? ForEachInvoke(ForEachInvokeEffect e) =>
-        throw new InvalidOperationException(
-            "ForEachInvokeEffect must lower to Ast; EffectExecutor is not the shipped path.");
-    protected override object? CreateEntityInstance(CreateEntityInstance create) {
-        return _instance.CreateChildInstance(create, _typeProvider);
-    }
-    protected override object? CreateEntityInRelationship(CreateEntityInRelationshipEffect createIn) {
-        return _instance.ExecuteCreateInRelationship(createIn, _typeProvider);
-    }
-}
+// EffectExecutor deleted — all effects lower to Syntax AST.
+// Leaf create / create-in: _lowerRuntimeCreate defaults to true in runtime mode.
+// CreateEntityInstance with RelationshipName stays on CreateChildInstance (store auto-linking).
 ```
 
 ### 2c. Dispatch Decision Tree
@@ -152,8 +131,11 @@ private sealed class EffectExecutor : EffectDispatch<object?> {
 ```
 ExecuteEffect(effect)
   │
-  ├─ mixed Composite/Conditional with create/create-in
+  ├─ unique-assign if/else or store-coupled creates
   │   → ExecuteStructured (each sub-effect through ExecuteEffect)
+  │
+  ├─ CreateEntityInstance with RelationshipName
+  │   → CreateChildInstance (direct: store auto-linking validation)
   │
   ├─ EffectLoweringPass.TryLowerVmNode(effect)
   │   │
@@ -163,25 +145,18 @@ ExecuteEffect(effect)
   │   ├─ StageTransitionEffect → CurrentStage Assignment + Invoke Notify on This
   │   ├─ InvokeActionEffect → Invoke(Member(...)) (self or Rel with Failure guard)
   │   ├─ ForEachInvokeEffect → ForEachLoop (IList walk; fail-loud non-IList)
-  │   └─ CreateEntityInstance / CreateEntityInRelationship
-  │         → null on runtime path; C# emit when LowerStageTransitions
+  │   ├─ CreateEntityInstance → InvokeNamed("CreateByType") (runtime)
+  │   └─ CreateEntityInRelationship → InvokeNamed("CreateInNav") (runtime)
   │
-  ├─ returned Node ≠ null
-  │   → Interpreter.Compile(lowered)
-  │   → Interpreter.Execute(compiled, args: this)
-  │   → failed DomainResult throws
-  │
-  └─ returned null
-      → EffectExecutor.Run(instance, pass, provider, effect)
-        │
-        ├─ CreateEntityInstance    → CreateChildInstance(...)
-        ├─ CreateEntityInRelationship → ExecuteCreateInRelationship(...)
-        └─ StageTransition / InvokeAction / ForEachInvoke → throw
+  └─ returned Node ≠ null
+      → Interpreter.Compile(lowered)
+      → Interpreter.Execute(compiled, args: this)
+      → failed DomainResult returned
 ```
 
 ### 2d. Comment is not shipped meaning
 
-`EffectLoweringPass` does **not** emit `Comment` nodes. A composite/conditional sub-effect that cannot lower throws `InvalidOperationException`. Remaining create / create-in return `null` on the runtime path (EffectExecutor) and lower only when `LowerStageTransitions` is set (emit). The `Comment` AST node is not product meaning and must not be used as a lowering-gap marker.
+`EffectLoweringPass` does **not** emit `Comment` nodes. A composite/conditional sub-effect that cannot lower throws `InvalidOperationException`. All effects lower on both runtime and emit paths (different factory shapes for create). `_lowerRuntimeCreate` defaults to true in runtime mode. The `Comment` AST node is not product meaning and must not be used as a lowering-gap marker. Sequential transitions update `SourceStageName` after each transition so exit effects use the correct source stage.
 
 ---
 
@@ -427,7 +402,7 @@ This is the runtime counterpart of `StageSubscription` declarations in the DSL.
 |------|---------|---------|
 | **Quantifier lowering** | Preprocessed out before lowering (dual path) — the Syntax AST and VM have no store-aware nodes | Store-aware lowering node or dedicated Syntax AST extension; fix goes in Syntax/VM, not lowering |
 | **Relationship navigation** | Lowered as `Member(Param, relName)` — semantically works via VM's unresolved-Member fallback | Dedicated navigation Syntax node with explicit semantics; fix goes in Syntax AST |
-| **Direct-execution effects in lowering** | Create / create-in still return `null` on the runtime path (EffectExecutor). StageTransition, self-invoke, cross-entity invoke, and for-invoke lower to the same handwritten IR on runtime and emit. Sequential transitions still share stale `SourceStageName` at lowering time. | Remaining store effects share the same lowered tree on runtime and emit. |
+| **Effect lowering** | All effects lower to Syntax AST on both paths. Create uses runtime factories (`CreateByType`/`CreateInNav`) vs C# `Stay.Create`. `EffectExecutor` deleted. Sequential transitions update `SourceStageName`. Emit path wired to `Interpreter.Analyze` (graceful fallback). | `CreateEntityInstance` with `RelationshipName` stays direct for store auto-linking. `ExecuteStructured` remains for unique-assign if/else. |
 | **VM quantifier eval** | Per-target re-lowering + compile is expensive for large collections | Cached lowering or batch evaluation in VM |
 | **ParameterAccess in DSL** | Product spelling is a **bare identifier** (`PropertyAccess`) — analysis/lowering/bindings/runtime treat an in-scope action-parameter name as a parameter (`paramEnv`); there is no distinct `param` keyword or `@param` form | L3 — no separate parameter authoring syntax |
 

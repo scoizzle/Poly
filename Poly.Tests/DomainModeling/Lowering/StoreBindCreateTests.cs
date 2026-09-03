@@ -271,6 +271,31 @@ public class StoreBindCreateTests {
         await Assert.That(createIn.Arguments.Last()).IsTypeOf<TypeCast>();
     }
 
+    [Test]
+    public async Task CreateIn_ScalarInitializer_Runtime_DoesNotCastToObject() {
+        var (domain, analysis) = Evolve("""
+            domain Parking
+            Permit: entity { Plate: Text required }
+            Lot: entity {
+              permits: many Permit
+              Issue: action (plate: Text) {
+                create in permits { Plate: plate }
+              }
+            }
+            """);
+        var lot = domain.Types.OfType<Entity>().First(e => e.Name == "Lot");
+        var action = lot.Actions.First(a => a.Name == "Issue");
+        var pass = new EffectLoweringPass(lot, new LoweringContext(
+            new Parameter("entity", new TypeReference(lot.Name)),
+            Analysis: analysis,
+            Domain: domain,
+            ActionParameterNames: ["plate"]));
+        var lowered = pass.LowerActionBody(action.Effects);
+        var createIn = Flatten(lowered!).OfType<Invoke>()
+            .First(i => i.Delegate is Member { MemberName: "CreateIn" });
+        await Assert.That(createIn.Arguments.Last() is TypeCast).IsFalse();
+    }
+
     private static (Domain Domain, AnalysisResult Analysis) Evolve(string poly) {
         var changes = new PolyDslParser(poly).Parse();
         var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(changes);

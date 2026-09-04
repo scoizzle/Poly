@@ -122,8 +122,7 @@ public class StoreBindCreateTests {
             .IsEqualTo((emitInvoke.Delegate as Member)!.MemberName);
         await Assert.That((runtimeInvoke.Arguments[0] as Constant)?.Value)
             .IsEqualTo((emitInvoke.Arguments[0] as Constant)?.Value);
-        await Assert.That(runtimeInvoke.Arguments.Length).IsEqualTo(2);
-        await Assert.That(emitInvoke.Arguments.Length).IsEqualTo(2);
+        await Assert.That(runtimeInvoke.Arguments.Length).IsEqualTo(emitInvoke.Arguments.Length);
     }
 
     [Test]
@@ -304,10 +303,7 @@ public class StoreBindCreateTests {
         var lowered = pass.LowerActionBody(action.Effects);
         var createIn = Flatten(lowered!).OfType<Invoke>()
             .First(i => i.Delegate is Member { MemberName: "CreateIn" });
-        await Assert.That(createIn.Arguments.Length).IsEqualTo(2);
-        var add = Flatten(lowered!).OfType<Assignment>()
-            .First(a => a.Destination is IndexAccess);
-        await Assert.That(add.Value).IsTypeOf<TypeCast>();
+        await Assert.That(createIn.Arguments.Last()).IsTypeOf<TypeCast>();
     }
 
     [Test]
@@ -330,11 +326,9 @@ public class StoreBindCreateTests {
             Domain: domain,
             ActionParameterNames: ["plate"]));
         var lowered = pass.LowerActionBody(action.Effects);
-        var writes = Flatten(lowered!).OfType<Assignment>()
-            .Where(a => a.Destination is IndexAccess)
-            .ToList();
-        await Assert.That(writes.Count).IsGreaterThan(0);
-        await Assert.That(writes.All(a => a.Value is not TypeCast)).IsTrue();
+        var createIn = Flatten(lowered!).OfType<Invoke>()
+            .First(i => i.Delegate is Member { MemberName: "CreateIn" });
+        await Assert.That(createIn.Arguments.Last() is TypeCast).IsFalse();
     }
 
     private static (Domain Domain, AnalysisResult Analysis) Evolve(string poly) {

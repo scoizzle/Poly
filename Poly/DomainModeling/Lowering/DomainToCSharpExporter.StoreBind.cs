@@ -11,10 +11,11 @@ public sealed partial class DomainToCSharpExporter {
     /// <summary>
     /// Host bind of Store jobs the operation tree names: <c>Create</c> /
     /// <c>CreateIn</c> / <c>ProbeCreate</c> / <c>EnsureUnique</c>. Public jobs
-    /// take a name plus initializer dictionary so they never collide with the
-    /// static <c>Stay.Create</c> factory. Bodies wrap those factories /
-    /// <c>CreateNav</c>. Unique is a Success stub — persistence indexes remain
-    /// the schema concern.
+    /// are name/value-pair overloads (same tree as simulate). The 0-pair slot
+    /// takes an unused optional object so it never collides with static
+    /// <c>Stay.Create(string)</c>. Bodies pack pairs into a dictionary and wrap
+    /// existing factories / <c>CreateNav</c>. Unique is a Success stub —
+    /// persistence indexes remain the schema concern.
     /// </summary>
     private static void AddStoreBindMethods(
         Entity entity,
@@ -37,9 +38,9 @@ public sealed partial class DomainToCSharpExporter {
         var objectResult = new NamedTypeReference("DomainResult",
             TypeArguments: [StoreJobObjectType()]);
         var voidResult = new NamedTypeReference("DomainResult");
-        AddStoreJobMethod(methods, "Create", objectResult, "BindCreate", dictType);
-        AddStoreJobMethod(methods, "CreateIn", objectResult, "BindCreateIn", dictType);
-        AddStoreJobMethod(methods, "ProbeCreate", voidResult, "BindProbeCreate", dictType);
+        AddStoreJobOverloads(methods, "Create", objectResult, "BindCreate", dictType);
+        AddStoreJobOverloads(methods, "CreateIn", objectResult, "BindCreateIn", dictType);
+        AddStoreJobOverloads(methods, "ProbeCreate", voidResult, "BindProbeCreate", dictType);
 
         methods.Add(BindCreateMethod(entity, domain, metadata, objectResult, dictType));
         methods.Add(BindCreateInMethod(entity, domain, metadata, objectResult, dictType));
@@ -52,24 +53,45 @@ public sealed partial class DomainToCSharpExporter {
     internal static Node StoreJobDictionaryType() =>
         TypeReference.To<Dictionary<string, object?>>();
 
-    private static void AddStoreJobMethod(
+    private const int StoreJobPairSlots = 8;
+
+    private static void AddStoreJobOverloads(
         List<MethodDefinitionNode> methods,
         string methodName,
         Node returnType,
         string bindName,
         Node dictType) {
-        methods.Add(new MethodDefinitionNode(
-            methodName,
-            returnType,
-            Parameters: [
-                new Parameter("name", new PrimitiveTypeReference(PrimType.String)),
-                new Parameter("values", dictType)
-            ],
-            Body: new Block([
-                new Return(new Invoke(new Member(new ThisReference(), bindName),
-                    new Parameter("name"), new Parameter("values")))
-            ]),
-            AccessModifier: AccessModifier.Public));
+        for (var pairs = 0; pairs <= StoreJobPairSlots; pairs++) {
+            var parameters = new List<Parameter> {
+                new("name", new PrimitiveTypeReference(PrimType.String))
+            };
+            if (pairs == 0) {
+                parameters.Add(new Parameter(
+                    "__job",
+                    new OptionalTypeReference(StoreJobObjectType()),
+                    DefaultValue: new Constant(null)));
+            }
+            var body = new List<Node>();
+            var locals = new List<Node>();
+            var values = new Variable("values");
+            locals.Add(values);
+            body.Add(new Assignment(values, new New(dictType)));
+            for (var i = 0; i < pairs; i++) {
+                var p = $"p{i}";
+                var v = $"v{i}";
+                parameters.Add(new Parameter(p, new PrimitiveTypeReference(PrimType.String)));
+                parameters.Add(new Parameter(v, StoreJobObjectType()));
+                body.Add(new Assignment(new IndexAccess(values, new Parameter(p)), new Parameter(v)));
+            }
+            body.Add(new Return(new Invoke(new Member(new ThisReference(), bindName),
+                new Parameter("name"), values)));
+            methods.Add(new MethodDefinitionNode(
+                methodName,
+                returnType,
+                Parameters: parameters,
+                Body: new Block(body, locals),
+                AccessModifier: AccessModifier.Public));
+        }
     }
 
     private static MethodDefinitionNode BindCreateMethod(

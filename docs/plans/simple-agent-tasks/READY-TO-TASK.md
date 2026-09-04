@@ -37,6 +37,7 @@ Includes: gpure, mcp-minify, ile, pack-1, rewrite-to-master, grammar-revision, d
 | Doc | Why |
 |-----|-----|
 | instance-commit-and-outbox | Needs durable host |
+| [`../pipeline-transformation-2026-09-04.md`](../pipeline-transformation-2026-09-04.md) | Named stages; **not CURRENT**. Admit P1 only when ready. |
 | customer-trust-proof-map | Living index |
 | absorption matrix | Pick one P* → solidify suite first |
 | [`../domainmodeling-e2e-representation-2026-08-13.md`](../domainmodeling-e2e-representation-2026-08-13.md) | Parked parent |

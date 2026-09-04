@@ -1,6 +1,6 @@
 # Pipeline status
 
-**Updated:** 2026-09-03
+**Updated:** 2026-09-04
 **Authority:** this file is the **sole CURRENT/DONE truth** for agent suite admission.  
 Other indexes must **mirror** this file (or link here) — do not invent a second CURRENT line.
 
@@ -64,3 +64,4 @@ PULL:    E5; EF codegen; naming cleanup
 - **host-ABI remaining lie:** none for unique/create simulate. `EffectExecutor` / `ExecuteStructured` deleted. Unique assign and create / create-in bind Store in one VM tree. Store-aware reads (`Rel exists`, quantifiers, path-prefix) are Store jobs in the tree. Sequential transitions SourceStageName **fixed**. Residual: C# still prints `Stay.Create` / unique as EF indexes until an EF Store exists; `now`/`today`/`guid` rewrite to literals. Plan (DONE): [`../create-create-in-simulate.md`](../create-create-in-simulate.md).
 - **rewrite-to-master:** ✅ DONE PR 26. Product trunk is `master`. Parallel streams may run with exclusive file ownership (MCP mut-safety; Grammar wrap-up; V3 naming).
 - **interpretation-language-engine:** ✅ DONE 2026-08-31 (ile-gate). **create/create-in:** ✅ DONE 2026-09-03. Dictionary-backed `This` is already Interpretation’s type-def path — do not invent Expando. CURRENT is `(none)`.
+- **pipeline transformation:** Proposal only — [`../pipeline-transformation-2026-09-04.md`](../pipeline-transformation-2026-09-04.md). Named stages; P1 = one lower (`LowerStageTransitions` dies). **Not CURRENT.** Do not mega-suite with sqlite/CLI.

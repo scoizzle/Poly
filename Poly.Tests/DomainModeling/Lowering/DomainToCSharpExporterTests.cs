@@ -2415,7 +2415,7 @@ public class DomainToCSharpExporterTests {
         var afterContact = cs.IndexOf("\npublic ", contactCsStart + 1, StringComparison.Ordinal);
         var contactCs = afterContact > contactCsStart ? cs[contactCsStart..afterContact] : cs[contactCsStart..];
         await Assert.That(contactCs).DoesNotContain("Account.Create(name, this)");
-        await Assert.That(cs).Contains("Account.Create(name, null)");
+        await Assert.That(contactCs).Contains("(Account?)null");
         var errors = CompileExported(cs);
         await Assert.That(errors).IsEmpty();
     }

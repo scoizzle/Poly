@@ -629,7 +629,9 @@ public sealed partial record DomainEntityInstance {
     }
 
     /// <summary>
-    /// One operation AST: every effect list lowers and runs through <see cref="Interpreter"/>.
+    /// One operation AST through <see cref="Interpreter"/>. Named action / OnEntry
+    /// bodies come from <see cref="RuntimeAnalysisCache.GetOrLower"/>; subscriptions
+    /// and transition batches still lower at execute time.
     /// Shared by InvokeAction, first-stage OnEntry, subscription, and TransitionStage entry/exit.
     /// </summary>
     private DomainResult? ExecuteEffectList(
@@ -640,10 +642,22 @@ public sealed partial record DomainEntityInstance {
         if (effects.Count == 0)
             return null;
 
-        Node? tree = Domain is not null && cacheKey is not null
-            ? RuntimeAnalysisCache.GetOrLowerOperation(Domain, cacheKey,
-                () => effectPass.LowerActionBody(effects))
-            : effectPass.LowerActionBody(effects);
+        Node? tree;
+        if (Domain is not null) {
+            var analysis = RuntimeAnalysisCache.GetOrAnalyze(Domain);
+            RuntimeAnalysisCache.GetOrLower(Domain, RuntimeAnalysisCache.Session(Domain), analysis);
+            if (cacheKey is not null
+                && RuntimeAnalysisCache.TryGetOperation(Domain, cacheKey, out var cached))
+                tree = cached;
+            else if (cacheKey is not null)
+                tree = RuntimeAnalysisCache.GetOrLowerOperation(Domain, cacheKey,
+                    () => effectPass.LowerActionBody(effects));
+            else
+                tree = effectPass.LowerActionBody(effects);
+        }
+        else {
+            tree = effectPass.LowerActionBody(effects);
+        }
         if (tree is null)
             throw new InvalidOperationException(
                 "Cannot lower effect list to a Syntax AST.");

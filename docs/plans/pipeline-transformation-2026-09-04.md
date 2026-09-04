@@ -120,6 +120,8 @@ This is the slice that makes the pipeline *true*. Do it first.
 - `invoke_action` / `evaluate_policy` run the cached operation body. Cache key is the module (or per-operation node), not a Domain walk.
 - **Stop:** create-in simulate still green; `LowerActionBody` is not on the invoke hot path.
 
+**Executed 2026-09-04.** `GetOrLower` populates named action / OnEntry trees (runtime-shaped, same keys invoke already used). `ExecuteEffectList` looks them up. `LowerActionBody` remains for populate + subscriptions / transition batches — it is not on the named-action invoke hot path. EvaluatePolicy still lowers the guard expression per call.
+
 ### P3 — Projection is the lower, or the façade dies
 
 **Job:** One owner of stage 3.

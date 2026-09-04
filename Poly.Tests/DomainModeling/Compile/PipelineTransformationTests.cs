@@ -32,6 +32,53 @@ public class PipelineTransformationTests {
     }
 
     [Test]
+    public async Task SessionLower_PopulatesNamedActionOperation() {
+        var (domain, analysis, session) = Evolve("""
+            domain Parking
+            Permit: entity { Plate: Text required }
+            Lot: entity {
+              permits: many Permit
+              Issue: action (plate: Text) {
+                create in permits { Plate: plate }
+              }
+            }
+            """);
+        session.Lower(domain, analysis);
+        var key = RuntimeAnalysisCache.ActionKey("Lot", "Issue", stage: null);
+        await Assert.That(RuntimeAnalysisCache.TryGetOperation(domain, key, out var tree)).IsTrue();
+        await Assert.That(tree).IsNotNull();
+    }
+
+    [Test]
+    public async Task InvokeAction_UsesTheModuleOperation_NotAReloweredCopy() {
+        var (domain, analysis, session) = Evolve("""
+            domain Parking
+            Permit: entity { Plate: Text required }
+            Lot: entity {
+              permits: many Permit
+              Issue: action (plate: Text) {
+                create in permits { Plate: plate }
+              }
+            }
+            """);
+        session.Lower(domain, analysis);
+        var key = RuntimeAnalysisCache.ActionKey("Lot", "Issue", stage: null);
+        await Assert.That(RuntimeAnalysisCache.TryGetOperation(domain, key, out var before)).IsTrue();
+        await Assert.That(before).IsNotNull();
+
+        var lotE = domain.Types.OfType<Entity>().First(e => e.Name == "Lot");
+        var store = new DomainInstanceStore();
+        var lot = DomainEntityInstance.Create(lotE, domain: domain);
+        store.Add(lot);
+        var result = lot.InvokeAction("Issue", new Dictionary<string, object?> { ["plate"] = "AAA" });
+        await Assert.That(result.Succeeded).IsTrue();
+        await Assert.That(lot.CreatedChildren.Count).IsEqualTo(1);
+
+        await Assert.That(RuntimeAnalysisCache.TryGetOperation(domain, key, out var after)).IsTrue();
+        await Assert.That(ReferenceEquals(before, after)).IsTrue();
+    }
+
+    [Test]
     public async Task InvokeAction_SecondCall_UsesCachedOperationBody() {
         var (domain, _, _) = Evolve("""
             domain Parking

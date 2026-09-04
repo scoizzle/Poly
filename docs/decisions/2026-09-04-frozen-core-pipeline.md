@@ -59,6 +59,7 @@ C# is not a privileged forever target (2026-07-22). Scratch store is not the pro
 - Always-on instructions: [`AGENTS.md`](../../AGENTS.md) **Frozen core**; [`docs/CORE.md`](../CORE.md) §0. Agents and humans follow those, not chat memory of Store/actors/C# print.
 - CORE §3 remains “use this, don’t reinvent” for **current** machinery. That is anti-fork, not a freeze of those types.
 - Test `FrozenCoreInstructionTests` pins that AGENTS + CORE still state the freeze.
+- Transforming current consumers onto named stages: proposal [`docs/plans/pipeline-transformation-2026-09-04.md`](../plans/pipeline-transformation-2026-09-04.md) — not CURRENT.
 
 ## Non-goals
 

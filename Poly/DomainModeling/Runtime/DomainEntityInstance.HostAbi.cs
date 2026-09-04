@@ -1,5 +1,4 @@
 using Poly.DomainModeling.Analysis;
-using Poly.DomainModeling.Dispatch;
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
 using Poly.Interpretation;
@@ -11,52 +10,6 @@ using Prim = Poly.Introspection.PrimitiveType;
 namespace Poly.DomainModeling.Runtime;
 
 public sealed partial record DomainEntityInstance {
-    /// <summary>
-    /// Residual dispatcher. All product arms throw: create / create-in execute
-    /// via CreateChildInstance / ExecuteCreateInRelationship (probes+Failure).
-    /// Invoke, stage, and for must lower to Ast.
-    /// </summary>
-    private sealed class EffectExecutor : EffectDispatch<object?> {
-        private readonly DomainEntityInstance _instance;
-        private readonly EffectLoweringPass _effectPass;
-        private readonly TypeDefinitionNodeAnalyzer _typeProvider;
-
-        private EffectExecutor(DomainEntityInstance instance,
-            EffectLoweringPass effectPass, TypeDefinitionNodeAnalyzer typeProvider) {
-            _instance = instance;
-            _effectPass = effectPass;
-            _typeProvider = typeProvider;
-        }
-
-        protected override object? Default() => null;
-
-        public static void Run(DomainEntityInstance instance,
-            EffectLoweringPass effectPass, TypeDefinitionNodeAnalyzer typeProvider,
-            Effect effect) {
-            new EffectExecutor(instance, effectPass, typeProvider).Route(effect);
-        }
-
-        protected override object? StageTransition(StageTransitionEffect transition) =>
-            throw new InvalidOperationException(
-                "StageTransitionEffect must lower to Ast; EffectExecutor is not the shipped path.");
-
-        protected override object? CreateEntityInstance(CreateEntityInstance create) =>
-            throw new InvalidOperationException(
-                "CreateEntityInstance must not use EffectExecutor; probes+Failure and CreateChildInstance are the shipped path.");
-
-        protected override object? CreateEntityInRelationship(CreateEntityInRelationshipEffect createIn) =>
-            throw new InvalidOperationException(
-                "CreateEntityInRelationship must not use EffectExecutor; probes+Failure and ExecuteCreateInRelationship are the shipped path.");
-
-        protected override object? InvokeAction(InvokeActionEffect invoke) =>
-            throw new InvalidOperationException(
-                "InvokeActionEffect must lower to Ast; EffectExecutor is not the shipped path.");
-
-        protected override object? ForEachInvoke(ForEachInvokeEffect efe) =>
-            throw new InvalidOperationException(
-                "ForEachInvokeEffect must lower to Ast; EffectExecutor is not the shipped path.");
-    }
-
     /// <summary>
     /// Real instance method invoked from the lowered StageTransition tree
     /// (<c>Invoke(Member(This, "Notify"), stageName)</c>) after a stage
@@ -70,8 +23,100 @@ public sealed partial record DomainEntityInstance {
     }
 
     /// <summary>
+    /// VM-callable Store bind for unique assign (Notify-shaped). Dictionary-backed
+    /// <c>This</c> cannot Member-read <see cref="Store"/>; the lowered tree invokes
+    /// this method. No Store bound means no peers — Success, then the assign proceeds.
+    /// </summary>
+    public DomainResult EnsureUnique(string propertyName, object? value) {
+        ArgumentException.ThrowIfNullOrEmpty(propertyName);
+        if (Store is null)
+            return DomainResult.Success();
+        return Store.EnsureUnique(this, propertyName, value);
+    }
+
+    /// <summary>
+    /// Notify-shaped Store read: true when the named relationship has any
+    /// outbound link. Dictionary <c>This</c> cannot Member-read <see cref="Store"/>.
+    /// </summary>
+    public bool ExistsRelated(string relationshipName) {
+        ArgumentException.ThrowIfNullOrEmpty(relationshipName);
+        if (TryEvaluateRelationshipPresence(new PropertyAccess(relationshipName), out var present))
+            return present;
+        throw new InvalidOperationException(
+            Domain is null
+                ? $"Cannot resolve relationship '{relationshipName}' without a domain."
+                : $"Relationship '{relationshipName}' not found in domain '{Domain.Name}'.");
+    }
+
+    /// <summary>
+    /// Notify-shaped Store read: the unique outbound target of a to-one hop.
+    /// Zero or many links fail closed (path-prefix contract).
+    /// </summary>
+    public DomainEntityInstance GetRelatedOne(string relationshipName) {
+        ArgumentException.ThrowIfNullOrEmpty(relationshipName);
+        var targets = GetOutboundRelatedInstances(relationshipName);
+        if (targets.Count == 0)
+            throw new InvalidOperationException(
+                $"No linked instances found for relationship '{relationshipName}' on entity '{Entity.Name}'.");
+        if (targets.Count > 1)
+            throw new InvalidOperationException(
+                $"Path-prefix on relationship '{relationshipName}' requires exactly one linked target " +
+                $"(found {targets.Count} on entity '{Entity.Name}'). Use any/all quantifiers for collections.");
+        return targets[0];
+    }
+
+    /// <summary>
+    /// Notify-shaped Store bind: link a just-created child. No Store is a no-op
+    /// (CreateEntityInstance.RelationshipName without a store still allocates).
+    /// Unknown relationship with a Store bound fails loud.
+    /// </summary>
+    public void LinkRelated(string relationshipName, object? target) {
+        ArgumentException.ThrowIfNullOrEmpty(relationshipName);
+        if (Store is null)
+            return;
+        if (target is not DomainEntityInstance child)
+            throw new InvalidOperationException(
+                $"LinkRelated target must be a domain instance, got {target?.GetType().Name ?? "null"}.");
+        var relationship = ResolveCreateInRelationship(relationshipName);
+        if (!string.Equals(child.Entity.Name, relationship.Target.TypeName, StringComparison.Ordinal)) {
+            throw new InvalidOperationException(
+                $"CreateEntityInstance creates type '{child.Entity.Name}' but relationship " +
+                $"'{relationshipName}' targets '{relationship.Target.TypeName}'.");
+        }
+        Store.Link(relationshipName, this, child);
+        TryLinkCreateInBackReference(child);
+    }
+
+    public bool AnyRelated(string relationshipName, object? body) =>
+        EvaluateAnyExpr(new AnyExpr(relationshipName, RequirePredicate(body, "AnyRelated")));
+
+    public bool AllRelated(string relationshipName, object? body) =>
+        EvaluateAllExpr(new AllExpr(relationshipName, RequirePredicate(body, "AllRelated")));
+
+    public bool NoneRelated(string relationshipName, object? body) =>
+        EvaluateNoneExpr(new NoneExpr(relationshipName, RequirePredicate(body, "NoneRelated")));
+
+    public long CountRelated(string relationshipName, object? body) =>
+        EvaluateCountExpr(body is null
+            ? new CountExpr(relationshipName, Body: null)
+            : new CountExpr(relationshipName, RequirePredicate(body, "CountRelated")));
+
+    private static DomainExpression RequirePredicate(object? body, string job) {
+        if (body is DomainExpression expr)
+            return expr;
+        throw new InvalidOperationException(
+            $"{job} predicate must be a domain expression, got {body?.GetType().Name ?? "null"}.");
+    }
+
+    private static bool IsConstraintFailureMessage(string message) =>
+        message.Contains("Unique", StringComparison.Ordinal)
+        || message.Contains("required", StringComparison.Ordinal)
+        || message.Contains("pattern", StringComparison.Ordinal)
+        || message.Contains("does not exist on entity", StringComparison.Ordinal);
+
+    /// <summary>
     /// Leftover helper for nested OnEntry/OnExit depth bounding and test callers.
-    /// Action <see cref="StageTransitionEffect"/> must lower via <see cref="ExecuteEffect"/>;
+    /// Action <see cref="StageTransitionEffect"/> lowers via <see cref="ExecuteEffectList"/>;
     /// this is not the shipped action path.
     /// When the helper runs, order is OnExit (current stage), set
     /// <see cref="CurrentStage"/>, OnEntry (target; partial-entry if an effect throws),
@@ -320,51 +365,38 @@ public sealed partial record DomainEntityInstance {
     }
 
     /// <summary>
-    /// VM-called runtime factories for lowered create / create-in (body and probes).
-    /// Args: name (type or relationship), then property name/value pairs.
-    /// Probe does not register a child. Stay.Create is C# export only.
+    /// VM-called Store jobs for lowered create / create-in (body and probes).
+    /// Args: name (type or relationship) plus an initializer dictionary, or
+    /// flattened name/value pairs. Probe does not register a child.
     /// </summary>
     private DomainResult RuntimeCreateFactory(string name, object?[] args) {
         if (args.Length < 1 || args[0] is not string key || key.Length == 0)
             return DomainResult.Failure("Create factory requires a type or relationship name.");
-        if ((args.Length - 1) % 2 != 0)
-            return DomainResult.Failure("Create factory arguments must be name/value pairs.");
 
-        var bindings = new List<PropertyBinding>();
-        for (var i = 1; i < args.Length; i += 2) {
-            if (args[i] is not string propName)
-                return DomainResult.Failure("Create factory property names must be strings.");
-            bindings.Add(new PropertyBinding(propName, DomainExpression.Literal(args[i + 1])));
+        Dictionary<string, object?> values;
+        if (args.Length >= 2 && TryReadCreateValues(args[1], out var fromDict)) {
+            values = fromDict;
         }
-
-        if (name == "ProbeCreateByType") {
-            Entity? target;
-            if (Domain is not null) {
-                var analysis = RuntimeAnalysisCache.GetOrAnalyze(Domain);
-                if (!analysis.TryGetEntity(Domain, key, out target) || target is null)
-                    return DomainResult.Failure(
-                        $"Entity type '{key}' not found in domain '{Domain.Name}'.");
+        else {
+            if ((args.Length - 1) % 2 != 0)
+                return DomainResult.Failure("Create factory arguments must be name/value pairs.");
+            values = new Dictionary<string, object?>(StringComparer.Ordinal);
+            for (var i = 1; i < args.Length; i += 2) {
+                if (args[i] is not string propName)
+                    return DomainResult.Failure("Create factory property names must be strings.");
+                values[propName] = args[i + 1];
             }
-            else {
-                target = Entity;
-            }
-            var err = PrevalidateCreateInitializers(bindings, target);
-            return err is null ? DomainResult.Success() : DomainResult.Failure(err);
         }
 
         try {
-            if (name == "CreateInNav") {
-                var child = ExecuteCreateInRelationship(
-                    new CreateEntityInRelationshipEffect(key, bindings),
-                    _bindingTypeProvider ?? _typeDefAnalyzer);
-                return DomainResult.Success(child);
-            }
-            var created = CreateChildInstance(
-                new CreateEntityInstance(new DomainTypeReference(key), bindings),
-                _bindingTypeProvider ?? _typeDefAnalyzer);
-            return DomainResult.Success(created);
+            return name switch {
+                "ProbeCreate" => ProbeCreate(key, values),
+                "CreateIn" => CreateIn(key, values),
+                "Create" => Create(key, values),
+                _ => DomainResult.Failure($"Unknown create job '{name}'.")
+            };
         }
-        catch (InvalidOperationException ex) {
+        catch (InvalidOperationException ex) when (IsConstraintFailureMessage(ex.Message)) {
             return DomainResult.Failure(ex.Message);
         }
         catch (ArgumentException ex) {
@@ -372,90 +404,94 @@ public sealed partial record DomainEntityInstance {
         }
     }
 
+    private static bool TryReadCreateValues(object? arg, out Dictionary<string, object?> values) {
+        values = new Dictionary<string, object?>(StringComparer.Ordinal);
+        switch (arg) {
+            case IReadOnlyDictionary<string, object?> typed:
+                foreach (var kv in typed)
+                    values[kv.Key] = kv.Value;
+                return true;
+            case IDictionary<string, object?> typed2:
+                foreach (var kv in typed2)
+                    values[kv.Key] = kv.Value;
+                return true;
+            case System.Collections.IDictionary untyped:
+                foreach (System.Collections.DictionaryEntry entry in untyped) {
+                    if (entry.Key is string key)
+                        values[key] = entry.Value;
+                }
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    /// <summary>
+    /// Notify-shaped Store bind for by-type create. Dictionary <c>This</c> cannot
+    /// Member-read <see cref="Store"/>.
+    /// </summary>
+    public DomainResult Create(string typeName, IReadOnlyDictionary<string, object?> values) {
+        ArgumentException.ThrowIfNullOrEmpty(typeName);
+        ArgumentNullException.ThrowIfNull(values);
+        if (Store is not null)
+            return Store.Create(this, typeName, values);
+        var bindings = ValuesAsLiteralBindings(values);
+        var created = CreateChildInstance(
+            new CreateEntityInstance(new DomainTypeReference(typeName), bindings),
+            _bindingTypeProvider ?? _typeDefAnalyzer);
+        return DomainResult.Success(created);
+    }
+
+    /// <summary>
+    /// Notify-shaped Store bind for create-in (allocate, register, link).
+    /// </summary>
+    public DomainResult CreateIn(string relationshipName, IReadOnlyDictionary<string, object?> values) {
+        ArgumentException.ThrowIfNullOrEmpty(relationshipName);
+        ArgumentNullException.ThrowIfNull(values);
+        if (Store is not null)
+            return Store.CreateIn(this, relationshipName, values);
+        var bindings = ValuesAsLiteralBindings(values);
+        var child = ExecuteCreateInRelationship(
+            new CreateEntityInRelationshipEffect(relationshipName, bindings),
+            _bindingTypeProvider ?? _typeDefAnalyzer);
+        return DomainResult.Success(child);
+    }
+
+    /// <summary>
+    /// Constraint probe without allocating. Fail-before-mutate prefix in the lowered tree.
+    /// </summary>
+    public DomainResult ProbeCreate(string typeName, IReadOnlyDictionary<string, object?> values) {
+        ArgumentException.ThrowIfNullOrEmpty(typeName);
+        ArgumentNullException.ThrowIfNull(values);
+        if (Store is not null)
+            return Store.ProbeCreate(this, typeName, values);
+        Entity? target;
+        if (Domain is not null) {
+            var analysis = RuntimeAnalysisCache.GetOrAnalyze(Domain);
+            if (!analysis.TryGetEntity(Domain, typeName, out target) || target is null)
+                return DomainResult.Failure(
+                    $"Entity type '{typeName}' not found in domain '{Domain.Name}'.");
+        }
+        else {
+            target = Entity;
+        }
+        var err = PrevalidateCreateInitializers(ValuesAsLiteralBindings(values), target);
+        return err is null ? DomainResult.Success() : DomainResult.Failure(err);
+    }
+
+    private static List<PropertyBinding> ValuesAsLiteralBindings(
+        IReadOnlyDictionary<string, object?> values) {
+        var bindings = new List<PropertyBinding>();
+        foreach (var (name, value) in values)
+            bindings.Add(new PropertyBinding(name, DomainExpression.Literal(value)));
+        return bindings;
+    }
+
     /// <summary>
     /// Parking dogfood: <c>assign Occupied + 1</c> then <c>create in</c> left Occupied
-    /// bumped when Plate failed the pattern. Unconditional create/create-in and
-    /// creates on a taken <c>if</c> branch are constraint-checked before any effect runs.
-    /// Taken-ness is evaluated on the pre-effect bag: a condition that reads a
-    /// property assigned earlier in the same action is not re-eval'd, so that
-    /// assign still applies when the post-assign bag would take an illegal create.
-    /// Untaken then/else branches are not probed (illegal initializer on an untaken
-    /// branch must not fail the action).
+    /// bumped when Plate failed the pattern. Unconditional create/create-in probes live
+    /// in the lowered tree (<c>ProbeCreate</c>) so Failure happens before prior assigns.
     /// </summary>
-    private string? PrevalidateUnconditionalCreates(IReadOnlyList<Effect> effects) {
-        foreach (var effect in effects) {
-            switch (effect) {
-                case CompositeEffect composite: {
-                        var nested = PrevalidateUnconditionalCreates(composite.Effects);
-                        if (nested is not null)
-                            return nested;
-                        break;
-                    }
-                case ConditionalEffect cond: {
-                        // Only ifs that contain create/create-in. Taken-branch creates
-                        // fail closed before any prior assign. Untaken branch is not probed.
-                        // Effect-dependent conditions skip prevalidate (PR 44 F2).
-                        if (!ContainsDirectExecutionEffect(cond))
-                            break;
-                        if (!ConditionIsEffectIndependent(cond.Condition))
-                            break;
-                        if (!TryEvalEffectCondition(PreprocessQuantifiers(cond.Condition), out var taken))
-                            return "Cannot evaluate if condition for create prevalidation.";
-                        var branch = taken ? cond.ThenEffects : (cond.ElseEffects ?? []);
-                        var nested = PrevalidateUnconditionalCreates(branch);
-                        if (nested is not null)
-                            return nested;
-                        break;
-                    }
-                case CreateEntityInRelationshipEffect createIn: {
-                        if (Domain is null)
-                            break;
-                        var analysis = RuntimeAnalysisCache.GetOrAnalyze(Domain);
-                        var relationship = ResolveSourceRelationshipOrThrow(createIn.RelationshipName,
-                            $"Relationship '{createIn.RelationshipName}' not found in domain '{Domain.Name}'.");
-                        if (!analysis.TryGetEntity(Domain, relationship.Target.TypeName, out var target)
-                            || target is null)
-                            return $"Target entity '{relationship.Target.TypeName}' not found.";
-                        var err = PrevalidateCreateInitializers(createIn.Initializers, target);
-                        if (err is not null)
-                            return err;
-                        break;
-                    }
-                case CreateEntityInstance create: {
-                        if (Domain is null)
-                            break;
-                        var analysis = RuntimeAnalysisCache.GetOrAnalyze(Domain);
-                        if (!analysis.TryGetEntity(Domain, create.Type.TypeName, out var target)
-                            || target is null)
-                            return $"Entity type '{create.Type.TypeName}' not found in domain '{Domain.Name}'.";
-                        var err = PrevalidateCreateInitializers(create.Initializers, target);
-                        if (err is not null)
-                            return err;
-                        break;
-                    }
-            }
-        }
-
-        return null;
-    }
-
-    private bool ConditionIsEffectIndependent(DomainExpression condition) =>
-        !ConditionReadsEntityProperty(condition);
-
-    private bool ConditionReadsEntityProperty(DomainExpression expr) {
-        if (expr is PropertyAccess pa)
-            return Entity.Properties.Any(p =>
-                string.Equals(p.Name, pa.Name, StringComparison.Ordinal));
-        if (expr is RelationshipNavigation)
-            return true;
-        foreach (var child in expr.Children) {
-            if (child is DomainExpression inner && ConditionReadsEntityProperty(inner))
-                return true;
-        }
-        return false;
-    }
-
-
     private string? PrevalidateCreateInitializers(
         IReadOnlyList<PropertyBinding> initializers, Entity targetEntity) {
         var values = new Dictionary<string, object?>(StringComparer.Ordinal);
@@ -477,16 +513,8 @@ public sealed partial record DomainEntityInstance {
             values[binding.PropertyName] = exec.Result.GetValue<object>();
         }
 
-        foreach (var prop in targetEntity.Properties) {
-            if (values.ContainsKey(prop.Name))
-                continue;
-            if (prop.Constraints.OfType<DefaultValueConstraint>().FirstOrDefault() is { } def)
-                values[prop.Name] = EvaluateDefaultValue(def.Expression, prop.Type.TypeName, Domain);
-            else
-                values[prop.Name] = null;
-        }
-
-        return ValidateConstraints(targetEntity, values, Store);
+        return ValidateConstraints(
+            targetEntity, FillCreateDefaults(targetEntity, values, Domain), Store);
     }
 
     /// <summary>
@@ -556,6 +584,7 @@ public sealed partial record DomainEntityInstance {
                     $"Available: {string.Join(", ", scalarNames)}.");
         }
 
+        initialValues = FillCreateDefaults(targetEntity, initialValues, Domain);
         var uniqueOrConstraint = ValidateConstraints(targetEntity, initialValues, Store);
         if (uniqueOrConstraint is not null)
             throw new InvalidOperationException(uniqueOrConstraint);
@@ -639,7 +668,7 @@ public sealed partial record DomainEntityInstance {
     /// back to this source (<c>Opportunity.account</c>) so Rel-exists policies match
     /// the C# auto-wired back-ref.
     /// </summary>
-    private void TryLinkCreateInBackReference(DomainEntityInstance child) {
+    internal void TryLinkCreateInBackReference(DomainEntityInstance child) {
         if (Store is null) return;
         var backs = child.Entity.Navigations
             .Where(n => n.Cardinality is not (RelationshipCardinality.OneToMany
@@ -651,7 +680,7 @@ public sealed partial record DomainEntityInstance {
         Store.Link(backs[0].Name, child, this);
     }
 
-    private void TryLinkInverseCollection(DomainEntityInstance peer, DomainEntityInstance child) {
+    internal void TryLinkInverseCollection(DomainEntityInstance peer, DomainEntityInstance child) {
         if (Store is null) return;
         var inverses = peer.Entity.Navigations
             .Where(n => n.Cardinality is RelationshipCardinality.OneToMany

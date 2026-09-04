@@ -1,4 +1,5 @@
 using Poly.Analysis;
+using Poly.Ast.Nodes;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Lowering;
@@ -39,7 +40,8 @@ public enum DbmsPack {
 /// <summary>
 /// Compiles .poly DSL text into C# type definitions.
 ///
-/// Reuses <see cref="DomainToCSharpExporter"/> from the lowering subsystem,
+/// Uses <see cref="DomainSession.Emit"/> which projects the analyzed domain
+/// through <see cref="DomainProgramProjection"/> and <see cref="CSharpGenerator"/>,
 /// the same pipeline behind the MCP <c>export_domain_to_csharp</c> tool.
 /// </summary>
 public sealed class DslCompiler {
@@ -159,6 +161,7 @@ public sealed class DslCompiler {
 
         var domain = outcome.Root;
         try {
+            var module = session.Lower(domain, outcome.Analysis);
             var files = session.Emit(domain, outcome.Analysis).ToList();
             var persist = outcome.Analysis.GetMetadata<PersistenceSurfaceMetadata>(domain);
             var http = outcome.Analysis.GetMetadata<HttpSurfaceMetadata>(domain);
@@ -181,6 +184,7 @@ public sealed class DslCompiler {
                     throw new InvalidOperationException(
                         "HTTP artifacts require storage, behavior, and aggregate analysis metadata.");
                 }
+                RequireHttpActionsInModule(domain, outcome.Analysis, module);
                 foreach (var file in new MinimalApiHostArtifactContributor(dbms: dbms)
                     .Contribute(domain, outcome.Analysis))
                     files.Add(file);
@@ -210,6 +214,29 @@ public sealed class DslCompiler {
         else if (dbms is DbmsPack.SqlServer)
             seed.Add("sqlserver");
         return seed;
+    }
+
+    /// <summary>
+    /// HTTP names catalog actions; those operations must already exist on the
+    /// lowered module. Program.cs calls them — it does not copy effect walks.
+    /// </summary>
+    private static void RequireHttpActionsInModule(
+        Domain domain, AnalysisResult analysis, IReadOnlyList<TypeDefinitionNode> module) {
+        var behavior = BehaviorMetadata.From(domain, analysis);
+        foreach (var entity in behavior.Entities) {
+            var type = module.FirstOrDefault(t =>
+                string.Equals(t.Name, entity.Name, StringComparison.Ordinal));
+            if (type is null)
+                throw new InvalidOperationException(
+                    $"HTTP names entity '{entity.Name}' that is not in the operation module.");
+            foreach (var action in entity.Actions) {
+                if (type.Methods?.Any(m =>
+                    string.Equals(m.Name, action.Name, StringComparison.Ordinal)) != true) {
+                    throw new InvalidOperationException(
+                        $"HTTP names action '{entity.Name}.{action.Name}' that is not in the operation module.");
+                }
+            }
+        }
     }
 
     /// <summary>

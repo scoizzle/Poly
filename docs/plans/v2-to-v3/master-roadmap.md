@@ -1,7 +1,7 @@
 # DomainModeling product roadmap (milestones)
 
 **Status:** Active (milestones index)  
-**Last Updated:** 2026-09-01  
+**Last Updated:** 2026-09-03  
 **Purpose:** High-level milestone status only.  
 **Day-to-day work:** **one admitted suite**. **CURRENT truth:** [`../simple-agent-tasks/PIPELINE-STATUS.md`](../simple-agent-tasks/PIPELINE-STATUS.md) (Agent pick below must match).  
 **Completed suites (archived):** [`domainmodeling-completed-2026-08`](../archive/domainmodeling-completed-2026-08/README.md) (`qe` · `vs` · `spe` · `das` · `dacr` · `apm` · `dar` · `dau`) · infra under bar [`../archive/infrastructure-pass/README.md`](../archive/infrastructure-pass/README.md) · late-August [`../archive/completed-2026-08-late/README.md`](../archive/completed-2026-08-late/README.md)
@@ -52,8 +52,8 @@ MCP / direct API as thin consumers
 ### Agent pick (one line)
 
 ```text
-DONE:    … p3/p2; GI; E1; gpure (2026-08-07); mcp-minify (2026-08-08); vision-cleanup 1–3 (2026-08-17); emit-session CompileMode seed-only (2026-08-24); host-ABI PRs 21–24; rewrite-to-master (PR 26); interpretation-language-engine (ile-gate 2026-08-31)
-CURRENT: create/create-in
+DONE:    … p3/p2; GI; E1; gpure (2026-08-07); mcp-minify (2026-08-08); vision-cleanup 1–3 (2026-08-17); emit-session CompileMode seed-only (2026-08-24); host-ABI PRs 21–24; rewrite-to-master (PR 26); interpretation-language-engine (ile-gate 2026-08-31); create/create-in (simulate Interpreter + bound Store 2026-09-03)
+CURRENT: (none)
 ADMIT:   parallel (exclusive files)
 THEN:    MCP mut-safety; Grammar wrap-up; V3 naming
 PARKED:  pack-2 IDomainPack; mut-safety; e2e-*; pack-host “packs extend Grammar tables”; session four-slot Meaning/Emit
@@ -62,7 +62,7 @@ PULL:    E5; EF codegen; naming cleanup
 
 **Honest product claim today:** Path-prefix multi-hop; exists/where/Q3′; peer/entity when; catalog; action `→ Entity` returns. **Grammar:** product parse is Grammar-table-guided (Option A expr ladder + effect heads; printer deferred). **MCP:** DSL-only expressions; unified `add`/`remove` + `apply_dsl`. CompileMode seeds persistence only; HTTP host is `uses http`. **No** temporal DSL authoring until p1.
 
-**Focus (2026-08-31):** CURRENT is create/create-in (host-ABI remaining store effects). interpretation-language-engine ile-gate closed. Mirror [`../simple-agent-tasks/PIPELINE-STATUS.md`](../simple-agent-tasks/PIPELINE-STATUS.md). Do not invent a second CURRENT. Do not admit dict-sqlite or mut-safety.
+**Focus (2026-09-03):** CURRENT is `(none)`. create/create-in simulate shipped ([`../create-create-in-simulate.md`](../create-create-in-simulate.md)). Do not invent a second CURRENT. Do not admit dict-sqlite or mut-safety without PIPELINE-STATUS.
 ---
 
 ## Archived material

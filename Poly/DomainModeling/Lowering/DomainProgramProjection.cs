@@ -10,13 +10,8 @@ using ValueType = Poly.DomainModeling.Ontology.ValueType;
 namespace Poly.DomainModeling.Lowering;
 
 /// <summary>
-/// Shared domain → Syntax projection layer.
-/// Produces language-agnostic <see cref="TypeDefinitionNode"/> trees
-/// from an analyzed <see cref="Domain"/>. Entity types, stage enums,
-/// DomainResult scaffolding, and lowered policies.
-///
-/// Target-specific idiom decoration (DomainResult<T>, private set,
-/// #nullable enable, static Create) is applied downstream by the C# target pack.
+/// Stage-3 operation module: type definitions from an analyzed <see cref="Domain"/>.
+/// <see cref="DomainSession.Lower"/> is the product door.
 /// </summary>
 public static class DomainProgramProjection {
     /// <summary>
@@ -30,9 +25,9 @@ public static class DomainProgramProjection {
     }
 
     /// <summary>
-    /// Projects the domain into language-agnostic Syntax type definitions.
-    /// Currently delegates to static methods on <see cref="DomainToCSharpExporter"/>
-    /// which will be migrated here incrementally.
+    /// Projects the domain into Syntax type definitions (entity types, stage
+    /// enums, DomainResult scaffolding, lowered operations). Called from
+    /// <see cref="DomainSession.Lower"/>.
     /// </summary>
     public static IReadOnlyList<TypeDefinitionNode> ToSyntax(
         Domain domain, INodeMetadataProvider metadata) {

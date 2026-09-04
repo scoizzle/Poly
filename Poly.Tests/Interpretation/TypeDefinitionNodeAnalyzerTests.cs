@@ -63,6 +63,105 @@ public class TypeDefinitionNodeAnalyzerTests {
     }
 
     [Test]
+    public async Task Analyze_GenericTypeParameter_ResolvesAsMemberType() {
+        var box = new TypeDefinitionNode(
+            "Box",
+            "Sample",
+            Properties: [
+                new PropertyDefinitionNode("Value", new NamedTypeReference("T"))
+            ],
+            Methods: [
+                new MethodDefinitionNode(
+                    "Wrap",
+                    new NamedTypeReference("Box", TypeArguments: [new NamedTypeReference("T")]),
+                    Parameters: [new Parameter("value", new NamedTypeReference("T"))],
+                    IsStatic: true)
+            ],
+            GenericParameters: [new Parameter("T")]);
+
+        var analysis = new AnalyzerBuilder()
+            .AddAnalyzer(new TypeDefinitionNodeAnalyzer())
+            .Build()
+            .Analyze(box);
+        var resolvedType = analysis.GetMetadata<TypeDefinitionMetadata>(box)?.TypeDefinition;
+
+        await Assert.That(resolvedType).IsNotNull();
+        var valueType = resolvedType!.Properties.Single().MemberTypeDefinition;
+        await Assert.That(valueType.Name).IsEqualTo("T");
+        await Assert.That(valueType.GetRuntimeType()).IsEqualTo(typeof(object));
+
+        var wrap = resolvedType.Methods.Single();
+        await Assert.That(wrap.Parameters.Single().ParameterTypeDefinition.Name).IsEqualTo("T");
+        await Assert.That(wrap.MemberTypeDefinition.Name).IsEqualTo("Box");
+    }
+
+    [Test]
+    public async Task Analyze_NamedTypeReference_WithTypeArguments_ClosesCollectionOfAstType() {
+        var widget = new TypeDefinitionNode("Widget", "Sample");
+        var holder = new TypeDefinitionNode(
+            "Holder",
+            "Sample",
+            Properties: [
+                new PropertyDefinitionNode(
+                    "Items",
+                    new NamedTypeReference("IEnumerable", TypeArguments: [new NamedTypeReference("Widget")]))
+            ]);
+
+        var analysis = new AnalyzerBuilder()
+            .AddAnalyzer(new TypeDefinitionNodeAnalyzer())
+            .Build()
+            .Analyze(new Block([widget, holder]));
+        var resolvedHolder = analysis.GetMetadata<TypeDefinitionMetadata>(holder)?.TypeDefinition;
+        var resolvedWidget = analysis.GetMetadata<TypeDefinitionMetadata>(widget)?.TypeDefinition;
+
+        await Assert.That(resolvedHolder).IsNotNull();
+        await Assert.That(resolvedWidget).IsNotNull();
+        var itemsType = resolvedHolder!.Properties.Single().MemberTypeDefinition;
+        await Assert.That(itemsType.TypeCategory.IsCollection).IsTrue();
+        await Assert.That(itemsType.GetElementType()).IsEqualTo(resolvedWidget);
+    }
+
+    [Test]
+    public async Task Analyze_NamedTypeReference_ShortName_ResolvesNamespacedPeer() {
+        var orderState = new TypeDefinitionNode("OrderState", "Hotel");
+        var stay = new TypeDefinitionNode(
+            "Stay",
+            Properties: [
+                new PropertyDefinitionNode("State", new NamedTypeReference("OrderState"))
+            ]);
+
+        var analysis = new AnalyzerBuilder()
+            .AddAnalyzer(new TypeDefinitionNodeAnalyzer())
+            .Build()
+            .Analyze(new Block([stay, orderState]));
+        var resolvedStay = analysis.GetMetadata<TypeDefinitionMetadata>(stay)?.TypeDefinition;
+
+        await Assert.That(resolvedStay).IsNotNull();
+        var stateType = resolvedStay!.Properties.Single().MemberTypeDefinition;
+        await Assert.That(stateType.FullName).IsEqualTo("Hotel.OrderState");
+    }
+
+    [Test]
+    public async Task Analyze_UnknownNamedType_MemberResolve_Throws() {
+        var holder = new TypeDefinitionNode(
+            "Holder",
+            Properties: [
+                new PropertyDefinitionNode("Missing", new NamedTypeReference("DoesNotExist"))
+            ]);
+
+        var analysis = new AnalyzerBuilder()
+            .AddAnalyzer(new TypeDefinitionNodeAnalyzer())
+            .Build()
+            .Analyze(holder);
+        var resolved = analysis.GetMetadata<TypeDefinitionMetadata>(holder)?.TypeDefinition;
+
+        await Assert.That(resolved).IsNotNull();
+        await Assert.That(() => resolved!.Properties.Single().MemberTypeDefinition)
+            .Throws<InvalidOperationException>()
+            .WithMessageContaining("DoesNotExist");
+    }
+
+    [Test]
     public async Task Analyze_TypeDefinitionNode_WithUnionProperty_ResolvesToExpectedRuntimeType() {
         var sameTypeUnion = new TypeDefinitionNode(
             "SameTypeUnionHolder",

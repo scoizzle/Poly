@@ -5,9 +5,9 @@ namespace Poly.DomainModeling.Runtime;
 /// <see cref="Success"/> / <see cref="Failure"/> return an object with
 /// <see cref="IsSuccess"/>; they do not throw. Canonical fail-closed shape:
 /// <c>if (!result.IsSuccess) return caller.Failure(error)</c> is live on self-invoke,
-/// singular cross-entity, and for-invoke (rewrap as the caller DomainResult arity).
+/// singular cross-entity, for-invoke, and unique <c>EnsureUnique</c> (rewrap as the caller DomainResult arity).
 /// <c>ExecuteEffect</c> returns the failed <c>DomainResult</c> when a VM program returns Failure (foreach
-/// zero-match, per-item invoke Failure from <c>InvokeNamed</c>).
+/// zero-match, per-item invoke Failure from <c>InvokeNamed</c>, unique collision).
 /// Missing or wrong-stage actions return Failure from <c>InvokeNamed</c>.
 /// </summary>
 public sealed class DomainResult {

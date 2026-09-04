@@ -14,49 +14,67 @@ namespace Poly.Interpretation.Analysis.Semantics;
 public sealed class TypeDefinitionNodeAnalyzer : INodeAnalyzer, ITypeDefinitionProvider {
     public const string Id = "TypeDefinitionNode";
     public string PassName => Id;
-    private readonly Dictionary<string, AstTypeDefinition> _types = new();
-    private TypeDefinitionProviderCollection? _lastRegisteredCollection;
-
-    private sealed record TypeDefinitionScanMetadata : IAnalysisMetadata;
+    private AstTypeRegistry? _registry;
 
     public void Analyze(AnalysisContext context, Node node) {
-        if (context.GetMetadata<TypeDefinitionScanMetadata>(default) is null) {
-            _types.Clear();
-            _lastRegisteredCollection = null;
-            context.SetMetadata(default, new TypeDefinitionScanMetadata());
+        var registry = context.GetMetadata<AstTypeRegistry>(default);
+        if (registry is null) {
+            registry = new AstTypeRegistry();
+            context.SetMetadata(default, registry);
+            context.TypeDefinitions.Add(registry);
+            _registry = registry;
         }
 
         if (node is TypeDefinitionNode typeDef) {
-            if (context.TypeDefinitions != _lastRegisteredCollection) {
-                context.TypeDefinitions.Add(this);
-                _lastRegisteredCollection = context.TypeDefinitions;
-            }
-            var definition = new AstTypeDefinition(typeDef, this);
-            _types[typeDef.FullName] = definition;
-
-            // Store the type definition in context metadata for resolution
-            // by other passes (e.g. ThisReferenceContextPass) and for
-            // GetResolvedType queries.
+            var definition = new AstTypeDefinition(typeDef, context.TypeDefinitions);
+            registry.Add(definition);
             context.SetMetadata(node, new TypeDefinitionMetadata(definition));
         }
 
-        // Analyze children (properties, methods, etc.)
         this.AnalyzeChildren(context, node);
     }
 
+    public ITypeDefinition? GetTypeDefinition(string typeName) =>
+        _registry?.GetTypeDefinition(typeName);
+
+    public ITypeDefinition? GetTypeDefinition(Type type) =>
+        ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(type);
+
+    public IEnumerable<ITypeDefinition> GetTypeDefinitions() =>
+        _registry?.GetTypeDefinitions() ?? [];
+}
+
+/// <summary>
+/// Per-analysis AST type table. Lives on <see cref="AnalysisContext"/> so the
+/// shared <see cref="Interpreter.Analyzer"/> instance cannot leak or clear
+/// types across concurrent analyses.
+/// </summary>
+internal sealed class AstTypeRegistry : ITypeDefinitionProvider, IAnalysisMetadata {
+    private readonly Dictionary<string, AstTypeDefinition> _types = new(StringComparer.Ordinal);
+
+    public void Add(AstTypeDefinition definition) {
+        _types[definition.FullName] = definition;
+    }
+
+    public IEnumerable<ITypeDefinition> GetTypeDefinitions() => _types.Values;
+
     public ITypeDefinition? GetTypeDefinition(string typeName) {
-        return _types.TryGetValue(typeName, out var def) ? def : null;
+        if (_types.TryGetValue(typeName, out var def))
+            return def;
+
+        AstTypeDefinition? match = null;
+        foreach (var type in _types.Values) {
+            if (!string.Equals(type.Name, typeName, StringComparison.Ordinal))
+                continue;
+            if (match is not null)
+                return null;
+            match = type;
+        }
+        return match;
     }
 
-    public ITypeDefinition? GetTypeDefinition(Type type) {
-        // AST-based types don't map to CLR types directly
-        // Fall back to CLR registry for runtime types
-        return ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(type);
-    }
-
-    public IEnumerable<ITypeDefinition> GetTypeDefinitions() {
-        return _types.Values;
-    }
+    public ITypeDefinition? GetTypeDefinition(Type type) =>
+        ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(type);
 }
 
 /// <summary>Metadata associating a <see cref="TypeDefinitionNode"/> with its
@@ -235,7 +253,8 @@ internal sealed class AstTypeDefinition : ITypeDefinition, IClrTypeDefinition {
         return string.Join(",", parameters.Select(static parameter => parameter.ParameterTypeDefinition.FullName));
     }
 
-    internal ITypeDefinition ResolveType(Node typeNode) => AstTypeReferenceResolver.Resolve(typeNode, _provider);
+    internal ITypeDefinition ResolveType(Node typeNode) =>
+        AstTypeReferenceResolver.Resolve(typeNode, _provider, this);
 
     internal IReadOnlyList<IParameter> MapParameters(IReadOnlyList<Parameter>? parameters) {
         return parameters?
@@ -525,22 +544,40 @@ internal static class DictionaryBackedValue {
 /// Utility class to resolve AST type reference nodes to ITypeDefinition.
 /// </summary>
 internal static class AstTypeReferenceResolver {
-    public static ITypeDefinition Resolve(Node typeNode, ITypeDefinitionProvider provider) {
+    public static ITypeDefinition Resolve(
+        Node typeNode,
+        ITypeDefinitionProvider provider,
+        ITypeDefinition? enclosing = null) {
+        return TryResolve(typeNode, provider, enclosing)
+            ?? throw new InvalidOperationException(
+                $"Type with name '{TypeNameOf(typeNode)}' not found.");
+    }
+
+    public static ITypeDefinition? TryResolve(
+        Node typeNode,
+        ITypeDefinitionProvider provider,
+        ITypeDefinition? enclosing = null) {
         var clr = ClrTypeDefinitionRegistry.Shared;
 
         return typeNode switch {
             PrimitiveTypeReference prim => ResolvePrimitive(prim.PrimitiveId, prim.IsNullable, clr),
-            NamedTypeReference named => provider.GetDeferredTypeDefinitionResolver(named.FullName).Value,
-            OptionalTypeReference opt => ResolveOptional(opt, provider, clr),
-            CollectionTypeReference col => ResolveCollection(col, provider, clr),
-            MapTypeReference map => ResolveMap(map, provider, clr),
-            UnionTypeReference union => ResolveUnion(union, provider, clr),
+            NamedTypeReference named => ResolveNamed(named, provider, clr, enclosing),
+            OptionalTypeReference opt => ResolveOptional(opt, provider, clr, enclosing),
+            CollectionTypeReference col => ResolveCollection(col, provider, clr, enclosing),
+            MapTypeReference map => ResolveMap(map, provider, clr, enclosing),
+            UnionTypeReference union => ResolveUnion(union, provider, clr, enclosing),
             TypeDefinitionReference tdr => tdr.TypeDefinition,
             ClrTypeReference clrRef => provider.GetTypeDefinition(clrRef.RuntimeType) ?? clr.GetTypeDefinition<object>(),
             TypeReference tr => ResolveByName(tr.TypeName, provider, clr),
             _ => clr.GetTypeDefinition<object>()
         };
     }
+
+    private static string TypeNameOf(Node typeNode) => typeNode switch {
+        NamedTypeReference named => named.FullName,
+        TypeReference tr => tr.TypeName,
+        _ => typeNode.ToString() ?? typeNode.GetType().Name
+    };
 
     private static ClrTypeDefinition ResolvePrimitive(PrimitiveType id, bool isNullable, ClrTypeDefinitionRegistry clr) {
         var baseType = id switch {
@@ -576,8 +613,126 @@ internal static class AstTypeReferenceResolver {
         return baseType;
     }
 
-    private static ITypeDefinition ResolveOptional(OptionalTypeReference opt, ITypeDefinitionProvider provider, ClrTypeDefinitionRegistry clr) {
-        var innerType = Resolve(opt.InnerType, provider);
+    private static ITypeDefinition? ResolveNamed(
+        NamedTypeReference named,
+        ITypeDefinitionProvider provider,
+        ClrTypeDefinitionRegistry clr,
+        ITypeDefinition? enclosing) {
+        if (named.TypeArguments is { Count: > 0 } args) {
+            var resolvedArgs = new ITypeDefinition[args.Count];
+            for (var i = 0; i < args.Count; i++) {
+                var resolved = TryResolve(args[i], provider, enclosing);
+                if (resolved is null)
+                    return null;
+                resolvedArgs[i] = resolved;
+            }
+            return CloseNamed(named, resolvedArgs, provider, clr, enclosing);
+        }
+
+        return LookupNamed(named, provider, clr, enclosing, allowTypeParameter: true);
+    }
+
+    private static ITypeDefinition? LookupNamed(
+        NamedTypeReference named,
+        ITypeDefinitionProvider provider,
+        ClrTypeDefinitionRegistry clr,
+        ITypeDefinition? enclosing,
+        bool allowTypeParameter) {
+        if (named.Namespace is null
+            && string.Equals(named.TypeName, "void", StringComparison.OrdinalIgnoreCase))
+            return clr.GetTypeDefinition(typeof(void));
+
+        if (allowTypeParameter && enclosing is not null && named.Namespace is null) {
+            foreach (var genericParameter in enclosing.GenericParameters) {
+                if (string.Equals(genericParameter.Name, named.TypeName, StringComparison.Ordinal))
+                    return new AstGenericParameterTypeDefinition(genericParameter, enclosing);
+            }
+        }
+
+        return provider.GetTypeDefinition(named.FullName)
+            ?? (named.Namespace is not null ? provider.GetTypeDefinition(named.TypeName) : null)
+            ?? clr.GetTypeDefinition(named.FullName)
+            ?? (named.FullName != named.TypeName ? clr.GetTypeDefinition(named.TypeName) : null);
+    }
+
+    private static ITypeDefinition? CloseNamed(
+        NamedTypeReference named,
+        ITypeDefinition[] args,
+        ITypeDefinitionProvider provider,
+        ClrTypeDefinitionRegistry clr,
+        ITypeDefinition? enclosing) {
+        if (args.Length == 1 && TryCollectionKind(named.TypeName, out var kind))
+            return CloseCollection(args[0], kind, clr);
+
+        var open = LookupNamed(named, provider, clr, enclosing, allowTypeParameter: false);
+        if (open is null)
+            return null;
+        return CloseGeneric(open, args, clr);
+    }
+
+    private static bool TryCollectionKind(string typeName, out CollectionKind kind) {
+        switch (typeName) {
+            case "List":
+            case "IList":
+            case "ICollection":
+            case "IEnumerable":
+            case "IReadOnlyList":
+            case "IReadOnlyCollection":
+                kind = CollectionKind.List;
+                return true;
+            case "HashSet":
+            case "ISet":
+                kind = CollectionKind.Set;
+                return true;
+            default:
+                kind = default;
+                return false;
+        }
+    }
+
+    private static ITypeDefinition CloseCollection(
+        ITypeDefinition element,
+        CollectionKind kind,
+        ClrTypeDefinitionRegistry clr) {
+        if (element is AstTypeDefinition or AstCollectionTypeDefinition or AstGenericParameterTypeDefinition)
+            return new AstCollectionTypeDefinition(element, kind);
+
+        var elementClrType = element.GetRuntimeTypeOrThrow();
+        var collectionClrType = kind switch {
+            CollectionKind.Array => elementClrType.MakeArrayType(),
+            CollectionKind.List => typeof(List<>).MakeGenericType(elementClrType),
+            CollectionKind.Set => typeof(HashSet<>).MakeGenericType(elementClrType),
+            _ => typeof(IEnumerable<>).MakeGenericType(elementClrType)
+        };
+        return clr.GetTypeDefinition(collectionClrType);
+    }
+
+    private static ITypeDefinition CloseGeneric(
+        ITypeDefinition open,
+        ITypeDefinition[] args,
+        ClrTypeDefinitionRegistry clr) {
+        if (open is not IClrTypeDefinition clrOpen)
+            return open;
+
+        var runtimeType = clrOpen.RuntimeType;
+        var definition = runtimeType.IsGenericTypeDefinition
+            ? runtimeType
+            : runtimeType.IsGenericType ? runtimeType.GetGenericTypeDefinition() : null;
+        if (definition is null || definition.GetGenericArguments().Length != args.Length)
+            return open;
+
+        var clrArgs = new Type[args.Length];
+        for (var i = 0; i < args.Length; i++)
+            clrArgs[i] = args[i].GetRuntimeType() ?? typeof(object);
+        return clr.GetTypeDefinition(definition.MakeGenericType(clrArgs));
+    }
+
+    private static ITypeDefinition ResolveOptional(
+        OptionalTypeReference opt,
+        ITypeDefinitionProvider provider,
+        ClrTypeDefinitionRegistry clr,
+        ITypeDefinition? enclosing) {
+        var innerType = Resolve(opt.InnerType, provider, enclosing);
         var innerClrType = innerType.GetRuntimeTypeOrThrow();
 
         if (!innerClrType.IsValueType || Nullable.GetUnderlyingType(innerClrType) != null)
@@ -587,32 +742,29 @@ internal static class AstTypeReferenceResolver {
         return clr.GetTypeDefinition(nullableType);
     }
 
-    private static ITypeDefinition ResolveByName(
+    private static ITypeDefinition? ResolveByName(
         string name, ITypeDefinitionProvider provider, ClrTypeDefinitionRegistry clr) {
         if (string.Equals(name, "void", StringComparison.OrdinalIgnoreCase))
             return clr.GetTypeDefinition(typeof(void));
-        return provider.GetTypeDefinition(name)
-            ?? throw new InvalidOperationException($"Type '{name}' not found.");
+        return provider.GetTypeDefinition(name) ?? clr.GetTypeDefinition(name);
     }
 
-    private static ITypeDefinition ResolveCollection(CollectionTypeReference col, ITypeDefinitionProvider provider, ClrTypeDefinitionRegistry clr) {
-        var elementType = Resolve(col.ElementType, provider);
-        if (elementType is AstTypeDefinition or AstCollectionTypeDefinition)
-            return new AstCollectionTypeDefinition(elementType, col.Kind);
-
-        var elementClrType = elementType.GetRuntimeTypeOrThrow();
-        var collectionClrType = col.Kind switch {
-            CollectionKind.Array => elementClrType.MakeArrayType(),
-            CollectionKind.List => typeof(List<>).MakeGenericType(elementClrType),
-            CollectionKind.Set => typeof(HashSet<>).MakeGenericType(elementClrType),
-            _ => typeof(IEnumerable<>).MakeGenericType(elementClrType)
-        };
-        return clr.GetTypeDefinition(collectionClrType);
+    private static ITypeDefinition ResolveCollection(
+        CollectionTypeReference col,
+        ITypeDefinitionProvider provider,
+        ClrTypeDefinitionRegistry clr,
+        ITypeDefinition? enclosing) {
+        var elementType = Resolve(col.ElementType, provider, enclosing);
+        return CloseCollection(elementType, col.Kind, clr);
     }
 
-    private static ClrTypeDefinition ResolveMap(MapTypeReference map, ITypeDefinitionProvider provider, ClrTypeDefinitionRegistry clr) {
-        var keyType = Resolve(map.KeyType, provider);
-        var valueType = Resolve(map.ValueType, provider);
+    private static ClrTypeDefinition ResolveMap(
+        MapTypeReference map,
+        ITypeDefinitionProvider provider,
+        ClrTypeDefinitionRegistry clr,
+        ITypeDefinition? enclosing) {
+        var keyType = Resolve(map.KeyType, provider, enclosing);
+        var valueType = Resolve(map.ValueType, provider, enclosing);
 
         var dictType = typeof(Dictionary<,>).MakeGenericType(
             keyType.GetRuntimeTypeOrThrow(),
@@ -621,12 +773,16 @@ internal static class AstTypeReferenceResolver {
         return clr.GetTypeDefinition(dictType);
     }
 
-    private static ITypeDefinition ResolveUnion(UnionTypeReference union, ITypeDefinitionProvider provider, ClrTypeDefinitionRegistry clr) {
+    private static ITypeDefinition ResolveUnion(
+        UnionTypeReference union,
+        ITypeDefinitionProvider provider,
+        ClrTypeDefinitionRegistry clr,
+        ITypeDefinition? enclosing) {
         if (union.Options.Count == 0) {
             return clr.GetTypeDefinition<object>();
         }
 
-        var optionTypes = union.Options.Select(option => Resolve(option, provider)).ToArray();
+        var optionTypes = union.Options.Select(option => Resolve(option, provider, enclosing)).ToArray();
         var firstRuntimeType = optionTypes[0].GetRuntimeTypeOrThrow();
 
         // Preserve precision only when all options collapse to the same CLR runtime type.
@@ -660,6 +816,29 @@ internal sealed class AstCollectionTypeDefinition : ITypeDefinition, IClrTypeDef
     public PrimitiveType? PrimitiveType => null;
     public TypeCategory TypeCategory => TypeCategory.Collection;
     public Type RuntimeType => typeof(System.Collections.IList);
+}
+
+internal sealed class AstGenericParameterTypeDefinition : ITypeDefinition, IClrTypeDefinition {
+    public AstGenericParameterTypeDefinition(IParameter parameter, ITypeDefinition declaringType) {
+        Name = parameter.Name;
+        DeclaringType = declaringType;
+    }
+
+    public string Name { get; }
+    public ITypeDefinition DeclaringType { get; }
+    public string? Namespace => null;
+    public AccessModifier AccessModifier => AccessModifier.Public;
+    public ITypeDefinition? BaseType => null;
+    public IEnumerable<ITypeDefinition> Interfaces => [];
+    public IEnumerable<IParameter> GenericParameters => [];
+    public IEnumerable<ITypeMember> Members => [];
+    public IEnumerable<ITypeField> Fields => [];
+    public IEnumerable<ITypeProperty> Properties => [];
+    public IEnumerable<ITypeMethod> Methods => [];
+    public IEnumerable<ITypeConstructor> Constructors => [];
+    public PrimitiveType? PrimitiveType => null;
+    public TypeCategory TypeCategory => TypeCategory.None;
+    public Type RuntimeType => typeof(object);
 }
 
 internal sealed class AstCollectionItemProperty : ITypeProperty {

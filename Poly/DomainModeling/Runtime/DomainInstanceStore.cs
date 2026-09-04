@@ -61,6 +61,229 @@ public sealed class DomainInstanceStore {
         return true;
     }
 
+    /// <summary>
+    /// Per-property unique check against registered instances. Lowering invokes
+    /// this through <see cref="DomainEntityInstance.EnsureUnique"/> so a colliding
+    /// assign returns <see cref="DomainResult.Failure"/> without mutating.
+    /// Non-unique properties and null values are Success (no peers to collide).
+    /// </summary>
+    public DomainResult EnsureUnique(
+        DomainEntityInstance instance,
+        string propertyName,
+        object? value) {
+        ArgumentNullException.ThrowIfNull(instance);
+        ArgumentException.ThrowIfNullOrEmpty(propertyName);
+        var error = UniqueCollisionForProperty(
+            instance.Entity, propertyName, value, except: instance);
+        return error is null ? DomainResult.Success() : DomainResult.Failure(error);
+    }
+
+    /// <summary>
+    /// Allocates <paramref name="typeName"/>, registers it, and returns the child.
+    /// Constraint failures and unique collisions are Failure without registering.
+    /// Graph wiring (nav initializers) uses <see cref="Link"/> after TryAdd.
+    /// </summary>
+    public DomainResult Create(
+        DomainEntityInstance creator,
+        string typeName,
+        IReadOnlyDictionary<string, object?> values) {
+        ArgumentNullException.ThrowIfNull(creator);
+        ArgumentException.ThrowIfNullOrEmpty(typeName);
+        ArgumentNullException.ThrowIfNull(values);
+        return CreateCore(creator, typeName, values, relationshipName: null);
+    }
+
+    /// <summary>
+    /// Allocates the relationship target, registers it, and links
+    /// <paramref name="source"/> → child on <paramref name="relationshipName"/>.
+    /// </summary>
+    public DomainResult CreateIn(
+        DomainEntityInstance source,
+        string relationshipName,
+        IReadOnlyDictionary<string, object?> values) {
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentException.ThrowIfNullOrEmpty(relationshipName);
+        ArgumentNullException.ThrowIfNull(values);
+        var domain = source.Domain
+            ?? throw new InvalidOperationException(
+                "Cannot execute 'create in' effect without a domain to resolve relationship targets.");
+        var analysis = RuntimeAnalysisCache.GetOrAnalyze(domain);
+        var storage = analysis.GetMetadata<StorageMappingMetadata>(domain);
+        var mapped = storage?.Storage.Relationships.FirstOrDefault(r =>
+            string.Equals(r.Name, relationshipName, StringComparison.Ordinal)
+            && string.Equals(r.SourceType, source.Entity.Name, StringComparison.Ordinal));
+        string targetTypeName;
+        if (mapped is not null) {
+            targetTypeName = mapped.TargetType;
+        }
+        else {
+            var relationship = source.ResolveCreateInRelationship(relationshipName);
+            targetTypeName = relationship.Target.TypeName;
+        }
+        return CreateCore(source, targetTypeName, values, relationshipName);
+    }
+
+    /// <summary>
+    /// Constraint-checks a prospective create without allocating or linking.
+    /// Used as the fail-before-mutate probe prefix in the lowered action tree.
+    /// </summary>
+    public DomainResult ProbeCreate(
+        DomainEntityInstance creator,
+        string typeName,
+        IReadOnlyDictionary<string, object?> values) {
+        ArgumentNullException.ThrowIfNull(creator);
+        ArgumentException.ThrowIfNullOrEmpty(typeName);
+        ArgumentNullException.ThrowIfNull(values);
+        if (!TryResolveTargetEntity(creator, typeName, out var target, out var error)
+            || target is null)
+            return DomainResult.Failure(error ?? $"Entity type '{typeName}' not found.");
+        Dictionary<string, object?> scalars;
+        try {
+            SplitValues(target, values, out scalars, out _);
+        }
+        catch (ArgumentException ex) {
+            return DomainResult.Failure(ex.Message);
+        }
+        catch (InvalidOperationException ex) {
+            return DomainResult.Failure(ex.Message);
+        }
+        var validation = DomainEntityInstance.ValidateCreateConstraints(
+            target, DomainEntityInstance.FillCreateDefaults(target, scalars, creator.Domain), this);
+        return validation is null ? DomainResult.Success() : DomainResult.Failure(validation);
+    }
+
+    private DomainResult CreateCore(
+        DomainEntityInstance creator,
+        string typeName,
+        IReadOnlyDictionary<string, object?> values,
+        string? relationshipName) {
+        if (!TryResolveTargetEntity(creator, typeName, out var targetEntity, out var resolveError)
+            || targetEntity is null)
+            return DomainResult.Failure(resolveError ?? $"Entity type '{typeName}' not found.");
+
+        Dictionary<string, object?> scalars;
+        Dictionary<string, DomainEntityInstance> navs;
+        try {
+            SplitValues(targetEntity, values, out scalars, out navs);
+        }
+        catch (ArgumentException ex) {
+            return DomainResult.Failure(ex.Message);
+        }
+        catch (InvalidOperationException ex) {
+            return DomainResult.Failure(ex.Message);
+        }
+        var filled = DomainEntityInstance.FillCreateDefaults(targetEntity, scalars, creator.Domain);
+        var uniqueOrConstraint = DomainEntityInstance.ValidateCreateConstraints(
+            targetEntity, filled, this);
+        if (uniqueOrConstraint is not null)
+            return DomainResult.Failure(uniqueOrConstraint);
+
+        DomainEntityInstance child;
+        try {
+            child = DomainEntityInstance.Create(targetEntity, filled, creator.Domain);
+        }
+        catch (InvalidOperationException ex) {
+            return DomainResult.Failure(ex.Message);
+        }
+        catch (ArgumentException ex) {
+            return DomainResult.Failure(ex.Message);
+        }
+
+        creator.TrackCreatedChild(child);
+        if (!TryAdd(child, out var addError)) {
+            creator.UntrackCreatedChild(child);
+            return DomainResult.Failure(addError ?? "Unique constraint violated.");
+        }
+
+        try {
+            foreach (var (navName, linked) in navs) {
+                if (!ReferenceEquals(linked.Store, this)
+                    && !TryAdd(linked, out var linkAddError)) {
+                    creator.UntrackCreatedChild(child);
+                    Remove(child);
+                    return DomainResult.Failure(linkAddError ?? "Failed to register linked instance.");
+                }
+                Link(navName, child, linked);
+                creator.TryLinkInverseCollection(linked, child);
+            }
+
+            if (relationshipName is not null) {
+                if (creator.Domain is not null) {
+                    var relationship = creator.ResolveCreateInRelationship(relationshipName);
+                    if (!string.Equals(targetEntity.Name, relationship.Target.TypeName, StringComparison.Ordinal)) {
+                        creator.UntrackCreatedChild(child);
+                        Remove(child);
+                        return DomainResult.Failure(
+                            $"CreateEntityInstance creates type '{targetEntity.Name}' but relationship " +
+                            $"'{relationshipName}' targets '{relationship.Target.TypeName}'.");
+                    }
+                }
+                Link(relationshipName, creator, child);
+                creator.TryLinkCreateInBackReference(child);
+            }
+        }
+        catch (InvalidOperationException ex) {
+            creator.UntrackCreatedChild(child);
+            Remove(child);
+            return DomainResult.Failure(ex.Message);
+        }
+
+        return DomainResult.Success(child);
+    }
+
+    private static bool TryResolveTargetEntity(
+        DomainEntityInstance creator,
+        string typeName,
+        out Entity? target,
+        out string? error) {
+        target = null;
+        error = null;
+        if (creator.Domain is not null) {
+            var analysis = RuntimeAnalysisCache.GetOrAnalyze(creator.Domain);
+            if (!analysis.TryGetEntity(creator.Domain, typeName, out target) || target is null) {
+                error = $"Entity type '{typeName}' not found in domain '{creator.Domain.Name}'.";
+                return false;
+            }
+            return true;
+        }
+        if (!string.Equals(creator.Entity.Name, typeName, StringComparison.Ordinal)) {
+            error = $"Entity type '{typeName}' not found.";
+            return false;
+        }
+        target = creator.Entity;
+        return true;
+    }
+
+    private static void SplitValues(
+        Entity targetEntity,
+        IReadOnlyDictionary<string, object?> values,
+        out Dictionary<string, object?> scalars,
+        out Dictionary<string, DomainEntityInstance> navs) {
+        var scalarNames = new HashSet<string>(
+            targetEntity.Properties.Select(p => p.Name), StringComparer.Ordinal);
+        var singularNavs = targetEntity.Navigations
+            .Where(n => n.Cardinality is not (RelationshipCardinality.OneToMany
+                or RelationshipCardinality.ManyToMany))
+            .Select(n => n.Name)
+            .ToHashSet(StringComparer.Ordinal);
+        scalars = new Dictionary<string, object?>(StringComparer.Ordinal);
+        navs = new Dictionary<string, DomainEntityInstance>(StringComparer.Ordinal);
+        foreach (var (name, raw) in values) {
+            if (scalarNames.Contains(name))
+                scalars[name] = raw;
+            else if (singularNavs.Contains(name)) {
+                if (raw is not DomainEntityInstance linked)
+                    throw new InvalidOperationException(
+                        $"Create-in initializer '{name}' on '{targetEntity.Name}' must resolve to a linked instance.");
+                navs[name] = linked;
+            }
+            else
+                throw new ArgumentException(
+                    $"Property '{name}' does not exist on entity '{targetEntity.Name}'. " +
+                    $"Available: {string.Join(", ", scalarNames)}.");
+        }
+    }
+
     internal void RejectUniqueCollision(DomainEntityInstance candidate, DomainEntityInstance? except) {
         var error = UniqueCollisionMessage(candidate, except);
         if (error is not null)
@@ -90,16 +313,33 @@ public sealed class DomainInstanceStore {
             else if (candidate is null || !candidate.TryGetRaw(prop.Name, out value) || value is null) {
                 continue;
             }
-            foreach (var other in _instances) {
-                if (ReferenceEquals(other, except) || ReferenceEquals(other, candidate))
-                    continue;
-                if (!string.Equals(other.Entity.Name, entity.Name, StringComparison.Ordinal))
-                    continue;
-                if (!other.TryGetRaw(prop.Name, out var otherValue))
-                    continue;
-                if (Equals(otherValue, value))
-                    return $"Unique constraint violated: '{prop.Name}' value is already used on another '{entity.Name}'.";
-            }
+            var error = UniqueCollisionForProperty(entity, prop.Name, value, except ?? candidate);
+            if (error is not null)
+                return error;
+        }
+        return null;
+    }
+
+    private string? UniqueCollisionForProperty(
+        Entity entity,
+        string propertyName,
+        object? value,
+        DomainEntityInstance? except) {
+        if (value is null)
+            return null;
+        var prop = entity.Properties.FirstOrDefault(p =>
+            string.Equals(p.Name, propertyName, StringComparison.Ordinal));
+        if (prop is null || !prop.Constraints.OfType<UniqueConstraint>().Any())
+            return null;
+        foreach (var other in _instances) {
+            if (ReferenceEquals(other, except))
+                continue;
+            if (!string.Equals(other.Entity.Name, entity.Name, StringComparison.Ordinal))
+                continue;
+            if (!other.TryGetRaw(propertyName, out var otherValue))
+                continue;
+            if (Equals(otherValue, value))
+                return $"Unique constraint violated: '{propertyName}' value is already used on another '{entity.Name}'.";
         }
         return null;
     }

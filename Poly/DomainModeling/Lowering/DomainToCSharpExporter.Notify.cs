@@ -131,7 +131,7 @@ public sealed partial class DomainToCSharpExporter {
                 // that type. Contact.create-in account must not pass a Contact as Account.
                 createArgs.Add(string.Equals(entity.Name, targetEntity.Name, StringComparison.Ordinal)
                     ? (Node)new ThisReference()
-                    : new Constant(null));
+                    : TypedNull(parameter.Type.TypeName));
                 continue;
             }
 

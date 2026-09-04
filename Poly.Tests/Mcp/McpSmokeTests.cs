@@ -1,3 +1,4 @@
+using System.Reflection;
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Evolution;
@@ -3777,9 +3778,7 @@ E: entity {{
 
     [Test]
     public async Task InvokeAction_Description_ListsOnlyShippedEffects() {
-        // Live MCP simulate text is the authoring instruction: list only effects
-        // that lower (transition, assign, create, create-in, invoke, for-invoke, if).
-        // link/unlink/delete are not Effect IR — linking is store tools.
+        // Live MCP simulate text: list shipped action effects, not store link/unlink.
         var method = typeof(RuntimeTool).GetMethod(nameof(RuntimeTool.InvokeAction));
         await Assert.That(method).IsNotNull();
 
@@ -3799,5 +3798,42 @@ E: entity {{
         await Assert.That(description).Contains("unlink_instances");
         await Assert.That(description.Contains("link/unlink")).IsFalse();
         await Assert.That(description.Contains("delete", StringComparison.OrdinalIgnoreCase)).IsFalse();
+    }
+
+    [Test]
+    public async Task ToolDescriptions_DoNotLeakImplementationMachinery() {
+        var forbidden = new[] {
+            "Interpreter",
+            "IDictionary",
+            "DomainEntityInstance",
+            "DomainInstanceStore",
+            "NotifyTransition",
+            "lowered operation AST",
+            "VM-evaluat",
+            "synthetic Entity",
+            "type-def",
+        };
+
+        var toolTypes = new[] {
+            typeof(SessionTool), typeof(QueryTool), typeof(EvolveTool),
+            typeof(PolicyTool), typeof(DslTool), typeof(OracleTool), typeof(RuntimeTool),
+        };
+
+        var leaks = new List<string>();
+        foreach (var type in toolTypes) {
+            foreach (var method in type.GetMethods(BindingFlags.Public | BindingFlags.Static)) {
+                var description = method.GetCustomAttributes(inherit: false)
+                    .OfType<System.ComponentModel.DescriptionAttribute>()
+                    .FirstOrDefault()?.Description;
+                if (string.IsNullOrEmpty(description))
+                    continue;
+                foreach (var token in forbidden) {
+                    if (description.Contains(token, StringComparison.Ordinal))
+                        leaks.Add($"{type.Name}.{method.Name}: {token}");
+                }
+            }
+        }
+
+        await Assert.That(leaks).IsEmpty();
     }
 }

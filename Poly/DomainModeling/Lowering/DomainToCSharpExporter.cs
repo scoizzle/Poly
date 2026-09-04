@@ -473,7 +473,6 @@ public sealed partial class DomainToCSharpExporter {
                         Parameters: peerParams,
                         Analysis: metadata,
                         UseThisReference: true,
-                        LowerStageTransitions: true,
                         Domain: domain,
                         EnumPropertyNames: esm.EnumPropertyNames);
                     var effectPass = new EffectLoweringPass(entity, context);
@@ -622,7 +621,6 @@ public sealed partial class DomainToCSharpExporter {
                             new TypeReference(entity.Name)),
                         Analysis: metadata,
                         UseThisReference: true,
-                        LowerStageTransitions: false,
                         Domain: domain,
                         EnumPropertyNames: esm.EnumPropertyNames);
                     var entryPass = new EffectLoweringPass(entity, entryCtx);
@@ -711,6 +709,8 @@ public sealed partial class DomainToCSharpExporter {
                 ));
             }
         }
+
+        AddStoreBindMethods(entity, domain, metadata, methods);
 
         typeDefs.Add(new TypeDefinitionNode(
             entity.Name,

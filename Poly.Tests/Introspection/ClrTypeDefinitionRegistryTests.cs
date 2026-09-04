@@ -1,3 +1,4 @@
+using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.Tests.Introspection;
@@ -93,5 +94,23 @@ public class ClrTypeDefinitionRegistryTests {
 
         var result = registry.GetTypeDefinition("NonExistent.InvalidType");
         await Assert.That(result).IsNull();
+    }
+
+    [Test]
+    public async Task GetTypeDefinition_UnqualifiedCollectionName_ReturnsNull() {
+        var registry = new ClrTypeDefinitionRegistry();
+
+        await Assert.That(registry.GetTypeDefinition("IEnumerable")).IsNull();
+        await Assert.That(registry.GetTypeDefinition("List")).IsNull();
+        await Assert.That(registry.GetTypeDefinition("IReadOnlyList")).IsNull();
+    }
+
+    [Test]
+    public async Task GetTypeDefinition_ByFullyQualifiedName_ResolvesGenericCollection() {
+        var registry = new ClrTypeDefinitionRegistry();
+
+        var list = registry.GetTypeDefinition("System.Collections.Generic.List`1");
+        await Assert.That(list).IsNotNull();
+        await Assert.That(list!.GetRuntimeType()).IsEqualTo(typeof(List<>));
     }
 }

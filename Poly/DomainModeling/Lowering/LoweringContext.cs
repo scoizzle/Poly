@@ -4,8 +4,9 @@ namespace Poly.DomainModeling.Lowering;
 
 /// <summary>
 /// Shared context for lowering passes. Bundles the subject (current-instance root),
-/// optional parameter map, and analysis metadata so lowering passes can consume
+/// optional parameter map, and analysis metadata so lowering **passes** can consume
 /// pre-computed bags instead of re-scanning <see cref="Domain"/> collections.
+/// The Syntax they emit does not carry bag types — bags are lowering input only.
 ///
 /// When <see cref="Analysis"/> is provided, lowering reads <see cref="IAnalysisMetadata"/>
 /// via <see cref="INodeMetadataProvider.GetMetadata{T}"/> (typically an
@@ -31,13 +32,6 @@ namespace Poly.DomainModeling.Lowering;
 /// <param name="ActionParameterNames">
 /// When <see cref="UseThisReference"/> is true, these names are rendered as bare
 /// parameters (e.g. <c>maxAmount</c>) instead of <c>this.maxAmount</c>.
-/// </param>
-/// <param name="LowerStageTransitions">
-/// When true, create / create-in lower to C# <c>Stay.Create</c> /
-/// <c>this.CreateNav</c>. Defaults to false: runtime lowers to instance
-/// factories (<c>CreateByType</c> / <c>CreateInNav</c>) that InvokeNamed runs.
-/// StageTransition and invoke (including for-invoke) always lower — this flag
-/// does not gate them.
 /// </param>
 /// <param name="Domain">Optional domain reference for cross-entity type resolution.</param>
 /// <param name="StageEnumTypeName">
@@ -74,10 +68,18 @@ namespace Poly.DomainModeling.Lowering;
 /// to lower <c>Rel exists</c> to a <c>.Count != 0</c> check (runtime store-link
 /// presence) instead of a never-null <c>collection != null</c>.
 /// </param>
+/// <param name="IsRelationshipNavigation">
+/// Optional predicate answering whether a DSL name is an outbound relationship
+/// on the current subject. Runtime <c>Rel exists</c> becomes <c>ExistsRelated</c>.
+/// </param>
 /// <param name="PropertyTypeResolver">
 /// Optional mapper from a property name to its domain type name. Used to lower
 /// date arithmetic (<c>DueDate + 14</c> → <c>DueDate.AddDays(...)</c>) in every
 /// expression context (policies, if conditions, initializers), not just assign.
+/// </param>
+/// <param name="SourceEntityName">
+/// Optional current-subject entity type name. Runtime path-prefix uses it to
+/// TypeCast <c>GetRelatedOne</c> to the relationship target so leaf members resolve.
 /// </param>
 public sealed record LoweringContext(
     Node Subject,
@@ -85,7 +87,6 @@ public sealed record LoweringContext(
     INodeMetadataProvider? Analysis = null,
     bool UseThisReference = false,
     HashSet<string>? ActionParameterNames = null,
-    bool LowerStageTransitions = false,
     Domain? Domain = null,
     string? StageEnumTypeName = null,
     IReadOnlyDictionary<string, IReadOnlyList<Node>>? PostTransitionNodes = null,
@@ -93,7 +94,9 @@ public sealed record LoweringContext(
     IReadOnlyDictionary<string, string>? EnumPropertyNames = null,
     Func<string, string>? NavigationNameResolver = null,
     Func<string, bool>? IsCollectionNavigation = null,
+    Func<string, bool>? IsRelationshipNavigation = null,
     Func<string, string?>? PropertyTypeResolver = null,
     Node? ActionResultType = null,
-    bool EmitInstanceNotify = true
+    bool EmitInstanceNotify = true,
+    string? SourceEntityName = null
 );

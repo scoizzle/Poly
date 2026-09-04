@@ -1,4 +1,5 @@
 using Poly.Analysis;
+using Poly.Ast.Nodes;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
@@ -114,18 +115,44 @@ public sealed class DomainSession {
     /// <summary>Analyzes <paramref name="domain"/> with this session's pipeline (type maps included).</summary>
     public AnalysisResult Analyze(Domain domain) {
         ArgumentNullException.ThrowIfNull(domain);
+        var analysis = Analyzer.Analyze(domain);
+        RuntimeAnalysisCache.Bind(domain, this, analysis);
+        return analysis;
+    }
+
+    /// <summary>
+    /// Analyze without rebinding the cache. Used by the cache itself to avoid
+    /// recursion when a fallback session must produce bags.
+    /// </summary>
+    internal AnalysisResult AnalyzeWithoutBind(Domain domain) {
+        ArgumentNullException.ThrowIfNull(domain);
         return Analyzer.Analyze(domain);
     }
 
     /// <summary>
-    /// Entity-module C# files from analyzed facts. Persistence and HTTP files are
+    /// Stage 3: one operation module (type definitions + operation bodies).
+    /// Also caches runtime-shaped named action / OnEntry trees for invoke lookup.
+    /// Simulate and print consume this result.
+    /// </summary>
+    public IReadOnlyList<TypeDefinitionNode> Lower(Domain domain, AnalysisResult analysis) {
+        ArgumentNullException.ThrowIfNull(domain);
+        ArgumentNullException.ThrowIfNull(analysis);
+        return RuntimeAnalysisCache.GetOrLower(domain, this, analysis);
+    }
+
+    /// <summary>
+    /// Entity-module C# files from the lowered module. Persistence and HTTP files are
     /// compiler/host emitters gated on analysis bags, not this method.
     /// </summary>
     public IReadOnlyList<(string FileName, string Source)> Emit(Domain domain, AnalysisResult analysis) {
         ArgumentNullException.ThrowIfNull(domain);
         ArgumentNullException.ThrowIfNull(analysis);
         var files = new List<(string FileName, string Source)>();
-        var types = DomainProgramProjection.ToSyntax(domain, analysis);
+        var types = Lower(domain, analysis);
+        var interpAnalysis = TryAnalyzeForEmit(types);
+        var generator = interpAnalysis is not null
+            ? new CSharpGenerator(interpAnalysis)
+            : new CSharpGenerator();
         var entities = domain.Types.OfType<Entity>().ToList();
         foreach (var entity in entities) {
             var entityNames = new HashSet<string>(StringComparer.Ordinal) {
@@ -138,7 +165,7 @@ public sealed class DomainSession {
             if (entityDefs.Count == 0)
                 throw new InvalidOperationException(
                     $"DomainProgramProjection produced no type definitions for entity '{entity.Name}'.");
-            files.Add(($"{entity.Name}.cs", new CSharpGenerator().Generate(entityDefs)));
+            files.Add(($"{entity.Name}.cs", generator.Generate(entityDefs)));
         }
 
         var scaffoldingDefs = types
@@ -146,8 +173,19 @@ public sealed class DomainSession {
                 d.Name == e.Name || d.Name == $"{e.Name}Stage"))
             .ToList();
         if (scaffoldingDefs.Count > 0)
-            files.Add(("Poly.Types.cs", new CSharpGenerator().Generate(scaffoldingDefs)));
+            files.Add(("Poly.Types.cs", generator.Generate(scaffoldingDefs)));
         return files;
+    }
+
+    /// <summary>
+    /// Runs interpretation analysis on lowered type definitions so the C# generator
+    /// can use type-aware features (variable type resolution, DCE).
+    /// </summary>
+    private static AnalysisResult? TryAnalyzeForEmit(IReadOnlyList<TypeDefinitionNode> allTypes) {
+        if (allTypes.Count == 0)
+            return null;
+        var unit = new CompilationUnitNode([], null, allTypes, null);
+        return Interpretation.Interpreter.Analyzer.Analyze(unit);
     }
 
     internal static ExpressionFoldTable FoldsFor(ExpressionFormRegistry forms) {

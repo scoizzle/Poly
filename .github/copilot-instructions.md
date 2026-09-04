@@ -7,6 +7,7 @@ All architectural guidelines, module boundaries, placement rules, coding style, 
 ## Instructions for Copilot
 
 - You **MUST** treat `AGENTS.md` as the authoritative document.
+- You **MUST** respect **Frozen core** in `AGENTS.md` / `docs/CORE.md` §0. Current hosts (scratch store, C# print, HTTP) are not the architecture.
 - Before making any non-trivial changes (especially anything related to domain modeling, analysis, interpretation, lowering, or new features), you should read or re-read the relevant sections of `AGENTS.md`.
 - The contents of this file (`copilot-instructions.md`) are secondary. They exist only to reinforce that `AGENTS.md` takes precedence.
 - When in doubt about architecture, file placement, or conventions, defer to `AGENTS.md`.
@@ -14,6 +15,7 @@ All architectural guidelines, module boundaries, placement rules, coding style, 
 ## Key Sections in AGENTS.md
 
 Pay particular attention to:
+- **Frozen core** (AST / Node / Analysis — current hosts are not the architecture)
 - Module boundaries (one-way dependencies)
 - Placement Rules table
 - Contract Interface Generation rules

@@ -2,6 +2,8 @@
 
 These docs are **source of truth for agent workflows** in this repo. They are plain markdown: any AI tool, human, or CI step can open and follow them.
 
+**Frozen core** (architecture, not a protocol): [`../CORE.md`](../CORE.md) §0 · [`../../AGENTS.md`](../../AGENTS.md) **Frozen core** · [`../decisions/2026-09-04-frozen-core-pipeline.md`](../decisions/2026-09-04-frozen-core-pipeline.md). Agents must respect the freeze; do not grow consumer dual-paths.
+
 | Protocol | When to use |
 |---|---|
 | [`phenomenal-review.md`](./phenomenal-review.md) | **Adversarial** correctness / contract review of a diff (Bun-inspired split context, multi-pass option). Findings + follow-ups in docs. **Does not** fix code by default. |

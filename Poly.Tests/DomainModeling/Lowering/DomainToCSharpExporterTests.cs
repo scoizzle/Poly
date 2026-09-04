@@ -223,8 +223,7 @@ public class DomainToCSharpExporterTests {
         var context = new LoweringContext(
             new Parameter("entity", new TypeReference(entity.Name)),
             Analysis: analysis,
-            UseThisReference: true,
-            LowerStageTransitions: true);
+            UseThisReference: true);
         var pass = new EffectLoweringPass(entity, context);
 
         var lowered = pass.TryLowerVmNode(effect);
@@ -254,7 +253,6 @@ public class DomainToCSharpExporterTests {
             new Parameter("entity", new TypeReference(entity.Name)),
             Analysis: analysis,
             UseThisReference: true,
-            LowerStageTransitions: true,
             Domain: domain);
         var pass = new EffectLoweringPass(entity, context);
 
@@ -265,7 +263,7 @@ public class DomainToCSharpExporterTests {
     }
 
     [Test]
-    public async Task EffectLowering_MissingEntityStructureMetadata_Throws() {
+    public async Task EffectLowering_Create_DoesNotRequireEntityStructureMetadata() {
         var (domain, analysis) = ParseAndAnalyze("""
             domain Demo
 
@@ -280,12 +278,15 @@ public class DomainToCSharpExporterTests {
             new Parameter("entity", new TypeReference(entity.Name)),
             Analysis: analysis,
             UseThisReference: true,
-            LowerStageTransitions: true,
             Domain: domain);
         var pass = new EffectLoweringPass(entity, context);
 
-        var ex = Assert.Throws<InvalidOperationException>(() => pass.TryLowerVmNode(effect));
-        await Assert.That(ex!.Message).Contains("EntityStructureMetadata is required");
+        var lowered = pass.TryLowerVmNode(effect);
+        await Assert.That(lowered).IsNotNull();
+        var names = FlattenLowered(lowered!).OfType<Invoke>()
+            .Select(i => (i.Delegate as Member)?.MemberName)
+            .ToList();
+        await Assert.That(names.Contains("Create")).IsTrue();
     }
 
     [Test]
@@ -315,7 +316,6 @@ public class DomainToCSharpExporterTests {
             new Parameter("entity", new TypeReference(entity.Name)),
             Analysis: analysis,
             UseThisReference: true,
-            LowerStageTransitions: true,
             Domain: domain,
             SourceStageName: "Active");
         var pass = new EffectLoweringPass(entity, context);
@@ -480,9 +480,9 @@ public class DomainToCSharpExporterTests {
         // (customer) is auto-wired with `this`. Repro shape: title, total → 2.
         await Assert.That(paramCount).IsEqualTo(2);
 
-        var checkOut = customer.Methods?.FirstOrDefault(m => m.Name == "CheckOut");
-        await Assert.That(checkOut).IsNotNull();
-        var call = FindAllInvokes(checkOut!.Body!).FirstOrDefault(i =>
+        var bind = customer.Methods?.FirstOrDefault(m => m.Name == "BindCreateIn");
+        await Assert.That(bind).IsNotNull();
+        var call = FindAllInvokes(bind!.Body!).FirstOrDefault(i =>
             i.Delegate is Member { MemberName: "CreateOrders" });
         await Assert.That(call).IsNotNull();
         await Assert.That(call!.Arguments.Length).IsEqualTo(paramCount);
@@ -1541,8 +1541,10 @@ public class DomainToCSharpExporterTests {
 
         // Severity is a trailing optional CreateDiagnostics param defaulting to the DSL default.
         await Assert.That(cs).Contains("CreateDiagnostics(string code, Severity severity = Severity.Warning)");
-        // The call site passes the bound override positionally.
-        await Assert.That(cs).Contains("CreateDiagnostics(\"P000\", Severity.Hint)");
+        // Action names the Store job; host bind forwards the override through the factory.
+        await Assert.That(cs).Contains("CreateIn(");
+        await Assert.That(cs).Contains("\"Severity\"");
+        await Assert.That(cs).Contains("Severity.Hint");
         // No post-create assignment (the ctor's own `this.Severity = severity;` is fine).
         await Assert.That(cs).DoesNotContain("diagnostic.Severity = ");
     }
@@ -1770,7 +1772,7 @@ public class DomainToCSharpExporterTests {
         var cs = new CSharpGenerator().Generate(unit);
 
         var bookIdx = cs.IndexOf("public DomainResult Book(", StringComparison.Ordinal);
-        var probeIdx = cs.IndexOf("Stay.Create(nights)", bookIdx);
+        var probeIdx = cs.IndexOf("this.ProbeCreate(\"Stay\"", bookIdx);
         var assignIdx = cs.IndexOf("this.OpenStays = this.OpenStays + 1L", bookIdx);
         await Assert.That(probeIdx).IsGreaterThan(bookIdx);
         await Assert.That(assignIdx).IsGreaterThan(probeIdx);
@@ -1959,7 +1961,10 @@ public class DomainToCSharpExporterTests {
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
-        await Assert.That(cs).Contains("Product.Create(\"P1\", Tier.Plus)");
+        await Assert.That(cs).Contains("this.Create(");
+        await Assert.That(cs).Contains("\"Tier\"");
+        await Assert.That(cs).Contains("Tier.Plus");
+        await Assert.That(cs).Contains("Product.Create(");
         await Assert.That(cs).DoesNotContain("product.Tier =");
     }
 
@@ -1985,7 +1990,8 @@ public class DomainToCSharpExporterTests {
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
-        await Assert.That(cs).Contains("CreateTokens(TokenKind.Keyword, \"let\")");
+        await Assert.That(cs).Contains("CreateIn(");
+        await Assert.That(cs).Contains("TokenKind.Keyword");
     }
 
     [Test]
@@ -2127,7 +2133,10 @@ public class DomainToCSharpExporterTests {
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
-        await Assert.That(cs).Contains("this.CreateFiles(srcContent, srcMode, newName)");
+        await Assert.That(cs).Contains("CreateIn(");
+        await Assert.That(cs).Contains("srcContent");
+        await Assert.That(cs).Contains("srcMode");
+        await Assert.That(cs).Contains("newName");
     }
 
     [Test]
@@ -2177,7 +2186,7 @@ public class DomainToCSharpExporterTests {
 
         var bookIdx = cs.IndexOf("public DomainResult Book(", StringComparison.Ordinal);
         var assignIdx = cs.IndexOf("this.OpenStays = this.OpenStays + 1L", bookIdx);
-        var probeIdx = cs.IndexOf("Stay.Create(nights)", bookIdx);
+        var probeIdx = cs.IndexOf("this.ProbeCreate(\"Stay\"", bookIdx);
         await Assert.That(bookIdx).IsGreaterThan(-1);
         await Assert.That(assignIdx).IsGreaterThan(bookIdx);
         // Probe of the then-branch create-in must not run before the if (or at all
@@ -2206,7 +2215,7 @@ public class DomainToCSharpExporterTests {
         var cs = new CSharpGenerator().Generate(unit);
 
         var bookIdx = cs.IndexOf("public DomainResult Book(", StringComparison.Ordinal);
-        var probeIdx = cs.IndexOf("Stay.Create(nights)", bookIdx);
+        var probeIdx = cs.IndexOf("this.ProbeCreate(\"Stay\"", bookIdx);
         var assignIdx = cs.IndexOf("this.OpenStays = this.OpenStays + 1L", bookIdx);
         await Assert.That(probeIdx).IsGreaterThan(bookIdx);
         await Assert.That(assignIdx).IsGreaterThan(probeIdx);
@@ -2236,7 +2245,7 @@ public class DomainToCSharpExporterTests {
 
         var bookIdx = cs.IndexOf("public DomainResult Book(", StringComparison.Ordinal);
         var assignIdx = cs.IndexOf("this.OpenStays = this.OpenStays + 1L", bookIdx);
-        var probeIdx = cs.IndexOf("Stay.Create(nights)", bookIdx);
+        var probeIdx = cs.IndexOf("this.ProbeCreate(\"Stay\"", bookIdx);
         await Assert.That(bookIdx).IsGreaterThan(-1);
         await Assert.That(assignIdx).IsGreaterThan(bookIdx);
         await Assert.That(probeIdx).IsGreaterThan(bookIdx);
@@ -2267,7 +2276,7 @@ public class DomainToCSharpExporterTests {
         var cs = new CSharpGenerator().Generate(unit);
 
         var bookIdx = cs.IndexOf("public DomainResult Book(", StringComparison.Ordinal);
-        var probeIdx = cs.IndexOf("Stay.Create(nights)", bookIdx);
+        var probeIdx = cs.IndexOf("this.ProbeCreate(\"Stay\"", bookIdx);
         var assignIdx = cs.IndexOf("this.OpenStays = this.OpenStays + 1L", bookIdx);
         await Assert.That(probeIdx).IsGreaterThan(bookIdx);
         await Assert.That(assignIdx).IsGreaterThan(probeIdx);
@@ -2299,7 +2308,7 @@ public class DomainToCSharpExporterTests {
         var cs = new CSharpGenerator().Generate(unit);
 
         var bookIdx = cs.IndexOf("public DomainResult Book(", StringComparison.Ordinal);
-        var probeIdx = cs.IndexOf("Stay.Create(nights)", bookIdx);
+        var probeIdx = cs.IndexOf("this.ProbeCreate(\"Stay\"", bookIdx);
         var assignIdx = cs.IndexOf("this.OpenStays = this.OpenStays + 1L", bookIdx);
         await Assert.That(probeIdx).IsGreaterThan(bookIdx);
         await Assert.That(assignIdx).IsGreaterThan(probeIdx);
@@ -2309,9 +2318,9 @@ public class DomainToCSharpExporterTests {
     }
 
     [Test]
-    public async Task Export_IfOnMutatedProperty_ProbeUsesPreAssignBag() {
-        // Documented miss: guarded probe condition is the pre-assign bag
-        // (this.OpenStays >= 1L before OpenStays is incremented).
+    public async Task Export_IfOnMutatedProperty_SkipsGuardedProbeLikeRuntime() {
+        // One tree: when the if condition reads a property a prior sibling assigned,
+        // the guarded probe is skipped (runtime ConditionDrift).
         var (domain, analysis) = ParseAndAnalyze("""
             domain Hotel
             Stay: entity {
@@ -2332,12 +2341,12 @@ public class DomainToCSharpExporterTests {
         var cs = new CSharpGenerator().Generate(unit);
 
         var bookIdx = cs.IndexOf("public DomainResult Book(", StringComparison.Ordinal);
-        var probeIdx = cs.IndexOf("Stay.Create(nights)", bookIdx);
         var assignIdx = cs.IndexOf("this.OpenStays = this.OpenStays + 1L", bookIdx);
-        await Assert.That(probeIdx).IsGreaterThan(bookIdx);
-        await Assert.That(assignIdx).IsGreaterThan(probeIdx);
-        var bookPrefix = cs[bookIdx..probeIdx];
-        await Assert.That(bookPrefix.Contains("OpenStays", StringComparison.Ordinal)).IsTrue();
+        var nextMember = cs.IndexOf("\n    public ", bookIdx + 1);
+        var bookCs = nextMember > bookIdx ? cs[bookIdx..nextMember] : cs[bookIdx..];
+        await Assert.That(bookIdx).IsGreaterThan(-1);
+        await Assert.That(assignIdx).IsGreaterThan(bookIdx);
+        await Assert.That(bookCs.Contains("this.ProbeCreate(\"Stay\"", StringComparison.Ordinal)).IsFalse();
         await Assert.That(cs).DoesNotContain("throw new InvalidOperationException(stayResult.ErrorMessage)");
     }
 
@@ -2370,7 +2379,7 @@ public class DomainToCSharpExporterTests {
         var cs = new CSharpGenerator().Generate(unit);
 
         var openItIdx = cs.IndexOf("public DomainResult OpenIt(", StringComparison.Ordinal);
-        var probeIdx = cs.IndexOf("Stay.Create(", openItIdx);
+        var probeIdx = cs.IndexOf("this.ProbeCreate(\"Stay\"", openItIdx);
         var stageIdx = cs.IndexOf("this.CurrentStage = GuestStage.Open", openItIdx);
         var assignIdx = cs.IndexOf("this.OpenStays = this.OpenStays + 1L", openItIdx);
         await Assert.That(openItIdx).IsGreaterThan(-1);
@@ -2401,13 +2410,12 @@ public class DomainToCSharpExporterTests {
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
-        var openIdx = cs.IndexOf("public DomainResult OpenAccount(", StringComparison.Ordinal);
-        await Assert.That(openIdx).IsGreaterThan(-1);
-        var createAccountIdx = cs.IndexOf("private DomainResult<Account> CreateAccount(", StringComparison.Ordinal);
-        var openEnd = createAccountIdx > openIdx ? createAccountIdx : cs.Length;
-        var openCs = cs[openIdx..openEnd];
-        await Assert.That(openCs).DoesNotContain("Account.Create(name, this)");
-        await Assert.That(openCs).Contains("Account.Create(name, null)");
+        var contactCsStart = cs.IndexOf("class Contact", StringComparison.Ordinal);
+        await Assert.That(contactCsStart).IsGreaterThan(-1);
+        var afterContact = cs.IndexOf("\npublic ", contactCsStart + 1, StringComparison.Ordinal);
+        var contactCs = afterContact > contactCsStart ? cs[contactCsStart..afterContact] : cs[contactCsStart..];
+        await Assert.That(contactCs).DoesNotContain("Account.Create(name, this)");
+        await Assert.That(contactCs).Contains("(Account?)null");
         var errors = CompileExported(cs);
         await Assert.That(errors).IsEmpty();
     }

@@ -1,7 +1,4 @@
 using Poly.DomainModeling;
-using Poly.DomainModeling.Analysis;
-using Poly.DomainModeling.Evolution;
-using Poly.DomainModeling.Language;
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Runtime;
@@ -11,118 +8,112 @@ namespace Poly.Tests.DomainModeling.Lowering;
 public class ClockLoweringTests {
     [Test]
     public async Task Assign_DateToNow_LowersToFromDateTime_NotLiteral() {
-        var (domain, analysis) = Evolve("""
-            domain Clocks
-            Item: entity {
-              Due: Date
-              Touch: action { assign Due to Now }
-            }
-            """);
-        var item = domain.Types.OfType<Entity>().First(e => e.Name == "Item");
-        var action = item.Actions.First(a => a.Name == "Touch");
-        var pass = new EffectLoweringPass(item, new LoweringContext(
-            new Parameter("entity", new TypeReference(item.Name)),
-            Analysis: analysis,
-            Domain: domain));
-        var lowered = pass.LowerActionBody(action.Effects);
-        await Assert.That(lowered).IsNotNull();
-        var assign = Flatten(lowered!).OfType<Assignment>()
+        var (entity, action) = DateAssignAction(DomainExpression.Property("Now"));
+        var lowered = Lower(entity, action);
+        var assign = Flatten(lowered).OfType<Assignment>()
             .First(a => a.Destination is Member { MemberName: "Due" });
         await Assert.That(assign.Value is Constant).IsFalse();
         var members = Flatten(assign.Value).OfType<Member>().Select(m => m.MemberName).ToList();
-        await Assert.That(members.Contains("FromDateTime") || members.Contains("UtcNow")).IsTrue();
+        await Assert.That(members.Contains("FromDateTime")).IsTrue();
+        await Assert.That(members.Contains("UtcNow")).IsTrue();
     }
 
     [Test]
-    public async Task Assign_DateToNow_WithTemporal_LowersToFromDateTime_NotLiteral() {
-        var (domain, analysis) = Evolve("""
-            domain Clocks
-            uses temporal
-            Item: entity {
-              Due: Date
-              Touch: action { assign Due to Now }
-            }
-            """, ExtensionCatalog.Core.Language);
-        var item = domain.Types.OfType<Entity>().First(e => e.Name == "Item");
-        var action = item.Actions.First(a => a.Name == "Touch");
-        var pass = new EffectLoweringPass(item, new LoweringContext(
-            new Parameter("entity", new TypeReference(item.Name)),
-            Analysis: analysis,
-            Domain: domain));
-        var lowered = pass.LowerActionBody(action.Effects);
-        var assign = Flatten(lowered!).OfType<Assignment>()
+    public async Task Assign_DateToNowIr_LowersToFromDateTime_NotLiteral() {
+        var (entity, action) = DateAssignAction(new Now());
+        var lowered = Lower(entity, action);
+        var assign = Flatten(lowered).OfType<Assignment>()
             .First(a => a.Destination is Member { MemberName: "Due" });
         await Assert.That(assign.Value is Constant).IsFalse();
         var members = Flatten(assign.Value).OfType<Member>().Select(m => m.MemberName).ToList();
-        await Assert.That(members.Contains("FromDateTime") || members.Contains("UtcNow")).IsTrue();
+        await Assert.That(members.Contains("FromDateTime")).IsTrue();
+        await Assert.That(members.Contains("UtcNow")).IsTrue();
+    }
+
+    [Test]
+    public async Task Assign_DateToNowIr_StoresDateOnly() {
+        var (entity, _) = DateAssignAction(new Now());
+        var domain = DomainTestFactory.Create("Clocks", [entity]);
+        var instance = DomainEntityInstance.Create(entity, domain: domain);
+        var result = instance.InvokeAction("Touch");
+        await Assert.That(result.Succeeded).IsTrue();
+        await Assert.That(instance.GetProperty<object>("Due")).IsTypeOf<DateOnly>();
     }
 
     [Test]
     public async Task CreateIn_DateNow_StoresDateOnly() {
-        var (domain, _) = Evolve("""
-            domain Parking
-            Permit: entity {
-              Plate: Text required
-              Issued: Date
-            }
-            Lot: entity {
-              permits: many Permit
-              Issue: action (plate: Text) {
-                create in permits { Plate: plate; Issued: Now }
-              }
-            }
-            """);
-        var lotE = domain.Types.OfType<Entity>().First(e => e.Name == "Lot");
+        var permit = new Entity("Permit",
+            Properties: [
+                new Property("Plate", new DomainTypeReference("Text"), []),
+                new Property("Issued", new DomainTypeReference("Date"), []),
+            ],
+            Actions: [],
+            Policies: [],
+            Stages: []);
+        var issue = new Poly.DomainModeling.Ontology.Action("Issue", InvocationResult.Void,
+            Parameters: [new Property("plate", new DomainTypeReference("Text"), [])],
+            Effects: [
+                new CreateEntityInRelationshipEffect("permits", [
+                    new PropertyBinding("Plate", DomainExpression.Property("plate")),
+                    new PropertyBinding("Issued", DomainExpression.Property("Now")),
+                ])
+            ],
+            Policies: []);
+        var lot = new Entity("Lot",
+            Properties: [],
+            Actions: [issue],
+            Policies: [],
+            Stages: []);
+        var rel = new Relationship("permits",
+            new DomainTypeReference("Lot"), new DomainTypeReference("Permit"),
+            RelationshipCardinality.OneToMany, []);
+        var domain = DomainTestFactory.Create("Parking", [permit, lot], [rel]);
         var store = new DomainInstanceStore();
-        var lot = DomainEntityInstance.Create(lotE, domain: domain);
-        store.Add(lot);
+        var instance = DomainEntityInstance.Create(lot, domain: domain);
+        store.Add(instance);
 
-        var result = lot.InvokeAction("Issue", new Dictionary<string, object?> { ["plate"] = "ABC123" });
+        var result = instance.InvokeAction("Issue",
+            new Dictionary<string, object?> { ["plate"] = "ABC123" });
         await Assert.That(result.Succeeded).IsTrue();
-        var child = lot.CreatedChildren.Single();
+        var child = instance.CreatedChildren.Single();
         await Assert.That(child.GetProperty<object>("Issued")).IsTypeOf<DateOnly>();
         await Assert.That(child.GetProperty<string>("Plate")).IsEqualTo("ABC123");
     }
 
     [Test]
     public async Task Assign_TextToGuid_StoresStringNotLiteralInTree() {
-        var (domain, analysis) = Evolve("""
-            domain Ids
-            Item: entity {
-              ExternalId: Text
-              Stamp: action { assign ExternalId to Guid }
-            }
-            """);
-        var item = domain.Types.OfType<Entity>().First(e => e.Name == "Item");
-        var action = item.Actions.First(a => a.Name == "Stamp");
-        var pass = new EffectLoweringPass(item, new LoweringContext(
-            new Parameter("entity", new TypeReference(item.Name)),
-            Analysis: analysis,
-            Domain: domain));
-        var lowered = pass.LowerActionBody(action.Effects);
-        var assign = Flatten(lowered!).OfType<Assignment>()
+        var id = new Property("ExternalId", new DomainTypeReference("Text"), []);
+        var stamp = new Poly.DomainModeling.Ontology.Action("Stamp", InvocationResult.Void, [],
+            [new AssignEffect(DomainExpression.Property("ExternalId"), DomainExpression.Property("Guid"))],
+            []);
+        var entity = new Entity("Item", [id], [stamp], [], []);
+        var lowered = Lower(entity, stamp);
+        var assign = Flatten(lowered).OfType<Assignment>()
             .First(a => a.Destination is Member { MemberName: "ExternalId" });
         await Assert.That(assign.Value is Constant).IsFalse();
 
-        var instance = DomainEntityInstance.Create(item, domain: domain);
+        var domain = DomainTestFactory.Create("Ids", [entity]);
+        var instance = DomainEntityInstance.Create(entity, domain: domain);
         var result = instance.InvokeAction("Stamp");
         await Assert.That(result.Succeeded).IsTrue();
         await Assert.That(instance.GetProperty<object>("ExternalId")).IsTypeOf<string>();
         await Assert.That(Guid.TryParse(instance.GetProperty<string>("ExternalId"), out _)).IsTrue();
     }
 
-    private static (Domain Domain, AnalysisResult Analysis) Evolve(
-        string poly, DomainSession? session = null) {
-        var changes = session is null
-            ? new PolyDslParser(poly).Parse()
-            : new PolyDslParser(poly, session).Parse();
-        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(changes);
-        if (!result.Succeeded)
-            throw new InvalidOperationException(string.Join("; ",
-                result.Analysis.Diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error)
-                    .Select(d => d.Message)));
-        var analysis = DomainModelAnalyzer.Analyze(result.Root!);
-        return (result.Root!, analysis);
+    private static (Entity Entity, Poly.DomainModeling.Ontology.Action Action) DateAssignAction(
+        DomainExpression clock) {
+        var due = new Property("Due", new DomainTypeReference("Date"), []);
+        var touch = new Poly.DomainModeling.Ontology.Action("Touch", InvocationResult.Void, [],
+            [new AssignEffect(DomainExpression.Property("Due"), clock)], []);
+        var entity = new Entity("Item", [due], [touch], [], []);
+        return (entity, touch);
+    }
+
+    private static Node Lower(Entity entity, Poly.DomainModeling.Ontology.Action action) {
+        var pass = new EffectLoweringPass(entity, new LoweringContext(
+            new Parameter("entity", new TypeReference(entity.Name))));
+        var lowered = pass.LowerActionBody(action.Effects);
+        return lowered ?? throw new InvalidOperationException("LowerActionBody returned null.");
     }
 
     private static IEnumerable<Node> Flatten(Node node) {

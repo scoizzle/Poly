@@ -1,6 +1,6 @@
 # Plans ready for agent micro-tasks
 
-**Date:** 2026-09-03  
+**Date:** 2026-09-04  
 **Rule:** Trunk is `master`. Parallel streams with exclusive file ownership.  
 **CURRENT truth:** [`PIPELINE-STATUS.md`](./PIPELINE-STATUS.md) (only) — **CURRENT: `(none)`**. Do not invent a second CURRENT.
 

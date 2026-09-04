@@ -50,9 +50,7 @@ public sealed partial class DomainToCSharpExporter {
         new PrimitiveTypeReference(PrimType.Structure);
 
     internal static Node StoreJobDictionaryType() =>
-        new MapTypeReference(
-            new PrimitiveTypeReference(PrimType.String),
-            new OptionalTypeReference(StoreJobObjectType()));
+        TypeReference.To<Dictionary<string, object?>>();
 
     private static void AddStoreJobMethod(
         List<MethodDefinitionNode> methods,

@@ -272,10 +272,13 @@ public sealed partial class DomainToCSharpExporter {
                     // Already wrapped — leave as-is.
                 }
                 else if (last is Syntactic.Assignment a) {
+                    Node produced = a.Destination;
+                    if (!isVoid)
+                        produced = new TypeCast(produced, resultTypeRef);
                     nodes.Add(new Return(
                         new Invoke(
                             new Member(actionResultType, "Success"),
-                            [a.Destination])));
+                            [produced])));
                 }
                 else if (last is Syntactic.Invoke
                          or Syntactic.Member or Syntactic.Constant

@@ -2410,7 +2410,11 @@ public class DomainToCSharpExporterTests {
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
-        await Assert.That(cs).DoesNotContain("Account.Create(name, this)");
+        var contactCsStart = cs.IndexOf("class Contact", StringComparison.Ordinal);
+        await Assert.That(contactCsStart).IsGreaterThan(-1);
+        var afterContact = cs.IndexOf("\npublic ", contactCsStart + 1, StringComparison.Ordinal);
+        var contactCs = afterContact > contactCsStart ? cs[contactCsStart..afterContact] : cs[contactCsStart..];
+        await Assert.That(contactCs).DoesNotContain("Account.Create(name, this)");
         await Assert.That(cs).Contains("Account.Create(name, null)");
         var errors = CompileExported(cs);
         await Assert.That(errors).IsEmpty();

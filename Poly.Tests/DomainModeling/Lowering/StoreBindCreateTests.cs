@@ -171,6 +171,47 @@ public class StoreBindCreateTests {
     }
 
     [Test]
+    public async Task Store_CreateIn_OmittedUniqueDefault_IsFailureWithoutRegistering() {
+        var (domain, _) = Evolve("""
+            domain Parking
+            Permit: entity { Plate: Text unique default("STD") }
+            Lot: entity { permits: many Permit }
+            """);
+        var lotE = domain.Types.OfType<Entity>().First(e => e.Name == "Lot");
+        var permitE = domain.Types.OfType<Entity>().First(e => e.Name == "Permit");
+        var store = new DomainInstanceStore();
+        var lot = DomainEntityInstance.Create(lotE, domain: domain);
+        var existing = DomainEntityInstance.Create(permitE, domain: domain);
+        store.Add(lot);
+        store.Add(existing);
+
+        var result = store.CreateIn(lot, "permits", new Dictionary<string, object?>());
+        await Assert.That(result.IsSuccess).IsFalse();
+        await Assert.That(result.ErrorMessage).Contains("Unique");
+        await Assert.That(lot.CreatedChildren).IsEmpty();
+        await Assert.That(store.GetRelatedInstances("permits", lot)).IsEmpty();
+    }
+
+    [Test]
+    public async Task Store_CreateIn_OmittedRequiredDefault_SucceedsWithDefault() {
+        var (domain, _) = Evolve("""
+            domain Parking
+            Permit: entity { Plate: Text required default("STD") }
+            Lot: entity { permits: many Permit }
+            """);
+        var lotE = domain.Types.OfType<Entity>().First(e => e.Name == "Lot");
+        var store = new DomainInstanceStore();
+        var lot = DomainEntityInstance.Create(lotE, domain: domain);
+        store.Add(lot);
+
+        var result = store.CreateIn(lot, "permits", new Dictionary<string, object?>());
+        await Assert.That(result.IsSuccess).IsTrue();
+        var child = result.Value as DomainEntityInstance;
+        await Assert.That(child).IsNotNull();
+        await Assert.That(child!.GetProperty<string>("Plate")).IsEqualTo("STD");
+    }
+
+    [Test]
     public async Task CreateThenRelExists_SameAction_SeesChild() {
         var (domain, _) = Evolve("""
             domain Parking

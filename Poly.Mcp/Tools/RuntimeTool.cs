@@ -145,15 +145,11 @@ internal sealed class RuntimeTool {
     /// execution, and stage subscription fan-out. Returns the instance ID and
     /// a snapshot of initial stage and property values.
     /// </summary>
-    [McpServerTool(Name = "create_instance"), Description(@"Creates a runtime instance of a domain entity and registers it in the session's instance store.
+    [McpServerTool(Name = "create_instance"), Description(@"Creates an instance of a domain entity in this session.
 
-The instance is dictionary-backed (Interpretation's IDictionary type-def path) and starts in the first defined stage (if stages exist). The store is bound so later invoke_action / evaluate_policy run the lowered operation AST — the same program emit would print.
+Starts in the first defined stage when the entity has stages. Returns an instance id and a snapshot of initial property values.
 
-Use 'invoke_action' to invoke actions on the instance, 'get_instance' to inspect its
-current state, 'link_instances' to wire relationship edges between instances for
-cross-entity policy evaluation, and 'list_instances' to enumerate all instances.
-
-Allocates DomainEntityInstance, binds DomainInstanceStore — no second evaluator.")]
+Use invoke_action to run actions, evaluate_policy to check policies, link_instances to connect related instances, and get_instance / list_instances to inspect.")]
     public static DomainToolResponse CreateInstance(
         [Description("Session ID")] string sessionId,
         [Description("Name of the entity to instantiate")] string entityName,
@@ -593,22 +589,13 @@ Use case — reassign a child from one parent to another:
     /// linked subscriber instances see the transition and their subscription
     /// effects are executed.
     /// </summary>
-    [McpServerTool(Name = "invoke_action"), Description(@"Invokes an action on a runtime instance.
+    [McpServerTool(Name = "invoke_action"), Description(@"Runs a named action on an instance from create_instance.
 
-Binds caller-supplied args onto the dictionary-backed instance and runs the lowered operation AST through Interpreter (same tree as emit) with the session Store bound.
+Resolves the action from the instance's current stage, then entity-level actions. Guard policies run first. Actions may transition, assign, create, create-in, invoke, for-invoke, if. On success, returns the new stage when a transition occurred. On failure, returns which guards blocked or why the action was not found. Linked subscribers fire on a stage transition.
 
-The action pipeline:
-1. Resolve action from current stage or entity level
-2. Evaluate guard policies (action-level, stage-level, entity-level)
-3. Execute the lowered program (transition, assign, create, create-in, invoke, for-invoke, if)
+Entity-typed parameters take instance ids from create_instance. Actions that return an entity include returnTypeName and returnInstanceId.
 
-Link and unlink existing instances with the store tools link_instances and unlink_instances — those are not action effects.
-
-On stage transition, linked subscriber instances automatically fire their
-stage subscription effects (fan-out via DomainInstanceStore.NotifyTransition).
-
-Returns the result including new stage, any guard failures, and when the action
-declares -> EntityType and creates that type, returnTypeName + returnInstanceId.")]
+To link or unlink existing instances, use link_instances / unlink_instances — those are not action effects.")]
     public static DomainToolResponse InvokeAction(
         [Description("Session ID")] string sessionId,
         [Description("Instance ID returned by create_instance")] string instanceId,

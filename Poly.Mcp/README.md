@@ -1,6 +1,6 @@
 # Poly.Mcp — MCP Server for Poly Domain Modeling
 
-**Role:** interactive **harness** for agents using Poly. Holds a `DomainSession` (it is not that session). Author and inspect. Named-policy/action **simulate** is `evaluate_policy(instanceId)` and `invoke_action` on store instances (same lowered AST as emit). `oracle_expression` is a fragment probe, not that lock. Not a product entry-point extension (REST is `uses http`). Not a second evaluator.
+**Role:** interactive **harness** for agents using Poly. Holds a `DomainSession` (it is not that session). Author and inspect. Named-policy/action **simulate** is `evaluate_policy(instanceId)` and `invoke_action` on session instances. `oracle_expression` is a fragment probe, not that lock. Not a product entry-point extension (REST is `uses http`). Not a second evaluator.
 
 Lock: [`docs/decisions/2026-08-15-domain-library-extensions-mcp-harness.md`](../docs/decisions/2026-08-15-domain-library-extensions-mcp-harness.md). Mechanisms: [`docs/CORE.md`](../docs/CORE.md) §3.6.
 
@@ -47,14 +47,14 @@ Tools live in `Poly.Mcp/Tools/` and use only `Poly.DomainModeling` types (no `Po
 
 | Tool | Class | Purpose |
 |------|-------|---------|
-| `evaluate_policy` | `PolicyTool` | VM-evaluates a named policy on a **store instance** (`instanceId` required) |
+| `evaluate_policy` | `PolicyTool` | Evaluates a named policy on an instance from `create_instance` (`instanceId` required) |
 
 ### Oracle
 
 | Tool | Class | Purpose |
 |------|-------|---------|
 | `describe_domain_element` | `OracleTool` | Describes entity/stage/action/policy/relationship |
-| `oracle_expression` | `OracleTool` | Fragment probe: VM-evaluates a **DSL expression fragment** against a local property bag. **Not** named-policy evaluate |
+| `oracle_expression` | `OracleTool` | Fragment probe: evaluates a **DSL expression fragment** against a JSON property bag. **Not** named-policy evaluate |
 | `export_domain_to_csharp` | `OracleTool` | Exports the domain session as C# record/class definitions |
 
 ### Runtime
@@ -124,13 +124,13 @@ Every MCP tool's **Name + Description + Success** must match actual behavior:
 
 | If the tool… | Then… |
 |--------------|--------|
-| Name/Description says evaluate / VM / true-false | Must call the VM path and return `data.result: bool` |
-| Only inspects metadata | Must be named/described as inspect/get/describe — **never** "evaluates via VM" |
+| Name/Description says evaluate / true-false | Must actually evaluate and return `data.result: bool` |
+| Only inspects metadata | Must be named/described as inspect/get/describe — **never** as evaluate |
 | Evaluation fails | `Success: false` (or explicit error), not success without a bool |
 
-**Current policy tools:** `get_policy_expression` (inspect-only, no VM), `evaluate_policy` (named session policy on a store `instanceId`). `oracle_expression` is an **expression oracle** (DSL fragment + bag, no session, synthetic Subject) — **not** named-policy evaluate. All satisfy the invariant for what they actually do.
+**Current policy tools:** `get_policy_expression` (inspect-only), `evaluate_policy` (named session policy on an `instanceId`). `oracle_expression` is an **expression probe** (DSL fragment + property bag, no session) — **not** named-policy evaluate. All satisfy the invariant for what they actually do.
 
-**DSL tools:** `apply_dsl` (parses .poly text → evolves empty domain → analysis gate → replaces session domain; revision+1; clears runtime instances; explicit HONESTY NOTES: action `when Stage` is not a separate runtime gate, subscriptions need RuntimeTool instances to fan out), `export_dsl` (printer round-trip, no side effects), `get_dsl_guide` (embedded product guide).
+**DSL tools:** `apply_dsl` (parses .poly text → analysis gate → replaces session domain; revision+1; clears runtime instances; action `when Stage` is not a separate runtime gate; subscriptions need instances + `invoke_action` to fire), `export_dsl` (printer round-trip, no side effects), `get_dsl_guide` (embedded product guide).
 
 ## Runtime Tools — Exercise Domain Lifecycle
 
@@ -148,7 +148,7 @@ The **RuntimeTool** family closes the final feedback loop: agents can create ins
 
 ### Instance lifecycle
 
-- Instances are **session-scoped** — each session has its own `DomainInstanceStore`.
+- Instances are **session-scoped** — each session has its own instance set.
 - The **first defined stage** is the initial stage (if stages exist).
 - `invoke_action` resolves from the **current stage** first, then entity-level actions.
 - Guard policies (action-level, stage-level, entity-level) are evaluated before effects.
@@ -162,6 +162,6 @@ The **RuntimeTool** family closes the final feedback loop: agents can create ins
 
 - `create_instance` **writes** session instance state (creates + registers an instance).
 - `get_instance` / `list_instances` are **inspect** tools — they read state, no execution.
-- `invoke_action` uses the **same `DomainEntityInstance.InvokeAction` path** as the core library (lower → VM).
+- `invoke_action` runs the named action on the session instance (same path as the core library).
 - Successful `apply_dsl` / evolve replaces the domain root and **clears** prior runtime instances (they held the previous entity graph).
 - Related-policy expressions (`Rel.Prop`, `Rel exists`, `Rel where`) evaluate on store instances via `create_instance` + `link_instances` + `evaluate_policy`. `oracle_expression` is bag-only and fail-closed for those reads.

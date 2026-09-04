@@ -60,7 +60,7 @@ When a domain concept cannot be expressed in the current Syntax AST (e.g. a coll
 │                        │                                         │
 │                        ▼                                         │
 │  ┌──────────────────────────────────────────────────────────┐    │
-│  │              Syntax AST (Poly.Syntax.Nodes)              │    │
+│  │              Syntax AST (Poly.Ast.Nodes)                 │    │
 │  │  65+ node types — Member, Constant, Assignment, Block,  │    │
 │  │  IfStatement, Equal, Add, Invoke, Parameter, etc.       │    │
 │  └──────────────────────────┬───────────────────────────────┘    │
@@ -85,11 +85,13 @@ Both consume a `LoweringContext` that carries the current-instance `Subject` and
 
 ---
 
-## 2. One tree: LowerActionBody → Interpreter
+## 2. One tree: session.Lower → Interpreter
 
-All effects **lower to Syntax AST on both runtime and emit**. `ExecuteStructured` / `EffectExecutor` are gone. `ExecuteEffectList` always calls `LowerActionBody` and `Interpreter.CompileChecked`.
+All shipped effects **lower to Syntax AST on both runtime and emit**. `ExecuteStructured` / `EffectExecutor` / `LowerStageTransitions` / `PreprocessRuntimeKeyword` are gone.
 
-Create / create-in still use different **print** shapes: runtime lowers to `Invoke(Member(This, "Create"/"CreateIn"/"ProbeCreate"), …)`; C# emit uses `Stay.Create` / `this.CreateNav`. That is the persistence-surface split until an EF Store exists — not a second interpreter.
+`session.Lower` / `RuntimeAnalysisCache.GetOrLower` builds the module and caches runtime-shaped named action / OnEntry trees. `ExecuteEffectList` looks those up for named invoke and first-stage OnEntry, then `Interpreter.CompileChecked`. Subscriptions and transition batches still call `LowerActionBody` at execute time. `EvaluatePolicy` still lowers the guard expression per call.
+
+Create / create-in / unique on the **operation tree** are `this.Create` / `CreateIn` / `ProbeCreate` / `EnsureUnique` (flattened name/value pairs). C# `Stay.Create` / `CreateNav` are the **host bind** of those jobs inside generated factories — not a second action body.
 
 ### 2a. VM-Compiled Path (Lowering → Compile → Execute)
 
@@ -103,11 +105,14 @@ Every action effect list maps to Syntax AST, compiles via `Interpreter.CompileCh
 | `StageTransitionEffect` | Assignment of `CurrentStage` + `Invoke(Member(This, "Notify"), stageName)` | Same tree on runtime and emit |
 | `InvokeActionEffect` | Self: `Invoke(Member(This, action), args)`. Cross-entity: `this.Rel.Action(args)` with a linked-target `DomainResult.Failure` guard | Same tree on runtime and emit |
 | `ForEachInvokeEffect` | Fail-fast `ForEachLoop` over a **OneToMany** collection nav | Zero-match `DomainResult.Failure` |
-| `CreateEntityInstance` | Runtime: `this.Create(typeName, …)`. C#: `Stay.Create` | Notify-shaped Store job |
-| `CreateEntityInRelationship` | Runtime: `this.CreateIn(relName, …)`. C#: `this.CreateNav` | Store.CreateIn registers and links |
+| `CreateEntityInstance` | `this.Create(typeName, prop, value, …)` | Notify-shaped Store job; C# factory may call `Stay.Create` as host bind |
+| `CreateEntityInRelationship` | `this.CreateIn(relName, prop, value, …)` | Store.CreateIn registers and links; C# factory may call `CreateNav` as host bind |
 
 ```csharp
-var tree = effectPass.LowerActionBody(prepared);
+RuntimeAnalysisCache.GetOrLower(domain, session, analysis);
+var tree = RuntimeAnalysisCache.TryGetOperation(domain, key, out var cached)
+    ? cached
+    : effectPass.LowerActionBody(effects); // subscriptions / transition batches
 var compiled = Interpreter.CompileChecked(tree, typeProvider);
 using var exec = Interpreter.Execute(compiled, s => s.SetArgs(new object?[] { this }));
 if (exec.Result.Value is DomainResult { IsSuccess: false } failed)
@@ -130,23 +135,23 @@ No Effect-IR walk at simulate. `CreateChildInstance` exists only as the body of 
 ```
 ExecuteEffectList(effects)
   │
-  ├─ PreprocessEffectExpressions — now/today/guid → literals
-  │   (VM cannot execute DateOnly.FromDateTime; not a store-read rewrite)
+  ├─ named action / OnEntry: GetOrLower → TryGetOperation (runtime-shaped tree)
+  ├─ subscription / transition batch: LowerActionBody
   │
-  └─ LowerActionBody → Interpreter.CompileChecked → Execute
+  └─ Interpreter.CompileChecked → Execute
       ├─ AssignEffect  → Assignment (+ EnsureUnique)
       ├─ CompositeEffect → Block
       ├─ ConditionalEffect → IfStatement
       ├─ StageTransitionEffect → CurrentStage Assignment + Invoke Notify
       ├─ InvokeActionEffect → Invoke(Member(...))
       ├─ ForEachInvokeEffect → ForEachLoop
-      ├─ CreateEntityInstance → this.Create (runtime) / Stay.Create (export)
-      └─ CreateEntityInRelationship → this.CreateIn (runtime) / CreateNav (export)
+      ├─ CreateEntityInstance → this.Create(name, prop, value, …)
+      └─ CreateEntityInRelationship → this.CreateIn(rel, prop, value, …)
 ```
 
 ### 2d. Comment is not shipped meaning
 
-`EffectLoweringPass` does **not** emit `Comment` nodes. A composite/conditional sub-effect that cannot lower throws `InvalidOperationException`. All effects lower on both runtime and emit paths (different factory shapes for create). `_lowerRuntimeCreate` defaults to true in runtime mode. The `Comment` AST node is not product meaning and must not be used as a lowering-gap marker. Sequential transitions update `SourceStageName` after each transition so exit effects use the correct source stage.
+`EffectLoweringPass` does **not** emit `Comment` nodes. A composite/conditional sub-effect that cannot lower throws `InvalidOperationException`. All shipped effects lower on both runtime and emit paths. The `Comment` AST node is not product meaning and must not be used as a lowering-gap marker. Sequential transitions update `SourceStageName` after each transition so exit effects use the correct source stage. Clocks (`now`/`today`/`guid`) lower to static BCL members the VM executes — they are not rewritten to host literals.
 
 ---
 
@@ -229,7 +234,7 @@ C# export may still throw Q3 except bare `count Rel`, and may keep coalesce-thro
 | Case | Lowered to | Behavior |
 |------|------------|----------|
 | Self-invoke | `Invoke(Member(This, action), args)` | Analysis sees the action on the type def; C# prints `this.Checkout()`. Nested Failure is discarded like C# `this.Foo();` |
-| Singular cross-entity | `this.Rel.Action(args)` with a linked-target `DomainResult.Failure` guard before deref | Same tree on runtime and emit. Not gated on `LowerStageTransitions`. Does not wrap `IsSuccess` |
+| Singular cross-entity | `this.Rel.Action(args)` with a linked-target `DomainResult.Failure` guard before deref | Same tree on runtime and emit. Does not wrap `IsSuccess` |
 | For-invoke | Fail-fast `ForEachLoop` over a **OneToMany** collection nav | Analysis rejects ManyToMany / OneToOne. VM walks `IList` (fail-loud non-IList). Per-item `if (!result.IsSuccess) return result`. Zero-match `DomainResult.Failure`; `ExecuteEffect` throws on a failed program result |
 
 `GetOutboundRelatedInstances` is the body of those Store-read jobs — not invoke dispatch, and not an execute-time rewrite of the action/policy tree.
@@ -338,7 +343,7 @@ This is the runtime counterpart of `StageSubscription` declarations in the DSL.
 |------|---------|---------|
 | **Quantifier lowering** | Runtime: Store jobs in the tree. C# export still limited (Q3 except bare `count Rel`) | EF Store so export can print the same jobs |
 | **Relationship navigation** | Runtime: `GetRelatedOne` + TypeCast. C#: coalesce-throw | Same Store job on both paths |
-| **Effect lowering** | One `LowerActionBody` tree. Runtime `Create`/`CreateIn` vs C# `Stay.Create`/`CreateNav`. Sequential transitions update `SourceStageName`. | Bind an EF Store; drop `LowerStageTransitions` split |
+| **Effect lowering** | One operation tree (`this.Create` / `CreateIn` / `EnsureUnique`). Named invoke looks up `session.Lower` cache. Sequential transitions update `SourceStageName`. | Bind an EF Store so C# factories do not wrap `Stay.Create` / `CreateNav` |
 | **VM quantifier eval** | Per-target re-lowering + compile inside the Store job | Cached lowering or batch evaluation |
 | **ParameterAccess in DSL** | Product spelling is a **bare identifier** (`PropertyAccess`) | L3 — no separate parameter authoring syntax |
 | **Clock keywords** | Clocks lower to BCL members (`DateTime.UtcNow`, `DateOnly.FromDateTime`, `Guid.NewGuid`); VM executes them | Injectable `TimeProvider` (not a product seam) |
@@ -350,7 +355,7 @@ This is the runtime counterpart of `StageSubscription` declarations in the DSL.
 | [`Poly/Interpretation/README.md`](../../Poly/Interpretation/README.md) | Interpretation system overview (below this layer) |
 | [`vm-abi-reference.md`](vm-abi-reference.md) | VM ABI, frame layout, register model (below this layer) |
 | [`docs/CORE.md`](../CORE.md) | Module boundaries and pipeline ownership |
-| `Poly/DomainModeling/Runtime/DomainEntityInstance.cs` | Runtime dispatch; Store jobs; `LowerActionBody` → Interpreter |
+| `Poly/DomainModeling/Runtime/DomainEntityInstance.cs` | Runtime dispatch; Store jobs; named invoke looks up `session.Lower` |
 | `Poly/DomainModeling/Lowering/DomainExpressionLoweringPass.cs` | Expression → Syntax AST lowering |
 | `Poly/DomainModeling/Lowering/EffectLoweringPass.cs` | Effect → Syntax AST lowering |
 | `Poly/DomainModeling/EffectDispatch.cs` | Effect dispatch base class |

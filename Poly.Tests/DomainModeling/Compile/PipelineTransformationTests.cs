@@ -1,3 +1,4 @@
+using Poly.Ast.Nodes;
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Compile;
@@ -76,6 +77,33 @@ public class PipelineTransformationTests {
 
         await Assert.That(RuntimeAnalysisCache.TryGetOperation(domain, key, out var after)).IsTrue();
         await Assert.That(ReferenceEquals(before, after)).IsTrue();
+    }
+
+    [Test]
+    public async Task InvokeAction_RunsTheCachedTree_NotAReloweredEffectWalk() {
+        var (domain, analysis, session) = Evolve("""
+            domain Parking
+            Permit: entity { Plate: Text required }
+            Lot: entity {
+              permits: many Permit
+              Issue: action (plate: Text) {
+                create in permits { Plate: plate }
+              }
+            }
+            """);
+        session.Lower(domain, analysis);
+        var key = RuntimeAnalysisCache.ActionKey("Lot", "Issue", stage: null);
+        RuntimeAnalysisCache.ReplaceOperation(domain, key, new Block([
+            new Return(new Invoke(new Member(new NamedTypeReference("DomainResult"), "Success")))
+        ]));
+
+        var lotE = domain.Types.OfType<Entity>().First(e => e.Name == "Lot");
+        var store = new DomainInstanceStore();
+        var lot = DomainEntityInstance.Create(lotE, domain: domain);
+        store.Add(lot);
+        var result = lot.InvokeAction("Issue", new Dictionary<string, object?> { ["plate"] = "AAA" });
+        await Assert.That(result.Succeeded).IsTrue();
+        await Assert.That(lot.CreatedChildren.Count).IsEqualTo(0);
     }
 
     [Test]

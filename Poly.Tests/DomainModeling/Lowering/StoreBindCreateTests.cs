@@ -120,7 +120,10 @@ public class StoreBindCreateTests {
         var emitInvoke = Name(emit.LowerActionBody(action.Effects)!);
         await Assert.That((runtimeInvoke.Delegate as Member)!.MemberName)
             .IsEqualTo((emitInvoke.Delegate as Member)!.MemberName);
-        await Assert.That(runtimeInvoke.Arguments[0]).IsEqualTo(emitInvoke.Arguments[0]);
+        await Assert.That((runtimeInvoke.Arguments[0] as Constant)?.Value)
+            .IsEqualTo((emitInvoke.Arguments[0] as Constant)?.Value);
+        await Assert.That(runtimeInvoke.Arguments.Length).IsEqualTo(2);
+        await Assert.That(emitInvoke.Arguments.Length).IsEqualTo(2);
     }
 
     [Test]
@@ -301,7 +304,10 @@ public class StoreBindCreateTests {
         var lowered = pass.LowerActionBody(action.Effects);
         var createIn = Flatten(lowered!).OfType<Invoke>()
             .First(i => i.Delegate is Member { MemberName: "CreateIn" });
-        await Assert.That(createIn.Arguments.Last()).IsTypeOf<TypeCast>();
+        await Assert.That(createIn.Arguments.Length).IsEqualTo(2);
+        var add = Flatten(lowered!).OfType<Invoke>()
+            .First(i => i.Delegate is Member { MemberName: "Add" } && i.Arguments.Length == 2);
+        await Assert.That(add.Arguments[1]).IsTypeOf<TypeCast>();
     }
 
     [Test]
@@ -324,9 +330,11 @@ public class StoreBindCreateTests {
             Domain: domain,
             ActionParameterNames: ["plate"]));
         var lowered = pass.LowerActionBody(action.Effects);
-        var createIn = Flatten(lowered!).OfType<Invoke>()
-            .First(i => i.Delegate is Member { MemberName: "CreateIn" });
-        await Assert.That(createIn.Arguments.Last() is TypeCast).IsFalse();
+        var adds = Flatten(lowered!).OfType<Invoke>()
+            .Where(i => i.Delegate is Member { MemberName: "Add" } && i.Arguments.Length == 2)
+            .ToList();
+        await Assert.That(adds.Count).IsGreaterThan(0);
+        await Assert.That(adds.All(a => a.Arguments[1] is not TypeCast)).IsTrue();
     }
 
     private static (Domain Domain, AnalysisResult Analysis) Evolve(string poly) {

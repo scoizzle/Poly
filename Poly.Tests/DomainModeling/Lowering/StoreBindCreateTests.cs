@@ -64,7 +64,7 @@ public class StoreBindCreateTests {
     }
 
     [Test]
-    public async Task CreateIn_Export_KeepsCreateNav() {
+    public async Task CreateIn_Export_UsesCreateIn() {
         var (domain, analysis) = Evolve("""
             domain Parking
             Permit: entity { Plate: Text required }
@@ -80,14 +80,47 @@ public class StoreBindCreateTests {
         var pass = new EffectLoweringPass(lot, new LoweringContext(
             new ThisReference(),
             UseThisReference: true,
-            LowerStageTransitions: true,
             Analysis: analysis,
             Domain: domain,
             ActionParameterNames: ["plate"]));
         var lowered = pass.LowerActionBody(action.Effects);
         var cs = new CSharpGenerator().Generate(lowered!);
-        await Assert.That(cs).Contains("CreatePermits");
-        await Assert.That(cs).DoesNotContain("CreateIn(");
+        await Assert.That(cs).Contains("CreateIn(");
+        await Assert.That(cs).DoesNotContain("CreatePermits(");
+    }
+
+    [Test]
+    public async Task CreateIn_EmitAndRuntime_ShareCreateInInvoke() {
+        var (domain, analysis) = Evolve("""
+            domain Parking
+            Permit: entity { Plate: Text required }
+            Lot: entity {
+              permits: many Permit
+              Issue: action (plate: Text) {
+                create in permits { Plate: plate }
+              }
+            }
+            """);
+        var lot = domain.Types.OfType<Entity>().First(e => e.Name == "Lot");
+        var action = lot.Actions.First(a => a.Name == "Issue");
+        var runtime = new EffectLoweringPass(lot, new LoweringContext(
+            new Parameter("entity", new TypeReference(lot.Name)),
+            Analysis: analysis,
+            Domain: domain,
+            ActionParameterNames: ["plate"]));
+        var emit = new EffectLoweringPass(lot, new LoweringContext(
+            new ThisReference(),
+            UseThisReference: true,
+            Analysis: analysis,
+            Domain: domain,
+            ActionParameterNames: ["plate"]));
+        Invoke Name(Node tree) => Flatten(tree).OfType<Invoke>()
+            .First(i => i.Delegate is Member { MemberName: "CreateIn" });
+        var runtimeInvoke = Name(runtime.LowerActionBody(action.Effects)!);
+        var emitInvoke = Name(emit.LowerActionBody(action.Effects)!);
+        await Assert.That((runtimeInvoke.Delegate as Member)!.MemberName)
+            .IsEqualTo((emitInvoke.Delegate as Member)!.MemberName);
+        await Assert.That(runtimeInvoke.Arguments[0]).IsEqualTo(emitInvoke.Arguments[0]);
     }
 
     [Test]

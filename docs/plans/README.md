@@ -57,7 +57,7 @@ Queue (`THEN` / `PARKED` / `PULL`) lives only in [`PIPELINE-STATUS.md`](simple-a
 | [`live-demo-reliability-2026-08-13.md`](live-demo-reliability-2026-08-13.md) | Cut for “compile → run → HTTP” demos |
 | [`live-pairing-demo-2026-08-13.md`](live-pairing-demo-2026-08-13.md) | Human + agent progressive authoring → `serve-poly.sh` |
 | [`pack-host-2026-08-13.md`](pack-host-2026-08-13.md) | **Not CURRENT.** Phase 1 shipped; extension model superseded. |
-| [`pipeline-transformation-2026-09-04.md`](pipeline-transformation-2026-09-04.md) | Named compile stages (parse → analyze → lower once → check → consume). **Proposal — not CURRENT, not a suite.** P1 = kill `LowerStageTransitions`. |
+| [`pipeline-transformation-2026-09-04.md`](pipeline-transformation-2026-09-04.md) | Named compile stages. P1–P5 executed (one lower, compile once, `session.Lower`, HTTP fail-closed, analysis bind). **Not CURRENT.** P6 clocks open. |
 | [`dict-sqlite-host-2026-08-30.md`](dict-sqlite-host-2026-08-30.md) | Dict + SQLite host. **Proposal — not CURRENT, not a suite.** ABI stale vs shipped Store jobs. |
 | [`domainmodeling-simplification-2026-08-14.md`](domainmodeling-simplification-2026-08-14.md) | Deletion-first DomainModeling proposal. **Not CURRENT** |
 | [`grammar-cycle-2026-08-14.md`](grammar-cycle-2026-08-14.md) | Grammar as the parse/print cycle. **Not CURRENT** until admitted |

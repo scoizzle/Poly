@@ -3,8 +3,9 @@ using Poly.DomainModeling.Ontology;
 namespace Poly.DomainModeling.Analysis;
 
 /// <summary>
-/// Compatibility door for tests. Product analyze is <see cref="DomainSession.Analyze"/>.
-/// This forwards to a core-catalog session for the domain.
+/// Compatibility door for tests. Product analyze is <see cref="DomainSession.Analyze"/>,
+/// which binds the authoring session. This forwards to the cache (bound session
+/// if Analyze already ran; otherwise a core-catalog fallback).
 /// </summary>
 public static class DomainModelAnalyzer {
     /// <summary>

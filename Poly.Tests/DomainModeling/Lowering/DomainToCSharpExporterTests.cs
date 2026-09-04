@@ -223,8 +223,7 @@ public class DomainToCSharpExporterTests {
         var context = new LoweringContext(
             new Parameter("entity", new TypeReference(entity.Name)),
             Analysis: analysis,
-            UseThisReference: true,
-            LowerStageTransitions: true);
+            UseThisReference: true);
         var pass = new EffectLoweringPass(entity, context);
 
         var lowered = pass.TryLowerVmNode(effect);
@@ -254,7 +253,6 @@ public class DomainToCSharpExporterTests {
             new Parameter("entity", new TypeReference(entity.Name)),
             Analysis: analysis,
             UseThisReference: true,
-            LowerStageTransitions: true,
             Domain: domain);
         var pass = new EffectLoweringPass(entity, context);
 
@@ -265,7 +263,7 @@ public class DomainToCSharpExporterTests {
     }
 
     [Test]
-    public async Task EffectLowering_MissingEntityStructureMetadata_Throws() {
+    public async Task EffectLowering_Create_DoesNotRequireEntityStructureMetadata() {
         var (domain, analysis) = ParseAndAnalyze("""
             domain Demo
 
@@ -280,12 +278,15 @@ public class DomainToCSharpExporterTests {
             new Parameter("entity", new TypeReference(entity.Name)),
             Analysis: analysis,
             UseThisReference: true,
-            LowerStageTransitions: true,
             Domain: domain);
         var pass = new EffectLoweringPass(entity, context);
 
-        var ex = Assert.Throws<InvalidOperationException>(() => pass.TryLowerVmNode(effect));
-        await Assert.That(ex!.Message).Contains("EntityStructureMetadata is required");
+        var lowered = pass.TryLowerVmNode(effect);
+        await Assert.That(lowered).IsNotNull();
+        var names = FlattenLowered(lowered!).OfType<Invoke>()
+            .Select(i => (i.Delegate as Member)?.MemberName)
+            .ToList();
+        await Assert.That(names.Contains("Create")).IsTrue();
     }
 
     [Test]
@@ -315,7 +316,6 @@ public class DomainToCSharpExporterTests {
             new Parameter("entity", new TypeReference(entity.Name)),
             Analysis: analysis,
             UseThisReference: true,
-            LowerStageTransitions: true,
             Domain: domain,
             SourceStageName: "Active");
         var pass = new EffectLoweringPass(entity, context);
@@ -1770,7 +1770,7 @@ public class DomainToCSharpExporterTests {
         var cs = new CSharpGenerator().Generate(unit);
 
         var bookIdx = cs.IndexOf("public DomainResult Book(", StringComparison.Ordinal);
-        var probeIdx = cs.IndexOf("Stay.Create(nights)", bookIdx);
+        var probeIdx = cs.IndexOf("this.ProbeCreate(\"Stay\"", bookIdx);
         var assignIdx = cs.IndexOf("this.OpenStays = this.OpenStays + 1L", bookIdx);
         await Assert.That(probeIdx).IsGreaterThan(bookIdx);
         await Assert.That(assignIdx).IsGreaterThan(probeIdx);
@@ -2177,7 +2177,7 @@ public class DomainToCSharpExporterTests {
 
         var bookIdx = cs.IndexOf("public DomainResult Book(", StringComparison.Ordinal);
         var assignIdx = cs.IndexOf("this.OpenStays = this.OpenStays + 1L", bookIdx);
-        var probeIdx = cs.IndexOf("Stay.Create(nights)", bookIdx);
+        var probeIdx = cs.IndexOf("this.ProbeCreate(\"Stay\"", bookIdx);
         await Assert.That(bookIdx).IsGreaterThan(-1);
         await Assert.That(assignIdx).IsGreaterThan(bookIdx);
         // Probe of the then-branch create-in must not run before the if (or at all
@@ -2206,7 +2206,7 @@ public class DomainToCSharpExporterTests {
         var cs = new CSharpGenerator().Generate(unit);
 
         var bookIdx = cs.IndexOf("public DomainResult Book(", StringComparison.Ordinal);
-        var probeIdx = cs.IndexOf("Stay.Create(nights)", bookIdx);
+        var probeIdx = cs.IndexOf("this.ProbeCreate(\"Stay\"", bookIdx);
         var assignIdx = cs.IndexOf("this.OpenStays = this.OpenStays + 1L", bookIdx);
         await Assert.That(probeIdx).IsGreaterThan(bookIdx);
         await Assert.That(assignIdx).IsGreaterThan(probeIdx);
@@ -2236,7 +2236,7 @@ public class DomainToCSharpExporterTests {
 
         var bookIdx = cs.IndexOf("public DomainResult Book(", StringComparison.Ordinal);
         var assignIdx = cs.IndexOf("this.OpenStays = this.OpenStays + 1L", bookIdx);
-        var probeIdx = cs.IndexOf("Stay.Create(nights)", bookIdx);
+        var probeIdx = cs.IndexOf("this.ProbeCreate(\"Stay\"", bookIdx);
         await Assert.That(bookIdx).IsGreaterThan(-1);
         await Assert.That(assignIdx).IsGreaterThan(bookIdx);
         await Assert.That(probeIdx).IsGreaterThan(bookIdx);
@@ -2267,7 +2267,7 @@ public class DomainToCSharpExporterTests {
         var cs = new CSharpGenerator().Generate(unit);
 
         var bookIdx = cs.IndexOf("public DomainResult Book(", StringComparison.Ordinal);
-        var probeIdx = cs.IndexOf("Stay.Create(nights)", bookIdx);
+        var probeIdx = cs.IndexOf("this.ProbeCreate(\"Stay\"", bookIdx);
         var assignIdx = cs.IndexOf("this.OpenStays = this.OpenStays + 1L", bookIdx);
         await Assert.That(probeIdx).IsGreaterThan(bookIdx);
         await Assert.That(assignIdx).IsGreaterThan(probeIdx);
@@ -2299,7 +2299,7 @@ public class DomainToCSharpExporterTests {
         var cs = new CSharpGenerator().Generate(unit);
 
         var bookIdx = cs.IndexOf("public DomainResult Book(", StringComparison.Ordinal);
-        var probeIdx = cs.IndexOf("Stay.Create(nights)", bookIdx);
+        var probeIdx = cs.IndexOf("this.ProbeCreate(\"Stay\"", bookIdx);
         var assignIdx = cs.IndexOf("this.OpenStays = this.OpenStays + 1L", bookIdx);
         await Assert.That(probeIdx).IsGreaterThan(bookIdx);
         await Assert.That(assignIdx).IsGreaterThan(probeIdx);
@@ -2309,9 +2309,9 @@ public class DomainToCSharpExporterTests {
     }
 
     [Test]
-    public async Task Export_IfOnMutatedProperty_ProbeUsesPreAssignBag() {
-        // Documented miss: guarded probe condition is the pre-assign bag
-        // (this.OpenStays >= 1L before OpenStays is incremented).
+    public async Task Export_IfOnMutatedProperty_SkipsGuardedProbeLikeRuntime() {
+        // One tree: when the if condition reads a property a prior sibling assigned,
+        // the guarded probe is skipped (runtime ConditionDrift).
         var (domain, analysis) = ParseAndAnalyze("""
             domain Hotel
             Stay: entity {
@@ -2332,12 +2332,12 @@ public class DomainToCSharpExporterTests {
         var cs = new CSharpGenerator().Generate(unit);
 
         var bookIdx = cs.IndexOf("public DomainResult Book(", StringComparison.Ordinal);
-        var probeIdx = cs.IndexOf("Stay.Create(nights)", bookIdx);
         var assignIdx = cs.IndexOf("this.OpenStays = this.OpenStays + 1L", bookIdx);
-        await Assert.That(probeIdx).IsGreaterThan(bookIdx);
-        await Assert.That(assignIdx).IsGreaterThan(probeIdx);
-        var bookPrefix = cs[bookIdx..probeIdx];
-        await Assert.That(bookPrefix.Contains("OpenStays", StringComparison.Ordinal)).IsTrue();
+        var nextMember = cs.IndexOf("\n    public ", bookIdx + 1);
+        var bookCs = nextMember > bookIdx ? cs[bookIdx..nextMember] : cs[bookIdx..];
+        await Assert.That(bookIdx).IsGreaterThan(-1);
+        await Assert.That(assignIdx).IsGreaterThan(bookIdx);
+        await Assert.That(bookCs.Contains("this.ProbeCreate(\"Stay\"", StringComparison.Ordinal)).IsFalse();
         await Assert.That(cs).DoesNotContain("throw new InvalidOperationException(stayResult.ErrorMessage)");
     }
 
@@ -2370,7 +2370,7 @@ public class DomainToCSharpExporterTests {
         var cs = new CSharpGenerator().Generate(unit);
 
         var openItIdx = cs.IndexOf("public DomainResult OpenIt(", StringComparison.Ordinal);
-        var probeIdx = cs.IndexOf("Stay.Create(", openItIdx);
+        var probeIdx = cs.IndexOf("this.ProbeCreate(\"Stay\"", openItIdx);
         var stageIdx = cs.IndexOf("this.CurrentStage = GuestStage.Open", openItIdx);
         var assignIdx = cs.IndexOf("this.OpenStays = this.OpenStays + 1L", openItIdx);
         await Assert.That(openItIdx).IsGreaterThan(-1);

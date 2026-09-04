@@ -51,12 +51,12 @@ public class StageTransitionHostAbiTests {
     }
 
     [Test]
-    public async Task StageTransition_IsNotGatedOnLowerStageTransitionsFlag() {
+    public async Task StageTransition_LowersWithAndWithoutThisReference() {
         var entity = CreatePersonEntity();
         var off = new EffectLoweringPass(entity, new LoweringContext(
-            new Parameter("entity"), LowerStageTransitions: false));
+            new Parameter("entity")));
         var on = new EffectLoweringPass(entity, new LoweringContext(
-            new Parameter("entity"), LowerStageTransitions: true, UseThisReference: true));
+            new Parameter("entity"), UseThisReference: true));
 
         await Assert.That(off.TryLowerVmNode(new StageTransitionEffect(new StageReference("Active"))))
             .IsNotNull();
@@ -68,7 +68,7 @@ public class StageTransitionHostAbiTests {
     public async Task Create_LowersOnRuntimePath() {
         var entity = CreatePersonEntity();
         var pass = new EffectLoweringPass(entity, new LoweringContext(
-            new Parameter("entity"), LowerStageTransitions: false));
+            new Parameter("entity")));
 
         await Assert.That(pass.TryLowerVmNode(
             new CreateEntityInstance(new DomainTypeReference("Person")))).IsNotNull();
@@ -96,7 +96,6 @@ public class StageTransitionHostAbiTests {
         var context = new LoweringContext(
             new ThisReference(),
             UseThisReference: true,
-            LowerStageTransitions: true,
             StageEnumTypeName: "PersonStage",
             SourceStageName: "Draft");
         var pass = new EffectLoweringPass(entity, context);

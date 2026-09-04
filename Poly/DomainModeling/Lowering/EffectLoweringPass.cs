@@ -18,6 +18,7 @@ namespace Poly.DomainModeling.Lowering;
 /// (<c>LowerStageTransitions</c>) emits <c>Stay.Create</c> / <c>this.CreateNav</c>.
 /// Runtime emits Store jobs (<c>Create</c> / <c>CreateIn</c> /
 /// <c>ProbeCreate</c>) that <c>InvokeNamed</c> runs — Stay.Create is C#-only.
+/// That split is unfrozen debt: do not add a sibling consumer flag.
 /// Mixed if+create is the same guarded-probe + body tree.
 /// Unique assign on the runtime path wraps <c>EnsureUnique</c> then assign
 /// (Store bind). C# export keeps a bare Assignment (persistence indexes).

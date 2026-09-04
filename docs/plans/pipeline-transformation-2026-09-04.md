@@ -1,10 +1,10 @@
 # Pipeline transformation (named stages)
 
 **Date:** 2026-09-04  
-**Status:** P1–P5 executed 2026-09-04. **Not CURRENT, not a suite.** P6 (clocks) is an open argument — do not implement.  
+**Status:** P1–P6 executed 2026-09-04. **Not CURRENT, not a suite.**  
 **Frozen:** [`docs/CORE.md`](../CORE.md) §0 · [`docs/decisions/2026-09-04-frozen-core-pipeline.md`](../decisions/2026-09-04-frozen-core-pipeline.md) · [`AGENTS.md`](../../AGENTS.md) **Frozen core**
 
-P1–P5 landed on the product path (`session.Lower`, one Create/CreateIn/EnsureUnique tree, compile-once action bodies, HTTP fail-closed against the module, analysis cache binds the authoring session). P6 clocks left for argument. Still **not CURRENT** — do not invent a second CURRENT.
+P1–P6 landed on the product path (`session.Lower`, one Create/CreateIn/EnsureUnique tree, compile-once action bodies, HTTP fail-closed against the module, analysis cache binds the authoring session, clocks in the tree). Still **not CURRENT** — do not invent a second CURRENT.
 
 ---
 
@@ -153,6 +153,8 @@ Leave OpenAPI / gRPC / CLI as `?` artifacts. Do not add `uses cli` in this slice
 
 - CORE already says the VM executes `DateTime.UtcNow` / `DateOnly.FromDateTime`. Remove the preprocess lie.
 - **Stop:** `rg PreprocessRuntimeKeyword` empty (or the method does not exist); a Date property assign of `Now` still works.
+
+**Executed 2026-09-04.** `PreprocessRuntimeKeyword` is gone. Assign / create-in clocks lower through `LowerDefaultExpression` (type-adapted BCL members). `EvaluateDefaultValue` remains for **create-time property defaults** on `DomainEntityInstance.Create` — that is bag fill at construction, not an operation-tree rewrite.
 
 ---
 

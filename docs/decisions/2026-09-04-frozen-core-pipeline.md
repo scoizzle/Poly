@@ -64,5 +64,4 @@ C# is not a privileged forever target (2026-07-22). Scratch store is not the pro
 ## Non-goals
 
 - Deleting the scratch store, HTTP door, or C# exporter in this change.
-- Unifying clocks (`now`/`today`/`guid`) into the tree (P6 — open argument).
 - Admitting a PIPELINE-STATUS CURRENT suite.

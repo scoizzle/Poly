@@ -17,11 +17,8 @@ namespace Poly.Tests.DomainModeling.Packs;
 ///  - Unknown unit (<c>12 fortnights</c>) and pack-absent sessions fail closed
 ///    end-to-end (design-lock Q5 negatives).
 ///
-/// Runtime eval with a fixed clock is intentionally absent: the design-lock
-/// store/preprocess clock seam (Q3/Q4 — resolve <c>Now</c> once per eval via
-/// injectable <c>TimeProvider</c>) is not implemented, so the VM fails on static
-/// clock members (<c>NamedTypeReference</c> in <c>DirectVmAbiEmitter</c>). That is
-/// a production blocker, not a test gap.
+/// Runtime eval uses the VM clock members (`DateTime.UtcNow` /
+/// `DateOnly.FromDateTime`); injectable `TimeProvider` is not a product seam.
 ///
 /// No production edits: everything here exercises the shipped surface.
 /// </summary>

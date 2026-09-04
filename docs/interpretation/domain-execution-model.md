@@ -341,7 +341,7 @@ This is the runtime counterpart of `StageSubscription` declarations in the DSL.
 | **Effect lowering** | One `LowerActionBody` tree. Runtime `Create`/`CreateIn` vs C# `Stay.Create`/`CreateNav`. Sequential transitions update `SourceStageName`. | Bind an EF Store; drop `LowerStageTransitions` split |
 | **VM quantifier eval** | Per-target re-lowering + compile inside the Store job | Cached lowering or batch evaluation |
 | **ParameterAccess in DSL** | Product spelling is a **bare identifier** (`PropertyAccess`) | L3 — no separate parameter authoring syntax |
-| **Clock keywords** | `now`/`today`/`guid` rewrite to literals before lower | VM executes `DateOnly.FromDateTime` |
+| **Clock keywords** | Clocks lower to BCL members (`DateTime.UtcNow`, `DateOnly.FromDateTime`, `Guid.NewGuid`); VM executes them | Injectable `TimeProvider` (not a product seam) |
 
 ## 10. Related Documents
 

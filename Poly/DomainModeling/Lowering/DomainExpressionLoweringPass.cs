@@ -87,11 +87,16 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Node
         $"DomainExpression node type is not supported");
 
     protected override Node PropertyAccess(PropertyAccess p) {
-        // Runtime keywords: now/today/guid lower to BCL members, not entity
-        // property access. Type adaptation for a known target happens in
-        // EffectLoweringPass (assign / create initializers).
-        var runtime = EffectLoweringPass.LowerDefaultExpression(p);
-        if (runtime is not null) return runtime;
+        // Runtime default expressions: now/today/guid should resolve to CLR
+        // expressions (DateTime.UtcNow, DateOnly.FromDateTime, Guid.NewGuid)
+        // instead of entity property access. Export (UseThisReference) always
+        // clocks these keywords. Simulate assign/create passes a type hint in
+        // EffectLoweringPass. Bare fragments without temporal stay Member(Now)
+        // so analysis can fail closed on unknown property.
+        if (_useThisReference) {
+            var runtime = EffectLoweringPass.LowerDefaultExpression(p);
+            if (runtime is not null) return runtime;
+        }
 
         // When UseThisReference is set, action parameters render as bare names
         if (_useThisReference && _actionParameterNames?.Contains(p.Name) == true)

@@ -86,6 +86,17 @@ internal static class RuntimeAnalysisCache {
     internal static string EntryKey(string entity, string stage) =>
         $"{entity}\0entry\0{stage}";
 
+    internal static void ReplaceOperation(Domain domain, string key, Node tree) {
+        ArgumentNullException.ThrowIfNull(domain);
+        ArgumentException.ThrowIfNullOrEmpty(key);
+        ArgumentNullException.ThrowIfNull(tree);
+        var holder = GetHolder(domain);
+        lock (holder) {
+            holder.Operations ??= new Dictionary<string, Node?>(StringComparer.Ordinal);
+            holder.Operations[key] = tree;
+        }
+    }
+
     internal static bool TryGetOperation(Domain domain, string key, out Node? tree) {
         ArgumentNullException.ThrowIfNull(domain);
         ArgumentException.ThrowIfNullOrEmpty(key);

@@ -513,16 +513,8 @@ public sealed partial record DomainEntityInstance {
             values[binding.PropertyName] = exec.Result.GetValue<object>();
         }
 
-        foreach (var prop in targetEntity.Properties) {
-            if (values.ContainsKey(prop.Name))
-                continue;
-            if (prop.Constraints.OfType<DefaultValueConstraint>().FirstOrDefault() is { } def)
-                values[prop.Name] = EvaluateDefaultValue(def.Expression, prop.Type.TypeName, Domain);
-            else
-                values[prop.Name] = null;
-        }
-
-        return ValidateConstraints(targetEntity, values, Store);
+        return ValidateConstraints(
+            targetEntity, FillCreateDefaults(targetEntity, values, Domain), Store);
     }
 
     /// <summary>
@@ -592,6 +584,7 @@ public sealed partial record DomainEntityInstance {
                     $"Available: {string.Join(", ", scalarNames)}.");
         }
 
+        initialValues = FillCreateDefaults(targetEntity, initialValues, Domain);
         var uniqueOrConstraint = ValidateConstraints(targetEntity, initialValues, Store);
         if (uniqueOrConstraint is not null)
             throw new InvalidOperationException(uniqueOrConstraint);

@@ -136,6 +136,29 @@ public sealed partial record DomainEntityInstance {
     }
 
     /// <summary>
+    /// Fills missing/null scalar slots from <c>default(...)</c> before create
+    /// probe/validate. Store jobs see the same bag <see cref="Create"/> will store
+    /// — unique-from-default and required-default must not skip the probe.
+    /// </summary>
+    internal static Dictionary<string, object?> FillCreateDefaults(
+        Entity entity,
+        IReadOnlyDictionary<string, object?> values,
+        Domain? domain) {
+        ArgumentNullException.ThrowIfNull(entity);
+        ArgumentNullException.ThrowIfNull(values);
+        var filled = new Dictionary<string, object?>(values, StringComparer.Ordinal);
+        foreach (var prop in entity.Properties) {
+            filled.TryGetValue(prop.Name, out var existing);
+            if (existing is not null)
+                continue;
+            if (prop.Constraints.OfType<DefaultValueConstraint>().FirstOrDefault() is not { } def)
+                continue;
+            filled[prop.Name] = EvaluateDefaultValue(def.Expression, prop.Type.TypeName, domain);
+        }
+        return filled;
+    }
+
+    /// <summary>
     /// Validates required/range/length/pattern/unique constraints against the to-be-stored
     /// values, mirroring the C# export's <c>Create</c> factory guards. Returns the first
     /// violation message, or null when the values are valid. Unique is checked only when

@@ -8,7 +8,35 @@
 
 **Maintenance:** Update this file in the same change that alters a listed mechanism. Stale CORE is worse than no CORE.
 
+**Frozen vs current:** §0 is the architecture (agents **must** respect it). §3 is **current** machinery — compose it, do not reinvent a parallel copy, do not freeze consumer shapes or grow dual-paths. Policy: [`docs/decisions/2026-09-04-frozen-core-pipeline.md`](decisions/2026-09-04-frozen-core-pipeline.md). Always-on: [`AGENTS.md`](../AGENTS.md) **Frozen core**.
+
 **Module split:** `Poly.Syntax` has been split into `Poly.Ast` (node records, NodeId, fluent API) + `Poly.Analysis` (analysis framework, metadata, node replacement). See [`docs/plans/archive/completed-2026-08-late/poly-ast-analysis-module-split.md`](plans/archive/completed-2026-08-late/poly-ast-analysis-module-split.md) (completed 2026-07-26). Paths in this file use the new layout.
+
+---
+
+## 0. Frozen core
+
+Committed: **AST / Node / Analysis**, session-loaded libraries, two products from one analyze. Not committed: a particular store, print target, door implementation, or actor runtime.
+
+```text
+Domain (facts + uses ids)
+  → DomainSession (libraries: analyzers + maps + artifact contributors)
+  → session.Analyze  → bags on nodes, replacements (tree stays immutable)
+  → operation module (generic Syntax; lowering may read bags, the tree does not)
+    and surface bags → host artifacts (persistence / HTTP / later CLI)
+  → consumers (execute / print / doors) bind; they do not fork analyze/lower
+MCP: harness over cataloged operations + session instances — not a product door
+```
+
+| Frozen rule | Implication |
+|-------------|-------------|
+| Nodes are the symbolic primary | No product-path primitive IR; shipped meaning is a complete Syntax tree |
+| Analysis owns facts and rewrite | Bags on nodes; `SetNodeReplacement`; semantic consume requires `AnalysisResult` |
+| Libraries extend the session | `uses` ids; no new spell; unknown/duplicate ids fail closed |
+| Doors map the catalog | Opt-in host libraries; core has no `Main`; doors do not invent operations |
+| No consumer lowering flags | Do not add siblings of `LowerStageTransitions`. Residual dual-path is debt |
+
+**Forbidden:** Effect/Domain walk as shipped meaning; emitter/ABI special case for one host; MCP as customer API; treating `Stay.Create`, scratch `DomainInstanceStore`, or Store job names as frozen.
 
 ---
 
@@ -17,16 +45,12 @@
 Poly is a **neurosymbolic platform**: domain models and policies are authored as structured data, lowered to a **symbolic AST**, analyzed, then executed by the **VM** (canonical semantics). A domain is a **library of legal operations**, not a process with a required `Main`. Known algorithms are a second generation path on the same AST → VM spine. The goal is shipped, correct end-to-end behavior — not framework completeness.
 
 ```text
-Domain (facts + uses ids)
-  → DomainSession (extensions loaded once: analyzers + maps)
-  → session.Analyze (core pipeline + library INodeAnalyzer)  → concern bags
-  → lower each action / policy / create / subscription → Syntax AST
-      (lowering reads bags; the tree does not — it invokes bound Store)
-  → session.Emit (entity C# project) + bag-gated host files (DbContext / HTTP)
-MCP harness: create_instance → evaluate_policy(instanceId) / invoke_action — same operation AST
+See §0 (frozen pipeline). Current consumers today:
+  lower → Interpreter (scratch Store bound)  |  session.Emit (C# module) + bag-gated host files
+MCP: create_instance → evaluate_policy(instanceId) / invoke_action
 ```
 
-**Facts / bag / Store / bind** (words, not a framework): `Domain` is facts. Analysis publishes **concern bags**. A **surface** (`uses sqlite`) selects an implementation. **Lowering** reads bags to choose what to emit. The **product** is generic Syntax that **invokes bound collaborators** (Store: `EnsureUnique`, later `Create` / `CreateIn`) — the tree has no bag knowledge. Scratch `DomainInstanceStore` today, later EF; **not** `IStorage` (that name is the mapping bag). **Bind** is caller-supplied. **Project** prints that tree; **host files** consume bags because they *are* the bound implementations. Duties: [`docs/decisions/2026-09-03-facts-concerns-bags-store-bind.md`](decisions/2026-09-03-facts-concerns-bags-store-bind.md).
+**Facts / bag / Store / bind** (words for **current** bind, not a frozen framework): `Domain` is facts. Analysis publishes **concern bags**. A **surface** (`uses sqlite`, `uses http`) selects an implementation. **Lowering** reads bags. The **operation tree** has no bag types. Scratch `DomainInstanceStore` and C# `Stay.Create` are current consumers — not frozen. **Bind** is caller-supplied. **Project** prints the module; **host files** consume bags because they *are* the bound implementations. Duties: [`docs/decisions/2026-09-03-facts-concerns-bags-store-bind.md`](decisions/2026-09-03-facts-concerns-bags-store-bind.md). Dual-path create/unique print is **debt** ([`2026-09-04-frozen-core-pipeline.md`](decisions/2026-09-04-frozen-core-pipeline.md)).
 
 **Hard lines**
 
@@ -34,9 +58,9 @@ MCP harness: create_instance → evaluate_policy(instanceId) / invoke_action —
 |-------|-------------|
 | Domain is a **module**, not a process | Do not invent `Main` / `Program.cs` in core. Capability/catalog is the operation menu |
 | Shipped ⊆ lowerable | A construct is shipped only if it lowers to a complete, legal Syntax AST. Gaps stay in `docs/plans/`, not in the parser or guide |
-| Always-legal **operations** | Each named operation is a full tree (no `Comment` / `null` / host walk as shipped meaning). Runtime and emit consume the same trees |
+| Always-legal **operations** | Each named operation is a full tree (no `Comment` / `null` / host walk as shipped meaning). Consumers must take that tree. Residual runtime-vs-C# create print (`LowerStageTransitions`) is **debt** — do not grow it |
 | AST is the symbolic primary | Do not reintroduce a parallel “primitive IR” for product paths |
-| VM is canonical execution of a **program** (operation or algorithm) | `Poly.Interpretation` is a **generic language VM** for Syntax trees. DomainModeling is a client that lowers into that language. `Interpreter.Compile` fails closed on analysis errors. The LINQ expression path is a **same-tree semantic checker** (and inspectable execution) for the VM — not a second language. C# emit is a projection. Stored closures late-bind: analysis records free bindings per `Lambda`; emit shares a heap `long[1]` cell. A `Lambda` node produces a function value (`Func`/`Action` from params + yield), which is a heap ref; `Invoke` of it takes the yield/return kind. Stored `Invoke(fn)` arity must match the lambda exactly (including 0 vs N); 0 expression args as `SetArgs` is immediate `Invoke(Lambda)` only. `Variable` is a binding (declare on `Block.Variables` / foreach); write is `Assignment`. Incompatible successive assigns to one variable (including if/else joins) fail at analysis — one slot, one kind; no union locals. C# declare-only is `var x = default(T)` (analysis type, else first-assignment RHS, else `object`); `var x = e` is printer fusion of a direct first assignment. `Assignment` yields the RHS kind. Illegal `Invoke` targets fail at analysis. |
+| VM is canonical execution of a **program** (operation or algorithm) | First executor of Syntax: `Poly.Interpretation` (`Interpreter.Compile` fail-closed). DomainModeling lowers into that language — no domain opcodes. LINQ path is a same-tree checker, not a second language. C# emit is a projection. Language contract (current, do not fork): stored closures late-bind; `Lambda` is a function value; stored `Invoke(fn)` arity must match; `Variable` is a binding; incompatible assigns fail at analysis; C# declare-only is `var x = default(T)`; `Assignment` yields the RHS kind; illegal `Invoke` targets fail at analysis. Details: §3.3 |
 | Domain lowers to **generic** ops | No domain-specific VM opcodes. StageTransition is type-def + Assignment + `Invoke(Member(This, "Notify"))`. Self-invoke is `Invoke(Member(This, action))`. Cross-entity invoke is `this.Rel.Action(args)` with a caller `DomainResult`/`DomainResult<T>.Failure` linked-target guard. For-invoke is a fail-fast `ForEachLoop` over a **OneToMany** collection nav (`if (!result.IsSuccess) return caller.Failure(error)`, zero-match caller `Failure`). Self/cross-entity wrap the same rewrap so nested Failure is CS0029-free across DomainResult arities. Unique assign lowers to `EnsureUnique` on the bound Store (Notify-shaped instance method; dictionary `This` cannot Member-read `Store`). Remaining store (`Create` / create-in) still dual-path. Clocks lower to static BCL members (`DateTime.UtcNow`, `DateOnly.FromDateTime`) which the VM executes |
 | Product doors are **opt-in extensions** | REST and the like load via `uses`. CLI flags seed ids only. Core seed does not emit a host |
 | MCP is the **interactive harness** | Author, inspect, simulate a named policy/action on a store instance (`create_instance` then `evaluate_policy(instanceId)` / `invoke_action`). Not the `DomainSession`. Not the customer API |
@@ -237,6 +261,7 @@ Folder `Libraries/` holds in-assembly seeds (Temporal, storage facets). Vendor p
 
 | Need | Open |
 |------|------|
+| Frozen core (architecture vs current hosts) | [`AGENTS.md`](../AGENTS.md) **Frozen core** · this file §0 · [`docs/decisions/2026-09-04-frozen-core-pipeline.md`](decisions/2026-09-04-frozen-core-pipeline.md) |
 | Facet map + complexity demons | [`docs/complexity-semantic-map.md`](complexity-semantic-map.md) |
 | Principles (values) | `AGENTS.md` + `docs/decisions/2026-core-engineering-principles.md` |
 | Trust bar + first-customer strategy (T1–T3; product via domain + modules) | [`docs/decisions/2026-07-11-platform-trust-bar-and-dogfood.md`](decisions/2026-07-11-platform-trust-bar-and-dogfood.md) |
@@ -258,4 +283,5 @@ Folder `Libraries/` holds in-assembly seeds (Temporal, storage facets). Vendor p
 5. If I added a process door, is it an opt-in extension rather than core `Program.cs`?  
 6. If I added MCP behavior, is it harness (author / inspect / simulate-with-context) on the same AST — not a private evaluator or inferred `Main`?  
 7. Do docs (this file if mechanisms changed) still match the code?  
-8. Build/tests green (`AGENTS.md` Build & Test).
+8. Did I respect **frozen core** (AGENTS / this file §0)? Did I avoid a new consumer lowering flag and avoid treating scratch store / `Stay.Create` / Store job names as architecture?  
+9. Build/tests green (`AGENTS.md` Build & Test).

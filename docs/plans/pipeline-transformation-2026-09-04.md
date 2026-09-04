@@ -1,10 +1,10 @@
 # Pipeline transformation (named stages)
 
 **Date:** 2026-09-04  
-**Status:** Proposal — **not CURRENT, not a suite**  
+**Status:** P1–P5 executed 2026-09-04. **Not CURRENT, not a suite.** P6 (clocks) is an open argument — do not implement.  
 **Frozen:** [`docs/CORE.md`](../CORE.md) §0 · [`docs/decisions/2026-09-04-frozen-core-pipeline.md`](../decisions/2026-09-04-frozen-core-pipeline.md) · [`AGENTS.md`](../../AGENTS.md) **Frozen core**
 
-Do not admit this as PIPELINE-STATUS CURRENT until P1 is a real suite with a gate. Do not invent a second CURRENT. Do not grow `LowerStageTransitions` while this sits parked.
+P1–P5 landed on the product path (`session.Lower`, one Create/CreateIn/EnsureUnique tree, compile-once action bodies, HTTP fail-closed against the module, analysis cache binds the authoring session). P6 clocks left for argument. Still **not CURRENT** — do not invent a second CURRENT.
 
 ---
 

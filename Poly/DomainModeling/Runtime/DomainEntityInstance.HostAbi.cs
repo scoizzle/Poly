@@ -367,7 +367,7 @@ public sealed partial record DomainEntityInstance {
     /// <summary>
     /// VM-called Store jobs for lowered create / create-in (body and probes).
     /// Args: name (type or relationship), then property name/value pairs already
-    /// evaluated by the tree. Probe does not register a child. Stay.Create is C# export only.
+    /// evaluated by the tree. Probe does not register a child.
     /// </summary>
     private DomainResult RuntimeCreateFactory(string name, object?[] args) {
         if (args.Length < 1 || args[0] is not string key || key.Length == 0)

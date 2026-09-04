@@ -33,13 +33,6 @@ namespace Poly.DomainModeling.Lowering;
 /// When <see cref="UseThisReference"/> is true, these names are rendered as bare
 /// parameters (e.g. <c>maxAmount</c>) instead of <c>this.maxAmount</c>.
 /// </param>
-/// <param name="LowerStageTransitions">
-/// Unfrozen dual-path (debt). When true, create / create-in lower to C# <c>Stay.Create</c> /
-/// <c>this.CreateNav</c>. Defaults to false: runtime lowers to Store jobs
-/// (<c>Create</c> / <c>CreateIn</c>) that InvokeNamed runs.
-/// StageTransition and invoke (including for-invoke) always lower — this flag
-/// does not gate them. Do not add a sibling consumer flag.
-/// </param>
 /// <param name="Domain">Optional domain reference for cross-entity type resolution.</param>
 /// <param name="StageEnumTypeName">
 /// Optional stage enum type name for stage transition lowering. Overrides the
@@ -94,7 +87,6 @@ public sealed record LoweringContext(
     INodeMetadataProvider? Analysis = null,
     bool UseThisReference = false,
     HashSet<string>? ActionParameterNames = null,
-    bool LowerStageTransitions = false,
     Domain? Domain = null,
     string? StageEnumTypeName = null,
     IReadOnlyDictionary<string, IReadOnlyList<Node>>? PostTransitionNodes = null,

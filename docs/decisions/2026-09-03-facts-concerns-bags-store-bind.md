@@ -53,11 +53,11 @@ A lowering flag or host Effect-IR walk means the bag/collaborator was not bound.
 
 Unique `AssignEffect` lowers to `Invoke(Member(This, "EnsureUnique"), property, value)` plus the same `DomainResult.Failure` rewrap as create-in / invoke. `DomainEntityInstance.EnsureUnique` delegates to the bound `DomainInstanceStore` (Notify-shaped: dictionary-backed `This` cannot Member-read `Store`). Lowering prefers `StorageMappingMetadata` columns (`IsUnique`) and falls back to `UniqueConstraint` when the bag is absent.
 
-C# unique remains the persistence-surface concern (EF indexes from `StorageColumn.IsUnique`) until an EF Store exists. That split reuses the existing runtime-vs-export create split (`LowerStageTransitions`); it is not a new consumer flag.
+C# unique remains the persistence-surface concern (EF indexes from `StorageColumn.IsUnique`) until an EF Store exists. Action trees always lower `EnsureUnique` then assign; generated C# stubs the job.
 
 ## Later slice (2026-09-03)
 
-`Store.Create` / `CreateIn` / `ProbeCreate` shipped as Notify-shaped jobs. `ExecuteStructured` is gone. Runtime factories are `Create` / `CreateIn` / `ProbeCreate`. Store-aware `Rel exists` / quantifiers / path-prefix lower to Store reads. MCP simulate is bind + Interpreter. Residual: C# still prints `Stay.Create` / `CreateNav` and unique as EF indexes until an EF Store exists; `now`/`today`/`guid` rewrite to literals (VM cannot execute `DateOnly.FromDateTime`).
+`Store.Create` / `CreateIn` / `ProbeCreate` shipped as Notify-shaped jobs. `ExecuteStructured` is gone. Runtime and emit share `Create` / `CreateIn` / `ProbeCreate` / `EnsureUnique` on the operation tree. C# factories may still call `Stay.Create` as the host bind of the job. Unique indexes remain EF schema. `now`/`today`/`guid` rewrite to literals before the first compile (clocks-in-the-tree is an open argument).
 
 ## Consequences
 

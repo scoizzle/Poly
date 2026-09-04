@@ -14,14 +14,12 @@ namespace Poly.DomainModeling.Lowering;
 /// <see cref="DomainExpressionLoweringPass"/> for expression-heavy effects
 /// like <see cref="AssignEffect"/> and <see cref="ConditionalEffect"/>.
 ///
-/// <para>Create / create-in lower on both paths. Export
-/// (<c>LowerStageTransitions</c>) emits <c>Stay.Create</c> / <c>this.CreateNav</c>.
-/// Runtime emits Store jobs (<c>Create</c> / <c>CreateIn</c> /
-/// <c>ProbeCreate</c>) that <c>InvokeNamed</c> runs — Stay.Create is C#-only.
-/// That split is unfrozen debt: do not add a sibling consumer flag.
+/// <para>Create / create-in / unique lower to Store jobs
+/// (<c>Create</c> / <c>CreateIn</c> / <c>ProbeCreate</c> / <c>EnsureUnique</c>)
+/// on the one operation tree. C# print of those jobs is ordinary methods;
+/// generated <c>Create</c> factories may still call <c>Stay.Create</c> as the
+/// host bind of the job. Persistence unique indexes stay a host-artifact concern.
 /// Mixed if+create is the same guarded-probe + body tree.
-/// Unique assign on the runtime path wraps <c>EnsureUnique</c> then assign
-/// (Store bind). C# export keeps a bare Assignment (persistence indexes).
 /// StageTransition and invoke are handwritten IR on both paths.</para>
 ///
 /// <para>When <see cref="Analysis"/> is set, lowering reads pre-computed
@@ -35,7 +33,6 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     private readonly DomainExpressionLoweringPass _expressionPass;
     private readonly INodeMetadataProvider? _analysis;
     private readonly bool _useThisReference;
-    private readonly bool _lowerStageTransitions;
     private readonly string? _stageEnumTypeName;
     private readonly IReadOnlyDictionary<string, IReadOnlyList<Node>>? _postTransitionNodes;
     private string? _sourceStageName;
@@ -57,7 +54,6 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         _domain = context.Domain;
         _analysis = context.Analysis;
         _useThisReference = context.UseThisReference;
-        _lowerStageTransitions = context.LowerStageTransitions;
         _stageEnumTypeName = context.StageEnumTypeName;
         _postTransitionNodes = context.PostTransitionNodes;
         _sourceStageName = context.SourceStageName;
@@ -262,8 +258,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         }
 
         var assignment = new Assignment(target, value);
-        if (!_lowerStageTransitions
-            && a.Target is PropertyAccess uniqueTarget
+        if (a.Target is PropertyAccess uniqueTarget
             && IsUniqueProperty(uniqueTarget.Name)) {
             return WrapUniqueAssign(assignment.Destination, uniqueTarget.Name, value);
         }
@@ -349,8 +344,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     /// source-stage exit effects (when known), CurrentStage assignment, target-stage
     /// entry effects (in try), post-transition notification nodes, then
     /// <c>Invoke(Member(Subject, "Notify"), stageName)</c> in finally.
-    /// Not a host-ABI node. Not gated on <see cref="LoweringContext.LowerStageTransitions"/>
-    /// — that flag still gates create / create-in.
+    /// Not a host-ABI node.
     /// </summary>
     protected override Node? StageTransition(StageTransitionEffect t) {
         if (!_entity.Stages.Any(s =>
@@ -438,9 +432,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     /// (never a bare NRE). Kitchen dogfood: nested Failure must fail-fast
     /// (<c>if (!result.IsSuccess) return caller.Failure(error)</c>) so later effects
     /// do not run and C# export does not CS0029 across <c>DomainResult</c> /
-    /// <c>DomainResult&lt;T&gt;</c>. Not gated on
-    /// <see cref="LoweringContext.LowerStageTransitions"/> — that flag still
-    /// gates create / create-in. OneToMany fan-out uses the for-each lowering.
+    /// <c>DomainResult&lt;T&gt;</c>. OneToMany fan-out uses the for-each lowering.
     /// </summary>
     protected override Node? InvokeAction(InvokeActionEffect i) {
         var args = new List<Node>();
@@ -650,176 +642,29 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     }
 
     /// <summary>
-    /// Lowers CreateEntityInstance for C# mode. Emits <c>TargetType.Create(arg1, arg2, ...)</c>,
-    /// matching initializer bindings to constructor parameters by property name.
-    /// Uses the static <c>Create</c> factory method instead of <c>new</c> since
-    /// constructors are private (Principle: owner constructs owned).
-    /// When <see cref="_domain"/> is null or the target entity is not found, returns null.
+    /// Lowers CreateEntityInstance to <c>this.Create(type, prop, value, …)</c>
+    /// with Failure unwrap. Same tree for simulate and emit.
     /// </summary>
-    protected override Node? CreateEntityInstance(CreateEntityInstance cei) {
-        if (!_lowerStageTransitions) {
-            return LowerRuntimeFactoryCall(
-                "Create", cei.Type.TypeName, cei.Initializers,
-                ResolveEntity(cei.Type.TypeName),
-                cei.RelationshipName);
-        }
-
-        var targetEntity = ResolveEntity(cei.Type.TypeName);
-        if (targetEntity is null) return null;
-
-        var args = BuildConstructorArgs(cei.Initializers, targetEntity);
-        var createCall = new Invoke(
-            new Member(new NamedTypeReference(targetEntity.Name), "Create"),
-            [.. args]);
-
-        // The Create factory now returns DomainResult<T> with constraint validation.
-        // Unwrap: var fineResult = Fine.Create(...);
-        //         if (!fineResult.IsSuccess) return Failure(...);
-        //         var fine = fineResult.Value;
-        // Same Failure shape as create-in — do not throw after prior assigns.
-        var targetName = DomainToCSharpExporter.ToCamelCase(targetEntity.Name);
-        var resultVar = new Variable($"{targetName}Result");
-        var targetVar = new Variable(targetName);
-        var resultType = _context.ActionResultType;
-        var nds = new List<Node>();
-
-        nds.Add(new Assignment(resultVar, createCall));
-
-        Node failureStmt = resultType is not null
-            ? new Return(
-                new Invoke(
-                    new Member(resultType, "Failure"),
-                    new Syntactic.Coalesce(
-                        new Member(resultVar, "ErrorMessage"),
-                        new Constant(""))))
-            : new ThrowStatement(
-                new New(
-                    new NamedTypeReference("InvalidOperationException"),
-                    new Member(resultVar, "ErrorMessage")));
-
-        nds.Add(new IfStatement(
-            new Ast.Nodes.Not(new Member(resultVar, "IsSuccess")),
-            new Block([failureStmt])));
-
-        nds.Add(new Assignment(targetVar, new Member(resultVar, "Value")));
-
-        // Bound initializers for non-constructor props are applied as post-create
-        // assignments. Defaulted props are NOT ctor params here, but their overrides
-        // were already forwarded as trailing optional args by BuildConstructorArgs
-        // (same as create-in) — re-assigning them would hit the private setter (CS0272).
-        var parameterNames = GetConstructorParameterOrder(targetEntity)
-            .Select(p => p.Name).ToHashSet(StringComparer.Ordinal);
-        foreach (var init in cei.Initializers) {
-            if (parameterNames.Contains(init.PropertyName)) continue;
-            var targetProp = targetEntity.Properties.FirstOrDefault(p =>
-                string.Equals(p.Name, init.PropertyName, StringComparison.Ordinal));
-            if (targetProp is null) continue;
-            if (targetProp.Constraints.Any(c => c is DefaultValueConstraint)) continue;
-            nds.Add(new Assignment(
-                new Member(targetVar, targetProp.Name),
-                LowerEnumAwareValue(init.Expression, targetProp.Type, Subject)));
-        }
-
-        return new Block(nds, [resultVar, targetVar]);
-    }
+    protected override Node? CreateEntityInstance(CreateEntityInstance cei) =>
+        LowerRuntimeFactoryCall(
+            "Create", cei.Type.TypeName, cei.Initializers,
+            ResolveEntity(cei.Type.TypeName),
+            cei.RelationshipName);
 
     /// <summary>
-    /// Lowers CreateEntityInRelationshipEffect for C# mode. Emits a call to the
-    /// source entity's <c>Create{Nav}()</c> factory method, which handles
-    /// construction, collection wiring, and subscription registration.
-    /// E.g. <c>create in loans { book: book }</c> → <c>var loan = this.CreateLoans(book);</c>
-    ///
-    /// The return value is captured in a local variable so subsequent effects
-    /// and the action's return value can reference the created instance.
-    ///
-    /// Builds the argument list to match the factory method signature produced
-    /// by <see cref="DomainToCSharpExporter.AddCreateNavMethod"/>: entity
-    /// properties (excluding defaults) followed by singular navs (excluding
-    /// the auto-wired back-reference). Unspecified initializers default to null.
+    /// Lowers create-in to <c>this.CreateIn(relationship, prop, value, …)</c>
+    /// with Failure unwrap. Same tree for simulate and emit.
     /// </summary>
     protected override Node? CreateEntityInRelationship(CreateEntityInRelationshipEffect cr) {
-        if (!_lowerStageTransitions) {
-            if (_domain is null)
-                throw new InvalidOperationException(
-                    "Cannot execute 'create in' without a domain to resolve relationship targets.");
-            var runtimeTarget = _analysis?.GetMetadata<ResolvedRelationshipTargetMetadata>(cr);
-            var runtimeRel = runtimeTarget?.Relationship ?? ResolveRelationship(cr.RelationshipName);
-            var runtimeEntity = runtimeTarget?.TargetEntity
-                ?? (runtimeRel is not null ? ResolveEntity(runtimeRel.Target.TypeName) : null);
-            return LowerRuntimeFactoryCall(
-                "CreateIn", cr.RelationshipName, cr.Initializers, runtimeEntity);
-        }
-
-        if (_domain is null) return null;
-
-        if (_analysis is null) {
+        if (_domain is null)
             throw new InvalidOperationException(
-                "Create-in lowering requires analysis metadata. Semantic lowering without analysis is not supported.");
-        }
-
-        var pascalName = DomainToCSharpExporter.ToPascalCase(cr.RelationshipName);
-        var methodName = $"Create{pascalName}";
-
-        var resolvedTarget = _analysis.GetMetadata<ResolvedRelationshipTargetMetadata>(cr);
-        var relationship = resolvedTarget?.Relationship
-            ?? ResolveRelationship(cr.RelationshipName);
-        if (relationship is null) return null;
-
-        var targetEntity = resolvedTarget?.TargetEntity
-            ?? ResolveEntity(relationship.Target.TypeName);
-        if (targetEntity is null) return null;
-
-        // Build initializer map keyed by property name (camelCase and PascalCase)
-        var initMap = new Dictionary<string, DomainExpression>(StringComparer.Ordinal);
-        foreach (var init in cr.Initializers)
-            initMap[init.PropertyName] = init.Expression;
-
-        var args = new List<Node>();
-        var parameterMetadata = GetConstructorParameterOrder(targetEntity);
-
-        // The CreateNav factory signature (DomainToCSharpExporter.AddCreateNavMethod)
-        // omits back-references and collection navs: back-refs are auto-wired with
-        // `this`, collections start as empty lists in the factory body. The call site
-        // must emit exactly the factory's parameters or the export won't compile
-        // (CS1501 arity drift). Skip back-refs, the auto-wire back-ref, and
-        // collections here to stay in lockstep.
-        var autoWireBackRef = DomainToCSharpExporter.FindAutoWireBackReference(targetEntity, _entity.Name);
-        foreach (var parameter in parameterMetadata) {
-            if (parameter.IsBackReference) continue;
-            if (parameter.IsCollection) continue;
-            if (autoWireBackRef is not null
-                && string.Equals(parameter.Name, autoWireBackRef.Name, StringComparison.Ordinal)) continue;
-            if (initMap.TryGetValue(parameter.Name, out var expr))
-                args.Add(LowerEnumAwareValue(expr, parameter.Type, Subject));
-            else
-                args.Add(DefaultForDomainType(parameter.Type, _domain, _analysis));
-        }
-
-        // Defaulted props are TRAILING optional params on the CreateNav factory (the DSL
-        // default is the C# default). When a create-in binds one, emit args for ALL
-        // defaulted props in the same sorted order — bound value or the DSL default —
-        // so positional order matches the signature. When none are bound, omit (C# default).
-        AppendDefaultedPropArgs(args, initMap, targetEntity);
-
-        var resultLocal = new Variable(DomainToCSharpExporter.ToCamelCase(targetEntity.Name) + "Result");
-        var local = new Variable(DomainToCSharpExporter.ToCamelCase(targetEntity.Name));
-        var resultType = _context.ActionResultType ?? new NamedTypeReference("DomainResult");
-        var blockNodes = new List<Node> {
-            new Assignment(resultLocal, new Invoke(new Member(Subject, methodName), [.. args])),
-            new IfStatement(
-                new Syntactic.Not(new Member(resultLocal, "IsSuccess")),
-                new Block([
-                    new Return(
-                        new Invoke(
-                            new Member(resultType, "Failure"),
-                            new Syntactic.Coalesce(
-                                new Member(resultLocal, "ErrorMessage"),
-                                new Constant(""))))
-                ])),
-            new Assignment(local, new Member(resultLocal, "Value"))
-        };
-
-        return new Block(blockNodes, [resultLocal, local]);
+                "Cannot execute 'create in' without a domain to resolve relationship targets.");
+        var runtimeTarget = _analysis?.GetMetadata<ResolvedRelationshipTargetMetadata>(cr);
+        var runtimeRel = runtimeTarget?.Relationship ?? ResolveRelationship(cr.RelationshipName);
+        var runtimeEntity = runtimeTarget?.TargetEntity
+            ?? (runtimeRel is not null ? ResolveEntity(runtimeRel.Target.TypeName) : null);
+        return LowerRuntimeFactoryCall(
+            "CreateIn", cr.RelationshipName, cr.Initializers, runtimeEntity);
     }
 
     internal List<Node> LowerCreateInConstraintProbes(
@@ -832,8 +677,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
 
     /// <summary>
     /// Guarded create probes (before prior assigns) plus the action body.
-    /// Same tree shape as export <c>LowerActionToMethodBody</c>; runtime factories
-    /// replace Stay.Create / this.CreateNav.
+    /// Same tree for simulate and emit.
     /// </summary>
     internal Node? LowerActionBody(IReadOnlyList<Effect> effects) =>
         LowerActionBodyCore(effects);
@@ -895,8 +739,8 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
                     break;
                 case ConditionalEffect cond:
                     if (priorMutation) {
-                        var skipRuntimeGuarded = !_lowerStageTransitions
-                            && ConditionReadsAssignedProperty(cond.Condition, assigned);
+                        var skipRuntimeGuarded =
+                            ConditionReadsAssignedProperty(cond.Condition, assigned);
                         if (!skipRuntimeGuarded)
                             CollectGuardedBranchProbes(cond, nodes);
                     }
@@ -980,56 +824,17 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
             ?? ResolveEntity(relationship.Target.TypeName);
         if (targetEntity is null) return null;
 
-        if (!_lowerStageTransitions) {
-            var probe = LowerRuntimeFactoryCall(
-                "ProbeCreate", targetEntity.Name, cr.Initializers, targetEntity);
-            return probe as Block ?? new Block([probe]);
-        }
-
-        var initMap = new Dictionary<string, DomainExpression>(StringComparer.Ordinal);
-        foreach (var init in cr.Initializers)
-            initMap[init.PropertyName] = init.Expression;
-
-        var args = new List<Node>();
-        var parameterMetadata = GetConstructorParameterOrder(targetEntity);
-        var autoWireBackRef = DomainToCSharpExporter.FindAutoWireBackReference(targetEntity, _entity.Name);
-        foreach (var parameter in parameterMetadata) {
-            if (parameter.IsCollection) continue;
-            if (parameter.IsBackReference) {
-                // Self-rel slot (Account.parent) is `this` only when *this* entity is
-                // that type. Contact.create-in account must not pass a Contact as Account.
-                args.Add(string.Equals(_entity.Name, targetEntity.Name, StringComparison.Ordinal)
-                    ? Subject
-                    : new Constant(null));
-                continue;
-            }
-            if (autoWireBackRef is not null
-                && string.Equals(parameter.Name, autoWireBackRef.Name, StringComparison.Ordinal)) {
-                args.Add(Subject);
-                continue;
-            }
-            if (initMap.TryGetValue(parameter.Name, out var expr))
-                args.Add(LowerEnumAwareValue(expr, parameter.Type, Subject));
-            else
-                args.Add(DefaultForDomainType(parameter.Type, _domain, _analysis));
-        }
-        AppendDefaultedPropArgs(args, initMap, targetEntity);
-
-        return LowerCreateConstraintProbe(targetEntity, args);
+        var probe = LowerRuntimeFactoryCall(
+            "ProbeCreate", targetEntity.Name, cr.Initializers, targetEntity);
+        return probe as Block ?? new Block([probe]);
     }
 
     private Block? LowerCreateEntityInstanceProbe(CreateEntityInstance cei) {
         var targetEntity = ResolveEntity(cei.Type.TypeName);
         if (targetEntity is null) return null;
-        if (!_lowerStageTransitions) {
-            var probe = LowerRuntimeFactoryCall(
-                "ProbeCreate", targetEntity.Name, cei.Initializers, targetEntity);
-            return probe as Block ?? new Block([probe]);
-        }
-        if (_domain is null)
-            return null;
-        var args = BuildConstructorArgs(cei.Initializers, targetEntity);
-        return LowerCreateConstraintProbe(targetEntity, args);
+        var probe = LowerRuntimeFactoryCall(
+            "ProbeCreate", targetEntity.Name, cei.Initializers, targetEntity);
+        return probe as Block ?? new Block([probe]);
     }
 
     /// <summary>
@@ -1107,28 +912,6 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         type is not null && _domain?.Types.OfType<Entity>().Any(e =>
             string.Equals(e.Name, type.TypeName, StringComparison.Ordinal)) == true;
 
-    private Block LowerCreateConstraintProbe(Entity targetEntity, List<Node> args) {
-        var probe = new Variable($"probe{_createInProbeSequence++}");
-        var resultType = _context.ActionResultType ?? new NamedTypeReference("DomainResult");
-        var targetType = new NamedTypeReference(targetEntity.Name);
-        var errorMessage = new Syntactic.Coalesce(
-            new Member(probe, "ErrorMessage"),
-            new Constant(""));
-        return new Block(
-            [
-                new Assignment(probe, new Invoke(new Member(targetType, "Create"), [.. args])),
-                new IfStatement(
-                    new Syntactic.Not(new Member(probe, "IsSuccess")),
-                    new Block([
-                        new Return(
-                            new Invoke(
-                                new Member(resultType, "Failure"),
-                                errorMessage))
-                    ]))
-            ],
-            [probe]);
-    }
-
     // ── Runtime default expression helpers ─────────────────
 
     /// <summary>
@@ -1177,99 +960,6 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     }
 
     /// <summary>
-    /// Builds constructor arguments matching the <c>Create</c> factory method
-    /// signature produced by <see cref="DomainToCSharpExporter"/>.
-    ///
-    /// The factory signature orders params as:
-    ///   1. Entity properties without <see cref="DefaultValueConstraint"/>
-    ///      (sorted by property name — same order as the exporter).
-    ///   2. Singular navigation properties (one-to-one where target entity
-    ///      is the source).
-    ///
-    /// Back-references to the current entity (<c>_entity</c>) are auto-wired
-    /// as <c>this</c>. Unspecified initializers use CLR-appropriate defaults
-    /// (false for bool, 0 for numbers, null for strings/references).
-    /// Properties with <see cref="DefaultValueConstraint"/> are NOT included
-    /// in constructor args — the factory body sets them from the default.
-    /// </summary>
-    private List<Node> BuildConstructorArgs(
-        IReadOnlyList<PropertyBinding> initializers, Entity targetEntity) {
-        var initMap = new Dictionary<string, DomainExpression>(StringComparer.Ordinal);
-        foreach (var init in initializers)
-            initMap[init.PropertyName] = init.Expression;
-
-        var args = new List<Node>();
-        var parameterMetadata = GetConstructorParameterOrder(targetEntity);
-
-        foreach (var parameter in parameterMetadata) {
-            if (parameter.IsBackReference) {
-                args.Add(Subject);
-                continue;
-            }
-
-            if (parameter.IsCollection) {
-                // Collection nav: starts empty unless an initializer binds it.
-                if (initMap.TryGetValue(parameter.Name, out var collectionInit))
-                    args.Add(LowerEnumAwareValue(collectionInit, parameter.Type, Subject));
-                else
-                    args.Add(new New(
-                        new NamedTypeReference("List",
-                            TypeArguments: [new NamedTypeReference(parameter.Type.TypeName)])));
-                continue;
-            }
-
-            if (initMap.TryGetValue(parameter.Name, out var expr))
-                args.Add(LowerEnumAwareValue(expr, parameter.Type, Subject));
-            else
-                args.Add(DefaultForDomainType(parameter.Type, _domain, _analysis));
-        }
-
-        // Defaulted props are TRAILING optional params (the DSL default is the C#
-        // default). When any is bound, emit args for ALL defaulted props in sorted
-        // order — bound value or the DSL default — so positional order matches the
-        // Create/CreateNav signature. When none are bound, omit (C# default).
-        AppendDefaultedPropArgs(args, initMap, targetEntity);
-
-        return args;
-    }
-
-    /// <summary>
-    /// Appends trailing optional-parameter args for defaulted props of the target
-    /// entity. Shared by the standalone <c>create Type</c> and <c>create in Rel</c>
-    /// call sites so a bound defaulted-prop override flows through construction
-    /// instead of a (private-setter) post-create assignment.
-    /// </summary>
-    private void AppendDefaultedPropArgs(
-        List<Node> args,
-        IReadOnlyDictionary<string, DomainExpression> initMap,
-        Entity targetEntity) {
-        var entryAssigned = _analysis?.GetStructure(targetEntity)?.EntryAssignedPropertyNames
-            ?? EntityStructureAnalyzer.ComputeEntryAssignedPropertyNames(targetEntity);
-        var defaultedProps = targetEntity.Properties
-            .Where(p => p.Constraints.Any(c => c is DefaultValueConstraint))
-            .Where(p => !entryAssigned.Contains(p.Name))
-            .OrderBy(p => p.Name)
-            .ToList();
-        if (!defaultedProps.Any(p => initMap.ContainsKey(p.Name)))
-            return;
-
-        foreach (var prop in defaultedProps) {
-            if (initMap.TryGetValue(prop.Name, out var expr)) {
-                args.Add(LowerEnumAwareValue(expr, prop.Type, Subject));
-            }
-            else {
-                var defaultConstraint = prop.Constraints.OfType<DefaultValueConstraint>().First();
-                var runtimeExpr = EffectLoweringPass.LowerDefaultExpression(
-                    defaultConstraint.Expression, new NamedTypeReference(prop.Type.TypeName));
-                var defaultNode = DomainToCSharpExporter.LowerDefaultConstantNode(defaultConstraint, prop, _domain, _analysis);
-                args.Add(runtimeExpr is not null
-                    ? new Constant(null) // sentinel — ctor applies the runtime default
-                    : defaultNode ?? DefaultForDomainType(prop.Type, _domain, _analysis));
-            }
-        }
-    }
-
-    /// <summary>
     /// Lowers an initializer/assignment VALUE whose target is
     /// <paramref name="targetType"/>. A bare identifier that names a member of the
     /// target enum type resolves to qualified member access
@@ -1292,61 +982,6 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
             }
         }
         return _expressionPass.Lower(expr, subject);
-    }
-
-    private IReadOnlyList<ConstructorParameterOrder> GetConstructorParameterOrder(Entity targetEntity) {
-        if (_analysis is not null) {
-            if (_analysis.GetStructure(targetEntity) is EntityStructureMetadata metadata)
-                return metadata.ConstructorParameters;
-
-            throw new InvalidOperationException(
-                $"EntityStructureMetadata is required for constructor ordering on entity '{targetEntity.Name}'.");
-        }
-
-        // Analysis absent: structural property-order rebuild (standalone / no-analysis path only).
-        var parameters = targetEntity.Properties
-            .Where(p => !p.Constraints.Any(c => c is DefaultValueConstraint))
-            .OrderBy(p => p.Name)
-            .Select(p => new ConstructorParameterOrder(p.Name, p.Type, false, false))
-            .ToList();
-
-        if (_domain is not null) {
-            foreach (var rel in targetEntity.Navigations.Where(r =>
-                         r.Cardinality is not (RelationshipCardinality.OneToMany or RelationshipCardinality.ManyToMany))) {
-                if (string.Equals(rel.Target.TypeName, _entity.Name, StringComparison.Ordinal)) {
-                    parameters.Add(new ConstructorParameterOrder(rel.Name, rel.Target, true, true));
-                    continue;
-                }
-
-                parameters.Add(new ConstructorParameterOrder(rel.Name, rel.Target, true, false));
-            }
-        }
-
-        return parameters;
-    }
-
-    /// <summary>
-    /// Returns a type-appropriate default value Syntax node for a domain type.
-    /// Used by <see cref="BuildConstructorArgs"/> and <see cref="CreateEntityInRelationship"/>
-    /// to emit valid defaults instead of bare <c>null</c> for value-type properties.
-    /// Enum defaults use catalog lookup when <paramref name="analysis"/> is present.
-    /// </summary>
-    private Node DefaultForDomainType(DomainTypeReference typeRef, Domain? domain, INodeMetadataProvider? analysis = null) {
-        if (DomainToCSharpExporter.TryResolveEnumType(domain, analysis, typeRef.TypeName, out var enumType) && enumType is not null)
-            return new Member(new NamedTypeReference(enumType.Name), enumType.MemberNames[0]);
-        return typeRef.TypeName switch {
-            "Text" or "String" => new Constant(""),
-            "Number" or "Int" or "Int64" => new Constant(0L),
-            "Int32" => new Constant(0),
-            "Boolean" or "Bool" => new Constant(false),
-            "DateTime" or "Timestamp" => new Member(
-                new NamedTypeReference("DateTime"), "MinValue"),
-            "Date" or "DateOnly" => new Member(
-                new NamedTypeReference("DateOnly"), "MinValue"),
-            "Guid" or "Uuid" => new Member(
-                new NamedTypeReference("Guid"), "Empty"),
-            _ => new Constant(null),
-        };
     }
 
     private Entity? ResolveEntity(string typeName) {

@@ -7,14 +7,14 @@ public class FrozenCoreInstructionTests {
         await Assert.That(agents).Contains("## Frozen core");
         await Assert.That(agents).Contains("2026-09-04-frozen-core-pipeline.md");
         await Assert.That(agents).Contains("consumer-specific lowering flag");
-        await Assert.That(agents).Contains("LowerStageTransitions");
+        await Assert.That(agents).Contains("consumer-specific lowering flag");
     }
 
     [Test]
     public async Task CoreMd_StatesFrozenCoreSection() {
         var core = await File.ReadAllTextAsync(Path.Combine(RepoRoot(), "docs", "CORE.md"));
         await Assert.That(core).Contains("## 0. Frozen core");
-        await Assert.That(core).Contains("Do not add siblings of `LowerStageTransitions`");
+        await Assert.That(core).Contains("Do not add consumer-specific lowering flags");
         await Assert.That(core).Contains("2026-09-04-frozen-core-pipeline.md");
     }
 

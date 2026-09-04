@@ -147,7 +147,7 @@ public sealed partial record DomainEntityInstance {
         // Runtime factories for mixed if+create. 0/1-pair overloads plus 2–16
         // object-value pair overloads so Invoke types as DomainResult
         // (IsSuccess resolves) for any realistic initializer count.
-        // Stay.Create is C#-only.
+        // Generated C# may still call Stay.Create inside the factory that binds this job.
         var str = TypeReference.To<string>();
         var i64 = TypeReference.To<long>();
         var boolean = TypeReference.To<bool>();

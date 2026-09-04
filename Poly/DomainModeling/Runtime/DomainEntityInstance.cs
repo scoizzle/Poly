@@ -227,7 +227,8 @@ public sealed partial record DomainEntityInstance {
             return;
         // Mixed if+create must LowerActionBody (ExecuteStructured was deleted).
         ThrowIfEffectListFailed(
-            instance.ExecuteEffectList(entryEffects, entryPass, instance._typeDefAnalyzer),
+            instance.ExecuteEffectList(entryEffects, entryPass, instance._typeDefAnalyzer,
+                cacheKey: $"{instance.Entity.Name}\0entry\0{firstStage.Name}"),
             "first-stage OnEntry");
     }
 
@@ -405,8 +406,8 @@ public sealed partial record DomainEntityInstance {
     /// <see cref="CompositeEffect"/>, <see cref="ConditionalEffect"/>) are
     /// lowered to Syntax AST, compiled, and executed via the VM.</para>
     ///
-    /// <para>Create / create-in share a lowered tree with emit (runtime factories
-    /// vs Stay.Create). <see cref="StageTransitionEffect"/> and invoke (self,
+    /// <para>Create / create-in share a lowered tree with emit (Store jobs
+    /// <c>Create</c> / <c>CreateIn</c> / <c>ProbeCreate</c>). <see cref="StageTransitionEffect"/> and invoke (self,
     /// cross-entity, for-each) also share the lowered tree with emit.</para>
     /// </summary>
     /// <param name="actionName">Name of the action to invoke.</param>
@@ -534,7 +535,8 @@ public sealed partial record DomainEntityInstance {
             var createdBefore = _createdChildren.Count;
             var bagBefore = new Dictionary<string, object?>(_values, StringComparer.Ordinal);
             var stageBefore = CurrentStage;
-            var failed = ExecuteEffectList(action.Effects, effectPass, effectTypeProvider);
+            var failed = ExecuteEffectList(action.Effects, effectPass, effectTypeProvider,
+                cacheKey: $"{Entity.Name}\0action\0{action.Name}\0{CurrentStage}");
             if (failed is { IsSuccess: false }) {
                 // Unique-before-mutate restore (PR 44 F2). Other constraint Failures
                 // keep prior assigns — PR 43 documented miss IfOnMutatedProperty.
@@ -610,12 +612,16 @@ public sealed partial record DomainEntityInstance {
     private DomainResult? ExecuteEffectList(
         IReadOnlyList<Effect> effects,
         EffectLoweringPass effectPass,
-        TypeDefinitionNodeAnalyzer typeProvider) {
+        TypeDefinitionNodeAnalyzer typeProvider,
+        string? cacheKey = null) {
         var prepared = effects.Select(PreprocessEffectExpressions).ToList();
         if (prepared.Count == 0)
             return null;
 
-        var tree = effectPass.LowerActionBody(prepared);
+        Node? tree = Domain is not null && cacheKey is not null
+            ? RuntimeAnalysisCache.GetOrLowerOperation(Domain, cacheKey,
+                () => effectPass.LowerActionBody(prepared))
+            : effectPass.LowerActionBody(prepared);
         if (tree is null)
             throw new InvalidOperationException(
                 "Cannot lower effect list to a Syntax AST.");

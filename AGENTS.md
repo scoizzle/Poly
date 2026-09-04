@@ -32,7 +32,7 @@ The committed platform is **AST / Node / Analysis** plus libraries that publish 
 | Shipped ⊆ complete generic Syntax tree | `Comment` / `null` lower / second interpreter / domain VM opcodes |
 | One analyze → **operation module** (tree has no bags) **and** **surface bags → host artifacts** | Door that invents operations; lowering flag per consumer |
 | Catalog / capability = operation menu; doors are opt-in `uses` | Core process entry; MCP as customer API |
-| New meaning: lower / analyze / **replace nodes** | Emitter patch, ABI one-off, new `LowerStageTransitions`-style flag |
+| New meaning: lower / analyze / **replace nodes** | Emitter patch, ABI one-off, new consumer-specific lowering flag |
 
 **Current machinery** (Interpreter, `DomainToCSharpExporter`, `DomainEntityInstance`, `uses http`, …): compose it instead of a fork. Replacing it is a planned slice through the frozen seams — not a license to add a sibling path.
 

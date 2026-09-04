@@ -32,9 +32,9 @@ public class SelfInvokeHostAbiTests {
     public async Task SelfInvoke_LowersToInvokeMember_NotGatedOnFlag() {
         var entity = CreateCartEntity();
         var off = new EffectLoweringPass(entity, new LoweringContext(
-            new Parameter("entity"), LowerStageTransitions: false));
+            new Parameter("entity")));
         var on = new EffectLoweringPass(entity, new LoweringContext(
-            new Parameter("entity"), LowerStageTransitions: true, UseThisReference: true));
+            new Parameter("entity"), UseThisReference: true));
 
         var effect = new InvokeActionEffect("Other", []);
         var loweredOff = off.TryLowerVmNode(effect);

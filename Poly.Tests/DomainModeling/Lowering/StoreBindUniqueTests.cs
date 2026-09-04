@@ -29,21 +29,19 @@ public class StoreBindUniqueTests {
     }
 
     [Test]
-    public async Task UniqueAssign_Export_KeepsBareAssignment() {
+    public async Task UniqueAssign_Export_LowersToEnsureUniqueThenAssign() {
         var entity = PermitEntity();
         var pass = new EffectLoweringPass(entity, new LoweringContext(
             new ThisReference(),
-            UseThisReference: true,
-            LowerStageTransitions: true));
+            UseThisReference: true));
 
         var lowered = pass.TryLowerVmNode(new AssignEffect(
             DomainExpression.Property("Plate"),
             DomainExpression.Property("plate")));
         var cs = new CSharpGenerator().Generate(lowered!);
 
-        await Assert.That(lowered).IsTypeOf<Assignment>();
+        await Assert.That(cs).Contains("EnsureUnique");
         await Assert.That(cs).Contains("Plate");
-        await Assert.That(cs).DoesNotContain("EnsureUnique");
     }
 
     [Test]

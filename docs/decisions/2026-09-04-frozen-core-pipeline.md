@@ -40,7 +40,7 @@ Compose these instead of a parallel copy. Replacing them is allowed as a **plann
 | `CSharpGenerator` / `DomainToCSharpExporter` | First print of the module |
 | `DomainEntityInstance` / `DomainInstanceStore` | Scratch simulate / session instances |
 | Store jobs on `This` (`Create`, `EnsureUnique`, …) | How dictionary `This` calls the directory |
-| `LowerStageTransitions` (`Stay.Create` vs `this.Create`) | Dual-path **debt** — do not add a third flag |
+| C# `Stay.Create` / `CreateNav` | Host bind of those jobs inside generated factories |
 | `uses http` → Minimal API + `.http` | First process door |
 | Introspection CLR provider | First type-system provider |
 
@@ -64,5 +64,5 @@ C# is not a privileged forever target (2026-07-22). Scratch store is not the pro
 ## Non-goals
 
 - Deleting the scratch store, HTTP door, or C# exporter in this change.
-- Unifying `Stay.Create` with runtime create in this change.
+- Unifying clocks (`now`/`today`/`guid`) into the tree (P6 — open argument).
 - Admitting a PIPELINE-STATUS CURRENT suite.

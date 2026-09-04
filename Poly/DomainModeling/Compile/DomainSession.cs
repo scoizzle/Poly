@@ -115,18 +115,39 @@ public sealed class DomainSession {
     /// <summary>Analyzes <paramref name="domain"/> with this session's pipeline (type maps included).</summary>
     public AnalysisResult Analyze(Domain domain) {
         ArgumentNullException.ThrowIfNull(domain);
+        var analysis = Analyzer.Analyze(domain);
+        RuntimeAnalysisCache.Bind(domain, this, analysis);
+        return analysis;
+    }
+
+    /// <summary>
+    /// Analyze without rebinding the cache. Used by the cache itself to avoid
+    /// recursion when a fallback session must produce bags.
+    /// </summary>
+    internal AnalysisResult AnalyzeWithoutBind(Domain domain) {
+        ArgumentNullException.ThrowIfNull(domain);
         return Analyzer.Analyze(domain);
     }
 
     /// <summary>
-    /// Entity-module C# files from analyzed facts. Persistence and HTTP files are
+    /// Stage 3: one operation module (type definitions + operation bodies).
+    /// Simulate and print consume this result.
+    /// </summary>
+    public IReadOnlyList<TypeDefinitionNode> Lower(Domain domain, AnalysisResult analysis) {
+        ArgumentNullException.ThrowIfNull(domain);
+        ArgumentNullException.ThrowIfNull(analysis);
+        return RuntimeAnalysisCache.GetOrLower(domain, this, analysis);
+    }
+
+    /// <summary>
+    /// Entity-module C# files from the lowered module. Persistence and HTTP files are
     /// compiler/host emitters gated on analysis bags, not this method.
     /// </summary>
     public IReadOnlyList<(string FileName, string Source)> Emit(Domain domain, AnalysisResult analysis) {
         ArgumentNullException.ThrowIfNull(domain);
         ArgumentNullException.ThrowIfNull(analysis);
         var files = new List<(string FileName, string Source)>();
-        var types = DomainProgramProjection.ToSyntax(domain, analysis);
+        var types = Lower(domain, analysis);
         var interpAnalysis = TryAnalyzeForEmit(types);
         var generator = interpAnalysis is not null
             ? new CSharpGenerator(interpAnalysis)

@@ -865,22 +865,28 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
                 : _expressionPass.Lower(init.Expression, Subject);
             if (NeedsObjectSlotCast(targetEntity, prop, init.PropertyName, value))
                 value = new TypeCast(value, DomainToCSharpExporter.StoreJobObjectType());
-            nodes.Add(new Invoke(new Member(valuesVar, "Add"),
-                new Constant(init.PropertyName), value));
+            nodes.Add(new Assignment(
+                new IndexAccess(valuesVar, new Constant(init.PropertyName)),
+                value));
         }
         nodes.Add(new Assignment(resultVar,
             new Invoke(new Member(Subject, methodName),
                 new Constant(nameArg), valuesVar)));
+        Node failClosed = _context.UseThisReference && _context.ActionResultType is null
+            ? new ThrowStatement(new New(
+                new NamedTypeReference("InvalidOperationException"),
+                new Syntactic.Coalesce(
+                    new Member(resultVar, "ErrorMessage"),
+                    new Constant(""))))
+            : new Return(
+                new Invoke(
+                    new Member(resultType, "Failure"),
+                    new Syntactic.Coalesce(
+                        new Member(resultVar, "ErrorMessage"),
+                        new Constant(""))));
         nodes.Add(new IfStatement(
             new Syntactic.Not(new Member(resultVar, "IsSuccess")),
-            new Block([
-                new Return(
-                    new Invoke(
-                        new Member(resultType, "Failure"),
-                        new Syntactic.Coalesce(
-                            new Member(resultVar, "ErrorMessage"),
-                            new Constant(""))))
-            ])));
+            new Block([failClosed])));
         if (!methodName.StartsWith("Probe", StringComparison.Ordinal)) {
             var valueVar = new Variable($"created{seq}");
             locals.Add(valueVar);

@@ -203,7 +203,7 @@ public sealed partial class DomainToCSharpExporter {
             if (parameter.IsBackReference) {
                 args.Add(string.Equals(source.Name, target.Name, StringComparison.Ordinal)
                     ? new ThisReference()
-                    : new Constant(null));
+                    : TypedNull(parameter.Type.TypeName));
                 continue;
             }
             if (parameter.IsCollection) {
@@ -290,4 +290,8 @@ public sealed partial class DomainToCSharpExporter {
             _ => new Constant(null)
         };
     }
+
+    private static Node TypedNull(string typeName) =>
+        new TypeCast(new Constant(null),
+            new OptionalTypeReference(new NamedTypeReference(typeName)));
 }

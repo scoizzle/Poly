@@ -642,7 +642,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     }
 
     /// <summary>
-    /// Lowers CreateEntityInstance to <c>this.Create(type, prop, value, …)</c>
+    /// Lowers CreateEntityInstance to <c>this.Create(type, values)</c>
     /// with Failure unwrap. Same tree for simulate and emit.
     /// </summary>
     protected override Node? CreateEntityInstance(CreateEntityInstance cei) =>
@@ -652,7 +652,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
             cei.RelationshipName);
 
     /// <summary>
-    /// Lowers create-in to <c>this.CreateIn(relationship, prop, value, …)</c>
+    /// Lowers create-in to <c>this.CreateIn(relationship, values)</c>
     /// with Failure unwrap. Same tree for simulate and emit.
     /// </summary>
     protected override Node? CreateEntityInRelationship(CreateEntityInRelationshipEffect cr) {
@@ -838,10 +838,10 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     }
 
     /// <summary>
-    /// Runtime create / probe: <c>this.Create/CreateIn/ProbeCreate(name, prop, value, ...)</c>
-    /// with Failure unwrap. Entity-typed values are cast to object so the 1-pair
-    /// object slot matches; primitives stay unboxed so the VM still boxes them at
-    /// the object-parameter invoke (a TypeCast to object is a no-op on scalars).
+    /// Runtime create / probe: <c>this.Create/CreateIn/ProbeCreate(name, values)</c>
+    /// with Failure unwrap. Initializers populate a dictionary; entity-typed values
+    /// are cast to object so the map value slot matches. Primitives stay unboxed
+    /// so the VM boxes them at the object-parameter Add.
     /// </summary>
     private Node LowerRuntimeFactoryCall(
         string methodName,
@@ -849,36 +849,38 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         IReadOnlyList<PropertyBinding> initializers,
         Entity? targetEntity,
         string? linkRelationshipName = null) {
-        var args = new List<Node> { new Constant(nameArg) };
+        var seq = _createInProbeSequence++;
+        var valuesVar = new Variable($"init{seq}");
+        var resultVar = new Variable($"create{seq}");
+        var resultType = _context.ActionResultType ?? new NamedTypeReference("DomainResult");
+        var locals = new List<Node> { valuesVar, resultVar };
+        var nodes = new List<Node> {
+            new Assignment(valuesVar, new New(DomainToCSharpExporter.StoreJobDictionaryType()))
+        };
         foreach (var init in initializers) {
-            args.Add(new Constant(init.PropertyName));
             var prop = targetEntity?.Properties.FirstOrDefault(p =>
                 string.Equals(p.Name, init.PropertyName, StringComparison.Ordinal));
             Node value = prop is not null
                 ? LowerEnumAwareValue(init.Expression, prop.Type, Subject)
                 : _expressionPass.Lower(init.Expression, Subject);
-            args.Add(NeedsObjectSlotCast(targetEntity, prop, init.PropertyName, value)
-                ? new TypeCast(value, TypeReference.To<object>())
-                : value);
+            if (NeedsObjectSlotCast(targetEntity, prop, init.PropertyName, value))
+                value = new TypeCast(value, DomainToCSharpExporter.StoreJobObjectType());
+            nodes.Add(new Invoke(new Member(valuesVar, "Add"),
+                new Constant(init.PropertyName), value));
         }
-
-        var seq = _createInProbeSequence++;
-        var resultVar = new Variable($"create{seq}");
-        var resultType = _context.ActionResultType ?? new NamedTypeReference("DomainResult");
-        var locals = new List<Node> { resultVar };
-        var nodes = new List<Node> {
-            new Assignment(resultVar, new Invoke(new Member(Subject, methodName), [.. args])),
-            new IfStatement(
-                new Syntactic.Not(new Member(resultVar, "IsSuccess")),
-                new Block([
-                    new Return(
-                        new Invoke(
-                            new Member(resultType, "Failure"),
-                            new Syntactic.Coalesce(
-                                new Member(resultVar, "ErrorMessage"),
-                                new Constant(""))))
-                ]))
-        };
+        nodes.Add(new Assignment(resultVar,
+            new Invoke(new Member(Subject, methodName),
+                new Constant(nameArg), valuesVar)));
+        nodes.Add(new IfStatement(
+            new Syntactic.Not(new Member(resultVar, "IsSuccess")),
+            new Block([
+                new Return(
+                    new Invoke(
+                        new Member(resultType, "Failure"),
+                        new Syntactic.Coalesce(
+                            new Member(resultVar, "ErrorMessage"),
+                            new Constant(""))))
+            ])));
         if (!methodName.StartsWith("Probe", StringComparison.Ordinal)) {
             var valueVar = new Variable($"created{seq}");
             locals.Add(valueVar);
@@ -895,7 +897,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
 
     /// <summary>
     /// Entity-typed create initializers (properties or singular navs) do not match
-    /// the long/string/bool 1-pair slots. Cast those values to object. Do not cast
+    /// the dictionary object value slot. Cast those values to object. Do not cast
     /// primitives: TypeCast-to-object is a VM no-op on scalars and skips boxing.
     /// </summary>
     private bool NeedsObjectSlotCast(

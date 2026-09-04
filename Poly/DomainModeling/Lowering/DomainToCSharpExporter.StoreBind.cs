@@ -8,13 +8,13 @@ using Syntactic = Poly.Ast.Nodes;
 namespace Poly.DomainModeling.Lowering;
 
 public sealed partial class DomainToCSharpExporter {
-    private const int StoreJobPairSlots = 8;
-
     /// <summary>
     /// Host bind of Store jobs the operation tree names: <c>Create</c> /
-    /// <c>CreateIn</c> / <c>ProbeCreate</c> / <c>EnsureUnique</c>. Bodies wrap
-    /// existing <c>Stay.Create</c> / <c>CreateNav</c> factories. Unique is a
-    /// Success stub — persistence indexes remain the schema concern.
+    /// <c>CreateIn</c> / <c>ProbeCreate</c> / <c>EnsureUnique</c>. Public jobs
+    /// take a name plus initializer dictionary so they never collide with the
+    /// static <c>Stay.Create</c> factory. Bodies wrap those factories /
+    /// <c>CreateNav</c>. Unique is a Success stub — persistence indexes remain
+    /// the schema concern.
     /// </summary>
     private static void AddStoreBindMethods(
         Entity entity,
@@ -26,64 +26,52 @@ public sealed partial class DomainToCSharpExporter {
             new NamedTypeReference("DomainResult"),
             Parameters: [
                 new Parameter("propertyName", new PrimitiveTypeReference(PrimType.String)),
-                new Parameter("value", new NamedTypeReference("object"))
+                new Parameter("value", StoreJobObjectType())
             ],
             Body: new Block([
                 new Return(new Invoke(new Member(new NamedTypeReference("DomainResult"), "Success")))
             ]),
             AccessModifier: AccessModifier.Public));
 
-        var dictType = DictionaryType();
+        var dictType = StoreJobDictionaryType();
         var objectResult = new NamedTypeReference("DomainResult",
-            TypeArguments: [new NamedTypeReference("object")]);
+            TypeArguments: [StoreJobObjectType()]);
         var voidResult = new NamedTypeReference("DomainResult");
-        AddStoreJobOverloads(methods, "Create", objectResult, "BindCreate", dictType);
-        AddStoreJobOverloads(methods, "CreateIn", objectResult, "BindCreateIn", dictType);
-        AddStoreJobOverloads(methods, "ProbeCreate", voidResult, "BindProbeCreate", dictType);
+        AddStoreJobMethod(methods, "Create", objectResult, "BindCreate", dictType);
+        AddStoreJobMethod(methods, "CreateIn", objectResult, "BindCreateIn", dictType);
+        AddStoreJobMethod(methods, "ProbeCreate", voidResult, "BindProbeCreate", dictType);
 
         methods.Add(BindCreateMethod(entity, domain, metadata, objectResult, dictType));
         methods.Add(BindCreateInMethod(entity, domain, metadata, objectResult, dictType));
         methods.Add(BindProbeCreateMethod(entity, domain, metadata, voidResult, dictType));
     }
 
-    private static NamedTypeReference DictionaryType() =>
-        new("Dictionary", TypeArguments: [
-            new PrimitiveTypeReference(PrimType.String),
-            new OptionalTypeReference(new NamedTypeReference("object"))
-        ]);
+    internal static Node StoreJobObjectType() =>
+        new PrimitiveTypeReference(PrimType.Structure);
 
-    private static void AddStoreJobOverloads(
+    internal static Node StoreJobDictionaryType() =>
+        new MapTypeReference(
+            new PrimitiveTypeReference(PrimType.String),
+            new OptionalTypeReference(StoreJobObjectType()));
+
+    private static void AddStoreJobMethod(
         List<MethodDefinitionNode> methods,
         string methodName,
         Node returnType,
         string bindName,
         Node dictType) {
-        for (var pairs = 0; pairs <= StoreJobPairSlots; pairs++) {
-            var parameters = new List<Parameter> {
-                new("name", new PrimitiveTypeReference(PrimType.String))
-            };
-            var body = new List<Node>();
-            var locals = new List<Node>();
-            var values = new Variable("values");
-            locals.Add(values);
-            body.Add(new Assignment(values, new New(dictType)));
-            for (var i = 0; i < pairs; i++) {
-                var p = $"p{i}";
-                var v = $"v{i}";
-                parameters.Add(new Parameter(p, new PrimitiveTypeReference(PrimType.String)));
-                parameters.Add(new Parameter(v, new NamedTypeReference("object")));
-                body.Add(new Invoke(new Member(values, "Add"),
-                    new Parameter(p), new Parameter(v)));
-            }
-            body.Add(new Return(new Invoke(new Member(new ThisReference(), bindName),
-                new Parameter("name"), values)));
-            methods.Add(new MethodDefinitionNode(
-                methodName,
-                returnType,
-                Parameters: parameters,
-                Body: new Block(body, locals),
-                AccessModifier: AccessModifier.Public));
-        }
+        methods.Add(new MethodDefinitionNode(
+            methodName,
+            returnType,
+            Parameters: [
+                new Parameter("name", new PrimitiveTypeReference(PrimType.String)),
+                new Parameter("values", dictType)
+            ],
+            Body: new Block([
+                new Return(new Invoke(new Member(new ThisReference(), bindName),
+                    new Parameter("name"), new Parameter("values")))
+            ]),
+            AccessModifier: AccessModifier.Public));
     }
 
     private static MethodDefinitionNode BindCreateMethod(
@@ -278,11 +266,15 @@ public sealed partial class DomainToCSharpExporter {
             string.Equals(e.Name, type.TypeName, StringComparison.Ordinal))) {
             mapped = new OptionalTypeReference(mapped);
         }
-        var fetched = new Invoke(
-            new Member(values, "GetValueOrDefault"),
-            new Constant(propertyName));
+        var inner = mapped is OptionalTypeReference opt ? opt.InnerType : mapped;
         var fallback = DefaultNode(type, domain, metadata);
-        return new TypeCast(new Syntactic.Coalesce(fetched, fallback), mapped);
+        var fetched = new TypeCast(
+            new IndexAccess(values, new Constant(propertyName)),
+            new OptionalTypeReference(inner));
+        return new Conditional(
+            new Invoke(new Member(values, "ContainsKey"), new Constant(propertyName)),
+            new Syntactic.Coalesce(fetched, fallback),
+            fallback);
     }
 
     private static Node DefaultNode(

@@ -480,9 +480,9 @@ public class DomainToCSharpExporterTests {
         // (customer) is auto-wired with `this`. Repro shape: title, total → 2.
         await Assert.That(paramCount).IsEqualTo(2);
 
-        var checkOut = customer.Methods?.FirstOrDefault(m => m.Name == "CheckOut");
-        await Assert.That(checkOut).IsNotNull();
-        var call = FindAllInvokes(checkOut!.Body!).FirstOrDefault(i =>
+        var bind = customer.Methods?.FirstOrDefault(m => m.Name == "BindCreateIn");
+        await Assert.That(bind).IsNotNull();
+        var call = FindAllInvokes(bind!.Body!).FirstOrDefault(i =>
             i.Delegate is Member { MemberName: "CreateOrders" });
         await Assert.That(call).IsNotNull();
         await Assert.That(call!.Arguments.Length).IsEqualTo(paramCount);
@@ -1541,8 +1541,10 @@ public class DomainToCSharpExporterTests {
 
         // Severity is a trailing optional CreateDiagnostics param defaulting to the DSL default.
         await Assert.That(cs).Contains("CreateDiagnostics(string code, Severity severity = Severity.Warning)");
-        // The call site passes the bound override positionally.
-        await Assert.That(cs).Contains("CreateDiagnostics(\"P000\", Severity.Hint)");
+        // Action names the Store job; host bind forwards the override through the factory.
+        await Assert.That(cs).Contains("CreateIn(");
+        await Assert.That(cs).Contains("\"Severity\"");
+        await Assert.That(cs).Contains("Severity.Hint");
         // No post-create assignment (the ctor's own `this.Severity = severity;` is fine).
         await Assert.That(cs).DoesNotContain("diagnostic.Severity = ");
     }
@@ -1959,7 +1961,10 @@ public class DomainToCSharpExporterTests {
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
-        await Assert.That(cs).Contains("Product.Create(\"P1\", Tier.Plus)");
+        await Assert.That(cs).Contains("this.Create(");
+        await Assert.That(cs).Contains("\"Tier\"");
+        await Assert.That(cs).Contains("Tier.Plus");
+        await Assert.That(cs).Contains("Product.Create(");
         await Assert.That(cs).DoesNotContain("product.Tier =");
     }
 
@@ -1985,7 +1990,8 @@ public class DomainToCSharpExporterTests {
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
-        await Assert.That(cs).Contains("CreateTokens(TokenKind.Keyword, \"let\")");
+        await Assert.That(cs).Contains("CreateIn(");
+        await Assert.That(cs).Contains("TokenKind.Keyword");
     }
 
     [Test]
@@ -2127,7 +2133,10 @@ public class DomainToCSharpExporterTests {
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
-        await Assert.That(cs).Contains("this.CreateFiles(srcContent, srcMode, newName)");
+        await Assert.That(cs).Contains("CreateIn(");
+        await Assert.That(cs).Contains("srcContent");
+        await Assert.That(cs).Contains("srcMode");
+        await Assert.That(cs).Contains("newName");
     }
 
     [Test]
@@ -2401,13 +2410,8 @@ public class DomainToCSharpExporterTests {
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
-        var openIdx = cs.IndexOf("public DomainResult OpenAccount(", StringComparison.Ordinal);
-        await Assert.That(openIdx).IsGreaterThan(-1);
-        var createAccountIdx = cs.IndexOf("private DomainResult<Account> CreateAccount(", StringComparison.Ordinal);
-        var openEnd = createAccountIdx > openIdx ? createAccountIdx : cs.Length;
-        var openCs = cs[openIdx..openEnd];
-        await Assert.That(openCs).DoesNotContain("Account.Create(name, this)");
-        await Assert.That(openCs).Contains("Account.Create(name, null)");
+        await Assert.That(cs).DoesNotContain("Account.Create(name, this)");
+        await Assert.That(cs).Contains("Account.Create(name, null)");
         var errors = CompileExported(cs);
         await Assert.That(errors).IsEmpty();
     }

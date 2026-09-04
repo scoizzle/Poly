@@ -144,9 +144,8 @@ public sealed partial record DomainEntityInstance {
             "Notify", "EnsureUnique", "AnyRelated", "AllRelated", "NoneRelated", "CountRelated",
             "ExistsRelated", "GetRelatedOne", "LinkRelated"
         };
-        // Runtime factories for mixed if+create. 0/1-pair overloads plus 2–16
-        // object-value pair overloads so Invoke types as DomainResult
-        // (IsSuccess resolves) for any realistic initializer count.
+        // Runtime factories for mixed if+create. Dictionary slot plus pair
+        // overloads so Invoke types as DomainResult (IsSuccess resolves).
         // Generated C# may still call Stay.Create inside the factory that binds this job.
         var str = TypeReference.To<string>();
         var i64 = TypeReference.To<long>();
@@ -203,9 +202,17 @@ public sealed partial record DomainEntityInstance {
             methods.Add(new MethodDefinitionNode(
                 factory,
                 TypeReference.To<DomainResult>(),
-                Parameters: [new Parameter("name", str)],
+                Parameters: [
+                    new Parameter("name", str),
+                    new Parameter("values", TypeReference.To<Dictionary<string, object?>>())
+                ],
                 Body: new Block([])));
             methodNames.Add(factory);
+            methods.Add(new MethodDefinitionNode(
+                factory,
+                TypeReference.To<DomainResult>(),
+                Parameters: [new Parameter("name", str)],
+                Body: new Block([])));
             for (var t = 0; t < valueTypes.Length; t++) {
                 methods.Add(new MethodDefinitionNode(
                     factory,

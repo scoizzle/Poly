@@ -366,20 +366,26 @@ public sealed partial record DomainEntityInstance {
 
     /// <summary>
     /// VM-called Store jobs for lowered create / create-in (body and probes).
-    /// Args: name (type or relationship), then property name/value pairs already
-    /// evaluated by the tree. Probe does not register a child.
+    /// Args: name (type or relationship) plus an initializer dictionary, or
+    /// flattened name/value pairs. Probe does not register a child.
     /// </summary>
     private DomainResult RuntimeCreateFactory(string name, object?[] args) {
         if (args.Length < 1 || args[0] is not string key || key.Length == 0)
             return DomainResult.Failure("Create factory requires a type or relationship name.");
-        if ((args.Length - 1) % 2 != 0)
-            return DomainResult.Failure("Create factory arguments must be name/value pairs.");
 
-        var values = new Dictionary<string, object?>(StringComparer.Ordinal);
-        for (var i = 1; i < args.Length; i += 2) {
-            if (args[i] is not string propName)
-                return DomainResult.Failure("Create factory property names must be strings.");
-            values[propName] = args[i + 1];
+        Dictionary<string, object?> values;
+        if (args.Length >= 2 && TryReadCreateValues(args[1], out var fromDict)) {
+            values = fromDict;
+        }
+        else {
+            if ((args.Length - 1) % 2 != 0)
+                return DomainResult.Failure("Create factory arguments must be name/value pairs.");
+            values = new Dictionary<string, object?>(StringComparer.Ordinal);
+            for (var i = 1; i < args.Length; i += 2) {
+                if (args[i] is not string propName)
+                    return DomainResult.Failure("Create factory property names must be strings.");
+                values[propName] = args[i + 1];
+            }
         }
 
         try {
@@ -395,6 +401,28 @@ public sealed partial record DomainEntityInstance {
         }
         catch (ArgumentException ex) {
             return DomainResult.Failure(ex.Message);
+        }
+    }
+
+    private static bool TryReadCreateValues(object? arg, out Dictionary<string, object?> values) {
+        values = new Dictionary<string, object?>(StringComparer.Ordinal);
+        switch (arg) {
+            case IReadOnlyDictionary<string, object?> typed:
+                foreach (var kv in typed)
+                    values[kv.Key] = kv.Value;
+                return true;
+            case IDictionary<string, object?> typed2:
+                foreach (var kv in typed2)
+                    values[kv.Key] = kv.Value;
+                return true;
+            case System.Collections.IDictionary untyped:
+                foreach (System.Collections.DictionaryEntry entry in untyped) {
+                    if (entry.Key is string key)
+                        values[key] = entry.Value;
+                }
+                return true;
+            default:
+                return false;
         }
     }
 

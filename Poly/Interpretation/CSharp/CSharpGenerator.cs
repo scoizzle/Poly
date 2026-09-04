@@ -397,6 +397,7 @@ public sealed class CSharpGenerator {
 
     private static string? TypeRefName(Node? type) => type switch {
         PrimitiveTypeReference p => p.PrimitiveId.GetCSharpKeyword() + (p.IsNullable ? "?" : ""),
+        ClrTypeReference c => ToCSharpTypeName(c.RuntimeType),
         NamedTypeReference n when n.TypeArguments is { Count: > 0 } args =>
             n.TypeName + "<" + string.Join(", ", args.Select(a => TypeRefName(a) ?? "object")) + ">",
         NamedTypeReference n => n.TypeName,
@@ -440,7 +441,7 @@ public sealed class CSharpGenerator {
             TypeCode.Decimal => "decimal",
             TypeCode.Char => "char",
             TypeCode.String => "string",
-            _ => type.Name
+            _ => type == typeof(object) ? "object" : type.Name
         };
     }
 
@@ -1008,6 +1009,9 @@ public sealed class CSharpGenerator {
                 sb.Append("typeof(");
                 WriteExpression(sb, typeOf.Type);
                 sb.Append(')');
+                return;
+            case ClrTypeReference clr:
+                sb.Append(ToCSharpTypeName(clr.RuntimeType));
                 return;
             case TypeReference typeRef:
                 sb.Append(typeRef.TypeName);

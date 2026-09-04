@@ -614,14 +614,13 @@ public sealed partial record DomainEntityInstance {
         EffectLoweringPass effectPass,
         TypeDefinitionNodeAnalyzer typeProvider,
         string? cacheKey = null) {
-        var prepared = effects.Select(PreprocessEffectExpressions).ToList();
-        if (prepared.Count == 0)
+        if (effects.Count == 0)
             return null;
 
         Node? tree = Domain is not null && cacheKey is not null
             ? RuntimeAnalysisCache.GetOrLowerOperation(Domain, cacheKey,
-                () => effectPass.LowerActionBody(prepared))
-            : effectPass.LowerActionBody(prepared);
+                () => effectPass.LowerActionBody(effects))
+            : effectPass.LowerActionBody(effects);
         if (tree is null)
             throw new InvalidOperationException(
                 "Cannot lower effect list to a Syntax AST.");
@@ -647,54 +646,4 @@ public sealed partial record DomainEntityInstance {
         }
     }
 
-    /// <summary>
-    /// Rewrites runtime keywords (<c>now</c>/<c>today</c>/<c>guid</c>) on assign
-    /// values. Store-aware expressions lower in-tree (nav Member reads / Store jobs).
-    /// </summary>
-    private Effect PreprocessEffectExpressions(Effect effect) => effect switch {
-        AssignEffect a => a with { Value = PreprocessRuntimeKeyword(a.Value, (a.Target as PropertyAccess)?.Name) },
-        ConditionalEffect c => c with {
-            Condition = c.Condition,
-            ThenEffects = c.ThenEffects.Select(PreprocessEffectExpressions).ToList(),
-            ElseEffects = c.ElseEffects?.Select(PreprocessEffectExpressions).ToList()
-        },
-        CompositeEffect c => c with {
-            Effects = c.Effects.Select(PreprocessEffectExpressions).ToList()
-        },
-        CreateEntityInstance cei => cei with {
-            Initializers = cei.Initializers
-                .Select(i => i with { Expression = PreprocessRuntimeKeyword(i.Expression, i.PropertyName) })
-                .ToList()
-        },
-        CreateEntityInRelationshipEffect cir => cir with {
-            Initializers = cir.Initializers
-                .Select(i => i with { Expression = PreprocessRuntimeKeyword(i.Expression, i.PropertyName) })
-                .ToList()
-        },
-        InvokeActionEffect iae => iae with {
-            ParameterBindings = iae.ParameterBindings
-                .Select(b => b with { Expression = PreprocessRuntimeKeyword(b.Expression, null) })
-                .ToList()
-        },
-        // `for` arguments are binder-rooted (item Qty) — PreprocessQuantifiers would treat
-        // the binder root as a relationship and fail. The binder is bound per-target in
-        // ExecuteForEachInvoke; args carry no store quantifiers (analysis restricts roots).
-        ForEachInvokeEffect efe => efe,
-        _ => effect
-    };
-
-    /// <summary>Rewrites an assign RHS runtime keyword (now/today/guid) into a literal via the
-    /// type-aware <see cref="EvaluateDefaultValue"/> — the shared VM lowering emits
-    /// <c>DateOnly.FromDateTime(...)</c> for such RHS, which the runtime VM cannot execute.</summary>
-    private DomainExpression PreprocessRuntimeKeyword(DomainExpression value, string? targetPropName) {
-        var propType = Entity.Properties.FirstOrDefault(p =>
-            string.Equals(p.Name, targetPropName, StringComparison.Ordinal))?.Type.TypeName;
-        // Pack-owned clock nodes (Now/Today) resolve through the ambient default registry —
-        // core never names pack IR.
-        if (value is Now or Today)
-            return DomainExpression.Literal(EvaluateDefaultValue(value, propType));
-        if (value is PropertyAccess { Name: var name } && name is "Now" or "UtcNow" or "Today" or "Guid")
-            return DomainExpression.Literal(EvaluateDefaultValue(value, propType));
-        return value;
-    }
 }

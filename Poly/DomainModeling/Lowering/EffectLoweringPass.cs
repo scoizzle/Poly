@@ -214,16 +214,12 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
             var entityProp = _entity.Properties.FirstOrDefault(p =>
                 string.Equals(p.Name, propAccess.Name, StringComparison.Ordinal));
 
-            // Runtime keywords in an assign RHS (assign DueDate to now / today /
-            // guid) must adapt to the TARGET property's CLR type — the raw keyword
-            // shape (DateTime.UtcNow / DateOnly / Guid) would otherwise be
-            // cross-typed (CS0029/CS0019 in the export, wrong-typed stores at runtime).
-            // Discovery round5 F2/F3.
-            if (entityProp is not null
-                && a.Value is PropertyAccess keywordAccess
-                && keywordAccess.Name is "Now" or "UtcNow" or "Today" or "Guid") {
+            // Runtime keywords / clock IR in an assign RHS (assign DueDate to now)
+            // must adapt to the TARGET property's CLR type — DateTime.UtcNow on a
+            // Date slot is CS0029 in export and a wrong-typed store at runtime.
+            if (entityProp is not null) {
                 var adapted = LowerDefaultExpression(
-                    keywordAccess, new NamedTypeReference(entityProp.Type.TypeName));
+                    a.Value, new NamedTypeReference(entityProp.Type.TypeName));
                 if (adapted is not null) value = adapted;
             }
 
@@ -854,9 +850,13 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
             args.Add(new Constant(init.PropertyName));
             var prop = targetEntity?.Properties.FirstOrDefault(p =>
                 string.Equals(p.Name, init.PropertyName, StringComparison.Ordinal));
-            Node value = prop is not null
-                ? LowerEnumAwareValue(init.Expression, prop.Type, Subject)
-                : _expressionPass.Lower(init.Expression, Subject);
+            var value = (prop is not null
+                    ? LowerDefaultExpression(
+                        init.Expression, new NamedTypeReference(prop.Type.TypeName))
+                    : null)
+                ?? (prop is not null
+                    ? LowerEnumAwareValue(init.Expression, prop.Type, Subject)
+                    : _expressionPass.Lower(init.Expression, Subject));
             args.Add(NeedsObjectSlotCast(targetEntity, prop, init.PropertyName, value)
                 ? new TypeCast(value, DomainToCSharpExporter.StoreJobObjectType())
                 : value);

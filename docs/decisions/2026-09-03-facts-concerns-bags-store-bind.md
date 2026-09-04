@@ -57,7 +57,7 @@ C# unique remains the persistence-surface concern (EF indexes from `StorageColum
 
 ## Later slice (2026-09-03)
 
-`Store.Create` / `CreateIn` / `ProbeCreate` shipped as Notify-shaped jobs. `ExecuteStructured` is gone. Runtime and emit share `Create` / `CreateIn` / `ProbeCreate` / `EnsureUnique` on the operation tree. C# factories may still call `Stay.Create` as the host bind of the job. Unique indexes remain EF schema. `now`/`today`/`guid` rewrite to literals before the first compile (clocks-in-the-tree is an open argument).
+`Store.Create` / `CreateIn` / `ProbeCreate` shipped as Notify-shaped jobs. `ExecuteStructured` is gone. Runtime and emit share `Create` / `CreateIn` / `ProbeCreate` / `EnsureUnique` on the operation tree. C# factories may still call `Stay.Create` as the host bind of the job. Unique indexes remain EF schema. Clocks (`now`/`today`/`guid`) lower to static BCL members which the VM executes.
 
 ## Consequences
 

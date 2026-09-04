@@ -61,7 +61,7 @@ PULL:    E5; EF codegen; naming cleanup
 - **grammar-revision** ✅ DONE 2026-08-09: v2 engine + DSL cutover + printer + review fixes (B1–B3, N1–N3, C1).
 - Span-vs-fold `not`-in-chain pinned: `SpanVsFold_NotInChain_TableRejectsFoldAccepts` until wrap-up reconciles.
 - **RuntimeAnalysisCache:** `DomainSession.Analyze` binds the authoring session; `GetOrAnalyze` reuses it (vendor maps visible). Unbound fallback is still core-catalog.
-- **host-ABI remaining lie:** none for unique/create simulate. Residual: C# factories may still call `Stay.Create` as the host bind of `Create`; unique indexes remain EF schema; `now`/`today`/`guid` rewrite to literals (P6 open).
+- **host-ABI remaining lie:** none for unique/create simulate. Residual: C# factories may still call `Stay.Create` as the host bind of `Create`; unique indexes remain EF schema.
+- **pipeline transformation:** P1–P6 executed — [`../pipeline-transformation-2026-09-04.md`](../pipeline-transformation-2026-09-04.md). One Create/CreateIn/EnsureUnique tree; `session.Lower`; compile-once action bodies; HTTP fail-closed against the module; clocks in the tree. **Not CURRENT.**
 - **rewrite-to-master:** ✅ DONE PR 26. Product trunk is `master`. Parallel streams may run with exclusive file ownership (MCP mut-safety; Grammar wrap-up; V3 naming).
 - **interpretation-language-engine:** ✅ DONE 2026-08-31 (ile-gate). **create/create-in:** ✅ DONE 2026-09-03. Dictionary-backed `This` is already Interpretation’s type-def path — do not invent Expando. CURRENT is `(none)`.
-- **pipeline transformation:** P1–P5 executed — [`../pipeline-transformation-2026-09-04.md`](../pipeline-transformation-2026-09-04.md). One Create/CreateIn/EnsureUnique tree; `session.Lower`; compile-once action bodies; HTTP fail-closed against the module. **Not CURRENT.** P6 clocks left for argument.

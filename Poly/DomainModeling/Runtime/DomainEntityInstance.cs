@@ -1,8 +1,11 @@
+using Poly.Ast.Nodes;
+using Poly.Analysis;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Dispatch;
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
 using Poly.Interpretation;
+using Poly.Introspection;
 using Poly.Interpretation.Analysis.Semantics;
 
 using Action = Poly.DomainModeling.Ontology.Action;
@@ -248,10 +251,9 @@ public sealed partial record DomainEntityInstance {
             .ToList();
         if (entryEffects.Count == 0)
             return;
-        // Mixed if+create must LowerActionBody (ExecuteStructured was deleted).
         ThrowIfEffectListFailed(
             instance.ExecuteEffectList(entryEffects, entryPass, instance._typeDefAnalyzer,
-                cacheKey: $"{instance.Entity.Name}\0entry\0{firstStage.Name}"),
+                entryStageName: firstStage.Name),
             "first-stage OnEntry");
     }
 
@@ -559,7 +561,7 @@ public sealed partial record DomainEntityInstance {
             var bagBefore = new Dictionary<string, object?>(_values, StringComparer.Ordinal);
             var stageBefore = CurrentStage;
             var failed = ExecuteEffectList(action.Effects, effectPass, effectTypeProvider,
-                cacheKey: $"{Entity.Name}\0action\0{action.Name}\0{CurrentStage}");
+                actionName: action.Name, args: args, actionParameters: action.Parameters);
             if (failed is { IsSuccess: false }) {
                 // Unique-before-mutate restore (PR 44 F2). Other constraint Failures
                 // keep prior assigns — PR 43 documented miss IfOnMutatedProperty.
@@ -629,31 +631,41 @@ public sealed partial record DomainEntityInstance {
     }
 
     /// <summary>
-    /// One operation AST through <see cref="Interpreter"/>. Named action / OnEntry
-    /// bodies come from <see cref="RuntimeAnalysisCache.GetOrLower"/>; subscriptions
-    /// and transition batches still lower at execute time.
-    /// Shared by InvokeAction, first-stage OnEntry, subscription, and TransitionStage entry/exit.
+    /// One operation AST through <see cref="Interpreter"/>. Named actions run
+    /// <see cref="MethodDefinitionNode.Body"/> from the cached module TypeDef;
+    /// first-stage OnEntry prefers a module entry method when present.
+    /// Subscriptions and transition batches still lower at execute time.
     /// </summary>
     private DomainResult? ExecuteEffectList(
         IReadOnlyList<Effect> effects,
         EffectLoweringPass effectPass,
         TypeDefinitionNodeAnalyzer typeProvider,
-        string? cacheKey = null) {
+        string? actionName = null,
+        string? entryStageName = null,
+        IReadOnlyDictionary<string, object?>? args = null,
+        IReadOnlyList<Property>? actionParameters = null) {
         if (effects.Count == 0)
             return null;
 
-        Node? tree;
+        Node? tree = null;
         if (Domain is not null) {
             var analysis = RuntimeAnalysisCache.GetOrAnalyze(Domain);
             RuntimeAnalysisCache.GetOrLower(Domain, RuntimeAnalysisCache.Session(Domain), analysis);
-            if (cacheKey is not null
-                && RuntimeAnalysisCache.TryGetOperation(Domain, cacheKey, out var cached))
-                tree = cached;
-            else if (cacheKey is not null)
-                tree = RuntimeAnalysisCache.GetOrLowerOperation(Domain, cacheKey,
-                    () => effectPass.LowerActionBody(effects));
-            else
+            if (actionName is not null) {
+                if (!RuntimeAnalysisCache.TryGetModuleMethod(Domain, Entity.Name, actionName, out var method)
+                    || method?.Body is null)
+                    throw new InvalidOperationException(
+                        $"Module method '{actionName}' is missing on type '{Entity.Name}'.");
+                tree = BindModuleMethodBody(method);
+            }
+            else if (entryStageName is not null
+                && RuntimeAnalysisCache.TryGetEntryMethod(Domain, Entity.Name, entryStageName, out var entry)
+                && entry?.Body is not null) {
+                tree = BindModuleMethodBody(entry);
+            }
+            else {
                 tree = effectPass.LowerActionBody(effects);
+            }
         }
         else {
             tree = effectPass.LowerActionBody(effects);
@@ -662,13 +674,187 @@ public sealed partial record DomainEntityInstance {
             throw new InvalidOperationException(
                 "Cannot lower effect list to a Syntax AST.");
         var compiled = Interpreter.CompileChecked(
-            tree, DomainResultTypeProvider.Wrap(typeProvider));
+            tree, ModuleAwareTypeProvider(typeProvider, actionParameters));
         using var exec = Interpreter.Execute(compiled,
             s => s.SetArgs(new object?[] { this }));
         if (exec.Result.Value is DomainResult { IsSuccess: false } failed)
             return failed;
         return null;
     }
+
+    /// <summary>
+    /// Consumer bind of dictionary <c>this</c>: module bodies keep
+    /// <see cref="ThisReference"/> in the cached TypeDef; execute rewrites
+    /// them to a typed <c>entity</c> parameter so the VM ABI (slot 0 =
+    /// instance, action args at 1+) matches SetArgs(this, ...args). Not a
+    /// second lower — same method body nodes, rebound for the scratch store.
+    /// </summary>
+
+    private ITypeDefinitionProvider ModuleAwareTypeProvider(
+        ITypeDefinitionProvider inner,
+        IReadOnlyList<Property>? actionParameters = null) {
+        var wrapped = DomainResultTypeProvider.Wrap(inner);
+        if (Domain is null)
+            return wrapped;
+        var analysis = RuntimeAnalysisCache.GetOrAnalyze(Domain);
+        var module = RuntimeAnalysisCache.GetOrLower(
+            Domain, RuntimeAnalysisCache.Session(Domain), analysis);
+        var moduleTypes = new TypeDefinitionNodeAnalyzer();
+        var ctx = new AnalysisContext(wrapped);
+        TypeDefinitionNode? moduleEntity = null;
+        foreach (var td in module) {
+            // CLR DomainResult wins via DomainResultTypeProvider.
+            if (string.Equals(td.Name, "DomainResult", StringComparison.Ordinal))
+                continue;
+            if (string.Equals(td.Name, Entity.Name, StringComparison.Ordinal)) {
+                moduleEntity = td;
+                continue;
+            }
+            moduleTypes.Analyze(ctx, td);
+        }
+        // Runtime-shaped entity (string CurrentStage + bag action params) plus
+        // module method stubs (Notify*Subscribers, etc.) — consumer bind, not a second lower.
+        var runtimeEntity = BuildTypeDefNode(Entity, actionParameters, Domain);
+        if (moduleEntity?.Methods is { Count: > 0 } moduleMethods) {
+            var names = new HashSet<string>(
+                (runtimeEntity.Methods ?? []).Select(m => m.Name), StringComparer.Ordinal);
+            List<MethodDefinitionNode>? extras = null;
+            foreach (var m in moduleMethods) {
+                if (!names.Add(m.Name))
+                    continue;
+                extras ??= [];
+                extras.Add(m with { Body = new Block([]) });
+            }
+            if (extras is not null)
+                runtimeEntity = runtimeEntity with {
+                    Methods = [.. runtimeEntity.Methods ?? [], .. extras]
+                };
+        }
+        moduleTypes.Analyze(ctx, runtimeEntity);
+        // Module/stage enums + merged entity first; wrapped as fallback.
+        return new TypeDefinitionProviderCollection(moduleTypes, wrapped);
+    }
+
+    private Node BindModuleMethodBody(MethodDefinitionNode method) {
+        var body = method.Body
+            ?? throw new InvalidOperationException(
+                $"Module method '{method.Name}' on '{Entity.Name}' has no body.");
+        var entity = new Parameter("entity", new TypeReference(Entity.Name));
+        Dictionary<string, Parameter>? paramMap = null;
+        if (method.Parameters is { Count: > 0 } methodParams) {
+            paramMap = new Dictionary<string, Parameter>(StringComparer.Ordinal);
+            foreach (var p in methodParams)
+                paramMap[p.Name] = p;
+        }
+        return BindThis(body, entity, paramMap, StageEnumTypeNames());
+    }
+
+    /// <summary>
+    /// Emit module uses stage enums; dictionary This stores CurrentStage as string.
+    /// Consumer bind rewrites <c>StageEnum.Name</c> to string constants — not a second lower.
+    /// </summary>
+    private IReadOnlySet<string> StageEnumTypeNames() {
+        var names = new HashSet<string>(StringComparer.Ordinal);
+        if (Domain is null)
+            return names;
+        var analysis = RuntimeAnalysisCache.GetOrAnalyze(Domain);
+        foreach (var e in Domain.Types.OfType<Entity>()) {
+            if (e.Stages.Count == 0)
+                continue;
+            var meta = analysis.GetStructure(e);
+            names.Add(meta?.StageEnumTypeName ?? $"{e.Name}Stage");
+        }
+        return names;
+    }
+
+    private static Node BindThis(
+        Node node,
+        Parameter entity,
+        IReadOnlyDictionary<string, Parameter>? parameters,
+        IReadOnlySet<string> stageEnums) => node switch {
+        ThisReference => entity,
+        Parameter p when parameters is not null
+            && parameters.ContainsKey(p.Name) => new Member(entity, p.Name),
+        // Emit stage enum member → runtime string (CurrentStage is string on This).
+        Member { Value: NamedTypeReference ntr } m
+            when stageEnums.Contains(ntr.TypeName) => new Constant(m.MemberName),
+        Block b => new Block(
+            b.Nodes.Select(n => BindThis(n, entity, parameters, stageEnums)),
+            b.Variables.Select(n => BindThis(n, entity, parameters, stageEnums))),
+        IfStatement i => new IfStatement(
+            BindThis(i.Condition, entity, parameters, stageEnums),
+            BindThis(i.ThenBranch, entity, parameters, stageEnums),
+            i.ElseBranch is null ? null : BindThis(i.ElseBranch, entity, parameters, stageEnums)),
+        Return r => r.Value is null ? r : new Return(BindThis(r.Value, entity, parameters, stageEnums)),
+        Assignment a => new Assignment(
+            BindThis(a.Destination, entity, parameters, stageEnums), BindThis(a.Value, entity, parameters, stageEnums)),
+        Invoke inv => new Invoke(
+            BindThis(inv.Delegate, entity, parameters, stageEnums),
+            [.. inv.Arguments.Select(a => BindThis(a, entity, parameters, stageEnums))]) {
+            TypeArguments = inv.TypeArguments
+        },
+        Member m => new Member(BindThis(m.Value, entity, parameters, stageEnums), m.MemberName),
+        Poly.Ast.Nodes.Not n => new Poly.Ast.Nodes.Not(BindThis(n.Value, entity, parameters, stageEnums)),
+        Equal e => new Equal(
+            BindThis(e.LeftHandValue, entity, parameters, stageEnums), BindThis(e.RightHandValue, entity, parameters, stageEnums)),
+        NotEqual ne => new NotEqual(
+            BindThis(ne.LeftHandValue, entity, parameters, stageEnums), BindThis(ne.RightHandValue, entity, parameters, stageEnums)),
+        LessThan lt => new LessThan(
+            BindThis(lt.LeftHandValue, entity, parameters, stageEnums), BindThis(lt.RightHandValue, entity, parameters, stageEnums)),
+        LessThanOrEqual le => new LessThanOrEqual(
+            BindThis(le.LeftHandValue, entity, parameters, stageEnums), BindThis(le.RightHandValue, entity, parameters, stageEnums)),
+        GreaterThan gt => new GreaterThan(
+            BindThis(gt.LeftHandValue, entity, parameters, stageEnums), BindThis(gt.RightHandValue, entity, parameters, stageEnums)),
+        GreaterThanOrEqual ge => new GreaterThanOrEqual(
+            BindThis(ge.LeftHandValue, entity, parameters, stageEnums), BindThis(ge.RightHandValue, entity, parameters, stageEnums)),
+        Poly.Ast.Nodes.Add add => new Poly.Ast.Nodes.Add(
+            BindThis(add.LeftHandValue, entity, parameters, stageEnums), BindThis(add.RightHandValue, entity, parameters, stageEnums)),
+        Poly.Ast.Nodes.Subtract sub => new Poly.Ast.Nodes.Subtract(
+            BindThis(sub.LeftHandValue, entity, parameters, stageEnums), BindThis(sub.RightHandValue, entity, parameters, stageEnums)),
+        Poly.Ast.Nodes.Multiply mul => new Poly.Ast.Nodes.Multiply(
+            BindThis(mul.LeftHandValue, entity, parameters, stageEnums), BindThis(mul.RightHandValue, entity, parameters, stageEnums)),
+        Poly.Ast.Nodes.Divide div => new Poly.Ast.Nodes.Divide(
+            BindThis(div.LeftHandValue, entity, parameters, stageEnums), BindThis(div.RightHandValue, entity, parameters, stageEnums)),
+        Poly.Ast.Nodes.And and => new Poly.Ast.Nodes.And(
+            BindThis(and.LeftHandValue, entity, parameters, stageEnums), BindThis(and.RightHandValue, entity, parameters, stageEnums)),
+        Poly.Ast.Nodes.Or or => new Poly.Ast.Nodes.Or(
+            BindThis(or.LeftHandValue, entity, parameters, stageEnums), BindThis(or.RightHandValue, entity, parameters, stageEnums)),
+        Coalesce c => new Coalesce(
+            BindThis(c.LeftHandValue, entity, parameters, stageEnums), BindThis(c.RightHandValue, entity, parameters, stageEnums)),
+        TypeCast tc => new TypeCast(
+            BindThis(tc.Operand, entity, parameters, stageEnums),
+            BindThis(tc.TargetTypeReference, entity, parameters, stageEnums),
+            tc.IsChecked),
+        New n => new New(
+            BindThis(n.Type, entity, parameters, stageEnums),
+            [.. n.Arguments.Select(a => BindThis(a, entity, parameters, stageEnums))]),
+        ThrowStatement ts => new ThrowStatement(BindThis(ts.Exception, entity, parameters, stageEnums)),
+        TryCatchFinally t => new TryCatchFinally(
+            BindThis(t.TryBlock, entity, parameters, stageEnums),
+            t.CatchClauses?.Select(cc => cc with {
+                ExceptionType = cc.ExceptionType is null
+                    ? null
+                    : BindThis(cc.ExceptionType, entity, parameters, stageEnums),
+                Body = BindThis(cc.Body, entity, parameters, stageEnums)
+            }).ToList(),
+            t.FinallyBlock is null ? null : BindThis(t.FinallyBlock, entity, parameters, stageEnums)),
+        ForEachLoop f => new ForEachLoop(
+            f.LoopVariable,
+            BindThis(f.Collection, entity, parameters, stageEnums),
+            BindThis(f.Body, entity, parameters, stageEnums),
+            f.Label),
+        Conditional cond => new Conditional(
+            BindThis(cond.Condition, entity, parameters, stageEnums),
+            BindThis(cond.IfTrue, entity, parameters, stageEnums),
+            BindThis(cond.IfFalse, entity, parameters, stageEnums)),
+        UnaryMinus um => new UnaryMinus(BindThis(um.Operand, entity, parameters, stageEnums)),
+        NullForgiving nf => new NullForgiving(BindThis(nf.Operand, entity, parameters, stageEnums)),
+        Parameter or Variable or Constant or NamedTypeReference or TypeReference
+            or PrimitiveTypeReference or ClrTypeReference => node,
+        _ => throw new InvalidOperationException(
+            $"Cannot bind module method this on {node.GetType().Name}.")
+    };
+
 
     private void RestoreActionState(
         Dictionary<string, object?> bagBefore, string? stageBefore, int createdBefore) {

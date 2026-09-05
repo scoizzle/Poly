@@ -89,7 +89,7 @@ Both consume a `LoweringContext` that carries the current-instance `Subject` and
 
 All shipped effects **lower to Syntax AST on both runtime and emit**. `ExecuteStructured` / `EffectExecutor` / `LowerStageTransitions` / `PreprocessRuntimeKeyword` are gone.
 
-`session.Lower` / `RuntimeAnalysisCache.GetOrLower` builds the module and caches runtime-shaped named action / OnEntry trees. `ExecuteEffectList` looks those up for named invoke and first-stage OnEntry, then `Interpreter.CompileChecked`. Subscriptions and transition batches still call `LowerActionBody` at execute time. `EvaluatePolicy` still lowers the guard expression per call.
+`session.Lower` / `RuntimeAnalysisCache.GetOrLower` builds the module. Named invoke runs the entity method `Body` (same node `session.Emit` prints), rebound for dictionary `This`. Subscriptions and transition batches still call `LowerActionBody` at execute time. `EvaluatePolicy` still lowers the guard expression per call.
 
 Create / create-in / unique on the **operation tree** are `this.Create` / `CreateIn` / `ProbeCreate` / `EnsureUnique` (flattened name/value pairs). C# `Stay.Create` / `CreateNav` are the **host bind** of those jobs inside generated factories — not a second action body.
 

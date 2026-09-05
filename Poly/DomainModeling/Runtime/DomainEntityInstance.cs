@@ -746,14 +746,14 @@ public sealed partial record DomainEntityInstance {
             foreach (var p in methodParams)
                 paramMap[p.Name] = p;
         }
-        return BindThis(body, entity, paramMap, StageEnumTypeNames());
+        return BindThis(body, entity, paramMap, EnumTypeNames());
     }
 
     /// <summary>
-    /// Emit module uses stage enums; dictionary This stores CurrentStage as string.
-    /// Consumer bind rewrites <c>StageEnum.Name</c> to string constants — not a second lower.
+    /// Emit module uses stage / domain enums; dictionary This stores those as strings.
+    /// Consumer bind rewrites <c>Enum.Name</c> to string constants — not a second lower.
     /// </summary>
-    private IReadOnlySet<string> StageEnumTypeNames() {
+    private IReadOnlySet<string> EnumTypeNames() {
         var names = new HashSet<string>(StringComparer.Ordinal);
         if (Domain is null)
             return names;
@@ -764,6 +764,8 @@ public sealed partial record DomainEntityInstance {
             var meta = analysis.GetStructure(e);
             names.Add(meta?.StageEnumTypeName ?? $"{e.Name}Stage");
         }
+        foreach (var enumType in Domain.Types.OfType<EnumType>())
+            names.Add(enumType.Name);
         return names;
     }
 
@@ -775,6 +777,8 @@ public sealed partial record DomainEntityInstance {
         ThisReference => entity,
         Parameter p when parameters is not null
             && parameters.ContainsKey(p.Name) => new Member(entity, p.Name),
+        Variable v when parameters is not null
+            && parameters.ContainsKey(v.Name) => new Member(entity, v.Name),
         // Emit stage enum member → runtime string (CurrentStage is string on This).
         Member { Value: NamedTypeReference ntr } m
             when stageEnums.Contains(ntr.TypeName) => new Constant(m.MemberName),
@@ -788,6 +792,17 @@ public sealed partial record DomainEntityInstance {
         Return r => r.Value is null ? r : new Return(BindThis(r.Value, entity, parameters, stageEnums)),
         Assignment a => new Assignment(
             BindThis(a.Destination, entity, parameters, stageEnums), BindThis(a.Value, entity, parameters, stageEnums)),
+        Invoke { Delegate: Member { MemberName: { } notifyName } } inv
+            when inv.Arguments.Length == 0
+                && notifyName.StartsWith("Notify", StringComparison.Ordinal)
+                && notifyName.EndsWith("Subscribers", StringComparison.Ordinal)
+                && notifyName.Length > "NotifySubscribers".Length
+            => new Invoke(
+                new Member(BindThis(((Member)inv.Delegate).Value, entity, parameters, stageEnums), "Notify"),
+                new Constant(notifyName["Notify".Length..^"Subscribers".Length])),
+        Invoke { Delegate: Member { Value: TypeReference or NamedTypeReference } } inv
+            when AdapterTypeName(inv) is not null
+            => new Block([]),
         Invoke inv => new Invoke(
             BindThis(inv.Delegate, entity, parameters, stageEnums),
             [.. inv.Arguments.Select(a => BindThis(a, entity, parameters, stageEnums))]) {
@@ -843,6 +858,9 @@ public sealed partial record DomainEntityInstance {
             BindThis(f.Collection, entity, parameters, stageEnums),
             BindThis(f.Body, entity, parameters, stageEnums),
             f.Label),
+        ContinueStatement or BreakStatement => node,
+        LabelDeclaration ld => new LabelDeclaration(
+            ld.Name, BindThis(ld.Statement, entity, parameters, stageEnums)),
         Conditional cond => new Conditional(
             BindThis(cond.Condition, entity, parameters, stageEnums),
             BindThis(cond.IfTrue, entity, parameters, stageEnums),
@@ -853,6 +871,18 @@ public sealed partial record DomainEntityInstance {
             or PrimitiveTypeReference or ClrTypeReference => node,
         _ => throw new InvalidOperationException(
             $"Cannot bind module method this on {node.GetType().Name}.")
+    };
+
+    private static string? AdapterTypeName(Invoke inv) =>
+        inv.Delegate is Member { Value: Node type } && TypeNameOf(type) is { } name
+            && name.EndsWith("Adapters", StringComparison.Ordinal)
+            ? name
+            : null;
+
+    private static string? TypeNameOf(Node type) => type switch {
+        TypeReference tr => tr.TypeName,
+        NamedTypeReference ntr => ntr.TypeName,
+        _ => null
     };
 
 

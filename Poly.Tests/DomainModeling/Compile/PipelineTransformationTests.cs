@@ -7,6 +7,7 @@ using Poly.DomainModeling.Language;
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Runtime;
+using Poly.Interpretation.CSharp;
 using Poly.Packs.Sqlite;
 
 namespace Poly.Tests.DomainModeling.Compile;
@@ -33,7 +34,7 @@ public class PipelineTransformationTests {
     }
 
     [Test]
-    public async Task SessionLower_PopulatesNamedActionOperation() {
+    public async Task SessionLower_PopulatesNamedActionMethodBody() {
         var (domain, analysis, session) = Evolve("""
             domain Parking
             Permit: entity { Plate: Text required }
@@ -44,14 +45,17 @@ public class PipelineTransformationTests {
               }
             }
             """);
-        session.Lower(domain, analysis);
-        var key = RuntimeAnalysisCache.ActionKey("Lot", "Issue", stage: null);
-        await Assert.That(RuntimeAnalysisCache.TryGetOperation(domain, key, out var tree)).IsTrue();
-        await Assert.That(tree).IsNotNull();
+        var module = session.Lower(domain, analysis);
+        var lot = module.First(t => t.Name == "Lot");
+        var issue = lot.Methods?.FirstOrDefault(m => m.Name == "Issue");
+        await Assert.That(issue).IsNotNull();
+        await Assert.That(issue!.Body).IsNotNull();
+        await Assert.That(RuntimeAnalysisCache.TryGetModuleMethod(domain, "Lot", "Issue", out var cached)).IsTrue();
+        await Assert.That(ReferenceEquals(issue, cached)).IsTrue();
     }
 
     [Test]
-    public async Task InvokeAction_UsesTheModuleOperation_NotAReloweredCopy() {
+    public async Task InvokeAction_UsesTheModuleMethodBody_NotAReloweredCopy() {
         var (domain, analysis, session) = Evolve("""
             domain Parking
             Permit: entity { Plate: Text required }
@@ -62,25 +66,28 @@ public class PipelineTransformationTests {
               }
             }
             """);
-        session.Lower(domain, analysis);
-        var key = RuntimeAnalysisCache.ActionKey("Lot", "Issue", stage: null);
-        await Assert.That(RuntimeAnalysisCache.TryGetOperation(domain, key, out var before)).IsTrue();
+        var module = session.Lower(domain, analysis);
+        var lotType = module.First(t => t.Name == "Lot");
+        var before = lotType.Methods?.First(m => m.Name == "Issue").Body;
         await Assert.That(before).IsNotNull();
 
         var lotE = domain.Types.OfType<Entity>().First(e => e.Name == "Lot");
         var store = new DomainInstanceStore();
         var lot = DomainEntityInstance.Create(lotE, domain: domain);
         store.Add(lot);
+        var cs = new CSharpGenerator().Generate(before!);
         var result = lot.InvokeAction("Issue", new Dictionary<string, object?> { ["plate"] = "AAA" });
+        if (!result.Succeeded)
+            throw new InvalidOperationException((result.ErrorMessage ?? "Issue failed") + " BODY:\n" + cs);
         await Assert.That(result.Succeeded).IsTrue();
         await Assert.That(lot.CreatedChildren.Count).IsEqualTo(1);
 
-        await Assert.That(RuntimeAnalysisCache.TryGetOperation(domain, key, out var after)).IsTrue();
-        await Assert.That(ReferenceEquals(before, after)).IsTrue();
+        await Assert.That(RuntimeAnalysisCache.TryGetModuleMethod(domain, "Lot", "Issue", out var afterMethod)).IsTrue();
+        await Assert.That(ReferenceEquals(before, afterMethod!.Body)).IsTrue();
     }
 
     [Test]
-    public async Task InvokeAction_RunsTheCachedTree_NotAReloweredEffectWalk() {
+    public async Task InvokeAction_RunsTheModuleMethodBody_NotAReloweredEffectWalk() {
         var (domain, analysis, session) = Evolve("""
             domain Parking
             Permit: entity { Plate: Text required }
@@ -91,11 +98,23 @@ public class PipelineTransformationTests {
               }
             }
             """);
-        session.Lower(domain, analysis);
-        var key = RuntimeAnalysisCache.ActionKey("Lot", "Issue", stage: null);
-        RuntimeAnalysisCache.ReplaceOperation(domain, key, new Block([
-            new Return(new Invoke(new Member(new NamedTypeReference("DomainResult"), "Success")))
-        ]));
+        var module = session.Lower(domain, analysis);
+        var lotType = module.First(t => t.Name == "Lot");
+        if (lotType.Methods is not IList<MethodDefinitionNode> methods)
+            throw new InvalidOperationException("Module methods must be a mutable list.");
+        var index = -1;
+        for (var i = 0; i < methods.Count; i++) {
+            if (string.Equals(methods[i].Name, "Issue", StringComparison.Ordinal)) {
+                index = i;
+                break;
+            }
+        }
+        await Assert.That(index).IsGreaterThanOrEqualTo(0);
+        methods[index] = methods[index] with {
+            Body = new Block([
+                new Return(new Invoke(new Member(new NamedTypeReference("DomainResult"), "Success")))
+            ])
+        };
 
         var lotE = domain.Types.OfType<Entity>().First(e => e.Name == "Lot");
         var store = new DomainInstanceStore();

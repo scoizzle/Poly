@@ -58,6 +58,7 @@ Queue (`THEN` / `PARKED` / `PULL`) lives only in [`PIPELINE-STATUS.md`](simple-a
 | [`live-pairing-demo-2026-08-13.md`](live-pairing-demo-2026-08-13.md) | Human + agent progressive authoring → `serve-poly.sh` |
 | [`pack-host-2026-08-13.md`](pack-host-2026-08-13.md) | **Not CURRENT.** Phase 1 shipped; extension model superseded. |
 | [`pipeline-transformation-2026-09-04.md`](pipeline-transformation-2026-09-04.md) | Named compile stages. P1–P6 executed (one lower, compile once, `session.Lower`, HTTP fail-closed, analysis bind, clocks in the tree). **Not CURRENT.** |
+| [`ontology-pr51-pipeline-alignment-2026-09-04.md`](ontology-pr51-pipeline-alignment-2026-09-04.md) | Consultant alignment of PR 51 P1–P6 vs ontology codegen north star. **Proposal — not CURRENT.** |
 | [`dict-sqlite-host-2026-08-30.md`](dict-sqlite-host-2026-08-30.md) | Dict + SQLite host. **Proposal — not CURRENT, not a suite.** ABI stale vs shipped Store jobs. |
 | [`domainmodeling-simplification-2026-08-14.md`](domainmodeling-simplification-2026-08-14.md) | Deletion-first DomainModeling proposal. **Not CURRENT** |
 | [`grammar-cycle-2026-08-14.md`](grammar-cycle-2026-08-14.md) | Grammar as the parse/print cycle. **Not CURRENT** until admitted |

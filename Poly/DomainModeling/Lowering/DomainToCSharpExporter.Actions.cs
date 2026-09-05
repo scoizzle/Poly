@@ -108,16 +108,24 @@ public sealed partial class DomainToCSharpExporter {
         var nodes = new List<Node>();
         Action? entityLevel = null;
         foreach (var (action, sourceStage) in variants) {
-            if (sourceStage is null) {
+            if (sourceStage is null)
                 entityLevel = action;
+        }
+        foreach (var (action, sourceStage) in variants) {
+            if (sourceStage is null)
                 continue;
-            }
 
             if (stageEnumTypeName is null)
                 throw new InvalidOperationException(
                     $"Action '{action.Name}' is stage-scoped on '{entity.Name}' but no stage enum was emitted.");
 
-            var branchBody = BuildFullActionBody(entity, action, stageEnumTypeName, postTransitionNodes,
+            // SA empty stage-copy (no effects/policies) → entity body. Same as TryResolveAction.
+            var branchAction = action.Effects.Count == 0
+                && action.Policies.Count == 0
+                && entityLevel is not null
+                ? entityLevel
+                : action;
+            var branchBody = BuildFullActionBody(entity, branchAction, stageEnumTypeName, postTransitionNodes,
                 loweringSourceStage: sourceStage, guardSourceStage: null, domain, analysis, isVoid);
             nodes.Add(new IfStatement(
                 new Equal(

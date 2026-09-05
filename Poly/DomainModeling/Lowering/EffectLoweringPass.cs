@@ -367,6 +367,26 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
             if (sourceStage is not null)
                 AppendInlinedStageEffects(sourceStage.OnExitEffects, nodes, nodes);
         }
+        else {
+            // Entity-level transition: source stage is CurrentStage at run time.
+            // Emit per-stage OnExit so simulate and C# both run exit before assign.
+            foreach (var stage in _entity.Stages) {
+                if (stage.OnExitEffects.Count == 0)
+                    continue;
+                var exitNodes = new List<Node>();
+                AppendInlinedStageEffects(stage.OnExitEffects, exitNodes, exitNodes);
+                if (exitNodes.Count == 0)
+                    continue;
+                Node stageMatch = _useThisReference || _stageEnumTypeName is not null
+                    ? new Member(
+                        new NamedTypeReference(_stageEnumTypeName ?? $"{_entity.Name}Stage"),
+                        stage.Name)
+                    : new Constant(stage.Name);
+                nodes.Add(new IfStatement(
+                    new Equal(new Member(Subject, "CurrentStage"), stageMatch),
+                    exitNodes.Count == 1 ? exitNodes[0] : new Block(exitNodes)));
+            }
+        }
 
         // Entry probes run BEFORE CurrentStage so a taken illegal create fails
         // closed without flipping the stage. Entry body still runs after the

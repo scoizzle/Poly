@@ -793,11 +793,15 @@ internal static class AstTypeReferenceResolver {
 
 internal sealed class AstCollectionTypeDefinition : ITypeDefinition, IClrTypeDefinition {
     private readonly AstCollectionItemProperty _item;
+    private readonly ITypeProperty? _count;
 
     public AstCollectionTypeDefinition(ITypeDefinition element, CollectionKind kind) {
         ElementType = element;
         Kind = kind;
         _item = new AstCollectionItemProperty(this, element);
+        _count = ClrTypeDefinitionRegistry.Shared
+            .GetTypeDefinition(typeof(System.Collections.IList))
+            ?.Properties.FirstOrDefault(p => string.Equals(p.Name, "Count", StringComparison.Ordinal));
     }
 
     public ITypeDefinition ElementType { get; }
@@ -808,9 +812,9 @@ internal sealed class AstCollectionTypeDefinition : ITypeDefinition, IClrTypeDef
     public ITypeDefinition? BaseType => null;
     public IEnumerable<ITypeDefinition> Interfaces => [];
     public IEnumerable<IParameter> GenericParameters => [];
-    public IEnumerable<ITypeMember> Members => [_item];
+    public IEnumerable<ITypeMember> Members => _count is null ? [_item] : [_item, _count];
     public IEnumerable<ITypeField> Fields => [];
-    public IEnumerable<ITypeProperty> Properties => [_item];
+    public IEnumerable<ITypeProperty> Properties => _count is null ? [_item] : [_item, _count];
     public IEnumerable<ITypeMethod> Methods => [];
     public IEnumerable<ITypeConstructor> Constructors => [];
     public PrimitiveType? PrimitiveType => null;

@@ -70,6 +70,14 @@ When you create an entity in a navigation property, the runtime store links the 
 instance to the source — the child becomes reachable from the source through the
 relationship. You only specify the *other* property initializers.
 
+**Type-create auto-link (unambiguous many-rel):** bare `create Type { … }` from a
+source that owns **exactly one** many-navigation targeting that type (e.g. Patron
+with `fines: many Fine` running `create Fine { … }`) also auto-links outbound and
+the unambiguous reverse (`Fine.patron`), same as `create in fines`. Zero or several
+matching many-rels leave the child registered but unlinked — use `create in Rel` or
+`link_instances` explicitly. Prefer `create in Rel` when you want the relationship
+named in the effect.
+
 ```poly
 Patron: entity {
   loans: many Loan

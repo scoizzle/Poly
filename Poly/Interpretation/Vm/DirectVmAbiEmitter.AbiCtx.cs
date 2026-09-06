@@ -283,8 +283,28 @@ public static partial class DirectVmAbiEmitter {
             foreach (var scope in _scopeStack) {
                 if (scope.TryGetValue(v, out slot))
                     return true;
+                // Name fallback: catch VariableName is a string; body refs are new Variable(name).
+                foreach (var (key, s) in scope) {
+                    if (key.Name == v.Name) {
+                        slot = s;
+                        return true;
+                    }
+                }
             }
             slot = -1;
+            return false;
+        }
+
+        private bool TryGetRegister(Variable v, out int regIdx) {
+            if (_variableRegisters.TryGetValue(v, out regIdx))
+                return true;
+            foreach (var (key, idx) in _variableRegisters) {
+                if (key.Name == v.Name) {
+                    regIdx = idx;
+                    return true;
+                }
+            }
+            regIdx = -1;
             return false;
         }
 
@@ -425,7 +445,7 @@ public static partial class DirectVmAbiEmitter {
         public void MarkCellBacked(Variable v) => _cellBacked.Add(v);
 
         public Expression VariableReadRaw(Variable v) {
-            if (_variableRegisters.TryGetValue(v, out int regIdx))
+            if (TryGetRegister(v, out int regIdx))
                 return _regVars[regIdx];
             if (TryGetVariable(v, out int slotIndex))
                 return VariableRead(slotIndex);
@@ -433,7 +453,7 @@ public static partial class DirectVmAbiEmitter {
         }
 
         public Expression VariableWriteRaw(Variable v, Expression value) {
-            if (_variableRegisters.TryGetValue(v, out int regIdx))
+            if (TryGetRegister(v, out int regIdx))
                 return Assign(_regVars[regIdx], value);
             if (TryGetVariable(v, out int slotIndex))
                 return VariableWrite(slotIndex, value);

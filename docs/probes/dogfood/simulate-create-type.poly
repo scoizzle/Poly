@@ -1,0 +1,28 @@
+domain SimulateCreateType
+uses temporal
+uses storage
+
+// Dogfood: MCP simulate create Type when source owns unambiguous many-rel.
+// Expect: Fine registered AND auto-linked onto Patron.fines (same as create-in
+// when Patron.fines is the only many Fine nav). HasFines / HasFineCount true;
+// reverse Fine.patron linked. Pain if Type-create orphans while Rel links.
+
+Patron: entity {
+  Name: Text required
+  fines: many Fine
+  HasFines: policy { fines exists }
+  HasFineCount: policy { count fines > 0 }
+  NoFines: policy { count fines == 0 }
+
+  Active: stage {
+    AssessByType: action -> Fine {
+      create Fine { Amount: 5 Reason: "TypeCreate" }
+    }
+  }
+}
+
+Fine: entity {
+  Amount: Number range(0, 500) required
+  Reason: Text required
+  patron: Patron
+}

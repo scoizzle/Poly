@@ -132,9 +132,10 @@ public static partial class DirectVmAbiEmitter {
             ctx.DebugHookProp = Property(ctx.State, nameof(VmState.DebugHook));
         }
 
-        body.Add(ctx.EmitPcDispatch(Goto(ctx.ExitLabel)));
+        // Compile root BEFORE PC dispatch so SuspendNode resume labels are registered.
         ctx.EnterActivation(0, 0);
         var rootExpr = CompileStatement(root, ctx);
+        body.Add(ctx.EmitPcDispatch(Goto(ctx.ExitLabel)));
         body.Add(rootExpr);
         if (ctx.RingDepth > 0) {
             body.Add(Assign(ArrayAccess(ctx.SlotsLocal, ctx.FramePosLocal),

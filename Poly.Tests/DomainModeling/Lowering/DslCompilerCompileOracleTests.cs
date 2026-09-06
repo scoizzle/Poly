@@ -165,6 +165,9 @@ public class DslCompilerCompileOracleTests {
     [Arguments("docs/probes/fleet-eval/12-mcp/mcp-library.poly")]
     [Arguments("docs/probes/dogfood/university.poly")]
     [Arguments("docs/probes/dogfood/crm.poly")]
+    [Arguments("docs/probes/dogfood/simulate-create-type.poly")]
+    [Arguments("docs/probes/dogfood/simulate-create-in.poly")]
+    [Arguments("docs/probes/dogfood/simulate-create-create-in.poly")]
     public async Task Compile_All_DemoDomains_EmitCompilableSolution(string relativePath) {
         var root = FindRepoRoot();
         var poly = await File.ReadAllTextAsync(Path.Combine(root, relativePath));

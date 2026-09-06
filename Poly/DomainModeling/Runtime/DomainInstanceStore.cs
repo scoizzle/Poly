@@ -221,6 +221,11 @@ public sealed class DomainInstanceStore {
                 Link(relationshipName, creator, child);
                 creator.TryLinkCreateInBackReference(child);
             }
+            else {
+                // Match CreateChildInstance: bare create Type auto-links when the
+                // source owns exactly one many-rel to the created type (PR 52 Fine).
+                creator.TryAutoLinkUnambiguousOutbound(child, targetEntity);
+            }
         }
         catch (InvalidOperationException ex) {
             creator.UntrackCreatedChild(child);

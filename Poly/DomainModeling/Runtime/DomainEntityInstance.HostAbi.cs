@@ -675,7 +675,7 @@ public sealed partial record DomainEntityInstance {
     /// exactly one many-rel targeting that type, link outbound and reverse like create-in.
     /// Ambiguous or absent matches leave the child registered but unlinked.
     /// </summary>
-    private void TryAutoLinkUnambiguousOutbound(DomainEntityInstance child, Entity targetEntity) {
+    internal void TryAutoLinkUnambiguousOutbound(DomainEntityInstance child, Entity targetEntity) {
         if (Store is null) return;
         var outs = Entity.Navigations
             .Where(n => (n.Cardinality is RelationshipCardinality.OneToMany

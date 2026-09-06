@@ -1,0 +1,29 @@
+domain SimulateCreateIn
+uses temporal
+uses storage
+
+// Dogfood: MCP simulate create-in Rel.
+// Expect: Fine is registered AND auto-linked onto Patron.fines.
+// HasFines / HasFineCount true after AssessByRel; list_instances Fine
+// count matches linked children. Pain if create-in succeeds but orphan,
+// or policies disagree with list_instances / get_instance child count.
+
+Patron: entity {
+  Name: Text required
+  fines: many Fine
+  HasFines: policy { fines exists }
+  HasFineCount: policy { count fines > 0 }
+  NoFines: policy { count fines == 0 }
+
+  Active: stage {
+    AssessByRel: action -> Fine {
+      create in fines { Amount: 5 Reason: "CreateIn" }
+    }
+  }
+}
+
+Fine: entity {
+  Amount: Number range(0, 500) required
+  Reason: Text required
+  patron: Patron
+}

@@ -75,4 +75,15 @@ public class SideEffectAnalysisTests {
         await Assert.That(used).IsNotNull();
         await Assert.That(used!.IsValueUsed).IsTrue();
     }
+
+    [Test]
+    public async Task PureNonFinal_HasElisionMetadata() {
+        var pure = new Constant(1L);
+        var block = new Block([pure, new Constant(2L)]);
+        var result = SideEffectAnalyzerPipeline().Analyze(block);
+        var elision = result.GetMetadata<ElisionMetadata>(pure);
+        await Assert.That(elision).IsNotNull();
+        await Assert.That(elision!.CanElide).IsTrue();
+        await Assert.That(result.GetMetadata<SideEffectMetadata>(pure)).IsNotNull();
+    }
 }

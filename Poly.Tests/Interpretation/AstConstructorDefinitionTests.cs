@@ -1,3 +1,4 @@
+using Poly.Interpretation;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Introspection;
 
@@ -71,5 +72,20 @@ public class AstConstructorDefinitionTests {
         await Assert.That(resolvedConstructor.Parameters.Last().IsOptional).IsTrue();
         await Assert.That(resolvedType).IsNotNull();
         await Assert.That(resolvedType!.FullName).IsEqualTo("Sample.Widget");
+    }
+
+    [Test]
+    public async Task Compile_NewOfAstDefinedType_FailsLoud() {
+        var typeNode = new TypeDefinitionNode(
+            "Widget",
+            "Sample",
+            Constructors: [new ConstructorDefinitionNode()]);
+        var tda = new TypeDefinitionNodeAnalyzer();
+        var ctx = AnalysisContext.CreateDefault();
+        tda.Analyze(ctx, typeNode);
+        var newNode = new New(new TypeReference("Sample.Widget"));
+        await Assert.That(() => Interpreter.Compile(newNode, tda))
+            .Throws<InvalidOperationException>()
+            .WithMessageContaining("no matching constructor");
     }
 }

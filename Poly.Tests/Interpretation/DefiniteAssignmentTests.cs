@@ -70,4 +70,28 @@ public class DefiniteAssignmentTests {
         // Only then-branch assigns; join must not claim definite assignment.
         await Assert.That(result.IsDefinitelyAssigned(body, "x")).IsFalse();
     }
+
+    [Test]
+    public async Task LambdaBody_PublishesDefiniteAssignmentMetadata() {
+        var x = new Variable("x");
+        var body = new Block([new Assignment(x, new Constant(1L)), x], [x]);
+        var lambda = new Lambda([], body);
+        var result = AnalyzeDa(lambda);
+        var meta = result.GetMetadata<DefiniteAssignmentMetadata>(body);
+        await Assert.That(meta).IsNotNull();
+        await Assert.That(meta!.DefinitelyAssigned.Contains("x")).IsTrue();
+    }
+
+    [Test]
+    public async Task WhileLoopAssign_DoesNotLeakPastLoop() {
+        var x = new Variable("x");
+        var body = new Block([
+            new WhileLoop(new Constant(false), new Assignment(x, new Constant(1L))),
+            x
+        ], [x]);
+        var lambda = new Lambda([], body);
+        var result = AnalyzeDa(lambda);
+        // Loop assigns must not leak into post-loop definite assignment.
+        await Assert.That(result.IsDefinitelyAssigned(body, "x")).IsFalse();
+    }
 }

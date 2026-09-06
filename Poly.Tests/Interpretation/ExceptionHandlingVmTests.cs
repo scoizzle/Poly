@@ -118,4 +118,84 @@ public class ExceptionHandlingVmTests {
         using var exec = Interpreter.Execute(Interpreter.Compile(node));
         await Assert.That(exec.Result.GetValue<long>()).IsEqualTo(7L);
     }
+
+    /// <summary>F2: CatchClause.VariableName must be readable in the catch body (or fail loud).</summary>
+    [Test]
+    public async Task TryCatch_CatchVariable_ReadMessage_FailsLoudOrBinds() {
+        var msg = new Variable("msg");
+        var node = new Block([
+            new Assignment(msg, new Constant("")),
+            new TryCatchFinally(
+                new ThrowStatement(new New(
+                    new ClrTypeReference(typeof(InvalidOperationException)),
+                    new Constant("boom-msg"))),
+                CatchClauses: [
+                    new CatchClause(
+                        new ClrTypeReference(typeof(InvalidOperationException)),
+                        "ex",
+                        new Assignment(msg, new Member(new Variable("ex"), "Message")))
+                ]),
+            msg
+        ], [msg]);
+        // Current product: ScopeValidator does not bind catch VariableName → compile reject.
+        await Assert.That(() => Interpreter.Compile(node))
+            .Throws<InvalidOperationException>()
+            .WithMessageContaining("not declared");
+    }
+
+    /// <summary>F18: Nested try — inner catch handles; outer does not run.</summary>
+    [Test]
+    public async Task NestedTry_InnerCatchHandles_OuterSkipped() {
+        var steps = new Variable("steps");
+        var node = new Block([
+            new Assignment(steps, new Constant(0L)),
+            new TryCatchFinally(
+                new TryCatchFinally(
+                    new ThrowStatement(new New(new ClrTypeReference(typeof(InvalidOperationException)))),
+                    CatchClauses: [
+                        new CatchClause(
+                            new ClrTypeReference(typeof(InvalidOperationException)),
+                            null,
+                            new Assignment(steps, new Add(steps, new Constant(1L))))
+                    ]),
+                CatchClauses: [
+                    new CatchClause(
+                        new ClrTypeReference(typeof(InvalidOperationException)),
+                        null,
+                        new Assignment(steps, new Add(steps, new Constant(10L))))
+                ]),
+            steps
+        ], [steps]);
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.Result.GetValue<long>()).IsEqualTo(1L);
+    }
+
+    /// <summary>F18: Throw inside catch is rethrown to outer catch.</summary>
+    [Test]
+    public async Task NestedTry_ThrowInsideCatch_CaughtByOuter() {
+        var steps = new Variable("steps");
+        var node = new Block([
+            new Assignment(steps, new Constant(0L)),
+            new TryCatchFinally(
+                new TryCatchFinally(
+                    new ThrowStatement(new New(new ClrTypeReference(typeof(InvalidOperationException)))),
+                    CatchClauses: [
+                        new CatchClause(
+                            new ClrTypeReference(typeof(InvalidOperationException)),
+                            null,
+                            new ThrowStatement(new New(
+                                new ClrTypeReference(typeof(ArgumentException)),
+                                new Constant("from-inner-catch"))))
+                    ]),
+                CatchClauses: [
+                    new CatchClause(
+                        new ClrTypeReference(typeof(ArgumentException)),
+                        null,
+                        new Assignment(steps, new Constant(7L)))
+                ]),
+            steps
+        ], [steps]);
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.Result.GetValue<long>()).IsEqualTo(7L);
+    }
 }

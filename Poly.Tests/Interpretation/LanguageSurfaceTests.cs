@@ -134,6 +134,7 @@ public class LanguageSurfaceTests {
             new TypeReference("System.String"),
             new PrimitiveTypeReference(PrimitiveType.Int32),
             new TypeDefinitionReference(stringType),
+            new ClrTypeReference(typeof(string)),
         ];
         foreach (var node in samples) {
             await Assert.That(Kinds[node.GetType()]).IsEqualTo(Surface.CompileReject);
@@ -143,6 +144,7 @@ public class LanguageSurfaceTests {
 
     [Test]
     public async Task AnalysisOnlyKinds_AreNotScriptEntry() {
+        ITypeDefinition stringType = ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(typeof(string));
         Node[] samples = [
             new CompilationUnitNode([], null, [], null),
             new TypeDefinitionNode("Widget", "Sample"),
@@ -160,6 +162,7 @@ public class LanguageSurfaceTests {
             new OptionalTypeReference(new PrimitiveTypeReference(PrimitiveType.Int32)),
             new MapTypeReference(new PrimitiveTypeReference(PrimitiveType.String), new PrimitiveTypeReference(PrimitiveType.Int32)),
             new CollectionTypeReference(new PrimitiveTypeReference(PrimitiveType.Int32)),
+            new ResolvedTypeReference(stringType),
         ];
         foreach (var node in samples) {
             await Assert.That(Kinds[node.GetType()]).IsEqualTo(Surface.AnalysisOnly);
@@ -172,6 +175,12 @@ public class LanguageSurfaceTests {
         using var exec = Interpreter.Execute(Interpreter.Compile(new Comment("note")));
         await Assert.That(exec.Result.IsVoid).IsTrue();
         await Assert.That(() => Interpreter.Compile(new Add(new Comment("x"), new Constant(1L))))
+            .Throws<InvalidOperationException>();
+    }
+
+    [Test]
+    public async Task ClrTypeReference_AsValue_CompileRejects() {
+        await Assert.That(() => Interpreter.Compile(new ClrTypeReference(typeof(string))))
             .Throws<InvalidOperationException>();
     }
 }

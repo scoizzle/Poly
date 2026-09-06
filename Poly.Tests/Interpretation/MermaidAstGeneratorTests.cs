@@ -39,4 +39,12 @@ public class MermaidAstGeneratorTests {
         var mermaid = new MermaidAstGenerator().Generate(new Constant(1L), direction: "LR");
         await Assert.That(mermaid).Contains("graph LR");
     }
+
+    [Test]
+    public async Task Generate_AnalysisOnly_TypeDefinition_Smoke() {
+        var node = new TypeDefinitionNode("Widget", "Sample");
+        var mermaid = new MermaidAstGenerator().Generate(node);
+        await Assert.That(mermaid).Contains("graph TB");
+        await Assert.That(mermaid).Contains("TypeDefinitionNode");
+    }
 }

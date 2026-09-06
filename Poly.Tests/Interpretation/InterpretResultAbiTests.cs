@@ -48,4 +48,39 @@ public class InterpretResultAbiTests {
         await Assert.That(result.HasValue).IsTrue();
         await Assert.That(result.GetValue<string>()).IsNull();
     }
+
+    [Test]
+    public async Task BreakStatement_ResultKind_IsNotBreak() {
+        var node = new WhileLoop(new Constant(true), new BreakStatement());
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.Result.Kind).IsNotEqualTo(InterpreterResult.ResultKind.Break);
+        await Assert.That(exec.Result.Kind is InterpreterResult.ResultKind.Void or InterpreterResult.ResultKind.Value).IsTrue();
+    }
+
+    [Test]
+    public async Task ContinueStatement_CompletingLoop_ResultKind_IsNotContinue() {
+        var i = new Variable("i");
+        var node = new Block([
+            new Assignment(i, new Constant(0L)),
+            new WhileLoop(
+                new LessThan(i, new Constant(1L)),
+                new Block([
+                    new Assignment(i, new Add(i, new Constant(1L))),
+                    new ContinueStatement()
+                ])),
+            i
+        ], [i]);
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.Result.Kind).IsNotEqualTo(InterpreterResult.ResultKind.Continue);
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(1L);
+    }
+
+    [Test]
+    public async Task ThrowStatement_PropagatesClrException_NotResultKindThrow() {
+        var node = new ThrowStatement(new New(TypeReference.To<InvalidOperationException>(), new Constant("x")));
+        await Assert.That(() => {
+            using var exec = Interpreter.Execute(Interpreter.Compile(node));
+            _ = exec.Result.Kind; // would be Throw if dead API were used
+        }).Throws<InvalidOperationException>();
+    }
 }

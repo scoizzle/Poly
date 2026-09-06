@@ -1,75 +1,58 @@
 # Provisional Interpretation coverage inventory — 2026-09-05
 
 **Branch / PR:** `cleanup/interpretation-coverage` · [PR 53](https://github.com/scoizzle/Poly/pull/53)  
-**Mode:** Provisional gap fill (Nested). **Authority for remaining F#:** Sentinel `review/interpretation-coverage` follow-ups (not landed yet).  
-**Scope:** `Poly/Interpretation/**` + `Poly/Ast/Nodes/TypeDefinitions/**` as consumed by interpretation vs `Poly.Tests/Interpretation/**`.  
-**Not in scope:** PR 51 / 52 product; merges; self-review.
-
-When Sentinel F# lands, close those items in a follow-up PR — this pass only fills clearly missing/thin areas with high-signal TUnit.
+**Mode:** Sentinel F1–F23 Nested test-only close (worktree). **Authority:** `docs/agent/reviews/2026-09-06-interpretation-coverage-sentinel-followups.md`.  
+**Scope:** `Poly.Tests/Interpretation/**` only. No `Poly/**` product edits.
 
 ---
 
-## What already exists (pre-pass)
+## F# disposition (this pass)
 
-~49 test files under `Poly.Tests/Interpretation/` (~12k LOC), including:
+| F# | Status | Notes |
+|----|--------|-------|
+| F1 | **Closed (current behavior)** | `ThrowVmTests` asserts product gap: non-`New` operands (`Constant` / `Variable` / `ThrowExpression`) discard and throw a fresh `Exception()` (`*_DiscardsOperand_ThrowsFreshException`). Desired same-instance propagate needs product fix. |
+| F2 | **Closed** | Catch `VariableName` read fails loud (`not declared`) — asserted in `ExceptionHandlingVmTests`. |
+| F3 | **Closed (current behavior)** | `Resume_WhenNotSuspended_Throws` + Resume API callable **closed**. `Suspend_ThenResume_ReSuspendsWithoutFallThrough` asserts product PC gap (Resume re-enters SuspendNode; no fall-through). Desired continue-remaining needs product fix. |
+| F4 | **Closed** | `ClrTypeReference` in `CompileRejectKinds_FailLoud` + dedicated compile-reject. |
+| F5 | **Closed** | `ResolvedTypeReference` in `AnalysisOnlyKinds_AreNotScriptEntry`. |
+| F6 | **Closed** | JT0003 + JT0005 pinned; CF0001 sibling asserted (`InvalidProgramTests` + `JumpTargetAnalysisTests`). |
+| F7 | **Closed** | CF0001/4/6/10/13; rename const-false→then; MustExecuteMetadata asserted. |
+| F8 | **Closed** | `SideEffectAnalysisTests` (DEAD_CODE_ELIDABLE + SideEffect/Elision/AssignmentValueUsed metadata). |
+| F9 | **Closed** | `DefiniteAssignmentTests` metadata + if/else merge + loop non-leak. |
+| F10 | **Closed** | `LambdaReturnTypeAnalyzerTests`. |
+| F11 | **Closed** | `ConstantFoldingTests` Compile+Execute + `GetNodeReplacement`. |
+| F12 | **Closed (current behavior)** | IndexOf(char) Compile+Execute **closed**; Equals(string) as string-arg sibling (`IndexOf(string)` VM returns -1). Substring(1.5): Analyze resolved-member null + Compile currently accepts (characterization). Desired Compile-reject needs product. |
+| F13 | **Closed** | Optional/Map property types in `TypeDefinitionNodeAnalyzerTests`. |
+| F14 | **Closed** | New AST type Compile fail-loud; `AstMemberVmTests` Member/Assignment Compile+Execute. |
+| F15 | **Closed** | AST method body / no CLR host fail-loud in `InvokeMemberInstanceTests`. |
+| F16 | **Closed** | Missing C# printer cases + Map/Optional/Union (Union = Generate fallback string). |
+| F17 | **Closed** | Non-IDisposable using skip; nested using; foreach enumerator Dispose after complete/break/throw. |
+| F18 | **Closed** | Nested try execute + throw-in-catch in `ExceptionHandlingVmTests`. |
+| F19 | **Closed** | Break/Continue/Throw are not `InterpreterResult` Break/Continue/Throw kinds. |
+| F20 | **Closed** | Theater renames/fixes (CallSiteCatalog, CF then-elision, TypeCast/Block resolved type, Member_OnNull compile-reject, TH0002 dropped, Property Analyze). |
+| F21 | **Closed** | `VariableScopeTests` metadata + shadow warning + captured set. |
+| F22 | **Closed** | `VmHeapComparisonTests` + extended `VmHeapRelationalTests` (DateTime/Guid/mixed). |
+| F23 | **Closed** | `MermaidAstGeneratorTests` executable + AnalysisOnly TypeDefinition smoke. |
 
-| Area | Representative coverage |
-|------|-------------------------|
-| VM language surface | `LanguageVmTests`, `VmCorrectnessTests`, `DirectVmAbiEmitterTests`, `InterpreterLanguageGotchaTests` |
-| Control-flow CFG | `ControlFlowAnalysisTests` |
-| Constant folding | `ConstantFoldingTests` |
-| Closures / captures | `ClosureVmTests`, `ClosureCaptureTests` |
-| Exceptions (analysis) | `ExceptionRegionAnalysisTests` |
-| Exceptions (VM) | `ExceptionHandlingVmTests` (thin), `ThrowVmTests`, gotchas |
-| Errors / fail-closed | `InvalidProgramTests` (SyntaxTypeCompatibility, JT0001/2/4, TH, …) |
-| Generators | `CSharpGeneratorTests`, `LinqExpressionGeneratorTests`; Mermaid mostly under `Poly.Tests/Integration/` |
-| ABI / results | `InterpretResultAbiTests` (thin), stabilization SetArgs/Heap |
-| Type defs (consumed) | `TypeDefinitionNodeAnalyzerTests`, `PropertyDefinitionNodeTests`, `AstConstructorDefinitionTests` |
-| Passes (indirect) | SideEffect / JumpTarget / DA / LambdaReturn wired in pipelines; few direct metadata asserts |
+### Suite status
 
----
+Suite: **2724** total · **0** failed · **2724** succeeded (Nested close pass after F1/F3/F12 current-behavior asserts).
 
-## Missing / thin (provisional view)
+### Remaining product hooks (separate product PR — do not silently fix in `Poly/**`)
 
-| Area | Evidence | Status after this PR |
-|------|----------|----------------------|
-| `AbiValueTypes.IsLongRepresentable` | No dedicated tests | **Closed** → `AbiValueTypesTests` |
-| Heap relational compare (`VmHeapComparison` path) | Long/string Equal covered; DateOnly/string LessThan / Guid Equal thin | **Closed** → `VmHeapRelationalTests` |
-| `ResolvedJumpTarget` positive stamps | InvalidProgram covers JT errors; metadata stamps unasserted; JT0003 missing | **Closed** → `JumpTargetAnalysisTests` |
-| Definite assignment metadata | Pass in pipeline; `IsDefinitelyAssigned` never asserted | **Closed** → `DefiniteAssignmentTests` |
-| Side-effect / elision | Pass used; no Pure/Write/CanElide/DEAD_CODE_ELIDABLE oracles | **Closed** → `SideEffectAnalysisTests` |
-| `ValueStack` unit behavior | No direct tests (only via VM) | **Closed** → `ValueStackTests` |
-| Mermaid under Interpretation/ | Only Integration/ | **Closed (thin)** → `MermaidAstGeneratorTests` |
-| TryCatch+Finally / catch-all VM | ExceptionHandlingVmTests had 3 cases | **Closed (augment)** → `ExceptionHandlingVmTests` |
-| `InterpreterResult` void / IEEE GetValue / null payload | Thin ABI file | **Closed (augment)** → `InterpretResultAbiTests` |
-| Lambda jump isolation / deeper DA on non-lambda points | Not asserted | **Await Sentinel F#** |
-| `VmValueMarshaller` / `VmTrace` / `FunctionEntry` internals | Internal; exercised indirectly | **Await Sentinel F#** |
-| Full TypeDefinitions matrix via Interpretation | Partial via analyzer/property tests | **Await Sentinel F#** |
-| Exhaustive VM op matrix / dual-oracle expansion | Large existing suites; residual holes unknown | **Await Sentinel F#** |
-| SideEffect Read/Volatile / Allocate taxonomy | Only Pure/Write + elision here | **Await Sentinel F#** |
-| ScopeValidator diagnostic catalog | Errors via InvalidProgram / BlockScope; not inventoried | **Await Sentinel F#** |
-
----
-
-## What this PR added
-
-| File | Intent |
-|------|--------|
-| `Poly.Tests/Interpretation/AbiValueTypesTests.cs` | Ring-inline vs heap-resident type classification |
-| `Poly.Tests/Interpretation/VmHeapRelationalTests.cs` | DateOnly/string/Guid relational + equality via VM heap path |
-| `Poly.Tests/Interpretation/JumpTargetAnalysisTests.cs` | ResolvedJumpTarget stamps + JT0003 |
-| `Poly.Tests/Interpretation/DefiniteAssignmentTests.cs` | DA metadata join behavior on lambda bodies |
-| `Poly.Tests/Interpretation/SideEffectAnalysisTests.cs` | Pure/Write, elision, AssignmentValueUsed, DEAD_CODE_ELIDABLE |
-| `Poly.Tests/Interpretation/ValueStackTests.cs` | Push/Pop/Drop/grow/underflow |
-| `Poly.Tests/Interpretation/MermaidAstGeneratorTests.cs` | Interpretation/-local Mermaid generator smoke |
-| `Poly.Tests/Interpretation/ExceptionHandlingVmTests.cs` | Catch+finally, no-throw finally, untyped catch-all |
-| `Poly.Tests/Interpretation/InterpretResultAbiTests.cs` | Void, IEEE double GetValue, null payload |
-| `docs/plans/interpretation-coverage-provisional-2026-09-05.md` | This inventory |
+1. **F1** — `DirectVmAbiEmitter.Statements.cs` `EmitThrow`: preserve non-`New` operand instance (`Constant` / `Variable` / `ThrowExpression`). Tests: `Throw_*_DiscardsOperand_ThrowsFreshException`.
+2. **F3** — Resume PC dispatch: fall through past `SuspendNode` instead of re-entering. Test: `Suspend_ThenResume_ReSuspendsWithoutFallThrough`.
+3. **F12** — Unmatched overload Compile-reject (`Substring(1.5)`); optionally fix `IndexOf(string)` VM. Test: `Analyze_SubstringDouble_NoMatch_ResolvedMemberNull_AndCompileCurrentlyAccepts`.
+4. **F2** (asserted fail-loud) — Catch variable binding when product should bind `VariableName`.
 
 ---
 
-## Remaining (await Sentinel F#)
+## What already existed (pre-Sentinel provisional)
 
-All rows marked **Await Sentinel F#** above. Nested will mill each open F# into `Poly.Tests/Interpretation/` (or justified deferral in PR 53 body) after Sentinel publishes `docs/agent/reviews/*interpretation-coverage-sentinel*`.
+See prior tables: AbiValueTypes, VmHeapRelational, JumpTarget, DefiniteAssignment, SideEffect, ValueStack, Mermaid smoke, ExceptionHandling augment, InterpretResultAbi augment.
 
-Bugs found this pass: **none** (tests only; no product edits).
+---
+
+## Bugs found this pass
+
+None fixed in product (tests only). Confirmed product gaps (asserted as current behavior / documented): F1 throw non-New discard; F3 resume no fall-through; F12 unmatched overload not fail-closed; F2 catch binding absent (asserted fail-loud).

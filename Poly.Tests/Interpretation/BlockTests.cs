@@ -1,4 +1,6 @@
 using Poly.Interpretation;
+using Poly.Interpretation.Analysis.Semantics;
+using Poly.Introspection;
 using Poly.Tests.TestHelpers;
 
 using Expr = System.Linq.Expressions.Expression;
@@ -114,14 +116,11 @@ public class BlockTests {
 
     [Test]
     public async Task Block_GetTypeDefinition_ReturnsLastExpressionType() {
-        // Arrange
         var node = new Block(Wrap(10), Wrap(20));
-
-        // Act - build to trigger semantic analysis
-        _ = node.BuildExpression();
-
-        // Assert
-        await Assert.That(node).IsNotNull();
+        var analysis = Interpreter.Analyze(node);
+        var resolved = analysis.GetResolvedType(node);
+        await Assert.That(resolved).IsNotNull();
+        await Assert.That(resolved!.GetRuntimeType()).IsEqualTo(typeof(int));
     }
 
     [Test]

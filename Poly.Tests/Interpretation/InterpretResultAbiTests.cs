@@ -25,4 +25,27 @@ public class InterpretResultAbiTests {
         await Assert.That(exec.Result.Kind).IsEqualTo(InterpreterResult.ResultKind.Value);
         await Assert.That(exec.GetValue<string>()).IsEqualTo("hello");
     }
+
+    [Test]
+    public async Task VoidProgram_HasNoValue() {
+        using var exec = Interpreter.Execute(Interpreter.Compile(new Comment("note")));
+        await Assert.That(exec.Result.IsVoid).IsTrue();
+        await Assert.That(exec.Result.HasValue).IsFalse();
+        await Assert.That(exec.Result.GetValue<long>()).IsEqualTo(0L);
+    }
+
+    [Test]
+    public async Task GetValue_LongBits_AsDouble_RoundTripsIeee() {
+        var bits = BitConverter.DoubleToInt64Bits(1.5);
+        using var exec = Interpreter.Execute(Interpreter.Compile(new Constant(1.5)));
+        await Assert.That(exec.RawValue).IsEqualTo(bits);
+        await Assert.That(exec.GetValue<double>()).IsEqualTo(1.5);
+    }
+
+    [Test]
+    public async Task GetValue_NullPayload_ReturnsDefault() {
+        var result = InterpreterResult.FromValue(null);
+        await Assert.That(result.HasValue).IsTrue();
+        await Assert.That(result.GetValue<string>()).IsNull();
+    }
 }

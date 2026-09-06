@@ -55,4 +55,67 @@ public class ExceptionHandlingVmTests {
         using var exec = Interpreter.Execute(program);
         await Assert.That(exec.Result.GetValue<long>()).IsEqualTo(2L);
     }
+
+    [Test]
+    public async Task TryCatchFinally_CatchThenFinally_BothRun() {
+        var steps = new Variable("steps");
+        var node = new Block([
+            new Assignment(steps, new Constant(0L)),
+            new TryCatchFinally(
+                new ThrowStatement(new New(new ClrTypeReference(typeof(InvalidOperationException)))),
+                CatchClauses: [
+                    new CatchClause(
+                        new ClrTypeReference(typeof(InvalidOperationException)),
+                        "ex",
+                        new Assignment(steps, new Add(steps, new Constant(1L))))
+                ],
+                FinallyBlock: new Assignment(steps, new Add(steps, new Constant(10L)))),
+            steps
+        ], [steps]);
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.Result.GetValue<long>()).IsEqualTo(11L);
+    }
+
+    [Test]
+    public async Task TryCatchFinally_NoThrow_RunsFinallyOnly() {
+        // Catch bodies are coerced to void in the emitter; try must also be void-typed.
+        // False If → Empty else branch keeps try void while still exercising catch+finally shape.
+        var steps = new Variable("steps");
+        var node = new Block([
+            new Assignment(steps, new Constant(0L)),
+            new TryCatchFinally(
+                new IfStatement(
+                    new Constant(0L),
+                    new ThrowStatement(new New(new ClrTypeReference(typeof(InvalidOperationException))))),
+                CatchClauses: [
+                    new CatchClause(
+                        new ClrTypeReference(typeof(InvalidOperationException)),
+                        null,
+                        new Assignment(steps, new Constant(99L)))
+                ],
+                FinallyBlock: new Assignment(steps, new Add(steps, new Constant(10L)))),
+            steps
+        ], [steps]);
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.Result.GetValue<long>()).IsEqualTo(10L);
+    }
+
+    [Test]
+    public async Task TryCatch_CatchAllUntyped_CatchesAny() {
+        var caught = new Variable("caught");
+        var node = new Block([
+            new Assignment(caught, new Constant(0L)),
+            new TryCatchFinally(
+                new ThrowStatement(new New(new ClrTypeReference(typeof(InvalidOperationException)))),
+                CatchClauses: [
+                    new CatchClause(
+                        ExceptionType: null,
+                        VariableName: null,
+                        Body: new Assignment(caught, new Constant(7L)))
+                ]),
+            caught
+        ], [caught]);
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.Result.GetValue<long>()).IsEqualTo(7L);
+    }
 }

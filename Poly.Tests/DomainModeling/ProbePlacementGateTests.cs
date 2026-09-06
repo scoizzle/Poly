@@ -24,15 +24,15 @@ public class ProbePlacementGateTests {
     }
 
     [Test]
-    public async Task CommittedPolyProbes_AreUnderDocsProbesOrArchive() {
+    public async Task StrayRepoRootProbesPoly_MustBeEmpty() {
         var root = FindRepoRoot();
         var allowedPrefixes = new[] {
             Path.Combine(root, "docs", "probes") + Path.DirectorySeparatorChar,
             Path.Combine(root, "docs", "plans", "archive", "probes-2026-08") + Path.DirectorySeparatorChar,
         };
 
-        // Cheap scan: any *.poly under repo-root probes/ (if present) or stray
-        // top-level probe trees. Live fixtures must live under docs/probes/.
+        // Flags *.poly only under repo-root probes/ (live fixtures belong under
+        // docs/probes/). RepoRoot_ProbesDirectory_MustNotExist owns the directory check.
         var stray = new List<string>();
         var rootProbes = Path.Combine(root, "probes");
         if (Directory.Exists(rootProbes)) {

@@ -605,6 +605,9 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     /// matching initializer bindings to constructor parameters by property name.
     /// Uses the static <c>Create</c> factory method instead of <c>new</c> since
     /// constructors are private (Principle: owner constructs owned).
+    /// When the source owns an unambiguous many-rel targeting the created type,
+    /// also emits <c>_collection.Add(instance)</c> so export aligns with
+    /// <c>HostAbi.TryAutoLinkUnambiguousOutbound</c>.
     /// When <see cref="_domain"/> is null or the target entity is not found, returns null.
     /// </summary>
     protected override Node? CreateEntityInstance(CreateEntityInstance cei) {
@@ -653,6 +656,23 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
             new Block([failureStmt])));
 
         nds.Add(new Assignment(targetVar, new Member(resultVar, "Value")));
+
+        // Unambiguous many-rel Type-create: wire into the sole matching collection
+        // (aligns with HostAbi.TryAutoLinkUnambiguousOutbound). Zero or several → no Add.
+        if (_lowerStageTransitions) {
+            var outs = _entity.Navigations
+                .Where(n => (n.Cardinality is RelationshipCardinality.OneToMany
+                    or RelationshipCardinality.ManyToMany)
+                    && string.Equals(n.Target.TypeName, targetEntity.Name, StringComparison.Ordinal))
+                .ToList();
+            if (outs.Count == 1) {
+                var nav = outs[0];
+                var fieldName = $"_{DomainToCSharpExporter.ToCamelCase(DomainToCSharpExporter.ToPascalCase(nav.Name))}";
+                nds.Add(new Invoke(
+                    new Member(new Member(Subject, fieldName), "Add"),
+                    [targetVar]));
+            }
+        }
 
         // Bound initializers for non-constructor props are applied as post-create
         // assignments. Defaulted props are NOT ctor params here, but their overrides

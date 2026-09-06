@@ -800,9 +800,13 @@ public sealed partial record DomainEntityInstance {
             => new Invoke(
                 new Member(BindThis(((Member)inv.Delegate).Value, entity, parameters, stageEnums), "Notify"),
                 new Constant(notifyName["Notify".Length..^"Subscribers".Length])),
-        Invoke { Delegate: Member { Value: TypeReference or NamedTypeReference } } inv
-            when AdapterTypeName(inv) is not null
-            => new Block([]),
+        // Fail closed: export adapter throws; simulate must not silent-success.
+        Invoke { Delegate: Member { Value: TypeReference or NamedTypeReference, MemberName: { } endpoint } } inv
+            when AdapterTypeName(inv) is { } adapter
+            => new Return(new Invoke(
+                new Member(new NamedTypeReference("DomainResult"), "Failure"),
+                new Constant(
+                    $"Contract endpoint '{ContractNameFromAdapter(adapter)}.{endpoint}' has no in-process adapter on simulate."))),
         Invoke inv => new Invoke(
             BindThis(inv.Delegate, entity, parameters, stageEnums),
             [.. inv.Arguments.Select(a => BindThis(a, entity, parameters, stageEnums))]) {
@@ -878,6 +882,11 @@ public sealed partial record DomainEntityInstance {
             && name.EndsWith("Adapters", StringComparison.Ordinal)
             ? name
             : null;
+
+    private static string ContractNameFromAdapter(string adapterTypeName) =>
+        adapterTypeName.EndsWith("Adapters", StringComparison.Ordinal)
+            ? adapterTypeName[..^"Adapters".Length]
+            : adapterTypeName;
 
     private static string? TypeNameOf(Node type) => type switch {
         TypeReference tr => tr.TypeName,

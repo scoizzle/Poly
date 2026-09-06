@@ -115,9 +115,16 @@ public static class TypeDefinitionExtensions {
         public bool IsAssignableFrom(ITypeDefinition other) {
             ArgumentNullException.ThrowIfNull(other);
             if (typeDefinition == other) return true;
-            if (typeDefinition is ClrTypeDefinition clrTypeDef && other is ClrTypeDefinition otherClrTypeDef
-                && clrTypeDef.RuntimeType.IsAssignableFrom(otherClrTypeDef.RuntimeType))
-                return true;
+            if (typeDefinition is ClrTypeDefinition clrTypeDef) {
+                // CLR object is the VM box of every modeled type def (module
+                // entity at DomainResult.Success). Two ClrTypeDefinitions still
+                // use RuntimeType.IsAssignableFrom below.
+                if (clrTypeDef.RuntimeType == typeof(object))
+                    return true;
+                if (other is ClrTypeDefinition otherClrTypeDef
+                    && clrTypeDef.RuntimeType.IsAssignableFrom(otherClrTypeDef.RuntimeType))
+                    return true;
+            }
 
             var current = other.BaseType;
             while (current != null) {

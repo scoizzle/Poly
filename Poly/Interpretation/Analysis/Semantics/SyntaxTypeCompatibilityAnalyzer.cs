@@ -204,8 +204,9 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
             // same-name/arity candidate can accept the args via assign or widen.
             if (context.GetResolvedMember(invoke) is null
                 && !HasPlausibleMemberOverload(context, invoke, member)) {
+                var receiver = context.GetResolvedType(member.Value)?.Name ?? member.Value.GetType().Name;
                 Report(context, invoke,
-                    $"no matching member for invoke with {invoke.Arguments.Length} argument(s)");
+                    $"no matching member '{member.MemberName}' on '{receiver}' for invoke with {invoke.Arguments.Length} argument(s)");
             }
             return;
         }

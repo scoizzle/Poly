@@ -800,6 +800,22 @@ public sealed partial record DomainEntityInstance {
             => new Invoke(
                 new Member(BindThis(((Member)inv.Delegate).Value, entity, parameters, stageEnums), "Notify"),
                 new Constant(notifyName["Notify".Length..^"Subscribers".Length])),
+        // Module emit uses DomainResult<T>.Success(value). VM CLR DomainResult is
+        // non-generic; entity TypeDefs are not assignable-to object under PR53
+        // overload scoring. Typed return still comes from CreatedChildren.
+        // Success(value) → Success(); Failure(msg) keeps the string arg.
+        Invoke { Delegate: Member {
+                Value: NamedTypeReference { TypeName: "DomainResult" },
+                MemberName: "Success"
+            } } inv
+            => new Invoke(new Member(new NamedTypeReference("DomainResult"), "Success")),
+        Invoke { Delegate: Member {
+                Value: NamedTypeReference { TypeName: "DomainResult" },
+                MemberName: "Failure"
+            } } inv
+            => new Invoke(
+                new Member(new NamedTypeReference("DomainResult"), "Failure"),
+                [.. inv.Arguments.Select(a => BindThis(a, entity, parameters, stageEnums))]),
         // Fail closed: export adapter throws; simulate must not silent-success.
         Invoke { Delegate: Member { Value: TypeReference or NamedTypeReference, MemberName: { } endpoint } } inv
             when AdapterTypeName(inv) is { } adapter

@@ -72,7 +72,22 @@ public class InvalidProgramTests {
         await AssertAnalysisThenCompileRejects(
             new GotoStatement("nowhere"),
             "not found",
-            expectedCode: null);
+            expectedCode: "JT0005");
+    }
+
+    [Test]
+    public async Task Goto_UnknownLabel_AlsoReportsCF0001Sibling() {
+        var analysis = Interpreter.Analyze(new GotoStatement("nowhere"));
+        await Assert.That(analysis.Diagnostics.Any(d => d.Code == "JT0005")).IsTrue();
+        await Assert.That(analysis.Diagnostics.Any(d => d.Code == "CF0001")).IsTrue();
+    }
+
+    [Test]
+    public async Task LabeledContinue_UnknownLabel_ReportsJT0003AndCompileRejects() {
+        await AssertAnalysisThenCompileRejects(
+            new WhileLoop(new Constant(true), new ContinueStatement("nope")),
+            "No enclosing loop with label",
+            "JT0003");
     }
 
     [Test]

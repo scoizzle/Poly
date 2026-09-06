@@ -300,4 +300,32 @@ public class TypeDefinitionNodeAnalyzerTests {
         await Assert.That(result).IsTypeOf<long>();
         await Assert.That((long)result!).IsEqualTo(7L);
     }
+
+    [Test]
+    public async Task Analyze_OptionalAndMapPropertyTypes_Resolve() {
+        var typeNode = new TypeDefinitionNode(
+            "Bag",
+            "Sample",
+            Properties: [
+                new PropertyDefinitionNode(
+                    "Maybe",
+                    new OptionalTypeReference(new PrimitiveTypeReference(PrimitiveType.Int32))),
+                new PropertyDefinitionNode(
+                    "Dict",
+                    new MapTypeReference(
+                        new PrimitiveTypeReference(PrimitiveType.String),
+                        new PrimitiveTypeReference(PrimitiveType.Int32))),
+            ]);
+        var analysis = new AnalyzerBuilder()
+            .AddAnalyzer(new TypeDefinitionNodeAnalyzer())
+            .Build()
+            .Analyze(typeNode);
+        var td = analysis.GetMetadata<TypeDefinitionMetadata>(typeNode)?.TypeDefinition;
+        await Assert.That(td).IsNotNull();
+        var maybe = td!.Properties.Single(p => p.Name == "Maybe");
+        var dict = td.Properties.Single(p => p.Name == "Dict");
+        await Assert.That(maybe.MemberTypeDefinition.GetRuntimeType()).IsEqualTo(typeof(int?));
+        await Assert.That(dict.MemberTypeDefinition.GetRuntimeType())
+            .IsEqualTo(typeof(Dictionary<string, int>));
+    }
 }

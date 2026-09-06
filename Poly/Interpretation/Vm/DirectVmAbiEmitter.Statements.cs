@@ -322,22 +322,19 @@ public static partial class DirectVmAbiEmitter {
     }
 
     private static Expression EmitThrow(ThrowStatement ts, AbiCtx ctx) {
-        if (ts.Exception is New) {
-            int d = ctx.RingDepth;
-            var compiled = CompileNode(ts.Exception, ctx);
-            int resultSlot = ctx.RingDepth - 1;
-            var heapObj = Call(ctx.HeapLocal,
-                HeapUnsafeGet,
-                Convert(ctx.RingVar(resultSlot), typeof(int)));
-            var exVar = Variable(typeof(Exception), "_thrownEx");
-            return Block(
-                [exVar],
-                compiled,
-                Assign(exVar, Convert(heapObj, typeof(Exception))),
-                Throw(exVar));
-        }
-        var sideEffects = CompileNode(ts.Exception, ctx);
-        return Block(sideEffects, Throw(New(typeof(Exception))));
+        // Preserve the operand instance (Constant / Variable / New / ThrowExpression value).
+        // Match LINQ: Expression.Throw(CompileNode(exception)).
+        var compiled = CompileNode(ts.Exception, ctx);
+        int resultSlot = ctx.RingDepth - 1;
+        var heapObj = Call(ctx.HeapLocal,
+            HeapUnsafeGet,
+            Convert(ctx.RingVar(resultSlot), typeof(int)));
+        var exVar = Variable(typeof(Exception), "_thrownEx");
+        return Block(
+            [exVar],
+            compiled,
+            Assign(exVar, Convert(heapObj, typeof(Exception))),
+            Throw(exVar));
     }
 
     private static Expression EmitTryCatchFinally(TryCatchFinally tcf, AbiCtx ctx) {
@@ -395,18 +392,24 @@ public static partial class DirectVmAbiEmitter {
         var setStatus = Assign(
             Property(ctx.State, nameof(VmState.Status)),
             Constant(InterpreterStatus.Suspended));
-        var saveResumeId = Assign(ctx.ProgramCounter, Constant(step));
+        // Flush step to VmState.ProgramCounter — EmitPcDispatch switches on state, not local _pc.
+        var saveResumeId = Assign(ctx.StatePcFlush, Constant(step));
         var saveFramePos = Assign(
             Property(ctx.State, nameof(VmState.FramePos)),
             ctx.FramePosLocal);
+        var clearSuspended = Assign(
+            Property(ctx.State, nameof(VmState.Status)),
+            Constant(InterpreterStatus.Running));
+        // Resume label is AFTER suspend+exit so Resume falls through to later statements.
         return Block(
-            Label(resumeLabel),
             innerExpr,
             setCurrentNode,
             setStatus,
             saveResumeId,
             saveFramePos,
-            Goto(ctx.ExitLabel));
+            Goto(ctx.ExitLabel),
+            Label(resumeLabel),
+            clearSuspended);
     }
 
     private static Expression EmitParameter(Parameter p, AbiCtx ctx) {

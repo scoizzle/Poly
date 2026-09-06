@@ -1,3 +1,4 @@
+using Poly.Interpretation;
 using Poly.Interpretation.Analysis.ConstantFolding;
 using Poly.Interpretation.Analysis.ControlFlow;
 using Poly.Interpretation.Analysis.Semantics;
@@ -510,5 +511,29 @@ public class ConstantFoldingTests {
         // Assert
         await Assert.That(result.IsConstant(ast)).IsTrue();
         await Assert.That(result.GetConstantValue(ast)).IsEqualTo(5);
+    }
+
+    [Test]
+    public async Task FoldedAdd_CompileExecute_UsesReplacementValue() {
+        var add = new Add(Wrap(2), Wrap(3));
+        var analysis = new AnalyzerBuilder()
+            .UseThisReferenceContext()
+            .UseTypeAndMemberResolver()
+            .UseVariableScopeValidator()
+            .UseSideEffectAnalysis()
+            .UseJumpTargetResolution()
+            .UseConstantFolding()
+            .UseControlFlowAnalysis()
+            .Build()
+            .Analyze(add);
+        await Assert.That(analysis.GetConstantValue(add)).IsEqualTo(5);
+        var replacement = analysis.GetNodeReplacement(add);
+        await Assert.That(replacement).IsNotNull();
+        await Assert.That(replacement).IsTypeOf<Constant>();
+        await Assert.That(((Constant)replacement!).Value).IsEqualTo(5);
+
+        // Emitter compiles GetNodeReplacement — execute must yield the folded constant.
+        using var exec = Interpreter.Execute(Interpreter.Compile(add));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(5L);
     }
 }

@@ -77,6 +77,10 @@ internal sealed class ScopeValidator : INodeAnalyzer {
                 AnalyzeForEachLoop(context, state, forEachLoop);
                 break;
 
+            case TryCatchFinally tcf:
+                AnalyzeTryCatchFinally(context, state, tcf);
+                break;
+
             case Variable variable:
                 ValidateVariableReference(context, state, variable);
                 AnalyzeChildrenWithState(context, state, node);
@@ -106,6 +110,28 @@ internal sealed class ScopeValidator : INodeAnalyzer {
                 AnalyzeChildrenWithState(context, state, node);
                 break;
         }
+    }
+
+    private void AnalyzeTryCatchFinally(AnalysisContext context, ScopeState state, TryCatchFinally tcf) {
+        AnalyzeNode(context, state, tcf.TryBlock);
+        if (tcf.CatchClauses is not null) {
+            foreach (var clause in tcf.CatchClauses) {
+                if (clause.ExceptionType is not null)
+                    AnalyzeNode(context, state, clause.ExceptionType);
+                Variable? catchVar = null;
+                if (!string.IsNullOrEmpty(clause.VariableName)) {
+                    catchVar = new Variable(clause.VariableName);
+                    RegisterScopedVariable(context, state, catchVar);
+                    state.Meta.VariableDeclarationScope[catchVar] =
+                        state.ScopeStack.Count > 0 ? state.ScopeStack[^1] : tcf;
+                }
+                AnalyzeNode(context, state, clause.Body);
+                if (catchVar is not null)
+                    UnregisterVariable(state, catchVar);
+            }
+        }
+        if (tcf.FinallyBlock is not null)
+            AnalyzeNode(context, state, tcf.FinallyBlock);
     }
 
     private void AnalyzeForEachLoop(AnalysisContext context, ScopeState state, ForEachLoop forEachLoop) {

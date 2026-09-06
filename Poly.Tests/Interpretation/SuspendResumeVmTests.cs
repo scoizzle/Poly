@@ -14,24 +14,7 @@ public class SuspendResumeVmTests {
     }
 
     [Test]
-    public async Task Suspend_ThenResume_InvokesResumeApi() {
-        var program = Interpreter.Compile(new SuspendNode(new Constant(5L), "bp"));
-        using var exec = Interpreter.Execute(program);
-        await Assert.That(exec.IsSuspended).IsTrue();
-        await Assert.That(exec.State.Status).IsEqualTo(InterpreterStatus.Suspended);
-        // Resume transfers ownership; PC dispatch / Resuming path must run without throwing.
-        using var resumed = exec.Resume();
-        await Assert.That(resumed).IsNotNull();
-        // Product today re-enters SuspendNode and suspends again (no fall-through). Documented in provisional.
-        await Assert.That(resumed.IsSuspended).IsTrue();
-    }
-
-    /// <summary>
-    /// F3 product gap: Resume re-enters SuspendNode and suspends again (no fall-through to later stmts).
-    /// Desired continue-remaining oracle blocked until product changes — assert current re-suspend.
-    /// </summary>
-    [Test]
-    public async Task Suspend_ThenResume_ReSuspendsWithoutFallThrough() {
+    public async Task Suspend_ThenResume_FallsThroughToLaterStatements() {
         var x = new Variable("x");
         var node = new Block([
             new Assignment(x, new Constant(1L)),
@@ -42,8 +25,9 @@ public class SuspendResumeVmTests {
         var program = Interpreter.Compile(node);
         using var exec = Interpreter.Execute(program);
         await Assert.That(exec.IsSuspended).IsTrue();
+        await Assert.That(exec.State.Status).IsEqualTo(InterpreterStatus.Suspended);
         using var resumed = exec.Resume();
-        await Assert.That(resumed.IsSuspended).IsTrue();
-        await Assert.That(resumed.State.Status).IsEqualTo(InterpreterStatus.Suspended);
+        await Assert.That(resumed.IsSuspended).IsFalse();
+        await Assert.That(resumed.Result.GetValue<long>()).IsEqualTo(2L);
     }
 }

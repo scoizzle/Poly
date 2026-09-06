@@ -37,36 +37,29 @@ public class ThrowVmTests {
         await Assert.That(() => { Interpreter.Execute(block); }).ThrowsExactly<Exception>();
     }
 
-    /// <summary>
-    /// F1 product gap: DirectVmAbiEmitter discards non-New Throw operands and throws a fresh Exception().
-    /// Desired oracle (same-instance propagate) is blocked until product changes — assert current loud discard.
-    /// </summary>
+    /// <summary>F1: non-New Throw operand must propagate that same exception instance.</summary>
     [Test]
-    public async Task Throw_ConstantExceptionInstance_DiscardsOperand_ThrowsFreshException() {
+    public async Task Throw_ConstantExceptionInstance_PropagatesSameInstance() {
         var expected = new InvalidOperationException("constant-ex");
         var throwStmt = new ThrowStatement(new Constant(expected));
         Exception? caught = null;
         try { Interpreter.Execute(throwStmt); }
         catch (Exception ex) { caught = ex; }
-        await Assert.That(caught).IsNotNull();
-        await Assert.That(caught).IsNotSameReferenceAs(expected);
-        await Assert.That(caught!.GetType()).IsEqualTo(typeof(Exception));
+        await Assert.That(caught).IsSameReferenceAs(expected);
     }
 
     [Test]
-    public async Task ThrowExpression_ConstantExceptionInstance_DiscardsOperand_ThrowsFreshException() {
+    public async Task ThrowExpression_ConstantExceptionInstance_PropagatesSameInstance() {
         var expected = new InvalidOperationException("expr-ex");
         var node = new ThrowExpression(new Constant(expected));
         Exception? caught = null;
         try { Interpreter.Execute(Interpreter.Compile(node)); }
         catch (Exception ex) { caught = ex; }
-        await Assert.That(caught).IsNotNull();
-        await Assert.That(caught).IsNotSameReferenceAs(expected);
-        await Assert.That(caught!.GetType()).IsEqualTo(typeof(Exception));
+        await Assert.That(caught).IsSameReferenceAs(expected);
     }
 
     [Test]
-    public async Task Throw_VariableHoldingException_DiscardsOperand_ThrowsFreshException() {
+    public async Task Throw_VariableHoldingException_PropagatesSameInstance() {
         var expected = new InvalidOperationException("var-ex");
         var e = new Variable("e");
         var block = new Block([
@@ -76,8 +69,6 @@ public class ThrowVmTests {
         Exception? caught = null;
         try { Interpreter.Execute(Interpreter.Compile(block)); }
         catch (Exception ex) { caught = ex; }
-        await Assert.That(caught).IsNotNull();
-        await Assert.That(caught).IsNotSameReferenceAs(expected);
-        await Assert.That(caught!.GetType()).IsEqualTo(typeof(Exception));
+        await Assert.That(caught).IsSameReferenceAs(expected);
     }
 }

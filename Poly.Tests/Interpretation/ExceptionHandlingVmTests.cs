@@ -119,9 +119,9 @@ public class ExceptionHandlingVmTests {
         await Assert.That(exec.Result.GetValue<long>()).IsEqualTo(7L);
     }
 
-    /// <summary>F2: CatchClause.VariableName must be readable in the catch body (or fail loud).</summary>
+    /// <summary>F2: CatchClause.VariableName is bound; catch body reads message.</summary>
     [Test]
-    public async Task TryCatch_CatchVariable_ReadMessage_FailsLoudOrBinds() {
+    public async Task TryCatch_CatchVariable_ReadMessage_BindsSameInstance() {
         var msg = new Variable("msg");
         var node = new Block([
             new Assignment(msg, new Constant("")),
@@ -137,10 +137,8 @@ public class ExceptionHandlingVmTests {
                 ]),
             msg
         ], [msg]);
-        // Current product: ScopeValidator does not bind catch VariableName → compile reject.
-        await Assert.That(() => Interpreter.Compile(node))
-            .Throws<InvalidOperationException>()
-            .WithMessageContaining("not declared");
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.Result.GetValue<string>()).IsEqualTo("boom-msg");
     }
 
     /// <summary>F18: Nested try — inner catch handles; outer does not run.</summary>

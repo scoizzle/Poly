@@ -62,13 +62,16 @@ public class MethodInvocationSemanticResolutionTests {
     }
 
     [Test]
-    public async Task Analyze_SubstringDouble_NoMatch_ResolvedMemberNull_AndCompileCurrentlyAccepts() {
+    public async Task Analyze_SubstringDouble_NoMatch_ResolvedMemberNull_AndCompileRejects() {
         var methodInvocation = new Invoke(new Member(Wrap("hello"), "Substring"), Wrap(1.5));
         var analysis = Interpreter.Analyze(methodInvocation);
         await Assert.That(analysis.GetResolvedMember(methodInvocation)).IsNull();
-        // PRODUCT HOOK (F12): desired Compile-reject; current tree accepts. Characterization only.
-        var program = Interpreter.Compile(methodInvocation);
-        await Assert.That(program).IsNotNull();
+        await Assert.That(analysis.Diagnostics.Any(d =>
+            d.Severity == DiagnosticSeverity.Error
+            && d.Message.Contains("no matching member", StringComparison.OrdinalIgnoreCase))).IsTrue();
+        await Assert.That(() => Interpreter.Compile(methodInvocation))
+            .Throws<InvalidOperationException>()
+            .WithMessageContaining("no matching member");
     }
 }
 

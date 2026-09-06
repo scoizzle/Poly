@@ -52,4 +52,46 @@ public class VariableScopeTests {
         await Assert.That(meta).IsNotNull();
         await Assert.That(meta!.CapturedVariables.Contains(captured)).IsTrue();
     }
+
+    [Test]
+    public async Task EscapedVariables_InvokeArgument_IsMarked() {
+        var arg = new Variable("arg");
+        var fn = new Variable("fn");
+        var node = new Block([
+            new Assignment(arg, new Constant(1L)),
+            new Assignment(fn, new Lambda([new Parameter("p")], new Parameter("p"))),
+            new Invoke(fn, arg)
+        ], [arg, fn]);
+        var result = Analyze(node);
+        var meta = result.GetMetadata<VariableAnalysisMetadata>(node);
+        await Assert.That(meta).IsNotNull();
+        await Assert.That(meta!.EscapedVariables.Contains(arg)).IsTrue();
+    }
+
+    [Test]
+    public async Task EscapedVariables_ReturnValue_IsMarked() {
+        var x = new Variable("x");
+        var node = new Block([
+            new Assignment(x, new Constant(1L)),
+            new Return(x)
+        ], [x]);
+        var result = Analyze(node);
+        var meta = result.GetMetadata<VariableAnalysisMetadata>(node);
+        await Assert.That(meta).IsNotNull();
+        await Assert.That(meta!.EscapedVariables.Contains(x)).IsTrue();
+    }
+
+    [Test]
+    public async Task EscapedVariables_ForEachCollection_IsMarked() {
+        var items = new Variable("items");
+        var item = new Variable("item");
+        var node = new Block([
+            new Assignment(items, new Constant(new[] { 1L, 2L })),
+            new ForEachLoop(item, items, new Constant(0L))
+        ], [items]);
+        var result = Analyze(node);
+        var meta = result.GetMetadata<VariableAnalysisMetadata>(node);
+        await Assert.That(meta).IsNotNull();
+        await Assert.That(meta!.EscapedVariables.Contains(items)).IsTrue();
+    }
 }

@@ -102,15 +102,59 @@ public sealed partial class DomainToCSharpExporter {
         var cases = new List<Node>();
         foreach (var target in domain.Types.OfType<Entity>()) {
             var typed = new Variable("typed");
-            var createArgs = BuildTargetCreateArgs(entity, target, values, domain, metadata);
+            // Same outs.Count == 1 rule as HostAbi.TryAutoLinkUnambiguousOutbound;
+            // reverse this only when TryLinkCreateInBackReference would (unique singular).
+            var outs = entity.Navigations
+                .Where(n => (n.Cardinality is RelationshipCardinality.OneToMany
+                    or RelationshipCardinality.ManyToMany)
+                    && string.Equals(n.Target.TypeName, target.Name, StringComparison.Ordinal))
+                .ToList();
+            var backs = target.Navigations
+                .Where(n => n.Cardinality is not (RelationshipCardinality.OneToMany
+                    or RelationshipCardinality.ManyToMany)
+                    && string.Equals(n.Target.TypeName, entity.Name, StringComparison.Ordinal))
+                .ToList();
+            var autoLink = outs.Count == 1;
+            var createArgs = BuildTargetCreateArgs(
+                entity, target, values, domain, metadata,
+                wireUnambiguousBackRef: autoLink && backs.Count == 1);
+            var body = new List<Node> {
+                new Assignment(typed, new Invoke(
+                    new Member(new NamedTypeReference(target.Name), "Create"),
+                    [.. createArgs]))
+            };
+            var locals = new List<Node> { typed };
+            if (autoLink) {
+                // Align C# export with HostAbi: Add into the sole matching collection
+                // after Fine.Create succeeds (AssessByType → this.Create → BindCreate).
+                var created = new Variable("created");
+                locals.Add(created);
+                var fieldName = $"_{ToCamelCase(ToPascalCase(outs[0].Name))}";
+                body.Add(new IfStatement(
+                    new Syntactic.Not(new Member(typed, "IsSuccess")),
+                    new Block([
+                        new Return(new Invoke(
+                            new Member(objectResult, "Failure"),
+                            new Syntactic.Coalesce(
+                                new Member(typed, "ErrorMessage"),
+                                new Constant(""))))
+                    ]),
+                    new Block([
+                        new Assignment(created, new Member(typed, "Value")),
+                        new Invoke(
+                            new Member(new Member(new ThisReference(), fieldName), "Add"),
+                            [new TypeCast(created, new NamedTypeReference(target.Name))]),
+                        new Return(new Invoke(
+                            new Member(objectResult, "Success"),
+                            [created]))
+                    ])));
+            }
+            else {
+                body.Add(RewrapObjectResult(typed, objectResult));
+            }
             cases.Add(new IfStatement(
                 new Equal(name, new Constant(target.Name)),
-                new Block([
-                    new Assignment(typed, new Invoke(
-                        new Member(new NamedTypeReference(target.Name), "Create"),
-                        [.. createArgs])),
-                    RewrapObjectResult(typed, objectResult)
-                ], [typed])));
+                new Block(body, locals)));
         }
         cases.Add(UnknownFailure(objectResult, "Unknown type '", name, "'."));
         return new MethodDefinitionNode(
@@ -218,12 +262,16 @@ public sealed partial class DomainToCSharpExporter {
         Entity target,
         Parameter values,
         Domain domain,
-        INodeMetadataProvider metadata) {
+        INodeMetadataProvider metadata,
+        bool wireUnambiguousBackRef = false) {
         var args = new List<Node>();
         var parameters = GetConstructorParameters(target, metadata);
         foreach (var parameter in parameters) {
             if (parameter.IsBackReference) {
-                args.Add(string.Equals(source.Name, target.Name, StringComparison.Ordinal)
+                // HostAbi TryLinkCreateInBackReference: unique singular back to source
+                // gets this. Self-create still always uses this.
+                args.Add(wireUnambiguousBackRef
+                    || string.Equals(source.Name, target.Name, StringComparison.Ordinal)
                     ? new ThisReference()
                     : TypedNull(parameter.Type.TypeName));
                 continue;

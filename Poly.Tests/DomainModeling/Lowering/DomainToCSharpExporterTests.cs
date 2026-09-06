@@ -1970,8 +1970,9 @@ public class DomainToCSharpExporterTests {
 
     [Test]
     public async Task Export_CreateType_UnambiguousManyRel_EmitsCollectionAdd() {
-        // F5: Type-create on unambiguous many-rel emits _collection.Add, aligning
-        // C# export with HostAbi.TryAutoLinkUnambiguousOutbound.
+        // F5/F9: Type-create host bind (BindCreate) emits _collection.Add, aligning
+        // C# export with HostAbi.TryAutoLinkUnambiguousOutbound. CreateFines alone
+        // is not proof — assert BindCreate's Fine arm, not the whole compilation unit.
         var (domain, analysis) = ParseAndAnalyze("""
             domain Test
             Patron: entity {
@@ -1989,7 +1990,36 @@ public class DomainToCSharpExporterTests {
             """);
         var types = new DomainToCSharpExporter().Export(domain, analysis);
         var cs = new CSharpGenerator().Generate(new CompilationUnitNode([], null, types, null));
-        await Assert.That(cs).Contains("_fines.Add");
+        await Assert.That(cs).Contains("this.Create(");
+
+        // Private host bind — not the public Create overloads that call BindCreate.
+        var bindStart = cs.IndexOf("BindCreate(string typeName", StringComparison.Ordinal);
+        await Assert.That(bindStart).IsGreaterThanOrEqualTo(0);
+        var bindEnd = cs.IndexOf("BindCreateIn(string", bindStart + 1, StringComparison.Ordinal);
+        if (bindEnd < 0)
+            bindEnd = cs.IndexOf("BindProbeCreate(string", bindStart + 1, StringComparison.Ordinal);
+        await Assert.That(bindEnd).IsGreaterThan(bindStart);
+        var bindCreate = cs[bindStart..bindEnd];
+        await Assert.That(bindCreate).Contains("_fines.Add");
+        await Assert.That(bindCreate).Contains("Fine.Create(");
+
+        // AssessByType uses this.Create (job host); Add lives in BindCreate.
+        var assessStart = cs.IndexOf("DomainResult<Fine> AssessByType(", StringComparison.Ordinal);
+        await Assert.That(assessStart).IsGreaterThanOrEqualTo(0);
+        var assessBrace = cs.IndexOf('{', assessStart);
+        await Assert.That(assessBrace).IsGreaterThan(assessStart);
+        var depth = 0;
+        var assessEnd = assessBrace;
+        for (var i = assessBrace; i < cs.Length; i++) {
+            if (cs[i] == '{') depth++;
+            else if (cs[i] == '}') {
+                depth--;
+                if (depth == 0) { assessEnd = i + 1; break; }
+            }
+        }
+        var assessByType = cs[assessStart..assessEnd];
+        await Assert.That(assessByType).Contains("this.Create(");
+        await Assert.That(assessByType).DoesNotContain("_fines.Add");
     }
 
     [Test]

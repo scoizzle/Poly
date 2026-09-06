@@ -2034,7 +2034,7 @@ public class DomainEntityInstanceTests {
 
     [Test]
     public async Task CreateEntityInstance_WithoutRelationship_NotLinked() {
-        // Create effect without RelationshipName → child is NOT linked.
+        // Create without RelationshipName and no matching many-rel → not linked.
         var child = new Entity("Child", [], [], [], []);
         var parent = new Entity("Parent", [], [
             new Poly.DomainModeling.Ontology.Action("Spawn", InvocationResult.Void, [], [

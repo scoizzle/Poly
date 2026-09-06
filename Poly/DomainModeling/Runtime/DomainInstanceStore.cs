@@ -221,6 +221,11 @@ public sealed class DomainInstanceStore {
                 Link(relationshipName, creator, child);
                 creator.TryLinkCreateInBackReference(child);
             }
+            else {
+                // Same Type-create contract as CreateChildInstance: unambiguous
+                // many-rel to the created type auto-links outbound + reverse.
+                creator.TryAutoLinkUnambiguousOutbound(child, targetEntity);
+            }
         }
         catch (InvalidOperationException ex) {
             creator.UntrackCreatedChild(child);

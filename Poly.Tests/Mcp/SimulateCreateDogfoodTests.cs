@@ -178,4 +178,51 @@ public class SimulateCreateDogfoodTests {
         await Assert.That(state.InstanceStore.GetRelatedInstances("patron", fineRel).Count)
             .IsEqualTo(1);
     }
+
+    [Test]
+    public async Task TypeOnly_AmbiguousManyRel_ListsButDoesNotLink() {
+        // F6: two many-navs to Fine → TryAutoLinkUnambiguousOutbound no-ops (outs.Count != 1).
+        var (sessionId, _) = McpSessionStore.Create("SimulateCreateAmbiguous");
+        var dsl = """
+            domain SimulateCreateAmbiguous
+            uses temporal
+            uses storage
+
+            Patron: entity {
+              Name: Text required
+              fines: many Fine
+              waived: many Fine
+              HasFines: policy { fines exists }
+              HasFineCount: policy { count fines > 0 }
+              NoFines: policy { count fines == 0 }
+
+              Active: stage {
+                AssessByType: action -> Fine {
+                  create Fine { Amount: 5 Reason: "Ambiguous" }
+                }
+              }
+            }
+
+            Fine: entity {
+              Amount: Number range(0, 500) required
+              Reason: Text required
+              patron: Patron
+            }
+            """;
+        await Assert.That(DslTool.ApplyDsl(sessionId, dsl).Success).IsTrue();
+
+        var patronId = CreateAndId(sessionId, "Patron", """{"Name":"Dana"}""");
+        var invoke = RuntimeTool.InvokeAction(sessionId, patronId, "AssessByType");
+        await Assert.That(invoke.Success).IsTrue();
+        var fineId = ExtractReturnInstanceId(invoke);
+        await Assert.That(fineId).IsNotNull();
+
+        await Assert.That(ListFineCount(sessionId)).IsEqualTo(1);
+        await AssertPolicies(sessionId, patronId, hasFines: false, noFines: true);
+
+        var (patron, fine, store) = ResolvePatronFine(sessionId, patronId, fineId);
+        await Assert.That(store.GetRelatedInstances("fines", patron).Count).IsEqualTo(0);
+        await Assert.That(store.GetRelatedInstances("waived", patron).Count).IsEqualTo(0);
+        _ = fine; // registered but unlinked
+    }
 }

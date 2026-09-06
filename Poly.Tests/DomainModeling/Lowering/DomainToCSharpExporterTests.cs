@@ -1964,6 +1964,30 @@ public class DomainToCSharpExporterTests {
     }
 
     [Test]
+    public async Task Export_CreateType_UnambiguousManyRel_EmitsCollectionAdd() {
+        // F5: Type-create on unambiguous many-rel emits _collection.Add, aligning
+        // C# export with HostAbi.TryAutoLinkUnambiguousOutbound.
+        var (domain, analysis) = ParseAndAnalyze("""
+            domain Test
+            Patron: entity {
+              Name: Text required
+              fines: many Fine
+              AssessByType: action -> Fine {
+                create Fine { Amount: 5 Reason: "TypeCreate" }
+              }
+            }
+            Fine: entity {
+              Amount: Number required
+              Reason: Text required
+              patron: Patron
+            }
+            """);
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var cs = new CSharpGenerator().Generate(new CompilationUnitNode([], null, types, null));
+        await Assert.That(cs).Contains("_fines.Add");
+    }
+
+    [Test]
     public async Task Export_CreateInitializer_StringLiteralEnumMember_Qualifies() {
         // Discovery pilot C-F2: `Kind: "Keyword"` in a create/create-in initializer passed
         // the string literal through as `string` (CS1503) — the assign path qualifies it.

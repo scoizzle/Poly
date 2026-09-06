@@ -73,10 +73,10 @@ relationship. You only specify the *other* property initializers.
 **Type-create auto-link (unambiguous many-rel):** bare `create Type { … }` from a
 source that owns **exactly one** many-navigation targeting that type (e.g. Patron
 with `fines: many Fine` running `create Fine { … }`) also auto-links outbound and
-the unambiguous reverse (`Fine.patron`), same as `create in fines`. Zero or several
-matching many-rels leave the child registered but unlinked — use `create in Rel` or
-`link_instances` explicitly. Prefer `create in Rel` when you want the relationship
-named in the effect.
+the unambiguous reverse (`Fine.patron`), same as `create in fines`. C# export likewise
+emits `_fines.Add` for that unambiguous case. Zero or several matching many-rels leave
+the child registered but unlinked — use `create in Rel` or `link_instances` explicitly.
+Prefer `create in Rel` when you want the relationship named in the effect.
 
 ```poly
 Patron: entity {

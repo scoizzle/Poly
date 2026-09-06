@@ -274,32 +274,16 @@ public sealed partial class DomainToCSharpExporter {
             // If there are no effects (body was empty), emit a structural error.
             if (nodes.Count > 0) {
                 var lastIdx = nodes.Count - 1;
-                var last = nodes[lastIdx];
+                // Type-create may trail with collection.Add (void) after the created
+                // local assignment — skip those so Success wraps the entity, not void.
+                while (lastIdx >= 0
+                       && nodes[lastIdx] is Syntactic.Invoke {
+                           Delegate: Syntactic.Member { MemberName: "Add" }
+                       }) {
+                    lastIdx--;
+                }
 
-                if (last is Return) {
-                    // Already wrapped — leave as-is.
-                }
-                else if (last is Syntactic.Assignment a) {
-                    Node produced = a.Destination;
-                    if (!isVoid)
-                        produced = new TypeCast(produced, resultTypeRef);
-                    nodes.Add(new Return(
-                        new Invoke(
-                            new Member(actionResultType, "Success"),
-                            [produced])));
-                }
-                else if (last is Syntactic.Invoke
-                         or Syntactic.Member or Syntactic.Constant
-                         or Syntactic.New or Syntactic.UnaryMinus
-                         or Syntactic.Not or Syntactic.Add or Syntactic.Subtract
-                         or Syntactic.Multiply or Syntactic.Divide) {
-                    nodes[lastIdx] = new Return(
-                        new Invoke(
-                            new Member(actionResultType, "Success"),
-                            [last]));
-                }
-                else {
-                    // Non-returnable last node — structural error (still throw)
+                if (lastIdx < 0) {
                     nodes.Add(new ThrowStatement(
                         new New(
                             new NamedTypeReference("NotSupportedException"),
@@ -307,6 +291,42 @@ public sealed partial class DomainToCSharpExporter {
                                 $"Action '{action.Name}' has return type but its last effect " +
                                 $"does not produce a value. Use an 'assign' statement as the " +
                                 $"final effect, or remove the -> return type declaration."))));
+                }
+                else {
+                    var last = nodes[lastIdx];
+
+                    if (last is Return) {
+                        // Already wrapped — leave as-is.
+                    }
+                    else if (last is Syntactic.Assignment a) {
+                        Node produced = a.Destination;
+                        if (!isVoid)
+                            produced = new TypeCast(produced, resultTypeRef);
+                        nodes.Add(new Return(
+                            new Invoke(
+                                new Member(actionResultType, "Success"),
+                                [produced])));
+                    }
+                    else if (last is Syntactic.Invoke
+                             or Syntactic.Member or Syntactic.Constant
+                             or Syntactic.New or Syntactic.UnaryMinus
+                             or Syntactic.Not or Syntactic.Add or Syntactic.Subtract
+                             or Syntactic.Multiply or Syntactic.Divide) {
+                        nodes[lastIdx] = new Return(
+                            new Invoke(
+                                new Member(actionResultType, "Success"),
+                                [last]));
+                    }
+                    else {
+                        // Non-returnable last node — structural error (still throw)
+                        nodes.Add(new ThrowStatement(
+                            new New(
+                                new NamedTypeReference("NotSupportedException"),
+                                new Constant(
+                                    $"Action '{action.Name}' has return type but its last effect " +
+                                    $"does not produce a value. Use an 'assign' statement as the " +
+                                    $"final effect, or remove the -> return type declaration."))));
+                    }
                 }
             }
             else {

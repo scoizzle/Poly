@@ -2001,7 +2001,16 @@ public class DomainToCSharpExporterTests {
         await Assert.That(bindEnd).IsGreaterThan(bindStart);
         var bindCreate = cs[bindStart..bindEnd];
         await Assert.That(bindCreate).Contains("_fines.Add");
-        await Assert.That(bindCreate).Contains("Fine.Create(");
+        // F10: reverse Fine.patron must be ctor this (FindAutoWireBackReference),
+        // not values["patron"] / null. BindCreate scalars come from the dictionary.
+        var fineCreateIdx = bindCreate.IndexOf("Fine.Create(", StringComparison.Ordinal);
+        await Assert.That(fineCreateIdx).IsGreaterThanOrEqualTo(0);
+        var fineCreateEnd = bindCreate.IndexOf(';', fineCreateIdx);
+        await Assert.That(fineCreateEnd).IsGreaterThan(fineCreateIdx);
+        var fineCreateCall = bindCreate[fineCreateIdx..fineCreateEnd];
+        await Assert.That(fineCreateCall).Contains("this");
+        await Assert.That(fineCreateCall).DoesNotContain("ContainsKey(\"patron\")");
+        await Assert.That(fineCreateCall).DoesNotContain("null");
 
         // AssessByType uses this.Create (job host); Add lives in BindCreate.
         var assessStart = cs.IndexOf("DomainResult<Fine> AssessByType(", StringComparison.Ordinal);

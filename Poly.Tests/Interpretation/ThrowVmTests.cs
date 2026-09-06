@@ -36,4 +36,39 @@ public class ThrowVmTests {
         ], [varX]);
         await Assert.That(() => { Interpreter.Execute(block); }).ThrowsExactly<Exception>();
     }
+
+    /// <summary>F1: non-New Throw operand must propagate that same exception instance.</summary>
+    [Test]
+    public async Task Throw_ConstantExceptionInstance_PropagatesSameInstance() {
+        var expected = new InvalidOperationException("constant-ex");
+        var throwStmt = new ThrowStatement(new Constant(expected));
+        Exception? caught = null;
+        try { Interpreter.Execute(throwStmt); }
+        catch (Exception ex) { caught = ex; }
+        await Assert.That(caught).IsSameReferenceAs(expected);
+    }
+
+    [Test]
+    public async Task ThrowExpression_ConstantExceptionInstance_PropagatesSameInstance() {
+        var expected = new InvalidOperationException("expr-ex");
+        var node = new ThrowExpression(new Constant(expected));
+        Exception? caught = null;
+        try { Interpreter.Execute(Interpreter.Compile(node)); }
+        catch (Exception ex) { caught = ex; }
+        await Assert.That(caught).IsSameReferenceAs(expected);
+    }
+
+    [Test]
+    public async Task Throw_VariableHoldingException_PropagatesSameInstance() {
+        var expected = new InvalidOperationException("var-ex");
+        var e = new Variable("e");
+        var block = new Block([
+            new Assignment(e, new Constant(expected)),
+            new ThrowStatement(e)
+        ], [e]);
+        Exception? caught = null;
+        try { Interpreter.Execute(Interpreter.Compile(block)); }
+        catch (Exception ex) { caught = ex; }
+        await Assert.That(caught).IsSameReferenceAs(expected);
+    }
 }

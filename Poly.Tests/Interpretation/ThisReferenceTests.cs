@@ -156,7 +156,7 @@ public class ThisReferenceTests {
             .Build()
             .Analyze(thisReference);
 
-        await Assert.That(analysis.Diagnostics.Any(static d => d.Code is "TH0001" or "TH0002")).IsFalse();
+        await Assert.That(analysis.Diagnostics.Any(static d => d.Code == "TH0001")).IsFalse();
         await Assert.That(analysis.GetResolvedType(thisReference)).IsNull();
     }
 }

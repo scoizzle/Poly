@@ -1,4 +1,6 @@
 using Poly.Interpretation;
+using Poly.Interpretation.Analysis.Semantics;
+using Poly.Introspection;
 using Poly.Tests.Introspection;
 using Poly.Tests.TestHelpers;
 
@@ -139,14 +141,11 @@ public class TypeCastTests {
 
     [Test]
     public async Task TypeCast_GetTypeDefinition_ReturnsTargetType() {
-        // Arrange
         var node = new TypeCast(Wrap(42), TypeReference.To<double>());
-
-        // Act - build to trigger semantic analysis
-        _ = node.BuildExpression();
-
-        // Assert
-        await Assert.That(node).IsNotNull();
+        var analysis = Interpreter.Analyze(node);
+        var resolved = analysis.GetResolvedType(node);
+        await Assert.That(resolved).IsNotNull();
+        await Assert.That(resolved!.GetRuntimeType()).IsEqualTo(typeof(double));
     }
 
     [Test]

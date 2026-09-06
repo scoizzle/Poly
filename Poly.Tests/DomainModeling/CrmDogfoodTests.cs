@@ -214,7 +214,9 @@ public class CrmDogfoodTests {
                     ["Currency"] = "USD"
                 }
             });
-        await Assert.That(capture.Succeeded).IsTrue();
+        await Assert.That(capture.Succeeded).IsFalse();
+        await Assert.That(capture.ErrorMessage!).Contains("Billing.Charge");
+        await Assert.That(capture.ErrorMessage!).Contains("no in-process adapter");
 
         var wrap = opp.InvokeAction("CompleteOpenWork");
         await Assert.That(wrap.Succeeded).IsTrue();

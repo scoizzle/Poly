@@ -1096,8 +1096,8 @@ Unknown kind or missing required field fails closed.")]
 
 /// <summary>
 /// Tools for inspecting and evaluating policy guards on domain entities.
-/// <c>get_policy_expression</c> is inspect-only; <c>evaluate_policy</c> runs the
-/// VM path against a store instance from <c>create_instance</c>.
+/// <c>get_policy_expression</c> is inspect-only; <c>evaluate_policy</c> runs
+/// against an instance from <c>create_instance</c>.
 /// </summary>
 [McpServerToolType]
 internal sealed class PolicyTool {
@@ -1147,7 +1147,7 @@ internal sealed class PolicyTool {
     /// <summary>
     /// Evaluates a named policy on a store instance from <c>create_instance</c>.
     /// </summary>
-    [McpServerTool(Name = "evaluate_policy"), Description("Evaluates a named policy on a store instance. Create the subject with create_instance (and link_instances for cross-entity reads). instanceId is required — there is no bag/age/properties mode. Returns true if the policy passes, false otherwise.")]
+    [McpServerTool(Name = "evaluate_policy"), Description("Evaluates a named policy on an instance from create_instance. For policies that read related entities, link those instances first with link_instances. instanceId is required — do not pass a property bag. Returns true if the policy passes, false otherwise.")]
     public static DomainToolResponse EvaluatePolicy(
         [Description("Session ID")] string sessionId,
         [Description("Name of the entity that has the policy")] string entityName,
@@ -1234,39 +1234,21 @@ internal sealed class DslTool {
     /// Parses the text, evolves a fresh domain, and — if analysis succeeds — replaces the
     /// session domain with the result. On failure, returns diagnostics with line/column info.
     /// </summary>
-    [McpServerTool(Name = "apply_dsl"), Description(@"Applies Phase 1a/1b .poly DSL text to the session, REPLACING the current domain.
+    [McpServerTool(Name = "apply_dsl"), Description(@"Applies .poly DSL text to the session, replacing the current domain.
 
-Parses the text, evolves a fresh domain, and — if analysis succeeds — replaces the
-session domain with the result. Use this for bulk authoring; incremental single-element
-edits go through the unified `add` / `remove` tools (kind + payload).
+Parses the text and, if analysis succeeds, replaces the session domain. Use this for bulk authoring; single-element edits use add / remove (kind + payload).
 
-Supported constructs: entities, properties with constraints (required, unique, range,
-length, pattern), lifecycle stages, actions with require gates,
-stage subscriptions (when RelName Stage1, Stage2 { effects }), policies, relationships
-(N1 navigation properties only: 'orders: many Order' on the source entity),
-and effects (transition to, assign, create, create in, entry/exit).
+Supported constructs: entities, properties with constraints (required, unique, range, length, pattern), lifecycle stages, actions with require gates, stage subscriptions (when RelName Stage1, Stage2 { effects }), policies, relationships (N1 navigation properties only: 'orders: many Order' on the source entity), and effects (transition to, assign, create, create in, entry/exit).
 
-For a complete syntax guide, call `get_dsl_guide` before authoring.
-Do not invent constructs from experiment/lab docs — only the shipped surface is accepted.
+Call get_dsl_guide before authoring. Do not invent constructs from experiment/lab docs — only the shipped surface is accepted. Unsupported constructs (actor, value, schedule, etc.) produce clear errors.
 
-Unsupported constructs (actor, value, schedule, etc.) produce clear errors.
+This replaces the session domain and clears any instances created earlier. The session stays open; revision increments by 1.
 
-HONESTY NOTES — what this tool does NOT enforce:
- - Action `when Stage` is parsed and stored but NOT runtime-enforced as a separate
-   gate (stage membership comes from placing actions on stages; InvokeAction resolves
-   stage-scoped actions from the current stage first, then entity-level fallthrough).
-   Use `create_instance` + `invoke_action` (RuntimeTool) to exercise lifecycle.
- - Stage subscriptions are parsed and stored but do NOT auto-fan-out from apply_dsl alone.
-   Subscription side-effects need a DomainInstanceStore with registered instances.
-   Use `create_instance` + `invoke_action` (RuntimeTool) to trigger subscription fan-out
-   on stage transition.
- - apply_dsl replaces the session domain and CLEARS any runtime instances created earlier
-   in the session (same as successful evolve — new domain root, fresh instance map).
- - The revision counter becomes the session's current revision + 1, not zero
-   (apply_dsl replaces the domain but keeps the session alive).
+Action `when Stage` is stored but does not add a separate runtime gate — stage membership comes from declaring the action on a stage. Use create_instance + invoke_action to try the lifecycle.
 
-IMPORTANT: This tool REPLACES the session domain. Incremental single-element edits go
-through the unified `add` / `remove` tools (kind + payload).")]
+Stage subscriptions do not run from apply_dsl alone. Create and link instances, then invoke_action so a transition can notify subscribers.
+
+Incremental single-element edits go through add / remove.")]
     public static DomainToolResponse ApplyDsl(
         [Description("Session ID returned by create_domain_session")] string sessionId,
         [Description("Phase 1a/1b .poly DSL text to parse and apply")] string polyText) {
@@ -1378,7 +1360,7 @@ through the unified `add` / `remove` tools (kind + payload).")]
     /// <summary>
     /// Exports the current session domain as .poly DSL text.
     /// </summary>
-    [McpServerTool(Name = "export_dsl"), Description("Exports the current session domain as .poly DSL text using the canonical Phase 1a printer.")]
+    [McpServerTool(Name = "export_dsl"), Description("Exports the current session domain as .poly DSL text.")]
     public static DomainToolResponse ExportDsl(
         [Description("Session ID")] string sessionId) {
         if (!McpSessionStore.TryGet(sessionId, out var state))

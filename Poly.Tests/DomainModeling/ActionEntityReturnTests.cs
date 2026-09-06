@@ -476,6 +476,37 @@ public class ActionEntityReturnTests {
     }
 
     [Test]
+    public async Task InvokeAction_CreateInUniqueDefaultCollision_DoesNotApplyPriorAssigns() {
+        var (domain, _) = Evolve("""
+            domain Parking
+            Permit: entity {
+              Plate: Text unique default("STD")
+            }
+            Lot: entity {
+              Occupied: Number default(0)
+              permits: many Permit
+              Issue: action {
+                assign Occupied to Occupied + 1
+                create in permits { }
+              }
+            }
+            """);
+        var permitE = domain.Types.OfType<Entity>().First(e => e.Name == "Permit");
+        var lotE = domain.Types.OfType<Entity>().First(e => e.Name == "Lot");
+        var store = new DomainInstanceStore();
+        var existing = DomainEntityInstance.Create(permitE, domain: domain);
+        var lot = DomainEntityInstance.Create(lotE, domain: domain);
+        store.Add(existing);
+        store.Add(lot);
+
+        var result = lot.InvokeAction("Issue");
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(result.ErrorMessage).Contains("Unique");
+        await Assert.That(lot.GetProperty<object>("Occupied")).IsEqualTo(0L);
+        await Assert.That(lot.CreatedChildren).IsEmpty();
+    }
+
+    [Test]
     public async Task InvokeAction_AssignUniqueCollision_DoesNotMutate() {
         var (domain, _) = Evolve("""
             domain Parking

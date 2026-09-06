@@ -108,16 +108,24 @@ public sealed partial class DomainToCSharpExporter {
         var nodes = new List<Node>();
         Action? entityLevel = null;
         foreach (var (action, sourceStage) in variants) {
-            if (sourceStage is null) {
+            if (sourceStage is null)
                 entityLevel = action;
+        }
+        foreach (var (action, sourceStage) in variants) {
+            if (sourceStage is null)
                 continue;
-            }
 
             if (stageEnumTypeName is null)
                 throw new InvalidOperationException(
                     $"Action '{action.Name}' is stage-scoped on '{entity.Name}' but no stage enum was emitted.");
 
-            var branchBody = BuildFullActionBody(entity, action, stageEnumTypeName, postTransitionNodes,
+            // SA empty stage-copy (no effects/policies) → entity body. Same as TryResolveAction.
+            var branchAction = action.Effects.Count == 0
+                && action.Policies.Count == 0
+                && entityLevel is not null
+                ? entityLevel
+                : action;
+            var branchBody = BuildFullActionBody(entity, branchAction, stageEnumTypeName, postTransitionNodes,
                 loweringSourceStage: sourceStage, guardSourceStage: null, domain, analysis, isVoid);
             nodes.Add(new IfStatement(
                 new Equal(
@@ -291,10 +299,13 @@ public sealed partial class DomainToCSharpExporter {
                         // Already wrapped — leave as-is.
                     }
                     else if (last is Syntactic.Assignment a) {
+                        Node produced = a.Destination;
+                        if (!isVoid)
+                            produced = new TypeCast(produced, resultTypeRef);
                         nodes.Add(new Return(
                             new Invoke(
                                 new Member(actionResultType, "Success"),
-                                [a.Destination])));
+                                [produced])));
                     }
                     else if (last is Syntactic.Invoke
                              or Syntactic.Member or Syntactic.Constant
@@ -422,7 +433,6 @@ public sealed partial class DomainToCSharpExporter {
             Analysis: analysis,
             UseThisReference: true,
             ActionParameterNames: paramNames,
-            LowerStageTransitions: true,
             StageEnumTypeName: stageEnumTypeName,
             PostTransitionNodes: postTransitionNodes,
             SourceStageName: sourceStageName,
@@ -431,30 +441,7 @@ public sealed partial class DomainToCSharpExporter {
             ActionResultType: actionResultType,
             EmitInstanceNotify: false);
         var effectPass = new EffectLoweringPass(entity, context);
-        var probes = effectPass.LowerCreateInConstraintProbes(action.Effects);
-        var composite = new CompositeEffect(action.Effects);
-        var lowered = effectPass.TryLowerVmNode(composite);
-        if (probes.Count == 0)
-            return lowered;
-        var nodes = new List<Node>();
-        var locals = new List<Node>();
-        foreach (var probe in probes) {
-            if (probe is Block pb) {
-                nodes.AddRange(pb.Nodes);
-                locals.AddRange(pb.Variables);
-            }
-            else {
-                nodes.Add(probe);
-            }
-        }
-        if (lowered is Block block) {
-            nodes.AddRange(block.Nodes);
-            locals.AddRange(block.Variables);
-        }
-        else if (lowered is not null) {
-            nodes.Add(lowered);
-        }
-        return new Block(nodes, locals);
+        return effectPass.LowerActionBody(action.Effects);
     }
 
     internal static Node? LowerExpressionToMethodBody(

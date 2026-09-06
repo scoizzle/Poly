@@ -1,6 +1,6 @@
 # Pipeline status
 
-**Updated:** 2026-09-01
+**Updated:** 2026-09-04
 **Authority:** this file is the **sole CURRENT/DONE truth** for agent suite admission.  
 Other indexes must **mirror** this file (or link here) — do not invent a second CURRENT line.
 
@@ -9,8 +9,8 @@ Other indexes must **mirror** this file (or link here) — do not invent a secon
 ## Agent pick (one line)
 
 ```text
-DONE:    gpure (2026-08-07 + follow-ups 08-08); mcp-minify (2026-08-08 + follow-ups); grammar-revision (2026-08-09: v2 engine + DSL cutover + printer + review fixes); dead-dual cleanup (2026-08-09: Validation + Text.Matching deleted); domainmodeling vision-cleanup slices 1–3 (2026-08-17: one door, session.Analyze, Comment not emit-meaning); emit-session CompileMode seed-only (2026-08-24: HTTP host only via uses http / Load(HttpLibrary); bag-gated emit); host-ABI StageTransition (PR 21); host-ABI self-invoke (PR 22); host-ABI cross-entity invoke (PR 23); host-ABI for-invoke (PR 24); rewrite-to-master (PR 26); interpretation-language-engine (ile-gate 2026-08-31)
-CURRENT: create/create-in
+DONE:    gpure (2026-08-07 + follow-ups 08-08); mcp-minify (2026-08-08 + follow-ups); grammar-revision (2026-08-09: v2 engine + DSL cutover + printer + review fixes); dead-dual cleanup (2026-08-09: Validation + Text.Matching deleted); domainmodeling vision-cleanup slices 1–3 (2026-08-17: one door, session.Analyze, Comment not emit-meaning); emit-session CompileMode seed-only (2026-08-24: HTTP host only via uses http / Load(HttpLibrary); bag-gated emit); host-ABI StageTransition (PR 21); host-ABI self-invoke (PR 22); host-ABI cross-entity invoke (PR 23); host-ABI for-invoke (PR 24); rewrite-to-master (PR 26); interpretation-language-engine (ile-gate 2026-08-31); create/create-in (simulate Interpreter + bound Store 2026-09-03)
+CURRENT: (none)
 ADMIT:   parallel (exclusive files)
 THEN:    MCP mut-safety; Grammar wrap-up; V3 naming
 PARKED:  pack-2 IDomainPack; mut-safety; e2e-*; pack-host “packs extend Grammar tables”; session four-slot Meaning/Emit
@@ -31,7 +31,8 @@ PULL:    E5; EF codegen; naming cleanup
 | **mcp-minify** | ✅ **DONE** 2026-08-08 (+ follow-ups same day) | Catalog 46→24; DSL-only expressions; unified `add`/`remove`; follow-ups closed. |
 | **grammar-revision** | ✅ **DONE** 2026-08-09 | v2 engine (`Grammar<TToken, TTokenKind>`, examine/consume, longest-match, stateless printer) + DSL cutover; review B1–B3/N1–N3/C1 closed. Archived: [`../archive/completed-2026-08-late/grammar-revision.md`](../archive/completed-2026-08-late/grammar-revision.md) |
 | **emit-session** | ✅ **DONE** 2026-08-24 (CompileMode honesty) | Libraries add `INodeAnalyzer`. Spell closed. Emit reads bags, not `CompileMode`. CompileMode.All/Db seed persistence only; HTTP host requires `uses http` (catalog id `http`) or `Load(HttpLibrary)`. Remaining lies: TemporalLibrary Meaning unused; RuntimeAnalysisCache core-catalog reopen. |
-| **host-ABI** | Strong slice **DONE** (PRs 21–24) | StageTransition, self-invoke, cross-entity, for-invoke same-tree. Create / create-in still EffectExecutor — **not** the rewrite-to-master gate. |
+| **host-ABI** | Strong slice **DONE** (PRs 21–24) | StageTransition, self-invoke, cross-entity, for-invoke same-tree. create/create-in Store bind ✅ 2026-09-03. |
+| **create/create-in** | ✅ **DONE** 2026-09-03 | Simulate = Interpreter + bound Store. Plan: [`../create-create-in-simulate.md`](../create-create-in-simulate.md) · suite: [`create-create-in-README.md`](./create-create-in-README.md) |
 | **interpretation-language-engine** | ✅ **DONE** 2026-08-31 | ile-0…ile-3 + ile-gate: no POC passthrough, `Compile` fail-closed, LanguageVmTests + LanguageSurfaceTests, CORE/README match. Plan: [`../archive/completed-2026-08-late/simple-agent-tasks/interpretation-language-engine-README.md`](../archive/completed-2026-08-late/simple-agent-tasks/interpretation-language-engine-README.md). |
 | **rewrite-to-master** | ✅ **DONE** 2026-08-25 (PR 26) | Rewrite is `master`. Plan: [`../archive/completed-2026-08-late/simple-agent-tasks/rewrite-to-master-2026-08-25.md`](../archive/completed-2026-08-late/simple-agent-tasks/rewrite-to-master-2026-08-25.md). New work from `master`; do not open work on the rewrite branch. |
 | **pack-host** | Parked (phase 1 shipped; **extension model superseded**) | TokenWriter + binders done. “Packs extend Grammar tables” is not the product contract — extension is analysis passes. pack-2 `IDomainPack` parked. |
@@ -59,7 +60,8 @@ PULL:    E5; EF codegen; naming cleanup
 - **grammar wrap-up** (admit next): LeftAssoc live-fold + S1 span reconciliation — product fold path.
 - **grammar-revision** ✅ DONE 2026-08-09: v2 engine + DSL cutover + printer + review fixes (B1–B3, N1–N3, C1).
 - Span-vs-fold `not`-in-chain pinned: `SpanVsFold_NotInChain_TableRejectsFoldAccepts` until wrap-up reconciles.
-- **emit-session remaining lies:** TemporalLibrary does not register Meaning handlers (design: dispatch/type-check + `TemporalPass` vocabulary bag). `RuntimeAnalysisCache` / static `DomainModelAnalyzer.Analyze` reopen a core-catalog session (vendor maps ignored). CompileMode seed-only honesty is DONE via #20.
-- **host-ABI remaining lie (not a merge blocker):** create / create-in still EffectExecutor. `ExecuteStructured` remains until mixed if+create can lower. `LowerStageTransitions` still gates create (not StageTransition / self-invoke / cross-entity invoke / for-invoke). Sequential transitions stale SourceStageName.
-- **rewrite-to-master:** ✅ DONE PR 26. Product trunk is `master`. Parallel streams may run with exclusive file ownership (create/create-in; MCP mut-safety; Grammar wrap-up; V3 naming).
-- **interpretation-language-engine:** ✅ DONE 2026-08-31 (ile-gate). CURRENT is create/create-in (host-ABI remaining store effects).
+- **RuntimeAnalysisCache:** `DomainSession.Analyze` binds the authoring session; `GetOrAnalyze` reuses it (vendor maps visible). Unbound fallback is still core-catalog.
+- **host-ABI remaining lie:** none for unique/create simulate. Residual: C# factories may still call `Stay.Create` as the host bind of `Create`; unique indexes remain EF schema.
+- **pipeline transformation:** P1–P6 executed — [`../pipeline-transformation-2026-09-04.md`](../pipeline-transformation-2026-09-04.md). One Create/CreateIn/EnsureUnique tree; named invoke runs `session.Lower` module method bodies (dictionary `This` bind); HTTP fail-closed against the module; clocks in the tree. **Not CURRENT.**
+- **rewrite-to-master:** ✅ DONE PR 26. Product trunk is `master`. Parallel streams may run with exclusive file ownership (MCP mut-safety; Grammar wrap-up; V3 naming).
+- **interpretation-language-engine:** ✅ DONE 2026-08-31 (ile-gate). **create/create-in:** ✅ DONE 2026-09-03. Dictionary-backed `This` is already Interpretation’s type-def path — do not invent Expando. CURRENT is `(none)`.

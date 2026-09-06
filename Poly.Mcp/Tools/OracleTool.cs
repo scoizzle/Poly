@@ -111,7 +111,7 @@ internal sealed class OracleTool {
     };
 
     // ── V0.6: export_domain_to_csharp ────────────────────────────
-    [McpServerTool(Name = "export_domain_to_csharp"), Description("Generates C# source code for an entire domain session as a set of record/class definitions. Each entity becomes a C# record with its properties, navigation properties (as collections for many, references for one), stages as enums or additional state, and actions as methods with their lowered effects as the method body. Useful for inspecting how a domain model maps to C#.")]
+    [McpServerTool(Name = "export_domain_to_csharp"), Description("Generates C# source for the session domain: entities as types with properties, navigations, stages, and actions as methods. Useful for inspecting how the model maps to C#.")]
     public static DomainToolResponse ExportDomainToCSharp(
         [Description("Session ID")] string sessionId) {
         if (!McpSessionStore.TryGet(sessionId, out var state))
@@ -361,7 +361,7 @@ internal sealed class OracleTool {
 
     // ── oracle_expression (fragment probe, not named-policy simulate)
 
-    [McpServerTool(Name = "oracle_expression"), Description("Authoring probe: VM-evaluates a DSL expression fragment against a local property bag. Not named-policy evaluate and not invoke_action. No DomainSession; types are inferred onto a synthetic Entity(\"Subject\"). Returns {'result': true/false}. Related/nav expressions fail closed. For a named policy, create_instance then evaluate_policy.")]
+    [McpServerTool(Name = "oracle_expression"), Description("Evaluates a DSL expression fragment against a JSON property bag. No session required. For a named policy on a real instance, use create_instance then evaluate_policy. Expressions that read relationships fail. Returns { result: true/false }.")]
     public static DomainToolResponse OracleExpression(
         [Description("DSL expression fragment, e.g. `Age >= 18`.")] string expression,
         [Description("JSON object of property values, e.g. \"{\\\"Age\\\":25,\\\"Status\\\":\\\"Active\\\"}\"")] string propertiesJson) {

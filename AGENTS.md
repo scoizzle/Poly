@@ -12,9 +12,31 @@
 | **[`docs/agent/`](docs/agent/)** | Tool-agnostic agent protocols (review, etc.). Index: [`docs/agent/README.md`](docs/agent/README.md) |
 | **[`docs/plans/simple-agent-tasks/PIPELINE-STATUS.md`](docs/plans/simple-agent-tasks/PIPELINE-STATUS.md)** | Sole CURRENT/DONE for suite admission. Other plan indexes mirror or link here — do not invent a second CURRENT. |
 
-When a change alters a mechanism listed in CORE, update CORE in the same change. Significant cross-cutting choices get an ADR.
+When a change alters a mechanism listed in CORE, update CORE in the same change. Significant cross-cutting choices get an ADR. **Frozen core** (below) is the architecture; CORE §3 is current machinery — use it, do not reinvent a parallel copy, do not treat it as frozen.
 
 > Note: This repo treats `Poly/AGENTS.md` as the authoritative workspace policy. User-wide agent defaults in `~/.agents/AGENTS.md` are respected as a baseline for all sessions, but repo-specific rules in this file take precedence inside this workspace.
+
+---
+
+## Frozen core
+
+**Agents and humans must respect this.** Depth: [`docs/CORE.md`](docs/CORE.md) §0 · [`docs/decisions/2026-09-04-frozen-core-pipeline.md`](docs/decisions/2026-09-04-frozen-core-pipeline.md).
+
+The committed platform is **AST / Node / Analysis** plus libraries that publish bags and artifacts. Scratch store, C# print shapes, HTTP Minimal API, Store job names, virtual actors — **current consumers**, not the architecture. Do not grow a second pipeline to keep a consumer working.
+
+| Frozen | Do not |
+|--------|--------|
+| `Node` / `NodeId` (`Poly.Ast`) as the symbolic primary | A parallel product IR (primitive IR, Effect walk as shipped meaning) |
+| Analysis: `INodeAnalyzer`, bags on nodes, **node replacement** | Side tables; product rewriters; semantic consume without `AnalysisResult` |
+| `Domain` = facts (`uses` ids); session loads libraries | `Domain.ResolveHost`; dialects; `Main` / `Program.cs` in core |
+| Shipped ⊆ complete generic Syntax tree | `Comment` / `null` lower / second interpreter / domain VM opcodes |
+| One analyze → **operation module** (tree has no bags) **and** **surface bags → host artifacts** | Door that invents operations; lowering flag per consumer |
+| Catalog / capability = operation menu; doors are opt-in `uses` | Core process entry; MCP as customer API |
+| New meaning: lower / analyze / **replace nodes** | Emitter patch, ABI one-off, new consumer-specific lowering flag |
+
+**Current machinery** (Interpreter, `DomainToCSharpExporter`, `DomainEntityInstance`, `uses http`, …): compose it instead of a fork. Replacing it is a planned slice through the frozen seams — not a license to add a sibling path.
+
+MCP tool `Description` text is usage (call / pass / result), not Interpreter, AST, or store types.
 
 ---
 
@@ -26,7 +48,7 @@ Non-negotiable. Each principle has a **one-line rule** and a short **how** for a
 
 **When principles pull opposite ways:** prefer **domain fidelity and end-to-end ownership via CORE seams** over a locally smaller wrong path; prefer a **smaller tested loop** over a larger untested batch; prefer **no new abstraction** over a “cleaner” framework without a second real use. “More generic” production under green means fewer special cases — not a premature pattern catalog.
 
-**Platform facts (must adhere):** A domain is a **library of legal operations**, not a process. It lowers to complete Syntax ASTs **per operation** (shipped ⊆ lowerable). Product entry points (REST, …) are **opt-in extensions** (`uses`). **Poly.MCP** is the interactive harness: author, inspect, simulate a named policy/action only with **caller-supplied context** — same lowered AST as emit. Do not invent `Main` in core, grow `Comment` / a second interpreter as shipped meaning, or treat MCP as the customer API. Policy: [`docs/decisions/2026-08-15-domain-library-extensions-mcp-harness.md`](docs/decisions/2026-08-15-domain-library-extensions-mcp-harness.md). Mechanisms: [`docs/CORE.md`](docs/CORE.md).
+**Platform facts (must adhere):** A domain is a **library of legal operations**, not a process. It lowers to complete Syntax ASTs **per operation** (shipped ⊆ lowerable). Product entry points (REST, …) are **opt-in extensions** (`uses`). **Poly.MCP** is the interactive harness: author, inspect, simulate a named policy/action only with **caller-supplied context**. Do not invent `Main` in core, grow `Comment` / a second interpreter as shipped meaning, treat MCP as the customer API, or add a consumer-specific lowering flag. Residual runtime-vs-C# create print is debt. Policy: [`docs/decisions/2026-08-15-domain-library-extensions-mcp-harness.md`](docs/decisions/2026-08-15-domain-library-extensions-mcp-harness.md). Frozen: [`docs/CORE.md`](docs/CORE.md) §0.
 
 **Platform trust bar:** **We are our own first customer.** Product surface (including **external contracts**) is built *through* domain + modules; substrate ops glue is separate. **Customer product generation funds neurosymbolic work over time** — generation is the engine, not a side demo; substrate depth is steered by what generation and honesty need. Contract surface pains *us* first by design. Market platform trust = **T2**; **T1** = design partners. Dogfood pain → fix the seam or narrow the claim. Policy: [`docs/decisions/2026-07-11-platform-trust-bar-and-dogfood.md`](docs/decisions/2026-07-11-platform-trust-bar-and-dogfood.md).
 

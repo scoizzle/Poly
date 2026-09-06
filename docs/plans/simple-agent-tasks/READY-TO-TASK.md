@@ -1,8 +1,8 @@
 # Plans ready for agent micro-tasks
 
-**Date:** 2026-09-01  
+**Date:** 2026-09-04  
 **Rule:** Trunk is `master`. Parallel streams with exclusive file ownership.  
-**CURRENT truth:** [`PIPELINE-STATUS.md`](./PIPELINE-STATUS.md) (only) — **CURRENT: `create/create-in`**. Do not invent a second CURRENT.
+**CURRENT truth:** [`PIPELINE-STATUS.md`](./PIPELINE-STATUS.md) (only) — **CURRENT: `(none)`**. Do not invent a second CURRENT.
 
 ---
 
@@ -10,7 +10,8 @@
 
 | Priority | Suite | Status |
 |----------|--------|--------|
-| CURRENT | create/create-in | **CURRENT** — host-ABI remaining store effects. Mirror [`PIPELINE-STATUS.md`](./PIPELINE-STATUS.md). |
+| CURRENT | *(none)* | Next admit from PIPELINE-STATUS `THEN` / `ADMIT`. |
+| parked | create/create-in | ✅ **DONE** 2026-09-03 — simulate = Interpreter + bound Store. [`create-create-in-README.md`](./create-create-in-README.md) |
 | parked | [`mut-safety-README.md`](./mut-safety-README.md) | THEN in PIPELINE-STATUS — not admitted |
 | parked | [`gcyc-README.md`](./gcyc-README.md) | Remaining G4 unparse — THEN, not CURRENT |
 | parked | [`e2e-README.md`](./e2e-README.md) | Admit one wave |
@@ -36,6 +37,7 @@ Includes: gpure, mcp-minify, ile, pack-1, rewrite-to-master, grammar-revision, d
 | Doc | Why |
 |-----|-----|
 | instance-commit-and-outbox | Needs durable host |
+| [`../pipeline-transformation-2026-09-04.md`](../pipeline-transformation-2026-09-04.md) | Named stages; **not CURRENT**. Admit P1 only when ready. |
 | customer-trust-proof-map | Living index |
 | absorption matrix | Pick one P* → solidify suite first |
 | [`../domainmodeling-e2e-representation-2026-08-13.md`](../domainmodeling-e2e-representation-2026-08-13.md) | Parked parent |

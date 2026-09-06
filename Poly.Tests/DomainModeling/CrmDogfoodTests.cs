@@ -214,7 +214,9 @@ public class CrmDogfoodTests {
                     ["Currency"] = "USD"
                 }
             });
-        await Assert.That(capture.Succeeded).IsTrue();
+        // F1: simulate fail-closes unbound contract adapters (export throws).
+        await Assert.That(capture.Succeeded).IsFalse();
+        await Assert.That(capture.ErrorMessage).Contains("Billing.Charge");
 
         var wrap = opp.InvokeAction("CompleteOpenWork");
         await Assert.That(wrap.Succeeded).IsTrue();

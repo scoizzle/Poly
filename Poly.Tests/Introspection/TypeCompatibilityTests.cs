@@ -1,3 +1,4 @@
+using Poly.Interpretation.Analysis.Semantics;
 using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
 
@@ -149,6 +150,20 @@ public class TypeCompatibilityTests {
         var stringType = (ITypeDefinition)registry.GetTypeDefinition<string>();
 
         await Assert.That(objectType.IsAssignableFrom(stringType)).IsTrue();
+    }
+
+    [Test]
+    public async Task IsAssignableFrom_ClrObject_FromAstTypeDefinition_ReturnsTrue() {
+        var order = new TypeDefinitionNode("Order");
+        var analysis = new AnalyzerBuilder()
+            .AddAnalyzer(new TypeDefinitionNodeAnalyzer())
+            .Build()
+            .Analyze(order);
+        var astType = analysis.GetMetadata<TypeDefinitionMetadata>(order)?.TypeDefinition;
+        var objectType = (ITypeDefinition)ClrTypeDefinitionRegistry.Shared.GetTypeDefinition<object>();
+
+        await Assert.That(astType).IsNotNull();
+        await Assert.That(objectType.IsAssignableFrom(astType!)).IsTrue();
     }
 
     [Test]

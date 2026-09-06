@@ -2656,7 +2656,6 @@ public class DomainEntityInstanceTests {
 
     [Test]
     public async Task CreateEntityInstance_UnknownRelationship_FailsLoud() {
-        // P2′.3: Create with a relationship name that doesn't exist in the domain should throw.
         var child = new Entity("Child", [], [], [], []);
         var parent = new Entity("Parent", [], [
             new Poly.DomainModeling.Ontology.Action("Spawn", InvocationResult.Void, [], [
@@ -2720,7 +2719,6 @@ public class DomainEntityInstanceTests {
 
     [Test]
     public async Task CreateEntityInstance_WithRelationshipName_WrongSource_FailsLoud() {
-        // P2′′′.3: CreateEntityInstance + RelationshipName on wrong source entity should throw.
         var order = new Entity("Order", [], [], [], []);
         var customer = new Entity("Customer", [], [], [], []);
         var action = new Poly.DomainModeling.Ontology.Action("Spawn", InvocationResult.Void, [], [
@@ -2749,7 +2747,6 @@ public class DomainEntityInstanceTests {
 
     [Test]
     public async Task CreateEntityInstance_WithRelationshipName_TargetTypeMismatch_FailsLoud() {
-        // P2′′′.3: CreateEntityInstance + RelationshipName where created type ≠ rel target should throw.
         var invoice = new Entity("Invoice", [], [], [], []);
         var order = new Entity("Order", [], [], [], []);
         var action = new Poly.DomainModeling.Ontology.Action("Spawn", InvocationResult.Void, [], [

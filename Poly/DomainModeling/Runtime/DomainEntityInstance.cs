@@ -1,8 +1,11 @@
+using Poly.Ast.Nodes;
+using Poly.Analysis;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Dispatch;
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
 using Poly.Interpretation;
+using Poly.Introspection;
 using Poly.Interpretation.Analysis.Semantics;
 
 using Action = Poly.DomainModeling.Ontology.Action;
@@ -22,11 +25,7 @@ public sealed partial record DomainEntityInstance {
     public const int MaxInvokeDepth = 16;
     /// <summary>Max nested <see cref="TransitionStage"/> depth (OnEntry/OnExit re-entrancy).</summary>
     public const int MaxTransitionDepth = 16;
-    internal DomainInstanceStore? Store { get; set; }
-
-    private QuantifierPreprocessRewrite? _quantifierRewrite;
-    private QuantifierPreprocessRewrite QuantifierRewrite =>
-        _quantifierRewrite ??= new(this);
+    public DomainInstanceStore? Store { get; internal set; }
 
     private DomainEntityInstance(
         Entity entity,
@@ -140,6 +139,29 @@ public sealed partial record DomainEntityInstance {
     }
 
     /// <summary>
+    /// Fills missing/null scalar slots from <c>default(...)</c> before create
+    /// probe/validate. Store jobs see the same bag <see cref="Create"/> will store
+    /// — unique-from-default and required-default must not skip the probe.
+    /// </summary>
+    internal static Dictionary<string, object?> FillCreateDefaults(
+        Entity entity,
+        IReadOnlyDictionary<string, object?> values,
+        Domain? domain) {
+        ArgumentNullException.ThrowIfNull(entity);
+        ArgumentNullException.ThrowIfNull(values);
+        var filled = new Dictionary<string, object?>(values, StringComparer.Ordinal);
+        foreach (var prop in entity.Properties) {
+            filled.TryGetValue(prop.Name, out var existing);
+            if (existing is not null)
+                continue;
+            if (prop.Constraints.OfType<DefaultValueConstraint>().FirstOrDefault() is not { } def)
+                continue;
+            filled[prop.Name] = EvaluateDefaultValue(def.Expression, prop.Type.TypeName, domain);
+        }
+        return filled;
+    }
+
+    /// <summary>
     /// Validates required/range/length/pattern/unique constraints against the to-be-stored
     /// values, mirroring the C# export's <c>Create</c> factory guards. Returns the first
     /// violation message, or null when the values are valid. Unique is checked only when
@@ -229,9 +251,9 @@ public sealed partial record DomainEntityInstance {
             .ToList();
         if (entryEffects.Count == 0)
             return;
-        // Mixed if+create must LowerActionBody (ExecuteStructured was deleted).
         ThrowIfEffectListFailed(
-            instance.ExecuteEffectList(entryEffects, entryPass, instance._typeDefAnalyzer),
+            instance.ExecuteEffectList(entryEffects, entryPass, instance._typeDefAnalyzer,
+                entryStageName: firstStage.Name),
             "first-stage OnEntry");
     }
 
@@ -317,12 +339,10 @@ public sealed partial record DomainEntityInstance {
                 $"Property '{name}' does not exist on entity '{Entity.Name}'. " +
                 $"Available: {string.Join(", ", _values.Keys)}.");
         if (Store is not null) {
-            var proposed = new Dictionary<string, object?>(_values, StringComparer.Ordinal) {
-                [name] = value
-            };
-            var unique = Store.UniqueCollisionMessage(Entity, proposed, except: this, candidate: this);
-            if (unique is not null)
-                throw new InvalidOperationException(unique);
+            var unique = Store.EnsureUnique(this, name, value);
+            if (!unique.IsSuccess)
+                throw new InvalidOperationException(
+                    unique.ErrorMessage ?? "Unique constraint violated.");
         }
         _values[name] = value;
     }
@@ -330,32 +350,62 @@ public sealed partial record DomainEntityInstance {
     internal bool TryGetRaw(string name, out object? value) =>
         _values.TryGetValue(name, out value);
 
+    internal static string? ValidateCreateConstraints(
+        Entity entity,
+        IReadOnlyDictionary<string, object?> values,
+        DomainInstanceStore? store = null) =>
+        ValidateConstraints(entity, values, store);
+
+    internal void TrackCreatedChild(DomainEntityInstance child) =>
+        _createdChildren.Add(child);
+
+    internal void UntrackCreatedChild(DomainEntityInstance child) =>
+        _createdChildren.Remove(child);
+
+    internal Relationship ResolveCreateInRelationship(string relationshipName) =>
+        ResolveSourceRelationshipOrThrow(relationshipName,
+            Domain is null
+                ? $"Relationship '{relationshipName}' not found."
+                : $"Relationship '{relationshipName}' not found in domain '{Domain.Name}'.");
+
     /// <summary>
     /// Evaluates <paramref name="policy"/> against this instance using the
     /// VM (direct AST lowering — canonical path). Returns <c>true</c> if the
     /// policy's guard expression is satisfied.
-    ///
-    /// <para>Collection quantifiers (any/all/none/count) are preprocessed before
-    /// lowering — evaluated against the current store's linked instances
-    /// and replaced with literal results. This keeps the VM lowering path
-    /// quantifier-free while enabling store-aware policy evaluation.</para>
+    /// Store-aware expressions lower in-tree (nav Member reads / Store jobs).
     /// </summary>
     public bool EvaluatePolicy(Policy policy) {
         ArgumentNullException.ThrowIfNull(policy);
 
-        // Preprocess quantifiers: resolve against store, replace with literals.
-        var expr = PreprocessQuantifiers(policy.Expression);
+        var expr = policy.Expression;
 
         var entityParam = new Parameter("entity", new TypeReference(Entity.Name));
+        AnalysisResult? analysis = Domain is not null
+            ? RuntimeAnalysisCache.GetOrAnalyze(Domain)
+            : null;
         var pass = new DomainExpressionLoweringPass(new LoweringContext(
             entityParam,
-            PropertyTypeResolver: EffectLoweringPass.BuildPropertyTypeResolver(Entity)));
+            Analysis: analysis,
+            Domain: Domain,
+            PropertyTypeResolver: EffectLoweringPass.BuildPropertyTypeResolver(Entity),
+            NavigationNameResolver: EffectLoweringPass.BuildNavigationNameResolver(Entity, Domain, analysis),
+            IsCollectionNavigation: EffectLoweringPass.BuildIsCollectionNavigation(Entity, Domain, analysis),
+            IsRelationshipNavigation: EffectLoweringPass.BuildIsRelationshipNavigation(Entity, Domain, analysis),
+            SourceEntityName: Entity.Name));
         var lowered = pass.Lower(expr, entityParam);
 
         var compiled = Interpreter.CompileChecked(lowered, _typeDefAnalyzer);
         using var exec = Interpreter.Execute(compiled,
             s => s.SetArgs(new object?[] { this }));
-        return exec.Result.GetValue<bool>();
+        var boxed = BoxPathPrefixLeaf(expr, exec.Result.GetValue<object>());
+        return boxed switch {
+            bool b => b,
+            long l => l != 0L,
+            int i => i != 0,
+            null => false,
+            _ => throw new InvalidOperationException(
+                $"Policy '{policy.Name}' produced {boxed.GetType().Name}, not a boolean.")
+        };
     }
 
     /// <summary>
@@ -370,7 +420,7 @@ public sealed partial record DomainEntityInstance {
     ///   <item>Evaluate entity-level guard policies.</item>
     ///   <item>Execute each effect in declaration order:
     ///     <list type="bullet">
-    ///       <item><b>VM-compiled</b> (<see cref="AssignEffect"/>, <see cref="CompositeEffect"/>, <see cref="ConditionalEffect"/>, <see cref="StageTransitionEffect"/>) → lowered to Syntax AST → compiled via <see cref="Interpreter.Compile"/> → executed via VM. StageTransition is Assignment of CurrentStage + Invoke Notify on This.</item>
+    ///       <item><b>VM-compiled</b> (<see cref="AssignEffect"/>, <see cref="CompositeEffect"/>, <see cref="ConditionalEffect"/>, <see cref="StageTransitionEffect"/>) → lowered to Syntax AST → compiled via <see cref="Interpreter.Compile"/> → executed via VM. Unique assign is <c>EnsureUnique</c> then Assignment. StageTransition is Assignment of CurrentStage + Invoke Notify on This.</item>
     ///       <item><b>Create / create-in</b> → instance factories via InvokeNamed (guarded-probe + body for mixed if+create; not EffectExecutor). Self-invoke and singular cross-entity invoke lower to <c>Invoke(Member(…))</c>.</item>
     ///     </list>
     ///   </item>
@@ -381,8 +431,8 @@ public sealed partial record DomainEntityInstance {
     /// <see cref="CompositeEffect"/>, <see cref="ConditionalEffect"/>) are
     /// lowered to Syntax AST, compiled, and executed via the VM.</para>
     ///
-    /// <para>Create / create-in share a lowered tree with emit (runtime factories
-    /// vs Stay.Create). <see cref="StageTransitionEffect"/> and invoke (self,
+    /// <para>Create / create-in share a lowered tree with emit (Store jobs
+    /// <c>Create</c> / <c>CreateIn</c> / <c>ProbeCreate</c>). <see cref="StageTransitionEffect"/> and invoke (self,
     /// cross-entity, for-each) also share the lowered tree with emit.</para>
     /// </summary>
     /// <param name="actionName">Name of the action to invoke.</param>
@@ -493,7 +543,10 @@ public sealed partial record DomainEntityInstance {
             subjectParam,
             Analysis: runtimeAnalysis,
             Domain: Domain,
-            SourceStageName: CurrentStage);
+            SourceStageName: CurrentStage,
+            ActionParameterNames: action.Parameters.Count > 0
+                ? action.Parameters.Select(p => p.Name).ToHashSet(StringComparer.Ordinal)
+                : null);
         var effectPass = new EffectLoweringPass(Entity, loweringContext);
         // Action parameters are injected into _values for the call duration, but are not
         // entity schema properties. Compile with an action-scoped type def so PropertyAccess
@@ -504,14 +557,11 @@ public sealed partial record DomainEntityInstance {
         var previousBindingProvider = _bindingTypeProvider;
         _bindingTypeProvider = effectTypeProvider;
         try {
-            var createError = PrevalidateUnconditionalCreates(action.Effects);
-            if (createError is not null)
-                return ActionInvocationResult.InvalidArguments(actionName, createError);
-
             var createdBefore = _createdChildren.Count;
             var bagBefore = new Dictionary<string, object?>(_values, StringComparer.Ordinal);
             var stageBefore = CurrentStage;
-            var failed = ExecuteEffectList(action.Effects, effectPass, effectTypeProvider);
+            var failed = ExecuteEffectList(action.Effects, effectPass, effectTypeProvider,
+                actionName: action.Name, args: args, actionParameters: action.Parameters);
             if (failed is { IsSuccess: false }) {
                 // Unique-before-mutate restore (PR 44 F2). Other constraint Failures
                 // keep prior assigns — PR 43 documented miss IfOnMutatedProperty.
@@ -581,215 +631,285 @@ public sealed partial record DomainEntityInstance {
     }
 
     /// <summary>
-    /// Mixed if+create compiles guarded-probe + body (runtime factories). Leaf
-    /// effects stay on <see cref="ExecuteEffect"/>. Shared by InvokeAction,
-    /// first-stage OnEntry, subscription, and TransitionStage entry/exit.
+    /// One operation AST through <see cref="Interpreter"/>. Named actions run
+    /// <see cref="MethodDefinitionNode.Body"/> from the cached module TypeDef;
+    /// first-stage OnEntry prefers a module entry method when present.
+    /// Subscriptions and transition batches still lower at execute time.
     /// </summary>
     private DomainResult? ExecuteEffectList(
         IReadOnlyList<Effect> effects,
         EffectLoweringPass effectPass,
-        TypeDefinitionNodeAnalyzer typeProvider) {
-        var prepared = effects.Select(PreprocessEffectExpressions).ToList();
-        if (prepared.Exists(ContainsConditionalCreate)
-            && !prepared.Exists(HasEffectDependentConditionalCreate)) {
-            var tree = effectPass.LowerActionBody(prepared);
-            if (tree is null)
-                throw new InvalidOperationException(
-                    "Cannot lower effects containing create.");
-            var compiled = Interpreter.CompileChecked(
-                tree, DomainResultTypeProvider.Wrap(typeProvider));
-            using var exec = Interpreter.Execute(compiled,
-                s => s.SetArgs(new object?[] { this }));
-            if (exec.Result.Value is DomainResult { IsSuccess: false } failed)
-                return failed;
+        TypeDefinitionNodeAnalyzer typeProvider,
+        string? actionName = null,
+        string? entryStageName = null,
+        IReadOnlyDictionary<string, object?>? args = null,
+        IReadOnlyList<Property>? actionParameters = null) {
+        if (effects.Count == 0)
             return null;
+
+        Node? tree = null;
+        if (Domain is not null) {
+            var analysis = RuntimeAnalysisCache.GetOrAnalyze(Domain);
+            RuntimeAnalysisCache.GetOrLower(Domain, RuntimeAnalysisCache.Session(Domain), analysis);
+            if (actionName is not null) {
+                if (!RuntimeAnalysisCache.TryGetModuleMethod(Domain, Entity.Name, actionName, out var method)
+                    || method?.Body is null)
+                    throw new InvalidOperationException(
+                        $"Module method '{actionName}' is missing on type '{Entity.Name}'.");
+                tree = BindModuleMethodBody(method);
+            }
+            else if (entryStageName is not null
+                && RuntimeAnalysisCache.TryGetEntryMethod(Domain, Entity.Name, entryStageName, out var entry)
+                && entry?.Body is not null) {
+                tree = BindModuleMethodBody(entry);
+            }
+            else {
+                tree = effectPass.LowerActionBody(effects);
+            }
         }
-        foreach (var effect in prepared) {
-            var failed = ExecuteEffect(effect, effectPass, typeProvider);
-            if (failed is { IsSuccess: false })
-                return failed;
+        else {
+            tree = effectPass.LowerActionBody(effects);
         }
+        if (tree is null)
+            throw new InvalidOperationException(
+                "Cannot lower effect list to a Syntax AST.");
+        var compiled = Interpreter.CompileChecked(
+            tree, ModuleAwareTypeProvider(typeProvider, actionParameters));
+        using var exec = Interpreter.Execute(compiled,
+            s => s.SetArgs(new object?[] { this }));
+        if (exec.Result.Value is DomainResult { IsSuccess: false } failed)
+            return failed;
         return null;
     }
 
     /// <summary>
-    /// Executes a single effect. VM-executable effects go through
-    /// lowering → compile → execute; direct-execution effects mutate
-    /// the instance in place.
+    /// Consumer bind of dictionary <c>this</c>: module bodies keep
+    /// <see cref="ThisReference"/> in the cached TypeDef; execute rewrites
+    /// them to a typed <c>entity</c> parameter so the VM ABI (slot 0 =
+    /// instance, action args at 1+) matches SetArgs(this, ...args). Not a
+    /// second lower — same method body nodes, rebound for the scratch store.
     /// </summary>
-    private DomainResult? ExecuteEffect(
-        Effect effect,
-        EffectLoweringPass effectPass,
-        TypeDefinitionNodeAnalyzer typeProvider) {
-        // Store-aware quantifiers / path-prefix / Rel exists must resolve before
-        // Syntax lowering — same honesty as EvaluatePolicy (no bag pass-through).
-        var prepared = PreprocessEffectExpressions(effect);
 
-        if (prepared is AssignEffect assign) {
-            var uniqueFail = UniqueCollisionForAssign(assign, typeProvider);
-            if (uniqueFail is not null)
-                return uniqueFail;
-        }
-
-        // Unique-assign if/else, or effect-dependent mixed if+create (LowerActionBody
-        // skipped — probes would see the pre-assign bag and reject F2 OVER).
-        if ((prepared is ConditionalEffect or CompositeEffect)
-            && (ContainsUniqueAssign(prepared) || ContainsDirectExecutionEffect(prepared))) {
-            return ExecuteStructured(prepared, effectPass, typeProvider);
-        }
-
-        // Mixed if+create is compiled as probe+body in InvokeActionInternal (runtime
-        // factories). Leaf create / create-in still execute here when not lowered.
-        if (prepared is CreateEntityInstance create) {
-            try {
-                CreateChildInstance(create, typeProvider);
-                return null;
+    private ITypeDefinitionProvider ModuleAwareTypeProvider(
+        ITypeDefinitionProvider inner,
+        IReadOnlyList<Property>? actionParameters = null) {
+        var wrapped = DomainResultTypeProvider.Wrap(inner);
+        if (Domain is null)
+            return wrapped;
+        var analysis = RuntimeAnalysisCache.GetOrAnalyze(Domain);
+        var module = RuntimeAnalysisCache.GetOrLower(
+            Domain, RuntimeAnalysisCache.Session(Domain), analysis);
+        var moduleTypes = new TypeDefinitionNodeAnalyzer();
+        var ctx = new AnalysisContext(wrapped);
+        TypeDefinitionNode? moduleEntity = null;
+        foreach (var td in module) {
+            // CLR DomainResult wins via DomainResultTypeProvider.
+            if (string.Equals(td.Name, "DomainResult", StringComparison.Ordinal))
+                continue;
+            if (string.Equals(td.Name, Entity.Name, StringComparison.Ordinal)) {
+                moduleEntity = td;
+                continue;
             }
-            catch (InvalidOperationException ex) when (IsConstraintFailureMessage(ex.Message)) {
-                return DomainResult.Failure(ex.Message);
+            moduleTypes.Analyze(ctx, td);
+        }
+        // Runtime-shaped entity (string CurrentStage + bag action params) plus
+        // module method stubs (Notify*Subscribers, etc.) — consumer bind, not a second lower.
+        var runtimeEntity = BuildTypeDefNode(Entity, actionParameters, Domain);
+        if (moduleEntity?.Methods is { Count: > 0 } moduleMethods) {
+            var names = new HashSet<string>(
+                (runtimeEntity.Methods ?? []).Select(m => m.Name), StringComparer.Ordinal);
+            List<MethodDefinitionNode>? extras = null;
+            foreach (var m in moduleMethods) {
+                if (!names.Add(m.Name))
+                    continue;
+                extras ??= [];
+                extras.Add(m with { Body = new Block([]) });
             }
+            if (extras is not null)
+                runtimeEntity = runtimeEntity with {
+                    Methods = [.. runtimeEntity.Methods ?? [], .. extras]
+                };
         }
-
-        if (prepared is CreateEntityInRelationshipEffect createIn) {
-            try {
-                ExecuteCreateInRelationship(createIn, typeProvider);
-                return null;
-            }
-            catch (InvalidOperationException ex) when (IsConstraintFailureMessage(ex.Message)) {
-                return DomainResult.Failure(ex.Message);
-            }
-        }
-
-        var lowered = effectPass.TryLowerVmNode(prepared);
-        if (lowered is not null) {
-            var compiled = Interpreter.CompileChecked(lowered, DomainResultTypeProvider.Wrap(typeProvider));
-            using var exec = Interpreter.Execute(compiled,
-                s => s.SetArgs(new object?[] { this }));
-            if (exec.Result.Value is DomainResult { IsSuccess: false } failed)
-                return failed;
-            return null;
-        }
-
-        try {
-            EffectExecutor.Run(this, effectPass, typeProvider, prepared);
-            return null;
-        }
-        catch (InvalidOperationException ex) when (
-            ex.Message.StartsWith("Unique constraint violated", StringComparison.Ordinal)) {
-            return DomainResult.Failure(ex.Message);
-        }
+        moduleTypes.Analyze(ctx, runtimeEntity);
+        // Module/stage enums + merged entity first; wrapped as fallback.
+        return new TypeDefinitionProviderCollection(moduleTypes, wrapped);
     }
 
-    private static bool IsConstraintFailureMessage(string message) =>
-        message.StartsWith("Unique constraint violated", StringComparison.Ordinal)
-        || message.Contains(" is required.", StringComparison.Ordinal)
-        || message.Contains(" must be ", StringComparison.Ordinal)
-        || message.Contains(" does not match the required pattern.", StringComparison.Ordinal);
-
-    /// <summary>
-    /// Unique-before-mutate for VM <see cref="AssignEffect"/>: DictSetItem writes the
-    /// bag with no Store check. Proposed bag is checked here so a colliding assign
-    /// returns Failure without mutating.
-    /// </summary>
-    private DomainResult? UniqueCollisionForAssign(
-        AssignEffect assign, TypeDefinitionNodeAnalyzer typeProvider) {
-        if (Store is null)
-            return null;
-        if (assign.Target is not PropertyAccess propAccess)
-            return null;
-        var entityProp = Entity.Properties.FirstOrDefault(p =>
-            string.Equals(p.Name, propAccess.Name, StringComparison.Ordinal));
-        if (entityProp is null
-            || !entityProp.Constraints.OfType<UniqueConstraint>().Any())
-            return null;
-
-        object? value;
-        if (TryEvalActionParamPath(assign.Value, out var fromParam)) {
-            value = fromParam;
+    private Node BindModuleMethodBody(MethodDefinitionNode method) {
+        var body = method.Body
+            ?? throw new InvalidOperationException(
+                $"Module method '{method.Name}' on '{Entity.Name}' has no body.");
+        var entity = new Parameter("entity", new TypeReference(Entity.Name));
+        Dictionary<string, Parameter>? paramMap = null;
+        if (method.Parameters is { Count: > 0 } methodParams) {
+            paramMap = new Dictionary<string, Parameter>(StringComparer.Ordinal);
+            foreach (var p in methodParams)
+                paramMap[p.Name] = p;
         }
-        else {
-            var entityParam = new Parameter("entity", new TypeReference(Entity.Name));
-            var pass = new DomainExpressionLoweringPass(new LoweringContext(
-                entityParam,
-                PropertyTypeResolver: EffectLoweringPass.BuildPropertyTypeResolver(Entity)));
-            var lowered = pass.Lower(assign.Value, entityParam);
-            var compiled = Interpreter.Compile(lowered, _bindingTypeProvider ?? typeProvider);
-            using var exec = Interpreter.Execute(compiled,
-                s => s.SetArgs(new object?[] { this }));
-            value = exec.Result.GetValue<object>();
-        }
-
-        var proposed = new Dictionary<string, object?>(_values, StringComparer.Ordinal) {
-            [propAccess.Name] = value
-        };
-        var unique = Store.UniqueCollisionMessage(Entity, proposed, except: this, candidate: this);
-        return unique is null ? null : DomainResult.Failure(unique);
+        return BindThis(body, entity, paramMap, EnumTypeNames());
     }
 
     /// <summary>
-    /// Evaluates an <c>if</c> condition against the current bag (including injected
-    /// action parameters). Used to prevalidate creates on the taken branch before
-    /// any effect mutates.
+    /// Emit module uses stage / domain enums; dictionary This stores those as strings.
+    /// Consumer bind rewrites <c>Enum.Name</c> to string constants — not a second lower.
     /// </summary>
-        private bool TryEvalEffectCondition(DomainExpression condition, out bool taken) {
-        taken = false;
-        try {
-            var entityParam = new Parameter("entity", new TypeReference(Entity.Name));
-            var pass = new DomainExpressionLoweringPass(new LoweringContext(
-                entityParam,
-                PropertyTypeResolver: EffectLoweringPass.BuildPropertyTypeResolver(Entity)));
-            var lowered = pass.Lower(condition, entityParam);
-            var compiled = Interpreter.CompileChecked(
-                lowered, DomainResultTypeProvider.Wrap(_bindingTypeProvider ?? _typeDefAnalyzer));
-            using var exec = Interpreter.Execute(compiled,
-                s => s.SetArgs(new object?[] { this }));
-            taken = exec.Result.GetValue<bool>();
-            return true;
+    private IReadOnlySet<string> EnumTypeNames() {
+        var names = new HashSet<string>(StringComparer.Ordinal);
+        if (Domain is null)
+            return names;
+        var analysis = RuntimeAnalysisCache.GetOrAnalyze(Domain);
+        foreach (var e in Domain.Types.OfType<Entity>()) {
+            if (e.Stages.Count == 0)
+                continue;
+            var meta = analysis.GetStructure(e);
+            names.Add(meta?.StageEnumTypeName ?? $"{e.Name}Stage");
         }
-        catch (Exception) {
-            return false;
-        }
+        foreach (var enumType in Domain.Types.OfType<EnumType>())
+            names.Add(enumType.Name);
+        return names;
     }
 
-    /// <summary>True when an effect tree contains create / create-in.</summary>
-    private static bool ContainsDirectExecutionEffect(Effect effect) => effect switch {
-        CreateEntityInstance or CreateEntityInRelationshipEffect => true,
-        CompositeEffect c => c.Effects.Any(ContainsDirectExecutionEffect),
-        ConditionalEffect c => (c.ThenEffects?.Any(ContainsDirectExecutionEffect) ?? false)
-            || (c.ElseEffects?.Any(ContainsDirectExecutionEffect) ?? false),
-        _ => false
+    private static Node BindThis(
+        Node node,
+        Parameter entity,
+        IReadOnlyDictionary<string, Parameter>? parameters,
+        IReadOnlySet<string> stageEnums) => node switch {
+        ThisReference => entity,
+        Parameter p when parameters is not null
+            && parameters.ContainsKey(p.Name) => new Member(entity, p.Name),
+        Variable v when parameters is not null
+            && parameters.ContainsKey(v.Name) => new Member(entity, v.Name),
+        // Emit stage enum member → runtime string (CurrentStage is string on This).
+        Member { Value: NamedTypeReference ntr } m
+            when stageEnums.Contains(ntr.TypeName) => new Constant(m.MemberName),
+        Block b => new Block(
+            b.Nodes.Select(n => BindThis(n, entity, parameters, stageEnums)),
+            b.Variables.Select(n => BindThis(n, entity, parameters, stageEnums))),
+        IfStatement i => new IfStatement(
+            BindThis(i.Condition, entity, parameters, stageEnums),
+            BindThis(i.ThenBranch, entity, parameters, stageEnums),
+            i.ElseBranch is null ? null : BindThis(i.ElseBranch, entity, parameters, stageEnums)),
+        Return r => r.Value is null ? r : new Return(BindThis(r.Value, entity, parameters, stageEnums)),
+        Assignment a => new Assignment(
+            BindThis(a.Destination, entity, parameters, stageEnums), BindThis(a.Value, entity, parameters, stageEnums)),
+        Invoke { Delegate: Member { MemberName: { } notifyName } } inv
+            when inv.Arguments.Length == 0
+                && notifyName.StartsWith("Notify", StringComparison.Ordinal)
+                && notifyName.EndsWith("Subscribers", StringComparison.Ordinal)
+                && notifyName.Length > "NotifySubscribers".Length
+            => new Invoke(
+                new Member(BindThis(((Member)inv.Delegate).Value, entity, parameters, stageEnums), "Notify"),
+                new Constant(notifyName["Notify".Length..^"Subscribers".Length])),
+        // Module emit uses DomainResult<T>.Success(value). VM CLR DomainResult is
+        // non-generic; entity TypeDefs are not assignable-to object under PR53
+        // overload scoring. Typed return still comes from CreatedChildren.
+        // Success(value) → Success(); Failure(msg) keeps the string arg.
+        Invoke { Delegate: Member {
+                Value: NamedTypeReference { TypeName: "DomainResult" },
+                MemberName: "Success"
+            } } inv
+            => new Invoke(new Member(new NamedTypeReference("DomainResult"), "Success")),
+        Invoke { Delegate: Member {
+                Value: NamedTypeReference { TypeName: "DomainResult" },
+                MemberName: "Failure"
+            } } inv
+            => new Invoke(
+                new Member(new NamedTypeReference("DomainResult"), "Failure"),
+                [.. inv.Arguments.Select(a => BindThis(a, entity, parameters, stageEnums))]),
+        // Fail closed: export adapter throws; simulate must not silent-success.
+        Invoke { Delegate: Member { Value: TypeReference or NamedTypeReference, MemberName: { } endpoint } } inv
+            when AdapterTypeName(inv) is { } adapter
+            => new Return(new Invoke(
+                new Member(new NamedTypeReference("DomainResult"), "Failure"),
+                new Constant(
+                    $"Contract endpoint '{ContractNameFromAdapter(adapter)}.{endpoint}' has no in-process adapter on simulate."))),
+        Invoke inv => new Invoke(
+            BindThis(inv.Delegate, entity, parameters, stageEnums),
+            [.. inv.Arguments.Select(a => BindThis(a, entity, parameters, stageEnums))]) {
+            TypeArguments = inv.TypeArguments
+        },
+        Member m => new Member(BindThis(m.Value, entity, parameters, stageEnums), m.MemberName),
+        Poly.Ast.Nodes.Not n => new Poly.Ast.Nodes.Not(BindThis(n.Value, entity, parameters, stageEnums)),
+        Equal e => new Equal(
+            BindThis(e.LeftHandValue, entity, parameters, stageEnums), BindThis(e.RightHandValue, entity, parameters, stageEnums)),
+        NotEqual ne => new NotEqual(
+            BindThis(ne.LeftHandValue, entity, parameters, stageEnums), BindThis(ne.RightHandValue, entity, parameters, stageEnums)),
+        LessThan lt => new LessThan(
+            BindThis(lt.LeftHandValue, entity, parameters, stageEnums), BindThis(lt.RightHandValue, entity, parameters, stageEnums)),
+        LessThanOrEqual le => new LessThanOrEqual(
+            BindThis(le.LeftHandValue, entity, parameters, stageEnums), BindThis(le.RightHandValue, entity, parameters, stageEnums)),
+        GreaterThan gt => new GreaterThan(
+            BindThis(gt.LeftHandValue, entity, parameters, stageEnums), BindThis(gt.RightHandValue, entity, parameters, stageEnums)),
+        GreaterThanOrEqual ge => new GreaterThanOrEqual(
+            BindThis(ge.LeftHandValue, entity, parameters, stageEnums), BindThis(ge.RightHandValue, entity, parameters, stageEnums)),
+        Poly.Ast.Nodes.Add add => new Poly.Ast.Nodes.Add(
+            BindThis(add.LeftHandValue, entity, parameters, stageEnums), BindThis(add.RightHandValue, entity, parameters, stageEnums)),
+        Poly.Ast.Nodes.Subtract sub => new Poly.Ast.Nodes.Subtract(
+            BindThis(sub.LeftHandValue, entity, parameters, stageEnums), BindThis(sub.RightHandValue, entity, parameters, stageEnums)),
+        Poly.Ast.Nodes.Multiply mul => new Poly.Ast.Nodes.Multiply(
+            BindThis(mul.LeftHandValue, entity, parameters, stageEnums), BindThis(mul.RightHandValue, entity, parameters, stageEnums)),
+        Poly.Ast.Nodes.Divide div => new Poly.Ast.Nodes.Divide(
+            BindThis(div.LeftHandValue, entity, parameters, stageEnums), BindThis(div.RightHandValue, entity, parameters, stageEnums)),
+        Poly.Ast.Nodes.And and => new Poly.Ast.Nodes.And(
+            BindThis(and.LeftHandValue, entity, parameters, stageEnums), BindThis(and.RightHandValue, entity, parameters, stageEnums)),
+        Poly.Ast.Nodes.Or or => new Poly.Ast.Nodes.Or(
+            BindThis(or.LeftHandValue, entity, parameters, stageEnums), BindThis(or.RightHandValue, entity, parameters, stageEnums)),
+        Coalesce c => new Coalesce(
+            BindThis(c.LeftHandValue, entity, parameters, stageEnums), BindThis(c.RightHandValue, entity, parameters, stageEnums)),
+        TypeCast tc => new TypeCast(
+            BindThis(tc.Operand, entity, parameters, stageEnums),
+            BindThis(tc.TargetTypeReference, entity, parameters, stageEnums),
+            tc.IsChecked),
+        New n => new New(
+            BindThis(n.Type, entity, parameters, stageEnums),
+            [.. n.Arguments.Select(a => BindThis(a, entity, parameters, stageEnums))]),
+        ThrowStatement ts => new ThrowStatement(BindThis(ts.Exception, entity, parameters, stageEnums)),
+        TryCatchFinally t => new TryCatchFinally(
+            BindThis(t.TryBlock, entity, parameters, stageEnums),
+            t.CatchClauses?.Select(cc => cc with {
+                ExceptionType = cc.ExceptionType is null
+                    ? null
+                    : BindThis(cc.ExceptionType, entity, parameters, stageEnums),
+                Body = BindThis(cc.Body, entity, parameters, stageEnums)
+            }).ToList(),
+            t.FinallyBlock is null ? null : BindThis(t.FinallyBlock, entity, parameters, stageEnums)),
+        ForEachLoop f => new ForEachLoop(
+            f.LoopVariable,
+            BindThis(f.Collection, entity, parameters, stageEnums),
+            BindThis(f.Body, entity, parameters, stageEnums),
+            f.Label),
+        ContinueStatement or BreakStatement => node,
+        LabelDeclaration ld => new LabelDeclaration(
+            ld.Name, BindThis(ld.Statement, entity, parameters, stageEnums)),
+        Conditional cond => new Conditional(
+            BindThis(cond.Condition, entity, parameters, stageEnums),
+            BindThis(cond.IfTrue, entity, parameters, stageEnums),
+            BindThis(cond.IfFalse, entity, parameters, stageEnums)),
+        UnaryMinus um => new UnaryMinus(BindThis(um.Operand, entity, parameters, stageEnums)),
+        NullForgiving nf => new NullForgiving(BindThis(nf.Operand, entity, parameters, stageEnums)),
+        Parameter or Variable or Constant or NamedTypeReference or TypeReference
+            or PrimitiveTypeReference or ClrTypeReference => node,
+        _ => throw new InvalidOperationException(
+            $"Cannot bind module method this on {node.GetType().Name}.")
     };
 
-    /// <summary>True when an <c>if</c> branch contains create / create-in.</summary>
-    private static bool ContainsConditionalCreate(Effect effect) => effect switch {
-        ConditionalEffect c => ContainsDirectExecutionEffect(c),
-        CompositeEffect c => c.Effects.Any(ContainsConditionalCreate),
-        _ => false
+    private static string? AdapterTypeName(Invoke inv) =>
+        inv.Delegate is Member { Value: Node type } && TypeNameOf(type) is { } name
+            && name.EndsWith("Adapters", StringComparison.Ordinal)
+            ? name
+            : null;
+
+    private static string ContractNameFromAdapter(string adapterTypeName) =>
+        adapterTypeName.EndsWith("Adapters", StringComparison.Ordinal)
+            ? adapterTypeName[..^"Adapters".Length]
+            : adapterTypeName;
+
+    private static string? TypeNameOf(Node type) => type switch {
+        TypeReference tr => tr.TypeName,
+        NamedTypeReference ntr => ntr.TypeName,
+        _ => null
     };
 
-    /// <summary>
-    /// True when an if+create condition reads the entity bag (PR 44 F2). Those
-    /// trees cannot LowerActionBody — probes use the pre-assign bag.
-    /// </summary>
-    private bool HasEffectDependentConditionalCreate(Effect effect) => effect switch {
-        ConditionalEffect c =>
-            (ContainsDirectExecutionEffect(c) && !ConditionIsEffectIndependent(c.Condition))
-            || (c.ThenEffects?.Any(HasEffectDependentConditionalCreate) ?? false)
-            || (c.ElseEffects?.Any(HasEffectDependentConditionalCreate) ?? false),
-        CompositeEffect c => c.Effects.Any(HasEffectDependentConditionalCreate),
-        _ => false
-    };
-
-    private bool ContainsUniqueAssign(Effect effect) => effect switch {
-        AssignEffect a => a.Target is PropertyAccess pa
-            && Entity.Properties.Any(p =>
-                string.Equals(p.Name, pa.Name, StringComparison.Ordinal)
-                && p.Constraints.OfType<UniqueConstraint>().Any()),
-        CompositeEffect c => c.Effects.Any(ContainsUniqueAssign),
-        ConditionalEffect c => (c.ThenEffects?.Any(ContainsUniqueAssign) ?? false)
-            || (c.ElseEffects?.Any(ContainsUniqueAssign) ?? false),
-        _ => false
-    };
 
     private void RestoreActionState(
         Dictionary<string, object?> bagBefore, string? stageBefore, int createdBefore) {
@@ -804,95 +924,4 @@ public sealed partial record DomainEntityInstance {
         }
     }
 
-    /// <summary>
-    /// Unique-assign if/else trees: evaluate the taken branch and run each
-    /// sub-effect through <see cref="ExecuteEffect"/> so UniqueCollisionForAssign
-    /// runs before DictSetItem.
-    /// </summary>
-    private DomainResult? ExecuteStructured(
-        Effect effect,
-        EffectLoweringPass effectPass,
-        TypeDefinitionNodeAnalyzer typeProvider) {
-        switch (effect) {
-            case CompositeEffect c:
-                foreach (var sub in c.Effects) {
-                    var failed = ExecuteEffect(sub, effectPass, typeProvider);
-                    if (failed is not null)
-                        return failed;
-                }
-                return null;
-            case ConditionalEffect cond:
-                var entityParam = new Parameter("entity", new TypeReference(Entity.Name));
-                var pass = new DomainExpressionLoweringPass(new LoweringContext(
-                    entityParam,
-                    PropertyTypeResolver: EffectLoweringPass.BuildPropertyTypeResolver(Entity)));
-                var lowered = pass.Lower(cond.Condition, entityParam);
-                var compiled = Interpreter.CompileChecked(lowered, DomainResultTypeProvider.Wrap(typeProvider));
-                bool taken;
-                using (var exec = Interpreter.Execute(compiled,
-                           s => s.SetArgs(new object?[] { this }))) {
-                    taken = exec.Result.GetValue<bool>();
-                }
-                var branch = taken ? cond.ThenEffects : (cond.ElseEffects ?? []);
-                foreach (var sub in branch) {
-                    var failed = ExecuteEffect(sub, effectPass, typeProvider);
-                    if (failed is not null)
-                        return failed;
-                }
-                return null;
-            default:
-                return ExecuteEffect(effect, effectPass, typeProvider);
-        }
-    }
-
-    /// <summary>
-    /// Rewrites effect expression trees so store-dependent forms become literals
-    /// (or fail closed) before VM lowering.
-    /// </summary>
-    private Effect PreprocessEffectExpressions(Effect effect) => effect switch {
-        AssignEffect a => a with { Value = PreprocessRuntimeKeyword(a.Value, (a.Target as PropertyAccess)?.Name) },
-        ConditionalEffect c => c with {
-            Condition = PreprocessQuantifiers(c.Condition),
-            ThenEffects = c.ThenEffects.Select(PreprocessEffectExpressions).ToList(),
-            ElseEffects = c.ElseEffects?.Select(PreprocessEffectExpressions).ToList()
-        },
-        CompositeEffect c => c with {
-            Effects = c.Effects.Select(PreprocessEffectExpressions).ToList()
-        },
-        CreateEntityInstance cei => cei with {
-            Initializers = cei.Initializers
-                .Select(i => i with { Expression = PreprocessQuantifiers(i.Expression) })
-                .ToList()
-        },
-        CreateEntityInRelationshipEffect cir => cir with {
-            Initializers = cir.Initializers
-                .Select(i => i with { Expression = PreprocessQuantifiers(i.Expression) })
-                .ToList()
-        },
-        InvokeActionEffect iae => iae with {
-            ParameterBindings = iae.ParameterBindings
-                .Select(b => b with { Expression = PreprocessQuantifiers(b.Expression) })
-                .ToList()
-        },
-        // `for` arguments are binder-rooted (item Qty) — PreprocessQuantifiers would treat
-        // the binder root as a relationship and fail. The binder is bound per-target in
-        // ExecuteForEachInvoke; args carry no store quantifiers (analysis restricts roots).
-        ForEachInvokeEffect efe => efe,
-        _ => effect
-    };
-
-    /// <summary>Rewrites an assign RHS runtime keyword (now/today/guid) into a literal via the
-    /// type-aware <see cref="EvaluateDefaultValue"/> — the shared VM lowering emits
-    /// <c>DateOnly.FromDateTime(...)</c> for such RHS, which the runtime VM cannot execute.</summary>
-    private DomainExpression PreprocessRuntimeKeyword(DomainExpression value, string? targetPropName) {
-        var propType = Entity.Properties.FirstOrDefault(p =>
-            string.Equals(p.Name, targetPropName, StringComparison.Ordinal))?.Type.TypeName;
-        // Pack-owned clock nodes (Now/Today) resolve through the ambient default registry —
-        // core never names pack IR.
-        if (value is Now or Today)
-            return DomainExpression.Literal(EvaluateDefaultValue(value, propType));
-        if (value is PropertyAccess { Name: var name } && name is "Now" or "UtcNow" or "Today" or "Guid")
-            return DomainExpression.Literal(EvaluateDefaultValue(value, propType));
-        return PreprocessQuantifiers(value);
-    }
 }

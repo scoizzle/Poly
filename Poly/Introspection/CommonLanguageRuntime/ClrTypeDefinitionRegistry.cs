@@ -75,8 +75,6 @@ internal sealed class ClrTypeDefinitionRegistry : ITypeDefinitionProvider {
         var clrType = Type.GetType(name) ?? ResolveLoadedAssemblyType(name);
         if (clrType is null && Enum.TryParse<PrimitiveType>(name, ignoreCase: false, out var prim))
             clrType = prim.GetClrType();
-        if (clrType is null && name.IndexOf('.', StringComparison.Ordinal) < 0)
-            clrType = Type.GetType("System." + name) ?? ResolveLoadedAssemblyType("System." + name);
         if (clrType is null) {
             return null;
         }

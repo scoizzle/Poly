@@ -94,8 +94,7 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
             TypeDefinitionReference typeDefRef => typeDefRef.TypeDefinition,
             ClrTypeReference clrTypeRef => context.TypeDefinitions.GetTypeDefinition(clrTypeRef.RuntimeType),
             NamedTypeReference named =>
-                context.TypeDefinitions.GetTypeDefinition(named.FullName)
-                ?? context.TypeDefinitions.GetTypeDefinition(named.TypeName),
+                AstTypeReferenceResolver.TryResolve(named, context.TypeDefinitions),
             PrimitiveTypeReference prim => prim.PrimitiveId.GetClrType() is { } clr
                 ? context.TypeDefinitions.GetTypeDefinition(clr)
                 : null,

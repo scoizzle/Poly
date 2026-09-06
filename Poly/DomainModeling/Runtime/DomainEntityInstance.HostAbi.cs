@@ -196,7 +196,7 @@ public sealed partial record DomainEntityInstance {
     /// <summary>
     /// Nested <see cref="StageTransitionEffect"/> still recurses
     /// <see cref="TransitionStage"/>. Mixed if+create in the same entry/exit
-    /// list compiles via <c>LowerActionBody</c> (ExecuteStructured was deleted).
+    /// list still compiles via <c>LowerActionBody</c> (not a named-action path).
     /// </summary>
     private void RunTransitionEffectList(
         IReadOnlyList<Effect> effects, EffectLoweringPass pass, bool notifyStore) {

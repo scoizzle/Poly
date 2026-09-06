@@ -1,3 +1,4 @@
+using Poly.DomainModeling;
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Runtime;
@@ -53,8 +54,9 @@ public class SelfInvokeHostAbiTests {
     [Test]
     public async Task SelfInvoke_Runtime_UpdatesBagViaVmPath() {
         var entity = CreateCartEntity();
+        var domain = DomainTestFactory.Create("Shop", [entity]);
         var instance = DomainEntityInstance.Create(entity,
-            new Dictionary<string, object?> { ["Status"] = "open" });
+            new Dictionary<string, object?> { ["Status"] = "open" }, domain: domain);
 
         var result = instance.InvokeAction("Checkout");
 
@@ -80,8 +82,9 @@ public class SelfInvokeHostAbiTests {
             Actions: [],
             Policies: [],
             Stages: [draft]);
+        var domain = DomainTestFactory.Create("Loops", [entity]);
         var instance = DomainEntityInstance.Create(entity,
-            new Dictionary<string, object?> { ["Status"] = "x" });
+            new Dictionary<string, object?> { ["Status"] = "x" }, domain: domain);
 
         var bounceResult = instance.InvokeAction("Bounce");
         await Assert.That(bounceResult.Succeeded).IsFalse();

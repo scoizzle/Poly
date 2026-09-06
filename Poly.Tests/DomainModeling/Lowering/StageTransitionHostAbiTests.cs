@@ -1,3 +1,4 @@
+using Poly.DomainModeling;
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Runtime;
@@ -81,8 +82,9 @@ public class StageTransitionHostAbiTests {
     [Test]
     public async Task InvokeAction_Transition_SetsStageWithoutEffectExecutor() {
         var entity = CreatePersonEntity();
+        var domain = DomainTestFactory.Create("People", [entity]);
         var instance = DomainEntityInstance.Create(entity,
-            new Dictionary<string, object?> { ["Name"] = "Alice" });
+            new Dictionary<string, object?> { ["Name"] = "Alice" }, domain: domain);
 
         var result = instance.InvokeAction("Activate");
 

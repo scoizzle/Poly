@@ -169,6 +169,40 @@ public class PipelineTransformationTests {
         await Assert.That(analysis.GetMetadata<StorageMappingMetadata>(domain)).IsNotNull();
     }
 
+    [Test]
+    public async Task InvokeAction_ContractBound_FailsClosedWithoutInProcessAdapter() {
+        var (domain, analysis, session) = Evolve("""
+            domain Shop
+            Order: entity {
+              Total: Number default(0)
+              Pay: action (request: ChargeRequest) {
+                assign Total to Total
+              }
+            }
+
+            Stripe: contract external stripe v1 {
+              ChargeRequest: value {
+                Amount: Number
+                Currency: Text
+              }
+              Charge: outbound operation ChargeRequest
+            }
+
+            ChargeOrder: bind Stripe Charge to Pay request
+            """);
+        session.Lower(domain, analysis);
+        var orderE = domain.Types.OfType<Entity>().First(e => e.Name == "Order");
+        var store = new DomainInstanceStore();
+        var order = DomainEntityInstance.Create(orderE, domain: domain);
+        store.Add(order);
+        var request = new Dictionary<string, object?> { ["Amount"] = 10L, ["Currency"] = "USD" };
+        var result = order.InvokeAction("Pay",
+            new Dictionary<string, object?> { ["request"] = request });
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(result.ErrorMessage).Contains("Stripe.Charge");
+        await Assert.That(result.ErrorMessage!).Contains("no in-process adapter");
+    }
+
     private static (Domain Domain, AnalysisResult Analysis, DomainSession Session) Evolve(string poly) {
         var session = DomainSession.ForSource(poly, ExtensionCatalog.ProductAuthoring);
         var changes = new PolyDslParser(poly, session).Parse();

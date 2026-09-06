@@ -9,6 +9,7 @@ Historical discovery rounds: [`docs/plans/archive/probes-2026-08/`](../plans/arc
 | `dogfood/university.poly` | `UniversityDogfoodTests` |
 | `dogfood/crm.poly` | `CrmDogfoodTests` |
 | `dogfood/nested-invoke-type-mismatch.poly` | dogfood companion |
+| `dogfood/simulate-create-{type,in,create-in}.poly` | `SimulateCreateDogfoodTests` + compile oracle |
 | `fleet-eval/09-transport/{warehouse,orders,clinic}.poly` | compile oracle + `scripts/live-demo.sh` |
 | `fleet-eval/12-mcp/mcp-library.poly` | compile oracle |
 | `smoke/smoke.poly` | smoke |

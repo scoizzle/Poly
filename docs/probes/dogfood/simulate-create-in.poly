@@ -2,7 +2,7 @@ domain SimulateCreateIn
 uses temporal
 uses storage
 
-// Dogfood PR51: MCP simulate create-in Rel.
+// Dogfood: MCP simulate create-in Rel.
 // Expect: Fine is registered AND auto-linked onto Patron.fines.
 // HasFines / HasFineCount true after AssessByRel; list_instances Fine
 // count matches linked children. Pain if create-in succeeds but orphan,

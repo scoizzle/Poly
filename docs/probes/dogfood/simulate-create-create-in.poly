@@ -1,12 +1,11 @@
-domain SimulateCreateType
+domain SimulateCreateCreateIn
 uses temporal
 uses storage
 
-// Dogfood PR51: MCP simulate create Type (not create-in).
-// Expect: Fine is registered in the session store, but NOT auto-linked
-// onto Patron.fines — policies HasFines / HasFineCount stay false unless
-// link_instances is used. Pain if Type-create vacuous-success orphans
-// disagree with runtime expectations, or policies report true without a link.
+// Dogfood combined: Type-create then create-in under one MCP session.
+// Sequential AssessByType then AssessByRel on the same Patron.
+// Both actions link; list_instances(Fine)=2, fines links=2, reverse each 1.
+// Compare list / policy / returnInstanceId after each action.
 
 Patron: entity {
   Name: Text required
@@ -18,6 +17,9 @@ Patron: entity {
   Active: stage {
     AssessByType: action -> Fine {
       create Fine { Amount: 5 Reason: "TypeCreate" }
+    }
+    AssessByRel: action -> Fine {
+      create in fines { Amount: 7 Reason: "CreateIn" }
     }
   }
 }

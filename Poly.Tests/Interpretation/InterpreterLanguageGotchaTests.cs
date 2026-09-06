@@ -475,16 +475,11 @@ public class InterpreterLanguageGotchaTests {
     }
 
     [Test]
-    public async Task Member_OnNull_FailsLoud() {
+    public async Task Member_OnNull_CompileRejects() {
         var node = new Member(new Constant(null), "Length");
-        try {
-            var program = Interpreter.Compile(node);
-            await Assert.That(() => {
-                using var exec = Interpreter.Execute(program);
-            }).Throws<Exception>();
-        }
-        catch (InvalidOperationException) {
-        }
+        await Assert.That(() => Interpreter.Compile(node))
+            .Throws<InvalidOperationException>()
+            .WithMessageContaining("does not contain a member");
     }
 
     [Test]

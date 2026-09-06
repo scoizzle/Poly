@@ -32,7 +32,7 @@ public class CallSiteCatalogTests {
     }
 
     [Test]
-    public async Task SimpleInvoke_GetsSiteIndex() {
+    public async Task LambdaInvoke_DoesNotGetSiteIndex() {
         // Invoke on a lambda — no catalog entry expected (lambda calls use Call primitive, not CallExternal)
         var body = new Invoke(new Lambda([new Parameter("x")], new Parameter("x")), new Constant(42));
         var result = Analyze(body);

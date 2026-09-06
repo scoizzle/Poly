@@ -347,7 +347,7 @@ public class ControlFlowAnalysisTests {
     }
 
     [Test]
-    public async Task If_ConstFalse_ElidesElseBranch() {
+    public async Task If_ConstFalse_ElidesThenBranch() {
         var cond = new Constant(false);
         var thenB = new Block(new Constant(1));
         var elseB = new Block(new Constant(2));
@@ -416,11 +416,75 @@ public class ControlFlowAnalysisTests {
             .Build()
             .Analyze(ast);
 
-        // first stmts in entry often marked must-execute by our simple heuristic
-        if (ast.Nodes.Count > 0) {
-            // not strict assert (heuristic), just exercise no crash + api
-            _ = result.IsMustExecute(ast.Nodes[0]);
-        }
         await Assert.That(result.GetControlFlowGraph(ast)).IsNotNull();
+        await Assert.That(result.IsMustExecute(ast.Nodes[0])).IsTrue();
+        var meta = result.GetMetadata<MustExecuteMetadata>(ast.Nodes[0]);
+        await Assert.That(meta).IsNotNull();
+        await Assert.That(meta!.MustExecute).IsTrue();
     }
+
+    [Test]
+    public async Task Goto_UnknownLabel_ReportsCF0001() {
+        var ast = new GotoStatement("missing");
+        var result = CfAnalyze(ast);
+        await Assert.That(result.Diagnostics.Any(d => d.Code == "CF0001")).IsTrue();
+    }
+
+    [Test]
+    public async Task If_ConstTrue_ElidesElseBranch_ReportsCF0004() {
+        var thenB = new Block(new Constant(1));
+        var elseB = new Block(new Constant(2));
+        var ast = new IfStatement(new Constant(true), thenB, elseB);
+        var result = CfAnalyze(ast);
+        await Assert.That(result.CanElide(elseB)).IsTrue();
+        await Assert.That(result.CanElide(thenB)).IsFalse();
+        await Assert.That(result.Diagnostics.Any(d => d.Code == "CF0004")).IsTrue();
+    }
+
+    [Test]
+    public async Task While_ConstFalse_ElidesBody_ReportsCF0006() {
+        var body = new Block(new Constant(1));
+        var ast = new WhileLoop(new Constant(false), body);
+        var result = CfAnalyze(ast);
+        await Assert.That(result.CanElide(body)).IsTrue();
+        await Assert.That(result.Diagnostics.Any(d => d.Code == "CF0006")).IsTrue();
+    }
+
+    [Test]
+    public async Task Try_NoThrow_CatchUnreachable_ReportsCF0010() {
+        var catchBody = new Block(new Constant(1L));
+        var ast = new TryCatchFinally(
+            new Constant(0L),
+            CatchClauses: [
+                new CatchClause(
+                    new ClrTypeReference(typeof(InvalidOperationException)),
+                    null,
+                    catchBody)
+            ]);
+        var result = CfAnalyze(ast);
+        await Assert.That(result.CanElide(catchBody)).IsTrue();
+        await Assert.That(result.Diagnostics.Any(d => d.Code == "CF0010")).IsTrue();
+    }
+
+    [Test]
+    public async Task UnreachableLabel_ReportsCF0013() {
+        var dead = new LabelDeclaration("dead", new Constant(1L));
+        // Infinite loop first so label is unreachable
+        var loop = new WhileLoop(new Constant(true), new Constant(0L));
+        var ast = new Block([loop, dead]);
+        var result = CfAnalyze(ast);
+        await Assert.That(result.Diagnostics.Any(d => d.Code == "CF0013")).IsTrue();
+    }
+
+    private static AnalysisResult CfAnalyze(Node ast) =>
+        new AnalyzerBuilder()
+            .UseThisReferenceContext()
+            .UseTypeAndMemberResolver()
+            .UseVariableScopeValidator()
+            .UseSideEffectAnalysis()
+            .UseJumpTargetResolution()
+            .UseConstantFolding()
+            .UseControlFlowAnalysis()
+            .Build()
+            .Analyze(ast);
 }

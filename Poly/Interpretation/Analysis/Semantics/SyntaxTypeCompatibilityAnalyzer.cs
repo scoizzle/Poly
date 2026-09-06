@@ -197,8 +197,18 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
     }
 
     private void CheckInvokeTarget(AnalysisContext context, Invoke invoke) {
-        if (invoke.Delegate is Member)
+        if (invoke.Delegate is Member member) {
+            // Unmatched Member invoke must Error so Interpreter.Compile rejects (F12).
+            // Preserve late-bind for numeric widening the overload scorer misses
+            // (DateTime.AddDays(double) with a long arg) — only reject when no
+            // same-name/arity candidate can accept the args via assign or widen.
+            if (context.GetResolvedMember(invoke) is null
+                && !HasPlausibleMemberOverload(context, invoke, member)) {
+                Report(context, invoke,
+                    $"no matching member for invoke with {invoke.Arguments.Length} argument(s)");
+            }
             return;
+        }
         if (invoke.Delegate is Lambda lambda) {
             CheckInvokeArity(context, invoke, lambda, allowZeroArgsAsSetArgs: true);
             return;
@@ -215,6 +225,64 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
         Report(context, invoke,
             $"Invoke target must be a member, lambda, or stored closure, got {invoke.Delegate.GetType().Name}");
     }
+
+    private static bool HasPlausibleMemberOverload(
+        AnalysisContext context, Invoke invoke, Member member) {
+        var targetType = context.GetResolvedType(member.Value);
+        if (targetType is null)
+            return true; // unknown receiver — allow emit late-bind
+        var argTypes = new ITypeDefinition[invoke.Arguments.Length];
+        for (var i = 0; i < invoke.Arguments.Length; i++) {
+            var argType = context.GetResolvedType(invoke.Arguments[i]);
+            if (argType is null)
+                return true; // incomplete — allow late-bind
+            argTypes[i] = argType;
+        }
+        foreach (var candidate in targetType.Methods.WithName(member.MemberName)) {
+            var parameters = candidate.Parameters?.ToArray() ?? [];
+            if (parameters.Length != invoke.Arguments.Length)
+                continue;
+            var ok = true;
+            for (var i = 0; i < parameters.Length; i++) {
+                var paramType = parameters[i].ParameterTypeDefinition;
+                var argType = argTypes[i];
+                if (ReferenceEquals(paramType, argType) || paramType.IsAssignableFrom(argType))
+                    continue;
+                if (IsNumericWidening(argType, paramType))
+                    continue;
+                ok = false;
+                break;
+            }
+            if (ok)
+                return true;
+        }
+        return false;
+    }
+
+    private static bool IsNumericWidening(ITypeDefinition from, ITypeDefinition to) {
+        if (!from.TryGetRuntimeType(out var fromClr) || !to.TryGetRuntimeType(out var toClr))
+            return false;
+        var fromCode = Type.GetTypeCode(fromClr);
+        var toCode = Type.GetTypeCode(toClr);
+        // TypeCode identity alone is not widening: Object==Object for unrelated
+        // classes (Uri vs StringBuilder) must not count as a plausible overload.
+        if (fromCode == toCode)
+            return NumericWidenRank(fromCode) is not null;
+        return NumericWidenRank(fromCode) is int fr
+            && NumericWidenRank(toCode) is int tr
+            && fr <= tr;
+    }
+
+    private static int? NumericWidenRank(TypeCode code) => code switch {
+        TypeCode.SByte or TypeCode.Byte => 1,
+        TypeCode.Int16 or TypeCode.UInt16 or TypeCode.Char => 2,
+        TypeCode.Int32 or TypeCode.UInt32 => 3,
+        TypeCode.Int64 or TypeCode.UInt64 => 4,
+        TypeCode.Single => 5,
+        TypeCode.Double => 6,
+        TypeCode.Decimal => 7,
+        _ => null
+    };
 
     private void CheckInvokeArity(AnalysisContext context, Invoke invoke, Lambda lambda, bool allowZeroArgsAsSetArgs) {
         int nParams = lambda.Parameters.Count;

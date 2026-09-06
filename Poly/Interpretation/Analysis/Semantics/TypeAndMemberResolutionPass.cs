@@ -11,6 +11,11 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
     public string PassName => Id;
     public string[] Dependencies => [ThisReferenceContextAnalyzer.Id];
     public void Analyze(AnalysisContext context, Node node) {
+        if (node is TryCatchFinally tcf) {
+            AnalyzeTryCatchFinally(context, tcf);
+            return;
+        }
+
         var resolvedType = ResolveNodeType(context, node);
 
         if (resolvedType != null) {
@@ -18,6 +23,46 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
         }
 
         this.AnalyzeChildren(context, node);
+    }
+
+    /// <summary>Seed catch <see cref="CatchClause.VariableName"/> types before the body
+    /// so <c>Member(ex, "Message")</c> resolves; then walk try/catch/finally normally.</summary>
+    private void AnalyzeTryCatchFinally(AnalysisContext context, TryCatchFinally tcf) {
+        Analyze(context, tcf.TryBlock);
+        if (tcf.CatchClauses is not null) {
+            foreach (var clause in tcf.CatchClauses) {
+                ITypeDefinition? exType = null;
+                if (clause.ExceptionType is not null) {
+                    Analyze(context, clause.ExceptionType);
+                    exType = context.GetResolvedType(clause.ExceptionType);
+                }
+                exType ??= context.TypeDefinitions.GetTypeDefinition(typeof(Exception));
+                if (!string.IsNullOrEmpty(clause.VariableName) && exType is not null)
+                    SeedCatchVariableTypes(context, clause.Body, clause.VariableName!, exType);
+                Analyze(context, clause.Body);
+            }
+        }
+        if (tcf.FinallyBlock is not null)
+            Analyze(context, tcf.FinallyBlock);
+        var tryType = context.GetResolvedType(tcf.TryBlock);
+        if (tryType is not null)
+            context.SetResolvedType(tcf, tryType);
+    }
+
+    private static void SeedCatchVariableTypes(
+        AnalysisContext context, Node node, string name, ITypeDefinition type) {
+        if (node is Variable v && v.Name == name)
+            context.SetResolvedType(v, type);
+        if (node is Block block) {
+            foreach (var bv in block.Variables) {
+                if (bv is Variable dv && dv.Name == name)
+                    return;
+            }
+        }
+        foreach (var child in node.Children) {
+            if (child is not null)
+                SeedCatchVariableTypes(context, child, name, type);
+        }
     }
 
     private static ITypeDefinition? ResolveNodeType(AnalysisContext context, Node node) {

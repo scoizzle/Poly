@@ -1,0 +1,29 @@
+domain SimulateCreateType
+uses temporal
+uses storage
+
+// Dogfood PR51: MCP simulate create Type (not create-in).
+// Expect: Fine is registered in the session store, but NOT auto-linked
+// onto Patron.fines — policies HasFines / HasFineCount stay false unless
+// link_instances is used. Pain if Type-create vacuous-success orphans
+// disagree with runtime expectations, or policies report true without a link.
+
+Patron: entity {
+  Name: Text required
+  fines: many Fine
+  HasFines: policy { fines exists }
+  HasFineCount: policy { count fines > 0 }
+  NoFines: policy { count fines == 0 }
+
+  Active: stage {
+    AssessByType: action -> Fine {
+      create Fine { Amount: 5 Reason: "TypeCreate" }
+    }
+  }
+}
+
+Fine: entity {
+  Amount: Number range(0, 500) required
+  Reason: Text required
+  patron: Patron
+}

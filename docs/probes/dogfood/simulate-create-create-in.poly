@@ -1,0 +1,31 @@
+domain SimulateCreateCreateIn
+uses temporal
+uses storage
+
+// Dogfood combined: Type-create then create-in under one MCP session.
+// Sequential AssessByType then AssessByRel on the same Patron.
+// Both actions link; list_instances(Fine)=2, fines links=2, reverse each 1.
+// Compare list / policy / returnInstanceId after each action.
+
+Patron: entity {
+  Name: Text required
+  fines: many Fine
+  HasFines: policy { fines exists }
+  HasFineCount: policy { count fines > 0 }
+  NoFines: policy { count fines == 0 }
+
+  Active: stage {
+    AssessByType: action -> Fine {
+      create Fine { Amount: 5 Reason: "TypeCreate" }
+    }
+    AssessByRel: action -> Fine {
+      create in fines { Amount: 7 Reason: "CreateIn" }
+    }
+  }
+}
+
+Fine: entity {
+  Amount: Number range(0, 500) required
+  Reason: Text required
+  patron: Patron
+}

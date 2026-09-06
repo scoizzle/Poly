@@ -264,8 +264,10 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
             return false;
         var fromCode = Type.GetTypeCode(fromClr);
         var toCode = Type.GetTypeCode(toClr);
+        // TypeCode identity alone is not widening: Object==Object for unrelated
+        // classes (Uri vs StringBuilder) must not count as a plausible overload.
         if (fromCode == toCode)
-            return true;
+            return NumericWidenRank(fromCode) is not null;
         return NumericWidenRank(fromCode) is int fr
             && NumericWidenRank(toCode) is int tr
             && fr <= tr;

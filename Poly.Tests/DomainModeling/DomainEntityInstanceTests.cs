@@ -6,6 +6,18 @@ using Poly.DomainModeling.Ontology;
 namespace Poly.Tests.DomainModeling;
 
 public class DomainEntityInstanceTests {
+    /// <summary>Named invoke requires a Domain-bound module (no LowerActionBody fallback).</summary>
+    private static DomainEntityInstance CreateWithDomain(
+        Entity entity,
+        IReadOnlyDictionary<string, object?>? values = null,
+        string domainName = "T") {
+        var domain = DomainTestFactory.Create(domainName, [entity]);
+        return DomainEntityInstance.Create(
+            entity,
+            values ?? new Dictionary<string, object?>(),
+            domain: domain);
+    }
+
     private static Entity CreatePersonEntity() {
         var age = new Property("Age", new DomainTypeReference("Number"), []);
         var name = new Property("Name", new DomainTypeReference("Text"), []);
@@ -211,7 +223,7 @@ public class DomainEntityInstanceTests {
     [Test]
     public async Task InvokeAction_WithPassingGuards_Succeeds() {
         var entity = CreatePersonEntity();
-        var instance = DomainEntityInstance.Create(entity,
+        var instance = CreateWithDomain(entity,
             new Dictionary<string, object?> { ["Active"] = true, ["Age"] = 25L });
 
         var result = instance.InvokeAction("Activate");
@@ -267,12 +279,11 @@ public class DomainEntityInstanceTests {
             new Dictionary<string, object?>());
 
         await Assert.That(instance.Domain).IsNull();
-        var result = instance.InvokeAction("Submit",
-            new Dictionary<string, object?> { ["Note"] = "ok" });
-
-        await Assert.That(result.Succeeded).IsTrue();
-        await Assert.That(result.NewStage).IsEqualTo("Active");
-        await Assert.That(instance.CurrentStage).IsEqualTo("Active");
+        // Named invoke no longer re-lowers without a Domain-bound module.
+        await Assert.That(() => instance.InvokeAction("Submit",
+                new Dictionary<string, object?> { ["Note"] = "ok" }))
+            .Throws<InvalidOperationException>()
+            .WithMessageContaining("without a Domain-bound module");
     }
 
     [Test]
@@ -347,8 +358,9 @@ public class DomainEntityInstanceTests {
         var instance = DomainEntityInstance.Create(entity);
 
         await Assert.That(instance.Domain).IsNull();
-        var ex = Assert.Throws<InvalidOperationException>(() => instance.InvokeAction("Spawn"));
-        await Assert.That(ex!.Message).Contains("domain");
+        await Assert.That(() => instance.InvokeAction("Spawn"))
+            .Throws<InvalidOperationException>()
+            .WithMessageContaining("without a Domain-bound module");
     }
 
     [Test]
@@ -493,7 +505,7 @@ public class DomainEntityInstanceTests {
                 Policies: [])
         ], [], []);
 
-        var instance = DomainEntityInstance.Create(entity,
+        var instance = CreateWithDomain(entity,
             new Dictionary<string, object?> { ["Age"] = 0L });
 
         var result = instance.InvokeAction("SetAge");
@@ -514,7 +526,7 @@ public class DomainEntityInstanceTests {
                 Policies: [])
         ], [], []);
 
-        var instance = DomainEntityInstance.Create(entity,
+        var instance = CreateWithDomain(entity,
             new Dictionary<string, object?> { ["Label"] = "unset" });
 
         var result = instance.InvokeAction("Tag",
@@ -543,7 +555,7 @@ public class DomainEntityInstanceTests {
                 Policies: [])
         ], [], []);
 
-        var instance = DomainEntityInstance.Create(entity,
+        var instance = CreateWithDomain(entity,
             new Dictionary<string, object?> { ["Label"] = "before" });
 
         var result = instance.InvokeAction("Go");
@@ -564,7 +576,7 @@ public class DomainEntityInstanceTests {
                 Policies: [])
         ], [], []);
 
-        var instance = DomainEntityInstance.Create(entity);
+        var instance = CreateWithDomain(entity);
         var result = instance.InvokeAction("Setup");
 
         await Assert.That(result.Succeeded).IsTrue();
@@ -593,12 +605,12 @@ public class DomainEntityInstanceTests {
                 Policies: [])
         ], [], []);
 
-        var big = DomainEntityInstance.Create(entity,
+        var big = CreateWithDomain(entity,
             new Dictionary<string, object?> { ["Total"] = 200L });
         big.InvokeAction("Process");
         await Assert.That(big.GetProperty<string>("Status")).IsEqualTo("Approved");
 
-        var small = DomainEntityInstance.Create(entity,
+        var small = CreateWithDomain(entity,
             new Dictionary<string, object?> { ["Total"] = 50L });
         small.InvokeAction("Process");
         await Assert.That(small.GetProperty<string>("Status")).IsEqualTo("Review");
@@ -622,7 +634,7 @@ public class DomainEntityInstanceTests {
                 Policies: [])
         ], [], []);
 
-        var instance = DomainEntityInstance.Create(entity,
+        var instance = CreateWithDomain(entity,
             new Dictionary<string, object?> { ["Total"] = 50L, ["Status"] = "OK" });
         instance.InvokeAction("FlagLarge");
         await Assert.That(instance.GetProperty<string>("Status")).IsEqualTo("OK");
@@ -643,7 +655,7 @@ public class DomainEntityInstanceTests {
                 Policies: [])
         ], [], []);
 
-        var instance = DomainEntityInstance.Create(entity);
+        var instance = CreateWithDomain(entity);
         var result = instance.InvokeAction("Spawn");
 
         await Assert.That(result.Succeeded).IsTrue();
@@ -667,7 +679,7 @@ public class DomainEntityInstanceTests {
                 Policies: [])
         ], [], []);
 
-        var instance = DomainEntityInstance.Create(entity);
+        var instance = CreateWithDomain(entity);
         instance.InvokeAction("Batch");
 
         await Assert.That(instance.CreatedChildren.Count).IsEqualTo(3);
@@ -683,7 +695,7 @@ public class DomainEntityInstanceTests {
                 Policies: [])
         ], [], []);
 
-        var instance = DomainEntityInstance.Create(entity); // no domain reference
+        var instance = CreateWithDomain(entity);
         instance.InvokeAction("Clone");
 
         await Assert.That(instance.CreatedChildren.Count).IsEqualTo(1);
@@ -728,7 +740,7 @@ public class DomainEntityInstanceTests {
                 Policies: [])
         ], [], []);
 
-        var instance = DomainEntityInstance.Create(entity,
+        var instance = CreateWithDomain(entity,
             new Dictionary<string, object?> { ["Count"] = 0L });
         instance.InvokeAction("DoubleIncrement");
 
@@ -1062,7 +1074,7 @@ public class DomainEntityInstanceTests {
                 Policies: [])
         ], [], [new Stage("Draft", [], [], [], []), new Stage("Active", [], [], [], [])]);
 
-        var instance = DomainEntityInstance.Create(entity,
+        var instance = CreateWithDomain(entity,
             new Dictionary<string, object?> { ["Status"] = "", ["Count"] = 0L });
         var result = instance.InvokeAction("DoAll");
 
@@ -3347,7 +3359,7 @@ public class DomainEntityInstanceTests {
         var draft = new Stage("Draft", Actions: [extend], Policies: [], OnEntryEffects: [], OnExitEffects: []);
         var entity = new Entity("Order", [dueDate], [extend], [], [draft]);
 
-        var instance = DomainEntityInstance.Create(entity,
+        var instance = CreateWithDomain(entity,
             new Dictionary<string, object?> { ["DueDate"] = new DateOnly(2026, 1, 1) });
 
         var result = instance.InvokeAction("Extend");
@@ -3369,7 +3381,7 @@ public class DomainEntityInstanceTests {
         var draft = new Stage("Draft", Actions: [extend], Policies: [], OnEntryEffects: [], OnExitEffects: []);
         var entity = new Entity("Order", [dueDate], [extend], [], [draft]);
 
-        var instance = DomainEntityInstance.Create(entity,
+        var instance = CreateWithDomain(entity,
             new Dictionary<string, object?> { ["DueDate"] = new DateTime(2026, 1, 1) });
 
         var result = instance.InvokeAction("Extend");
@@ -3492,7 +3504,7 @@ public class DomainEntityInstanceTests {
         var draft = new Stage("Draft", Actions: [extend], Policies: [], OnEntryEffects: [], OnExitEffects: []);
         var entity = new Entity("Order", [dueDate], [extend], [], [draft]);
 
-        var instance = DomainEntityInstance.Create(entity,
+        var instance = CreateWithDomain(entity,
             new Dictionary<string, object?> { ["DueDate"] = new DateOnly(2026, 1, 15) });
 
         var result = instance.InvokeAction("Extend");
@@ -3585,13 +3597,13 @@ public class DomainEntityInstanceTests {
             [new Property("Flag", new DomainTypeReference("Boolean"), [])],
             [go], [], [draft, active]);
 
-        var noFlag = DomainEntityInstance.Create(entity,
+        var noFlag = CreateWithDomain(entity,
             new Dictionary<string, object?> { ["Flag"] = false });
         var r1 = noFlag.InvokeAction("Go");
         await Assert.That(r1.Succeeded).IsTrue();
         await Assert.That(noFlag.CurrentStage).IsEqualTo("Draft");
 
-        var withFlag = DomainEntityInstance.Create(entity,
+        var withFlag = CreateWithDomain(entity,
             new Dictionary<string, object?> { ["Flag"] = true });
         var r2 = withFlag.InvokeAction("Go");
         await Assert.That(r2.Succeeded).IsTrue();
@@ -3686,7 +3698,7 @@ public class DomainEntityInstanceTests {
         ], []);
         var entity = new Entity("Item", [status, code], [tag], [], []);
 
-        var instance = DomainEntityInstance.Create(entity,
+        var instance = CreateWithDomain(entity,
             new Dictionary<string, object?> { ["Status"] = "paid", ["Code"] = "" });
 
         var result = instance.InvokeAction("Tag");

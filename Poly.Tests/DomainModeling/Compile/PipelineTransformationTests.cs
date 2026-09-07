@@ -126,6 +126,41 @@ public class PipelineTransformationTests {
     }
 
     [Test]
+    public async Task InvokeAction_MissingModuleMethod_Throws_DoesNotRelower() {
+        // Ontology residual stop: named invoke never falls back to LowerActionBody.
+        var (domain, analysis, session) = Evolve("""
+            domain Parking
+            Permit: entity { Plate: Text required }
+            Lot: entity {
+              permits: many Permit
+              Issue: action (plate: Text) {
+                create in permits { Plate: plate }
+              }
+            }
+            """);
+        var module = session.Lower(domain, analysis);
+        var lotType = module.First(t => t.Name == "Lot");
+        if (lotType.Methods is not IList<MethodDefinitionNode> methods)
+            throw new InvalidOperationException("Module methods must be a mutable list.");
+        for (var i = methods.Count - 1; i >= 0; i--) {
+            if (string.Equals(methods[i].Name, "Issue", StringComparison.Ordinal))
+                methods.RemoveAt(i);
+        }
+        await Assert.That(RuntimeAnalysisCache.TryGetModuleMethod(domain, "Lot", "Issue", out _))
+            .IsFalse();
+
+        var lotE = domain.Types.OfType<Entity>().First(e => e.Name == "Lot");
+        var store = new DomainInstanceStore();
+        var lot = DomainEntityInstance.Create(lotE, domain: domain);
+        store.Add(lot);
+        await Assert.That(() =>
+                lot.InvokeAction("Issue", new Dictionary<string, object?> { ["plate"] = "AAA" }))
+            .Throws<InvalidOperationException>()
+            .WithMessageContaining("Module method 'Issue' is missing");
+        await Assert.That(lot.CreatedChildren.Count).IsEqualTo(0);
+    }
+
+    [Test]
     public async Task InvokeAction_SecondCall_UsesCachedOperationBody() {
         var (domain, _, _) = Evolve("""
             domain Parking

@@ -631,9 +631,10 @@ public sealed partial record DomainEntityInstance {
     }
 
     /// <summary>
-    /// One operation AST through <see cref="Interpreter"/>. Named actions run
-    /// <see cref="MethodDefinitionNode.Body"/> from the cached module TypeDef;
-    /// first-stage OnEntry prefers a module entry method when present.
+    /// One operation AST through <see cref="Interpreter"/>. Named actions always
+    /// bind <see cref="MethodDefinitionNode.Body"/> from the cached module — never
+    /// <c>LowerActionBody</c> (Ontology residual: dual-path execute is a bug).
+    /// First-stage OnEntry prefers a module entry method when present.
     /// Subscriptions and transition batches still lower at execute time.
     /// </summary>
     private DomainResult? ExecuteEffectList(
@@ -647,23 +648,30 @@ public sealed partial record DomainEntityInstance {
         if (effects.Count == 0)
             return null;
 
-        Node? tree = null;
-        if (Domain is not null) {
+        Node? tree;
+        if (actionName is not null) {
+            // Named action: bind module or throw. Never fall back to Effect IR lower.
+            if (Domain is null)
+                throw new InvalidOperationException(
+                    $"Cannot invoke '{actionName}' on '{Entity.Name}' without a Domain-bound module.");
             var analysis = RuntimeAnalysisCache.GetOrAnalyze(Domain);
             RuntimeAnalysisCache.GetOrLower(Domain, RuntimeAnalysisCache.Session(Domain), analysis);
-            if (actionName is not null) {
-                if (!RuntimeAnalysisCache.TryGetModuleMethod(Domain, Entity.Name, actionName, out var method)
-                    || method?.Body is null)
-                    throw new InvalidOperationException(
-                        $"Module method '{actionName}' is missing on type '{Entity.Name}'.");
-                tree = BindModuleMethodBody(method);
-            }
-            else if (entryStageName is not null
+            if (!RuntimeAnalysisCache.TryGetModuleMethod(Domain, Entity.Name, actionName, out var method)
+                || method?.Body is null)
+                throw new InvalidOperationException(
+                    $"Module method '{actionName}' is missing on type '{Entity.Name}'.");
+            tree = BindModuleMethodBody(method);
+        }
+        else if (Domain is not null) {
+            var analysis = RuntimeAnalysisCache.GetOrAnalyze(Domain);
+            RuntimeAnalysisCache.GetOrLower(Domain, RuntimeAnalysisCache.Session(Domain), analysis);
+            if (entryStageName is not null
                 && RuntimeAnalysisCache.TryGetEntryMethod(Domain, Entity.Name, entryStageName, out var entry)
                 && entry?.Body is not null) {
                 tree = BindModuleMethodBody(entry);
             }
             else {
+                // Subscriptions / transition batches / missing entry — not named actions.
                 tree = effectPass.LowerActionBody(effects);
             }
         }

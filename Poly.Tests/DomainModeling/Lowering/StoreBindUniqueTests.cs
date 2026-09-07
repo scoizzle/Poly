@@ -162,8 +162,9 @@ public class StoreBindUniqueTests {
     [Test]
     public async Task UniqueAssign_WithoutStore_SucceedsWhenNoPeers() {
         var entity = PermitWithRelabel();
+        var domain = DomainTestFactory.Create("Parking", [entity]);
         var instance = DomainEntityInstance.Create(entity,
-            new Dictionary<string, object?> { ["Plate"] = "XYZ999" });
+            new Dictionary<string, object?> { ["Plate"] = "XYZ999" }, domain: domain);
 
         var result = instance.InvokeAction("Relabel",
             new Dictionary<string, object?> { ["plate"] = "ABC123" });

@@ -306,6 +306,19 @@ public sealed partial record DomainEntityInstance {
             foreach (var policy in stage.Policies)
                 yield return policy;
         }
+        // Action-level require guards emit this.PolicyName() in the module body
+        // (BuildActionBodyWithGuards). Stub the same names so named-module execute
+        // type-checks; InvokeAction still evaluates guards via EvaluatePolicy first.
+        foreach (var action in EnumerateTypeDefActions(entity)) {
+            foreach (var policy in action.Policies) {
+                var name = policy.Name.StartsWith("not_", StringComparison.Ordinal)
+                    ? policy.Name[4..]
+                    : policy.Name;
+                yield return string.Equals(name, policy.Name, StringComparison.Ordinal)
+                    ? policy
+                    : policy with { Name = name };
+            }
+        }
     }
 
     /// <summary>

@@ -924,7 +924,7 @@ public class McpSmokeTests {
 
         // Instance with Score=5 (fails: Score > 10) → blocked
         var instance = DomainEntityInstance.Create(entity,
-            new Dictionary<string, object?> { ["Score"] = 5L });
+            new Dictionary<string, object?> { ["Score"] = 5L }, domain: state.Domain);
         var result = instance.InvokeAction("Submit");
         await Assert.That(result.Succeeded).IsFalse();
         await Assert.That(result.FailedGuards.Count).IsGreaterThan(0);
@@ -933,7 +933,7 @@ public class McpSmokeTests {
 
         // Instance with Score=15 (passes: Score > 10) → succeeds
         var instance2 = DomainEntityInstance.Create(entity,
-            new Dictionary<string, object?> { ["Score"] = 15L });
+            new Dictionary<string, object?> { ["Score"] = 15L }, domain: state.Domain);
         var result2 = instance2.InvokeAction("Submit");
         await Assert.That(result2.Succeeded).IsTrue();
         await Assert.That(instance2.CurrentStage).IsEqualTo("Active");

@@ -165,6 +165,7 @@ public class DslCompilerCompileOracleTests {
     [Arguments("docs/probes/fleet-eval/12-mcp/mcp-library.poly")]
     [Arguments("docs/probes/dogfood/university.poly")]
     [Arguments("docs/probes/dogfood/crm.poly")]
+    [Arguments("docs/probes/dogfood/hotel.poly")]
     [Arguments("docs/probes/dogfood/simulate-create-type.poly")]
     [Arguments("docs/probes/dogfood/simulate-create-in.poly")]
     [Arguments("docs/probes/dogfood/simulate-create-create-in.poly")]

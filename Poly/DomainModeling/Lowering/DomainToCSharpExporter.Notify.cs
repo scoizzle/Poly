@@ -72,12 +72,12 @@ public sealed partial class DomainToCSharpExporter {
     ///
     /// For DSL <c>create in loans { book: book }</c>, this produces:
     /// <code>
-    /// public Loan CreateLoans(Book book, string status, ...)
+    /// public DomainResult&lt;Loan&gt; CreateLoans(Book book, string status, ...)
     /// {
-    ///     var loan = Loan.Create(book: book, borrower: this, status: status, ...);
-    ///     _loans.Add(loan);
-    ///     loan.RegisterPatronOverdueSubscriber(this);
-    ///     return loan;
+    ///     var loanResult = Loan.Create(book: book, borrower: this, status: status, ...);
+    ///     // Loan.Create Attaches via borrower:this (Add + Register*) — no duplicate here.
+    ///     if (!loanResult.IsSuccess) return Failure(...);
+    ///     return Success(loanResult.Value);
     /// }
     /// </code>
     /// </summary>
@@ -216,55 +216,40 @@ public sealed partial class DomainToCSharpExporter {
 
         bodyNodes.Add(new Assignment(local, new Member(localResult, "Value")));
 
-        if (fieldName is not null) {
-            bodyNodes.Add(new Invoke(
-                new Member(
-                    new Member(new ThisReference(), fieldName), "Add"),
-                [local]));
-        }
-        else {
-            bodyNodes.Add(new Assignment(
-                new Member(new ThisReference(), pascalName),
-                local));
-        }
+        // Target.Create already Attaches via singular nav args (including auto-wired
+        // `this` back-ref): peer collections + WhenEach* registries. Do not duplicate
+        // _field.Add / Register* / peer Attach when Create wired this collection.
+        var createWiredThisCollection = autoWireBackRef is not null
+            && fieldName is not null
+            && FindInverseCollection(entity, targetTypeName) is { } wired
+            && string.Equals(wired.Name, rel.Name, StringComparison.Ordinal);
 
-        // Subscription registration: loan.RegisterPatronOverdueSubscriber(this)
-        // One registration per stage — multiple subscriptions on the same relation+stage
-        // (any/all/Each) share the target's single registry list.
-        if (subscriberSubs is { Count: > 0 }) {
-            foreach (var info in subscriberSubs
-                .Where(i => string.Equals(i.Relationship.Name, rel.Name, StringComparison.Ordinal))
-                .GroupBy(s => s.StageName)
-                .Select(g => g.First())) {
+        if (!createWiredThisCollection) {
+            if (fieldName is not null) {
                 bodyNodes.Add(new Invoke(
                     new Member(
-                        local,
-                        $"Register{info.SourceEntity.Name}{info.StageName}Subscriber"),
-                    [new ThisReference()]));
+                        new Member(new ThisReference(), fieldName), "Add"),
+                    [local]));
             }
-        }
+            else {
+                bodyNodes.Add(new Assignment(
+                    new Member(new ThisReference(), pascalName),
+                    local));
+            }
 
-        // create in { section: offering } — attach the child onto the peer's unique
-        // collection (Section.Enrollments) so generated C# matches the runtime inverse.
-        foreach (var parameter in parameterMetadata) {
-            if (!parameter.IsNavigation || parameter.IsCollection || parameter.IsBackReference)
-                continue;
-            if (autoWireBackRef is not null
-                && string.Equals(parameter.Name, autoWireBackRef.Name, StringComparison.Ordinal))
-                continue;
-            if (!lookup.Types.TryGetValue(parameter.Type.TypeName, out var peerType)
-                || peerType is not Entity peerEntity)
-                continue;
-            var inverse = FindInverseCollection(peerEntity, targetTypeName);
-            if (inverse is null) continue;
-            var peerVar = new Variable(ToCamelCase(parameter.Name));
-            bodyNodes.Add(new IfStatement(
-                new NotEqual(peerVar, new Constant(null)),
-                new Block([
-                    new Invoke(
-                        new Member(peerVar, $"Attach{ToPascalCase(inverse.Name)}"),
-                        [local])
-                ])));
+            // Subscription registration when Create did not Attach this relation.
+            if (subscriberSubs is { Count: > 0 }) {
+                foreach (var info in subscriberSubs
+                    .Where(i => string.Equals(i.Relationship.Name, rel.Name, StringComparison.Ordinal))
+                    .GroupBy(s => s.StageName)
+                    .Select(g => g.First())) {
+                    bodyNodes.Add(new Invoke(
+                        new Member(
+                            local,
+                            $"Register{info.SourceEntity.Name}{info.StageName}Subscriber"),
+                        [new ThisReference()]));
+                }
+            }
         }
 
         bodyNodes.Add(new Return(

@@ -672,21 +672,87 @@ public sealed partial class DomainToCSharpExporter {
             // don't carry constraints in the current model.
             var constraintChecks = BuildCreateConstraintChecks(entity, domain, esm.EntryAssignedPropertyNames);
 
-            // return DomainResult<EntityName>.Success(new EntityName(args...));
+            // Construct, wire inverse collections + subscription registries via Attach*,
+            // then Success — same seam as CreateNav/Attach. Ambiguous peer collections
+            // fail closed; OneToOne (no collection inverse) leaves the ctor to-one only.
             var createSuccessNodes = new List<Node>();
             createSuccessNodes.AddRange(constraintChecks);
+            var createdLocal = new Variable("created");
+            createSuccessNodes.Add(new Assignment(
+                createdLocal,
+                new New(
+                    new NamedTypeReference(entity.Name),
+                    ctorParams.Select(p => new Parameter(p.Name)).ToArray())));
+
+            var lookup = metadata.GetTypeLookup(domain);
+            foreach (var navParam in esm.ConstructorParameters
+                .Where(p => p.IsNavigation && !p.IsCollection)) {
+                var paramName = ToCamelCase(navParam.Name);
+                var paramRef = new Parameter(paramName);
+                var peerTypeName = navParam.Type.TypeName;
+                Entity? peerEntity = null;
+                if (lookup is not null
+                    && lookup.Types.TryGetValue(peerTypeName, out var resolvedPeer)
+                    && resolvedPeer is Entity pe)
+                    peerEntity = pe;
+                else
+                    peerEntity = domain.Types.OfType<Entity>()
+                        .FirstOrDefault(e => string.Equals(e.Name, peerTypeName, StringComparison.Ordinal));
+
+                // Unique collection inverse on the peer (same rule as FindInverseCollection).
+                // count == 0: OneToOne / no collection to wire — ctor already set the to-one.
+                // count > 1: fail closed (ambiguous). count == 1: Attach (Add + Register*).
+                Relationship? inverse = null;
+                var inverseCount = 0;
+                if (peerEntity is not null) {
+                    foreach (var peerNav in peerEntity.Navigations) {
+                        if (peerNav.Cardinality is not (RelationshipCardinality.OneToMany
+                            or RelationshipCardinality.ManyToMany))
+                            continue;
+                        if (!string.Equals(peerNav.Target.TypeName, entity.Name, StringComparison.Ordinal))
+                            continue;
+                        inverse = peerNav;
+                        inverseCount++;
+                    }
+                    if (inverseCount != 1)
+                        inverse = null;
+                }
+
+                Node Failure(string msg) => new Return(
+                    new Invoke(
+                        new Member(createResultType, "Failure"),
+                        new Constant(msg)));
+
+                if (inverseCount > 1) {
+                    createSuccessNodes.Add(new IfStatement(
+                        new NotEqual(paramRef, new Constant(null)),
+                        new Block([Failure(
+                            $"'{navParam.Name}' has no unique inverse collection to attach on '{peerTypeName}'")])));
+                    continue;
+                }
+
+                if (inverse is null)
+                    continue;
+
+                createSuccessNodes.Add(new IfStatement(
+                    new NotEqual(paramRef, new Constant(null)),
+                    new Block([
+                        new Invoke(
+                            new Member(paramRef, $"Attach{ToPascalCase(inverse.Name)}"),
+                            [createdLocal])
+                    ])));
+            }
+
             createSuccessNodes.Add(new Return(
                 new Invoke(
                     new Member(createResultType, "Success"),
-                    [new New(
-                        new NamedTypeReference(entity.Name),
-                        ctorParams.Select(p => new Parameter(p.Name)).ToArray())])));
+                    [createdLocal])));
 
             methods.Add(new MethodDefinitionNode(
                 "Create",
                 createResultType,
                 Parameters: ctorParams,
-                Body: new Block(createSuccessNodes),
+                Body: new Block(createSuccessNodes, [createdLocal]),
                 IsStatic: true,
                 AccessModifier: AccessModifier.Public
             ));

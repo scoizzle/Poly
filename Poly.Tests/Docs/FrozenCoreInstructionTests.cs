@@ -7,7 +7,9 @@ public class FrozenCoreInstructionTests {
         await Assert.That(agents).Contains("## Frozen core");
         await Assert.That(agents).Contains("2026-09-04-frozen-core-pipeline.md");
         await Assert.That(agents).Contains("consumer-specific lowering flag");
-        await Assert.That(agents).Contains("consumer-specific lowering flag");
+        await Assert.That(agents).Contains("## Agent target");
+        await Assert.That(agents).Contains("2026-09-05-lowered-module-is-domain-meaning.md");
+        await Assert.That(agents).Contains("The lowered operation module is the domain.");
     }
 
     [Test]
@@ -16,6 +18,8 @@ public class FrozenCoreInstructionTests {
         await Assert.That(core).Contains("## 0. Frozen core");
         await Assert.That(core).Contains("Do not add consumer-specific lowering flags");
         await Assert.That(core).Contains("2026-09-04-frozen-core-pipeline.md");
+        await Assert.That(core).Contains("Lowered module is **domain meaning**");
+        await Assert.That(core).Contains("2026-09-05-lowered-module-is-domain-meaning.md");
     }
 
     [Test]

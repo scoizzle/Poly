@@ -55,7 +55,7 @@ MCP / direct API as thin consumers
 DONE:    … p3/p2; GI; E1; gpure (2026-08-07); mcp-minify (2026-08-08); vision-cleanup 1–3 (2026-08-17); emit-session CompileMode seed-only (2026-08-24); host-ABI PRs 21–24; rewrite-to-master (PR 26); interpretation-language-engine (ile-gate 2026-08-31); create/create-in (simulate Interpreter + bound Store 2026-09-03)
 CURRENT: (none)
 ADMIT:   parallel (exclusive files)
-THEN:    MCP mut-safety; Grammar wrap-up; V3 naming
+THEN:    lowering-module holism (same Lower trees for execute+print; no Effect-IR at execute); MCP mut-safety; Grammar wrap-up; V3 naming
 PARKED:  pack-2 IDomainPack; mut-safety; e2e-*; pack-host “packs extend Grammar tables”; session four-slot Meaning/Emit
 PULL:    E5; EF codegen; naming cleanup
 ```

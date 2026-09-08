@@ -80,7 +80,7 @@ public class DomainExpressionLoweringPassTests {
     }
 
     [Test]
-    public async Task RelationshipNavigation_LowersToGuardedHop() {
+    public async Task RelationshipNavigation_LowersToNullForgivingHop() {
         var inner = DomainExpression.Property("AvailableCopies");
         var expr = DomainExpression.RelationshipNav("Book", inner);
 

@@ -48,6 +48,7 @@ public class PathPrefixRequireFailureTests {
         await Assert.That(threw).IsFalse();
         await Assert.That(result).IsNotNull();
         await Assert.That(result!.Succeeded).IsFalse();
+        await Assert.That(result.ErrorMessage).Contains("requires a linked 'room'");
         await Assert.That(result.FailedGuards).Contains("RoomFree");
     }
 
@@ -77,6 +78,74 @@ public class PathPrefixRequireFailureTests {
             "DomainResult.Failure(\"'CheckIn' requires a linked 'room' on entity 'Reservation'.\")");
         await Assert.That(cs).DoesNotContain("?? throw new InvalidOperationException");
         await Assert.That(cs).Contains("this.Room!");
+    }
+
+
+    [Test]
+    public async Task Confirm_RequireNot_UnlinkedSection_FailsClosed_DoesNotThrow() {
+        // F1: require not + unlinked must not invert soft-false to allow the action.
+        var (domain, _) = Evolve("""
+            domain EnrollSlice
+            Section: entity {
+              SeatsTaken: Number default(0)
+            }
+            Enrollment: entity {
+              section: Section
+              SectionFull: policy { section SeatsTaken >= 1 }
+              Pending: stage {
+                Confirm: action require not SectionFull {
+                  transition to Confirmed
+                }
+              }
+              Confirmed: stage { }
+            }
+            """);
+        var enrollment = domain.Types.OfType<Entity>().First(e => e.Name == "Enrollment");
+        var store = new DomainInstanceStore();
+        var en = DomainEntityInstance.Create(enrollment, domain: domain);
+        store.Add(en);
+
+        ActionInvocationResult? result = null;
+        var threw = false;
+        try {
+            result = en.InvokeAction("Confirm");
+        }
+        catch (Exception) {
+            threw = true;
+        }
+
+        await Assert.That(threw).IsFalse();
+        await Assert.That(result).IsNotNull();
+        await Assert.That(result!.Succeeded).IsFalse();
+        await Assert.That(result.ErrorMessage).Contains("requires a linked 'section'");
+        await Assert.That(result.FailedGuards).Contains("not_SectionFull");
+    }
+
+
+    [Test]
+    public async Task Escalate_MultiHop_UnlinkedReporter_FailsClosed() {
+        var (domain, _) = Evolve("""
+            domain IssueSlice
+            Engineer: entity { team: Team }
+            Team: entity { TeamName: Text }
+            Issue: entity {
+              reporter: Engineer
+              FromBlueTeam: policy { reporter team TeamName is "Blue" }
+              Open: stage {
+                Escalate: action require FromBlueTeam { transition to Closed }
+              }
+              Closed: stage { }
+            }
+            """);
+        var issueE = domain.Types.OfType<Entity>().First(e => e.Name == "Issue");
+        var store = new DomainInstanceStore();
+        var issue = DomainEntityInstance.Create(issueE, domain: domain);
+        store.Add(issue);
+
+        var result = issue.InvokeAction("Escalate");
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(result.ErrorMessage).Contains("requires a linked 'reporter'");
+        await Assert.That(result.FailedGuards).Contains("FromBlueTeam");
     }
 
     private static (Domain Domain, AnalysisResult Analysis) Evolve(string poly) {

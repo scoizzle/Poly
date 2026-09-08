@@ -509,16 +509,26 @@ public sealed partial record DomainEntityInstance {
         }
 
         // ── Evaluate all guard policies ─────────────────────────
-        // Path-prefix under require: EvaluatePolicy soft-fails unlinked hops
-        // (ExistsRelated short-circuit) so FailedGuards populate without throw.
-        // Export/module still emit DomainResult.Failure ("requires a linked")
-        // ahead of the policy bool for the printed one-tree require path.
+        // When a Domain-bound module method owns the action, require gates
+        // (path-prefix "requires a linked" Failure + policy bools) live in that
+        // tree — skip the EvaluatePolicy prelude so ONE-TREE Failure runs and
+        // require-not cannot invert soft-false to fail-open. Bare evaluate_policy
+        // still soft-fails unlinked via ExistsRelated. Stage policies stay here.
         var failures = new List<string>();
-        foreach (var guard in action.Policies)
-            if (!EvaluatePolicy(guard)) failures.Add(guard.Name);
+        if (Domain is not null) {
+            var ensureAnalysis = RuntimeAnalysisCache.GetOrAnalyze(Domain);
+            RuntimeAnalysisCache.GetOrLower(Domain, RuntimeAnalysisCache.Session(Domain), ensureAnalysis);
+        }
+        var moduleOwnsRequire = Domain is not null
+            && RuntimeAnalysisCache.TryGetModuleMethod(Domain, Entity.Name, actionName, out var moduleMethod)
+            && moduleMethod?.Body is not null;
+        if (!moduleOwnsRequire) {
+            foreach (var guard in action.Policies)
+                if (!EvaluatePolicy(guard)) failures.Add(guard.Name);
 
-        if (failures.Count > 0)
-            return ActionInvocationResult.Blocked(actionName, failures);
+            if (failures.Count > 0)
+                return ActionInvocationResult.Blocked(actionName, failures);
+        }
 
         Stage? stage = null;
         if (runtimeAnalysis is not null && CurrentStage is not null) {
@@ -571,8 +581,7 @@ public sealed partial record DomainEntityInstance {
                 // keep prior assigns — PR 43 documented miss IfOnMutatedProperty.
                 if (failed.ErrorMessage is string msg && msg.Contains("Unique", StringComparison.Ordinal))
                     RestoreActionState(bagBefore, stageBefore, createdBefore);
-                return ActionInvocationResult.InvalidArguments(
-                    actionName, failed.ErrorMessage ?? "invoke failed.");
+                return MapModuleRequireFailure(actionName, action, failed.ErrorMessage);
             }
 
             // P3: declared -> Entity return = last child created this invoke of that type.
@@ -596,6 +605,40 @@ public sealed partial record DomainEntityInstance {
         finally {
             _bindingTypeProvider = previousBindingProvider;
         }
+    }
+
+
+    /// <summary>
+    /// Maps module <c>DomainResult.Failure</c> require messages to
+    /// <see cref="ActionInvocationResult"/> — blocked-by-policy → FailedGuards;
+    /// requires-a-linked → ErrorMessage + FailedGuards (ONE-TREE + harness).
+    /// </summary>
+    private static ActionInvocationResult MapModuleRequireFailure(
+        string actionName, Action action, string? message) {
+        message ??= "invoke failed.";
+        const string blockedPrefix = "blocked by policy '";
+        var blockedIdx = message.IndexOf(blockedPrefix, StringComparison.Ordinal);
+        if (blockedIdx >= 0) {
+            var start = blockedIdx + blockedPrefix.Length;
+            var end = message.IndexOf('\'', start);
+            if (end > start) {
+                var policyLeaf = message[start..end];
+                var guardName = action.Policies
+                    .Select(p => p.Name)
+                    .FirstOrDefault(n =>
+                        string.Equals(n, policyLeaf, StringComparison.Ordinal)
+                        || string.Equals(n, "not_" + policyLeaf, StringComparison.Ordinal))
+                    ?? policyLeaf;
+                return ActionInvocationResult.Blocked(actionName, [guardName]);
+            }
+        }
+
+        if (message.Contains("requires a linked", StringComparison.Ordinal)) {
+            var guards = action.Policies.Select(p => p.Name).ToList();
+            return ActionInvocationResult.RequireFailure(actionName, message, guards);
+        }
+
+        return ActionInvocationResult.InvalidArguments(actionName, message);
     }
 
     /// <summary>

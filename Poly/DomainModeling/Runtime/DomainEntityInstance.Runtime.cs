@@ -678,4 +678,16 @@ public sealed record ActionInvocationResult {
         Succeeded = false,
         ErrorMessage = message
     };
+
+    /// <summary>
+    /// Module require Failure that carries both the ONE-TREE Failure string and
+    /// FailedGuards (policy names) so harness oracles and export agree.
+    /// </summary>
+    internal static ActionInvocationResult RequireFailure(
+        string actionName, string message, IReadOnlyList<string> failedGuards) => new() {
+            ActionName = actionName,
+            Succeeded = false,
+            ErrorMessage = message,
+            FailedGuards = failedGuards
+        };
 }

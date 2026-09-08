@@ -1915,7 +1915,7 @@ public class DomainToCSharpExporterTests {
         var cs = new CSharpGenerator().Generate(unit);
 
         await Assert.That(cs).Contains("DomainResult.Failure(\"'Escalate' requires a linked 'reporter' on entity 'Issue'.\")");
-        await Assert.That(cs).Contains("DomainResult.Failure(\"'Escalate' requires a linked 'team' on entity 'Issue'.\")");
+        await Assert.That(cs).Contains("DomainResult.Failure(\"'Escalate' requires a linked 'team' on entity 'Engineer'.\")");
         await Assert.That(cs).Contains(".TeamName == \"Blue\"");
         await Assert.That(cs).DoesNotContain("?? throw new InvalidOperationException");
         await Assert.That(cs).Contains("this.Reporter!.Team!");

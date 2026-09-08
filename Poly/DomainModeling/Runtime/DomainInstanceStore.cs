@@ -528,7 +528,7 @@ public sealed class DomainInstanceStore {
                 // Each: fire effects for every matching transition (default)
                 subscriber.ExecuteSubscriptionEffects(
                     entry.Effects, transitionedInstance, entry.PeerBinding,
-                    planEntry: entry, watchedStageName: targetStageName);
+                    planEntry: entry);
             }
             else if (entry.Quantifier is StageSubscriptionQuantifier.Any or StageSubscriptionQuantifier.All) {
                 // Any: fire once when at least one related entity is in matching stage.
@@ -560,7 +560,7 @@ public sealed class DomainInstanceStore {
                 if (!shouldFire) continue;
                 subscriber.ExecuteSubscriptionEffects(
                     entry.Effects, transitionedInstance, entry.PeerBinding,
-                    planEntry: entry, watchedStageName: targetStageName);
+                    planEntry: entry);
             }
 
             // Recurse if the subscriber also transitioned as a side effect

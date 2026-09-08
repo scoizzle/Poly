@@ -25,8 +25,6 @@ internal static class RuntimeAnalysisCache {
         public IReadOnlyList<TypeDefinitionNode>? Module { get; set; }
         /// <summary>Plan entry → lowered subscription effect body (no execute-time LowerActionBody).</summary>
         public Dictionary<SubscriptionDispatchPlanEntry, Node>? SubscriptionBodies { get; set; }
-        /// <summary>(entry, watched stage) → module When* handler method.</summary>
-        public Dictionary<(SubscriptionDispatchPlanEntry Entry, string Stage), MethodDefinitionNode>? SubscriptionHandlers { get; set; }
         /// <summary>VM-shaped OnEntry/OnExit bodies for Domain-bound execute (export methods stay UseThis).</summary>
         public Dictionary<(string Entity, string Stage, string Kind), Node>? EntryExitBodies { get; set; }
         /// <summary>VM-shaped policy bodies for EvaluatePolicy (export bool methods stay UseThis).</summary>
@@ -53,7 +51,6 @@ internal static class RuntimeAnalysisCache {
             if (sessionChanged || analysisChanged) {
                 holder.Module = null;
                 holder.SubscriptionBodies = null;
-                holder.SubscriptionHandlers = null;
                 holder.EntryExitBodies = null;
                 holder.PolicyBodies = null;
             }
@@ -90,10 +87,9 @@ internal static class RuntimeAnalysisCache {
                 return holder.Module;
             var module = DomainProgramProjection.ToSyntax(domain, analysis);
             var (module2, entryExit) = PopulateEntryExitMethods(domain, analysis, module);
-            var (bodies, handlers) = BuildSubscriptionCaches(domain, analysis, module2);
+            var bodies = BuildSubscriptionCaches(domain, analysis, module2);
             holder.Module = module2;
             holder.SubscriptionBodies = bodies;
-            holder.SubscriptionHandlers = handlers;
             holder.EntryExitBodies = entryExit;
             holder.PolicyBodies = BuildPolicyBodies(domain, analysis);
             return holder.Module;
@@ -165,21 +161,6 @@ internal static class RuntimeAnalysisCache {
             && body is not null)
             return true;
         body = null;
-        return false;
-    }
-
-    internal static bool TryGetSubscriptionHandler(
-        Domain domain, SubscriptionDispatchPlanEntry entry, string stageName,
-        out MethodDefinitionNode? method) {
-        ArgumentNullException.ThrowIfNull(domain);
-        ArgumentNullException.ThrowIfNull(entry);
-        ArgumentException.ThrowIfNullOrEmpty(stageName);
-        var holder = GetHolder(domain);
-        if (holder.SubscriptionHandlers is not null
-            && holder.SubscriptionHandlers.TryGetValue((entry, stageName), out method)
-            && method is not null)
-            return true;
-        method = null;
         return false;
     }
 
@@ -303,13 +284,9 @@ internal static class RuntimeAnalysisCache {
         return false;
     }
 
-    private static (
-        Dictionary<SubscriptionDispatchPlanEntry, Node> Bodies,
-        Dictionary<(SubscriptionDispatchPlanEntry, string), MethodDefinitionNode> Handlers)
-        BuildSubscriptionCaches(
+    private static Dictionary<SubscriptionDispatchPlanEntry, Node> BuildSubscriptionCaches(
             Domain domain, AnalysisResult analysis, IReadOnlyList<TypeDefinitionNode> module) {
         var bodies = new Dictionary<SubscriptionDispatchPlanEntry, Node>(ReferenceEqualityComparer.Instance);
-        var handlers = new Dictionary<(SubscriptionDispatchPlanEntry, string), MethodDefinitionNode>();
 
         var entities = domain.Types.OfType<Entity>().ToList();
         var entityLookup = entities.ToDictionary(e => e.Name, StringComparer.Ordinal);
@@ -336,27 +313,12 @@ internal static class RuntimeAnalysisCache {
                 subscriptionsBySubscriber[entity.Name] = subList;
         }
 
-        var handlerNames = DomainToCSharpExporter.BuildHandlerNames(subscriptionsBySubscriber);
-        var typesByName = module
-            .Where(t => t.Methods is { Count: > 0 })
-            .GroupBy(t => t.Name, StringComparer.Ordinal)
-            .ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
-
         foreach (var (subscriberName, subList) in subscriptionsBySubscriber) {
-            typesByName.TryGetValue(subscriberName, out var subscriberType);
             var entity = entityLookup[subscriberName];
             var esm = analysis.GetStructure(entity);
 
             foreach (var info in subList) {
                 var entry = info.Subscription;
-                if (handlerNames.TryGetValue(info, out var handlerName)
-                    && subscriberType?.Methods is { } methods) {
-                    var method = methods.FirstOrDefault(m =>
-                        string.Equals(m.Name, handlerName, StringComparison.Ordinal));
-                    if (method is not null)
-                        handlers[(entry, info.StageName)] = method;
-                }
-
                 if (bodies.ContainsKey(entry))
                     continue;
 
@@ -386,28 +348,43 @@ internal static class RuntimeAnalysisCache {
             }
         }
 
-        return (bodies, handlers);
+        return bodies;
     }
 
     private static Dictionary<(string, string), Node> BuildPolicyBodies(
         Domain domain, AnalysisResult analysis) {
         var map = new Dictionary<(string, string), Node>();
         foreach (var entity in domain.Types.OfType<Entity>()) {
-            foreach (var policy in entity.Policies) {
-                var entityParam = new Parameter("entity", new TypeReference(entity.Name));
-                var pass = new DomainExpressionLoweringPass(new LoweringContext(
-                    entityParam,
-                    Analysis: analysis,
-                    Domain: domain,
-                    UseThisReference: false,
-                    PropertyTypeResolver: EffectLoweringPass.BuildPropertyTypeResolver(entity),
-                    NavigationNameResolver: EffectLoweringPass.BuildNavigationNameResolver(entity, domain, analysis),
-                    IsCollectionNavigation: EffectLoweringPass.BuildIsCollectionNavigation(entity, domain, analysis),
-                    IsRelationshipNavigation: EffectLoweringPass.BuildIsRelationshipNavigation(entity, domain, analysis),
-                    SourceEntityName: entity.Name));
+            var entityParam = new Parameter("entity", new TypeReference(entity.Name));
+            var pass = new DomainExpressionLoweringPass(new LoweringContext(
+                entityParam,
+                Analysis: analysis,
+                Domain: domain,
+                UseThisReference: false,
+                PropertyTypeResolver: EffectLoweringPass.BuildPropertyTypeResolver(entity),
+                NavigationNameResolver: EffectLoweringPass.BuildNavigationNameResolver(entity, domain, analysis),
+                IsCollectionNavigation: EffectLoweringPass.BuildIsCollectionNavigation(entity, domain, analysis),
+                IsRelationshipNavigation: EffectLoweringPass.BuildIsRelationshipNavigation(entity, domain, analysis),
+                SourceEntityName: entity.Name));
+
+            void Cache(Policy policy) {
                 var lowered = pass.Lower(policy.Expression, entityParam);
                 if (lowered is not null)
                     map[(entity.Name, policy.Name)] = lowered;
+            }
+
+            // Entity + action + stage policies — EvaluatePolicy keys by (entity, policy name).
+            foreach (var policy in entity.Policies)
+                Cache(policy);
+            foreach (var action in entity.Actions)
+                foreach (var policy in action.Policies)
+                    Cache(policy);
+            foreach (var stage in entity.Stages) {
+                foreach (var policy in stage.Policies)
+                    Cache(policy);
+                foreach (var action in stage.Actions)
+                    foreach (var policy in action.Policies)
+                        Cache(policy);
             }
         }
         return map;
@@ -423,6 +400,72 @@ internal static class RuntimeAnalysisCache {
             return true;
         body = null;
         return false;
+    }
+
+
+    /// <summary>Test hook: replace a GetOrLower-cached policy body (cache-identity oracles).</summary>
+    internal static void ReplacePolicyBody(Domain domain, string entity, string policy, Node body) {
+        ArgumentNullException.ThrowIfNull(domain);
+        ArgumentNullException.ThrowIfNull(body);
+        var holder = GetHolder(domain);
+        lock (holder) {
+            holder.PolicyBodies ??= new Dictionary<(string, string), Node>();
+            holder.PolicyBodies[(entity, policy)] = body;
+        }
+    }
+
+    /// <summary>Test hook: remove a cached policy body so Domain-bound EvaluatePolicy must fail closed.</summary>
+    internal static void ClearPolicyBody(Domain domain, string entity, string policy) {
+        ArgumentNullException.ThrowIfNull(domain);
+        var holder = GetHolder(domain);
+        lock (holder) {
+            holder.PolicyBodies?.Remove((entity, policy));
+        }
+    }
+
+    /// <summary>Test hook: replace a GetOrLower-cached OnEntry/OnExit body.</summary>
+    internal static void ReplaceEntryExitBody(
+        Domain domain, string entity, string stage, string kind, Node body) {
+        ArgumentNullException.ThrowIfNull(domain);
+        ArgumentNullException.ThrowIfNull(body);
+        var holder = GetHolder(domain);
+        lock (holder) {
+            holder.EntryExitBodies ??= new Dictionary<(string, string, string), Node>();
+            holder.EntryExitBodies[(entity, stage, kind)] = body;
+        }
+    }
+
+    /// <summary>Test hook: clear an OnEntry/OnExit body (fail-closed Domain-bound).</summary>
+    internal static void ClearEntryExitBody(Domain domain, string entity, string stage, string kind) {
+        ArgumentNullException.ThrowIfNull(domain);
+        var holder = GetHolder(domain);
+        lock (holder) {
+            holder.EntryExitBodies?.Remove((entity, stage, kind));
+        }
+    }
+
+    /// <summary>Test hook: replace a GetOrLower-cached subscription effect body.</summary>
+    internal static void ReplaceSubscriptionBody(
+        Domain domain, SubscriptionDispatchPlanEntry entry, Node body) {
+        ArgumentNullException.ThrowIfNull(domain);
+        ArgumentNullException.ThrowIfNull(entry);
+        ArgumentNullException.ThrowIfNull(body);
+        var holder = GetHolder(domain);
+        lock (holder) {
+            holder.SubscriptionBodies ??= new Dictionary<SubscriptionDispatchPlanEntry, Node>(
+                ReferenceEqualityComparer.Instance);
+            holder.SubscriptionBodies[entry] = body;
+        }
+    }
+
+    /// <summary>Test hook: clear a subscription body (fail-closed Domain-bound).</summary>
+    internal static void ClearSubscriptionBody(Domain domain, SubscriptionDispatchPlanEntry entry) {
+        ArgumentNullException.ThrowIfNull(domain);
+        ArgumentNullException.ThrowIfNull(entry);
+        var holder = GetHolder(domain);
+        lock (holder) {
+            holder.SubscriptionBodies?.Remove(entry);
+        }
     }
 
     private static Holder GetHolder(Domain domain) =>

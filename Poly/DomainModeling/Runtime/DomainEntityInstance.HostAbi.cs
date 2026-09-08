@@ -224,9 +224,9 @@ public sealed partial record DomainEntityInstance {
         var batch = new List<Effect>();
         void Flush() {
             if (batch.Count == 0) return;
-            // Partial flush after nested transition — do not bind full OnEntry/OnExit.
+            // Partial flush after nested transition — claimed residual LowerActionBody.
             ThrowIfEffectListFailed(
-                ExecuteEffectList(batch, pass, _typeDefAnalyzer),
+                ExecuteEffectList(batch, pass, _typeDefAnalyzer, allowExecuteTimeLower: true),
                 "stage entry/exit");
             batch.Clear();
         }
@@ -278,8 +278,7 @@ public sealed partial record DomainEntityInstance {
         IReadOnlyList<Effect> effects,
         DomainEntityInstance peerInstance,
         string? peerBinding = null,
-        SubscriptionDispatchPlanEntry? planEntry = null,
-        string? watchedStageName = null) {
+        SubscriptionDispatchPlanEntry? planEntry = null) {
         _isExecutingSubscription = true;
 
         try {
@@ -298,26 +297,28 @@ public sealed partial record DomainEntityInstance {
                     Analysis: analysis,
                     Domain: Domain));
 
-                // Prefer effects-only body cached at GetOrLower (VM-shaped). Module When*
-                // handlers are C#-export shaped (nav gates / UseThisReference) and are
-                // recorded for TryGetSubscriptionHandler but not executed here.
-                if (planEntry is not null
-                    && RuntimeAnalysisCache.TryGetSubscriptionBody(Domain, planEntry, out var body)
-                    && body is not null) {
-                    // Body was lowered with Parameter("entity") subject — already VM-shaped.
-                    var cached = body;
-                    if (peerBinding is { Length: > 0 })
-                        cached = MaterializePeerInSyntax(cached, peerBinding, peerInstance);
-                    ThrowIfEffectListFailed(
-                        ExecuteCachedSubscriptionTree(cached, effectPass, peerArg: null),
-                        "subscription");
-                    return;
-                }
+                // Domain-bound: bind effects-only body cached at GetOrLower (VM-shaped).
+                // Miss or missing plan entry throws — never BindPeerInEffect + LowerActionBody.
+                if (planEntry is null)
+                    throw new InvalidOperationException(
+                        $"Subscription dispatch on '{Entity.Name}' requires a plan entry for cache bind.");
+                if (!RuntimeAnalysisCache.TryGetSubscriptionBody(Domain, planEntry, out var body)
+                    || body is null)
+                    throw new InvalidOperationException(
+                        $"Subscription body is missing on entity '{Entity.Name}'.");
+                var cached = body;
+                if (peerBinding is { Length: > 0 })
+                    cached = MaterializePeerInSyntax(cached, peerBinding, peerInstance);
+                ThrowIfEffectListFailed(
+                    ExecuteCachedSubscriptionTree(cached, effectPass, peerArg: null),
+                    "subscription");
+                return;
             }
             else {
                 effectPass = new EffectLoweringPass(Entity, subjectParam);
             }
 
+            // Domain-null standalone: keep execute-time lower path.
             var bound = effects.Select(effect => peerBinding is { Length: > 0 }
                     ? BindPeerInEffect(effect, peerBinding, peerInstance)
                     : effect)
@@ -355,6 +356,8 @@ public sealed partial record DomainEntityInstance {
             new Constant(peer.GetProperty<object?>(m.MemberName)),
         Parameter p when string.Equals(p.Name, peerBinding, StringComparison.Ordinal) =>
             new Constant(peer),
+        // Non-peer parameters (entity subject, loop vars, etc.) — leave unchanged.
+        Parameter => node,
         Block b => new Block(
             b.Nodes.Select(n => MaterializePeerInSyntax(n, peerBinding, peer)),
             b.Variables.Select(n => MaterializePeerInSyntax(n, peerBinding, peer))),
@@ -421,6 +424,30 @@ public sealed partial record DomainEntityInstance {
             MaterializePeerInSyntax(f.Collection, peerBinding, peer),
             MaterializePeerInSyntax(f.Body, peerBinding, peer),
             f.Label),
+        WhileLoop w => new WhileLoop(
+            MaterializePeerInSyntax(w.Condition, peerBinding, peer),
+            MaterializePeerInSyntax(w.Body, peerBinding, peer),
+            w.Label),
+        DoWhileLoop dw => new DoWhileLoop(
+            MaterializePeerInSyntax(dw.Body, peerBinding, peer),
+            MaterializePeerInSyntax(dw.Condition, peerBinding, peer),
+            dw.Label),
+        ForLoop fl => new ForLoop(
+            fl.Initializer is null ? null : MaterializePeerInSyntax(fl.Initializer, peerBinding, peer),
+            fl.Condition is null ? null : MaterializePeerInSyntax(fl.Condition, peerBinding, peer),
+            fl.Increment is null ? null : MaterializePeerInSyntax(fl.Increment, peerBinding, peer),
+            MaterializePeerInSyntax(fl.Body, peerBinding, peer),
+            fl.Label),
+        TryCatchFinally tcf => new TryCatchFinally(
+            MaterializePeerInSyntax(tcf.TryBlock, peerBinding, peer),
+            tcf.CatchClauses?.Select(c => new CatchClause(
+                c.ExceptionType is null ? null : MaterializePeerInSyntax(c.ExceptionType, peerBinding, peer),
+                c.VariableName,
+                MaterializePeerInSyntax(c.Body, peerBinding, peer))).ToList(),
+            tcf.FinallyBlock is null ? null : MaterializePeerInSyntax(tcf.FinallyBlock, peerBinding, peer)),
+        UsingStatement us => new UsingStatement(
+            MaterializePeerInSyntax(us.Resource, peerBinding, peer),
+            MaterializePeerInSyntax(us.Body, peerBinding, peer)),
         New n => new New(
             MaterializePeerInSyntax(n.Type, peerBinding, peer),
             [.. n.Arguments.Select(a => MaterializePeerInSyntax(a, peerBinding, peer))]),
@@ -429,9 +456,29 @@ public sealed partial record DomainEntityInstance {
             MaterializePeerInSyntax(tc.Operand, peerBinding, peer),
             MaterializePeerInSyntax(tc.TargetTypeReference, peerBinding, peer),
             tc.IsChecked),
-        Variable or Constant or NamedTypeReference or TypeReference
-            or PrimitiveTypeReference or ClrTypeReference or ThisReference => node,
-        _ => node
+        TypeIs ti => new TypeIs(
+            MaterializePeerInSyntax(ti.Operand, peerBinding, peer),
+            MaterializePeerInSyntax(ti.TargetTypeReference, peerBinding, peer)),
+        TypeAs ta => new TypeAs(
+            MaterializePeerInSyntax(ta.Operand, peerBinding, peer),
+            MaterializePeerInSyntax(ta.TargetTypeReference, peerBinding, peer)),
+        IndexAccess ia => new IndexAccess(
+            MaterializePeerInSyntax(ia.Value, peerBinding, peer),
+            [.. ia.Arguments.Select(a => MaterializePeerInSyntax(a, peerBinding, peer))]),
+        UnaryMinus um => new UnaryMinus(MaterializePeerInSyntax(um.Operand, peerBinding, peer)),
+        NullForgiving nf => new NullForgiving(MaterializePeerInSyntax(nf.Operand, peerBinding, peer)),
+        LabelDeclaration ld => new LabelDeclaration(
+            ld.Name, MaterializePeerInSyntax(ld.Statement, peerBinding, peer)),
+        Default d => d.TargetType is null
+            ? d
+            : new Default(MaterializePeerInSyntax(d.TargetType, peerBinding, peer)),
+        BreakStatement or ContinueStatement or GotoStatement
+            or Variable or Constant or NamedTypeReference or TypeReference
+            or PrimitiveTypeReference or ClrTypeReference or ThisReference
+            or Comment => node,
+        _ => throw new InvalidOperationException(
+            $"MaterializePeerInSyntax: unhandled node type '{node.GetType().Name}' " +
+            $"(peer binding '{peerBinding}').")
     };
 
 

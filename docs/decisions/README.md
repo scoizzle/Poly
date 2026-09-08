@@ -25,6 +25,7 @@ These documents exist so that:
 
 ## Current Decisions
 
+- [2026-09-05: Lowered operation module is domain meaning](2026-09-05-lowered-module-is-domain-meaning.md) — Domain meaning is `session.Lower`. Scratch `DomainEntityInstance` / MCP simulate are harness, not product-surface proof. Agents fix lowering when execute and print diverge. Always-on: `AGENTS.md` Agent target.
 - [2026-09-04: Frozen core pipeline (AST / Node / Analysis)](2026-09-04-frozen-core-pipeline.md) — **Architecture freeze.** Nodes + analysis + session libraries + two products (operation module, surface artifacts). Current hosts (scratch store, C# print, HTTP, Store jobs) are replaceable; do not grow dual-paths. Always-on: `AGENTS.md` Frozen core · `docs/CORE.md` §0.
 - [2026-09-03: Facts, concern bags, and Store bind](2026-09-03-facts-concerns-bags-store-bind.md) — Domain is **facts**; analysis publishes **concern bags**; operation lowering **binds** bags and a named **Store** collaborator (`EnsureUnique`, then `Create` / `CreateIn`). Not `IStorage`. Simulate the lowered program. Remaining create dual-path: [`docs/plans/create-create-in-simulate.md`](../plans/create-create-in-simulate.md). Store job names are **current bind**, not frozen core (see 2026-09-04).
 - [2026-08-15: Domain is a library; extensions bind doors; MCP is the harness](2026-08-15-domain-library-extensions-mcp-harness.md) — Domain lowers to legal **operations**, not a process. Product entry points are opt-in extensions. MCP simulates by supplied context. Shipped ⊆ lowerable.

@@ -1180,9 +1180,10 @@ public class ActionEntityReturnTests {
     }
 
     [Test]
-    public async Task InvokeAction_IfOnMutatedProperty_CreateIllegal_StillAppliesPriorAssign() {
-        // Documented miss: taken-ness is the pre-effect bag. assign OpenStays+1
-        // then if (OpenStays >= 1) { create illegal } still applies the assign.
+    public async Task InvokeAction_IfOnMutatedProperty_CreateIllegal_DoesNotApplyPriorAssign() {
+        // Item 4: Failure restores prior assigns even when the if condition reads
+        // the mutated property (prevalidate may skip guarded create; runtime still
+        // fails create and must roll back OpenStays).
         var (domain, _) = Evolve("""
             domain Hotel
             Stay: entity {
@@ -1203,11 +1204,39 @@ public class ActionEntityReturnTests {
         var store = new DomainInstanceStore();
         store.Add(guest);
 
-        _ = guest.InvokeAction("Book",
+        var result = guest.InvokeAction("Book",
             new Dictionary<string, object?> { ["nights"] = 0L });
-        // Documented miss: prevalidate/probes evaluate OpenStays on the pre-assign
-        // bag (0), so the assign stands.
-        await Assert.That(guest.GetProperty<object>("OpenStays")).IsEqualTo(1L);
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(result.ErrorMessage).Contains("Nights");
+        await Assert.That(guest.GetProperty<object>("OpenStays")).IsEqualTo(0L);
+        await Assert.That(guest.CreatedChildren).IsEmpty();
+    }
+
+    [Test]
+    public async Task InvokeAction_AssignThenNestedRequireFailure_RestoresPriorAssign() {
+        // Item 4: assign then later Failure (nested invoke require) restores bag.
+        var (domain, analysis) = Evolve("""
+            domain Shop
+            Cart: entity {
+              Flag: Number default(0)
+              AlwaysFail: policy { Flag > 99 }
+              Prep: action require AlwaysFail { }
+              Place: action {
+                assign Flag to 1
+                invoke Prep
+              }
+            }
+            """);
+        await Assert.That(analysis.HasErrors).IsFalse();
+
+        var store = new DomainInstanceStore();
+        var cartEntity = domain.Types.OfType<Entity>().Single(e => e.Name == "Cart");
+        var cart = DomainEntityInstance.Create(cartEntity, domain: domain);
+        store.Add(cart);
+
+        var result = cart.InvokeAction("Place");
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(cart.GetProperty<object>("Flag")).IsEqualTo(0L);
     }
 
     [Test]

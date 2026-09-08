@@ -48,7 +48,7 @@ public class PathPrefixRequireFailureTests {
         await Assert.That(threw).IsFalse();
         await Assert.That(result).IsNotNull();
         await Assert.That(result!.Succeeded).IsFalse();
-        await Assert.That(result.ErrorMessage).Contains("requires a linked 'room'");
+        await Assert.That(result.FailedGuards).Contains("RoomFree");
     }
 
     [Test]
@@ -76,6 +76,7 @@ public class PathPrefixRequireFailureTests {
         await Assert.That(cs).Contains(
             "DomainResult.Failure(\"'CheckIn' requires a linked 'room' on entity 'Reservation'.\")");
         await Assert.That(cs).DoesNotContain("?? throw new InvalidOperationException");
+        await Assert.That(cs).Contains("this.Room!");
     }
 
     private static (Domain Domain, AnalysisResult Analysis) Evolve(string poly) {

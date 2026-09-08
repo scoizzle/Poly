@@ -92,11 +92,13 @@ public class DomainExpressionLoweringPassTests {
         var outer = (Member)result;
         await Assert.That(outer.MemberName).IsEqualTo("AvailableCopies");
 
-        // Export/module path-prefix is a bare nullable Member. Unlinked require
-        // fails closed via DomainResult.Failure in BuildActionBodyWithGuards —
-        // not coalesce-throw on the policy body.
-        await Assert.That(outer.Value).IsTypeOf<Member>();
-        var nav = (Member)outer.Value;
+        // Export/module path-prefix is NullForgiving(Member) for CS8602.
+        // Unlinked require fails closed via DomainResult.Failure in
+        // BuildActionBodyWithGuards — not coalesce-throw escaping DomainResult.
+        await Assert.That(outer.Value).IsTypeOf<NullForgiving>();
+        var forgive = (NullForgiving)outer.Value;
+        await Assert.That(forgive.Operand).IsTypeOf<Member>();
+        var nav = (Member)forgive.Operand;
         await Assert.That(nav.MemberName).IsEqualTo("Book");
         await Assert.That(nav.Value).IsSameReferenceAs(Subject);
     }

@@ -1399,9 +1399,8 @@ public class DomainToCSharpExporterTests {
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
-        await Assert.That(cs).Contains("this.Source.Path");
+        await Assert.That(cs).Contains("this.Source!.Path");
         await Assert.That(cs).DoesNotContain("this.source.Path");
-        await Assert.That(cs).DoesNotContain("this.Source!");
     }
 
     [Test]
@@ -1681,7 +1680,7 @@ public class DomainToCSharpExporterTests {
 
         await Assert.That(cs).Contains("DomainResult.Failure(\"'CheckIn' requires a linked 'room' on entity 'Reservation'.\")");
         await Assert.That(cs).DoesNotContain("?? throw new InvalidOperationException");
-        await Assert.That(cs).Contains("this.Room.Occupied");
+        await Assert.That(cs).Contains("this.Room!.Occupied");
     }
 
     [Test]
@@ -1919,7 +1918,7 @@ public class DomainToCSharpExporterTests {
         await Assert.That(cs).Contains("DomainResult.Failure(\"'Escalate' requires a linked 'team' on entity 'Issue'.\")");
         await Assert.That(cs).Contains(".TeamName == \"Blue\"");
         await Assert.That(cs).DoesNotContain("?? throw new InvalidOperationException");
-        await Assert.That(cs).DoesNotContain("this.Reporter!.Team!");
+        await Assert.That(cs).Contains("this.Reporter!.Team!");
         await Assert.That(cs).DoesNotContain("this.Reporter.team.TeamName");
     }
 

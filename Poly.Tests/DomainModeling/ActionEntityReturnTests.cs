@@ -1355,6 +1355,33 @@ public class ActionEntityReturnTests {
     }
 
     [Test]
+    public async Task InvokeAction_AssignThenNestedRequireFailure_RestoresPriorAssign() {
+        // Item 4: assign then later Failure (nested invoke require) restores bag.
+        var (domain, analysis) = Evolve("""
+            domain Shop
+            Cart: entity {
+              Flag: Number default(0)
+              AlwaysFail: policy { Flag > 99 }
+              Prep: action require AlwaysFail { }
+              Place: action {
+                assign Flag to 1
+                invoke Prep
+              }
+            }
+            """);
+        await Assert.That(analysis.HasErrors).IsFalse();
+
+        var store = new DomainInstanceStore();
+        var cartEntity = domain.Types.OfType<Entity>().Single(e => e.Name == "Cart");
+        var cart = DomainEntityInstance.Create(cartEntity, domain: domain);
+        store.Add(cart);
+
+        var result = cart.InvokeAction("Place");
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(cart.GetProperty<object>("Flag")).IsEqualTo(0L);
+    }
+
+    [Test]
     public async Task Create_OnEntryIfCreate_DoesNotThrowCannotLower() {
         var (domain, _) = Evolve("""
             domain Hotel

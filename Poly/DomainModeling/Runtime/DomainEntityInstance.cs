@@ -596,10 +596,10 @@ public sealed partial record DomainEntityInstance {
             var failed = ExecuteEffectList(action.Effects, effectPass, effectTypeProvider,
                 actionName: action.Name, args: args, actionParameters: action.Parameters);
             if (failed is { IsSuccess: false }) {
-                // Unique-before-mutate restore (PR 44 F2). Other constraint Failures
-                // keep prior assigns — PR 43 documented miss IfOnMutatedProperty.
-                if (failed.ErrorMessage is string msg && msg.Contains("Unique", StringComparison.Ordinal))
-                    RestoreActionState(bagBefore, stageBefore, createdBefore);
+                // Item 4: any ExecuteEffectList Failure restores bag/stage/created.
+                // Closes PR 43 IfOnMutatedProperty prior-assign miss (Unique-only
+                // restore was PR 44 F2).
+                RestoreActionState(bagBefore, stageBefore, createdBefore);
                 return MapModuleRequireFailure(actionName, action, failed.ErrorMessage);
             }
 

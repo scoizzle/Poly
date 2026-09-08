@@ -1,3 +1,4 @@
+using Poly.Ast.Nodes;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
@@ -160,7 +161,9 @@ public sealed partial record DomainEntityInstance {
                 var prevStage = ResolveTransitionStage(analysis, previousStageName);
                 if (prevStage?.OnExitEffects is { Count: > 0 }) {
                     var exitPass = new EffectLoweringPass(Entity, loweringContext);
-                    RunTransitionEffectList(prevStage.OnExitEffects, exitPass, notifyStore);
+                    RunTransitionEffectList(
+                        prevStage.OnExitEffects, exitPass, notifyStore,
+                        exitStageName: previousStageName);
                 }
             }
 
@@ -170,7 +173,9 @@ public sealed partial record DomainEntityInstance {
                 var targetStage = ResolveTransitionStage(analysis, targetStageName);
                 if (targetStage?.OnEntryEffects is { Count: > 0 }) {
                     var entryPass = new EffectLoweringPass(Entity, loweringContext);
-                    RunTransitionEffectList(targetStage.OnEntryEffects, entryPass, notifyStore);
+                    RunTransitionEffectList(
+                        targetStage.OnEntryEffects, entryPass, notifyStore,
+                        entryStageName: targetStageName);
                 }
             }
             finally {
@@ -195,14 +200,31 @@ public sealed partial record DomainEntityInstance {
 
     /// <summary>
     /// Nested <see cref="StageTransitionEffect"/> still recurses
-    /// <see cref="TransitionStage"/>. Mixed if+create in the same entry/exit
-    /// list still compiles via <c>LowerActionBody</c> (not a named-action path).
+    /// <see cref="TransitionStage"/>. When the list has no nested transitions,
+    /// Domain-bound batches bind OnEntry/OnExit module methods from GetOrLower.
+    /// Mixed lists keep flush/recurse and lower residual batches at execute time.
     /// </summary>
     private void RunTransitionEffectList(
-        IReadOnlyList<Effect> effects, EffectLoweringPass pass, bool notifyStore) {
+        IReadOnlyList<Effect> effects,
+        EffectLoweringPass pass,
+        bool notifyStore,
+        string? entryStageName = null,
+        string? exitStageName = null) {
+        // No nested stage transitions: bind the whole batch via module OnEntry/OnExit.
+        if (effects.All(e => e is not StageTransitionEffect)) {
+            ThrowIfEffectListFailed(
+                ExecuteEffectList(
+                    effects, pass, _typeDefAnalyzer,
+                    entryStageName: entryStageName,
+                    exitStageName: exitStageName),
+                "stage entry/exit");
+            return;
+        }
+
         var batch = new List<Effect>();
         void Flush() {
             if (batch.Count == 0) return;
+            // Partial flush after nested transition — do not bind full OnEntry/OnExit.
             ThrowIfEffectListFailed(
                 ExecuteEffectList(batch, pass, _typeDefAnalyzer),
                 "stage entry/exit");
@@ -255,18 +277,42 @@ public sealed partial record DomainEntityInstance {
     internal void ExecuteSubscriptionEffects(
         IReadOnlyList<Effect> effects,
         DomainEntityInstance peerInstance,
-        string? peerBinding = null) {
+        string? peerBinding = null,
+        SubscriptionDispatchPlanEntry? planEntry = null,
+        string? watchedStageName = null) {
         _isExecutingSubscription = true;
 
         try {
+            // Empty subscription (notify-only) — avoid GetOrLower side effects for fail-closed tests.
+            if (effects.Count == 0)
+                return;
+
             var subjectParam = new Parameter("entity", new TypeReference(Entity.Name));
             EffectLoweringPass effectPass;
             if (Domain is not null) {
                 var analysis = RuntimeAnalysisCache.GetOrAnalyze(Domain);
+                RuntimeAnalysisCache.GetOrLower(
+                    Domain, RuntimeAnalysisCache.Session(Domain), analysis);
                 effectPass = new EffectLoweringPass(Entity, new LoweringContext(
                     subjectParam,
                     Analysis: analysis,
                     Domain: Domain));
+
+                // Prefer effects-only body cached at GetOrLower (VM-shaped). Module When*
+                // handlers are C#-export shaped (nav gates / UseThisReference) and are
+                // recorded for TryGetSubscriptionHandler but not executed here.
+                if (planEntry is not null
+                    && RuntimeAnalysisCache.TryGetSubscriptionBody(Domain, planEntry, out var body)
+                    && body is not null) {
+                    // Body was lowered with Parameter("entity") subject — already VM-shaped.
+                    var cached = body;
+                    if (peerBinding is { Length: > 0 })
+                        cached = MaterializePeerInSyntax(cached, peerBinding, peerInstance);
+                    ThrowIfEffectListFailed(
+                        ExecuteCachedSubscriptionTree(cached, effectPass, peerArg: null),
+                        "subscription");
+                    return;
+                }
             }
             else {
                 effectPass = new EffectLoweringPass(Entity, subjectParam);
@@ -284,6 +330,110 @@ public sealed partial record DomainEntityInstance {
             _isExecutingSubscription = false;
         }
     }
+
+    private DomainResult? ExecuteCachedSubscriptionTree(
+        Node tree, EffectLoweringPass effectPass, object? peerArg) {
+        var compiled = Interpreter.CompileChecked(
+            tree, ModuleAwareTypeProvider(_typeDefAnalyzer));
+        using var exec = Interpreter.Execute(compiled,
+            s => s.SetArgs(peerArg is null
+                ? new object?[] { this }
+                : new object?[] { this, peerArg }));
+        if (exec.Result.Value is DomainResult { IsSuccess: false } failed)
+            return failed;
+        return null;
+    }
+
+    /// <summary>
+    /// Substitutes peer <see cref="Parameter"/> reads in a GetOrLower-cached
+    /// subscription tree with constants from the transitioned peer bag — not a re-lower.
+    /// </summary>
+    private static Node MaterializePeerInSyntax(
+        Node node, string peerBinding, DomainEntityInstance peer) => node switch {
+        Member { Value: Parameter p } m
+            when string.Equals(p.Name, peerBinding, StringComparison.Ordinal) =>
+            new Constant(peer.GetProperty<object?>(m.MemberName)),
+        Parameter p when string.Equals(p.Name, peerBinding, StringComparison.Ordinal) =>
+            new Constant(peer),
+        Block b => new Block(
+            b.Nodes.Select(n => MaterializePeerInSyntax(n, peerBinding, peer)),
+            b.Variables.Select(n => MaterializePeerInSyntax(n, peerBinding, peer))),
+        IfStatement i => new IfStatement(
+            MaterializePeerInSyntax(i.Condition, peerBinding, peer),
+            MaterializePeerInSyntax(i.ThenBranch, peerBinding, peer),
+            i.ElseBranch is null ? null : MaterializePeerInSyntax(i.ElseBranch, peerBinding, peer)),
+        Return r => r.Value is null ? r : new Return(MaterializePeerInSyntax(r.Value, peerBinding, peer)),
+        Assignment a => new Assignment(
+            MaterializePeerInSyntax(a.Destination, peerBinding, peer),
+            MaterializePeerInSyntax(a.Value, peerBinding, peer)),
+        Invoke inv => new Invoke(
+            MaterializePeerInSyntax(inv.Delegate, peerBinding, peer),
+            [.. inv.Arguments.Select(a => MaterializePeerInSyntax(a, peerBinding, peer))]) {
+            TypeArguments = inv.TypeArguments
+        },
+        Member m => new Member(MaterializePeerInSyntax(m.Value, peerBinding, peer), m.MemberName),
+        Poly.Ast.Nodes.Not n => new Poly.Ast.Nodes.Not(MaterializePeerInSyntax(n.Value, peerBinding, peer)),
+        Equal e => new Equal(
+            MaterializePeerInSyntax(e.LeftHandValue, peerBinding, peer),
+            MaterializePeerInSyntax(e.RightHandValue, peerBinding, peer)),
+        NotEqual ne => new NotEqual(
+            MaterializePeerInSyntax(ne.LeftHandValue, peerBinding, peer),
+            MaterializePeerInSyntax(ne.RightHandValue, peerBinding, peer)),
+        LessThan lt => new LessThan(
+            MaterializePeerInSyntax(lt.LeftHandValue, peerBinding, peer),
+            MaterializePeerInSyntax(lt.RightHandValue, peerBinding, peer)),
+        LessThanOrEqual le => new LessThanOrEqual(
+            MaterializePeerInSyntax(le.LeftHandValue, peerBinding, peer),
+            MaterializePeerInSyntax(le.RightHandValue, peerBinding, peer)),
+        GreaterThan gt => new GreaterThan(
+            MaterializePeerInSyntax(gt.LeftHandValue, peerBinding, peer),
+            MaterializePeerInSyntax(gt.RightHandValue, peerBinding, peer)),
+        GreaterThanOrEqual ge => new GreaterThanOrEqual(
+            MaterializePeerInSyntax(ge.LeftHandValue, peerBinding, peer),
+            MaterializePeerInSyntax(ge.RightHandValue, peerBinding, peer)),
+        Poly.Ast.Nodes.Add add => new Poly.Ast.Nodes.Add(
+            MaterializePeerInSyntax(add.LeftHandValue, peerBinding, peer),
+            MaterializePeerInSyntax(add.RightHandValue, peerBinding, peer)),
+        Poly.Ast.Nodes.Subtract sub => new Poly.Ast.Nodes.Subtract(
+            MaterializePeerInSyntax(sub.LeftHandValue, peerBinding, peer),
+            MaterializePeerInSyntax(sub.RightHandValue, peerBinding, peer)),
+        Poly.Ast.Nodes.Multiply mul => new Poly.Ast.Nodes.Multiply(
+            MaterializePeerInSyntax(mul.LeftHandValue, peerBinding, peer),
+            MaterializePeerInSyntax(mul.RightHandValue, peerBinding, peer)),
+        Poly.Ast.Nodes.Divide div => new Poly.Ast.Nodes.Divide(
+            MaterializePeerInSyntax(div.LeftHandValue, peerBinding, peer),
+            MaterializePeerInSyntax(div.RightHandValue, peerBinding, peer)),
+        Poly.Ast.Nodes.And and => new Poly.Ast.Nodes.And(
+            MaterializePeerInSyntax(and.LeftHandValue, peerBinding, peer),
+            MaterializePeerInSyntax(and.RightHandValue, peerBinding, peer)),
+        Poly.Ast.Nodes.Or or => new Poly.Ast.Nodes.Or(
+            MaterializePeerInSyntax(or.LeftHandValue, peerBinding, peer),
+            MaterializePeerInSyntax(or.RightHandValue, peerBinding, peer)),
+        Coalesce c => new Coalesce(
+            MaterializePeerInSyntax(c.LeftHandValue, peerBinding, peer),
+            MaterializePeerInSyntax(c.RightHandValue, peerBinding, peer)),
+        Conditional cond => new Conditional(
+            MaterializePeerInSyntax(cond.Condition, peerBinding, peer),
+            MaterializePeerInSyntax(cond.IfTrue, peerBinding, peer),
+            MaterializePeerInSyntax(cond.IfFalse, peerBinding, peer)),
+        ForEachLoop f => new ForEachLoop(
+            f.LoopVariable,
+            MaterializePeerInSyntax(f.Collection, peerBinding, peer),
+            MaterializePeerInSyntax(f.Body, peerBinding, peer),
+            f.Label),
+        New n => new New(
+            MaterializePeerInSyntax(n.Type, peerBinding, peer),
+            [.. n.Arguments.Select(a => MaterializePeerInSyntax(a, peerBinding, peer))]),
+        ThrowStatement ts => new ThrowStatement(MaterializePeerInSyntax(ts.Exception, peerBinding, peer)),
+        TypeCast tc => new TypeCast(
+            MaterializePeerInSyntax(tc.Operand, peerBinding, peer),
+            MaterializePeerInSyntax(tc.TargetTypeReference, peerBinding, peer),
+            tc.IsChecked),
+        Variable or Constant or NamedTypeReference or TypeReference
+            or PrimitiveTypeReference or ClrTypeReference or ThisReference => node,
+        _ => node
+    };
+
 
     /// <summary>
     /// Rewrites peer path-prefix roots (<c>name Prop</c> → <see cref="RelationshipNavigation"/>)

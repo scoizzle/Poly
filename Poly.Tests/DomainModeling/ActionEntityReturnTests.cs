@@ -734,6 +734,21 @@ public class ActionEntityReturnTests {
         await Assert.That(lot.GetProperty<object>("Occupied")).IsEqualTo(0L);
         await Assert.That(lot.GetProperty<bool>("Create")).IsFalse();
         await Assert.That(lot.CreatedChildren).IsEmpty();
+
+        // Module ProbeCreate-before-assign (Create/Occupied) — not Unique restore theater.
+        await Assert.That(RuntimeAnalysisCache.TryGetModuleMethod(
+            domain, "Lot", "Issue", out var issue)).IsTrue();
+        await Assert.That(issue?.Body).IsNotNull();
+        var flat = FlattenSyntax(issue!.Body!).ToList();
+        var probeIdx = flat.FindIndex(n =>
+            n is Invoke inv && inv.Delegate is Member { MemberName: "ProbeCreate" });
+        var createAssignIdx = flat.FindIndex(n =>
+            n is Assignment a && a.Destination is Member { MemberName: "Create" });
+        var occupiedAssignIdx = flat.FindIndex(n =>
+            n is Assignment a && a.Destination is Member { MemberName: "Occupied" });
+        await Assert.That(probeIdx).IsGreaterThanOrEqualTo(0);
+        await Assert.That(createAssignIdx).IsGreaterThan(probeIdx);
+        await Assert.That(occupiedAssignIdx).IsGreaterThan(probeIdx);
     }
 
     [Test]
@@ -1233,6 +1248,110 @@ public class ActionEntityReturnTests {
             && a.Destination is Member { MemberName: "OpenStays" });
         await Assert.That(probeIdx).IsGreaterThanOrEqualTo(0);
         await Assert.That(assignIdx).IsGreaterThan(probeIdx);
+    }
+
+    [Test]
+    public async Task InvokeAction_NestedIfOnMutatedProperty_CreateIllegal_DoesNotApplyPriorAssign() {
+        // Nested if after ancestor OpenStays assign must inherit assignedRhs so
+        // ProbeCreate sees OpenStays+1 and Failure leaves OpenStays==0.
+        var (domain, _) = Evolve("""
+            domain Hotel
+            Stay: entity {
+              Nights: Number range(1, 21) required
+            }
+            Guest: entity {
+              OpenStays: Number default(0)
+              Book: action (nights: Number, confirm: Boolean) {
+                assign OpenStays to OpenStays + 1
+                if (confirm) {
+                  if (OpenStays >= 1) {
+                    create Stay { Nights: nights }
+                  }
+                }
+              }
+            }
+            """);
+        var guestEntity = domain.Types.OfType<Entity>().First(e => e.Name == "Guest");
+        var guest = DomainEntityInstance.Create(guestEntity, domain: domain);
+        var store = new DomainInstanceStore();
+        store.Add(guest);
+
+        var result = guest.InvokeAction("Book",
+            new Dictionary<string, object?> { ["nights"] = 0L, ["confirm"] = true });
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(result.ErrorMessage).Contains("Nights");
+        await Assert.That(guest.GetProperty<object>("OpenStays")).IsEqualTo(0L);
+        await Assert.That(guest.CreatedChildren).IsEmpty();
+
+        await Assert.That(RuntimeAnalysisCache.TryGetModuleMethod(
+            domain, "Guest", "Book", out var book)).IsTrue();
+        await Assert.That(book?.Body).IsNotNull();
+        var flat = FlattenSyntax(book!.Body!).ToList();
+        var probeIdx = flat.FindIndex(n =>
+            n is Invoke inv && inv.Delegate is Member { MemberName: "ProbeCreate" });
+        var assignIdx = flat.FindIndex(n =>
+            n is Assignment a
+            && a.Destination is Member { MemberName: "OpenStays" });
+        await Assert.That(probeIdx).IsGreaterThanOrEqualTo(0);
+        await Assert.That(assignIdx).IsGreaterThan(probeIdx);
+        // Inner probe guard must contain substituted OpenStays + 1 (not bare OpenStays).
+        var probePrefix = flat.Take(probeIdx + 1).ToList();
+        var hasOpenStaysPlusOne = probePrefix.Any(n =>
+            n is global::Poly.Ast.Nodes.Add add
+            && add.LeftHandValue is Member { MemberName: "OpenStays" }
+            && add.RightHandValue is Constant { Value: 1L or 1 });
+        await Assert.That(hasOpenStaysPlusOne).IsTrue();
+    }
+
+    [Test]
+    public async Task InvokeAction_ElseIfOnMutatedProperty_CreateIllegal_DoesNotApplyPriorAssign() {
+        // else-if on OpenStays after ancestor assign must inherit assignedRhs
+        // (else walk copy of priorAssignRhs; not then-branch overlays).
+        var (domain, _) = Evolve("""
+            domain Hotel
+            Stay: entity {
+              Nights: Number range(1, 21) required
+            }
+            Guest: entity {
+              OpenStays: Number default(0)
+              Book: action (nights: Number, confirm: Boolean) {
+                assign OpenStays to OpenStays + 1
+                if (confirm) {
+                } else if (OpenStays >= 1) {
+                  create Stay { Nights: nights }
+                }
+              }
+            }
+            """);
+        var guestEntity = domain.Types.OfType<Entity>().First(e => e.Name == "Guest");
+        var guest = DomainEntityInstance.Create(guestEntity, domain: domain);
+        var store = new DomainInstanceStore();
+        store.Add(guest);
+
+        var result = guest.InvokeAction("Book",
+            new Dictionary<string, object?> { ["nights"] = 0L, ["confirm"] = false });
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(result.ErrorMessage).Contains("Nights");
+        await Assert.That(guest.GetProperty<object>("OpenStays")).IsEqualTo(0L);
+        await Assert.That(guest.CreatedChildren).IsEmpty();
+
+        await Assert.That(RuntimeAnalysisCache.TryGetModuleMethod(
+            domain, "Guest", "Book", out var book)).IsTrue();
+        await Assert.That(book?.Body).IsNotNull();
+        var flat = FlattenSyntax(book!.Body!).ToList();
+        var probeIdx = flat.FindIndex(n =>
+            n is Invoke inv && inv.Delegate is Member { MemberName: "ProbeCreate" });
+        var assignIdx = flat.FindIndex(n =>
+            n is Assignment a
+            && a.Destination is Member { MemberName: "OpenStays" });
+        await Assert.That(probeIdx).IsGreaterThanOrEqualTo(0);
+        await Assert.That(assignIdx).IsGreaterThan(probeIdx);
+        var probePrefix = flat.Take(probeIdx + 1).ToList();
+        var hasOpenStaysPlusOne = probePrefix.Any(n =>
+            n is global::Poly.Ast.Nodes.Add add
+            && add.LeftHandValue is Member { MemberName: "OpenStays" }
+            && add.RightHandValue is Constant { Value: 1L or 1 });
+        await Assert.That(hasOpenStaysPlusOne).IsTrue();
     }
 
     [Test]

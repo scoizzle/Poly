@@ -762,6 +762,8 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
                     break;
                 case AssignEffect a:
                     priorMutation = true;
+                    // Probe subst tracks PropertyAccess targets only (owned / other
+                    // assign targets leave conditions unsubstituted — pre-assign bag).
                     if (a.Target is PropertyAccess pa)
                         assignedRhs[pa.Name] = SubstituteAssignedProperties(a.Value, assignedRhs);
                     break;
@@ -789,6 +791,15 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         : DomainExpressionRewriteBase {
         protected override DomainExpression PropertyAccess(PropertyAccess e) =>
             assignedRhs.TryGetValue(e.Name, out var rhs) ? rhs : e;
+
+        // Subject-rooted PropertyAccess only: related-entity props inside
+        // quantifier bodies / RelationshipNavigation.TargetProperty must not
+        // inherit subject assign RHS (entry/exit VM lowers StoreQuantifier).
+        protected override DomainExpression AnyExpr(AnyExpr e) => e;
+        protected override DomainExpression AllExpr(AllExpr e) => e;
+        protected override DomainExpression NoneExpr(NoneExpr e) => e;
+        protected override DomainExpression CountExpr(CountExpr e) => e;
+        protected override DomainExpression RelationshipNavigation(RelationshipNavigation e) => e;
     }
 
     private void CollectGuardedBranchProbes(
@@ -800,9 +811,13 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         // PrevalidateUnconditionalCreates recurses regardless of nested
         // priorMutation; start then/else as already-mutating so those probes
         // are collected (this walk is only entered after a prior mutation).
+        // Inner then/else walks inherit ancestor sibling assigns (copy of
+        // priorAssignRhs) so nested if (OpenStays>=1) / else-if see OpenStays+1;
+        // separate dictionaries so else does not see then-branch assigns.
         var thenPrior = true;
-        CollectCreateInProbes(cond.ThenEffects, thenProbes, ref thenPrior,
-            new Dictionary<string, DomainExpression>(StringComparer.Ordinal));
+        var thenRhs = new Dictionary<string, DomainExpression>(StringComparer.Ordinal);
+        foreach (var (k, v) in priorAssignRhs) thenRhs[k] = v;
+        CollectCreateInProbes(cond.ThenEffects, thenProbes, ref thenPrior, thenRhs);
         if (thenProbes.Count > 0) {
             var conditionExpr = SubstituteAssignedProperties(cond.Condition, priorAssignRhs);
             var condition = _expressionPass.Lower(conditionExpr, Subject);
@@ -813,8 +828,9 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
             return;
         var elseProbes = new List<Node>();
         var elsePrior = true;
-        CollectCreateInProbes(cond.ElseEffects, elseProbes, ref elsePrior,
-            new Dictionary<string, DomainExpression>(StringComparer.Ordinal));
+        var elseRhs = new Dictionary<string, DomainExpression>(StringComparer.Ordinal);
+        foreach (var (k, v) in priorAssignRhs) elseRhs[k] = v;
+        CollectCreateInProbes(cond.ElseEffects, elseProbes, ref elsePrior, elseRhs);
         if (elseProbes.Count == 0)
             return;
         var elseConditionExpr = SubstituteAssignedProperties(cond.Condition, priorAssignRhs);

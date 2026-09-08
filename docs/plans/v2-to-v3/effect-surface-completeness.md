@@ -44,8 +44,8 @@ Legend: **✅** product-ready · **🟡** partial · **❌** missing · **🚫**
 | **Assign** | ✅ VM | ✅ `assign P to expr` | ✅ `AddEffectToAction` | ❌ | Core data change |
 | **CreateEntity** | ✅ direct | ✅ `create T { }` | ✅ helpers | ❌ | Optional `RelationshipName` auto-link |
 | **CreateInRelationship** | ✅ direct | ✅ `create in Rel { }` | 🟡 via `AddEffectToAction` | ❌ | Spawn-and-wire |
-| **Composite** | ✅ VM (direct children silently dropped — DMEFF006 warning) | ✅ flatten (children inline) | 🟡 construct | ❌ | Nested structure; only Assign/sub-Composite/sub-Conditional execute via VM; direct effects silently dropped |
-| **Conditional** | ✅ VM (direct children silently dropped — DMEFF006 warning) | ✅ `if (expr) { effects } else { effects }` | 🟡 construct | ❌ | Branching; only VM-lowerable children execute; direct effects silently dropped in both then/else |
+| **Composite** | ✅ `session.Lower` → VM / print | ✅ flatten (children inline) | 🟡 construct | ❌ | Nested effects lower; DMEFF006 retired (was a false “silently dropped” warning) |
+| **Conditional** | ✅ `session.Lower` → VM / print | ✅ `if (expr) { effects } else { effects }` | 🟡 construct | ❌ | Branching; nested invoke/create/transition lower on both execute and emit |
 | **InvokeAction** | 🟡 **self only** | ✅ `invoke ActionName` (+ optional args) | 🟡 construct | ❌ | `InvokeAction(ActionName)` on **this** instance; **ParameterBindings evaluated** (self only) — **not** multi-entity yet |
 | **DeleteEntityInstance** | ✅ soft-delete **self** | ✅ `delete` (E1) | 🟡 construct | ❌ | Executor ignores `EntityType`; parser stamps `_currentEntityName`. Soft-delete only |
 | **LinkRelationship** | 🟡 constrained | ❌ no DSL | 🟡 construct | ❌ | Target must be `PropertyAccess` whose bag value is already a `DomainEntityInstance`; else throws. Prefer `Store.Link` in tests |
@@ -75,7 +75,7 @@ A domain is **useful** for internal process modeling when agents can author and 
 | Connect existing instances | link / unlink | 🟡 property-bag target only; or `Store.Link` |
 | Call another action on **self** | invoke | 🟡 DSL + RT self; bindings evaluated; multi-entity still ❌ |
 | Call action on **related** instance | invoke+nav | ❌ not implemented |
-| Branchy effects | if/else | ✅ DSL + RT (VM-lowerable children; DMEFF006 on direct non-VM children) |
+| Branchy effects | if/else | ✅ DSL + RT (nested invoke/create/transition lower; DMEFF006 retired) |
 | Action parameters | `(name: Type)` | ✅ DSL parse/print; RT binding path exists |
 
 **Kernel bar (dogfood-2):** met for Order/Customer-style.  

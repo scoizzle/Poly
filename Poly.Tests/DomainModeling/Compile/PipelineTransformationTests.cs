@@ -1,3 +1,4 @@
+using Poly.Analysis;
 using Poly.Ast.Nodes;
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
@@ -236,6 +237,79 @@ public class PipelineTransformationTests {
         await Assert.That(result.Succeeded).IsFalse();
         await Assert.That(result.ErrorMessage).Contains("Stripe.Charge");
         await Assert.That(result.ErrorMessage!).Contains("no in-process adapter");
+    }
+
+    [Test]
+    public async Task ConditionalInvoke_RunsOnTrueBranch_AndPrintsInModule() {
+        var (domain, analysis, session) = Evolve("""
+            domain Counter
+            Item: entity {
+              Qty: Number default(0)
+              Inc: action { assign Qty to Qty + 1 }
+              Maybe: action {
+                if (Qty is 0) { invoke Inc }
+              }
+            }
+            """);
+        await Assert.That(analysis.Diagnostics.Any(d =>
+            d.Code == DomainModelDiagnosticCodes.NestedDirectEffectDropped)).IsFalse();
+
+        var module = session.Lower(domain, analysis);
+        var itemType = module.First(t => t.Name == "Item");
+        var maybe = itemType.Methods?.FirstOrDefault(m => m.Name == "Maybe");
+        await Assert.That(maybe?.Body).IsNotNull();
+        var bodyCs = new CSharpGenerator().Generate(maybe!.Body!);
+        await Assert.That(bodyCs).Contains("Inc()");
+
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var cs = new CSharpGenerator().Generate(new CompilationUnitNode([], null, types, null));
+        await Assert.That(cs).Contains("this.Inc()");
+
+        var itemE = domain.Types.OfType<Entity>().First(e => e.Name == "Item");
+        var store = new DomainInstanceStore();
+        var zero = DomainEntityInstance.Create(itemE, domain: domain);
+        store.Add(zero);
+        await Assert.That(zero.InvokeAction("Maybe").Succeeded).IsTrue();
+        await Assert.That(zero.GetProperty<object>("Qty")).IsEqualTo(1L);
+
+        var already = DomainEntityInstance.Create(itemE,
+            new Dictionary<string, object?> { ["Qty"] = 1L }, domain);
+        store.Add(already);
+        await Assert.That(already.InvokeAction("Maybe").Succeeded).IsTrue();
+        await Assert.That(already.GetProperty<object>("Qty")).IsEqualTo(1L);
+    }
+
+    [Test]
+    public async Task ConditionalCreateIn_DoesNotWarnDropped_AndRuns() {
+        var (domain, analysis, session) = Evolve("""
+            domain Box
+            Token: entity { Kind: Text required }
+            Parser: entity {
+              tokens: many Token
+              Rush: Boolean default(false)
+              Lex: action {
+                if (Rush is true) {
+                  create in tokens { Kind: "rush" }
+                }
+              }
+            }
+            """);
+        await Assert.That(analysis.Diagnostics.Any(d =>
+            d.Code == DomainModelDiagnosticCodes.NestedDirectEffectDropped)).IsFalse();
+        session.Lower(domain, analysis);
+
+        var parserE = domain.Types.OfType<Entity>().First(e => e.Name == "Parser");
+        var store = new DomainInstanceStore();
+        var quiet = DomainEntityInstance.Create(parserE, domain: domain);
+        store.Add(quiet);
+        await Assert.That(quiet.InvokeAction("Lex").Succeeded).IsTrue();
+        await Assert.That(quiet.CreatedChildren).IsEmpty();
+
+        var rush = DomainEntityInstance.Create(parserE,
+            new Dictionary<string, object?> { ["Rush"] = true }, domain);
+        store.Add(rush);
+        await Assert.That(rush.InvokeAction("Lex").Succeeded).IsTrue();
+        await Assert.That(rush.CreatedChildren.Count).IsEqualTo(1);
     }
 
     private static (Domain Domain, AnalysisResult Analysis, DomainSession Session) Evolve(string poly) {

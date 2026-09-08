@@ -366,57 +366,14 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
             if (e.ElseEffects is not null) {
                 ValidateEffects(context, e.ElseEffects, action, entity, domain, lookup, currentStage);
             }
-            // DMEFF006: warn if the conditional contains direct-execution effects
-            // that would be silently dropped by EffectLoweringPass
-            WarnNestedDirectEffects(context, "ConditionalEffect (then)", e.ThenEffects);
-            if (e.ElseEffects is not null)
-                WarnNestedDirectEffects(context, "ConditionalEffect (else)", e.ElseEffects);
             return null;
         }
 
         protected override object? Composite(CompositeEffect e) {
             ValidateEffects(context, e.Effects, action, entity, domain, lookup, currentStage);
-            // DMEFF006: warn if composite contains direct-execution effects
-            // that would be silently dropped by EffectLoweringPass
-            WarnNestedDirectEffects(context, "CompositeEffect", e.Effects);
             return null;
         }
     }
-
-    /// <summary>
-    /// Reports a warning when a CompositeEffect or ConditionalEffect contains
-    /// direct-execution effects that <see cref="EffectLoweringPass"/> will silently
-    /// drop. Only VM-lowerable effects (Assign, sub-Composite, sub-Conditional)
-    /// survive lowering; direct effects (transition, create, delete, link, invoke,
-    /// etc.) are skipped without error.
-    /// </summary>
-    private static void WarnNestedDirectEffects(
-        AnalysisContext context,
-        string containerLabel,
-        IReadOnlyList<Effect> effects) {
-        foreach (var sub in effects) {
-            if (IsDirectExecutionEffect(sub)) {
-                context.ReportWarning(
-                    sub,
-                    $"{containerLabel} contains a '{sub.GetType().Name}' that will be silently dropped " +
-                    "at runtime because it is a direct-execution effect and only VM-lowerable effects " +
-                    "(Assign, nested Composite/Conditional) execute inside composite/conditional blocks. " +
-                    "Move the direct effect outside the composite/conditional or use sequential effects.",
-                    DomainModelDiagnosticCodes.NestedDirectEffectDropped);
-            }
-            // Recurse for nested Composite/Conditional (they have the same limitation)
-            if (sub is CompositeEffect nested)
-                WarnNestedDirectEffects(context, $"{containerLabel} > CompositeEffect", nested.Effects);
-            if (sub is ConditionalEffect nestedCond) {
-                WarnNestedDirectEffects(context, $"{containerLabel} > ConditionalEffect (then)", nestedCond.ThenEffects);
-                if (nestedCond.ElseEffects is not null)
-                    WarnNestedDirectEffects(context, $"{containerLabel} > ConditionalEffect (else)", nestedCond.ElseEffects);
-            }
-        }
-    }
-
-    private static bool IsDirectExecutionEffect(Effect effect) =>
-        EffectHelpers.IsDirectExecutionEffect(effect);
 
     private static void ValidateCreateEntityInstance(
         AnalysisContext context, CreateEntityInstance cei, Entity actionEntity, DomainTypeLookupMetadata lookup, Domain domain) {

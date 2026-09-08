@@ -35,9 +35,10 @@ internal static class DomainModelDiagnosticCodes {
     /// Path-prefix on 'many' cardinality relationship (use collection quantifiers instead).
     public const string RelationshipNavigationCardinality = "DMREL001";
 
-    // Unsupported / silently-dropped effect diagnostics
+    // Retired: nested invoke/create/transition now lower (session.Lower). Kept so
+    // historical messages remain identifiable; analysis no longer reports it.
 
-    /// Composite/Conditional effect contains direct-execution children that are silently dropped.
+    /// Retired. Nested effects in Composite/Conditional lower to Syntax; they are not dropped.
     public const string NestedDirectEffectDropped = "DMEFF006";
 
     /// Invoke quantifier/filter/relationship shape is invalid

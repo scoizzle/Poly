@@ -243,7 +243,8 @@ public class SurfaceExtensionDogfoodTests {
 
     [Test]
     public async Task OwnedPolicy_Unlinked_FailsClosed() {
-        // No vacuous true when path-prefix has no outbound link.
+        // No vacuous true when path-prefix has no outbound link — soft false
+        // (require FailedGuards path), not throw. MCP reports Success with result false.
         var (sessionId, _) = McpSessionStore.Create("SurfaceExtensionDogfood");
         await Assert.That(DslTool.ApplyDsl(sessionId, SharedSurfaceExtensionDomain).Success).IsTrue();
 
@@ -251,7 +252,8 @@ public class SurfaceExtensionDogfoodTests {
             """{"Name":"Alone","Status":"x","LastOrderCode":"n"}""");
 
         var eval = PolicyTool.EvaluatePolicy(sessionId, "Customer", "IsUrban", instanceId: custId);
-        await Assert.That(eval.Success).IsFalse();
+        await Assert.That(eval.Success).IsTrue();
+        await Assert.That(eval.Message).Contains("false");
     }
 
     // ── Relationship exists (store-aware) ───────────────────────

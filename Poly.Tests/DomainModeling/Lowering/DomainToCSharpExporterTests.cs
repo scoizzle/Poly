@@ -1399,9 +1399,8 @@ public class DomainToCSharpExporterTests {
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
-        await Assert.That(cs).Contains("this.Source ?? throw");
+        await Assert.That(cs).Contains("this.Source!.Path");
         await Assert.That(cs).DoesNotContain("this.source.Path");
-        await Assert.That(cs).DoesNotContain("this.Source!");
     }
 
     [Test]
@@ -1656,28 +1655,32 @@ public class DomainToCSharpExporterTests {
     }
 
     [Test]
-    public async Task Export_PathPrefixPolicy_GuardsUnlinkedHopWithDeliberateThrow() {
-        // Hardening: a to-one nav hop in a policy must fail loud with a deliberate,
-        // message-carrying InvalidOperationException when unlinked (matching the runtime's
-        // fail-closed path-prefix contract) — never a bare null-forgiving deref (NRE) and
-        // never a silent false.
+    public async Task Export_PathPrefixRequire_FailsClosedWithDomainResultFailure() {
+        // Require + path-prefix: action body owns unlinked as DomainResult.Failure
+        // ("requires a linked"), not coalesce-throw on the policy / require path.
         var (domain, analysis) = ParseAndAnalyze("""
             domain Test
-            Book: entity {
-              Title: Text
-              Stock: Number
+            Room: entity {
+              Occupied: Boolean
             }
-            Order: entity {
-              book: Book
-              IsClassic: policy { book Title is "Classic" }
+            Reservation: entity {
+              room: Room
+              RoomFree: policy { room Occupied is false }
+              Booked: stage {
+                CheckIn: action require RoomFree {
+                  transition to InHouse
+                }
+              }
+              InHouse: stage { }
             }
             """);
         var types = new DomainToCSharpExporter().Export(domain, analysis);
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
-        await Assert.That(cs).Contains("this.Book ?? throw new InvalidOperationException(\"No linked instances found for relationship 'book'.\")");
-        await Assert.That(cs).DoesNotContain("this.Book!");
+        await Assert.That(cs).Contains("DomainResult.Failure(\"'CheckIn' requires a linked 'room' on entity 'Reservation'.\")");
+        await Assert.That(cs).DoesNotContain("?? throw new InvalidOperationException");
+        await Assert.That(cs).Contains("this.Room!.Occupied");
     }
 
     [Test]
@@ -1892,12 +1895,8 @@ public class DomainToCSharpExporterTests {
 
     [Test]
     public async Task Export_PathPrefixMultiHop_GuardsEachNestedNav() {
-        // Discovery pilot A-F1/A-F4: `reporter team TeamName` (multi-hop to-one
-        // path-prefix) must emit the PascalCased nested navs (`this.Reporter`, `.Team`)
-        // with each hop guarded by a deliberate throw — the nested nav `team` (on
-        // Engineer, not the policy's own entity) was left raw (CS1061) and the nullable
-        // navs were not null-forgiven (CS8602). The null-forgiving derefs are now
-        // deliberate InvalidOperationExceptions matching the runtime's fail-closed path.
+        // Multi-hop path-prefix under require: each hop gets a DomainResult.Failure
+        // null guard; policy body uses bare Pascal Members (no ?? throw).
         var (domain, analysis) = ParseAndAnalyze("""
             domain Test
             Engineer: entity { team: Team }
@@ -1905,16 +1904,21 @@ public class DomainToCSharpExporterTests {
             Issue: entity {
               reporter: Engineer
               FromBlueTeam: policy { reporter team TeamName is "Blue" }
+              Open: stage {
+                Escalate: action require FromBlueTeam { transition to Closed }
+              }
+              Closed: stage { }
             }
             """);
         var types = new DomainToCSharpExporter().Export(domain, analysis);
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
-        await Assert.That(cs).Contains("(this.Reporter ?? throw");
-        await Assert.That(cs).Contains(".Team ?? throw");
+        await Assert.That(cs).Contains("DomainResult.Failure(\"'Escalate' requires a linked 'reporter' on entity 'Issue'.\")");
+        await Assert.That(cs).Contains("DomainResult.Failure(\"'Escalate' requires a linked 'team' on entity 'Engineer'.\")");
         await Assert.That(cs).Contains(".TeamName == \"Blue\"");
-        await Assert.That(cs).DoesNotContain("this.Reporter!.Team!");
+        await Assert.That(cs).DoesNotContain("?? throw new InvalidOperationException");
+        await Assert.That(cs).Contains("this.Reporter!.Team!");
         await Assert.That(cs).DoesNotContain("this.Reporter.team.TeamName");
     }
 

@@ -129,11 +129,16 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Node
             return Route(rn.TargetProperty, parameterSubject);
         }
 
-        // Every hop in a path-prefix is a relationship navigation. C# export
-        // uses coalesce-throw on the pascal nav. Runtime binds Store via
-        // GetRelatedOne so unlinked / multi-link fail with the path-prefix
-        // contract, then TypeCast to the target entity so leaf members resolve.
+        // Every hop in a path-prefix is a relationship navigation.
+        // Runtime: ExistsRelated short-circuit → false when unlinked so require
+        // EvaluatePolicy fills FailedGuards without throw; GetRelatedOne still
+        // throws on many (fail closed). Export: NullForgiving for CS8602; require
+        // gates own DomainResult.Failure ("requires a linked") in
+        // BuildActionBodyWithGuards before the policy bool is called.
         if (!_useThisReference) {
+            var exists = new Invoke(
+                new Member(_currentSubject, "ExistsRelated"),
+                new Constant(rn.RelationshipName));
             var related = new Invoke(
                 new Member(_currentSubject, "GetRelatedOne"),
                 new Constant(rn.RelationshipName));
@@ -141,15 +146,12 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Node
             Node typedHop = targetName is not null
                 ? new TypeCast(related, new TypeReference(targetName))
                 : related;
-            return Route(rn.TargetProperty, typedHop, targetName);
+            var whenPresent = Route(rn.TargetProperty, typedHop, targetName);
+            return new Conditional(exists, whenPresent, new Constant(false));
         }
 
         var relMember = new Member(_currentSubject, ResolveNavName(rn.RelationshipName));
-        Node hop = new Coalesce(relMember,
-            new ThrowExpression(new New(
-                new NamedTypeReference("InvalidOperationException"),
-                new Constant($"No linked instances found for relationship '{rn.RelationshipName}'."))));
-        return Route(rn.TargetProperty, hop);
+        return Route(rn.TargetProperty, new NullForgiving(relMember));
     }
 
     /// <summary>Pascal-cases a relationship hop name the resolver did not map

@@ -115,6 +115,43 @@ public class ConstraintAssignLoweringTests {
     }
 
     [Test]
+    public async Task PatternAssign_Null_DoesNotThrow_RetainsPriorValue() {
+        var (domain, _) = Evolve("""
+            domain Lab
+            Tag: entity {
+              Code: Text pattern("^[A-Z]+$")
+              Relabel: action (code: Text) {
+                assign Code to code
+              }
+            }
+            """);
+        var entity = domain.Types.OfType<Entity>().First(e => e.Name == "Tag");
+        var instance = DomainEntityInstance.Create(entity,
+            new Dictionary<string, object?> { ["Code"] = "OK" },
+            domain: domain);
+
+        // Lowered tree must null-guard IsMatch (export: bare IsMatch(null) throws).
+        var pass = new EffectLoweringPass(entity, new LoweringContext(
+            new Parameter("entity", new TypeReference(entity.Name))));
+        var lowered = pass.TryLowerVmNode(new AssignEffect(
+            DomainExpression.Property("Code"),
+            DomainExpression.Property("code")));
+        var cs = new CSharpGenerator().Generate(lowered!);
+        await Assert.That(cs.Contains("!= null") || cs.Contains("is not null")).IsTrue();
+        await Assert.That(cs).Contains("IsMatch");
+
+        // Bag Text reads coerce null→"" so runtime Failure (prior retained);
+        // never ArgumentNullException from Regex.IsMatch.
+        var result = instance.InvokeAction("Relabel",
+            new Dictionary<string, object?> { ["code"] = null });
+
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(result.ErrorMessage)
+            .Contains("does not match the required pattern");
+        await Assert.That(instance.GetProperty<string>("Code")).IsEqualTo("OK");
+    }
+
+    [Test]
     public async Task Length_WithRequired_EmptyFails() {
         var (domain, _) = Evolve("""
             domain Lab

@@ -424,13 +424,16 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         foreach (var p in prop.Constraints.OfType<PatternConstraint>()) {
             if (!isText)
                 continue;
+            // Null RHS: skip IsMatch (align ValidateConstraints: only check when string).
             nodes.Add(new IfStatement(
-                new Syntactic.Not(
-                    new Invoke(
-                        new Member(
-                            TypeReference.To<System.Text.RegularExpressions.Regex>(),
-                            "IsMatch"),
-                        [valueRef, new Constant(p.Pattern)])),
+                new Syntactic.And(
+                    new NotEqual(valueRef, new Constant(null)),
+                    new Syntactic.Not(
+                        new Invoke(
+                            new Member(
+                                TypeReference.To<System.Text.RegularExpressions.Regex>(),
+                                "IsMatch"),
+                            [valueRef, new Constant(p.Pattern)]))),
                 new Block([Fail(
                     $"'{prop.Name}' does not match the required pattern.")])));
         }

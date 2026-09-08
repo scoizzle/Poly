@@ -1,5 +1,4 @@
 using Poly.DomainModeling.Ontology;
-using Poly.DomainModeling.Runtime;
 
 namespace Poly.DomainModeling.Analysis;
 
@@ -35,19 +34,4 @@ internal static class EffectHelpers {
             }
         }
     }
-
-    /// <summary>
-    /// Returns true if the effect is a direct-execution type that
-    /// <see cref="Lowering.EffectLoweringPass.TryLowerVmNode"/> returns null for.
-    /// Such effects execute via <see cref="DomainEntityInstance.ExecuteEffect"/>
-    /// and cannot run inside composite/conditional VM blocks.
-    /// </summary>
-    public static bool IsDirectExecutionEffect(Effect effect) => effect switch {
-        StageTransitionEffect => true,
-        CreateEntityInstance => true,
-        CreateEntityInRelationshipEffect => true,
-        InvokeActionEffect => true,
-        ForEachInvokeEffect => true,
-        _ => false
-    };
 }

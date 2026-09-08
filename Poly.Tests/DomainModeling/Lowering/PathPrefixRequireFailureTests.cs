@@ -148,6 +148,54 @@ public class PathPrefixRequireFailureTests {
         await Assert.That(result.FailedGuards).Contains("FromBlueTeam");
     }
 
+
+    [Test]
+    public async Task EmptyBody_Require_PolicyFalse_FailsClosed() {
+        // F9: empty-effect require must still run module Failure (not Ok).
+        var (domain, _) = Evolve("""
+            domain EmptyRequire
+            Device: entity {
+              Active: Boolean
+              IsActive: policy { Active is true }
+              Submit: action require IsActive { }
+            }
+            """);
+        var deviceE = domain.Types.OfType<Entity>().First(e => e.Name == "Device");
+        var store = new DomainInstanceStore();
+        var device = DomainEntityInstance.Create(deviceE,
+            new Dictionary<string, object?> { ["Active"] = false }, domain: domain);
+        store.Add(device);
+
+        var result = device.InvokeAction("Submit");
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(result.FailedGuards).Contains("IsActive");
+    }
+
+    [Test]
+    public async Task EmptyBody_RequireNot_Unlinked_FailsClosed() {
+        // F9 + F1 sibling: empty require not + unlinked path-prefix.
+        var (domain, _) = Evolve("""
+            domain EmptyRequireNot
+            Section: entity {
+              SeatsTaken: Number default(0)
+            }
+            Enrollment: entity {
+              section: Section
+              SectionFull: policy { section SeatsTaken >= 1 }
+              Confirm: action require not SectionFull { }
+            }
+            """);
+        var enrollE = domain.Types.OfType<Entity>().First(e => e.Name == "Enrollment");
+        var store = new DomainInstanceStore();
+        var en = DomainEntityInstance.Create(enrollE, domain: domain);
+        store.Add(en);
+
+        var result = en.InvokeAction("Confirm");
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(result.ErrorMessage).Contains("requires a linked 'section'");
+        await Assert.That(result.FailedGuards).Contains("not_SectionFull");
+    }
+
     private static (Domain Domain, AnalysisResult Analysis) Evolve(string poly) {
         var changes = new PolyDslParser(poly).Parse();
         var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(changes);

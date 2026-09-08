@@ -512,8 +512,10 @@ public sealed partial record DomainEntityInstance {
         // When a Domain-bound module method owns the action, require gates
         // (path-prefix "requires a linked" Failure + policy bools) live in that
         // tree — skip the EvaluatePolicy prelude so ONE-TREE Failure runs and
-        // require-not cannot invert soft-false to fail-open. Bare evaluate_policy
-        // still soft-fails unlinked via ExistsRelated. Stage policies stay here.
+        // require-not cannot invert soft-false to fail-open. ExecuteEffectList
+        // still binds the module Body for named actions even when Ontology
+        // effects are empty (gated no-op). Bare evaluate_policy still soft-fails
+        // unlinked via ExistsRelated. Stage policies stay here.
         var failures = new List<string>();
         if (Domain is not null) {
             var ensureAnalysis = RuntimeAnalysisCache.GetOrAnalyze(Domain);
@@ -692,7 +694,10 @@ public sealed partial record DomainEntityInstance {
         string? entryStageName = null,
         IReadOnlyDictionary<string, object?>? args = null,
         IReadOnlyList<Property>? actionParameters = null) {
-        if (effects.Count == 0)
+        // Named actions always bind the module Body (require Failure + Success),
+        // even when Ontology effects are empty — gated no-ops still run guards
+        // (Final Boss F9: empty-effects must not skip module require).
+        if (effects.Count == 0 && actionName is null)
             return null;
 
         Node? tree;

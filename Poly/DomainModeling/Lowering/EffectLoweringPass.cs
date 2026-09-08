@@ -253,13 +253,35 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
                     new Member(new NamedTypeReference(arg.TypeName), arg.MemberName))]);
         }
 
-        var assignment = new Assignment(target, value);
-        if (a.Target is PropertyAccess uniqueTarget
-            && IsUniqueProperty(uniqueTarget.Name)) {
-            return WrapUniqueAssign(assignment.Destination, uniqueTarget.Name, value);
+        // Item 6: assign-time required/range/length/pattern (+ unique) in the
+        // same Lower tree as simulate + C# print. Evaluate RHS once, fail-before-
+        // mutate, then assign (EnsureUnique when unique).
+        Property? assignProp = null;
+        string? uniqueName = null;
+        if (a.Target is PropertyAccess assignTarget) {
+            assignProp = _entity.Properties.FirstOrDefault(p =>
+                string.Equals(p.Name, assignTarget.Name, StringComparison.Ordinal));
+            if (IsUniqueProperty(assignTarget.Name))
+                uniqueName = assignTarget.Name;
         }
-        return assignment;
+
+        var needsConstraintWrap = assignProp is not null
+            && HasAssignableConstraints(assignProp);
+        if (uniqueName is null && !needsConstraintWrap)
+            return new Assignment(target, value);
+
+        return WrapConstrainedAssign(
+            target,
+            needsConstraintWrap ? assignProp : null,
+            value,
+            uniqueName);
     }
+
+    private static bool HasAssignableConstraints(Property prop) =>
+        prop.Constraints.Any(c => c is RequiredConstraint
+            or RangeConstraint
+            or LengthConstraint
+            or PatternConstraint);
 
     private bool IsUniqueProperty(string propertyName) {
         if (_analysis is not null && _domain is not null) {
@@ -276,21 +298,198 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
             && p.Constraints.OfType<UniqueConstraint>().Any());
     }
 
-    private Node WrapUniqueAssign(Node destination, string propertyName, Node value) {
+    /// <summary>
+    /// Fail-before-mutate wrap for assign: local RHS, constraint Failure checks
+    /// (required → range → length → pattern), optional EnsureUnique, then assign.
+    /// </summary>
+    private Node WrapConstrainedAssign(
+        Node destination,
+        Property? property,
+        Node value,
+        string? uniquePropertyName) {
         var seq = _forEachInvokeSequence++;
-        var assignedVar = new Variable($"uniqueValue{seq}");
-        var checkVar = new Variable($"uniqueCheck{seq}");
-        return new Block([
-            new Assignment(assignedVar, value),
-            new Assignment(checkVar, new Invoke(
+        var assignedVar = new Variable($"assignValue{seq}");
+        var locals = new List<Node> { assignedVar };
+        var nodes = new List<Node> {
+            new Assignment(assignedVar, value)
+        };
+
+        if (property is not null)
+            AppendAssignConstraintChecks(nodes, property, assignedVar);
+
+        if (uniquePropertyName is not null) {
+            var checkVar = new Variable($"uniqueCheck{seq}");
+            locals.Add(checkVar);
+            nodes.Add(new Assignment(checkVar, new Invoke(
                 new Member(Subject, "EnsureUnique"),
-                new Constant(propertyName),
-                assignedVar)),
-            new IfStatement(
+                new Constant(uniquePropertyName),
+                assignedVar)));
+            nodes.Add(new IfStatement(
                 new Syntactic.Not(new Member(checkVar, "IsSuccess")),
-                new Block([ReturnCallerFailureFrom(checkVar)])),
-            new Assignment(destination, assignedVar)
-        ], [assignedVar, checkVar]);
+                new Block([ReturnCallerFailureFrom(checkVar)])));
+        }
+
+        nodes.Add(new Assignment(destination, assignedVar));
+        return new Block(nodes, locals);
+    }
+
+    /// <summary>
+    /// Emits assign-time constraint guards matching Create factory /
+    /// <c>ValidateConstraints</c> messages. Optional length (no Required) skips
+    /// empty values. Uses <see cref="ClrTypeReference"/> for string/Regex statics
+    /// so the VM resolves MethodInfo (NamedTypeReference is export-shaped only).
+    /// Void export contexts (ctor / OnEntry, no ActionResultType) throw like create-in.
+    /// </summary>
+    private void AppendAssignConstraintChecks(
+        List<Node> nodes, Property prop, Node valueRef) {
+        var isText = string.Equals(prop.Type.TypeName, "Text", StringComparison.Ordinal)
+                  || string.Equals(prop.Type.TypeName, "String", StringComparison.Ordinal);
+        var isNumber = string.Equals(prop.Type.TypeName, "Number", StringComparison.Ordinal)
+                    || string.Equals(prop.Type.TypeName, "Int", StringComparison.Ordinal);
+        var hasRequired = prop.Constraints.OfType<RequiredConstraint>().Any();
+
+        Node Fail(string msg) => AssignConstraintFailure(msg);
+
+        foreach (var _ in prop.Constraints.OfType<RequiredConstraint>()) {
+            if (isText) {
+                nodes.Add(new IfStatement(
+                    new Invoke(
+                        new Member(TypeReference.To<string>(), "IsNullOrEmpty"),
+                        [valueRef]),
+                    new Block([Fail($"'{prop.Name}' is required.")])));
+            }
+            else if (IsAssignableNullableDomainType(prop.Type.TypeName)) {
+                nodes.Add(new IfStatement(
+                    new Equal(valueRef, new Constant(null)),
+                    new Block([Fail($"'{prop.Name}' is required.")])));
+            }
+        }
+
+        foreach (var r in prop.Constraints.OfType<RangeConstraint>()) {
+            if (!isNumber)
+                continue;
+            if (r.Minimum is not null) {
+                var minVal = ConvertAssignConstraintConstant(r.Minimum);
+                if (minVal is not null) {
+                    nodes.Add(new IfStatement(
+                        new LessThan(valueRef, minVal),
+                        new Block([Fail(
+                            $"'{prop.Name}' must be >= {FormatAssignConstraintValue(r.Minimum)}.")])));
+                }
+            }
+            if (r.Maximum is not null) {
+                var maxVal = ConvertAssignConstraintConstant(r.Maximum);
+                if (maxVal is not null) {
+                    nodes.Add(new IfStatement(
+                        new GreaterThan(valueRef, maxVal),
+                        new Block([Fail(
+                            $"'{prop.Name}' must be <= {FormatAssignConstraintValue(r.Maximum)}.")])));
+                }
+            }
+        }
+
+        foreach (var l in prop.Constraints.OfType<LengthConstraint>()) {
+            if (!isText)
+                continue;
+            var lengthChecks = new List<Node>();
+            var lenAccess = new Member(valueRef, "Length");
+            if (l.MinLength > 0) {
+                lengthChecks.Add(new IfStatement(
+                    new LessThan(lenAccess, new Constant((long)l.MinLength)),
+                    new Block([Fail(
+                        $"'{prop.Name}' must be at least {l.MinLength} characters.")])));
+            }
+            if (l.MaxLength < int.MaxValue) {
+                lengthChecks.Add(new IfStatement(
+                    new GreaterThan(lenAccess, new Constant((long)l.MaxLength)),
+                    new Block([Fail(
+                        $"'{prop.Name}' must be at most {l.MaxLength} characters.")])));
+            }
+            if (lengthChecks.Count == 0)
+                continue;
+            if (!hasRequired) {
+                // Optional length: skip when null/empty (do not Failure).
+                nodes.Add(new IfStatement(
+                    new Syntactic.Not(
+                        new Invoke(
+                            new Member(TypeReference.To<string>(), "IsNullOrEmpty"),
+                            [valueRef])),
+                    new Block(lengthChecks)));
+            }
+            else {
+                nodes.AddRange(lengthChecks);
+            }
+        }
+
+        foreach (var p in prop.Constraints.OfType<PatternConstraint>()) {
+            if (!isText)
+                continue;
+            // Null RHS: skip IsMatch (align ValidateConstraints: only check when string).
+            nodes.Add(new IfStatement(
+                new Syntactic.And(
+                    new NotEqual(valueRef, new Constant(null)),
+                    new Syntactic.Not(
+                        new Invoke(
+                            new Member(
+                                TypeReference.To<System.Text.RegularExpressions.Regex>(),
+                                "IsMatch"),
+                            [valueRef, new Constant(p.Pattern)]))),
+                new Block([Fail(
+                    $"'{prop.Name}' does not match the required pattern.")])));
+        }
+    }
+
+    /// <summary>
+    /// Failure for assign guards: <c>return DomainResult.Failure</c> when the
+    /// caller has a result type; <c>throw</c> in void export contexts (ctor /
+    /// stage entry) — same split as create-in fail-closed.
+    /// </summary>
+    private Node AssignConstraintFailure(string message) {
+        if (_context.UseThisReference && _context.ActionResultType is null) {
+            return new ThrowStatement(new New(
+                new NamedTypeReference("InvalidOperationException"),
+                new Constant(message)));
+        }
+        return ReturnCallerFailure(new Constant(message));
+    }
+
+    private static Constant? ConvertAssignConstraintConstant(object? value) {
+        if (value is null) return null;
+        if (value is long l) return new Constant(l);
+        if (value is int i) return new Constant((long)i);
+        if (value is double d) return d == Math.Floor(d)
+            ? new Constant((long)d)
+            : new Constant(d);
+        if (value is decimal m) return new Constant((double)m);
+        if (value is string s) return new Constant(s);
+        if (value is bool b) return new Constant(b);
+        return new Constant(value.ToString());
+    }
+
+    private static string FormatAssignConstraintValue(object? value) => value switch {
+        null => "?",
+        double d => d == Math.Floor(d) ? d.ToString("F0") : d.ToString("G"),
+        _ => value.ToString() ?? "?"
+    };
+
+    private bool IsAssignableNullableDomainType(string typeName) {
+        if (_domain is not null
+            && _domain.Types.OfType<EnumType>().Any(e =>
+                string.Equals(e.Name, typeName, StringComparison.Ordinal)))
+            return false;
+        return typeName switch {
+            "Text" or "String" => true,
+            "Number" or "Int" or "Int64" or "Int32" => false,
+            "Boolean" or "Bool" => false,
+            "DateTime" or "Timestamp" => false,
+            "Date" or "DateOnly" => false,
+            "Time" or "TimeOnly" => false,
+            "Duration" or "TimeSpan" => false,
+            "Decimal" => false,
+            "Float" or "Double" => false,
+            "Guid" or "Uuid" => false,
+            _ => true,
+        };
     }
 
     private Node? RouteWithRuntimeCreate(Effect effect) =>

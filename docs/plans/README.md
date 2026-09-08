@@ -59,6 +59,7 @@ Queue (`THEN` / `PARKED` / `PULL`) lives only in [`PIPELINE-STATUS.md`](simple-a
 | [`pack-host-2026-08-13.md`](pack-host-2026-08-13.md) | **Not CURRENT.** Phase 1 shipped; extension model superseded. |
 | [`pipeline-transformation-2026-09-04.md`](pipeline-transformation-2026-09-04.md) | Named compile stages. P1–P6 executed (one lower, compile once, `session.Lower`, HTTP fail-closed, analysis bind, clocks in the tree). **Not CURRENT.** |
 | [`dict-sqlite-host-2026-08-30.md`](dict-sqlite-host-2026-08-30.md) | Dict + SQLite host. **Proposal — not CURRENT, not a suite.** ABI stale vs shipped Store jobs. |
+| [`store-vs-lower-ranking-2026-09-08.md`](store-vs-lower-ranking-2026-09-08.md) | Backlog 1–6 STORE\|LOWER\|DSL\|DEFER ranking. **Proposal / consultant note — not CURRENT.** Store hosts state; `session.Lower` is domain meaning. |
 | [`domainmodeling-simplification-2026-08-14.md`](domainmodeling-simplification-2026-08-14.md) | Deletion-first DomainModeling proposal. **Not CURRENT** |
 | [`grammar-cycle-2026-08-14.md`](grammar-cycle-2026-08-14.md) | Grammar as the parse/print cycle. **Not CURRENT** until admitted |
 | [`fleet-eval-fixes-2026-08-12.md`](fleet-eval-fixes-2026-08-12.md) | Probe-finding execution checklist (P0–P7). Do not CURRENT beside an overlapping `e2e-*` |

@@ -1,3 +1,4 @@
+using Poly.Ast.Nodes;
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Evolution;
@@ -21,6 +22,16 @@ public class ActionEntityReturnTests {
                     .Select(d => d.Message)));
         var analysis = DomainModelAnalyzer.Analyze(result.Root!);
         return (result.Root!, analysis);
+    }
+
+    private static IEnumerable<Node> FlattenSyntax(Node node) {
+        yield return node;
+        foreach (var child in node.Children) {
+            if (child is null)
+                continue;
+            foreach (var n in FlattenSyntax(child))
+                yield return n;
+        }
     }
 
     /// <summary>Evolves a domain that is EXPECTED to fail analysis; returns the
@@ -1180,9 +1191,10 @@ public class ActionEntityReturnTests {
     }
 
     [Test]
-    public async Task InvokeAction_IfOnMutatedProperty_CreateIllegal_StillAppliesPriorAssign() {
-        // Documented miss: taken-ness is the pre-effect bag. assign OpenStays+1
-        // then if (OpenStays >= 1) { create illegal } still applies the assign.
+    public async Task InvokeAction_IfOnMutatedProperty_CreateIllegal_DoesNotApplyPriorAssign() {
+        // Item 4 fail-before-mutate: assign OpenStays+1 then if (OpenStays >= 1)
+        // { create illegal } probes with post-assign condition so Failure leaves
+        // OpenStays unchanged. Oracle is module ProbeCreate-before-assign, not DEI restore.
         var (domain, _) = Evolve("""
             domain Hotel
             Stay: entity {
@@ -1203,11 +1215,24 @@ public class ActionEntityReturnTests {
         var store = new DomainInstanceStore();
         store.Add(guest);
 
-        _ = guest.InvokeAction("Book",
+        var result = guest.InvokeAction("Book",
             new Dictionary<string, object?> { ["nights"] = 0L });
-        // Documented miss: prevalidate/probes evaluate OpenStays on the pre-assign
-        // bag (0), so the assign stands.
-        await Assert.That(guest.GetProperty<object>("OpenStays")).IsEqualTo(1L);
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(result.ErrorMessage).Contains("Nights");
+        await Assert.That(guest.GetProperty<object>("OpenStays")).IsEqualTo(0L);
+        await Assert.That(guest.CreatedChildren).IsEmpty();
+
+        await Assert.That(RuntimeAnalysisCache.TryGetModuleMethod(
+            domain, "Guest", "Book", out var book)).IsTrue();
+        await Assert.That(book?.Body).IsNotNull();
+        var flat = FlattenSyntax(book!.Body!).ToList();
+        var probeIdx = flat.FindIndex(n =>
+            n is Invoke inv && inv.Delegate is Member { MemberName: "ProbeCreate" });
+        var assignIdx = flat.FindIndex(n =>
+            n is Assignment a
+            && a.Destination is Member { MemberName: "OpenStays" });
+        await Assert.That(probeIdx).IsGreaterThanOrEqualTo(0);
+        await Assert.That(assignIdx).IsGreaterThan(probeIdx);
     }
 
     [Test]

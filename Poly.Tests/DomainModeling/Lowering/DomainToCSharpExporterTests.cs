@@ -2385,9 +2385,9 @@ public class DomainToCSharpExporterTests {
     }
 
     [Test]
-    public async Task Export_IfOnMutatedProperty_SkipsGuardedProbeLikeRuntime() {
-        // One tree: when the if condition reads a property a prior sibling assigned,
-        // the guarded probe is skipped (runtime ConditionDrift).
+    public async Task Export_IfOnMutatedProperty_ProbesBeforeOpenStaysAssign() {
+        // Item 4 fail-before-mutate: same tree as runtime — ProbeCreate before
+        // OpenStays assign; condition lowered post-prior-assign for probe only.
         var (domain, analysis) = ParseAndAnalyze("""
             domain Hotel
             Stay: entity {
@@ -2408,12 +2408,11 @@ public class DomainToCSharpExporterTests {
         var cs = new CSharpGenerator().Generate(unit);
 
         var bookIdx = cs.IndexOf("public DomainResult Book(", StringComparison.Ordinal);
+        var probeIdx = cs.IndexOf("this.ProbeCreate(\"Stay\"", bookIdx);
         var assignIdx = cs.IndexOf("this.OpenStays = this.OpenStays + 1L", bookIdx);
-        var nextMember = cs.IndexOf("\n    public ", bookIdx + 1);
-        var bookCs = nextMember > bookIdx ? cs[bookIdx..nextMember] : cs[bookIdx..];
         await Assert.That(bookIdx).IsGreaterThan(-1);
-        await Assert.That(assignIdx).IsGreaterThan(bookIdx);
-        await Assert.That(bookCs.Contains("this.ProbeCreate(\"Stay\"", StringComparison.Ordinal)).IsFalse();
+        await Assert.That(probeIdx).IsGreaterThan(bookIdx);
+        await Assert.That(assignIdx).IsGreaterThan(probeIdx);
         await Assert.That(cs).DoesNotContain("throw new InvalidOperationException(stayResult.ErrorMessage)");
     }
 

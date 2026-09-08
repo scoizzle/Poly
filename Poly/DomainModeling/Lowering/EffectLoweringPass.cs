@@ -687,14 +687,14 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     internal List<Node> LowerCreateInConstraintProbes(
         IReadOnlyList<Effect> effects, bool priorMutation = false) {
         var nodes = new List<Node>();
-        var assigned = new HashSet<string>(StringComparer.Ordinal);
-        CollectCreateInProbes(effects, nodes, ref priorMutation, assigned);
+        var assignedRhs = new Dictionary<string, DomainExpression>(StringComparer.Ordinal);
+        CollectCreateInProbes(effects, nodes, ref priorMutation, assignedRhs);
         return nodes;
     }
 
     /// <summary>
     /// Guarded create probes (before prior assigns) plus the action body.
-    /// Same tree for simulate and emit.
+    /// Same tree for simulate and emit (Item 4 fail-before-mutate).
     /// </summary>
     internal Node? LowerActionBody(IReadOnlyList<Effect> effects) =>
         LowerActionBodyCore(effects);
@@ -729,20 +729,21 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         IReadOnlyList<Effect> effects,
         List<Node> nodes,
         ref bool priorMutation,
-        HashSet<string> assigned) {
+        Dictionary<string, DomainExpression> assignedRhs) {
         // Unconditional create / create-in (and composites of them) probe at method
         // start — same set as runtime PrevalidateUnconditionalCreates.
         // ConditionalEffect is not probed unguarded (illegal then-branch on an
         // untaken if must not fail the action). When a prior sibling already
         // mutates (assign / create / invoke / transition), emit a condition-guarded
-        // probe so a taken illegal create returns Failure before those assigns.
-        // Runtime skips that guarded probe when the condition reads a property a
-        // prior sibling assigned (ConditionDrift: assign Create to false then if).
-        // C# export keeps the documented pre-assign-bag probe.
+        // probe so a taken illegal create returns Failure before those assigns
+        // (Item 4 fail-before-mutate). Probe if-conditions are lowered as after
+        // prior sibling AssignEffects (property→RHS substitution for probe only)
+        // so Occupy-shaped OpenStays+1 then if (OpenStays>=1) probes taken, and
+        // AssignFalse ConditionDrift probes constant false (not taken).
         foreach (var effect in effects) {
             switch (effect) {
                 case CompositeEffect composite:
-                    CollectCreateInProbes(composite.Effects, nodes, ref priorMutation, assigned);
+                    CollectCreateInProbes(composite.Effects, nodes, ref priorMutation, assignedRhs);
                     break;
                 case CreateEntityInRelationshipEffect cr:
                     if (LowerCreateInProbe(cr) is { } probe)
@@ -755,18 +756,14 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
                     priorMutation = true;
                     break;
                 case ConditionalEffect cond:
-                    if (priorMutation) {
-                        var skipRuntimeGuarded =
-                            ConditionReadsAssignedProperty(cond.Condition, assigned);
-                        if (!skipRuntimeGuarded)
-                            CollectGuardedBranchProbes(cond, nodes);
-                    }
+                    if (priorMutation)
+                        CollectGuardedBranchProbes(cond, nodes, assignedRhs);
                     priorMutation = true;
                     break;
                 case AssignEffect a:
                     priorMutation = true;
                     if (a.Target is PropertyAccess pa)
-                        assigned.Add(pa.Name);
+                        assignedRhs[pa.Name] = SubstituteAssignedProperties(a.Value, assignedRhs);
                     break;
                 case StageTransitionEffect or InvokeActionEffect or ForEachInvokeEffect:
                     priorMutation = true;
@@ -775,19 +772,29 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         }
     }
 
-    private static bool ConditionReadsAssignedProperty(
-        DomainExpression expr, HashSet<string> assigned) {
-        if (expr is PropertyAccess pa)
-            return assigned.Contains(pa.Name);
-        foreach (var child in expr.Children) {
-            if (child is DomainExpression inner
-                && ConditionReadsAssignedProperty(inner, assigned))
-                return true;
-        }
-        return false;
+    /// <summary>
+    /// For probe-prefix conditions only: replace PropertyAccess with prior sibling
+    /// assign RHS so taken-ness matches post-assign bag without mutating yet.
+    /// </summary>
+    private static DomainExpression SubstituteAssignedProperties(
+        DomainExpression expr,
+        IReadOnlyDictionary<string, DomainExpression> assignedRhs) {
+        if (assignedRhs.Count == 0)
+            return expr;
+        return new SubstituteAssignedPropertiesRewrite(assignedRhs).Route(expr);
     }
 
-    private void CollectGuardedBranchProbes(ConditionalEffect cond, List<Node> nodes) {
+    private sealed class SubstituteAssignedPropertiesRewrite(
+        IReadOnlyDictionary<string, DomainExpression> assignedRhs)
+        : DomainExpressionRewriteBase {
+        protected override DomainExpression PropertyAccess(PropertyAccess e) =>
+            assignedRhs.TryGetValue(e.Name, out var rhs) ? rhs : e;
+    }
+
+    private void CollectGuardedBranchProbes(
+        ConditionalEffect cond,
+        List<Node> nodes,
+        IReadOnlyDictionary<string, DomainExpression> priorAssignRhs) {
         var thenProbes = new List<Node>();
         // Nested else-if is a ConditionalEffect in ElseEffects. Runtime
         // PrevalidateUnconditionalCreates recurses regardless of nested
@@ -795,9 +802,10 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         // are collected (this walk is only entered after a prior mutation).
         var thenPrior = true;
         CollectCreateInProbes(cond.ThenEffects, thenProbes, ref thenPrior,
-            new HashSet<string>(StringComparer.Ordinal));
+            new Dictionary<string, DomainExpression>(StringComparer.Ordinal));
         if (thenProbes.Count > 0) {
-            var condition = _expressionPass.Lower(cond.Condition, Subject);
+            var conditionExpr = SubstituteAssignedProperties(cond.Condition, priorAssignRhs);
+            var condition = _expressionPass.Lower(conditionExpr, Subject);
             nodes.Add(new IfStatement(condition, FlattenProbeBlocks(thenProbes)));
         }
 
@@ -806,10 +814,11 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         var elseProbes = new List<Node>();
         var elsePrior = true;
         CollectCreateInProbes(cond.ElseEffects, elseProbes, ref elsePrior,
-            new HashSet<string>(StringComparer.Ordinal));
+            new Dictionary<string, DomainExpression>(StringComparer.Ordinal));
         if (elseProbes.Count == 0)
             return;
-        var elseCondition = _expressionPass.Lower(cond.Condition, Subject);
+        var elseConditionExpr = SubstituteAssignedProperties(cond.Condition, priorAssignRhs);
+        var elseCondition = _expressionPass.Lower(elseConditionExpr, Subject);
         nodes.Add(new IfStatement(
             new Syntactic.Not(elseCondition), FlattenProbeBlocks(elseProbes)));
     }

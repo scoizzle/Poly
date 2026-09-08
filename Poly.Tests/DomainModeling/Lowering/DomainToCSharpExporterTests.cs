@@ -2385,9 +2385,9 @@ public class DomainToCSharpExporterTests {
     }
 
     [Test]
-    public async Task Export_IfOnMutatedProperty_SkipsGuardedProbeLikeRuntime() {
-        // One tree: when the if condition reads a property a prior sibling assigned,
-        // the guarded probe is skipped (runtime ConditionDrift).
+    public async Task Export_IfOnMutatedProperty_ProbesBeforeOpenStaysAssign() {
+        // Item 4 fail-before-mutate: same tree as runtime — ProbeCreate before
+        // OpenStays assign; condition lowered post-prior-assign for probe only.
         var (domain, analysis) = ParseAndAnalyze("""
             domain Hotel
             Stay: entity {
@@ -2408,13 +2408,124 @@ public class DomainToCSharpExporterTests {
         var cs = new CSharpGenerator().Generate(unit);
 
         var bookIdx = cs.IndexOf("public DomainResult Book(", StringComparison.Ordinal);
+        var probeIdx = cs.IndexOf("this.ProbeCreate(\"Stay\"", bookIdx);
         var assignIdx = cs.IndexOf("this.OpenStays = this.OpenStays + 1L", bookIdx);
-        var nextMember = cs.IndexOf("\n    public ", bookIdx + 1);
-        var bookCs = nextMember > bookIdx ? cs[bookIdx..nextMember] : cs[bookIdx..];
         await Assert.That(bookIdx).IsGreaterThan(-1);
-        await Assert.That(assignIdx).IsGreaterThan(bookIdx);
-        await Assert.That(bookCs.Contains("this.ProbeCreate(\"Stay\"", StringComparison.Ordinal)).IsFalse();
+        await Assert.That(probeIdx).IsGreaterThan(bookIdx);
+        await Assert.That(assignIdx).IsGreaterThan(probeIdx);
+        var bookPrefix = cs[bookIdx..probeIdx];
+        await Assert.That(
+            bookPrefix.Contains("OpenStays + 1", StringComparison.Ordinal)
+            || bookPrefix.Contains("OpenStays + 1L", StringComparison.Ordinal)).IsTrue();
+        await Assert.That(bookPrefix.Contains(">= 1", StringComparison.Ordinal)).IsTrue();
         await Assert.That(cs).DoesNotContain("throw new InvalidOperationException(stayResult.ErrorMessage)");
+    }
+
+    [Test]
+    public async Task Export_AssignFalse_ProbesWrappedInIfFalse() {
+        // AssignFalse ConditionDrift: probe must be guarded by constant false
+        // (post-prior-assign subst), not unguarded ProbeCreate before assign.
+        var (domain, analysis) = ParseAndAnalyze("""
+            domain Parking
+            Permit: entity {
+              Plate: Text unique required
+            }
+            Lot: entity {
+              Create: Boolean default(true)
+              Occupied: Number default(0)
+              permits: many Permit
+              Issue: action (plate: Text) {
+                assign Create to false
+                if (Create) {
+                  assign Occupied to Occupied + 1
+                  create in permits { Plate: plate }
+                }
+              }
+            }
+            """);
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var unit = new CompilationUnitNode([], null, types, null);
+        var cs = new CSharpGenerator().Generate(unit);
+
+        var issueIdx = cs.IndexOf("public DomainResult Issue(", StringComparison.Ordinal);
+        var probeIdx = cs.IndexOf("this.ProbeCreate(\"Permit\"", issueIdx);
+        var assignIdx = cs.IndexOf("this.Create = false", issueIdx);
+        await Assert.That(issueIdx).IsGreaterThan(-1);
+        await Assert.That(probeIdx).IsGreaterThan(issueIdx);
+        await Assert.That(assignIdx).IsGreaterThan(probeIdx);
+        var issuePrefix = cs[issueIdx..probeIdx];
+        await Assert.That(issuePrefix.Contains("if (false)", StringComparison.Ordinal)).IsTrue();
+    }
+
+    [Test]
+    public async Task Export_NestedIfOnMutatedProperty_InnerProbeSubstitutesOpenStays() {
+        var (domain, analysis) = ParseAndAnalyze("""
+            domain Hotel
+            Stay: entity {
+              Nights: Number range(1, 21) required
+            }
+            Guest: entity {
+              OpenStays: Number default(0)
+              Book: action (nights: Number, confirm: Boolean) {
+                assign OpenStays to OpenStays + 1
+                if (confirm) {
+                  if (OpenStays >= 1) {
+                    create Stay { Nights: nights }
+                  }
+                }
+              }
+            }
+            """);
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var unit = new CompilationUnitNode([], null, types, null);
+        var cs = new CSharpGenerator().Generate(unit);
+
+        var bookIdx = cs.IndexOf("public DomainResult Book(", StringComparison.Ordinal);
+        var probeIdx = cs.IndexOf("this.ProbeCreate(\"Stay\"", bookIdx);
+        var assignIdx = cs.IndexOf("this.OpenStays = this.OpenStays + 1L", bookIdx);
+        await Assert.That(bookIdx).IsGreaterThan(-1);
+        await Assert.That(probeIdx).IsGreaterThan(bookIdx);
+        await Assert.That(assignIdx).IsGreaterThan(probeIdx);
+        var bookPrefix = cs[bookIdx..probeIdx];
+        await Assert.That(
+            bookPrefix.Contains("OpenStays + 1", StringComparison.Ordinal)
+            || bookPrefix.Contains("OpenStays + 1L", StringComparison.Ordinal)).IsTrue();
+        await Assert.That(bookPrefix.Contains(">= 1", StringComparison.Ordinal)).IsTrue();
+    }
+
+    [Test]
+    public async Task Export_ElseIfOnMutatedProperty_InnerProbeSubstitutesOpenStays() {
+        var (domain, analysis) = ParseAndAnalyze("""
+            domain Hotel
+            Stay: entity {
+              Nights: Number range(1, 21) required
+            }
+            Guest: entity {
+              OpenStays: Number default(0)
+              Book: action (nights: Number, confirm: Boolean) {
+                assign OpenStays to OpenStays + 1
+                if (confirm) {
+                } else if (OpenStays >= 1) {
+                  create Stay { Nights: nights }
+                }
+              }
+            }
+            """);
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var unit = new CompilationUnitNode([], null, types, null);
+        var cs = new CSharpGenerator().Generate(unit);
+
+        var bookIdx = cs.IndexOf("public DomainResult Book(", StringComparison.Ordinal);
+        var probeIdx = cs.IndexOf("this.ProbeCreate(\"Stay\"", bookIdx);
+        var assignIdx = cs.IndexOf("this.OpenStays = this.OpenStays + 1L", bookIdx);
+        await Assert.That(bookIdx).IsGreaterThan(-1);
+        await Assert.That(probeIdx).IsGreaterThan(bookIdx);
+        await Assert.That(assignIdx).IsGreaterThan(probeIdx);
+        var bookPrefix = cs[bookIdx..probeIdx];
+        await Assert.That(
+            bookPrefix.Contains("OpenStays + 1", StringComparison.Ordinal)
+            || bookPrefix.Contains("OpenStays + 1L", StringComparison.Ordinal)).IsTrue();
+        await Assert.That(bookPrefix.Contains(">= 1", StringComparison.Ordinal)).IsTrue();
     }
 
     [Test]

@@ -403,8 +403,8 @@ internal sealed class OracleTool {
                 .Select(k => new Property(k, new DomainTypeReference(
                     propertyTypes.TryGetValue(k, out var t) ? t : "Text"), []))
                 .ToList();
-            var entity = new Entity("Subject", props, [], [], []);
             var policy = new Policy("_sim", expr);
+            var entity = new Entity("Subject", props, [], [policy], []); // Policies = [policy] so EvaluatePolicy cache hits
             var domain = new Domain("Subject", [entity]) {
                 Extensions = [.. ExtensionCatalog.ProductAuthoring],
             };

@@ -129,10 +129,11 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Node
             return Route(rn.TargetProperty, parameterSubject);
         }
 
-        // Every hop in a path-prefix is a relationship navigation. C# export
-        // uses coalesce-throw on the pascal nav. Runtime binds Store via
-        // GetRelatedOne so unlinked / multi-link fail with the path-prefix
-        // contract, then TypeCast to the target entity so leaf members resolve.
+        // Every hop in a path-prefix is a relationship navigation. Runtime binds
+        // Store via GetRelatedOne (zero/many fail closed for evaluate_policy reads).
+        // C# export / module UseThisReference uses a bare nullable Member — require
+        // gates own unlinked Failure ("requires a linked") in BuildActionBodyWithGuards
+        // instead of coalesce-throw escaping the DomainResult return path.
         if (!_useThisReference) {
             var related = new Invoke(
                 new Member(_currentSubject, "GetRelatedOne"),
@@ -145,11 +146,7 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Node
         }
 
         var relMember = new Member(_currentSubject, ResolveNavName(rn.RelationshipName));
-        Node hop = new Coalesce(relMember,
-            new ThrowExpression(new New(
-                new NamedTypeReference("InvalidOperationException"),
-                new Constant($"No linked instances found for relationship '{rn.RelationshipName}'."))));
-        return Route(rn.TargetProperty, hop);
+        return Route(rn.TargetProperty, relMember);
     }
 
     /// <summary>Pascal-cases a relationship hop name the resolver did not map

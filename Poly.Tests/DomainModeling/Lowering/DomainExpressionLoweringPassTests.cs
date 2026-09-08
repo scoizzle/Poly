@@ -92,16 +92,13 @@ public class DomainExpressionLoweringPassTests {
         var outer = (Member)result;
         await Assert.That(outer.MemberName).IsEqualTo("AvailableCopies");
 
-        // The nav hop is guarded: an unlinked to-one nav coalesces to a deliberate
-        // InvalidOperationException (matching the runtime's fail-closed path-prefix
-        // contract) instead of a bare null-forgiving deref (NRE).
-        await Assert.That(outer.Value).IsTypeOf<Coalesce>();
-        var coalesce = (Coalesce)outer.Value;
-        await Assert.That(coalesce.LeftHandValue).IsTypeOf<Member>();
-        var nav = (Member)coalesce.LeftHandValue;
+        // Export/module path-prefix is a bare nullable Member. Unlinked require
+        // fails closed via DomainResult.Failure in BuildActionBodyWithGuards —
+        // not coalesce-throw on the policy body.
+        await Assert.That(outer.Value).IsTypeOf<Member>();
+        var nav = (Member)outer.Value;
         await Assert.That(nav.MemberName).IsEqualTo("Book");
         await Assert.That(nav.Value).IsSameReferenceAs(Subject);
-        await Assert.That(coalesce.RightHandValue).IsTypeOf<ThrowExpression>();
     }
 
     [Test]

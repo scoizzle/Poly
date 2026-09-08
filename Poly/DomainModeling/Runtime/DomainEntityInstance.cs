@@ -509,12 +509,26 @@ public sealed partial record DomainEntityInstance {
         }
 
         // ── Evaluate all guard policies ─────────────────────────
+        // When a Domain-bound module method owns the action, require gates
+        // (including path-prefix "requires a linked" Failure) live in that
+        // tree — skip the EvaluatePolicy prelude so unlinked path-prefix
+        // does not throw before the module Failure return. Bare evaluate_policy
+        // still uses GetRelatedOne throw. Stage policies stay prelude-evaluated.
         var failures = new List<string>();
-        foreach (var guard in action.Policies)
-            if (!EvaluatePolicy(guard)) failures.Add(guard.Name);
+        if (Domain is not null) {
+            var ensureAnalysis = RuntimeAnalysisCache.GetOrAnalyze(Domain);
+            RuntimeAnalysisCache.GetOrLower(Domain, RuntimeAnalysisCache.Session(Domain), ensureAnalysis);
+        }
+        var moduleOwnsRequire = Domain is not null
+            && RuntimeAnalysisCache.TryGetModuleMethod(Domain, Entity.Name, actionName, out var moduleMethod)
+            && moduleMethod?.Body is not null;
+        if (!moduleOwnsRequire) {
+            foreach (var guard in action.Policies)
+                if (!EvaluatePolicy(guard)) failures.Add(guard.Name);
 
-        if (failures.Count > 0)
-            return ActionInvocationResult.Blocked(actionName, failures);
+            if (failures.Count > 0)
+                return ActionInvocationResult.Blocked(actionName, failures);
+        }
 
         Stage? stage = null;
         if (runtimeAnalysis is not null && CurrentStage is not null) {

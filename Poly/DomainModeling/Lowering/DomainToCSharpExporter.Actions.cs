@@ -226,7 +226,12 @@ public sealed partial class DomainToCSharpExporter {
         // Emit require guard clauses. Named entity policies are predicates, not
         // always-on invariants — they gate an action only when the action `require`s
         // them (FieldService AtCapacity must not block ClockIn / GoOffDuty).
+        // Path-prefix hops in a required policy: fail-closed DomainResult.Failure
+        // before the bool call (same message as singular cross-entity invoke) so
+        // unlinked never escapes via coalesce-throw / InvalidOperationException.
         foreach (var policy in action.Policies) {
+            EmitPathPrefixRequireGuards(policy.Expression, action, entity, nodes, FailureReturn);
+
             if (policy.Name.StartsWith("not_", StringComparison.Ordinal)) {
                 var realName = policy.Name.Substring(4);
                 var guardCall = new Invoke(
@@ -874,4 +879,39 @@ public sealed partial class DomainToCSharpExporter {
         }
         return count == 1 ? found : null;
     }
+    /// <summary>
+    /// For each to-one path-prefix hop in a require policy expression, emit
+    /// <c>if (this.Rel == null) return DomainResult.Failure("'Action' requires a linked 'rel'…")</c>
+    /// before the policy bool is called. Multi-hop guards each hop in order.
+    /// </summary>
+    private static void EmitPathPrefixRequireGuards(
+        DomainExpression expression,
+        Action action,
+        Entity entity,
+        List<Node> nodes,
+        Func<string, Node> failureReturn) {
+        WalkPathPrefixRequireGuards(expression, new ThisReference(), action, entity, nodes, failureReturn);
+    }
+
+    private static void WalkPathPrefixRequireGuards(
+        DomainExpression expression,
+        Node subject,
+        Action action,
+        Entity entity,
+        List<Node> nodes,
+        Func<string, Node> failureReturn) {
+        if (expression is RelationshipNavigation rn) {
+            var navMember = new Member(subject, ToPascalCase(rn.RelationshipName));
+            nodes.Add(new IfStatement(
+                new Equal(navMember, new Constant(null!)),
+                new Block([failureReturn(
+                    $"'{action.Name}' requires a linked '{rn.RelationshipName}' on entity '{entity.Name}'.")])));
+            WalkPathPrefixRequireGuards(rn.TargetProperty, navMember, action, entity, nodes, failureReturn);
+            return;
+        }
+
+        foreach (var child in expression.Children.OfType<DomainExpression>())
+            WalkPathPrefixRequireGuards(child, subject, action, entity, nodes, failureReturn);
+    }
+
 }

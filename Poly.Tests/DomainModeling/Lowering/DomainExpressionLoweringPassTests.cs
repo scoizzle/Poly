@@ -80,7 +80,7 @@ public class DomainExpressionLoweringPassTests {
     }
 
     [Test]
-    public async Task RelationshipNavigation_LowersToGuardedHop() {
+    public async Task RelationshipNavigation_LowersToNullForgivingHop() {
         var inner = DomainExpression.Property("AvailableCopies");
         var expr = DomainExpression.RelationshipNav("Book", inner);
 
@@ -92,16 +92,15 @@ public class DomainExpressionLoweringPassTests {
         var outer = (Member)result;
         await Assert.That(outer.MemberName).IsEqualTo("AvailableCopies");
 
-        // The nav hop is guarded: an unlinked to-one nav coalesces to a deliberate
-        // InvalidOperationException (matching the runtime's fail-closed path-prefix
-        // contract) instead of a bare null-forgiving deref (NRE).
-        await Assert.That(outer.Value).IsTypeOf<Coalesce>();
-        var coalesce = (Coalesce)outer.Value;
-        await Assert.That(coalesce.LeftHandValue).IsTypeOf<Member>();
-        var nav = (Member)coalesce.LeftHandValue;
+        // Export/module path-prefix is NullForgiving(Member) for CS8602.
+        // Unlinked require fails closed via DomainResult.Failure in
+        // BuildActionBodyWithGuards — not coalesce-throw escaping DomainResult.
+        await Assert.That(outer.Value).IsTypeOf<NullForgiving>();
+        var forgive = (NullForgiving)outer.Value;
+        await Assert.That(forgive.Operand).IsTypeOf<Member>();
+        var nav = (Member)forgive.Operand;
         await Assert.That(nav.MemberName).IsEqualTo("Book");
         await Assert.That(nav.Value).IsSameReferenceAs(Subject);
-        await Assert.That(coalesce.RightHandValue).IsTypeOf<ThrowExpression>();
     }
 
     [Test]

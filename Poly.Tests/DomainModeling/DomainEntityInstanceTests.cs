@@ -3150,7 +3150,9 @@ public class DomainEntityInstanceTests {
     }
 
     [Test]
-    public async Task EvaluatePolicy_ToOneRelationshipNav_Unlinked_Throws() {
+    public async Task EvaluatePolicy_ToOneRelationshipNav_Unlinked_ReturnsFalse() {
+        // Item 1: unlinked to-one path-prefix soft-fails (ExistsRelated) so require
+        // can fill FailedGuards without throw — not vacuous true.
         var target = new Entity("Profile", [
             new Property("City", new DomainTypeReference("Text"), [])
         ], [], [], []);
@@ -3172,7 +3174,7 @@ public class DomainEntityInstanceTests {
         store.Add(cust);
 
         var policy = domain.Types.OfType<Entity>().First(e => e.Name == "Customer").Policies.First(p => p.Name == "IsUrban");
-        await Assert.That(() => cust.EvaluatePolicy(policy)).Throws<InvalidOperationException>();
+        await Assert.That(cust.EvaluatePolicy(policy)).IsFalse();
     }
 
     [Test]

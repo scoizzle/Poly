@@ -1,0 +1,340 @@
+domain Hotel
+uses temporal
+
+RoomType: entity {
+  Name: Text required length(1, 40)
+  NightlyRate: Number range(0, 10000) required
+  MaxOccupancy: Number range(1, 8) required
+}
+
+Property: entity {
+  Name: Text required length(1, 80)
+  City: Text required length(1, 60)
+  halls: many Hall
+  rooms: many Room
+  HasHalls: policy { count halls > 0 }
+  Open: stage {
+    AddHall: action (name: Text, seats: Number, rate: Number) -> Hall {
+      create in halls { Name: name Capacity: seats DayRate: rate }
+    }
+    Close: action { transition to Closed }
+  }
+  Closed: stage {
+    Reopen: action { transition to Open }
+  }
+}
+
+Room: entity {
+  Number: Text unique required length(1, 8)
+  Floor: Number range(0, 50) required
+  NightlyRate: Number range(0, 10000) required
+  MaxOccupancy: Number range(1, 8) required
+  Occupied: Boolean default(false)
+  Dirty: Boolean default(false)
+  Offline: Boolean default(false)
+  property: Property
+  roomType: RoomType
+  stays: many Reservation
+  IsVacant: policy { Occupied is false }
+  IsReady: policy { Occupied is false and Dirty is false and Offline is false }
+  HasType: policy { roomType exists }
+  when stays InHouse {
+    assign Occupied to true
+  }
+  when stays Departed, Cancelled, NoShow {
+    assign Occupied to false
+  }
+  when stays Departed {
+    assign Dirty to true
+  }
+  InService: stage {
+    TakeOutOfService: action
+      require IsVacant
+    {
+      assign Offline to true
+      transition to OutOfService
+    }
+    Inspect: action {
+      assign Dirty to false
+    }
+  }
+  OutOfService: stage {
+    ReturnToService: action {
+      assign Offline to false
+      transition to InService
+    }
+  }
+}
+
+Hall: entity {
+  Name: Text required length(1, 80)
+  Capacity: Number range(1, 5000) required
+  DayRate: Number range(0, 100000) required
+  Occupied: Boolean default(false)
+  Offline: Boolean default(false)
+  BusySections: Number default(0)
+  property: Property
+  sections: many Section
+  IsVacant: policy { Occupied is false }
+  ChildrenFree: policy { BusySections is 0 }
+  CanBook: policy { Occupied is false and Offline is false and BusySections is 0 }
+  IsOccupied: policy { Occupied is true }
+  InService: stage {
+    Occupy: action
+      require CanBook
+    {
+      assign Occupied to true
+    }
+    Vacate: action
+      require IsOccupied
+    {
+      assign Occupied to false
+    }
+    MarkChildBusy: action {
+      assign BusySections to BusySections + 1
+    }
+    ClearChildBusy: action {
+      assign BusySections to BusySections - 1
+    }
+    TakeOffline: action
+      require IsVacant
+      require ChildrenFree
+    {
+      assign Offline to true
+      transition to OutOfService
+    }
+  }
+  OutOfService: stage {
+    ReturnToService: action {
+      assign Offline to false
+      transition to InService
+    }
+  }
+}
+
+Section: entity {
+  Name: Text required length(1, 80)
+  Capacity: Number range(1, 2000) required
+  DayRate: Number range(0, 100000) required
+  Occupied: Boolean default(false)
+  hall: Hall
+  IsVacant: policy { Occupied is false }
+  IsOccupied: policy { Occupied is true }
+  ParentFree: policy { hall where Occupied is false and Offline is false }
+  CanBook: policy { Occupied is false }
+  InService: stage {
+    Occupy: action
+      require CanBook
+      require ParentFree
+    {
+      assign Occupied to true
+      invoke hall.MarkChildBusy
+    }
+    Vacate: action
+      require IsOccupied
+    {
+      assign Occupied to false
+      invoke hall.ClearChildBusy
+    }
+  }
+}
+
+Guest: entity {
+  Name: Text required
+  Email: Text unique required pattern("^[^@]+@[^@]+$")
+  Phone: Text length(7, 20)
+  StayCount: Number default(0)
+  NightCount: Number default(0)
+  EventCount: Number default(0)
+  events: many EventHold
+  reservations: many Reservation
+  HasStays: policy { count reservations > 0 }
+  HasEvents: policy { count events > 0 }
+  when reservations Departed as stay {
+    assign StayCount to StayCount + 1
+    assign NightCount to NightCount + stay Nights
+  }
+  when events Released {
+    assign EventCount to EventCount + 1
+  }
+  Active: stage {
+    BookStay: action (room: Room, party: Number, nights: Number, arrive: Date, depart: Date) -> Reservation {
+      create in reservations {
+        room: room
+        PartySize: party
+        Nights: nights
+        NightlyRate: room NightlyRate
+        MaxOccupancy: room MaxOccupancy
+        CheckInDate: arrive
+        CheckOutDate: depart
+      }
+    }
+    BookHall: action (hall: Hall, party: Number, arrive: Date, depart: Date) -> EventHold {
+      create in events {
+        hall: hall
+        Headcount: party
+        Capacity: hall Capacity
+        DayRate: hall DayRate
+        StartDate: arrive
+        EndDate: depart
+      }
+    }
+    BookSection: action (section: Section, hall: Hall, party: Number, arrive: Date, depart: Date) -> EventHold {
+      create in events {
+        section: section
+        hall: hall
+        Headcount: party
+        Capacity: section Capacity
+        DayRate: section DayRate
+        StartDate: arrive
+        EndDate: depart
+      }
+    }
+    Block: action { transition to Blocked }
+  }
+  Blocked: stage {
+    Reinstate: action { transition to Active }
+  }
+}
+
+Reservation: entity {
+  PartySize: Number range(1, 8) required
+  Nights: Number range(1, 60) required
+  NightlyRate: Number range(0, 10000) required
+  MaxOccupancy: Number range(1, 8) required
+  CheckInDate: Date required
+  CheckOutDate: Date required
+  folio: owned Folio
+  guest: Guest
+  room: Room
+  DatesValid: policy { CheckOutDate > CheckInDate }
+  PartyFits: policy { PartySize <= MaxOccupancy }
+  RoomReady: policy { room where Occupied is false and Dirty is false and Offline is false }
+  HasRoom: policy { room exists }
+  HasGuest: policy { guest exists }
+  BillSettled: policy { folio Balance is 0 }
+  HasFolio: policy { folio exists }
+  Requested: stage {
+    Confirm: action
+      require DatesValid
+      require PartyFits
+      require HasRoom
+    {
+      transition to Confirmed
+    }
+    Cancel: action { transition to Cancelled }
+  }
+  Confirmed: stage {
+    CheckIn: action
+      require RoomReady
+      require HasRoom
+    {
+      create in folio { Balance: 0 }
+      transition to InHouse
+    }
+    Cancel: action { transition to Cancelled }
+    MarkNoShow: action { transition to NoShow }
+  }
+  InHouse: stage {
+    PostStayCharge: action
+      require HasFolio
+    {
+      invoke folio.PostRoomNight(amount: NightlyRate)
+    }
+    CheckOut: action
+      require HasFolio
+      require BillSettled
+    {
+      transition to Departed
+    }
+  }
+  Departed: stage { }
+  Cancelled: stage { }
+  NoShow: stage { }
+}
+
+Folio: entity {
+  Balance: Number range(0, 1000000) default(0)
+  reservation: Reservation
+  HasBalance: policy { Balance > 0 }
+  IsSettled: policy { Balance is 0 }
+  Open: stage {
+    PostRoomNight: action (amount: Number) {
+      assign Balance to Balance + amount
+    }
+    PostCharge: action (amount: Number) {
+      assign Balance to Balance + amount
+    }
+    Settle: action
+      require HasBalance
+    {
+      assign Balance to 0
+      transition to Settled
+    }
+    CloseEmpty: action
+      require IsSettled
+    {
+      transition to Settled
+    }
+  }
+  Settled: stage { }
+}
+
+EventHold: entity {
+  Headcount: Number range(1, 5000) required
+  Capacity: Number range(1, 5000) required
+  DayRate: Number range(0, 100000) required
+  StartDate: Date required
+  EndDate: Date required
+  guest: Guest
+  hall: Hall
+  section: Section
+  DatesValid: policy { EndDate > StartDate }
+  PartyFits: policy { Headcount <= Capacity }
+  HasHall: policy { hall exists }
+  HasSection: policy { section exists }
+  HasSpace: policy { hall exists or section exists }
+  Requested: stage {
+    Confirm: action
+      require DatesValid
+      require PartyFits
+      require HasSpace
+    {
+      transition to Confirmed
+    }
+    Cancel: action { transition to Cancelled }
+  }
+  Confirmed: stage {
+    StartHall: action
+      require HasHall
+      require not HasSection
+    {
+      invoke hall.Occupy
+      transition to InUse
+    }
+    StartSection: action
+      require HasSection
+    {
+      invoke section.Occupy
+      transition to InUse
+    }
+    Cancel: action { transition to Cancelled }
+  }
+  InUse: stage {
+    ReleaseHall: action
+      require HasHall
+      require not HasSection
+    {
+      invoke hall.Vacate
+      transition to Released
+    }
+    ReleaseSection: action
+      require HasSection
+    {
+      invoke section.Vacate
+      transition to Released
+    }
+  }
+  Released: stage { }
+  Cancelled: stage { }
+}

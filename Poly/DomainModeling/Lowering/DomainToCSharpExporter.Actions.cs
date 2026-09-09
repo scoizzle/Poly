@@ -861,11 +861,13 @@ public sealed partial class DomainToCSharpExporter {
     }
 
     /// <summary>
-    /// Unique collection on <paramref name="peerEntity"/> whose target is
-    /// <paramref name="childEntityName"/> — the C# inverse of a create-in to-one
-    /// initializer (same rule as runtime <c>TryLinkInverseCollection</c>).
+    /// Collection inverses on <paramref name="peerEntity"/> targeting
+    /// <paramref name="childEntityName"/> — same rule as runtime
+    /// <c>TryLinkInverseCollection</c>. <c>Unique</c> is set only when
+    /// <c>Count == 1</c>; otherwise null (skip Attach / no fail-closed).
     /// </summary>
-    internal static Relationship? FindInverseCollection(Entity peerEntity, string childEntityName) {
+    internal static (Relationship? Unique, int Count) FindInverseCollectionInfo(
+        Entity peerEntity, string childEntityName) {
         Relationship? found = null;
         var count = 0;
         foreach (var nav in peerEntity.Navigations) {
@@ -877,8 +879,16 @@ public sealed partial class DomainToCSharpExporter {
                 count++;
             }
         }
-        return count == 1 ? found : null;
+        return count == 1 ? (found, count) : (null, count);
     }
+
+    /// <summary>
+    /// Unique collection on <paramref name="peerEntity"/> whose target is
+    /// <paramref name="childEntityName"/> — the C# inverse of a create-in to-one
+    /// initializer (same rule as runtime <c>TryLinkInverseCollection</c>).
+    /// </summary>
+    internal static Relationship? FindInverseCollection(Entity peerEntity, string childEntityName) =>
+        FindInverseCollectionInfo(peerEntity, childEntityName).Unique;
     /// <summary>
     /// For each to-one path-prefix hop in a require policy expression, emit
     /// <c>if (this.Rel == null) return DomainResult.Failure("'Action' requires a linked 'rel'…")</c>

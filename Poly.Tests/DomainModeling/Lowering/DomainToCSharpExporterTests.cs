@@ -1973,10 +1973,9 @@ public class DomainToCSharpExporterTests {
     }
 
     [Test]
-    public async Task Export_CreateType_UnambiguousManyRel_EmitsCollectionAdd() {
-        // F5/F9: Type-create host bind (BindCreate) emits _collection.Add, aligning
-        // C# export with HostAbi.TryAutoLinkUnambiguousOutbound. CreateFines alone
-        // is not proof — assert BindCreate's Fine arm, not the whole compilation unit.
+    public async Task Export_CreateType_UnambiguousManyRel_CreateAttaches_BindCreateDoesNotDoubleAdd() {
+        // Poly Item 2: Fine.Create(patron: this) AttachFines — BindCreate must not
+        // also _fines.Add (double-Add). AssessByType still hosts via this.Create.
         var (domain, analysis) = ParseAndAnalyze("""
             domain Test
             Patron: entity {
@@ -1996,7 +1995,21 @@ public class DomainToCSharpExporterTests {
         var cs = new CSharpGenerator().Generate(new CompilationUnitNode([], null, types, null));
         await Assert.That(cs).Contains("this.Create(");
 
-        // Private host bind — not the public Create overloads that call BindCreate.
+        var fineCreateStart = cs.IndexOf("static DomainResult<Fine> Create(", StringComparison.Ordinal);
+        await Assert.That(fineCreateStart).IsGreaterThanOrEqualTo(0);
+        var fineCreateBrace = cs.IndexOf('{', fineCreateStart);
+        var depth = 0;
+        var fineCreateEnd = fineCreateBrace;
+        for (var i = fineCreateBrace; i < cs.Length; i++) {
+            if (cs[i] == '{') depth++;
+            else if (cs[i] == '}') {
+                depth--;
+                if (depth == 0) { fineCreateEnd = i + 1; break; }
+            }
+        }
+        var fineCreate = cs[fineCreateStart..fineCreateEnd];
+        await Assert.That(fineCreate).Contains("AttachFines");
+
         var bindStart = cs.IndexOf("BindCreate(string typeName", StringComparison.Ordinal);
         await Assert.That(bindStart).IsGreaterThanOrEqualTo(0);
         var bindEnd = cs.IndexOf("BindCreateIn(string", bindStart + 1, StringComparison.Ordinal);
@@ -2004,24 +2017,19 @@ public class DomainToCSharpExporterTests {
             bindEnd = cs.IndexOf("BindProbeCreate(string", bindStart + 1, StringComparison.Ordinal);
         await Assert.That(bindEnd).IsGreaterThan(bindStart);
         var bindCreate = cs[bindStart..bindEnd];
-        await Assert.That(bindCreate).Contains("_fines.Add");
-        // F10: reverse Fine.patron must be ctor this (FindAutoWireBackReference),
-        // not values["patron"] / null. BindCreate scalars come from the dictionary.
+        await Assert.That(bindCreate).DoesNotContain("_fines.Add");
         var fineCreateIdx = bindCreate.IndexOf("Fine.Create(", StringComparison.Ordinal);
         await Assert.That(fineCreateIdx).IsGreaterThanOrEqualTo(0);
-        var fineCreateEnd = bindCreate.IndexOf(';', fineCreateIdx);
-        await Assert.That(fineCreateEnd).IsGreaterThan(fineCreateIdx);
-        var fineCreateCall = bindCreate[fineCreateIdx..fineCreateEnd];
+        var fineCreateCallEnd = bindCreate.IndexOf(';', fineCreateIdx);
+        var fineCreateCall = bindCreate[fineCreateIdx..fineCreateCallEnd];
         await Assert.That(fineCreateCall).Contains("this");
         await Assert.That(fineCreateCall).DoesNotContain("ContainsKey(\"patron\")");
         await Assert.That(fineCreateCall).DoesNotContain("null");
 
-        // AssessByType uses this.Create (job host); Add lives in BindCreate.
         var assessStart = cs.IndexOf("DomainResult<Fine> AssessByType(", StringComparison.Ordinal);
         await Assert.That(assessStart).IsGreaterThanOrEqualTo(0);
         var assessBrace = cs.IndexOf('{', assessStart);
-        await Assert.That(assessBrace).IsGreaterThan(assessStart);
-        var depth = 0;
+        depth = 0;
         var assessEnd = assessBrace;
         for (var i = assessBrace; i < cs.Length; i++) {
             if (cs[i] == '{') depth++;
@@ -2033,6 +2041,23 @@ public class DomainToCSharpExporterTests {
         var assessByType = cs[assessStart..assessEnd];
         await Assert.That(assessByType).Contains("this.Create(");
         await Assert.That(assessByType).DoesNotContain("_fines.Add");
+
+        // F4: unique-path CreateNav defers Add when Create already Attached.
+        var createFinesStart = cs.IndexOf("DomainResult<Fine> CreateFines(", StringComparison.Ordinal);
+        await Assert.That(createFinesStart).IsGreaterThanOrEqualTo(0);
+        var createFinesBrace = cs.IndexOf('{', createFinesStart);
+        depth = 0;
+        var createFinesEnd = createFinesBrace;
+        for (var i = createFinesBrace; i < cs.Length; i++) {
+            if (cs[i] == '{') depth++;
+            else if (cs[i] == '}') {
+                depth--;
+                if (depth == 0) { createFinesEnd = i + 1; break; }
+            }
+        }
+        var createFines = cs[createFinesStart..createFinesEnd];
+        await Assert.That(createFines).Contains("Fine.Create(");
+        await Assert.That(createFines).DoesNotContain("_fines.Add");
     }
 
     [Test]
@@ -2702,6 +2727,331 @@ public class DomainToCSharpExporterTests {
         await Assert.That(cs).Contains("return DomainResult<Line>.Failure(\"for lines.Mark matched zero targets.\")");
         var errors = CompileExported(cs);
         await Assert.That(errors).IsEmpty();
+    }
+
+    // ── Poly Item 2: public Create wires inverses + registries ──
+
+    private const string PublicCreateWireInversesDsl = """
+        domain HotelStay
+        Guest: entity {
+          Name: Text required
+          reservations: many Reservation
+        }
+        Room: entity {
+          Number: Text required
+          Occupied: Boolean default(false)
+          stays: many Reservation
+          when stays InHouse {
+            assign Occupied to true
+          }
+        }
+        Reservation: entity {
+          guest: Guest
+          room: Room
+          Requested: stage {
+            CheckIn: action { transition to InHouse }
+          }
+          InHouse: stage { }
+        }
+        """;
+
+    [Test]
+    public async Task Export_PublicCreate_WiresInverseAttachCalls() {
+        var (domain, analysis) = ParseAndAnalyze(PublicCreateWireInversesDsl);
+        await Assert.That(analysis.HasErrors).IsFalse();
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var cs = new CSharpGenerator().Generate(new CompilationUnitNode([], null, types, null));
+
+        var createStart = cs.IndexOf("static DomainResult<Reservation> Create(", StringComparison.Ordinal);
+        await Assert.That(createStart).IsGreaterThanOrEqualTo(0);
+        var brace = cs.IndexOf('{', createStart);
+        var depth = 0;
+        var createEnd = brace;
+        for (var i = brace; i < cs.Length; i++) {
+            if (cs[i] == '{') depth++;
+            else if (cs[i] == '}') {
+                depth--;
+                if (depth == 0) { createEnd = i + 1; break; }
+            }
+        }
+        var createBody = cs[createStart..createEnd];
+        await Assert.That(createBody).Contains("AttachReservations");
+        await Assert.That(createBody).Contains("AttachStays");
+
+        // F4: unique-path CreateNav defers Add when Create already Attached.
+        var createReservationsStart = cs.IndexOf("DomainResult<Reservation> CreateReservations(", StringComparison.Ordinal);
+        await Assert.That(createReservationsStart).IsGreaterThanOrEqualTo(0);
+        var createReservationsBrace = cs.IndexOf('{', createReservationsStart);
+        depth = 0;
+        var createReservationsEnd = createReservationsBrace;
+        for (var i = createReservationsBrace; i < cs.Length; i++) {
+            if (cs[i] == '{') depth++;
+            else if (cs[i] == '}') {
+                depth--;
+                if (depth == 0) { createReservationsEnd = i + 1; break; }
+            }
+        }
+        var createReservations = cs[createReservationsStart..createReservationsEnd];
+        await Assert.That(createReservations).Contains("Reservation.Create(");
+        await Assert.That(createReservations).DoesNotContain("_reservations.Add");
+
+        var errors = CompileExported(cs);
+        await Assert.That(errors).IsEmpty();
+    }
+
+    [Test]
+    public async Task Export_PublicCreate_CheckIn_SetsRoomOccupied_ViaGeneratedTypes() {
+        var (domain, analysis) = ParseAndAnalyze(PublicCreateWireInversesDsl);
+        await Assert.That(analysis.HasErrors).IsFalse();
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var cs = new CSharpGenerator().Generate(new CompilationUnitNode([], null, types, null));
+
+        var tree = CSharpSyntaxTree.ParseText("#nullable enable\nusing System.Collections.Generic;\n" + cs);
+        var references = ((string?)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES"))
+            ?.Split(Path.PathSeparator)
+            .Select(p => (MetadataReference)MetadataReference.CreateFromFile(p))
+            .ToArray() ?? [];
+        var compilation = CSharpCompilation.Create(
+            "PublicCreateWireInverses",
+            [tree],
+            references,
+            new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+        using var pe = new MemoryStream();
+        var emit = compilation.Emit(pe);
+        var emitErrors = emit.Diagnostics
+            .Where(d => d.Severity == Microsoft.CodeAnalysis.DiagnosticSeverity.Error)
+            .Select(d => d.ToString())
+            .ToArray();
+        await Assert.That(emitErrors).IsEmpty();
+        pe.Position = 0;
+        var alc = new System.Runtime.Loader.AssemblyLoadContext(
+            "PublicCreateWireInverses", isCollectible: true);
+        var asm = alc.LoadFromStream(pe);
+
+        var guestType = asm.GetType("Guest")!;
+        var roomType = asm.GetType("Room")!;
+        var reservationType = asm.GetType("Reservation")!;
+
+        object InvokeCreate(Type type, params object?[] args) {
+            var methods = type.GetMethods(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)
+                .Where(m => m.Name == "Create")
+                .ToArray();
+            var create = methods.OrderByDescending(m => m.GetParameters().Length).First();
+            var parameters = create.GetParameters();
+            var callArgs = new object?[parameters.Length];
+            for (var i = 0; i < parameters.Length; i++) {
+                if (i < args.Length && args[i] is not null)
+                    callArgs[i] = args[i];
+                else if (parameters[i].HasDefaultValue)
+                    callArgs[i] = parameters[i].DefaultValue;
+                else if (parameters[i].ParameterType == typeof(string))
+                    callArgs[i] = "";
+                else if (parameters[i].ParameterType == typeof(bool))
+                    callArgs[i] = false;
+                else
+                    callArgs[i] = null;
+            }
+            return create.Invoke(null, callArgs)!;
+        }
+
+        object ResultValue(object result) =>
+            result.GetType().GetProperty("Value")!.GetValue(result)!;
+
+        bool ResultOk(object result) =>
+            (bool)result.GetType().GetProperty("IsSuccess")!.GetValue(result)!;
+
+        var guestResult = InvokeCreate(guestType, "Ada");
+        await Assert.That(ResultOk(guestResult)).IsTrue();
+        var guest = ResultValue(guestResult);
+
+        var roomResult = InvokeCreate(roomType, "101");
+        await Assert.That(ResultOk(roomResult)).IsTrue();
+        var room = ResultValue(roomResult);
+
+        // Reservation.Create(guest, room, …) — match by parameter types where possible.
+        var resCreate = reservationType.GetMethods(
+                System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)
+            .Where(m => m.Name == "Create")
+            .OrderByDescending(m => m.GetParameters().Length)
+            .First();
+        var resParams = resCreate.GetParameters();
+        var resArgs = new object?[resParams.Length];
+        for (var i = 0; i < resParams.Length; i++) {
+            var pt = resParams[i].ParameterType;
+            var underlying = Nullable.GetUnderlyingType(pt) ?? pt;
+            if (underlying == guestType) resArgs[i] = guest;
+            else if (underlying == roomType) resArgs[i] = room;
+            else if (resParams[i].HasDefaultValue) resArgs[i] = resParams[i].DefaultValue;
+            else resArgs[i] = null;
+        }
+        var reservationResult = resCreate.Invoke(null, resArgs)!;
+        await Assert.That(ResultOk(reservationResult)).IsTrue();
+        var reservation = ResultValue(reservationResult);
+
+        var stays = roomType.GetProperty("Stays")!.GetValue(room) as System.Collections.ICollection;
+        await Assert.That(stays).IsNotNull();
+        await Assert.That(stays!.Count).IsEqualTo(1);
+
+        var occupiedBefore = (bool)roomType.GetProperty("Occupied")!.GetValue(room)!;
+        await Assert.That(occupiedBefore).IsFalse();
+
+        var checkIn = reservationType.GetMethod("CheckIn")!;
+        var checkInResult = checkIn.Invoke(reservation, null)!;
+        await Assert.That(ResultOk(checkInResult)).IsTrue();
+
+        var occupiedAfter = (bool)roomType.GetProperty("Occupied")!.GetValue(room)!;
+        await Assert.That(occupiedAfter).IsTrue();
+    }
+
+    [Test]
+    public async Task Export_PublicCreate_AmbiguousInverse_SkipsAttach() {
+        // HostAbi.TryLinkInverseCollection skip: public Create with peer when two
+        // collections constructs successfully and does not Attach* / fail-closed.
+        var (domain, analysis) = ParseAndAnalyze("""
+            domain Ambiguous
+            Peer: entity {
+              primary: many Child
+              secondary: many Child
+            }
+            Child: entity {
+              peer: Peer
+            }
+            """);
+        await Assert.That(analysis.HasErrors).IsFalse();
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var cs = new CSharpGenerator().Generate(new CompilationUnitNode([], null, types, null));
+        var createStart = cs.IndexOf("static DomainResult<Child> Create(", StringComparison.Ordinal);
+        await Assert.That(createStart).IsGreaterThanOrEqualTo(0);
+        var brace = cs.IndexOf('{', createStart);
+        var depth = 0;
+        var createEnd = brace;
+        for (var i = brace; i < cs.Length; i++) {
+            if (cs[i] == '{') depth++;
+            else if (cs[i] == '}') {
+                depth--;
+                if (depth == 0) { createEnd = i + 1; break; }
+            }
+        }
+        var createBody = cs[createStart..createEnd];
+        await Assert.That(createBody).DoesNotContain("has no unique inverse collection to attach on 'Peer'");
+        await Assert.That(createBody).DoesNotContain("AttachPrimary");
+        await Assert.That(createBody).DoesNotContain("AttachSecondary");
+        await Assert.That(createBody).Contains("DomainResult<Child>.Success");
+        var errors = CompileExported(cs);
+        await Assert.That(errors).IsEmpty();
+    }
+
+    [Test]
+    public async Task Export_CreateNav_AmbiguousInverse_CreateInPrimary_Succeeds() {
+        // F1: named create-in when parent has two collections of the child type.
+        // Create skips Attach; CreateNav fallback _primary.Add runs.
+        var (domain, analysis) = ParseAndAnalyze("""
+            domain AmbiguousCreateIn
+            Peer: entity {
+              primary: many Child
+              secondary: many Child
+              Make: action {
+                create in primary {}
+              }
+            }
+            Child: entity {
+              peer: Peer
+            }
+            """);
+        await Assert.That(analysis.HasErrors).IsFalse();
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var cs = new CSharpGenerator().Generate(new CompilationUnitNode([], null, types, null));
+
+        var createPrimaryStart = cs.IndexOf("DomainResult<Child> CreatePrimary(", StringComparison.Ordinal);
+        await Assert.That(createPrimaryStart).IsGreaterThanOrEqualTo(0);
+        var brace = cs.IndexOf('{', createPrimaryStart);
+        var depth = 0;
+        var createPrimaryEnd = brace;
+        for (var i = brace; i < cs.Length; i++) {
+            if (cs[i] == '{') depth++;
+            else if (cs[i] == '}') {
+                depth--;
+                if (depth == 0) { createPrimaryEnd = i + 1; break; }
+            }
+        }
+        var createPrimary = cs[createPrimaryStart..createPrimaryEnd];
+        await Assert.That(createPrimary).Contains("Child.Create(");
+        await Assert.That(createPrimary).Contains("_primary.Add");
+        await Assert.That(createPrimary).DoesNotContain("_secondary.Add");
+        await Assert.That(createPrimary).DoesNotContain("AttachPrimary");
+        await Assert.That(createPrimary).DoesNotContain("AttachSecondary");
+
+        var childCreateStart = cs.IndexOf("static DomainResult<Child> Create(", StringComparison.Ordinal);
+        await Assert.That(childCreateStart).IsGreaterThanOrEqualTo(0);
+        brace = cs.IndexOf('{', childCreateStart);
+        depth = 0;
+        var childCreateEnd = brace;
+        for (var i = brace; i < cs.Length; i++) {
+            if (cs[i] == '{') depth++;
+            else if (cs[i] == '}') {
+                depth--;
+                if (depth == 0) { childCreateEnd = i + 1; break; }
+            }
+        }
+        var childCreate = cs[childCreateStart..childCreateEnd];
+        await Assert.That(childCreate).DoesNotContain("AttachPrimary");
+        await Assert.That(childCreate).DoesNotContain("AttachSecondary");
+        await Assert.That(childCreate).DoesNotContain("has no unique inverse collection");
+
+        var tree = CSharpSyntaxTree.ParseText("#nullable enable\nusing System.Collections.Generic;\n" + cs);
+        var references = ((string?)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES"))
+            ?.Split(Path.PathSeparator)
+            .Select(p => (MetadataReference)MetadataReference.CreateFromFile(p))
+            .ToArray() ?? [];
+        var compilation = CSharpCompilation.Create(
+            "AmbiguousCreateInPrimary",
+            [tree],
+            references,
+            new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+        using var pe = new MemoryStream();
+        var emit = compilation.Emit(pe);
+        var emitErrors = emit.Diagnostics
+            .Where(d => d.Severity == Microsoft.CodeAnalysis.DiagnosticSeverity.Error)
+            .Select(d => d.ToString())
+            .ToArray();
+        await Assert.That(emitErrors).IsEmpty();
+        pe.Position = 0;
+        var alc = new System.Runtime.Loader.AssemblyLoadContext(
+            "AmbiguousCreateInPrimary", isCollectible: true);
+        var asm = alc.LoadFromStream(pe);
+
+        var peerType = asm.GetType("Peer")!;
+        var childType = asm.GetType("Child")!;
+        var peerCreate = peerType.GetMethods(
+                System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)
+            .Where(m => m.Name == "Create")
+            .OrderByDescending(m => m.GetParameters().Length)
+            .First();
+        var peerArgs = peerCreate.GetParameters().Select(p =>
+            p.HasDefaultValue ? p.DefaultValue
+            : p.ParameterType == typeof(string) ? (object)""
+            : null).ToArray();
+        var peerResult = peerCreate.Invoke(null, peerArgs)!;
+        await Assert.That((bool)peerResult.GetType().GetProperty("IsSuccess")!.GetValue(peerResult)!).IsTrue();
+        var peer = peerResult.GetType().GetProperty("Value")!.GetValue(peerResult)!;
+
+        var make = peerType.GetMethod("Make")!;
+        var makeResult = make.Invoke(peer, null)!;
+        await Assert.That((bool)makeResult.GetType().GetProperty("IsSuccess")!.GetValue(makeResult)!).IsTrue();
+
+        var primary = peerType.GetProperty("Primary")!.GetValue(peer) as System.Collections.ICollection;
+        var secondary = peerType.GetProperty("Secondary")!.GetValue(peer) as System.Collections.ICollection;
+        await Assert.That(primary).IsNotNull();
+        await Assert.That(secondary).IsNotNull();
+        await Assert.That(primary!.Count).IsEqualTo(1);
+        await Assert.That(secondary!.Count).IsEqualTo(0);
+
+        object? child = null;
+        foreach (var item in primary)
+            child = item;
+        await Assert.That(child).IsNotNull();
+        var childPeer = childType.GetProperty("Peer")!.GetValue(child);
+        await Assert.That(ReferenceEquals(childPeer, peer)).IsTrue();
     }
 
     private static string[] CompileExported(string cs) {

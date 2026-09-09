@@ -2041,6 +2041,23 @@ public class DomainToCSharpExporterTests {
         var assessByType = cs[assessStart..assessEnd];
         await Assert.That(assessByType).Contains("this.Create(");
         await Assert.That(assessByType).DoesNotContain("_fines.Add");
+
+        // F4: unique-path CreateNav defers Add when Create already Attached.
+        var createFinesStart = cs.IndexOf("DomainResult<Fine> CreateFines(", StringComparison.Ordinal);
+        await Assert.That(createFinesStart).IsGreaterThanOrEqualTo(0);
+        var createFinesBrace = cs.IndexOf('{', createFinesStart);
+        depth = 0;
+        var createFinesEnd = createFinesBrace;
+        for (var i = createFinesBrace; i < cs.Length; i++) {
+            if (cs[i] == '{') depth++;
+            else if (cs[i] == '}') {
+                depth--;
+                if (depth == 0) { createFinesEnd = i + 1; break; }
+            }
+        }
+        var createFines = cs[createFinesStart..createFinesEnd];
+        await Assert.That(createFines).Contains("Fine.Create(");
+        await Assert.That(createFines).DoesNotContain("_fines.Add");
     }
 
     [Test]
@@ -2760,6 +2777,24 @@ public class DomainToCSharpExporterTests {
         var createBody = cs[createStart..createEnd];
         await Assert.That(createBody).Contains("AttachReservations");
         await Assert.That(createBody).Contains("AttachStays");
+
+        // F4: unique-path CreateNav defers Add when Create already Attached.
+        var createReservationsStart = cs.IndexOf("DomainResult<Reservation> CreateReservations(", StringComparison.Ordinal);
+        await Assert.That(createReservationsStart).IsGreaterThanOrEqualTo(0);
+        var createReservationsBrace = cs.IndexOf('{', createReservationsStart);
+        depth = 0;
+        var createReservationsEnd = createReservationsBrace;
+        for (var i = createReservationsBrace; i < cs.Length; i++) {
+            if (cs[i] == '{') depth++;
+            else if (cs[i] == '}') {
+                depth--;
+                if (depth == 0) { createReservationsEnd = i + 1; break; }
+            }
+        }
+        var createReservations = cs[createReservationsStart..createReservationsEnd];
+        await Assert.That(createReservations).Contains("Reservation.Create(");
+        await Assert.That(createReservations).DoesNotContain("_reservations.Add");
+
         var errors = CompileExported(cs);
         await Assert.That(errors).IsEmpty();
     }
@@ -2869,7 +2904,9 @@ public class DomainToCSharpExporterTests {
     }
 
     [Test]
-    public async Task Export_PublicCreate_AmbiguousInverse_FailsClosed() {
+    public async Task Export_PublicCreate_AmbiguousInverse_SkipsAttach() {
+        // HostAbi.TryLinkInverseCollection skip: public Create with peer when two
+        // collections constructs successfully and does not Attach* / fail-closed.
         var (domain, analysis) = ParseAndAnalyze("""
             domain Ambiguous
             Peer: entity {
@@ -2896,9 +2933,125 @@ public class DomainToCSharpExporterTests {
             }
         }
         var createBody = cs[createStart..createEnd];
-        await Assert.That(createBody).Contains("has no unique inverse collection to attach on 'Peer'");
+        await Assert.That(createBody).DoesNotContain("has no unique inverse collection to attach on 'Peer'");
         await Assert.That(createBody).DoesNotContain("AttachPrimary");
         await Assert.That(createBody).DoesNotContain("AttachSecondary");
+        await Assert.That(createBody).Contains("DomainResult<Child>.Success");
+        var errors = CompileExported(cs);
+        await Assert.That(errors).IsEmpty();
+    }
+
+    [Test]
+    public async Task Export_CreateNav_AmbiguousInverse_CreateInPrimary_Succeeds() {
+        // F1: named create-in when parent has two collections of the child type.
+        // Create skips Attach; CreateNav fallback _primary.Add runs.
+        var (domain, analysis) = ParseAndAnalyze("""
+            domain AmbiguousCreateIn
+            Peer: entity {
+              primary: many Child
+              secondary: many Child
+              Make: action {
+                create in primary {}
+              }
+            }
+            Child: entity {
+              peer: Peer
+            }
+            """);
+        await Assert.That(analysis.HasErrors).IsFalse();
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var cs = new CSharpGenerator().Generate(new CompilationUnitNode([], null, types, null));
+
+        var createPrimaryStart = cs.IndexOf("DomainResult<Child> CreatePrimary(", StringComparison.Ordinal);
+        await Assert.That(createPrimaryStart).IsGreaterThanOrEqualTo(0);
+        var brace = cs.IndexOf('{', createPrimaryStart);
+        var depth = 0;
+        var createPrimaryEnd = brace;
+        for (var i = brace; i < cs.Length; i++) {
+            if (cs[i] == '{') depth++;
+            else if (cs[i] == '}') {
+                depth--;
+                if (depth == 0) { createPrimaryEnd = i + 1; break; }
+            }
+        }
+        var createPrimary = cs[createPrimaryStart..createPrimaryEnd];
+        await Assert.That(createPrimary).Contains("Child.Create(");
+        await Assert.That(createPrimary).Contains("_primary.Add");
+        await Assert.That(createPrimary).DoesNotContain("_secondary.Add");
+        await Assert.That(createPrimary).DoesNotContain("AttachPrimary");
+        await Assert.That(createPrimary).DoesNotContain("AttachSecondary");
+
+        var childCreateStart = cs.IndexOf("static DomainResult<Child> Create(", StringComparison.Ordinal);
+        await Assert.That(childCreateStart).IsGreaterThanOrEqualTo(0);
+        brace = cs.IndexOf('{', childCreateStart);
+        depth = 0;
+        var childCreateEnd = brace;
+        for (var i = brace; i < cs.Length; i++) {
+            if (cs[i] == '{') depth++;
+            else if (cs[i] == '}') {
+                depth--;
+                if (depth == 0) { childCreateEnd = i + 1; break; }
+            }
+        }
+        var childCreate = cs[childCreateStart..childCreateEnd];
+        await Assert.That(childCreate).DoesNotContain("AttachPrimary");
+        await Assert.That(childCreate).DoesNotContain("AttachSecondary");
+        await Assert.That(childCreate).DoesNotContain("has no unique inverse collection");
+
+        var tree = CSharpSyntaxTree.ParseText("#nullable enable\nusing System.Collections.Generic;\n" + cs);
+        var references = ((string?)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES"))
+            ?.Split(Path.PathSeparator)
+            .Select(p => (MetadataReference)MetadataReference.CreateFromFile(p))
+            .ToArray() ?? [];
+        var compilation = CSharpCompilation.Create(
+            "AmbiguousCreateInPrimary",
+            [tree],
+            references,
+            new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+        using var pe = new MemoryStream();
+        var emit = compilation.Emit(pe);
+        var emitErrors = emit.Diagnostics
+            .Where(d => d.Severity == Microsoft.CodeAnalysis.DiagnosticSeverity.Error)
+            .Select(d => d.ToString())
+            .ToArray();
+        await Assert.That(emitErrors).IsEmpty();
+        pe.Position = 0;
+        var alc = new System.Runtime.Loader.AssemblyLoadContext(
+            "AmbiguousCreateInPrimary", isCollectible: true);
+        var asm = alc.LoadFromStream(pe);
+
+        var peerType = asm.GetType("Peer")!;
+        var childType = asm.GetType("Child")!;
+        var peerCreate = peerType.GetMethods(
+                System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)
+            .Where(m => m.Name == "Create")
+            .OrderByDescending(m => m.GetParameters().Length)
+            .First();
+        var peerArgs = peerCreate.GetParameters().Select(p =>
+            p.HasDefaultValue ? p.DefaultValue
+            : p.ParameterType == typeof(string) ? (object)""
+            : null).ToArray();
+        var peerResult = peerCreate.Invoke(null, peerArgs)!;
+        await Assert.That((bool)peerResult.GetType().GetProperty("IsSuccess")!.GetValue(peerResult)!).IsTrue();
+        var peer = peerResult.GetType().GetProperty("Value")!.GetValue(peerResult)!;
+
+        var make = peerType.GetMethod("Make")!;
+        var makeResult = make.Invoke(peer, null)!;
+        await Assert.That((bool)makeResult.GetType().GetProperty("IsSuccess")!.GetValue(makeResult)!).IsTrue();
+
+        var primary = peerType.GetProperty("Primary")!.GetValue(peer) as System.Collections.ICollection;
+        var secondary = peerType.GetProperty("Secondary")!.GetValue(peer) as System.Collections.ICollection;
+        await Assert.That(primary).IsNotNull();
+        await Assert.That(secondary).IsNotNull();
+        await Assert.That(primary!.Count).IsEqualTo(1);
+        await Assert.That(secondary!.Count).IsEqualTo(0);
+
+        object? child = null;
+        foreach (var item in primary)
+            child = item;
+        await Assert.That(child).IsNotNull();
+        var childPeer = childType.GetProperty("Peer")!.GetValue(child);
+        await Assert.That(ReferenceEquals(childPeer, peer)).IsTrue();
     }
 
     private static string[] CompileExported(string cs) {

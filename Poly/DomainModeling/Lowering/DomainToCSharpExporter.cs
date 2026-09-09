@@ -672,9 +672,12 @@ public sealed partial class DomainToCSharpExporter {
             // don't carry constraints in the current model.
             var constraintChecks = BuildCreateConstraintChecks(entity, domain, esm.EntryAssignedPropertyNames);
 
-            // Construct, wire inverse collections + subscription registries via Attach*,
-            // then Success — same seam as CreateNav/Attach. Ambiguous peer collections
-            // fail closed; OneToOne (no collection inverse) leaves the ctor to-one only.
+            // Construct, then Success. Create is the unique-inverse attach source
+            // (Attach* when count==1); CreateNav/BindCreate defer Add/Register when
+            // that attach ran. Ambiguous peer collections (count>1) skip Attach —
+            // same as HostAbi.TryLinkInverseCollection — so named create-in can
+            // fallback-_field.Add. OneToOne (no collection inverse) leaves the
+            // ctor to-one only. Null peer is a no-op.
             var createSuccessNodes = new List<Node>();
             createSuccessNodes.AddRange(constraintChecks);
             var createdLocal = new Variable("created");
@@ -699,37 +702,13 @@ public sealed partial class DomainToCSharpExporter {
                     peerEntity = domain.Types.OfType<Entity>()
                         .FirstOrDefault(e => string.Equals(e.Name, peerTypeName, StringComparison.Ordinal));
 
-                // Unique collection inverse on the peer (same rule as FindInverseCollection).
-                // count == 0: OneToOne / no collection to wire — ctor already set the to-one.
-                // count > 1: fail closed (ambiguous). count == 1: Attach (Add + Register*).
-                Relationship? inverse = null;
-                var inverseCount = 0;
-                if (peerEntity is not null) {
-                    foreach (var peerNav in peerEntity.Navigations) {
-                        if (peerNav.Cardinality is not (RelationshipCardinality.OneToMany
-                            or RelationshipCardinality.ManyToMany))
-                            continue;
-                        if (!string.Equals(peerNav.Target.TypeName, entity.Name, StringComparison.Ordinal))
-                            continue;
-                        inverse = peerNav;
-                        inverseCount++;
-                    }
-                    if (inverseCount != 1)
-                        inverse = null;
-                }
-
-                Node Failure(string msg) => new Return(
-                    new Invoke(
-                        new Member(createResultType, "Failure"),
-                        new Constant(msg)));
-
-                if (inverseCount > 1) {
-                    createSuccessNodes.Add(new IfStatement(
-                        new NotEqual(paramRef, new Constant(null)),
-                        new Block([Failure(
-                            $"'{navParam.Name}' has no unique inverse collection to attach on '{peerTypeName}'")])));
-                    continue;
-                }
+                // Unique collection inverse on the peer (FindInverseCollectionInfo /
+                // HostAbi.TryLinkInverseCollection). count == 0: OneToOne / no
+                // collection — ctor already set the to-one. count > 1: skip Attach
+                // (named create-in CreateNav fallback Add). count == 1: Attach*.
+                var inverse = peerEntity is not null
+                    ? FindInverseCollectionInfo(peerEntity, entity.Name).Unique
+                    : null;
 
                 if (inverse is null)
                     continue;

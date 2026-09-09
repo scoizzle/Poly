@@ -219,10 +219,11 @@ public sealed partial class DomainToCSharpExporter {
         // Target.Create already Attaches via singular nav args (including auto-wired
         // `this` back-ref): peer collections + WhenEach* registries. Do not duplicate
         // _field.Add / Register* / peer Attach when Create wired this collection.
+        var (wiredInverse, _) = FindInverseCollectionInfo(entity, targetTypeName);
         var createWiredThisCollection = autoWireBackRef is not null
             && fieldName is not null
-            && FindInverseCollection(entity, targetTypeName) is { } wired
-            && string.Equals(wired.Name, rel.Name, StringComparison.Ordinal);
+            && wiredInverse is not null
+            && string.Equals(wiredInverse.Name, rel.Name, StringComparison.Ordinal);
 
         if (!createWiredThisCollection) {
             if (fieldName is not null) {

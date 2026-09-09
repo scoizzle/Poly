@@ -141,21 +141,25 @@ public sealed class PatternBuilder<TToken, TTokenKind>
         _priority = priority;
     }
 
+    /// <summary>Matches any token of the specified <paramref name="kind"/>.</summary>
     public PatternBuilder<TToken, TTokenKind> Kind(TTokenKind kind) {
         _elements.Add(new MatchKind<TToken, TTokenKind>(kind));
         return this;
     }
 
+    /// <summary>Matches a token of the specified <paramref name="kind"/> and captures it as <paramref name="name"/>.</summary>
     public PatternBuilder<TToken, TTokenKind> Value(TTokenKind kind, string? name = null) {
         _elements.Add(new Value<TToken, TTokenKind>(kind, name));
         return this;
     }
 
+    /// <summary>Matches a token satisfying <paramref name="predicate"/> and captures the result under <paramref name="label"/>.</summary>
     public PatternBuilder<TToken, TTokenKind> Predicate(Func<TToken, bool> predicate, string label) {
         _elements.Add(new MatchPredicate<TToken, TTokenKind>(predicate, label));
         return this;
     }
 
+    /// <summary>Makes <paramref name="inner"/> optional — matches zero or one occurrence.</summary>
     public PatternBuilder<TToken, TTokenKind> Optional(IPatternElement<TToken, TTokenKind> inner) {
         _elements.Add(new Optional<TToken, TTokenKind>(inner));
         return this;
@@ -165,31 +169,37 @@ public sealed class PatternBuilder<TToken, TTokenKind>
     public PatternBuilder<TToken, TTokenKind> Optional(TTokenKind kind) =>
         Optional(new MatchKind<TToken, TTokenKind>(kind));
 
+    /// <summary>Repeats a reference to <paramref name="ruleName"/> between <paramref name="min"/> and <paramref name="max"/> times.</summary>
     public PatternBuilder<TToken, TTokenKind> Repeat(string ruleName, int min = 0, int max = int.MaxValue) {
         _elements.Add(new Repeat<TToken, TTokenKind>(ruleName, min, max));
         return this;
     }
 
+    /// <summary>References another rule by <paramref name="ruleName"/>.</summary>
     public PatternBuilder<TToken, TTokenKind> Ref(string ruleName) {
         _elements.Add(new Ref<TToken, TTokenKind>(ruleName));
         return this;
     }
 
+    /// <summary>Matches a left-associative binary expression: <c>operand operator operand</c>.</summary>
     public PatternBuilder<TToken, TTokenKind> LeftAssoc(string operandRule, params TTokenKind[] operatorKinds) {
         _elements.Add(new LeftAssoc<TToken, TTokenKind>(operandRule, operatorKinds));
         return this;
     }
 
+    /// <summary>Matches a balanced pair of <paramref name="open"/> and <paramref name="close"/> delimiters.</summary>
     public PatternBuilder<TToken, TTokenKind> Balanced(TTokenKind open, TTokenKind close) {
         _elements.Add(new Balanced<TToken, TTokenKind>(open, close));
         return this;
     }
 
+    /// <summary>Matches any single token.</summary>
     public PatternBuilder<TToken, TTokenKind> Any() {
         _elements.Add(new Any<TToken, TTokenKind>());
         return this;
     }
 
+    /// <summary>Asserts the pattern is not followed by a token of <paramref name="kind"/>.</summary>
     public PatternBuilder<TToken, TTokenKind> NotFollowedBy(TTokenKind kind) {
         _elements.Add(new NotFollowedBy<TToken, TTokenKind>(kind));
         return this;

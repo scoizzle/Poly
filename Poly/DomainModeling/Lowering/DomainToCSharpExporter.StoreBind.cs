@@ -120,34 +120,9 @@ public sealed partial class DomainToCSharpExporter {
                     [.. createArgs]))
             };
             var locals = new List<Node> { typed };
-            if (autoLink) {
-                // Align C# export with HostAbi: Add into the sole matching collection
-                // after Fine.Create succeeds (AssessByType → this.Create → BindCreate).
-                var created = new Variable("created");
-                locals.Add(created);
-                var fieldName = $"_{ToCamelCase(ToPascalCase(outs[0].Name))}";
-                body.Add(new IfStatement(
-                    new Syntactic.Not(new Member(typed, "IsSuccess")),
-                    new Block([
-                        new Return(new Invoke(
-                            new Member(objectResult, "Failure"),
-                            new Syntactic.Coalesce(
-                                new Member(typed, "ErrorMessage"),
-                                new Constant(""))))
-                    ]),
-                    new Block([
-                        new Assignment(created, new Member(typed, "Value")),
-                        new Invoke(
-                            new Member(new Member(new ThisReference(), fieldName), "Add"),
-                            [new TypeCast(created, new NamedTypeReference(target.Name))]),
-                        new Return(new Invoke(
-                            new Member(objectResult, "Success"),
-                            [created]))
-                    ])));
-            }
-            else {
-                body.Add(RewrapObjectResult(typed, objectResult));
-            }
+            // When autoLink wires `this` as the back-ref, Target.Create already
+            // Attach*es into the sole matching collection — no separate Add.
+            body.Add(RewrapObjectResult(typed, objectResult));
             cases.Add(new IfStatement(
                 new Equal(name, new Constant(target.Name)),
                 new Block(body, locals)));

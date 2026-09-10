@@ -672,21 +672,66 @@ public sealed partial class DomainToCSharpExporter {
             // don't carry constraints in the current model.
             var constraintChecks = BuildCreateConstraintChecks(entity, domain, esm.EntryAssignedPropertyNames);
 
-            // return DomainResult<EntityName>.Success(new EntityName(args...));
+            // Construct, then Success. Create is the unique-inverse attach source
+            // (Attach* when count==1); CreateNav/BindCreate defer Add/Register when
+            // that attach ran. Ambiguous peer collections (count>1) skip Attach —
+            // same as HostAbi.TryLinkInverseCollection — so named create-in can
+            // fallback-_field.Add. OneToOne (no collection inverse) leaves the
+            // ctor to-one only. Null peer is a no-op.
             var createSuccessNodes = new List<Node>();
             createSuccessNodes.AddRange(constraintChecks);
+            var createdLocal = new Variable("created");
+            createSuccessNodes.Add(new Assignment(
+                createdLocal,
+                new New(
+                    new NamedTypeReference(entity.Name),
+                    ctorParams.Select(p => new Parameter(p.Name)).ToArray())));
+
+            var lookup = metadata.GetTypeLookup(domain);
+            foreach (var navParam in esm.ConstructorParameters
+                .Where(p => p.IsNavigation && !p.IsCollection)) {
+                var paramName = ToCamelCase(navParam.Name);
+                var paramRef = new Parameter(paramName);
+                var peerTypeName = navParam.Type.TypeName;
+                Entity? peerEntity = null;
+                if (lookup is not null
+                    && lookup.Types.TryGetValue(peerTypeName, out var resolvedPeer)
+                    && resolvedPeer is Entity pe)
+                    peerEntity = pe;
+                else
+                    peerEntity = domain.Types.OfType<Entity>()
+                        .FirstOrDefault(e => string.Equals(e.Name, peerTypeName, StringComparison.Ordinal));
+
+                // Unique collection inverse on the peer (FindInverseCollectionInfo /
+                // HostAbi.TryLinkInverseCollection). count == 0: OneToOne / no
+                // collection — ctor already set the to-one. count > 1: skip Attach
+                // (named create-in CreateNav fallback Add). count == 1: Attach*.
+                var inverse = peerEntity is not null
+                    ? FindInverseCollectionInfo(peerEntity, entity.Name).Unique
+                    : null;
+
+                if (inverse is null)
+                    continue;
+
+                createSuccessNodes.Add(new IfStatement(
+                    new NotEqual(paramRef, new Constant(null)),
+                    new Block([
+                        new Invoke(
+                            new Member(paramRef, $"Attach{ToPascalCase(inverse.Name)}"),
+                            [createdLocal])
+                    ])));
+            }
+
             createSuccessNodes.Add(new Return(
                 new Invoke(
                     new Member(createResultType, "Success"),
-                    [new New(
-                        new NamedTypeReference(entity.Name),
-                        ctorParams.Select(p => new Parameter(p.Name)).ToArray())])));
+                    [createdLocal])));
 
             methods.Add(new MethodDefinitionNode(
                 "Create",
                 createResultType,
                 Parameters: ctorParams,
-                Body: new Block(createSuccessNodes),
+                Body: new Block(createSuccessNodes, [createdLocal]),
                 IsStatic: true,
                 AccessModifier: AccessModifier.Public
             ));

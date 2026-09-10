@@ -19,29 +19,24 @@ public sealed record EvolutionResult(
     AnalysisResult Analysis,
     EvolutionTrace Trace,
     bool Succeeded,
-    bool WasRolledBack
+    bool WasRolledBack,
+    IReadOnlyList<string> MutationErrors
 ) {
     /// <summary>
-    /// True if analysis detected a structural or reference-level failure.
-    /// When true, the proposal is fundamentally invalid.
-    /// </summary>
-    public bool HasStructuralFailure => Analysis.HasStructuralFailure;
-
-    /// <summary>
     /// Short, human-readable summary of the primary errors when the proposal was rejected.
-    /// Useful for agents and logs. Includes whether it was a structural failure.
+    /// Mutation-target failures and analysis errors, in that order.
     /// </summary>
     public string? FailureSummary {
         get {
             if (Succeeded) return null;
 
-            var prefix = HasStructuralFailure ? "[Structural Failure] " : "";
-            var errors = Analysis.Diagnostics
-                .Where(d => d.Severity == DiagnosticSeverity.Error)
-                .Take(3)
-                .Select(d => d.Message);
+            var errors = MutationErrors
+                .Concat(Analysis.Diagnostics
+                    .Where(d => d.Severity == DiagnosticSeverity.Error)
+                    .Select(d => d.Message))
+                .Take(3);
 
-            return prefix + string.Join("; ", errors);
+            return string.Join("; ", errors);
         }
     }
 
@@ -49,11 +44,13 @@ public sealed record EvolutionResult(
         Domain root,
         AnalysisResult analysis,
         EvolutionTrace trace) =>
-        new(root, analysis, trace, Succeeded: true, WasRolledBack: false);
+        new(root, analysis, trace, Succeeded: true, WasRolledBack: false, MutationErrors: []);
 
     public static EvolutionResult RolledBack(
         Domain originalRoot,
         AnalysisResult analysis,
-        EvolutionTrace trace) =>
-        new(originalRoot, analysis, trace, Succeeded: false, WasRolledBack: true);
+        EvolutionTrace trace,
+        IReadOnlyList<string>? mutationErrors = null) =>
+        new(originalRoot, analysis, trace, Succeeded: false, WasRolledBack: true,
+            MutationErrors: mutationErrors ?? []);
 }

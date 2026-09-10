@@ -20,7 +20,6 @@ internal sealed class EffectTopologyPass : INodeAnalyzer {
 
     public void Analyze(AnalysisContext context, Node node) {
         if (node is not Domain domain) return;
-        if (context.HasStructuralFailure) return;
 
         var topology = Scan(domain);
         context.SetMetadata(domain, new EffectTopologyMetadata(topology));

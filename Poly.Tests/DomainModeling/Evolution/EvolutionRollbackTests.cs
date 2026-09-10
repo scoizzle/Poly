@@ -37,7 +37,7 @@ public class EvolutionRollbackTests {
 
         await Assert.That(result.WasRolledBack).IsTrue();
         await Assert.That(result.Succeeded).IsFalse();
-        await Assert.That(result.HasStructuralFailure).IsTrue();
+        await Assert.That(result.Analysis.HasErrors).IsTrue();
         await Assert.That(result.FailureSummary).IsNotNull();
         await Assert.That(result.FailureSummary!.Contains("Order")).IsTrue();
     }
@@ -210,18 +210,14 @@ public class EvolutionRollbackTests {
     }
 
     [Test]
-    public async Task Apply_HasInformationDiagnostics_ForEachStep() {
+    public async Task Apply_RecordsATraceStep_ForEachChange() {
         var domain = DomainFactory.Create("Test");
         var result = new DomainEvolution(domain).Evolve()
             .AddEntity("Order")
             .AddEntity("Customer")
             .Apply();
 
-        var infoCount = result.Analysis.Diagnostics
-            .Count(d => d.Severity == DiagnosticSeverity.Information);
-
-        // Each successful evolution step should add an EVOLUTION_STEP info diagnostic
-        await Assert.That(infoCount).IsGreaterThanOrEqualTo(2);
+        await Assert.That(result.Trace.Steps.Count).IsGreaterThanOrEqualTo(2);
     }
 
     // ── Missing-target fail-loud (RequireUpdate + evalErrors → rollback) ───

@@ -325,8 +325,8 @@ public class DomainEntityInstanceTests {
 
         var instance = DomainEntityInstance.Create(order,
             new Dictionary<string, object?>(), domain);
-        var analysis = RuntimeAnalysisCache.GetOrAnalyze(domain);
-        analysis.GetMetadataStore().Remove<DomainCatalogMetadata>(domain);
+        RuntimeAnalysisCache.GetOrAnalyze(domain)
+            .RebindWithoutMetadata<DomainCatalogMetadata>(domain, domain);
 
         var ex = Assert.Throws<InvalidOperationException>(() => instance.InvokeAction("Submit"));
         await Assert.That(ex!.Message).Contains("DomainCatalogMetadata");
@@ -421,20 +421,20 @@ public class DomainEntityInstanceTests {
     }
 
     [Test]
-    public async Task RequireCatalog_Throws_WhenCatalogMissingWithoutStructuralFailure() {
+    public async Task RequireCatalog_Throws_WhenCatalogMissingWithoutErrors() {
         // Success tree with catalog stripped — RequireCatalog throw branch (Q3).
-        // Full analyze is required so HasStructuralFailure is false; partial Semantic-only
-        // hosts still structural-fail on unknown built-in type names without bootstrap.
+        // Full analyze is required so HasErrors is false; partial Semantic-only
+        // hosts still fail on unknown built-in type names without bootstrap.
         var domain = DomainFactory.Create("Orders", b =>
             b.AddEntity("Order")
              .AddPropertyToEntity("Order", new Property("Name", new DomainTypeReference("Text"), []))
              .AddStage("Order", "Draft"));
 
         var analysis = DomainModelAnalyzer.Analyze(domain);
-        await Assert.That(analysis.HasStructuralFailure).IsFalse();
+        await Assert.That(analysis.HasErrors).IsFalse();
         await Assert.That(analysis.GetCatalog(domain)).IsNotNull();
 
-        analysis.GetMetadataStore().Remove<DomainCatalogMetadata>(domain);
+        analysis = analysis.WithoutMetadata<DomainCatalogMetadata>(domain);
         await Assert.That(analysis.GetCatalog(domain)).IsNull();
 
         var ex = Assert.Throws<InvalidOperationException>(
@@ -444,17 +444,18 @@ public class DomainEntityInstanceTests {
     }
 
     [Test]
-    public async Task RequireCatalog_Returns_WhenStructuralFailureWithoutCatalog() {
+    public async Task RequireCatalog_Returns_WhenErrorsWithoutCatalog() {
         var entity = new Entity("Order",
             [new Property("Name", new DomainTypeReference("Nope"), [])],
             [], [], []);
         var domain = DomainTestFactory.Create("EmptyStructural", [entity], []);
-        var context = AnalysisContext.CreateDefault();
-        new DomainCatalogPass().Analyze(context, domain);
-        var analysis = new AnalysisResult(context, AnalysisTelemetry.Empty);
+        var analysis = new AnalyzerBuilder()
+            .AddAnalyzer(new DomainCatalogPass())
+            .Build()
+            .Analyze(domain);
 
-        await Assert.That(analysis.HasStructuralFailure).IsTrue();
-        analysis.GetMetadataStore().Remove<DomainCatalogMetadata>(domain);
+        await Assert.That(analysis.HasErrors).IsTrue();
+        analysis = analysis.WithoutMetadata<DomainCatalogMetadata>(domain);
         await Assert.That(analysis.GetCatalog(domain)).IsNull();
 
         DomainModelAnalyzer.RequireCatalog(analysis, domain);

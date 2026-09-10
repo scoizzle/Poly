@@ -39,7 +39,6 @@ public class DomainFactoryTests {
         var analysis = DomainModelAnalyzer.Analyze(domain);
 
         await Assert.That(analysis.HasErrors).IsFalse();
-        await Assert.That(analysis.HasStructuralFailure).IsFalse();
     }
 
     [Test]

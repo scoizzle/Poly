@@ -272,7 +272,7 @@ public class DomainToCSharpExporterTests {
             }
             """);
         var entity = domain.Types.OfType<Entity>().Single(e => e.Name == "Person");
-        analysis.GetMetadataStore().Remove<EntityStructureMetadata>(entity);
+        analysis = analysis.WithoutMetadata<EntityStructureMetadata>(entity);
         var effect = new CreateEntityInstance(new DomainTypeReference("Person"));
         var context = new LoweringContext(
             new Parameter("entity", new TypeReference(entity.Name)),
@@ -2247,7 +2247,7 @@ public class DomainToCSharpExporterTests {
             }
             """);
         var order = domain.Types.OfType<Entity>().First(e => e.Name == "Order");
-        analysis.GetMetadataStore().Remove<SubscriptionDispatchPlanMetadata>(order);
+        analysis = analysis.WithoutMetadata<SubscriptionDispatchPlanMetadata>(order);
 
         var ex = Assert.Throws<InvalidOperationException>(
             () => new DomainToCSharpExporter().Export(domain, analysis));

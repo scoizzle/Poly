@@ -93,7 +93,7 @@ internal sealed record AnalysisData(
     [property: JsonPropertyName("warningCount")] int WarningCount,
     [property: JsonPropertyName("infoCount")] int InfoCount,
     [property: JsonPropertyName("hintCount")] int HintCount,
-    [property: JsonPropertyName("hasStructuralFailure")] bool HasStructuralFailure,
+    [property: JsonPropertyName("hasErrors")] bool HasErrors,
     [property: JsonPropertyName("messages")] IReadOnlyList<string> Messages,
     [property: JsonPropertyName("entityCount")] int EntityCount = 0,
     [property: JsonPropertyName("relationshipCount")] int RelationshipCount = 0,
@@ -359,7 +359,7 @@ internal sealed class QueryTool {
 
         var data = new AnalysisData(
             summary.ErrorCount, summary.WarningCount, summary.InfoCount, hintCount,
-            summary.HasStructuralFailure, summary.Messages,
+            summary.ErrorCount > 0, summary.Messages,
             EntityCount: entityCount,
             RelationshipCount: relationshipCount,
             RootEntityNames: rootEntityNames.Count > 0 ? rootEntityNames : null,

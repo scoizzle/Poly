@@ -1,4 +1,5 @@
 using System.Reflection;
+
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Evolution;
@@ -982,7 +983,7 @@ public class McpSmokeTests {
 
         // Analysis should be clean
         var analysis = DomainModelAnalyzer.Analyze(state.Domain);
-        await Assert.That(analysis.HasStructuralFailure).IsFalse();
+        await Assert.That(analysis.HasErrors).IsFalse();
 
         // BR.4.2: Subscription visibility via MCP get_entity_detail
         var detail = QueryTool.GetEntityDetail(sessionId, "Tracker");
@@ -1219,7 +1220,7 @@ public class McpSmokeTests {
 
         // Analysis should be clean
         var analysis = DomainModelAnalyzer.Analyze(state.Domain);
-        await Assert.That(analysis.HasStructuralFailure).IsFalse();
+        await Assert.That(analysis.HasErrors).IsFalse();
 
         // Export DSL should still be honest
         var export = DslTool.ExportDsl(sessionId);
@@ -1303,7 +1304,6 @@ public class McpSmokeTests {
         await Assert.That(state).IsNotNull();
 
         var analysis = DomainModelAnalyzer.Analyze(state!.Domain);
-        await Assert.That(analysis.HasStructuralFailure).IsFalse();
         await Assert.That(analysis.HasErrors).IsFalse();
 
         // G′′.3: export_dsl round-trip assertion

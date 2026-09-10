@@ -1,5 +1,3 @@
-using System.Collections.Concurrent;
-
 namespace Poly.Analysis;
 
 using Poly.Introspection;
@@ -8,17 +6,21 @@ using Poly.Introspection;
 /// Provides context for analysis operations, including type definitions and metadata storage.
 /// </summary>
 public sealed class AnalysisContext : INodeMetadataProvider {
-    /// <summary>
-    /// Creates a default AnalysisContext using the shared CLR type definition registry.
-    /// </summary>
-    public static AnalysisContext CreateDefault() =>
-        new(Introspection.CommonLanguageRuntime.ClrTypeDefinitionRegistry.Shared);
+    private readonly List<Diagnostic> _diagnostics = [];
+
+    public static AnalysisContext CreateDefault() => new();
+
+    public AnalysisContext() : this(Introspection.CommonLanguageRuntime.ClrTypeDefinitionRegistry.Shared, AnalysisSettings.Default) { }
+
+    public AnalysisContext(ITypeDefinitionProvider typeDefinitions)
+        : this(typeDefinitions, AnalysisSettings.Default) { }
 
     /// <summary>
     /// Initializes a new instance with type definitions.
     /// </summary>
-    public AnalysisContext(ITypeDefinitionProvider typeDefinitions, AnalysisSettings? settings = null) {
+    public AnalysisContext(ITypeDefinitionProvider typeDefinitions, AnalysisSettings settings) {
         ArgumentNullException.ThrowIfNull(typeDefinitions);
+        ArgumentNullException.ThrowIfNull(settings);
         var clr = Introspection.CommonLanguageRuntime.ClrTypeDefinitionRegistry.Shared;
         if (typeDefinitions is TypeDefinitionProviderCollection tpc) {
             TypeDefinitions = tpc;
@@ -30,29 +32,29 @@ public sealed class AnalysisContext : INodeMetadataProvider {
         else {
             TypeDefinitions = new TypeDefinitionProviderCollection(typeDefinitions, clr);
         }
-        Metadata = new NodeMetadataStore();
-        _diagnostics = new ConcurrentQueue<Diagnostic>();
-        Settings = settings ?? AnalysisSettings.Default;
+        Settings = settings;
+        AnalysisDiagnosticConfiguration = Settings.Get<AnalysisDiagnosticConfiguration>() ?? AnalysisDiagnosticConfiguration.Default;
     }
-
-    /// <summary>
-    /// Gets the metadata store for associating arbitrary data with AST nodes during analysis.
-    /// </summary>
-    public NodeMetadataStore Metadata { get; }
-
-    private readonly ConcurrentQueue<Diagnostic> _diagnostics;
-
-    /// <summary>
-    /// Diagnostics reported during this analysis, in enqueue order.
-    /// </summary>
-    public IReadOnlyCollection<Diagnostic> Diagnostics => _diagnostics;
-
-    internal ConcurrentQueue<Diagnostic> DiagnosticQueue => _diagnostics;
 
     /// <summary>
     /// Gets run-level settings for this analysis execution.
     /// </summary>
     public AnalysisSettings Settings { get; }
+
+    /// <summary>
+    /// Gets the metadata store for associating arbitrary data with AST nodes during analysis.
+    /// </summary>
+    public NodeMetadataStore Metadata { get; } = new();
+
+    /// <summary>
+    /// Diagnostics reported during this analysis, in report order.
+    /// </summary>
+    public IReadOnlyList<Diagnostic> Diagnostics => _diagnostics;
+
+    /// <summary>
+    /// Gets the diagnostic configuration used for this analysis run, which controls severity normalization and filtering.
+    /// </summary>
+    public AnalysisDiagnosticConfiguration AnalysisDiagnosticConfiguration { get; }
 
     /// <summary>
     /// Gets the type definition provider used for resolving type information.
@@ -68,7 +70,11 @@ public sealed class AnalysisContext : INodeMetadataProvider {
     public void ReportDiagnostic(Node node, DiagnosticSeverity severity, string message, string? code = null) {
         ArgumentNullException.ThrowIfNull(node);
         ArgumentNullException.ThrowIfNull(message);
-        _diagnostics.Enqueue(new Diagnostic(node, severity, message, code));
+
+        severity = AnalysisDiagnosticConfiguration.NormalizeSeverity(severity);
+        if (!AnalysisDiagnosticConfiguration.ShouldInclude(severity))
+            return;
+        _diagnostics.Add(new Diagnostic(node, severity, message, code));
     }
 
     /// <summary>
@@ -105,31 +111,22 @@ public sealed class AnalysisContext : INodeMetadataProvider {
     /// <param name="nodeId">The node identifier for which to clear metadata.</param>
     public void ClearMetadata(NodeId nodeId) => Metadata.RemoveAll(nodeId);
 
-    // === Early exit / interruption support ===
-
-    private int _structuralFailure;
+    /// <summary>
+    /// True when any error-level diagnostic has been reported.
+    /// </summary>
+    public bool HasErrors => _diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error);
 
     /// <summary>
-    /// Gets whether a structural or reference-level failure has been reported.
-    /// Analyzers and the pipeline can use this to decide whether to continue with expensive passes.
+    /// Reports an error. Same as <see cref="ReportDiagnostic"/> at
+    /// <see cref="DiagnosticSeverity.Error"/> — any error is enough to stop later work.
     /// </summary>
-    public bool HasStructuralFailure => Volatile.Read(ref _structuralFailure) != 0;
-
-    /// <summary>
-    /// Reports a structural or reference-level failure. This sets <see cref="HasStructuralFailure"/> to true.
-    /// Later analyzers (or the pipeline itself) may choose to skip work when this is set, depending on <see cref="AnalysisOptions"/>.
-    /// </summary>
-    public void ReportStructuralFailure(Node node, string message, string? code = null) {
-        Volatile.Write(ref _structuralFailure, 1);
+    public void ReportStructuralFailure(Node node, string message, string? code = null) =>
         ReportDiagnostic(node, DiagnosticSeverity.Error, message, code);
-    }
 
     /// <summary>
-    /// Returns whether analysis should continue running additional passes,
-    /// based on the provided options and any structural failures reported so far.
-    /// Analyzers can call this to decide whether to do expensive work.
+    /// Returns whether analysis should continue running additional passes.
     /// </summary>
     public bool ShouldContinue(AnalysisOptions options) {
-        return !options.ShouldStopOnStructuralErrors || !HasStructuralFailure;
+        return !options.ShouldStopOnStructuralErrors || !HasErrors;
     }
 }

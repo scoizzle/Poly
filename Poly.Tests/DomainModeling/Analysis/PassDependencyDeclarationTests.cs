@@ -99,7 +99,6 @@ public class PassDependencyDeclarationTests {
         }
 
         // Catalog / structure / topology consumers after their publishers.
-        // Same-wave independents (Structural vs Catalog) are not ordered by telemetry.
         await Assert.That(Index(DomainCatalogPass.Id)).IsLessThan(Index(CapabilityAnalyzer.Id));
         await Assert.That(Index(DomainCatalogPass.Id)).IsLessThan(Index(EntityStructureAnalyzer.Id));
         await Assert.That(Index(EffectTopologyPass.Id)).IsLessThan(Index(OwnershipAggregatePass.Id));

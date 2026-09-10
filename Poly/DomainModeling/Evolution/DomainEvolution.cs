@@ -40,47 +40,16 @@ public sealed class DomainEvolution {
 
         var mutationIndex = ResolveMutationTargetIndex(priorAnalysis, session);
 
-        var (proposed, _, evalErrors) = ApplyChanges(_current, changes, mutationIndex);
+        var (proposed, _, mutationErrors) = ApplyChanges(_current, changes, mutationIndex);
 
         var analysis = ResolveSession(proposed, session).Analyze(proposed);
 
-        // Integrate change history as first-class Information diagnostics *immediately*
-        // after analysis, before any access to .Diagnostics. This ensures the EVOLUTION_STEP
-        // infos are present in the materialized diagnostic list for both success and rejection paths.
-        // This is the unified model: step history lives in the standard diagnostic stream.
-        {
-            foreach (var change in changes) {
-                analysis.AddDiagnostic(new Diagnostic(
-                    proposed,
-                    DiagnosticSeverity.Information,
-                    change.GetDescription(),
-                    "EVOLUTION_STEP"));
-            }
-        }
-
-        // Inject evalErrors (missing-target failures from RequireUpdate) into the
-        // analysis diagnostic stream as first-class Error diagnostics so they appear
-        // in FailureSummary, trace, and MCP responses.
-        if (evalErrors.Count > 0) {
-            foreach (var err in evalErrors) {
-                analysis.AddDiagnostic(new Diagnostic(
-                    proposed,
-                    DiagnosticSeverity.Error,
-                    err,
-                    "EVOLUTION_TARGET"));
-            }
-        }
-
-        var hasErrors = analysis.Diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error);
-        var hasStructuralFailure = analysis.HasStructuralFailure;
+        var rejected = analysis.HasErrors || mutationErrors.Count > 0;
         var duration = DateTime.UtcNow - start;
-        var trace = BuildTrace(changes, hasErrors || hasStructuralFailure, analysis, duration);
+        var trace = BuildTrace(changes, rejected, analysis, duration, mutationErrors.Count);
 
-        // A structural failure means the model is invalid at a fundamental level.
-        // Per current design, this is treated as a hard rejection.
-        // We also reject on any other errors or missing-target failures.
-        if (hasErrors || hasStructuralFailure)
-            return EvolutionResult.RolledBack(_current, analysis, trace);
+        if (rejected)
+            return EvolutionResult.RolledBack(_current, analysis, trace, mutationErrors);
 
         return EvolutionResult.Success(proposed, analysis, trace);
     }
@@ -128,7 +97,8 @@ public sealed class DomainEvolution {
         IReadOnlyList<DomainChange> changes,
         bool proposalRejected,
         AnalysisResult analysis,
-        TimeSpan duration) {
+        TimeSpan duration,
+        int mutationErrorCount) {
         var steps = changes
             .Select(c => new EvolutionStep(c.GetDescription()))
             .ToList();
@@ -137,7 +107,8 @@ public sealed class DomainEvolution {
             steps,
             RolledBack: proposalRejected,
             Duration: duration,
-            ErrorCount: analysis.Diagnostics.Count(d => d.Severity == DiagnosticSeverity.Error),
+            ErrorCount: mutationErrorCount
+                + analysis.Diagnostics.Count(d => d.Severity == DiagnosticSeverity.Error),
             WarningCount: analysis.Diagnostics.Count(d => d.Severity == DiagnosticSeverity.Warning));
     }
 }

@@ -46,9 +46,8 @@ public class SyntaxDiffUtilTests {
         var beforeSnapshot = NodeDiffUtil.CaptureSnapshot(before, GetNodeName, BuildFingerprint);
         var afterSnapshot = NodeDiffUtil.CaptureSnapshot(after, GetNodeName, BuildFingerprint);
 
-        var context = new AnalysisContext(Poly.Introspection.CommonLanguageRuntime.ClrTypeDefinitionRegistry.Shared);
-        context.ReportWarning(afterLeaf, "changed leaf", "DIFF001");
-        var analysis = new AnalysisResult(context, AnalysisTelemetry.Empty);
+        var analysis = new AnalyzerBuilder().Build().Analyze(after, setup: ctx =>
+            ctx.ReportWarning(afterLeaf, "changed leaf", "DIFF001"));
 
         var diff = NodeDiffUtil.CompareSnapshots(beforeSnapshot, afterSnapshot, analysis);
         var changed = diff.Changed.Single(entry => entry.NodeId == changedId);

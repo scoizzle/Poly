@@ -8,7 +8,9 @@ public interface INodeAnalyzer {
     /// for type-safe cross-references in other passes' <see cref="Dependencies"/>.</summary>
     string PassName { get; }
 
-    /// <summary>Pass names that must run before this one. Default is empty.</summary>
+    /// <summary>Pass names that must be registered before this one.
+    /// <see cref="AnalyzerBuilder"/> inserts after the last of these; <see cref="Analyzer"/>
+    /// then runs the list in that order. Default is empty.</summary>
     string[] Dependencies => [];
 }
 

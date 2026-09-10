@@ -129,7 +129,7 @@ public class DomainSemanticLookupFailClosedTests {
         var domain = BuildOrderDomain();
         var analysis = RuntimeAnalysisCache.GetOrAnalyze(domain);
         var order = (Entity)domain.Types[0];
-        analysis.GetMetadataStore().Remove<EntityStructureMetadata>(order);
+        analysis = analysis.WithoutMetadata<EntityStructureMetadata>(order);
 
         await Assert.That(analysis.TryGetStage(order, "Draft", out var stage)).IsTrue();
         await Assert.That(stage!.Name).IsEqualTo("Draft");
@@ -140,7 +140,7 @@ public class DomainSemanticLookupFailClosedTests {
         var domain = BuildOrderDomain();
         var analysis = RuntimeAnalysisCache.GetOrAnalyze(domain);
         var order = (Entity)domain.Types[0];
-        analysis.GetMetadataStore().Remove<DomainCatalogMetadata>(domain);
+        analysis = analysis.WithoutMetadata<DomainCatalogMetadata>(domain);
 
         await Assert.That(analysis.TryGetStage(order, "Draft", out _)).IsFalse();
     }
@@ -206,7 +206,7 @@ public class DomainSemanticLookupFailClosedTests {
         var domain = BuildOrderDomain();
         var analysis = RuntimeAnalysisCache.GetOrAnalyze(domain);
         var order = (Entity)domain.Types[0];
-        analysis.GetMetadataStore().Remove<DomainCatalogMetadata>(domain);
+        analysis = analysis.WithoutMetadata<DomainCatalogMetadata>(domain);
 
         await Assert.That(analysis.TryResolveAction(domain, order, "Draft", "Submit", out _)).IsFalse();
     }
@@ -257,8 +257,8 @@ public class DomainSemanticLookupFailClosedTests {
         var order = (Entity)domain.Types[0];
         var draft = order.Stages[0];
         // StageCapability is preferred (W2); strip it plus catalog for empty.
-        analysis.GetMetadataStore().Remove<StageCapabilityMetadata>(draft);
-        analysis.GetMetadataStore().Remove<DomainCatalogMetadata>(domain);
+        analysis = analysis.WithoutMetadata<StageCapabilityMetadata>(draft);
+        analysis = analysis.WithoutMetadata<DomainCatalogMetadata>(domain);
 
         var policies = analysis.GetEffectivePolicies(domain, order, "Draft");
 
@@ -271,7 +271,7 @@ public class DomainSemanticLookupFailClosedTests {
         var analysis = RuntimeAnalysisCache.GetOrAnalyze(domain);
         var order = (Entity)domain.Types[0];
         var draft = order.Stages[0];
-        analysis.GetMetadataStore().Remove<StageCapabilityMetadata>(draft);
+        analysis = analysis.WithoutMetadata<StageCapabilityMetadata>(draft);
 
         await Assert.That(analysis.GetCatalog(domain)).IsNotNull();
         var policies = analysis.GetEffectivePolicies(domain, order, "Draft");
@@ -292,7 +292,7 @@ public class DomainSemanticLookupFailClosedTests {
         // Catalog-compose path: strip stage capability bags so MTI fallthrough would
         // have returned entity policies before the fail-closed fix.
         foreach (var stage in order.Stages)
-            analysis.GetMetadataStore().Remove<StageCapabilityMetadata>(stage);
+            analysis = analysis.WithoutMetadata<StageCapabilityMetadata>(stage);
 
         var viaCatalog = analysis.GetEffectivePolicies(domain, order, "DoesNotExist");
         await Assert.That(viaCatalog).IsEmpty();
@@ -351,8 +351,8 @@ public class DomainSemanticLookupFailClosedTests {
         var analysis = RuntimeAnalysisCache.GetOrAnalyze(domain);
         var order = (Entity)domain.Types[0];
         var draft = order.Stages[0];
-        analysis.GetMetadataStore().Remove<StageCapabilityMetadata>(draft);
-        analysis.GetMetadataStore().Remove<DomainCatalogMetadata>(domain);
+        analysis = analysis.WithoutMetadata<StageCapabilityMetadata>(draft);
+        analysis = analysis.WithoutMetadata<DomainCatalogMetadata>(domain);
 
         var actions = analysis.GetEffectiveActions(domain, order, "Draft");
 
@@ -440,7 +440,7 @@ public class DomainSemanticLookupFailClosedTests {
     public async Task TryGetRelationship_ReturnsFalse_WhenCatalogMissing() {
         var domain = BuildRelationshipDomain();
         var analysis = RuntimeAnalysisCache.GetOrAnalyze(domain);
-        analysis.GetMetadataStore().Remove<DomainCatalogMetadata>(domain);
+        analysis = analysis.WithoutMetadata<DomainCatalogMetadata>(domain);
 
         await Assert.That(analysis.TryGetRelationship(domain, "Order", "Owns", out _)).IsFalse();
     }
@@ -450,7 +450,7 @@ public class DomainSemanticLookupFailClosedTests {
         var domain = BuildRelationshipDomain();
         var analysis = RuntimeAnalysisCache.GetOrAnalyze(domain);
         // Intermediate Semantic RLM still published; domain-keyed path uses catalog only.
-        analysis.GetMetadataStore().Remove<RelationshipLookupMetadata>(null);
+        analysis = analysis.WithoutMetadata<RelationshipLookupMetadata>(null);
 
         await Assert.That(analysis.TryGetRelationship(domain, "Order", "Owns", out var rel)).IsTrue();
         await Assert.That(rel!.Name).IsEqualTo("Owns");
@@ -480,7 +480,7 @@ public class DomainSemanticLookupFailClosedTests {
     public async Task TryGetEntity_ReturnsFalse_WhenCatalogMissing() {
         var domain = BuildRelationshipDomain();
         var analysis = RuntimeAnalysisCache.GetOrAnalyze(domain);
-        analysis.GetMetadataStore().Remove<DomainCatalogMetadata>(domain);
+        analysis = analysis.WithoutMetadata<DomainCatalogMetadata>(domain);
 
         await Assert.That(analysis.TryGetEntity(domain, "Order", out _)).IsFalse();
     }
@@ -490,7 +490,7 @@ public class DomainSemanticLookupFailClosedTests {
         var domain = BuildRelationshipDomain();
         var analysis = RuntimeAnalysisCache.GetOrAnalyze(domain);
         // Intermediate Semantic DTLM still published; domain-keyed path uses catalog only.
-        analysis.GetMetadataStore().Remove<DomainTypeLookupMetadata>(null);
+        analysis = analysis.WithoutMetadata<DomainTypeLookupMetadata>(null);
 
         await Assert.That(analysis.TryGetEntity(domain, "Order", out var entity)).IsTrue();
         await Assert.That(entity!.Name).IsEqualTo("Order");
@@ -515,7 +515,8 @@ public class DomainSemanticLookupFailClosedTests {
         var state = GetFreshState(sessionId)!;
         var order = state.Domain.Types.OfType<Entity>()
             .First(e => string.Equals(e.Name, "Order", StringComparison.Ordinal));
-        state.LatestAnalysis!.GetMetadataStore().Remove<EntityStructureMetadata>(order);
+        AnalysisResultMetadata.ReplaceSessionAnalysis(sessionId,
+            state.LatestAnalysis!.WithoutMetadata<EntityStructureMetadata>(order));
 
         var desc = OracleTool.DescribeDomainElement(sessionId, "stage", "Draft", entityName: "Order");
         await Assert.That(desc.Success).IsFalse();
@@ -548,7 +549,8 @@ public class DomainSemanticLookupFailClosedTests {
         await Assert.That(r2.Success).IsTrue();
 
         var state = GetFreshState(sessionId)!;
-        state.LatestAnalysis!.GetMetadataStore().Remove<DomainCatalogMetadata>(state.Domain);
+        AnalysisResultMetadata.ReplaceSessionAnalysis(sessionId,
+            state.LatestAnalysis!.WithoutMetadata<DomainCatalogMetadata>(state.Domain));
 
         var desc = OracleTool.DescribeDomainElement(sessionId, "action", "Submit", entityName: "Order");
         await Assert.That(desc.Success).IsFalse();
@@ -602,7 +604,8 @@ public class DomainSemanticLookupFailClosedTests {
         await Assert.That(r2.Success).IsTrue();
 
         var state = GetFreshState(sessionId)!;
-        state.LatestAnalysis!.GetMetadataStore().Remove<DomainCatalogMetadata>(state.Domain);
+        AnalysisResultMetadata.ReplaceSessionAnalysis(sessionId,
+            state.LatestAnalysis!.WithoutMetadata<DomainCatalogMetadata>(state.Domain));
 
         var desc = OracleTool.DescribeDomainElement(sessionId, "policy", "Adult", entityName: "Order");
         await Assert.That(desc.Success).IsFalse();
@@ -658,7 +661,8 @@ public class DomainSemanticLookupFailClosedTests {
         await Assert.That(r3.Success).IsTrue();
 
         var state = GetFreshState(sessionId)!;
-        state.LatestAnalysis!.GetMetadataStore().Remove<DomainCatalogMetadata>(state.Domain);
+        AnalysisResultMetadata.ReplaceSessionAnalysis(sessionId,
+            state.LatestAnalysis!.WithoutMetadata<DomainCatalogMetadata>(state.Domain));
 
         var desc = OracleTool.DescribeDomainElement(sessionId, "relationship", "Owns");
         await Assert.That(desc.Success).IsFalse();
@@ -695,7 +699,8 @@ public class DomainSemanticLookupFailClosedTests {
         await Assert.That(r3.Success).IsTrue();
 
         var state = GetFreshState(sessionId)!;
-        state.LatestAnalysis!.GetMetadataStore().Remove<RelationshipLookupMetadata>(null);
+        AnalysisResultMetadata.ReplaceSessionAnalysis(sessionId,
+            state.LatestAnalysis!.WithoutMetadata<RelationshipLookupMetadata>(null));
 
         var desc = OracleTool.DescribeDomainElement(sessionId, "relationship", "Owns");
         await Assert.That(desc.Success).IsTrue();

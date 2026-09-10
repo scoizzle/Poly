@@ -42,15 +42,15 @@ internal sealed class OwnershipAggregatePass : INodeAnalyzer {
     /// <see cref="EffectTopology"/> for create-in based parent prioritization.
     /// </summary>
     internal static AggregateModel BuildAggregate(Domain domain, AnalysisContext? context, EffectTopology? topology = null) {
-        // Evolution/rollback may temporarily hold duplicate entity names; keep first.
-        var entities = domain.Types.OfType<Entity>()
+        var entities = domain.Types.OfType<Entity>().ToList();
+        // Evolution/rollback may temporarily hold duplicate entity names; fail-closed like DomainCatalogPass.
+        var entityLookup = entities
             .GroupBy(e => e.Name, StringComparer.Ordinal)
-            .Select(g => g.First())
-            .ToList();
-        var entityLookup = entities.ToDictionary(e => e.Name, StringComparer.Ordinal);
+            .ToDictionary(g => g.Key, g => g.Last(), StringComparer.Ordinal);
+        var uniqueEntities = entityLookup.Values.ToList();
         var relationships = context is not null
             ? context.GetAllRelationships(domain).ToList()
-            : entities.SelectMany(e => e.Navigations).ToList();
+            : uniqueEntities.SelectMany(e => e.Navigations).ToList();
 
         var incomingRels = new Dictionary<string, List<Relationship>>(StringComparer.Ordinal);
         foreach (var rel in relationships) {
@@ -60,7 +60,7 @@ internal sealed class OwnershipAggregatePass : INodeAnalyzer {
         }
 
         var drafts = new List<(string Name, bool IsRoot)>();
-        foreach (var entity in entities)
+        foreach (var entity in uniqueEntities)
             drafts.Add((entity.Name, IsRootEntity(entity, context, entityLookup, relationships)));
 
         var resolved = new Dictionary<string, AggregateEntity>(StringComparer.Ordinal);

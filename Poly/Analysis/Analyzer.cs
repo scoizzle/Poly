@@ -33,10 +33,14 @@ public sealed class Analyzer {
         }
 
         var telemetry = collector.ToSnapshot(Stopwatch.GetElapsedTime(totalStart));
+        // Preserve prior contract: same Node/Severity/Code/Message reports once.
+        var diagnostics = context.Diagnostics
+            .DistinctBy(d => (d.Node.Id, d.Severity, d.Code, d.Message))
+            .ToList();
         return new AnalysisResult(
             new NodeMetadataStore(context.Metadata),
             telemetry,
-            context.Diagnostics,
+            diagnostics,
             context.Settings,
             Options);
     }

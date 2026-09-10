@@ -42,7 +42,11 @@ internal sealed class OwnershipAggregatePass : INodeAnalyzer {
     /// <see cref="EffectTopology"/> for create-in based parent prioritization.
     /// </summary>
     internal static AggregateModel BuildAggregate(Domain domain, AnalysisContext? context, EffectTopology? topology = null) {
-        var entities = domain.Types.OfType<Entity>().ToList();
+        // Evolution/rollback may temporarily hold duplicate entity names; keep first.
+        var entities = domain.Types.OfType<Entity>()
+            .GroupBy(e => e.Name, StringComparer.Ordinal)
+            .Select(g => g.First())
+            .ToList();
         var entityLookup = entities.ToDictionary(e => e.Name, StringComparer.Ordinal);
         var relationships = context is not null
             ? context.GetAllRelationships(domain).ToList()

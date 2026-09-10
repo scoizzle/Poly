@@ -57,6 +57,9 @@ public static class DomainModelAnalyzer {
     public static void RequireCatalog(AnalysisResult analysis, Domain domain) {
         ArgumentNullException.ThrowIfNull(analysis);
         ArgumentNullException.ThrowIfNull(domain);
+        // PR 68: HasStructuralFailure collapsed into HasErrors — same early-return.
+        if (analysis.HasErrors)
+            return;
         if (analysis.GetCatalog(domain) is null)
             throw new InvalidOperationException(
                 $"Domain analysis for '{domain.Name}' did not produce {nameof(DomainCatalogMetadata)}.");

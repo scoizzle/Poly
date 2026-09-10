@@ -6,7 +6,7 @@ namespace Poly.Analysis;
 /// Passes are inserted after their last declared
 /// <see cref="INodeAnalyzer.Dependencies"/> name. A declared name that is not
 /// registered fails closed. Circular dependencies throw at registration time.
-/// <see cref="Analyzer"/> awaits those dependencies; independent passes overlap.
+/// <see cref="Analyzer"/> runs the resulting list in order, one pass at a time.
 /// </summary>
 public sealed class AnalyzerBuilder {
     private readonly OrderedDictionary<string, INodeAnalyzer> _entries = new(StringComparer.Ordinal);

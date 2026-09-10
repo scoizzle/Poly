@@ -345,7 +345,7 @@ public class N1NavigationTests {
 
         // Analysis should be clean
         var analysis = DomainModelAnalyzer.Analyze(result2.Root);
-        await Assert.That(analysis.HasStructuralFailure).IsFalse();
+        await Assert.That(analysis.HasErrors).IsFalse();
     }
 
     [Test]
@@ -411,7 +411,7 @@ public class N1NavigationTests {
             r.Cardinality == RelationshipCardinality.OneToMany)).IsTrue();
 
         var analysis = DomainModelAnalyzer.Analyze(result.Root);
-        await Assert.That(analysis.HasStructuralFailure).IsFalse();
+        await Assert.That(analysis.HasErrors).IsFalse();
     }
 
     [Test]
@@ -518,7 +518,7 @@ public class N1NavigationTests {
         await Assert.That(result.Relationships().Any(r => r.Name == "Audits")).IsTrue();
 
         var analysis = DomainModelAnalyzer.Analyze(result.Root);
-        await Assert.That(analysis.HasStructuralFailure).IsFalse();
+        await Assert.That(analysis.HasErrors).IsFalse();
     }
 
     [Test]
@@ -548,7 +548,7 @@ public class N1NavigationTests {
         await Assert.That(rel.SourceOwnsTarget).IsFalse();
 
         var analysis = DomainModelAnalyzer.Analyze(result.Root);
-        await Assert.That(analysis.HasStructuralFailure).IsFalse();
+        await Assert.That(analysis.HasErrors).IsFalse();
     }
 
     [Test]
@@ -660,7 +660,7 @@ public class N1NavigationTests {
         await Assert.That(pending.Subscriptions[0].RelationshipName).IsEqualTo("Tracks");
 
         var analysis = DomainModelAnalyzer.Analyze(result2.Root);
-        await Assert.That(analysis.HasStructuralFailure).IsFalse();
+        await Assert.That(analysis.HasErrors).IsFalse();
         await Assert.That(analysis.Diagnostics.Any(d =>
             d.Code == DomainModelDiagnosticCodes.SubscriptionContractMismatch)).IsFalse();
     }

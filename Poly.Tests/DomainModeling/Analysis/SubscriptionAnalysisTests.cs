@@ -71,8 +71,7 @@ public class SubscriptionAnalysisTests {
 
         await Assert.That(result.Succeeded).IsFalse();
         await Assert.That(result.WasRolledBack).IsTrue();
-        await Assert.That(result.Analysis.Diagnostics.Any(d =>
-            d.Message.Contains("nothing to remove"))).IsTrue();
+        await Assert.That(result.MutationErrors.Any(e => e.Contains("nothing to remove"))).IsTrue();
     }
 
     // ── A′.2 SubscriptionAnalyzer real checks ──────────
@@ -200,7 +199,7 @@ public class SubscriptionAnalysisTests {
 
         // Analyze the evolved domain
         var analysis = DomainModelAnalyzer.Analyze(result.Root!);
-        await Assert.That(analysis.HasStructuralFailure).IsFalse();
+        await Assert.That(analysis.HasErrors).IsFalse();
         await Assert.That(analysis.Diagnostics.Any(d =>
             d.Code == DomainModelDiagnosticCodes.SubscriptionContractMismatch)).IsFalse();
     }

@@ -217,7 +217,7 @@ public class MinimalApiGeneratorTests {
         var behavior = BehaviorMetadata.From(d, analysis);
         var aggregate = analysis.GetMetadata<OwnershipAggregateMetadata>(d)!.Aggregate;
         var item = d.Types.OfType<Entity>().First();
-        analysis.GetMetadataStore().Remove<EntityStructureMetadata>(item);
+        analysis = analysis.WithoutMetadata<EntityStructureMetadata>(item);
         var gen = new MinimalApiGenerator(d, analysis, storage, behavior, aggregate);
 
         var ex = Assert.Throws<InvalidOperationException>(() => gen.GenerateCompilationUnit("TDbCtx"));

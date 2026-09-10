@@ -68,7 +68,6 @@ public class SurfaceExtensionDogfoodTests {
         McpSessionStore.TryGet(sessionId, out var state);
         await Assert.That(state).IsNotNull();
         var analysis = DomainModelAnalyzer.Analyze(state!.Domain);
-        await Assert.That(analysis.HasStructuralFailure).IsFalse();
         await Assert.That(analysis.HasErrors).IsFalse();
 
         var customer = state.Domain.Types.OfType<Entity>().Single(e => e.Name == "Customer");
@@ -438,7 +437,7 @@ public class SurfaceExtensionDogfoodTests {
         if (apply.Success) {
             McpSessionStore.TryGet(sessionId, out var state);
             var analysis = DomainModelAnalyzer.Analyze(state!.Domain);
-            await Assert.That(analysis.HasErrors || analysis.HasStructuralFailure).IsTrue();
+            await Assert.That(analysis.HasErrors).IsTrue();
         }
         else {
             await Assert.That(apply.Message.Length).IsGreaterThan(0);
@@ -850,7 +849,7 @@ public class SurfaceExtensionDogfoodTests {
         if (apply.Success) {
             McpSessionStore.TryGet(sessionId, out var state);
             var analysis = DomainModelAnalyzer.Analyze(state!.Domain);
-            await Assert.That(analysis.HasErrors || analysis.HasStructuralFailure).IsTrue();
+            await Assert.That(analysis.HasErrors).IsTrue();
         }
         else {
             await Assert.That(apply.Success).IsFalse();

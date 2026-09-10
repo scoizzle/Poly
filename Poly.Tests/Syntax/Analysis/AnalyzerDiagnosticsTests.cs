@@ -14,6 +14,18 @@ public class AnalyzerDiagnosticsTests {
     }
 
     [Test]
+    public async Task IndependentPasses_SameNode_BothDiagnosticsPresent() {
+        var analyzer = new AnalyzerBuilder()
+            .AddAnalyzer(new ReportPass("a", "A"))
+            .AddAnalyzer(new ReportPass("b", "B"))
+            .Build();
+        var result = analyzer.Analyze(new Constant(0));
+        await Assert.That(result.Diagnostics.Count).IsEqualTo(2);
+        var codes = result.Diagnostics.Select(d => d.Code).ToHashSet();
+        await Assert.That(codes.SetEquals(["A", "B"])).IsTrue();
+    }
+
+    [Test]
     public async Task Analyze_WhenPassesAreNamed_TelemetryRecordsEachPass() {
         var analyzer = new AnalyzerBuilder()
             .AddAnalyzer(new NoopAnalyzer())
@@ -25,6 +37,17 @@ public class AnalyzerDiagnosticsTests {
         var names = result.Telemetry.Passes.Select(p => p.PassName).ToHashSet();
         await Assert.That(result.Telemetry.Passes.Count).IsEqualTo(2);
         await Assert.That(names.SetEquals(["TestNoop", "TestDuplicateDiagnostic"])).IsTrue();
+    }
+
+    private sealed class ReportPass : INodeAnalyzer {
+        public string PassName { get; }
+        private readonly string _code;
+        public ReportPass(string name, string code) {
+            PassName = name;
+            _code = code;
+        }
+        public void Analyze(AnalysisContext context, Node node) =>
+            context.ReportError(node, $"from {PassName}", _code);
     }
 
     private sealed class NoopAnalyzer : INodeAnalyzer {

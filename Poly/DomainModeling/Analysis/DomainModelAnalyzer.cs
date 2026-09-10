@@ -51,14 +51,12 @@ public static class DomainModelAnalyzer {
     }
 
     /// <summary>
-    /// Fail closed when a non-failed analysis is missing <see cref="DomainCatalogMetadata"/>.
-    /// Structural failures may omit the catalog without throwing (callers inspect diagnostics).
+    /// Fail closed when a successful analysis is missing <see cref="DomainCatalogMetadata"/>.
+    /// Analyses that already have errors may omit the catalog; callers inspect diagnostics.
     /// </summary>
     public static void RequireCatalog(AnalysisResult analysis, Domain domain) {
         ArgumentNullException.ThrowIfNull(analysis);
         ArgumentNullException.ThrowIfNull(domain);
-        if (analysis.HasStructuralFailure)
-            return;
         if (analysis.GetCatalog(domain) is null)
             throw new InvalidOperationException(
                 $"Domain analysis for '{domain.Name}' did not produce {nameof(DomainCatalogMetadata)}.");

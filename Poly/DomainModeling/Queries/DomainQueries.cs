@@ -98,7 +98,6 @@ public sealed record AnalysisSummary(
     int ErrorCount,
     int WarningCount,
     int InfoCount,
-    bool HasStructuralFailure,
     IReadOnlyList<string> Messages,
     int EntityCount = 0,
     int RelationshipCount = 0
@@ -274,7 +273,6 @@ public static class DomainQueries {
             ErrorCount: errors.Count,
             WarningCount: warnings.Count,
             InfoCount: infos.Count,
-            HasStructuralFailure: analysis.HasStructuralFailure,
             Messages: errors.Concat(warnings)
                 .Take(10)
                 .Select(d => $"[{d.Severity}] {d.Message}")

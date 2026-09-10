@@ -51,4 +51,24 @@ public class AnalyzerDependencyScheduleTests {
         await Assert.That(result.Telemetry.Passes.Count).IsEqualTo(2);
         await Assert.That(names.SetEquals(["left", "right"])).IsTrue();
     }
+
+    [Test]
+    public async Task Passes_RunInInsertOrder_LaterPassWinsSharedSlot() {
+        var first = new StampPass("first", "a");
+        var second = new StampPass("second", "b");
+        var third = new ReadPass("third", "first");
+        var node = new Constant(0);
+        var analyzer = new AnalyzerBuilder()
+            .AddAnalyzer(first)
+            .AddAnalyzer(second)
+            .AddAnalyzer(third)
+            .Build();
+        var result = analyzer.Analyze(node);
+        var names = result.Telemetry.Passes.Select(p => p.PassName).ToArray();
+        await Assert.That(names[0]).IsEqualTo("first");
+        await Assert.That(names[1]).IsEqualTo("third");
+        await Assert.That(names[2]).IsEqualTo("second");
+        await Assert.That(third.Seen).IsEqualTo("a");
+        await Assert.That(result.GetMetadata<StampMetadata>(node)?.From).IsEqualTo("b");
+    }
 }

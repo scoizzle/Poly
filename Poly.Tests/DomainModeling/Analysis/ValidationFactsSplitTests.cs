@@ -100,14 +100,22 @@ public class ValidationFactsSplitTests {
             }
             """);
 
-        var context = AnalysisContext.CreateDefault();
-        new DomainCatalogPass().Analyze(context, domain);
-        new EffectAnalyzer().Analyze(context, domain);
-        var analysis = new AnalysisResult(context, AnalysisTelemetry.Empty);
+        var analysis = new AnalyzerBuilder()
+            .AddAnalyzer(new DomainCatalogPass())
+            .AddAnalyzer(new EffectLintWithoutFactPasses())
+            .Build()
+            .Analyze(domain);
         var order = domain.Types.OfType<Entity>().First(e => e.Name == "Order");
         var place = order.Actions.First(a => a.Name == "Place");
         var createIn = place.Effects.OfType<CreateEntityInRelationshipEffect>().First();
 
         await Assert.That(analysis.GetMetadata<ResolvedRelationshipTargetMetadata>(createIn)).IsNull();
+    }
+
+    private sealed class EffectLintWithoutFactPasses : INodeAnalyzer {
+        public string PassName => EffectAnalyzer.Id + ".NoFacts";
+        public string[] Dependencies => [DomainCatalogPass.Id];
+        public void Analyze(AnalysisContext context, Node node) =>
+            new EffectAnalyzer().Analyze(context, node);
     }
 }

@@ -128,8 +128,7 @@ public static class DslGrammar {
         ExpressionFormRegistry forms) =>
         new(For(annotations, forms), CanonicalText, () => new DslTokenWriter());
 
-    private static Grammar<DslToken, DslTokenKind> CreateCore() =>
-        new GrammarBuilder<DslToken, DslTokenKind>()
+    private static Grammar<DslToken, DslTokenKind> CreateCore() => new GrammarBuilder<DslToken, DslTokenKind>()
         .Define("document")
             .Pattern("header").Kind(DslTokenKind.Domain).Value(DslTokenKind.Identifier, "name").Commit()
         .Define("uses")

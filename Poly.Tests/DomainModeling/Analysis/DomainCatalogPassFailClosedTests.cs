@@ -18,7 +18,7 @@ public class DomainCatalogPassFailClosedTests {
             .Build()
             .Analyze(domain);
 
-        await Assert.That(analysis.HasStructuralFailure).IsFalse();
+        await Assert.That(analysis.HasErrors).IsFalse();
         var catalog = analysis.GetCatalog(domain);
         await Assert.That(catalog).IsNotNull();
         await Assert.That(catalog!.ActionsByEntityName.ContainsKey("Order")).IsTrue();
@@ -34,9 +34,10 @@ public class DomainCatalogPassFailClosedTests {
             Stages: [new Stage("Draft", [], [], [], [])]);
         var domain = DomainTestFactory.Create("Direct", [order], []);
 
-        var context = AnalysisContext.CreateDefault();
-        new DomainCatalogPass().Analyze(context, domain);
-        var analysis = new AnalysisResult(context, AnalysisTelemetry.Empty);
+        var analysis = new AnalyzerBuilder()
+            .AddAnalyzer(new DomainCatalogPass())
+            .Build()
+            .Analyze(domain);
 
         await Assert.That(analysis.GetCatalog(domain)).IsNotNull();
         DomainModelAnalyzer.RequireCatalog(analysis, domain);

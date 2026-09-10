@@ -36,7 +36,6 @@ internal sealed class StoragePass : INodeAnalyzer {
 
     public void Analyze(AnalysisContext context, Node node) {
         if (node is not Domain domain) return;
-        if (context.HasStructuralFailure) return;
 
         // Pipeline: bags are on this context. Standalone: fall back to the completed
         // domain analysis passed to the constructor.

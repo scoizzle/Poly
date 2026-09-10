@@ -55,8 +55,8 @@ public class DomainInstanceStoreFailClosedTests {
         store.Link("Tracks", tracker, order);
 
         // Corrupt the cache: remove RelationshipContractMetadata after analysis
-        var analysis = RuntimeAnalysisCache.GetOrAnalyze(domain);
-        analysis.GetMetadataStore().Remove<RelationshipContractMetadata>(null);
+        RuntimeAnalysisCache.GetOrAnalyze(domain)
+            .RebindWithoutMetadata<RelationshipContractMetadata>(domain, null);
 
         // Act & Assert: throws when runtime metadata is missing
         await Assert.That(() => order.TransitionStage("Active"))
@@ -77,8 +77,8 @@ public class DomainInstanceStoreFailClosedTests {
         store.Add(tracker);
         store.Link("Tracks", tracker, order);
 
-        var analysis = RuntimeAnalysisCache.GetOrAnalyze(domain);
-        analysis.GetMetadataStore().Remove<EntityStructureMetadata>((Entity)domain.Types[1]);
+        RuntimeAnalysisCache.GetOrAnalyze(domain)
+            .RebindWithoutMetadata<EntityStructureMetadata>(domain, (Entity)domain.Types[1]);
 
         await Assert.That(() => order.TransitionStage("Active")).ThrowsNothing();
     }
@@ -89,8 +89,8 @@ public class DomainInstanceStoreFailClosedTests {
         var order = DomainEntityInstance.Create(
             (Entity)domain.Types[0], new Dictionary<string, object?>(), domain);
 
-        var analysis = RuntimeAnalysisCache.GetOrAnalyze(domain);
-        analysis.GetMetadataStore().Remove<DomainCatalogMetadata>(domain);
+        RuntimeAnalysisCache.GetOrAnalyze(domain)
+            .RebindWithoutMetadata<DomainCatalogMetadata>(domain, domain);
 
         var ex = Assert.Throws<InvalidOperationException>(() => order.TransitionStage("Active"));
         await Assert.That(ex!.Message).Contains("DomainCatalogMetadata");
@@ -115,8 +115,8 @@ public class DomainInstanceStoreFailClosedTests {
         // Advance stage without notify so we can hit NotifyTransition alone.
         order.TransitionStage("Active", notifyStore: false);
 
-        var analysis = RuntimeAnalysisCache.GetOrAnalyze(domain);
-        analysis.GetMetadataStore().Remove<DomainCatalogMetadata>(domain);
+        RuntimeAnalysisCache.GetOrAnalyze(domain)
+            .RebindWithoutMetadata<DomainCatalogMetadata>(domain, domain);
 
         var ex = Assert.Throws<InvalidOperationException>(() => store.NotifyTransition(order, "Active"));
         await Assert.That(ex!.Message).Contains("DomainCatalogMetadata");
@@ -129,8 +129,8 @@ public class DomainInstanceStoreFailClosedTests {
         var orderEntity = (Entity)domain.Types[0];
         var order = DomainEntityInstance.Create(orderEntity, new Dictionary<string, object?>(), domain);
 
-        var analysis = RuntimeAnalysisCache.GetOrAnalyze(domain);
-        analysis.GetMetadataStore().Remove<EntityStructureMetadata>(orderEntity);
+        RuntimeAnalysisCache.GetOrAnalyze(domain)
+            .RebindWithoutMetadata<EntityStructureMetadata>(domain, orderEntity);
 
         await Assert.That(() => order.TransitionStage("Active")).ThrowsNothing();
     }
@@ -170,8 +170,8 @@ public class DomainInstanceStoreFailClosedTests {
 
         order.TransitionStage("Active", notifyStore: false);
 
-        var analysis = RuntimeAnalysisCache.GetOrAnalyze(domain);
-        analysis.GetMetadataStore().Remove<SubscriptionDispatchPlanMetadata>(trackerEntity);
+        RuntimeAnalysisCache.GetOrAnalyze(domain)
+            .RebindWithoutMetadata<SubscriptionDispatchPlanMetadata>(domain, trackerEntity);
 
         var ex = Assert.Throws<InvalidOperationException>(() => store.NotifyTransition(order, "Active"));
         await Assert.That(ex!.Message).Contains(nameof(SubscriptionDispatchPlanMetadata));

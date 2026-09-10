@@ -1,5 +1,3 @@
-using System.Collections.Concurrent;
-
 namespace Poly.Analysis;
 
 /// <summary>
@@ -24,26 +22,23 @@ public sealed class Analyzer {
     private AnalysisResult RunPasses(AnalysisContext context, Node root) {
         var collector = new AnalysisTelemetryCollector();
         var totalStart = Stopwatch.GetTimestamp();
-        var passes = new ConcurrentDictionary<string, Task>(StringComparer.Ordinal);
 
         foreach (var analyzer in _analyzers) {
-            passes[analyzer.PassName] = RunPassAsync(analyzer);
-        }
-
-        Task.WaitAll(passes.Values);
-        var telemetry = collector.ToSnapshot(Stopwatch.GetElapsedTime(totalStart));
-        return new AnalysisResult(context, telemetry, Options);
-
-        async Task RunPassAsync(INodeAnalyzer analyzer) {
-            await Task.WhenAll(analyzer.Dependencies.Select(name => passes[name])).ConfigureAwait(false);
-
             if (!context.ShouldContinue(Options))
-                return;
+                break;
 
             var passStart = Stopwatch.GetTimestamp();
             analyzer.Analyze(context, root);
             collector.RecordPass(analyzer.PassName, Stopwatch.GetElapsedTime(passStart));
         }
+
+        var telemetry = collector.ToSnapshot(Stopwatch.GetElapsedTime(totalStart));
+        return new AnalysisResult(
+            new NodeMetadataStore(context.Metadata),
+            telemetry,
+            context.Diagnostics,
+            context.Settings,
+            Options);
     }
 
     /// <summary>
@@ -55,7 +50,9 @@ public sealed class Analyzer {
         AnalysisSettings? settings = null) {
 
         ArgumentNullException.ThrowIfNull(root);
-        var context = new AnalysisContext(typeDefinitions ?? Introspection.CommonLanguageRuntime.ClrTypeDefinitionRegistry.Shared, settings);
+        typeDefinitions ??= Introspection.CommonLanguageRuntime.ClrTypeDefinitionRegistry.Shared;
+        settings ??= AnalysisSettings.Default;
+        var context = new AnalysisContext(typeDefinitions, settings);
         setup?.Invoke(context);
         return RunPasses(context, root);
     }

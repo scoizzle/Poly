@@ -46,7 +46,7 @@ public class PolyDslRoundTripTests {
         await Assert.That(e2.Stages.Count).IsEqualTo(e1.Stages.Count);
 
         var analysis = DomainModelAnalyzer.Analyze(applyResult2.Root);
-        await Assert.That(analysis.HasStructuralFailure).IsFalse();
+        await Assert.That(analysis.HasErrors).IsFalse();
     }
 
     [Test]
@@ -1204,7 +1204,7 @@ public class PolyDslRoundTripTests {
         await Assert.That(result2.Relationships().Single(r => r.Name == "passport").SourceOwnsTarget).IsTrue();
 
         var analysis = DomainModelAnalyzer.Analyze(result2.Root);
-        await Assert.That(analysis.HasStructuralFailure).IsFalse();
+        await Assert.That(analysis.HasErrors).IsFalse();
     }
 
     [Test]

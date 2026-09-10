@@ -1,71 +1,16 @@
-using System.Collections.Concurrent;
-
 namespace Poly.Analysis;
 
-public sealed record AnalysisResult : INodeMetadataProvider {
-    private readonly NodeMetadataStore _metadata;
-    private readonly ConcurrentQueue<Diagnostic> _diagnostics;
-    private readonly Lazy<IReadOnlyList<Diagnostic>> _allDiagnostics;
-
-    public AnalysisResult(AnalysisContext context, AnalysisTelemetry telemetry, AnalysisOptions? options = null) {
-        ArgumentNullException.ThrowIfNull(context);
-        ArgumentNullException.ThrowIfNull(telemetry);
-        _metadata = context.Metadata;
-        _diagnostics = context.DiagnosticQueue;
-        var diagnosticConfiguration = context.Settings.Get<AnalysisDiagnosticConfiguration>()
-            ?? AnalysisDiagnosticConfiguration.Default;
-        _allDiagnostics = new Lazy<IReadOnlyList<Diagnostic>>(() =>
-            _diagnostics
-                .Select(d => d with {
-                    Severity = diagnosticConfiguration.NormalizeSeverity(d.Severity)
-                })
-                .Where(d => diagnosticConfiguration.ShouldInclude(d.Severity))
-                .DistinctBy(d => (d.Node.Id, d.Severity, d.Code, d.Message))
-                .ToList());
-        Telemetry = telemetry;
-        HasStructuralFailure = context.HasStructuralFailure;
-        var effectiveOptions = options ?? AnalysisOptions.Default;
-        AnalysisWasTerminatedEarly = !context.ShouldContinue(effectiveOptions);
-        SettingsUsed = context.Settings;
-    }
-
-    /// <summary>
-    /// The options that were active during this analysis run.
-    /// </summary>
-    public AnalysisOptions OptionsUsed { get; } = AnalysisOptions.Default;
-
-    /// <summary>
-    /// Settings that were active on the analysis context for this run.
-    /// </summary>
-    public AnalysisSettings SettingsUsed { get; } = AnalysisSettings.Default;
-
-    /// <summary>
-    /// Gets the per-pass timing telemetry captured during analysis.
-    /// </summary>
-    public AnalysisTelemetry Telemetry { get; }
-
-    /// <summary>
-    /// Gets the collection of diagnostics produced during analysis.
-    /// </summary>
-    public IReadOnlyList<Diagnostic> Diagnostics => _allDiagnostics.Value;
-
+public sealed record AnalysisResult(
+    INodeMetadataProvider Metadata,
+    AnalysisTelemetry Telemetry,
+    IReadOnlyList<Diagnostic> Diagnostics,
+    AnalysisSettings Settings,
+    AnalysisOptions? Options = null
+) : INodeMetadataProvider {
     /// <summary>
     /// Returns true if any error-level diagnostics were produced.
     /// </summary>
-    public bool HasErrors => Diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error);
-
-    /// <summary>
-    /// Returns true if any structural or reference-level failures were detected during analysis.
-    /// When true, many semantic and higher-level analyses may be incomplete or invalid.
-    /// This is the primary signal for early termination and invalidation in incremental scenarios.
-    /// </summary>
-    public bool HasStructuralFailure { get; init; }
-
-    /// <summary>
-    /// Returns true if analysis was terminated early due to errors (structural or otherwise).
-    /// The result may be incomplete.
-    /// </summary>
-    public bool AnalysisWasTerminatedEarly { get; init; }
+    public bool HasErrors { get; } = Diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error);
 
     /// <summary>
     /// Gets metadata of the specified type for the given node.
@@ -74,12 +19,5 @@ public sealed record AnalysisResult : INodeMetadataProvider {
     /// <typeparam name="TMetadata">The type of metadata to retrieve.</typeparam>
     /// <param name="node">The node for which to retrieve metadata.</param>
     /// <returns>The metadata of the specified type, or null if not found.</returns>
-    public TMetadata? GetMetadata<TMetadata>(Node? node) where TMetadata : class, IAnalysisMetadata => _metadata.Get<TMetadata>(node);
-
-    internal NodeMetadataStore GetMetadataStore() => _metadata;
-
-    internal void AddDiagnostic(Diagnostic diagnostic) {
-        ArgumentNullException.ThrowIfNull(diagnostic);
-        _diagnostics.Enqueue(diagnostic);
-    }
+    public TMetadata? GetMetadata<TMetadata>(Node? node) where TMetadata : class, IAnalysisMetadata => Metadata.GetMetadata<TMetadata>(node);
 }

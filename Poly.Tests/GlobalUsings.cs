@@ -2,6 +2,7 @@ global using Poly.Analysis;
 global using Poly.Ast;
 global using Poly.Ast.Nodes;
 global using Poly.Interpretation.Analysis;
+global using Poly.Tests.TestHelpers;
 
 global using TUnit.Assertions;
 global using TUnit.Assertions.Extensions;

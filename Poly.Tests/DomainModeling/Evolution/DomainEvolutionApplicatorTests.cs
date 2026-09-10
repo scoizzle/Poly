@@ -645,7 +645,7 @@ public class DomainEvolutionApplicatorTests {
 
         await Assert.That(result.Succeeded).IsFalse();
         await Assert.That(result.WasRolledBack).IsTrue();
-        await Assert.That(result.HasStructuralFailure).IsTrue();
+        await Assert.That(result.Analysis.HasErrors).IsTrue();
         await Assert.That(result.Root).IsSameReferenceAs(step1.Root);
         await Assert.That(result.Trace.RolledBack).IsTrue();
         await Assert.That(result.Trace.Steps.Count).IsEqualTo(2);
@@ -659,11 +659,8 @@ public class DomainEvolutionApplicatorTests {
         await Assert.That(badStep).IsNotNull();
         await Assert.That(badStep!.ChangeDescription).Contains("NonExistentType");
 
-        // Change history is emitted as first-class Information diagnostics (unified model, no parallel text machinery).
-        var infoDiags = result.Analysis.Diagnostics.Where(d => d.Severity == DiagnosticSeverity.Information).ToList();
-        await Assert.That(infoDiags.Count).IsGreaterThan(0);
-        await Assert.That(infoDiags.Any(d => d.Message.Contains("Add property") && d.Message.Contains("NonExistentType"))).IsTrue();
-        await Assert.That(infoDiags.Any(d => d.Code == "EVOLUTION_STEP")).IsTrue();
+        await Assert.That(result.Trace.Steps.Any(s =>
+            s.ChangeDescription.Contains("Add property") && s.ChangeDescription.Contains("NonExistentType"))).IsTrue();
     }
 
     /// <summary>
@@ -704,7 +701,7 @@ public class DomainEvolutionApplicatorTests {
             .Apply();
 
         await Assert.That(step1.Succeeded).IsTrue();
-        await Assert.That(step1.HasStructuralFailure).IsFalse();
+        await Assert.That(step1.Analysis.HasErrors).IsFalse();
 
         // === Evolution 2: Stages + complex stage policies (Exists/NotExists + Owned) ===
         // This is the heart of the documented lifecycle guards.
@@ -761,7 +758,7 @@ public class DomainEvolutionApplicatorTests {
             .Apply();
 
         await Assert.That(step3.Succeeded).IsTrue();
-        await Assert.That(step3.HasStructuralFailure).IsFalse();
+        await Assert.That(step3.Analysis.HasErrors).IsFalse();
 
         // === Final verification against the documented shape ===
         var final = step3.Root;
@@ -798,15 +795,8 @@ public class DomainEvolutionApplicatorTests {
         // ValueTypes and Events are present as documented
         await Assert.That(final.Types.OfType<Poly.DomainModeling.Ontology.ValueType>().Count()).IsEqualTo(2);
 
-        // The trace tells the full story (high-fidelity change history as Information diagnostics)
-        // step2 added stages + policies + OnEntry effects
-        var allInfoStep2 = step2.Analysis.Diagnostics.Where(d => d.Severity == DiagnosticSeverity.Information).ToList();
-        await Assert.That(allInfoStep2.Count).IsGreaterThan(0);
-        await Assert.That(allInfoStep2.Any(d => d.Code == "EVOLUTION_STEP" && d.Message.Contains("Add Stage 'Alive'"))).IsTrue();
-
-        // step3 added actions + parameters + effects to existing stages
-        var allInfoStep3 = step3.Analysis.Diagnostics.Where(d => d.Severity == DiagnosticSeverity.Information).ToList();
-        await Assert.That(allInfoStep3.Any(d => d.Code == "EVOLUTION_STEP" && d.Message.Contains("Add Action 'Die'"))).IsTrue();
+        await Assert.That(step2.Trace.Steps.Any(s => s.ChangeDescription.Contains("Add Stage 'Alive'"))).IsTrue();
+        await Assert.That(step3.Trace.Steps.Any(s => s.ChangeDescription.Contains("Add Action 'Die'"))).IsTrue();
 
         // Final proof: the entire evolution succeeded with zero errors on the documented shape
         await Assert.That(step3.Succeeded).IsTrue();
@@ -866,7 +856,7 @@ public class DomainEvolutionApplicatorTests {
             .Apply();
 
         await Assert.That(step1.Succeeded).IsTrue();
-        await Assert.That(step1.HasStructuralFailure).IsFalse();
+        await Assert.That(step1.Analysis.HasErrors).IsFalse();
 
         // === Evolution 2: Stages with parent hierarchies + relationships ===
         var step2 = new DomainEvolution(step1.Root)

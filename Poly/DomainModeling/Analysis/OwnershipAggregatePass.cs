@@ -17,7 +17,6 @@ internal sealed class OwnershipAggregatePass : INodeAnalyzer {
 
     public void Analyze(AnalysisContext context, Node node) {
         if (node is not Domain domain) return;
-        if (context.HasStructuralFailure) return;
 
         var topology = context.GetMetadata<EffectTopologyMetadata>(domain)?.Topology;
         var aggregate = BuildAggregate(domain, context, topology);

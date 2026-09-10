@@ -150,7 +150,6 @@ public class DomainAuthoringHappyPathTests {
         var summary = DomainQueries.GetAnalysisSummary(analysis);
 
         await Assert.That(summary.ErrorCount).IsEqualTo(0);
-        await Assert.That(summary.HasStructuralFailure).IsFalse();
     }
 
     [Test]
@@ -168,7 +167,6 @@ public class DomainAuthoringHappyPathTests {
         var summary = DomainQueries.GetAnalysisSummary(analysis);
 
         await Assert.That(summary.ErrorCount).IsGreaterThan(0);
-        await Assert.That(summary.HasStructuralFailure).IsTrue();
     }
 
     [Test]

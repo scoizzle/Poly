@@ -44,7 +44,7 @@ public class EffectAnalyzerFailClosedTests {
 
         await Assert.That(AllDiagnostics(context).Any(d =>
             d.Severity == DiagnosticSeverity.Error)).IsFalse();
-        await Assert.That(context.HasStructuralFailure).IsFalse();
+        await Assert.That(context.HasErrors).IsFalse();
     }
 
     [Test]
@@ -58,7 +58,7 @@ public class EffectAnalyzerFailClosedTests {
         await Assert.That(diags.Any(d =>
             d.Code == DomainModelDiagnosticCodes.EffectBinding &&
             d.Severity == DiagnosticSeverity.Error)).IsTrue();
-        await Assert.That(context.HasStructuralFailure).IsFalse();
+        await Assert.That(context.HasErrors).IsTrue();
     }
 
     // ── F1: missing bags fail closed (never silent skip) ───────
@@ -71,7 +71,7 @@ public class EffectAnalyzerFailClosedTests {
         new EffectAnalyzer().Analyze(context, domain);
 
         // No Semantic bags at all → the pass must fail loud, not return quietly.
-        await Assert.That(context.HasStructuralFailure).IsTrue();
+        await Assert.That(context.HasErrors).IsTrue();
         var diags = AllDiagnostics(context);
         await Assert.That(diags.Any(d =>
             d.Severity == DiagnosticSeverity.Error &&

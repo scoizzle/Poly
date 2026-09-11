@@ -114,7 +114,7 @@ Use these. If you think you need a parallel facility, stop and re-read this sect
 |-------|----------|
 | Framework | `Poly/Analysis/` — `AnalyzerBuilder`, `Analyzer`, `AnalysisContext`, `AnalysisResult`, `NodeMetadataStore` |
 | Pass contract | `INodeAnalyzer` — post-order walk, `TryBeginAnalyzerVisit`, `Dependencies` |
-| Schedule | `AnalyzerBuilder` inserts by `Dependencies`; `Analyzer` runs that list in order, one pass at a time. Each `Analyze` is a full walk. With `StopOnStructuralErrors` / `FailFast`, later passes are skipped once `context.HasErrors` is true. Replacement is a single slot per source node (current tip); sequential order is composition |
+| Schedule | `AnalyzerBuilder` inserts by `Dependencies`; `Analyzer` runs that list in order, one pass at a time. Each `Analyze` is a full walk. With `FailFast`, later passes are skipped once `context.HasErrors` is true. Replacement is a single slot per source node (current tip); sequential order is composition |
 | Facts on nodes | `IAnalysisMetadata` via `context.SetMetadata` / `GetMetadata<T>` |
 | Diagnostics | `List<Diagnostic>` on the per-run context; public `IReadOnlyList` on `AnalysisContext` and `AnalysisResult`, in report order (no analyzer-level de-duplication) |
 | Semantic passes | `Poly/Interpretation/Analysis/` (types, scopes, CFG, side effects, folding, …) |

@@ -24,7 +24,7 @@ public sealed class Analyzer {
         var totalStart = Stopwatch.GetTimestamp();
 
         foreach (var analyzer in _analyzers) {
-            if (Options.ShouldStopOnStructuralErrors && context.HasErrors)
+            if (Options.ShouldStopOnErrors && context.HasErrors)
                 break;
 
             var passStart = Stopwatch.GetTimestamp();
@@ -36,9 +36,10 @@ public sealed class Analyzer {
         return new AnalysisResult(
             new NodeMetadataStore(context.Metadata),
             telemetry,
-            context.Diagnostics,
+            context.Diagnostics.ToList(),
             context.Settings,
-            Options);
+            Options,
+            context.HasErrors);
     }
 
     /// <summary>

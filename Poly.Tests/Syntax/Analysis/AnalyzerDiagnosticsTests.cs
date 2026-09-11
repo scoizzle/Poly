@@ -44,18 +44,15 @@ public class AnalyzerDiagnosticsTests {
     }
 
     [Test]
-    public async Task Analyze_WhenStopOnStructuralErrors_AndErrorReported_SkipsLaterPasses() {
-        var later = new CountingAnalyzer("later");
+    public async Task Analyze_WhenErrorReported_ResultHasErrorsFromContextFlag() {
         var analyzer = new AnalyzerBuilder()
             .AddAnalyzer(new ReportPass("first", "A"))
-            .AddAnalyzer(later)
-            .Build(AnalysisOptions.StopOnStructuralErrors);
+            .Build();
 
         var result = analyzer.Analyze(new Constant(0));
 
-        await Assert.That(later.Calls).IsEqualTo(0);
-        await Assert.That(result.Telemetry.Passes.Count).IsEqualTo(1);
         await Assert.That(result.HasErrors).IsTrue();
+        await Assert.That(result.Diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error)).IsTrue();
     }
 
     [Test]
@@ -64,7 +61,7 @@ public class AnalyzerDiagnosticsTests {
         var analyzer = new AnalyzerBuilder()
             .AddAnalyzer(new ReportPass("first", "A"))
             .AddAnalyzer(later)
-            .Build(new AnalysisOptions { Mode = AnalysisMode.FailFast });
+            .Build(AnalysisOptions.FailFast);
 
         var result = analyzer.Analyze(new Constant(0));
 

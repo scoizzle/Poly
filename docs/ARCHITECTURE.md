@@ -152,7 +152,7 @@ All in `Poly/Ast/Nodes/TypeDefinitions/`:
 | `IAnalysisMetadata.cs` | Empty marker for all metadata types |
 | `NodeMetadataStore.cs` | Two-level store (NodeId → bucket with inline array → Dictionary) |
 | `NodeReplacementMetadata.cs` | Node substitution for backends |
-| `AnalysisOptions.cs` | Pipeline behavior: `Full`, `StopOnStructuralErrors`, `FailFast` |
+| `AnalysisOptions.cs` | Pipeline behavior: `Full`, `FailFast` |
 
 ### Typical Pipeline Order
 

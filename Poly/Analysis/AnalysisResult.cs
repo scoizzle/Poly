@@ -1,17 +1,14 @@
 namespace Poly.Analysis;
 
+/// <param name="HasErrors">True when any error-level diagnostic was reported; taken from the analysis context flag at construction (not re-scanned from <paramref name="Diagnostics"/>).</param>
 public sealed record AnalysisResult(
     INodeMetadataProvider Metadata,
     AnalysisTelemetry Telemetry,
     IReadOnlyList<Diagnostic> Diagnostics,
     AnalysisSettings Settings,
-    AnalysisOptions? Options = null
+    AnalysisOptions? Options = null,
+    bool HasErrors = false
 ) : INodeMetadataProvider {
-    /// <summary>
-    /// Returns true if any error-level diagnostics were produced.
-    /// </summary>
-    public bool HasErrors { get; } = Diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error);
-
     /// <summary>
     /// Gets metadata of the specified type for the given node.
     /// Returns null if no metadata of that type exists for the node.

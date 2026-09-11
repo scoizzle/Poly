@@ -69,10 +69,10 @@ The analysis framework is a pass pipeline. `AnalyzerBuilder` collects `INodeAnal
 
 **Why keep:** Important signal for consumers — if analysis stopped early, the result may be incomplete. Part of the analysis result's public contract.
 
-### `AnalysisOptions.StopOnStructuralErrors` static property (1 line)
-**What it does:** Convenience factory for creating options with `StopOnStructuralErrors` mode.
+### `AnalysisOptions.FailFast` static property (1 line)
+**What it does:** Convenience factory for creating options with `FailFast` mode (skip later passes once any Error is reported).
 
-**Why keep:** Not dead — it's dormant infrastructure. `Analyzer` skips later passes when `ShouldStopOnStructuralErrors && context.HasErrors`. Making this the default would change pipeline behavior (stop at first error), which is a design choice, not cleanup.
+**Why keep:** Not dead — it's dormant infrastructure. `Analyzer` skips later passes when `ShouldStopOnErrors && context.HasErrors`. Making this the default would change pipeline behavior (stop at first error), which is a design choice, not cleanup. There is one early-stop mode only (`FailFast`); `StopOnStructuralErrors` was collapsed into it.
 
 ### `SyntaxDiffUtil` (157 lines)
 **What it does:** Generic tree diffing — snapshots and compares two ASTs by node fingerprint.

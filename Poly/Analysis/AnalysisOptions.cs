@@ -10,9 +10,10 @@ public sealed record AnalysisOptions {
     public static AnalysisOptions Default { get; } = new();
 
     /// <summary>
-    /// Recommended options for evolution/feedback loops: structural errors can cause later expensive passes to be skipped for faster response.
+    /// Skip later passes once any error-level diagnostic has been reported.
+    /// Useful for fast feedback in evolution loops.
     /// </summary>
-    public static AnalysisOptions StopOnStructuralErrors { get; } = new() { Mode = AnalysisMode.StopOnStructuralErrors };
+    public static AnalysisOptions FailFast { get; } = new() { Mode = AnalysisMode.FailFast };
 
     /// <summary>
     /// The mode that determines early-exit behavior.
@@ -20,9 +21,9 @@ public sealed record AnalysisOptions {
     public AnalysisMode Mode { get; init; } = AnalysisMode.Full;
 
     /// <summary>
-    /// Whether the current options + state should allow skipping expensive passes after structural failures.
+    /// Whether the current options should skip later passes once <see cref="AnalysisContext.HasErrors"/> is true.
     /// </summary>
-    internal bool ShouldStopOnStructuralErrors => Mode is AnalysisMode.StopOnStructuralErrors or AnalysisMode.FailFast;
+    internal bool ShouldStopOnErrors => Mode == AnalysisMode.FailFast;
 }
 
 /// <summary>
@@ -36,13 +37,7 @@ public enum AnalysisMode {
     Full = 0,
 
     /// <summary>
-    /// Structural and reference errors are allowed to cause later, more expensive analyzers to be skipped.
-    /// Useful for fast feedback in evolution loops.
+    /// Skip later passes once any error-level diagnostic has been reported.
     /// </summary>
-    StopOnStructuralErrors = 1,
-
-    /// <summary>
-    /// Stop analysis as soon as any error (of any kind) is reported.
-    /// </summary>
-    FailFast = 2,
+    FailFast = 1,
 }

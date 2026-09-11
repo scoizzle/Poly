@@ -47,7 +47,7 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
             .ToHashSet(StringComparer.Ordinal);
         foreach (var nav in domain.Types.OfType<Entity>().SelectMany(e => e.Navigations)) {
             if (typeNames.Contains(nav.Name)) {
-                context.ReportStructuralFailure(
+                context.ReportError(
                     nav,
                     $"Relationship name '{nav.Name}' collides with a type of the same name.",
                     DomainModelDiagnosticCodes.StructuralDuplicate);
@@ -55,7 +55,7 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
             // P7-4: `any`/`all`/`none`/`count` are consumed as quantifier keywords in
             // expression reads — a nav by that name would be silently unreadable.
             if (IsReservedExpressionWord(nav.Name)) {
-                context.ReportStructuralFailure(
+                context.ReportError(
                     nav,
                     $"Relationship name '{nav.Name}' is reserved (used by expression quantifiers) " +
                     "and cannot be read in policies, subscriptions, or invoke bindings. " +
@@ -90,7 +90,7 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
             StringComparer.Ordinal);
         foreach (var policy in entity.Policies) {
             if (!actionNames.Contains(policy.Name)) continue;
-            context.ReportStructuralFailure(
+            context.ReportError(
                 policy,
                 $"Name collision: an action and a policy are both named '{policy.Name}' on entity '{entity.Name}'.",
                 DomainModelDiagnosticCodes.StructuralDuplicate);
@@ -131,7 +131,7 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
         where TNode : DomainMember {
         foreach (var group in nodes.GroupBy(static node => node.Name, StringComparer.Ordinal).Where(static group => group.Count() > 1)) {
             foreach (var duplicate in group.Skip(1)) {
-                context.ReportStructuralFailure(
+                context.ReportError(
                     duplicate,
                     $"Duplicate member name '{duplicate.Name}' in {ownerType} '{ownerName}'.",
                     DomainModelDiagnosticCodes.StructuralDuplicate);
@@ -142,7 +142,7 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
     private static void ReportDuplicateNames(AnalysisContext context, IEnumerable<InvocationResult.Member> nodes, string ownerType, string ownerName) {
         foreach (var group in nodes.GroupBy(static node => node.Name, StringComparer.Ordinal).Where(static group => group.Count() > 1)) {
             foreach (var duplicate in group.Skip(1)) {
-                context.ReportStructuralFailure(
+                context.ReportError(
                     duplicate,
                     $"Duplicate member name '{duplicate.Name}' in {ownerType} '{ownerName}'.",
                     DomainModelDiagnosticCodes.StructuralDuplicate);
@@ -157,7 +157,7 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
         string ownerName) {
         foreach (var group in nodes.GroupBy(static node => node.TypeName, StringComparer.Ordinal).Where(static group => group.Count() > 1)) {
             foreach (var duplicate in group.Skip(1)) {
-                context.ReportStructuralFailure(
+                context.ReportError(
                     duplicate,
                     $"Duplicate reference name '{duplicate.TypeName}' in {ownerType} '{ownerName}'.",
                     DomainModelDiagnosticCodes.StructuralDuplicate);

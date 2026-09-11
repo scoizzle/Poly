@@ -26,6 +26,67 @@ public class AnalyzerDiagnosticsTests {
     }
 
     [Test]
+    public async Task ReportError_SetsHasErrors() {
+        var context = AnalysisContext.CreateDefault();
+        context.ReportError(new Constant(0), "boom", "X");
+        await Assert.That(context.HasErrors).IsTrue();
+        await Assert.That(context.Diagnostics.Count).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task ReportWarning_DoesNotSetHasErrors() {
+        var context = AnalysisContext.CreateDefault();
+        context.ReportWarning(new Constant(0), "hmm", "W");
+        await Assert.That(context.HasErrors).IsFalse();
+        await Assert.That(context.Diagnostics.Count).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task Analyze_WhenStopOnStructuralErrors_AndErrorReported_SkipsLaterPasses() {
+        var later = new CountingAnalyzer("later");
+        var analyzer = new AnalyzerBuilder()
+            .AddAnalyzer(new ReportPass("first", "A"))
+            .AddAnalyzer(later)
+            .Build(AnalysisOptions.StopOnStructuralErrors);
+
+        var result = analyzer.Analyze(new Constant(0));
+
+        await Assert.That(later.Calls).IsEqualTo(0);
+        await Assert.That(result.Telemetry.Passes.Count).IsEqualTo(1);
+        await Assert.That(result.HasErrors).IsTrue();
+    }
+
+    [Test]
+    public async Task Analyze_WhenFailFast_AndErrorReported_SkipsLaterPasses() {
+        var later = new CountingAnalyzer("later");
+        var analyzer = new AnalyzerBuilder()
+            .AddAnalyzer(new ReportPass("first", "A"))
+            .AddAnalyzer(later)
+            .Build(new AnalysisOptions { Mode = AnalysisMode.FailFast });
+
+        var result = analyzer.Analyze(new Constant(0));
+
+        await Assert.That(later.Calls).IsEqualTo(0);
+        await Assert.That(result.Telemetry.Passes.Count).IsEqualTo(1);
+        await Assert.That(result.HasErrors).IsTrue();
+    }
+
+    [Test]
+    public async Task Analyze_WhenFullMode_AndErrorReported_RunsLaterPasses() {
+        var later = new CountingAnalyzer("later");
+        var analyzer = new AnalyzerBuilder()
+            .AddAnalyzer(new ReportPass("first", "A"))
+            .AddAnalyzer(later)
+            .Build();
+
+        var result = analyzer.Analyze(new Constant(0));
+
+        await Assert.That(later.Calls).IsEqualTo(1);
+        await Assert.That(result.Telemetry.Passes.Count).IsEqualTo(2);
+        await Assert.That(result.HasErrors).IsTrue();
+    }
+
+    [Test]
     public async Task Analyze_WhenPassesAreNamed_TelemetryRecordsEachPass() {
         var analyzer = new AnalyzerBuilder()
             .AddAnalyzer(new NoopAnalyzer())
@@ -48,6 +109,13 @@ public class AnalyzerDiagnosticsTests {
         }
         public void Analyze(AnalysisContext context, Node node) =>
             context.ReportError(node, $"from {PassName}", _code);
+    }
+
+    private sealed class CountingAnalyzer : INodeAnalyzer {
+        public string PassName { get; }
+        public int Calls;
+        public CountingAnalyzer(string name) => PassName = name;
+        public void Analyze(AnalysisContext context, Node node) => Calls++;
     }
 
     private sealed class NoopAnalyzer : INodeAnalyzer {

@@ -130,7 +130,7 @@ internal sealed class RuntimeContractAnalyzer : INodeAnalyzer {
                 && string.Equals(c.SourceEntityName, sourceEntityName, StringComparison.Ordinal)).ToList();
 
             if (contracts.Count != 1) {
-                context.ReportStructuralFailure(reportOn,
+                context.ReportError(reportOn,
                     $"Subscription relationship '{subscription.RelationshipName}' on {scopeLabel} could not be uniquely resolved for source entity '{sourceEntityName}'.",
                     DomainModelDiagnosticCodes.SemanticReferenceResolution);
                 continue;

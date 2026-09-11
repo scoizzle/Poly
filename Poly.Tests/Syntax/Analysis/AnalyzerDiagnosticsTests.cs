@@ -2,15 +2,17 @@ namespace Poly.Tests.Syntax.Analysis;
 
 public class AnalyzerDiagnosticsTests {
     [Test]
-    public async Task Analyze_WhenSameDiagnosticReportedTwice_DeduplicatesByNodeSeverityCodeAndMessage() {
+    public async Task Analyze_WhenSameDiagnosticReportedTwice_KeepsBothInReportOrder() {
         var analyzer = new AnalyzerBuilder().AddAnalyzer(new DuplicateDiagnosticAnalyzer()).Build();
         var leaf = new TestLeaf(1);
 
         var result = analyzer.Analyze(leaf);
 
-        await Assert.That(result.Diagnostics.Count).IsEqualTo(1);
+        await Assert.That(result.Diagnostics.Count).IsEqualTo(2);
         await Assert.That(result.Diagnostics[0].Code).IsEqualTo("DUP");
+        await Assert.That(result.Diagnostics[1].Code).IsEqualTo("DUP");
         await Assert.That(result.Diagnostics[0].Message).IsEqualTo("Duplicate diagnostic");
+        await Assert.That(result.Diagnostics[1].Message).IsEqualTo("Duplicate diagnostic");
     }
 
     [Test]

@@ -36,7 +36,9 @@ public sealed class AnalyzerBuilder {
     /// <summary>
     /// Build the analyzer pipeline.
     /// </summary>
-    public Analyzer Build() {
-        return new Analyzer([.. _entries.Values]);
+    public Analyzer Build(AnalysisOptions? options = null) {
+        return new Analyzer([.. _entries.Values]) {
+            Options = options ?? AnalysisOptions.Default
+        };
     }
 }

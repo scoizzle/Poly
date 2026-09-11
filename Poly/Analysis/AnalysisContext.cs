@@ -65,6 +65,11 @@ public sealed class AnalysisContext : INodeMetadataProvider {
     public TypeDefinitionProviderCollection TypeDefinitions { get; }
 
     /// <summary>
+    /// True when any error-level diagnostic has been reported.
+    /// </summary>
+    public bool HasErrors { get; private set; }
+
+    /// <summary>
     /// Reports a diagnostic for the specified node.
     /// </summary>
     public void ReportDiagnostic(Node node, DiagnosticSeverity severity, string message, string? code = null) {
@@ -72,9 +77,14 @@ public sealed class AnalysisContext : INodeMetadataProvider {
         ArgumentNullException.ThrowIfNull(message);
 
         severity = AnalysisDiagnosticConfiguration.NormalizeSeverity(severity);
+
         if (!AnalysisDiagnosticConfiguration.ShouldInclude(severity))
             return;
+
         _diagnostics.Add(new Diagnostic(node, severity, message, code));
+
+        if (severity == DiagnosticSeverity.Error)
+            HasErrors = true;
     }
 
     /// <summary>
@@ -110,23 +120,4 @@ public sealed class AnalysisContext : INodeMetadataProvider {
     /// </summary>
     /// <param name="nodeId">The node identifier for which to clear metadata.</param>
     public void ClearMetadata(NodeId nodeId) => Metadata.RemoveAll(nodeId);
-
-    /// <summary>
-    /// True when any error-level diagnostic has been reported.
-    /// </summary>
-    public bool HasErrors => _diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error);
-
-    /// <summary>
-    /// Reports an error. Same as <see cref="ReportDiagnostic"/> at
-    /// <see cref="DiagnosticSeverity.Error"/> — any error is enough to stop later work.
-    /// </summary>
-    public void ReportStructuralFailure(Node node, string message, string? code = null) =>
-        ReportDiagnostic(node, DiagnosticSeverity.Error, message, code);
-
-    /// <summary>
-    /// Returns whether analysis should continue running additional passes.
-    /// </summary>
-    public bool ShouldContinue(AnalysisOptions options) {
-        return !options.ShouldStopOnStructuralErrors || !HasErrors;
-    }
 }

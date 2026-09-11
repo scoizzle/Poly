@@ -24,7 +24,7 @@ public sealed class Analyzer {
         var totalStart = Stopwatch.GetTimestamp();
 
         foreach (var analyzer in _analyzers) {
-            if (!context.ShouldContinue(Options))
+            if (Options.ShouldStopOnStructuralErrors && context.HasErrors)
                 break;
 
             var passStart = Stopwatch.GetTimestamp();

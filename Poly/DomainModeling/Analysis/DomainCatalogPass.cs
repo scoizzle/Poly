@@ -217,7 +217,7 @@ internal sealed class DomainCatalogPass : INodeAnalyzer {
             return;
 
         if (!lookup.Types.TryGetValue(typeReference.TypeName, out var type)) {
-            context.ReportStructuralFailure(
+            context.ReportError(
                 reportNode,
                 $"{usage} references unknown type '{typeReference.TypeName}'.",
                 DomainModelDiagnosticCodes.SemanticReferenceResolution);

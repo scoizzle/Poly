@@ -38,7 +38,7 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
         if (lookup is null) {
             // Fail closed (review F1): domain-bound validation without any type
             // lookup bag would silently omit every effect check. Report loudly.
-            context.ReportStructuralFailure(
+            context.ReportError(
                 domain,
                 "Domain type lookup bag is unavailable; effect binding cannot be validated. " +
                 "Run DomainCatalogPass before EffectAnalyzer.",
@@ -555,7 +555,7 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
     /// the check (review F1 — bag-skip is not fail-closed).
     /// </summary>
     private static void ReportCatalogUnavailable(AnalysisContext context, Node node) =>
-        context.ReportStructuralFailure(
+        context.ReportError(
             node,
             "Domain relationship/type lookup bags are unavailable; effect binding cannot be validated. " +
             "Run DomainCatalogPass before EffectAnalyzer.",

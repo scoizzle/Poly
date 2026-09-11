@@ -221,7 +221,7 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
 
         var member = instanceType.Members.WithName(memberAccess.MemberName).FirstOrDefault();
         if (member is null)
-            context.ReportStructuralFailure(memberAccess, $"Type '{instanceType.Name}' does not contain a member named '{memberAccess.MemberName}'.");
+            context.ReportError(memberAccess, $"Type '{instanceType.Name}' does not contain a member named '{memberAccess.MemberName}'.");
         else
             context.SetResolvedMember(memberAccess, member);
         return member?.MemberTypeDefinition;

@@ -62,6 +62,7 @@ Queue (`THEN` / `PARKED` / `PULL`) lives only in [`PIPELINE-STATUS.md`](simple-a
 | [`domainmodeling-simplification-2026-08-14.md`](domainmodeling-simplification-2026-08-14.md) | Deletion-first DomainModeling proposal. **Not CURRENT** |
 | [`grammar-cycle-2026-08-14.md`](grammar-cycle-2026-08-14.md) | Grammar as the parse/print cycle. **Not CURRENT** until admitted |
 | [`fleet-eval-fixes-2026-08-12.md`](fleet-eval-fixes-2026-08-12.md) | Probe-finding execution checklist (P0–P7). Do not CURRENT beside an overlapping `e2e-*` |
+| [`analysis-leftover-inventory-2026-09-11.md`](analysis-leftover-inventory-2026-09-11.md) | PR 68/69/70 analysis-framework leftover class. Proposal inventory — **not CURRENT.** Occupancy Item 5 stays PARKED (excluded). |
 
 ---
 
@@ -73,6 +74,7 @@ Queue (`THEN` / `PARKED` / `PULL`) lives only in [`PIPELINE-STATUS.md`](simple-a
 | [`fleet-eval-fixes-2026-08-12.md`](fleet-eval-fixes-2026-08-12.md) | Explicit batch admit (P0-0 first) |
 | [`ef-and-api-codegen.md`](ef-and-api-codegen.md) | Explicit generation suite admit |
 | [`analysis-consuming-lowering.md`](analysis-consuming-lowering.md) | Explicit pick |
+| [`analysis-leftover-inventory-2026-09-11.md`](analysis-leftover-inventory-2026-09-11.md) | Framework residue after sequential collapse; proposal only — not a suite |
 | [`post-v2-delete-naming-cleanup.md`](post-v2-delete-naming-cleanup.md) | Idle green tree |
 | [`v2-to-v3/effect-surface-completeness.md`](v2-to-v3/effect-surface-completeness.md) | E5/E6 pain |
 | [`mcp-domain-inspection-completeness.md`](mcp-domain-inspection-completeness.md) | MCP pain |

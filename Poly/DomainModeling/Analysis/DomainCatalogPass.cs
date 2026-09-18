@@ -15,7 +15,6 @@ namespace Poly.DomainModeling.Analysis;
 internal sealed class DomainCatalogPass : INodeAnalyzer {
     public const string Id = "DomainCatalogPass";
     public string PassName => Id;
-    public string[] Dependencies => [];
 
     public void Analyze(AnalysisContext context, Node node) {
         switch (node) {

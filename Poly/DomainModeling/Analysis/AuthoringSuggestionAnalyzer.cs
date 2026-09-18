@@ -10,7 +10,6 @@ internal sealed class AuthoringSuggestionAnalyzer : INodeAnalyzer {
     public const string Id = "DomainAuthoringSuggestionAnalyzer";
     public string PassName => Id;
     // Reads DomainTypeLookupMetadata for entity enumeration.
-    public string[] Dependencies => [DomainCatalogPass.Id];
 
     public void Analyze(AnalysisContext context, Node node) {
 

@@ -151,15 +151,14 @@ public sealed class TemporalPackPrintRoundTripTests {
         var g = DslGrammar.Core;
 
         foreach (var rule in new[] { "expr-primary", "expr-primary-no-not" }) {
-            await Assert.That(g.GetPatterns(rule).Any(p => p.Name == "now")).IsTrue();
-            await Assert.That(g.GetPatterns(rule).Any(p => p.Name == "today")).IsTrue();
+            await Assert.That(g.GetPatterns(rule).Any(p => p.Name == "ident")).IsTrue();
             await Assert.That(g.GetPatterns(rule).Any(p => p.Name == "duration")).IsTrue();
 
             var now = new Matcher<DslToken, DslTokenKind>(g, new DslTokenReader("Now"));
-            await Assert.That(now.TryMatch(rule)?.PatternName).IsEqualTo("now");
+            await Assert.That(now.TryMatch(rule)?.PatternName).IsEqualTo("ident");
 
             var today = new Matcher<DslToken, DslTokenKind>(g, new DslTokenReader("Today"));
-            await Assert.That(today.TryMatch(rule)?.PatternName).IsEqualTo("today");
+            await Assert.That(today.TryMatch(rule)?.PatternName).IsEqualTo("ident");
 
             var duration = new Matcher<DslToken, DslTokenKind>(g, new DslTokenReader("12 Days"));
             await Assert.That(duration.TryMatch(rule)?.PatternName).IsEqualTo("duration");

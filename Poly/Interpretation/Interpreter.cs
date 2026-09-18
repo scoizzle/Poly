@@ -20,18 +20,17 @@ public static class Interpreter {
         .UseTypeDefinitionNodeAnalyzer()
         .UseThisReferenceContext()
         .UseTypeAndMemberResolver()
+        .UseLambdaReturnTypeResolution()
         .UseVariableScopeValidator()
         .UseSideEffectAnalysis()
-        .UseJumpTargetResolution()
         .UseConstantFolding()
+        .UseJumpTargetResolution()
         .UseControlFlowAnalysis()
-        .UseDefiniteAssignmentAnalysis()
-        .UseLambdaReturnTypeResolution()
-        .UseValueRepresentationAnalysis()
-        .UseCallSiteCatalog()
         .UseExceptionRegionAnalysis()
+        .UseValueRepresentationAnalysis()
         .UseSyntaxTypeCompatibility()
-        // Direct AST-to-ABI lowering is the primary path.
+        .UseCallSiteCatalog()
+        .UseDefiniteAssignmentAnalysis()
         .Build();
 
     /// <summary>

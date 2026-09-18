@@ -1,3 +1,5 @@
+using Poly.DomainModeling.Analysis;
+
 namespace Poly.Packs.Sqlite;
 
 /// <summary>
@@ -10,6 +12,7 @@ public sealed class SqliteLibrary : IDomainLibrary {
     public void Register(SessionBuilder builder) {
         ArgumentNullException.ThrowIfNull(builder);
         SqliteDefaults.ApplyTypeMaps(builder.TypeMaps);
+        builder.AddAnalyzer(new StoragePass(builder.TypeMaps, builder.StorageConventions));
         builder.AddAnalyzer(new PersistenceSurfacePass());
     }
 }

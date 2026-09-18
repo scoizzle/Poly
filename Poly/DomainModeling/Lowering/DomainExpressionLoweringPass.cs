@@ -1,5 +1,7 @@
 using Poly.Ast.Nodes;
+using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Dispatch;
+using Poly.DomainModeling.Meaning;
 using Poly.DomainModeling.Ontology;
 
 using Add = Poly.DomainModeling.Ontology.Add;
@@ -8,7 +10,6 @@ using Divide = Poly.DomainModeling.Ontology.Divide;
 using Multiply = Poly.DomainModeling.Ontology.Multiply;
 using Not = Poly.DomainModeling.Ontology.Not;
 using Or = Poly.DomainModeling.Ontology.Or;
-using Prim = Poly.Introspection.PrimitiveType;
 using SN = Poly.Ast.Nodes;
 using Subtract = Poly.DomainModeling.Ontology.Subtract;
 
@@ -36,6 +37,8 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Node
     private readonly Func<string, bool>? _isRelationshipNavigation;
     private readonly Func<string, string?>? _propertyTypeResolver;
     private readonly Domain? _domain;
+    private readonly ExpressionMeaning _meaning;
+    private readonly ExpressionFormRegistry? _forms;
     private string? _sourceEntityName;
     private Node _currentSubject = null!;
 
@@ -66,8 +69,25 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Node
         _isRelationshipNavigation = context.IsRelationshipNavigation;
         _propertyTypeResolver = context.PropertyTypeResolver;
         _domain = context.Domain;
+        _meaning = context.Meaning ?? ExpressionMeaning.Empty;
+        _forms = context.Forms;
         _sourceEntityName = context.SourceEntityName;
     }
+
+    private ExpressionMeaning EffectiveMeaning {
+        get {
+            if (_meaning.Lowering.Handlers.Count > 0)
+                return _meaning;
+            return _domain is not null
+                ? RuntimeAnalysisCache.MeaningFor(_domain)
+                : _meaning;
+        }
+    }
+
+    private ExpressionFormRegistry EffectiveForms =>
+        _forms ?? (_domain is not null
+            ? RuntimeAnalysisCache.FormsFor(_domain)
+            : new ExpressionFormRegistry());
 
     /// <summary>
     /// Lowers <paramref name="expression"/> to a Syntax AST <see cref="Node"/>,
@@ -87,14 +107,12 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Node
         $"DomainExpression node type is not supported");
 
     protected override Node PropertyAccess(PropertyAccess p) {
-        // Runtime default expressions: now/today/guid should resolve to CLR
-        // expressions (DateTime.UtcNow, DateOnly.FromDateTime, Guid.NewGuid)
-        // instead of entity property access. Export (UseThisReference) always
-        // clocks these keywords. Simulate assign/create passes a type hint in
-        // EffectLoweringPass. Bare fragments without temporal stay Member(Now)
-        // so analysis can fail closed on unknown property.
+        // Export (UseThisReference) resolves session ident folds (clocks) and Guid
+        // through LowerDefaultExpression. Bare fragments without those tables stay
+        // Member so analysis can fail closed on unknown property.
         if (_useThisReference) {
-            var runtime = EffectLoweringPass.LowerDefaultExpression(p);
+            var runtime = EffectLoweringPass.LowerDefaultExpression(
+                p, typeHint: null, EffectiveMeaning, EffectiveForms);
             if (runtime is not null) return runtime;
         }
 
@@ -227,40 +245,15 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Node
     }
 
     protected override Node Add(Add a) {
-        var left = Lower(a.Left, _currentSubject);
-        var right = Lower(a.Right, _currentSubject);
-        return LowerDateArithmetic(a.Left, left, right, isSubtract: false);
+        if (EffectiveMeaning.Lowering.TryLower(a, e => Lower(e, _currentSubject), _propertyTypeResolver, out var node))
+            return node;
+        return new SN.Add(Lower(a.Left, _currentSubject), Lower(a.Right, _currentSubject));
     }
 
     protected override Node Subtract(Subtract s) {
-        var left = Lower(s.Left, _currentSubject);
-        var right = Lower(s.Right, _currentSubject);
-        return LowerDateArithmetic(s.Left, left, right, isSubtract: true);
-    }
-
-    /// <summary>
-    /// Hoists the date-arithmetic rewrite (`DueDate + 14` → `DueDate.AddDays(14)`,
-    /// `DueDate - 14` → `DueDate.AddDays(-14)`) into expression lowering so it applies
-    /// everywhere a date-typed member appears in arithmetic — policies, if conditions,
-    /// entry/exit, and create-in initializers — not just the assign path. The CLR types
-    /// don't support `DateOnly + long`, so without this the generated C# fails CS0019
-    /// (and the runtime evaluates garbage on heap-handle arithmetic).
-    /// </summary>
-    private Node LowerDateArithmetic(DomainExpression leftExpr, Node left, Node right, bool isSubtract) {
-        if (leftExpr is PropertyAccess pa
-            && _propertyTypeResolver?.Invoke(pa.Name) is { } typeName
-            && typeName is "DateTime" or "Timestamp" or "Date" or "DateOnly") {
-            // Subtract lowers to AddDays with a negated offset (DateOnly/DateTime have no
-            // `- long` operator). Negate the RHS rather than emitting `0 - N` so the
-            // DateOnly int-cast binds to the whole operand: (int)-14L, not (int)0L - 14L.
-            var rawArg = isSubtract ? (Node)new SN.UnaryMinus(right) : right;
-            // DateOnly.AddDays takes int; DateTime.AddDays takes double (long widens implicitly).
-            var typedArg = typeName is "Date" or "DateOnly"
-                ? Int32Offset(rawArg)
-                : rawArg;
-            return new Invoke(new Member(left, "AddDays"), [typedArg]);
-        }
-        return isSubtract ? new SN.Subtract(left, right) : new SN.Add(left, right);
+        if (EffectiveMeaning.Lowering.TryLower(s, e => Lower(e, _currentSubject), _propertyTypeResolver, out var node))
+            return node;
+        return new SN.Subtract(Lower(s.Left, _currentSubject), Lower(s.Right, _currentSubject));
     }
 
     protected override Node Multiply(Multiply m)
@@ -370,97 +363,10 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Node
             $"Collection quantifier '{quantifier} {relName} …' requires store-aware evaluation " +
             "which is not yet implemented on the VM compilation path.");
 
-    protected override Node Now(Now _) =>
-        new Member(new NamedTypeReference("DateTime"), "UtcNow");
-
-    protected override Node Today(Today _) =>
-        new Invoke(
-            new Member(new NamedTypeReference("DateOnly"), "FromDateTime"),
-            new Member(new NamedTypeReference("DateTime"), "UtcNow"));
-
-    protected override Node Duration(Duration d) =>
+    protected override Node Library(DomainExpression expr) {
+        if (EffectiveMeaning.Lowering.TryLower(expr, Route, _propertyTypeResolver, out var node))
+            return node;
         throw new NotSupportedException(
-            $"Bare duration '{d.Amount} {d.Unit}' reached lowering without a temporal left operand " +
-            "(e.g. 'Now - 12 days'). Resolve it into a DateOperation before lowering.");
-
-    protected override Node DateOperation(DateOperation d) {
-        var date = Route(d.Date);
-        var offset = Route(d.Offset);
-        var family = ResolveDateClrFamily(d.Date);
-
-        if (family is DateClrFamily.TimeOnly
-            && d.Kind is DateOperationKind.AddSeconds or DateOperationKind.AddMilliseconds) {
-            var from = d.Kind is DateOperationKind.AddSeconds ? "FromSeconds" : "FromMilliseconds";
-            return new Invoke(
-                new Member(date, "Add"),
-                new Invoke(new Member(new NamedTypeReference("TimeSpan"), from), offset));
-        }
-
-        var (method, arg) = d.Kind switch {
-            DateOperationKind.AddMilliseconds => ("AddMilliseconds", offset),
-            DateOperationKind.AddSeconds => ("AddSeconds", offset),
-            DateOperationKind.AddMinutes => ("AddMinutes", offset),
-            DateOperationKind.AddHours => ("AddHours", offset),
-            DateOperationKind.AddDays => ("AddDays", offset),
-            DateOperationKind.AddWeeks => ("AddDays", ScaleOffset(offset, 7)),
-            DateOperationKind.AddMonths => ("AddMonths", offset),
-            DateOperationKind.AddYears => ("AddYears", offset),
-            DateOperationKind.DiffDays => ("Subtract", offset),
-            _ => throw new NotSupportedException($"DateOperation kind '{d.Kind}' is not supported."),
-        };
-
-        if (NeedsIntOffset(family, d.Kind))
-            arg = Int32Offset(arg);
-
-        return new Invoke(new Member(date, method), arg);
+            $"DomainExpression node type '{expr.GetType().Name}' is not supported");
     }
-
-    private enum DateClrFamily { Unknown, DateOnly, DateTime, TimeOnly }
-
-    private DateClrFamily ResolveDateClrFamily(DomainExpression dateExpr) {
-        if (dateExpr is Now)
-            return DateClrFamily.DateTime;
-        if (dateExpr is Today)
-            return DateClrFamily.DateOnly;
-        if (DateOperandName(dateExpr) is { } name
-            && _propertyTypeResolver?.Invoke(name) is { } typeName)
-            return FamilyFromTypeName(typeName);
-        if (dateExpr is DateOperation nested)
-            return ResolveDateClrFamily(nested.Date);
-        return DateClrFamily.Unknown;
-    }
-
-    private static string? DateOperandName(DomainExpression dateExpr) => dateExpr switch {
-        PropertyAccess pa => pa.Name,
-        ParameterAccess pa => pa.Name,
-        _ => null,
-    };
-
-    private static DateClrFamily FamilyFromTypeName(string typeName) => typeName switch {
-        "Date" or "DateOnly" => DateClrFamily.DateOnly,
-        "DateTime" or "Timestamp" => DateClrFamily.DateTime,
-        "Time" or "TimeOnly" => DateClrFamily.TimeOnly,
-        _ => DateClrFamily.Unknown,
-    };
-
-    /// <summary>
-    /// DateOnly.AddDays/AddMonths/AddYears take int; DateTime.AddMonths/AddYears take int.
-    /// DateTime.AddDays (and clock Add*) take double — long widens. Cast wraps the scaled
-    /// or negated offset so the printer emits <c>(int)-14L</c>, not <c>(int)0L - 14L</c>.
-    /// </summary>
-    private static bool NeedsIntOffset(DateClrFamily family, DateOperationKind kind) {
-        if (kind is DateOperationKind.AddMonths or DateOperationKind.AddYears)
-            return family is not DateClrFamily.TimeOnly;
-        return family is DateClrFamily.DateOnly
-            && kind is DateOperationKind.AddDays or DateOperationKind.AddWeeks;
-    }
-
-    private static Node Int32Offset(Node rawArg) =>
-        new TypeCast(rawArg, new PrimitiveTypeReference(Prim.Int32));
-
-    private static Node ScaleOffset(Node offset, int factor) => offset switch {
-        Constant { Value: long n } => new Constant(n * factor),
-        Constant { Value: int n } => new Constant(n * factor),
-        _ => new SN.Multiply(offset, new Constant((long)factor)),
-    };
 }

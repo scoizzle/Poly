@@ -90,6 +90,12 @@ public abstract record DomainExpression : DomainObject {
 
     public static DomainExpression GreaterThanOrEqual(DomainExpression left, DomainExpression right) =>
         new Comparison(left, right, ComparisonKind.GreaterThanOrEqual);
+
+    /// <summary>
+    /// Rebuilds this node with rewritten children. Leaves return <c>this</c>.
+    /// Library composites override so core rewrite does not name pack types.
+    /// </summary>
+    public virtual DomainExpression MapChildren(Func<DomainExpression, DomainExpression> map) => this;
 }
 
 // === Concrete nodes (deliberately small set) ===

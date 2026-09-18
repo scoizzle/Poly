@@ -1,8 +1,11 @@
+using Prim = Poly.Introspection.PrimitiveType;
+
 namespace Poly.DomainModeling.Meaning;
 
 /// <summary>
 /// Shared domain→host mappings used by lowering convention views and C# backends.
-/// Domain facts stay protocol-agnostic; CLR/SQL names live here as adapter projections.
+/// Domain facts stay protocol-agnostic. Core maps Text/Number/Boolean/Uuid/Binary;
+/// temporal Date/Time/Duration maps register from the temporal library.
 /// </summary>
 public static class DomainTypeMapping {
     /// <summary>Maps a domain primitive (or known alias) to a C# type name for codegen.</summary>
@@ -11,10 +14,6 @@ public static class DomainTypeMapping {
         "Number" or "Int" or "Int64" => "long",
         "Int32" => "int",
         "Boolean" or "Bool" => "bool",
-        "DateTime" or "Timestamp" => "DateTime",
-        "Date" or "DateOnly" => "DateOnly",
-        "Time" or "TimeOnly" => "TimeOnly",
-        "Duration" or "TimeSpan" => "TimeSpan",
         "Decimal" => "decimal",
         "Float" or "Double" => "double",
         "Guid" or "Uuid" => "Guid",
@@ -32,10 +31,6 @@ public static class DomainTypeMapping {
         "Number" or "Int" or "Int64" => "bigint",
         "Int32" => "integer",
         "Boolean" or "Bool" => "boolean",
-        "DateTime" or "Timestamp" => "timestamp",
-        "Date" or "DateOnly" => "date",
-        "Time" or "TimeOnly" => "time",
-        "Duration" or "TimeSpan" => "interval",
         "Decimal" => "decimal",
         "Float" or "Double" => "double precision",
         "Guid" or "Uuid" => "uuid",
@@ -47,6 +42,81 @@ public static class DomainTypeMapping {
     public static bool IsNonNullableClrValueType(string clrTypeName) => clrTypeName is
         "int" or "long" or "double" or "decimal" or "float" or "bool"
         or "DateTime" or "DateOnly" or "TimeOnly" or "TimeSpan" or "Guid";
+
+    /// <summary>Maps a CLR type name (after <see cref="ToClrTypeName"/>) to an Introspection primitive.</summary>
+    public static bool TryPrimitiveType(string clrTypeName, out Prim primitive) {
+        switch (clrTypeName) {
+            case "string":
+                primitive = Prim.String;
+                return true;
+            case "long":
+                primitive = Prim.Int64;
+                return true;
+            case "int":
+                primitive = Prim.Int32;
+                return true;
+            case "bool":
+                primitive = Prim.Boolean;
+                return true;
+            case "DateTime":
+                primitive = Prim.DateTime;
+                return true;
+            case "DateOnly":
+                primitive = Prim.DateOnly;
+                return true;
+            case "TimeOnly":
+                primitive = Prim.TimeOnly;
+                return true;
+            case "TimeSpan":
+                primitive = Prim.TimeSpan;
+                return true;
+            case "Guid":
+                primitive = Prim.Guid;
+                return true;
+            case "decimal":
+                primitive = Prim.Decimal;
+                return true;
+            case "double":
+                primitive = Prim.Float64;
+                return true;
+            case "float":
+                primitive = Prim.Float32;
+                return true;
+            default:
+                primitive = default;
+                return false;
+        }
+    }
+
+    /// <summary>Static default member on a CLR value type (MinValue / Empty / Zero).</summary>
+    public static bool TryDefaultMember(string clrTypeName, out string typeName, out string memberName) {
+        switch (clrTypeName) {
+            case "DateTime":
+                typeName = "DateTime";
+                memberName = "MinValue";
+                return true;
+            case "DateOnly":
+                typeName = "DateOnly";
+                memberName = "MinValue";
+                return true;
+            case "TimeOnly":
+                typeName = "TimeOnly";
+                memberName = "MinValue";
+                return true;
+            case "TimeSpan":
+                typeName = "TimeSpan";
+                memberName = "Zero";
+                return true;
+            case "Guid":
+                typeName = "Guid";
+                memberName = "Empty";
+                return true;
+            default:
+                typeName = "";
+                memberName = "";
+                return false;
+        }
+    }
 
     public static string ToCamelCase(string name) {
         if (string.IsNullOrEmpty(name) || char.IsLower(name[0]))

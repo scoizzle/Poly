@@ -12,7 +12,15 @@ namespace Poly.Tests.DomainModeling.Lowering;
 /// comparing rendered C# strings, avoiding formatting brittleness.
 /// </summary>
 public class DbContextGeneratorTests {
+    private static string WithPersistence(string poly) {
+        if (poly.Contains("uses persistence", StringComparison.Ordinal))
+            return poly;
+        var nl = poly.IndexOf('\n');
+        return nl < 0 ? poly : poly[..(nl + 1)] + "uses persistence\n" + poly[(nl + 1)..];
+    }
+
     private static Domain ParseDomain(string poly) {
+        poly = WithPersistence(poly);
         var ctx = ExtensionCatalog.Core.Authoring;
         var parser = new PolyDslParser(poly, ctx);
         var changes = parser.Parse();

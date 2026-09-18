@@ -16,7 +16,6 @@ internal sealed class EffectTopologyPass : INodeAnalyzer {
     public const string Id = "EffectTopologyPass";
     public string PassName => Id;
     // Pure domain-tree scan; no upstream analysis bags.
-    public string[] Dependencies => [];
 
     public void Analyze(AnalysisContext context, Node node) {
         if (node is not Domain domain) return;

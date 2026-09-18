@@ -328,16 +328,14 @@ public sealed partial class DomainToCSharpExporter {
         DomainTypeReference type, Domain domain, INodeMetadataProvider metadata) {
         if (TryResolveEnumType(domain, metadata, type.TypeName, out var enumType) && enumType is not null)
             return new Member(new NamedTypeReference(enumType.Name), enumType.MemberNames[0]);
-        return type.TypeName switch {
-            "Text" or "String" => new Constant(""),
-            "Number" or "Int" or "Int64" => new Constant(0L),
-            "Int32" => new Constant(0),
-            "Boolean" or "Bool" => new Constant(false),
-            "DateTime" or "Timestamp" => new Member(new NamedTypeReference("DateTime"), "MinValue"),
-            "Date" or "DateOnly" => new Member(new NamedTypeReference("DateOnly"), "MinValue"),
-            "Guid" or "Uuid" => new Member(new NamedTypeReference("Guid"), "Empty"),
-            _ => new Constant(null)
-        };
+        var clr = RuntimeAnalysisCache.ClrTypeName(domain, type.TypeName);
+        if (clr is "string") return new Constant("");
+        if (clr is "long") return new Constant(0L);
+        if (clr is "int") return new Constant(0);
+        if (clr is "bool") return new Constant(false);
+        if (DomainTypeMapping.TryDefaultMember(clr, out var defaultType, out var member))
+            return new Member(new NamedTypeReference(defaultType), member);
+        return new Constant(null);
     }
 
     private static Node TypedNull(string typeName) =>

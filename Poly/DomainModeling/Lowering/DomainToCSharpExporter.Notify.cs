@@ -179,7 +179,10 @@ public sealed partial class DomainToCSharpExporter {
             var paramName = ToCamelCase(prop.Name);
             var mapped = MapDomainTypeRef(prop.Type, domain, metadata);
             var runtimeExpr = EffectLoweringPass.LowerDefaultExpression(
-                defaultConstraint.Expression, new NamedTypeReference(prop.Type.TypeName));
+                defaultConstraint.Expression,
+                new NamedTypeReference(prop.Type.TypeName),
+                RuntimeAnalysisCache.MeaningFor(domain),
+                RuntimeAnalysisCache.FormsFor(domain));
             if (runtimeExpr is not null) {
                 methodParams.Add(new Parameter(paramName,
                     new OptionalTypeReference(mapped),
@@ -485,18 +488,7 @@ public sealed partial class DomainToCSharpExporter {
         if (domain is not null
             && domain.Types.OfType<EnumType>().Any(e => string.Equals(e.Name, typeName, StringComparison.Ordinal)))
             return false;
-        return typeName switch {
-            "Text" or "String" => true,  // handled separately via IsNullOrEmpty
-            "Number" or "Int" or "Int64" or "Int32" => false,
-            "Boolean" or "Bool" => false,
-            "DateTime" or "Timestamp" => false,
-            "Date" or "DateOnly" => false,
-            "Time" or "TimeOnly" => false,
-            "Duration" or "TimeSpan" => false,
-            "Decimal" => false,
-            "Float" or "Double" => false,
-            "Guid" or "Uuid" => false,
-            _ => true, // entity reference types (Book, Patron, etc.) are nullable
-        };
+        return !DomainTypeMapping.IsNonNullableClrValueType(
+            RuntimeAnalysisCache.ClrTypeName(domain, typeName));
     }
 }

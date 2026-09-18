@@ -1,5 +1,4 @@
 using Poly.DomainModeling.Evolution;
-using Poly.DomainModeling.Libraries.Temporal;
 
 namespace Poly.DomainModeling.Ontology.Bootstrap;
 
@@ -71,8 +70,9 @@ public static class DomainFactory {
 
     private static Domain ApplyBuiltins(Domain empty) {
         var changes = CanonicalBuiltInTypeCatalog.CreateChanges().ToList();
-        if (empty.Extensions.Contains(ExtensionCatalog.TemporalId, StringComparer.Ordinal))
-            changes.AddRange(TemporalTypeCatalog.CreateChanges());
+        var session = DomainSession.ForExtensions(empty.Extensions);
+        foreach (var (_, name, category) in session.PrimitiveSeeds)
+            changes.Add(new AddPrimitiveTypeChange(name, category, []));
         var result = new DomainEvolution(empty).Apply(changes);
         return result.Succeeded
             ? result.Root

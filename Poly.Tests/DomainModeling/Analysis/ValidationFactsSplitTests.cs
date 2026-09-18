@@ -114,7 +114,6 @@ public class ValidationFactsSplitTests {
 
     private sealed class EffectLintWithoutFactPasses : INodeAnalyzer {
         public string PassName => EffectAnalyzer.Id + ".NoFacts";
-        public string[] Dependencies => [DomainCatalogPass.Id];
         public void Analyze(AnalysisContext context, Node node) =>
             new EffectAnalyzer().Analyze(context, node);
     }

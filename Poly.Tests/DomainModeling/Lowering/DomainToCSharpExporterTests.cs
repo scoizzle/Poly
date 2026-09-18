@@ -2093,6 +2093,7 @@ public class DomainToCSharpExporterTests {
         // string. Now rejected at analysis by the type-compatibility pass.
         var ex = Assert.Throws<InvalidOperationException>(() => ParseAndAnalyze("""
             domain Test
+            uses temporal
             Status: enum { Draft, Open }
             Task: entity { DueDate: Date default(Draft) }
             """));

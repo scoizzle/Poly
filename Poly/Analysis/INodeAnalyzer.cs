@@ -4,14 +4,8 @@ public interface INodeAnalyzer {
     void Analyze(AnalysisContext context, Node node);
 
     /// <summary>Stable display name for this pass, used in telemetry and diagnostics.
-    /// Each concrete pass should expose a <c>public const string Id</c>
-    /// for type-safe cross-references in other passes' <see cref="Dependencies"/>.</summary>
+    /// Each concrete pass should expose a <c>public const string Id</c>.</summary>
     string PassName { get; }
-
-    /// <summary>Pass names that must be registered before this one.
-    /// <see cref="AnalyzerBuilder"/> inserts after the last of these; <see cref="Analyzer"/>
-    /// then runs the list in that order. Default is empty.</summary>
-    string[] Dependencies => [];
 }
 
 public static class NodeAnalyzerExtensions {

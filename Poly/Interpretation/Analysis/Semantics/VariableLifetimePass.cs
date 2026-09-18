@@ -34,7 +34,6 @@ internal sealed record ScopeState(
 internal sealed class ScopeValidator : INodeAnalyzer {
     public const string Id = "VariableScope";
     public string PassName => Id;
-    public string[] Dependencies => [TypeAndMemberResolver.Id];
     public void Analyze(AnalysisContext context, Node node) {
         var state = new ScopeState(
             Meta: new(

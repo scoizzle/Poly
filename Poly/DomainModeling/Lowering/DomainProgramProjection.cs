@@ -120,7 +120,7 @@ public static class DomainProgramProjection {
                 .DistinctBy(e => e.Name)
                 .ToList();
             if (boundEndpoints.Count == 0) continue;
-            result.Add(DomainToCSharpExporter.BuildContractAdapterTypeDef(contract, boundEndpoints));
+            result.Add(DomainToCSharpExporter.BuildContractAdapterTypeDef(contract, boundEndpoints, domain));
         }
 
         // ── Build entity type definitions ─────────────────────────

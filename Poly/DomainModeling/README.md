@@ -68,10 +68,12 @@ var entity = DomainQueries.GetEntity(domain, "Order");
 ### Analysis pipeline
 
 ```text
-Well-formed  →  Catalog (first metadata)  →  Derive (capability, required, topology, storage, …)
+Shape → Catalog → Gates / facts → Coupling → Hints
                      │
                      ▼
               DomainCatalogMetadata — later passes read this
+Registration order is the schedule. Libraries fill ExpressionMeaning (inference, checks, lowering, defaults); core gates and lowering read it.
+Libraries append flags after this list (not mid-list passes). Persistence libraries append StoragePass. They seed primitives via `IDomainLibrary.PrimitiveSeeds`.
 ```
 
 ## Directory overview

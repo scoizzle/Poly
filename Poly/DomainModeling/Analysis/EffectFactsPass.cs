@@ -11,7 +11,6 @@ namespace Poly.DomainModeling.Analysis;
 internal sealed class EffectFactsPass : INodeAnalyzer {
     public const string Id = "DomainEffectFacts";
     public string PassName => Id;
-    public string[] Dependencies => [DomainCatalogPass.Id];
 
     public void Analyze(AnalysisContext context, Node node) {
 

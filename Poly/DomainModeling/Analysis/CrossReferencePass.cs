@@ -13,7 +13,6 @@ namespace Poly.DomainModeling.Analysis;
 internal sealed class CrossReferencePass : INodeAnalyzer {
     public const string Id = "CrossReferencePass";
     public string PassName => Id;
-    public string[] Dependencies => [EffectTopologyPass.Id];
 
     public void Analyze(AnalysisContext context, Node node) {
         if (node is not Domain domain) return;

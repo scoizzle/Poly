@@ -4,20 +4,18 @@ namespace Poly.Analysis;
 /// Runs an ordered pipeline of analysis passes over an AST node.
 /// Immutable after construction — safe for repeated use (passes are stateless).
 /// </summary>
-public sealed class Analyzer {
-    private readonly INodeAnalyzer[] _analyzers;
+public sealed class Analyzer(
+    IReadOnlyList<INodeAnalyzer> analyzers,
+    AnalysisOptions? options = null) {
+    private readonly IReadOnlyList<INodeAnalyzer> _analyzers = analyzers;
 
-    internal Analyzer(INodeAnalyzer[] analyzers) {
-        _analyzers = analyzers;
-    }
-
-    /// <summary>Registration order after <see cref="AnalyzerBuilder"/> topological insert.</summary>
+    /// <summary>Registration order from <see cref="AnalyzerBuilder"/>.</summary>
     internal IReadOnlyList<string> PassNames => [.. _analyzers.Select(static a => a.PassName)];
 
     /// <summary>
     /// Options that control analysis behavior (including early exit).
     /// </summary>
-    public AnalysisOptions Options { get; init; } = AnalysisOptions.Default;
+    public AnalysisOptions Options { get; } = options ?? AnalysisOptions.Default;
 
     private AnalysisResult RunPasses(AnalysisContext context, Node root) {
         var collector = new AnalysisTelemetryCollector();

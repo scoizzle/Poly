@@ -271,15 +271,16 @@ public sealed class EmitSessionContractTests {
     }
 
     [Test]
-    public async Task ParseNow_WithTemporal_LowersToUtcNowMember_WithoutMeaningTable() {
+    public async Task ParseNow_WithTemporal_LowersToUtcNowMember_ViaMeaningTable() {
         var (session, domain, _) = AnalyzePoly(TemporalNowPolicy);
-        await Assert.That(session.Meaning.Lowering.Handlers).IsEmpty();
+        await Assert.That(session.Meaning.Lowering.Handlers.Count).IsGreaterThan(0);
         var policy = domain.Types.OfType<Entity>().Single().Policies.Single();
         await Assert.That(policy.Expression).IsTypeOf<Comparison>();
         var cmp = (Comparison)policy.Expression;
         await Assert.That(cmp.Right).IsTypeOf<Now>();
 
-        var lowered = new DomainExpressionLoweringPass(new LoweringContext(new Parameter("entity")))
+        var lowered = new DomainExpressionLoweringPass(new LoweringContext(
+                new Parameter("entity"), Meaning: session.Meaning))
             .Lower(cmp.Right, new Parameter("entity"));
         await Assert.That(lowered).IsTypeOf<Member>();
         var member = (Member)lowered;
@@ -293,7 +294,7 @@ public sealed class EmitSessionContractTests {
         var poly = """
             domain T
             Item: entity {
-              Expiry: Date
+              Expiry: Text
               Due: policy { Expiry < Now }
             }
             """;

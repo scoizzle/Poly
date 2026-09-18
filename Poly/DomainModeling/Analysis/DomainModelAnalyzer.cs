@@ -1,3 +1,4 @@
+using Poly.DomainModeling.Meaning;
 using Poly.DomainModeling.Ontology;
 
 namespace Poly.DomainModeling.Analysis;
@@ -9,27 +10,19 @@ namespace Poly.DomainModeling.Analysis;
 /// </summary>
 public static class DomainModelAnalyzer {
     /// <summary>
-    /// Builds the product analysis pipeline with the session's storage type maps
-    /// and conventions wired into <see cref="StoragePass"/>. The session owns its
-    /// analyzer; this factory is the single construction point.
+    /// Builds the product analysis pipeline. The session owns its analyzer;
+    /// this factory is the single construction point. Storage mapping is a
+    /// library overlay, not a core-list pass.
     /// </summary>
     internal static Analyzer BuildPipeline(
-        TypeMappingRegistry? typeMaps,
-        IReadOnlyList<IStorageConvention>? conventions,
-        IReadOnlyList<INodeAnalyzer>? extraAnalyzers = null) {
+        IReadOnlyList<INodeAnalyzer>? extraAnalyzers = null,
+        ExpressionMeaning? meaning = null,
+        ExpressionFormRegistry? forms = null) {
         var builder = new AnalyzerBuilder()
-            .UseDomainModelAnalysisPipeline(typeMaps, conventions);
+            .UseDomainModelAnalysisPipeline(meaning, forms);
         if (extraAnalyzers is not null) {
-            foreach (var analyzer in extraAnalyzers) {
-                try {
-                    builder.AddAnalyzer(analyzer);
-                }
-                catch (ArgumentException ex) {
-                    throw new InvalidOperationException(
-                        $"An analyzer with pass name '{analyzer.PassName}' is already registered.",
-                        ex);
-                }
-            }
+            foreach (var analyzer in extraAnalyzers)
+                builder.AddAnalyzer(analyzer);
         }
         return builder.Build();
     }
@@ -70,38 +63,30 @@ public static class DomainModelAnalyzer {
 public static class DomainModelAnalysisBuilderExtensions {
     extension(AnalyzerBuilder builder) {
         public AnalyzerBuilder UseDomainModelAnalysisPipeline(
-            TypeMappingRegistry? typeMaps = null,
-            IReadOnlyList<IStorageConvention>? conventions = null) {
-            // Registration order must introduce each pass only after its declared
-            // Dependencies are present (AnalyzerBuilder inserts after the last dep).
-            // Fact emitters vs validate packs:
-            //   RequiredPropertiesPass / EffectFactsPass publish bags;
-            //   PolicyConstraintAnalyzer / EffectAnalyzer are diagnostic packs only.
-            // Lint-only: Structural, PolicyConstraint, Effect, ConstraintQuality,
-            // RuleCoverage, ContractIntegration, Subscription, AuthoringSuggestion.
+            ExpressionMeaning? meaning = null,
+            ExpressionFormRegistry? forms = null) {
+            // Registration order is the schedule. Waves are comments, not a scheduler.
+            // Libraries append flags after this list; they fill ExpressionMeaning, not mid-list passes.
             builder.AddAnalyzer(new StructuralDomainAnalyzer());
             builder.AddAnalyzer(new DomainCatalogPass());
-            builder.AddAnalyzer(new RuntimeContractAnalyzer());
-            builder.AddAnalyzer(new RequiredPropertiesPass());
+            builder.AddAnalyzer(new ExpressionTypeAnalyzer(meaning, forms));
             builder.AddAnalyzer(new PolicyConstraintAnalyzer());
-            builder.AddAnalyzer(new ExpressionTypeAnalyzer());
-            // DownstreamConstraintsMetadata consumed by EffectAnalyzer — register first
+            builder.AddAnalyzer(new ConstraintQualityAnalyzer());
+            builder.AddAnalyzer(new ContractIntegrationAnalyzer());
+            builder.AddAnalyzer(new RequiredPropertiesPass());
             builder.AddAnalyzer(new ConstraintPropagationAnalyzer());
             builder.AddAnalyzer(new EffectFactsPass());
             builder.AddAnalyzer(new EffectInvariantAnalyzer());
             builder.AddAnalyzer(new EffectAnalyzer());
-            builder.AddAnalyzer(new ConstraintQualityAnalyzer());
+            builder.AddAnalyzer(new RuntimeContractAnalyzer());
             builder.AddAnalyzer(new CapabilityAnalyzer());
-            builder.AddAnalyzer(new RuleCoverageAnalyzer());
-            builder.AddAnalyzer(new ContractIntegrationAnalyzer());
-            builder.AddAnalyzer(new EntityStructureAnalyzer());
             builder.AddAnalyzer(new SubscriptionAnalyzer());
+            builder.AddAnalyzer(new EntityStructureAnalyzer());
             builder.AddAnalyzer(new EffectTopologyPass());
             builder.AddAnalyzer(new OwnershipAggregatePass());
+            builder.AddAnalyzer(new RuleCoverageAnalyzer());
             builder.AddAnalyzer(new CrossReferencePass());
-            builder.AddAnalyzer(new StoragePass(typeMaps, conventions));
             builder.AddAnalyzer(new AuthoringSuggestionAnalyzer());
-            // Entity Syntax projection is export-time only — not an analysis fact.
             return builder;
         }
     }

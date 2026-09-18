@@ -9,7 +9,6 @@ using Poly.Ast.Nodes;
 internal sealed class TypeAndMemberResolver : INodeAnalyzer {
     public const string Id = "TypeAndMember";
     public string PassName => Id;
-    public string[] Dependencies => [ThisReferenceContextAnalyzer.Id];
     public void Analyze(AnalysisContext context, Node node) {
         if (node is TryCatchFinally tcf) {
             AnalyzeTryCatchFinally(context, tcf);

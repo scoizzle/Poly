@@ -1,5 +1,7 @@
 using Poly.DomainModeling.Lowering;
+using Poly.DomainModeling.Meaning;
 using Poly.DomainModeling.Ontology;
+using Poly.Tests.TestHelpers;
 
 using Parameter = Poly.Ast.Nodes.Parameter;
 using SN = Poly.Ast.Nodes;
@@ -7,8 +9,10 @@ using SN = Poly.Ast.Nodes;
 namespace Poly.Tests.DomainModeling.Lowering;
 
 public class DomainExpressionLoweringPassTests {
+    private static readonly ExpressionMeaning Temporal = TemporalMeaningHarness.Create();
+
     private readonly DomainExpressionLoweringPass Pass = new(
-        new LoweringContext(new Parameter("entity")));
+        new LoweringContext(new Parameter("entity"), Meaning: Temporal));
 
     private readonly ParameterReference Subject = new();
 
@@ -313,7 +317,8 @@ public class DomainExpressionLoweringPassTests {
     public async Task DateOperation_AddWeeks_OnDate_ScalesThenIntCasts() {
         var pass = new DomainExpressionLoweringPass(new LoweringContext(
             new Parameter("entity"),
-            PropertyTypeResolver: n => n == "DueDate" ? "Date" : null));
+            PropertyTypeResolver: n => n == "DueDate" ? "Date" : null,
+            Meaning: Temporal));
         var expr = new DateOperation(
             DomainExpression.Property("DueDate"),
             DomainExpression.Literal(2L),
@@ -336,7 +341,8 @@ public class DomainExpressionLoweringPassTests {
     public async Task DateOperation_AddMilliseconds_OnTime_LowersToTimeSpanFromMilliseconds() {
         var pass = new DomainExpressionLoweringPass(new LoweringContext(
             new Parameter("entity"),
-            PropertyTypeResolver: n => n == "Opens" ? "Time" : null));
+            PropertyTypeResolver: n => n == "Opens" ? "Time" : null,
+            Meaning: Temporal));
         var expr = new DateOperation(
             DomainExpression.Property("Opens"),
             DomainExpression.Literal(50),

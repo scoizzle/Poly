@@ -11,7 +11,8 @@ public sealed class ExpressionFormRegistry {
     private readonly List<System.Action<GrammarBuilder<DslToken, DslTokenKind>>> _grammarContributors = [];
     private readonly List<IExpressionPrintMapping> _printMappings = [];
     private readonly List<IBinaryExpressionFold> _binaryFolds = [];
-    private readonly List<(string Rule, string Pattern, Func<MatchResult<DslToken, DslTokenKind>, DomainExpression> Fold)> _folds = [];
+    private readonly List<(string? Rule, string Pattern, Func<MatchResult<DslToken, DslTokenKind>, DomainExpression> Fold)> _folds = [];
+    private readonly Dictionary<string, Func<DomainExpression>> _idents = new(StringComparer.Ordinal);
 
     public ExpressionFormRegistry() {
     }
@@ -22,9 +23,18 @@ public sealed class ExpressionFormRegistry {
         _printMappings.AddRange(source._printMappings);
         _binaryFolds.AddRange(source._binaryFolds);
         _folds.AddRange(source._folds);
+        foreach (var (name, fold) in source._idents)
+            _idents[name] = fold;
     }
 
-    /// <summary>Registers a (rule, pattern) fold into session <see cref="ExpressionFoldTable"/>.</summary>
+    /// <summary>Fold for a pattern name in every rule that uses it.</summary>
+    public void RegisterFold(string pattern, Func<MatchResult<DslToken, DslTokenKind>, DomainExpression> fold) {
+        ArgumentException.ThrowIfNullOrWhiteSpace(pattern);
+        ArgumentNullException.ThrowIfNull(fold);
+        _folds.Add((null, pattern, fold));
+    }
+
+    /// <summary>Fold for one (rule, pattern). Prefer <see cref="RegisterFold(string, Func{MatchResult{DslToken, DslTokenKind}, DomainExpression})"/>.</summary>
     public void RegisterFold(string rule, string pattern, Func<MatchResult<DslToken, DslTokenKind>, DomainExpression> fold) {
         ArgumentException.ThrowIfNullOrWhiteSpace(rule);
         ArgumentException.ThrowIfNullOrWhiteSpace(pattern);
@@ -32,10 +42,31 @@ public sealed class ExpressionFormRegistry {
         _folds.Add((rule, pattern, fold));
     }
 
+    /// <summary>Claims an identifier spelling (e.g. <c>Now</c>) as library IR.</summary>
+    public void RegisterIdent(string text, Func<DomainExpression> fold) {
+        ArgumentException.ThrowIfNullOrWhiteSpace(text);
+        ArgumentNullException.ThrowIfNull(fold);
+        if (!_idents.TryAdd(text, fold))
+            throw new InvalidOperationException($"An ident fold for '{text}' is already registered.");
+    }
+
+    public bool TryRewriteIdent(string text, out DomainExpression expression) {
+        if (_idents.TryGetValue(text, out var fold)) {
+            expression = fold();
+            return true;
+        }
+        expression = null!;
+        return false;
+    }
+
     public void ContributeFolds(ExpressionFoldTable table) {
         ArgumentNullException.ThrowIfNull(table);
-        foreach (var (rule, pattern, fold) in _folds)
-            table.Register(rule, pattern, fold);
+        foreach (var (rule, pattern, fold) in _folds) {
+            if (rule is null)
+                table.Register(pattern, fold);
+            else
+                table.Register(rule, pattern, fold);
+        }
     }
 
     /// <summary>Registers an IR → Grammar print mapping.</summary>

@@ -9,7 +9,6 @@ public sealed record HttpSurfaceMetadata : IAnalysisMetadata;
 public sealed class HttpSurfacePass : INodeAnalyzer {
     public const string Id = "HttpSurface";
     public string PassName => Id;
-    public string[] Dependencies => [CapabilityAnalyzer.Id, OwnershipAggregatePass.Id, StoragePass.Id];
 
     public void Analyze(AnalysisContext context, Node node) {
         if (node is Domain domain)

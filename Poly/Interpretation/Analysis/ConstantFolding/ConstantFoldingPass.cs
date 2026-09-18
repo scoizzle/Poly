@@ -14,7 +14,6 @@ public sealed record ConstantValueMetadata(object? Value) : IAnalysisMetadata;
 public sealed class ConstantFoldingPass : INodeAnalyzer {
     public const string Id = "ConstantFolding";
     public string PassName => Id;
-    public string[] Dependencies => [TypeAndMemberResolver.Id, SideEffectAnalyzer.Id];
     public void Analyze(AnalysisContext context, Node node) {
         if (node is Constant) {
             return;

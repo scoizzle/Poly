@@ -32,15 +32,18 @@ public sealed class DomainSession {
 
     public ExpressionMeaning Meaning { get; }
 
+    /// <summary>Primitive types loaded libraries seed, keyed by library id.</summary>
+    public IReadOnlyList<(string LibraryId, string Name, TypeCategory Category)> PrimitiveSeeds { get; }
+
     public IReadOnlyList<IArtifactContributor> Artifacts { get; }
 
     internal IReadOnlyList<INodeAnalyzer> ExtraAnalyzers { get; }
 
     private Analyzer? _analyzer;
 
-    /// <summary>The session's analysis pipeline: core product passes plus library analyzers, with storage type maps wired into <see cref="StoragePass"/>.</summary>
+    /// <summary>The session's analysis pipeline: core product passes plus library analyzers.</summary>
     private Analyzer Analyzer =>
-        _analyzer ??= DomainModelAnalyzer.BuildPipeline(TypeMaps, StorageConventions, ExtraAnalyzers);
+        _analyzer ??= DomainModelAnalyzer.BuildPipeline(ExtraAnalyzers, Meaning, ExpressionForms);
 
     internal DomainSession(
         Domain? domain,
@@ -53,7 +56,8 @@ public sealed class DomainSession {
         ExpressionFoldTable folds,
         ExpressionMeaning meaning,
         IReadOnlyList<IArtifactContributor>? artifacts = null,
-        IReadOnlyList<INodeAnalyzer>? extraAnalyzers = null) {
+        IReadOnlyList<INodeAnalyzer>? extraAnalyzers = null,
+        IReadOnlyList<(string LibraryId, string Name, TypeCategory Category)>? primitiveSeeds = null) {
         Domain = domain;
         Extensions = extensions;
         Language = language;
@@ -65,6 +69,7 @@ public sealed class DomainSession {
         Meaning = meaning;
         Artifacts = artifacts ?? [];
         ExtraAnalyzers = extraAnalyzers ?? [];
+        PrimitiveSeeds = primitiveSeeds ?? [];
     }
 
     /// <summary>Loads libraries for an existing domain's extension ids. Unknown id throws.</summary>
@@ -108,7 +113,7 @@ public sealed class DomainSession {
     public DomainSession WithDomain(Domain domain) {
         ArgumentNullException.ThrowIfNull(domain);
         if (SameExtensions(Extensions, domain.Extensions))
-            return new DomainSession(domain, domain.Extensions, Language, Annotations, ExpressionForms, TypeMaps, StorageConventions, Folds, Meaning, Artifacts, ExtraAnalyzers);
+            return new DomainSession(domain, domain.Extensions, Language, Annotations, ExpressionForms, TypeMaps, StorageConventions, Folds, Meaning, Artifacts, ExtraAnalyzers, PrimitiveSeeds);
         return Open(domain);
     }
 

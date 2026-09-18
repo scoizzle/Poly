@@ -5,7 +5,6 @@ namespace Poly.Interpretation.Analysis.Semantics;
 internal sealed class DefiniteAssignmentAnalyzer : INodeAnalyzer {
     public const string Id = "DefiniteAssignment";
     public string PassName => Id;
-    public string[] Dependencies => [ControlFlowAnalysisPass.Id];
     public void Analyze(AnalysisContext context, Node node) {
         var scopeStack = new Stack<HashSet<string>>();
         var assigned = new HashSet<string>();

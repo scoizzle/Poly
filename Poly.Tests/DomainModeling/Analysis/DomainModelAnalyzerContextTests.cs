@@ -32,9 +32,21 @@ public class DomainModelAnalyzerContextTests {
     }
 
     [Test]
+    public async Task Analyze_WithoutPersistenceLibrary_HasNoStorageMappingMetadata() {
+        var domain = ParseDomain("""
+            domain Test
+            Item: entity { Name: Text }
+            """);
+
+        var analysis = DomainModelAnalyzer.Analyze(domain);
+        await Assert.That(analysis.GetMetadata<StorageMappingMetadata>(domain)).IsNull();
+    }
+
+    [Test]
     public async Task Analyze_ProducesStorageMappingMetadata() {
         var domain = ParseDomain("""
             domain Test
+            uses persistence
             Item: entity { Name: Text }
             """);
 
@@ -49,6 +61,7 @@ public class DomainModelAnalyzerContextTests {
     public async Task Analyze_StorageMapping_IsDeterministicForSameDomainTree() {
         var domain = ParseDomain("""
             domain Test
+            uses persistence
             Item: entity { Name: Text }
             """);
 
@@ -75,6 +88,7 @@ public class DomainModelAnalyzerContextTests {
         // key and stage facts surface on the storage model.
         var domain = ParseDomain("""
             domain Test
+            uses persistence
             Item: entity {
                 Sku: Text unique
                 Name: Text

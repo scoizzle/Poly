@@ -196,7 +196,7 @@ public sealed class StorageAnalyzer {
             keyName = uniqueProp is not null
                 ? DomainTypeMapping.ToCamelCase(uniqueProp.Name) : "id";
             keyClrType = uniqueProp is not null
-                ? DomainTypeMapping.ToClrTypeName(uniqueProp.Type.TypeName) : "int";
+                ? _typeMaps.ToClrTypeName(uniqueProp.Type.TypeName) : "int";
             isRoot = agg?.IsRoot ?? !HasRequiredEntityRef(entity);
             var stageEnumType = _domain.Types.OfType<EnumType>()
                 .FirstOrDefault(e => e.Name == $"{entity.Name}Stage");

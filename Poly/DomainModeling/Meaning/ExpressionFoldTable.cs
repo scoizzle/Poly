@@ -11,24 +11,33 @@ namespace Poly.DomainModeling.Meaning;
 /// table folds closed primaries (literals, bare ident).
 /// </summary>
 public sealed class ExpressionFoldTable {
-    private readonly Dictionary<(string Rule, string Pattern), Func<MatchResult<DslToken, DslTokenKind>, DomainExpression>> _folds =
-        new();
+    private readonly Dictionary<(string Rule, string Pattern), Func<MatchResult<DslToken, DslTokenKind>, DomainExpression>> _byRule = new();
+    private readonly Dictionary<string, Func<MatchResult<DslToken, DslTokenKind>, DomainExpression>> _byPattern =
+        new(StringComparer.Ordinal);
 
     public static ExpressionFoldTable Core() {
         var table = new ExpressionFoldTable();
-        table.Register("expr-primary", "number", FoldNumber);
-        table.Register("expr-primary", "string", m => DomainExpression.Literal(Text(m)));
-        table.Register("expr-primary", "true", _ => DomainExpression.Literal(true));
-        table.Register("expr-primary", "false", _ => DomainExpression.Literal(false));
-        table.Register("expr-primary", "null", _ => DomainExpression.Literal(null));
-        table.Register("expr-primary", "ident", m => DomainExpression.Property(Text(m)));
-        table.Register("expr-primary-no-not", "number", FoldNumber);
-        table.Register("expr-primary-no-not", "string", m => DomainExpression.Literal(Text(m)));
-        table.Register("expr-primary-no-not", "true", _ => DomainExpression.Literal(true));
-        table.Register("expr-primary-no-not", "false", _ => DomainExpression.Literal(false));
-        table.Register("expr-primary-no-not", "null", _ => DomainExpression.Literal(null));
-        table.Register("expr-primary-no-not", "ident", m => DomainExpression.Property(Text(m)));
+        table.Register("number", Number);
+        table.Register("string", String);
+        table.Register("true", True);
+        table.Register("false", False);
+        table.Register("null", Null);
+        table.Register("ident", Ident);
         return table;
+    }
+
+    public static DomainExpression Number(MatchResult<DslToken, DslTokenKind> match) => FoldNumber(match);
+    public static DomainExpression String(MatchResult<DslToken, DslTokenKind> match) => DomainExpression.Literal(Text(match));
+    public static DomainExpression True(MatchResult<DslToken, DslTokenKind> match) => DomainExpression.Literal(true);
+    public static DomainExpression False(MatchResult<DslToken, DslTokenKind> match) => DomainExpression.Literal(false);
+    public static DomainExpression Null(MatchResult<DslToken, DslTokenKind> match) => DomainExpression.Literal(null);
+    public static DomainExpression Ident(MatchResult<DslToken, DslTokenKind> match) => DomainExpression.Property(Text(match));
+
+    public void Register(string pattern, Func<MatchResult<DslToken, DslTokenKind>, DomainExpression> fold) {
+        ArgumentException.ThrowIfNullOrWhiteSpace(pattern);
+        ArgumentNullException.ThrowIfNull(fold);
+        if (!_byPattern.TryAdd(pattern, fold))
+            throw new InvalidOperationException($"A fold for pattern '{pattern}' is already registered.");
     }
 
     public void Register(string rule, string pattern, Func<MatchResult<DslToken, DslTokenKind>, DomainExpression> fold) {
@@ -36,14 +45,15 @@ public sealed class ExpressionFoldTable {
         ArgumentException.ThrowIfNullOrWhiteSpace(pattern);
         ArgumentNullException.ThrowIfNull(fold);
         var key = (rule, pattern);
-        if (!_folds.TryAdd(key, fold))
+        if (!_byRule.TryAdd(key, fold))
             throw new InvalidOperationException($"A fold for '{rule}/{pattern}' is already registered.");
     }
 
     public bool TryFold(string rule, MatchResult<DslToken, DslTokenKind> match, out DomainExpression expression) {
         ArgumentException.ThrowIfNullOrWhiteSpace(rule);
         ArgumentNullException.ThrowIfNull(match);
-        if (_folds.TryGetValue((rule, match.PatternName), out var fold)) {
+        if (_byRule.TryGetValue((rule, match.PatternName), out var fold)
+            || _byPattern.TryGetValue(match.PatternName, out fold)) {
             expression = fold(match);
             return true;
         }

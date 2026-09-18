@@ -9,7 +9,6 @@ namespace Poly.DomainModeling.Analysis;
 internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
     public const string Id = "DomainStructuralDomainAnalyzer";
     public string PassName => Id;
-    public string[] Dependencies => [];
     public void Analyze(AnalysisContext context, Node node) {
         switch (node) {
             case Domain domain:
@@ -145,21 +144,6 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
                 context.ReportError(
                     duplicate,
                     $"Duplicate member name '{duplicate.Name}' in {ownerType} '{ownerName}'.",
-                    DomainModelDiagnosticCodes.StructuralDuplicate);
-            }
-        }
-    }
-
-    private static void ReportDuplicateReferenceNames(
-        AnalysisContext context,
-        IEnumerable<DomainTypeReference> nodes,
-        string ownerType,
-        string ownerName) {
-        foreach (var group in nodes.GroupBy(static node => node.TypeName, StringComparer.Ordinal).Where(static group => group.Count() > 1)) {
-            foreach (var duplicate in group.Skip(1)) {
-                context.ReportError(
-                    duplicate,
-                    $"Duplicate reference name '{duplicate.TypeName}' in {ownerType} '{ownerName}'.",
                     DomainModelDiagnosticCodes.StructuralDuplicate);
             }
         }

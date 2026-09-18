@@ -34,7 +34,6 @@ internal sealed record StageCapabilityMetadata(StageCapabilityView View) : IAnal
 internal sealed class CapabilityAnalyzer : INodeAnalyzer {
     public const string Id = "DomainCapabilityAnalyzer";
     public string PassName => Id;
-    public string[] Dependencies => [DomainCatalogPass.Id];
 
     public void Analyze(AnalysisContext context, Node node) {
 

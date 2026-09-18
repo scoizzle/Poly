@@ -38,7 +38,6 @@ public sealed record ResolvedJumpTarget(NodeId TargetNodeId) : IAnalysisMetadata
 internal sealed class JumpTargetAnalyzer : INodeAnalyzer {
     public const string Id = "JumpTarget";
     public string PassName => Id;
-    public string[] Dependencies => [];
     public void Analyze(AnalysisContext context, Node node) {
         // Walk the tree from any scope boundary — TypeDefinitionNode members,
         // MethodDefinitionNode bodies, Lambda bodies, or the script root.

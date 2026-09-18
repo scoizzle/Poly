@@ -1,3 +1,4 @@
+using Poly.DomainModeling.Meaning;
 using Poly.Grammar;
 
 namespace Poly.DomainModeling.Language;
@@ -10,8 +11,7 @@ namespace Poly.DomainModeling.Language;
 public static class DslGrammar {
     /// <summary>True when <paramref name="kind"/> is a primitive property type keyword.</summary>
     public static bool IsPrimitiveTypeKind(DslTokenKind kind) => kind is
-        DslTokenKind.Text or DslTokenKind.NumberType or DslTokenKind.BooleanType
-        or DslTokenKind.DateTimeType or DslTokenKind.DateType;
+        DslTokenKind.Text or DslTokenKind.NumberType or DslTokenKind.BooleanType;
 
     /// <summary>True when <paramref name="kind"/> is a comparison operator (product <c>ParseComparison</c> set).</summary>
     public static bool IsCompareOpKind(DslTokenKind kind) => kind is
@@ -72,8 +72,6 @@ public static class DslGrammar {
         DslTokenKind.Text => "Text",
         DslTokenKind.NumberType => "Number",
         DslTokenKind.BooleanType => "Boolean",
-        DslTokenKind.DateTimeType => "DateTime",
-        DslTokenKind.DateType => "Date",
         DslTokenKind.Required => "required",
         DslTokenKind.Unique => "unique",
         DslTokenKind.Range => "range",
@@ -220,16 +218,14 @@ public static class DslGrammar {
         .Define("expr-mul-no-not")
             .Pattern("chain").LeftAssoc("expr-primary-no-not", DslTokenKind.Star, DslTokenKind.Slash).Commit()
         .Define("expr-primary-no-not")
-            .Pattern("number").Kind(DslTokenKind.Number).Commit()
-            .Pattern("string").Kind(DslTokenKind.StringLiteral).Commit()
-            .Pattern("true").Kind(DslTokenKind.True).Commit()
-            .Pattern("false").Kind(DslTokenKind.False).Commit()
-            .Pattern("null").Kind(DslTokenKind.Null).Commit()
+            .Pattern("number").Kind(DslTokenKind.Number).Fold(ExpressionFoldTable.Number).Commit()
+            .Pattern("string").Kind(DslTokenKind.StringLiteral).Fold(ExpressionFoldTable.String).Commit()
+            .Pattern("true").Kind(DslTokenKind.True).Fold(ExpressionFoldTable.True).Commit()
+            .Pattern("false").Kind(DslTokenKind.False).Fold(ExpressionFoldTable.False).Commit()
+            .Pattern("null").Kind(DslTokenKind.Null).Fold(ExpressionFoldTable.Null).Commit()
             .Pattern("group").Kind(DslTokenKind.LParen).Ref("expr").Kind(DslTokenKind.RParen).Commit()
-            .Pattern("now", priority: 1).Predicate(IsNowIdentifier, "now").Commit()
-            .Pattern("today", priority: 1).Predicate(IsTodayIdentifier, "today").Commit()
-            .Pattern("duration").Value(DslTokenKind.Number, "amount").Predicate(IsDurationUnitToken, "unit").Commit()
-            .Pattern("ident").Value(DslTokenKind.Identifier).Commit()
+            .Pattern("duration").Value(DslTokenKind.Number, "amount").Value(DslTokenKind.Identifier, "unit").NotFollowedBy(DslTokenKind.Colon).Commit()
+            .Pattern("ident").Value(DslTokenKind.Identifier).Fold(ExpressionFoldTable.Ident).Commit()
             .Pattern("quant-where", priority: 2)
                 .Predicate(IsQuantifierToken, "quant").Value(DslTokenKind.Identifier, "rel")
                 .Predicate(IsWhereIdent, "where").Ref("expr-and").Commit()
@@ -287,17 +283,15 @@ public static class DslGrammar {
             .Pattern("if")
                 .Kind(DslTokenKind.If).Kind(DslTokenKind.LParen).Commit()
         .Define("expr-primary")
-            .Pattern("number").Value(DslTokenKind.Number).Commit()
-            .Pattern("string").Value(DslTokenKind.StringLiteral).Commit()
-            .Pattern("true").Kind(DslTokenKind.True).Commit()
-            .Pattern("false").Kind(DslTokenKind.False).Commit()
-            .Pattern("null").Kind(DslTokenKind.Null).Commit()
+            .Pattern("number").Value(DslTokenKind.Number).Fold(ExpressionFoldTable.Number).Commit()
+            .Pattern("string").Value(DslTokenKind.StringLiteral).Fold(ExpressionFoldTable.String).Commit()
+            .Pattern("true").Kind(DslTokenKind.True).Fold(ExpressionFoldTable.True).Commit()
+            .Pattern("false").Kind(DslTokenKind.False).Fold(ExpressionFoldTable.False).Commit()
+            .Pattern("null").Kind(DslTokenKind.Null).Fold(ExpressionFoldTable.Null).Commit()
             .Pattern("group").Balanced(DslTokenKind.LParen, DslTokenKind.RParen).Commit()
             .Pattern("not").Kind(DslTokenKind.Not).Ref("expr-add").Commit()
-            .Pattern("now", priority: 1).Predicate(IsNowIdentifier, "now").Commit()
-            .Pattern("today", priority: 1).Predicate(IsTodayIdentifier, "today").Commit()
-            .Pattern("duration").Value(DslTokenKind.Number, "amount").Predicate(IsDurationUnitToken, "unit").Commit()
-            .Pattern("ident").Value(DslTokenKind.Identifier).Commit()
+            .Pattern("duration").Value(DslTokenKind.Number, "amount").Value(DslTokenKind.Identifier, "unit").NotFollowedBy(DslTokenKind.Colon).Commit()
+            .Pattern("ident").Value(DslTokenKind.Identifier).Fold(ExpressionFoldTable.Ident).Commit()
             .Pattern("quant-where", priority: 2)
                 .Predicate(IsQuantifierToken, "quant").Value(DslTokenKind.Identifier, "rel")
                 .Predicate(IsWhereIdent, "where").Ref("expr-live-and").Commit()
@@ -321,24 +315,13 @@ public static class DslGrammar {
         .Define("date-operation")
             .Pattern("add")
                 .Ref("expr-primary").Kind(DslTokenKind.Plus)
-                .Value(DslTokenKind.Number, "amount").Predicate(IsDurationUnitToken, "unit")
+                .Value(DslTokenKind.Number, "amount").Value(DslTokenKind.Identifier, "unit").NotFollowedBy(DslTokenKind.Colon)
                 .Commit()
             .Pattern("sub")
                 .Ref("expr-primary").Kind(DslTokenKind.Minus)
-                .Value(DslTokenKind.Number, "amount").Predicate(IsDurationUnitToken, "unit")
+                .Value(DslTokenKind.Number, "amount").Value(DslTokenKind.Identifier, "unit").NotFollowedBy(DslTokenKind.Colon)
                 .Commit()
             .Build();
-
-    internal static bool IsNowIdentifier(DslToken t) =>
-        t.Kind == DslTokenKind.Identifier
-        && string.Equals(t.Text, "Now", StringComparison.Ordinal);
-
-    internal static bool IsTodayIdentifier(DslToken t) =>
-        t.Kind == DslTokenKind.Identifier
-        && string.Equals(t.Text, "Today", StringComparison.Ordinal);
-
-    internal static bool IsDurationUnitToken(DslToken t) =>
-        t.Kind == DslTokenKind.Identifier && DurationForm.TryGetUnit(t.Text, out _);
 
     internal static bool IsExistsIdent(DslToken t) =>
         t.Kind == DslTokenKind.Identifier

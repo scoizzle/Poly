@@ -12,7 +12,15 @@ using DbmsPack = Poly.DslCompiler.DbmsPack;
 namespace Poly.Tests.DomainModeling.Lowering;
 
 public class MinimalApiGeneratorTests {
+    private static string WithPersistence(string poly) {
+        if (poly.Contains("uses persistence", StringComparison.Ordinal))
+            return poly;
+        var nl = poly.IndexOf('\n');
+        return nl < 0 ? poly : poly[..(nl + 1)] + "uses persistence\n" + poly[(nl + 1)..];
+    }
+
     private static Domain ParseDomain(string poly) {
+        poly = WithPersistence(poly);
         var ctx = ExtensionCatalog.Core.Authoring;
         var parser = new PolyDslParser(poly, ctx);
         var changes = parser.Parse();
@@ -247,7 +255,7 @@ public class MinimalApiGeneratorTests {
                 : p).ToList()
         };
         var types = d.Types.Select(t => ReferenceEquals(t, d.Types.OfType<Entity>().First()) ? item : t).ToList();
-        var rendered = Render(new Domain(d.Name, types));
+        var rendered = Render(d with { Types = types });
 
         await Assert.That(rendered).Contains("[AllowedValues(\"Active\")]\n    public string Status { get; init; }");
         await Assert.That(rendered).Contains("[AllowedValues(\"Active\")]\n    public string value { get; init; }");

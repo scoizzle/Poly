@@ -16,8 +16,9 @@ namespace Poly.DomainModeling.Dispatch;
 /// Methods are named by the type they handle, not by the pattern.
 /// The concern (lower, print, parse) lives in the subclass name.
 ///
-/// <para>Core subtypes route through the closed switch below, including temporal
-/// clocks and durations (same assembly). Unhandled subtypes hit <see cref="Default"/>.</para>
+/// <para>Core subtypes route through the closed switch below. Library IR
+/// (clocks, durations, date ops) hits <see cref="Library"/> — core does not name
+/// those types. Unhandled subtypes hit <see cref="Default"/>.</para>
 /// </summary>
 public abstract class DomainExpressionDispatch<TResult> {
 
@@ -47,15 +48,17 @@ public abstract class DomainExpressionDispatch<TResult> {
     protected virtual TResult And(And e) => Default();
     protected virtual TResult Or(Or e) => Default();
     protected virtual TResult Not(Not e) => Default();
-    protected virtual TResult Now(Now e) => Default();
-    protected virtual TResult Today(Today e) => Default();
-    protected virtual TResult Duration(Duration e) => Default();
-    protected virtual TResult DateOperation(DateOperation e) => Default();
+
+    /// <summary>
+    /// Pack-owned expression subtypes. Override to consult session Meaning;
+    /// rewrite defaults to <see cref="DomainExpression.MapChildren"/>.
+    /// </summary>
+    protected virtual TResult Library(DomainExpression expr) => Default();
 
     /// <summary>
     /// Routes a <see cref="DomainExpression"/> to the appropriate handler method.
-    /// Core subtypes use the switch; pack-owned subtypes fall through to the
-    /// registered handler registry. New core subtypes cause a compile error here
+    /// Core subtypes use the switch; pack-owned subtypes fall through to
+    /// <see cref="Library"/>. New core subtypes cause a compile error here
     /// if not added to the switch.
     /// </summary>
     public TResult Route(DomainExpression expr) => expr switch {
@@ -78,10 +81,6 @@ public abstract class DomainExpressionDispatch<TResult> {
         And e => And(e),
         Or e => Or(e),
         Not e => Not(e),
-        Now e => Now(e),
-        Today e => Today(e),
-        Duration e => Duration(e),
-        DateOperation e => DateOperation(e),
-        _ => Default(),
+        _ => Library(expr),
     };
 }

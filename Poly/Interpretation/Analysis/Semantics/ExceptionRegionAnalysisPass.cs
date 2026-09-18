@@ -81,7 +81,6 @@ internal sealed class ExceptionRegionState : IAnalysisMetadata {
 internal sealed class ExceptionRegionAnalyzer : INodeAnalyzer {
     public const string Id = "ExceptionRegion";
     public string PassName => Id;
-    public string[] Dependencies => [TypeAndMemberResolver.Id, ControlFlowAnalysisPass.Id];
 
     public void Analyze(AnalysisContext context, Node node) {
         // Get or create per-traversal state. Reuses existing state from parent

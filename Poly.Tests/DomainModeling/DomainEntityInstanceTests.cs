@@ -10,8 +10,11 @@ public class DomainEntityInstanceTests {
     private static DomainEntityInstance CreateWithDomain(
         Entity entity,
         IReadOnlyDictionary<string, object?>? values = null,
-        string domainName = "T") {
+        string domainName = "T",
+        IReadOnlyList<string>? extensions = null) {
         var domain = DomainTestFactory.Create(domainName, [entity]);
+        if (extensions is { Count: > 0 })
+            domain = domain with { Extensions = extensions };
         return DomainEntityInstance.Create(
             entity,
             values ?? new Dictionary<string, object?>(),
@@ -168,8 +171,12 @@ public class DomainEntityInstanceTests {
             Actions: [],
             Policies: [],
             Stages: []);
+        var domain = DomainFactory.Create("T") with {
+            Types = [entity],
+            Extensions = [ExtensionCatalog.TemporalId],
+        };
 
-        var instance = DomainEntityInstance.Create(entity);
+        var instance = DomainEntityInstance.Create(entity, domain: domain);
         await Assert.That(instance.GetProperty<object>("Start")).IsTypeOf<DateOnly>();
         await Assert.That(instance.GetProperty<object>("ExternalId")).IsTypeOf<string>();
     }
@@ -1049,7 +1056,9 @@ public class DomainEntityInstanceTests {
             new AssignEffect(DomainExpression.Property("DueDate"), DomainExpression.Property("Now"))
         ], []);
         var entity = new Entity("Item", [dueDate], [action], [], []);
-        var domain = DomainTestFactory.Create("Test", [entity]);
+        var domain = DomainTestFactory.Create("Test", [entity]) with {
+            Extensions = [ExtensionCatalog.TemporalId]
+        };
 
         var instance = DomainEntityInstance.Create(entity, domain: domain);
         var result = instance.InvokeAction("Touch");
@@ -3363,7 +3372,8 @@ public class DomainEntityInstanceTests {
         var entity = new Entity("Order", [dueDate], [extend], [], [draft]);
 
         var instance = CreateWithDomain(entity,
-            new Dictionary<string, object?> { ["DueDate"] = new DateOnly(2026, 1, 1) });
+            new Dictionary<string, object?> { ["DueDate"] = new DateOnly(2026, 1, 1) },
+            extensions: [ExtensionCatalog.TemporalId]);
 
         var result = instance.InvokeAction("Extend");
         await Assert.That(result.Succeeded).IsTrue();
@@ -3385,7 +3395,8 @@ public class DomainEntityInstanceTests {
         var entity = new Entity("Order", [dueDate], [extend], [], [draft]);
 
         var instance = CreateWithDomain(entity,
-            new Dictionary<string, object?> { ["DueDate"] = new DateTime(2026, 1, 1) });
+            new Dictionary<string, object?> { ["DueDate"] = new DateTime(2026, 1, 1) },
+            extensions: [ExtensionCatalog.TemporalId]);
 
         var result = instance.InvokeAction("Extend");
         await Assert.That(result.Succeeded).IsTrue();
@@ -3508,7 +3519,8 @@ public class DomainEntityInstanceTests {
         var entity = new Entity("Order", [dueDate], [extend], [], [draft]);
 
         var instance = CreateWithDomain(entity,
-            new Dictionary<string, object?> { ["DueDate"] = new DateOnly(2026, 1, 15) });
+            new Dictionary<string, object?> { ["DueDate"] = new DateOnly(2026, 1, 15) },
+            extensions: [ExtensionCatalog.TemporalId]);
 
         var result = instance.InvokeAction("Extend");
         await Assert.That(result.Succeeded).IsTrue();

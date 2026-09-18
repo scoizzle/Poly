@@ -3,7 +3,6 @@ namespace Poly.Interpretation.Analysis.Semantics;
 internal sealed class ThisReferenceContextAnalyzer : INodeAnalyzer {
     public const string Id = "ThisReference";
     public string PassName => Id;
-    public string[] Dependencies => [];
     public void Analyze(AnalysisContext context, Node node) {
         if (node is ThisReference thisReference && context.GetResolvedType(thisReference) is null) {
             // Root-program this is SetArgs slot 0 (legal). Static member

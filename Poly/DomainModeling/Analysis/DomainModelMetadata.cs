@@ -30,8 +30,8 @@ public sealed record AssignedMemberConversionMetadata(
 ) : IAnalysisMetadata;
 
 /// <summary>
-/// Library-stamped expression type (catalog type name). Core inference reads this
-/// instead of naming library IR (<c>Now</c>, <c>DateOperation</c>, …).
+/// Expression type (catalog type name) stamped by core inference after consulting
+/// session <c>ExpressionMeaning</c>. Core does not name library IR in its switch.
 /// </summary>
 public sealed record CatalogTypedExpressionMetadata(string TypeName) : IAnalysisMetadata;
 

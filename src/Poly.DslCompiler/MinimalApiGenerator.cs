@@ -182,7 +182,8 @@ public sealed class MinimalApiGenerator {
     private static bool IsCollectionNavigation(StorageEntity parentStore, string pascalRel) =>
         parentStore.CollectionNavigations.Any(n =>
             string.Equals(n.PropertyName, pascalRel, StringComparison.Ordinal));
-    private static string GetClrTypeName(string domainType) => DomainTypeMapping.ToClrTypeName(domainType);
+    private string GetClrTypeName(string domainType) =>
+        RuntimeAnalysisCache.ClrTypeName(_domain, domainType);
 
     private static bool IsNumericClrType(string clrType) => clrType switch {
         "long" or "int" or "short" or "byte" or "double" or "float" or "decimal" => true,
@@ -1073,25 +1074,24 @@ public sealed class MinimalApiGenerator {
             return new Constant(1);
         }
 
-        // Text/String with min length
-        if (typeName is "Text" or "String") {
+        var clr = RuntimeAnalysisCache.ClrTypeName(_domain, typeName);
+        if (clr is "string") {
             var length = prop.Constraints.OfType<LengthConstraint>().FirstOrDefault();
             if (length is not null && length.MinLength > 0)
                 return new Constant(new string('X', Math.Max((int)length.MinLength, 8)));
             return new Constant("Sample");
         }
 
-        return typeName switch {
-            "Number" or "Int" or "Int64" => new Constant(1),
-            "Int32" => new Constant(1),
-            "Boolean" or "Bool" => new Constant(false),
-            "DateTime" or "Timestamp" => new Member(new TypeReference("DateTime"), "UtcNow"),
-            "Date" or "DateOnly" => new Invoke(
+        return clr switch {
+            "long" or "int" => new Constant(1),
+            "bool" => new Constant(false),
+            "DateTime" => new Member(new TypeReference("DateTime"), "UtcNow"),
+            "DateOnly" => new Invoke(
                 new Member(new TypeReference("DateOnly"), "FromDateTime"),
                 new Member(new TypeReference("DateTime"), "UtcNow")),
-            "Decimal" => new Constant(1m),
-            "Float" or "Double" => new Constant(1.0),
-            "Guid" or "Uuid" => new Invoke(new Member(new TypeReference("Guid"), "NewGuid")),
+            "decimal" => new Constant(1m),
+            "double" or "float" => new Constant(1.0),
+            "Guid" => new Invoke(new Member(new TypeReference("Guid"), "NewGuid")),
             _ when _enumLookup.TryGetValue(typeName, out var enumType) && enumType.MemberNames.Count > 0
                 => new Member(new TypeReference(typeName), enumType.MemberNames[0]),
             _ => new Constant("Sample"),

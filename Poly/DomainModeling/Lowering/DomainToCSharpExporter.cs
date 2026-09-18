@@ -198,7 +198,10 @@ public sealed partial class DomainToCSharpExporter {
                 continue;
             if (defaultValue is not null) {
                 var runtimeExpr = EffectLoweringPass.LowerDefaultExpression(
-                    defaultValue.Expression, new NamedTypeReference(prop.Type.TypeName));
+                    defaultValue.Expression,
+                    new NamedTypeReference(prop.Type.TypeName),
+                    RuntimeAnalysisCache.MeaningFor(domain),
+                    RuntimeAnalysisCache.FormsFor(domain));
                 if (runtimeExpr is not null) {
                     // Runtime default (now/today/guid) can't be a compile-time default —
                     // T? = null sentinel; body applies the runtime default when null.

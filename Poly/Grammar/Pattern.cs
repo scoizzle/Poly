@@ -15,9 +15,25 @@ public sealed class Pattern<TToken, TTokenKind>
     /// <summary>Higher wins a longest-match tie. Default 0.</summary>
     public int Priority { get; }
 
-    public Pattern(string name, IReadOnlyList<IPatternElement<TToken, TTokenKind>> elements, int priority = 0) {
+    /// <summary>
+    /// Handler-owned meaning bound at <c>Commit</c>. The engine does not interpret
+    /// this; names stay diagnostic labels.
+    /// </summary>
+    public object? Payload { get; }
+
+    public Pattern(
+        string name,
+        IReadOnlyList<IPatternElement<TToken, TTokenKind>> elements,
+        int priority = 0,
+        object? payload = null) {
         Name = name ?? throw new ArgumentNullException(nameof(name));
         Elements = elements ?? throw new ArgumentNullException(nameof(elements));
         Priority = priority;
+        Payload = payload;
+    }
+
+    public Pattern<TToken, TTokenKind> WithPayload(object payload) {
+        ArgumentNullException.ThrowIfNull(payload);
+        return new Pattern<TToken, TTokenKind>(Name, Elements, Priority, payload);
     }
 }

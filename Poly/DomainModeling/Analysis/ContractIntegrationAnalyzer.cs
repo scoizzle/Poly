@@ -10,7 +10,6 @@ namespace Poly.DomainModeling.Analysis;
 internal sealed class ContractIntegrationAnalyzer : INodeAnalyzer {
     public const string Id = "DomainContractIntegrationAnalyzer";
     public string PassName => Id;
-    public string[] Dependencies => [];
     public void Analyze(AnalysisContext context, Node node) {
 
         if (node is Domain domain) {
@@ -77,7 +76,7 @@ internal sealed class ContractIntegrationAnalyzer : INodeAnalyzer {
     }
 
     private static bool PayloadTypeExists(Domain domain, ImportedContract contract, string typeName) {
-        if (typeName is "Text" or "Number" or "Boolean" or "DateTime" or "Date")
+        if (typeName is "Text" or "Number" or "Boolean")
             return true;
         if (contract.Types.Any(t => string.Equals(t.Name, typeName, StringComparison.Ordinal)))
             return true;

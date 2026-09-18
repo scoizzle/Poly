@@ -13,7 +13,6 @@ internal sealed class PolicyConstraintAnalyzer : INodeAnalyzer {
     public const string Id = "DomainPolicyConstraint";
     public string PassName => Id;
     // Lint-only: reads DomainTypeLookupMetadata; publishes no bags others read.
-    public string[] Dependencies => [DomainCatalogPass.Id];
     public void Analyze(AnalysisContext context, Node node) {
 
         if (node is Entity entity) {

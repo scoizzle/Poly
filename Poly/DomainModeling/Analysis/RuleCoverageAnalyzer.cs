@@ -9,7 +9,6 @@ internal sealed class RuleCoverageAnalyzer : INodeAnalyzer {
     public const string Id = "DomainRuleCoverageAnalyzer";
     public string PassName => Id;
     // Reads RequiredPropertiesMetadata published by RequiredPropertiesPass.
-    public string[] Dependencies => [RequiredPropertiesPass.Id];
     public void Analyze(AnalysisContext context, Node node) {
 
         if (node is Domain domain) {

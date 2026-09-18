@@ -79,6 +79,7 @@ public class DomainModelingSurfaceCompletionTests {
         var result = new DomainEvolution(DomainTestFactory.Create("_", [], []))
             .Apply(new PolyDslParser("""
                 domain T
+                uses temporal
                 Item: entity {
                   Qty: Number
                   Go: action {
@@ -87,7 +88,8 @@ public class DomainModelingSurfaceCompletionTests {
                 }
                 """).Parse());
         await Assert.That(result.Analysis.Diagnostics.Any(d =>
-            d.Message.Contains("Now", StringComparison.Ordinal))).IsTrue();
+            d.Message.Contains("cannot assign", StringComparison.Ordinal)
+            && d.Message.Contains("Number", StringComparison.Ordinal))).IsTrue();
     }
 
     [Test]

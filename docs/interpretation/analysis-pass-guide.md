@@ -7,12 +7,12 @@ semantic analysis passes for the Poly Interpretation system.
 
 Analysis passes implement `INodeAnalyzer` and are composed into an `Analyzer` via
 `AnalyzerBuilder`. Each pass walks the AST in post-order, attaches metadata to nodes,
-and reports diagnostics. Passes declare dependencies to ensure correct execution order.
+and reports diagnostics. Passes declare `After` / `Before` so `Build` can schedule them.
 
 ## Pass Lifecycle
 
 1. **Registration**: Added to `AnalyzerBuilder` via an extension method
-2. **Analysis**: `Analyzer.Analyze(rootNode)` runs all passes in dependency order
+2. **Analysis**: `Analyzer.Analyze(rootNode)` runs all passes in scheduled order
 3. **Metadata**: Passes attach `IAnalysisMetadata` records to nodes via `AnalysisContext`
 4. **Retrieval**: Downstream passes and the emitter read metadata via `context.GetMetadata<T>(node)`
 
@@ -42,7 +42,6 @@ namespace Poly.Interpretation.Analysis.Semantics;
 internal sealed class WidgetAnalyzer : INodeAnalyzer {
     public const string Id = "Widget";
     public string PassName => Id;
-    public string[] Dependencies => [TypeAndMemberResolver.Id];
 
     public void Analyze(AnalysisContext context, Node node) {
         // Guard: skip nodes already visited by this pass
@@ -144,17 +143,9 @@ public async Task WidgetCount_SimpleExpression_ReturnsCorrectCount() {
 }
 ```
 
-## Pass Dependencies
+## Ordering
 
-| Dependency | Meaning |
-|------------|---------|
-| `[]` | No dependencies — pass can run first |
-| `[TypeAndMemberResolver.Id]` | Needs resolved types and members |
-| `[SideEffectAnalyzer.Id]` | Needs side-effect classification |
-| `[ControlFlowAnalysisPass.Id]` | Needs CFG and reachability information |
-
-The `AnalyzerBuilder` topological sorts passes. Circular dependencies cause
-a build-time exception.
+`Build` is registration order. Put a pass after the passes whose bags it reads.
 
 ## Metadata Scoping
 

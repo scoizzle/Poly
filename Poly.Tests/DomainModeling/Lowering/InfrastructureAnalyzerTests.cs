@@ -1,6 +1,7 @@
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Evolution;
+using Poly.DomainModeling.Libraries.Temporal;
 using Poly.DomainModeling.Ontology;
 using Poly.Introspection.CommonLanguageRuntime;
 namespace Poly.Tests.DomainModeling.Lowering;
@@ -555,24 +556,33 @@ public class InfrastructureAnalyzerTests {
         await Assert.That(registry.ToSqlColumnType("Text")).IsEqualTo("varchar");
         await Assert.That(registry.ToSqlColumnType("Number")).IsEqualTo("bigint");
         await Assert.That(registry.ToSqlColumnType("Boolean")).IsEqualTo("boolean");
-        await Assert.That(registry.ToSqlColumnType("DateTime")).IsEqualTo("timestamp");
-        await Assert.That(registry.ToSqlColumnType("Date")).IsEqualTo("date");
         await Assert.That(registry.ToSqlColumnType("Decimal")).IsEqualTo("decimal");
         await Assert.That(registry.ToSqlColumnType("Guid")).IsEqualTo("uuid");
         await Assert.That(registry.ToSqlColumnType("Binary")).IsEqualTo("binary");
         await Assert.That(registry.ToSqlColumnType("Unknown")).IsEqualTo("varchar");
+        await Assert.That(registry.ToSqlColumnType("Date")).IsEqualTo("varchar");
 
         await Assert.That(registry.ToClrTypeName("Text")).IsEqualTo("string");
         await Assert.That(registry.ToClrTypeName("Number")).IsEqualTo("long");
         await Assert.That(registry.ToClrTypeName("Boolean")).IsEqualTo("bool");
-        await Assert.That(registry.ToClrTypeName("DateTime")).IsEqualTo("DateTime");
-        await Assert.That(registry.ToClrTypeName("Date")).IsEqualTo("DateOnly");
         await Assert.That(registry.ToClrTypeName("Guid")).IsEqualTo("Guid");
         await Assert.That(registry.ToClrTypeName("Unknown")).IsEqualTo("Unknown");
+        await Assert.That(registry.ToClrTypeName("Date")).IsEqualTo("Date");
 
         // Single source of truth: DomainTypeMapping and registry agree on core defaults.
         await Assert.That(DomainTypeMapping.ToSqlColumnType("Text")).IsEqualTo(registry.ToSqlColumnType("Text"));
         await Assert.That(DomainTypeMapping.ToClrTypeName("Number")).IsEqualTo(registry.ToClrTypeName("Number"));
+    }
+
+    [Test]
+    public async Task TypeMappingRegistry_TemporalMaps_DateAndDateTime() {
+        var registry = new TypeMappingRegistry();
+        TemporalTypeMaps.Apply(registry);
+        await Assert.That(registry.ToSqlColumnType("DateTime")).IsEqualTo("timestamp");
+        await Assert.That(registry.ToSqlColumnType("Date")).IsEqualTo("date");
+        await Assert.That(registry.ToClrTypeName("DateTime")).IsEqualTo("DateTime");
+        await Assert.That(registry.ToClrTypeName("Date")).IsEqualTo("DateOnly");
+        await Assert.That(registry.ToClrTypeName("Duration")).IsEqualTo("TimeSpan");
     }
 
     [Test]
@@ -771,6 +781,7 @@ public class InfrastructurePipelineTests {
         // Full pipeline, then StoragePass can also consume that AnalysisResult stand-alone.
         var pipeline = new AnalyzerBuilder()
             .UseDomainModelAnalysisPipeline()
+            .AddAnalyzer(new StoragePass())
             .Build();
 
         var result = pipeline.Analyze(domain);
@@ -784,7 +795,7 @@ public class InfrastructurePipelineTests {
     public async Task StoragePass_FailsClosed_WithoutAggregateAndTopology() {
         // D3.0: StoragePass must fail-loud (not silently produce incomplete storage)
         // when EffectTopologyMetadata or OwnershipAggregateMetadata are missing.
-        // Invoked directly (not via AnalyzerBuilder) to bypass the Dependencies check
+        // Invoked directly (not via AnalyzerBuilder) to bypass the After check
         // — standalone usage simulates the codegen fallback path.
         var domain = ParseDomain("""
             domain Test

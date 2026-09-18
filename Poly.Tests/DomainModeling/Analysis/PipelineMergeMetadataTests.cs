@@ -300,6 +300,7 @@ public class PipelineMergeMetadataTests {
         // skip, exception early, or misorder dependencies.
         var domain = ParseDomain("""
             domain Test
+            uses persistence
             Profile: entity { City: Text }
             Customer: entity {
               Name: Text required

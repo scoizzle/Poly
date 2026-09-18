@@ -2,6 +2,7 @@ using Poly.DomainModeling;
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Runtime;
+using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.DomainModeling.Lowering;
 
@@ -33,7 +34,9 @@ public class ClockLoweringTests {
     [Test]
     public async Task Assign_DateToNowIr_StoresDateOnly() {
         var (entity, _) = DateAssignAction(new Now());
-        var domain = DomainTestFactory.Create("Clocks", [entity]);
+        var domain = DomainTestFactory.Create("Clocks", [entity]) with {
+            Extensions = [ExtensionCatalog.TemporalId]
+        };
         var instance = DomainEntityInstance.Create(entity, domain: domain);
         var result = instance.InvokeAction("Touch");
         await Assert.That(result.Succeeded).IsTrue();
@@ -67,7 +70,9 @@ public class ClockLoweringTests {
         var rel = new Relationship("permits",
             new DomainTypeReference("Lot"), new DomainTypeReference("Permit"),
             RelationshipCardinality.OneToMany, []);
-        var domain = DomainTestFactory.Create("Parking", [permit, lot], [rel]);
+        var domain = DomainTestFactory.Create("Parking", [permit, lot], [rel]) with {
+            Extensions = [ExtensionCatalog.TemporalId]
+        };
         var store = new DomainInstanceStore();
         var instance = DomainEntityInstance.Create(lot, domain: domain);
         store.Add(instance);
@@ -111,7 +116,9 @@ public class ClockLoweringTests {
 
     private static Node Lower(Entity entity, Poly.DomainModeling.Ontology.Action action) {
         var pass = new EffectLoweringPass(entity, new LoweringContext(
-            new Parameter("entity", new TypeReference(entity.Name))));
+            new Parameter("entity", new TypeReference(entity.Name)),
+            Meaning: TemporalMeaningHarness.Create(),
+            Forms: TemporalMeaningHarness.Forms()));
         var lowered = pass.LowerActionBody(action.Effects);
         return lowered ?? throw new InvalidOperationException("LowerActionBody returned null.");
     }

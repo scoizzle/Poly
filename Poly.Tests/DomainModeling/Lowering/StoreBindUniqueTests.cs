@@ -193,6 +193,11 @@ public class StoreBindUniqueTests {
     }
 
     private static (Domain Domain, AnalysisResult Analysis) Evolve(string poly) {
+        if (!poly.Contains("uses persistence", StringComparison.Ordinal)) {
+            var nl = poly.IndexOf('\n');
+            if (nl >= 0)
+                poly = poly[..(nl + 1)] + "uses persistence\n" + poly[(nl + 1)..];
+        }
         var changes = new PolyDslParser(poly).Parse();
         var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(changes);
         if (!result.Succeeded)

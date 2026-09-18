@@ -1,12 +1,12 @@
-using Poly.Ast.Nodes;
 using Poly.Analysis;
+using Poly.Ast.Nodes;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Dispatch;
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
 using Poly.Interpretation;
-using Poly.Introspection;
 using Poly.Interpretation.Analysis.Semantics;
+using Poly.Introspection;
 
 using Action = Poly.DomainModeling.Ontology.Action;
 using Prim = Poly.Introspection.PrimitiveType;
@@ -126,7 +126,7 @@ public sealed partial record DomainEntityInstance {
         // Enforce constraints at creation, matching the C# export's Create factory guards.
         // The runtime previously accepted out-of-range/pattern-violating/empty-required
         // values silently while the export rejected them — a divergence (round-1 C-F3).
-        var validationError = ValidateConstraints(entity, values);
+        var validationError = ValidateConstraints(entity, values, domain: domain);
         if (validationError is not null)
             throw new InvalidOperationException(validationError);
 
@@ -170,7 +170,8 @@ public sealed partial record DomainEntityInstance {
     private static string? ValidateConstraints(
         Entity entity,
         IReadOnlyDictionary<string, object?> values,
-        DomainInstanceStore? store = null) {
+        DomainInstanceStore? store = null,
+        Domain? domain = null) {
         foreach (var prop in entity.Properties) {
             values.TryGetValue(prop.Name, out var v);
             foreach (var constraint in prop.Constraints) {
@@ -178,7 +179,7 @@ public sealed partial record DomainEntityInstance {
                     case RequiredConstraint:
                         if (IsText(prop) && string.IsNullOrEmpty(v as string))
                             return $"'{prop.Name}' is required.";
-                        if (v is null && IsNullableDomainTypeName(prop.Type.TypeName))
+                        if (v is null && IsNullableDomainTypeName(prop.Type.TypeName, domain))
                             return $"'{prop.Name}' is required.";
                         break;
                     case RangeConstraint r:
@@ -219,12 +220,13 @@ public sealed partial record DomainEntityInstance {
     private static bool IsText(Property prop) =>
         prop.Type.TypeName is "Text" or "String";
 
-    private static bool IsNullableDomainTypeName(string typeName) =>
-        typeName is "Text" or "String"
-        || typeName is not ("Number" or "Int" or "Int64" or "Int32" or "Boolean"
-            or "Bool" or "DateTime" or "Timestamp" or "Date" or "DateOnly"
-            or "Time" or "TimeOnly" or "Duration" or "TimeSpan" or "Uuid" or "Guid"
-            or "Decimal" or "Float" or "Double");
+    private static bool IsNullableDomainTypeName(string typeName, Domain? domain) {
+        if (domain?.Types.OfType<EnumType>().Any(e =>
+                string.Equals(e.Name, typeName, StringComparison.Ordinal)) == true)
+            return false;
+        return !DomainTypeMapping.IsNonNullableClrValueType(
+            RuntimeAnalysisCache.ClrTypeName(domain, typeName));
+    }
 
     /// <summary>
     /// Applies the first stage's entry effects at creation time, matching the export's
@@ -261,35 +263,32 @@ public sealed partial record DomainEntityInstance {
     /// Evaluates a DSL default expression to a concrete runtime value, adapted to
     /// the target property's CLR type when known (discovery round5 F1–F3).
     /// The runtime stores enum-typed properties as strings, so an enum member name
-    /// (e.g. <c>default(Active)</c>) lowers to its name string; <c>now</c>/<c>today</c>/<c>guid</c>
-    /// evaluate at creation time. Matches the C# export's defaulted optional ctor params.
+    /// (e.g. <c>default(Active)</c>) lowers to its name string; clocks evaluate via
+    /// session ident rewrite then Meaning.Defaults; <c>guid</c> is core.
+    /// Matches the C# export's defaulted optional ctor params.
     /// </summary>
     private object? EvaluateDefaultValue(DomainExpression expr, string? propTypeName = null) =>
         EvaluateDefaultValue(expr, propTypeName, Domain);
 
-    private static object? EvaluateDefaultValue(DomainExpression expr, string? propTypeName, Domain? domain) => expr switch {
-        Literal lit => lit.Value,
-        Now => propTypeName is "DateTime" or "Timestamp"
-            ? DateTime.UtcNow
-            : DateOnly.FromDateTime(DateTime.UtcNow),
-        Today => propTypeName is "DateTime" or "Timestamp"
-            ? DateTime.Today
-            : DateOnly.FromDateTime(DateTime.Today),
-        PropertyAccess pa => pa.Name switch {
-            "Now" or "UtcNow" => propTypeName is "DateTime" or "Timestamp"
-                ? DateTime.UtcNow
-                : DateOnly.FromDateTime(DateTime.UtcNow),
-            "Today" => propTypeName is "DateTime" or "Timestamp"
-                ? DateTime.Today
-                : DateOnly.FromDateTime(DateTime.Today),
-            "Guid" => propTypeName is "Text" or "String"
-                ? Guid.NewGuid().ToString()
-                : Guid.NewGuid(),
-            _ => pa.Name // enum member name — runtime stores enum values as strings
-        },
-        _ => throw new InvalidOperationException(
-            $"Cannot evaluate default expression of type '{expr.GetType().Name}'.")
-    };
+    private static object? EvaluateDefaultValue(DomainExpression expr, string? propTypeName, Domain? domain) {
+        var meaning = RuntimeAnalysisCache.MeaningFor(domain);
+        var forms = RuntimeAnalysisCache.FormsFor(domain);
+        if (expr is PropertyAccess ident && forms.TryRewriteIdent(ident.Name, out var claimed))
+            expr = claimed;
+        if (meaning.Defaults.TryResolve(expr, propTypeName, out var runtime, out _))
+            return runtime;
+        return expr switch {
+            Literal lit => lit.Value,
+            PropertyAccess pa => pa.Name switch {
+                "Guid" => propTypeName is "Text" or "String"
+                    ? Guid.NewGuid().ToString()
+                    : Guid.NewGuid(),
+                _ => pa.Name
+            },
+            _ => throw new InvalidOperationException(
+                $"Cannot evaluate default expression of type '{expr.GetType().Name}'.")
+        };
+    }
 
     /// <summary>
     /// Action resolution missed. Distinguish a genuinely-unknown action from one
@@ -353,8 +352,9 @@ public sealed partial record DomainEntityInstance {
     internal static string? ValidateCreateConstraints(
         Entity entity,
         IReadOnlyDictionary<string, object?> values,
-        DomainInstanceStore? store = null) =>
-        ValidateConstraints(entity, values, store);
+        DomainInstanceStore? store = null,
+        Domain? domain = null) =>
+        ValidateConstraints(entity, values, store, domain);
 
     internal void TrackCreatedChild(DomainEntityInstance child) =>
         _createdChildren.Add(child);
@@ -400,12 +400,13 @@ public sealed partial record DomainEntityInstance {
         var pass = new DomainExpressionLoweringPass(new LoweringContext(
             entityParam,
             Analysis: null,
-            Domain: null,
+            Domain: Domain,
             PropertyTypeResolver: EffectLoweringPass.BuildPropertyTypeResolver(Entity),
             NavigationNameResolver: EffectLoweringPass.BuildNavigationNameResolver(Entity, Domain, null),
             IsCollectionNavigation: EffectLoweringPass.BuildIsCollectionNavigation(Entity, Domain, null),
             IsRelationshipNavigation: EffectLoweringPass.BuildIsRelationshipNavigation(Entity, Domain, null),
-            SourceEntityName: Entity.Name));
+            SourceEntityName: Entity.Name,
+            Meaning: ExtensionCatalog.Core.Language.Meaning));
         var lowered = pass.Lower(expr, entityParam);
 
         var compiled = Interpreter.CompileChecked(lowered, _typeDefAnalyzer);
@@ -678,7 +679,7 @@ public sealed partial record DomainEntityInstance {
                 result[binding.PropertyName] = fromParam;
                 continue;
             }
-            var loweringPass = new DomainExpressionLoweringPass(new LoweringContext(new Parameter("entity")));
+            var loweringPass = new DomainExpressionLoweringPass(new LoweringContext(new Parameter("entity"), Domain: Domain));
             var lowered = loweringPass.Lower(binding.Expression, subjectParam);
             var compiled = Interpreter.Compile(lowered, _bindingTypeProvider ?? _typeDefAnalyzer);
             using var exec = Interpreter.Execute(compiled,
@@ -892,124 +893,128 @@ public sealed partial record DomainEntityInstance {
         Parameter entity,
         IReadOnlyDictionary<string, Parameter>? parameters,
         IReadOnlySet<string> stageEnums) => node switch {
-        ThisReference => entity,
-        Parameter p when parameters is not null
-            && parameters.ContainsKey(p.Name) => new Member(entity, p.Name),
-        Variable v when parameters is not null
-            && parameters.ContainsKey(v.Name) => new Member(entity, v.Name),
-        // Emit stage enum member → runtime string (CurrentStage is string on This).
-        Member { Value: NamedTypeReference ntr } m
-            when stageEnums.Contains(ntr.TypeName) => new Constant(m.MemberName),
-        Block b => new Block(
-            b.Nodes.Select(n => BindThis(n, entity, parameters, stageEnums)),
-            b.Variables.Select(n => BindThis(n, entity, parameters, stageEnums))),
-        IfStatement i => new IfStatement(
-            BindThis(i.Condition, entity, parameters, stageEnums),
-            BindThis(i.ThenBranch, entity, parameters, stageEnums),
-            i.ElseBranch is null ? null : BindThis(i.ElseBranch, entity, parameters, stageEnums)),
-        Return r => r.Value is null ? r : new Return(BindThis(r.Value, entity, parameters, stageEnums)),
-        Assignment a => new Assignment(
-            BindThis(a.Destination, entity, parameters, stageEnums), BindThis(a.Value, entity, parameters, stageEnums)),
-        Invoke { Delegate: Member { MemberName: { } notifyName } } inv
-            when inv.Arguments.Length == 0
-                && notifyName.StartsWith("Notify", StringComparison.Ordinal)
-                && notifyName.EndsWith("Subscribers", StringComparison.Ordinal)
-                && notifyName.Length > "NotifySubscribers".Length
-            => new Invoke(
-                new Member(BindThis(((Member)inv.Delegate).Value, entity, parameters, stageEnums), "Notify"),
-                new Constant(notifyName["Notify".Length..^"Subscribers".Length])),
-        // Module emit uses DomainResult<T>.Success(value). VM CLR DomainResult is
-        // non-generic; entity TypeDefs are not assignable-to object under PR53
-        // overload scoring. Typed return still comes from CreatedChildren.
-        // Success(value) → Success(); Failure(msg) keeps the string arg.
-        Invoke { Delegate: Member {
-                Value: NamedTypeReference { TypeName: "DomainResult" },
-                MemberName: "Success"
-            } } inv
-            => new Invoke(new Member(new NamedTypeReference("DomainResult"), "Success")),
-        Invoke { Delegate: Member {
-                Value: NamedTypeReference { TypeName: "DomainResult" },
-                MemberName: "Failure"
-            } } inv
-            => new Invoke(
-                new Member(new NamedTypeReference("DomainResult"), "Failure"),
-                [.. inv.Arguments.Select(a => BindThis(a, entity, parameters, stageEnums))]),
-        // Fail closed: export adapter throws; simulate must not silent-success.
-        Invoke { Delegate: Member { Value: TypeReference or NamedTypeReference, MemberName: { } endpoint } } inv
-            when AdapterTypeName(inv) is { } adapter
-            => new Return(new Invoke(
-                new Member(new NamedTypeReference("DomainResult"), "Failure"),
-                new Constant(
-                    $"Contract endpoint '{ContractNameFromAdapter(adapter)}.{endpoint}' has no in-process adapter on simulate."))),
-        Invoke inv => new Invoke(
-            BindThis(inv.Delegate, entity, parameters, stageEnums),
-            [.. inv.Arguments.Select(a => BindThis(a, entity, parameters, stageEnums))]) {
-            TypeArguments = inv.TypeArguments
-        },
-        Member m => new Member(BindThis(m.Value, entity, parameters, stageEnums), m.MemberName),
-        Poly.Ast.Nodes.Not n => new Poly.Ast.Nodes.Not(BindThis(n.Value, entity, parameters, stageEnums)),
-        Equal e => new Equal(
-            BindThis(e.LeftHandValue, entity, parameters, stageEnums), BindThis(e.RightHandValue, entity, parameters, stageEnums)),
-        NotEqual ne => new NotEqual(
-            BindThis(ne.LeftHandValue, entity, parameters, stageEnums), BindThis(ne.RightHandValue, entity, parameters, stageEnums)),
-        LessThan lt => new LessThan(
-            BindThis(lt.LeftHandValue, entity, parameters, stageEnums), BindThis(lt.RightHandValue, entity, parameters, stageEnums)),
-        LessThanOrEqual le => new LessThanOrEqual(
-            BindThis(le.LeftHandValue, entity, parameters, stageEnums), BindThis(le.RightHandValue, entity, parameters, stageEnums)),
-        GreaterThan gt => new GreaterThan(
-            BindThis(gt.LeftHandValue, entity, parameters, stageEnums), BindThis(gt.RightHandValue, entity, parameters, stageEnums)),
-        GreaterThanOrEqual ge => new GreaterThanOrEqual(
-            BindThis(ge.LeftHandValue, entity, parameters, stageEnums), BindThis(ge.RightHandValue, entity, parameters, stageEnums)),
-        Poly.Ast.Nodes.Add add => new Poly.Ast.Nodes.Add(
-            BindThis(add.LeftHandValue, entity, parameters, stageEnums), BindThis(add.RightHandValue, entity, parameters, stageEnums)),
-        Poly.Ast.Nodes.Subtract sub => new Poly.Ast.Nodes.Subtract(
-            BindThis(sub.LeftHandValue, entity, parameters, stageEnums), BindThis(sub.RightHandValue, entity, parameters, stageEnums)),
-        Poly.Ast.Nodes.Multiply mul => new Poly.Ast.Nodes.Multiply(
-            BindThis(mul.LeftHandValue, entity, parameters, stageEnums), BindThis(mul.RightHandValue, entity, parameters, stageEnums)),
-        Poly.Ast.Nodes.Divide div => new Poly.Ast.Nodes.Divide(
-            BindThis(div.LeftHandValue, entity, parameters, stageEnums), BindThis(div.RightHandValue, entity, parameters, stageEnums)),
-        Poly.Ast.Nodes.And and => new Poly.Ast.Nodes.And(
-            BindThis(and.LeftHandValue, entity, parameters, stageEnums), BindThis(and.RightHandValue, entity, parameters, stageEnums)),
-        Poly.Ast.Nodes.Or or => new Poly.Ast.Nodes.Or(
-            BindThis(or.LeftHandValue, entity, parameters, stageEnums), BindThis(or.RightHandValue, entity, parameters, stageEnums)),
-        Coalesce c => new Coalesce(
-            BindThis(c.LeftHandValue, entity, parameters, stageEnums), BindThis(c.RightHandValue, entity, parameters, stageEnums)),
-        TypeCast tc => new TypeCast(
-            BindThis(tc.Operand, entity, parameters, stageEnums),
-            BindThis(tc.TargetTypeReference, entity, parameters, stageEnums),
-            tc.IsChecked),
-        New n => new New(
-            BindThis(n.Type, entity, parameters, stageEnums),
-            [.. n.Arguments.Select(a => BindThis(a, entity, parameters, stageEnums))]),
-        ThrowStatement ts => new ThrowStatement(BindThis(ts.Exception, entity, parameters, stageEnums)),
-        TryCatchFinally t => new TryCatchFinally(
-            BindThis(t.TryBlock, entity, parameters, stageEnums),
-            t.CatchClauses?.Select(cc => cc with {
-                ExceptionType = cc.ExceptionType is null
-                    ? null
-                    : BindThis(cc.ExceptionType, entity, parameters, stageEnums),
-                Body = BindThis(cc.Body, entity, parameters, stageEnums)
-            }).ToList(),
-            t.FinallyBlock is null ? null : BindThis(t.FinallyBlock, entity, parameters, stageEnums)),
-        ForEachLoop f => new ForEachLoop(
-            f.LoopVariable,
-            BindThis(f.Collection, entity, parameters, stageEnums),
-            BindThis(f.Body, entity, parameters, stageEnums),
-            f.Label),
-        ContinueStatement or BreakStatement => node,
-        LabelDeclaration ld => new LabelDeclaration(
-            ld.Name, BindThis(ld.Statement, entity, parameters, stageEnums)),
-        Conditional cond => new Conditional(
-            BindThis(cond.Condition, entity, parameters, stageEnums),
-            BindThis(cond.IfTrue, entity, parameters, stageEnums),
-            BindThis(cond.IfFalse, entity, parameters, stageEnums)),
-        UnaryMinus um => new UnaryMinus(BindThis(um.Operand, entity, parameters, stageEnums)),
-        NullForgiving nf => new NullForgiving(BindThis(nf.Operand, entity, parameters, stageEnums)),
-        Parameter or Variable or Constant or NamedTypeReference or TypeReference
-            or PrimitiveTypeReference or ClrTypeReference => node,
-        _ => throw new InvalidOperationException(
-            $"Cannot bind module method this on {node.GetType().Name}.")
-    };
+            ThisReference => entity,
+            Parameter p when parameters is not null
+                && parameters.ContainsKey(p.Name) => new Member(entity, p.Name),
+            Variable v when parameters is not null
+                && parameters.ContainsKey(v.Name) => new Member(entity, v.Name),
+            // Emit stage enum member → runtime string (CurrentStage is string on This).
+            Member { Value: NamedTypeReference ntr } m
+                when stageEnums.Contains(ntr.TypeName) => new Constant(m.MemberName),
+            Block b => new Block(
+                b.Nodes.Select(n => BindThis(n, entity, parameters, stageEnums)),
+                b.Variables.Select(n => BindThis(n, entity, parameters, stageEnums))),
+            IfStatement i => new IfStatement(
+                BindThis(i.Condition, entity, parameters, stageEnums),
+                BindThis(i.ThenBranch, entity, parameters, stageEnums),
+                i.ElseBranch is null ? null : BindThis(i.ElseBranch, entity, parameters, stageEnums)),
+            Return r => r.Value is null ? r : new Return(BindThis(r.Value, entity, parameters, stageEnums)),
+            Assignment a => new Assignment(
+                BindThis(a.Destination, entity, parameters, stageEnums), BindThis(a.Value, entity, parameters, stageEnums)),
+            Invoke { Delegate: Member { MemberName: { } notifyName } } inv
+                when inv.Arguments.Length == 0
+                    && notifyName.StartsWith("Notify", StringComparison.Ordinal)
+                    && notifyName.EndsWith("Subscribers", StringComparison.Ordinal)
+                    && notifyName.Length > "NotifySubscribers".Length
+                => new Invoke(
+                    new Member(BindThis(((Member)inv.Delegate).Value, entity, parameters, stageEnums), "Notify"),
+                    new Constant(notifyName["Notify".Length..^"Subscribers".Length])),
+            // Module emit uses DomainResult<T>.Success(value). VM CLR DomainResult is
+            // non-generic; entity TypeDefs are not assignable-to object under PR53
+            // overload scoring. Typed return still comes from CreatedChildren.
+            // Success(value) → Success(); Failure(msg) keeps the string arg.
+            Invoke {
+                Delegate: Member {
+                    Value: NamedTypeReference { TypeName: "DomainResult" },
+                    MemberName: "Success"
+                }
+            } inv
+                => new Invoke(new Member(new NamedTypeReference("DomainResult"), "Success")),
+            Invoke {
+                Delegate: Member {
+                    Value: NamedTypeReference { TypeName: "DomainResult" },
+                    MemberName: "Failure"
+                }
+            } inv
+                => new Invoke(
+                    new Member(new NamedTypeReference("DomainResult"), "Failure"),
+                    [.. inv.Arguments.Select(a => BindThis(a, entity, parameters, stageEnums))]),
+            // Fail closed: export adapter throws; simulate must not silent-success.
+            Invoke { Delegate: Member { Value: TypeReference or NamedTypeReference, MemberName: { } endpoint } } inv
+                when AdapterTypeName(inv) is { } adapter
+                => new Return(new Invoke(
+                    new Member(new NamedTypeReference("DomainResult"), "Failure"),
+                    new Constant(
+                        $"Contract endpoint '{ContractNameFromAdapter(adapter)}.{endpoint}' has no in-process adapter on simulate."))),
+            Invoke inv => new Invoke(
+                BindThis(inv.Delegate, entity, parameters, stageEnums),
+                [.. inv.Arguments.Select(a => BindThis(a, entity, parameters, stageEnums))]) {
+                TypeArguments = inv.TypeArguments
+            },
+            Member m => new Member(BindThis(m.Value, entity, parameters, stageEnums), m.MemberName),
+            Poly.Ast.Nodes.Not n => new Poly.Ast.Nodes.Not(BindThis(n.Value, entity, parameters, stageEnums)),
+            Equal e => new Equal(
+                BindThis(e.LeftHandValue, entity, parameters, stageEnums), BindThis(e.RightHandValue, entity, parameters, stageEnums)),
+            NotEqual ne => new NotEqual(
+                BindThis(ne.LeftHandValue, entity, parameters, stageEnums), BindThis(ne.RightHandValue, entity, parameters, stageEnums)),
+            LessThan lt => new LessThan(
+                BindThis(lt.LeftHandValue, entity, parameters, stageEnums), BindThis(lt.RightHandValue, entity, parameters, stageEnums)),
+            LessThanOrEqual le => new LessThanOrEqual(
+                BindThis(le.LeftHandValue, entity, parameters, stageEnums), BindThis(le.RightHandValue, entity, parameters, stageEnums)),
+            GreaterThan gt => new GreaterThan(
+                BindThis(gt.LeftHandValue, entity, parameters, stageEnums), BindThis(gt.RightHandValue, entity, parameters, stageEnums)),
+            GreaterThanOrEqual ge => new GreaterThanOrEqual(
+                BindThis(ge.LeftHandValue, entity, parameters, stageEnums), BindThis(ge.RightHandValue, entity, parameters, stageEnums)),
+            Poly.Ast.Nodes.Add add => new Poly.Ast.Nodes.Add(
+                BindThis(add.LeftHandValue, entity, parameters, stageEnums), BindThis(add.RightHandValue, entity, parameters, stageEnums)),
+            Poly.Ast.Nodes.Subtract sub => new Poly.Ast.Nodes.Subtract(
+                BindThis(sub.LeftHandValue, entity, parameters, stageEnums), BindThis(sub.RightHandValue, entity, parameters, stageEnums)),
+            Poly.Ast.Nodes.Multiply mul => new Poly.Ast.Nodes.Multiply(
+                BindThis(mul.LeftHandValue, entity, parameters, stageEnums), BindThis(mul.RightHandValue, entity, parameters, stageEnums)),
+            Poly.Ast.Nodes.Divide div => new Poly.Ast.Nodes.Divide(
+                BindThis(div.LeftHandValue, entity, parameters, stageEnums), BindThis(div.RightHandValue, entity, parameters, stageEnums)),
+            Poly.Ast.Nodes.And and => new Poly.Ast.Nodes.And(
+                BindThis(and.LeftHandValue, entity, parameters, stageEnums), BindThis(and.RightHandValue, entity, parameters, stageEnums)),
+            Poly.Ast.Nodes.Or or => new Poly.Ast.Nodes.Or(
+                BindThis(or.LeftHandValue, entity, parameters, stageEnums), BindThis(or.RightHandValue, entity, parameters, stageEnums)),
+            Coalesce c => new Coalesce(
+                BindThis(c.LeftHandValue, entity, parameters, stageEnums), BindThis(c.RightHandValue, entity, parameters, stageEnums)),
+            TypeCast tc => new TypeCast(
+                BindThis(tc.Operand, entity, parameters, stageEnums),
+                BindThis(tc.TargetTypeReference, entity, parameters, stageEnums),
+                tc.IsChecked),
+            New n => new New(
+                BindThis(n.Type, entity, parameters, stageEnums),
+                [.. n.Arguments.Select(a => BindThis(a, entity, parameters, stageEnums))]),
+            ThrowStatement ts => new ThrowStatement(BindThis(ts.Exception, entity, parameters, stageEnums)),
+            TryCatchFinally t => new TryCatchFinally(
+                BindThis(t.TryBlock, entity, parameters, stageEnums),
+                t.CatchClauses?.Select(cc => cc with {
+                    ExceptionType = cc.ExceptionType is null
+                        ? null
+                        : BindThis(cc.ExceptionType, entity, parameters, stageEnums),
+                    Body = BindThis(cc.Body, entity, parameters, stageEnums)
+                }).ToList(),
+                t.FinallyBlock is null ? null : BindThis(t.FinallyBlock, entity, parameters, stageEnums)),
+            ForEachLoop f => new ForEachLoop(
+                f.LoopVariable,
+                BindThis(f.Collection, entity, parameters, stageEnums),
+                BindThis(f.Body, entity, parameters, stageEnums),
+                f.Label),
+            ContinueStatement or BreakStatement => node,
+            LabelDeclaration ld => new LabelDeclaration(
+                ld.Name, BindThis(ld.Statement, entity, parameters, stageEnums)),
+            Conditional cond => new Conditional(
+                BindThis(cond.Condition, entity, parameters, stageEnums),
+                BindThis(cond.IfTrue, entity, parameters, stageEnums),
+                BindThis(cond.IfFalse, entity, parameters, stageEnums)),
+            UnaryMinus um => new UnaryMinus(BindThis(um.Operand, entity, parameters, stageEnums)),
+            NullForgiving nf => new NullForgiving(BindThis(nf.Operand, entity, parameters, stageEnums)),
+            Parameter or Variable or Constant or NamedTypeReference or TypeReference
+                or PrimitiveTypeReference or ClrTypeReference => node,
+            _ => throw new InvalidOperationException(
+                $"Cannot bind module method this on {node.GetType().Name}.")
+        };
 
     private static string? AdapterTypeName(Invoke inv) =>
         inv.Delegate is Member { Value: Node type } && TypeNameOf(type) is { } name

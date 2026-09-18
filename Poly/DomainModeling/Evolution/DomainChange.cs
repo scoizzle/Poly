@@ -682,13 +682,13 @@ public sealed record AddDomainExtensionChange(
             return;
         }
         context.Extensions.Add(ExtensionId);
-        if (!string.Equals(ExtensionId, ExtensionCatalog.TemporalId, StringComparison.Ordinal))
+        if (!ExtensionCatalog.Core.Contains(ExtensionId))
             return;
-        foreach (var def in TemporalTypeCatalog.Definitions) {
+        foreach (var (name, category) in ExtensionCatalog.Core.Resolve(ExtensionId).PrimitiveSeeds) {
             if (context.Types.Any(t => t is PrimitiveType p
-                && string.Equals(p.Name, def.Name, StringComparison.Ordinal)))
+                && string.Equals(p.Name, name, StringComparison.Ordinal)))
                 continue;
-            new AddPrimitiveTypeChange(def.Name, def.Category, []).ApplyTo(context);
+            new AddPrimitiveTypeChange(name, category, []).ApplyTo(context);
         }
     }
 

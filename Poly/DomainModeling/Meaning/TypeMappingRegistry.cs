@@ -3,10 +3,10 @@ namespace Poly.DomainModeling.Meaning;
 /// <summary>
 /// Pack-overridable domain→host type maps for storage conventions and codegen.
 ///
-/// Core defaults live in <see cref="DomainTypeMapping"/> (D3 generic SQL + CLR).
-/// Packs register per-key overrides via <see cref="OverrideSqlColumnType"/> /
-/// <see cref="OverrideClrTypeName"/>. Lookup returns the override when present,
-/// otherwise the core default (D5 last-registered wins via dictionary set).
+/// Core defaults live in <see cref="DomainTypeMapping"/> (D3 generic SQL + CLR
+/// for Text/Number/Boolean/Uuid/Binary). Libraries register per-key maps via
+/// <see cref="OverrideSqlColumnType"/> / <see cref="OverrideClrTypeName"/>
+/// (temporal Date/DateTime/Duration, vendor SQL). Last-registered wins.
 /// </summary>
 public sealed class TypeMappingRegistry {
     private readonly Dictionary<string, string> _sqlOverrides = new(StringComparer.OrdinalIgnoreCase);

@@ -15,10 +15,9 @@ namespace Poly.DomainModeling.Analysis;
 /// Accepts optional <see cref="TypeMappingRegistry"/> and storage conventions
 /// from the authoring context (packs configure these).
 /// </summary>
-internal sealed class StoragePass : INodeAnalyzer {
+public sealed class StoragePass : INodeAnalyzer {
     public const string Id = "StoragePass";
     public string PassName => Id;
-    public string[] Dependencies => [EffectTopologyPass.Id, OwnershipAggregatePass.Id, EntityStructureAnalyzer.Id];
     // Standalone `new StoragePass(..., analysis)` bypasses AnalyzerBuilder
     // dependency checks; `_analysis` supplies bags the pipeline would have published.
 

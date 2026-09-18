@@ -24,7 +24,7 @@ Each pass implements `INodeAnalyzer` and is registered via an extension method o
 
 ## Pass Ordering
 
-Built order of `Interpreter.Analyzer` after `AnalyzerBuilder` topological insert (asserted by `StandardAnalyzer_PassNames_MatchInterpreterPipeline`). Direct AST-to-VM-ABI lowering; no primitive expansion. `Use*` registration in `Interpreter.cs` is the source list; `Dependencies` can insert a pass earlier than its `Use*` line.
+Built order of `Interpreter.Analyzer` (asserted by `StandardAnalyzer_PassNames_MatchInterpreterPipeline`). Direct AST-to-VM-ABI lowering; no primitive expansion. `Use*` registration **is** the run order.
 
 ```
  1. TypeDefinitionNodeAnalyzer
@@ -33,7 +33,7 @@ Built order of `Interpreter.Analyzer` after `AnalyzerBuilder` topological insert
  4. LambdaReturnTypeAnalyzer        (Invoke body type; Lambda value stays heap/object)
  5. ScopeValidator
  6. SideEffectAnalyzer
- 7. ConstantFoldingPass             (inserted after SideEffect; before JumpTarget)
+ 7. ConstantFoldingPass
  8. JumpTargetAnalyzer
  9. ControlFlowAnalysisPass
 10. ExceptionRegionAnalyzer
@@ -43,7 +43,7 @@ Built order of `Interpreter.Analyzer` after `AnalyzerBuilder` topological insert
 14. DefiniteAssignmentAnalyzer
 ```
 
-Ad-hoc test pipelines may omit `TypeDefinitionNodeAnalyzer`. This/TypeAndMember do not declare it as a hard `Dependencies` entry so CLR-only trees still analyze.
+Ad-hoc test pipelines may omit `TypeDefinitionNodeAnalyzer`. CLR-only trees still analyze.
 
 **Oracle:** A shipped Syntax node's runtime meaning is proven by `Interpreter.Compile` (and execute) on that tree. CFG analysis or `BuildExpression()` / LINQ alone is not the oracle.
 
@@ -63,7 +63,6 @@ Every pass must implement `INodeAnalyzer`:
 internal sealed class MyPass : INodeAnalyzer {
     public const string Id = "MyPass";
     public string PassName => Id;
-    public string[] Dependencies => [TypeAndMemberResolver.Id];
 
     public void Analyze(AnalysisContext context, Node node) {
         if (!context.TryBeginAnalyzerVisit<MyPass>(node))
@@ -116,19 +115,15 @@ Metadata records implement `IAnalysisMetadata` and are stored per-node via
 Metadata on the root node (null key) is accessible module-wide.
 Per-node metadata is scoped to that specific AST node.
 
-### Dependencies
+### Pass ordering
 
-The `Dependencies` array declares which passes must run before this one.
-The `AnalyzerBuilder` ensures passes execute in topological order.
-Circular dependencies cause a build-time exception.
-
-### Pass Ordering Rules
+`Build` is registration order. Put a pass after the passes whose bags it reads.
 
 1. TypeDefinitionNode (when present) before This/TypeAndMember so AST types exist.
-2. Variable scoping must precede side-effect analysis.
-3. Jump targets must be resolved before CFG construction.
-4. Constant folding runs before CFG; ValueRepresentation, definite assignment, and EH run after CFG.
-5. LambdaReturnType runs immediately after TypeAndMember so Invoke nodes have body types before value representation. SyntaxTypeCompatibility and CallSiteCatalog run after ValueRepresentation.
+2. Variable scoping before side-effect analysis.
+3. Jump targets before CFG construction.
+4. Constant folding before CFG; ValueRepresentation, definite assignment, and EH after CFG.
+5. LambdaReturnType after TypeAndMember so Invoke nodes have body types before value representation. SyntaxTypeCompatibility and CallSiteCatalog after ValueRepresentation.
 
 ---
 

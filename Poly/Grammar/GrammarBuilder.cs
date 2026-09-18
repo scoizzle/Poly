@@ -40,6 +40,24 @@ public sealed class GrammarBuilder<TToken, TTokenKind>
         return new Grammar<TToken, TTokenKind>(frozen);
     }
 
+    /// <summary>
+    /// Binds handler meaning onto an existing pattern. Unknown rule/pattern fails closed.
+    /// </summary>
+    public GrammarBuilder<TToken, TTokenKind> AttachPayload(string ruleName, string patternName, object payload) {
+        ArgumentException.ThrowIfNullOrWhiteSpace(ruleName);
+        ArgumentException.ThrowIfNullOrWhiteSpace(patternName);
+        ArgumentNullException.ThrowIfNull(payload);
+        if (!_rules.TryGetValue(ruleName, out var list))
+            throw new InvalidOperationException($"Unknown rule '{ruleName}'.");
+        for (var i = 0; i < list.Count; i++) {
+            if (string.Equals(list[i].Name, patternName, StringComparison.Ordinal)) {
+                list[i] = list[i].WithPayload(payload);
+                return this;
+            }
+        }
+        throw new InvalidOperationException($"Unknown pattern '{patternName}' in rule '{ruleName}'.");
+    }
+
     internal void AddPattern(string ruleName, Pattern<TToken, TTokenKind> pattern) {
         if (!_rules.TryGetValue(ruleName, out var list))
             _rules[ruleName] = list = [];
@@ -133,6 +151,7 @@ public sealed class PatternBuilder<TToken, TTokenKind>
     private readonly string _name;
     private readonly int _priority;
     private readonly List<IPatternElement<TToken, TTokenKind>> _elements = [];
+    private object? _payload;
 
     internal PatternBuilder(GrammarBuilder<TToken, TTokenKind> builder, string ruleName, string name, int priority = 0) {
         _builder = builder;
@@ -205,9 +224,16 @@ public sealed class PatternBuilder<TToken, TTokenKind>
         return this;
     }
 
+    /// <summary>Handler-owned meaning. The engine does not interpret this.</summary>
+    public PatternBuilder<TToken, TTokenKind> Payload(object payload) {
+        ArgumentNullException.ThrowIfNull(payload);
+        _payload = payload;
+        return this;
+    }
+
     /// <summary>Registers this pattern on the builder; ready for the next pattern in the same rule.</summary>
     public RuleBuilder<TToken, TTokenKind> Commit() {
-        _builder.AddPattern(_ruleName, new Pattern<TToken, TTokenKind>(_name, _elements, _priority));
+        _builder.AddPattern(_ruleName, new Pattern<TToken, TTokenKind>(_name, _elements, _priority, _payload));
         return new RuleBuilder<TToken, TTokenKind>(_builder, _ruleName);
     }
 }

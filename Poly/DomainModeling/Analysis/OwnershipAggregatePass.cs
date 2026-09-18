@@ -13,7 +13,6 @@ namespace Poly.DomainModeling.Analysis;
 internal sealed class OwnershipAggregatePass : INodeAnalyzer {
     public const string Id = "OwnershipAggregatePass";
     public string PassName => Id;
-    public string[] Dependencies => [EffectTopologyPass.Id, EntityStructureAnalyzer.Id];
 
     public void Analyze(AnalysisContext context, Node node) {
         if (node is not Domain domain) return;

@@ -7,6 +7,7 @@ using Poly.Interpretation.Analysis.ControlFlow;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Interpretation.LinqExpressions;
 using Poly.Interpretation.Vm;
+using Poly.Tests.TestHelpers;
 
 using SN = Poly.Ast.Nodes;
 
@@ -23,7 +24,7 @@ public class DomainExpressionVmExecutionTests {
     // DomainExpressionLoweringPass carries mutable _currentSubject state — a shared
     // static instance raced under parallel execution (Exists_NonNullValue_ReturnsTrue flake).
     private readonly DomainExpressionLoweringPass Pass = new(
-        new LoweringContext(new SN.Parameter("entity")));
+        new LoweringContext(new SN.Parameter("entity"), Meaning: TemporalMeaningHarness.Create()));
     private readonly ParameterReference Subject = new();
 
     private static AnalysisResult Analyze(Node node) =>

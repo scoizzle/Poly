@@ -44,7 +44,7 @@ public class DslExpressionFragmentTests {
     [Test]
     public async Task Fragment_TrailingJunk_Throws() {
         var ex = await Assert.That(
-            () => DslExpressionFragment.ParseExpressionFragment("Age >= 18 leftover"))
+            () => DslExpressionFragment.ParseExpressionFragment("Age >= 18 )"))
             .Throws<FormatException>();
         await Assert.That(ex!.Message).Contains("Trailing");
     }

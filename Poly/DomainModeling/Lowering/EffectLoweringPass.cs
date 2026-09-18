@@ -1,6 +1,7 @@
 using Poly.Ast.Nodes;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Dispatch;
+using Poly.DomainModeling.Meaning;
 using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Runtime;
 
@@ -214,11 +215,10 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
             var entityProp = _entity.Properties.FirstOrDefault(p =>
                 string.Equals(p.Name, propAccess.Name, StringComparison.Ordinal));
 
-            // Runtime keywords / clock IR in an assign RHS (assign DueDate to now)
-            // must adapt to the TARGET property's CLR type — DateTime.UtcNow on a
-            // Date slot is CS0029 in export and a wrong-typed store at runtime.
+            // Clock IR / session ident folds in an assign RHS must adapt to the
+            // TARGET property's CLR type via Meaning.Defaults.
             if (entityProp is not null) {
-                var adapted = LowerDefaultExpression(
+                var adapted = LowerDefault(
                     a.Value, new NamedTypeReference(entityProp.Type.TypeName));
                 if (adapted is not null) value = adapted;
             }
@@ -477,19 +477,8 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
             && _domain.Types.OfType<EnumType>().Any(e =>
                 string.Equals(e.Name, typeName, StringComparison.Ordinal)))
             return false;
-        return typeName switch {
-            "Text" or "String" => true,
-            "Number" or "Int" or "Int64" or "Int32" => false,
-            "Boolean" or "Bool" => false,
-            "DateTime" or "Timestamp" => false,
-            "Date" or "DateOnly" => false,
-            "Time" or "TimeOnly" => false,
-            "Duration" or "TimeSpan" => false,
-            "Decimal" => false,
-            "Float" or "Double" => false,
-            "Guid" or "Uuid" => false,
-            _ => true,
-        };
+        return !DomainTypeMapping.IsNonNullableClrValueType(
+            RuntimeAnalysisCache.ClrTypeName(_domain, typeName));
     }
 
     private Node? RouteWithRuntimeCreate(Effect effect) =>
@@ -1096,7 +1085,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
             var prop = targetEntity?.Properties.FirstOrDefault(p =>
                 string.Equals(p.Name, init.PropertyName, StringComparison.Ordinal));
             var value = (prop is not null
-                    ? LowerDefaultExpression(
+                    ? LowerDefault(
                         init.Expression, new NamedTypeReference(prop.Type.TypeName))
                     : null)
                 ?? (prop is not null
@@ -1167,45 +1156,35 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     /// <summary>
     /// Builds a Syntax AST node for a runtime default expression, adapted to the
     /// target property's CLR type when known (discovery round5 F1–F3).
-    /// <c>now</c>/<c>utcnow</c> → <c>DateTime.UtcNow</c> on a DateTime target,
-    /// <c>DateOnly.FromDateTime(DateTime.UtcNow)</c> on a Date target;
-    /// <c>today</c> → <c>DateTime.Today</c> / <c>DateOnly.FromDateTime(DateTime.Today)</c>;
+    /// Library clocks resolve via session ident rewrite then Meaning.Defaults.
     /// <c>guid</c> → <c>Guid.NewGuid()</c> on a Guid target,
     /// <c>Guid.NewGuid().ToString()</c> on a Text target.
     /// Returns null for literal defaults (handled directly by the exporter).
     /// </summary>
+    private Node? LowerDefault(DomainExpression expr, Node? typeHint = null) =>
+        LowerDefaultExpression(
+            expr,
+            typeHint,
+            _context.Meaning ?? RuntimeAnalysisCache.MeaningFor(_domain),
+            _context.Forms ?? RuntimeAnalysisCache.FormsFor(_domain));
+
     internal static Node? LowerDefaultExpression(
         DomainExpression expr,
-        Node? typeHint = null) {
+        Node? typeHint = null,
+        ExpressionMeaning? meaning = null,
+        ExpressionFormRegistry? forms = null) {
         var targetName = typeHint is NamedTypeReference ntr ? ntr.TypeName : null;
-        var isDateTimeTarget = targetName is "DateTime" or "Timestamp";
-        if (expr is Now) {
-            return isDateTimeTarget
-                ? new Member(new NamedTypeReference("DateTime"), "UtcNow")
-                : new Invoke(new Member(new NamedTypeReference("DateOnly"), "FromDateTime"),
-                    new Member(new NamedTypeReference("DateTime"), "UtcNow"));
-        }
-        if (expr is Today) {
-            return isDateTimeTarget
-                ? new Member(new NamedTypeReference("DateTime"), "Today")
-                : new Invoke(new Member(new NamedTypeReference("DateOnly"), "FromDateTime"),
-                    new Member(new NamedTypeReference("DateTime"), "Today"));
-        }
-        if (expr is not PropertyAccess pa) return null;
-        return pa.Name switch {
-            "Now" or "UtcNow" => isDateTimeTarget
-                ? new Member(new NamedTypeReference("DateTime"), "UtcNow")
-                : new Invoke(new Member(new NamedTypeReference("DateOnly"), "FromDateTime"),
-                    new Member(new NamedTypeReference("DateTime"), "UtcNow")),
-            "Today" => isDateTimeTarget
-                ? new Member(new NamedTypeReference("DateTime"), "Today")
-                : new Invoke(new Member(new NamedTypeReference("DateOnly"), "FromDateTime"),
-                    new Member(new NamedTypeReference("DateTime"), "Today")),
+        if (expr is PropertyAccess pa && forms is not null && forms.TryRewriteIdent(pa.Name, out var claimed))
+            expr = claimed;
+        if ((meaning ?? ExpressionMeaning.Empty).Defaults.TryResolve(expr, targetName, out _, out var export))
+            return export;
+        if (expr is not PropertyAccess guid) return null;
+        return guid.Name switch {
             "Guid" => targetName is "Text" or "String"
                 ? new Invoke(new Member(
                     new Invoke(new Member(new NamedTypeReference("Guid"), "NewGuid")), "ToString"))
                 : new Invoke(new Member(new NamedTypeReference("Guid"), "NewGuid")),
-            _ => null, // treat as enum member name
+            _ => null,
         };
     }
 

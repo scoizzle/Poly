@@ -113,14 +113,17 @@ public sealed class DslExpressionParser {
         };
 
     private DomainExpression FoldPrimary(MatchResult<DslToken, DslTokenKind> match, bool inWhere) {
-        if (match.PatternName is not "group" and not "not"
-            && _folds.TryFold(match.RuleName, match, out var folded))
-            return folded;
+        if (match.PatternName is not "group" and not "not") {
+            // Session folds override pattern payload (library Now vs core ident-shaped clock).
+            if (_folds.TryFold(match.RuleName, match, out var folded))
+                return RewriteIdent(folded);
+            if (match.TryFoldExpression(out var bound))
+                return RewriteIdent(bound);
+        }
 
         return match.PatternName switch {
             "group" => FoldGroup(match, inWhere),
             "not" => DomainExpression.Not(FoldRule(match.Children[0], inWhere)),
-            "now" or "today" => DomainExpression.Property(match.Tokens[0].Text),
             "duration" => throw _c.Error(
                 $"Duration '{string.Join(' ', match.Tokens.Select(t => t.Text))}' requires uses temporal."),
             "exists" => DomainExpression.Exists(DomainExpression.Property(CaptureText(match, "rel"))),
@@ -134,6 +137,11 @@ public sealed class DslExpressionParser {
                 $"Cannot fold primary '{match.RuleName}/{match.PatternName}'."),
         };
     }
+
+    private DomainExpression RewriteIdent(DomainExpression expression) =>
+        expression is PropertyAccess pa && _forms.TryRewriteIdent(pa.Name, out var claimed)
+            ? claimed
+            : expression;
 
     private DomainExpression FoldGroup(MatchResult<DslToken, DslTokenKind> match, bool inWhere) {
         if (match.Children.Count > 0)

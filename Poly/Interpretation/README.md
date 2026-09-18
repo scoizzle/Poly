@@ -335,7 +335,7 @@ to `bool`, `int`, `short`, `byte`, and `object` automatically.
 ### Adding a New Analysis Pass
 
 1. Create a class implementing `INodeAnalyzer` in `Interpretation/Analysis/Semantics/` (or the appropriate subdirectory).
-2. Implement `PassName`, `Dependencies`, and `Analyze()`. Use `context.SetMetadata()` and `context.ReportDiagnostic()` for outputs.
+2. Implement `PassName`, `After` / `Before` as needed, and `Analyze()`. Use `context.SetMetadata()` and `context.ReportDiagnostic()` for outputs.
 3. Add an extension method on `AnalyzerBuilder` in the same file.
 4. Register it in `Interpreter.cs` (in the `AnalyzerBuilder` chain) and update the pass table in this README and `Analysis/README.md`.
 5. Add tests in `Poly.Tests/Interpretation/`.

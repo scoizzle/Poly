@@ -1,5 +1,6 @@
 using Poly.Ast.Nodes;
 using Poly.DomainModeling.Lowering;
+using Poly.DomainModeling.Meaning;
 using Poly.DomainModeling.Ontology;
 using Poly.Introspection;
 
@@ -37,6 +38,17 @@ internal static class RuntimeAnalysisCache {
         ArgumentNullException.ThrowIfNull(domain);
         return GetHolder(domain).Session;
     }
+
+    internal static ExpressionMeaning MeaningFor(Domain? domain) =>
+        domain is null ? ExpressionMeaning.Empty : Session(domain).Meaning;
+
+    internal static ExpressionFormRegistry FormsFor(Domain? domain) =>
+        domain is null ? new ExpressionFormRegistry() : Session(domain).ExpressionForms;
+
+    internal static string ClrTypeName(Domain? domain, string domainType) =>
+        domain is null
+            ? DomainTypeMapping.ToClrTypeName(domainType)
+            : Session(domain).TypeMaps.ToClrTypeName(domainType);
 
     public static void Bind(Domain domain, DomainSession session, AnalysisResult? analysis = null) {
         ArgumentNullException.ThrowIfNull(domain);

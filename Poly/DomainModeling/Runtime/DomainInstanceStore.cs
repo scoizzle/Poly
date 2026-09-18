@@ -148,7 +148,7 @@ public sealed class DomainInstanceStore {
             return DomainResult.Failure(ex.Message);
         }
         var validation = DomainEntityInstance.ValidateCreateConstraints(
-            target, DomainEntityInstance.FillCreateDefaults(target, scalars, creator.Domain), this);
+            target, DomainEntityInstance.FillCreateDefaults(target, scalars, creator.Domain), this, creator.Domain);
         return validation is null ? DomainResult.Success() : DomainResult.Failure(validation);
     }
 
@@ -174,7 +174,7 @@ public sealed class DomainInstanceStore {
         }
         var filled = DomainEntityInstance.FillCreateDefaults(targetEntity, scalars, creator.Domain);
         var uniqueOrConstraint = DomainEntityInstance.ValidateCreateConstraints(
-            targetEntity, filled, this);
+            targetEntity, filled, this, creator.Domain);
         if (uniqueOrConstraint is not null)
             return DomainResult.Failure(uniqueOrConstraint);
 

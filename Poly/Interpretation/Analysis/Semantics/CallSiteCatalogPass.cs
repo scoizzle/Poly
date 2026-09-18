@@ -64,7 +64,6 @@ internal sealed class CallSiteCatalogState : IAnalysisMetadata {
 internal sealed class CallSiteCatalogAnalyzer : INodeAnalyzer {
     public const string Id = "CallSiteCatalog";
     public string PassName => Id;
-    public string[] Dependencies => [TypeAndMemberResolver.Id, ValueRepresentationAnalyzer.Id];
 
     public void Analyze(AnalysisContext context, Node node) {
         // Get or create per-traversal state. Reuses existing state from parent

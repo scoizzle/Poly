@@ -45,10 +45,6 @@ public sealed record ValueRepresentationMetadata(
 internal sealed class ValueRepresentationAnalyzer : INodeAnalyzer {
     public const string Id = "ValueRepresentation";
     public string PassName => Id;
-    public string[] Dependencies => [
-        TypeAndMemberResolver.Id,
-        ControlFlowAnalysisPass.Id,
-        LambdaReturnTypeAnalyzer.Id];
     public void Analyze(AnalysisContext context, Node node) {
         // Post-order: classify children first
         this.AnalyzeChildren(context, node);

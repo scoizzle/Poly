@@ -7,12 +7,13 @@ semantic analysis passes for the Poly Interpretation system.
 
 Analysis passes implement `INodeAnalyzer` and are composed into an `Analyzer` via
 `AnalyzerBuilder`. Each pass walks the AST in post-order, attaches metadata to nodes,
-and reports diagnostics. Passes declare `After` / `Before` so `Build` can schedule them.
+and reports diagnostics. `Build` is registration order — the `Use*` chain is the schedule
+(align with CORE and `Poly/Interpretation/Analysis/README.md`).
 
 ## Pass Lifecycle
 
 1. **Registration**: Added to `AnalyzerBuilder` via an extension method
-2. **Analysis**: `Analyzer.Analyze(rootNode)` runs all passes in scheduled order
+2. **Analysis**: `Analyzer.Analyze(rootNode)` runs all passes in registration order
 3. **Metadata**: Passes attach `IAnalysisMetadata` records to nodes via `AnalysisContext`
 4. **Retrieval**: Downstream passes and the emitter read metadata via `context.GetMetadata<T>(node)`
 

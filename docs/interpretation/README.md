@@ -52,8 +52,9 @@ complementing the module README at `Poly/Interpretation/README.md`.
 
 ### Analysis Passes
 Each pass implements `INodeAnalyzer`, walks the AST in post-order, and attaches
-metadata to nodes via `AnalysisContext`. Passes declare dependencies to ensure
-correct execution order via topological sort.
+metadata to nodes via `AnalysisContext`. Pass order is registration order on
+`AnalyzerBuilder` (`Build` appends; no topological insert). See the
+[Analysis README](../../Poly/Interpretation/Analysis/README.md) pass list.
 
 ### Direct AST Lowering
 `DirectVmAbiEmitter` is the sole compilation path. It walks the analyzed AST

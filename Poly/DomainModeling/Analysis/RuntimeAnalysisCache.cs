@@ -45,10 +45,16 @@ internal static class RuntimeAnalysisCache {
     internal static ExpressionFormRegistry FormsFor(Domain? domain) =>
         domain is null ? new ExpressionFormRegistry() : Session(domain).ExpressionForms;
 
+    private static readonly TypeMappingRegistry CoreTypeMaps = new();
+
     internal static string ClrTypeName(Domain? domain, string domainType) =>
+        FindMapping(domain, domainType)?.ClrTypeName
+        ?? DomainTypeMapping.ToClrTypeName(domainType);
+
+    internal static HostTypeMapping? FindMapping(Domain? domain, string domainType) =>
         domain is null
-            ? DomainTypeMapping.ToClrTypeName(domainType)
-            : Session(domain).TypeMaps.ToClrTypeName(domainType);
+            ? CoreTypeMaps.Find(domainType)
+            : Session(domain).TypeMaps.Find(domainType);
 
     public static void Bind(Domain domain, DomainSession session, AnalysisResult? analysis = null) {
         ArgumentNullException.ThrowIfNull(domain);

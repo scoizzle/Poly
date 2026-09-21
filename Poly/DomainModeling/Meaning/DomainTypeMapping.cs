@@ -88,36 +88,6 @@ public static class DomainTypeMapping {
         }
     }
 
-    /// <summary>Static default member on a CLR value type (MinValue / Empty / Zero).</summary>
-    public static bool TryDefaultMember(string clrTypeName, out string typeName, out string memberName) {
-        switch (clrTypeName) {
-            case "DateTime":
-                typeName = "DateTime";
-                memberName = "MinValue";
-                return true;
-            case "DateOnly":
-                typeName = "DateOnly";
-                memberName = "MinValue";
-                return true;
-            case "TimeOnly":
-                typeName = "TimeOnly";
-                memberName = "MinValue";
-                return true;
-            case "TimeSpan":
-                typeName = "TimeSpan";
-                memberName = "Zero";
-                return true;
-            case "Guid":
-                typeName = "Guid";
-                memberName = "Empty";
-                return true;
-            default:
-                typeName = "";
-                memberName = "";
-                return false;
-        }
-    }
-
     public static string ToCamelCase(string name) {
         if (string.IsNullOrEmpty(name) || char.IsLower(name[0]))
             return name;

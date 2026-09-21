@@ -1,0 +1,122 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 780" role="img" aria-labelledby="title desc">
+  <title id="title">DomainModeling analysis suites — intended dataflow</title>
+  <desc id="desc">
+    Shape, then catalog, then three parallel suite columns (meaning, surface, coupling),
+    then host overlay, then hints. Library extras are dashed.
+  </desc>
+  <style>
+    .bg { fill: #f7f5f0; }
+    .title { font: 700 22px ui-sans-serif, system-ui, sans-serif; fill: #1c1917; }
+    .sub { font: 400 13px ui-sans-serif, system-ui, sans-serif; fill: #57534e; }
+    .box { stroke-width: 1.5; }
+    .lbl { font: 700 14px ui-sans-serif, system-ui, sans-serif; fill: #1c1917; }
+    .n { font: 600 11px ui-sans-serif, system-ui, sans-serif; fill: #78716c; }
+    .body { font: 400 12px ui-sans-serif, system-ui, sans-serif; fill: #44403c; }
+    .small { font: 400 11px ui-sans-serif, system-ui, sans-serif; fill: #57534e; }
+    .arrow { stroke: #57534e; stroke-width: 1.6; fill: none; marker-end: url(#arr); }
+    .dash { stroke-dasharray: 5 4; }
+    .legend { font: 400 11px ui-sans-serif, system-ui, sans-serif; fill: #44403c; }
+    .foot { font: 400 11px ui-sans-serif, system-ui, sans-serif; fill: #78716c; }
+  </style>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#57534e"/>
+    </marker>
+  </defs>
+  <rect class="bg" width="1120" height="780"/>
+  <text class="title" x="40" y="40">Domain analysis suites</text>
+  <text class="sub" x="40" y="62">Intended dataflow — what must precede what. Not the current AnalyzerBuilder insert schedule.</text>
+
+  <!-- Domain -->
+  <rect class="box" x="470" y="84" width="180" height="44" rx="8" fill="#e7e5e4" stroke="#44403c"/>
+  <text class="lbl" x="560" y="111" text-anchor="middle">Domain facts</text>
+
+  <line class="arrow" x1="560" y1="128" x2="560" y2="154"/>
+
+  <!-- Shape -->
+  <rect class="box" x="430" y="156" width="260" height="64" rx="8" fill="#ffedd5" stroke="#c2410c"/>
+  <text class="n" x="560" y="176" text-anchor="middle">1 · GATE</text>
+  <text class="lbl" x="560" y="196" text-anchor="middle">Shape</text>
+  <text class="body" x="560" y="212" text-anchor="middle">duplicates · reserved names · ownership cardinality</text>
+
+  <line class="arrow" x1="560" y1="220" x2="560" y2="246"/>
+
+  <!-- Catalog -->
+  <rect class="box" x="390" y="248" width="340" height="72" rx="8" fill="#dbeafe" stroke="#1d4ed8"/>
+  <text class="n" x="560" y="268" text-anchor="middle">2 · INDEX + BIND</text>
+  <text class="lbl" x="560" y="288" text-anchor="middle">Catalog</text>
+  <text class="body" x="560" y="306" text-anchor="middle">name → type / nav / action / stage · resolve type-refs</text>
+
+  <!-- fan-out -->
+  <line class="arrow" x1="560" y1="320" x2="560" y2="348"/>
+  <line class="arrow" x1="560" y1="348" x2="196" y2="348"/>
+  <line class="arrow" x1="560" y1="348" x2="924" y2="348"/>
+  <line class="arrow" x1="196" y1="348" x2="196" y2="372"/>
+  <line class="arrow" x1="560" y1="348" x2="560" y2="372"/>
+  <line class="arrow" x1="924" y1="348" x2="924" y2="372"/>
+
+  <!-- 3 Meaning -->
+  <rect class="box" x="40" y="372" width="312" height="196" rx="10" fill="#fef3c7" stroke="#b45309"/>
+  <text class="n" x="196" y="394" text-anchor="middle">3 · GATE</text>
+  <text class="lbl" x="196" y="414" text-anchor="middle">Meaning</text>
+  <text class="body" x="196" y="434" text-anchor="middle">legal policies · expressions · effects · contracts</text>
+  <rect x="56" y="448" width="280" height="44" rx="6" fill="#fffbeb" stroke="#d97706" stroke-dasharray="4 3"/>
+  <text class="small" x="196" y="466" text-anchor="middle">uses temporal (library)</text>
+  <text class="small" x="196" y="482" text-anchor="middle">vocab stamp · date-op checks · assign conversions</text>
+  <rect x="56" y="500" width="280" height="52" rx="6" fill="#fff7ed" stroke="#c2410c"/>
+  <text class="lbl" x="196" y="520" text-anchor="middle" style="font-size:12px">Effect cluster</text>
+  <text class="small" x="196" y="538" text-anchor="middle">required → flow → create-in bind → invariants → gate</text>
+
+  <!-- 4 Surface -->
+  <rect class="box" x="404" y="372" width="312" height="196" rx="10" fill="#ccfbf1" stroke="#0f766e"/>
+  <text class="n" x="560" y="394" text-anchor="middle">4 · DERIVE + GATE</text>
+  <text class="lbl" x="560" y="414" text-anchor="middle">Surface + dispatch</text>
+  <text class="body" x="560" y="434" text-anchor="middle">effective menu · how notify fires · when legality</text>
+  <rect x="420" y="448" width="280" height="48" rx="6" fill="#f0fdfa" stroke="#0f766e"/>
+  <text class="lbl" x="560" y="468" text-anchor="middle" style="font-size:12px">Capability</text>
+  <text class="small" x="560" y="484" text-anchor="middle">effective actions / policies per stage</text>
+  <rect x="420" y="504" width="136" height="48" rx="6" fill="#f0fdfa" stroke="#0f766e"/>
+  <text class="lbl" x="488" y="524" text-anchor="middle" style="font-size:12px">Dispatch</text>
+  <text class="small" x="488" y="540" text-anchor="middle">rels + when plans</text>
+  <rect x="564" y="504" width="136" height="48" rx="6" fill="#ecfeff" stroke="#0e7490"/>
+  <text class="lbl" x="632" y="524" text-anchor="middle" style="font-size:12px">Subscription gate</text>
+  <text class="small" x="632" y="540" text-anchor="middle">needs capability</text>
+  <line class="arrow" x1="560" y1="496" x2="632" y2="504"/>
+
+  <!-- 5 Coupling -->
+  <rect class="box" x="768" y="372" width="312" height="196" rx="10" fill="#ede9fe" stroke="#6d28d9"/>
+  <text class="n" x="924" y="394" text-anchor="middle">5 · DERIVE</text>
+  <text class="lbl" x="924" y="414" text-anchor="middle">Coupling</text>
+  <text class="body" x="924" y="434" text-anchor="middle">who owns whom · cross-entity edges</text>
+  <rect x="784" y="448" width="136" height="48" rx="6" fill="#f5f3ff" stroke="#6d28d9"/>
+  <text class="lbl" x="852" y="468" text-anchor="middle" style="font-size:12px">Structure</text>
+  <text class="small" x="852" y="484" text-anchor="middle">IsRoot · key · ctor</text>
+  <rect x="928" y="448" width="136" height="48" rx="6" fill="#f5f3ff" stroke="#6d28d9"/>
+  <text class="lbl" x="996" y="468" text-anchor="middle" style="font-size:12px">Topology</text>
+  <text class="small" x="996" y="484" text-anchor="middle">create-in · invoke · when</text>
+  <rect x="784" y="512" width="280" height="40" rx="6" fill="#f5f3ff" stroke="#6d28d9"/>
+  <text class="lbl" x="924" y="536" text-anchor="middle" style="font-size:12px">Aggregate  ← structure + topology</text>
+  <line class="arrow" x1="852" y1="496" x2="852" y2="512"/>
+  <line class="arrow" x1="996" y1="496" x2="996" y2="512"/>
+
+  <!-- join to host -->
+  <line class="arrow" x1="196" y1="568" x2="196" y2="600"/>
+  <line class="arrow" x1="560" y1="568" x2="560" y2="600"/>
+  <line class="arrow" x1="924" y1="568" x2="924" y2="600"/>
+  <line class="arrow" x1="196" y1="600" x2="924" y2="600"/>
+  <line class="arrow" x1="560" y1="600" x2="560" y2="620"/>
+
+  <!-- 6 Host -->
+  <rect class="box" x="300" y="620" width="520" height="72" rx="10" fill="#dcfce7" stroke="#15803d"/>
+  <text class="n" x="560" y="640" text-anchor="middle">6 · OVERLAY  (library — still always-on today)</text>
+  <text class="lbl" x="560" y="660" text-anchor="middle">Host · Storage mapping</text>
+  <text class="body" x="560" y="678" text-anchor="middle">tables / columns / FKs   →   persistence flag*   →   http flag*</text>
+
+  <line class="arrow" x1="560" y1="692" x2="560" y2="712"/>
+
+  <!-- 7 Hints -->
+  <rect class="box" x="300" y="712" width="520" height="40" rx="8" fill="#f5f5f4" stroke="#78716c"/>
+  <text class="lbl" x="560" y="737" text-anchor="middle" style="font-size:13px">7 · HINTS  authoring suggestions · rule coverage · dependency cycles</text>
+
+  <text class="foot" x="40" y="766">* dashed / starred = library extra (temporal, persistence, http). Solid boxes are core.</text>
+</svg>

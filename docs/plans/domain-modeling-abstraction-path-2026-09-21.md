@@ -3,7 +3,7 @@
 **Date:** 2026-09-21
 **Status:** Proposal / consultant note — **not CURRENT**. Do not admit a suite. Do not change `simple-agent-tasks/PIPELINE-STATUS.md`. Eng WIP stays **0** until Scot greenlights a slice.
 **Grounding:** [`product-pipeline-first-principles-2026-09-20.md`](product-pipeline-first-principles-2026-09-20.md) on this branch (principles SHA moved with talk alignment + this sim-rule amend) · [`domain-modeling-salvage-verdict-2026-09-18.md`](domain-modeling-salvage-verdict-2026-09-18.md) (middle path = **refactor behind abstraction**, not keep/kill as mill queue)
-**Parked (locked):** store-vs-lower **Item 5** Occupancy / `BusySections`. Still PARKED. Do not unpark.
+**Parked (locked):** store-vs-lower **Item 5** Occupancy / `BusySections`. Still PARKED. Do not unpark. **PR 73** stays PARKED. Do not touch.
 **Audience:** Scot
 
 This note does not implement C#, does not delete code, and does not start a slice.
@@ -20,7 +20,7 @@ A domain file states **facts** and names libraries with `uses` ids. **DomainSess
 
 **Product rule (Scot):** drop everything that fakes a runtime for simulation. Facts → bags → `session.Lower` (one module) → Interpreter runs that module. Producers deliver host call-sites. Not CURRENT. No slice greenlight.
 
-**Lower plan (next, before eng):** [`session-lower-plan-2026-09-21.md`](session-lower-plan-2026-09-21.md). Slices A–E stay unapproved until Scot accepts that plan.
+**Lower plan (next, before eng):** [`session-lower-plan-2026-09-21.md`](session-lower-plan-2026-09-21.md) — **SoT.** Scot’s revision: Lower is **inside** analysis, not a post-analyze `session.Lower` door. Clean analyze **is** having real lowered trees, or fail-closed. Slices A–E stay unapproved until Scot accepts that revised plan. The “after clean analyze → `session.Lower`” wording in §1 is historical sequencing, not the product door.
 
 ---
 
@@ -86,6 +86,7 @@ Small, stop-conditioned. **No slice starts until Scot accepts the Lower plan, th
 
 - **Not CURRENT.** PIPELINE-STATUS stays `(none)`.
 - **Item 5 PARKED.** Occupancy / `BusySections` — not a candidate.
+- **PR 73 PARKED.** Do not touch. Do not unpark.
 - **Product sim = Interpreter on the `session.Lower` tree.** DEI / Effect-IR are not sim. This file does not delete DEI.
 - **No implement / no delete** from this file.
 - **No wipe, no salvage-in-place.** Refactor behind Session Compile only.
@@ -98,6 +99,6 @@ Small, stop-conditioned. **No slice starts until Scot accepts the Lower plan, th
 | Doc | Role |
 |-----|------|
 | [`product-pipeline-first-principles-2026-09-20.md`](product-pipeline-first-principles-2026-09-20.md) | Pipeline + principles this path sits on |
-| [`session-lower-plan-2026-09-21.md`](session-lower-plan-2026-09-21.md) | Refine `session.Lower` before eng. Slices unapproved until Scot accepts. |
+| [`session-lower-plan-2026-09-21.md`](session-lower-plan-2026-09-21.md) | **SoT** for Lower-as-analysis. Slices unapproved until Scot accepts. |
 | [`domain-modeling-salvage-verdict-2026-09-18.md`](domain-modeling-salvage-verdict-2026-09-18.md) | Scot middle path = abstraction refactor (not old keep/kill queue) |
 | `simple-agent-tasks/PIPELINE-STATUS.md` | Sole CURRENT/DONE — leave it |

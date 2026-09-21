@@ -1,120 +1,119 @@
-# session.Lower — plan (for Scot)
+# Lower-as-analysis — plan (for Scot)
 
 **Date:** 2026-09-21
 **Status:** Proposal / consultant note — **not CURRENT**. Do not admit a suite. Do not change `simple-agent-tasks/PIPELINE-STATUS.md`.
-**Slices:** A–E stay **unapproved** until Scot **accepts this Lower plan**. This supersedes immediate slice greenlight. Eng WIP = **0**.
-**Parked (locked):** store-vs-lower **Item 5** Occupancy / `BusySections`. Still PARKED. Do not unpark.
+**Revises:** tip `754e9b8c` on `ontology/talk-alignment-2026-09-21` (same file/URL). Vision = **Lower as analysis**, not a post-analyze `session.Lower` door.
+**Slices:** A–E stay **unapproved** until Scot **accepts this revised plan**. Eng WIP = **0**.
+**Parked (locked):** store-vs-lower **Item 5** Occupancy / `BusySections`. **PR 73** stays PARKED. Do not touch. Do not unpark.
 **This file does not** implement C#, delete product code, or start a slice.
 **Audience:** Scot
-**Grounding:** tip `23ef8554` on `ontology/talk-alignment-2026-09-21` · [`product-pipeline-first-principles-2026-09-20.md`](product-pipeline-first-principles-2026-09-20.md) · [`domain-modeling-abstraction-path-2026-09-21.md`](domain-modeling-abstraction-path-2026-09-21.md)
+**Grounding:** [`product-pipeline-first-principles-2026-09-20.md`](product-pipeline-first-principles-2026-09-20.md) · [`domain-modeling-abstraction-path-2026-09-21.md`](domain-modeling-abstraction-path-2026-09-21.md)
 
-**Product rule (already locked there):** simulation = **Interpreter** on the real `session.Lower` tree. Artifact producers = host call-sites, not sim. DEI / Effect-IR are not product sim.
+**Product rule (unchanged):** simulation = **Interpreter** on the **real lowered Syntax trees**. Artifact producers = host call-sites, not sim. DEI / Effect-IR are not product sim.
 
----
-
-## 1) What `session.Lower` is
-
-The **compile** step inside **Session Compile**.
-
-`DomainSession` has already loaded libraries and run **one** analyze. If that analyze is clean, **`session.Lower`** turns the analyzed result into **one operation module**: a complete generic Syntax tree per shipped action, policy, subscription, create, and transition.
-
-It is not execute. It is not print. It is not MCP. It is not DEI. Those consume the module after Lower (or, for producers, emit files that **call** it).
+**This note is SoT** for the Lower-as-analysis revision. Path / principles that still say “clean analyze, *then* `session.Lower`” are historical sequencing — not the product door.
 
 ---
 
-## 2) Inputs
+## 1) Lower is an analysis concern / pass
 
-Only after **clean analyze** (fail-closed gate):
+**Session Compile** still names the compile unit: `DomainSession` loads libraries and runs **one** analyze.
+
+**Revision:** lowering is **part of that analyze**, not a second door after it.
+
+Analysis that **proves** the domain also **produces** the real lowered Syntax trees — or **fail-closes**. Clean analyze **means** those trees exist (same gate). There is no product sequencing “analyze went green, now call `session.Lower`.”
+
+If a `session.Lower` method still exists in code, that is leftover naming. Product-wise it can only **read** what analyze already made. It must not compile again.
+
+It is not execute. Not print. Not MCP. Not DEI. Those consume the trees analyze produced (or, for producers, emit files that **call** them).
+
+---
+
+## 2) Inputs / outputs
+
+**In (analysis):**
 
 - **Facts** — the `Domain` the author wrote (types, stages, operations, relationships, `uses` ids).
-- **Bags** — analysis metadata on those authoring nodes (catalog, storage, HTTP, dispatch, …). Lower **reads** bags. It does not leave bag types in the output tree.
+- **Bags / concerns** — what analyze publishes on authoring nodes (catalog, storage, HTTP, dispatch, …). Lowering **reads** those concerns. Authoring IR (`DomainExpression`, `Effect`) stays **parse output**, not execute input.
 
-Dirty analyze → **no Lower**. Authoring IR (`DomainExpression`, `Effect`) is **parse output**, not Lower input-to-execute.
+**Out (same analyze, or fail):**
 
----
+- Real **lowered Syntax** operation module / trees (every shipped action, policy, subscription, create, transition).
+- Generic Syntax (assignments, `Invoke`, BCL members, Store jobs the tree already names).
+- **No bags in the tree.** Same trees for **Interpreter** and C# print. No twin. No consumer flag.
 
-## 3) Output
-
-**One** Syntax **operation module**.
-
-- Generic trees (ordinary assignments, `Invoke`, BCL members, Store jobs the tree already names).
-- **No bags in the tree.**
-- Same module for **Interpreter** and for C# print. No consumer-specific lowering flag. No twin tree.
-
-Host files are **not** this output. Library **artifact producers** emit those from **surface bags** after the same clean analyze. They **call** the module. They are not a second Lower, and they are not simulate.
+Host files are **not** this output. Producers still emit **call-sites** from **surface bags** — only after **clean** analyze — and **call** those trees. Not a second Lower. Not simulate.
 
 ---
 
-## 4) Fail-closed rules
+## 3) Fail-closed with analyze
 
-Keep these tight:
+One gate. No “analyze green then Lower fails later.”
 
 | If | Then |
 |----|------|
-| Analyze is dirty | **STOP.** No Lower. No host files. No execute invent. |
-| A shipped construct cannot lower to a complete legal tree | **Fail.** Do not ship `Comment`, `null`, or a host-escape as meaning. Shrink the language rather than fake it. |
-| Lower is incomplete (missing body, leftover authoring IR as execute input) | **Fail.** Do not let Interpreter / print / a door “finish” lowering. |
-| A door or producer needs an operation that did not lower, or a bag that was never published | **Fail closed** at that consumer — they do not invent the op. |
-| Interpreter and print disagree | Bug is in **Lower** (one tree). Not Store, MCP, DEI, or a new flag. |
+| Analyze is dirty (including incomplete or illegal lower) | **STOP.** No module. No host files. No execute invent. |
+| A shipped construct cannot lower to a complete legal tree | **Analyze fails.** Do not ship `Comment`, `null`, or a host-escape as meaning. Shrink the language. |
+| Trees missing after a “clean” analyze | That analyze was **not** clean. Fail closed. Do not let Interpreter / print / a door finish lowering. |
+| A door or producer needs an op that did not lower, or a bag that was never published | **Fail closed** at that consumer — they do not invent the op. |
+| Interpreter and print disagree | Bug is in **analysis/lowering** (one tree). Not Store, MCP, DEI, or a new flag. |
 
-Unknown / duplicate `uses` fail at **Load**, before Lower. That gate stays.
-
----
-
-## 5) How Interpreter sim binds that module
-
-**Simulate** = **Interpreter** executes the **real** lowered Syntax tree.
-
-Bind is consumer-side:
-
-- Caller supplies **`This`** / **Store** as the directory jobs the module already names (`Create`, `CreateIn`, `EnsureUnique`, …). Bind is not a DI container inside the VM, and it is not a second meaning path.
-- C# print projects the **same** tree. Generated types, when used, **call** that module.
-- MCP may **ask** Interpreter to run a named op with caller-supplied context. That ask is sim only if it is this Interpreter run.
-
-Not sim: DEI walks, Effect-IR walks, scratch fake execute, producer emit, host `Stay.Create` as if it were the operation.
+Unknown / duplicate `uses` still fail at **Load**.
 
 ---
 
-## 6) What must die
+## 4) How Interpreter sim binds those trees
 
-Honesty, not a delete-tomorrow list. This note does not delete code.
+**Simulate** = **Interpreter** executes the **real** trees analyze produced.
 
-| Die as meaning / as sim | What that means |
-|-------------------------|-----------------|
-| **Execute-time `LowerActionBody` residual** | Nested StageTransition flush / Domain-null standalone (and leftover per-call policy lower) belong **in `session.Lower`**. Execute never lowers. |
-| **`UseThisReference` twin / sibling trees** | One cached module body. Interpreter and print do not keep a runtime-shaped tree beside an emit `this` tree. |
-| **DEI as simulate / proof** | Label: not-sim, not-proof, harness bind at most. **Do not delete DEI from this file.** |
-| **Consumer lowering flags** | Fix Lower once. Do not grow a sibling flag to keep one consumer green. |
-| **Producers-as-sim** | Host call-site delivery only. |
+Bind is consumer-side: caller supplies **`This`** / **Store** for jobs the module already names. Bind is not a second meaning path. C# print projects the **same** trees. MCP may **ask** Interpreter to run a named op — sim only if it is this run.
 
-Does **not** die here: Ontology facts, `.poly`, session/libraries, evolution, fact-publishing analysis, Item 5.
+Not sim: DEI, Effect-IR, scratch fake execute, producer emit, host `Stay.Create` as if it were the operation.
 
 ---
 
-## 7) Open design questions (Scot)
+## 5) What must die
 
-Real choices. Not fake options. Accepting this plan still does **not** admit CURRENT, unpark Item 5, or start eng.
+Honesty, not delete-tomorrow. This note does not delete code.
 
-1. **Residual inventory.** Path names nested StageTransition flush and Domain-null standalone. Is per-call policy lower the rest of the list, or is there more execute-time lower to find before A/B are even proposable as slices?
-2. **One module cache.** Lower once per session revision; Interpreter and print share that cache. Re-Lower on domain/session change — never per invoke. Agree?
-3. **Producers vs Lower order.** Both run only after clean analyze. Should host emit also **fail closed if Lower failed** (no call-site for an op that did not lower), or is the analyze gate enough and doors fail later?
-4. **`This` bind without DEI-as-sim.** Interpreter needs a bound directory. What is the honest bind for product sim (caller-supplied Store/`This` on the module) vs leftover DEI harness smoke — without pretending DEI is the run?
-5. **What “accept this plan” unlocks.** Next talk is slice greenlight, **A then B first** (one real tree). Still one slice at a time. Still Eng WIP = 0 until that greenlight. Item 5 stays PARKED. DEI stays not-deleted. Accepting is **not** CURRENT and **not** a license to mill C–E.
+| Die as product door / meaning / sim | What that means |
+|-------------------------------------|-----------------|
+| **Standalone Lower-after-analyze** | No product door `session.Lower` after a green analyze. Lower lives **in** analyze. |
+| **Execute-time `LowerActionBody` residual** | Nested StageTransition flush / Domain-null standalone / leftover per-call policy lower belong **in analysis**. Execute never lowers. |
+| **`UseThisReference` twin / sibling trees** | One module body from analyze. Interpreter and print share it. |
+| **DEI as simulate / proof** | Not-sim, not-proof. Harness bind at most. **Do not delete DEI from this file.** |
+| **Producers-as-sim** | Host call-site delivery, gated by **clean analyze** (which already includes the trees). |
+| **Consumer lowering flags** | Fix lowering once, inside analyze. |
+
+Does **not** die here: Ontology facts, `.poly`, session/libraries, evolution, fact-publishing analysis, Item 5, PR 73.
+
+---
+
+## 6) Open design questions (Scot)
+
+Real choices. Accepting this plan still does **not** admit CURRENT, unpark Item 5 or PR 73, or start eng.
+
+1. **Pass vs bag.** Is Lower **one analysis pass** that emits/replaces into Syntax trees, or a **concern bag that holds the module** (trees as bag payload, still not bags *in* the Syntax tree)? CORE already has passes, bags, and node replacement — pick one; do not invent a third IR.
+2. **Where the module lives after analyze.** Session field? `AnalysisResult`? Bag on a root node? Replacement of authoring bodies? Decide storage so Interpreter/print **read**, they do not re-lower.
+3. **Producers without a Lower door.** They must still run **only after clean analyze**, emitting call-sites that **call** the trees that analyze already made. How do they find those trees without resurrecting `session.Lower` as a compile step?
+4. **Session Compile naming.** Keep **Session Compile** as the session-shaped compile unit (load + one analyze that includes Lower)? Or say “one analyze” and retire the extra name? Same picture either way — do not grow a second pipeline.
+5. **If `session.Lower` the method stays.** Read-only accessor of analyze output, or delete-as-door later? Not eng now; name honesty only.
+6. **What “accept this revised plan” unlocks.** Next talk is still slice greenlight, **A then B first** (one real tree, no execute-time lower) — **after** accept. Still one slice at a time. Still Eng WIP = 0 until that greenlight. Item 5 PARKED. PR 73 PARKED. DEI not deleted. Accepting is **not** CURRENT.
 
 ---
 
 ## Locks
 
 - **Not CURRENT.** PIPELINE-STATUS stays `(none)`.
-- **Item 5 PARKED.**
+- **Item 5 PARKED.** **PR 73 PARKED.**
 - **No implement / no delete** from this file.
-- **No slice greenlight** until Scot accepts this plan, then still per-slice greenlight.
-- **Product sim = Interpreter on the `session.Lower` tree.**
+- **No slice greenlight** until Scot accepts **this** revised plan, then still per-slice greenlight.
+- **Product sim = Interpreter on the real trees analyze produced.**
 
 ## Related (do not execute from here)
 
 | Doc | Role |
 |-----|------|
-| [`product-pipeline-first-principles-2026-09-20.md`](product-pipeline-first-principles-2026-09-20.md) | Pipeline + sim rule |
+| [`product-pipeline-first-principles-2026-09-20.md`](product-pipeline-first-principles-2026-09-20.md) | Pipeline + sim rule. Stage “3 Lower after 2′” is historical; this file is SoT for the fold-in. |
 | [`domain-modeling-abstraction-path-2026-09-21.md`](domain-modeling-abstraction-path-2026-09-21.md) | Session Compile + slices A–E (unapproved) |
 | `simple-agent-tasks/PIPELINE-STATUS.md` | Sole CURRENT/DONE — leave it |

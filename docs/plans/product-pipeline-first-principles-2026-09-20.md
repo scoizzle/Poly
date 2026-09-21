@@ -4,7 +4,7 @@
 **Status:** Proposal / consultant note — **not CURRENT**. Do not admit a suite. Do not change [`simple-agent-tasks/PIPELINE-STATUS.md`](simple-agent-tasks/PIPELINE-STATUS.md).
 **SHA:** `934b2409` (merge of [PR 71](https://github.com/scoizzle/Poly/pull/71); tip includes PR 68–71 analysis FailFast / snapshot / `HasErrors`)
 **Open PR out of scope:** [PR 72](https://github.com/scoizzle/Poly/pull/72) `refactor/domainmodeling-core-library-seams` — library extract (Temporal out of the core list, registration-order schedule). **Do not block. Do not review. Do not rebase this note onto it.**
-**Parked (locked):** store-vs-lower **Item 5** Occupancy / `BusySections`. Still PARKED. Not a candidate in this note. Do not unpark. Do not mill Hotel occupancy in DEI.
+**Parked (locked):** store-vs-lower **Item 5** Occupancy / `BusySections`. Still PARKED. Not a candidate in this note. Do not unpark. Do not mill Hotel occupancy in DEI. **PR 73** stays PARKED — do not touch, review, or unpark from this file.
 **Audience:** Scot
 **North star:** a domain is a library of legal operations that lowers to one Syntax module. **Simulation = Interpreter executing that real lowered tree** — not DEI, Effect-IR, or any fake runtime. Artifact producers deliver host call-sites; they are not simulate.
 **Hard lines:** [`docs/CORE.md`](../CORE.md) §0 / hard lines · [`docs/decisions/2026-09-04-frozen-core-pipeline.md`](../decisions/2026-09-04-frozen-core-pipeline.md) · [`docs/decisions/2026-09-05-lowered-module-is-domain-meaning.md`](../decisions/2026-09-05-lowered-module-is-domain-meaning.md) · [`docs/decisions/2026-09-03-facts-concerns-bags-store-bind.md`](../decisions/2026-09-03-facts-concerns-bags-store-bind.md) · [`docs/decisions/2026-08-15-domain-library-extensions-mcp-harness.md`](../decisions/2026-08-15-domain-library-extensions-mcp-harness.md) · [`docs/decisions/2026-08-14-domain-libraries.md`](../decisions/2026-08-14-domain-libraries.md) · [`docs/decisions/2026-06-08-vm-as-canonical-semantics.md`](../decisions/2026-06-08-vm-as-canonical-semantics.md)
@@ -60,6 +60,8 @@ Named stages (same picture, from the 2026-09-04 transformation — **executed as
 | **5 Consume** | Bind; do not re-lower | (a) **Interpreter** executes the module = **simulate** (b) print the module (c) **library artifact producers** emit host **call-sites** from **surface bags** — not simulate |
 
 Later stages do not redo earlier ones. Hosts are replaceable. The architecture is AST / Node / Analysis plus that one module. Stage **5a** is the only simulate path. Stage **5c** is not simulate and not a second product pipeline: producers were **registered at Load**, **gated by Analyze**, and emit adapters that call the module.
+
+**Amendment (2026-09-21):** Scot folds Lower **into analysis**. Clean analyze **is** the gate that has real lowered trees, or it fails. There is no product door “analyze green, then `session.Lower`.” The diagram and stage **3 Lower** after **2′** above are **historical sequencing**. SoT for this revision: [`session-lower-plan-2026-09-21.md`](session-lower-plan-2026-09-21.md). Not CURRENT. No eng. Slices unapproved. Item 5 PARKED. PR 73 PARKED.
 
 ---
 
@@ -250,6 +252,7 @@ Variable-precision here: locks are tight (not CURRENT, Item 5 PARKED, Eng WIP = 
 | Implement C# / lower residual / bind EF | **No.** Consult only. |
 | Delete DEI, `Stay.Create`, Runtime, Ontology, Language | **No.** Do not delete from this file. Frozen ADR already says DEI deletion is a non-goal of the module-meaning lock. |
 | Unpark Item 5 | **No.** Occupancy / `BusySections` stays PARKED. |
+| Unpark or mill PR 73 | **No.** PR 73 stays PARKED. Do not touch. |
 | Block or rebase onto PR 72 | **No.** Out of scope. |
 | Treat scratch store, `Stay.Create`, Store job names, HTTP Minimal API, or virtual actors as frozen | **No.** Current consumers. Compose them; do not freeze them; do not grow a sibling path to keep one of them working. |
 | Treat DEI / Effect-IR / scratch walks as product sim | **No.** Debt / harness. Product sim = **Interpreter** on the `session.Lower` tree. This note does not delete DEI. |
@@ -314,6 +317,7 @@ What the prior tip (`2e430348`) understated, and what this amend still leaves th
 | [`ontology-pr51-pipeline-alignment-2026-09-04.md`](ontology-pr51-pipeline-alignment-2026-09-04.md) | Dual-path as cached product — diagnosis, not a suite |
 | [`archive/completed-2026-08-late/domainmodeling-metadata-artifact-catalog-2026-08-15.md`](archive/completed-2026-08-late/domainmodeling-metadata-artifact-catalog-2026-08-15.md) | Who publishes bags / who emits files / library hook honesty |
 | [`domain-modeling-abstraction-path-2026-09-21.md`](domain-modeling-abstraction-path-2026-09-21.md) | Session Compile path-forward (proposal). **Not CURRENT.** Slices unapproved. |
+| [`session-lower-plan-2026-09-21.md`](session-lower-plan-2026-09-21.md) | **SoT** for Lower-as-analysis (revises post-analyze `session.Lower` door). **Not CURRENT.** |
 | [`simple-agent-tasks/PIPELINE-STATUS.md`](simple-agent-tasks/PIPELINE-STATUS.md) | Sole CURRENT/DONE. Leave it. |
 
 ---
@@ -324,6 +328,7 @@ What the prior tip (`2e430348`) understated, and what this amend still leaves th
 - Admitting PIPELINE-STATUS CURRENT (or a second CURRENT line).
 - Admitting Session Compile as CURRENT eng (path-forward is unlocked as a proposal only; slices unapproved).
 - Unparking Occupancy / `BusySections`.
+- Unparking or touching PR 73.
 - Treating scratch store, `Stay.Create`, or Store job names as frozen.
 - Treating DEI / Effect-IR as product simulation (label as debt; do not delete DEI from this file).
 - Rewriting Hotel occupancy in DEI.

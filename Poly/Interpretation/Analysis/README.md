@@ -90,7 +90,7 @@ Add an extension method on `AnalyzerBuilder`:
 public static class MyPassExtensions {
     extension(AnalyzerBuilder builder) {
         public AnalyzerBuilder UseMyPass() {
-            builder.AddPass(state => new MyPass());
+            builder.AddAnalyzer(new MyPass());
             return builder;
         }
     }

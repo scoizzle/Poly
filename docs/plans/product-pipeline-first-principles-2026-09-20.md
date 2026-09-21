@@ -187,9 +187,11 @@ So:
 - Nothing in the stack bottoms on a sibling library, a host, or a one-off. Core is the floor.
 - Do not invent a mesh: no “this library grabbed that one because the sample did,” no consumer taking a hard dependency on an inner library the composition already used.
 
+**Clarifying example (Scot):** `http` and `grpc` may both depend on a shared **transport** library. That one library owns fact-finding and aggregation. The door libraries reuse it — they do not each grow their own copy, and they do not take each other as siblings. A domain that `uses http` still depends on **core**, not on transport as a named extra. Same stack: compose downward, no mesh.
+
 This is the same closed-spell / session-load story as §2–§3: ids are declared, the session loads, unknown or duplicate ids fail closed. Composition does not punch a hole in that.
 
-**Still thin here (do not mill from this note):** cycles, DAG vs layers, nested `uses` in a `.poly` file, and what exactly fails closed if a library-uses-library graph is illegal. Named so the gap is honest.
+**Still thin here (do not mill from this note):** cycles, DAG vs layers, nested `uses` in a `.poly` file, and what exactly fails closed if a library-uses-library graph is illegal. The example is the picture, not a spec of those. Named so the gap is honest.
 
 ---
 
@@ -225,7 +227,7 @@ This note does **not** review, merge-block, rebase, or rewrite files it touches.
 | Block or rebase onto PR 72 | **No.** Out of scope. |
 | Treat scratch store, `Stay.Create`, Store job names, HTTP Minimal API, or virtual actors as frozen | **No.** Current consumers. Compose them; do not freeze them; do not grow a sibling path to keep one of them working. |
 | Grow a second pipeline so a consumer stays green | **Forbidden.** Dual-path runtime vs export is a bug, not a host-bind footnote. Artifact producers are not that second pipeline. |
-| Mill library cycles / DAG / layers / nested `uses` | **No.** §9 states the stack. Those details stay still-thin. |
+| Mill library cycles / DAG / layers / nested `uses` | **No.** §9 states the stack and the http/grpc/transport picture. Those details stay still-thin. |
 
 ---
 
@@ -248,7 +250,7 @@ That is the pipeline that matches frozen core. Everything else is a consumer.
 
 ## Missed / still thin
 
-What the prior tip (`4d92db40`) understated, and what this amend still leaves thin on purpose.
+What the prior tip (`2e430348`) understated, and what this amend still leaves thin on purpose.
 
 ### Missed before (now stated)
 
@@ -258,6 +260,7 @@ What the prior tip (`4d92db40`) understated, and what this amend still leaves th
 | **Session loads; Domain declares** | Frozen in library ADRs / CORE §3.6; the note only implied it via the Load row. | Principle **§3** |
 | **Analyze gates producers** | Fail-closed on dirty analyze was soft (Check stage for the *module*). Host artifacts needed the same gate called out. | Diagram, stage **2′**, §2 / §5 |
 | **Libraries can use other libraries** | Load/`uses` said a domain names libraries and the session loads them. It never said a **library may itself use other libraries**, and that dependents of that composition only depend on **core** (stack bottoms at core; no freestyle deps). Easy to misread as a free-for-all of library-to-library wiring. | Principle **§9** |
+| **http / grpc on shared transport** | §9 stated A-uses-B in the abstract. Easy to picture each door inventing its own fact-finding, or http↔grpc as siblings. Scot: `http` and `grpc` may both sit on one **transport** library that owns fact-finding/aggregation; the door libs reuse it. Dependents of the door still depend on core. | Principle **§9** example |
 
 ### Still thin / deferred (honest, not milled here)
 
@@ -265,7 +268,7 @@ What the prior tip (`4d92db40`) understated, and what this amend still leaves th
 |-------|---------------------|
 | **Path-forward** (salvage / cut / reset DomainModeling) | **PARKED.** Not chosen. |
 | **Item 5** Occupancy / `BusySections` | **PARKED.** |
-| **Cycles / DAG / layers / nested `uses` / fail-closed on those** | **Still thin.** §9 states the composition rule in English. It does not specify whether library-uses-library is a DAG, how layers work, whether nested `uses` is allowed in a `.poly` file, or what fails closed on a cycle or illegal graph. Do not mill it here. |
+| **Cycles / DAG / layers / nested `uses` / fail-closed on those** | **Still thin.** §9 states the composition rule in English and the http/grpc/transport picture. It does not specify whether library-uses-library is a DAG, how layers work, whether nested `uses` is allowed in a `.poly` file, or what fails closed on a cycle or illegal graph. The example is not that spec. Do not mill it here. |
 | **PR 72** library extract | Independent; not reviewed here. |
 | **Half-state of emit** | Frozen story is “producers after clean analyze.” Reality still mixes core entity emit, bag-gated DbContext, and library/host contributors (and historical compiler-mode host registration). Naming the principle does not finish unifying emit into one producer loop. Inventory: [`domainmodeling-metadata-artifact-catalog-2026-08-15.md`](archive/completed-2026-08-late/domainmodeling-metadata-artifact-catalog-2026-08-15.md). |
 | **Residual dual-path debt** (runtime vs C# create/`Stay.Create`, execute-time lower leftovers) | Named as debt under §1 / §5 / §7. Not a mill list. |
@@ -296,5 +299,5 @@ What the prior tip (`4d92db40`) understated, and what this amend still leaves th
 - Treating scratch store, `Stay.Create`, or Store job names as frozen.
 - Rewriting Hotel occupancy in DEI.
 - Inventing a second product pipeline for host files (artifact producers are Load → gate → Consume on the same analyze).
-- Specifying cycles, DAG, layers, nested `uses`, or fail-closed rules for library-uses-library (named still-thin under §9).
+- Specifying cycles, DAG, layers, nested `uses`, or fail-closed rules for library-uses-library (named still-thin under §9; the http/grpc/transport example is the picture, not that spec).
 - A suite README for this note.

@@ -61,7 +61,7 @@ Named stages (same picture, from the 2026-09-04 transformation — **executed as
 
 Later stages do not redo earlier ones. Hosts are replaceable. The architecture is AST / Node / Analysis plus that one module. Stage **5a** is the only simulate path. Stage **5c** is not simulate and not a second product pipeline: producers were **registered at Load**, **gated by Analyze**, and emit adapters that call the module.
 
-**Amendment (2026-09-21):** Scot folds Lower **into analysis**. Clean analyze **is** the gate that has real lowered trees, or it fails. There is no product door “analyze green, then `session.Lower`.” The diagram and stage **3 Lower** after **2′** above are **historical sequencing**. SoT for this revision: [`session-lower-plan-2026-09-21.md`](session-lower-plan-2026-09-21.md). Not CURRENT. No eng. Slices unapproved. Item 5 PARKED. PR 73 PARKED.
+**Amendment (2026-09-21, corrected):** An explore folded Lower **into** analysis. **Scot retracted that.** Product SoT is again: clean analyze (fail-closed) → **then** `session.Lower` → one module. The diagram and stage **3 Lower** after **2′** match that SoT. Lower-inside-analysis is **not** SoT. Plan: [`session-lower-plan-2026-09-21.md`](session-lower-plan-2026-09-21.md). Not CURRENT. No eng. Slices unapproved. Item 5 PARKED. PR 73 PARKED.
 
 ---
 
@@ -317,7 +317,7 @@ What the prior tip (`2e430348`) understated, and what this amend still leaves th
 | [`ontology-pr51-pipeline-alignment-2026-09-04.md`](ontology-pr51-pipeline-alignment-2026-09-04.md) | Dual-path as cached product — diagnosis, not a suite |
 | [`archive/completed-2026-08-late/domainmodeling-metadata-artifact-catalog-2026-08-15.md`](archive/completed-2026-08-late/domainmodeling-metadata-artifact-catalog-2026-08-15.md) | Who publishes bags / who emits files / library hook honesty |
 | [`domain-modeling-abstraction-path-2026-09-21.md`](domain-modeling-abstraction-path-2026-09-21.md) | Session Compile path-forward (proposal). **Not CURRENT.** Slices unapproved. |
-| [`session-lower-plan-2026-09-21.md`](session-lower-plan-2026-09-21.md) | **SoT** for Lower-as-analysis (revises post-analyze `session.Lower` door). **Not CURRENT.** |
+| [`session-lower-plan-2026-09-21.md`](session-lower-plan-2026-09-21.md) | **SoT** for post-analyze Lower (Lower-inside-analysis retracted). **Not CURRENT.** |
 | [`simple-agent-tasks/PIPELINE-STATUS.md`](simple-agent-tasks/PIPELINE-STATUS.md) | Sole CURRENT/DONE. Leave it. |
 
 ---

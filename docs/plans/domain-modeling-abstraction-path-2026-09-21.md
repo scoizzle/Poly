@@ -2,7 +2,7 @@
 
 **Date:** 2026-09-21
 **Status:** Proposal / consultant note — **not CURRENT**. Do not admit a suite. Do not change `simple-agent-tasks/PIPELINE-STATUS.md`. Eng WIP stays **0** until Scot greenlights a slice.
-**Grounding:** [`product-pipeline-first-principles-2026-09-20.md`](product-pipeline-first-principles-2026-09-20.md) @ `bc176c49` · [`domain-modeling-salvage-verdict-2026-09-18.md`](domain-modeling-salvage-verdict-2026-09-18.md) (middle path = **refactor behind abstraction**, not keep/kill as mill queue)
+**Grounding:** [`product-pipeline-first-principles-2026-09-20.md`](product-pipeline-first-principles-2026-09-20.md) on this branch (brought from `bc176c49`; talk alignment is the same commit — principles SHA moved) · [`domain-modeling-salvage-verdict-2026-09-18.md`](domain-modeling-salvage-verdict-2026-09-18.md) (middle path = **refactor behind abstraction**, not keep/kill as mill queue)
 **Parked (locked):** store-vs-lower **Item 5** Occupancy / `BusySections`. Still PARKED. Do not unpark.
 **Audience:** Scot
 
@@ -17,6 +17,28 @@ This note does not implement C#, does not delete code, and does not start a slic
 **Name: Session Compile**
 
 A domain file states **facts** and names libraries with `uses` ids. **DomainSession** is the only compile unit: it loads those libraries (analyzers, type maps, artifact producers), runs **one** analyze (bags on nodes), and **fail-closes** if analyze is dirty. After a clean analyze it does two things on that same result: **`session.Lower`** emits **one** operation module (generic Syntax; the tree has no bags), and library **artifact producers** emit host files from **surface bags** that **call** that module. Store, DEI, `Stay.Create`, MCP, and C# print are **consumers** of that module (or of surface bags for host bind). None of them are the domain, and none invent a second meaning path.
+
+---
+
+## 1a) Talk alignment (Alexandrescu + Coyle)
+
+Same two talks as the principles note. They name **Session Compile**. They do **not** greenlight slices A–E.
+
+**Andrei Alexandrescu**, ACCU ([video](https://youtu.be/-RWdevA0gWI)): abstraction is the centerpiece. It **compresses context** for humans and AI. The **high-level structure must persist** through a “just fix.” Specs can be **variable-precision**. Avoid the **reverse-centaur**: the human as rubber-stamp for opaque agent output.
+
+**Frank Coyle** ([video](https://www.youtube.com/watch?v=Sir59K8ZDPU)): **agents need ontologies** — formal shared conceptualization, inference, constraints. Neural agents + **symbolic guardrails**. **Validate before side effects.** **Pydantic-at-door / ontology-at-ledger.**
+
+| Talk idea | Session Compile (this path) |
+|-----------|-----------------------------|
+| The one picture (**context compression**) | Session Compile: facts → bags → `session.Lower` (**one module**) + library **artifact producers** |
+| **High-level structure that must persist** | That compile unit. Collapse table: not dual trees, not DEI-as-proof, not ad-hoc host pipelines |
+| **Reverse-centaur** | Do not “prove” meaning via harness / MCP / DEI while the module is wrong |
+| **Ontology-at-ledger** | Domain facts + bags + lowered module |
+| **Pydantic-at-door** | Surface bags / host producers / MCP tool shapes — validate at the door; meaning stays in the ledger |
+| **Validate before side effects** | **Fail-closed analyze**: dirty → STOP (no Lower, no host files, no execute invent) |
+| Domain is not the consumers | Library of legal operations; Store / DEI / MCP / print are not meaning |
+
+Slices below stay **unapproved**. Scot greenlight required. **Not CURRENT.** Item 5 PARKED. Eng WIP = 0.
 
 ---
 

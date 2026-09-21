@@ -104,7 +104,7 @@ Doors still fail closed if an operation did not lower. A producer that needs a b
 
 A `.poly` file is facts. It lists `uses temporal`, `uses sqlite`, `uses http`. It does not load assemblies.
 
-The **session** is the unit that loads what those ids name: meaning / folds, type maps, analyzers, artifact producers. Parse, analyze, lower, print, and artifact emit go through that session — not `Domain.ResolveHost()`, not a third assembler, not Guid-named fake libraries.
+The **session** is the unit that loads what those ids name: meaning / folds, type maps, analyzers, artifact producers. Parse, analyze, lower, print, and artifact emit go through that session — not `Domain.ResolveHost()`, not a third assembler, not Guid-named fake libraries. A library may itself use other libraries; dependents of that composition still only depend on core (§9).
 
 - **Closed spell.** Libraries do not add dialects or new token kinds.
 - **Fail closed** on unknown or duplicate ids.
@@ -176,6 +176,21 @@ Simulate must run the **lowered program** with a bound Store. The agent names th
 
 Do not grow MCP theater (new simulate tools, more instance-store semantics) as the place domain meaning “actually happens.”
 
+### 9. Libraries can use other libraries; the stack bottoms at core
+
+**Plain English:** a library may use other libraries. That is how you stack them (meaning, persistence, a host door, and so on). Anyone who depends on that stack does **not** also take those inner libraries as their own dependencies. They depend on **core**. The stack always ends at core. There is no freestyle web of library-to-library deps: you compose downward into core, not sideways into whatever is convenient.
+
+So:
+
+- Library A may use library B.
+- A domain that `uses` A — or a later library that sits on A — depends on **core**, not on B as a named extra.
+- Nothing in the stack bottoms on a sibling library, a host, or a one-off. Core is the floor.
+- Do not invent a mesh: no “this library grabbed that one because the sample did,” no consumer taking a hard dependency on an inner library the composition already used.
+
+This is the same closed-spell / session-load story as §2–§3: ids are declared, the session loads, unknown or duplicate ids fail closed. Composition does not punch a hole in that.
+
+**Still thin here (do not mill from this note):** cycles, DAG vs layers, nested `uses` in a `.poly` file, and what exactly fails closed if a library-uses-library graph is illegal. Named so the gap is honest.
+
 ---
 
 ## Item 5 — PARKED
@@ -210,6 +225,7 @@ This note does **not** review, merge-block, rebase, or rewrite files it touches.
 | Block or rebase onto PR 72 | **No.** Out of scope. |
 | Treat scratch store, `Stay.Create`, Store job names, HTTP Minimal API, or virtual actors as frozen | **No.** Current consumers. Compose them; do not freeze them; do not grow a sibling path to keep one of them working. |
 | Grow a second pipeline so a consumer stays green | **Forbidden.** Dual-path runtime vs export is a bug, not a host-bind footnote. Artifact producers are not that second pipeline. |
+| Mill library cycles / DAG / layers / nested `uses` | **No.** §9 states the stack. Those details stay still-thin. |
 
 ---
 
@@ -224,6 +240,7 @@ A reader can say, without flags:
 5. Check that module.
 6. Hand the **same** module to simulate **or** C# print.
 7. Ask library **artifact producers** (registered at Load) to emit host files from surface bags — files that **call** the module, not rewrite it.
+8. Libraries may use other libraries. Dependents of that stack depend on **core**. The stack bottoms at core. No freestyle deps.
 
 That is the pipeline that matches frozen core. Everything else is a consumer.
 
@@ -231,7 +248,7 @@ That is the pipeline that matches frozen core. Everything else is a consumer.
 
 ## Missed / still thin
 
-What the prior tip (`3f33807f`) understated, and what this amend still leaves thin on purpose.
+What the prior tip (`4d92db40`) understated, and what this amend still leaves thin on purpose.
 
 ### Missed before (now stated)
 
@@ -240,6 +257,7 @@ What the prior tip (`3f33807f`) understated, and what this amend still leaves th
 | **Library artifact producers** | Load mentioned “artifact contributors,” and Consume said “host files from surface bags,” but never said in plain English that **each library can contribute a suite of producers that power the whole downstream host story — only after analyze is clean.** Easy to misread host emit as a separate ad-hoc pipeline or a compiler-mode invention. | Principle **§2**; diagram + stage **2′ Gate** / **5c** |
 | **Session loads; Domain declares** | Frozen in library ADRs / CORE §3.6; the note only implied it via the Load row. | Principle **§3** |
 | **Analyze gates producers** | Fail-closed on dirty analyze was soft (Check stage for the *module*). Host artifacts needed the same gate called out. | Diagram, stage **2′**, §2 / §5 |
+| **Libraries can use other libraries** | Load/`uses` said a domain names libraries and the session loads them. It never said a **library may itself use other libraries**, and that dependents of that composition only depend on **core** (stack bottoms at core; no freestyle deps). Easy to misread as a free-for-all of library-to-library wiring. | Principle **§9** |
 
 ### Still thin / deferred (honest, not milled here)
 
@@ -247,6 +265,7 @@ What the prior tip (`3f33807f`) understated, and what this amend still leaves th
 |-------|---------------------|
 | **Path-forward** (salvage / cut / reset DomainModeling) | **PARKED.** Not chosen. |
 | **Item 5** Occupancy / `BusySections` | **PARKED.** |
+| **Cycles / DAG / layers / nested `uses` / fail-closed on those** | **Still thin.** §9 states the composition rule in English. It does not specify whether library-uses-library is a DAG, how layers work, whether nested `uses` is allowed in a `.poly` file, or what fails closed on a cycle or illegal graph. Do not mill it here. |
 | **PR 72** library extract | Independent; not reviewed here. |
 | **Half-state of emit** | Frozen story is “producers after clean analyze.” Reality still mixes core entity emit, bag-gated DbContext, and library/host contributors (and historical compiler-mode host registration). Naming the principle does not finish unifying emit into one producer loop. Inventory: [`domainmodeling-metadata-artifact-catalog-2026-08-15.md`](archive/completed-2026-08-late/domainmodeling-metadata-artifact-catalog-2026-08-15.md). |
 | **Residual dual-path debt** (runtime vs C# create/`Stay.Create`, execute-time lower leftovers) | Named as debt under §1 / §5 / §7. Not a mill list. |
@@ -277,4 +296,5 @@ What the prior tip (`3f33807f`) understated, and what this amend still leaves th
 - Treating scratch store, `Stay.Create`, or Store job names as frozen.
 - Rewriting Hotel occupancy in DEI.
 - Inventing a second product pipeline for host files (artifact producers are Load → gate → Consume on the same analyze).
+- Specifying cycles, DAG, layers, nested `uses`, or fail-closed rules for library-uses-library (named still-thin under §9).
 - A suite README for this note.

@@ -7,7 +7,7 @@
 **Parked (locked):** store-vs-lower **Item 5** Occupancy / `BusySections`. Still PARKED. Not a candidate in this note. Do not unpark. Do not mill Hotel occupancy in DEI.
 **Audience:** Scot
 **North star:** a domain is a library of legal operations that lowers to one Syntax module; the VM is how those programs mean what they mean.
-**Hard lines:** [`docs/CORE.md`](../CORE.md) §0 / hard lines · [`docs/decisions/2026-09-04-frozen-core-pipeline.md`](../decisions/2026-09-04-frozen-core-pipeline.md) · [`docs/decisions/2026-09-05-lowered-module-is-domain-meaning.md`](../decisions/2026-09-05-lowered-module-is-domain-meaning.md) · [`docs/decisions/2026-09-03-facts-concerns-bags-store-bind.md`](../decisions/2026-09-03-facts-concerns-bags-store-bind.md) · [`docs/decisions/2026-08-15-domain-library-extensions-mcp-harness.md`](../decisions/2026-08-15-domain-library-extensions-mcp-harness.md) · [`docs/decisions/2026-06-08-vm-as-canonical-semantics.md`](../decisions/2026-06-08-vm-as-canonical-semantics.md)
+**Hard lines:** [`docs/CORE.md`](../CORE.md) §0 / hard lines · [`docs/decisions/2026-09-04-frozen-core-pipeline.md`](../decisions/2026-09-04-frozen-core-pipeline.md) · [`docs/decisions/2026-09-05-lowered-module-is-domain-meaning.md`](../decisions/2026-09-05-lowered-module-is-domain-meaning.md) · [`docs/decisions/2026-09-03-facts-concerns-bags-store-bind.md`](../decisions/2026-09-03-facts-concerns-bags-store-bind.md) · [`docs/decisions/2026-08-15-domain-library-extensions-mcp-harness.md`](../decisions/2026-08-15-domain-library-extensions-mcp-harness.md) · [`docs/decisions/2026-08-14-domain-libraries.md`](../decisions/2026-08-14-domain-libraries.md) · [`docs/decisions/2026-06-08-vm-as-canonical-semantics.md`](../decisions/2026-06-08-vm-as-canonical-semantics.md)
 
 This note does not implement C#, does not delete code, does not change PIPELINE-STATUS, and is not a CURRENT suite. It does **not** choose salvage / cut / reset of DomainModeling.
 
@@ -23,7 +23,7 @@ It is not a keep/kill ranking. It is not a suite. It does not pick how to mill D
 
 ## The product in one paragraph
 
-You write a **domain**: the types, stages, actions, policies, and relationships that say what is legal. Poly does not turn that into a `Main` or a process. It turns it into a **library of named operations**. Each shipped operation becomes a complete program in the Syntax AST. Analysis hangs derived facts (bags) on the authoring nodes. Lowering **reads** those bags and emits **one** operation module — trees with no bag types in them. The **VM** is the canonical executor of those trees. C# print is a projection of the same trees. Scratch Store and `DomainEntityInstance` bind a directory so you can simulate. MCP is how an agent authors and pokes a named operation with caller-supplied context. None of those consumers are the domain.
+You write a **domain**: the types, stages, actions, policies, and relationships that say what is legal. Poly does not turn that into a `Main` or a process. It turns it into a **library of named operations**. Each shipped operation becomes a complete program in the Syntax AST. Analysis hangs derived facts (bags) on the authoring nodes. **Only after analysis is clean (fail-closed)** do two things happen on that same analyze: (1) Lowering **reads** those bags and emits **one** operation module — trees with no bag types in them; (2) library-contributed **artifact producers** turn surface bags into host files (persistence / HTTP / later CLI) that **call** that module. The **VM** is the canonical executor of those trees. C# print is a projection of the same trees. Scratch Store and `DomainEntityInstance` bind a directory so you can simulate. MCP is how an agent authors and pokes a named operation with caller-supplied context. None of those consumers are the domain.
 
 If simulate and print disagree, the bug is in **lowering** (one tree), not in the store, the MCP walk, or a new consumer flag.
 
@@ -33,10 +33,14 @@ If simulate and print disagree, the bug is in **lowering** (one tree), not in th
 
 ```text
 Domain (facts + uses ids)
-  → DomainSession (libraries the domain named)
+  → DomainSession (libraries the domain named:
+       analyzers + type maps + artifact producers)
   → session.Analyze  → bags on nodes, replacements (tree stays immutable)
-  → session.Lower    → one operation module (generic Syntax; tree has no bags)
-                     and surface bags → host artifacts (persistence / HTTP / later CLI)
+                     → dirty analyze? STOP (fail closed) — no lower, no host files
+  → AFTER analyze is proven successful:
+       session.Lower              → one operation module (generic Syntax; tree has no bags)
+       library artifact producers → host artifacts from surface bags
+                                    (persistence / HTTP / later CLI) — same catalog, not a second pipeline
   → consumers bind: execute (VM) | print (C#) | doors (routes that call the module)
 MCP: harness over cataloged operations + session instances — not a product door
 ```
@@ -46,13 +50,14 @@ Named stages (same picture, from the 2026-09-04 transformation — **executed as
 | Stage | In English | Product |
 |-------|------------|---------|
 | **0 Parse** | Read `.poly` into facts | `Domain` |
-| **1 Load** | Honor `uses` ids | analyzers, maps, artifact contributors on the session |
+| **1 Load** | Honor `uses` ids | analyzers, maps, **artifact producers** on the session |
 | **2 Analyze** | Derive views; do not rebuild catalogs later | concern **bags** on nodes |
+| **2′ Gate** | Analysis must be clean | fail closed — producers and Lower do not run on a dirty result |
 | **3 Lower** | Compile each shipped operation | **one** operation module |
 | **4 Check** | Analysis of that module, fail closed | Interpretation `AnalysisResult` |
-| **5 Consume** | Bind; do not re-lower | (a) VM execute (b) print the module (c) host files from **surface bags** |
+| **5 Consume** | Bind; do not re-lower | (a) VM execute (b) print the module (c) **library artifact producers** emit host files from **surface bags** |
 
-Later stages do not redo earlier ones. Hosts are replaceable. The architecture is AST / Node / Analysis plus that one module.
+Later stages do not redo earlier ones. Hosts are replaceable. The architecture is AST / Node / Analysis plus that one module. Stage **5c** is not a second product pipeline: producers were **registered at Load**, **gated by Analyze**, and emit adapters that call the module.
 
 ---
 
@@ -78,18 +83,46 @@ Two products from one analyze, still: the operation module, and host artifacts. 
 
 When execute and emit disagree, **fix lowering**. Do not add a consumer-specific lowering flag. `LowerStageTransitions` is gone; do not grow a sibling (`UseThisReference` as a second module is that same mistake, cached).
 
-### 2. Legal operations, not a process
+### 2. Libraries contribute artifact producers — after analyze succeeds
+
+**Plain English:** each library you `uses` can bring a **suite of artifact producers**. Those producers are how the rest of the system gets host-facing files once analysis has proven the domain is clean. They are not a side pipeline you bolt on later, and they are not “whatever the compiler mode invents.”
+
+How it sits in the frozen picture:
+
+| When | What happens |
+|------|----------------|
+| **Load** | `Domain` only **declares** `uses` ids. The **session** loads those libraries (`IDomainLibrary.Register`). A library may register analyzers, type maps, **and** artifact producers (`IArtifactContributor` on the session’s artifact list). Spell stays closed. Unknown / duplicate ids fail closed. |
+| **Analyze** | Bags land on nodes. Surfaces (`uses sqlite`, `uses http`) select which concern bags exist. |
+| **Gate** | If analysis is dirty, **stop**. No Lower. No host files. Fail closed. |
+| **After clean analyze** | (1) Lower → one operation module. (2) Ask the session’s artifact producers → host artifacts from **surface bags** (DbContext, Minimal API / `.http`, later CLI, …). Producers map the **same catalog** onto a medium. They do not invent operations and do not re-lower. |
+
+So: Load **registers** producers; Analyze **proves** the domain; producers **power** downstream host artifacts only after that gate. That is the same frozen “two products from one analyze” rule — module **and** host files — not a second ad-hoc compile path.
+
+Doors still fail closed if an operation did not lower. A producer that needs a bag that was never published fails closed. Core seed does not emit `Program.cs`; a host door appears because a library was loaded and its producers ran after a clean analyze.
+
+### 3. Session loads libraries; Domain only declares ids
+
+A `.poly` file is facts. It lists `uses temporal`, `uses sqlite`, `uses http`. It does not load assemblies.
+
+The **session** is the unit that loads what those ids name: meaning / folds, type maps, analyzers, artifact producers. Parse, analyze, lower, print, and artifact emit go through that session — not `Domain.ResolveHost()`, not a third assembler, not Guid-named fake libraries.
+
+- **Closed spell.** Libraries do not add dialects or new token kinds.
+- **Fail closed** on unknown or duplicate ids.
+- **Another domain** is `ImportedContract` (bind door), not an extension id.
+- CLI flags **seed ids** (`--dbms sqlite` → `uses sqlite`). They do not bypass the catalog or imply HTTP.
+
+### 4. Legal operations, not a process
 
 A domain is business logic: entities, stages, actions, policies, subscriptions. That is a **library of legal operations**, not an app with a known `Main`.
 
 - **Legal:** what the domain forbids is in the operation tree (guards), not only in a later factory the export might skip.
 - **No required entry point.** Capability / catalog is the menu. Core seed does not emit `Program.cs`.
-- **Doors are opt-in.** REST appears if `uses http` is loaded. CLI flags seed ids; they do not invent a host.
+- **Doors are opt-in.** REST appears if `uses http` is loaded (and its producers ran after clean analyze). CLI flags seed ids; they do not invent a host.
 - A door **maps** already-lowered operations onto routes (or equivalent). If the operation did not lower, the door fails closed. It does not complete missing lowering in strings.
 
 Interpretation runs **named operations** (and known algorithms on the same AST → VM spine). It is not “run the domain.”
 
-### 3. Shipped ⊆ AST
+### 5. Shipped ⊆ AST; analyze is required for meaning
 
 A construct ships only if it lowers to a **complete, legal, generic** Syntax tree and program analysis of that tree is clean.
 
@@ -97,10 +130,11 @@ A construct ships only if it lowers to a **complete, legal, generic** Syntax tre
 - **Generic:** no domain VM opcodes. Stage, notify, invoke, create, unique, clocks are ordinary Syntax (assignments, `Invoke`, BCL members, Store jobs on the tree).
 - **Fail closed** if it cannot lower. Gaps stay in `docs/plans/`, not in the parser or the DSL guide.
 - **Shrink the language** if the next construct cannot lower. Do not ship a keyword whose implementation is a harness escape.
+- **Analysis is non-optional** for downstream semantics (lowering decisions, runtime semantic dispatch, MCP semantic inspection, host artifact production). Missing `AnalysisResult` / required bags → fail closed. That is the same gate that keeps artifact producers from running on a dirty domain.
 
 Authoring IR (`DomainExpression`, `Effect`) can remain **parse output**. It must not be **execution input**. Residual execute-time `LowerActionBody` (nested transition flush, Domain-null standalone) and per-call policy lower are **debt** — they belong in `session.Lower`.
 
-### 4. VM is canonical
+### 6. VM is canonical
 
 The VM is the ground truth for what a Syntax program does. C# print is a projection. LINQ is a same-tree checker, not a second language. There is no product-path primitive IR beside the AST.
 
@@ -114,7 +148,7 @@ A construct “works” when:
 
 Green compile of generated C# is not execute proof. Green DEI is not T2.
 
-### 5. Store / DEI are consumers, not proof
+### 7. Store / DEI are consumers, not proof
 
 Scratch `DomainInstanceStore` and `DomainEntityInstance` (dictionary `This` + Store) are the **current** simulate bind. C# `Stay.Create` / `CreateNav` are the **current** host bind of Create inside generated factories. Store job names on `This` are how that dictionary calls the directory.
 
@@ -132,7 +166,7 @@ University / CRM / Hotel DEI dogfood stays valid **harness smoke**. Label it tha
 
 Store **hosts state**. It implements directory jobs the module already names. It does not replace ontology → operation-tree. It does not own occupancy, require, sequential Failure, or policy bodies.
 
-### 6. MCP is the harness
+### 8. MCP is the harness
 
 Poly.MCP is how agents **use Poly** in a conversation. It holds a `DomainSession` + revision + scratch store. It authors (`apply_dsl` / evolve), inspects (catalog, diagnostics), and **simulates** a named policy or action on a store instance (`create_instance` then `evaluate_policy(instanceId)` / `invoke_action`).
 
@@ -168,14 +202,14 @@ This note does **not** review, merge-block, rebase, or rewrite files it touches.
 
 | Temptation | This note |
 |------------|-----------|
-| **Salvage / cut / reset** DomainModeling | **Does not choose.** First principles of the pipeline, not a keep/kill of the front-end. Write a separate note if that call is needed. |
+| **Salvage / cut / reset** DomainModeling | **Does not choose.** First principles of the pipeline, not a keep/kill of the front-end. Write a separate note if that call is needed. Path-forward stays **PARKED**. |
 | Admit PIPELINE-STATUS **CURRENT** | **No.** CURRENT stays `(none)`. This file is not a suite. |
 | Implement C# / lower residual / bind EF | **No.** Consult only. |
 | Delete DEI, `Stay.Create`, Runtime, Ontology, Language | **No.** Do not delete from this file. Frozen ADR already says DEI deletion is a non-goal of the module-meaning lock. |
 | Unpark Item 5 | **No.** Occupancy / `BusySections` stays PARKED. |
 | Block or rebase onto PR 72 | **No.** Out of scope. |
 | Treat scratch store, `Stay.Create`, Store job names, HTTP Minimal API, or virtual actors as frozen | **No.** Current consumers. Compose them; do not freeze them; do not grow a sibling path to keep one of them working. |
-| Grow a second pipeline so a consumer stays green | **Forbidden.** Dual-path runtime vs export is a bug, not a host-bind footnote. |
+| Grow a second pipeline so a consumer stays green | **Forbidden.** Dual-path runtime vs export is a bug, not a host-bind footnote. Artifact producers are not that second pipeline. |
 
 ---
 
@@ -183,13 +217,42 @@ This note does **not** review, merge-block, rebase, or rewrite files it touches.
 
 A reader can say, without flags:
 
-1. Analyze once.
-2. Lower once to a module (`session.Lower`).
-3. Check that module.
-4. Hand the **same** module to simulate **or** C# print.
-5. Hand surface bags to host files that **call** the module, not rewrite it.
+1. Load the libraries the domain named (`uses`).
+2. Analyze once.
+3. If analyze is dirty → stop (fail closed). No module. No host files.
+4. Lower once to a module (`session.Lower`).
+5. Check that module.
+6. Hand the **same** module to simulate **or** C# print.
+7. Ask library **artifact producers** (registered at Load) to emit host files from surface bags — files that **call** the module, not rewrite it.
 
 That is the pipeline that matches frozen core. Everything else is a consumer.
+
+---
+
+## Missed / still thin
+
+What the prior tip (`3f33807f`) understated, and what this amend still leaves thin on purpose.
+
+### Missed before (now stated)
+
+| Gap | Why it mattered | Where it lives now |
+|-----|-----------------|--------------------|
+| **Library artifact producers** | Load mentioned “artifact contributors,” and Consume said “host files from surface bags,” but never said in plain English that **each library can contribute a suite of producers that power the whole downstream host story — only after analyze is clean.** Easy to misread host emit as a separate ad-hoc pipeline or a compiler-mode invention. | Principle **§2**; diagram + stage **2′ Gate** / **5c** |
+| **Session loads; Domain declares** | Frozen in library ADRs / CORE §3.6; the note only implied it via the Load row. | Principle **§3** |
+| **Analyze gates producers** | Fail-closed on dirty analyze was soft (Check stage for the *module*). Host artifacts needed the same gate called out. | Diagram, stage **2′**, §2 / §5 |
+
+### Still thin / deferred (honest, not milled here)
+
+| Topic | Status in this note |
+|-------|---------------------|
+| **Path-forward** (salvage / cut / reset DomainModeling) | **PARKED.** Not chosen. |
+| **Item 5** Occupancy / `BusySections` | **PARKED.** |
+| **PR 72** library extract | Independent; not reviewed here. |
+| **Half-state of emit** | Frozen story is “producers after clean analyze.” Reality still mixes core entity emit, bag-gated DbContext, and library/host contributors (and historical compiler-mode host registration). Naming the principle does not finish unifying emit into one producer loop. Inventory: [`domainmodeling-metadata-artifact-catalog-2026-08-15.md`](archive/completed-2026-08-late/domainmodeling-metadata-artifact-catalog-2026-08-15.md). |
+| **Residual dual-path debt** (runtime vs C# create/`Stay.Create`, execute-time lower leftovers) | Named as debt under §1 / §5 / §7. Not a mill list. |
+| **ImportedContract / bind** vs `uses` | Mentioned once under §3. Not expanded. |
+| **DomainEvolution / immutability** | CORE hard line; not restated as a long principle here. |
+| **Which libraries ship which producers today** | Principle is the seam. Inventory of who actually registers files stays in the catalog note / PR 72’s world — not re-litigated here. |
 
 ---
 
@@ -200,6 +263,7 @@ That is the pipeline that matches frozen core. Everything else is a consumer.
 | [`docs/CORE.md`](../CORE.md) §0 | Frozen pipeline; current machinery in §3 |
 | [`pipeline-transformation-2026-09-04.md`](pipeline-transformation-2026-09-04.md) | Named stages. P1–P6 executed. **Not CURRENT.** |
 | [`ontology-pr51-pipeline-alignment-2026-09-04.md`](ontology-pr51-pipeline-alignment-2026-09-04.md) | Dual-path as cached product — diagnosis, not a suite |
+| [`archive/completed-2026-08-late/domainmodeling-metadata-artifact-catalog-2026-08-15.md`](archive/completed-2026-08-late/domainmodeling-metadata-artifact-catalog-2026-08-15.md) | Who publishes bags / who emits files / library hook honesty |
 | [`simple-agent-tasks/PIPELINE-STATUS.md`](simple-agent-tasks/PIPELINE-STATUS.md) | Sole CURRENT/DONE. Leave it. |
 
 ---
@@ -208,8 +272,9 @@ That is the pipeline that matches frozen core. Everything else is a consumer.
 
 - Implementing C#, deleting code, or reviewing PR 72 to merge.
 - Admitting PIPELINE-STATUS CURRENT (or a second CURRENT line).
-- Choosing salvage, partial cut, or hard reset of DomainModeling.
+- Choosing salvage, partial cut, or hard reset of DomainModeling (path-forward stays PARKED).
 - Unparking Occupancy / `BusySections`.
 - Treating scratch store, `Stay.Create`, or Store job names as frozen.
 - Rewriting Hotel occupancy in DEI.
+- Inventing a second product pipeline for host files (artifact producers are Load → gate → Consume on the same analyze).
 - A suite README for this note.

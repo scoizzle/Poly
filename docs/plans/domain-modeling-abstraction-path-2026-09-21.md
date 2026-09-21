@@ -20,6 +20,8 @@ A domain file states **facts** and names libraries with `uses` ids. **DomainSess
 
 **Product rule (Scot):** drop everything that fakes a runtime for simulation. Facts → bags → `session.Lower` (one module) → Interpreter runs that module. Producers deliver host call-sites. Not CURRENT. No slice greenlight.
 
+**Lower plan (next, before eng):** [`session-lower-plan-2026-09-21.md`](session-lower-plan-2026-09-21.md). Slices A–E stay unapproved until Scot accepts that plan.
+
 ---
 
 ## 1a) Talk alignment (Alexandrescu + Coyle)
@@ -64,7 +66,7 @@ Does **not** collapse (and this note does not delete): Ontology facts, `.poly`, 
 
 ## 3) Ordered refactor slices (Scot approve before eng)
 
-Small, stop-conditioned. **No slice starts until Scot greenlights that slice.** Eng WIP = 0 until then.
+Small, stop-conditioned. **No slice starts until Scot accepts the Lower plan, then greenlights that slice.** Eng WIP = 0 until then.
 
 **Order (not a greenlight):** **A** then **B** are **first** — they make “one real tree” true (Interpreter can run what Lower emitted; execute never invents a second tree). **E** is the honesty slice: **DEI is not a simulate path**. C and D stay as listed. Still unapproved. Still not CURRENT.
 
@@ -96,5 +98,6 @@ Small, stop-conditioned. **No slice starts until Scot greenlights that slice.** 
 | Doc | Role |
 |-----|------|
 | [`product-pipeline-first-principles-2026-09-20.md`](product-pipeline-first-principles-2026-09-20.md) | Pipeline + principles this path sits on |
+| [`session-lower-plan-2026-09-21.md`](session-lower-plan-2026-09-21.md) | Refine `session.Lower` before eng. Slices unapproved until Scot accepts. |
 | [`domain-modeling-salvage-verdict-2026-09-18.md`](domain-modeling-salvage-verdict-2026-09-18.md) | Scot middle path = abstraction refactor (not old keep/kill queue) |
 | `simple-agent-tasks/PIPELINE-STATUS.md` | Sole CURRENT/DONE — leave it |

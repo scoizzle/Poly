@@ -13,6 +13,8 @@
 
 **This note is SoT** for the Lower-as-analysis revision. Path / principles that still say “clean analyze, *then* `session.Lower`” are historical sequencing — not the product door.
 
+**Abstractions (glossary):** [`session-lower-abstractions-2026-09-21.md`](session-lower-abstractions-2026-09-21.md) — SoT for the named concepts. This plan stays SoT for the vision. Does not accept this plan.
+
 ---
 
 ## 1) Lower is an analysis concern / pass
@@ -115,5 +117,6 @@ Real choices. Accepting this plan still does **not** admit CURRENT, unpark Item 
 | Doc | Role |
 |-----|------|
 | [`product-pipeline-first-principles-2026-09-20.md`](product-pipeline-first-principles-2026-09-20.md) | Pipeline + sim rule. Stage “3 Lower after 2′” is historical; this file is SoT for the fold-in. |
+| [`session-lower-abstractions-2026-09-21.md`](session-lower-abstractions-2026-09-21.md) | SoT for named concepts. Does not accept this plan. |
 | [`domain-modeling-abstraction-path-2026-09-21.md`](domain-modeling-abstraction-path-2026-09-21.md) | Session Compile + slices A–E (unapproved) |
 | `simple-agent-tasks/PIPELINE-STATUS.md` | Sole CURRENT/DONE — leave it |

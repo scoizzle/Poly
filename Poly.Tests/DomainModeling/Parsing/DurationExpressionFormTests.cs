@@ -1,5 +1,6 @@
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
+using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.DomainModeling.Parsing;
 
@@ -17,7 +18,7 @@ public class DurationExpressionFormTests {
         ExtensionCatalog.Core.Language;
 
     private readonly DomainExpressionLoweringPass Pass = new(
-        new LoweringContext(new Parameter("entity")));
+        new LoweringContext(new Parameter("entity"), Meaning: TemporalMeaningHarness.Create()));
 
     [Test]
     public async Task Duration_12Days_Form_Parses() {

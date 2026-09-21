@@ -102,12 +102,9 @@ public sealed class DomainExtensionTests {
             domain T
             Item: entity { Due: Date }
             """;
-        var changes = new PolyDslParser(poly).Parse();
-        var result = new DomainEvolution(new Domain("T", [])).Apply(changes);
-
-        await Assert.That(result.Succeeded).IsFalse();
-        await Assert.That(result.Analysis.Diagnostics.Any(d =>
-            d.Message.Contains("unknown type 'Date'", StringComparison.Ordinal))).IsTrue();
+        await Assert.That(() => new PolyDslParser(poly).Parse())
+            .Throws<FormatException>()
+            .WithMessageContaining("Date");
     }
 
     [Test]

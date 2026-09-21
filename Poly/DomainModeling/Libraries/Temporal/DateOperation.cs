@@ -26,4 +26,7 @@ public sealed record DateOperation(
     DateOperationKind Kind
 ) : DomainExpression {
     public sealed override IEnumerable<Node?> Children => [Date, Offset];
+
+    public override DomainExpression MapChildren(Func<DomainExpression, DomainExpression> map) =>
+        this with { Date = map(Date), Offset = map(Offset) };
 }

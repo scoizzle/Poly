@@ -1,3 +1,4 @@
+using Poly.DomainModeling.Meaning;
 using Poly.DomainModeling.Ontology;
 
 namespace Poly.DomainModeling.Lowering;
@@ -98,5 +99,7 @@ public sealed record LoweringContext(
     Func<string, string?>? PropertyTypeResolver = null,
     Node? ActionResultType = null,
     bool EmitInstanceNotify = true,
-    string? SourceEntityName = null
+    string? SourceEntityName = null,
+    ExpressionMeaning? Meaning = null,
+    ExpressionFormRegistry? Forms = null
 );

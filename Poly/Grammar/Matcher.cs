@@ -107,7 +107,7 @@ public sealed class Matcher<TToken, TTokenKind>
             pos += piece.Tokens.Count;
         }
         match = new MatchResult<TToken, TTokenKind>(
-            pattern.Name, tokens, captures, ruleName, children, operators);
+            pattern.Name, tokens, captures, ruleName, children, operators, pattern);
         return true;
     }
 

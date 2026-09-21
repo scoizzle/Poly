@@ -1,8 +1,10 @@
 using Poly.Ast.Nodes;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Evolution;
+using Poly.DomainModeling.Libraries.Temporal;
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
+using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.DomainModeling.Packs;
 
@@ -14,7 +16,7 @@ public sealed class DomainSessionTests {
             ExtensionCatalog.ProductLanguage);
         var parser = new PolyDslParser("domain D\nE: entity { }\n", session);
         var printer = new DomainDslPrinter(session);
-        await Assert.That(session.Language.Grammar.TryGetPattern("expr-primary", "now", out _)).IsTrue();
+        await Assert.That(session.Language.Grammar.TryGetPattern("expr-primary", "ident", out _)).IsTrue();
         _ = parser.Parse();
         _ = printer;
     }
@@ -22,7 +24,7 @@ public sealed class DomainSessionTests {
     [Test]
     public async Task ForExtensions_WithoutTemporal_NowIsProperty() {
         var session = DomainSession.ForExtensions([]);
-        await Assert.That(session.Language.Grammar.TryGetPattern("expr-primary", "now", out _)).IsTrue();
+        await Assert.That(session.Language.Grammar.TryGetPattern("expr-primary", "now", out _)).IsFalse();
         var expr = DslExpressionFragment.ParseExpressionFragment("Now", session);
         await Assert.That(expr).IsTypeOf<PropertyAccess>();
     }
@@ -36,10 +38,20 @@ public sealed class DomainSessionTests {
     }
 
     [Test]
-    public async Task Lowering_Now_DoesNotNeedSessionMeaning() {
+    public async Task Lowering_Now_WithoutMeaning_FailsClosed() {
         var pass = new DomainExpressionLoweringPass(new LoweringContext(new Parameter("entity")));
+        await Assert.That(() => pass.Lower(new Now(), new Parameter("entity")))
+            .Throws<NotSupportedException>()
+            .WithMessageContaining("Now");
+    }
+
+    [Test]
+    public async Task Lowering_Now_WithMeaning_LowersToUtcNow() {
+        var pass = new DomainExpressionLoweringPass(new LoweringContext(
+            new Parameter("entity"), Meaning: TemporalMeaningHarness.Create()));
         var lowered = pass.Lower(new Now(), new Parameter("entity"));
         await Assert.That(lowered).IsTypeOf<Member>();
+        await Assert.That(((Member)lowered).MemberName).IsEqualTo("UtcNow");
     }
 
     [Test]
@@ -68,13 +80,16 @@ public sealed class DomainSessionTests {
     }
 
     [Test]
-    public async Task Analyze_TemporalLibrary_PublishesVocabularyBag() {
+    public async Task Analyze_TemporalLibrary_RegistersMeaningNotAPass() {
         var withTemporal = DomainSession.Open(DomainFactory.Create("D"));
+        await Assert.That(withTemporal.Meaning.Inference.Handlers.Count).IsGreaterThan(0);
         var analysis = withTemporal.Analyze(withTemporal.Domain!);
-        await Assert.That(analysis.GetMetadata<TemporalVocabularyMetadata>(withTemporal.Domain!)).IsNotNull();
+        await Assert.That(analysis.Telemetry.Passes.Any(p => p.PassName == "Temporal")).IsFalse();
+        await Assert.That(analysis.GetMetadata<TemporalVocabularyMetadata>(withTemporal.Domain!)).IsNull();
 
         var without = DomainFactory.Create("D") with { Extensions = [] };
         var empty = DomainSession.Open(without);
+        await Assert.That(empty.Meaning.Inference.Handlers).IsEmpty();
         var emptyAnalysis = empty.Analyze(without);
         await Assert.That(emptyAnalysis.GetMetadata<TemporalVocabularyMetadata>(without)).IsNull();
     }
@@ -118,7 +133,7 @@ public sealed class DomainSessionTests {
         var session = DomainSession.Open(domain, catalog);
         await Assert.That(() => session.Analyze(domain))
             .Throws<InvalidOperationException>()
-            .WithMessageContaining(StoragePass.Id);
+            .WithMessageContaining(DomainCatalogPass.Id);
     }
 
     private sealed record MarkerMetadata : IAnalysisMetadata;
@@ -143,6 +158,6 @@ public sealed class DomainSessionTests {
         public string Id => "core-clash";
 
         public void Register(SessionBuilder builder) =>
-            builder.AddAnalyzer(new StoragePass());
+            builder.AddAnalyzer(new DomainCatalogPass());
     }
 }

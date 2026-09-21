@@ -12,7 +12,6 @@ internal sealed class SubscriptionAnalyzer : INodeAnalyzer {
     public string PassName => Id;
     // DomainTypeLookupMetadata (Semantic) + ActionCapabilityMetadata (Capability)
     // for causality edges filtered to transitions that can produce cycles.
-    public string[] Dependencies => [DomainCatalogPass.Id, CapabilityAnalyzer.Id];
 
     public void Analyze(AnalysisContext context, Node node) {
 

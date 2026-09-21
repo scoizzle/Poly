@@ -47,7 +47,6 @@ public sealed record ActionInvariantMetadata(
 internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
     public const string Id = "DomainEffectInvariant";
     public string PassName => Id;
-    public string[] Dependencies => [EffectFactsPass.Id];
 
     public void Analyze(AnalysisContext context, Node node) {
 

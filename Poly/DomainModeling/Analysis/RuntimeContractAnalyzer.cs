@@ -22,7 +22,6 @@ internal sealed class RuntimeContractAnalyzer : INodeAnalyzer {
 
     public string PassName => Id;
 
-    public string[] Dependencies => [DomainCatalogPass.Id];
 
     public void Analyze(AnalysisContext context, Node node) {
         switch (node) {

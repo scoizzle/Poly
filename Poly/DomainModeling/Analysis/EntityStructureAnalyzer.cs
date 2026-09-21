@@ -16,7 +16,6 @@ namespace Poly.DomainModeling.Analysis;
 internal sealed class EntityStructureAnalyzer : INodeAnalyzer {
     public const string Id = "DomainEntityStructureAnalyzer";
     public string PassName => Id;
-    public string[] Dependencies => [DomainCatalogPass.Id];
 
     public void Analyze(AnalysisContext context, Node node) {
 
@@ -48,7 +47,7 @@ internal sealed class EntityStructureAnalyzer : INodeAnalyzer {
         var keyPropName = uniqueProp?.Name;
         // Map domain type → host CLR name for natural keys; shadow keys use int.
         var keyClrType = hasNaturalKey
-            ? DomainTypeMapping.ToClrTypeName(uniqueProp!.Type.TypeName)
+            ? RuntimeAnalysisCache.ClrTypeName(domain, uniqueProp!.Type.TypeName)
             : "int";
 
         // ── Root detection ────────────────────────────────────

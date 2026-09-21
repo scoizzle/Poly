@@ -3,7 +3,6 @@ namespace Poly.Interpretation.Analysis.Semantics;
 internal sealed class LambdaReturnTypeAnalyzer : INodeAnalyzer {
     public const string Id = "LambdaReturnType";
     public string PassName => Id;
-    public string[] Dependencies => [TypeAndMemberResolver.Id];
     public void Analyze(AnalysisContext context, Node node) {
         // A Lambda value is a closure (heap ref / object). Do not overwrite
         // that with the body type — Invoke uses the body, the binding does not.

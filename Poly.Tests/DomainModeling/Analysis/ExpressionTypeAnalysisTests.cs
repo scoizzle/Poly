@@ -319,6 +319,7 @@ public class ExpressionTypeAnalysisTests {
         // Round-5 F2/F6: default(Now) on a non-Date target must fail at analysis, not codegen.
         var result = Parse("""
             domain Test
+            uses temporal
             Item: entity { Qty: Number default(Now) }
             """);
         await Assert.That(result.Succeeded).IsFalse();
@@ -329,6 +330,7 @@ public class ExpressionTypeAnalysisTests {
     public async Task Default_TodayOnNumber_Rejected() {
         var result = Parse("""
             domain Test
+            uses temporal
             Item: entity { Qty: Number default(Today) }
             """);
         await Assert.That(result.Succeeded).IsFalse();

@@ -1,7 +1,6 @@
 using System.Globalization;
 
 using Poly.DomainModeling.Evolution;
-using Poly.DomainModeling.Libraries.Temporal;
 using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Ontology.Bootstrap;
 using Poly.DomainModeling.Ontology.Contract;
@@ -42,6 +41,7 @@ public sealed class PolyDslParser : DslCursor {
     // Enum type names, for distinguishing typed properties from nav lines
     private readonly HashSet<string> _enumTypeNames = new(StringComparer.Ordinal);
     private readonly HashSet<string> _valueTypeNames = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _primitiveTypeNames = new(StringComparer.Ordinal);
 
     // Property names per entity, for collision detection with navs
     private readonly Dictionary<string, HashSet<string>> _entityPropertyNames = new(StringComparer.Ordinal);
@@ -135,16 +135,32 @@ public sealed class PolyDslParser : DslCursor {
         _primitivesAdded = true;
         foreach (var change in CanonicalBuiltInTypeCatalog.CreateChanges())
             changes.Add(change);
-        if (ImportsTemporal(changes)) {
-            foreach (var change in TemporalTypeCatalog.CreateChanges())
-                changes.Add(change);
+        var adding = changes.OfType<AddDomainExtensionChange>()
+            .Select(c => c.ExtensionId)
+            .ToHashSet(StringComparer.Ordinal);
+        foreach (var (libraryId, name, category) in _session.PrimitiveSeeds) {
+            if (adding.Contains(libraryId))
+                continue;
+            changes.Add(new AddPrimitiveTypeChange(name, category, []));
+        }
+        IndexPrimitiveNames(changes);
+    }
+
+    private void IndexPrimitiveNames(List<DomainChange> changes) {
+        foreach (var def in CanonicalBuiltInTypeCatalog.Definitions)
+            _primitiveTypeNames.Add(def.Name);
+        foreach (var (_, name, _) in _session.PrimitiveSeeds)
+            _primitiveTypeNames.Add(name);
+        foreach (var add in changes.OfType<AddDomainExtensionChange>()) {
+            if (!ExtensionCatalog.Core.Contains(add.ExtensionId))
+                continue;
+            foreach (var (name, _) in ExtensionCatalog.Core.Resolve(add.ExtensionId).PrimitiveSeeds)
+                _primitiveTypeNames.Add(name);
         }
     }
 
-    private bool ImportsTemporal(List<DomainChange> changes) =>
-        _session.Extensions.Contains(ExtensionCatalog.TemporalId, StringComparer.Ordinal)
-        && !changes.OfType<AddDomainExtensionChange>().Any(c =>
-            string.Equals(c.ExtensionId, ExtensionCatalog.TemporalId, StringComparison.Ordinal));
+    private bool IsKnownPrimitiveName(string name) =>
+        _primitiveTypeNames.Contains(name);
 
     private void ParseEntity(List<DomainChange> changes) {
         var entityName = ExpectIdentifier(TokenKind.Identifier, "entity name");
@@ -226,13 +242,11 @@ public sealed class PolyDslParser : DslCursor {
                             // known enum names, mirroring the legacy IsNavLine dispatch.
                             var name = ExpectIdentifier(TokenKind.Identifier, "property name");
                             Expect(TokenKind.Colon);
-                            if (_enumTypeNames.Contains(Current.Text) || _valueTypeNames.Contains(Current.Text)) {
-                                // Typed property referencing an enum or value type
+                            if (_enumTypeNames.Contains(Current.Text)
+                                || _valueTypeNames.Contains(Current.Text)
+                                || IsKnownPrimitiveName(Current.Text)) {
                                 var typeName = ExpectIdentifier(TokenKind.Identifier, "type name");
-                                TrackPropertyName(_currentEntityName, name);
-                                changes.Add(new AddPropertyToEntityChange(_currentEntityName,
-                                    new Property(name, new DomainTypeReference(typeName), [])));
-                                ParsePropertyTail(name, changes);
+                                ParseNamedTypeProperty(name, typeName, changes);
                             }
                             else if (IsNavLine()) {
                                 ParseNavLine(name);
@@ -267,6 +281,12 @@ public sealed class PolyDslParser : DslCursor {
                             Expect(TokenKind.Colon);
                             if (IsPrimitiveType(Current.Kind)) {
                                 ParseProperty(name, Current.Kind, changes);
+                            }
+                            else if (Current.Kind == TokenKind.Identifier
+                                     && IsKnownPrimitiveName(Current.Text)) {
+                                var typeName = Current.Text;
+                                Advance();
+                                ParseNamedTypeProperty(name, typeName, changes);
                             }
                             else {
                                 throw Error($"Expected type after '{name}:', got '{Current.Text}'");
@@ -333,20 +353,20 @@ public sealed class PolyDslParser : DslCursor {
     private void ParseProperty(string name, TokenKind typeKind, List<DomainChange> changes) {
         Advance(); // consume type
 
-        TrackPropertyName(_currentEntityName, name);
-
         var typeName = typeKind switch {
             TokenKind.Text => "Text",
             TokenKind.NumberType => "Number",
             TokenKind.BooleanType => "Boolean",
-            TokenKind.DateTimeType => "DateTime",
-            TokenKind.DateType => "Date",
             _ => throw Error($"Unknown type '{typeKind}'"),
         };
 
+        ParseNamedTypeProperty(name, typeName, changes);
+    }
+
+    private void ParseNamedTypeProperty(string name, string typeName, List<DomainChange> changes) {
+        TrackPropertyName(_currentEntityName, name);
         changes.Add(new AddPropertyToEntityChange(_currentEntityName,
             new Property(name, new DomainTypeReference(typeName), [])));
-
         ParsePropertyTail(name, changes);
     }
 
@@ -1272,7 +1292,7 @@ public sealed class PolyDslParser : DslCursor {
     /// </summary>
     private void ResolvePendingNavs(List<DomainChange> changes) {
         foreach (var nav in _pendingNavs) {
-            if (IsPrimitiveTypeToken(nav.TargetTypeName)) {
+            if (IsKnownPrimitiveName(nav.TargetTypeName)) {
                 throw Error($"Navigation property '{nav.PropertyName}': '{nav.TargetTypeName}' is a primitive type, not an entity. Use a primitive property declaration instead.");
             }
             if (!_entityNames.Contains(nav.TargetTypeName)) {
@@ -1303,11 +1323,6 @@ public sealed class PolyDslParser : DslCursor {
         }
         _pendingNavs.Clear();
     }
-
-    private static bool IsPrimitiveTypeToken(string typeName) => typeName switch {
-        "Text" or "Number" or "Boolean" or "DateTime" or "Date" => true,
-        _ => false,
-    };
 
     private void ParsePolicy(string name, List<DomainChange> changes) {
         Advance(); // consume 'policy'
@@ -1473,8 +1488,6 @@ public sealed class PolyDslParser : DslCursor {
                 TokenKind.Text => "Text",
                 TokenKind.NumberType => "Number",
                 TokenKind.BooleanType => "Boolean",
-                TokenKind.DateTimeType => "DateTime",
-                TokenKind.DateType => "Date",
                 _ => throw Error($"Unknown type '{Current.Kind}'"),
             };
             Advance();
@@ -1497,8 +1510,7 @@ public sealed class PolyDslParser : DslCursor {
     }
 
     private static bool IsPrimitiveType(TokenKind kind) => kind switch {
-        TokenKind.Text or TokenKind.NumberType or TokenKind.BooleanType
-            or TokenKind.DateTimeType or TokenKind.DateType => true,
+        TokenKind.Text or TokenKind.NumberType or TokenKind.BooleanType => true,
         _ => false,
     };
 

@@ -32,6 +32,25 @@ public sealed class GrammarLanguageTests {
     }
 
     [Test]
+    public async Task Payload_BoundAtCommit_SurvivesMatch() {
+        var g = new GrammarBuilder<TestToken, TestKind>()
+            .Define("primary")
+            .Pattern("ident").Value(TestKind.Identifier).Payload("clock")
+            .Commit()
+            .Build();
+        var match = new Matcher<TestToken, TestKind>(g, new TestTokenizer("x")).TryMatch("primary");
+        await Assert.That(match?.PatternName).IsEqualTo("ident");
+        await Assert.That(match!.Pattern?.Payload).IsEqualTo("clock");
+    }
+
+    [Test]
+    public async Task AttachPayload_UnknownPattern_FailsClosed() {
+        var builder = CorePrimary().ToBuilder();
+        await Assert.That(() => builder.AttachPayload("primary", "missing", "x"))
+            .Throws<InvalidOperationException>();
+    }
+
+    [Test]
     public async Task DuplicatePatternName_FailsClosed() {
         var g = CorePrimary();
         await Assert.That(() => g.ToBuilder().Define("primary").Pattern("ident").Value(TestKind.Number).Commit())

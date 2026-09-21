@@ -110,7 +110,7 @@ Root files: `Interpreter.cs` (pipeline + execute), `ExecutionResult.cs`, `Interp
 
 ## Standard analysis pipeline
 
-`Interpreter._analyzer` is 14 passes. **Built order** (after `AnalyzerBuilder` topological insert) is asserted by `StandardAnalyzer_PassNames_MatchInterpreterPipeline` and listed in [`Analysis/README.md`](Analysis/README.md). Do not copy a `Use*` registration list here — insert order ≠ registration order.
+`Interpreter._analyzer` is 14 passes. **`Use*` registration is the run order** — asserted by `StandardAnalyzer_PassNames_MatchInterpreterPipeline` and listed in [`Analysis/README.md`](Analysis/README.md). Do not invent a separate insert schedule; `Build` is registration order.
 
 `Interpreter.Compile` is the one compile door: it fails closed on every `DiagnosticSeverity.Error`. `CompileChecked` is an alias. Use `Analyze` to inspect diagnostics without emitting. `Await` and `ParameterReference` compile-reject. `Comment` is a statement no-op and compile-rejects as a value (never dummy `0`).
 
@@ -335,7 +335,7 @@ to `bool`, `int`, `short`, `byte`, and `object` automatically.
 ### Adding a New Analysis Pass
 
 1. Create a class implementing `INodeAnalyzer` in `Interpretation/Analysis/Semantics/` (or the appropriate subdirectory).
-2. Implement `PassName`, `Dependencies`, and `Analyze()`. Use `context.SetMetadata()` and `context.ReportDiagnostic()` for outputs.
+2. Implement `PassName` and `Analyze()`. Use `context.SetMetadata()` and `context.ReportDiagnostic()` for outputs. Schedule is the `Use*` / `AddAnalyzer` registration line (no `After` / `Before` / `Dependencies`).
 3. Add an extension method on `AnalyzerBuilder` in the same file.
 4. Register it in `Interpreter.cs` (in the `AnalyzerBuilder` chain) and update the pass table in this README and `Analysis/README.md`.
 5. Add tests in `Poly.Tests/Interpretation/`.

@@ -70,9 +70,7 @@ public abstract class DomainExpressionRewriteBase : DomainExpressionDispatch<Dom
         e with { Body = e.Body is null ? null : Route(e.Body) };
     protected override DomainExpression RelationshipNavigation(RelationshipNavigation e) =>
         e with { TargetProperty = Route(e.TargetProperty) };
-    protected override DomainExpression Now(Now e) => e;
-    protected override DomainExpression Today(Today e) => e;
-    protected override DomainExpression Duration(Duration e) => e;
-    protected override DomainExpression DateOperation(DateOperation e) =>
-        e with { Date = Route(e.Date), Offset = Route(e.Offset) };
+
+    protected override DomainExpression Library(DomainExpression expr) =>
+        expr.MapChildren(Route);
 }

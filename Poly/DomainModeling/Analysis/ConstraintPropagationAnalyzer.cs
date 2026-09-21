@@ -10,12 +10,10 @@ internal sealed record DownstreamConstraintsMetadata(IReadOnlyList<Constraint> C
 
 /// <summary>
 /// Publishes <see cref="DownstreamConstraintsMetadata"/> from the effect tree.
-/// No upstream analysis bags required.
 /// </summary>
 internal sealed class ConstraintPropagationAnalyzer : INodeAnalyzer {
     public const string Id = "DomainConstraintPropagationAnalyzer";
     public string PassName => Id;
-    public string[] Dependencies => [];
     public void Analyze(AnalysisContext context, Node node) {
 
         if (node is Domain domain) {

@@ -11,6 +11,7 @@ namespace Poly.DomainModeling.Compile;
 /// </summary>
 public sealed class SessionBuilder {
     private readonly List<IStorageConvention> _storageConventions = [];
+    private readonly List<(string LibraryId, string Name, TypeCategory Category)> _primitiveSeeds = [];
     private readonly List<IArtifactContributor> _artifacts = [];
     private readonly List<INodeAnalyzer> _analyzers = [];
     private readonly HashSet<string> _analyzerPassNames = new(StringComparer.Ordinal);
@@ -20,6 +21,7 @@ public sealed class SessionBuilder {
     public AnnotationRegistry Annotations { get; } = new();
     public ExpressionFormRegistry ExpressionForms { get; } = new();
     public TypeMappingRegistry TypeMaps { get; } = new();
+    public IReadOnlyList<IStorageConvention> StorageConventions => _storageConventions;
     public ExpressionMeaning Meaning { get; } = new();
 
     /// <summary>No extensions loaded.</summary>
@@ -36,6 +38,8 @@ public sealed class SessionBuilder {
             throw new InvalidOperationException($"A library with id '{library.Id}' is already loaded.");
         library.Register(this);
         _loadedIds.Add(library.Id);
+        foreach (var (name, category) in library.PrimitiveSeeds)
+            _primitiveSeeds.Add((library.Id, name, category));
         return this;
     }
 
@@ -52,9 +56,9 @@ public sealed class SessionBuilder {
     }
 
     /// <summary>
-    /// Appends a library analyzer to this unit's pipeline. Duplicate
-    /// <see cref="INodeAnalyzer.PassName"/> fails closed. Placement among core
-    /// passes uses <see cref="INodeAnalyzer.Dependencies"/> at freeze.
+    /// Appends a library analyzer after the core list. Duplicate
+    /// <see cref="INodeAnalyzer.PassName"/> fails closed. Libraries do not splice
+    /// the middle of the pipeline.
     /// </summary>
     public SessionBuilder AddAnalyzer(INodeAnalyzer analyzer) {
         ArgumentNullException.ThrowIfNull(analyzer);
@@ -83,6 +87,7 @@ public sealed class SessionBuilder {
             DomainSession.FoldsFor(expressionForms),
             Meaning,
             _artifacts,
-            _analyzers);
+            _analyzers,
+            _primitiveSeeds);
     }
 }

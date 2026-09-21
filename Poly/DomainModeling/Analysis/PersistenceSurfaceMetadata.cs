@@ -9,7 +9,6 @@ public sealed record PersistenceSurfaceMetadata : IAnalysisMetadata;
 public sealed class PersistenceSurfacePass : INodeAnalyzer {
     public const string Id = "PersistenceSurface";
     public string PassName => Id;
-    public string[] Dependencies => [StoragePass.Id];
 
     public void Analyze(AnalysisContext context, Node node) {
         if (node is Domain domain)

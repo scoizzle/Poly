@@ -9,7 +9,6 @@ internal sealed class ConstraintQualityAnalyzer : INodeAnalyzer {
     public const string Id = "DomainConstraintQualityAnalyzer";
     public string PassName => Id;
     // Reads DomainTypeLookupMetadata / ResolvedTypeReferenceMetadata.
-    public string[] Dependencies => [DomainCatalogPass.Id];
     public void Analyze(AnalysisContext context, Node node) {
 
         switch (node) {

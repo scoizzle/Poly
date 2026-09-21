@@ -458,7 +458,7 @@ public sealed partial record DomainEntityInstance {
 
         var result = new List<DomainEntityInstance>();
         foreach (var t in all) {
-            var loweringPass = new DomainExpressionLoweringPass(new LoweringContext(new Parameter("entity")));
+            var loweringPass = new DomainExpressionLoweringPass(new LoweringContext(new Parameter("entity"), Domain: Domain));
             var lowered = loweringPass.Lower(filter,
                 new Parameter("entity", new TypeReference(t.Entity.Name)));
             var compiled = Interpreter.Compile(lowered, t._typeDefAnalyzer);
@@ -537,7 +537,7 @@ public sealed partial record DomainEntityInstance {
     /// result. This is the same pattern used by <see cref="GetRelatedTargets"/>.
     /// </summary>
     private static bool EvaluateBodyOnTarget(DomainExpression body, DomainEntityInstance target) {
-        var pass = new DomainExpressionLoweringPass(new LoweringContext(new Parameter("entity")));
+        var pass = new DomainExpressionLoweringPass(new LoweringContext(new Parameter("entity"), Domain: target.Domain));
         var lowered = pass.Lower(body,
             new Parameter("entity", new TypeReference(target.Entity.Name)));
         var compiled = Interpreter.Compile(lowered, target._typeDefAnalyzer);
@@ -569,30 +569,13 @@ public sealed partial record DomainEntityInstance {
     /// </summary>
     private static Node MapDomainTypeToAstNode(DomainTypeReference domainType, Domain? domain) {
         var typeName = domainType.TypeName;
-        return typeName switch {
-            "Text" => new PrimitiveTypeReference(Prim.String),
-            "Number" => new PrimitiveTypeReference(Prim.Int64),
-            "Int" => new PrimitiveTypeReference(Prim.Int64),
-            "Boolean" => new PrimitiveTypeReference(Prim.Boolean),
-            "Bool" => new PrimitiveTypeReference(Prim.Boolean),
-            "DateTime" => new PrimitiveTypeReference(Prim.DateTime),
-            "Timestamp" => new PrimitiveTypeReference(Prim.DateTime),
-            "Date" => new PrimitiveTypeReference(Prim.DateOnly),
-            "DateOnly" => new PrimitiveTypeReference(Prim.DateOnly),
-            "Time" => new PrimitiveTypeReference(Prim.TimeOnly),
-            "TimeOnly" => new PrimitiveTypeReference(Prim.TimeOnly),
-            "Duration" => new PrimitiveTypeReference(Prim.TimeSpan),
-            "TimeSpan" => new PrimitiveTypeReference(Prim.TimeSpan),
-            "Uuid" => new PrimitiveTypeReference(Prim.Guid),
-            "Guid" => new PrimitiveTypeReference(Prim.Guid),
-            "Decimal" => new PrimitiveTypeReference(Prim.Decimal),
-            "Float" => new PrimitiveTypeReference(Prim.Float64),
-            "Double" => new PrimitiveTypeReference(Prim.Float64),
-            _ when domain?.Types.OfType<Entity>().Any(e =>
-                string.Equals(e.Name, typeName, StringComparison.Ordinal)) == true
-                => new TypeReference(typeName),
-            _ => new PrimitiveTypeReference(Prim.Structure)
-        };
+        if (domain?.Types.OfType<Entity>().Any(e =>
+                string.Equals(e.Name, typeName, StringComparison.Ordinal)) == true)
+            return new TypeReference(typeName);
+        var clr = RuntimeAnalysisCache.ClrTypeName(domain, typeName);
+        if (DomainTypeMapping.TryPrimitiveType(clr, out var prim))
+            return new PrimitiveTypeReference(prim);
+        return new PrimitiveTypeReference(Prim.Structure);
     }
 }
 

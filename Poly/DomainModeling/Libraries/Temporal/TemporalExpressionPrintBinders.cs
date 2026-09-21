@@ -1,5 +1,6 @@
 using System.Globalization;
 
+using Poly.DomainModeling.Language;
 using Poly.DomainModeling.Ontology;
 using Poly.Grammar;
 
@@ -14,24 +15,12 @@ namespace Poly.DomainModeling.Libraries.Temporal;
 /// surface; the <c>date-operation</c> rule is the DateOperation print table.
 /// </summary>
 public static class TemporalExpressionPrintBinders {
-    /// <summary>Registers Now/Today/Duration folds on the session fold table.</summary>
-    public static void RegisterFolds(ExpressionFoldTable table) {
-        ArgumentNullException.ThrowIfNull(table);
-        foreach (var rule in new[] { "expr-primary", "expr-primary-no-not" }) {
-            table.Register(rule, "now", _ => new Now());
-            table.Register(rule, "today", _ => new Today());
-            table.Register(rule, "duration", FoldDuration);
-        }
-    }
-
-    /// <summary>Vocabulary folds on existing product patterns. Does not Extend Grammar.</summary>
+    /// <summary>Claims ident spellings and the duration primary. Does not name parser rules.</summary>
     public static void RegisterFolds(ExpressionFormRegistry forms) {
         ArgumentNullException.ThrowIfNull(forms);
-        foreach (var rule in new[] { "expr-primary", "expr-primary-no-not" }) {
-            forms.RegisterFold(rule, "now", _ => new Now());
-            forms.RegisterFold(rule, "today", _ => new Today());
-            forms.RegisterFold(rule, "duration", FoldDuration);
-        }
+        forms.RegisterIdent("Now", static () => new Now());
+        forms.RegisterIdent("Today", static () => new Today());
+        forms.RegisterFold("duration", FoldDuration);
     }
 
     private static DomainExpression FoldDuration(MatchResult<DslToken, DslTokenKind> match) {
@@ -41,7 +30,7 @@ public static class TemporalExpressionPrintBinders {
         if (!long.TryParse(amounts[0].Text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var amount))
             throw new InvalidOperationException($"Duration amount '{amounts[0].Text}' is not an integer.");
         if (!DurationForm.TryGetUnit(units[0].Text, out var unit))
-            throw new InvalidOperationException($"Unknown duration unit '{units[0].Text}'.");
+            throw new FormatException($"Unknown duration unit '{units[0].Text}'.");
         return new Duration(amount, unit);
     }
 
@@ -53,29 +42,11 @@ public static class TemporalExpressionPrintBinders {
         forms.RegisterPrintMapping(new DateOperationBinder());
     }
 
-    /// <summary>
-    /// Contributes the temporal patterns: clock primaries + duration on both primary
-    /// rules, and the DateOperation spell rule. Recognition only — folding stays the
-    /// RD parse forms' job (pack-host lock 13, cited gap).
-    /// </summary>
+    /// <summary>Optional: bind duration fold onto the core duration pattern.</summary>
     public static void ContributeGrammarPatterns(GrammarBuilder<DslToken, DslTokenKind> g) {
         ArgumentNullException.ThrowIfNull(g);
-        foreach (var rule in new[] { "expr-primary", "expr-primary-no-not" }) {
-            g.Define(rule)
-                .Pattern("now", priority: 1).Predicate(IsNowIdentifier, "now").Commit()
-                .Pattern("today", priority: 1).Predicate(IsTodayIdentifier, "today").Commit()
-                .Pattern("duration").Value(DslTokenKind.Number, "amount").Predicate(IsDurationUnitToken, "unit").Commit();
-        }
-
-        g.Define("date-operation")
-            .Pattern("add")
-                .Ref("expr-primary").Kind(DslTokenKind.Plus)
-                .Value(DslTokenKind.Number, "amount").Predicate(IsDurationUnitToken, "unit")
-                .Commit()
-            .Pattern("sub")
-                .Ref("expr-primary").Kind(DslTokenKind.Minus)
-                .Value(DslTokenKind.Number, "amount").Predicate(IsDurationUnitToken, "unit")
-                .Commit();
+        foreach (var rule in new[] { "expr-primary", "expr-primary-no-not" })
+            g.AttachFold(rule, "duration", FoldDuration);
     }
 
     internal static bool IsNowIdentifier(DslToken t) =>
@@ -98,10 +69,7 @@ public static class TemporalExpressionPrintBinders {
                 binding = default;
                 return false;
             }
-            binding = new PrintMapping(
-                "expr-primary",
-                "now",
-                NamedFills: new Dictionary<string, string>(StringComparer.Ordinal) { ["now"] = "Now" });
+            binding = new PrintMapping("expr-primary", "ident", Fill: ctx => ctx.Emit("Now"));
             return true;
         }
     }
@@ -115,10 +83,7 @@ public static class TemporalExpressionPrintBinders {
                 binding = default;
                 return false;
             }
-            binding = new PrintMapping(
-                "expr-primary",
-                "today",
-                NamedFills: new Dictionary<string, string>(StringComparer.Ordinal) { ["today"] = "Today" });
+            binding = new PrintMapping("expr-primary", "ident", Fill: ctx => ctx.Emit("Today"));
             return true;
         }
     }

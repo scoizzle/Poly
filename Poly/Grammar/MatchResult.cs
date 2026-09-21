@@ -15,6 +15,9 @@ public sealed class MatchResult<TToken, TTokenKind>
 
     public string PatternName { get; }
 
+    /// <summary>Winning pattern, when the matcher produced this node. Payload lives here.</summary>
+    public Pattern<TToken, TTokenKind>? Pattern { get; }
+
     /// <summary>All tokens consumed by this match, in order (the span to <c>Consume</c>).</summary>
     public IReadOnlyList<TToken> Tokens { get; }
 
@@ -47,8 +50,10 @@ public sealed class MatchResult<TToken, TTokenKind>
         IReadOnlyDictionary<string, IReadOnlyList<TToken>>? captures = null,
         string ruleName = "",
         IReadOnlyList<MatchResult<TToken, TTokenKind>>? children = null,
-        IReadOnlyList<TToken>? operators = null) {
-        PatternName = patternName;
+        IReadOnlyList<TToken>? operators = null,
+        Pattern<TToken, TTokenKind>? pattern = null) {
+        Pattern = pattern;
+        PatternName = pattern?.Name ?? patternName;
         Tokens = tokens;
         Captures = captures ?? new Dictionary<string, IReadOnlyList<TToken>>(StringComparer.Ordinal);
         RuleName = ruleName ?? "";

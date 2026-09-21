@@ -386,11 +386,11 @@ public sealed partial class DomainToCSharpExporter {
     /// so an unimplemented binding fails loud instead of silently succeeding.
     /// </summary>
     internal static TypeDefinitionNode BuildContractAdapterTypeDef(
-        ImportedContract contract, IReadOnlyList<ContractEndpoint> boundEndpoints) {
+        ImportedContract contract, IReadOnlyList<ContractEndpoint> boundEndpoints, Domain? domain = null) {
         var methods = new List<MethodDefinitionNode>();
         foreach (var endpoint in boundEndpoints) {
             var payload = new NamedTypeReference(
-                DomainTypeMapping.ToClrTypeName(endpoint.PayloadType.TypeName));
+                RuntimeAnalysisCache.ClrTypeName(domain, endpoint.PayloadType.TypeName));
             methods.Add(new MethodDefinitionNode(
                 endpoint.Name,
                 new NamedTypeReference("void"),
@@ -457,6 +457,7 @@ public sealed partial class DomainToCSharpExporter {
             new Parameter("entity", new TypeReference(entity.Name)),
             Analysis: analysis,
             UseThisReference: true,
+            Domain: domain,
             EnumPropertyNames: enumProps,
             NavigationNameResolver: EffectLoweringPass.BuildNavigationNameResolver(entity, domain, analysis),
             IsCollectionNavigation: EffectLoweringPass.BuildIsCollectionNavigation(entity, domain, analysis),
@@ -552,19 +553,10 @@ public sealed partial class DomainToCSharpExporter {
                 return new NamedTypeReference(typeName);
         }
 
-        return typeName switch {
-            "Text" => new PrimitiveTypeReference(PrimType.String),
-            "Number" or "Int" => new PrimitiveTypeReference(PrimType.Int64),
-            "Boolean" or "Bool" => new PrimitiveTypeReference(PrimType.Boolean),
-            "DateTime" or "Timestamp" => new PrimitiveTypeReference(PrimType.DateTime),
-            "Date" or "DateOnly" => new PrimitiveTypeReference(PrimType.DateOnly),
-            "Time" or "TimeOnly" => new PrimitiveTypeReference(PrimType.TimeOnly),
-            "Duration" or "TimeSpan" => new PrimitiveTypeReference(PrimType.TimeSpan),
-            "Uuid" or "Guid" => new PrimitiveTypeReference(PrimType.Guid),
-            "Decimal" => new PrimitiveTypeReference(PrimType.Decimal),
-            "Float" or "Double" => new PrimitiveTypeReference(PrimType.Float64),
-            _ => new NamedTypeReference(typeName)
-        };
+        var clr = RuntimeAnalysisCache.ClrTypeName(domain, typeName);
+        if (DomainTypeMapping.TryPrimitiveType(clr, out var prim))
+            return new PrimitiveTypeReference(prim);
+        return new NamedTypeReference(typeName);
     }
 
     // ── DomainResult infrastructure type builders ───────────────

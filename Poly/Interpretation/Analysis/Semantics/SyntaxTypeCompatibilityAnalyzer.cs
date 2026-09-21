@@ -33,7 +33,6 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
     /// <summary>Diagnostic code used by <see cref="Interpreter.Compile"/> to fail loud.</summary>
     public const string DiagnosticCode = "VmTypeCompatibility";
 
-    public string[] Dependencies => [TypeAndMemberResolver.Id, ValueRepresentationAnalyzer.Id];
 
     public void Analyze(AnalysisContext context, Node node) {
         switch (node) {

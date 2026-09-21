@@ -20,7 +20,7 @@ A domain file states **facts** and names libraries with `uses` ids. **DomainSess
 
 **Product rule (Scot):** drop everything that fakes a runtime for simulation. Facts → bags → `session.Lower` (one module) → Interpreter runs that module. Producers deliver host call-sites. Not CURRENT. No slice greenlight.
 
-**Lower plan (next, before eng):** [`session-lower-plan-2026-09-21.md`](session-lower-plan-2026-09-21.md) — **SoT.** Scot decision: **post-analyze Lower** after clean analyze. **Lower-inside-analysis** is superseded / not SoT. Slices A–E stay unapproved until Scot accepts that plan. §1 “after clean analyze → `session.Lower`” matches product sequencing.
+**Lower plan (next, before eng):** [`session-lower-plan-2026-09-21.md`](session-lower-plan-2026-09-21.md) — **SoT.** Scot: **post-analyze Lower** after clean analyze. **Addendum:** Lower’s result is a **multi-producer artifact set**; the Syntax module is the **sim tree** among them, not the whole output. **Lower-inside-analysis** is not SoT. Slices A–E stay unapproved until Scot accepts that plan.
 
 ---
 
@@ -99,6 +99,6 @@ Small, stop-conditioned. **No slice starts until Scot accepts the Lower plan, th
 | Doc | Role |
 |-----|------|
 | [`product-pipeline-first-principles-2026-09-20.md`](product-pipeline-first-principles-2026-09-20.md) | Pipeline + principles this path sits on |
-| [`session-lower-plan-2026-09-21.md`](session-lower-plan-2026-09-21.md) | **SoT** for post-analyze Lower. Slices unapproved until Scot accepts. |
+| [`session-lower-plan-2026-09-21.md`](session-lower-plan-2026-09-21.md) | **SoT** for post-analyze Lower + artifact-set addendum. Slices unapproved until Scot accepts. |
 | [`domain-modeling-salvage-verdict-2026-09-18.md`](domain-modeling-salvage-verdict-2026-09-18.md) | Scot middle path = abstraction refactor (not old keep/kill queue) |
 | `simple-agent-tasks/PIPELINE-STATUS.md` | Sole CURRENT/DONE — leave it |

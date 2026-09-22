@@ -39,6 +39,12 @@ public sealed class DomainSession {
 
     internal IReadOnlyList<INodeAnalyzer> ExtraAnalyzers { get; }
 
+    /// <summary>
+    /// Artifact-set catalog after a successful <see cref="Lower"/>.
+    /// Empty before Lower; at least the privileged Syntax module after Lower.
+    /// </summary>
+    public IReadOnlyList<ArtifactDescriptor> ArtifactCatalog { get; private set; } = [];
+
     private Analyzer? _analyzer;
 
     /// <summary>The session's analysis pipeline: core product passes plus library analyzers.</summary>
@@ -142,18 +148,26 @@ public sealed class DomainSession {
     public IReadOnlyList<TypeDefinitionNode> Lower(Domain domain, AnalysisResult analysis) {
         ArgumentNullException.ThrowIfNull(domain);
         ArgumentNullException.ThrowIfNull(analysis);
-        return RuntimeAnalysisCache.GetOrLower(domain, this, analysis);
+        var module = RuntimeAnalysisCache.GetOrLower(domain, this, analysis);
+        ArtifactCatalog = [
+            new ArtifactDescriptor("SyntaxModule", "module", "Lower"),
+        ];
+        return module;
     }
 
     /// <summary>
-    /// Entity-module C# files from the lowered module. Persistence and HTTP files are
-    /// compiler/host emitters gated on analysis bags, not this method.
+    /// Entity-module C# files from the lowered module. Persistence and HTTP host
+    /// call-sites come from Load-registered <see cref="IArtifactContributor"/>s,
+    /// not this method.
     /// </summary>
     public IReadOnlyList<(string FileName, string Source)> Emit(Domain domain, AnalysisResult analysis) {
         ArgumentNullException.ThrowIfNull(domain);
         ArgumentNullException.ThrowIfNull(analysis);
         var files = new List<(string FileName, string Source)>();
         var types = Lower(domain, analysis);
+        if (ArtifactCatalog.Count == 0)
+            throw new InvalidOperationException(
+                "Emit requires a non-empty artifact catalog after Lower.");
         var interpAnalysis = TryAnalyzeForEmit(types);
         var generator = interpAnalysis is not null
             ? new CSharpGenerator(interpAnalysis)

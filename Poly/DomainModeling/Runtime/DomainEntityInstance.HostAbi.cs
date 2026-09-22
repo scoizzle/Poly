@@ -202,7 +202,7 @@ public sealed partial record DomainEntityInstance {
     /// Nested <see cref="StageTransitionEffect"/> still recurses
     /// <see cref="TransitionStage"/>. When the list has no nested transitions,
     /// Domain-bound batches bind OnEntry/OnExit module methods from GetOrLower.
-    /// Mixed lists keep flush/recurse and lower residual batches at execute time.
+    /// Mixed lists flush/recurse binding GetOrLower segment bodies — never LowerActionBody.
     /// </summary>
     private void RunTransitionEffectList(
         IReadOnlyList<Effect> effects,
@@ -221,13 +221,19 @@ public sealed partial record DomainEntityInstance {
             return;
         }
 
+        var segmentIndex = 0;
         var batch = new List<Effect>();
         void Flush() {
             if (batch.Count == 0) return;
-            // Partial flush after nested transition — claimed residual LowerActionBody.
+            // Partial flush after nested transition — bind cached segment from GetOrLower.
             ThrowIfEffectListFailed(
-                ExecuteEffectList(batch, pass, _typeDefAnalyzer, allowExecuteTimeLower: true),
+                ExecuteEffectList(
+                    batch, pass, _typeDefAnalyzer,
+                    entryStageName: entryStageName,
+                    exitStageName: exitStageName,
+                    entryExitSegmentIndex: segmentIndex),
                 "stage entry/exit");
+            segmentIndex++;
             batch.Clear();
         }
         foreach (var effect in effects) {

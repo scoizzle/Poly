@@ -16,7 +16,7 @@ namespace Poly.DomainModeling.Analysis;
 /// core catalog only when nothing has bound yet.
 /// <see cref="GetOrLower"/> caches the operation module
 /// (<see cref="DomainProgramProjection.ToSyntax"/>), populates OnEntry/OnExit
-/// batches, and side-caches subscription effect trees so Domain-bound hot paths
+/// batches (and mixed-list segments), and side-caches subscription effect trees so Domain-bound hot paths
 /// bind module bodies instead of re-lowering at execute time.
 /// </summary>
 internal static class RuntimeAnalysisCache {
@@ -28,6 +28,11 @@ internal static class RuntimeAnalysisCache {
         public Dictionary<SubscriptionDispatchPlanEntry, Node>? SubscriptionBodies { get; set; }
         /// <summary>Export-shaped (UseThis) OnEntry/OnExit bodies shared with module methods; execute BindThis.</summary>
         public Dictionary<(string Entity, string Stage, string Kind), Node>? EntryExitBodies { get; set; }
+        /// <summary>
+        /// Contiguous non-StageTransition segments of OnEntry/OnExit, lowered at GetOrLower.
+        /// Mixed lists flush/recurse at execute by binding these — never LowerActionBody.
+        /// </summary>
+        public Dictionary<(string Entity, string Stage, string Kind, int Segment), Node>? EntryExitSegmentBodies { get; set; }
         /// <summary>VM-shaped policy bodies for EvaluatePolicy (export bool methods stay UseThis — residual twin).</summary>
         public Dictionary<(string Entity, string Policy), Node>? PolicyBodies { get; set; }
     }
@@ -64,6 +69,7 @@ internal static class RuntimeAnalysisCache {
                 holder.Module = null;
                 holder.SubscriptionBodies = null;
                 holder.EntryExitBodies = null;
+                holder.EntryExitSegmentBodies = null;
                 holder.PolicyBodies = null;
             }
         }
@@ -98,11 +104,12 @@ internal static class RuntimeAnalysisCache {
             if (holder.Module is not null)
                 return holder.Module;
             var module = DomainProgramProjection.ToSyntax(domain, analysis);
-            var (module2, entryExit) = PopulateEntryExitMethods(domain, analysis, module);
+            var (module2, entryExit, entryExitSegments) = PopulateEntryExitMethods(domain, analysis, module);
             var bodies = BuildSubscriptionCaches(domain, analysis, module2);
             holder.Module = module2;
             holder.SubscriptionBodies = bodies;
             holder.EntryExitBodies = entryExit;
+            holder.EntryExitSegmentBodies = entryExitSegments;
             holder.PolicyBodies = BuildPolicyBodies(domain, analysis);
             return holder.Module;
         }
@@ -195,11 +202,13 @@ internal static class RuntimeAnalysisCache {
     /// UseThisReference twin / Parameter-rooted sibling tree.
     /// </summary>
     private static (IReadOnlyList<TypeDefinitionNode> Module,
-        Dictionary<(string, string, string), Node> EntryExit)
+        Dictionary<(string, string, string), Node> EntryExit,
+        Dictionary<(string, string, string, int), Node> EntryExitSegments)
         PopulateEntryExitMethods(
             Domain domain, AnalysisResult analysis, IReadOnlyList<TypeDefinitionNode> module) {
         var types = module.ToList();
         var entryExit = new Dictionary<(string, string, string), Node>();
+        var entryExitSegments = new Dictionary<(string, string, string, int), Node>();
         for (var i = 0; i < types.Count; i++) {
             var td = types[i];
             var entity = domain.Types.OfType<Entity>()
@@ -213,8 +222,9 @@ internal static class RuntimeAnalysisCache {
             List<MethodDefinitionNode>? extras = null;
 
             foreach (var stage in entity.Stages) {
-                // Exclude nested StageTransitionEffect — those still flush/recurse at
-                // TransitionStage. ApplyInitialStageEntryEffects also filters them.
+                // Whole-batch EntryExitBodies exclude nested StageTransitionEffect (no-nested
+                // TransitionStage path). Segments cache contiguous non-ST fragments for the
+                // mixed flush/recurse path — execute binds those, never LowerActionBody.
                 var entryBatch = stage.OnEntryEffects
                     .Where(e => e is not StageTransitionEffect).ToList();
                 if (entryBatch.Count > 0) {
@@ -228,6 +238,10 @@ internal static class RuntimeAnalysisCache {
                         extras.Add(entryMethod);
                     }
                 }
+                CacheEntryExitSegments(
+                    entryExitSegments, entity, domain, analysis, esm,
+                    stage.Name, "entry", stage.OnEntryEffects);
+
                 var exitBatch = stage.OnExitEffects
                     .Where(e => e is not StageTransitionEffect).ToList();
                 if (exitBatch.Count > 0) {
@@ -240,13 +254,53 @@ internal static class RuntimeAnalysisCache {
                         extras.Add(exitMethod);
                     }
                 }
+                CacheEntryExitSegments(
+                    entryExitSegments, entity, domain, analysis, esm,
+                    stage.Name, "exit", stage.OnExitEffects);
             }
 
             if (extras is null)
                 continue;
             types[i] = td with { Methods = [.. td.Methods ?? [], .. extras] };
         }
-        return (types, entryExit);
+        return (types, entryExit, entryExitSegments);
+    }
+
+    /// <summary>
+    /// Lower nonempty contiguous non-<see cref="StageTransitionEffect"/> segments of an
+    /// OnEntry/OnExit list. Mixed lists flush these at execute via
+    /// <see cref="TryGetEntryExitSegmentBody"/>.
+    /// </summary>
+    private static void CacheEntryExitSegments(
+        Dictionary<(string, string, string, int), Node> map,
+        Entity entity,
+        Domain domain,
+        AnalysisResult analysis,
+        EntityStructureMetadata? esm,
+        string stageName,
+        string kind,
+        IReadOnlyList<Effect> effects) {
+        var segmentIndex = 0;
+        var batch = new List<Effect>();
+        void Flush() {
+            if (batch.Count == 0) return;
+            var method = BuildStageBatchMethodExport(
+                entity, domain, analysis, esm,
+                $"On{(kind == "entry" ? "Entry" : "Exit")}{stageName}_Seg{segmentIndex}",
+                batch);
+            map[(entity.Name, stageName, kind, segmentIndex)] = method.Body!;
+            segmentIndex++;
+            batch.Clear();
+        }
+        foreach (var effect in effects) {
+            if (effect is StageTransitionEffect) {
+                Flush();
+            }
+            else {
+                batch.Add(effect);
+            }
+        }
+        Flush();
     }
 
 
@@ -278,6 +332,19 @@ internal static class RuntimeAnalysisCache {
         var holder = GetHolder(domain);
         if (holder.EntryExitBodies is not null
             && holder.EntryExitBodies.TryGetValue((entityName, stageName, kind), out body)
+            && body is not null)
+            return true;
+        body = null;
+        return false;
+    }
+
+    internal static bool TryGetEntryExitSegmentBody(
+        Domain domain, string entityName, string stageName, string kind, int segmentIndex, out Node? body) {
+        ArgumentNullException.ThrowIfNull(domain);
+        var holder = GetHolder(domain);
+        if (holder.EntryExitSegmentBodies is not null
+            && holder.EntryExitSegmentBodies.TryGetValue(
+                (entityName, stageName, kind, segmentIndex), out body)
             && body is not null)
             return true;
         body = null;
@@ -447,6 +514,16 @@ internal static class RuntimeAnalysisCache {
         var holder = GetHolder(domain);
         lock (holder) {
             holder.EntryExitBodies?.Remove((entity, stage, kind));
+        }
+    }
+
+    /// <summary>Test hook: clear a mixed-list OnEntry/OnExit segment body.</summary>
+    internal static void ClearEntryExitSegmentBody(
+        Domain domain, string entity, string stage, string kind, int segmentIndex) {
+        ArgumentNullException.ThrowIfNull(domain);
+        var holder = GetHolder(domain);
+        lock (holder) {
+            holder.EntryExitSegmentBodies?.Remove((entity, stage, kind, segmentIndex));
         }
     }
 

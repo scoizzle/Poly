@@ -269,7 +269,8 @@ internal static class RuntimeAnalysisCache {
     /// <summary>
     /// Lower nonempty contiguous non-<see cref="StageTransitionEffect"/> segments of an
     /// OnEntry/OnExit list. Mixed lists flush these at execute via
-    /// <see cref="TryGetEntryExitSegmentBody"/>.
+    /// <see cref="TryGetEntryExitSegmentBody"/>. Lists with no StageTransitionEffect
+    /// skip segment cache — execute uses EntryExitBodies / module methods already.
     /// </summary>
     private static void CacheEntryExitSegments(
         Dictionary<(string, string, string, int), Node> map,
@@ -280,6 +281,9 @@ internal static class RuntimeAnalysisCache {
         string stageName,
         string kind,
         IReadOnlyList<Effect> effects) {
+        // No ST → no mixed flush path; avoid unused seg0 twin of EntryExitBodies.
+        if (effects.All(e => e is not StageTransitionEffect))
+            return;
         var segmentIndex = 0;
         var batch = new List<Effect>();
         void Flush() {

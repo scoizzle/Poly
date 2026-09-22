@@ -240,21 +240,13 @@ public sealed partial record DomainEntityInstance {
         if (firstStage?.OnEntryEffects is not { Count: > 0 })
             return;
 
-        var analysis = instance.Domain is not null
-            ? RuntimeAnalysisCache.GetOrAnalyze(instance.Domain)
-            : null;
-        var loweringContext = new LoweringContext(
-            new Parameter("entity", new TypeReference(instance.Entity.Name)),
-            Analysis: analysis,
-            Domain: instance.Domain);
-        var entryPass = new EffectLoweringPass(instance.Entity, loweringContext);
         var entryEffects = firstStage.OnEntryEffects
             .Where(e => e is not StageTransitionEffect)
             .ToList();
         if (entryEffects.Count == 0)
             return;
         ThrowIfEffectListFailed(
-            instance.ExecuteEffectList(entryEffects, entryPass, instance._typeDefAnalyzer,
+            instance.ExecuteEffectList(entryEffects, instance._typeDefAnalyzer,
                 entryStageName: firstStage.Name),
             "first-stage OnEntry");
     }
@@ -555,16 +547,6 @@ public sealed partial record DomainEntityInstance {
             return ActionInvocationResult.Blocked(actionName, failures);
 
         // ── Execute effects ─────────────────────────────────────
-        var subjectParam = new Parameter("entity", new TypeReference(Entity.Name));
-        var loweringContext = new LoweringContext(
-            subjectParam,
-            Analysis: runtimeAnalysis,
-            Domain: Domain,
-            SourceStageName: CurrentStage,
-            ActionParameterNames: action.Parameters.Count > 0
-                ? action.Parameters.Select(p => p.Name).ToHashSet(StringComparer.Ordinal)
-                : null);
-        var effectPass = new EffectLoweringPass(Entity, loweringContext);
         // Action parameters are injected into _values for the call duration, but are not
         // entity schema properties. Compile with an action-scoped type def so PropertyAccess
         // to parameter names resolves (otherwise Member passthrough assigns the whole bag).
@@ -577,7 +559,7 @@ public sealed partial record DomainEntityInstance {
             var createdBefore = _createdChildren.Count;
             var bagBefore = new Dictionary<string, object?>(_values, StringComparer.Ordinal);
             var stageBefore = CurrentStage;
-            var failed = ExecuteEffectList(action.Effects, effectPass, effectTypeProvider,
+            var failed = ExecuteEffectList(action.Effects, effectTypeProvider,
                 actionName: action.Name, args: args, actionParameters: action.Parameters);
             if (failed is { IsSuccess: false }) {
                 // Unique-before-mutate restore (PR 44 F2). Other constraint Failures
@@ -690,7 +672,6 @@ public sealed partial record DomainEntityInstance {
     /// </summary>
     private DomainResult? ExecuteEffectList(
         IReadOnlyList<Effect> effects,
-        EffectLoweringPass effectPass,
         TypeDefinitionNodeAnalyzer typeProvider,
         string? actionName = null,
         string? entryStageName = null,

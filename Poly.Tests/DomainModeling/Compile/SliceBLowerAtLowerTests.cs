@@ -150,6 +150,103 @@ public class SliceBLowerAtLowerTests {
         await Assert.That(ReferenceEquals(mark, cached)).IsTrue();
     }
 
+    [Test]
+    public async Task SliceB_ClearEntryExitSegment1_ThrowsFailClosed_NoRelower() {
+        var (domain, analysis, session) = Evolve("""
+            domain Flow
+            Ticket: entity {
+              Note: Text
+              Log: Text
+              Draft: stage { }
+              Mid: stage {
+                entry {
+                  assign Note to "before"
+                  transition to Active
+                  assign Log to "after"
+                }
+              }
+              Active: stage { }
+            }
+            """);
+        _ = session.Lower(domain, analysis);
+
+        await Assert.That(RuntimeAnalysisCache.TryGetEntryExitSegmentBody(
+            domain, "Ticket", "Mid", "entry", 1, out _)).IsTrue();
+        RuntimeAnalysisCache.ClearEntryExitSegmentBody(domain, "Ticket", "Mid", "entry", 1);
+
+        var ticketE = domain.Types.OfType<Entity>().First(e => e.Name == "Ticket");
+        var inst = DomainEntityInstance.Create(ticketE,
+            new Dictionary<string, object?> { ["Note"] = "", ["Log"] = "" }, domain);
+
+        var ex = Assert.Throws<InvalidOperationException>(() => inst.TransitionStage("Mid"));
+        await Assert.That(ex!.Message).Contains("segment");
+        await Assert.That(ex.Message).Contains("[1]");
+    }
+
+    [Test]
+    public async Task SliceB_TransitionStage_DomainNull_NonStEntry_ThrowsFailClosed() {
+        var note = new Property("Note", new DomainTypeReference("Text"), []);
+        var draft = new Stage("Draft", Actions: [], Policies: [], OnEntryEffects: [], OnExitEffects: []);
+        var active = new Stage(
+            "Active",
+            Actions: [],
+            Policies: [],
+            OnEntryEffects: [
+                new AssignEffect(
+                    DomainExpression.Property("Note"),
+                    DomainExpression.Literal("x"))
+            ],
+            OnExitEffects: []);
+        var entity = new Entity("Ticket", [note], Actions: [], Policies: [], Stages: [draft, active]);
+        var inst = DomainEntityInstance.Create(entity,
+            new Dictionary<string, object?> { ["Note"] = "" });
+        await Assert.That(inst.Domain).IsNull();
+
+        var ex = Assert.Throws<InvalidOperationException>(() => inst.TransitionStage("Active"));
+        await Assert.That(ex!.Message).Contains("without a Domain-bound module");
+    }
+
+    [Test]
+    public async Task SliceB_EntryExitSegmentBody_MatchesGetOrLowerIdentity() {
+        var (domain, analysis, session) = Evolve("""
+            domain Flow
+            Ticket: entity {
+              Note: Text
+              Log: Text
+              Draft: stage { }
+              Mid: stage {
+                entry {
+                  assign Note to "before"
+                  transition to Active
+                  assign Log to "after"
+                }
+              }
+              Active: stage {
+                entry { assign Note to "active" }
+              }
+            }
+            """);
+        _ = session.Lower(domain, analysis);
+
+        await Assert.That(RuntimeAnalysisCache.TryGetEntryExitSegmentBody(
+            domain, "Ticket", "Mid", "entry", 0, out var seg0)).IsTrue();
+        await Assert.That(RuntimeAnalysisCache.TryGetEntryExitSegmentBody(
+            domain, "Ticket", "Mid", "entry", 0, out var seg0Again)).IsTrue();
+        await Assert.That(ReferenceEquals(seg0, seg0Again)).IsTrue();
+
+        // No-ST Active entry: EntryExitBodies populated; segment map skipped (F5).
+        await Assert.That(RuntimeAnalysisCache.TryGetEntryExitBody(
+            domain, "Ticket", "Active", "entry", out var activeEntry)).IsTrue();
+        await Assert.That(activeEntry).IsNotNull();
+        await Assert.That(RuntimeAnalysisCache.TryGetEntryExitSegmentBody(
+            domain, "Ticket", "Active", "entry", 0, out _)).IsFalse();
+
+        // Mixed Mid: segments are distinct from the whole-batch EntryExitBodies twin.
+        await Assert.That(RuntimeAnalysisCache.TryGetEntryExitBody(
+            domain, "Ticket", "Mid", "entry", out var midEntry)).IsTrue();
+        await Assert.That(ReferenceEquals(seg0, midEntry)).IsFalse();
+    }
+
     private static (Domain Domain, AnalysisResult Analysis, DomainSession Session) Evolve(string poly) {
         var session = DomainSession.ForSource(poly, ExtensionCatalog.ProductAuthoring);
         var changes = new PolyDslParser(poly, session).Parse();

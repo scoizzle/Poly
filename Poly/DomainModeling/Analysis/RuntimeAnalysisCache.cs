@@ -26,9 +26,9 @@ internal static class RuntimeAnalysisCache {
         public IReadOnlyList<TypeDefinitionNode>? Module { get; set; }
         /// <summary>Plan entry → lowered subscription effect body (no execute-time LowerActionBody).</summary>
         public Dictionary<SubscriptionDispatchPlanEntry, Node>? SubscriptionBodies { get; set; }
-        /// <summary>VM-shaped OnEntry/OnExit bodies for Domain-bound execute (export methods stay UseThis).</summary>
+        /// <summary>Export-shaped (UseThis) OnEntry/OnExit bodies shared with module methods; execute BindThis.</summary>
         public Dictionary<(string Entity, string Stage, string Kind), Node>? EntryExitBodies { get; set; }
-        /// <summary>VM-shaped policy bodies for EvaluatePolicy (export bool methods stay UseThis).</summary>
+        /// <summary>VM-shaped policy bodies for EvaluatePolicy (export bool methods stay UseThis — residual twin).</summary>
         public Dictionary<(string Entity, string Policy), Node>? PolicyBodies { get; set; }
     }
 
@@ -190,8 +190,9 @@ internal static class RuntimeAnalysisCache {
 
     /// <summary>
     /// Module ToSyntax inlines first-stage entry in the ctor only — populate
-    /// OnEntry{Stage}/OnExit{Stage} export methods (UseThis) plus a VM-shaped
-    /// side-cache for Domain-bound execute.
+    /// OnEntry{Stage}/OnExit{Stage} export methods once (UseThis). EntryExitBodies
+    /// holds the same export-shaped bodies; Domain-bound execute BindThis — no
+    /// UseThisReference twin / Parameter-rooted sibling tree.
     /// </summary>
     private static (IReadOnlyList<TypeDefinitionNode> Module,
         Dictionary<(string, string, string), Node> EntryExit)
@@ -218,24 +219,25 @@ internal static class RuntimeAnalysisCache {
                     .Where(e => e is not StageTransitionEffect).ToList();
                 if (entryBatch.Count > 0) {
                     var name = $"OnEntry{stage.Name}";
-                    entryExit[(entity.Name, stage.Name, "entry")] =
-                        LowerStageBatchVm(entity, domain, analysis, esm, entryBatch);
+                    var entryMethod = BuildStageBatchMethodExport(
+                        entity, domain, analysis, esm, name, entryBatch);
+                    // One UseThis body: module method + EntryExitBodies share it.
+                    entryExit[(entity.Name, stage.Name, "entry")] = entryMethod.Body!;
                     if (existingNames.Add(name)) {
                         extras ??= [];
-                        extras.Add(BuildStageBatchMethodExport(
-                            entity, domain, analysis, esm, name, entryBatch));
+                        extras.Add(entryMethod);
                     }
                 }
                 var exitBatch = stage.OnExitEffects
                     .Where(e => e is not StageTransitionEffect).ToList();
                 if (exitBatch.Count > 0) {
                     var name = $"OnExit{stage.Name}";
-                    entryExit[(entity.Name, stage.Name, "exit")] =
-                        LowerStageBatchVm(entity, domain, analysis, esm, exitBatch);
+                    var exitMethod = BuildStageBatchMethodExport(
+                        entity, domain, analysis, esm, name, exitBatch);
+                    entryExit[(entity.Name, stage.Name, "exit")] = exitMethod.Body!;
                     if (existingNames.Add(name)) {
                         extras ??= [];
-                        extras.Add(BuildStageBatchMethodExport(
-                            entity, domain, analysis, esm, name, exitBatch));
+                        extras.Add(exitMethod);
                     }
                 }
             }
@@ -247,20 +249,6 @@ internal static class RuntimeAnalysisCache {
         return (types, entryExit);
     }
 
-    private static Node LowerStageBatchVm(
-        Entity entity,
-        Domain domain,
-        AnalysisResult analysis,
-        EntityStructureMetadata? esm,
-        IReadOnlyList<Effect> effects) {
-        var ctx = new LoweringContext(
-            new Parameter("entity", new TypeReference(entity.Name)),
-            Analysis: analysis,
-            UseThisReference: false,
-            Domain: domain,
-            EnumPropertyNames: esm?.EnumPropertyNames);
-        return new EffectLoweringPass(entity, ctx).LowerActionBody(effects) ?? new Block([]);
-    }
 
     private static MethodDefinitionNode BuildStageBatchMethodExport(
         Entity entity,
@@ -348,6 +336,9 @@ internal static class RuntimeAnalysisCache {
                     };
                 }
 
+                // Effects-only VM body (Parameter-rooted). Module subscription handlers
+                // remain UseThis for C# print — residual twin (Slice A ships op/entry-exit;
+                // subscription handler gate wrappers differ from effects-only cache).
                 var ctx = new LoweringContext(
                     new Parameter("entity", new TypeReference(entity.Name)),
                     Parameters: peerParams,
@@ -368,6 +359,9 @@ internal static class RuntimeAnalysisCache {
         var map = new Dictionary<(string, string), Node>();
         foreach (var entity in domain.Types.OfType<Entity>()) {
             var entityParam = new Parameter("entity", new TypeReference(entity.Name));
+            // VM StoreQuantifier path requires UseThisReference:false (any/all/none).
+            // Module bool methods stay UseThis for C# print — residual twin; Slice A
+            // stop condition is shipped ops + entry/exit shared UseThis body.
             var pass = new DomainExpressionLoweringPass(new LoweringContext(
                 entityParam,
                 Analysis: analysis,

@@ -297,7 +297,7 @@ public sealed partial record DomainEntityInstance {
                     Analysis: analysis,
                     Domain: Domain));
 
-                // Domain-bound: bind effects-only body cached at GetOrLower (VM-shaped).
+                // Domain-bound: bind effects-only body cached at GetOrLower (VM-shaped; BindExportBody no-ops without This).
                 // Miss or missing plan entry throws — never BindPeerInEffect + LowerActionBody.
                 if (planEntry is null)
                     throw new InvalidOperationException(
@@ -306,7 +306,10 @@ public sealed partial record DomainEntityInstance {
                     || body is null)
                     throw new InvalidOperationException(
                         $"Subscription body is missing on entity '{Entity.Name}'.");
-                var cached = body;
+                // SubscriptionBodies are Parameter-rooted (UseThis:false) — residual twin vs
+                // module UseThis handlers for C# print. BindExportBody is a no-op without This;
+                // then materialize peer if present.
+                var cached = BindExportBody(body);
                 if (peerBinding is { Length: > 0 })
                     cached = MaterializePeerInSyntax(cached, peerBinding, peerInstance);
                 ThrowIfEffectListFailed(

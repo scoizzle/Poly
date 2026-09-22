@@ -240,21 +240,13 @@ public sealed partial record DomainEntityInstance {
         if (firstStage?.OnEntryEffects is not { Count: > 0 })
             return;
 
-        var analysis = instance.Domain is not null
-            ? RuntimeAnalysisCache.GetOrAnalyze(instance.Domain)
-            : null;
-        var loweringContext = new LoweringContext(
-            new Parameter("entity", new TypeReference(instance.Entity.Name)),
-            Analysis: analysis,
-            Domain: instance.Domain);
-        var entryPass = new EffectLoweringPass(instance.Entity, loweringContext);
         var entryEffects = firstStage.OnEntryEffects
             .Where(e => e is not StageTransitionEffect)
             .ToList();
         if (entryEffects.Count == 0)
             return;
         ThrowIfEffectListFailed(
-            instance.ExecuteEffectList(entryEffects, entryPass, instance._typeDefAnalyzer,
+            instance.ExecuteEffectList(entryEffects, instance._typeDefAnalyzer,
                 entryStageName: firstStage.Name),
             "first-stage OnEntry");
     }
@@ -379,44 +371,24 @@ public sealed partial record DomainEntityInstance {
 
         var expr = policy.Expression;
 
-        // Domain-bound: bind policy tree cached at GetOrLower. Miss throws
-        // (no evaluate-time DomainExpressionLoweringPass re-lower). Export bool
-        // methods stay UseThis for C# (residual twin). Domain-null keeps the
-        // standalone lower path.
-        if (Domain is not null) {
-            var analysis = RuntimeAnalysisCache.GetOrAnalyze(Domain);
-            RuntimeAnalysisCache.GetOrLower(Domain, RuntimeAnalysisCache.Session(Domain), analysis);
-            if (!RuntimeAnalysisCache.TryGetPolicyBody(Domain, Entity.Name, policy.Name, out var cached)
-                || cached is null)
-                throw new InvalidOperationException(
-                    $"Policy body '{policy.Name}' is missing on entity '{Entity.Name}'.");
-            // BindExportBody is identity for Parameter-shaped policy trees.
-            var boundPolicy = BindExportBody(cached);
-            var compiledModule = Interpreter.CompileChecked(boundPolicy, _typeDefAnalyzer);
-            using var execModule = Interpreter.Execute(compiledModule,
-                s => s.SetArgs(new object?[] { this }));
-            var boxedModule = BoxPathPrefixLeaf(expr, execModule.Result.GetValue<object>());
-            return CoercePolicyBool(policy.Name, boxedModule);
-        }
+        // Slice B: execute never lowers. Policy bodies come from GetOrLower only.
+        if (Domain is null)
+            throw new InvalidOperationException(
+                $"Cannot evaluate policy '{policy.Name}' on '{Entity.Name}' without a Domain-bound module.");
 
-        var entityParam = new Parameter("entity", new TypeReference(Entity.Name));
-        var pass = new DomainExpressionLoweringPass(new LoweringContext(
-            entityParam,
-            Analysis: null,
-            Domain: Domain,
-            PropertyTypeResolver: EffectLoweringPass.BuildPropertyTypeResolver(Entity),
-            NavigationNameResolver: EffectLoweringPass.BuildNavigationNameResolver(Entity, Domain, null),
-            IsCollectionNavigation: EffectLoweringPass.BuildIsCollectionNavigation(Entity, Domain, null),
-            IsRelationshipNavigation: EffectLoweringPass.BuildIsRelationshipNavigation(Entity, Domain, null),
-            SourceEntityName: Entity.Name,
-            Meaning: ExtensionCatalog.Core.Language.Meaning));
-        var lowered = pass.Lower(expr, entityParam);
-
-        var compiled = Interpreter.CompileChecked(lowered, _typeDefAnalyzer);
-        using var exec = Interpreter.Execute(compiled,
+        var analysis = RuntimeAnalysisCache.GetOrAnalyze(Domain);
+        RuntimeAnalysisCache.GetOrLower(Domain, RuntimeAnalysisCache.Session(Domain), analysis);
+        if (!RuntimeAnalysisCache.TryGetPolicyBody(Domain, Entity.Name, policy.Name, out var cached)
+            || cached is null)
+            throw new InvalidOperationException(
+                $"Policy body '{policy.Name}' is missing on entity '{Entity.Name}'.");
+        // BindExportBody is identity for Parameter-shaped policy trees.
+        var boundPolicy = BindExportBody(cached);
+        var compiledModule = Interpreter.CompileChecked(boundPolicy, _typeDefAnalyzer);
+        using var execModule = Interpreter.Execute(compiledModule,
             s => s.SetArgs(new object?[] { this }));
-        var boxed = BoxPathPrefixLeaf(expr, exec.Result.GetValue<object>());
-        return CoercePolicyBool(policy.Name, boxed);
+        var boxedModule = BoxPathPrefixLeaf(expr, execModule.Result.GetValue<object>());
+        return CoercePolicyBool(policy.Name, boxedModule);
     }
 
     private static bool CoercePolicyBool(string policyName, object? boxed) => boxed switch {
@@ -575,16 +547,6 @@ public sealed partial record DomainEntityInstance {
             return ActionInvocationResult.Blocked(actionName, failures);
 
         // ── Execute effects ─────────────────────────────────────
-        var subjectParam = new Parameter("entity", new TypeReference(Entity.Name));
-        var loweringContext = new LoweringContext(
-            subjectParam,
-            Analysis: runtimeAnalysis,
-            Domain: Domain,
-            SourceStageName: CurrentStage,
-            ActionParameterNames: action.Parameters.Count > 0
-                ? action.Parameters.Select(p => p.Name).ToHashSet(StringComparer.Ordinal)
-                : null);
-        var effectPass = new EffectLoweringPass(Entity, loweringContext);
         // Action parameters are injected into _values for the call duration, but are not
         // entity schema properties. Compile with an action-scoped type def so PropertyAccess
         // to parameter names resolves (otherwise Member passthrough assigns the whole bag).
@@ -597,7 +559,7 @@ public sealed partial record DomainEntityInstance {
             var createdBefore = _createdChildren.Count;
             var bagBefore = new Dictionary<string, object?>(_values, StringComparer.Ordinal);
             var stageBefore = CurrentStage;
-            var failed = ExecuteEffectList(action.Effects, effectPass, effectTypeProvider,
+            var failed = ExecuteEffectList(action.Effects, effectTypeProvider,
                 actionName: action.Name, args: args, actionParameters: action.Parameters);
             if (failed is { IsSuccess: false }) {
                 // Unique-before-mutate restore (PR 44 F2). Other constraint Failures
@@ -705,13 +667,11 @@ public sealed partial record DomainEntityInstance {
     /// bind <see cref="MethodDefinitionNode.Body"/> from the cached module — never
     /// <c>LowerActionBody</c> (Ontology residual: dual-path execute is a bug).
     /// Domain-bound OnEntry/OnExit batches bind GetOrLower export-shaped bodies
-    /// (BindThis) / module methods and throw on miss. Residual <c>LowerActionBody</c> only when
-    /// <paramref name="allowExecuteTimeLower"/> (nested StageTransition flush) or
-    /// Domain-null standalone.
+    /// (BindThis) / module methods / mixed-list segment bodies and throw on miss.
+    /// Slice B: execute never lowers; Domain-null fail-closed.
     /// </summary>
     private DomainResult? ExecuteEffectList(
         IReadOnlyList<Effect> effects,
-        EffectLoweringPass effectPass,
         TypeDefinitionNodeAnalyzer typeProvider,
         string? actionName = null,
         string? entryStageName = null,
@@ -719,7 +679,7 @@ public sealed partial record DomainEntityInstance {
         IReadOnlyDictionary<string, object?>? args = null,
         IReadOnlyList<Property>? actionParameters = null,
         object? peerArg = null,
-        bool allowExecuteTimeLower = false) {
+        int? entryExitSegmentIndex = null) {
         // Named actions always bind the module Body (require Failure + Success),
         // even when Ontology effects are empty — gated no-ops still run guards
         // (Final Boss F9: empty-effects must not skip module require).
@@ -745,7 +705,19 @@ public sealed partial record DomainEntityInstance {
             var analysis = RuntimeAnalysisCache.GetOrAnalyze(Domain);
             RuntimeAnalysisCache.GetOrLower(Domain, RuntimeAnalysisCache.Session(Domain), analysis);
             var hasStageName = entryStageName is not null || exitStageName is not null;
-            if (hasStageName) {
+            if (hasStageName && entryExitSegmentIndex is int segmentIndex) {
+                var kind = exitStageName is not null ? "exit" : "entry";
+                var stageName = exitStageName ?? entryStageName
+                    ?? throw new InvalidOperationException("Segment flush requires a stage name.");
+                if (!RuntimeAnalysisCache.TryGetEntryExitSegmentBody(
+                        Domain, Entity.Name, stageName, kind, segmentIndex, out var segmentBody)
+                    || segmentBody is null) {
+                    throw new InvalidOperationException(
+                        $"Entry/exit segment body {kind} '{stageName}'[{segmentIndex}] is missing on entity '{Entity.Name}'.");
+                }
+                tree = BindExportBody(segmentBody);
+            }
+            else if (hasStageName) {
                 if (exitStageName is not null
                     && RuntimeAnalysisCache.TryGetEntryExitBody(
                         Domain, Entity.Name, exitStageName, "exit", out var exitBody)
@@ -775,18 +747,15 @@ public sealed partial record DomainEntityInstance {
                         $"Entry/exit body {kind} is missing on entity '{Entity.Name}'.");
                 }
             }
-            else if (allowExecuteTimeLower) {
-                // Nested StageTransition partial flush — claimed residual LowerActionBody.
-                tree = effectPass.LowerActionBody(effects);
-            }
             else {
                 throw new InvalidOperationException(
                     $"Domain-bound effect list on '{Entity.Name}' requires a cached entry/exit body " +
-                    "or allowExecuteTimeLower for nested StageTransition flush.");
+                    "or mixed-list segment from GetOrLower.");
             }
         }
         else {
-            tree = effectPass.LowerActionBody(effects);
+            throw new InvalidOperationException(
+                $"Cannot execute effect list on '{Entity.Name}' without a Domain-bound module.");
         }
         if (tree is null)
             throw new InvalidOperationException(

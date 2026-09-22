@@ -151,18 +151,11 @@ public sealed partial record DomainEntityInstance {
                         $"Runtime transition requires {nameof(DomainCatalogMetadata)} for domain '{Domain.Name}' (TransitionStage).");
             }
 
-            var subject = new Parameter("entity", new TypeReference(Entity.Name));
-            var loweringContext = new LoweringContext(
-                subject,
-                Analysis: analysis,
-                Domain: Domain);
-
             if (previousStageName is not null) {
                 var prevStage = ResolveTransitionStage(analysis, previousStageName);
                 if (prevStage?.OnExitEffects is { Count: > 0 }) {
-                    var exitPass = new EffectLoweringPass(Entity, loweringContext);
                     RunTransitionEffectList(
-                        prevStage.OnExitEffects, exitPass, notifyStore,
+                        prevStage.OnExitEffects, notifyStore,
                         exitStageName: previousStageName);
                 }
             }
@@ -172,9 +165,8 @@ public sealed partial record DomainEntityInstance {
             try {
                 var targetStage = ResolveTransitionStage(analysis, targetStageName);
                 if (targetStage?.OnEntryEffects is { Count: > 0 }) {
-                    var entryPass = new EffectLoweringPass(Entity, loweringContext);
                     RunTransitionEffectList(
-                        targetStage.OnEntryEffects, entryPass, notifyStore,
+                        targetStage.OnEntryEffects, notifyStore,
                         entryStageName: targetStageName);
                 }
             }
@@ -194,19 +186,18 @@ public sealed partial record DomainEntityInstance {
     /// <see cref="TransitionStage"/> for depth bounding and test callers.
     /// Action-level stage transitions must lower via <see cref="ExecuteEffect"/>.
     /// </summary>
-    private void RunTransitionEffect(Effect effect, EffectLoweringPass pass, bool notifyStore) {
-        RunTransitionEffectList([effect], pass, notifyStore);
+    private void RunTransitionEffect(Effect effect, bool notifyStore) {
+        RunTransitionEffectList([effect], notifyStore);
     }
 
     /// <summary>
     /// Nested <see cref="StageTransitionEffect"/> still recurses
     /// <see cref="TransitionStage"/>. When the list has no nested transitions,
     /// Domain-bound batches bind OnEntry/OnExit module methods from GetOrLower.
-    /// Mixed lists keep flush/recurse and lower residual batches at execute time.
+    /// Mixed lists flush/recurse binding GetOrLower segment bodies — never LowerActionBody.
     /// </summary>
     private void RunTransitionEffectList(
         IReadOnlyList<Effect> effects,
-        EffectLoweringPass pass,
         bool notifyStore,
         string? entryStageName = null,
         string? exitStageName = null) {
@@ -214,20 +205,26 @@ public sealed partial record DomainEntityInstance {
         if (effects.All(e => e is not StageTransitionEffect)) {
             ThrowIfEffectListFailed(
                 ExecuteEffectList(
-                    effects, pass, _typeDefAnalyzer,
+                    effects, _typeDefAnalyzer,
                     entryStageName: entryStageName,
                     exitStageName: exitStageName),
                 "stage entry/exit");
             return;
         }
 
+        var segmentIndex = 0;
         var batch = new List<Effect>();
         void Flush() {
             if (batch.Count == 0) return;
-            // Partial flush after nested transition — claimed residual LowerActionBody.
+            // Partial flush after nested transition — bind cached segment from GetOrLower.
             ThrowIfEffectListFailed(
-                ExecuteEffectList(batch, pass, _typeDefAnalyzer, allowExecuteTimeLower: true),
+                ExecuteEffectList(
+                    batch, _typeDefAnalyzer,
+                    entryStageName: entryStageName,
+                    exitStageName: exitStageName,
+                    entryExitSegmentIndex: segmentIndex),
                 "stage entry/exit");
+            segmentIndex++;
             batch.Clear();
         }
         foreach (var effect in effects) {
@@ -286,48 +283,32 @@ public sealed partial record DomainEntityInstance {
             if (effects.Count == 0)
                 return;
 
-            var subjectParam = new Parameter("entity", new TypeReference(Entity.Name));
-            EffectLoweringPass effectPass;
-            if (Domain is not null) {
-                var analysis = RuntimeAnalysisCache.GetOrAnalyze(Domain);
-                RuntimeAnalysisCache.GetOrLower(
-                    Domain, RuntimeAnalysisCache.Session(Domain), analysis);
-                effectPass = new EffectLoweringPass(Entity, new LoweringContext(
-                    subjectParam,
-                    Analysis: analysis,
-                    Domain: Domain));
+            // Domain-null: fail closed immediately (mirror EvaluatePolicy Domain-bound requirement).
+            if (Domain is null)
+                throw new InvalidOperationException(
+                    $"Cannot execute subscription effects on '{Entity.Name}' without a Domain-bound module.");
 
-                // Domain-bound: bind effects-only body cached at GetOrLower (VM-shaped; BindExportBody no-ops without This).
-                // Miss or missing plan entry throws — never BindPeerInEffect + LowerActionBody.
-                if (planEntry is null)
-                    throw new InvalidOperationException(
-                        $"Subscription dispatch on '{Entity.Name}' requires a plan entry for cache bind.");
-                if (!RuntimeAnalysisCache.TryGetSubscriptionBody(Domain, planEntry, out var body)
-                    || body is null)
-                    throw new InvalidOperationException(
-                        $"Subscription body is missing on entity '{Entity.Name}'.");
-                // SubscriptionBodies are Parameter-rooted (UseThis:false) — residual twin vs
-                // module UseThis handlers for C# print. BindExportBody is a no-op without This;
-                // then materialize peer if present.
-                var cached = BindExportBody(body);
-                if (peerBinding is { Length: > 0 })
-                    cached = MaterializePeerInSyntax(cached, peerBinding, peerInstance);
-                ThrowIfEffectListFailed(
-                    ExecuteCachedSubscriptionTree(cached, effectPass, peerArg: null),
-                    "subscription");
-                return;
-            }
-            else {
-                effectPass = new EffectLoweringPass(Entity, subjectParam);
-            }
+            var analysis = RuntimeAnalysisCache.GetOrAnalyze(Domain);
+            RuntimeAnalysisCache.GetOrLower(
+                Domain, RuntimeAnalysisCache.Session(Domain), analysis);
 
-            // Domain-null standalone: keep execute-time lower path.
-            var bound = effects.Select(effect => peerBinding is { Length: > 0 }
-                    ? BindPeerInEffect(effect, peerBinding, peerInstance)
-                    : effect)
-                .ToList();
+            // Domain-bound: bind effects-only body cached at GetOrLower (VM-shaped; BindExportBody no-ops without This).
+            // Miss or missing plan entry throws — never BindPeerInEffect + LowerActionBody.
+            if (planEntry is null)
+                throw new InvalidOperationException(
+                    $"Subscription dispatch on '{Entity.Name}' requires a plan entry for cache bind.");
+            if (!RuntimeAnalysisCache.TryGetSubscriptionBody(Domain, planEntry, out var body)
+                || body is null)
+                throw new InvalidOperationException(
+                    $"Subscription body is missing on entity '{Entity.Name}'.");
+            // SubscriptionBodies are Parameter-rooted (UseThis:false) — residual twin vs
+            // module UseThis handlers for C# print. BindExportBody is a no-op without This;
+            // then materialize peer if present.
+            var cached = BindExportBody(body);
+            if (peerBinding is { Length: > 0 })
+                cached = MaterializePeerInSyntax(cached, peerBinding, peerInstance);
             ThrowIfEffectListFailed(
-                ExecuteEffectList(bound, effectPass, _typeDefAnalyzer),
+                ExecuteCachedSubscriptionTree(cached, peerArg: null),
                 "subscription");
         }
         finally {
@@ -336,7 +317,7 @@ public sealed partial record DomainEntityInstance {
     }
 
     private DomainResult? ExecuteCachedSubscriptionTree(
-        Node tree, EffectLoweringPass effectPass, object? peerArg) {
+        Node tree, object? peerArg) {
         var compiled = Interpreter.CompileChecked(
             tree, ModuleAwareTypeProvider(_typeDefAnalyzer));
         using var exec = Interpreter.Execute(compiled,

@@ -327,7 +327,8 @@ public sealed partial record DomainEntityInstance {
                 effectPass = new EffectLoweringPass(Entity, subjectParam);
             }
 
-            // Domain-null standalone: keep execute-time lower path.
+            // Domain-null: fail closed — ExecuteEffectList requires a Domain-bound module
+            // (no execute-time LowerActionBody). Dead setup until Domain is set; see F2.
             var bound = effects.Select(effect => peerBinding is { Length: > 0 }
                     ? BindPeerInEffect(effect, peerBinding, peerInstance)
                     : effect)

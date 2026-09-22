@@ -379,9 +379,10 @@ public sealed partial record DomainEntityInstance {
 
         var expr = policy.Expression;
 
-        // Domain-bound: bind VM-shaped policy tree cached at GetOrLower. Miss throws
+        // Domain-bound: bind policy tree cached at GetOrLower. Miss throws
         // (no evaluate-time DomainExpressionLoweringPass re-lower). Export bool
-        // methods stay UseThis for C#. Domain-null keeps the standalone lower path.
+        // methods stay UseThis for C# (residual twin). Domain-null keeps the
+        // standalone lower path.
         if (Domain is not null) {
             var analysis = RuntimeAnalysisCache.GetOrAnalyze(Domain);
             RuntimeAnalysisCache.GetOrLower(Domain, RuntimeAnalysisCache.Session(Domain), analysis);
@@ -389,7 +390,9 @@ public sealed partial record DomainEntityInstance {
                 || cached is null)
                 throw new InvalidOperationException(
                     $"Policy body '{policy.Name}' is missing on entity '{Entity.Name}'.");
-            var compiledModule = Interpreter.CompileChecked(cached, _typeDefAnalyzer);
+            // BindExportBody is identity for Parameter-shaped policy trees.
+            var boundPolicy = BindExportBody(cached);
+            var compiledModule = Interpreter.CompileChecked(boundPolicy, _typeDefAnalyzer);
             using var execModule = Interpreter.Execute(compiledModule,
                 s => s.SetArgs(new object?[] { this }));
             var boxedModule = BoxPathPrefixLeaf(expr, execModule.Result.GetValue<object>());
@@ -701,8 +704,8 @@ public sealed partial record DomainEntityInstance {
     /// One operation AST through <see cref="Interpreter"/>. Named actions always
     /// bind <see cref="MethodDefinitionNode.Body"/> from the cached module — never
     /// <c>LowerActionBody</c> (Ontology residual: dual-path execute is a bug).
-    /// Domain-bound OnEntry/OnExit batches bind GetOrLower side-cache / module methods
-    /// and throw on miss. Residual <c>LowerActionBody</c> only when
+    /// Domain-bound OnEntry/OnExit batches bind GetOrLower export-shaped bodies
+    /// (BindThis) / module methods and throw on miss. Residual <c>LowerActionBody</c> only when
     /// <paramref name="allowExecuteTimeLower"/> (nested StageTransition flush) or
     /// Domain-null standalone.
     /// </summary>
@@ -747,13 +750,14 @@ public sealed partial record DomainEntityInstance {
                     && RuntimeAnalysisCache.TryGetEntryExitBody(
                         Domain, Entity.Name, exitStageName, "exit", out var exitBody)
                     && exitBody is not null) {
-                    tree = exitBody;
+                    // EntryExitBodies are export-shaped (UseThis); bind for VM SetArgs.
+                    tree = BindExportBody(exitBody);
                 }
                 else if (entryStageName is not null
                     && RuntimeAnalysisCache.TryGetEntryExitBody(
                         Domain, Entity.Name, entryStageName, "entry", out var entryBody)
                     && entryBody is not null) {
-                    tree = entryBody;
+                    tree = BindExportBody(entryBody);
                 }
                 else if (exitStageName is not null
                     && RuntimeAnalysisCache.TryGetExitMethod(Domain, Entity.Name, exitStageName, out var exit)
@@ -850,6 +854,109 @@ public sealed partial record DomainEntityInstance {
         // Module/stage enums + merged entity first; wrapped as fallback.
         return new TypeDefinitionProviderCollection(moduleTypes, wrapped);
     }
+
+    /// <summary>
+    /// Consumer bind for export-shaped (UseThis) trees from session.Lower —
+    /// rewrites <see cref="ThisReference"/> to <c>Parameter("entity")</c> for VM SetArgs,
+    /// and void fail-closed <c>throw new InvalidOperationException(…)</c> to
+    /// <c>return DomainResult.Failure(…)</c> (VM has no 1-arg IOE ctor). Not a second lower.
+    /// </summary>
+    private Node BindExportBody(Node body) {
+        var entity = new Parameter("entity", new TypeReference(Entity.Name));
+        var bound = BindThis(body, entity, null, EnumTypeNames());
+        return RewriteVoidFailClosedThrow(bound);
+    }
+
+
+
+    /// <summary>
+    /// Export void bodies fail closed with throw; Domain-bound execute needs DomainResult.Failure.
+    /// Same tree as print — consumer bind only (not a second lower).
+    /// </summary>
+    private static Node RewriteVoidFailClosedThrow(Node node) => node switch {
+        ThrowStatement {
+            Exception: New {
+                Type: NamedTypeReference { TypeName: "InvalidOperationException" },
+                Arguments: var args
+            }
+        } => new Return(new Invoke(
+            new Member(new NamedTypeReference("DomainResult"), "Failure"),
+            args.Length > 0 ? RewriteVoidFailClosedThrow(args[0]) : new Constant(""))),
+        Block b => new Block(
+            b.Nodes.Select(RewriteVoidFailClosedThrow),
+            b.Variables.Select(RewriteVoidFailClosedThrow)),
+        IfStatement i => new IfStatement(
+            RewriteVoidFailClosedThrow(i.Condition),
+            RewriteVoidFailClosedThrow(i.ThenBranch),
+            i.ElseBranch is null ? null : RewriteVoidFailClosedThrow(i.ElseBranch)),
+        Return r => r.Value is null ? r : new Return(RewriteVoidFailClosedThrow(r.Value)),
+        Assignment a => new Assignment(
+            RewriteVoidFailClosedThrow(a.Destination),
+            RewriteVoidFailClosedThrow(a.Value)),
+        Invoke inv => new Invoke(
+            RewriteVoidFailClosedThrow(inv.Delegate),
+            [.. inv.Arguments.Select(RewriteVoidFailClosedThrow)]) {
+            TypeArguments = inv.TypeArguments
+        },
+        Member m => new Member(RewriteVoidFailClosedThrow(m.Value), m.MemberName),
+        Poly.Ast.Nodes.Not n => new Poly.Ast.Nodes.Not(RewriteVoidFailClosedThrow(n.Value)),
+        Equal e => new Equal(
+            RewriteVoidFailClosedThrow(e.LeftHandValue), RewriteVoidFailClosedThrow(e.RightHandValue)),
+        NotEqual ne => new NotEqual(
+            RewriteVoidFailClosedThrow(ne.LeftHandValue), RewriteVoidFailClosedThrow(ne.RightHandValue)),
+        LessThan lt => new LessThan(
+            RewriteVoidFailClosedThrow(lt.LeftHandValue), RewriteVoidFailClosedThrow(lt.RightHandValue)),
+        LessThanOrEqual le => new LessThanOrEqual(
+            RewriteVoidFailClosedThrow(le.LeftHandValue), RewriteVoidFailClosedThrow(le.RightHandValue)),
+        GreaterThan gt => new GreaterThan(
+            RewriteVoidFailClosedThrow(gt.LeftHandValue), RewriteVoidFailClosedThrow(gt.RightHandValue)),
+        GreaterThanOrEqual ge => new GreaterThanOrEqual(
+            RewriteVoidFailClosedThrow(ge.LeftHandValue), RewriteVoidFailClosedThrow(ge.RightHandValue)),
+        Poly.Ast.Nodes.Add add => new Poly.Ast.Nodes.Add(
+            RewriteVoidFailClosedThrow(add.LeftHandValue), RewriteVoidFailClosedThrow(add.RightHandValue)),
+        Poly.Ast.Nodes.Subtract sub => new Poly.Ast.Nodes.Subtract(
+            RewriteVoidFailClosedThrow(sub.LeftHandValue), RewriteVoidFailClosedThrow(sub.RightHandValue)),
+        Poly.Ast.Nodes.Multiply mul => new Poly.Ast.Nodes.Multiply(
+            RewriteVoidFailClosedThrow(mul.LeftHandValue), RewriteVoidFailClosedThrow(mul.RightHandValue)),
+        Poly.Ast.Nodes.Divide div => new Poly.Ast.Nodes.Divide(
+            RewriteVoidFailClosedThrow(div.LeftHandValue), RewriteVoidFailClosedThrow(div.RightHandValue)),
+        Poly.Ast.Nodes.And and => new Poly.Ast.Nodes.And(
+            RewriteVoidFailClosedThrow(and.LeftHandValue), RewriteVoidFailClosedThrow(and.RightHandValue)),
+        Poly.Ast.Nodes.Or or => new Poly.Ast.Nodes.Or(
+            RewriteVoidFailClosedThrow(or.LeftHandValue), RewriteVoidFailClosedThrow(or.RightHandValue)),
+        Coalesce c => new Coalesce(
+            RewriteVoidFailClosedThrow(c.LeftHandValue), RewriteVoidFailClosedThrow(c.RightHandValue)),
+        TypeCast tc => new TypeCast(
+            RewriteVoidFailClosedThrow(tc.Operand),
+            RewriteVoidFailClosedThrow(tc.TargetTypeReference)),
+        New n => new New(
+            RewriteVoidFailClosedThrow(n.Type),
+            [.. n.Arguments.Select(RewriteVoidFailClosedThrow)]),
+        ThrowStatement ts => new ThrowStatement(RewriteVoidFailClosedThrow(ts.Exception)),
+        TryCatchFinally t => new TryCatchFinally(
+            RewriteVoidFailClosedThrow(t.TryBlock),
+            t.CatchClauses is null ? null : [.. t.CatchClauses.Select(cc => cc with {
+                ExceptionType = cc.ExceptionType is null
+                    ? null
+                    : RewriteVoidFailClosedThrow(cc.ExceptionType),
+                Body = RewriteVoidFailClosedThrow(cc.Body)
+            })],
+            t.FinallyBlock is null ? null : RewriteVoidFailClosedThrow(t.FinallyBlock)),
+        ForEachLoop f => new ForEachLoop(
+            f.LoopVariable,
+            RewriteVoidFailClosedThrow(f.Collection),
+            RewriteVoidFailClosedThrow(f.Body),
+            f.Label),
+        LabelDeclaration ld => new LabelDeclaration(
+            ld.Name, RewriteVoidFailClosedThrow(ld.Statement)),
+        Conditional cond => new Conditional(
+            RewriteVoidFailClosedThrow(cond.Condition),
+            RewriteVoidFailClosedThrow(cond.IfTrue),
+            RewriteVoidFailClosedThrow(cond.IfFalse)),
+        UnaryMinus um => new UnaryMinus(RewriteVoidFailClosedThrow(um.Operand)),
+        NullForgiving nf => new NullForgiving(RewriteVoidFailClosedThrow(nf.Operand)),
+        _ => node
+    };
 
     private Node BindModuleMethodBody(MethodDefinitionNode method, bool keepParametersAsSlots = false) {
         var body = method.Body

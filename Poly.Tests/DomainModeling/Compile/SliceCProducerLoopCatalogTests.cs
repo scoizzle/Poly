@@ -137,11 +137,55 @@ public class SliceCProducerLoopCatalogTests {
     }
 
     [Test]
-    public async Task SliceC_MinimalApiContributor_NoHttpBag_NoOps() {
+    public async Task SliceC_MinimalApiContributor_NoHttpAndNoStorage_NoOps() {
+        // NoOp is both-null only: SampleDomain (ProductAuthoring seed) has neither
+        // HttpSurfaceMetadata nor StorageMappingMetadata.
         var (domain, analysis, session) = Evolve(SampleDomain);
         _ = session.Lower(domain, analysis);
         var files = new MinimalApiHostArtifactContributor().Contribute(domain, analysis);
         await Assert.That(files.Count).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task SliceC_MinimalApiContributor_NoHttpBag_WithStorage_EmitsHostFiles() {
+        // Intentional harness emit: storage present + http null still contributes
+        // Program.cs + demo.http (Compile path only registers with the http id).
+        // persistence (Core) registers StoragePass; no http door.
+        var storageOnly = """
+            domain Catalog
+            uses temporal
+            uses storage
+            uses persistence
+
+            Item: entity {
+              Name: Text required
+              Qty: Number
+            }
+            """;
+        var (domain, analysis, session) = Evolve(storageOnly);
+        await Assert.That(analysis.GetMetadata<HttpSurfaceMetadata>(domain)).IsNull();
+        await Assert.That(analysis.GetMetadata<StorageMappingMetadata>(domain)).IsNotNull();
+        _ = session.Lower(domain, analysis);
+        var files = new MinimalApiHostArtifactContributor().Contribute(domain, analysis);
+        await Assert.That(files.Select(f => f.FileName).ToList()).IsEquivalentTo(["Program.cs", "demo.http"]);
+    }
+
+    [Test]
+    public async Task SliceC_CompileDbmsPack_AlwaysWins_ProgramProvider() {
+        // Compile DbmsPack always wins over source uses sqlite for Program.cs provider.
+        var generic = new Compiler().Compile(HttpHostDomain, CompileMode.Entities, DbmsPack.Generic);
+        await Assert.That(generic.Success).IsTrue().Because(
+            generic.Errors is null ? "" : string.Join("; ", generic.Errors));
+        var genericProg = generic.Files!.Single(f => f.FileName == "Program.cs").Source;
+        await Assert.That(genericProg).Contains("UseInMemoryDatabase");
+        await Assert.That(genericProg).DoesNotContain("UseSqlite");
+
+        var sqlite = new Compiler().Compile(HttpHostDomain, CompileMode.Entities, DbmsPack.Sqlite);
+        await Assert.That(sqlite.Success).IsTrue().Because(
+            sqlite.Errors is null ? "" : string.Join("; ", sqlite.Errors));
+        var sqliteProg = sqlite.Files!.Single(f => f.FileName == "Program.cs").Source;
+        await Assert.That(sqliteProg).Contains("UseSqlite");
+        await Assert.That(sqliteProg).DoesNotContain("UseInMemoryDatabase");
     }
 
     private sealed class TrackingContributor : IArtifactContributor {

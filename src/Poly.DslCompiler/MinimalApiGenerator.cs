@@ -1110,8 +1110,10 @@ public sealed class MinimalApiHostArtifactContributor : IArtifactContributor {
     private readonly DbmsPack? _dbmsOverride;
 
     /// <summary>
-    /// When <paramref name="dbms"/> is null (Load registration), DBMS is resolved
-    /// from domain extensions at contribute time.
+    /// Compile registration always passes a non-null <paramref name="dbms"/>;
+    /// that pack always wins for Program.cs provider selection. When null
+    /// (harness / Load without an override), DBMS is resolved from domain
+    /// extensions at contribute time via ResolveDbms.
     /// </summary>
     public MinimalApiHostArtifactContributor(
         IStorageSyntaxEmitter? emitter = null,
@@ -1128,14 +1130,14 @@ public sealed class MinimalApiHostArtifactContributor : IArtifactContributor {
         var storage = analysis.GetMetadata<StorageMappingMetadata>(domain)?.Storage;
         var aggregate = analysis.GetMetadata<OwnershipAggregateMetadata>(domain)?.Aggregate;
 
-        // No HTTP door and no infrastructure bags → nothing to emit (Load gating + harness no-op).
-        // Explicit harness calls that already have storage bags still emit.
+        // NoOp only when both http and storage are null (Load gating + both-null harness).
+        // http-null + storage-present still emits (intentional harness path).
         if (http is null && storage is null)
             return [];
 
         if (storage is null || aggregate is null) {
             throw new InvalidOperationException(
-                "HTTP artifacts require storage, behavior, and aggregate analysis metadata.");
+                "HTTP artifacts require storage and aggregate analysis metadata.");
         }
 
         var behavior = BehaviorMetadata.From(domain, analysis);

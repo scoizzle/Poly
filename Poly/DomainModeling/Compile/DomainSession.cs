@@ -40,8 +40,9 @@ public sealed class DomainSession {
     internal IReadOnlyList<INodeAnalyzer> ExtraAnalyzers { get; }
 
     /// <summary>
-    /// Artifact-set catalog after a successful <see cref="Lower"/>.
-    /// Empty before Lower; at least the privileged Syntax module after Lower.
+    /// Lower sentinel only — not an emit/contributor file inventory.
+    /// Empty before Lower; after Lower always contains the privileged SyntaxModule
+    /// descriptor stamped by <see cref="Lower"/> (sole writer via private set).
     /// </summary>
     public IReadOnlyList<ArtifactDescriptor> ArtifactCatalog { get; private set; } = [];
 
@@ -164,10 +165,8 @@ public sealed class DomainSession {
         ArgumentNullException.ThrowIfNull(domain);
         ArgumentNullException.ThrowIfNull(analysis);
         var files = new List<(string FileName, string Source)>();
+        // Lower always stamps the SyntaxModule sentinel into ArtifactCatalog (sole writer).
         var types = Lower(domain, analysis);
-        if (ArtifactCatalog.Count == 0)
-            throw new InvalidOperationException(
-                "Emit requires a non-empty artifact catalog after Lower.");
         var interpAnalysis = TryAnalyzeForEmit(types);
         var generator = interpAnalysis is not null
             ? new CSharpGenerator(interpAnalysis)

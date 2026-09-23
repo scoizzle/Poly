@@ -1,6 +1,7 @@
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Evolution;
+using Poly.DomainModeling.Compile;
 using Poly.DomainModeling.Ontology;
 
 namespace Poly.Tests.DomainModeling;
@@ -69,9 +70,9 @@ public class DomainEntityInstanceTests {
     [Test]
     public async Task EvaluatePolicy_AgeGuard_ReturnsTrueForAdult() {
         var entity = CreatePersonEntity();
-        var adult = DomainEntityInstance.Create(entity,
+        var adult = CreateWithDomain(entity,
             new Dictionary<string, object?> { ["Age"] = 25L });
-        var minor = DomainEntityInstance.Create(entity,
+        var minor = CreateWithDomain(entity,
             new Dictionary<string, object?> { ["Age"] = 15L });
 
         await Assert.That(adult.EvaluatePolicy(entity.Policies.First(p => p.Name == "IsAdult"))).IsTrue();
@@ -86,8 +87,9 @@ public class DomainEntityInstanceTests {
                 DomainExpression.Property("OccurredAt"),
                 new Poly.DomainModeling.Libraries.Temporal.Now()));
         var entity = new Entity("Event", [occurred], [], [isPast], []);
-        var instance = DomainEntityInstance.Create(entity,
-            new Dictionary<string, object?> { ["OccurredAt"] = DateTime.UtcNow.AddHours(-1) });
+        var instance = CreateWithDomain(entity,
+            new Dictionary<string, object?> { ["OccurredAt"] = DateTime.UtcNow.AddHours(-1) },
+            extensions: [ExtensionCatalog.TemporalId]);
         await Assert.That(instance.EvaluatePolicy(isPast)).IsTrue();
     }
 
@@ -95,7 +97,7 @@ public class DomainEntityInstanceTests {
     public async Task EvaluatePolicy_CoercesIntToLong() {
         var entity = CreatePersonEntity();
         // Store Age as int — coercion should handle it
-        var instance = DomainEntityInstance.Create(entity,
+        var instance = CreateWithDomain(entity,
             new Dictionary<string, object?> { ["Age"] = 30 });
 
         await Assert.That(instance.EvaluatePolicy(
@@ -137,7 +139,7 @@ public class DomainEntityInstanceTests {
         // (DateOnly/DateTime/Guid/string) previously compared fresh heap handles —
         // `a < b` always true, `a > b` always false regardless of values.
         var entity = CreateDateComparisonEntity();
-        var instance = DomainEntityInstance.Create(entity, new Dictionary<string, object?> {
+        var instance = CreateWithDomain(entity, new Dictionary<string, object?> {
             ["Start"] = new DateOnly(2024, 1, 1),
             ["End"] = new DateOnly(2026, 1, 1)
         });
@@ -150,7 +152,7 @@ public class DomainEntityInstanceTests {
     [Test]
     public async Task EvaluatePolicy_StringRelationalComparison_UsesValuesNotHeapHandles() {
         var entity = CreateDateComparisonEntity();
-        var instance = DomainEntityInstance.Create(entity, new Dictionary<string, object?> {
+        var instance = CreateWithDomain(entity, new Dictionary<string, object?> {
             ["Name"] = "zebra"
         });
 
@@ -243,7 +245,7 @@ public class DomainEntityInstanceTests {
     [Test]
     public async Task InvokeAction_WithFailingGuard_Fails() {
         var entity = CreatePersonEntity();
-        var instance = DomainEntityInstance.Create(entity,
+        var instance = CreateWithDomain(entity,
             new Dictionary<string, object?> { ["Active"] = false, ["Age"] = 25L });
 
         var result = instance.InvokeAction("Activate");
@@ -492,7 +494,7 @@ public class DomainEntityInstanceTests {
     public async Task EvaluatePolicy_EntityLevelPolicy_EvaluatesCorrectly() {
         // Entity-level policy (IsAdult on the entity, not on an action)
         var entity = CreatePersonEntity();
-        var adult = DomainEntityInstance.Create(entity,
+        var adult = CreateWithDomain(entity,
             new Dictionary<string, object?> { ["Age"] = 21L });
 
         // IsAdult is at entity level
@@ -3635,7 +3637,7 @@ public class DomainEntityInstanceTests {
             DomainExpression.GreaterThan(DomainExpression.Property("Qty"), DomainExpression.Literal(0)));
         var entity = new Entity("Item", [qty], [], [isPositive], []);
 
-        var boolInNumber = DomainEntityInstance.Create(entity,
+        var boolInNumber = CreateWithDomain(entity,
             new Dictionary<string, object?> { ["Qty"] = true });
         var ex1 = Assert.Throws<InvalidOperationException>(() => boolInNumber.EvaluatePolicy(isPositive));
         await Assert.That(ex1!.Message).Contains("Cannot store a Boolean value in a numeric property");
@@ -3644,7 +3646,7 @@ public class DomainEntityInstanceTests {
         var hasName = new Policy("HasName",
             DomainExpression.NotEqual(DomainExpression.Property("Name"), DomainExpression.Literal("")));
         var text = new Entity("T", [name], [], [hasName], []);
-        var numInText = DomainEntityInstance.Create(text,
+        var numInText = CreateWithDomain(text,
             new Dictionary<string, object?> { ["Name"] = 5L });
         var ex2 = Assert.Throws<InvalidOperationException>(() => numInText.EvaluatePolicy(hasName));
         await Assert.That(ex2!.Message).Contains("Cannot store a value of type 'Int64' in a Text property");
@@ -3660,7 +3662,7 @@ public class DomainEntityInstanceTests {
             DomainExpression.Equal(DomainExpression.Property("Name"), DomainExpression.Literal(5)));
         var entity = new Entity("T", [name], [], [bad], []);
 
-        var instance = DomainEntityInstance.Create(entity,
+        var instance = CreateWithDomain(entity,
             new Dictionary<string, object?> { ["Name"] = "x" });
         var ex = Assert.Throws<InvalidOperationException>(() => instance.EvaluatePolicy(bad));
         await Assert.That(ex!.Message).Contains("comparison between incompatible types");
@@ -3673,7 +3675,7 @@ public class DomainEntityInstanceTests {
             DomainExpression.GreaterThanOrEqual(DomainExpression.Property("Age"), DomainExpression.Literal(18)));
         var entity = new Entity("T", [age], [], [adult], []);
 
-        var instance = DomainEntityInstance.Create(entity,
+        var instance = CreateWithDomain(entity,
             new Dictionary<string, object?> { ["Age"] = 25L });
         await Assert.That(instance.EvaluatePolicy(adult)).IsTrue();
     }
@@ -3693,7 +3695,7 @@ public class DomainEntityInstanceTests {
             OnExitEffects: []);
         var entity = new Entity("Loan", [status], [], [], [entry]);
 
-        var instance = DomainEntityInstance.Create(entity);
+        var instance = CreateWithDomain(entity);
 
         await Assert.That(instance.GetProperty<string>("Status")).IsEqualTo("loaned");
     }

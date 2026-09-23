@@ -243,21 +243,13 @@ public sealed partial record DomainEntityInstance {
         if (firstStage?.OnEntryEffects is not { Count: > 0 })
             return;
 
-        var analysis = instance.Domain is not null
-            ? RuntimeAnalysisCache.GetOrAnalyze(instance.Domain)
-            : null;
-        var loweringContext = new LoweringContext(
-            new Parameter("entity", new TypeReference(instance.Entity.Name)),
-            Analysis: analysis,
-            Domain: instance.Domain);
-        var entryPass = new EffectLoweringPass(instance.Entity, loweringContext);
         var entryEffects = firstStage.OnEntryEffects
             .Where(e => e is not StageTransitionEffect)
             .ToList();
         if (entryEffects.Count == 0)
             return;
         ThrowIfEffectListFailed(
-            instance.ExecuteEffectList(entryEffects, entryPass, instance._typeDefAnalyzer,
+            instance.ExecuteEffectList(entryEffects, instance._typeDefAnalyzer,
                 entryStageName: firstStage.Name),
             "first-stage OnEntry");
     }
@@ -382,41 +374,24 @@ public sealed partial record DomainEntityInstance {
 
         var expr = policy.Expression;
 
-        // Domain-bound: bind VM-shaped policy tree cached at GetOrLower. Miss throws
-        // (no evaluate-time DomainExpressionLoweringPass re-lower). Export bool
-        // methods stay UseThis for C#. Domain-null keeps the standalone lower path.
-        if (Domain is not null) {
-            var analysis = RuntimeAnalysisCache.GetOrAnalyze(Domain);
-            RuntimeAnalysisCache.GetOrLower(Domain, RuntimeAnalysisCache.Session(Domain), analysis);
-            if (!RuntimeAnalysisCache.TryGetPolicyBody(Domain, Entity.Name, policy.Name, out var cached)
-                || cached is null)
-                throw new InvalidOperationException(
-                    $"Policy body '{policy.Name}' is missing on entity '{Entity.Name}'.");
-            var compiledModule = Interpreter.CompileChecked(cached, _typeDefAnalyzer);
-            using var execModule = Interpreter.Execute(compiledModule,
-                s => s.SetArgs(new object?[] { this }));
-            var boxedModule = BoxPathPrefixLeaf(expr, execModule.Result.GetValue<object>());
-            return CoercePolicyBool(policy.Name, boxedModule);
-        }
+        // Slice B: execute never lowers. Policy bodies come from GetOrLower only.
+        if (Domain is null)
+            throw new InvalidOperationException(
+                $"Cannot evaluate policy '{policy.Name}' on '{Entity.Name}' without a Domain-bound module.");
 
-        var entityParam = new Parameter("entity", new TypeReference(Entity.Name));
-        var pass = new DomainExpressionLoweringPass(new LoweringContext(
-            entityParam,
-            Analysis: null,
-            Domain: Domain,
-            PropertyTypeResolver: EffectLoweringPass.BuildPropertyTypeResolver(Entity),
-            NavigationNameResolver: EffectLoweringPass.BuildNavigationNameResolver(Entity, Domain, null),
-            IsCollectionNavigation: EffectLoweringPass.BuildIsCollectionNavigation(Entity, Domain, null),
-            IsRelationshipNavigation: EffectLoweringPass.BuildIsRelationshipNavigation(Entity, Domain, null),
-            SourceEntityName: Entity.Name,
-            Meaning: ExtensionCatalog.Core.Language.Meaning));
-        var lowered = pass.Lower(expr, entityParam);
-
-        var compiled = Interpreter.CompileChecked(lowered, _typeDefAnalyzer);
-        using var exec = Interpreter.Execute(compiled,
+        var analysis = RuntimeAnalysisCache.GetOrAnalyze(Domain);
+        RuntimeAnalysisCache.GetOrLower(Domain, RuntimeAnalysisCache.Session(Domain), analysis);
+        if (!RuntimeAnalysisCache.TryGetPolicyBody(Domain, Entity.Name, policy.Name, out var cached)
+            || cached is null)
+            throw new InvalidOperationException(
+                $"Policy body '{policy.Name}' is missing on entity '{Entity.Name}'.");
+        // BindExportBody is identity for Parameter-shaped policy trees.
+        var boundPolicy = BindExportBody(cached);
+        var compiledModule = Interpreter.CompileChecked(boundPolicy, _typeDefAnalyzer);
+        using var execModule = Interpreter.Execute(compiledModule,
             s => s.SetArgs(new object?[] { this }));
-        var boxed = BoxPathPrefixLeaf(expr, exec.Result.GetValue<object>());
-        return CoercePolicyBool(policy.Name, boxed);
+        var boxedModule = BoxPathPrefixLeaf(expr, execModule.Result.GetValue<object>());
+        return CoercePolicyBool(policy.Name, boxedModule);
     }
 
     private static bool CoercePolicyBool(string policyName, object? boxed) => boxed switch {
@@ -575,16 +550,6 @@ public sealed partial record DomainEntityInstance {
             return ActionInvocationResult.Blocked(actionName, failures);
 
         // ── Execute effects ─────────────────────────────────────
-        var subjectParam = new Parameter("entity", new TypeReference(Entity.Name));
-        var loweringContext = new LoweringContext(
-            subjectParam,
-            Analysis: runtimeAnalysis,
-            Domain: Domain,
-            SourceStageName: CurrentStage,
-            ActionParameterNames: action.Parameters.Count > 0
-                ? action.Parameters.Select(p => p.Name).ToHashSet(StringComparer.Ordinal)
-                : null);
-        var effectPass = new EffectLoweringPass(Entity, loweringContext);
         // Action parameters are injected into _values for the call duration, but are not
         // entity schema properties. Compile with an action-scoped type def so PropertyAccess
         // to parameter names resolves (otherwise Member passthrough assigns the whole bag).
@@ -597,7 +562,7 @@ public sealed partial record DomainEntityInstance {
             var createdBefore = _createdChildren.Count;
             var bagBefore = new Dictionary<string, object?>(_values, StringComparer.Ordinal);
             var stageBefore = CurrentStage;
-            var failed = ExecuteEffectList(action.Effects, effectPass, effectTypeProvider,
+            var failed = ExecuteEffectList(action.Effects, effectTypeProvider,
                 actionName: action.Name, args: args, actionParameters: action.Parameters);
             if (failed is { IsSuccess: false }) {
                 // Unique-before-mutate restore (PR 44 F2). Other constraint Failures
@@ -704,14 +669,12 @@ public sealed partial record DomainEntityInstance {
     /// One operation AST through <see cref="Interpreter"/>. Named actions always
     /// bind <see cref="MethodDefinitionNode.Body"/> from the cached module — never
     /// <c>LowerActionBody</c> (Ontology residual: dual-path execute is a bug).
-    /// Domain-bound OnEntry/OnExit batches bind GetOrLower side-cache / module methods
-    /// and throw on miss. Residual <c>LowerActionBody</c> only when
-    /// <paramref name="allowExecuteTimeLower"/> (nested StageTransition flush) or
-    /// Domain-null standalone.
+    /// Domain-bound OnEntry/OnExit batches bind GetOrLower export-shaped bodies
+    /// (BindThis) / module methods / mixed-list segment bodies and throw on miss.
+    /// Slice B: execute never lowers; Domain-null fail-closed.
     /// </summary>
     private DomainResult? ExecuteEffectList(
         IReadOnlyList<Effect> effects,
-        EffectLoweringPass effectPass,
         TypeDefinitionNodeAnalyzer typeProvider,
         string? actionName = null,
         string? entryStageName = null,
@@ -719,7 +682,7 @@ public sealed partial record DomainEntityInstance {
         IReadOnlyDictionary<string, object?>? args = null,
         IReadOnlyList<Property>? actionParameters = null,
         object? peerArg = null,
-        bool allowExecuteTimeLower = false) {
+        int? entryExitSegmentIndex = null) {
         // Named actions always bind the module Body (require Failure + Success),
         // even when Ontology effects are empty — gated no-ops still run guards
         // (Final Boss F9: empty-effects must not skip module require).
@@ -745,18 +708,31 @@ public sealed partial record DomainEntityInstance {
             var analysis = RuntimeAnalysisCache.GetOrAnalyze(Domain);
             RuntimeAnalysisCache.GetOrLower(Domain, RuntimeAnalysisCache.Session(Domain), analysis);
             var hasStageName = entryStageName is not null || exitStageName is not null;
-            if (hasStageName) {
+            if (hasStageName && entryExitSegmentIndex is int segmentIndex) {
+                var kind = exitStageName is not null ? "exit" : "entry";
+                var stageName = exitStageName ?? entryStageName
+                    ?? throw new InvalidOperationException("Segment flush requires a stage name.");
+                if (!RuntimeAnalysisCache.TryGetEntryExitSegmentBody(
+                        Domain, Entity.Name, stageName, kind, segmentIndex, out var segmentBody)
+                    || segmentBody is null) {
+                    throw new InvalidOperationException(
+                        $"Entry/exit segment body {kind} '{stageName}'[{segmentIndex}] is missing on entity '{Entity.Name}'.");
+                }
+                tree = BindExportBody(segmentBody);
+            }
+            else if (hasStageName) {
                 if (exitStageName is not null
                     && RuntimeAnalysisCache.TryGetEntryExitBody(
                         Domain, Entity.Name, exitStageName, "exit", out var exitBody)
                     && exitBody is not null) {
-                    tree = exitBody;
+                    // EntryExitBodies are export-shaped (UseThis); bind for VM SetArgs.
+                    tree = BindExportBody(exitBody);
                 }
                 else if (entryStageName is not null
                     && RuntimeAnalysisCache.TryGetEntryExitBody(
                         Domain, Entity.Name, entryStageName, "entry", out var entryBody)
                     && entryBody is not null) {
-                    tree = entryBody;
+                    tree = BindExportBody(entryBody);
                 }
                 else if (exitStageName is not null
                     && RuntimeAnalysisCache.TryGetExitMethod(Domain, Entity.Name, exitStageName, out var exit)
@@ -774,18 +750,15 @@ public sealed partial record DomainEntityInstance {
                         $"Entry/exit body {kind} is missing on entity '{Entity.Name}'.");
                 }
             }
-            else if (allowExecuteTimeLower) {
-                // Nested StageTransition partial flush — claimed residual LowerActionBody.
-                tree = effectPass.LowerActionBody(effects);
-            }
             else {
                 throw new InvalidOperationException(
                     $"Domain-bound effect list on '{Entity.Name}' requires a cached entry/exit body " +
-                    "or allowExecuteTimeLower for nested StageTransition flush.");
+                    "or mixed-list segment from GetOrLower.");
             }
         }
         else {
-            tree = effectPass.LowerActionBody(effects);
+            throw new InvalidOperationException(
+                $"Cannot execute effect list on '{Entity.Name}' without a Domain-bound module.");
         }
         if (tree is null)
             throw new InvalidOperationException(
@@ -853,6 +826,109 @@ public sealed partial record DomainEntityInstance {
         // Module/stage enums + merged entity first; wrapped as fallback.
         return new TypeDefinitionProviderCollection(moduleTypes, wrapped);
     }
+
+    /// <summary>
+    /// Consumer bind for export-shaped (UseThis) trees from session.Lower —
+    /// rewrites <see cref="ThisReference"/> to <c>Parameter("entity")</c> for VM SetArgs,
+    /// and void fail-closed <c>throw new InvalidOperationException(…)</c> to
+    /// <c>return DomainResult.Failure(…)</c> (VM has no 1-arg IOE ctor). Not a second lower.
+    /// </summary>
+    private Node BindExportBody(Node body) {
+        var entity = new Parameter("entity", new TypeReference(Entity.Name));
+        var bound = BindThis(body, entity, null, EnumTypeNames());
+        return RewriteVoidFailClosedThrow(bound);
+    }
+
+
+
+    /// <summary>
+    /// Export void bodies fail closed with throw; Domain-bound execute needs DomainResult.Failure.
+    /// Same tree as print — consumer bind only (not a second lower).
+    /// </summary>
+    private static Node RewriteVoidFailClosedThrow(Node node) => node switch {
+        ThrowStatement {
+            Exception: New {
+                Type: NamedTypeReference { TypeName: "InvalidOperationException" },
+                Arguments: var args
+            }
+        } => new Return(new Invoke(
+            new Member(new NamedTypeReference("DomainResult"), "Failure"),
+            args.Length > 0 ? RewriteVoidFailClosedThrow(args[0]) : new Constant(""))),
+        Block b => new Block(
+            b.Nodes.Select(RewriteVoidFailClosedThrow),
+            b.Variables.Select(RewriteVoidFailClosedThrow)),
+        IfStatement i => new IfStatement(
+            RewriteVoidFailClosedThrow(i.Condition),
+            RewriteVoidFailClosedThrow(i.ThenBranch),
+            i.ElseBranch is null ? null : RewriteVoidFailClosedThrow(i.ElseBranch)),
+        Return r => r.Value is null ? r : new Return(RewriteVoidFailClosedThrow(r.Value)),
+        Assignment a => new Assignment(
+            RewriteVoidFailClosedThrow(a.Destination),
+            RewriteVoidFailClosedThrow(a.Value)),
+        Invoke inv => new Invoke(
+            RewriteVoidFailClosedThrow(inv.Delegate),
+            [.. inv.Arguments.Select(RewriteVoidFailClosedThrow)]) {
+            TypeArguments = inv.TypeArguments
+        },
+        Member m => new Member(RewriteVoidFailClosedThrow(m.Value), m.MemberName),
+        Poly.Ast.Nodes.Not n => new Poly.Ast.Nodes.Not(RewriteVoidFailClosedThrow(n.Value)),
+        Equal e => new Equal(
+            RewriteVoidFailClosedThrow(e.LeftHandValue), RewriteVoidFailClosedThrow(e.RightHandValue)),
+        NotEqual ne => new NotEqual(
+            RewriteVoidFailClosedThrow(ne.LeftHandValue), RewriteVoidFailClosedThrow(ne.RightHandValue)),
+        LessThan lt => new LessThan(
+            RewriteVoidFailClosedThrow(lt.LeftHandValue), RewriteVoidFailClosedThrow(lt.RightHandValue)),
+        LessThanOrEqual le => new LessThanOrEqual(
+            RewriteVoidFailClosedThrow(le.LeftHandValue), RewriteVoidFailClosedThrow(le.RightHandValue)),
+        GreaterThan gt => new GreaterThan(
+            RewriteVoidFailClosedThrow(gt.LeftHandValue), RewriteVoidFailClosedThrow(gt.RightHandValue)),
+        GreaterThanOrEqual ge => new GreaterThanOrEqual(
+            RewriteVoidFailClosedThrow(ge.LeftHandValue), RewriteVoidFailClosedThrow(ge.RightHandValue)),
+        Poly.Ast.Nodes.Add add => new Poly.Ast.Nodes.Add(
+            RewriteVoidFailClosedThrow(add.LeftHandValue), RewriteVoidFailClosedThrow(add.RightHandValue)),
+        Poly.Ast.Nodes.Subtract sub => new Poly.Ast.Nodes.Subtract(
+            RewriteVoidFailClosedThrow(sub.LeftHandValue), RewriteVoidFailClosedThrow(sub.RightHandValue)),
+        Poly.Ast.Nodes.Multiply mul => new Poly.Ast.Nodes.Multiply(
+            RewriteVoidFailClosedThrow(mul.LeftHandValue), RewriteVoidFailClosedThrow(mul.RightHandValue)),
+        Poly.Ast.Nodes.Divide div => new Poly.Ast.Nodes.Divide(
+            RewriteVoidFailClosedThrow(div.LeftHandValue), RewriteVoidFailClosedThrow(div.RightHandValue)),
+        Poly.Ast.Nodes.And and => new Poly.Ast.Nodes.And(
+            RewriteVoidFailClosedThrow(and.LeftHandValue), RewriteVoidFailClosedThrow(and.RightHandValue)),
+        Poly.Ast.Nodes.Or or => new Poly.Ast.Nodes.Or(
+            RewriteVoidFailClosedThrow(or.LeftHandValue), RewriteVoidFailClosedThrow(or.RightHandValue)),
+        Coalesce c => new Coalesce(
+            RewriteVoidFailClosedThrow(c.LeftHandValue), RewriteVoidFailClosedThrow(c.RightHandValue)),
+        TypeCast tc => new TypeCast(
+            RewriteVoidFailClosedThrow(tc.Operand),
+            RewriteVoidFailClosedThrow(tc.TargetTypeReference)),
+        New n => new New(
+            RewriteVoidFailClosedThrow(n.Type),
+            [.. n.Arguments.Select(RewriteVoidFailClosedThrow)]),
+        ThrowStatement ts => new ThrowStatement(RewriteVoidFailClosedThrow(ts.Exception)),
+        TryCatchFinally t => new TryCatchFinally(
+            RewriteVoidFailClosedThrow(t.TryBlock),
+            t.CatchClauses is null ? null : [.. t.CatchClauses.Select(cc => cc with {
+                ExceptionType = cc.ExceptionType is null
+                    ? null
+                    : RewriteVoidFailClosedThrow(cc.ExceptionType),
+                Body = RewriteVoidFailClosedThrow(cc.Body)
+            })],
+            t.FinallyBlock is null ? null : RewriteVoidFailClosedThrow(t.FinallyBlock)),
+        ForEachLoop f => new ForEachLoop(
+            f.LoopVariable,
+            RewriteVoidFailClosedThrow(f.Collection),
+            RewriteVoidFailClosedThrow(f.Body),
+            f.Label),
+        LabelDeclaration ld => new LabelDeclaration(
+            ld.Name, RewriteVoidFailClosedThrow(ld.Statement)),
+        Conditional cond => new Conditional(
+            RewriteVoidFailClosedThrow(cond.Condition),
+            RewriteVoidFailClosedThrow(cond.IfTrue),
+            RewriteVoidFailClosedThrow(cond.IfFalse)),
+        UnaryMinus um => new UnaryMinus(RewriteVoidFailClosedThrow(um.Operand)),
+        NullForgiving nf => new NullForgiving(RewriteVoidFailClosedThrow(nf.Operand)),
+        _ => node
+    };
 
     private Node BindModuleMethodBody(MethodDefinitionNode method, bool keepParametersAsSlots = false) {
         var body = method.Body

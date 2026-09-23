@@ -553,9 +553,12 @@ public sealed partial class DomainToCSharpExporter {
                 return new NamedTypeReference(typeName);
         }
 
-        var clr = RuntimeAnalysisCache.ClrTypeName(domain, typeName);
-        if (DomainTypeMapping.TryPrimitiveType(clr, out var prim))
+        var mapping = RuntimeAnalysisCache.FindMapping(domain, typeName);
+        if (mapping?.Primitive is { } prim)
             return new PrimitiveTypeReference(prim);
+        if (DomainTypeMapping.TryPrimitiveType(
+                mapping?.ClrTypeName ?? DomainTypeMapping.ToClrTypeName(typeName), out var fromClr))
+            return new PrimitiveTypeReference(fromClr);
         return new NamedTypeReference(typeName);
     }
 

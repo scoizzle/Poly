@@ -328,13 +328,14 @@ public sealed partial class DomainToCSharpExporter {
         DomainTypeReference type, Domain domain, INodeMetadataProvider metadata) {
         if (TryResolveEnumType(domain, metadata, type.TypeName, out var enumType) && enumType is not null)
             return new Member(new NamedTypeReference(enumType.Name), enumType.MemberNames[0]);
-        var clr = RuntimeAnalysisCache.ClrTypeName(domain, type.TypeName);
+        var mapping = RuntimeAnalysisCache.FindMapping(domain, type.TypeName);
+        if (mapping?.DefaultMemberType is { } defaultType)
+            return new Member(new NamedTypeReference(defaultType), mapping.DefaultMemberName!);
+        var clr = mapping?.ClrTypeName ?? RuntimeAnalysisCache.ClrTypeName(domain, type.TypeName);
         if (clr is "string") return new Constant("");
         if (clr is "long") return new Constant(0L);
         if (clr is "int") return new Constant(0);
         if (clr is "bool") return new Constant(false);
-        if (DomainTypeMapping.TryDefaultMember(clr, out var defaultType, out var member))
-            return new Member(new NamedTypeReference(defaultType), member);
         return new Constant(null);
     }
 

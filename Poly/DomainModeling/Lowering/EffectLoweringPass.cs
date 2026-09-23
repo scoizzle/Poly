@@ -477,6 +477,9 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
             && _domain.Types.OfType<EnumType>().Any(e =>
                 string.Equals(e.Name, typeName, StringComparison.Ordinal)))
             return false;
+        var mapping = RuntimeAnalysisCache.FindMapping(_domain, typeName);
+        if (mapping is not null)
+            return !mapping.IsNonNullableValueType;
         return !DomainTypeMapping.IsNonNullableClrValueType(
             RuntimeAnalysisCache.ClrTypeName(_domain, typeName));
     }

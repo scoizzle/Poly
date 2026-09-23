@@ -224,6 +224,9 @@ public sealed partial record DomainEntityInstance {
         if (domain?.Types.OfType<EnumType>().Any(e =>
                 string.Equals(e.Name, typeName, StringComparison.Ordinal)) == true)
             return false;
+        var mapping = RuntimeAnalysisCache.FindMapping(domain, typeName);
+        if (mapping is not null)
+            return !mapping.IsNonNullableValueType;
         return !DomainTypeMapping.IsNonNullableClrValueType(
             RuntimeAnalysisCache.ClrTypeName(domain, typeName));
     }

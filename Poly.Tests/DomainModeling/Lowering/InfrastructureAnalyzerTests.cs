@@ -583,6 +583,15 @@ public class InfrastructureAnalyzerTests {
         await Assert.That(registry.ToClrTypeName("DateTime")).IsEqualTo("DateTime");
         await Assert.That(registry.ToClrTypeName("Date")).IsEqualTo("DateOnly");
         await Assert.That(registry.ToClrTypeName("Duration")).IsEqualTo("TimeSpan");
+
+        var date = registry.Find("Date");
+        await Assert.That(date).IsNotNull();
+        await Assert.That(date!.Primitive).IsEqualTo(Poly.Introspection.PrimitiveType.DateOnly);
+        await Assert.That(date.IsNonNullableValueType).IsTrue();
+        await Assert.That(date.DefaultMemberType).IsEqualTo("DateOnly");
+        await Assert.That(date.DefaultMemberName).IsEqualTo("MinValue");
+        await Assert.That(registry.Find("Text")!.Primitive)
+            .IsEqualTo(Poly.Introspection.PrimitiveType.String);
     }
 
     [Test]

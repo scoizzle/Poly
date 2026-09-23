@@ -572,9 +572,12 @@ public sealed partial record DomainEntityInstance {
         if (domain?.Types.OfType<Entity>().Any(e =>
                 string.Equals(e.Name, typeName, StringComparison.Ordinal)) == true)
             return new TypeReference(typeName);
-        var clr = RuntimeAnalysisCache.ClrTypeName(domain, typeName);
-        if (DomainTypeMapping.TryPrimitiveType(clr, out var prim))
+        var mapping = RuntimeAnalysisCache.FindMapping(domain, typeName);
+        if (mapping?.Primitive is { } prim)
             return new PrimitiveTypeReference(prim);
+        if (DomainTypeMapping.TryPrimitiveType(
+                mapping?.ClrTypeName ?? DomainTypeMapping.ToClrTypeName(typeName), out var fromClr))
+            return new PrimitiveTypeReference(fromClr);
         return new PrimitiveTypeReference(Prim.Structure);
     }
 }

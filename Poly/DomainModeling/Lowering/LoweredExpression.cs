@@ -10,10 +10,14 @@ public sealed record LoweredExpression(
     /// <summary>An expression with no preceding statements.</summary>
     public static LoweredExpression Of(Node value) => new([], [], value);
 
-    /// <summary>Places these statements immediately before <paramref name="statement"/>.</summary>
+    /// <summary>Places these statements before <paramref name="statement"/> (see the overload for a Block).</summary>
     public Node Before(Node statement) => Before([this], statement);
 
-    /// <summary>Places the statements of every part, in order, immediately before <paramref name="statement"/>.</summary>
+    /// <summary>
+    /// Places the statements of every part, in order, immediately before <paramref name="statement"/>.
+    /// When <paramref name="statement"/> is a <see cref="Block"/>, they go at the start of that
+    /// block and the variables merge, so its last node stays last.
+    /// </summary>
     public static Node Before(IReadOnlyList<LoweredExpression> parts, Node statement) {
         if (parts.All(p => p.Statements.Count == 0))
             return statement;

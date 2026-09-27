@@ -3720,6 +3720,19 @@ public class DomainEntityInstanceTests {
     }
 
     [Test]
+    public async Task Create_BooleanProperty_CoercesOnlyZeroAndOne() {
+        var entity = new Entity("Item",
+            [new Property("Flag", new DomainTypeReference("Boolean"), [])], [], [], []);
+
+        object? Stored(object value) =>
+            CreateWithDomain(entity, new Dictionary<string, object?> { ["Flag"] = value }).Snapshot()["Flag"];
+
+        await Assert.That(Stored(1L) is true).IsTrue();
+        await Assert.That(Stored(0) is false).IsTrue();
+        await Assert.That(Stored(5L)).IsEqualTo(5L);
+    }
+
+    [Test]
     public async Task Read_WrongTypedBagValue_FailsLoud() {
         // Move-2 runtime fail-loud: a bool stored for a Number prop (or a number for a
         // Text prop) previously coerced silently (Convert.ToInt64(true) → 1). The VM

@@ -395,14 +395,14 @@ public sealed partial record DomainEntityInstance {
     /// <summary>
     /// VM boolean locals are 0/1 in the ring. Boolean properties and action
     /// parameters store <see cref="bool"/> so bag reads and the export agree.
+    /// Only 0 and 1 are treated as booleans; any other value passes through unchanged.
     /// </summary>
     internal static object? CoerceBooleanBagValue(string? typeName, object? value) {
         if (!string.Equals(typeName, "Boolean", StringComparison.Ordinal))
             return value;
         return value switch {
-            bool b => b,
-            long l => l != 0L,
-            int i => i != 0,
+            long l and (0L or 1L) => l == 1L,
+            int i and (0 or 1) => i == 1,
             _ => value
         };
     }

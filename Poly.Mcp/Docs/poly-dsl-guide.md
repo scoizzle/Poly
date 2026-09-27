@@ -552,8 +552,8 @@ and invokes the action on each. One fan-out mode, no `any`/`all`/`each` quantifi
 - Rollback of already-invoked records is a documented gap (fail-fast guarantees the caller
   always sees the failure; atomic undo is not shipped).
 - **Path-prefix / `Rel exists` predicates are rejected at analysis:** a `for` predicate
-  policy that reads path-prefix or `Rel exists` is store-dependent at simulate time and is
-  rejected ("is store-dependent … path-prefix / exists"). Collection-quantifier predicates
+  policy that reads path-prefix or `Rel exists` is rejected ("reads a path-prefix hop or
+  'exists'"): an unlinked hop simulates false but the export dereferences null. Collection-quantifier predicates
   (`any`/`all`/`none`/`count`) lower to a foreach over the collection in both simulate and
   export. Use a **local policy over the record's own properties** when the predicate needs
   path-prefix or exists.

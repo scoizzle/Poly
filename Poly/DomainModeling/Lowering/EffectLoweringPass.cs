@@ -40,8 +40,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     private readonly IReadOnlyDictionary<string, string>? _enumPropertyNames;
     private readonly LoweringContext _context;
     private readonly bool _emitInstanceNotify;
-    private int _forEachInvokeSequence;
-    private int _createInProbeSequence;
+    private readonly LocalNames _names;
 
     /// <summary>Pre-computed analysis metadata provider, when available.</summary>
     public INodeMetadataProvider? Analysis => _analysis;
@@ -52,6 +51,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     public EffectLoweringPass(Entity entity, LoweringContext context) {
         _entity = entity;
         _context = context.Names is null ? context with { Names = new LocalNames() } : context;
+        _names = _context.Names!;
         _domain = context.Domain;
         _analysis = context.Analysis;
         _useThisReference = context.UseThisReference;
@@ -313,8 +313,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         Property? property,
         Node value,
         string? uniquePropertyName) {
-        var seq = _forEachInvokeSequence++;
-        var assignedVar = new Variable($"assignValue{seq}");
+        var assignedVar = _names.Next("assignValue");
         var locals = new List<Node> { assignedVar };
         var nodes = new List<Node> {
             new Assignment(assignedVar, value)
@@ -324,7 +323,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
             AppendAssignConstraintChecks(nodes, property, assignedVar);
 
         if (uniquePropertyName is not null) {
-            var checkVar = new Variable($"uniqueCheck{seq}");
+            var checkVar = _names.Next("uniqueCheck");
             locals.Add(checkVar);
             nodes.Add(new Assignment(checkVar, new Invoke(
                 new Member(Subject, "EnsureUnique"),
@@ -660,8 +659,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
                 new Equal(navMember, new Constant(null!)),
                 new Block([ReturnCallerFailure(new Constant(
                     $"'{i.ActionName}' requires a linked '{i.TargetRelationship}' on entity '{_entity.Name}'."))]));
-            var seq = _forEachInvokeSequence++;
-            var resultVar = new Variable($"invoke{seq}");
+            var resultVar = _names.Next("invoke");
             var invokeCall = new Invoke(new Member(navMember, i.ActionName), [.. args]);
             return LoweredExpression.Before(loweredArgs, new Block([
                 guard,
@@ -677,8 +675,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     }
 
     private Node WrapInvokeResult(Invoke invokeCall) {
-        var seq = _forEachInvokeSequence++;
-        var resultVar = new Variable($"invoke{seq}");
+        var resultVar = _names.Next("invoke");
         return new Block([
             new Assignment(resultVar, invokeCall),
             new IfStatement(
@@ -719,8 +716,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         var relName = e.RelationshipName;
         var navMember = new Member(Subject, DomainToCSharpExporter.ToPascalCase(relName));
 
-        var seq = _forEachInvokeSequence++;
-        var loopVar = new Variable($"target{seq}");
+        var loopVar = _names.Next("target");
 
         // Predicate → a `continue` guard inside the loop (no LINQ dependency in the
         // standalone export): named policy → target's bool method; stage membership →
@@ -760,8 +756,8 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
 
         // Fail-fast + zero-matches-fail. Same Variable instances for VM identity.
         // Arg statements sit inside the loop, immediately before the invoke.
-        var matchedVar = new Variable($"matched{seq}");
-        var resultVar = new Variable($"result{seq}");
+        var matchedVar = _names.Next("matched");
+        var resultVar = _names.Next("result");
         var loopBody = new List<Node>();
         if (predicateGuard is not null) loopBody.Add(predicateGuard);
         loopBody.AddRange(loweredArgs.SelectMany(a => a.Statements));
@@ -1116,8 +1112,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
                 : loweredValue.Value);
         }
 
-        var seq = _createInProbeSequence++;
-        var resultVar = new Variable($"create{seq}");
+        var resultVar = _names.Next("create");
         var resultType = _context.ActionResultType ?? new NamedTypeReference("DomainResult");
         var locals = new List<Node> { resultVar };
         Node failClosed = _context.UseThisReference && _context.ActionResultType is null
@@ -1139,7 +1134,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
                 new Block([failClosed]))
         };
         if (!methodName.StartsWith("Probe", StringComparison.Ordinal)) {
-            var valueVar = new Variable($"created{seq}");
+            var valueVar = _names.Next("created");
             locals.Add(valueVar);
             nodes.Add(new Assignment(valueVar, new Member(resultVar, "Value")));
             if (linkRelationshipName is not null) {

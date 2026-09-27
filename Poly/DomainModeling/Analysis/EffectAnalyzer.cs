@@ -768,14 +768,14 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
                         $"ForEachInvoke predicate policy '{policyName}' does not exist on entity '{targetEntity.Name}'.",
                         DomainModelDiagnosticCodes.EffectBinding);
                 }
-                else if (ContainsStoreDependentExpression(predicatePolicy.Expression)) {
-                    // Path-prefix and Rel exists still use store host reads at simulate
-                    // time; reject so a `for` does not call a policy whose simulate and
-                    // export answers have not been proven to match.
+                else if (ReadsSingularHopOrExists(predicatePolicy.Expression)) {
+                    // An unlinked hop simulates false, but the export dereferences
+                    // null, so a `for` must not call such a policy.
                     context.ReportError(
                         efe,
-                        $"ForEachInvoke predicate policy '{policyName}' is store-dependent " +
-                        "(path-prefix / exists). Use a local policy over the record's own properties.",
+                        $"ForEachInvoke predicate policy '{policyName}' reads a path-prefix hop or 'exists'; " +
+                        "an unlinked hop simulates false but the export dereferences null. " +
+                        "Use a local policy over the record's own properties.",
                         DomainModelDiagnosticCodes.EffectInvokeShape);
                 }
                 break;
@@ -841,13 +841,11 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
                 yield return nested;
     }
 
-    /// <summary>True when an expression contains path-prefix or Rel exists.
-    /// Collection quantifiers lower to foreach on both simulate and export, so they
-    /// are not included. Path-prefix and exists still use store host reads at
-    /// simulate time and are rejected as <c>for</c> predicates.</summary>
-    private static bool ContainsStoreDependentExpression(DomainExpression expr) => expr switch {
+    /// <summary>True when an expression reads a singular hop (path-prefix) or
+    /// <c>Rel exists</c>.</summary>
+    private static bool ReadsSingularHopOrExists(DomainExpression expr) => expr switch {
         Exists or NotExists or RelationshipNavigation => true,
-        _ => expr.Children.OfType<DomainExpression>().Any(ContainsStoreDependentExpression),
+        _ => expr.Children.OfType<DomainExpression>().Any(ReadsSingularHopOrExists),
     };
 
     private static void ValidateInvokeAction(

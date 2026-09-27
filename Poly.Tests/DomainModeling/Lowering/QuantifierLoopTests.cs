@@ -247,6 +247,64 @@ public class QuantifierLoopTests {
         await Assert.That((bool)binType.GetProperty("Active")!.GetValue(printed)!).IsTrue();
     }
 
+    private const string StagedBinDsl = """
+        domain StagedBin
+        Widget: entity { Active: Boolean default(false) }
+        Bin: entity {
+          N: Number default(0)
+          widgets: many Widget
+          Go: action { if (any widgets where Active) { assign N to 1 } }
+          Open: stage {
+            Go: action { if (any widgets where Active) { assign N to 2 } }
+            Close: action { transition to Closed }
+          }
+          Closed: stage { }
+        }
+        """;
+
+    [Test]
+    public async Task StageDispatchedActionWithAny_SimulateAndGeneratedCSharp_Agree() {
+        var (domain, analysis) = Evolve(StagedBinDsl);
+        Entity E(string n) => domain.Types.OfType<Entity>().First(e => e.Name == n);
+
+        var asm = ExportedCSharp.CompileAndLoad(
+            new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis)));
+        var widgetType = asm.GetType("Widget")!;
+        var binType = asm.GetType("Bin")!;
+
+        // Runs Go in Open, or in Closed (the entity-level body) after Close; returns N from both sides.
+        async Task<(long Simulated, long Exported)> RunGo(bool closeFirst) {
+            var store = new DomainInstanceStore();
+            var bin = DomainEntityInstance.Create(E("Bin"), new Dictionary<string, object?>(), domain);
+            var widget = DomainEntityInstance.Create(E("Widget"),
+                new Dictionary<string, object?> { ["Active"] = true }, domain);
+            store.Add(bin); store.Add(widget);
+            store.Link("widgets", bin, widget);
+            if (closeFirst)
+                await Assert.That(bin.InvokeAction("Close").Succeeded).IsTrue();
+            await Assert.That(bin.InvokeAction("Go").Succeeded).IsTrue();
+
+            var widgets = Array.CreateInstance(widgetType, 1);
+            widgets.SetValue(ExportedCSharp.CreateEntity(widgetType, ("active", true)), 0);
+            var printed = ExportedCSharp.CreateEntity(binType, ("n", 0L), ("widgets", widgets));
+            if (closeFirst)
+                binType.GetMethod("Close")!.Invoke(printed, null);
+            var result = binType.GetMethod("Go")!.Invoke(printed, null)!;
+            await Assert.That((bool)result.GetType().GetProperty("IsSuccess")!.GetValue(result)!).IsTrue();
+
+            return (Convert.ToInt64(bin.GetProperty<object>("N")),
+                Convert.ToInt64(binType.GetProperty("N")!.GetValue(printed)));
+        }
+
+        var open = await RunGo(closeFirst: false);
+        await Assert.That(open.Simulated).IsEqualTo(2L);
+        await Assert.That(open.Exported).IsEqualTo(open.Simulated);
+
+        var closed = await RunGo(closeFirst: true);
+        await Assert.That(closed.Simulated).IsEqualTo(1L);
+        await Assert.That(closed.Exported).IsEqualTo(closed.Simulated);
+    }
+
     [Test]
     public async Task ActionAssignCountWhere_SimulateAndGeneratedCSharp_Agree() {
         var (domain, analysis) = Evolve(BinDsl);

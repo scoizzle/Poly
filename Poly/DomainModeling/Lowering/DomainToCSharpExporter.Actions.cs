@@ -75,11 +75,11 @@ public sealed partial class DomainToCSharpExporter {
         string? stageEnumTypeName,
         IReadOnlyDictionary<string, IReadOnlyList<Node>>? postTransitionNodes,
         string? loweringSourceStage, string? guardSourceStage, Domain? domain,
-        INodeMetadataProvider? analysis, bool isVoid) {
+        INodeMetadataProvider? analysis, bool isVoid, LocalNames? names = null) {
         var paramNames = new HashSet<string>(
             action.Parameters.Select(p => p.Name), StringComparer.Ordinal);
         var effectsBody = LowerActionToMethodBody(entity, action, paramNames, stageEnumTypeName,
-            postTransitionNodes, loweringSourceStage, domain, analysis, isVoid);
+            postTransitionNodes, loweringSourceStage, domain, analysis, isVoid, names);
         effectsBody = PrependAdapterInvocation(domain, action, effectsBody);
         return BuildActionBodyWithGuards(action, entity, effectsBody, domain,
             guardSourceStage, stageEnumTypeName, isVoid, analysis);
@@ -105,7 +105,11 @@ public sealed partial class DomainToCSharpExporter {
             : new NamedTypeReference("DomainResult",
                 TypeArguments: [MapDomainTypeRef(representative.Result!.Members[0].Type, domain, analysis)]);
 
+        // One method holds every stage branch and the entity-level tail, so their
+        // locals come from one name source and cannot collide.
+        var names = new LocalNames();
         var nodes = new List<Node>();
+        var locals = new List<Node>();
         Action? entityLevel = null;
         foreach (var (action, sourceStage) in variants) {
             if (sourceStage is null)
@@ -126,7 +130,7 @@ public sealed partial class DomainToCSharpExporter {
                 ? entityLevel
                 : action;
             var branchBody = BuildFullActionBody(entity, branchAction, stageEnumTypeName, postTransitionNodes,
-                loweringSourceStage: sourceStage, guardSourceStage: null, domain, analysis, isVoid);
+                loweringSourceStage: sourceStage, guardSourceStage: null, domain, analysis, isVoid, names);
             nodes.Add(new IfStatement(
                 new Equal(
                     new Member(new ThisReference(), "CurrentStage"),
@@ -135,9 +139,11 @@ public sealed partial class DomainToCSharpExporter {
         }
 
         if (entityLevel is not null) {
-            nodes.AddRange(BuildFullActionBody(entity, entityLevel, stageEnumTypeName,
+            var tail = BuildFullActionBody(entity, entityLevel, stageEnumTypeName,
                 postTransitionNodes, loweringSourceStage: null, guardSourceStage: null,
-                domain, analysis, isVoid).Nodes);
+                domain, analysis, isVoid, names);
+            nodes.AddRange(tail.Nodes);
+            locals.AddRange(tail.Variables);
         }
         else {
             nodes.Add(new Return(
@@ -156,7 +162,7 @@ public sealed partial class DomainToCSharpExporter {
             Parameters: representative.Parameters
                 .Select(p => new Parameter(p.Name, MapDomainTypeRef(p.Type, domain, analysis)))
                 .ToList(),
-            Body: new Block(nodes),
+            Body: new Block(nodes, locals),
             AccessModifier: AccessModifier.Public
         ));
     }
@@ -426,7 +432,7 @@ public sealed partial class DomainToCSharpExporter {
         HashSet<string>? paramNames = null, string? stageEnumTypeName = null,
         IReadOnlyDictionary<string, IReadOnlyList<Node>>? postTransitionNodes = null,
         string? sourceStageName = null, Domain? domain = null,
-        INodeMetadataProvider? analysis = null, bool isVoid = true) {
+        INodeMetadataProvider? analysis = null, bool isVoid = true, LocalNames? names = null) {
         if (action.Effects.Count == 0) return null;
         var enumProps = GetEnumPropertyNames(entity, domain, analysis);
         Node actionResultType = isVoid
@@ -444,7 +450,8 @@ public sealed partial class DomainToCSharpExporter {
             Domain: domain,
             EnumPropertyNames: enumProps,
             ActionResultType: actionResultType,
-            EmitInstanceNotify: false);
+            EmitInstanceNotify: false,
+            Names: names);
         var effectPass = new EffectLoweringPass(entity, context);
         return effectPass.LowerActionBody(action.Effects);
     }

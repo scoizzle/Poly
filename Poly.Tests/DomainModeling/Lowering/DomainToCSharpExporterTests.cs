@@ -934,8 +934,8 @@ public class DomainToCSharpExporterTests {
         await Assert.That(cs).Contains("foreach (var target0 in this.Lines)");
         await Assert.That(cs).Contains("if (!target0.IsPaid())");
         await Assert.That(cs).Contains("target0.Mark(target0.Qty)");
-        await Assert.That(cs).Contains("target1.CurrentStage == LineStage.Active");
-        await Assert.That(cs).Contains("return DomainResult.Failure(result0.ErrorMessage ?? \"\");");
+        await Assert.That(cs).Contains("target3.CurrentStage == LineStage.Active");
+        await Assert.That(cs).Contains("return DomainResult.Failure(result2.ErrorMessage ?? \"\");");
         await Assert.That(cs).Contains("matched zero targets");
         await Assert.That(cs).DoesNotContain("NotSupportedException");
     }
@@ -995,7 +995,7 @@ public class DomainToCSharpExporterTests {
             ?? DomainModelAnalyzer.Analyze(evolved.Root!).Diagnostics;
 
         await Assert.That(diagnostics.Any(d =>
-            d.Message.Contains("store-dependent"))).IsTrue();
+            d.Message.Contains("reads a path-prefix hop or 'exists'"))).IsTrue();
     }
 
     [Test]

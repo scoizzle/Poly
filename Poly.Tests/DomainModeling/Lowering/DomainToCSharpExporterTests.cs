@@ -969,10 +969,9 @@ public class DomainToCSharpExporterTests {
     }
 
     [Test]
-    public async Task Analysis_ForEachInvoke_StoreDependentPredicatePolicy_Rejected() {
-        // A `for` predicate whose named policy reads path-prefix or Rel exists is
-        // still rejected; collection-quantifier predicates lower to foreach on both
-        // paths and are allowed.
+    public async Task Analysis_ForEachInvoke_PathPrefixPredicatePolicy_Rejected() {
+        // A `for` predicate whose named policy reads a path-prefix hop is rejected:
+        // an unlinked hop simulates false but the export dereferences null.
         var poly = """
             domain Test
             Team: entity { Active: Boolean }
@@ -995,7 +994,33 @@ public class DomainToCSharpExporterTests {
             ?? DomainModelAnalyzer.Analyze(evolved.Root!).Diagnostics;
 
         await Assert.That(diagnostics.Any(d =>
-            d.Message.Contains("reads a path-prefix hop or 'exists'"))).IsTrue();
+            d.Message.Contains("reads a path-prefix hop;"))).IsTrue();
+    }
+
+    [Test]
+    public async Task Analysis_ForEachInvoke_PropertyExistsPredicatePolicy_Rejected() {
+        var poly = """
+            domain Test
+            Line: entity {
+              Name: Text
+              Qty: Number
+              HasName: policy { Name exists }
+              Mark: action (amount: Number) { assign Qty to amount }
+            }
+            Order: entity {
+              lines: many Line
+              Go: action {
+                for lines as line where line HasName invoke line.Mark(amount: 1)
+              }
+            }
+            """;
+        var changes = new PolyDslParser(poly).Parse();
+        var evolved = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(changes);
+        var diagnostics = evolved.Analysis?.Diagnostics
+            ?? DomainModelAnalyzer.Analyze(evolved.Root!).Diagnostics;
+
+        await Assert.That(diagnostics.Any(d =>
+            d.Message.Contains("predicate policy 'HasName' tests 'exists' on a property"))).IsTrue();
     }
 
     [Test]

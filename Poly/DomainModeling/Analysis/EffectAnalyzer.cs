@@ -768,14 +768,25 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
                         $"ForEachInvoke predicate policy '{policyName}' does not exist on entity '{targetEntity.Name}'.",
                         DomainModelDiagnosticCodes.EffectBinding);
                 }
-                else if (ReadsSingularHopOrExists(predicatePolicy.Expression)) {
+                else if (EnumerateRelationshipNavigations(predicatePolicy.Expression).Any()) {
                     // An unlinked hop simulates false, but the export dereferences
                     // null, so a `for` must not call such a policy.
                     context.ReportError(
                         efe,
-                        $"ForEachInvoke predicate policy '{policyName}' reads a path-prefix hop or 'exists'; " +
+                        $"ForEachInvoke predicate policy '{policyName}' reads a path-prefix hop; " +
                         "an unlinked hop simulates false but the export dereferences null. " +
                         "Use a local policy over the record's own properties.",
+                        DomainModelDiagnosticCodes.EffectInvokeShape);
+                }
+                else if (TestsPropertyExists(predicatePolicy.Expression, targetEntity)) {
+                    // Simulate and export disagree on whether an unset property exists
+                    // (an unset Text simulates present; the export's unset Number is
+                    // never null), so the two would pick different records.
+                    context.ReportError(
+                        efe,
+                        $"ForEachInvoke predicate policy '{policyName}' tests 'exists' on a property; " +
+                        "simulate and export disagree on whether an unset property exists. " +
+                        "Compare the property to a value instead.",
                         DomainModelDiagnosticCodes.EffectInvokeShape);
                 }
                 break;
@@ -841,12 +852,15 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
                 yield return nested;
     }
 
-    /// <summary>True when an expression reads a singular hop (path-prefix) or
-    /// <c>Rel exists</c>.</summary>
-    private static bool ReadsSingularHopOrExists(DomainExpression expr) => expr switch {
-        Exists or NotExists or RelationshipNavigation => true,
-        _ => expr.Children.OfType<DomainExpression>().Any(ReadsSingularHopOrExists),
-    };
+    /// <summary>True when an expression tests <c>exists</c> / <c>not exists</c> on one of
+    /// <paramref name="entity"/>'s properties (not a relationship).</summary>
+    private static bool TestsPropertyExists(DomainExpression expr, Entity entity) {
+        var target = expr switch { Exists e => e.Target, NotExists ne => ne.Target, _ => null };
+        if (target is PropertyAccess pa
+            && entity.Properties.Any(p => string.Equals(p.Name, pa.Name, StringComparison.Ordinal)))
+            return true;
+        return expr.Children.OfType<DomainExpression>().Any(child => TestsPropertyExists(child, entity));
+    }
 
     private static void ValidateInvokeAction(
         AnalysisContext context, InvokeActionEffect iae, Entity entity, Domain domain,

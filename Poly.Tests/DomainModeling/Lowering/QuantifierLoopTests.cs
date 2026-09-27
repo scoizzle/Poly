@@ -305,6 +305,96 @@ public class QuantifierLoopTests {
         await Assert.That(closed.Exported).IsEqualTo(closed.Simulated);
     }
 
+    private const string ExistsPredicateDsl = """
+        domain Yard
+        Owner: entity { Label: Text }
+        Part: entity { Qty: Number }
+        Widget: entity {
+          Flag: Boolean default(false)
+          owner: Owner
+          parts: many Part
+          HasOwner: policy { owner exists }
+          HasParts: policy { parts exists }
+          Mark: action { assign Flag to true }
+        }
+        Bin: entity {
+          widgets: many Widget
+          MarkOwned: action { for widgets as w where w HasOwner invoke w.Mark() }
+          MarkWithParts: action { for widgets as w where w HasParts invoke w.Mark() }
+        }
+        """;
+
+    [Test]
+    public async Task ForEachRelationshipExistsPredicate_SimulateAndGeneratedCSharp_Agree() {
+        var (domain, analysis) = Evolve(ExistsPredicateDsl);
+        Entity E(string n) => domain.Types.OfType<Entity>().First(e => e.Name == n);
+        var asm = ExportedCSharp.CompileAndLoad(
+            new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis)));
+        var widgetType = asm.GetType("Widget")!;
+        var binType = asm.GetType("Bin")!;
+
+        // Two widgets: "bare" has no links; "linked" has an owner and one part.
+        // Returns each widget's Flag after the action, per side.
+        async Task<(bool[] Simulated, bool[] Exported)> Run(string actionName) {
+            var store = new DomainInstanceStore();
+            var bin = DomainEntityInstance.Create(E("Bin"), new Dictionary<string, object?>(), domain);
+            var bare = DomainEntityInstance.Create(E("Widget"), new Dictionary<string, object?>(), domain);
+            var linked = DomainEntityInstance.Create(E("Widget"), new Dictionary<string, object?>(), domain);
+            var owner = DomainEntityInstance.Create(E("Owner"),
+                new Dictionary<string, object?> { ["Label"] = "o" }, domain);
+            var part = DomainEntityInstance.Create(E("Part"),
+                new Dictionary<string, object?> { ["Qty"] = 1L }, domain);
+            store.Add(bin); store.Add(bare); store.Add(linked); store.Add(owner); store.Add(part);
+            store.Link("widgets", bin, bare);
+            store.Link("widgets", bin, linked);
+            store.Link("owner", linked, owner);
+            store.Link("parts", linked, part);
+            await Assert.That(bin.InvokeAction(actionName).Succeeded).IsTrue();
+
+            var printedParts = Array.CreateInstance(asm.GetType("Part")!, 1);
+            printedParts.SetValue(ExportedCSharp.CreateEntity(asm, "Part", ("qty", 1L)), 0);
+            var printedBare = ExportedCSharp.CreateEntity(widgetType);
+            var printedLinked = ExportedCSharp.CreateEntity(widgetType,
+                ("owner", ExportedCSharp.CreateEntity(asm, "Owner", ("label", "o"))), ("parts", printedParts));
+            var widgets = Array.CreateInstance(widgetType, 2);
+            widgets.SetValue(printedBare, 0);
+            widgets.SetValue(printedLinked, 1);
+            var printed = ExportedCSharp.CreateEntity(binType, ("widgets", widgets));
+            var result = binType.GetMethod(actionName)!.Invoke(printed, null)!;
+            await Assert.That((bool)result.GetType().GetProperty("IsSuccess")!.GetValue(result)!).IsTrue();
+
+            bool Flag(object w) => (bool)widgetType.GetProperty("Flag")!.GetValue(w)!;
+            return ([bare.GetProperty<bool>("Flag"), linked.GetProperty<bool>("Flag")],
+                [Flag(printedBare), Flag(printedLinked)]);
+        }
+
+        var byOwner = await Run("MarkOwned");
+        await Assert.That(byOwner.Simulated).IsEquivalentTo(new[] { false, true });
+        await Assert.That(byOwner.Exported).IsEquivalentTo(byOwner.Simulated);
+
+        var byParts = await Run("MarkWithParts");
+        await Assert.That(byParts.Simulated).IsEquivalentTo(new[] { false, true });
+        await Assert.That(byParts.Exported).IsEquivalentTo(byParts.Simulated);
+    }
+
+    [Test]
+    public async Task NumberValuedPolicy_SimulatesAsNonzero_AndPrintDoesNotCompile() {
+        // Analysis accepts a policy whose body is a Number. Simulate treats any
+        // nonzero value as true; the printed `bool P() => this.N` is a C# type error.
+        var (domain, analysis) = Evolve("""
+            domain Yard
+            Bin: entity { N: Number default(0)  P: policy { N } }
+            """);
+        var bin = DomainEntityInstance.Create(domain.Types.OfType<Entity>().First(e => e.Name == "Bin"),
+            new Dictionary<string, object?> { ["N"] = 2L }, domain);
+        var policy = bin.Entity.Policies.First(p => p.Name == "P");
+        await Assert.That(bin.EvaluatePolicy(policy)).IsTrue();
+
+        var cs = new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis));
+        await Assert.That(() => ExportedCSharp.CompileAndLoad(cs)).Throws<InvalidOperationException>()
+            .WithMessageContaining("CS0029");
+    }
+
     [Test]
     public async Task ActionAssignCountWhere_SimulateAndGeneratedCSharp_Agree() {
         var (domain, analysis) = Evolve(BinDsl);

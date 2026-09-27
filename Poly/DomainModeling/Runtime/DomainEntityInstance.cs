@@ -395,7 +395,9 @@ public sealed partial record DomainEntityInstance {
     /// <summary>
     /// VM boolean locals are 0/1 in the ring. Boolean properties and action
     /// parameters store <see cref="bool"/> so bag reads and the export agree.
-    /// Only 0 and 1 are treated as booleans; any other value passes through unchanged.
+    /// For create values and action arguments, only 0 and 1 are treated as
+    /// booleans; any other value passes through unchanged. Policy results use
+    /// <see cref="CoercePolicyBool"/> instead.
     /// </summary>
     internal static object? CoerceBooleanBagValue(string? typeName, object? value) {
         if (!string.Equals(typeName, "Boolean", StringComparison.Ordinal))
@@ -407,15 +409,14 @@ public sealed partial record DomainEntityInstance {
         };
     }
 
-    private static bool CoercePolicyBool(string policyName, object? boxed) {
-        var coerced = CoerceBooleanBagValue("Boolean", boxed);
-        return coerced switch {
-            bool b => b,
-            null => false,
-            _ => throw new InvalidOperationException(
-                $"Policy '{policyName}' produced {coerced.GetType().Name}, not a boolean.")
-        };
-    }
+    private static bool CoercePolicyBool(string policyName, object? boxed) => boxed switch {
+        bool b => b,
+        long l => l != 0L,
+        int i => i != 0,
+        null => false,
+        _ => throw new InvalidOperationException(
+            $"Policy '{policyName}' produced {boxed.GetType().Name}, not a boolean.")
+    };
 
 
     /// <summary>

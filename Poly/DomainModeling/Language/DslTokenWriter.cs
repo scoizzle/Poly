@@ -53,11 +53,15 @@ public sealed class DslTokenWriter : ITokenWriter<DslTokenKind> {
         (lastIsWord && nextIsWord) || (lastKind == DslTokenKind.Colon && nextIsWord);
 
     private static bool IsWord(DslTokenKind kind) => kind switch {
-        DslTokenKind.Identifier or DslTokenKind.Number or DslTokenKind.StringLiteral => true,
-        DslTokenKind.Colon or DslTokenKind.Comma or DslTokenKind.Dot
-            or DslTokenKind.LParen or DslTokenKind.RParen
-            or DslTokenKind.LBrace or DslTokenKind.RBrace
-            or DslTokenKind.LBracket or DslTokenKind.RBracket => false,
+        DslTokenKind.Colon or
+        DslTokenKind.Comma or
+        DslTokenKind.Dot or
+        DslTokenKind.LParen or
+        DslTokenKind.RParen or
+        DslTokenKind.LBrace or
+        DslTokenKind.RBrace or
+        DslTokenKind.LBracket or
+        DslTokenKind.RBracket => false,
         _ => true, // every keyword kind
     };
 }

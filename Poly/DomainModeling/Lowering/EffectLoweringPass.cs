@@ -74,10 +74,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
             NavigationNameResolver = context.NavigationNameResolver ?? BuildNavigationNameResolver(entity, _domain, _analysis),
             IsCollectionNavigation = context.IsCollectionNavigation
                 ?? BuildIsCollectionNavigation(entity, _domain, _analysis),
-            IsRelationshipNavigation = context.IsRelationshipNavigation
-                ?? BuildIsRelationshipNavigation(entity, _domain, _analysis),
-            PropertyTypeResolver = context.PropertyTypeResolver ?? BuildPropertyTypeResolver(entity),
-            SourceEntityName = context.SourceEntityName ?? entity.Name
+            PropertyTypeResolver = context.PropertyTypeResolver ?? BuildPropertyTypeResolver(entity)
         });
         Subject = context.Subject;
     }
@@ -119,30 +116,6 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     /// unknown). Used to lower <c>Rel exists</c> on <c>many</c> navs to a
     /// <c>.Count != 0</c> check in the export.
     /// </summary>
-    /// <summary>
-    /// True when <paramref name="name"/> is an outbound relationship on the
-    /// current entity (any cardinality). Runtime <c>Rel exists</c> uses
-    /// <c>ExistsRelated</c>; property <c>Name exists</c> stays a null check.
-    /// </summary>
-    internal static Func<string, bool> BuildIsRelationshipNavigation(
-        Entity entity, Domain? domain, INodeMetadataProvider? analysis) {
-        if (analysis is not null) {
-            var rlm = domain is not null
-                ? analysis.GetRelationshipLookup(domain)
-                : analysis.GetRelationshipLookup();
-            if (rlm is not null) {
-                return name => rlm.TryGetRelationship(entity.Name, name, out _);
-            }
-        }
-        if (domain is not null) {
-            var names = entity.Navigations
-                .Select(r => r.Name)
-                .ToHashSet(StringComparer.Ordinal);
-            return name => names.Contains(name);
-        }
-        return _ => false;
-    }
-
     internal static Func<string, bool> BuildIsCollectionNavigation(
         Entity entity, Domain? domain, INodeMetadataProvider? analysis) {
         if (analysis is not null) {

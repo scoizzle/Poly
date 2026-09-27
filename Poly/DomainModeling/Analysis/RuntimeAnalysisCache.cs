@@ -171,26 +171,22 @@ internal static class RuntimeAnalysisCache {
     }
 
     /// <summary>
-    /// Effects-only body cached at <see cref="GetOrLower"/> for Domain-bound subscription dispatch.
+    /// Module handler body cached at <see cref="GetOrLower"/> for Domain-bound
+    /// subscription dispatch. <paramref name="targetStageName"/> selects the
+    /// watched-stage handler (one info per stage on the entry).
     /// </summary>
     internal static bool TryGetSubscriptionBody(
-        Domain domain, SubscriptionDispatchPlanEntry entry, out Node? body) =>
-        TryGetSubscriptionBody(domain, entry, targetStageName: null, out body);
-
-    internal static bool TryGetSubscriptionBody(
-        Domain domain, SubscriptionDispatchPlanEntry entry, string? targetStageName, out Node? body) {
+        Domain domain, SubscriptionDispatchPlanEntry entry, string targetStageName, out Node? body) {
         ArgumentNullException.ThrowIfNull(domain);
         ArgumentNullException.ThrowIfNull(entry);
+        ArgumentException.ThrowIfNullOrEmpty(targetStageName);
         body = null;
         var holder = GetHolder(domain);
         if (holder.SubscriptionBodies is null
             || !holder.SubscriptionBodies.TryGetValue(entry, out var byStage)
             || byStage.Count == 0)
             return false;
-        if (targetStageName is { Length: > 0 })
-            return byStage.TryGetValue(targetStageName, out body) && body is not null;
-        body = byStage.Values.FirstOrDefault();
-        return body is not null;
+        return byStage.TryGetValue(targetStageName, out body) && body is not null;
     }
 
     private static IEnumerable<string> EntryMethodNames(string stageName) {
@@ -469,12 +465,9 @@ internal static class RuntimeAnalysisCache {
             holder.SubscriptionBodies ??= new Dictionary<SubscriptionDispatchPlanEntry, Dictionary<string, Node>>(
                 ReferenceEqualityComparer.Instance);
             if (!holder.SubscriptionBodies.TryGetValue(entry, out var byStage)
-                || byStage.Count == 0) {
-                holder.SubscriptionBodies[entry] = new Dictionary<string, Node>(StringComparer.Ordinal) {
-                    [""] = body
-                };
-                return;
-            }
+                || byStage.Count == 0)
+                throw new InvalidOperationException(
+                    "Subscription body is not cached; Lower the domain before replacing a handler.");
             foreach (var stage in byStage.Keys.ToList())
                 byStage[stage] = body;
         }

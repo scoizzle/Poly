@@ -1400,6 +1400,27 @@ public class DomainToCSharpExporterTests {
     }
 
     [Test]
+    public async Task Export_ToOnePathPrefixComparison_EmitsNullGuard() {
+        var (domain, analysis) = ParseAndAnalyze("""
+            domain Campus
+            Advisor: entity {
+              Name: Text required
+              Age: Number
+            }
+            Customer: entity {
+              advisor: Advisor
+              NamedPat: policy { advisor Name is "Pat" }
+            }
+            """);
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var unit = new CompilationUnitNode([], null, types, null);
+        var cs = new CSharpGenerator().Generate(unit);
+
+        await Assert.That(cs).Contains("this.Advisor != null");
+        await Assert.That(cs).Contains("this.Advisor!.Name");
+    }
+
+    [Test]
     public async Task Export_CreateNavMethod_EmitsEmptyCollectionArgsForCtorArity() {
         // Regression (review D): the nav factory (create in Rel) calls the target
         // entity's Create(...) with the SAME arity as its generated constructor.

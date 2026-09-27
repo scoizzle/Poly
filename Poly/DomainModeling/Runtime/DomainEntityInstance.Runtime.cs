@@ -142,7 +142,7 @@ public sealed partial record DomainEntityInstance {
         // VM does not inline them; InvokeNamed / generated C# owns the implementation.
         var methodNames = new HashSet<string>(StringComparer.Ordinal) {
             "Notify", "EnsureUnique", "AnyRelated", "AllRelated", "NoneRelated", "CountRelated",
-            "ExistsRelated", "GetRelatedOne", "LinkRelated"
+            "LinkRelated"
         };
         // Runtime factories for mixed if+create. Dictionary slot plus pair
         // overloads so Invoke types as DomainResult (IsSuccess resolves).
@@ -162,16 +162,6 @@ public sealed partial record DomainEntityInstance {
                 ],
                 Body: new Block([])));
         }
-        methods.Add(new MethodDefinitionNode(
-            "ExistsRelated",
-            boolean,
-            Parameters: [new Parameter("relationshipName", str)],
-            Body: new Block([])));
-        methods.Add(new MethodDefinitionNode(
-            "GetRelatedOne",
-            obj,
-            Parameters: [new Parameter("relationshipName", str)],
-            Body: new Block([])));
         methods.Add(new MethodDefinitionNode(
             "LinkRelated",
             new TypeReference("void"),
@@ -367,10 +357,10 @@ public sealed partial record DomainEntityInstance {
         if (match is null)
             return false;
 
-        if (Store is null || Domain is null) {
-            value = null;
-            return true;
-        }
+        if (Store is null)
+            throw new InvalidOperationException(
+                "Cannot resolve relationship target without a DomainInstanceStore. " +
+                "Call store.Add(instance) first.");
 
         var related = Store.GetRelatedInstances(match.Name, this)
             .Where(t => string.Equals(t.Entity.Name, match.Target.TypeName, StringComparison.Ordinal))
@@ -471,30 +461,6 @@ public sealed partial record DomainEntityInstance {
     }
 
     // ── Collection quantifier Store reads ─────────────────────────────────────
-
-    /// <summary>
-    /// When <paramref name="target"/> is a bare relationship name on this entity as source,
-    /// evaluates store-linked presence (count &gt; 0). Returns false from <c>out present</c>
-    /// with return false when the target is not an outbound relationship (caller uses bag path).
-    /// </summary>
-    private bool TryEvaluateRelationshipPresence(DomainExpression target, out bool present) {
-        present = false;
-        if (target is not PropertyAccess pa)
-            return false;
-        if (Domain is null)
-            return false;
-
-        var analysis = RuntimeAnalysisCache.GetOrAnalyze(Domain);
-        if (!analysis.TryGetRelationship(Domain, Entity.Name, pa.Name, out var relationship) || relationship is null)
-            return false;
-        if (!string.Equals(relationship.Source.TypeName, Entity.Name, StringComparison.Ordinal))
-            return false;
-
-        // Outbound relationship: require store; empty links are false (not throw).
-        var targets = GetOutboundRelatedInstances(pa.Name);
-        present = targets.Count > 0;
-        return true;
-    }
 
     private bool EvaluateAnyExpr(AnyExpr a) {
         var targets = GetOutboundRelatedInstances(a.RelationshipName);

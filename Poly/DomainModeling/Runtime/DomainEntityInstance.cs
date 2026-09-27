@@ -506,8 +506,8 @@ public sealed partial record DomainEntityInstance {
         // tree — skip the EvaluatePolicy prelude so ONE-TREE Failure runs and
         // require-not cannot invert soft-false to fail-open. ExecuteEffectList
         // still binds the module Body for named actions even when Ontology
-        // effects are empty (gated no-op). Bare evaluate_policy still soft-fails
-        // unlinked via the bound NullForgiving hop. Stage policies stay here.
+        // effects are empty (gated no-op). Unlinked to-one path-prefix is false
+        // via the lowered `rel != null && leaf` guard. Stage policies stay here.
         var failures = new List<string>();
         if (Domain is not null) {
             var ensureAnalysis = RuntimeAnalysisCache.GetOrAnalyze(Domain);
@@ -968,12 +968,8 @@ public sealed partial record DomainEntityInstance {
         IReadOnlyDictionary<string, Parameter>? parameters,
         IReadOnlySet<string> stageEnums) => node switch {
             ThisReference => entity,
-            Member { Value: NullForgiving { Operand: var inner } } m =>
-                new Conditional(
-                    new NotEqual(BindThis(inner, entity, parameters, stageEnums), new Constant(null)),
-                    new Member(BindThis(inner, entity, parameters, stageEnums), m.MemberName),
-                    new Constant(null)),
-            NullForgiving nf => BindThis(nf.Operand, entity, parameters, stageEnums),
+            NullForgiving nf => new NullForgiving(
+                BindThis(nf.Operand, entity, parameters, stageEnums)),
             Parameter p when parameters is not null
                 && parameters.ContainsKey(p.Name) => new Member(entity, p.Name),
             Variable v when parameters is not null

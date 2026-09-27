@@ -47,7 +47,7 @@ public class WhenAnySimulatePrintAgreeTests {
         var plan = analysis.GetMetadata<SubscriptionDispatchPlanMetadata>(pending)
             ?? throw new InvalidOperationException("missing entity subscription plan");
         var entry = plan.ByRelationshipName.Values.SelectMany(e => e).First();
-        await Assert.That(RuntimeAnalysisCache.TryGetSubscriptionBody(domain, entry, out var cached))
+        await Assert.That(RuntimeAnalysisCache.TryGetSubscriptionBody(domain, entry, "Overdue", out var cached))
             .IsTrue();
         await Assert.That(ReferenceEquals(handler.Body, cached)).IsTrue();
 

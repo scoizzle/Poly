@@ -496,29 +496,34 @@ public sealed partial class DomainToCSharpExporter {
                     handlerBody = new Block([stageGate, handlerBody]);
                 }
 
-                // `when all Rel Stage` fires only when EVERY linked target is in the
-                // watched stage (and at least one exists) — the notify call fires per
-                // transition, so the set condition must gate the handler body. Mirrors
-                // the runtime dispatch (matchedCount == allLinkedTargets.Count; the
-                // empty set never fires). Discovery round5 F10. The gate references the
-                // target's CurrentStage / stage enum, so it is only emitted when the
-                // target actually has stages (a stageless target is rejected at analysis;
-                // the guard is defense-in-depth).
+                // `when all Rel Stage…` fires when every linked target is in the
+                // entry's watched-stage set (union of StageNames) and at least one
+                // exists. Notify runs per transition; this gate is the set condition
+                // print emits. Stageless targets are rejected at analysis.
                 if (info.Subscription.Quantifier == StageSubscriptionQuantifier.All
-                    && info.TargetEntity.Stages.Count > 0) {
+                    && info.TargetEntity.Stages.Count > 0
+                    && info.Subscription.StageNames.Count > 0) {
                     var targetStageEnumName = metadata.GetStructure(info.TargetEntity)
                         ?.StageEnumTypeName ?? $"{info.TargetEntity.Name}Stage";
                     var linkedVar = new Variable("linkedTarget");
                     var matchedVar = new Variable("linkedMatched");
+                    var currentStage = new Member(linkedVar, "CurrentStage");
+                    Node? notInWatched = null;
+                    foreach (var sName in info.Subscription.StageNames) {
+                        var neq = new NotEqual(
+                            currentStage,
+                            new Member(new NamedTypeReference(targetStageEnumName), sName));
+                        notInWatched = notInWatched is null
+                            ? neq
+                            : new Syntactic.And(notInWatched, neq);
+                    }
                     var gateLoop = new ForEachLoop(
                         linkedVar,
                         new Member(new ThisReference(), ToPascalCase(info.Relationship.Name)),
                         new Block([
                             new Assignment(matchedVar, new Constant(true)),
                             new IfStatement(
-                                new NotEqual(
-                                    new Member(linkedVar, "CurrentStage"),
-                                    new Member(new NamedTypeReference(targetStageEnumName), info.StageName)),
+                                notInWatched!,
                                 new Block([new Return()]))
                         ]));
                     var emptyCheck = new IfStatement(

@@ -36,37 +36,6 @@ public sealed partial record DomainEntityInstance {
     }
 
     /// <summary>
-    /// Notify-shaped Store read: true when the named relationship has any
-    /// outbound link. Dictionary <c>This</c> cannot Member-read <see cref="Store"/>.
-    /// </summary>
-    public bool ExistsRelated(string relationshipName) {
-        ArgumentException.ThrowIfNullOrEmpty(relationshipName);
-        if (TryEvaluateRelationshipPresence(new PropertyAccess(relationshipName), out var present))
-            return present;
-        throw new InvalidOperationException(
-            Domain is null
-                ? $"Cannot resolve relationship '{relationshipName}' without a domain."
-                : $"Relationship '{relationshipName}' not found in domain '{Domain.Name}'.");
-    }
-
-    /// <summary>
-    /// Notify-shaped Store read: the unique outbound target of a to-one hop.
-    /// Zero or many links fail closed (path-prefix contract).
-    /// </summary>
-    public DomainEntityInstance GetRelatedOne(string relationshipName) {
-        ArgumentException.ThrowIfNullOrEmpty(relationshipName);
-        var targets = GetOutboundRelatedInstances(relationshipName);
-        if (targets.Count == 0)
-            throw new InvalidOperationException(
-                $"No linked instances found for relationship '{relationshipName}' on entity '{Entity.Name}'.");
-        if (targets.Count > 1)
-            throw new InvalidOperationException(
-                $"Path-prefix on relationship '{relationshipName}' requires exactly one linked target " +
-                $"(found {targets.Count} on entity '{Entity.Name}'). Use any/all quantifiers for collections.");
-        return targets[0];
-    }
-
-    /// <summary>
     /// Notify-shaped Store bind: link a just-created child. No Store is a no-op
     /// (CreateEntityInstance.RelationshipName without a store still allocates).
     /// Unknown relationship with a Store bound fails loud.
@@ -298,6 +267,9 @@ public sealed partial record DomainEntityInstance {
             if (planEntry is null)
                 throw new InvalidOperationException(
                     $"Subscription dispatch on '{Entity.Name}' requires a plan entry for cache bind.");
+            if (targetStageName is not { Length: > 0 })
+                throw new InvalidOperationException(
+                    $"Subscription dispatch on '{Entity.Name}' requires a target stage name.");
             if (!RuntimeAnalysisCache.TryGetSubscriptionBody(
                     Domain, planEntry, targetStageName, out var body)
                 || body is null)

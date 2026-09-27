@@ -137,18 +137,22 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Node
         }
 
         // Every hop in a path-prefix is a relationship navigation.
-        // Module shape: NullForgiving for CS8602; require gates own
-        // DomainResult.Failure ("requires a linked") in BuildActionBodyWithGuards
-        // before the policy bool is called. Simulate binds This → entity and
-        // rewrites NullForgiving hops so an unlinked to-one is false, not throw.
-        // Collection hops cannot be a singular path-prefix — fail closed (use any/all).
+        // Predicate leaves: `this.Rel != null && <leaf>` so an unlinked to-one is
+        // false (same meaning as Conditional(exists, whenPresent, false)). Value
+        // leaves stay the hop. NullForgiving on the hop is CS8602 only; require
+        // gates own DomainResult.Failure ("requires a linked") in
+        // BuildActionBodyWithGuards. Collection hops cannot be a singular
+        // path-prefix — fail closed (use any/all).
         if (IsCollectionNav(rn.RelationshipName)) {
             throw new InvalidOperationException(
                 $"Path-prefix on relationship '{rn.RelationshipName}' requires exactly one linked target. " +
                 "Use any/all quantifiers for collections.");
         }
         var relMember = new Member(_currentSubject, ResolveNavName(rn.RelationshipName));
-        return Route(rn.TargetProperty, new NullForgiving(relMember));
+        var leaf = Route(rn.TargetProperty, new NullForgiving(relMember));
+        if (!IsPathPrefixPredicate(rn.TargetProperty))
+            return leaf;
+        return new SN.And(new NotEqual(relMember, new Constant(null)), leaf);
     }
 
     /// <summary>Pascal-cases a relationship hop name the resolver did not map
@@ -161,6 +165,14 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Node
     private static bool ContainsRelationshipNavigation(DomainExpression expr) =>
         expr is RelationshipNavigation
         || expr.Children.OfType<DomainExpression>().Any(ContainsRelationshipNavigation);
+
+    private static bool IsPathPrefixPredicate(DomainExpression expr) => expr switch {
+        Ontology.Comparison or Ontology.And or Ontology.Or or Ontology.Not
+            or Ontology.Exists or Ontology.NotExists
+            or Ontology.AnyExpr or Ontology.AllExpr or Ontology.NoneExpr => true,
+        RelationshipNavigation inner => IsPathPrefixPredicate(inner.TargetProperty),
+        _ => false,
+    };
 
     // --- Recurse into a new subject — helper to avoid confusion with Route(expr) ---
     private Node Route(DomainExpression expr, Node subject) {

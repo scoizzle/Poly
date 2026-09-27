@@ -174,6 +174,25 @@ public class Item4FailBeforeMutateTests {
         var activeOnItem = Flatten(loop!.Body).OfType<Member>().FirstOrDefault(m =>
             m.MemberName == "Active" && ReferenceEquals(m.Value, loop.LoopVariable));
         await Assert.That(activeOnItem).IsNotNull();
+        await Assert.That(LoopIsSiblingBeforeIf(lowered!, loop!)).IsTrue();
+    }
+
+    private static bool LoopIsSiblingBeforeIf(Node node, ForEachLoop loop) {
+        if (node is Block block) {
+            var loopIdx = -1;
+            for (var i = 0; i < block.Nodes.Count; i++) {
+                if (ReferenceEquals(block.Nodes[i], loop))
+                    loopIdx = i;
+                if (loopIdx >= 0 && i > loopIdx && block.Nodes[i] is IfStatement ifs
+                    && !Flatten(ifs.Condition).OfType<ForEachLoop>().Any())
+                    return true;
+            }
+            foreach (var child in block.Nodes) {
+                if (LoopIsSiblingBeforeIf(child, loop))
+                    return true;
+            }
+        }
+        return false;
     }
 
     private static (Domain Domain, AnalysisResult Analysis) Evolve(string poly) {

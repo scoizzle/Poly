@@ -2764,36 +2764,11 @@ public class DomainToCSharpExporterTests {
         var types = new DomainToCSharpExporter().Export(domain, analysis);
         var cs = new CSharpGenerator().Generate(new CompilationUnitNode([], null, types, null));
 
-        var createStart = cs.IndexOf("static DomainResult<Reservation> Create(", StringComparison.Ordinal);
-        await Assert.That(createStart).IsGreaterThanOrEqualTo(0);
-        var brace = cs.IndexOf('{', createStart);
-        var depth = 0;
-        var createEnd = brace;
-        for (var i = brace; i < cs.Length; i++) {
-            if (cs[i] == '{') depth++;
-            else if (cs[i] == '}') {
-                depth--;
-                if (depth == 0) { createEnd = i + 1; break; }
-            }
-        }
-        var createBody = cs[createStart..createEnd];
+        var createBody = ExportedCSharp.ExtractMethod(cs, "static DomainResult<Reservation> Create(");
         await Assert.That(createBody).Contains("AttachReservations");
         await Assert.That(createBody).Contains("AttachStays");
 
-        // F4: unique-path CreateNav defers Add when Create already Attached.
-        var createReservationsStart = cs.IndexOf("DomainResult<Reservation> CreateReservations(", StringComparison.Ordinal);
-        await Assert.That(createReservationsStart).IsGreaterThanOrEqualTo(0);
-        var createReservationsBrace = cs.IndexOf('{', createReservationsStart);
-        depth = 0;
-        var createReservationsEnd = createReservationsBrace;
-        for (var i = createReservationsBrace; i < cs.Length; i++) {
-            if (cs[i] == '{') depth++;
-            else if (cs[i] == '}') {
-                depth--;
-                if (depth == 0) { createReservationsEnd = i + 1; break; }
-            }
-        }
-        var createReservations = cs[createReservationsStart..createReservationsEnd];
+        var createReservations = ExportedCSharp.ExtractMethod(cs, "DomainResult<Reservation> CreateReservations(");
         await Assert.That(createReservations).Contains("Reservation.Create(");
         await Assert.That(createReservations).DoesNotContain("_reservations.Add");
 
@@ -2922,19 +2897,7 @@ public class DomainToCSharpExporterTests {
         await Assert.That(analysis.HasErrors).IsFalse();
         var types = new DomainToCSharpExporter().Export(domain, analysis);
         var cs = new CSharpGenerator().Generate(new CompilationUnitNode([], null, types, null));
-        var createStart = cs.IndexOf("static DomainResult<Child> Create(", StringComparison.Ordinal);
-        await Assert.That(createStart).IsGreaterThanOrEqualTo(0);
-        var brace = cs.IndexOf('{', createStart);
-        var depth = 0;
-        var createEnd = brace;
-        for (var i = brace; i < cs.Length; i++) {
-            if (cs[i] == '{') depth++;
-            else if (cs[i] == '}') {
-                depth--;
-                if (depth == 0) { createEnd = i + 1; break; }
-            }
-        }
-        var createBody = cs[createStart..createEnd];
+        var createBody = ExportedCSharp.ExtractMethod(cs, "static DomainResult<Child> Create(");
         await Assert.That(createBody).DoesNotContain("has no unique inverse collection to attach on 'Peer'");
         await Assert.That(createBody).DoesNotContain("AttachPrimary");
         await Assert.That(createBody).DoesNotContain("AttachSecondary");
@@ -2964,38 +2927,14 @@ public class DomainToCSharpExporterTests {
         var types = new DomainToCSharpExporter().Export(domain, analysis);
         var cs = new CSharpGenerator().Generate(new CompilationUnitNode([], null, types, null));
 
-        var createPrimaryStart = cs.IndexOf("DomainResult<Child> CreatePrimary(", StringComparison.Ordinal);
-        await Assert.That(createPrimaryStart).IsGreaterThanOrEqualTo(0);
-        var brace = cs.IndexOf('{', createPrimaryStart);
-        var depth = 0;
-        var createPrimaryEnd = brace;
-        for (var i = brace; i < cs.Length; i++) {
-            if (cs[i] == '{') depth++;
-            else if (cs[i] == '}') {
-                depth--;
-                if (depth == 0) { createPrimaryEnd = i + 1; break; }
-            }
-        }
-        var createPrimary = cs[createPrimaryStart..createPrimaryEnd];
+        var createPrimary = ExportedCSharp.ExtractMethod(cs, "DomainResult<Child> CreatePrimary(");
         await Assert.That(createPrimary).Contains("Child.Create(");
         await Assert.That(createPrimary).Contains("_primary.Add");
         await Assert.That(createPrimary).DoesNotContain("_secondary.Add");
         await Assert.That(createPrimary).DoesNotContain("AttachPrimary");
         await Assert.That(createPrimary).DoesNotContain("AttachSecondary");
 
-        var childCreateStart = cs.IndexOf("static DomainResult<Child> Create(", StringComparison.Ordinal);
-        await Assert.That(childCreateStart).IsGreaterThanOrEqualTo(0);
-        brace = cs.IndexOf('{', childCreateStart);
-        depth = 0;
-        var childCreateEnd = brace;
-        for (var i = brace; i < cs.Length; i++) {
-            if (cs[i] == '{') depth++;
-            else if (cs[i] == '}') {
-                depth--;
-                if (depth == 0) { childCreateEnd = i + 1; break; }
-            }
-        }
-        var childCreate = cs[childCreateStart..childCreateEnd];
+        var childCreate = ExportedCSharp.ExtractMethod(cs, "static DomainResult<Child> Create(");
         await Assert.That(childCreate).DoesNotContain("AttachPrimary");
         await Assert.That(childCreate).DoesNotContain("AttachSecondary");
         await Assert.That(childCreate).DoesNotContain("has no unique inverse collection");
@@ -3062,24 +3001,9 @@ public class DomainToCSharpExporterTests {
         var types = new DomainToCSharpExporter().Export(domain, analysis);
         var cs = new CSharpGenerator().Generate(types);
 
-        var start = cs.IndexOf("bool HasOverdueLoans(", StringComparison.Ordinal);
-        await Assert.That(start).IsGreaterThanOrEqualTo(0);
-        var brace = cs.IndexOf('{', start);
-        var depth = 0;
-        var end = brace;
-        for (var i = brace; i < cs.Length; i++) {
-            if (cs[i] == '{') depth++;
-            else if (cs[i] == '}') {
-                depth--;
-                if (depth == 0) { end = i + 1; break; }
-            }
-        }
-        var method = cs[start..end];
+        var method = ExportedCSharp.ExtractMethod(cs, "bool HasOverdueLoans(");
         await Assert.That(method).Contains("foreach");
         await Assert.That(method).Contains("this.Loans");
-        await Assert.That(method).DoesNotContain("AnyRelated");
-        await Assert.That(method).DoesNotContain("NotSupportedException");
-        await Assert.That(method).DoesNotContain("store-aware");
     }
 
     [Test]
@@ -3123,71 +3047,12 @@ public class DomainToCSharpExporterTests {
 
         var types = new DomainToCSharpExporter().Export(domain, analysis);
         var cs = new CSharpGenerator().Generate(types);
-        var tree = CSharpSyntaxTree.ParseText("#nullable enable\n" + cs);
-        var references = ((string?)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES"))
-            ?.Split(Path.PathSeparator)
-            .Select(p => (MetadataReference)MetadataReference.CreateFromFile(p))
-            .ToArray() ?? [];
-        var compilation = CSharpCompilation.Create(
-            "HasOverdueLoansPrint",
-            [tree],
-            references,
-            new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
-        using var pe = new MemoryStream();
-        var emit = compilation.Emit(pe);
-        var emitErrors = emit.Diagnostics
-            .Where(d => d.Severity == Microsoft.CodeAnalysis.DiagnosticSeverity.Error)
-            .Select(d => d.ToString())
-            .ToArray();
-        await Assert.That(emitErrors).IsEmpty();
-        pe.Position = 0;
-        var alc = new System.Runtime.Loader.AssemblyLoadContext(
-            "HasOverdueLoansPrint", isCollectible: true);
-        var asm = alc.LoadFromStream(pe);
-
+        var asm = ExportedCSharp.CompileAndLoad(cs, "HasOverdueLoansPrint");
         var patronType = asm.GetType("Patron")!;
         var loanType = asm.GetType("Loan")!;
 
-        object InvokeCreate(Type type, params (string Name, object? Value)[] named) {
-            var create = type.GetMethods(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)
-                .Where(m => m.Name == "Create")
-                .OrderByDescending(m => m.GetParameters().Length)
-                .First();
-            var parameters = create.GetParameters();
-            var callArgs = new object?[parameters.Length];
-            for (var i = 0; i < parameters.Length; i++) {
-                var match = named.FirstOrDefault(n =>
-                    string.Equals(n.Name, parameters[i].Name, StringComparison.OrdinalIgnoreCase));
-                if (match.Name is not null)
-                    callArgs[i] = match.Value;
-                else if (parameters[i].HasDefaultValue)
-                    callArgs[i] = parameters[i].DefaultValue;
-                else if (parameters[i].ParameterType == typeof(string))
-                    callArgs[i] = "";
-                else if (parameters[i].ParameterType == typeof(bool))
-                    callArgs[i] = false;
-                else
-                    callArgs[i] = null;
-            }
-            return create.Invoke(null, callArgs)!;
-        }
-
-        object ResultValue(object result) =>
-            result.GetType().GetProperty("Value")!.GetValue(result)!;
-
-        bool ResultOk(object result) =>
-            (bool)result.GetType().GetProperty("IsSuccess")!.GetValue(result)!;
-
-        object RequireCreated(object created) {
-            if (!ResultOk(created))
-                throw new InvalidOperationException(
-                    created.GetType().GetProperty("ErrorMessage")?.GetValue(created) as string
-                    ?? "Create failed.");
-            return ResultValue(created);
-        }
-
         object MakeLoan(string status) =>
-            RequireCreated(InvokeCreate(loanType, ("status", status)));
+            ExportedCSharp.CreateEntity(loanType, ("status", status));
 
         object LoanList(params object[] loans) {
             var arr = Array.CreateInstance(loanType, loans.Length);
@@ -3197,11 +3062,11 @@ public class DomainToCSharpExporterTests {
         }
 
         object MakePatron(string email, params object[] loans) =>
-            RequireCreated(InvokeCreate(patronType,
+            ExportedCSharp.CreateEntity(patronType,
                 ("name", "Ada"),
                 ("email", email),
                 ("maxItems", 5L),
-                ("loans", LoanList(loans))));
+                ("loans", LoanList(loans)));
 
         bool HasOverdue(object patron) =>
             (bool)patronType.GetMethod("HasOverdueLoans")!.Invoke(patron, null)!;

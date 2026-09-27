@@ -3,7 +3,7 @@
 **Parent:** slice 2 · L5 · 05-F5  
 **Wave:** 4 after e2e-s-3 (exporter free) · after e2e-r (lowering free)
 
-**Status:** `[ ]`
+**Status:** Quantifier policies and quantifiers in action expressions lower to the same `foreach` in simulate and print. Tasks below that are not that lowering stay `[ ]`.
 
 ## Task order
 

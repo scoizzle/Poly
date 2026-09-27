@@ -3065,21 +3065,65 @@ public class DomainEntityInstanceTests {
     }
 
     [Test]
-    public async Task EvaluatePolicy_Quantifier_WithoutStore_EmptyCollection_ReturnsFalse() {
+    public async Task EvaluatePolicy_Quantifier_WithoutStore_Throws() {
+        var (src, policy) = QuantifierPolicyWithoutStore("HasBig", DomainExpression.Any("items",
+            DomainExpression.GreaterThan(DomainExpression.Property("Value"), DomainExpression.Literal(10L))));
+        await Assert.That(() => src.EvaluatePolicy(policy)).Throws<InvalidOperationException>();
+    }
+
+    [Test]
+    public async Task EvaluatePolicy_None_WithoutStore_Throws() {
+        var (src, policy) = QuantifierPolicyWithoutStore("NoneBig", DomainExpression.None("items",
+            DomainExpression.GreaterThan(DomainExpression.Property("Value"), DomainExpression.Literal(10L))));
+        await Assert.That(() => src.EvaluatePolicy(policy)).Throws<InvalidOperationException>();
+    }
+
+    [Test]
+    public async Task EvaluatePolicy_All_WithoutStore_Throws() {
+        var (src, policy) = QuantifierPolicyWithoutStore("AllBig", DomainExpression.All("items",
+            DomainExpression.GreaterThan(DomainExpression.Property("Value"), DomainExpression.Literal(10L))));
+        await Assert.That(() => src.EvaluatePolicy(policy)).Throws<InvalidOperationException>();
+    }
+
+    private static (DomainEntityInstance Src, Policy Policy) QuantifierPolicyWithoutStore(
+        string policyName, DomainExpression expr) {
         var target = new Entity("Target", [
             new Property("Value", new DomainTypeReference("Number"), [])
         ], [], [], []);
         var source = new Entity("Source", [], [], [
-            new Policy("HasBig", DomainExpression.Any("items",
-                DomainExpression.GreaterThan(DomainExpression.Property("Value"), DomainExpression.Literal(10L))))
+            new Policy(policyName, expr)
         ], []);
         var rel = new Relationship("items",
             new DomainTypeReference("Source"), new DomainTypeReference("Target"),
             RelationshipCardinality.OneToMany, []);
         var domain = DomainTestFactory.Create("Test", [source, target], [rel]);
-        var src = DomainEntityInstance.Create(source, domain: domain); // no store
-        var policy = domain.Types.OfType<Entity>().First(e => e.Name == "Source").Policies.First(p => p.Name == "HasBig");
-        await Assert.That(src.EvaluatePolicy(policy)).IsFalse();
+        var src = DomainEntityInstance.Create(source, domain: domain);
+        var policy = domain.Types.OfType<Entity>().First(e => e.Name == "Source").Policies.First(p => p.Name == policyName);
+        return (src, policy);
+    }
+
+    [Test]
+    public async Task EvaluatePolicy_SelfRelationship_OutboundOnly_TargetSeesNoReports() {
+        var employee = new Entity("Employee", [
+            new Property("Flag", new DomainTypeReference("Boolean"), [])
+        ], [], [
+            new Policy("HasReports", DomainExpression.Any("reports", DomainExpression.Property("Flag")))
+        ], []);
+        var rel = new Relationship("reports",
+            new DomainTypeReference("Employee"), new DomainTypeReference("Employee"),
+            RelationshipCardinality.OneToMany, []);
+        var domain = DomainTestFactory.Create("Org", [employee], [rel]);
+        var entity = domain.Types.OfType<Entity>().First(e => e.Name == "Employee");
+        var store = new DomainInstanceStore();
+        var mgr = DomainEntityInstance.Create(entity,
+            new Dictionary<string, object?> { ["Flag"] = true }, domain);
+        var emp = DomainEntityInstance.Create(entity,
+            new Dictionary<string, object?> { ["Flag"] = true }, domain);
+        store.Add(mgr); store.Add(emp);
+        store.Link("reports", mgr, emp);
+        var policy = entity.Policies.First(p => p.Name == "HasReports");
+        await Assert.That(mgr.EvaluatePolicy(policy)).IsTrue();
+        await Assert.That(emp.EvaluatePolicy(policy)).IsFalse();
     }
 
     // ── owned-3: to-one RelationshipNavigation in policy evaluation ──

@@ -82,6 +82,10 @@ namespace Poly.DomainModeling.Lowering;
 /// Optional current-subject entity type name. Runtime path-prefix uses it to
 /// TypeCast <c>GetRelatedOne</c> to the relationship target so leaf members resolve.
 /// </param>
+/// <param name="Names">
+/// Shared generator of unique local names for one method. Passes built from
+/// this context via <c>with</c> keep the same instance.
+/// </param>
 public sealed record LoweringContext(
     Node Subject,
     IReadOnlyDictionary<string, Node>? Parameters = null,
@@ -101,5 +105,6 @@ public sealed record LoweringContext(
     bool EmitInstanceNotify = true,
     string? SourceEntityName = null,
     ExpressionMeaning? Meaning = null,
-    ExpressionFormRegistry? Forms = null
+    ExpressionFormRegistry? Forms = null,
+    LocalNames? Names = null
 );

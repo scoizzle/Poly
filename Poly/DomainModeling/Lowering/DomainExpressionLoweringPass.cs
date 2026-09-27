@@ -44,7 +44,7 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Lowe
     private readonly ExpressionFormRegistry? _forms;
     private string? _sourceEntityName;
     private Node _currentSubject = null!;
-    private int _quantifierSequence;
+    private readonly LocalNames _names;
 
     /// <param name="parameters">
     /// Optional map of parameter names to their Syntax AST nodes.
@@ -64,7 +64,8 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Lowe
     /// names to generated member names (pascal-cased navs).
     /// </summary>
     public DomainExpressionLoweringPass(LoweringContext context) {
-        _context = context;
+        _context = context.Names is null ? context with { Names = new LocalNames() } : context;
+        _names = _context.Names!;
         _parameters = context.Parameters ?? new Dictionary<string, Node>();
         _actionParameterNames = context.ActionParameterNames;
         _useThisReference = context.UseThisReference;
@@ -135,7 +136,8 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Lowe
             if (runtime is not null) return LoweredExpression.Of(runtime);
         }
 
-        // When UseThisReference is set, action parameters render as bare names
+        // Action parameters win over a property of the same name, including
+        // inside a quantifier body (the nested pass inherits ActionParameterNames).
         if (_useThisReference && _actionParameterNames?.Contains(p.Name) == true)
             return LoweredExpression.Of(new Parameter(p.Name));
         return LoweredExpression.Of(new Member(_currentSubject, ResolveName(p.Name)));
@@ -185,12 +187,16 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Lowe
                 ? new TypeCast(related, new TypeReference(targetName))
                 : related;
             var whenPresent = Route(rn.TargetProperty, typedHop, targetName);
-            if (whenPresent.Statements.Count > 0) {
-                throw new NotSupportedException(
-                    "A path-prefix hop cannot contain a quantifier: the present-side " +
-                    "expression produced statements, and analysis already rejects this form.");
-            }
-            return LoweredExpression.Of(new Conditional(exists, whenPresent.Value, new Constant(false)));
+            if (whenPresent.Statements.Count == 0)
+                return LoweredExpression.Of(new Conditional(exists, whenPresent.Value, new Constant(false)));
+            var t = _names.Next("t");
+            var thenBlock = new Block(
+                [.. whenPresent.Statements, new Assignment(t, whenPresent.Value)],
+                whenPresent.Variables);
+            return new LoweredExpression(
+                [new Assignment(t, new Constant(false)), new IfStatement(exists, thenBlock)],
+                [t],
+                t);
         }
 
         var relMember = new Member(_currentSubject, ResolveNavName(rn.RelationshipName));
@@ -222,17 +228,22 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Lowe
     }
 
     /// <summary>
-    /// Child route for library handlers, which can only embed a value in expression
-    /// position. A child that produced statements fails loud rather than becoming a Block.
+    /// Library handlers receive a value-only route. This records each child's
+    /// statements and combines them with the handler's node.
     /// </summary>
-    private Node RouteValue(DomainExpression expr) {
-        var lowered = Route(expr);
-        if (lowered.Statements.Count > 0) {
-            throw new NotSupportedException(
-                $"Cannot lower a {expr.GetType().Name} child that produced statements " +
-                "(a loop must sit in statement position).");
+    private bool TryLowerLibrary(DomainExpression expr, [NotNullWhen(true)] out LoweredExpression? lowered) {
+        var children = new List<LoweredExpression>();
+        Node RouteChild(DomainExpression child) {
+            var routed = Route(child);
+            children.Add(routed);
+            return routed.Value;
         }
-        return lowered.Value;
+        if (EffectiveMeaning.Lowering.TryLower(expr, RouteChild, _propertyTypeResolver, out var node)) {
+            lowered = LoweredExpression.Combine(children, node);
+            return true;
+        }
+        lowered = null;
+        return false;
     }
 
     protected override LoweredExpression Exists(Exists e) {
@@ -287,16 +298,16 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Lowe
     }
 
     protected override LoweredExpression Add(Add a) {
-        if (EffectiveMeaning.Lowering.TryLower(a, RouteValue, _propertyTypeResolver, out var node))
-            return LoweredExpression.Of(node);
+        if (TryLowerLibrary(a, out var lowered))
+            return lowered;
         var left = Route(a.Left);
         var right = Route(a.Right);
         return LoweredExpression.Combine([left, right], new SN.Add(left.Value, right.Value));
     }
 
     protected override LoweredExpression Subtract(Subtract s) {
-        if (EffectiveMeaning.Lowering.TryLower(s, RouteValue, _propertyTypeResolver, out var node))
-            return LoweredExpression.Of(node);
+        if (TryLowerLibrary(s, out var lowered))
+            return lowered;
         var left = Route(s.Left);
         var right = Route(s.Right);
         return LoweredExpression.Combine([left, right], new SN.Subtract(left.Value, right.Value));
@@ -336,7 +347,7 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Lowe
     /// (<c>if (t)</c> for and, <c>if (!t)</c> for or).
     /// </summary>
     private LoweredExpression ShortCircuit(LoweredExpression left, LoweredExpression right, bool whenTrue) {
-        var t = new Variable($"t{_quantifierSequence++}");
+        var t = _names.Next("t");
         Node gate = whenTrue ? t : new SN.Not(t);
         var thenBlock = new Block(
             [.. right.Statements, new Assignment(t, right.Value)],
@@ -446,15 +457,14 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Lowe
     private LoweredExpression LowerFilteredQuantifier(
         string relationshipName, DomainExpression body, QuantifierKind kind) {
         var collection = new Member(_currentSubject, ResolveNavName(relationshipName));
-        var seq = _quantifierSequence++;
-        var item = new Variable($"item{seq}");
+        var item = _names.Next("item");
         var bodyLowered = LowerQuantifierBody(relationshipName, body, item);
 
-        var result = new Variable(kind switch {
-            QuantifierKind.Any => $"any{seq}",
-            QuantifierKind.All => $"all{seq}",
-            QuantifierKind.None => $"none{seq}",
-            _ => $"count{seq}",
+        var result = _names.Next(kind switch {
+            QuantifierKind.Any => "any",
+            QuantifierKind.All => "all",
+            QuantifierKind.None => "none",
+            _ => "count",
         });
         Node initial = kind switch {
             QuantifierKind.Any => new Constant(false),
@@ -475,7 +485,7 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Lowe
 
         if (kind == QuantifierKind.All) {
             // `all` over no items is false, so the loop also records that it saw one.
-            var sawItem = new Variable($"sawItem{seq}");
+            var sawItem = _names.Next("sawItem");
             Node[] statements = [
                 new Assignment(result, initial),
                 new Assignment(sawItem, new Constant(false)),
@@ -498,8 +508,8 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Lowe
     /// <summary>
     /// Lowers a quantifier body against the loop's <paramref name="item"/>, using the
     /// related entity's enum properties. Nested quantifiers in the body produce
-    /// statements that run inside the outer loop, once per item, and continue this
-    /// pass's item/result numbering so names stay unique.
+    /// statements that run inside the outer loop, once per item, and share this
+    /// pass's local-name generator so names stay unique.
     /// </summary>
     private LoweredExpression LowerQuantifierBody(
         string relationshipName, DomainExpression body, Variable item) {
@@ -516,15 +526,12 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Lowe
             EnumPropertyNames = enums,
             SourceEntityName = targetName ?? _sourceEntityName
         });
-        nested._quantifierSequence = _quantifierSequence;
-        var lowered = nested.LowerExpression(body, item);
-        _quantifierSequence = nested._quantifierSequence;
-        return lowered;
+        return nested.LowerExpression(body, item);
     }
 
     protected override LoweredExpression Library(DomainExpression expr) {
-        if (EffectiveMeaning.Lowering.TryLower(expr, RouteValue, _propertyTypeResolver, out var node))
-            return LoweredExpression.Of(node);
+        if (TryLowerLibrary(expr, out var lowered))
+            return lowered;
         throw new NotSupportedException(
             $"DomainExpression node type '{expr.GetType().Name}' is not supported");
     }

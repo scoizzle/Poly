@@ -51,7 +51,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
 
     public EffectLoweringPass(Entity entity, LoweringContext context) {
         _entity = entity;
-        _context = context;
+        _context = context.Names is null ? context with { Names = new LocalNames() } : context;
         _domain = context.Domain;
         _analysis = context.Analysis;
         _useThisReference = context.UseThisReference;
@@ -73,7 +73,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
             }
             parameters = merged;
         }
-        _expressionPass = new DomainExpressionLoweringPass(context with {
+        _expressionPass = new DomainExpressionLoweringPass(_context with {
             Parameters = parameters,
             NavigationNameResolver = context.NavigationNameResolver ?? BuildNavigationNameResolver(entity, _domain, _analysis),
             IsCollectionNavigation = context.IsCollectionNavigation

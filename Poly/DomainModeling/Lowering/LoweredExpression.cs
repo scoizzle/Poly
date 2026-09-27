@@ -17,6 +17,10 @@ public sealed record LoweredExpression(
     public static Node Before(IReadOnlyList<LoweredExpression> parts, Node statement) {
         if (parts.All(p => p.Statements.Count == 0))
             return statement;
+        if (statement is Block block)
+            return new Block(
+                [.. parts.SelectMany(p => p.Statements), .. block.Nodes],
+                [.. parts.SelectMany(p => p.Variables), .. block.Variables]);
         return new Block(
             [.. parts.SelectMany(p => p.Statements), statement],
             [.. parts.SelectMany(p => p.Variables)]);

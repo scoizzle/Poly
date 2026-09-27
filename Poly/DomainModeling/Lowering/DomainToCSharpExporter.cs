@@ -347,6 +347,7 @@ public sealed partial class DomainToCSharpExporter {
         AddActionMethods(entity, methods, stageEnumTypeName, postTransitionNodes, domain, metadata);
 
         // ── Policies as bool methods ──────────────────────────────
+        // A policy that cannot be lowered fails the whole export (no per-policy stub).
         foreach (var policy in entity.Policies) {
             var body = LowerExpressionToMethodBody(policy.Expression, entity, domain, analysis: metadata);
             methods.Add(new MethodDefinitionNode(

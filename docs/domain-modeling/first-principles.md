@@ -129,7 +129,7 @@ Secondary context only (naming, not a source of principles): `docs/decisions/202
 
 **Roadmap phase.** **Earning its place for phase 1.** A domain is how a business is written down so it can become working software.
 
-**Observation:** Between a domain and the syntax-tree core there is non-trivial ceremony. The author writes `DomainExpression` and `Effect` nodes. Those are not interpreter nodes. Lowering (`DomainExpressionLoweringPass`, `EffectLoweringPass`) rewrites them into `Member`, `Assignment`, `Invoke`, `IfStatement`, `ForEachLoop`, and friends. Until that rewrite happens, the domain is not simulable as Principle 0 states.
+**Observation:** The step between a domain and the syntax-tree core is intentional. It is the lowering contract working as designed. The author writes `DomainExpression` and `Effect` nodes, which describe the business rather than interpreter operations. Lowering (`DomainExpressionLoweringPass`, `EffectLoweringPass`) translates them into `Member`, `Assignment`, `Invoke`, `IfStatement`, `ForEachLoop`, and friends. Once lowered, the domain is simulable as Principle 0 states.
 
 **Observation:** Stage comments in `Stage.cs` state that parent/child stage hierarchy is not in the current language. Stages are flat on an entity.
 
@@ -188,6 +188,8 @@ There is a second analyze, on the *syntax* tree, immediately before the interpre
 **Principle.** Lower turns an analyzed domain into syntax trees: type definitions with method bodies for actions, policies, constructors, entry/exit, subscriptions, and store jobs (`Create`, `CreateIn`, `EnsureUnique`, and the like). That set of trees is what simulate and print are supposed to consume. Authoring expressions and effects are parse output, not execute input.
 
 **Why it has to be true.** Principle 0 says the syntax tree is the unit of meaning. If execute still walked `Effect` objects, or print built a different tree than simulate, “the domain works” would mean two different programs. Lowering is the one translation. It may *read* analysis metadata; the tree it emits is generic syntax (assignments, calls, `this`, loops), not domain types.
+
+**Correct before optimal.** Lowering produces a correct, interpretable implementation of the domain, not necessarily an optimal one. Optimization is a later pass, not a precondition for lowering.
 
 **Where it lives in code.**
 

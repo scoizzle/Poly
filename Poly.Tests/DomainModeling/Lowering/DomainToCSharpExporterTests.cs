@@ -1024,6 +1024,31 @@ public class DomainToCSharpExporterTests {
     }
 
     [Test]
+    public async Task Analysis_ForEachInvoke_PropertyExistsInsideQuantifier_Rejected() {
+        var poly = """
+            domain Yard
+            Part: entity { Qty: Number }
+            Widget: entity {
+              Flag: Boolean default(false)
+              parts: many Part
+              Pick: policy { any parts where Qty exists }
+              Mark: action { assign Flag to true }
+            }
+            Bin: entity {
+              widgets: many Widget
+              Go: action { for widgets as w where w Pick invoke w.Mark() }
+            }
+            """;
+        var changes = new PolyDslParser(poly).Parse();
+        var evolved = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(changes);
+        var diagnostics = evolved.Analysis?.Diagnostics
+            ?? DomainModelAnalyzer.Analyze(evolved.Root!).Diagnostics;
+
+        await Assert.That(diagnostics.Any(d =>
+            d.Message.Contains("predicate policy 'Pick' tests 'exists' on a property"))).IsTrue();
+    }
+
+    [Test]
     public async Task Export_WhenAllGate_UsesTargetStageEnumName() {
         // Round-5 F8: the `when all` gate must reference the TARGET's stage enum (via the
         // target's EntityStructureMetadata), not the subscriber's convention — the gate

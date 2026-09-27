@@ -554,10 +554,11 @@ and invokes the action on each. One fan-out mode, no `any`/`all`/`each` quantifi
 - **Some predicates are rejected at analysis:** a `for` predicate policy that reads a
   path-prefix hop is rejected ("reads a path-prefix hop"): an unlinked hop simulates false
   but the export dereferences null. One that tests `exists` on a property (not a
-  relationship) is rejected ("tests 'exists' on a property"): simulate and export disagree
-  on whether an unset property exists. Relationship `exists` and collection-quantifier
-  predicates (`any`/`all`/`none`/`count`) are allowed and give the same answer in simulate
-  and export. Use a **local policy over the record's own properties** instead of a
+  relationship), at any depth, including a related record's property inside an
+  `any`/`all`/`none`/`count` body, is rejected ("tests 'exists' on a property"): simulate
+  and export disagree on whether an unset property exists. Relationship `exists` and
+  collection-quantifier predicates are allowed and give the same answer in simulate and
+  export. Use a **local policy over the record's own properties** instead of a
   path-prefix hop, and compare a property to a value instead of testing `exists`.
 
 ```poly
@@ -890,9 +891,9 @@ diverging:
   lower `any`/`all`/`none`/`count … where` to a foreach over the collection navigation
   (the host supplies the collection). Path-prefix reads and `Rel exists` / `not Rel exists`
   lower to standalone member access (to-one hops, count-vs-null checks for collections).
-  A `for` predicate policy that reads path-prefix or tests `exists` on a property is still
-  **rejected at analysis**; a relationship `exists` or quantifier predicate is allowed and
-  runs as the target's bool method.
+  A `for` predicate policy that reads path-prefix or tests `exists` on a property (also
+  inside a quantifier body) is still **rejected at analysis**; a relationship `exists` or
+  quantifier predicate is allowed and runs as the target's bool method.
   Fail closed without a store on the simulate path.
 - **Relative date ordering is shipped.** Comparing a date property to `Now`/`Today`
   (e.g. `ExpiryDate < Now`) parses, analyzes, round-trips, and evaluates on the VM

@@ -778,7 +778,7 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
                         "Use a local policy over the record's own properties.",
                         DomainModelDiagnosticCodes.EffectInvokeShape);
                 }
-                else if (TestsPropertyExists(predicatePolicy.Expression, targetEntity)) {
+                else if (TestsPropertyExists(context, domain, predicatePolicy.Expression, targetEntity)) {
                     // Simulate and export disagree on whether an unset property exists
                     // (an unset Text simulates present; the export's unset Number is
                     // never null), so the two would pick different records.
@@ -852,14 +852,33 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
                 yield return nested;
     }
 
-    /// <summary>True when an expression tests <c>exists</c> / <c>not exists</c> on one of
-    /// <paramref name="entity"/>'s properties (not a relationship).</summary>
-    private static bool TestsPropertyExists(DomainExpression expr, Entity entity) {
+    /// <summary>True when an expression tests <c>exists</c> / <c>not exists</c> on a property
+    /// (not a relationship) of <paramref name="entity"/>, or, inside an
+    /// <c>any</c>/<c>all</c>/<c>none</c>/<c>count</c> body, of the related entity.</summary>
+    private static bool TestsPropertyExists(
+        AnalysisContext context, Domain domain, DomainExpression expr, Entity entity) {
         var target = expr switch { Exists e => e.Target, NotExists ne => ne.Target, _ => null };
         if (target is PropertyAccess pa
             && entity.Properties.Any(p => string.Equals(p.Name, pa.Name, StringComparison.Ordinal)))
             return true;
-        return expr.Children.OfType<DomainExpression>().Any(child => TestsPropertyExists(child, entity));
+        var quantified = expr switch {
+            AnyExpr a => a.RelationshipName,
+            AllExpr a => a.RelationshipName,
+            NoneExpr n => n.RelationshipName,
+            CountExpr c => c.RelationshipName,
+            _ => null
+        };
+        var scope = entity;
+        if (quantified is not null) {
+            // Quantifiers are source-side only; an unresolved one is reported by the policy analyzer.
+            if (!TryResolveRelationship(context, domain, entity.Name, quantified, expr, out var relationship)
+                || relationship is null
+                || !TryResolveEntity(context, domain, relationship.Target.TypeName, expr, out var related)
+                || related is null)
+                return false;
+            scope = related;
+        }
+        return expr.Children.OfType<DomainExpression>().Any(child => TestsPropertyExists(context, domain, child, scope));
     }
 
     private static void ValidateInvokeAction(

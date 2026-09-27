@@ -449,6 +449,9 @@ public sealed partial class DomainToCSharpExporter {
         return effectPass.LowerActionBody(action.Effects);
     }
 
+    /// <summary>
+    /// Policy method body: quantifier loops (if any) sit immediately before <c>return</c> of the value.
+    /// </summary>
     internal static Node? LowerExpressionToMethodBody(
         DomainExpression expr, Entity entity, Domain? domain = null,
         INodeMetadataProvider? analysis = null) {
@@ -464,18 +467,10 @@ public sealed partial class DomainToCSharpExporter {
             PropertyTypeResolver: EffectLoweringPass.BuildPropertyTypeResolver(entity),
             SourceEntityName: entity.Name);
         var pass = new DomainExpressionLoweringPass(context);
-        var lowered = pass.Lower(expr, new Parameter("entity"));
-        return lowered is null ? null : AsBooleanMethodBody(lowered);
+        var lowered = pass.LowerExpression(expr, new Parameter("entity"));
+        var body = lowered.Before(new Return(lowered.Value));
+        return body is Block ? body : new Block([body]);
     }
-
-    /// <summary>
-    /// Policy methods return a bool. A policy with filtered quantifiers lowers to a
-    /// Block of loops whose last node is the value; that last node becomes the return.
-    /// </summary>
-    private static Block AsBooleanMethodBody(Node lowered) =>
-        lowered is Block block
-            ? new Block([.. block.Nodes.SkipLast(1), new Return(block.Nodes[^1])], block.Variables)
-            : new Block([new Return(lowered)]);
 
     internal static bool TryResolveEnumType(Domain? domain, INodeMetadataProvider? analysis, string typeName, out EnumType? enumType) {
         enumType = null;

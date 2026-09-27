@@ -200,8 +200,8 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     protected override Node? Default() => null;
 
     protected override Node? Assign(AssignEffect a) {
-        var target = _expressionPass.Lower(a.Target, Subject);
-        var value = _expressionPass.Lower(a.Value, Subject);
+        var target = _expressionPass.LowerExpression(a.Target, Subject);
+        var value = _expressionPass.LowerExpression(a.Value, Subject);
 
         // Convert enum-valued RHS to qualified enum member access when the
         // target property is enum-typed:  assign Status to "Suspended"
@@ -220,7 +220,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
             if (entityProp is not null) {
                 var adapted = LowerDefault(
                     a.Value, new NamedTypeReference(entityProp.Type.TypeName));
-                if (adapted is not null) value = adapted;
+                if (adapted is not null) value = value with { Value = adapted };
             }
 
             if (entityProp is not null
@@ -229,16 +229,20 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
                 if (_enumPropertyNames is not null) {
                     if (a.Value is Literal { Value: string strVal }
                         && !string.IsNullOrEmpty(strVal)) {
-                        value = new Member(new NamedTypeReference(enumType.Name), strVal);
+                        value = value with {
+                            Value = new Member(new NamedTypeReference(enumType.Name), strVal)
+                        };
                     }
                     else if (a.Value is PropertyAccess pa
                         && enumType.MemberNames.Contains(pa.Name, StringComparer.Ordinal)) {
-                        value = new Member(new NamedTypeReference(enumType.Name), pa.Name);
+                        value = value with {
+                            Value = new Member(new NamedTypeReference(enumType.Name), pa.Name)
+                        };
                     }
                 }
                 else if (a.Value is PropertyAccess pa
                     && enumType.MemberNames.Contains(pa.Name, StringComparer.Ordinal)) {
-                    value = new Constant(pa.Name);
+                    value = value with { Value = new Constant(pa.Name) };
                 }
             }
 
@@ -247,10 +251,12 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         }
 
         if (_analysis?.GetMetadata<AssignedMemberConversionMetadata>(a) is { } conversion) {
-            value = new Invoke(
-                new Member(value, conversion.MethodName),
-                [.. conversion.Arguments.Select(arg =>
-                    new Member(new NamedTypeReference(arg.TypeName), arg.MemberName))]);
+            value = value with {
+                Value = new Invoke(
+                    new Member(value.Value, conversion.MethodName),
+                    [.. conversion.Arguments.Select(arg =>
+                        new Member(new NamedTypeReference(arg.TypeName), arg.MemberName))])
+            };
         }
 
         // Item 6: assign-time required/range/length/pattern (+ unique) in the
@@ -267,14 +273,14 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
 
         var needsConstraintWrap = assignProp is not null
             && HasAssignableConstraints(assignProp);
-        if (uniqueName is null && !needsConstraintWrap)
-            return new Assignment(target, value);
-
-        return WrapConstrainedAssign(
-            target,
-            needsConstraintWrap ? assignProp : null,
-            value,
-            uniqueName);
+        Node assignment = uniqueName is null && !needsConstraintWrap
+            ? new Assignment(target.Value, value.Value)
+            : WrapConstrainedAssign(
+                target.Value,
+                needsConstraintWrap ? assignProp : null,
+                value.Value,
+                uniqueName);
+        return LoweredExpression.Combine([target, value], value.Value).Before(assignment);
     }
 
     private static bool HasAssignableConstraints(Property prop) =>
@@ -639,10 +645,11 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     /// <c>DomainResult&lt;T&gt;</c>. OneToMany fan-out uses the for-each lowering.
     /// </summary>
     protected override Node? InvokeAction(InvokeActionEffect i) {
-        var args = new List<Node>();
-        foreach (var binding in i.ParameterBindings) {
-            args.Add(_expressionPass.Lower(binding.Expression, Subject));
-        }
+        var loweredArgs = i.ParameterBindings
+            .Select(binding => _expressionPass.LowerExpression(binding.Expression, Subject))
+            .ToList();
+        var args = loweredArgs.Select(a => a.Value).ToList();
+        var argStatements = LoweredExpression.Combine(loweredArgs, new Constant(null!));
 
         // Singular cross-entity invoke (OneToOne): the runtime requires exactly one
         // outbound link (ResolveRelationshipTarget) and fails loud otherwise. Enforce the
@@ -657,16 +664,16 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
             var seq = _forEachInvokeSequence++;
             var resultVar = new Variable($"invoke{seq}");
             var invokeCall = new Invoke(new Member(navMember, i.ActionName), [.. args]);
-            return new Block([
+            return argStatements.Before(new Block([
                 guard,
                 new Assignment(resultVar, invokeCall),
                 new IfStatement(
                     new Poly.Ast.Nodes.Not(new Member(resultVar, "IsSuccess")),
                     new Block([ReturnCallerFailureFrom(resultVar)]))
-            ], [resultVar]);
+            ], [resultVar]));
         }
 
-        return WrapInvokeResult(new Invoke(new Member(Subject, i.ActionName), [.. args]));
+        return argStatements.Before(WrapInvokeResult(new Invoke(new Member(Subject, i.ActionName), [.. args])));
     }
 
     private Node WrapInvokeResult(Invoke invokeCall) {
@@ -744,22 +751,28 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
                 mergedParams[kv.Key] = kv.Value;
         mergedParams[e.BinderName] = loopVar;
         var argPass = new DomainExpressionLoweringPass(_context with { Parameters = mergedParams });
-        var args = new List<Node>();
-        foreach (var binding in e.ParameterBindings)
-            args.Add(argPass.Lower(binding.Expression, Subject));
+        var loweredArgs = e.ParameterBindings
+            .Select(binding => argPass.LowerExpression(binding.Expression, Subject))
+            .ToList();
+        var args = loweredArgs.Select(a => a.Value).ToList();
+        var argStatements = LoweredExpression.Combine(loweredArgs, new Constant(null!));
 
         var invokeCall = new Invoke(new Member(loopVar, e.ActionName), [.. args]);
 
         // Fail-fast + zero-matches-fail. Same Variable instances for VM identity.
+        // Arg statements sit inside the loop, immediately before the invoke.
         var matchedVar = new Variable($"matched{seq}");
         var resultVar = new Variable($"result{seq}");
         var loopBody = new List<Node>();
         if (predicateGuard is not null) loopBody.Add(predicateGuard);
+        loopBody.AddRange(argStatements.Statements);
         loopBody.Add(new Assignment(matchedVar, new Constant(true)));
         loopBody.Add(new Assignment(resultVar, invokeCall));
         loopBody.Add(new IfStatement(new Poly.Ast.Nodes.Not(new Member(resultVar, "IsSuccess")),
             new Block([ReturnCallerFailureFrom(resultVar)])));
-        var loop = new ForEachLoop(loopVar, navMember, new Block(loopBody, [resultVar]));
+        var loopLocals = new List<Node> { resultVar };
+        loopLocals.AddRange(argStatements.Variables);
+        var loop = new ForEachLoop(loopVar, navMember, new Block(loopBody, loopLocals));
         var zeroCheck = new IfStatement(
             new Poly.Ast.Nodes.Not(matchedVar),
             new Block([ReturnCallerFailure(new Constant(
@@ -807,7 +820,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     }
 
     protected override Node? Conditional(ConditionalEffect c) {
-        var condition = _expressionPass.Lower(c.Condition, Subject);
+        var condition = _expressionPass.LowerExpression(c.Condition, Subject);
         var thenNodes = new List<Node>();
         var thenVars = new List<Node>();
         foreach (var sub in c.ThenEffects) {
@@ -819,7 +832,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         }
 
         if (c.ElseEffects is not { Count: > 0 })
-            return new IfStatement(condition, new Block(thenNodes, thenVars));
+            return condition.Before(new IfStatement(condition.Value, new Block(thenNodes, thenVars)));
 
         var elseNodes = new List<Node>();
         var elseVars = new List<Node>();
@@ -831,7 +844,8 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
             CollectNode(elseNodes, elseVars, lowered);
         }
 
-        return new IfStatement(condition, new Block(thenNodes, thenVars), new Block(elseNodes, elseVars));
+        return condition.Before(new IfStatement(
+            condition.Value, new Block(thenNodes, thenVars), new Block(elseNodes, elseVars)));
     }
 
     /// <summary>Adds a lowered node to a list. Flattens Block children, keeping declarations.</summary>
@@ -1009,8 +1023,8 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         CollectCreateInProbes(cond.ThenEffects, thenProbes, ref thenPrior, thenRhs);
         if (thenProbes.Count > 0) {
             var conditionExpr = SubstituteAssignedProperties(cond.Condition, priorAssignRhs);
-            var condition = _expressionPass.Lower(conditionExpr, Subject);
-            nodes.Add(new IfStatement(condition, FlattenProbeBlocks(thenProbes)));
+            var condition = _expressionPass.LowerExpression(conditionExpr, Subject);
+            nodes.Add(condition.Before(new IfStatement(condition.Value, FlattenProbeBlocks(thenProbes))));
         }
 
         if (cond.ElseEffects is not { Count: > 0 })
@@ -1023,9 +1037,9 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         if (elseProbes.Count == 0)
             return;
         var elseConditionExpr = SubstituteAssignedProperties(cond.Condition, priorAssignRhs);
-        var elseCondition = _expressionPass.Lower(elseConditionExpr, Subject);
-        nodes.Add(new IfStatement(
-            new Syntactic.Not(elseCondition), FlattenProbeBlocks(elseProbes)));
+        var elseCondition = _expressionPass.LowerExpression(elseConditionExpr, Subject);
+        nodes.Add(elseCondition.Before(new IfStatement(
+            new Syntactic.Not(elseCondition.Value), FlattenProbeBlocks(elseProbes))));
     }
 
     private static Block FlattenProbeBlocks(List<Node> probes) {
@@ -1081,20 +1095,26 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         Entity? targetEntity,
         string? linkRelationshipName = null) {
         var args = new List<Node> { new Constant(nameArg) };
+        var initExprs = new List<LoweredExpression>();
         foreach (var init in initializers) {
             args.Add(new Constant(init.PropertyName));
             var prop = targetEntity?.Properties.FirstOrDefault(p =>
                 string.Equals(p.Name, init.PropertyName, StringComparison.Ordinal));
-            var value = (prop is not null
-                    ? LowerDefault(
-                        init.Expression, new NamedTypeReference(prop.Type.TypeName))
-                    : null)
-                ?? (prop is not null
-                    ? LowerEnumAwareValue(init.Expression, prop.Type, Subject)
-                    : _expressionPass.Lower(init.Expression, Subject));
-            args.Add(NeedsObjectSlotCast(targetEntity, prop, init.PropertyName, value)
-                ? new TypeCast(value, DomainToCSharpExporter.StoreJobObjectType())
-                : value);
+            LoweredExpression loweredValue;
+            if (prop is not null
+                && LowerDefault(init.Expression, new NamedTypeReference(prop.Type.TypeName)) is { } adapted) {
+                loweredValue = LoweredExpression.Of(adapted);
+            }
+            else if (prop is not null) {
+                loweredValue = LowerEnumAwareValue(init.Expression, prop.Type, Subject);
+            }
+            else {
+                loweredValue = _expressionPass.LowerExpression(init.Expression, Subject);
+            }
+            initExprs.Add(loweredValue);
+            args.Add(NeedsObjectSlotCast(targetEntity, prop, init.PropertyName, loweredValue.Value)
+                ? new TypeCast(loweredValue.Value, DomainToCSharpExporter.StoreJobObjectType())
+                : loweredValue.Value);
         }
 
         var seq = _createInProbeSequence++;
@@ -1130,7 +1150,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
                     valueVar));
             }
         }
-        return new Block(nodes, locals);
+        return LoweredExpression.Combine(initExprs, resultVar).Before(new Block(nodes, locals));
     }
 
     /// <summary>
@@ -1198,20 +1218,20 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     /// assign (<c>"Suspended"</c> → <c>PatronStatus.Suspended</c>). Any other
     /// expression (parameter, subject property, literal) lowers normally.
     /// </summary>
-    private Node LowerEnumAwareValue(DomainExpression expr, DomainTypeReference targetType, Node subject) {
+    private LoweredExpression LowerEnumAwareValue(DomainExpression expr, DomainTypeReference targetType, Node subject) {
         if (DomainToCSharpExporter.TryResolveEnumType(_domain, _analysis, targetType.TypeName, out var enumType)
             && enumType is not null) {
             // Bare identifier member: Tier: Pro
             if (expr is PropertyAccess pa && enumType.MemberNames.Contains(pa.Name, StringComparer.Ordinal)) {
-                return new Member(new NamedTypeReference(enumType.Name), pa.Name);
+                return LoweredExpression.Of(new Member(new NamedTypeReference(enumType.Name), pa.Name));
             }
             // String-literal member: Kind: "Keyword" — same qualification as assign.
             if (expr is Literal { Value: string s }
                 && enumType.MemberNames.Contains(s, StringComparer.Ordinal)) {
-                return new Member(new NamedTypeReference(enumType.Name), s);
+                return LoweredExpression.Of(new Member(new NamedTypeReference(enumType.Name), s));
             }
         }
-        return _expressionPass.Lower(expr, subject);
+        return _expressionPass.LowerExpression(expr, subject);
     }
 
     private Entity? ResolveEntity(string typeName) {

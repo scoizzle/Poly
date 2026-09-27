@@ -111,7 +111,7 @@ public sealed partial record DomainEntityInstance {
         var values = new Dictionary<string, object?>(StringComparer.Ordinal);
         foreach (var prop in entity.Properties) {
             if (propertyValues is not null && propertyValues.TryGetValue(prop.Name, out var v)) {
-                values[prop.Name] = v;
+                values[prop.Name] = CoerceBooleanBagValue(prop.Type.TypeName, v);
             }
             else if (prop.Constraints.OfType<DefaultValueConstraint>().FirstOrDefault() is { } defaultValue) {
                 values[prop.Name] = EvaluateDefaultValue(defaultValue.Expression, prop.Type.TypeName, domain);
@@ -392,14 +392,30 @@ public sealed partial record DomainEntityInstance {
         return CoercePolicyBool(policy.Name, boxedModule);
     }
 
-    private static bool CoercePolicyBool(string policyName, object? boxed) => boxed switch {
-        bool b => b,
-        long l => l != 0L,
-        int i => i != 0,
-        null => false,
-        _ => throw new InvalidOperationException(
-            $"Policy '{policyName}' produced {boxed.GetType().Name}, not a boolean.")
-    };
+    /// <summary>
+    /// VM boolean locals are 0/1 in the ring. Boolean properties and action
+    /// parameters store <see cref="bool"/> so bag reads and the export agree.
+    /// </summary>
+    internal static object? CoerceBooleanBagValue(string? typeName, object? value) {
+        if (!string.Equals(typeName, "Boolean", StringComparison.Ordinal))
+            return value;
+        return value switch {
+            bool b => b,
+            long l => l != 0L,
+            int i => i != 0,
+            _ => value
+        };
+    }
+
+    private static bool CoercePolicyBool(string policyName, object? boxed) {
+        var coerced = CoerceBooleanBagValue("Boolean", boxed);
+        return coerced switch {
+            bool b => b,
+            null => false,
+            _ => throw new InvalidOperationException(
+                $"Policy '{policyName}' produced {coerced.GetType().Name}, not a boolean.")
+        };
+    }
 
 
     /// <summary>
@@ -497,7 +513,9 @@ public sealed partial record DomainEntityInstance {
         }
         if (args is { Count: > 0 }) {
             foreach (var kv in args) {
-                _values[kv.Key] = kv.Value;
+                var typeName = action.Parameters.FirstOrDefault(p =>
+                    string.Equals(p.Name, kv.Key, StringComparison.Ordinal))?.Type.TypeName;
+                _values[kv.Key] = CoerceBooleanBagValue(typeName, kv.Value);
                 injectedKeys.Add(kv.Key);
             }
         }

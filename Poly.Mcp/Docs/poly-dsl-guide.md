@@ -857,7 +857,7 @@ handling are out of scope — no `at 9am`, no business-day arithmetic, no TZ con
 
 **Shipped in the current product surface:**
 - Arithmetic (`+`, `-`, `*`, `/`) in expressions
-- Conditional effects (`if (expr) { effects } else { effects }`) — exists / path-prefix / quantifiers lower the same way as in policies (foreach over the collection, member reads)
+- Conditional effects (`if (expr) { effects } else { effects }`) — exists / path-prefix / quantifiers in the condition lower the same way as in policies
 - Invoke effect (`invoke ActionName` with optional arguments; cross-entity via `invoke RelName.ActionName`; fan-out via the `for` form — one mode, no `any`/`all`/`each` quantifier)
 - Action parameters (`actionName: action (param: Type, ...)`)
 - `default` constraints and enum-typed properties

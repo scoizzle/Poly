@@ -365,9 +365,11 @@ public sealed partial record DomainEntityInstance {
 
     /// <summary>
     /// Matches a collection nav (OneToMany / ManyToMany) by generated member name.
-    /// Does not read the store — used by ContainsKey so existence does not throw.
+    /// Does not read the store, so ContainsKey never throws. For-invoke analysis
+    /// still requires OneToMany; this matches lowering's collection-nav predicate
+    /// so a ManyToMany member read is not a miss.
     /// </summary>
-    private Relationship? MatchCollectionNavigation(string key) {
+    internal Relationship? MatchCollectionNavigation(string key) {
         foreach (var nav in NavigationsFor(Entity, Domain)) {
             if (nav.Cardinality is not (RelationshipCardinality.OneToMany
                 or RelationshipCardinality.ManyToMany))
@@ -380,27 +382,19 @@ public sealed partial record DomainEntityInstance {
     }
 
     /// <summary>
-    /// IDictionary read of a collection nav (OneToMany / ManyToMany): outbound
-    /// linked targets (empty list when unlinked — foreach zero-match, not NRE).
-    /// Throws without a store or domain on the value read. For-invoke analysis
-    /// still requires OneToMany; this matches lowering's collection-nav predicate
-    /// so a ManyToMany member read is not a miss.
+    /// IDictionary read of a collection nav (OneToMany / ManyToMany): the outbound
+    /// linked targets of <paramref name="navigation"/> (empty list when unlinked, so
+    /// a foreach sees zero items). Throws without a store or domain.
     /// </summary>
-    internal bool TryGetCollectionNavigation(string key, out object? value) {
-        value = null;
-        var match = MatchCollectionNavigation(key);
-        if (match is null)
-            return false;
-
+    internal List<DomainEntityInstance> ReadLinkedTargets(Relationship navigation) {
         if (Store is null || Domain is null)
             throw new InvalidOperationException(
                 "Cannot resolve relationship target without a DomainInstanceStore. " +
                 "Call store.Add(instance) first.");
 
-        value = Store.GetLinkedTargets(match.Name, this)
-            .Where(t => string.Equals(t.Entity.Name, match.Target.TypeName, StringComparison.Ordinal))
+        return Store.GetLinkedTargets(navigation.Name, this)
+            .Where(t => string.Equals(t.Entity.Name, navigation.Target.TypeName, StringComparison.Ordinal))
             .ToList();
-        return true;
     }
 
     /// <summary>

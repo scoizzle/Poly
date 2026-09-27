@@ -30,16 +30,13 @@ namespace Poly.DomainModeling.Lowering;
 public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Node> {
     private readonly IReadOnlyDictionary<string, Node> _parameters;
     private readonly HashSet<string>? _actionParameterNames;
-    private readonly bool _useThisReference;
     private readonly IReadOnlyDictionary<string, string>? _enumPropertyNames;
     private readonly Func<string, string>? _navigationNameResolver;
     private readonly Func<string, bool>? _isCollectionNavigation;
-    private readonly Func<string, bool>? _isRelationshipNavigation;
     private readonly Func<string, string?>? _propertyTypeResolver;
     private readonly Domain? _domain;
     private readonly ExpressionMeaning _meaning;
     private readonly ExpressionFormRegistry? _forms;
-    private string? _sourceEntityName;
     private Node _currentSubject = null!;
 
     /// <param name="parameters">
@@ -52,26 +49,23 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Node
 
     /// <summary>
     /// Creates a pass using context from a <see cref="LoweringContext"/>.
-    /// When <see cref="LoweringContext.UseThisReference"/> is true, the lowered
-    /// tree uses <see cref="ThisReference"/> instead of <see cref="Parameter"/>
-    /// for the instance root, and names in <see cref="LoweringContext.ActionParameterNames"/>
-    /// render as bare parameters instead of <c>this.name</c>.
+    /// The instance root is <see cref="LoweringContext.Subject"/> (module bodies
+    /// pass <see cref="ThisReference"/>). Names in
+    /// <see cref="LoweringContext.ActionParameterNames"/> render as bare parameters
+    /// instead of <c>this.name</c>.
     /// <see cref="LoweringContext.NavigationNameResolver"/> maps DSL relationship
     /// names to generated member names (pascal-cased navs).
     /// </summary>
     public DomainExpressionLoweringPass(LoweringContext context) {
         _parameters = context.Parameters ?? new Dictionary<string, Node>();
         _actionParameterNames = context.ActionParameterNames;
-        _useThisReference = context.UseThisReference;
         _enumPropertyNames = context.EnumPropertyNames;
         _navigationNameResolver = context.NavigationNameResolver;
         _isCollectionNavigation = context.IsCollectionNavigation;
-        _isRelationshipNavigation = context.IsRelationshipNavigation;
         _propertyTypeResolver = context.PropertyTypeResolver;
         _domain = context.Domain;
         _meaning = context.Meaning ?? ExpressionMeaning.Empty;
         _forms = context.Forms;
-        _sourceEntityName = context.SourceEntityName;
     }
 
     private ExpressionMeaning EffectiveMeaning {
@@ -97,9 +91,7 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Node
     public Node Lower(DomainExpression expression, Node subject) {
         ArgumentNullException.ThrowIfNull(expression);
         ArgumentNullException.ThrowIfNull(subject);
-        _currentSubject = _useThisReference && subject is Parameter { Name: "entity" }
-            ? new ThisReference()
-            : subject;
+        _currentSubject = subject;
         return Route(expression);
     }
 
@@ -107,17 +99,14 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Node
         $"DomainExpression node type is not supported");
 
     protected override Node PropertyAccess(PropertyAccess p) {
-        // Export (UseThisReference) resolves session ident folds (clocks) and Guid
-        // through LowerDefaultExpression. Bare fragments without those tables stay
-        // Member so analysis can fail closed on unknown property.
-        if (_useThisReference) {
-            var runtime = EffectLoweringPass.LowerDefaultExpression(
-                p, typeHint: null, EffectiveMeaning, EffectiveForms);
-            if (runtime is not null) return runtime;
-        }
+        // Session ident folds (clocks) and Guid through LowerDefaultExpression.
+        // Bare fragments without those tables stay Member so analysis can fail
+        // closed on unknown property.
+        var runtime = EffectLoweringPass.LowerDefaultExpression(
+            p, typeHint: null, EffectiveMeaning, EffectiveForms);
+        if (runtime is not null) return runtime;
 
-        // When UseThisReference is set, action parameters render as bare names
-        if (_useThisReference && _actionParameterNames?.Contains(p.Name) == true)
+        if (_actionParameterNames?.Contains(p.Name) == true)
             return new Parameter(p.Name);
         return new Member(_currentSubject, ResolveName(p.Name));
     }
@@ -148,26 +137,16 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Node
         }
 
         // Every hop in a path-prefix is a relationship navigation.
-        // Runtime: ExistsRelated short-circuit → false when unlinked so require
-        // EvaluatePolicy fills FailedGuards without throw; GetRelatedOne still
-        // throws on many (fail closed). Export: NullForgiving for CS8602; require
-        // gates own DomainResult.Failure ("requires a linked") in
-        // BuildActionBodyWithGuards before the policy bool is called.
-        if (!_useThisReference) {
-            var exists = new Invoke(
-                new Member(_currentSubject, "ExistsRelated"),
-                new Constant(rn.RelationshipName));
-            var related = new Invoke(
-                new Member(_currentSubject, "GetRelatedOne"),
-                new Constant(rn.RelationshipName));
-            var targetName = ResolveRelationshipTarget(rn.RelationshipName);
-            Node typedHop = targetName is not null
-                ? new TypeCast(related, new TypeReference(targetName))
-                : related;
-            var whenPresent = Route(rn.TargetProperty, typedHop, targetName);
-            return new Conditional(exists, whenPresent, new Constant(false));
+        // Module shape: NullForgiving for CS8602; require gates own
+        // DomainResult.Failure ("requires a linked") in BuildActionBodyWithGuards
+        // before the policy bool is called. Simulate binds This → entity and
+        // rewrites NullForgiving hops so an unlinked to-one is false, not throw.
+        // Collection hops cannot be a singular path-prefix — fail closed (use any/all).
+        if (IsCollectionNav(rn.RelationshipName)) {
+            throw new InvalidOperationException(
+                $"Path-prefix on relationship '{rn.RelationshipName}' requires exactly one linked target. " +
+                "Use any/all quantifiers for collections.");
         }
-
         var relMember = new Member(_currentSubject, ResolveNavName(rn.RelationshipName));
         return Route(rn.TargetProperty, new NullForgiving(relMember));
     }
@@ -184,28 +163,17 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Node
         || expr.Children.OfType<DomainExpression>().Any(ContainsRelationshipNavigation);
 
     // --- Recurse into a new subject — helper to avoid confusion with Route(expr) ---
-    private Node Route(DomainExpression expr, Node subject, string? sourceEntityName = null) {
+    private Node Route(DomainExpression expr, Node subject) {
         var saved = _currentSubject;
-        var savedSource = _sourceEntityName;
         _currentSubject = subject;
-        if (sourceEntityName is not null)
-            _sourceEntityName = sourceEntityName;
         try { return Route(expr); }
-        finally {
-            _currentSubject = saved;
-            _sourceEntityName = savedSource;
-        }
+        finally { _currentSubject = saved; }
     }
 
     protected override Node Exists(Exists e) {
-        if (!_useThisReference && e.Target is PropertyAccess pa && IsRelationship(pa.Name)) {
-            return new Invoke(
-                new Member(_currentSubject, "ExistsRelated"),
-                new Constant(pa.Name));
-        }
-        // Collection (`many`) relationship: the export's `collection != null` is
-        // always true (ctor-initialized) while the runtime answers store-link
-        // presence (false on empty) — lower to a real non-empty check instead.
+        // Collection (`many`) relationship: ctor-initialized lists are never null;
+        // store-link presence is a non-empty check. Simulate binds the same Count
+        // member through the dictionary nav.
         if (e.Target is PropertyAccess col && IsCollectionNav(col.Name)) {
             return new NotEqual(
                 new Member(Lower(e.Target, _currentSubject), "Count"),
@@ -215,11 +183,6 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Node
     }
 
     protected override Node NotExists(NotExists ne) {
-        if (!_useThisReference && ne.Target is PropertyAccess pa && IsRelationship(pa.Name)) {
-            return new SN.Not(new Invoke(
-                new Member(_currentSubject, "ExistsRelated"),
-                new Constant(pa.Name)));
-        }
         if (ne.Target is PropertyAccess col && IsCollectionNav(col.Name)) {
             return new Equal(
                 new Member(Lower(ne.Target, _currentSubject), "Count"),
@@ -230,19 +193,6 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Node
 
     private bool IsCollectionNav(string name) =>
         _isCollectionNavigation?.Invoke(name) == true;
-
-    private bool IsRelationship(string name) =>
-        _isRelationshipNavigation?.Invoke(name) == true;
-
-    private string? ResolveRelationshipTarget(string relationshipName) {
-        if (_domain is null || _sourceEntityName is null)
-            return null;
-        var source = _domain.Types.OfType<Entity>().FirstOrDefault(e =>
-            string.Equals(e.Name, _sourceEntityName, StringComparison.Ordinal));
-        var rel = source?.Navigations.FirstOrDefault(n =>
-            string.Equals(n.Name, relationshipName, StringComparison.Ordinal));
-        return rel?.Target.TypeName;
-    }
 
     protected override Node Add(Add a) {
         if (EffectiveMeaning.Lowering.TryLower(a, e => Lower(e, _currentSubject), _propertyTypeResolver, out var node))
@@ -324,27 +274,21 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Node
         return null;
     }
 
-    // Filtered any/all/none/count: runtime Store jobs (Notify-shaped). C# export
-    // keeps in-memory collection Count for bare `count Rel`; filtered still throws.
+    // Filtered any/all/none pack the DomainExpression predicate as a Store job
+    // argument (AnyRelated/…). Bare `count Rel` is the collection Count member.
+    // Print cannot emit the packed DomainExpression; the exporter substitutes a
+    // throw stub on policy methods. Unifying those as tree nodes is separate work.
     protected override Node AnyExpr(AnyExpr a) =>
-        _useThisReference
-            ? throw Q3NotSupported("any", a.RelationshipName)
-            : StoreQuantifier("AnyRelated", a.RelationshipName, a.Body);
+        StoreQuantifier("AnyRelated", a.RelationshipName, a.Body);
 
     protected override Node AllExpr(AllExpr a) =>
-        _useThisReference
-            ? throw Q3NotSupported("all", a.RelationshipName)
-            : StoreQuantifier("AllRelated", a.RelationshipName, a.Body);
+        StoreQuantifier("AllRelated", a.RelationshipName, a.Body);
 
     protected override Node NoneExpr(NoneExpr n) =>
-        _useThisReference
-            ? throw Q3NotSupported("none", n.RelationshipName)
-            : StoreQuantifier("NoneRelated", n.RelationshipName, n.Body);
+        StoreQuantifier("NoneRelated", n.RelationshipName, n.Body);
 
     protected override Node CountExpr(CountExpr c) {
-        if (_useThisReference) {
-            if (c.Body is not null)
-                throw Q3NotSupported("count", c.RelationshipName);
+        if (c.Body is null) {
             return new Member(
                 new Member(_currentSubject, ResolveNavName(c.RelationshipName)),
                 "Count");
@@ -357,11 +301,6 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Node
             new Member(_currentSubject, job),
             new Constant(relationshipName),
             new Constant(body));
-
-    private static Exception Q3NotSupported(string quantifier, string relName) =>
-        new NotSupportedException(
-            $"Collection quantifier '{quantifier} {relName} …' requires store-aware evaluation " +
-            "which is not yet implemented on the VM compilation path.");
 
     protected override Node Library(DomainExpression expr) {
         if (EffectiveMeaning.Lowering.TryLower(expr, Route, _propertyTypeResolver, out var node))

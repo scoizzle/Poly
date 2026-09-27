@@ -132,7 +132,9 @@ public sealed partial class DomainToCSharpExporter {
         INodeMetadataProvider metadata,
         List<SubscriptionInfo>? targetSubs = null,
         List<SubscriptionInfo>? subscriberSubs = null,
-        IReadOnlyDictionary<SubscriptionInfo, string>? handlerNames = null) {
+        IReadOnlyDictionary<SubscriptionInfo, string>? handlerNames = null,
+        Dictionary<(string Entity, string Policy), Node>? policyBodies = null,
+        Dictionary<SubscriptionDispatchPlanEntry, Dictionary<string, Node>>? subscriptionBodies = null) {
 
         ArgumentNullException.ThrowIfNull(metadata);
 
@@ -348,21 +350,16 @@ public sealed partial class DomainToCSharpExporter {
 
         // ── Policies as bool methods ──────────────────────────────
         foreach (var policy in entity.Policies) {
-            Node? body;
-            try {
-                body = LowerExpressionToMethodBody(policy.Expression, entity, domain, analysis: metadata);
-            }
-            catch (NotSupportedException) {
-                // Collection quantifiers (any/all/none/count) and other store-dependent
-                // expressions cannot be lowered to standalone C# methods yet.
-                // Generate a runtime exception so calling code fails loud.
-                body = new Block([
-                    new ThrowStatement(
-                        new New(
-                            new NamedTypeReference("NotSupportedException"),
-                            new Constant(
-                                $"Policy '{policy.Name}' requires store-aware evaluation and cannot be compiled to standalone C.")))
-                ]);
+            Node? lowered = LowerExpressionToMethodBody(
+                policy.Expression, entity, domain, analysis: metadata);
+            if (lowered is not null)
+                policyBodies?.Add((entity.Name, policy.Name), lowered);
+
+            Node? body = lowered;
+            if (body is not null && ContainsStoreQuantifierJob(body)) {
+                // Packed DomainExpression Store jobs are not valid C#. Print a throw
+                // stub; simulate keeps `lowered` via policyBodies (same Lower call).
+                body = StoreAwarePolicyThrowStub(policy.Name);
             }
             methods.Add(new MethodDefinitionNode(
                 policy.Name,
@@ -471,11 +468,9 @@ public sealed partial class DomainToCSharpExporter {
                         };
                     }
                     var context = new LoweringContext(
-                        new Parameter("entity",
-                            new TypeReference(entity.Name)),
+                        new ThisReference(),
                         Parameters: peerParams,
                         Analysis: metadata,
-                        UseThisReference: true,
                         Domain: domain,
                         EnumPropertyNames: esm.EnumPropertyNames);
                     var effectPass = new EffectLoweringPass(entity, context);
@@ -563,6 +558,14 @@ public sealed partial class DomainToCSharpExporter {
                         [matchedVar]);
                 }
 
+                if (subscriptionBodies is not null) {
+                    if (!subscriptionBodies.TryGetValue(info.Subscription, out var byStage)) {
+                        byStage = new Dictionary<string, Node>(StringComparer.Ordinal);
+                        subscriptionBodies[info.Subscription] = byStage;
+                    }
+                    byStage.TryAdd(info.StageName, handlerBody);
+                }
+
                 methods.Add(new MethodDefinitionNode(
                     handlerName,
                     new TypeReference("void"),
@@ -620,10 +623,8 @@ public sealed partial class DomainToCSharpExporter {
                 // construction, not just during explicit stage transitions.
                 if (firstStage.OnEntryEffects.Count > 0) {
                     var entryCtx = new LoweringContext(
-                        new Parameter("entity",
-                            new TypeReference(entity.Name)),
+                        new ThisReference(),
                         Analysis: metadata,
-                        UseThisReference: true,
                         Domain: domain,
                         EnumPropertyNames: esm.EnumPropertyNames);
                     var entryPass = new EffectLoweringPass(entity, entryCtx);

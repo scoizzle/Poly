@@ -3139,7 +3139,7 @@ public class DomainEntityInstanceTests {
     }
 
     [Test]
-    public async Task EvaluatePolicy_ToOneRelationshipNav_WithoutStore_Throws() {
+    public async Task EvaluatePolicy_ToOneRelationshipNav_WithoutStore_ReturnsFalse() {
         var target = new Entity("Profile", [
             new Property("City", new DomainTypeReference("Text"), [])
         ], [], [], []);
@@ -3158,7 +3158,7 @@ public class DomainEntityInstanceTests {
         var cust = DomainEntityInstance.Create(source,
             new Dictionary<string, object?> { ["Name"] = "Alice" }, domain: domain);
         var policy = domain.Types.OfType<Entity>().First(e => e.Name == "Customer").Policies.First(p => p.Name == "IsUrban");
-        await Assert.That(() => cust.EvaluatePolicy(policy)).Throws<InvalidOperationException>();
+        await Assert.That(cust.EvaluatePolicy(policy)).IsFalse();
     }
 
     [Test]
@@ -3240,7 +3240,7 @@ public class DomainEntityInstanceTests {
     }
 
     [Test]
-    public async Task EvaluatePolicy_RelExists_WithoutStore_Throws() {
+    public async Task EvaluatePolicy_RelExists_WithoutStore_ReturnsFalse() {
         var profile = new Entity("Profile", [
             new Property("City", new DomainTypeReference("Text"), [])
         ], [], [], []);
@@ -3257,7 +3257,7 @@ public class DomainEntityInstanceTests {
             new Dictionary<string, object?> { ["Name"] = "Alice" }, domain: domain);
 
         var policy = customer.Policies.First(p => p.Name == "HasProfile");
-        await Assert.That(() => cust.EvaluatePolicy(policy)).Throws<InvalidOperationException>();
+        await Assert.That(cust.EvaluatePolicy(policy)).IsFalse();
     }
 
     [Test]

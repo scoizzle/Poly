@@ -7,9 +7,8 @@ namespace Poly.Tests.DomainModeling;
 
 /// <summary>
 /// p4 suite goldens: DSL-authored `when any|all Rel Stage` subscriptions dispatch
-/// through the existing store runtime with set-state-after-transition semantics,
-/// and the default Each path (no keyword) stays per-element. Zero runtime changes
-/// — these prove the store already implements Any/All for DSL-authored plans.
+/// through the module handler session.Lower produces (the same tree C# print emits).
+/// `when any` is a rising edge; `when all` is the full-set gate; Each stays per-element.
 /// </summary>
 public class P4SubscriptionQuantifierDslTests {
     private static (Domain Domain, AnalysisResult Analysis) ParseAndAnalyze(string poly) {
@@ -74,15 +73,15 @@ public class P4SubscriptionQuantifierDslTests {
             """);
         var (patron, loans, store) = BuildPatronLoanHarness(domain, "NONE");
 
-        // First loan overdue → Any fires once.
+        // First loan overdue → Any fires once (linked set becomes non-empty).
         await Assert.That(loans[0].InvokeAction("Overdue").Succeeded).IsTrue();
         await Assert.That(patron.GetProperty<string>("Flag")).IsEqualTo("FIRED");
 
-        // Second loan overdue (set state still matches) → Any fires again on this
-        // notify, but once per transition (never per-linked-target).
+        // Second loan overdue: print's handler is a rising edge (matched count == 1).
+        // Simulate runs that same handler — already-non-empty set does not fire again.
         patron.SetProperty("Flag", "NONE");
         await Assert.That(loans[1].InvokeAction("Overdue").Succeeded).IsTrue();
-        await Assert.That(patron.GetProperty<string>("Flag")).IsEqualTo("FIRED");
+        await Assert.That(patron.GetProperty<string>("Flag")).IsEqualTo("NONE");
     }
 
     // ── All golden: fires once when EVERY linked target in matching stage ──

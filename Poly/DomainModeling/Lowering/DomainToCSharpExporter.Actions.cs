@@ -434,9 +434,8 @@ public sealed partial class DomainToCSharpExporter {
             : new NamedTypeReference("DomainResult",
                 TypeArguments: [MapDomainTypeRef(action.Result.Members[0].Type, domain, analysis)]);
         var context = new LoweringContext(
-            new Parameter("entity", new TypeReference(entity.Name)),
+            new ThisReference(),
             Analysis: analysis,
-            UseThisReference: true,
             ActionParameterNames: paramNames,
             StageEnumTypeName: stageEnumTypeName,
             PostTransitionNodes: postTransitionNodes,
@@ -454,20 +453,39 @@ public sealed partial class DomainToCSharpExporter {
         INodeMetadataProvider? analysis = null) {
         var enumProps = GetEnumPropertyNames(entity, domain, analysis);
         var context = new LoweringContext(
-            new Parameter("entity", new TypeReference(entity.Name)),
+            new ThisReference(),
             Analysis: analysis,
-            UseThisReference: true,
             Domain: domain,
             EnumPropertyNames: enumProps,
             NavigationNameResolver: EffectLoweringPass.BuildNavigationNameResolver(entity, domain, analysis),
             IsCollectionNavigation: EffectLoweringPass.BuildIsCollectionNavigation(entity, domain, analysis),
             PropertyTypeResolver: EffectLoweringPass.BuildPropertyTypeResolver(entity));
         var pass = new DomainExpressionLoweringPass(context);
-        var lowered = pass.Lower(expr, new Parameter("entity"));
+        var lowered = pass.Lower(expr, new ThisReference());
         return lowered is not null
             ? new Block([new Return(lowered)])
             : null;
     }
+
+    internal static bool ContainsStoreQuantifierJob(Node node) {
+        if (node is Invoke { Delegate: Member { MemberName: var name } }
+            && name is "AnyRelated" or "AllRelated" or "NoneRelated" or "CountRelated")
+            return true;
+        foreach (var child in node.Children) {
+            if (child is Node n && ContainsStoreQuantifierJob(n))
+                return true;
+        }
+        return false;
+    }
+
+    internal static Node StoreAwarePolicyThrowStub(string policyName) =>
+        new Block([
+            new ThrowStatement(
+                new New(
+                    new NamedTypeReference("NotSupportedException"),
+                    new Constant(
+                        $"Policy '{policyName}' requires store-aware evaluation and cannot be compiled to standalone C.")))
+        ]);
 
     internal static bool TryResolveEnumType(Domain? domain, INodeMetadataProvider? analysis, string typeName, out EnumType? enumType) {
         enumType = null;

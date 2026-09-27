@@ -89,7 +89,7 @@ public class DomainExpressionLoweringPassTests {
         var expr = DomainExpression.RelationshipNav("Book", inner);
 
         var pass = new DomainExpressionLoweringPass(new LoweringContext(
-            Subject, UseThisReference: true));
+            Subject));
         var result = pass.Lower(expr, Subject);
 
         await Assert.That(result).IsTypeOf<Member>();

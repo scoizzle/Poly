@@ -35,7 +35,7 @@ public class SelfInvokeHostAbiTests {
         var off = new EffectLoweringPass(entity, new LoweringContext(
             new Parameter("entity")));
         var on = new EffectLoweringPass(entity, new LoweringContext(
-            new Parameter("entity"), UseThisReference: true));
+            new ThisReference()));
 
         var effect = new InvokeActionEffect("Other", []);
         var loweredOff = off.TryLowerVmNode(effect);

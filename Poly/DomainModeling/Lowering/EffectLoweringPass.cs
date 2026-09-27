@@ -33,7 +33,6 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     private readonly Domain? _domain;
     private readonly DomainExpressionLoweringPass _expressionPass;
     private readonly INodeMetadataProvider? _analysis;
-    private readonly bool _useThisReference;
     private readonly string? _stageEnumTypeName;
     private readonly IReadOnlyDictionary<string, IReadOnlyList<Node>>? _postTransitionNodes;
     private string? _sourceStageName;
@@ -54,7 +53,6 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         _context = context;
         _domain = context.Domain;
         _analysis = context.Analysis;
-        _useThisReference = context.UseThisReference;
         _stageEnumTypeName = context.StageEnumTypeName;
         _postTransitionNodes = context.PostTransitionNodes;
         _sourceStageName = context.SourceStageName;
@@ -67,9 +65,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
                 : new Dictionary<string, Node>(parameters, StringComparer.Ordinal);
             foreach (var name in context.ActionParameterNames) {
                 if (!merged.ContainsKey(name))
-                    merged[name] = context.UseThisReference
-                        ? new Parameter(name)
-                        : new Member(context.Subject, name);
+                    merged[name] = new Parameter(name);
             }
             parameters = merged;
         }
@@ -83,9 +79,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
             PropertyTypeResolver = context.PropertyTypeResolver ?? BuildPropertyTypeResolver(entity),
             SourceEntityName = context.SourceEntityName ?? entity.Name
         });
-        Subject = context.UseThisReference && context.Subject is Parameter { Name: "entity" }
-            ? new ThisReference()
-            : context.Subject;
+        Subject = context.Subject;
     }
 
     /// <summary>
@@ -445,7 +439,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     /// stage entry) — same split as create-in fail-closed.
     /// </summary>
     private Node AssignConstraintFailure(string message) {
-        if (_context.UseThisReference && _context.ActionResultType is null) {
+        if (_context.ActionResultType is null) {
             return new ThrowStatement(new New(
                 new NamedTypeReference("InvalidOperationException"),
                 new Constant(message)));
@@ -565,11 +559,9 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
                 AppendInlinedStageEffects(stage.OnExitEffects, exitNodes, exitNodes);
                 if (exitNodes.Count == 0)
                     continue;
-                Node stageMatch = _useThisReference || _stageEnumTypeName is not null
-                    ? new Member(
-                        new NamedTypeReference(_stageEnumTypeName ?? $"{_entity.Name}Stage"),
-                        stage.Name)
-                    : new Constant(stage.Name);
+                Node stageMatch = new Member(
+                    new NamedTypeReference(_stageEnumTypeName ?? $"{_entity.Name}Stage"),
+                    stage.Name);
                 nodes.Add(new IfStatement(
                     new Equal(new Member(Subject, "CurrentStage"), stageMatch),
                     exitNodes.Count == 1 ? exitNodes[0] : new Block(exitNodes)));
@@ -591,11 +583,9 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
             AppendInlinedStageEffects(targetStage.OnEntryEffects, entryProbes, tryNodes);
         nodes.AddRange(entryProbes);
 
-        Node stageValue = _useThisReference || _stageEnumTypeName is not null
-            ? new Member(
-                new NamedTypeReference(_stageEnumTypeName ?? $"{_entity.Name}Stage"),
-                t.TargetStage.StageName)
-            : new Constant(t.TargetStage.StageName);
+        Node stageValue = new Member(
+            new NamedTypeReference(_stageEnumTypeName ?? $"{_entity.Name}Stage"),
+            t.TargetStage.StageName);
         nodes.Add(new Assignment(
             new Member(Subject, "CurrentStage"),
             stageValue));
@@ -726,9 +716,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
                     new Member(loopVar, p.PolicyName)),
                 ForEachStageMembership s => new Equal(
                     new Member(loopVar, "CurrentStage"),
-                    _useThisReference || _stageEnumTypeName is not null
-                        ? new Member(new NamedTypeReference(TargetStageEnumTypeName(relName)), s.StageName)
-                        : new Constant(s.StageName)),
+                    new Member(new NamedTypeReference(TargetStageEnumTypeName(relName)), s.StageName)),
                 _ => throw new NotSupportedException($"Unsupported ForEachInvoke predicate '{e.Predicate.GetType().Name}'."),
             };
             predicateGuard = new IfStatement(
@@ -1100,7 +1088,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         var resultVar = new Variable($"create{seq}");
         var resultType = _context.ActionResultType ?? new NamedTypeReference("DomainResult");
         var locals = new List<Node> { resultVar };
-        Node failClosed = _context.UseThisReference && _context.ActionResultType is null
+        Node failClosed = _context.ActionResultType is null
             ? new ThrowStatement(new New(
                 new NamedTypeReference("InvalidOperationException"),
                 new Syntactic.Coalesce(

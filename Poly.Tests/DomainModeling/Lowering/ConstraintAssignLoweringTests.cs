@@ -22,7 +22,8 @@ public class ConstraintAssignLoweringTests {
             Properties: [score],
             Actions: [], Policies: [], Stages: []);
         var pass = new EffectLoweringPass(entity, new LoweringContext(
-            new Parameter("entity", new TypeReference(entity.Name))));
+            new ThisReference(),
+            ActionResultType: new NamedTypeReference("DomainResult")));
 
         var lowered = pass.TryLowerVmNode(new AssignEffect(
             DomainExpression.Property("Score"),
@@ -52,8 +53,7 @@ public class ConstraintAssignLoweringTests {
             Properties: [score],
             Actions: [], Policies: [], Stages: []);
         var pass = new EffectLoweringPass(entity, new LoweringContext(
-            new ThisReference(),
-            UseThisReference: true));
+            new ThisReference()));
 
         var lowered = pass.TryLowerVmNode(new AssignEffect(
             DomainExpression.Property("Score"),
@@ -228,7 +228,6 @@ public class ConstraintAssignLoweringTests {
         var action = entity.Actions.First(a => a.Name == "SetScore");
         var exportPass = new EffectLoweringPass(entity, new LoweringContext(
             new ThisReference(),
-            UseThisReference: true,
             Analysis: analysis,
             Domain: domain,
             ActionParameterNames: ["n"]));

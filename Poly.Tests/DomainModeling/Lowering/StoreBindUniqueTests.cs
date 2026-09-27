@@ -32,8 +32,7 @@ public class StoreBindUniqueTests {
     public async Task UniqueAssign_Export_LowersToEnsureUniqueThenAssign() {
         var entity = PermitEntity();
         var pass = new EffectLoweringPass(entity, new LoweringContext(
-            new ThisReference(),
-            UseThisReference: true));
+            new ThisReference()));
 
         var lowered = pass.TryLowerVmNode(new AssignEffect(
             DomainExpression.Property("Plate"),

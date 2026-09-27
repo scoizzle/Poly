@@ -207,7 +207,7 @@ public class DomainModelingSurfaceCompletionTests {
     }
 
     [Test]
-    public async Task Subscription_All_SpreadStages_Fires() {
+    public async Task Subscription_All_FiresWhenEveryLinkedTargetIsInOneWatchedStage() {
         var poly = """
             domain T
             Board: entity {
@@ -242,7 +242,7 @@ public class DomainModelingSurfaceCompletionTests {
         store.Link("items", board, b);
         a.InvokeAction("Prep");
         await Assert.That(board.GetProperty<string>("Flag")).IsEqualTo("no");
-        b.InvokeAction("Finish");
+        b.InvokeAction("Prep");
         await Assert.That(board.GetProperty<string>("Flag")).IsEqualTo("set");
     }
 }

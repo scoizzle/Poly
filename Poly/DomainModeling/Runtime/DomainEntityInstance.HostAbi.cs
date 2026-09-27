@@ -275,7 +275,8 @@ public sealed partial record DomainEntityInstance {
         IReadOnlyList<Effect> effects,
         DomainEntityInstance peerInstance,
         string? peerBinding = null,
-        SubscriptionDispatchPlanEntry? planEntry = null) {
+        SubscriptionDispatchPlanEntry? planEntry = null,
+        string? targetStageName = null) {
         _isExecutingSubscription = true;
 
         try {
@@ -292,18 +293,16 @@ public sealed partial record DomainEntityInstance {
             RuntimeAnalysisCache.GetOrLower(
                 Domain, RuntimeAnalysisCache.Session(Domain), analysis);
 
-            // Domain-bound: bind effects-only body cached at GetOrLower (VM-shaped; BindExportBody no-ops without This).
+            // Domain-bound: bind the module handler cached at GetOrLower (same tree print emits).
             // Miss or missing plan entry throws — never BindPeerInEffect + LowerActionBody.
             if (planEntry is null)
                 throw new InvalidOperationException(
                     $"Subscription dispatch on '{Entity.Name}' requires a plan entry for cache bind.");
-            if (!RuntimeAnalysisCache.TryGetSubscriptionBody(Domain, planEntry, out var body)
+            if (!RuntimeAnalysisCache.TryGetSubscriptionBody(
+                    Domain, planEntry, targetStageName, out var body)
                 || body is null)
                 throw new InvalidOperationException(
                     $"Subscription body is missing on entity '{Entity.Name}'.");
-            // SubscriptionBodies are Parameter-rooted (UseThis:false) — residual twin vs
-            // module UseThis handlers for C# print. BindExportBody is a no-op without This;
-            // then materialize peer if present.
             var cached = BindExportBody(body);
             if (peerBinding is { Length: > 0 })
                 cached = MaterializePeerInSyntax(cached, peerBinding, peerInstance);

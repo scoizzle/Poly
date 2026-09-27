@@ -371,7 +371,7 @@ public sealed partial record DomainEntityInstance {
 
         var expr = policy.Expression;
 
-        // Slice B: execute never lowers. Policy bodies come from GetOrLower only.
+        // Execute never lowers. Policy bodies come from session.Lower only.
         if (Domain is null)
             throw new InvalidOperationException(
                 $"Cannot evaluate policy '{policy.Name}' on '{Entity.Name}' without a Domain-bound module.");
@@ -382,7 +382,6 @@ public sealed partial record DomainEntityInstance {
             || cached is null)
             throw new InvalidOperationException(
                 $"Policy body '{policy.Name}' is missing on entity '{Entity.Name}'.");
-        // BindExportBody is identity for Parameter-shaped policy trees.
         var boundPolicy = BindExportBody(cached);
         var compiledModule = Interpreter.CompileChecked(boundPolicy, _typeDefAnalyzer);
         using var execModule = Interpreter.Execute(compiledModule,
@@ -508,7 +507,7 @@ public sealed partial record DomainEntityInstance {
         // require-not cannot invert soft-false to fail-open. ExecuteEffectList
         // still binds the module Body for named actions even when Ontology
         // effects are empty (gated no-op). Bare evaluate_policy still soft-fails
-        // unlinked via ExistsRelated. Stage policies stay here.
+        // unlinked via the bound NullForgiving hop. Stage policies stay here.
         var failures = new List<string>();
         if (Domain is not null) {
             var ensureAnalysis = RuntimeAnalysisCache.GetOrAnalyze(Domain);
@@ -722,7 +721,6 @@ public sealed partial record DomainEntityInstance {
                     && RuntimeAnalysisCache.TryGetEntryExitBody(
                         Domain, Entity.Name, exitStageName, "exit", out var exitBody)
                     && exitBody is not null) {
-                    // EntryExitBodies are export-shaped (UseThis); bind for VM SetArgs.
                     tree = BindExportBody(exitBody);
                 }
                 else if (entryStageName is not null
@@ -825,7 +823,7 @@ public sealed partial record DomainEntityInstance {
     }
 
     /// <summary>
-    /// Consumer bind for export-shaped (UseThis) trees from session.Lower —
+    /// Consumer bind for module trees from session.Lower —
     /// rewrites <see cref="ThisReference"/> to <c>Parameter("entity")</c> for VM SetArgs,
     /// and void fail-closed <c>throw new InvalidOperationException(…)</c> to
     /// <c>return DomainResult.Failure(…)</c> (VM has no 1-arg IOE ctor). Not a second lower.
@@ -970,6 +968,12 @@ public sealed partial record DomainEntityInstance {
         IReadOnlyDictionary<string, Parameter>? parameters,
         IReadOnlySet<string> stageEnums) => node switch {
             ThisReference => entity,
+            Member { Value: NullForgiving { Operand: var inner } } m =>
+                new Conditional(
+                    new NotEqual(BindThis(inner, entity, parameters, stageEnums), new Constant(null)),
+                    new Member(BindThis(inner, entity, parameters, stageEnums), m.MemberName),
+                    new Constant(null)),
+            NullForgiving nf => BindThis(nf.Operand, entity, parameters, stageEnums),
             Parameter p when parameters is not null
                 && parameters.ContainsKey(p.Name) => new Member(entity, p.Name),
             Variable v when parameters is not null
@@ -1085,7 +1089,6 @@ public sealed partial record DomainEntityInstance {
                 BindThis(cond.IfTrue, entity, parameters, stageEnums),
                 BindThis(cond.IfFalse, entity, parameters, stageEnums)),
             UnaryMinus um => new UnaryMinus(BindThis(um.Operand, entity, parameters, stageEnums)),
-            NullForgiving nf => new NullForgiving(BindThis(nf.Operand, entity, parameters, stageEnums)),
             Parameter or Variable or Constant or NamedTypeReference or TypeReference
                 or PrimitiveTypeReference or ClrTypeReference => node,
             _ => throw new InvalidOperationException(

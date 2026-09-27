@@ -30,7 +30,19 @@ public static class DomainProgramProjection {
     /// <see cref="DomainSession.Lower"/>.
     /// </summary>
     public static IReadOnlyList<TypeDefinitionNode> ToSyntax(
-        Domain domain, INodeMetadataProvider metadata) {
+        Domain domain, INodeMetadataProvider metadata) =>
+        ToSyntax(domain, metadata, policyBodies: null, subscriptionBodies: null);
+
+    /// <summary>
+    /// Projects the domain and, when collectors are provided, records the same
+    /// policy / subscription trees the type definitions carry (simulate binds
+    /// those nodes; print emits the methods).
+    /// </summary>
+    internal static IReadOnlyList<TypeDefinitionNode> ToSyntax(
+        Domain domain,
+        INodeMetadataProvider metadata,
+        Dictionary<(string Entity, string Policy), Node>? policyBodies,
+        Dictionary<SubscriptionDispatchPlanEntry, Dictionary<string, Node>>? subscriptionBodies) {
         ArgumentNullException.ThrowIfNull(domain);
         ArgumentNullException.ThrowIfNull(metadata);
         var domainRelationships = metadata.GetAllRelationships(domain);
@@ -131,7 +143,8 @@ public static class DomainProgramProjection {
 
             result.AddRange(DomainToCSharpExporter.BuildTypeDefsForEntity(
                 entity, domain, domainRelationships, entityLookup, metadata,
-                targetSubs, subscriberSubs, handlerNames));
+                targetSubs, subscriberSubs, handlerNames,
+                policyBodies, subscriptionBodies));
         }
 
         return result;

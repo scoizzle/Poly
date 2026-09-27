@@ -25,14 +25,10 @@ namespace Poly.DomainModeling.Lowering;
 /// Metadata provider with pre-computed analysis bags. When present, lowering uses
 /// provider lookups instead of scanning domain collections. Null-safe (falls
 /// back to re-scan).</param>
-/// <param name="UseThisReference">
-/// When true, the lowered tree uses <see cref="ThisReference"/> as the instance root
-/// instead of <see cref="Parameter"/>. Useful when generating C# method bodies where
-/// <c>this.Property</c> is idiomatic. Defaults to false (VM-compatible mode).
-/// </param>
 /// <param name="ActionParameterNames">
-/// When <see cref="UseThisReference"/> is true, these names are rendered as bare
-/// parameters (e.g. <c>maxAmount</c>) instead of <c>this.maxAmount</c>.
+/// These names are rendered as bare parameters (e.g. <c>maxAmount</c>) instead of
+/// <c>this.maxAmount</c>. The instance root is <see cref="Subject"/> — pass
+/// <see cref="ThisReference"/> for module method bodies.
 /// </param>
 /// <param name="Domain">Optional domain reference for cross-entity type resolution.</param>
 /// <param name="StageEnumTypeName">
@@ -86,7 +82,6 @@ public sealed record LoweringContext(
     Node Subject,
     IReadOnlyDictionary<string, Node>? Parameters = null,
     INodeMetadataProvider? Analysis = null,
-    bool UseThisReference = false,
     HashSet<string>? ActionParameterNames = null,
     Domain? Domain = null,
     string? StageEnumTypeName = null,

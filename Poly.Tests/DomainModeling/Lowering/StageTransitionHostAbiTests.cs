@@ -40,7 +40,7 @@ public class StageTransitionHostAbiTests {
         await Assert.That(nodes.Any(n =>
             n is Assignment {
                 Destination: Member { MemberName: "CurrentStage" },
-                Value: Constant { Value: "Active" }
+                Value: Member { MemberName: "Active" }
             })).IsTrue();
         await Assert.That(nodes.Any(n =>
             n is Invoke {
@@ -57,7 +57,7 @@ public class StageTransitionHostAbiTests {
         var off = new EffectLoweringPass(entity, new LoweringContext(
             new Parameter("entity")));
         var on = new EffectLoweringPass(entity, new LoweringContext(
-            new Parameter("entity"), UseThisReference: true));
+            new ThisReference()));
 
         await Assert.That(off.TryLowerVmNode(new StageTransitionEffect(new StageReference("Active"))))
             .IsNotNull();
@@ -97,7 +97,6 @@ public class StageTransitionHostAbiTests {
         var entity = CreatePersonEntity();
         var context = new LoweringContext(
             new ThisReference(),
-            UseThisReference: true,
             StageEnumTypeName: "PersonStage",
             SourceStageName: "Draft");
         var pass = new EffectLoweringPass(entity, context);

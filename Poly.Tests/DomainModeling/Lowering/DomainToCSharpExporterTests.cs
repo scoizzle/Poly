@@ -221,9 +221,8 @@ public class DomainToCSharpExporterTests {
         var entity = domain.Types.OfType<Entity>().Single(e => e.Name == "Person");
         var effect = new CreateEntityInstance(new DomainTypeReference("Person"));
         var context = new LoweringContext(
-            new Parameter("entity", new TypeReference(entity.Name)),
-            Analysis: analysis,
-            UseThisReference: true);
+            new ThisReference(),
+            Analysis: analysis);
         var pass = new EffectLoweringPass(entity, context);
 
         var lowered = pass.TryLowerVmNode(effect);
@@ -250,9 +249,8 @@ public class DomainToCSharpExporterTests {
         var entity = domain.Types.OfType<Entity>().Single(e => e.Name == "Customer");
         var effect = new CreateEntityInRelationshipEffect("orders", []);
         var context = new LoweringContext(
-            new Parameter("entity", new TypeReference(entity.Name)),
+            new ThisReference(),
             Analysis: analysis,
-            UseThisReference: true,
             Domain: domain);
         var pass = new EffectLoweringPass(entity, context);
 
@@ -275,9 +273,8 @@ public class DomainToCSharpExporterTests {
         analysis = analysis.WithoutMetadata<EntityStructureMetadata>(entity);
         var effect = new CreateEntityInstance(new DomainTypeReference("Person"));
         var context = new LoweringContext(
-            new Parameter("entity", new TypeReference(entity.Name)),
+            new ThisReference(),
             Analysis: analysis,
-            UseThisReference: true,
             Domain: domain);
         var pass = new EffectLoweringPass(entity, context);
 
@@ -313,9 +310,8 @@ public class DomainToCSharpExporterTests {
         // Analysis-present path: entry effects must come from the EntityStructure bag.
         var effect = new StageTransitionEffect(new StageReference("Suspended"));
         var context = new LoweringContext(
-            new Parameter("entity", new TypeReference(entity.Name)),
+            new ThisReference(),
             Analysis: analysis,
-            UseThisReference: true,
             Domain: domain,
             SourceStageName: "Active");
         var pass = new EffectLoweringPass(entity, context);

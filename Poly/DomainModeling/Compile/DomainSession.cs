@@ -142,9 +142,9 @@ public sealed class DomainSession {
     }
 
     /// <summary>
-    /// Stage 3: one operation module (type definitions + operation bodies).
-    /// Also caches runtime-shaped named action / OnEntry trees for invoke lookup.
-    /// Simulate and print consume this result.
+    /// Stage 3: one operation module (type definitions + action, policy,
+    /// subscription, and OnEntry/OnExit bodies). Simulate and print consume
+    /// this result.
     /// </summary>
     public IReadOnlyList<TypeDefinitionNode> Lower(Domain domain, AnalysisResult analysis) {
         ArgumentNullException.ThrowIfNull(domain);

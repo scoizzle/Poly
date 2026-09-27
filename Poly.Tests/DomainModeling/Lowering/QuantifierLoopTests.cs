@@ -359,6 +359,326 @@ public class QuantifierLoopTests {
         await Assert.That(Convert.ToInt64(binType.GetProperty("N")!.GetValue(printed))).IsEqualTo(0L);
     }
 
+    [Test]
+    public async Task ActionIfAny_ThenForEachInvokeArgAny_SimulateAndGeneratedCSharp_Agree() {
+        var poly = """
+            domain Yard
+            Widget: entity {
+              Active: Boolean default(false)
+              Flag: Boolean default(false)
+              Mark: action (flag: Boolean) { assign Flag to flag }
+            }
+            Bin: entity {
+              N: Number default(0)
+              widgets: many Widget
+              Go: action {
+                if (any widgets where Active) { assign N to 1 }
+                for widgets as w invoke w.Mark(flag: any widgets where Active)
+              }
+            }
+            """;
+        var (domain, analysis) = Evolve(poly);
+        await Assert.That(analysis.HasErrors).IsFalse();
+        Entity E(string n) => domain.Types.OfType<Entity>().First(e => e.Name == n);
+        var store = new DomainInstanceStore();
+        var bin = DomainEntityInstance.Create(E("Bin"),
+            new Dictionary<string, object?> { ["N"] = 0L }, domain);
+        var active = DomainEntityInstance.Create(E("Widget"),
+            new Dictionary<string, object?> { ["Active"] = true, ["Flag"] = false }, domain);
+        var idle = DomainEntityInstance.Create(E("Widget"),
+            new Dictionary<string, object?> { ["Active"] = false, ["Flag"] = false }, domain);
+        store.Add(bin); store.Add(active); store.Add(idle);
+        store.Link("widgets", bin, active);
+        store.Link("widgets", bin, idle);
+        var sim = bin.InvokeAction("Go");
+        await Assert.That(sim.Succeeded).IsTrue();
+        await Assert.That(Convert.ToInt64(bin.GetProperty<object>("N"))).IsEqualTo(1L);
+        await Assert.That(active.GetProperty<bool>("Flag")).IsTrue();
+        await Assert.That(idle.GetProperty<bool>("Flag")).IsTrue();
+
+        var asm = ExportedCSharp.CompileAndLoad(
+            new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis)));
+        var widgetType = asm.GetType("Widget")!;
+        var binType = asm.GetType("Bin")!;
+        var printedWidgets = Array.CreateInstance(widgetType, 2);
+        printedWidgets.SetValue(ExportedCSharp.CreateEntity(widgetType, ("active", true), ("flag", false)), 0);
+        printedWidgets.SetValue(ExportedCSharp.CreateEntity(widgetType, ("active", false), ("flag", false)), 1);
+        var printed = ExportedCSharp.CreateEntity(binType, ("n", 0L), ("widgets", printedWidgets));
+        var result = binType.GetMethod("Go")!.Invoke(printed, null)!;
+        await Assert.That((bool)result.GetType().GetProperty("IsSuccess")!.GetValue(result)!).IsTrue();
+        await Assert.That(Convert.ToInt64(binType.GetProperty("N")!.GetValue(printed))).IsEqualTo(1L);
+        var after = (System.Collections.ICollection)binType.GetProperty("Widgets")!.GetValue(printed)!;
+        foreach (var item in after)
+            await Assert.That((bool)widgetType.GetProperty("Flag")!.GetValue(item)!).IsTrue();
+    }
+
+    [Test]
+    public async Task CreateInReturn_QuantifierInitializer_SimulateAndGeneratedCSharp_Agree() {
+        var poly = """
+            domain Yard
+            Widget: entity { Active: Boolean default(false) }
+            Bin: entity {
+              widgets: many Widget
+              Spawn: action -> Widget { create in widgets { Active: any widgets where Active } }
+            }
+            """;
+        var (domain, analysis) = Evolve(poly);
+        await Assert.That(analysis.HasErrors).IsFalse();
+        Entity E(string n) => domain.Types.OfType<Entity>().First(e => e.Name == n);
+        var store = new DomainInstanceStore();
+        var bin = DomainEntityInstance.Create(E("Bin"), domain: domain);
+        var active = DomainEntityInstance.Create(E("Widget"),
+            new Dictionary<string, object?> { ["Active"] = true }, domain);
+        store.Add(bin); store.Add(active);
+        store.Link("widgets", bin, active);
+        var sim = bin.InvokeAction("Spawn");
+        await Assert.That(sim.Succeeded).IsTrue();
+        await Assert.That(sim.ResultInstance).IsNotNull();
+        var simActive = sim.ResultInstance!.GetProperty<bool>("Active");
+
+        var asm = ExportedCSharp.CompileAndLoad(
+            new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis)));
+        var widgetType = asm.GetType("Widget")!;
+        var binType = asm.GetType("Bin")!;
+        var widgets = Array.CreateInstance(widgetType, 1);
+        widgets.SetValue(ExportedCSharp.CreateEntity(widgetType, ("active", true)), 0);
+        var printed = ExportedCSharp.CreateEntity(binType, ("widgets", widgets));
+        var result = binType.GetMethod("Spawn")!.Invoke(printed, null)!;
+        await Assert.That((bool)result.GetType().GetProperty("IsSuccess")!.GetValue(result)!).IsTrue();
+        var printedWidget = result.GetType().GetProperty("Value")!.GetValue(result)!;
+        await Assert.That((bool)widgetType.GetProperty("Active")!.GetValue(printedWidget)!).IsEqualTo(simActive);
+        await Assert.That(simActive).IsTrue();
+    }
+
+    [Test]
+    public async Task PathPrefixHop_QuantifierOnTarget_SimulateAndGeneratedCSharp_Agree() {
+        var poly = """
+            domain Shop
+            Worker: entity { Active: Boolean }
+            Team: entity {
+              Active: Boolean
+              workers: many Worker
+            }
+            Dept: entity {
+              team: Team
+              P: policy { team Active == any workers where Active }
+            }
+            """;
+        var (domain, analysis) = Evolve(poly);
+        await Assert.That(analysis.HasErrors).IsFalse();
+        Entity E(string n) => domain.Types.OfType<Entity>().First(e => e.Name == n);
+        var store = new DomainInstanceStore();
+        DomainEntityInstance SimDept(bool teamActive, bool workerActive) {
+            var worker = DomainEntityInstance.Create(E("Worker"),
+                new Dictionary<string, object?> { ["Active"] = workerActive }, domain);
+            var team = DomainEntityInstance.Create(E("Team"),
+                new Dictionary<string, object?> { ["Active"] = teamActive }, domain);
+            var dept = DomainEntityInstance.Create(E("Dept"), domain: domain);
+            store.Add(worker); store.Add(team); store.Add(dept);
+            store.Link("workers", team, worker);
+            store.Link("team", dept, team);
+            return dept;
+        }
+        var policy = E("Dept").Policies.First(p => p.Name == "P");
+        var simTrue = SimDept(true, true).EvaluatePolicy(policy);
+        var simFalse = SimDept(true, false).EvaluatePolicy(policy);
+        await Assert.That(simTrue).IsTrue();
+        await Assert.That(simFalse).IsFalse();
+
+        var asm = ExportedCSharp.CompileAndLoad(
+            new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis)));
+        var workerType = asm.GetType("Worker")!;
+        var teamType = asm.GetType("Team")!;
+        var deptType = asm.GetType("Dept")!;
+        object PrintDept(bool teamActive, bool workerActive) {
+            var workers = Array.CreateInstance(workerType, 1);
+            workers.SetValue(ExportedCSharp.CreateEntity(workerType, ("active", workerActive)), 0);
+            var team = ExportedCSharp.CreateEntity(teamType, ("active", teamActive), ("workers", workers));
+            return ExportedCSharp.CreateEntity(deptType, ("team", team));
+        }
+        bool PrintedP(object dept) => (bool)deptType.GetMethod("P")!.Invoke(dept, null)!;
+        await Assert.That(PrintedP(PrintDept(true, true))).IsEqualTo(simTrue);
+        await Assert.That(PrintedP(PrintDept(true, false))).IsEqualTo(simFalse);
+    }
+
+    [Test]
+    public async Task DatePlusCountWhere_SimulateAndGeneratedCSharp_Agree() {
+        var poly = """
+            domain Jobs
+            uses temporal
+            Line: entity { Open: Boolean }
+            Ticket: entity {
+              Due: Date
+              lines: many Line
+              P: policy { (Due + count lines where Open) > Due }
+            }
+            """;
+        var (domain, analysis) = Evolve(poly);
+        await Assert.That(analysis.HasErrors).IsFalse();
+        Entity E(string n) => domain.Types.OfType<Entity>().First(e => e.Name == n);
+        var due = new DateOnly(2026, 1, 1);
+        var store = new DomainInstanceStore();
+        DomainEntityInstance SimTicket(bool openLine) {
+            var ticket = DomainEntityInstance.Create(E("Ticket"),
+                new Dictionary<string, object?> { ["Due"] = due }, domain);
+            store.Add(ticket);
+            if (openLine) {
+                var line = DomainEntityInstance.Create(E("Line"),
+                    new Dictionary<string, object?> { ["Open"] = true }, domain);
+                store.Add(line);
+                store.Link("lines", ticket, line);
+            }
+            return ticket;
+        }
+        var policy = E("Ticket").Policies.First(p => p.Name == "P");
+        var simOpen = SimTicket(true).EvaluatePolicy(policy);
+        var simClosed = SimTicket(false).EvaluatePolicy(policy);
+        await Assert.That(simOpen).IsTrue();
+        await Assert.That(simClosed).IsFalse();
+
+        var cs = new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis));
+        var asm = ExportedCSharp.CompileAndLoad(cs);
+        var lineType = asm.GetType("Line")!;
+        var ticketType = asm.GetType("Ticket")!;
+        object PrintTicket(bool openLine) {
+            Array lines;
+            if (openLine) {
+                lines = Array.CreateInstance(lineType, 1);
+                lines.SetValue(ExportedCSharp.CreateEntity(lineType, ("open", true)), 0);
+            }
+            else {
+                lines = Array.CreateInstance(lineType, 0);
+            }
+            return ExportedCSharp.CreateEntity(ticketType, ("due", due), ("lines", lines));
+        }
+        bool PrintedP(object ticket) => (bool)ticketType.GetMethod("P")!.Invoke(ticket, null)!;
+        await Assert.That(PrintedP(PrintTicket(true))).IsEqualTo(simOpen);
+        await Assert.That(PrintedP(PrintTicket(false))).IsEqualTo(simClosed);
+    }
+
+    [Test]
+    public async Task QuantifierBody_ReadsActionParameterNotTargetProperty_SimulateAndPrintAgree() {
+        var poly = """
+            domain Yard
+            Widget: entity { Level: Number }
+            Bin: entity {
+              N: Number default(0)
+              widgets: many Widget
+              Close: action (Level: Number) {
+                if (any widgets where Level > 3) { assign N to 1 }
+              }
+            }
+            """;
+        var (domain, analysis) = Evolve(poly);
+        await Assert.That(analysis.HasErrors).IsFalse();
+        Entity E(string n) => domain.Types.OfType<Entity>().First(e => e.Name == n);
+        var store = new DomainInstanceStore();
+        var bin = DomainEntityInstance.Create(E("Bin"),
+            new Dictionary<string, object?> { ["N"] = 0L }, domain);
+        var widget = DomainEntityInstance.Create(E("Widget"),
+            new Dictionary<string, object?> { ["Level"] = 0L }, domain);
+        store.Add(bin); store.Add(widget);
+        store.Link("widgets", bin, widget);
+        var simHigh = bin.InvokeAction("Close", new Dictionary<string, object?> { ["Level"] = 10L });
+        await Assert.That(simHigh.Succeeded).IsTrue();
+        await Assert.That(Convert.ToInt64(bin.GetProperty<object>("N"))).IsEqualTo(1L);
+
+        var binLow = DomainEntityInstance.Create(E("Bin"),
+            new Dictionary<string, object?> { ["N"] = 0L }, domain);
+        var widgetLow = DomainEntityInstance.Create(E("Widget"),
+            new Dictionary<string, object?> { ["Level"] = 0L }, domain);
+        store.Add(binLow); store.Add(widgetLow);
+        store.Link("widgets", binLow, widgetLow);
+        var simLow = binLow.InvokeAction("Close", new Dictionary<string, object?> { ["Level"] = 2L });
+        await Assert.That(simLow.Succeeded).IsTrue();
+        await Assert.That(Convert.ToInt64(binLow.GetProperty<object>("N"))).IsEqualTo(0L);
+
+        var asm = ExportedCSharp.CompileAndLoad(
+            new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis)));
+        var widgetType = asm.GetType("Widget")!;
+        var binType = asm.GetType("Bin")!;
+        object PrintBin() {
+            var widgets = Array.CreateInstance(widgetType, 1);
+            widgets.SetValue(ExportedCSharp.CreateEntity(widgetType, ("level", 0L)), 0);
+            return ExportedCSharp.CreateEntity(binType, ("n", 0L), ("widgets", widgets));
+        }
+        var close = binType.GetMethod("Close")!;
+        var printedHigh = PrintBin();
+        var highResult = close.Invoke(printedHigh, [10L])!;
+        await Assert.That((bool)highResult.GetType().GetProperty("IsSuccess")!.GetValue(highResult)!).IsTrue();
+        await Assert.That(Convert.ToInt64(binType.GetProperty("N")!.GetValue(printedHigh))).IsEqualTo(1L);
+        var printedLow = PrintBin();
+        var lowResult = close.Invoke(printedLow, [2L])!;
+        await Assert.That((bool)lowResult.GetType().GetProperty("IsSuccess")!.GetValue(lowResult)!).IsTrue();
+        await Assert.That(Convert.ToInt64(binType.GetProperty("N")!.GetValue(printedLow))).IsEqualTo(0L);
+    }
+
+    [Test]
+    public async Task ForEachInvoke_QuantifierPredicate_SimulateAndGeneratedCSharp_Agree() {
+        var poly = """
+            domain Yard
+            Part: entity { Open: Boolean }
+            Widget: entity {
+              Flag: Boolean default(false)
+              parts: many Part
+              HasOpenPart: policy { any parts where Open }
+              Mark: action { assign Flag to true }
+            }
+            Bin: entity {
+              widgets: many Widget
+              Go: action {
+                for widgets as w where w HasOpenPart invoke w.Mark()
+              }
+            }
+            """;
+        var (domain, analysis) = Evolve(poly);
+        await Assert.That(analysis.HasErrors).IsFalse();
+        Entity E(string n) => domain.Types.OfType<Entity>().First(e => e.Name == n);
+        var store = new DomainInstanceStore();
+        var openPart = DomainEntityInstance.Create(E("Part"),
+            new Dictionary<string, object?> { ["Open"] = true }, domain);
+        var closedPart = DomainEntityInstance.Create(E("Part"),
+            new Dictionary<string, object?> { ["Open"] = false }, domain);
+        var withOpen = DomainEntityInstance.Create(E("Widget"),
+            new Dictionary<string, object?> { ["Flag"] = false }, domain);
+        var withoutOpen = DomainEntityInstance.Create(E("Widget"),
+            new Dictionary<string, object?> { ["Flag"] = false }, domain);
+        var bin = DomainEntityInstance.Create(E("Bin"), domain: domain);
+        store.Add(openPart); store.Add(closedPart); store.Add(withOpen); store.Add(withoutOpen); store.Add(bin);
+        store.Link("parts", withOpen, openPart);
+        store.Link("parts", withoutOpen, closedPart);
+        store.Link("widgets", bin, withOpen);
+        store.Link("widgets", bin, withoutOpen);
+        var sim = bin.InvokeAction("Go");
+        await Assert.That(sim.Succeeded).IsTrue();
+        await Assert.That(withOpen.GetProperty<bool>("Flag")).IsTrue();
+        await Assert.That(withoutOpen.GetProperty<bool>("Flag")).IsFalse();
+
+        var asm = ExportedCSharp.CompileAndLoad(
+            new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis)));
+        var partType = asm.GetType("Part")!;
+        var widgetType = asm.GetType("Widget")!;
+        var binType = asm.GetType("Bin")!;
+        Array Parts(bool open) {
+            var parts = Array.CreateInstance(partType, 1);
+            parts.SetValue(ExportedCSharp.CreateEntity(partType, ("open", open)), 0);
+            return parts;
+        }
+        var printedWidgets = Array.CreateInstance(widgetType, 2);
+        printedWidgets.SetValue(ExportedCSharp.CreateEntity(widgetType, ("flag", false), ("parts", Parts(true))), 0);
+        printedWidgets.SetValue(ExportedCSharp.CreateEntity(widgetType, ("flag", false), ("parts", Parts(false))), 1);
+        var printed = ExportedCSharp.CreateEntity(binType, ("widgets", printedWidgets));
+        var result = binType.GetMethod("Go")!.Invoke(printed, null)!;
+        await Assert.That((bool)result.GetType().GetProperty("IsSuccess")!.GetValue(result)!).IsTrue();
+        var after = (System.Collections.ICollection)binType.GetProperty("Widgets")!.GetValue(printed)!;
+        var flags = new List<bool>();
+        foreach (var item in after)
+            flags.Add((bool)widgetType.GetProperty("Flag")!.GetValue(item)!);
+        await Assert.That(flags.Count).IsEqualTo(2);
+        await Assert.That(flags[0]).IsTrue();
+        await Assert.That(flags[1]).IsFalse();
+    }
+
     private static IEnumerable<Node> Flatten(Node node) {
         yield return node;
         foreach (var child in node.Children) {

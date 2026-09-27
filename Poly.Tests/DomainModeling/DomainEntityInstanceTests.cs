@@ -3068,21 +3068,69 @@ public class DomainEntityInstanceTests {
     public async Task EvaluatePolicy_Quantifier_WithoutStore_Throws() {
         var (src, policy) = QuantifierPolicyWithoutStore("HasBig", DomainExpression.Any("items",
             DomainExpression.GreaterThan(DomainExpression.Property("Value"), DomainExpression.Literal(10L))));
-        await Assert.That(() => src.EvaluatePolicy(policy)).Throws<InvalidOperationException>();
+        await Assert.That(() => src.EvaluatePolicy(policy)).Throws<InvalidOperationException>()
+            .WithMessageContaining("without a DomainInstanceStore");
     }
 
     [Test]
     public async Task EvaluatePolicy_None_WithoutStore_Throws() {
         var (src, policy) = QuantifierPolicyWithoutStore("NoneBig", DomainExpression.None("items",
             DomainExpression.GreaterThan(DomainExpression.Property("Value"), DomainExpression.Literal(10L))));
-        await Assert.That(() => src.EvaluatePolicy(policy)).Throws<InvalidOperationException>();
+        await Assert.That(() => src.EvaluatePolicy(policy)).Throws<InvalidOperationException>()
+            .WithMessageContaining("without a DomainInstanceStore");
     }
 
     [Test]
     public async Task EvaluatePolicy_All_WithoutStore_Throws() {
         var (src, policy) = QuantifierPolicyWithoutStore("AllBig", DomainExpression.All("items",
             DomainExpression.GreaterThan(DomainExpression.Property("Value"), DomainExpression.Literal(10L))));
-        await Assert.That(() => src.EvaluatePolicy(policy)).Throws<InvalidOperationException>();
+        await Assert.That(() => src.EvaluatePolicy(policy)).Throws<InvalidOperationException>()
+            .WithMessageContaining("without a DomainInstanceStore");
+    }
+
+    [Test]
+    public async Task ContainsKey_CollectionNavigation_WithoutStore_DoesNotThrow() {
+        var (src, _) = QuantifierPolicyWithoutStore("HasBig", DomainExpression.Any("items",
+            DomainExpression.GreaterThan(DomainExpression.Property("Value"), DomainExpression.Literal(10L))));
+        IDictionary<string, object?> bag = src;
+        await Assert.That(bag.ContainsKey("Items")).IsTrue();
+    }
+
+    [Test]
+    public async Task ForEachInvoke_WithoutStore_Throws() {
+        var target = new Entity("Target", [
+            new Property("Status", new DomainTypeReference("Text"), [])
+        ], Actions: [
+            new Poly.DomainModeling.Ontology.Action("Process", InvocationResult.Void, [], [
+                new AssignEffect(DomainExpression.Property("Status"), DomainExpression.Literal("done"))
+            ], [])
+        ], [], []);
+        var source = new Entity("Source", [], Actions: [
+            new Poly.DomainModeling.Ontology.Action("RunAll", InvocationResult.Void, [], [
+                new ForEachInvokeEffect("Items", "item", null, "Process", [])
+            ], [])
+        ], [], []);
+        var rel = new Relationship("Items",
+            new DomainTypeReference("Source"), new DomainTypeReference("Target"),
+            RelationshipCardinality.OneToMany, []);
+        var domain = DomainTestFactory.Create("Test", [source, target], [rel]);
+        var src = DomainEntityInstance.Create(source, domain: domain);
+        await Assert.That(() => src.InvokeAction("RunAll")).Throws<InvalidOperationException>()
+            .WithMessageContaining("without a DomainInstanceStore");
+    }
+
+    [Test]
+    public async Task Indexer_OneToOne_WithoutStore_ReturnsNull() {
+        var target = new Entity("Target", [], [], [], []);
+        var source = new Entity("Source", [], [], [], []);
+        var rel = new Relationship("team",
+            new DomainTypeReference("Source"), new DomainTypeReference("Target"),
+            RelationshipCardinality.OneToOne, []);
+        var domain = DomainTestFactory.Create("Test", [source, target], [rel]);
+        var src = DomainEntityInstance.Create(source, domain: domain);
+        IDictionary<string, object?> bag = src;
+        await Assert.That(bag.ContainsKey("Team")).IsTrue();
+        await Assert.That(bag["Team"]).IsNull();
     }
 
     private static (DomainEntityInstance Src, Policy Policy) QuantifierPolicyWithoutStore(

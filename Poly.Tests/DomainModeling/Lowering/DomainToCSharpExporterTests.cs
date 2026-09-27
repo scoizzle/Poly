@@ -970,22 +970,22 @@ public class DomainToCSharpExporterTests {
 
     [Test]
     public async Task Analysis_ForEachInvoke_StoreDependentPredicatePolicy_Rejected() {
-        // A `for` predicate referencing a store-dependent policy (any/all/path-prefix/
-        // exists) would lower to a NotSupportedException-throwing method and dead-end the
-        // action — reject at authoring instead.
+        // A `for` predicate whose named policy reads path-prefix or Rel exists is
+        // still rejected; collection-quantifier predicates lower to foreach on both
+        // paths and are allowed.
         var poly = """
             domain Test
-            Tag: entity { Label: Text }
+            Team: entity { Active: Boolean }
             Line: entity {
               Qty: Number
-              tags: many Tag
-              HasTag: policy { any tags where Label is "x" }
+              team: Team
+              TeamActive: policy { team Active }
               Mark: action (amount: Number) { assign Qty to amount }
             }
             Order: entity {
               lines: many Line
               Go: action {
-                for lines as line where line HasTag invoke line.Mark(amount: 1)
+                for lines as line where line TeamActive invoke line.Mark(amount: 1)
               }
             }
             """;

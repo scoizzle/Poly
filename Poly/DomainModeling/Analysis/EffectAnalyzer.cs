@@ -769,13 +769,13 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
                         DomainModelDiagnosticCodes.EffectBinding);
                 }
                 else if (ContainsStoreDependentExpression(predicatePolicy.Expression)) {
-                    // The export lowers such policies to a NotSupportedException-throwing
-                    // method — a `for` predicate calling it would dead-end the whole action.
+                    // Path-prefix and Rel exists still use store host reads at simulate
+                    // time; reject so a `for` does not call a policy whose simulate and
+                    // export answers have not been proven to match.
                     context.ReportError(
                         efe,
                         $"ForEachInvoke predicate policy '{policyName}' is store-dependent " +
-                        "(quantifiers / path-prefix / exists) and cannot be compiled to standalone C#. " +
-                        "Use a local policy over the record's own properties.",
+                        "(path-prefix / exists). Use a local policy over the record's own properties.",
                         DomainModelDiagnosticCodes.EffectInvokeShape);
                 }
                 break;
@@ -841,11 +841,12 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
                 yield return nested;
     }
 
-    /// <summary>True when an expression contains a construct the standalone export cannot
-    /// lower (collection quantifiers, path-prefix, exists) — such policies lower to a
-    /// NotSupportedException-throwing method.</summary>
+    /// <summary>True when an expression contains path-prefix or Rel exists.
+    /// Collection quantifiers lower to foreach on both simulate and export, so they
+    /// are not included. Path-prefix and exists still use store host reads at
+    /// simulate time and are rejected as <c>for</c> predicates.</summary>
     private static bool ContainsStoreDependentExpression(DomainExpression expr) => expr switch {
-        AnyExpr or AllExpr or NoneExpr or CountExpr or Exists or NotExists or RelationshipNavigation => true,
+        Exists or NotExists or RelationshipNavigation => true,
         _ => expr.Children.OfType<DomainExpression>().Any(ContainsStoreDependentExpression),
     };
 

@@ -364,10 +364,11 @@ public sealed partial record DomainEntityInstance {
     }
 
     /// <summary>
-    /// IDictionary read of a collection nav (OneToMany / ManyToMany): all linked
-    /// targets (empty list when unlinked — foreach zero-match, not NRE).
-    /// For-invoke analysis still requires OneToMany; this matches lowering's
-    /// collection-nav predicate so a ManyToMany member read is not a miss.
+    /// IDictionary read of a collection nav (OneToMany / ManyToMany): outbound
+    /// linked targets (empty list when unlinked — foreach zero-match, not NRE).
+    /// Throws without a store or domain. For-invoke analysis still requires
+    /// OneToMany; this matches lowering's collection-nav predicate so a
+    /// ManyToMany member read is not a miss.
     /// </summary>
     internal bool TryGetCollectionNavigation(string key, out object? value) {
         value = null;
@@ -384,20 +385,22 @@ public sealed partial record DomainEntityInstance {
         if (match is null)
             return false;
 
-        if (Store is null || Domain is null) {
-            value = new List<DomainEntityInstance>();
-            return true;
-        }
+        if (Store is null || Domain is null)
+            throw new InvalidOperationException(
+                "Cannot resolve relationship target without a DomainInstanceStore. " +
+                "Call store.Add(instance) first.");
 
-        value = Store.GetRelatedInstances(match.Name, this)
+        value = Store.GetLinkedTargets(match.Name, this)
             .Where(t => string.Equals(t.Entity.Name, match.Target.TypeName, StringComparison.Ordinal))
             .ToList();
         return true;
     }
 
     /// <summary>
-    /// Outbound links only (this instance as relationship source → targets).
-    /// Reverse-side navigate is rejected (matches DMEFF007).
+    /// Outbound links only: this instance as relationship source → targets
+    /// (<see cref="DomainInstanceStore.GetLinkedTargets"/>). Reverse-side
+    /// navigate is rejected (matches DMEFF007). Self-relationships do not
+    /// include inverse links where this instance is the target.
     /// </summary>
     private IReadOnlyList<DomainEntityInstance> GetOutboundRelatedInstances(string relationshipName) {
         if (Domain is null)
@@ -421,8 +424,7 @@ public sealed partial record DomainEntityInstance {
                 "Cannot resolve relationship target without a DomainInstanceStore. " +
                 "Call store.Add(instance) first.");
 
-        // Source → target only (do not walk reverse links).
-        return Store.GetRelatedInstances(relationshipName, this)
+        return Store.GetLinkedTargets(relationshipName, this)
             .Where(t => string.Equals(t.Entity.Name, relationship.Target.TypeName, StringComparison.Ordinal))
             .ToList();
     }

@@ -78,7 +78,7 @@ The rest of this document marks, as an observation rather than a ranking, whethe
 
 Secondary context only (naming, not a source of principles): `docs/decisions/2026-06-08-breakpoint-architecture.md`, `docs/interpretation/debugging-and-tracing.md`.
 
-**Roadmap phase.** Serves phase 1 (a person can step a business operation), phase 2 (an agent can pause and inspect simulated outcomes), and phase 3 (extracted code stays steppable). The statement-level hook and `VmDebugger` are **earning their place for phase 1**. The “any reasonable host / any reasonable type system” ambition of introspection, and µop-level interrupt machinery that is not actually emitted, are **only justified by phase 2/3** if they are justified at all.
+**Roadmap phase.** Serves phase 1 (a person can step a business operation), phase 2 (an agent can pause and inspect simulated outcomes), and phase 3 (extracted code stays steppable). The statement-level hook and `VmDebugger` are **earning their place for phase 1**. The “any reasonable host / any reasonable type system” ambition of introspection, and per-micro-operation interrupt machinery (a callback before every tiny low-level step) that is not actually emitted, are **only justified by phase 2/3** if they are justified at all.
 
 **Observation:** `VmState.DebugInterrupt` is documented as a per-micro-operation callback. The emitter does not invoke it. `VmDebuggerTests.DebugInterrupt_IsNotInvokedByEmitter` records that. What you can actually step is statement-shaped syntax-tree nodes, not a bytecode program counter.
 
@@ -116,7 +116,7 @@ Secondary context only (naming, not a source of principles): `docs/decisions/202
 
 **Where it lives in code.**
 
-- Top-level container: `Poly/DomainModeling/Ontology/Domain.cs` — name, types, imported contracts, contract bindings, and `Extensions` (the `uses` ids). Children of the domain node are those members.
+- Top-level container: `Poly/DomainModeling/Ontology/Domain.cs` — name, types, imported contracts, contract bindings, and `Extensions` (the `uses` ids). Only types, imported contracts, and contract bindings are children of the domain node; the name and `Extensions` are plain properties.
 - Named members share `DomainMember` / `DomainObject` (`Poly/DomainModeling/Ontology/DomainMember.cs`, `DomainObject.cs`). `DomainObject` extends `Node`, which is how analysis hangs metadata on authoring nodes.
 - Entities, the stateful business objects: `Poly/DomainModeling/Ontology/Entity.cs` — properties, actions, policies, stages, entity-level subscriptions, and navigations (relationships owned by the source entity).
 - Actions (named operations with parameters, effects, and guard policies): `Poly/DomainModeling/Ontology/Action.cs`. Policies (a named boolean expression): `Poly/DomainModeling/Ontology/Policy.cs`. Stages (lifecycle, including entry/exit effects and stage-scoped subscriptions): `Poly/DomainModeling/Ontology/Stage.cs`.
@@ -173,7 +173,7 @@ There is a second analyze, on the *syntax* tree, immediately before the interpre
 - Persistence overlay (not in the core list; a library appends it): `Poly/DomainModeling/Analysis/StoragePass.cs`, `Poly/DomainModeling/Analysis/PersistenceSurfaceMetadata.cs`. HTTP flag: `Poly/DomainModeling/Analysis/HttpSurfaceMetadata.cs`.
 - Interpreter analyze of a syntax tree (the compile door): `Interpreter.Analyze` / the fourteen-pass builder at the top of `Poly/Interpretation/Interpreter.cs`. `Interpreter.Compile` refuses to emit if that analysis reported errors.
 
-**Roadmap phase.** **Earning its place for phase 1.** Without a catalog and the later bags, lowering cannot produce complete operation trees, and HTTP/persistence cannot know what to emit.
+**Roadmap phase.** **Earning its place for phase 1.** Without a catalog and the later analysis metadata (the facts analysis attaches to nodes), lowering cannot produce complete operation trees, and HTTP/persistence cannot know what to emit.
 
 **Observation:** Two analysis pipelines share one framework and two different trees. Domain analysis walks `Domain` / `Entity` / `Effect`. Interpreter analysis walks `TypeDefinitionNode` / `Block` / `Invoke`. The check from Principle 0.1 applies to the *syntax* tree. Domain analysis does not by itself give you a steppable snippet.
 
@@ -215,8 +215,8 @@ There is a second analyze, on the *syntax* tree, immediately before the interpre
 
 **Where it lives in code.**
 
-- Interpret: `Interpreter.Compile` then `Interpreter.Execute` (`Poly/Interpretation/Interpreter.cs`). Domain-bound simulate of a named action or policy: `DomainEntityInstance.InvokeAction` / `EvaluatePolicy` in `Poly/DomainModeling/Runtime/DomainEntityInstance.cs`, which compile cached trees with a type-definition provider and pass the instance as `This` (`SetArgs`). Named calls that have no CLR `MethodInfo` (actions, store jobs) go through `InvokeNamed` (`DomainEntityInstance.InvokeNamed.cs`). The instance is also `IDictionary<string, object?>` so member read/write on `This` is the property bag (`DomainEntityInstance.Dictionary.cs`).
-- Scratch directory bound into those trees: `Poly/DomainModeling/Runtime/DomainInstanceStore.cs` (`Create`, `CreateIn`, `EnsureUnique`, `Link`, subscription fan-out on `Notify`). Success/failure object the trees return: `Poly/DomainModeling/Runtime/DomainResult.cs`. Host-shaped methods the dictionary instance actually implements (`Notify`, `EnsureUnique`, related-set probes): `DomainEntityInstance.HostAbi.cs` and the empty method slots on the runtime type-def in `DomainEntityInstance.Runtime.cs`.
+- Interpret: `Interpreter.Compile` then `Interpreter.Execute` (`Poly/Interpretation/Interpreter.cs`). Domain-bound simulate of a named action or policy: `DomainEntityInstance.InvokeAction` / `EvaluatePolicy` in `Poly/DomainModeling/Runtime/DomainEntityInstance.cs`, which compile cached trees with a type-definition provider and pass the instance as `This` (`SetArgs`). Named calls that have no CLR `MethodInfo` (actions, store jobs) go through `InvokeNamed` (`DomainEntityInstance.InvokeNamed.cs`). The instance is also `IDictionary<string, object?>` so reading or writing a member on `This` reads or writes that dictionary of property values (`DomainEntityInstance.Dictionary.cs`).
+- Scratch directory bound into those trees: `Poly/DomainModeling/Runtime/DomainInstanceStore.cs` (`Create`, `CreateIn`, `EnsureUnique`, `Link`, subscription fan-out on `NotifyTransition`). Success/failure object the trees return: `Poly/DomainModeling/Runtime/DomainResult.cs`. Host-shaped methods the dictionary instance actually implements (`Notify`, which calls the store’s `NotifyTransition`; `EnsureUnique`; related-set probes): `DomainEntityInstance.HostAbi.cs` and the empty method slots on the runtime type-def in `DomainEntityInstance.Runtime.cs`.
 - Print of the lowered types: `DomainSession.Emit` runs `Lower`, optionally runs interpreter analysis on a `CompilationUnitNode` of those types, then `Poly/Interpretation/CSharp/CSharpGenerator.cs` per entity (`Entity.cs`, `Poly.Types.cs`).
 - MCP harness tools that ask interpret to run a named operation on a store instance: `Poly.Mcp/Tools/RuntimeTool.cs` (`invoke_action`, `create_instance`, `link_instances`), `Poly.Mcp/Tools/DomainTools.cs` (`evaluate_policy`). A DSL-fragment probe that is *not* named-policy simulate: `Poly.Mcp/Tools/OracleTool.cs`.
 
@@ -248,7 +248,7 @@ There is a second analyze, on the *syntax* tree, immediately before the interpre
 
 **Composition.** Libraries may depend on other libraries, but every dependency chain ends at core. Here “core” means the `Poly` project (`Poly/Poly.csproj`), which holds the syntax tree, the interpreter, and the domain pipeline.
 
-- Project references in code: `Poly/Poly.csproj` references no other project. `src/Poly.Packs.Sqlite/Poly.Packs.Sqlite.csproj`, `src/Poly.Packs.SqlServer/Poly.Packs.SqlServer.csproj`, `src/Poly.Packs.MySql/Poly.Packs.MySql.csproj`, and `Poly.Mcp/Poly.Mcp.csproj` each reference only `Poly`. `src/Poly.DslCompiler/Poly.DslCompiler.csproj` references `Poly`, the SQLite pack, and the SQL Server pack. `Poly.Tests/Poly.Tests.csproj` references all of the above. Every project chain ends at `Poly`, and there are no cycles.
+- Project references in code: `Poly/Poly.csproj` references no other project. `src/Poly.Packs.Sqlite/Poly.Packs.Sqlite.csproj`, `src/Poly.Packs.SqlServer/Poly.Packs.SqlServer.csproj`, `src/Poly.Packs.MySql/Poly.Packs.MySql.csproj`, and `Poly.Mcp/Poly.Mcp.csproj` each reference only `Poly`. `src/Poly.DslCompiler/Poly.DslCompiler.csproj` references `Poly`, the SQLite pack, and the SQL Server pack. `Poly.Tests/Poly.Tests.csproj` references all of the above. `Poly.Benchmarks/Poly.Benchmarks.csproj` references only `Poly`. Every project chain ends at `Poly`, and there are no cycles.
 - Library registration in code: `IDomainLibrary` (`Poly/DomainModeling/Compile/IDomainLibrary.cs`) has `Id`, `Register`, and `PrimitiveSeeds`. It has no way to declare that one library needs another.
 
 **Observation:** Library-to-library dependencies exist only implicitly. The HTTP library (`src/Poly.DslCompiler/HttpLibrary.cs`) registers only an HTTP flag, but `DslCompiler` refuses to emit `Program.cs` unless storage mapping metadata is present, which only a persistence or vendor library (`persistence`, `sqlite`, `sqlserver`, `mysql`) produces. Nothing in the library record states that.
@@ -298,7 +298,7 @@ There is a second analyze, on the *syntax* tree, immediately before the interpre
 
 **Observation:** `session.Lower` returns `IReadOnlyList<TypeDefinitionNode>`. It does not return, or catalog, the full set of files. Artifact contributors run later in `DslCompiler`. There is no “artifact-set catalog on the session after Lower that errors if empty.” Contributors may return an empty list.
 
-**Observation:** `DbContextGenerator` and `MinimalApiGenerator` take the `Domain` plus analysis metadata (storage, behavior, aggregate). They build *new* syntax trees for `DbContext` and `Program.cs`. HTTP then checks that every named action already exists as a method on the lowered module (`DslCompiler.RequireHttpActionsInModule`). The host is gated on the module for *names*; the host source itself is generated from domain facts and bags, not by printing the operation bodies again.
+**Observation:** `DbContextGenerator` and `MinimalApiGenerator` take the `Domain` plus analysis metadata (storage, behavior, aggregate). They build *new* syntax trees for `DbContext` and `Program.cs`. HTTP then checks that every named action already exists as a method on the lowered module (`DslCompiler.RequireHttpActionsInModule`). The host is gated on the module for *names*; the host source itself is generated from domain facts and analysis metadata, not by printing the operation bodies again.
 
 **Observation:** `demo.http` is ordinary text (`HttpFileGenerator`), not a syntax tree, and is not steppable in the interpreter.
 
@@ -321,7 +321,7 @@ There is a second analyze, on the *syntax* tree, immediately before the interpre
 
 **Observation:** The HTTP and DbContext generators are opaque relative to Principle 0.1. You can step `Program.cs` only after print, as C#. You cannot `VmDebugger.StepOver` a generated route. The operations those routes *call* are steppable in the interpreter when you simulate the named action on a bound instance.
 
-**Observation:** `Notify` fan-out on simulate is `DomainInstanceStore` walking links and dispatch plans (`RuntimeContractAnalyzer` metadata). Generated C# emits subscriber lists and `When…` handlers from the same dispatch plan (`DomainToCSharpExporter`). The plan is shared; the bind (in-memory links vs EF navigations) is not the same object.
+**Observation:** On simulate, the instance’s `Notify` calls `DomainInstanceStore.NotifyTransition`, which fans out by walking links and dispatch plans (`RuntimeContractAnalyzer` metadata). Generated C# emits subscriber lists and `When…` handlers from the same dispatch plan (`DomainToCSharpExporter`). The plan is shared; the bind (in-memory links vs EF navigations) is not the same object.
 
 ---
 

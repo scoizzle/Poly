@@ -503,6 +503,14 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
             return new Block([]);
 
         var nodes = new List<Node>();
+        Variable? previousStage = null;
+        if (_postTransitionNodes is not null
+            && _postTransitionNodes.ContainsKey(t.TargetStage.StageName)) {
+            previousStage = new Variable("previousStage");
+            nodes.Add(new Assignment(
+                previousStage,
+                new Member(Subject, "CurrentStage")));
+        }
 
         // Exit/entry effects are best-effort at lowering time: with analysis present a
         // TryGetStage miss implies analysis/domain disagreement (both derive from the
@@ -565,8 +573,20 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
 
         if (_postTransitionNodes is not null
             && _postTransitionNodes.TryGetValue(t.TargetStage.StageName, out var postNodes)) {
-            foreach (var postNode in postNodes)
-                tryNodes.Add(postNode);
+            foreach (var postNode in postNodes) {
+                if (previousStage is not null
+                    && postNode is Invoke {
+                        Delegate: Member { MemberName: { } notifyName }
+                    } inv
+                    && notifyName.StartsWith("Notify", StringComparison.Ordinal)
+                    && notifyName.EndsWith("Subscribers", StringComparison.Ordinal)
+                    && inv.Arguments.Length == 0) {
+                    tryNodes.Add(new Invoke(inv.Delegate, [previousStage]));
+                }
+                else {
+                    tryNodes.Add(postNode);
+                }
+            }
         }
 
         Node tryBody = tryNodes.Count switch {
@@ -588,7 +608,9 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
 
         _sourceStageName = t.TargetStage.StageName;
 
-        return nodes.Count == 1 ? nodes[0] : new Block(nodes);
+        if (previousStage is null)
+            return nodes.Count == 1 ? nodes[0] : new Block(nodes);
+        return new Block(nodes, [previousStage]);
     }
 
     /// <summary>

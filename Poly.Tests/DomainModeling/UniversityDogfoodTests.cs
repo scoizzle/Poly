@@ -200,9 +200,7 @@ public class UniversityDogfoodTests {
             new Dictionary<string, object?> { ["who"] = student2 });
         await Assert.That(queue2.Succeeded).IsTrue();
         await Assert.That(queue2.ResultInstance!.InvokeAction("Seat").Succeeded).IsTrue();
-        // `when any waitlist Offered` is a rising-edge handler on the module
-        // (matched count == 1). The second offer does not increment again.
-        await Assert.That(section.GetProperty<object>("OfferedSeats")).IsEqualTo(1L);
+        await Assert.That(section.GetProperty<object>("OfferedSeats")).IsEqualTo(2L);
 
         await Assert.That(offer.InvokeAction("Cancel").Succeeded).IsTrue();
         await Assert.That(offer.CurrentStage).IsEqualTo("Cancelled");

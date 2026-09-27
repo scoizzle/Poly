@@ -22,10 +22,10 @@ namespace Poly.DomainModeling.Lowering;
 ///
 /// Stage subscriptions (<c>when RelName Stage</c>) generate cross-entity notification:
 /// the subscriber entity declares a <c>When{Target}{Stage}</c> handler method
-/// (zero-arg when notification-only; one peer parameter of the target entity type named
-/// <c>PeerBinding</c> when <c>when … as name</c>), and the target entity emits a
+/// (peer parameter when <c>when … as name</c>; <c>when all</c> also takes the
+/// transitioning record's previous stage), and the target entity emits a
 /// subscriber list + notify call after each stage transition
-/// (<c>sub.When…()</c> or <c>sub.When…(this)</c>).
+/// (<c>sub.When…(previousStage)</c>, <c>sub.When…(this)</c>, or both).
 /// </summary>
 public sealed partial class DomainToCSharpExporter {
     /// <summary>Collected subscription data for cross-entity notification — populated from the
@@ -121,6 +121,38 @@ public sealed partial class DomainToCSharpExporter {
         StageSubscriptionQuantifier.All => "All",
         _ => "Each",
     };
+
+    private static bool NeedsAllPreviousStage(SubscriptionInfo info) =>
+        info.Subscription.Quantifier == StageSubscriptionQuantifier.All
+        && info.TargetEntity.Stages.Count > 0
+        && info.Subscription.StageNames.Count > 0;
+
+    private static Node StageEnumMember(string enumName, string stageName) =>
+        new Member(new NamedTypeReference(enumName), stageName);
+
+    private static Node EqualToStage(Node currentStage, string enumName, string stageName) =>
+        new Equal(currentStage, StageEnumMember(enumName, stageName));
+
+    private static Node NotEqualToStage(Node currentStage, string enumName, string stageName) =>
+        new NotEqual(currentStage, StageEnumMember(enumName, stageName));
+
+    private static Node InWatchedStages(Node currentStage, string enumName, IEnumerable<string> stageNames) {
+        Node? acc = null;
+        foreach (var stageName in stageNames) {
+            var eq = EqualToStage(currentStage, enumName, stageName);
+            acc = acc is null ? eq : new Syntactic.Or(acc, eq);
+        }
+        return acc!;
+    }
+
+    private static Node NotInWatchedStages(Node currentStage, string enumName, IEnumerable<string> stageNames) {
+        Node? acc = null;
+        foreach (var stageName in stageNames) {
+            var neq = NotEqualToStage(currentStage, enumName, stageName);
+            acc = acc is null ? neq : new Syntactic.And(acc, neq);
+        }
+        return acc!;
+    }
 
     // ── Per-entity builder ──────────────────────────────────────
 
@@ -420,14 +452,22 @@ public sealed partial class DomainToCSharpExporter {
             // (Student + Section on Enrollment.Dropped) used to emit duplicate
             // _droppedSubscribers / NotifyDroppedSubscribers members.
             foreach (var stageGroup in groups.GroupBy(infos => infos[0].StageName)) {
+                var notifyPrevious = new Parameter(
+                    "previousStage",
+                    new NamedTypeReference(stageEnumTypeName));
                 var notifyNodes = new List<Node>();
                 foreach (var infos in stageGroup) {
                     var fieldName = SubscriberRegistryFieldName(infos[0]);
-                    var notifyCalls = infos.Select(info => (Node)new Invoke(
-                        new Member(new Variable("sub"), handlerNames![info]),
-                        info.Subscription.PeerBinding is { Length: > 0 }
-                            ? [new ThisReference()]
-                            : [])).ToList();
+                    var notifyCalls = infos.Select(info => {
+                        var args = new List<Node>();
+                        if (info.Subscription.PeerBinding is { Length: > 0 })
+                            args.Add(new ThisReference());
+                        if (NeedsAllPreviousStage(info))
+                            args.Add(notifyPrevious);
+                        return (Node)new Invoke(
+                            new Member(new Variable("sub"), handlerNames![info]),
+                            [.. args]);
+                    }).ToList();
                     notifyNodes.Add(new IfStatement(
                         new NotEqual(
                             new Member(new ThisReference(), fieldName),
@@ -440,6 +480,7 @@ public sealed partial class DomainToCSharpExporter {
                 methods.Add(new MethodDefinitionNode(
                     $"Notify{stageGroup.Key}Subscribers",
                     new TypeReference("void"),
+                    Parameters: [notifyPrevious],
                     Body: new Block(notifyNodes),
                     AccessModifier: AccessModifier.Internal
                 ));
@@ -451,8 +492,18 @@ public sealed partial class DomainToCSharpExporter {
             foreach (var info in subscriberSubs) {
                 var handlerName = handlerNames![info];
                 var peerBinding = info.Subscription.PeerBinding;
-                IReadOnlyList<Parameter>? handlerParams = peerBinding is { Length: > 0 }
-                    ? [new Parameter(peerBinding, new NamedTypeReference(info.TargetEntity.Name))]
+                var targetStageEnumName = metadata.GetStructure(info.TargetEntity)
+                    ?.StageEnumTypeName ?? $"{info.TargetEntity.Name}Stage";
+                Parameter? previousStageParam = NeedsAllPreviousStage(info)
+                    ? new Parameter("previousStage", new NamedTypeReference(targetStageEnumName))
+                    : null;
+                var handlerParamList = new List<Parameter>();
+                if (peerBinding is { Length: > 0 })
+                    handlerParamList.Add(new Parameter(peerBinding, new NamedTypeReference(info.TargetEntity.Name)));
+                if (previousStageParam is not null)
+                    handlerParamList.Add(previousStageParam);
+                IReadOnlyList<Parameter>? handlerParams = handlerParamList.Count > 0
+                    ? handlerParamList
                     : null;
 
                 // Lower subscription effects into the handler body.
@@ -496,50 +547,48 @@ public sealed partial class DomainToCSharpExporter {
                     handlerBody = new Block([stageGate, handlerBody]);
                 }
 
-                // `when all Rel Stage…` fires when every linked target is in the
-                // entry's watched-stage set (union of StageNames) and at least one
-                // exists. Notify runs per transition; this gate is the set condition
-                // print emits. Stageless targets are rejected at analysis.
-                if (info.Subscription.Quantifier == StageSubscriptionQuantifier.All
-                    && info.TargetEntity.Stages.Count > 0
-                    && info.Subscription.StageNames.Count > 0) {
-                    var targetStageEnumName = metadata.GetStructure(info.TargetEntity)
-                        ?.StageEnumTypeName ?? $"{info.TargetEntity.Name}Stage";
+                // `when all Rel Stage…` fires once, on the transition where the last
+                // linked record reaches a watched stage (union of StageNames). At least
+                // one linked record must exist. Later transitions while every linked
+                // record still matches do not fire again.
+                if (previousStageParam is not null) {
                     var linkedVar = new Variable("linkedTarget");
                     var matchedVar = new Variable("linkedMatched");
                     var currentStage = new Member(linkedVar, "CurrentStage");
-                    Node? notInWatched = null;
-                    foreach (var sName in info.Subscription.StageNames) {
-                        var neq = new NotEqual(
-                            currentStage,
-                            new Member(new NamedTypeReference(targetStageEnumName), sName));
-                        notInWatched = notInWatched is null
-                            ? neq
-                            : new Syntactic.And(notInWatched, neq);
-                    }
                     var gateLoop = new ForEachLoop(
                         linkedVar,
                         new Member(new ThisReference(), ToPascalCase(info.Relationship.Name)),
                         new Block([
                             new Assignment(matchedVar, new Constant(true)),
                             new IfStatement(
-                                notInWatched!,
+                                NotInWatchedStages(
+                                    currentStage, targetStageEnumName, info.Subscription.StageNames),
                                 new Block([new Return()]))
                         ]));
                     var emptyCheck = new IfStatement(
                         new Poly.Ast.Nodes.Not(matchedVar),
                         new Block([new Return()]));
+                    var alreadyWatched = new IfStatement(
+                        InWatchedStages(
+                            previousStageParam, targetStageEnumName, info.Subscription.StageNames),
+                        new Block([new Return()]));
                     handlerBody = new Block(
-                        [new Assignment(matchedVar, new Constant(false)), gateLoop, emptyCheck, handlerBody],
+                        [
+                            new Assignment(matchedVar, new Constant(false)),
+                            gateLoop,
+                            emptyCheck,
+                            alreadyWatched,
+                            handlerBody
+                        ],
                         [matchedVar]);
                 }
 
-                // `when any Rel Stage` fires once when the linked set becomes non-empty
-                // in the watched stage (rising edge). Notify still runs per transition.
+                // `when any Rel Stage…` is level-triggered: on each notified
+                // transition it fires whenever at least one linked record is in
+                // any watched stage (union of StageNames).
                 if (info.Subscription.Quantifier == StageSubscriptionQuantifier.Any
-                    && info.TargetEntity.Stages.Count > 0) {
-                    var targetStageEnumName = metadata.GetStructure(info.TargetEntity)
-                        ?.StageEnumTypeName ?? $"{info.TargetEntity.Name}Stage";
+                    && info.TargetEntity.Stages.Count > 0
+                    && info.Subscription.StageNames.Count > 0) {
                     var linkedVar = new Variable("linkedTarget");
                     var matchedVar = new Variable("linkedMatched");
                     var gateLoop = new ForEachLoop(
@@ -547,19 +596,19 @@ public sealed partial class DomainToCSharpExporter {
                         new Member(new ThisReference(), ToPascalCase(info.Relationship.Name)),
                         new Block([
                             new IfStatement(
-                                new Equal(
+                                InWatchedStages(
                                     new Member(linkedVar, "CurrentStage"),
-                                    new Member(new NamedTypeReference(targetStageEnumName), info.StageName)),
+                                    targetStageEnumName,
+                                    info.Subscription.StageNames),
                                 new Block([
-                                    new Assignment(matchedVar,
-                                        new Syntactic.Add(matchedVar, new Constant(1L)))
+                                    new Assignment(matchedVar, new Constant(true))
                                 ]))
                         ]));
-                    var notRisingEdge = new IfStatement(
-                        new NotEqual(matchedVar, new Constant(1L)),
+                    var noneMatched = new IfStatement(
+                        new Poly.Ast.Nodes.Not(matchedVar),
                         new Block([new Return()]));
                     handlerBody = new Block(
-                        [new Assignment(matchedVar, new Constant(0L)), gateLoop, notRisingEdge, handlerBody],
+                        [new Assignment(matchedVar, new Constant(false)), gateLoop, noneMatched, handlerBody],
                         [matchedVar]);
                 }
 

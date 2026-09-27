@@ -972,6 +972,9 @@ public sealed partial record DomainEntityInstance {
                 BindThis(nf.Operand, entity, parameters, stageEnums)),
             Parameter p when parameters is not null
                 && parameters.ContainsKey(p.Name) => new Member(entity, p.Name),
+            Parameter p when p.TypeReference is NamedTypeReference ntr
+                && stageEnums.Contains(ntr.TypeName) =>
+                new Parameter(p.Name, new PrimitiveTypeReference(Prim.String), p.DefaultValue),
             Variable v when parameters is not null
                 && parameters.ContainsKey(v.Name) => new Member(entity, v.Name),
             // Emit stage enum member → runtime string (CurrentStage is string on This).
@@ -988,13 +991,15 @@ public sealed partial record DomainEntityInstance {
             Assignment a => new Assignment(
                 BindThis(a.Destination, entity, parameters, stageEnums), BindThis(a.Value, entity, parameters, stageEnums)),
             Invoke { Delegate: Member { MemberName: { } notifyName } } inv
-                when inv.Arguments.Length == 0
-                    && notifyName.StartsWith("Notify", StringComparison.Ordinal)
+                when notifyName.StartsWith("Notify", StringComparison.Ordinal)
                     && notifyName.EndsWith("Subscribers", StringComparison.Ordinal)
                     && notifyName.Length > "NotifySubscribers".Length
                 => new Invoke(
                     new Member(BindThis(((Member)inv.Delegate).Value, entity, parameters, stageEnums), "Notify"),
-                    new Constant(notifyName["Notify".Length..^"Subscribers".Length])),
+                    [
+                        new Constant(notifyName["Notify".Length..^"Subscribers".Length]),
+                        .. inv.Arguments.Select(a => BindThis(a, entity, parameters, stageEnums))
+                    ]),
             // Module emit uses DomainResult<T>.Success(value). VM CLR DomainResult is
             // non-generic; entity TypeDefs are not assignable-to object under PR53
             // overload scoring. Typed return still comes from CreatedChildren.

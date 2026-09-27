@@ -18,9 +18,16 @@ public sealed partial record DomainEntityInstance {
     /// (those belong in the lowered tree). Skips when executing a subscription
     /// (cascade is store-owned) or when no store is attached.
     /// </summary>
-    public void Notify(string targetStageName) {
+    public void Notify(string targetStageName) =>
+        Notify(targetStageName, previousStageName: null);
+
+    /// <summary>
+    /// Store fan-out after a stage assignment. <paramref name="previousStageName"/>
+    /// is the stage left by this transition; All handlers use it as the once-edge.
+    /// </summary>
+    public void Notify(string targetStageName, string? previousStageName) {
         if (Store is not null && !_isExecutingSubscription)
-            Store.NotifyTransition(this, targetStageName);
+            Store.NotifyTransition(this, targetStageName, previousStageName: previousStageName);
     }
 
     /// <summary>
@@ -141,7 +148,8 @@ public sealed partial record DomainEntityInstance {
             }
             finally {
                 if (notifyStore && Store is not null && !_isExecutingSubscription) {
-                    Store.NotifyTransition(this, targetStageName);
+                    Store.NotifyTransition(
+                        this, targetStageName, previousStageName: previousStageName);
                 }
             }
         }
@@ -245,7 +253,8 @@ public sealed partial record DomainEntityInstance {
         DomainEntityInstance peerInstance,
         string? peerBinding = null,
         SubscriptionDispatchPlanEntry? planEntry = null,
-        string? targetStageName = null) {
+        string? targetStageName = null,
+        string? previousStageName = null) {
         _isExecutingSubscription = true;
 
         try {
@@ -279,7 +288,7 @@ public sealed partial record DomainEntityInstance {
             if (peerBinding is { Length: > 0 })
                 cached = MaterializePeerInSyntax(cached, peerBinding, peerInstance);
             ThrowIfEffectListFailed(
-                ExecuteCachedSubscriptionTree(cached, peerArg: null),
+                ExecuteCachedSubscriptionTree(cached, previousStageName),
                 "subscription");
         }
         finally {
@@ -288,13 +297,11 @@ public sealed partial record DomainEntityInstance {
     }
 
     private DomainResult? ExecuteCachedSubscriptionTree(
-        Node tree, object? peerArg) {
+        Node tree, object? previousStageName) {
         var compiled = Interpreter.CompileChecked(
             tree, ModuleAwareTypeProvider(_typeDefAnalyzer));
         using var exec = Interpreter.Execute(compiled,
-            s => s.SetArgs(peerArg is null
-                ? new object?[] { this }
-                : new object?[] { this, peerArg }));
+            s => s.SetArgs(new object?[] { this, previousStageName }));
         if (exec.Result.Value is DomainResult { IsSuccess: false } failed)
             return failed;
         return null;

@@ -430,7 +430,11 @@ public sealed class DomainInstanceStore {
     /// <param name="transitionedInstance">The instance that changed stage.</param>
     /// <param name="targetStageName">The stage entered.</param>
     /// <param name="depth">Current cascade depth (internal — starts at 0).</param>
-    public void NotifyTransition(DomainEntityInstance transitionedInstance, string targetStageName, int depth = 0) {
+    public void NotifyTransition(
+        DomainEntityInstance transitionedInstance,
+        string targetStageName,
+        int depth = 0,
+        string? previousStageName = null) {
         const int maxDepth = 10;
         if (depth >= maxDepth) return;
 
@@ -471,7 +475,8 @@ public sealed class DomainInstanceStore {
                         incomingContracts,
                         stageNameBeforeEffects: subscriberStage.Name,
                         depth,
-                        maxDepth);
+                        maxDepth,
+                        previousStageName);
                 }
             }
 
@@ -488,7 +493,8 @@ public sealed class DomainInstanceStore {
                 incomingContracts,
                 stageNameBeforeEffects: subscriber.CurrentStage,
                 depth,
-                maxDepth);
+                maxDepth,
+                previousStageName);
         }
     }
 
@@ -500,7 +506,8 @@ public sealed class DomainInstanceStore {
         List<RelationshipContract> incomingContracts,
         string? stageNameBeforeEffects,
         int depth,
-        int maxDepth) {
+        int maxDepth,
+        string? previousStageName) {
         var applicableEntries = dispatchPlan.ByRelationshipName.Values
             .SelectMany(entries => entries)
             .Where(entry =>
@@ -527,13 +534,18 @@ public sealed class DomainInstanceStore {
             // conditions live in the lowered handler (the same tree print emits).
             subscriber.ExecuteSubscriptionEffects(
                 entry.Effects, transitionedInstance, entry.PeerBinding,
-                planEntry: entry, targetStageName: targetStageName);
+                planEntry: entry, targetStageName: targetStageName,
+                previousStageName: previousStageName);
 
             // Recurse if the subscriber also transitioned as a side effect
             if (depth + 1 < maxDepth
                 && !string.Equals(subscriber.CurrentStage, stageNameBeforeEffects, StringComparison.Ordinal)
                 && subscriber.CurrentStage is not null)
-                NotifyTransition(subscriber, subscriber.CurrentStage, depth + 1);
+                NotifyTransition(
+                    subscriber,
+                    subscriber.CurrentStage,
+                    depth + 1,
+                    previousStageName: stageNameBeforeEffects);
         }
     }
 }

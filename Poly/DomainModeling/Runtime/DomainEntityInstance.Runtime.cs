@@ -130,6 +130,14 @@ public sealed partial record DomainEntityInstance {
                     new PrimitiveTypeReference(Prim.String))],
                 Body: new Block([])),
             new MethodDefinitionNode(
+                "Notify",
+                new TypeReference("void"),
+                Parameters: [
+                    new Parameter("stageName", new PrimitiveTypeReference(Prim.String)),
+                    new Parameter("previousStageName", new PrimitiveTypeReference(Prim.String))
+                ],
+                Body: new Block([])),
+            new MethodDefinitionNode(
                 "EnsureUnique",
                 TypeReference.To<DomainResult>(),
                 Parameters: [

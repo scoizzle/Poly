@@ -427,7 +427,7 @@ public sealed partial record DomainEntityInstance {
             .ToList();
     }
 
-    // ── Collection quantifier Store reads ─────────────────────────────────────
+    // ── Relationship presence Store read ──────────────────────────────────────
 
     /// <summary>
     /// When <paramref name="target"/> is a bare relationship name on this entity as source,

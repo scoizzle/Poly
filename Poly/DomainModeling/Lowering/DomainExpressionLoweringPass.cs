@@ -43,6 +43,8 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Node
     private string? _sourceEntityName;
     private Node _currentSubject = null!;
     private int _quantifierSequence;
+    private List<Node> _quantifierLoops = [];
+    private List<Variable> _quantifierLoopVariables = [];
 
     /// <param name="parameters">
     /// Optional map of parameter names to their Syntax AST nodes.
@@ -95,7 +97,9 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Node
     /// <summary>
     /// Lowers <paramref name="expression"/> to a Syntax AST <see cref="Node"/>,
     /// using <paramref name="subject"/> as the current-instance root for
-    /// property and owned-navigation resolution.
+    /// property and owned-navigation resolution. When the expression has filtered
+    /// quantifiers, the result is a <see cref="Block"/>: their loops, then the value
+    /// as the last node.
     /// </summary>
     public Node Lower(DomainExpression expression, Node subject) {
         ArgumentNullException.ThrowIfNull(expression);
@@ -103,7 +107,12 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Node
         _currentSubject = _useThisReference && subject is Parameter { Name: "entity" }
             ? new ThisReference()
             : subject;
-        return Route(expression);
+        _quantifierLoops = [];
+        _quantifierLoopVariables = [];
+        var value = Route(expression);
+        if (_quantifierLoops.Count == 0)
+            return value;
+        return new Block([.. _quantifierLoops, value], _quantifierLoopVariables);
     }
 
     protected override Node Default() => throw new NotSupportedException(
@@ -211,10 +220,10 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Node
         // presence (false on empty) — lower to a real non-empty check instead.
         if (e.Target is PropertyAccess col && IsCollectionNav(col.Name)) {
             return new NotEqual(
-                new Member(Lower(e.Target, _currentSubject), "Count"),
+                new Member(Route(e.Target), "Count"),
                 new Constant(0));
         }
-        return new NotEqual(Lower(e.Target, _currentSubject), new Constant(null));
+        return new NotEqual(Route(e.Target), new Constant(null));
     }
 
     protected override Node NotExists(NotExists ne) {
@@ -225,10 +234,10 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Node
         }
         if (ne.Target is PropertyAccess col && IsCollectionNav(col.Name)) {
             return new Equal(
-                new Member(Lower(ne.Target, _currentSubject), "Count"),
+                new Member(Route(ne.Target), "Count"),
                 new Constant(0));
         }
-        return new Equal(Lower(ne.Target, _currentSubject), new Constant(null));
+        return new Equal(Route(ne.Target), new Constant(null));
     }
 
     private bool IsCollectionNav(string name) =>
@@ -248,35 +257,35 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Node
     }
 
     protected override Node Add(Add a) {
-        if (EffectiveMeaning.Lowering.TryLower(a, e => Lower(e, _currentSubject), _propertyTypeResolver, out var node))
+        if (EffectiveMeaning.Lowering.TryLower(a, Route, _propertyTypeResolver, out var node))
             return node;
-        return new SN.Add(Lower(a.Left, _currentSubject), Lower(a.Right, _currentSubject));
+        return new SN.Add(Route(a.Left), Route(a.Right));
     }
 
     protected override Node Subtract(Subtract s) {
-        if (EffectiveMeaning.Lowering.TryLower(s, e => Lower(e, _currentSubject), _propertyTypeResolver, out var node))
+        if (EffectiveMeaning.Lowering.TryLower(s, Route, _propertyTypeResolver, out var node))
             return node;
-        return new SN.Subtract(Lower(s.Left, _currentSubject), Lower(s.Right, _currentSubject));
+        return new SN.Subtract(Route(s.Left), Route(s.Right));
     }
 
     protected override Node Multiply(Multiply m)
-        => new SN.Multiply(Lower(m.Left, _currentSubject), Lower(m.Right, _currentSubject));
+        => new SN.Multiply(Route(m.Left), Route(m.Right));
 
     protected override Node Divide(Divide d)
-        => new SN.Divide(Lower(d.Left, _currentSubject), Lower(d.Right, _currentSubject));
+        => new SN.Divide(Route(d.Left), Route(d.Right));
 
     protected override Node And(And a)
-        => new SN.And(Lower(a.Left, _currentSubject), Lower(a.Right, _currentSubject));
+        => new SN.And(Route(a.Left), Route(a.Right));
 
     protected override Node Or(Or o)
-        => new SN.Or(Lower(o.Left, _currentSubject), Lower(o.Right, _currentSubject));
+        => new SN.Or(Route(o.Left), Route(o.Right));
 
     protected override Node Not(Not n)
-        => new SN.Not(Lower(n.Operand, _currentSubject));
+        => new SN.Not(Route(n.Operand));
 
     protected override Node Comparison(Comparison c) {
-        var loweredLeft = Lower(c.Left, _currentSubject);
-        var loweredRight = Lower(c.Right, _currentSubject);
+        var loweredLeft = Route(c.Left);
+        var loweredRight = Route(c.Right);
 
         // For enum-typed properties, replace string literal with qualified member
         // access: Status == "Active" becomes Status == PatronStatus.Active
@@ -328,8 +337,10 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Node
     }
 
     // Filtered any/all/none/count: a foreach over the navigation collection
-    // (same Member(subject, PascalCase(rel)) ForEachInvoke uses). Bare `count Rel`
-    // is the collection's Count. The host supplies the collection, not the meaning.
+    // (the same Member(subject, PascalCase(rel)) that ForEachInvoke loops over).
+    // Each loop goes into _quantifierLoops and the quantifier itself lowers to the
+    // variable holding its result; Lower puts the loops in front of the expression.
+    // Bare `count Rel` is the collection's Count.
     protected override Node AnyExpr(AnyExpr a) =>
         LowerFilteredQuantifier(a.RelationshipName, a.Body, QuantifierKind.Any);
 
@@ -349,61 +360,72 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Node
 
     private enum QuantifierKind { Any, All, None, Count }
 
+    /// <summary>
+    /// Adds the loop for one quantifier to <see cref="_quantifierLoops"/> and returns
+    /// the variable that holds its result:
+    /// <list type="bullet">
+    /// <item><c>any</c>: true at the first match; false when nothing matches or there are no items.</item>
+    /// <item><c>all</c>: false at the first miss; also false when there are no items.</item>
+    /// <item><c>none</c>: false at the first match; true otherwise.</item>
+    /// <item><c>count … where</c>: the number of matching items.</item>
+    /// </list>
+    /// </summary>
     private Node LowerFilteredQuantifier(
         string relationshipName, DomainExpression body, QuantifierKind kind) {
-        var nav = new Member(_currentSubject, ResolveNavName(relationshipName));
+        var collection = new Member(_currentSubject, ResolveNavName(relationshipName));
         var seq = _quantifierSequence++;
         var item = new Variable($"item{seq}");
-        var predicate = LowerQuantifierBody(relationshipName, body, item);
+        var (bodyLoops, bodyLoopVariables, matches) = LowerQuantifierBody(relationshipName, body, item);
 
-        if (kind == QuantifierKind.Count) {
-            var n = new Variable($"count{seq}");
-            var loop = new ForEachLoop(item, nav, new Block([
-                new IfStatement(predicate, new Block([
-                    new Assignment(n, new SN.Add(n, new Constant(1L)))
-                ]))
-            ]));
-            return new Block(
-                [new Assignment(n, new Constant(0L)), loop, n],
-                [n]);
-        }
+        var result = new Variable(kind switch {
+            QuantifierKind.Any => $"any{seq}",
+            QuantifierKind.All => $"all{seq}",
+            QuantifierKind.None => $"none{seq}",
+            _ => $"count{seq}",
+        });
+        Node initial = kind switch {
+            QuantifierKind.Any => new Constant(false),
+            QuantifierKind.All => new Constant(true),
+            QuantifierKind.None => new Constant(true),
+            _ => new Constant(0L),
+        };
+        Node onItem = kind switch {
+            QuantifierKind.Any => new IfStatement(matches, new Block([
+                new Assignment(result, new Constant(true)), new BreakStatement()])),
+            QuantifierKind.All => new IfStatement(new SN.Not(matches), new Block([
+                new Assignment(result, new Constant(false)), new BreakStatement()])),
+            QuantifierKind.None => new IfStatement(matches, new Block([
+                new Assignment(result, new Constant(false)), new BreakStatement()])),
+            _ => new IfStatement(matches, new Block([
+                new Assignment(result, new SN.Add(result, new Constant(1L)))])),
+        };
 
+        _quantifierLoopVariables.Add(result);
+        _quantifierLoops.Add(new Assignment(result, initial));
         if (kind == QuantifierKind.All) {
-            var saw = new Variable($"saw{seq}");
-            var allOk = new Variable($"all{seq}");
-            var loop = new ForEachLoop(item, nav, new Block([
-                new Assignment(saw, new Constant(true)),
-                new IfStatement(new SN.Not(predicate), new Block([
-                    new Assignment(allOk, new Constant(false)),
-                    new BreakStatement()
-                ]))
-            ]));
-            return new Block(
-                [
-                    new Assignment(saw, new Constant(false)),
-                    new Assignment(allOk, new Constant(true)),
-                    loop,
-                    new SN.And(saw, allOk)
-                ],
-                [saw, allOk]);
+            // `all` over no items is false, so the loop also records that it saw one.
+            var sawItem = new Variable($"sawItem{seq}");
+            _quantifierLoopVariables.Add(sawItem);
+            _quantifierLoops.Add(new Assignment(sawItem, new Constant(false)));
+            _quantifierLoops.Add(new ForEachLoop(item, collection,
+                new Block([.. bodyLoops, new Assignment(sawItem, new Constant(true)), onItem], bodyLoopVariables)));
+            return new SN.And(sawItem, result);
         }
-
-        var found = new Variable($"found{seq}");
-        var matchValue = kind != QuantifierKind.None;
-        var loopAny = new ForEachLoop(item, nav, new Block([
-            new IfStatement(predicate, new Block([
-                new Assignment(found, new Constant(matchValue)),
-                new BreakStatement()
-            ]))
-        ]));
-        return new Block(
-            [new Assignment(found, new Constant(!matchValue)), loopAny, found],
-            [found]);
+        _quantifierLoops.Add(new ForEachLoop(item, collection,
+            new Block([.. bodyLoops, onItem], bodyLoopVariables)));
+        return result;
     }
 
-    private Node LowerQuantifierBody(
+    /// <summary>
+    /// Lowers a quantifier body against the loop's <paramref name="item"/>, using the
+    /// related entity's enum properties. Loops for quantifiers nested in the body are
+    /// returned separately so they run inside the outer loop, once per item.
+    /// </summary>
+    private (List<Node> Loops, List<Variable> LoopVariables, Node Matches) LowerQuantifierBody(
         string relationshipName, DomainExpression body, Variable item) {
         var savedEnums = _enumPropertyNames;
+        var savedLoops = _quantifierLoops;
+        var savedLoopVariables = _quantifierLoopVariables;
         var targetName = ResolveRelationshipTarget(relationshipName);
         if (_domain is not null && targetName is not null) {
             var targetEntity = _domain.Types.OfType<Entity>().FirstOrDefault(e =>
@@ -412,11 +434,16 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Node
                 _enumPropertyNames = DomainToCSharpExporter.GetEnumPropertyNames(
                     targetEntity, _domain, _analysis);
         }
+        _quantifierLoops = [];
+        _quantifierLoopVariables = [];
         try {
-            return Route(body, item, targetName);
+            var matches = Route(body, item, targetName);
+            return (_quantifierLoops, _quantifierLoopVariables, matches);
         }
         finally {
             _enumPropertyNames = savedEnums;
+            _quantifierLoops = savedLoops;
+            _quantifierLoopVariables = savedLoopVariables;
         }
     }
 

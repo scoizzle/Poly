@@ -551,11 +551,12 @@ and invokes the action on each. One fan-out mode, no `any`/`all`/`each` quantifi
 - **Zero matches fail** (no vacuous success).
 - Rollback of already-invoked records is a documented gap (fail-fast guarantees the caller
   always sees the failure; atomic undo is not shipped).
-- **Store-dependent predicates are runtime-only:** a predicate policy that needs the store
-  (collection quantifiers, path-prefix reads, `Rel exists`) is **rejected at analysis** on
-  the C# export path ("is store-dependent … cannot be compiled to standalone C#"). The
-  runtime store path (MCP `create_instance` + `link_instances` + `invoke_action`) supports
-  them. Use a **local policy over the record's own properties** for the standalone export.
+- **Path-prefix / `Rel exists` predicates are rejected at analysis:** a `for` predicate
+  policy that reads path-prefix or `Rel exists` is store-dependent at simulate time and is
+  rejected ("is store-dependent … path-prefix / exists"). Collection-quantifier predicates
+  (`any`/`all`/`none`/`count`) lower to a foreach over the collection in both simulate and
+  export. Use a **local policy over the record's own properties** when the predicate needs
+  path-prefix or exists.
 
 ```poly
 invoke Validate                              # self-only
@@ -762,9 +763,12 @@ customer where Status is "Active" and CreditLimit >= 1000
 #### Collection Quantifiers (Q3′)
 
 Policies can **observe** and **evaluate** collection relationships with `any`, `all`, `none`, and `count`.
-Quantifiers are evaluated at runtime against the instance store's linked targets.
-These require a **OneToMany** relationship from the source entity. The body is an `and`-chain
-(use parentheses for `or` inside the body).
+Quantifiers lower to a foreach over the collection navigation in both simulate and the
+standalone C# export (the host supplies the collection; there is no store-aware runtime
+eval and no throwing export stub). These require a **OneToMany** relationship from the
+source entity. The body is an `and`-chain (use parentheses for `or` inside the body).
+Inside a quantifier body used from an action, a name that is both an action parameter
+and a property of the related entity binds to the **parameter**.
 
 | Form | Meaning | Example |
 |------|---------|---------|
@@ -853,7 +857,7 @@ handling are out of scope — no `at 9am`, no business-day arithmetic, no TZ con
 
 **Shipped in the current product surface:**
 - Arithmetic (`+`, `-`, `*`, `/`) in expressions
-- Conditional effects (`if (expr) { effects } else { effects }`) — store-aware conditions (exists / path-prefix / quantifiers) preprocess like policies
+- Conditional effects (`if (expr) { effects } else { effects }`) — exists / path-prefix / quantifiers lower the same way as in policies (foreach over the collection, member reads)
 - Invoke effect (`invoke ActionName` with optional arguments; cross-entity via `invoke RelName.ActionName`; fan-out via the `for` form — one mode, no `any`/`all`/`each` quantifier)
 - Action parameters (`actionName: action (param: Type, ...)`)
 - `default` constraints and enum-typed properties
@@ -880,16 +884,13 @@ diverging:
 - **`pattern(regex)` validates stored values at write time** (create/assign) — it is a
   constraint, not a query/read filter. Grep-style read-time matching against stored text
   is not expressible.
-- **Store-dependent expressions are runtime-only on the standalone C# export.** The C#
-  export lowers path-prefix reads and `Rel exists` / `not Rel exists` to standalone member
-  access (to-one hops, count-vs-null checks for collections) — those compile. **Only**
-  Q3′ collection quantifiers (`any`/`all`/`none`/`count`) cannot be lowered: the export
-  emits a method that **throws `NotSupportedException` at call time** ("requires store-aware
-  evaluation"); a `for` predicate using such a policy is **rejected at analysis**. The
-  runtime store path (MCP `create_instance` + `link_instances` + `evaluate_policy` /
-  `invoke_action`) is the supported evaluation surface for Q3′ forms. Author store-
-  dependent expressions only when you run through the store, or keep policies local to the
-  record's own properties for the export.
+- **Quantifiers lower to foreach on both paths.** The C# export and the simulator both
+  lower `any`/`all`/`none`/`count … where` to a foreach over the collection navigation
+  (the host supplies the collection). Path-prefix reads and `Rel exists` / `not Rel exists`
+  lower to standalone member access (to-one hops, count-vs-null checks for collections).
+  A `for` predicate policy that reads path-prefix or `Rel exists` is still **rejected at
+  analysis**; a quantifier predicate is allowed and runs as the target's bool method.
+  Fail closed without a store on the simulate path.
 - **Relative date ordering is shipped.** Comparing a date property to `Now`/`Today`
   (e.g. `ExpiryDate < Now`) parses, analyzes, round-trips, and evaluates on the VM
   via `evaluate_policy` / `invoke_action`.
@@ -960,7 +961,7 @@ and lowering pipeline but are **not yet authorable in product DSL**:
 | Scoped filter (`where`) | ✅ | ✅ **shipped** (`rel where and-chain`) | `customer where Status is "Active"` |
 | Owned / related single-hop | ✅ | ✅ **shipped** (path-prefix) | `profile City is "Metropolis"` — same space-delimited syntax as to-one nav; **requires store + link** at `evaluate_policy` |
 | Nested multi-hop path-prefix | ✅ | ✅ **shipped** (to-one hops) | `loan book Title is "Classic"`; many-middle requires `any`/`all` quantifiers |
-| Collection quantifiers (`any`/`all`/`none`/`count`) | ✅ | ✅ **Q3′ shipped** | `any items where Status is "Open"`; store-aware runtime eval before VM lowering. |
+| Collection quantifiers (`any`/`all`/`none`/`count`) | ✅ | ✅ **Q3′ shipped** | `any items where Status is "Open"`; foreach over the collection in simulate and export. |
 | Arithmetic (`+`, `-`, `*`, `/`) | ✅ | ✅ **shipped** | `Total + 5 > 10`, `Total * 2 > 10` |
 | Action parameters | ✅ | ✅ **shipped** | `actionName: action (param: Text) { ... }` |
 

@@ -556,7 +556,9 @@ and invokes the action on each. One fan-out mode, no `any`/`all`/`each` quantifi
   but the export dereferences null. One that tests `exists` on a property (not a
   relationship), at any depth, including a related record's property inside an
   `any`/`all`/`none`/`count` body, is rejected ("tests 'exists' on a property"): simulate
-  and export disagree on whether an unset property exists. Relationship `exists` and
+  and export disagree on whether an unset property exists. Not yet checked: the body of a
+  quantifier nested in another quantifier's body whose relationship does not resolve
+  (analysis does not validate nested quantifiers; simulate and export both fail on it). Relationship `exists` and
   collection-quantifier predicates are allowed and give the same answer in simulate and
   export. Use a **local policy over the record's own properties** instead of a
   path-prefix hop, and compare a property to a value instead of testing `exists`.
@@ -892,7 +894,7 @@ diverging:
   (the host supplies the collection). Path-prefix reads and `Rel exists` / `not Rel exists`
   lower to standalone member access (to-one hops, count-vs-null checks for collections).
   A `for` predicate policy that reads path-prefix or tests `exists` on a property (also
-  inside a quantifier body) is still **rejected at analysis**; a relationship `exists` or
+  inside a quantifier body whose relationship resolves) is still **rejected at analysis**; a relationship `exists` or
   quantifier predicate is allowed and runs as the target's bool method.
   Fail closed without a store on the simulate path.
 - **Relative date ordering is shipped.** Comparing a date property to `Now`/`Today`

@@ -870,7 +870,9 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
         };
         var scope = entity;
         if (quantified is not null) {
-            // Quantifiers are source-side only; an unresolved one is reported by the policy analyzer.
+            // Quantifiers are source-side only. An unresolved quantifier at the top of the
+            // policy is reported by the policy analyzer; one nested inside another
+            // quantifier's body is not validated anywhere yet, so its body goes unchecked here.
             if (!TryResolveRelationship(context, domain, entity.Name, quantified, expr, out var relationship)
                 || relationship is null
                 || !TryResolveEntity(context, domain, relationship.Target.TypeName, expr, out var related)

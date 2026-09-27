@@ -1024,14 +1024,18 @@ public class DomainToCSharpExporterTests {
     }
 
     [Test]
-    public async Task Analysis_ForEachInvoke_PropertyExistsInsideQuantifier_Rejected() {
-        var poly = """
+    [Arguments("any parts where Qty exists")]
+    [Arguments("all parts where Qty exists")]
+    [Arguments("none parts where Qty exists")]
+    [Arguments("count parts where Qty exists > 0")]
+    public async Task Analysis_ForEachInvoke_PropertyExistsInsideQuantifier_Rejected(string pick) {
+        var poly = $$"""
             domain Yard
             Part: entity { Qty: Number }
             Widget: entity {
               Flag: Boolean default(false)
               parts: many Part
-              Pick: policy { any parts where Qty exists }
+              Pick: policy { {{pick}} }
               Mark: action { assign Flag to true }
             }
             Bin: entity {

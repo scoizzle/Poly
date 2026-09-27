@@ -1996,19 +1996,7 @@ public class DomainToCSharpExporterTests {
         var cs = new CSharpGenerator().Generate(new CompilationUnitNode([], null, types, null));
         await Assert.That(cs).Contains("this.Create(");
 
-        var fineCreateStart = cs.IndexOf("static DomainResult<Fine> Create(", StringComparison.Ordinal);
-        await Assert.That(fineCreateStart).IsGreaterThanOrEqualTo(0);
-        var fineCreateBrace = cs.IndexOf('{', fineCreateStart);
-        var depth = 0;
-        var fineCreateEnd = fineCreateBrace;
-        for (var i = fineCreateBrace; i < cs.Length; i++) {
-            if (cs[i] == '{') depth++;
-            else if (cs[i] == '}') {
-                depth--;
-                if (depth == 0) { fineCreateEnd = i + 1; break; }
-            }
-        }
-        var fineCreate = cs[fineCreateStart..fineCreateEnd];
+        var fineCreate = ExportedCSharp.ExtractMethod(cs, "static DomainResult<Fine> Create(");
         await Assert.That(fineCreate).Contains("AttachFines");
 
         var bindStart = cs.IndexOf("BindCreate(string typeName", StringComparison.Ordinal);
@@ -2027,36 +2015,12 @@ public class DomainToCSharpExporterTests {
         await Assert.That(fineCreateCall).DoesNotContain("ContainsKey(\"patron\")");
         await Assert.That(fineCreateCall).DoesNotContain("null");
 
-        var assessStart = cs.IndexOf("DomainResult<Fine> AssessByType(", StringComparison.Ordinal);
-        await Assert.That(assessStart).IsGreaterThanOrEqualTo(0);
-        var assessBrace = cs.IndexOf('{', assessStart);
-        depth = 0;
-        var assessEnd = assessBrace;
-        for (var i = assessBrace; i < cs.Length; i++) {
-            if (cs[i] == '{') depth++;
-            else if (cs[i] == '}') {
-                depth--;
-                if (depth == 0) { assessEnd = i + 1; break; }
-            }
-        }
-        var assessByType = cs[assessStart..assessEnd];
+        var assessByType = ExportedCSharp.ExtractMethod(cs, "DomainResult<Fine> AssessByType(");
         await Assert.That(assessByType).Contains("this.Create(");
         await Assert.That(assessByType).DoesNotContain("_fines.Add");
 
         // F4: unique-path CreateNav defers Add when Create already Attached.
-        var createFinesStart = cs.IndexOf("DomainResult<Fine> CreateFines(", StringComparison.Ordinal);
-        await Assert.That(createFinesStart).IsGreaterThanOrEqualTo(0);
-        var createFinesBrace = cs.IndexOf('{', createFinesStart);
-        depth = 0;
-        var createFinesEnd = createFinesBrace;
-        for (var i = createFinesBrace; i < cs.Length; i++) {
-            if (cs[i] == '{') depth++;
-            else if (cs[i] == '}') {
-                depth--;
-                if (depth == 0) { createFinesEnd = i + 1; break; }
-            }
-        }
-        var createFines = cs[createFinesStart..createFinesEnd];
+        var createFines = ExportedCSharp.ExtractMethod(cs, "DomainResult<Fine> CreateFines(");
         await Assert.That(createFines).Contains("Fine.Create(");
         await Assert.That(createFines).DoesNotContain("_fines.Add");
     }

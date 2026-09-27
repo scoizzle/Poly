@@ -11,10 +11,16 @@ public sealed record LoweredExpression(
     public static LoweredExpression Of(Node value) => new([], [], value);
 
     /// <summary>Places these statements immediately before <paramref name="statement"/>.</summary>
-    public Node Before(Node statement) =>
-        Statements.Count == 0
-            ? statement
-            : new Block([.. Statements, statement], Variables);
+    public Node Before(Node statement) => Before([this], statement);
+
+    /// <summary>Places the statements of every part, in order, immediately before <paramref name="statement"/>.</summary>
+    public static Node Before(IReadOnlyList<LoweredExpression> parts, Node statement) {
+        if (parts.All(p => p.Statements.Count == 0))
+            return statement;
+        return new Block(
+            [.. parts.SelectMany(p => p.Statements), statement],
+            [.. parts.SelectMany(p => p.Variables)]);
+    }
 
     /// <summary>Concatenates statements and variables from several expressions, using <paramref name="value"/>.</summary>
     public static LoweredExpression Combine(IEnumerable<LoweredExpression> parts, Node value) =>

@@ -280,7 +280,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
                 needsConstraintWrap ? assignProp : null,
                 value.Value,
                 uniqueName);
-        return LoweredExpression.Combine([target, value], value.Value).Before(assignment);
+        return LoweredExpression.Before([target, value], assignment);
     }
 
     private static bool HasAssignableConstraints(Property prop) =>
@@ -649,7 +649,6 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
             .Select(binding => _expressionPass.LowerExpression(binding.Expression, Subject))
             .ToList();
         var args = loweredArgs.Select(a => a.Value).ToList();
-        var argStatements = LoweredExpression.Combine(loweredArgs, new Constant(null!));
 
         // Singular cross-entity invoke (OneToOne): the runtime requires exactly one
         // outbound link (ResolveRelationshipTarget) and fails loud otherwise. Enforce the
@@ -664,7 +663,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
             var seq = _forEachInvokeSequence++;
             var resultVar = new Variable($"invoke{seq}");
             var invokeCall = new Invoke(new Member(navMember, i.ActionName), [.. args]);
-            return argStatements.Before(new Block([
+            return LoweredExpression.Before(loweredArgs, new Block([
                 guard,
                 new Assignment(resultVar, invokeCall),
                 new IfStatement(
@@ -673,7 +672,8 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
             ], [resultVar]));
         }
 
-        return argStatements.Before(WrapInvokeResult(new Invoke(new Member(Subject, i.ActionName), [.. args])));
+        return LoweredExpression.Before(loweredArgs,
+            WrapInvokeResult(new Invoke(new Member(Subject, i.ActionName), [.. args])));
     }
 
     private Node WrapInvokeResult(Invoke invokeCall) {
@@ -755,7 +755,6 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
             .Select(binding => argPass.LowerExpression(binding.Expression, Subject))
             .ToList();
         var args = loweredArgs.Select(a => a.Value).ToList();
-        var argStatements = LoweredExpression.Combine(loweredArgs, new Constant(null!));
 
         var invokeCall = new Invoke(new Member(loopVar, e.ActionName), [.. args]);
 
@@ -765,13 +764,13 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         var resultVar = new Variable($"result{seq}");
         var loopBody = new List<Node>();
         if (predicateGuard is not null) loopBody.Add(predicateGuard);
-        loopBody.AddRange(argStatements.Statements);
+        loopBody.AddRange(loweredArgs.SelectMany(a => a.Statements));
         loopBody.Add(new Assignment(matchedVar, new Constant(true)));
         loopBody.Add(new Assignment(resultVar, invokeCall));
         loopBody.Add(new IfStatement(new Poly.Ast.Nodes.Not(new Member(resultVar, "IsSuccess")),
             new Block([ReturnCallerFailureFrom(resultVar)])));
         var loopLocals = new List<Node> { resultVar };
-        loopLocals.AddRange(argStatements.Variables);
+        loopLocals.AddRange(loweredArgs.SelectMany(a => a.Variables));
         var loop = new ForEachLoop(loopVar, navMember, new Block(loopBody, loopLocals));
         var zeroCheck = new IfStatement(
             new Poly.Ast.Nodes.Not(matchedVar),
@@ -1095,7 +1094,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         Entity? targetEntity,
         string? linkRelationshipName = null) {
         var args = new List<Node> { new Constant(nameArg) };
-        var initExprs = new List<LoweredExpression>();
+        var loweredInitializers = new List<LoweredExpression>();
         foreach (var init in initializers) {
             args.Add(new Constant(init.PropertyName));
             var prop = targetEntity?.Properties.FirstOrDefault(p =>
@@ -1111,7 +1110,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
             else {
                 loweredValue = _expressionPass.LowerExpression(init.Expression, Subject);
             }
-            initExprs.Add(loweredValue);
+            loweredInitializers.Add(loweredValue);
             args.Add(NeedsObjectSlotCast(targetEntity, prop, init.PropertyName, loweredValue.Value)
                 ? new TypeCast(loweredValue.Value, DomainToCSharpExporter.StoreJobObjectType())
                 : loweredValue.Value);
@@ -1150,7 +1149,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
                     valueVar));
             }
         }
-        return LoweredExpression.Combine(initExprs, resultVar).Before(new Block(nodes, locals));
+        return LoweredExpression.Before(loweredInitializers, new Block(nodes, locals));
     }
 
     /// <summary>

@@ -364,24 +364,31 @@ public sealed partial record DomainEntityInstance {
     }
 
     /// <summary>
-    /// IDictionary read of a collection nav (OneToMany / ManyToMany): outbound
-    /// linked targets (empty list when unlinked — foreach zero-match, not NRE).
-    /// Throws without a store or domain. For-invoke analysis still requires
-    /// OneToMany; this matches lowering's collection-nav predicate so a
-    /// ManyToMany member read is not a miss.
+    /// Matches a collection nav (OneToMany / ManyToMany) by generated member name.
+    /// Does not read the store — used by ContainsKey so existence does not throw.
     /// </summary>
-    internal bool TryGetCollectionNavigation(string key, out object? value) {
-        value = null;
-        Relationship? match = null;
+    private Relationship? MatchCollectionNavigation(string key) {
         foreach (var nav in NavigationsFor(Entity, Domain)) {
             if (nav.Cardinality is not (RelationshipCardinality.OneToMany
                 or RelationshipCardinality.ManyToMany))
                 continue;
             if (!string.Equals(DomainToCSharpExporter.ToPascalCase(nav.Name), key, StringComparison.Ordinal))
                 continue;
-            match = nav;
-            break;
+            return nav;
         }
+        return null;
+    }
+
+    /// <summary>
+    /// IDictionary read of a collection nav (OneToMany / ManyToMany): outbound
+    /// linked targets (empty list when unlinked — foreach zero-match, not NRE).
+    /// Throws without a store or domain on the value read. For-invoke analysis
+    /// still requires OneToMany; this matches lowering's collection-nav predicate
+    /// so a ManyToMany member read is not a miss.
+    /// </summary>
+    internal bool TryGetCollectionNavigation(string key, out object? value) {
+        value = null;
+        var match = MatchCollectionNavigation(key);
         if (match is null)
             return false;
 

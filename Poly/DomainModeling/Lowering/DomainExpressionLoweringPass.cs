@@ -31,16 +31,18 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Node
     private readonly IReadOnlyDictionary<string, Node> _parameters;
     private readonly HashSet<string>? _actionParameterNames;
     private readonly bool _useThisReference;
-    private readonly IReadOnlyDictionary<string, string>? _enumPropertyNames;
+    private IReadOnlyDictionary<string, string>? _enumPropertyNames;
     private readonly Func<string, string>? _navigationNameResolver;
     private readonly Func<string, bool>? _isCollectionNavigation;
     private readonly Func<string, bool>? _isRelationshipNavigation;
     private readonly Func<string, string?>? _propertyTypeResolver;
     private readonly Domain? _domain;
+    private readonly INodeMetadataProvider? _analysis;
     private readonly ExpressionMeaning _meaning;
     private readonly ExpressionFormRegistry? _forms;
     private string? _sourceEntityName;
     private Node _currentSubject = null!;
+    private int _quantifierSequence;
 
     /// <param name="parameters">
     /// Optional map of parameter names to their Syntax AST nodes.
@@ -69,6 +71,7 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Node
         _isRelationshipNavigation = context.IsRelationshipNavigation;
         _propertyTypeResolver = context.PropertyTypeResolver;
         _domain = context.Domain;
+        _analysis = context.Analysis;
         _meaning = context.Meaning ?? ExpressionMeaning.Empty;
         _forms = context.Forms;
         _sourceEntityName = context.SourceEntityName;
@@ -324,44 +327,98 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Node
         return null;
     }
 
-    // Filtered any/all/none/count: runtime Store jobs (Notify-shaped). C# export
-    // keeps in-memory collection Count for bare `count Rel`; filtered still throws.
+    // Filtered any/all/none/count: a foreach over the navigation collection
+    // (same Member(subject, PascalCase(rel)) ForEachInvoke uses). Bare `count Rel`
+    // is the collection's Count. The host supplies the collection, not the meaning.
     protected override Node AnyExpr(AnyExpr a) =>
-        _useThisReference
-            ? throw Q3NotSupported("any", a.RelationshipName)
-            : StoreQuantifier("AnyRelated", a.RelationshipName, a.Body);
+        LowerFilteredQuantifier(a.RelationshipName, a.Body, QuantifierKind.Any);
 
     protected override Node AllExpr(AllExpr a) =>
-        _useThisReference
-            ? throw Q3NotSupported("all", a.RelationshipName)
-            : StoreQuantifier("AllRelated", a.RelationshipName, a.Body);
+        LowerFilteredQuantifier(a.RelationshipName, a.Body, QuantifierKind.All);
 
     protected override Node NoneExpr(NoneExpr n) =>
-        _useThisReference
-            ? throw Q3NotSupported("none", n.RelationshipName)
-            : StoreQuantifier("NoneRelated", n.RelationshipName, n.Body);
+        LowerFilteredQuantifier(n.RelationshipName, n.Body, QuantifierKind.None);
 
     protected override Node CountExpr(CountExpr c) {
-        if (_useThisReference) {
-            if (c.Body is not null)
-                throw Q3NotSupported("count", c.RelationshipName);
+        if (c.Body is null)
             return new Member(
                 new Member(_currentSubject, ResolveNavName(c.RelationshipName)),
                 "Count");
-        }
-        return StoreQuantifier("CountRelated", c.RelationshipName, c.Body);
+        return LowerFilteredQuantifier(c.RelationshipName, c.Body, QuantifierKind.Count);
     }
 
-    private Node StoreQuantifier(string job, string relationshipName, DomainExpression? body) =>
-        new Invoke(
-            new Member(_currentSubject, job),
-            new Constant(relationshipName),
-            new Constant(body));
+    private enum QuantifierKind { Any, All, None, Count }
 
-    private static Exception Q3NotSupported(string quantifier, string relName) =>
-        new NotSupportedException(
-            $"Collection quantifier '{quantifier} {relName} …' requires store-aware evaluation " +
-            "which is not yet implemented on the VM compilation path.");
+    private Node LowerFilteredQuantifier(
+        string relationshipName, DomainExpression body, QuantifierKind kind) {
+        var nav = new Member(_currentSubject, ResolveNavName(relationshipName));
+        var seq = _quantifierSequence++;
+        var item = new Variable($"item{seq}");
+        var predicate = LowerQuantifierBody(relationshipName, body, item);
+
+        if (kind == QuantifierKind.Count) {
+            var n = new Variable($"count{seq}");
+            var loop = new ForEachLoop(item, nav, new Block([
+                new IfStatement(predicate, new Block([
+                    new Assignment(n, new SN.Add(n, new Constant(1L)))
+                ]))
+            ]));
+            return new Block(
+                [new Assignment(n, new Constant(0L)), loop, n],
+                [n]);
+        }
+
+        if (kind == QuantifierKind.All) {
+            var saw = new Variable($"saw{seq}");
+            var allOk = new Variable($"all{seq}");
+            var loop = new ForEachLoop(item, nav, new Block([
+                new Assignment(saw, new Constant(true)),
+                new IfStatement(new SN.Not(predicate), new Block([
+                    new Assignment(allOk, new Constant(false)),
+                    new BreakStatement()
+                ]))
+            ]));
+            return new Block(
+                [
+                    new Assignment(saw, new Constant(false)),
+                    new Assignment(allOk, new Constant(true)),
+                    loop,
+                    new SN.And(saw, allOk)
+                ],
+                [saw, allOk]);
+        }
+
+        var found = new Variable($"found{seq}");
+        var matchValue = kind != QuantifierKind.None;
+        var loopAny = new ForEachLoop(item, nav, new Block([
+            new IfStatement(predicate, new Block([
+                new Assignment(found, new Constant(matchValue)),
+                new BreakStatement()
+            ]))
+        ]));
+        return new Block(
+            [new Assignment(found, new Constant(!matchValue)), loopAny, found],
+            [found]);
+    }
+
+    private Node LowerQuantifierBody(
+        string relationshipName, DomainExpression body, Variable item) {
+        var savedEnums = _enumPropertyNames;
+        var targetName = ResolveRelationshipTarget(relationshipName);
+        if (_domain is not null && targetName is not null) {
+            var targetEntity = _domain.Types.OfType<Entity>().FirstOrDefault(e =>
+                string.Equals(e.Name, targetName, StringComparison.Ordinal));
+            if (targetEntity is not null)
+                _enumPropertyNames = DomainToCSharpExporter.GetEnumPropertyNames(
+                    targetEntity, _domain, _analysis);
+        }
+        try {
+            return Route(body, item, targetName);
+        }
+        finally {
+            _enumPropertyNames = savedEnums;
+        }
+    }
 
     protected override Node Library(DomainExpression expr) {
         if (EffectiveMeaning.Lowering.TryLower(expr, Route, _propertyTypeResolver, out var node))

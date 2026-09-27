@@ -166,19 +166,14 @@ public class Item4FailBeforeMutateTests {
         var lowered = pass.LowerActionBody(action.Effects);
         await Assert.That(lowered).IsNotNull();
         var flat = Flatten(lowered!).ToList();
-        var anyRelated = flat.OfType<Invoke>().FirstOrDefault(inv =>
-            inv.Delegate is Member { MemberName: "AnyRelated" });
-        await Assert.That(anyRelated).IsNotNull();
-        // StoreQuantifier packs DomainExpression body as Constant — must stay
-        // PropertyAccess Active (related), not Literal(true) from subject assign.
-        var bodyConst = anyRelated!.Arguments.OfType<Constant>()
-            .Select(c => c.Value)
-            .OfType<DomainExpression>()
-            .FirstOrDefault();
-        await Assert.That(bodyConst).IsNotNull();
-        await Assert.That(bodyConst).IsTypeOf<PropertyAccess>();
-        await Assert.That(((PropertyAccess)bodyConst!).Name).IsEqualTo("Active");
-        await Assert.That(bodyConst is Literal).IsFalse();
+        var loop = flat.OfType<ForEachLoop>().FirstOrDefault(l =>
+            l.Collection is Member { MemberName: "Widgets" });
+        await Assert.That(loop).IsNotNull();
+        // Related-entity Active is Member on the loop variable, not Literal(true)
+        // from the subject assign Active to true.
+        var activeOnItem = Flatten(loop!.Body).OfType<Member>().FirstOrDefault(m =>
+            m.MemberName == "Active" && ReferenceEquals(m.Value, loop.LoopVariable));
+        await Assert.That(activeOnItem).IsNotNull();
     }
 
     private static (Domain Domain, AnalysisResult Analysis) Evolve(string poly) {

@@ -982,7 +982,8 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
 
         // Subject-rooted PropertyAccess only: related-entity props inside
         // quantifier bodies / RelationshipNavigation.TargetProperty must not
-        // inherit subject assign RHS (entry/exit VM lowers StoreQuantifier).
+        // inherit subject assign RHS (those bodies rebind the subject to the
+        // loop variable over the navigation collection).
         protected override DomainExpression AnyExpr(AnyExpr e) => e;
         protected override DomainExpression AllExpr(AllExpr e) => e;
         protected override DomainExpression NoneExpr(NoneExpr e) => e;

@@ -1,8 +1,6 @@
 using Poly.DomainModeling.Analysis;
-using Poly.DomainModeling.Dispatch;
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
-using Poly.Interpretation;
 using Poly.Interpretation.Analysis.Semantics;
 
 using Action = Poly.DomainModeling.Ontology.Action;
@@ -141,7 +139,7 @@ public sealed partial record DomainEntityInstance {
         // Empty bodies: analysis resolves Member(entity, action/policy) as ITypeMethod.
         // VM does not inline them; InvokeNamed / generated C# owns the implementation.
         var methodNames = new HashSet<string>(StringComparer.Ordinal) {
-            "Notify", "EnsureUnique", "AnyRelated", "AllRelated", "NoneRelated", "CountRelated",
+            "Notify", "EnsureUnique",
             "ExistsRelated", "GetRelatedOne", "LinkRelated"
         };
         // Runtime factories for mixed if+create. Dictionary slot plus pair
@@ -178,24 +176,6 @@ public sealed partial record DomainEntityInstance {
             Parameters: [
                 new Parameter("relationshipName", str),
                 new Parameter("target", obj)
-            ],
-            Body: new Block([])));
-        foreach (var quantifier in new[] { "AnyRelated", "AllRelated", "NoneRelated" }) {
-            methods.Add(new MethodDefinitionNode(
-                quantifier,
-                boolean,
-                Parameters: [
-                    new Parameter("relationshipName", str),
-                    new Parameter("body", obj)
-                ],
-                Body: new Block([])));
-        }
-        methods.Add(new MethodDefinitionNode(
-            "CountRelated",
-            i64,
-            Parameters: [
-                new Parameter("relationshipName", str),
-                new Parameter("body", obj)
             ],
             Body: new Block([])));
         foreach (var factory in new[] { "Create", "CreateIn", "ProbeCreate" }) {
@@ -447,29 +427,6 @@ public sealed partial record DomainEntityInstance {
             .ToList();
     }
 
-    /// <summary>
-    /// Returns linked target instances for a cross-entity invoke, optionally
-    /// filtered by a predicate expression evaluated against each target's bag.
-    /// </summary>
-    private IReadOnlyList<DomainEntityInstance> GetRelatedTargets(
-        string relationshipName, DomainExpression? filter) {
-        var all = GetOutboundRelatedInstances(relationshipName);
-        if (filter is null || all.Count == 0) return all;
-
-        var result = new List<DomainEntityInstance>();
-        foreach (var t in all) {
-            var loweringPass = new DomainExpressionLoweringPass(new LoweringContext(new Parameter("entity"), Domain: Domain));
-            var lowered = loweringPass.Lower(filter,
-                new Parameter("entity", new TypeReference(t.Entity.Name)));
-            var compiled = Interpreter.Compile(lowered, t._typeDefAnalyzer);
-            using var exec = Interpreter.Execute(compiled,
-                s => s.SetArgs(new object?[] { t }));
-            if (exec.Result.GetValue<bool>())
-                result.Add(t);
-        }
-        return result;
-    }
-
     // ── Collection quantifier Store reads ─────────────────────────────────────
 
     /// <summary>
@@ -494,56 +451,6 @@ public sealed partial record DomainEntityInstance {
         var targets = GetOutboundRelatedInstances(pa.Name);
         present = targets.Count > 0;
         return true;
-    }
-
-    private bool EvaluateAnyExpr(AnyExpr a) {
-        var targets = GetOutboundRelatedInstances(a.RelationshipName);
-        foreach (var t in targets) {
-            if (EvaluateBodyOnTarget(a.Body, t))
-                return true;
-        }
-        return false;
-    }
-
-    private bool EvaluateAllExpr(AllExpr a) {
-        var targets = GetOutboundRelatedInstances(a.RelationshipName);
-        if (targets.Count == 0) return false; // no vacuous all
-        foreach (var t in targets) {
-            if (!EvaluateBodyOnTarget(a.Body, t))
-                return false;
-        }
-        return true;
-    }
-
-    private bool EvaluateNoneExpr(NoneExpr n) {
-        return !EvaluateAnyExpr(new AnyExpr(n.RelationshipName, n.Body));
-    }
-
-    private long EvaluateCountExpr(CountExpr c) {
-        var targets = GetOutboundRelatedInstances(c.RelationshipName);
-        if (c.Body is null) return targets.Count;
-
-        long count = 0;
-        foreach (var t in targets) {
-            if (EvaluateBodyOnTarget(c.Body, t))
-                count++;
-        }
-        return count;
-    }
-
-    /// <summary>
-    /// Lowers, compiles, and executes a body expression against a target
-    /// instance's property bag and type definition. Returns the boolean
-    /// result. This is the same pattern used by <see cref="GetRelatedTargets"/>.
-    /// </summary>
-    private static bool EvaluateBodyOnTarget(DomainExpression body, DomainEntityInstance target) {
-        var pass = new DomainExpressionLoweringPass(new LoweringContext(new Parameter("entity"), Domain: target.Domain));
-        var lowered = pass.Lower(body,
-            new Parameter("entity", new TypeReference(target.Entity.Name)));
-        var compiled = Interpreter.Compile(lowered, target._typeDefAnalyzer);
-        using var exec = Interpreter.Execute(compiled,
-            s => s.SetArgs(new object?[] { target }));
-        return exec.Result.GetValue<bool>();
     }
 
     /// <summary>

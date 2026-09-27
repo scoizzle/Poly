@@ -3065,7 +3065,7 @@ public class DomainEntityInstanceTests {
     }
 
     [Test]
-    public async Task EvaluatePolicy_Quantifier_WithoutStore_Throws() {
+    public async Task EvaluatePolicy_Quantifier_WithoutStore_EmptyCollection_ReturnsFalse() {
         var target = new Entity("Target", [
             new Property("Value", new DomainTypeReference("Number"), [])
         ], [], [], []);
@@ -3079,7 +3079,7 @@ public class DomainEntityInstanceTests {
         var domain = DomainTestFactory.Create("Test", [source, target], [rel]);
         var src = DomainEntityInstance.Create(source, domain: domain); // no store
         var policy = domain.Types.OfType<Entity>().First(e => e.Name == "Source").Policies.First(p => p.Name == "HasBig");
-        await Assert.That(() => src.EvaluatePolicy(policy)).Throws<InvalidOperationException>();
+        await Assert.That(src.EvaluatePolicy(policy)).IsFalse();
     }
 
     // ── owned-3: to-one RelationshipNavigation in policy evaluation ──

@@ -348,22 +348,7 @@ public sealed partial class DomainToCSharpExporter {
 
         // ── Policies as bool methods ──────────────────────────────
         foreach (var policy in entity.Policies) {
-            Node? body;
-            try {
-                body = LowerExpressionToMethodBody(policy.Expression, entity, domain, analysis: metadata);
-            }
-            catch (NotSupportedException) {
-                // Collection quantifiers (any/all/none/count) and other store-dependent
-                // expressions cannot be lowered to standalone C# methods yet.
-                // Generate a runtime exception so calling code fails loud.
-                body = new Block([
-                    new ThrowStatement(
-                        new New(
-                            new NamedTypeReference("NotSupportedException"),
-                            new Constant(
-                                $"Policy '{policy.Name}' requires store-aware evaluation and cannot be compiled to standalone C.")))
-                ]);
-            }
+            var body = LowerExpressionToMethodBody(policy.Expression, entity, domain, analysis: metadata);
             methods.Add(new MethodDefinitionNode(
                 policy.Name,
                 new PrimitiveTypeReference(PrimType.Boolean),

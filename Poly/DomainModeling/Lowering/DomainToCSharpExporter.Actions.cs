@@ -461,12 +461,27 @@ public sealed partial class DomainToCSharpExporter {
             EnumPropertyNames: enumProps,
             NavigationNameResolver: EffectLoweringPass.BuildNavigationNameResolver(entity, domain, analysis),
             IsCollectionNavigation: EffectLoweringPass.BuildIsCollectionNavigation(entity, domain, analysis),
-            PropertyTypeResolver: EffectLoweringPass.BuildPropertyTypeResolver(entity));
+            PropertyTypeResolver: EffectLoweringPass.BuildPropertyTypeResolver(entity),
+            SourceEntityName: entity.Name);
         var pass = new DomainExpressionLoweringPass(context);
         var lowered = pass.Lower(expr, new Parameter("entity"));
-        return lowered is not null
-            ? new Block([new Return(lowered)])
-            : null;
+        return lowered is null ? null : AsBooleanMethodBody(lowered);
+    }
+
+    /// <summary>
+    /// Policy methods return a bool. A filtered quantifier lowers to a Block whose
+    /// last node is the result; wrap that in <c>return</c> so the generator emits a
+    /// statement body rather than <c>=&gt; { … }</c>.
+    /// </summary>
+    private static Node AsBooleanMethodBody(Node lowered) {
+        if (lowered is not Block block)
+            return new Block([new Return(lowered)]);
+        var nodes = block.Nodes.ToList();
+        if (nodes.Count == 0)
+            return new Block([new Return(new Constant(false))]);
+        if (nodes[^1] is not Return)
+            nodes[^1] = new Return(nodes[^1]);
+        return new Block(nodes, block.Variables);
     }
 
     internal static bool TryResolveEnumType(Domain? domain, INodeMetadataProvider? analysis, string typeName, out EnumType? enumType) {

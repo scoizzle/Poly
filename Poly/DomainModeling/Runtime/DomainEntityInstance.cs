@@ -364,7 +364,8 @@ public sealed partial record DomainEntityInstance {
     /// Evaluates <paramref name="policy"/> against this instance using the
     /// VM (direct AST lowering — canonical path). Returns <c>true</c> if the
     /// policy's guard expression is satisfied.
-    /// Store-aware expressions lower in-tree (nav Member reads / Store jobs).
+    /// Store-aware expressions lower in-tree (nav Member reads / Store jobs
+    /// for exists and to-one hops; collection quantifiers foreach the nav).
     /// </summary>
     public bool EvaluatePolicy(Policy policy) {
         ArgumentNullException.ThrowIfNull(policy);

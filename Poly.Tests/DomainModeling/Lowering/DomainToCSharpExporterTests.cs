@@ -6,6 +6,7 @@ using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
+using Poly.DomainModeling.Runtime;
 using Poly.Interpretation.CSharp;
 
 namespace Poly.Tests.DomainModeling.Lowering;
@@ -3053,6 +3054,166 @@ public class DomainToCSharpExporterTests {
         await Assert.That(child).IsNotNull();
         var childPeer = childType.GetProperty("Peer")!.GetValue(child);
         await Assert.That(ReferenceEquals(childPeer, peer)).IsTrue();
+    }
+
+    [Test]
+    public async Task Export_HasOverdueLoans_PrintsForeachOverLoans() {
+        var (domain, analysis) = ParseAndAnalyze(LibraryCheckoutDsl);
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var cs = new CSharpGenerator().Generate(types);
+
+        var start = cs.IndexOf("bool HasOverdueLoans(", StringComparison.Ordinal);
+        await Assert.That(start).IsGreaterThanOrEqualTo(0);
+        var brace = cs.IndexOf('{', start);
+        var depth = 0;
+        var end = brace;
+        for (var i = brace; i < cs.Length; i++) {
+            if (cs[i] == '{') depth++;
+            else if (cs[i] == '}') {
+                depth--;
+                if (depth == 0) { end = i + 1; break; }
+            }
+        }
+        var method = cs[start..end];
+        await Assert.That(method).Contains("foreach");
+        await Assert.That(method).Contains("this.Loans");
+        await Assert.That(method).DoesNotContain("AnyRelated");
+        await Assert.That(method).DoesNotContain("NotSupportedException");
+        await Assert.That(method).DoesNotContain("store-aware");
+    }
+
+    [Test]
+    public async Task Patron_HasOverdueLoans_SimulateAndGeneratedCSharp_Agree() {
+        var (domain, analysis) = ParseAndAnalyze(LibraryCheckoutDsl);
+        await Assert.That(analysis.HasErrors).IsFalse();
+
+        Entity E(string n) => domain.Types.OfType<Entity>().First(t => t.Name == n);
+        var policy = E("Patron").Policies.First(p => p.Name == "HasOverdueLoans");
+        var store = new DomainInstanceStore();
+
+        DomainEntityInstance NewPatron(string email) {
+            var p = DomainEntityInstance.Create(E("Patron"), new Dictionary<string, object?> {
+                ["Name"] = "Ada",
+                ["Email"] = email,
+                ["MaxItems"] = 5L
+            }, domain);
+            store.Add(p);
+            return p;
+        }
+
+        DomainEntityInstance NewLoan(string status) {
+            var loan = DomainEntityInstance.Create(E("Loan"), new Dictionary<string, object?> {
+                ["Status"] = status
+            }, domain);
+            store.Add(loan);
+            return loan;
+        }
+
+        var withOverdue = NewPatron("ada-overdue@lib.test");
+        store.Link("loans", withOverdue, NewLoan("Active"));
+        store.Link("loans", withOverdue, NewLoan("Overdue"));
+        var withoutOverdue = NewPatron("ada-clear@lib.test");
+        store.Link("loans", withoutOverdue, NewLoan("Active"));
+        store.Link("loans", withoutOverdue, NewLoan("Returned"));
+
+        var simTrue = withOverdue.EvaluatePolicy(policy);
+        var simFalse = withoutOverdue.EvaluatePolicy(policy);
+        await Assert.That(simTrue).IsTrue();
+        await Assert.That(simFalse).IsFalse();
+
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var cs = new CSharpGenerator().Generate(types);
+        var tree = CSharpSyntaxTree.ParseText("#nullable enable\n" + cs);
+        var references = ((string?)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES"))
+            ?.Split(Path.PathSeparator)
+            .Select(p => (MetadataReference)MetadataReference.CreateFromFile(p))
+            .ToArray() ?? [];
+        var compilation = CSharpCompilation.Create(
+            "HasOverdueLoansPrint",
+            [tree],
+            references,
+            new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+        using var pe = new MemoryStream();
+        var emit = compilation.Emit(pe);
+        var emitErrors = emit.Diagnostics
+            .Where(d => d.Severity == Microsoft.CodeAnalysis.DiagnosticSeverity.Error)
+            .Select(d => d.ToString())
+            .ToArray();
+        await Assert.That(emitErrors).IsEmpty();
+        pe.Position = 0;
+        var alc = new System.Runtime.Loader.AssemblyLoadContext(
+            "HasOverdueLoansPrint", isCollectible: true);
+        var asm = alc.LoadFromStream(pe);
+
+        var patronType = asm.GetType("Patron")!;
+        var loanType = asm.GetType("Loan")!;
+
+        object InvokeCreate(Type type, params (string Name, object? Value)[] named) {
+            var create = type.GetMethods(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)
+                .Where(m => m.Name == "Create")
+                .OrderByDescending(m => m.GetParameters().Length)
+                .First();
+            var parameters = create.GetParameters();
+            var callArgs = new object?[parameters.Length];
+            for (var i = 0; i < parameters.Length; i++) {
+                var match = named.FirstOrDefault(n =>
+                    string.Equals(n.Name, parameters[i].Name, StringComparison.OrdinalIgnoreCase));
+                if (match.Name is not null)
+                    callArgs[i] = match.Value;
+                else if (parameters[i].HasDefaultValue)
+                    callArgs[i] = parameters[i].DefaultValue;
+                else if (parameters[i].ParameterType == typeof(string))
+                    callArgs[i] = "";
+                else if (parameters[i].ParameterType == typeof(bool))
+                    callArgs[i] = false;
+                else
+                    callArgs[i] = null;
+            }
+            return create.Invoke(null, callArgs)!;
+        }
+
+        object ResultValue(object result) =>
+            result.GetType().GetProperty("Value")!.GetValue(result)!;
+
+        bool ResultOk(object result) =>
+            (bool)result.GetType().GetProperty("IsSuccess")!.GetValue(result)!;
+
+        object RequireCreated(object created) {
+            if (!ResultOk(created))
+                throw new InvalidOperationException(
+                    created.GetType().GetProperty("ErrorMessage")?.GetValue(created) as string
+                    ?? "Create failed.");
+            return ResultValue(created);
+        }
+
+        object MakeLoan(string status) =>
+            RequireCreated(InvokeCreate(loanType, ("status", status)));
+
+        object LoanList(params object[] loans) {
+            var arr = Array.CreateInstance(loanType, loans.Length);
+            for (var i = 0; i < loans.Length; i++)
+                arr.SetValue(loans[i], i);
+            return arr;
+        }
+
+        object MakePatron(string email, params object[] loans) =>
+            RequireCreated(InvokeCreate(patronType,
+                ("name", "Ada"),
+                ("email", email),
+                ("maxItems", 5L),
+                ("loans", LoanList(loans))));
+
+        bool HasOverdue(object patron) =>
+            (bool)patronType.GetMethod("HasOverdueLoans")!.Invoke(patron, null)!;
+
+        var printTrue = HasOverdue(MakePatron("ada-overdue@lib.test",
+            MakeLoan("Active"), MakeLoan("Overdue")));
+        var printFalse = HasOverdue(MakePatron("ada-clear@lib.test",
+            MakeLoan("Active"), MakeLoan("Returned")));
+        await Assert.That(printTrue).IsEqualTo(simTrue);
+        await Assert.That(printFalse).IsEqualTo(simFalse);
+        await Assert.That(printTrue).IsTrue();
+        await Assert.That(printFalse).IsFalse();
     }
 
     private static string[] CompileExported(string cs) {

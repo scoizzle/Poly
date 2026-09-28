@@ -554,13 +554,13 @@ and invokes the action on each. One fan-out mode, no `any`/`all`/`each` quantifi
 - **Some predicates are rejected at analysis:** a `for` predicate policy that reads a
   path-prefix hop is rejected ("reads a path-prefix hop"): an unlinked hop simulates false
   but the export dereferences null. One that tests `exists` on a property (not a
-  relationship), at any depth, including a related record's property inside an
-  `any`/`all`/`none`/`count` body, is rejected ("tests 'exists' on a property"): simulate
-  and export disagree on whether an unset property exists. Not yet checked: the body of a
-  quantifier nested in another quantifier's body whose relationship does not resolve
-  (analysis does not validate nested quantifiers; simulate and export both fail on it). Relationship `exists` and
-  collection-quantifier predicates are allowed and give the same answer in simulate and
-  export. Use a **local policy over the record's own properties** instead of a
+  relationship) is rejected ("tests 'exists' on a property") wherever every quantifier
+  on the way to it resolves: on the record itself, or on a related record inside an
+  `any`/`all`/`none`/`count` body. Simulate and export disagree on whether an unset
+  property exists. Below a nested quantifier whose relationship does not resolve, the
+  check does not run (analysis does not validate nested quantifiers yet; simulate and
+  export both fail on such a policy). Relationship `exists` and collection-quantifier
+  predicates are allowed and give the same answer in simulate and export. Use a **local policy over the record's own properties** instead of a
   path-prefix hop, and compare a property to a value instead of testing `exists`.
 
 ```poly

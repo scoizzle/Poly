@@ -32,7 +32,7 @@ MCP: harness — not a product door
 | Libraries extend the session | `uses` ids; compilation unit = library; unknown/duplicate ids fail closed |
 | Post-analyze Lower → artifact set | Catalog on session; Syntax module privileged for meaning + sim; other artifacts ≠ second sim |
 | Doors map the catalog | Opt-in hosts; no core `Main`; doors do not invent operations |
-| No consumer lowering flags | No `UseThisReference` twins; no Lower-inside-analysis |
+| Do not add consumer-specific lowering flags | No `UseThisReference` twins; no Lower-inside-analysis |
 
 **Forbidden:** Effect/Domain walk as shipped meaning; emitter/ABI one-offs; MCP as customer API; treating scratch store / `Stay.Create` / Store job names as architecture; DEI/MCP walk as product proof (the module is).
 
@@ -58,7 +58,7 @@ Neurosymbolic platform: author structured domain → lower to symbolic AST → a
 | Domain lowers to generic ops | StageTransition / invoke / create / unique / clocks → existing Syntax + Store jobs on the one module |
 | Product doors are opt-in | `uses`; CLI seeds ids only |
 | MCP is harness | Author / inspect / simulate with caller context — not customer API |
-| Lowered module is meaning | Artifact set on session; Syntax module privileged; fix Lower when sim ≠ print |
+| Lowered module is **domain meaning** | Artifact set on session; Syntax module privileged; fix Lower when sim ≠ print |
 | Extend in the pipeline | Lower / analyze / replace — not emitter/ABI patches |
 | Analysis required for semantics | Fail closed without `AnalysisResult` |
 | One coherent path | Compose existing mechanisms |
@@ -125,7 +125,7 @@ No intermediate primitive IR. Keep the emitter a generic compiler of known nodes
 | Module | `DomainProgramProjection.ToSyntax` — types + ops; no `Main` |
 | Policy eval | `DomainEntityInstance.EvaluatePolicy` → lower → `Interpreter` |
 
-Expand to **generic** Syntax (no domain opcodes). StageTransition / self-invoke / cross-entity / for-invoke / create / unique / clocks — shapes and residual debt: [`docs/interpretation/domain-execution-model.md`](interpretation/domain-execution-model.md). ADR: [`docs/decisions/2026-06-08-domain-lowering-boundary.md`](decisions/2026-06-08-domain-lowering-boundary.md). Named invoke runs module method bodies from `session.Lower` (same tree print uses). Do not add consumer lowering flags or a second effect interpreter.
+Expand to **generic** Syntax (no domain opcodes). StageTransition / self-invoke / cross-entity / for-invoke / create / unique / clocks — shapes and residual debt: [`docs/interpretation/domain-execution-model.md`](interpretation/domain-execution-model.md). ADR: [`docs/decisions/2026-06-08-domain-lowering-boundary.md`](decisions/2026-06-08-domain-lowering-boundary.md). Named invoke runs module method bodies from `session.Lower` (same tree print uses). Do not add consumer-specific lowering flags or a second effect interpreter.
 
 ### 3.5 Introspection
 
@@ -170,6 +170,7 @@ Simulate = Interpreter on lowered module bodies with caller-supplied context —
 |------|------|
 | Always-on tenets / target | [`AGENTS.md`](../AGENTS.md) |
 | Frozen architecture | This file §0 · [`decisions/2026-09-04-frozen-core-pipeline.md`](decisions/2026-09-04-frozen-core-pipeline.md) |
+| Lowered module = domain meaning | [`decisions/2026-09-05-lowered-module-is-domain-meaning.md`](decisions/2026-09-05-lowered-module-is-domain-meaning.md) · always-on Agent target |
 | Principles (Rule + How) | [`decisions/2026-core-engineering-principles.md`](decisions/2026-core-engineering-principles.md) |
 | Trust bar | [`decisions/2026-07-11-platform-trust-bar-and-dogfood.md`](decisions/2026-07-11-platform-trust-bar-and-dogfood.md) |
 | Domain library / MCP harness | [`decisions/2026-08-15-domain-library-extensions-mcp-harness.md`](decisions/2026-08-15-domain-library-extensions-mcp-harness.md) |
@@ -188,5 +189,5 @@ Simulate = Interpreter on lowered module bodies with caller-supplied context —
 5. New process door is opt-in `uses`?  
 6. MCP change is harness on the same AST?  
 7. Updated this file if a listed mechanism changed?  
-8. Respected frozen core / no new consumer lowering flag?  
+8. Respected frozen core / no new consumer-specific lowering flag?  
 9. Build + tests green (`AGENTS.md` Ops)?

@@ -22,7 +22,7 @@ Non-negotiable. Depth: [`docs/decisions/2026-core-engineering-principles.md`](do
 
 **When tenets pull opposite ways:** prefer **domain fidelity and end-to-end ownership via CORE seams** over a locally smaller wrong path; prefer a **smaller tested loop** over a larger untested batch; prefer a **known multi-impl seam** over a single-path hack that will be ripped out; prefer **no speculative framework** when the second use is imaginary.
 
-**Hard nos:** `Main` in core · `Comment` / `null` lower / second interpreter as shipped meaning · consumer lowering flags · Lower-inside-analysis · twin trees (`UseThisReference`) · DEI/MCP walk as product-surface proof · empty artifact catalog when required · inventing a second CURRENT.
+**Hard nos:** `Main` in core · `Comment` / `null` lower / second interpreter as shipped meaning · consumer-specific lowering flag · Lower-inside-analysis · twin trees (`UseThisReference`) · DEI/MCP walk as product-surface proof · empty artifact catalog when required · inventing a second CURRENT.
 
 ---
 
@@ -38,7 +38,7 @@ Architecture = **AST / Node / Analysis** + libraries that publish bags and artif
 | Analysis: bags + **node replacement** | Side tables; semantic consume without `AnalysisResult` |
 | `Domain` = facts (`uses` ids); session loads libraries | `Domain.ResolveHost`; dialects; `Main` in core |
 | Shipped ⊆ complete generic Syntax tree | `Comment` / `null` lower / second interpreter / domain opcodes |
-| Clean analyze → **`session.Lower`** → **artifact set** on session | Lower-inside-analysis; empty catalog when required; consumer lowering flag |
+| Clean analyze → **`session.Lower`** → **artifact set** on session | Lower-inside-analysis; empty catalog when required; consumer-specific lowering flag |
 | Syntax module privileged for **meaning + Interpreter sim** | Twin trees; producers / DEI / Effect-IR as second sim |
 | New meaning: lower / analyze / **replace nodes** | Emitter patch, ABI one-off |
 
@@ -48,7 +48,7 @@ Compose current machinery (Interpreter, exporter, DEI, `uses http`, …); do not
 
 ## Agent target
 
-**Session Compile → artifact set; Syntax module privileged for meaning + sim.**  
+**The lowered operation module is the domain.** Session Compile → artifact set; Syntax module privileged for meaning + sim.  
 [`docs/decisions/2026-09-05-lowered-module-is-domain-meaning.md`](docs/decisions/2026-09-05-lowered-module-is-domain-meaning.md) · [`docs/plans/session-lower-plan-2026-09-21.md`](docs/plans/session-lower-plan-2026-09-21.md) · [`docs/plans/session-lower-abstractions-2026-09-21.md`](docs/plans/session-lower-abstractions-2026-09-21.md).
 
 Load → one analyze (dirty → **STOP**) → `session.Lower` → artifact set on the session (fail closed if empty when required). **Compilation unit** = library. Simulate and C# print share the **same** Syntax module body. When they diverge, fix **Lower**.

@@ -487,10 +487,9 @@ public class QuantifierLoopTests {
         await Assert.That(Convert.ToInt64(bin.GetProperty<object>("N"))).IsEqualTo(0L);
 
         var lowered = new EffectLoweringPass(E("Bin"), new LoweringContext(
-            new Parameter("entity", new TypeReference("Bin")),
+            new ThisReference(),
             Analysis: analysis,
-            Domain: domain,
-            UseThisReference: true)).LowerActionBody(E("Bin").Actions.First(a => a.Name == "Guarded").Effects);
+            Domain: domain)).LowerActionBody(E("Bin").Actions.First(a => a.Name == "Guarded").Effects);
         var ifs = Flatten(lowered!).OfType<IfStatement>().First(s =>
             Flatten(s.ThenBranch).OfType<ForEachLoop>().Any());
         await Assert.That(Flatten(ifs.Condition).OfType<ForEachLoop>().Any()).IsFalse();

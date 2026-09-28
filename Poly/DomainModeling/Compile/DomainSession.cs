@@ -142,8 +142,9 @@ public sealed class DomainSession {
     }
 
     /// <summary>
-    /// Stage 3: one operation module (type definitions + operation bodies).
-    /// Also caches runtime-shaped named action / OnEntry trees for invoke lookup.
+    /// Stage 3: one operation module (type definitions, action bodies,
+    /// entity-level policy methods, subscription handlers, and OnEntry/OnExit
+    /// bodies). Action- and stage-scoped policies are not carried here.
     /// Simulate and print consume this result.
     /// </summary>
     public IReadOnlyList<TypeDefinitionNode> Lower(Domain domain, AnalysisResult analysis) {

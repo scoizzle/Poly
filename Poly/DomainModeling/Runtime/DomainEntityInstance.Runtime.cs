@@ -128,6 +128,14 @@ public sealed partial record DomainEntityInstance {
                     new PrimitiveTypeReference(Prim.String))],
                 Body: new Block([])),
             new MethodDefinitionNode(
+                "Notify",
+                new TypeReference("void"),
+                Parameters: [
+                    new Parameter("stageName", new PrimitiveTypeReference(Prim.String)),
+                    new Parameter("previousStageName", new PrimitiveTypeReference(Prim.String))
+                ],
+                Body: new Block([])),
+            new MethodDefinitionNode(
                 "EnsureUnique",
                 TypeReference.To<DomainResult>(),
                 Parameters: [
@@ -161,6 +169,14 @@ public sealed partial record DomainEntityInstance {
                 Body: new Block([])));
         }
         methods.Add(new MethodDefinitionNode(
+            "LinkRelated",
+            new TypeReference("void"),
+            Parameters: [
+                new Parameter("relationshipName", str),
+                new Parameter("target", obj)
+            ],
+            Body: new Block([])));
+        methods.Add(new MethodDefinitionNode(
             "ExistsRelated",
             boolean,
             Parameters: [new Parameter("relationshipName", str)],
@@ -169,14 +185,6 @@ public sealed partial record DomainEntityInstance {
             "GetRelatedOne",
             obj,
             Parameters: [new Parameter("relationshipName", str)],
-            Body: new Block([])));
-        methods.Add(new MethodDefinitionNode(
-            "LinkRelated",
-            new TypeReference("void"),
-            Parameters: [
-                new Parameter("relationshipName", str),
-                new Parameter("target", obj)
-            ],
             Body: new Block([])));
         foreach (var factory in new[] { "Create", "CreateIn", "ProbeCreate" }) {
             methods.Add(new MethodDefinitionNode(
@@ -328,29 +336,37 @@ public sealed partial record DomainEntityInstance {
     }
 
     /// <summary>
-    /// IDictionary read of a OneToOne nav property: the linked target, or
-    /// <c>null</c> when unlinked so the lowered guard can return
-    /// <c>DomainResult.Failure</c> instead of NRE. More than one link is
-    /// fail-closed (singular invoke).
+    /// Matches a OneToOne nav by generated member name. Does not read the store,
+    /// so <see cref="IDictionary{TKey,TValue}.ContainsKey"/> never throws.
     /// </summary>
-    internal bool TryGetOneToOneNavigation(string key, out object? value) {
-        value = null;
-        Relationship? match = null;
+    internal Relationship? MatchOneToOneNavigation(string key) {
         foreach (var nav in NavigationsFor(Entity, Domain)) {
             if (nav.Cardinality is not RelationshipCardinality.OneToOne)
                 continue;
             if (!string.Equals(DomainToCSharpExporter.ToPascalCase(nav.Name), key, StringComparison.Ordinal))
                 continue;
-            match = nav;
-            break;
+            return nav;
         }
+        return null;
+    }
+
+    /// <summary>
+    /// IDictionary read of a OneToOne nav property: the linked target, or
+    /// <c>null</c> when unlinked so the lowered guard can return
+    /// <c>DomainResult.Failure</c> instead of NRE. More than one link is
+    /// fail-closed (singular invoke). Without a store, throws — same as
+    /// collection reads and path-prefix / <c>Rel exists</c> policies.
+    /// </summary>
+    internal bool TryGetOneToOneNavigation(string key, out object? value) {
+        value = null;
+        var match = MatchOneToOneNavigation(key);
         if (match is null)
             return false;
 
-        if (Store is null || Domain is null) {
-            value = null;
-            return true;
-        }
+        if (Store is null || Domain is null)
+            throw new InvalidOperationException(
+                "Cannot resolve relationship target without a DomainInstanceStore. " +
+                "Call store.Add(instance) first.");
 
         var related = Store.GetRelatedInstances(match.Name, this)
             .Where(t => string.Equals(t.Entity.Name, match.Target.TypeName, StringComparison.Ordinal))

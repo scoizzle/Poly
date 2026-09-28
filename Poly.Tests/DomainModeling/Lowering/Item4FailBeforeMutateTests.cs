@@ -137,8 +137,8 @@ public class Item4FailBeforeMutateTests {
 
     [Test]
     public async Task LowerActionBody_QuantifierBody_DoesNotSubstituteRelatedActive() {
-        // Entry/exit VM path (UseThisReference false): subject assign Active must
-        // not rewrite related-entity Active inside any-body for ProbeCreate guard.
+        // Subject assign Active must not rewrite related-entity Active inside
+        // any-body for ProbeCreate guard.
         var (domain, analysis) = Evolve("""
             domain Yard
             Widget: entity {
@@ -161,8 +161,7 @@ public class Item4FailBeforeMutateTests {
         var pass = new EffectLoweringPass(bin, new LoweringContext(
             new Parameter("entity", new TypeReference(bin.Name)),
             Analysis: analysis,
-            Domain: domain,
-            UseThisReference: false));
+            Domain: domain));
         var lowered = pass.LowerActionBody(action.Effects);
         await Assert.That(lowered).IsNotNull();
         var flat = Flatten(lowered!).ToList();

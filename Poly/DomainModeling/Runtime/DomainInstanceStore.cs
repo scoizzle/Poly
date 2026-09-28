@@ -23,9 +23,8 @@ using Poly.DomainModeling.Ontology.Constraints;
 ///       <item>An <b>instance link</b> exists for that relationship from subscriber → transitioned
 ///         (see <see cref="Link"/>).</item>
 ///       <item>The subscription's <c>StageNames</c> includes the target stage.</item>
-///       <item>Quantifier is <see cref="StageSubscriptionQuantifier.Each"/> (fires per transition),
-///         <see cref="StageSubscriptionQuantifier.Any"/> (fires if any linked target matches), or
-///         <see cref="StageSubscriptionQuantifier.All"/> (fires if all linked targets match).</item>
+///       <item>Quantifier is Each, Any, or All — the store notifies the matching
+///         handler; Any/All set conditions live in the lowered handler body.</item>
 ///     </list>
 ///   </item>
 ///   <item><b>Order:</b> stage-scoped handlers first, then entity-level (entity-level dispatch order).</item>
@@ -448,7 +447,11 @@ public sealed class DomainInstanceStore {
     /// <param name="transitionedInstance">The instance that changed stage.</param>
     /// <param name="targetStageName">The stage entered.</param>
     /// <param name="depth">Current cascade depth (internal — starts at 0).</param>
-    public void NotifyTransition(DomainEntityInstance transitionedInstance, string targetStageName, int depth = 0) {
+    public void NotifyTransition(
+        DomainEntityInstance transitionedInstance,
+        string targetStageName,
+        int depth = 0,
+        string? previousStageName = null) {
         const int maxDepth = 10;
         if (depth >= maxDepth) return;
 
@@ -489,7 +492,8 @@ public sealed class DomainInstanceStore {
                         incomingContracts,
                         stageNameBeforeEffects: subscriberStage.Name,
                         depth,
-                        maxDepth);
+                        maxDepth,
+                        previousStageName);
                 }
             }
 
@@ -506,7 +510,8 @@ public sealed class DomainInstanceStore {
                 incomingContracts,
                 stageNameBeforeEffects: subscriber.CurrentStage,
                 depth,
-                maxDepth);
+                maxDepth,
+                previousStageName);
         }
     }
 
@@ -518,7 +523,8 @@ public sealed class DomainInstanceStore {
         List<RelationshipContract> incomingContracts,
         string? stageNameBeforeEffects,
         int depth,
-        int maxDepth) {
+        int maxDepth,
+        string? previousStageName) {
         var applicableEntries = dispatchPlan.ByRelationshipName.Values
             .SelectMany(entries => entries)
             .Where(entry =>
@@ -540,51 +546,23 @@ public sealed class DomainInstanceStore {
                     string.Equals(sn, targetStageName, StringComparison.Ordinal)))
                 continue;
 
-            // Dispatch based on quantifier
-            if (entry.Quantifier == StageSubscriptionQuantifier.Each) {
-                // Each: fire effects for every matching transition (default)
-                subscriber.ExecuteSubscriptionEffects(
-                    entry.Effects, transitionedInstance, entry.PeerBinding,
-                    planEntry: entry);
-            }
-            else if (entry.Quantifier is StageSubscriptionQuantifier.Any or StageSubscriptionQuantifier.All) {
-                // Any: fire once when at least one related entity is in matching stage.
-                // All: fire once when every related entity is in matching stage.
-                // Both check the current state of all linked targets for that relationship.
-                var allLinkedTargets = _links
-                    .Where(l => string.Equals(l.RelationshipName, entry.RelationshipName, StringComparison.Ordinal)
-                             && ReferenceEquals(l.Source, subscriber))
-                    .Select(l => l.Target)
-                    .ToList();
-
-                if (allLinkedTargets.Count == 0) continue;
-
-                var matchedCount = allLinkedTargets.Count(t =>
-                    t.CurrentStage is not null
-                    && entry.StageNames.Any(sn =>
-                        string.Equals(sn, t.CurrentStage, StringComparison.Ordinal)));
-
-                // Any: fires once per transition of a linked target into a matching
-                // stage (the transitioned instance is always matched — the stage
-                // filter above guarantees it). All: fires once when every linked
-                // target is in a matching stage — the last one entering triggers it.
-                bool shouldFire = entry.Quantifier switch {
-                    StageSubscriptionQuantifier.Any => matchedCount >= 1,
-                    StageSubscriptionQuantifier.All => matchedCount == allLinkedTargets.Count,
-                    _ => false
-                };
-
-                if (!shouldFire) continue;
-                subscriber.ExecuteSubscriptionEffects(
-                    entry.Effects, transitionedInstance, entry.PeerBinding,
-                    planEntry: entry);
-            }
+            // Notify on every linked transition whose target stage is in the
+            // entry's StageNames. Each runs the handler as-is. Any/All set
+            // conditions live in the lowered handler (the same tree print emits).
+            subscriber.ExecuteSubscriptionEffects(
+                entry.Effects, transitionedInstance, entry.PeerBinding,
+                planEntry: entry, targetStageName: targetStageName,
+                previousStageName: previousStageName);
 
             // Recurse if the subscriber also transitioned as a side effect
             if (depth + 1 < maxDepth
                 && !string.Equals(subscriber.CurrentStage, stageNameBeforeEffects, StringComparison.Ordinal)
                 && subscriber.CurrentStage is not null)
-                NotifyTransition(subscriber, subscriber.CurrentStage, depth + 1);
+                NotifyTransition(
+                    subscriber,
+                    subscriber.CurrentStage,
+                    depth + 1,
+                    previousStageName: stageNameBeforeEffects);
         }
     }
 }

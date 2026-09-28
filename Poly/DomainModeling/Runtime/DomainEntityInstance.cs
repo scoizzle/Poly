@@ -372,7 +372,7 @@ public sealed partial record DomainEntityInstance {
 
         var expr = policy.Expression;
 
-        // Slice B: execute never lowers. Policy bodies come from GetOrLower only.
+        // Execute never lowers. Policy bodies come from session.Lower only.
         if (Domain is null)
             throw new InvalidOperationException(
                 $"Cannot evaluate policy '{policy.Name}' on '{Entity.Name}' without a Domain-bound module.");
@@ -383,7 +383,6 @@ public sealed partial record DomainEntityInstance {
             || cached is null)
             throw new InvalidOperationException(
                 $"Policy body '{policy.Name}' is missing on entity '{Entity.Name}'.");
-        // BindExportBody is identity for Parameter-shaped policy trees.
         var boundPolicy = BindExportBody(cached);
         var compiledModule = Interpreter.CompileChecked(boundPolicy, _typeDefAnalyzer);
         using var execModule = Interpreter.Execute(compiledModule,
@@ -527,8 +526,8 @@ public sealed partial record DomainEntityInstance {
         // tree — skip the EvaluatePolicy prelude so ONE-TREE Failure runs and
         // require-not cannot invert soft-false to fail-open. ExecuteEffectList
         // still binds the module Body for named actions even when Ontology
-        // effects are empty (gated no-op). Bare evaluate_policy still soft-fails
-        // unlinked via ExistsRelated. Stage policies stay here.
+        // effects are empty (gated no-op). Unlinked to-one path-prefix is false
+        // via the lowered `rel != null && leaf` guard. Stage policies stay here.
         var failures = new List<string>();
         if (Domain is not null) {
             var ensureAnalysis = RuntimeAnalysisCache.GetOrAnalyze(Domain);
@@ -742,7 +741,6 @@ public sealed partial record DomainEntityInstance {
                     && RuntimeAnalysisCache.TryGetEntryExitBody(
                         Domain, Entity.Name, exitStageName, "exit", out var exitBody)
                     && exitBody is not null) {
-                    // EntryExitBodies are export-shaped (UseThis); bind for VM SetArgs.
                     tree = BindExportBody(exitBody);
                 }
                 else if (entryStageName is not null
@@ -845,7 +843,7 @@ public sealed partial record DomainEntityInstance {
     }
 
     /// <summary>
-    /// Consumer bind for export-shaped (UseThis) trees from session.Lower —
+    /// Consumer bind for module trees from session.Lower —
     /// rewrites <see cref="ThisReference"/> to <c>Parameter("entity")</c> for VM SetArgs,
     /// and void fail-closed <c>throw new InvalidOperationException(…)</c> to
     /// <c>return DomainResult.Failure(…)</c> (VM has no 1-arg IOE ctor). Not a second lower.
@@ -990,8 +988,13 @@ public sealed partial record DomainEntityInstance {
         IReadOnlyDictionary<string, Parameter>? parameters,
         IReadOnlySet<string> stageEnums) => node switch {
             ThisReference => entity,
+            NullForgiving nf => new NullForgiving(
+                BindThis(nf.Operand, entity, parameters, stageEnums)),
             Parameter p when parameters is not null
                 && parameters.ContainsKey(p.Name) => new Member(entity, p.Name),
+            Parameter p when p.TypeReference is NamedTypeReference ntr
+                && stageEnums.Contains(ntr.TypeName) =>
+                new Parameter(p.Name, new PrimitiveTypeReference(Prim.String), p.DefaultValue),
             Variable v when parameters is not null
                 && parameters.ContainsKey(v.Name) => new Member(entity, v.Name),
             // Emit stage enum member → runtime string (CurrentStage is string on This).
@@ -1008,13 +1011,15 @@ public sealed partial record DomainEntityInstance {
             Assignment a => new Assignment(
                 BindThis(a.Destination, entity, parameters, stageEnums), BindThis(a.Value, entity, parameters, stageEnums)),
             Invoke { Delegate: Member { MemberName: { } notifyName } } inv
-                when inv.Arguments.Length == 0
-                    && notifyName.StartsWith("Notify", StringComparison.Ordinal)
+                when notifyName.StartsWith("Notify", StringComparison.Ordinal)
                     && notifyName.EndsWith("Subscribers", StringComparison.Ordinal)
                     && notifyName.Length > "NotifySubscribers".Length
                 => new Invoke(
                     new Member(BindThis(((Member)inv.Delegate).Value, entity, parameters, stageEnums), "Notify"),
-                    new Constant(notifyName["Notify".Length..^"Subscribers".Length])),
+                    [
+                        new Constant(notifyName["Notify".Length..^"Subscribers".Length]),
+                        .. inv.Arguments.Select(a => BindThis(a, entity, parameters, stageEnums))
+                    ]),
             // Module emit uses DomainResult<T>.Success(value). VM CLR DomainResult is
             // non-generic; entity TypeDefs are not assignable-to object under PR53
             // overload scoring. Typed return still comes from CreatedChildren.
@@ -1105,7 +1110,6 @@ public sealed partial record DomainEntityInstance {
                 BindThis(cond.IfTrue, entity, parameters, stageEnums),
                 BindThis(cond.IfFalse, entity, parameters, stageEnums)),
             UnaryMinus um => new UnaryMinus(BindThis(um.Operand, entity, parameters, stageEnums)),
-            NullForgiving nf => new NullForgiving(BindThis(nf.Operand, entity, parameters, stageEnums)),
             Parameter or Variable or Constant or NamedTypeReference or TypeReference
                 or PrimitiveTypeReference or ClrTypeReference => node,
             _ => throw new InvalidOperationException(

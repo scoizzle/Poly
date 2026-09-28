@@ -3120,7 +3120,7 @@ public class DomainEntityInstanceTests {
     }
 
     [Test]
-    public async Task Indexer_OneToOne_WithoutStore_ReturnsNull() {
+    public async Task Indexer_OneToOne_WithoutStore_ContainsKey_True_Get_Throws() {
         var target = new Entity("Target", [], [], [], []);
         var source = new Entity("Source", [], [], [], []);
         var rel = new Relationship("team",
@@ -3130,7 +3130,8 @@ public class DomainEntityInstanceTests {
         var src = DomainEntityInstance.Create(source, domain: domain);
         IDictionary<string, object?> bag = src;
         await Assert.That(bag.ContainsKey("Team")).IsTrue();
-        await Assert.That(bag["Team"]).IsNull();
+        await Assert.That(() => bag["Team"]).Throws<InvalidOperationException>()
+            .WithMessageContaining("without a DomainInstanceStore");
     }
 
     private static (DomainEntityInstance Src, Policy Policy) QuantifierPolicyWithoutStore(
@@ -3255,8 +3256,8 @@ public class DomainEntityInstanceTests {
 
     [Test]
     public async Task EvaluatePolicy_ToOneRelationshipNav_Unlinked_ReturnsFalse() {
-        // Item 1: unlinked to-one path-prefix soft-fails (ExistsRelated) so require
-        // can fill FailedGuards without throw — not vacuous true.
+        // Unlinked to-one path-prefix is false via the lowered `rel != null && leaf`
+        // guard so require can fill FailedGuards without throw — not vacuous true.
         var target = new Entity("Profile", [
             new Property("City", new DomainTypeReference("Text"), [])
         ], [], [], []);
@@ -3350,6 +3351,42 @@ public class DomainEntityInstanceTests {
 
         var policy = customer.Policies.First(p => p.Name == "HasProfile");
         await Assert.That(() => cust.EvaluatePolicy(policy)).Throws<InvalidOperationException>();
+    }
+
+    [Test]
+    public async Task EvaluatePolicy_UnlinkedToOneAdvisor_Comparisons_AreFalse() {
+        var advisor = new Entity("Advisor", [
+            new Property("Name", new DomainTypeReference("Text"), []),
+            new Property("Age", new DomainTypeReference("Number"), [])
+        ], [], [], []);
+        var customer = new Entity("Customer", [
+            new Property("Name", new DomainTypeReference("Text"), [])
+        ], [], [
+            new Policy("NamedPat", DomainExpression.RelationshipNav("advisor",
+                DomainExpression.Equal(
+                    DomainExpression.Property("Name"),
+                    DomainExpression.Literal("Pat")))),
+            new Policy("NotPat", DomainExpression.RelationshipNav("advisor",
+                DomainExpression.NotEqual(
+                    DomainExpression.Property("Name"),
+                    DomainExpression.Literal("Pat")))),
+            new Policy("Young", DomainExpression.RelationshipNav("advisor",
+                DomainExpression.LessThan(
+                    DomainExpression.Property("Age"),
+                    DomainExpression.Literal(30L))))
+        ], []);
+        var rel = new Relationship("advisor",
+            new DomainTypeReference("Customer"), new DomainTypeReference("Advisor"),
+            RelationshipCardinality.OneToOne, []);
+        var domain = DomainTestFactory.Create("Test", [customer, advisor], [rel]);
+        var store = new DomainInstanceStore();
+        var cust = DomainEntityInstance.Create(customer,
+            new Dictionary<string, object?> { ["Name"] = "Sam" }, domain: domain);
+        store.Add(cust);
+
+        await Assert.That(cust.EvaluatePolicy(customer.Policies.First(p => p.Name == "NamedPat"))).IsFalse();
+        await Assert.That(cust.EvaluatePolicy(customer.Policies.First(p => p.Name == "NotPat"))).IsFalse();
+        await Assert.That(cust.EvaluatePolicy(customer.Policies.First(p => p.Name == "Young"))).IsFalse();
     }
 
     [Test]

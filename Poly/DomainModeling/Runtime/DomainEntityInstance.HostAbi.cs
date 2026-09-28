@@ -18,9 +18,16 @@ public sealed partial record DomainEntityInstance {
     /// (those belong in the lowered tree). Skips when executing a subscription
     /// (cascade is store-owned) or when no store is attached.
     /// </summary>
-    public void Notify(string targetStageName) {
+    public void Notify(string targetStageName) =>
+        Notify(targetStageName, previousStageName: null);
+
+    /// <summary>
+    /// Store fan-out after a stage assignment. <paramref name="previousStageName"/>
+    /// is the stage left by this transition; All handlers use it as the once-edge.
+    /// </summary>
+    public void Notify(string targetStageName, string? previousStageName) {
         if (Store is not null && !_isExecutingSubscription)
-            Store.NotifyTransition(this, targetStageName);
+            Store.NotifyTransition(this, targetStageName, previousStageName: previousStageName);
     }
 
     /// <summary>
@@ -33,37 +40,6 @@ public sealed partial record DomainEntityInstance {
         if (Store is null)
             return DomainResult.Success();
         return Store.EnsureUnique(this, propertyName, value);
-    }
-
-    /// <summary>
-    /// Notify-shaped Store read: true when the named relationship has any
-    /// outbound link. Dictionary <c>This</c> cannot Member-read <see cref="Store"/>.
-    /// </summary>
-    public bool ExistsRelated(string relationshipName) {
-        ArgumentException.ThrowIfNullOrEmpty(relationshipName);
-        if (TryEvaluateRelationshipPresence(new PropertyAccess(relationshipName), out var present))
-            return present;
-        throw new InvalidOperationException(
-            Domain is null
-                ? $"Cannot resolve relationship '{relationshipName}' without a domain."
-                : $"Relationship '{relationshipName}' not found in domain '{Domain.Name}'.");
-    }
-
-    /// <summary>
-    /// Notify-shaped Store read: the unique outbound target of a to-one hop.
-    /// Zero or many links fail closed (path-prefix contract).
-    /// </summary>
-    public DomainEntityInstance GetRelatedOne(string relationshipName) {
-        ArgumentException.ThrowIfNullOrEmpty(relationshipName);
-        var targets = GetOutboundRelatedInstances(relationshipName);
-        if (targets.Count == 0)
-            throw new InvalidOperationException(
-                $"No linked instances found for relationship '{relationshipName}' on entity '{Entity.Name}'.");
-        if (targets.Count > 1)
-            throw new InvalidOperationException(
-                $"Path-prefix on relationship '{relationshipName}' requires exactly one linked target " +
-                $"(found {targets.Count} on entity '{Entity.Name}'). Use any/all quantifiers for collections.");
-        return targets[0];
     }
 
     /// <summary>
@@ -151,7 +127,8 @@ public sealed partial record DomainEntityInstance {
             }
             finally {
                 if (notifyStore && Store is not null && !_isExecutingSubscription) {
-                    Store.NotifyTransition(this, targetStageName);
+                    Store.NotifyTransition(
+                        this, targetStageName, previousStageName: previousStageName);
                 }
             }
         }
@@ -254,7 +231,9 @@ public sealed partial record DomainEntityInstance {
         IReadOnlyList<Effect> effects,
         DomainEntityInstance peerInstance,
         string? peerBinding = null,
-        SubscriptionDispatchPlanEntry? planEntry = null) {
+        SubscriptionDispatchPlanEntry? planEntry = null,
+        string? targetStageName = null,
+        string? previousStageName = null) {
         _isExecutingSubscription = true;
 
         try {
@@ -271,23 +250,24 @@ public sealed partial record DomainEntityInstance {
             RuntimeAnalysisCache.GetOrLower(
                 Domain, RuntimeAnalysisCache.Session(Domain), analysis);
 
-            // Domain-bound: bind effects-only body cached at GetOrLower (VM-shaped; BindExportBody no-ops without This).
+            // Domain-bound: bind the module handler cached at GetOrLower (same tree print emits).
             // Miss or missing plan entry throws — never BindPeerInEffect + LowerActionBody.
             if (planEntry is null)
                 throw new InvalidOperationException(
                     $"Subscription dispatch on '{Entity.Name}' requires a plan entry for cache bind.");
-            if (!RuntimeAnalysisCache.TryGetSubscriptionBody(Domain, planEntry, out var body)
+            if (targetStageName is not { Length: > 0 })
+                throw new InvalidOperationException(
+                    $"Subscription dispatch on '{Entity.Name}' requires a target stage name.");
+            if (!RuntimeAnalysisCache.TryGetSubscriptionBody(
+                    Domain, planEntry, targetStageName, out var body)
                 || body is null)
                 throw new InvalidOperationException(
                     $"Subscription body is missing on entity '{Entity.Name}'.");
-            // SubscriptionBodies are Parameter-rooted (UseThis:false) — residual twin vs
-            // module UseThis handlers for C# print. BindExportBody is a no-op without This;
-            // then materialize peer if present.
             var cached = BindExportBody(body);
             if (peerBinding is { Length: > 0 })
                 cached = MaterializePeerInSyntax(cached, peerBinding, peerInstance);
             ThrowIfEffectListFailed(
-                ExecuteCachedSubscriptionTree(cached, peerArg: null),
+                ExecuteCachedSubscriptionTree(cached, previousStageName),
                 "subscription");
         }
         finally {
@@ -296,13 +276,11 @@ public sealed partial record DomainEntityInstance {
     }
 
     private DomainResult? ExecuteCachedSubscriptionTree(
-        Node tree, object? peerArg) {
+        Node tree, object? previousStageName) {
         var compiled = Interpreter.CompileChecked(
             tree, ModuleAwareTypeProvider(_typeDefAnalyzer));
         using var exec = Interpreter.Execute(compiled,
-            s => s.SetArgs(peerArg is null
-                ? new object?[] { this }
-                : new object?[] { this, peerArg }));
+            s => s.SetArgs(new object?[] { this, previousStageName }));
         if (exec.Result.Value is DomainResult { IsSuccess: false } failed)
             return failed;
         return null;

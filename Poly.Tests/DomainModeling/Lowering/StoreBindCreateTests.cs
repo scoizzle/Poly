@@ -79,7 +79,6 @@ public class StoreBindCreateTests {
         var action = lot.Actions.First(a => a.Name == "Issue");
         var pass = new EffectLoweringPass(lot, new LoweringContext(
             new ThisReference(),
-            UseThisReference: true,
             Analysis: analysis,
             Domain: domain,
             ActionParameterNames: ["plate"]));
@@ -110,7 +109,6 @@ public class StoreBindCreateTests {
             ActionParameterNames: ["plate"]));
         var emit = new EffectLoweringPass(lot, new LoweringContext(
             new ThisReference(),
-            UseThisReference: true,
             Analysis: analysis,
             Domain: domain,
             ActionParameterNames: ["plate"]));
@@ -266,7 +264,7 @@ public class StoreBindCreateTests {
     }
 
     [Test]
-    public async Task RelExists_Runtime_LowersToExistsRelated() {
+    public async Task RelExists_LowersToCollectionCountCheck() {
         var (domain, analysis) = Evolve("""
             domain Shop
             Order: entity { Code: Text required }
@@ -278,22 +276,22 @@ public class StoreBindCreateTests {
         var customer = domain.Types.OfType<Entity>().First(e => e.Name == "Customer");
         var policy = customer.Policies.First(p => p.Name == "HasOrders");
         var pass = new DomainExpressionLoweringPass(new LoweringContext(
-            new Parameter("entity", new TypeReference(customer.Name)),
+            new ThisReference(),
             Analysis: analysis,
             Domain: domain,
             NavigationNameResolver: EffectLoweringPass.BuildNavigationNameResolver(customer, domain, analysis),
-            IsCollectionNavigation: EffectLoweringPass.BuildIsCollectionNavigation(customer, domain, analysis),
-            IsRelationshipNavigation: EffectLoweringPass.BuildIsRelationshipNavigation(customer, domain, analysis)));
-        var lowered = pass.Lower(policy.Expression,
-            new Parameter("entity", new TypeReference(customer.Name)));
-        var names = Flatten(lowered).OfType<Invoke>()
-            .Select(i => (i.Delegate as Member)?.MemberName)
-            .ToList();
-        await Assert.That(names.Contains("ExistsRelated")).IsTrue();
+            IsCollectionNavigation: EffectLoweringPass.BuildIsCollectionNavigation(customer, domain, analysis)));
+        var lowered = pass.Lower(policy.Expression, new ThisReference());
+        await Assert.That(lowered).IsTypeOf<NotEqual>();
+        var neq = (NotEqual)lowered;
+        await Assert.That(neq.LeftHandValue).IsTypeOf<Member>();
+        await Assert.That(((Member)neq.LeftHandValue).MemberName).IsEqualTo("Count");
+        await Assert.That(neq.RightHandValue).IsTypeOf<Constant>();
+        await Assert.That(((Constant)neq.RightHandValue).Value).IsEqualTo(0);
     }
 
     [Test]
-    public async Task PathPrefix_Runtime_LowersToReadRelated() {
+    public async Task PathPrefix_LowersToNullForgivingNav() {
         var (domain, analysis) = Evolve("""
             domain Shop
             Advisor: entity { Name: Text required }
@@ -305,17 +303,13 @@ public class StoreBindCreateTests {
         var customer = domain.Types.OfType<Entity>().First(e => e.Name == "Customer");
         var policy = customer.Policies.First(p => p.Name == "AdvisorNamed");
         var pass = new DomainExpressionLoweringPass(new LoweringContext(
-            new Parameter("entity", new TypeReference(customer.Name)),
+            new ThisReference(),
             Analysis: analysis,
             Domain: domain,
-            NavigationNameResolver: EffectLoweringPass.BuildNavigationNameResolver(customer, domain, analysis),
-            IsRelationshipNavigation: EffectLoweringPass.BuildIsRelationshipNavigation(customer, domain, analysis)));
-        var lowered = pass.Lower(policy.Expression,
-            new Parameter("entity", new TypeReference(customer.Name)));
-        var names = Flatten(lowered).OfType<Invoke>()
-            .Select(i => (i.Delegate as Member)?.MemberName)
-            .ToList();
-        await Assert.That(names.Contains("GetRelatedOne")).IsTrue();
+            NavigationNameResolver: EffectLoweringPass.BuildNavigationNameResolver(customer, domain, analysis)));
+        var lowered = pass.Lower(policy.Expression, new ThisReference());
+        await Assert.That(Flatten(lowered).OfType<NullForgiving>().Any()).IsTrue();
+        await Assert.That(Flatten(lowered).OfType<Member>().Any(m => m.MemberName == "Advisor")).IsTrue();
     }
 
     [Test]

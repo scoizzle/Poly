@@ -33,13 +33,13 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     private readonly Domain? _domain;
     private readonly DomainExpressionLoweringPass _expressionPass;
     private readonly INodeMetadataProvider? _analysis;
-    private readonly bool _useThisReference;
     private readonly string? _stageEnumTypeName;
-    private readonly IReadOnlyDictionary<string, IReadOnlyList<Node>>? _postTransitionNodes;
+    private readonly IReadOnlySet<string>? _postTransitionNotifyStages;
     private string? _sourceStageName;
     private readonly IReadOnlyDictionary<string, string>? _enumPropertyNames;
     private readonly LoweringContext _context;
     private readonly bool _emitInstanceNotify;
+    private int _previousStageSequence;
     private readonly LocalNames _names;
 
     /// <summary>Pre-computed analysis metadata provider, when available.</summary>
@@ -54,9 +54,8 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         _names = _context.Names!;
         _domain = context.Domain;
         _analysis = context.Analysis;
-        _useThisReference = context.UseThisReference;
         _stageEnumTypeName = context.StageEnumTypeName;
-        _postTransitionNodes = context.PostTransitionNodes;
+        _postTransitionNotifyStages = context.PostTransitionNotifyStages;
         _sourceStageName = context.SourceStageName;
         _enumPropertyNames = context.EnumPropertyNames;
         _emitInstanceNotify = context.EmitInstanceNotify;
@@ -67,25 +66,22 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
                 : new Dictionary<string, Node>(parameters, StringComparer.Ordinal);
             foreach (var name in context.ActionParameterNames) {
                 if (!merged.ContainsKey(name))
-                    merged[name] = context.UseThisReference
-                        ? new Parameter(name)
-                        : new Member(context.Subject, name);
+                    merged[name] = new Parameter(name);
             }
             parameters = merged;
         }
         _expressionPass = new DomainExpressionLoweringPass(_context with {
+            // Parameter typed with the entity name seeds quantifier target resolution
+            // without resurrecting LoweringContext.SourceEntityName; tree roots still
+            // use EffectLoweringPass.Subject (ThisReference for module bodies).
+            Subject = new Parameter("entity", new TypeReference(entity.Name)),
             Parameters = parameters,
             NavigationNameResolver = context.NavigationNameResolver ?? BuildNavigationNameResolver(entity, _domain, _analysis),
             IsCollectionNavigation = context.IsCollectionNavigation
                 ?? BuildIsCollectionNavigation(entity, _domain, _analysis),
-            IsRelationshipNavigation = context.IsRelationshipNavigation
-                ?? BuildIsRelationshipNavigation(entity, _domain, _analysis),
-            PropertyTypeResolver = context.PropertyTypeResolver ?? BuildPropertyTypeResolver(entity),
-            SourceEntityName = context.SourceEntityName ?? entity.Name
+            PropertyTypeResolver = context.PropertyTypeResolver ?? BuildPropertyTypeResolver(entity)
         });
-        Subject = context.UseThisReference && context.Subject is Parameter { Name: "entity" }
-            ? new ThisReference()
-            : context.Subject;
+        Subject = context.Subject;
     }
 
     /// <summary>
@@ -125,30 +121,6 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     /// unknown). Used to lower <c>Rel exists</c> on <c>many</c> navs to a
     /// <c>.Count != 0</c> check in the export.
     /// </summary>
-    /// <summary>
-    /// True when <paramref name="name"/> is an outbound relationship on the
-    /// current entity (any cardinality). Runtime <c>Rel exists</c> uses
-    /// <c>ExistsRelated</c>; property <c>Name exists</c> stays a null check.
-    /// </summary>
-    internal static Func<string, bool> BuildIsRelationshipNavigation(
-        Entity entity, Domain? domain, INodeMetadataProvider? analysis) {
-        if (analysis is not null) {
-            var rlm = domain is not null
-                ? analysis.GetRelationshipLookup(domain)
-                : analysis.GetRelationshipLookup();
-            if (rlm is not null) {
-                return name => rlm.TryGetRelationship(entity.Name, name, out _);
-            }
-        }
-        if (domain is not null) {
-            var names = entity.Navigations
-                .Select(r => r.Name)
-                .ToHashSet(StringComparer.Ordinal);
-            return name => names.Contains(name);
-        }
-        return _ => false;
-    }
-
     internal static Func<string, bool> BuildIsCollectionNavigation(
         Entity entity, Domain? domain, INodeMetadataProvider? analysis) {
         if (analysis is not null) {
@@ -450,7 +422,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     /// stage entry) — same split as create-in fail-closed.
     /// </summary>
     private Node AssignConstraintFailure(string message) {
-        if (_context.UseThisReference && _context.ActionResultType is null) {
+        if (_context.ActionResultType is null) {
             return new ThrowStatement(new New(
                 new NamedTypeReference("InvalidOperationException"),
                 new Constant(message)));
@@ -531,9 +503,13 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     /// <summary>
     /// Lowers a stage transition to generic Syntax AST on both runtime and emit:
     /// source-stage exit effects (when known), CurrentStage assignment, target-stage
-    /// entry effects (in try), post-transition notification nodes, then
-    /// <c>Invoke(Member(Subject, "Notify"), stageName)</c> in finally.
-    /// Not a host-ABI node.
+    /// entry effects (in try), then <c>Notify{Target}Subscribers(previousStageN)</c>
+    /// when the target is a watched stage (see
+    /// <see cref="LoweringContext.PostTransitionNotifyStages"/>), and finally
+    /// <c>Invoke(Member(Subject, "Notify"), stageName)</c> when instance notify is on.
+    /// Captures <c>CurrentStage</c> into a unique local before the assign so nested
+    /// OnEntry transitions do not collide (CS0136) and <c>when all</c> sees the
+    /// outer pre-stage. Not a host-ABI node.
     /// </summary>
     protected override Node? StageTransition(StageTransitionEffect t) {
         if (!_entity.Stages.Any(s =>
@@ -541,6 +517,15 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
             return new Block([]);
 
         var nodes = new List<Node>();
+        Variable? previousStage = null;
+        var notifyTarget = _postTransitionNotifyStages is not null
+            && _postTransitionNotifyStages.Contains(t.TargetStage.StageName);
+        if (notifyTarget) {
+            previousStage = new Variable($"previousStage{_previousStageSequence++}");
+            nodes.Add(new Assignment(
+                previousStage,
+                new Member(Subject, "CurrentStage")));
+        }
 
         // Exit/entry effects are best-effort at lowering time: with analysis present a
         // TryGetStage miss implies analysis/domain disagreement (both derive from the
@@ -570,11 +555,9 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
                 AppendInlinedStageEffects(stage.OnExitEffects, exitNodes, exitNodes);
                 if (exitNodes.Count == 0)
                     continue;
-                Node stageMatch = _useThisReference || _stageEnumTypeName is not null
-                    ? new Member(
-                        new NamedTypeReference(_stageEnumTypeName ?? $"{_entity.Name}Stage"),
-                        stage.Name)
-                    : new Constant(stage.Name);
+                Node stageMatch = new Member(
+                    new NamedTypeReference(_stageEnumTypeName ?? $"{_entity.Name}Stage"),
+                    stage.Name);
                 nodes.Add(new IfStatement(
                     new Equal(new Member(Subject, "CurrentStage"), stageMatch),
                     exitNodes.Count == 1 ? exitNodes[0] : new Block(exitNodes)));
@@ -596,19 +579,17 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
             AppendInlinedStageEffects(targetStage.OnEntryEffects, entryProbes, tryNodes);
         nodes.AddRange(entryProbes);
 
-        Node stageValue = _useThisReference || _stageEnumTypeName is not null
-            ? new Member(
-                new NamedTypeReference(_stageEnumTypeName ?? $"{_entity.Name}Stage"),
-                t.TargetStage.StageName)
-            : new Constant(t.TargetStage.StageName);
+        Node stageValue = new Member(
+            new NamedTypeReference(_stageEnumTypeName ?? $"{_entity.Name}Stage"),
+            t.TargetStage.StageName);
         nodes.Add(new Assignment(
             new Member(Subject, "CurrentStage"),
             stageValue));
 
-        if (_postTransitionNodes is not null
-            && _postTransitionNodes.TryGetValue(t.TargetStage.StageName, out var postNodes)) {
-            foreach (var postNode in postNodes)
-                tryNodes.Add(postNode);
+        if (previousStage is not null) {
+            tryNodes.Add(new Invoke(
+                new Member(Subject, $"Notify{t.TargetStage.StageName}Subscribers"),
+                [previousStage]));
         }
 
         Node tryBody = tryNodes.Count switch {
@@ -630,7 +611,9 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
 
         _sourceStageName = t.TargetStage.StageName;
 
-        return nodes.Count == 1 ? nodes[0] : new Block(nodes);
+        if (previousStage is null)
+            return nodes.Count == 1 ? nodes[0] : new Block(nodes);
+        return new Block(nodes, [previousStage]);
     }
 
     /// <summary>
@@ -729,9 +712,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
                     new Member(loopVar, p.PolicyName)),
                 ForEachStageMembership s => new Equal(
                     new Member(loopVar, "CurrentStage"),
-                    _useThisReference || _stageEnumTypeName is not null
-                        ? new Member(new NamedTypeReference(TargetStageEnumTypeName(relName)), s.StageName)
-                        : new Constant(s.StageName)),
+                    new Member(new NamedTypeReference(TargetStageEnumTypeName(relName)), s.StageName)),
                 _ => throw new NotSupportedException($"Unsupported ForEachInvoke predicate '{e.Predicate.GetType().Name}'."),
             };
             predicateGuard = new IfStatement(
@@ -1115,7 +1096,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         var resultVar = _names.Next("create");
         var resultType = _context.ActionResultType ?? new NamedTypeReference("DomainResult");
         var locals = new List<Node> { resultVar };
-        Node failClosed = _context.UseThisReference && _context.ActionResultType is null
+        Node failClosed = _context.ActionResultType is null
             ? new ThrowStatement(new New(
                 new NamedTypeReference("InvalidOperationException"),
                 new Syntactic.Coalesce(

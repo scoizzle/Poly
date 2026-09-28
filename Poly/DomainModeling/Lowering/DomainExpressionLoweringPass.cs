@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Poly.Ast.Nodes;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Dispatch;
@@ -32,17 +33,15 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Lowe
     private readonly LoweringContext _context;
     private readonly IReadOnlyDictionary<string, Node> _parameters;
     private readonly HashSet<string>? _actionParameterNames;
-    private readonly bool _useThisReference;
     private readonly IReadOnlyDictionary<string, string>? _enumPropertyNames;
     private readonly Func<string, string>? _navigationNameResolver;
     private readonly Func<string, bool>? _isCollectionNavigation;
-    private readonly Func<string, bool>? _isRelationshipNavigation;
     private readonly Func<string, string?>? _propertyTypeResolver;
     private readonly Domain? _domain;
     private readonly INodeMetadataProvider? _analysis;
     private readonly ExpressionMeaning _meaning;
     private readonly ExpressionFormRegistry? _forms;
-    private string? _sourceEntityName;
+    private string? _relationshipSourceEntityName;
     private Node _currentSubject = null!;
     private readonly LocalNames _names;
 
@@ -56,10 +55,10 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Lowe
 
     /// <summary>
     /// Creates a pass using context from a <see cref="LoweringContext"/>.
-    /// When <see cref="LoweringContext.UseThisReference"/> is true, the lowered
-    /// tree uses <see cref="ThisReference"/> instead of <see cref="Parameter"/>
-    /// for the instance root, and names in <see cref="LoweringContext.ActionParameterNames"/>
-    /// render as bare parameters instead of <c>this.name</c>.
+    /// The instance root is <see cref="LoweringContext.Subject"/> (module bodies
+    /// pass <see cref="ThisReference"/>). Names in
+    /// <see cref="LoweringContext.ActionParameterNames"/> render as bare parameters
+    /// instead of <c>this.name</c>.
     /// <see cref="LoweringContext.NavigationNameResolver"/> maps DSL relationship
     /// names to generated member names (pascal-cased navs).
     /// </summary>
@@ -68,17 +67,15 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Lowe
         _names = _context.Names!;
         _parameters = context.Parameters ?? new Dictionary<string, Node>();
         _actionParameterNames = context.ActionParameterNames;
-        _useThisReference = context.UseThisReference;
         _enumPropertyNames = context.EnumPropertyNames;
         _navigationNameResolver = context.NavigationNameResolver;
         _isCollectionNavigation = context.IsCollectionNavigation;
-        _isRelationshipNavigation = context.IsRelationshipNavigation;
         _propertyTypeResolver = context.PropertyTypeResolver;
         _domain = context.Domain;
         _analysis = context.Analysis;
         _meaning = context.Meaning ?? ExpressionMeaning.Empty;
         _forms = context.Forms;
-        _sourceEntityName = context.SourceEntityName;
+        _relationshipSourceEntityName = TypeNameOf(context.Subject);
     }
 
     private ExpressionMeaning EffectiveMeaning {
@@ -105,9 +102,9 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Lowe
     public LoweredExpression LowerExpression(DomainExpression expression, Node subject) {
         ArgumentNullException.ThrowIfNull(expression);
         ArgumentNullException.ThrowIfNull(subject);
-        _currentSubject = _useThisReference && subject is Parameter { Name: "entity" }
-            ? new ThisReference()
-            : subject;
+        if (_relationshipSourceEntityName is null)
+            _relationshipSourceEntityName = TypeNameOf(subject);
+        _currentSubject = subject;
         return Route(expression);
     }
 
@@ -127,18 +124,16 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Lowe
         $"DomainExpression node type is not supported");
 
     protected override LoweredExpression PropertyAccess(PropertyAccess p) {
-        // Export (UseThisReference) resolves session ident folds (clocks) and Guid
-        // through LowerDefaultExpression. Bare fragments without those tables stay
-        // Member so analysis can fail closed on unknown property.
-        if (_useThisReference) {
-            var runtime = EffectLoweringPass.LowerDefaultExpression(
-                p, typeHint: null, EffectiveMeaning, EffectiveForms);
-            if (runtime is not null) return LoweredExpression.Of(runtime);
-        }
+        // Session ident folds (clocks) and Guid through LowerDefaultExpression.
+        // Bare fragments without those tables stay Member so analysis can fail
+        // closed on unknown property.
+        var runtime = EffectLoweringPass.LowerDefaultExpression(
+            p, typeHint: null, EffectiveMeaning, EffectiveForms);
+        if (runtime is not null) return LoweredExpression.Of(runtime);
 
         // Action parameters win over a property of the same name, including
         // inside a quantifier body (the nested pass inherits ActionParameterNames).
-        if (_useThisReference && _actionParameterNames?.Contains(p.Name) == true)
+        if (_actionParameterNames?.Contains(p.Name) == true)
             return LoweredExpression.Of(new Parameter(p.Name));
         return LoweredExpression.Of(new Member(_currentSubject, ResolveName(p.Name)));
     }
@@ -170,37 +165,24 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Lowe
         }
 
         // Every hop in a path-prefix is a relationship navigation.
-        // Runtime: ExistsRelated short-circuit → false when unlinked so require
-        // EvaluatePolicy fills FailedGuards without throw; GetRelatedOne still
-        // throws on many (fail closed). Export: NullForgiving for CS8602; require
+        // Predicate leaves: `this.Rel != null && <leaf>` so an unlinked to-one is
+        // false (same meaning as Conditional(exists, whenPresent, false)). Value
+        // leaves stay the hop. NullForgiving on the hop is CS8602 only; require
         // gates own DomainResult.Failure ("requires a linked") in
-        // BuildActionBodyWithGuards before the policy bool is called.
-        if (!_useThisReference) {
-            var exists = new Invoke(
-                new Member(_currentSubject, "ExistsRelated"),
-                new Constant(rn.RelationshipName));
-            var related = new Invoke(
-                new Member(_currentSubject, "GetRelatedOne"),
-                new Constant(rn.RelationshipName));
-            var targetName = ResolveRelationshipTarget(rn.RelationshipName);
-            Node typedHop = targetName is not null
-                ? new TypeCast(related, new TypeReference(targetName))
-                : related;
-            var whenPresent = Route(rn.TargetProperty, typedHop, targetName);
-            if (whenPresent.Statements.Count == 0)
-                return LoweredExpression.Of(new Conditional(exists, whenPresent.Value, new Constant(false)));
-            var t = _names.Next("t");
-            var thenBlock = new Block(
-                [.. whenPresent.Statements, new Assignment(t, whenPresent.Value)],
-                whenPresent.Variables);
-            return new LoweredExpression(
-                [new Assignment(t, new Constant(false)), new IfStatement(exists, thenBlock)],
-                [t],
-                t);
+        // BuildActionBodyWithGuards. Collection hops cannot be a singular
+        // path-prefix — fail closed (use any/all).
+        if (IsCollectionNav(rn.RelationshipName)) {
+            throw new InvalidOperationException(
+                $"Path-prefix on relationship '{rn.RelationshipName}' requires exactly one linked target. " +
+                "Use any/all quantifiers for collections.");
         }
-
         var relMember = new Member(_currentSubject, ResolveNavName(rn.RelationshipName));
-        return Route(rn.TargetProperty, new NullForgiving(relMember));
+        var leaf = Route(rn.TargetProperty, new NullForgiving(relMember));
+        if (!IsPathPrefixPredicate(rn.TargetProperty))
+            return leaf;
+        return leaf with {
+            Value = new SN.And(new NotEqual(relMember, new Constant(null)), leaf.Value)
+        };
     }
 
     /// <summary>Pascal-cases a relationship hop name the resolver did not map
@@ -214,17 +196,19 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Lowe
         expr is RelationshipNavigation
         || expr.Children.OfType<DomainExpression>().Any(ContainsRelationshipNavigation);
 
-    private LoweredExpression Route(DomainExpression expr, Node subject, string? sourceEntityName = null) {
+    private static bool IsPathPrefixPredicate(DomainExpression expr) => expr switch {
+        Ontology.Comparison or Ontology.And or Ontology.Or or Ontology.Not
+            or Ontology.Exists or Ontology.NotExists
+            or Ontology.AnyExpr or Ontology.AllExpr or Ontology.NoneExpr => true,
+        RelationshipNavigation inner => IsPathPrefixPredicate(inner.TargetProperty),
+        _ => false,
+    };
+
+    private LoweredExpression Route(DomainExpression expr, Node subject) {
         var saved = _currentSubject;
-        var savedSource = _sourceEntityName;
         _currentSubject = subject;
-        if (sourceEntityName is not null)
-            _sourceEntityName = sourceEntityName;
         try { return Route(expr); }
-        finally {
-            _currentSubject = saved;
-            _sourceEntityName = savedSource;
-        }
+        finally { _currentSubject = saved; }
     }
 
     /// <summary>
@@ -247,14 +231,9 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Lowe
     }
 
     protected override LoweredExpression Exists(Exists e) {
-        if (!_useThisReference && e.Target is PropertyAccess pa && IsRelationship(pa.Name)) {
-            return LoweredExpression.Of(new Invoke(
-                new Member(_currentSubject, "ExistsRelated"),
-                new Constant(pa.Name)));
-        }
-        // Collection (`many`) relationship: the export's `collection != null` is
-        // always true (ctor-initialized) while the runtime answers store-link
-        // presence (false on empty) — lower to a real non-empty check instead.
+        // Collection (`many`) relationship: ctor-initialized lists are never null;
+        // store-link presence is a non-empty check. Simulate binds the same Count
+        // member through the dictionary nav.
         if (e.Target is PropertyAccess col && IsCollectionNav(col.Name)) {
             var target = Route(e.Target);
             return target with {
@@ -266,11 +245,6 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Lowe
     }
 
     protected override LoweredExpression NotExists(NotExists ne) {
-        if (!_useThisReference && ne.Target is PropertyAccess pa && IsRelationship(pa.Name)) {
-            return LoweredExpression.Of(new SN.Not(new Invoke(
-                new Member(_currentSubject, "ExistsRelated"),
-                new Constant(pa.Name))));
-        }
         if (ne.Target is PropertyAccess col && IsCollectionNav(col.Name)) {
             var target = Route(ne.Target);
             return target with {
@@ -284,18 +258,42 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Lowe
     private bool IsCollectionNav(string name) =>
         _isCollectionNavigation?.Invoke(name) == true;
 
-    private bool IsRelationship(string name) =>
-        _isRelationshipNavigation?.Invoke(name) == true;
-
     private string? ResolveRelationshipTarget(string relationshipName) {
-        if (_domain is null || _sourceEntityName is null)
+        if (_domain is null)
+            return null;
+        var sourceName = _relationshipSourceEntityName;
+        if (sourceName is null) {
+            foreach (var entity in _domain.Types.OfType<Entity>()) {
+                var candidate = entity.Navigations.FirstOrDefault(n =>
+                    string.Equals(n.Name, relationshipName, StringComparison.Ordinal));
+                if (candidate is null)
+                    continue;
+                if (_isCollectionNavigation is not null) {
+                    var isCol = candidate.Cardinality is RelationshipCardinality.OneToMany
+                        or RelationshipCardinality.ManyToMany;
+                    if (_isCollectionNavigation(relationshipName) != isCol)
+                        continue;
+                }
+                sourceName = entity.Name;
+                break;
+            }
+        }
+        if (sourceName is null)
             return null;
         var source = _domain.Types.OfType<Entity>().FirstOrDefault(e =>
-            string.Equals(e.Name, _sourceEntityName, StringComparison.Ordinal));
+            string.Equals(e.Name, sourceName, StringComparison.Ordinal));
         var rel = source?.Navigations.FirstOrDefault(n =>
             string.Equals(n.Name, relationshipName, StringComparison.Ordinal));
         return rel?.Target.TypeName;
     }
+
+    private static string? TypeNameOf(Node? node) => node switch {
+        Parameter { TypeReference: TypeReference tr } => tr.TypeName,
+        Parameter { TypeReference: NamedTypeReference ntr } => ntr.TypeName,
+        TypeReference tr => tr.TypeName,
+        NamedTypeReference ntr => ntr.TypeName,
+        _ => null,
+    };
 
     protected override LoweredExpression Add(Add a) {
         if (TryLowerLibrary(a, out var lowered))
@@ -524,8 +522,8 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Lowe
         }
         var nested = new DomainExpressionLoweringPass(_context with {
             EnumPropertyNames = enums,
-            SourceEntityName = targetName ?? _sourceEntityName
         });
+        nested._relationshipSourceEntityName = targetName ?? _relationshipSourceEntityName;
         return nested.LowerExpression(body, item);
     }
 

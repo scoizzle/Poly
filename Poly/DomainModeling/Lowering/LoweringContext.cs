@@ -25,14 +25,10 @@ namespace Poly.DomainModeling.Lowering;
 /// Metadata provider with pre-computed analysis bags. When present, lowering uses
 /// provider lookups instead of scanning domain collections. Null-safe (falls
 /// back to re-scan).</param>
-/// <param name="UseThisReference">
-/// When true, the lowered tree uses <see cref="ThisReference"/> as the instance root
-/// instead of <see cref="Parameter"/>. Useful when generating C# method bodies where
-/// <c>this.Property</c> is idiomatic. Defaults to false (VM-compatible mode).
-/// </param>
 /// <param name="ActionParameterNames">
-/// When <see cref="UseThisReference"/> is true, these names are rendered as bare
-/// parameters (e.g. <c>maxAmount</c>) instead of <c>this.maxAmount</c>.
+/// These names are rendered as bare parameters (e.g. <c>maxAmount</c>) instead of
+/// <c>this.maxAmount</c>. The instance root is <see cref="Subject"/> — pass
+/// <see cref="ThisReference"/> for module method bodies.
 /// </param>
 /// <param name="Domain">Optional domain reference for cross-entity type resolution.</param>
 /// <param name="StageEnumTypeName">
@@ -40,10 +36,12 @@ namespace Poly.DomainModeling.Lowering;
 /// default <c>{EntityName}Stage</c> derivation — necessary for inherited entities
 /// where the stage enum is defined on the root ancestor.
 /// </param>
-/// <param name="PostTransitionNodes">
-/// Optional map of stage name to Syntax AST nodes to emit <em>after</em> the
-/// <c>CurrentStage</c> assignment when lowering a transition to that stage.
-/// Used for cross-entity subscription notifications in C# codegen mode.
+/// <param name="PostTransitionNotifyStages">
+/// Optional set of stage names that have subscription notify methods. When a
+/// transition targets one of these stages, <see cref="EffectLoweringPass"/>
+/// captures <c>CurrentStage</c> before the assign and emits
+/// <c>Notify{Stage}Subscribers(previousStageN)</c> after it. The pass builds
+/// that invoke; callers only name the watched stages.
 /// </param>
 /// <param name="SourceStageName">
 /// Optional name of the source stage from which a transition originates.
@@ -69,18 +67,10 @@ namespace Poly.DomainModeling.Lowering;
 /// to lower <c>Rel exists</c> to a <c>.Count != 0</c> check (runtime store-link
 /// presence) instead of a never-null <c>collection != null</c>.
 /// </param>
-/// <param name="IsRelationshipNavigation">
-/// Optional predicate answering whether a DSL name is an outbound relationship
-/// on the current subject. Runtime <c>Rel exists</c> becomes <c>ExistsRelated</c>.
-/// </param>
 /// <param name="PropertyTypeResolver">
 /// Optional mapper from a property name to its domain type name. Used to lower
 /// date arithmetic (<c>DueDate + 14</c> → <c>DueDate.AddDays(...)</c>) in every
 /// expression context (policies, if conditions, initializers), not just assign.
-/// </param>
-/// <param name="SourceEntityName">
-/// Optional current-subject entity type name. Runtime path-prefix uses it to
-/// TypeCast <c>GetRelatedOne</c> to the relationship target so leaf members resolve.
 /// </param>
 /// <param name="Names">
 /// Shared generator of unique local names for one method. Passes built from
@@ -90,20 +80,17 @@ public sealed record LoweringContext(
     Node Subject,
     IReadOnlyDictionary<string, Node>? Parameters = null,
     INodeMetadataProvider? Analysis = null,
-    bool UseThisReference = false,
     HashSet<string>? ActionParameterNames = null,
     Domain? Domain = null,
     string? StageEnumTypeName = null,
-    IReadOnlyDictionary<string, IReadOnlyList<Node>>? PostTransitionNodes = null,
+    IReadOnlySet<string>? PostTransitionNotifyStages = null,
     string? SourceStageName = null,
     IReadOnlyDictionary<string, string>? EnumPropertyNames = null,
     Func<string, string>? NavigationNameResolver = null,
     Func<string, bool>? IsCollectionNavigation = null,
-    Func<string, bool>? IsRelationshipNavigation = null,
     Func<string, string?>? PropertyTypeResolver = null,
     Node? ActionResultType = null,
     bool EmitInstanceNotify = true,
-    string? SourceEntityName = null,
     ExpressionMeaning? Meaning = null,
     ExpressionFormRegistry? Forms = null,
     LocalNames? Names = null
